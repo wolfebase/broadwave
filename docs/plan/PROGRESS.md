@@ -9,7 +9,7 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [ ] A4 Hygiene: dead CSS/strings, web on /api/v1 only, eslint + swiftlint in CI
 - [ ] A5 Restart robustness: orphan ffmpeg cleanup, interrupted recordings, graceful SIGTERM
 - [x] A6 Public repo wolfebase/waveguide (twolfekc does not exist; see BLOCKERS), CI green, ghcr.io/wolfebase/waveguide:0.1.0 public for amd64 and arm64 (commit 5c9308b, tag v0.1.0)
-- [ ] A7 Apple signing (team ID found), bundle IDs + App Group, ASC app records, scripts/testflight.sh, iOS + tvOS builds in TestFlight
+- [ ] A7 Apple signing (team D4MC63SS36, bundle IDs, profiles, `scripts/testflight.sh`, iOS archive signs). Upload blocked: no App Store Connect app record until an Apple ID login (see BLOCKERS)
 
 ## Phase B — Multiview
 - [ ] B1 Server: tile renditions (540/360, audio none), multiview plan endpoint, mosaic rendition, multiview sync room

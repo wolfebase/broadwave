@@ -58,10 +58,11 @@ Reading files just written to /tmp often fails with "File not found"; tvOS 4K PN
 
 ## Signing and TestFlight (plan A7/L4)
 
-- Team ID: Xcode > Settings > Accounts, `security find-identity -v -p codesigning`, or `grep -r DEVELOPMENT_TEAM ~/Projects --include=project.pbxproj --include=project.yml | head`. Put it in `apple/project.yml` (`settings.base.DEVELOPMENT_TEAM`), then `xcodegen generate`.
-- App Store Connect: skills `asc-app-create-ui` (create app records), `asc-team-key-create` (API key -> `~/.blitz`), `asc-privacy-nutrition-labels`.
-- Pipeline: `scripts/testflight.sh` (created in A7) archives `Waveguide` and `WaveguideTV` (`xcodebuild archive -destination 'generic/platform=iOS'|'generic/platform=tvOS'`), exports with an `ExportOptions.plist` (`method: app-store-connect`, `destination: upload`, `teamID`), using `-allowProvisioningUpdates` and the ASC API key (`-authenticationKeyPath/-authenticationKeyID/-authenticationKeyIssuerID`). Build number = `git rev-list --count HEAD`.
-- Extensions to come (widgets, Top Shelf, Live Activities) need an App Group and their own bundle IDs; register them early.
+- Team ID `D4MC63SS36` (Tyler Wolfe, same team as `com.wolfeup.lumi`) is set in `apple/project.yml`. Distribution identity: "Apple Distribution: Tyler Wolfe (D4MC63SS36)".
+- Bundle IDs registered (platform UNIVERSAL, App Groups capability on): `com.wolfeup.waveguide`, `com.wolfeup.waveguide.widgets`, `com.wolfeup.waveguide.topshelf`. Entitlement App Group: `group.com.wolfeup.waveguide`.
+- API key already in `~/.blitz/asc-credentials.json` plus `AuthKey_<keyId>.p8`. It can read apps, register bundle IDs, and create profiles. It cannot create the app record. Xcode has no Apple ID account, so signing is manual: the script installs "Waveguide iOS App Store" and "Waveguide tvOS App Store" profiles and archives with `CODE_SIGN_STYLE=Manual`. `SKIP_UPLOAD=1` archives only.
+- The App Group capability is enabled on those bundle IDs. The profile's group list is empty until `group.com.wolfeup.waveguide` exists, so `apple/App/Waveguide.entitlements` is not applied to the target yet.
+- `scripts/testflight.sh` runs xcodegen, archives both apps with `CURRENT_PROJECT_VERSION=$(git rev-list --count HEAD)`, and uploads with `xcodebuild -exportArchive`. Re-run it after every phase that changes Apple code, once the app record exists.
 
 ## Multiview (Phase B3)
 
