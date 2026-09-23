@@ -933,6 +933,12 @@ export interface components {
             setupComplete?: "0" | "1";
             /** @description 1 when this catalog should show the setup wizard. Set by the server; ignored on write. */
             needsSetup?: "0" | "1";
+            /** @description When listings last loaded. Set by the server. */
+            lastGuidePull?: string;
+            /** @description When the next automatic listing refresh is due. Set by the server. */
+            nextGuidePull?: string;
+            /** @description When listings were last reloaded by hand. Set by the server. */
+            lastManualGuidePull?: string;
         };
     };
     responses: {

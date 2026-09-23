@@ -43,7 +43,7 @@ Read in this order before touching code:
 **Deploy**: Dockerfile (web + Go multi-stage, VA drivers, HEALTHCHECK), Dockerfile.runtime (prebuilt binary), compose + Unraid template (host network), GHCR release workflow (amd64+arm64), CI (Go, web, Apple, Docker). No GitHub remote yet (`gh` is logged in as `twolfekc`); image names still say `ghcr.io/twolfekc/waveguide` placeholders. Apple `DEVELOPMENT_TEAM` is empty (simulator-only so far). `scripts/dev-server.sh`, `scripts/relay-smoke.sh`, `scripts/deploy-unraid.sh`.
 
 **Known gaps and debt (fix early)**
-1. **Guide coverage is poor:** only 9 of 27 channels have listings, and only ~2 days deep. SiliconDust's free XMLTV gives 2 days (14 needs their DVR subscription) and asks for refreshes at randomized 20-28 h intervals; we refresh every 4 h. See Phase 3.
+1. **Guide coverage is poor:** only 9 of 27 channels have listings, and only ~2 days deep. SiliconDust's free XMLTV gives 2 days (14 needs their DVR subscription). Refreshes follow their 20-28 h rule (A2). Coverage is Phase C.
 2. The Unraid container still runs the **old build, bridge network, old template** — no Bonjour, no new UI. See Phase 1.
 3. Setup wizard not visually verified; first-run detection heuristic (`setupComplete` / no recordings / no passes).
 4. Accounts/pairing/remote access not started; the API is open on the LAN.

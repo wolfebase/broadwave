@@ -290,6 +290,11 @@ paths:
                 type: object
                 properties:
                   airings: { type: integer }
+        "429":
+          description: Manual refresh is limited to once an hour
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "500": { $ref: "#/components/responses/Error" }
   /watch:
     post:
@@ -1159,3 +1164,6 @@ components:
         hdhrEmulate: { type: string, enum: ["0", "1"] }
         setupComplete: { type: string, enum: ["0", "1"] }
         needsSetup: { type: string, enum: ["0", "1"], description: "1 when this catalog should show the setup wizard. Set by the server; ignored on write." }
+        lastGuidePull: { type: string, format: date-time, description: "When listings last loaded. Set by the server." }
+        nextGuidePull: { type: string, format: date-time, description: "When the next automatic listing refresh is due. Set by the server." }
+        lastManualGuidePull: { type: string, format: date-time, description: "When listings were last reloaded by hand. Set by the server." }

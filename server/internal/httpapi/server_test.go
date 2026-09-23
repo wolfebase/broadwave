@@ -346,6 +346,43 @@ func TestSetupSettings(t *testing.T) {
 	}
 }
 
+func TestGuideManualRateLimit(t *testing.T) {
+	st := testStore(t)
+	if err := st.SetManualGuidePull(context.Background(), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st}).Handler()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/guide/refresh", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status %d %s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte("just refreshed")) {
+		t.Fatalf("body %s", rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte("retryAt")) {
+		t.Fatalf("body %s", rec.Body.String())
+	}
+}
+
+func TestGuideDelayFollowsStoredSchedule(t *testing.T) {
+	st := testStore(t)
+	next := time.Now().Add(5 * time.Hour)
+	if err := st.SetGuideSchedule(context.Background(), time.Now(), next); err != nil {
+		t.Fatal(err)
+	}
+	delay := (&Server{Store: st}).GuideDelay(time.Now())
+	if delay < 4*time.Hour || delay > 5*time.Hour+time.Minute {
+		t.Fatalf("delay %s", delay)
+	}
+	h := (&Server{Store: st}).Handler()
+	res := get(t, h, "/api/v1/diagnostics")
+	if !bytes.Contains(res.Body.Bytes(), []byte("nextRefresh")) {
+		t.Fatalf("diagnostics %s", res.Body.String())
+	}
+}
+
 func testStore(t *testing.T) *store.Store {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))

@@ -39,6 +39,9 @@ export type Settings = {
   hdhrEmulate: string;
   setupComplete?: string;
   needsSetup?: "0" | "1";
+  lastGuidePull?: string;
+  nextGuidePull?: string;
+  lastManualGuidePull?: string;
 };
 
 export type StorageInfo = {
