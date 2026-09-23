@@ -38,6 +38,7 @@ export type Settings = {
   autoplay: string;
   hdhrEmulate: string;
   setupComplete?: string;
+  needsSetup?: "0" | "1";
 };
 
 export type StorageInfo = {

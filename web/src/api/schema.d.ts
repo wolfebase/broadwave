@@ -931,6 +931,8 @@ export interface components {
             hdhrEmulate?: "0" | "1";
             /** @enum {string} */
             setupComplete?: "0" | "1";
+            /** @description 1 when this catalog should show the setup wizard. Set by the server; ignored on write. */
+            needsSetup?: "0" | "1";
         };
     };
     responses: {

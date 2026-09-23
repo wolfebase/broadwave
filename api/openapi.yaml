@@ -1158,3 +1158,4 @@ components:
         autoplay: { type: string, enum: ["0", "1"] }
         hdhrEmulate: { type: string, enum: ["0", "1"] }
         setupComplete: { type: string, enum: ["0", "1"] }
+        needsSetup: { type: string, enum: ["0", "1"], description: "1 when this catalog should show the setup wizard. Set by the server; ignored on write." }

@@ -318,6 +318,34 @@ func TestRecordingDurationRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSetupSettings(t *testing.T) {
+	st := testStore(t)
+	if _, err := st.Identity(context.Background(), "Waveguide"); err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st}).Handler()
+	res := get(t, h, "/api/v1/settings")
+	var body map[string]string
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["needsSetup"] != "1" {
+		t.Fatalf("fresh needsSetup %q", body["needsSetup"])
+	}
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/settings", bytes.NewBufferString(`{"setupComplete":"1"}`))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("put %d %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["setupComplete"] != "1" || body["needsSetup"] != "0" {
+		t.Fatalf("after finish %+v", body)
+	}
+}
+
 func testStore(t *testing.T) *store.Store {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))
