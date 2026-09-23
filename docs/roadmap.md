@@ -22,7 +22,7 @@ Phases run roughly in order. Later phases can start when their dependencies are 
 - [ ] Multi-tuner pool across devices; ATSC 3.0 (FLEX 4K) with AC-4 handling
 - [x] Events WebSocket to replace polling
 - [ ] Accounts, profiles, device pairing
-- [x] Bonjour `_otaviewer._tcp`
+- [x] Bonjour `_waveguide._tcp`
 - [x] Sync clock and rooms (ADR 0003)
 - [ ] Multi-arch image on GHCR, Unraid Community Apps, setup wizard, diagnostics
 

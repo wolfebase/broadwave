@@ -1,9 +1,9 @@
 ---
-name: ota-viewer-dev-loop
-description: Build, run, restart, and verify the OTA Viewer server and web app against the real HDHomeRun, including relay smoke tests, browser checks at three layouts, and measuring Whole-Home Sync between two screens. Use when working in the OTA Viewer repo on server or web code, when starting/restarting the dev server, when verifying UI changes, or when asked to test playback or sync.
+name: waveguide-dev-loop
+description: Build, run, restart, and verify the Waveguide server and web app against the real HDHomeRun, including relay smoke tests, browser checks at three layouts, and measuring Whole-Home Sync between two screens. Use when working in the Waveguide repo on server or web code, when starting/restarting the dev server, when verifying UI changes, or when asked to test playback or sync.
 ---
 
-# OTA Viewer dev loop
+# Waveguide dev loop
 
 Repo: `/Users/tyler/Projects/active/ota viewer` (note the space; always quote paths). Read `AGENTS.md` and `docs/plan/MASTER_PLAN.md` first.
 
@@ -23,7 +23,7 @@ Pitfalls that cost hours before:
 - `pkill -f otav` kills the calling shell. Use `pkill -9 -x otav` (the script does).
 - A killed server can hold :18477 briefly; the script waits for the port.
 - Shell commands to 127.0.0.1 need `required_permissions: ["all"]` (the sandbox blocks localhost and ~/go writes).
-- The browser caches old bundles from before `index.html` became `no-cache`. In a test tab run CDP `Network.setCacheDisabled {cacheDisabled:true}` and check loaded scripts: `performance.getEntriesByType('resource').filter(e=>e.name.endsWith('.js'))` must match `server/cmd/ota-viewer/assets/web/assets/index-*.js`.
+- The browser caches old bundles from before `index.html` became `no-cache`. In a test tab run CDP `Network.setCacheDisabled {cacheDisabled:true}` and check loaded scripts: `performance.getEntriesByType('resource').filter(e=>e.name.endsWith('.js'))` must match `server/cmd/waveguide/assets/web/assets/index-*.js`.
 - Navigating before the server listens leaves the tab on `chrome-error://`; open a new tab (`newTab: true`) after the server is up.
 - Autoplay with sound is blocked in automation tabs: `v.muted=true; await v.play()` before measuring.
 
@@ -60,4 +60,4 @@ Open two tabs on `/watch?channel=1`, mute+play both, wait ~20 s, then in each ta
 
 ## Commit
 
-Small commits with what + why. Tick `docs/plan/PROGRESS.md`. Never commit `data/`, `server/cmd/ota-viewer/assets/web/`, or `apple/*.xcodeproj`.
+Small commits with what + why. Tick `docs/plan/PROGRESS.md`. Never commit `data/`, `server/cmd/waveguide/assets/web/`, or `apple/*.xcodeproj`.

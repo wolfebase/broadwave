@@ -2,9 +2,9 @@ FROM debian:bookworm-slim
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ffmpeg ca-certificates intel-media-va-driver \
   && rm -rf /var/lib/apt/lists/*
-COPY ota-viewer /usr/local/bin/ota-viewer
-RUN chmod 755 /usr/local/bin/ota-viewer
+COPY waveguide /usr/local/bin/waveguide
+RUN chmod 755 /usr/local/bin/waveguide
 EXPOSE 8477
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD ["/usr/local/bin/ota-viewer", "-healthcheck"]
-ENTRYPOINT ["/usr/local/bin/ota-viewer"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD ["/usr/local/bin/waveguide", "-healthcheck"]
+ENTRYPOINT ["/usr/local/bin/waveguide"]
 CMD ["-config", "/config", "-addr", ":8477"]

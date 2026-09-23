@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"ota-viewer/internal/disk"
-	"ota-viewer/internal/live"
-	"ota-viewer/internal/store"
+	"waveguide/internal/disk"
+	"waveguide/internal/live"
+	"waveguide/internal/store"
 )
 
 func (s *Server) playRecording(w http.ResponseWriter, r *http.Request) {
@@ -380,14 +380,14 @@ func (s *Server) backup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	path := filepath.Join(dir, "ota-viewer-backup.db")
+	path := filepath.Join(dir, "waveguide-backup.db")
 	_ = os.Remove(path)
 	if err := s.Store.BackupTo(r.Context(), path); err != nil {
 		writeError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", `attachment; filename="ota-viewer-backup.db"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="waveguide-backup.db"`)
 	http.ServeFile(w, r, path)
 }
 

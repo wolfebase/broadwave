@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"ota-viewer/internal/dvr"
-	"ota-viewer/internal/guide"
-	"ota-viewer/internal/source"
-	"ota-viewer/internal/store"
+	"waveguide/internal/dvr"
+	"waveguide/internal/guide"
+	"waveguide/internal/source"
+	"waveguide/internal/store"
 )
 
 func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {

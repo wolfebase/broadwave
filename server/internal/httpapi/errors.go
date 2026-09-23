@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	"ota-viewer/internal/disk"
-	"ota-viewer/internal/live"
+	"waveguide/internal/disk"
+	"waveguide/internal/live"
 )
 
 // apiError writes the error envelope every client reads: {"code", "message", ...details}.

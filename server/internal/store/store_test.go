@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"ota-viewer/internal/hdhr"
+	"waveguide/internal/hdhr"
 )
 
 func TestLineupKeepsLocalEditsOnRefresh(t *testing.T) {

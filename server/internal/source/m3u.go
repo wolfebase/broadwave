@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"strings"
 
-	"ota-viewer/internal/hdhr"
-	"ota-viewer/internal/store"
+	"waveguide/internal/hdhr"
+	"waveguide/internal/store"
 )
 
 // Entry is one channel from an M3U playlist or a single stream link.
@@ -74,7 +74,7 @@ func Install(ctx context.Context, st *store.Store, id int64, name, kind string, 
 		label = kind
 	}
 	return st.UpsertDevice(ctx, hdhr.Device{
-		DeviceID: devID, FriendlyName: label, ModelNumber: kind, FirmwareName: "ota-viewer",
+		DeviceID: devID, FriendlyName: label, ModelNumber: kind, FirmwareName: "waveguide",
 		BaseURL: "source", TunerCount: 0,
 	}, channels)
 }
@@ -85,7 +85,7 @@ func FetchText(ctx context.Context, rawURL string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "OTAViewer/0.1")
+	req.Header.Set("User-Agent", "Waveguide/0.1")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err

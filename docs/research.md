@@ -23,6 +23,7 @@ Facts gathered while building. Each should shape a decision or a test.
 - **NextPVR** shares one tuner across channels on the same frequency. **Jellyfin** shares one MPEG-TS body and counts viewers. Our relay does both, and adds a shared rewind buffer that follows the tune.
 - **Tablo 4th gen:** plug and play, but a limited guide and all content transcoded to H.264.
 - **Plex:** the widest client reach, but live TV has become a lower priority.
+- **AIRDVR:** a newer HDHomeRun DVR with side-by-side multiview (one view per tuner) and live sports scores; its iOS app was still "coming soon" in 2026. Watch it closely: it targets the same sports-first, multiview niche.
 
 ## Apple platforms (2026)
 

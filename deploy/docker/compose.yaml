@@ -1,6 +1,6 @@
 services:
-  ota-viewer:
-    image: ghcr.io/ota-viewer/ota-viewer:latest
+  waveguide:
+    image: ghcr.io/twolfekc/waveguide:latest
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile

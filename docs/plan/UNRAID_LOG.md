@@ -9,5 +9,8 @@ Template: `/boot/config/plugins/dockerMan/templates-user/my-OTA-Viewer.xml`.
 - Running the pre-rebuild build (bridge network, `HDHR_HOST=192.168.1.252`, old UI). Catalog has live data (recordings from 2026-09-22).
 - Not yet deployed: everything since the baseline commit. First task of the next session (plan A3): back up, deploy with `scripts/deploy-unraid.sh`, switch to host networking, update the template, verify.
 
+## 2026-09-23 — product renamed to Waveguide
+- The names above are the pre-rename install and still what's running. The next deploy (`scripts/deploy-unraid.sh`) moves `/mnt/cache/appdata/ota-viewer` to `/mnt/cache/appdata/waveguide`, replaces container `OTA-Viewer` with `Waveguide` (image `waveguide:latest`), and the server renames `ota-viewer.db` to `waveguide.db` on start. Replace template `my-OTA-Viewer.xml` with `my-Waveguide.xml`. Recordings stay in `/mnt/user/media/ota-recordings`.
+
 ## Entries
 <!-- Append: date, commit, what was deployed, checks run, results, issues. -->

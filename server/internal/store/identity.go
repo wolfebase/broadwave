@@ -32,7 +32,7 @@ func (s *Store) Identity(ctx context.Context, defaultName string) (Identity, err
 	}
 	id = Identity{ID: hex.EncodeToString(buf), Name: strings.TrimSpace(defaultName)}
 	if id.Name == "" {
-		id.Name = "OTA Viewer"
+		id.Name = "Waveguide"
 	}
 	_, err = s.db.ExecContext(ctx, `INSERT INTO server_identity (id, server_id, name, created_at) VALUES (1, ?, ?, ?)
 ON CONFLICT(id) DO NOTHING`, id.ID, id.Name, time.Now().UTC().Format(time.RFC3339))

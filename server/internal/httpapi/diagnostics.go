@@ -6,8 +6,8 @@ import (
 	"runtime"
 	"time"
 
-	"ota-viewer/internal/disk"
-	"ota-viewer/internal/live"
+	"waveguide/internal/disk"
+	"waveguide/internal/live"
 )
 
 // diagnostics is everything a support conversation needs, in one call.

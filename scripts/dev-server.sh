@@ -18,7 +18,7 @@ BIN="${BIN:-/tmp/otav}"
 if [[ -z "${SKIP_WEB:-}" ]]; then
   (cd "$ROOT/web" && npm run build >/dev/null)
 fi
-(cd "$ROOT" && go build -o "$BIN" ./server/cmd/ota-viewer)
+(cd "$ROOT" && go build -o "$BIN" ./server/cmd/waveguide)
 
 pkill -9 -x "$(basename "$BIN")" 2>/dev/null || true
 for _ in $(seq 1 40); do
@@ -30,8 +30,11 @@ if [[ -n "${FRESH:-}" ]]; then
   rm -rf "$CONFIG"
 fi
 mkdir -p "$CONFIG"
-if [[ ! -f "$CONFIG/ota-viewer.db" && -z "${FRESH:-}" && -f "$ROOT/data/ota-viewer.db" ]]; then
-  cp "$ROOT"/data/ota-viewer.db* "$CONFIG"/
+if [[ ! -f "$CONFIG/waveguide.db" && ! -f "$CONFIG/ota-viewer.db" && -z "${FRESH:-}" ]]; then
+  # The server adopts a pre-rename ota-viewer.db on open.
+  for name in waveguide ota-viewer; do
+    if [[ -f "$ROOT/data/$name.db" ]]; then cp "$ROOT/data/$name".db* "$CONFIG"/; break; fi
+  done
 fi
 
 echo "starting $BIN on :$PORT with $CONFIG (log: $CONFIG/stderr.log)"

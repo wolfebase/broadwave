@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"ota-viewer/internal/store"
+	"waveguide/internal/store"
 )
 
 // Slot is one program on a library channel's clock.

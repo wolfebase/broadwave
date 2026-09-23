@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"ota-viewer/internal/store"
+	"waveguide/internal/store"
 )
 
 // SchedulesDirect fills guide rows for channels the free SiliconDust feed left empty.

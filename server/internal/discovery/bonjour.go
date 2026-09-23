@@ -40,7 +40,7 @@ func localIPs() []string {
 	return out
 }
 
-const Service = "_otaviewer._tcp"
+const Service = "_waveguide._tcp"
 
 type Advert struct {
 	ID      string
@@ -68,7 +68,7 @@ func Announce(a Advert) (*zeroconf.Server, error) {
 	host, _ := os.Hostname()
 	host = strings.TrimSuffix(strings.TrimSuffix(host, "."), ".local")
 	if host == "" {
-		host = "ota-viewer"
+		host = "waveguide"
 	}
 	ips := localIPs()
 	if len(ips) == 0 {

@@ -1,10 +1,10 @@
-# OTA Viewer — guide for agents and contributors
+# Waveguide — guide for agents and contributors
 
-OTA Viewer is live TV and DVR for people with an antenna. A self-hosted server (Docker, Unraid, or a Mac) talks to HDHomeRun tuners, builds the guide, records, and relays every broadcast to native apps on iPhone and Apple TV and to a web app. It is a public product: strangers install it, so setup, polish, and reliability matter as much as features.
+Waveguide is live TV and DVR for people with an antenna. A self-hosted server (Docker, Unraid, or a Mac) talks to HDHomeRun tuners, builds the guide, records, and relays every broadcast to native apps on iPhone and Apple TV and to a web app. It is a public product: strangers install it, so setup, polish, and reliability matter as much as features.
 
 Read this file first, then the scoped rules in `.cursor/rules/` for the area you are touching, then `docs/architecture.md` and `docs/roadmap.md`.
 
-**Active work:** `docs/plan/MASTER_PLAN.md` is the plan of record (phases A-L, executed autonomously in order); `docs/plan/PROGRESS.md` is the live checklist; `docs/plan/BLOCKERS.md` lists what needs the user; `docs/plan/UNRAID_LOG.md` records deployments. Project skills live in `.cursor/skills/` (`ota-viewer-dev-loop`, `ota-viewer-media-pipeline`, `ota-viewer-apple`, `ota-viewer-multiview`); the personal skill `ota-viewer-unraid` covers the user's Unraid server.
+**Active work:** `docs/plan/MASTER_PLAN.md` is the plan of record (phases A-L, executed autonomously in order); `docs/plan/PROGRESS.md` is the live checklist; `docs/plan/BLOCKERS.md` lists what needs the user; `docs/plan/UNRAID_LOG.md` records deployments. Project skills live in `.cursor/skills/` (`waveguide-dev-loop`, `waveguide-media-pipeline`, `waveguide-apple`, `waveguide-multiview`); the personal skill `waveguide-unraid` covers the user's Unraid server.
 
 ## What we are building
 
@@ -31,8 +31,8 @@ Signature features. Protect them in every change:
 
 | Path | What lives there |
 | --- | --- |
-| `server/` | Go module `ota-viewer`. `cmd/ota-viewer` is the binary; `internal/` holds `hdhr` (tuner protocol), `live` (relay, ffmpeg, HLS), `dvr` (planning, passes, virtual channels), `guide` (XMLTV, Schedules Direct), `store` (SQLite), `httpapi` (HTTP API, HDHomeRun emulation), `source` (discovery, M3U, folders), `disk`. |
-| `web/` | React 19 + Vite + TypeScript web app. Builds into `server/cmd/ota-viewer/assets/web`, which is embedded into the binary. |
+| `server/` | Go module `waveguide`. `cmd/waveguide` is the binary; `internal/` holds `hdhr` (tuner protocol), `live` (relay, ffmpeg, HLS), `dvr` (planning, passes, virtual channels), `guide` (XMLTV, Schedules Direct), `store` (SQLite), `httpapi` (HTTP API, HDHomeRun emulation), `source` (discovery, M3U, folders), `disk`. |
+| `web/` | React 19 + Vite + TypeScript web app. Builds into `server/cmd/waveguide/assets/web`, which is embedded into the binary. |
 | `apple/` | Xcode workspace for the iOS and tvOS apps and the shared Swift packages (`OTAKit`, `OTAUI`). |
 | `design/` | Design tokens (`tokens.json`) shared by the web and Apple apps. |
 | `api/openapi.yaml` | The HTTP contract. Source of truth for generated Swift and TypeScript clients. |
@@ -47,14 +47,14 @@ Run from the repo root unless noted.
 make run        # build web, run server on :8477 with ./data
 make dev        # server with -dev (CORS for Vite); in another shell: cd web && npm run dev
 make test       # go test ./server/... and web typecheck
-make build      # bin/ota-viewer with the site embedded
+make build      # bin/waveguide with the site embedded
 make docker     # container image
 make apple      # xcodegen + build the iOS and tvOS apps (Xcode 26.1+, tvOS platform installed)
 make apple-test # OTAKit unit tests
 make tokens     # regenerate web CSS and Swift theme from design/tokens.json
 ```
 
-Apple apps: `apple/project.yml` is the source of truth (XcodeGen); the `.xcodeproj` is generated and ignored. For simulator testing, launch with `-OTAWatch <channel id>` (debug builds) to start a channel without tapping; deep links are `otaviewer://watch/<id>`, `otaviewer://guide`, `otaviewer://sports`.
+Apple apps: `apple/project.yml` is the source of truth (XcodeGen); the `.xcodeproj` is generated and ignored. For simulator testing, launch with `-OTAWatch <channel id>` (debug builds) to start a channel without tapping; deep links are `waveguide://watch/<id>`, `waveguide://guide`, `waveguide://sports`.
 
 Tools: Go 1.25+, Node 22+, ffmpeg (with ffprobe) on PATH, Xcode 26+ for `apple/`. `go.work` at the root makes `go` commands work from here.
 
@@ -64,7 +64,9 @@ Scripts: `scripts/dev-server.sh` (safe rebuild + restart on :18477 with a copy o
 
 ## Lessons learned (each cost real time; don't relearn them)
 
-- Live renditions use `-copyts` + CMAF fMP4; MPEG-TS segments made hls.js corrupt its fragment table mid-stream. Segment 0 is withheld. See skill `ota-viewer-media-pipeline` for the full invariant list.
+- The product was renamed from "OTA Viewer" to **Waveguide** (`docs/brand.md`). The repo folder is still `ota viewer` (quote paths). Old installs keep working: the store adopts `ota-viewer.db`, migration 0004 renames a default server name, and `scripts/deploy-unraid.sh` moves the old Unraid appdata and container. `OTAKit`/`OTAUI` keep their names on purpose.
+
+- Live renditions use `-copyts` + CMAF fMP4; MPEG-TS segments made hls.js corrupt its fragment table mid-stream. Segment 0 is withheld. See skill `waveguide-media-pipeline` for the full invariant list.
 - VideoToolbox must run with `-a53cc 0` or every segment is undecodable.
 - Sync engines never seek backward in a live buffer: pause for the drift when ahead, seek forward when behind.
 - `index.html` must be served `no-cache`; stale bundles silently invalidated several test runs. Verify loaded script hashes when testing.

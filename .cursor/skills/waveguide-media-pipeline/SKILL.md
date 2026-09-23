@@ -1,9 +1,9 @@
 ---
-name: ota-viewer-media-pipeline
-description: Rules and hard-won gotchas for OTA Viewer's live relay, ffmpeg rendition arguments, CMAF/HLS playlists, the shared broadcast timeline, and the browser/AVPlayer sync engines. Use when changing server/internal/live, ffmpeg args, HLS output, stream decisions, renditions, multiview streams, LL-HLS, captions, or web/src/lib/sync.ts and OTAKit SyncEngine.
+name: waveguide-media-pipeline
+description: Rules and hard-won gotchas for Waveguide's live relay, ffmpeg rendition arguments, CMAF/HLS playlists, the shared broadcast timeline, and the browser/AVPlayer sync engines. Use when changing server/internal/live, ffmpeg args, HLS output, stream decisions, renditions, multiview streams, LL-HLS, captions, or web/src/lib/sync.ts and OTAKit SyncEngine.
 ---
 
-# OTA Viewer media pipeline
+# Waveguide media pipeline
 
 ## Architecture in one breath
 
@@ -26,7 +26,7 @@ description: Rules and hard-won gotchas for OTA Viewer's live relay, ffmpeg rend
 
 - Unit tests: `go test ./server/internal/live` (includes an ffmpeg-backed shared-timeline test).
 - `scripts/relay-smoke.sh` for end-to-end.
-- Real tuner in the browser, then two-screen sync measurement (skill `ota-viewer-dev-loop`).
+- Real tuner in the browser, then two-screen sync measurement (skill `waveguide-dev-loop`).
 - Generate test broadcasts: `ffmpeg -f lavfi -i testsrc2=size=1280x720:rate=60000/1001 -f lavfi -i sine -c:v libx264 -g 30 -c:a ac3 -output_ts_offset 95000 -f mpegts x.ts` (the offset exercises big PTS values). Serve live with `-re ... -f mpegts -listen 1 http://127.0.0.1:18500/live.ts` and add it as a `link` source.
 - Grab 8 s of a real channel: `curl -s -m 9 127.0.0.1:18477/export/stream/1 -o real.ts`.
 - Inspect segments: `ffprobe -v quiet -show_entries stream=codec_name,width,height -of csv=p=0 seg.m4s` (needs init: `cat init.mp4 seg.m4s > x.mp4`), `ffmpeg -v error -i x -f null - | wc -l` counts decode errors.

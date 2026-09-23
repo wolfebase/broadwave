@@ -3,7 +3,7 @@ package guide
 import (
 	"testing"
 
-	"ota-viewer/internal/store"
+	"waveguide/internal/store"
 )
 
 func TestParseEpisodeIdentity(t *testing.T) {

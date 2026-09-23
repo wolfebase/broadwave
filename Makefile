@@ -20,13 +20,13 @@ web: web/node_modules
 	cd web && npm run build
 
 server:
-	go build -o bin/ota-viewer ./server/cmd/ota-viewer
+	go build -o bin/waveguide ./server/cmd/waveguide
 
 run: web
-	go run ./server/cmd/ota-viewer -config $(CONFIG) -addr $(ADDR)
+	go run ./server/cmd/waveguide -config $(CONFIG) -addr $(ADDR)
 
 dev:
-	go run ./server/cmd/ota-viewer -config $(CONFIG) -addr $(ADDR) -dev
+	go run ./server/cmd/waveguide -config $(CONFIG) -addr $(ADDR) -dev
 
 test: web/node_modules
 	go test ./server/...
@@ -38,18 +38,18 @@ vet:
 build: web server
 
 docker:
-	docker build -f deploy/docker/Dockerfile -t ota-viewer .
+	docker build -f deploy/docker/Dockerfile -t waveguide .
 
 clean:
-	rm -rf bin server/cmd/ota-viewer/assets/web
+	rm -rf bin server/cmd/waveguide/assets/web
 
 tokens:
 	node design/build.mjs
 
 apple:
 	cd apple && xcodegen generate
-	cd apple && xcodebuild -project OTAViewer.xcodeproj -scheme OTAViewer -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build
-	cd apple && xcodebuild -project OTAViewer.xcodeproj -scheme OTAViewerTV -destination 'generic/platform=tvOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build
+	cd apple && xcodebuild -project Waveguide.xcodeproj -scheme Waveguide -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build
+	cd apple && xcodebuild -project Waveguide.xcodeproj -scheme WaveguideTV -destination 'generic/platform=tvOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build
 
 apple-test:
 	cd apple/Packages/OTAKit && swift test

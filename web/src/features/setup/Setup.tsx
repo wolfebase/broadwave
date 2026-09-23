@@ -183,7 +183,7 @@ function AppsStep({ onFinish }: { onFinish: () => void }) {
   const url = window.location.origin;
   const svg = useMemo(() => {
     const qr = qrcode(0, "M");
-    qr.addData(`otaviewer://connect?url=${encodeURIComponent(url)}`);
+    qr.addData(`waveguide://connect?url=${encodeURIComponent(url)}`);
     qr.make();
     return qr.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
   }, [url]);

@@ -12,10 +12,10 @@ const apiVersion = 1
 func DefaultServerName() string {
 	host, err := os.Hostname()
 	if err != nil || host == "" {
-		return "OTA Viewer"
+		return "Waveguide"
 	}
 	host = strings.TrimSuffix(host, ".local")
-	return "OTA Viewer on " + host
+	return "Waveguide on " + host
 }
 
 func (s *Server) serverInfo(w http.ResponseWriter, r *http.Request) {

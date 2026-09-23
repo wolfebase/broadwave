@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"ota-viewer/internal/live"
-	"ota-viewer/internal/store"
+	"waveguide/internal/live"
+	"waveguide/internal/store"
 )
 
 // Tick starts a recording when a series pass matches an airing that is about to start.

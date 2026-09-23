@@ -8,7 +8,7 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [ ] A3 Deployed to Unraid (host network, VAAPI, Bonjour, sync from LAN, iPhone sim connects)
 - [ ] A4 Hygiene: dead CSS/strings, web on /api/v1 only, eslint + swiftlint in CI
 - [ ] A5 Restart robustness: orphan ffmpeg cleanup, interrupted recordings, graceful SIGTERM
-- [ ] A6 GitHub repo twolfekc/ota-viewer, pushed, CI green, image names = ghcr.io/twolfekc/ota-viewer, v0.1.0 release, public package
+- [ ] A6 GitHub repo twolfekc/waveguide, pushed, CI green, image names = ghcr.io/twolfekc/waveguide, v0.1.0 release, public package
 - [ ] A7 Apple signing (team ID found), bundle IDs + App Group, ASC app records, scripts/testflight.sh, iOS + tvOS builds in TestFlight
 
 ## Phase B — Multiview
@@ -89,7 +89,7 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [ ] J4 Accessibility audit
 - [ ] J5 Light mode + accent picker
 - [ ] J6 Localization readiness
-- [ ] J7 Brand + marketing site
+- [ ] J7 Brand: name decided (Waveguide, renamed everywhere); logo, app icon, marketing site to do
 
 ## Phase K — Quality
 - [ ] K1 Fake HDHomeRun + Go integration tests
