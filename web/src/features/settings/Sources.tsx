@@ -17,7 +17,7 @@ export function Sources({
   error: string;
   onDiscover: () => void;
   onLookup: (ip: string) => void;
-  onPatch: (channel: Channel, patch: { enabled?: boolean; hidden?: boolean; customName?: string; customNumber?: string }) => void;
+  onPatch: (channel: Channel, patch: { enabled?: boolean; hidden?: boolean; customName?: string; customNumber?: string; guideKey?: string }) => void;
 }) {
   const [ip, setIp] = useState("");
   const [tuners, setTuners] = useState<TunerStatus[]>([]);
@@ -113,6 +113,7 @@ export function Sources({
         ))}
       </div>
       <h3 className="section-title">{copy.sources.channels}</h3>
+      <p className="hint">{copy.sources.matchHint}</p>
       <ul className="source-list">
         {channels.map((channel) => (
           <li key={channel.id} className={channel.present ? "source-row" : "source-row gone"}>
@@ -135,6 +136,18 @@ export function Sources({
               onBlur={(event) => {
                 if (event.target.value.trim() !== channel.displayName) {
                   onPatch(channel, { customName: event.target.value });
+                }
+              }}
+            />
+            <input
+              className="name-input"
+              aria-label={`${channel.guideNumber} ${copy.sources.match}`}
+              placeholder={copy.sources.match}
+              defaultValue={channel.guideKey ?? ""}
+              key={`${channel.id}-guide-${channel.guideKey ?? ""}`}
+              onBlur={(event) => {
+                if (event.target.value.trim() !== (channel.guideKey ?? "")) {
+                  onPatch(channel, { guideKey: event.target.value });
                 }
               }}
             />

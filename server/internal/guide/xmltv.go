@@ -108,38 +108,10 @@ func Parse(data []byte, channels []store.Channel) ([]store.Airing, error) {
 	if err := xml.Unmarshal(data, &doc); err != nil {
 		return nil, err
 	}
-	byGuide := map[string]int64{}
-	byName := map[string]int64{}
-	for _, ch := range channels {
-		byGuide[ch.GuideNumber] = ch.ID
-		byName[strings.ToLower(ch.GuideName)] = ch.ID
-		byName[strings.ToLower(ch.DisplayName)] = ch.ID
-	}
-	xmlToChannel := map[string]int64{}
-	for _, ch := range doc.Channels {
-		if id, ok := byGuide[ch.ID]; ok {
-			xmlToChannel[ch.ID] = id
-			continue
-		}
-		for _, name := range ch.Names {
-			if id, ok := byGuide[strings.TrimSpace(name)]; ok {
-				xmlToChannel[ch.ID] = id
-				break
-			}
-			if id, ok := byName[strings.ToLower(strings.TrimSpace(name))]; ok {
-				xmlToChannel[ch.ID] = id
-				break
-			}
-		}
-	}
+	xmlToChannel := assign(doc.Channels, channels)
 	var out []store.Airing
 	for _, p := range doc.Programmes {
 		channelID := xmlToChannel[p.Channel]
-		if channelID == 0 {
-			if id, ok := byGuide[p.Channel]; ok {
-				channelID = id
-			}
-		}
 		if channelID == 0 {
 			continue
 		}

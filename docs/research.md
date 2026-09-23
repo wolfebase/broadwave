@@ -13,7 +13,7 @@ Facts gathered while building. Each should shape a decision or a test.
 
 ## Guide data
 
-- The SiliconDust XMLTV feed (`api.hdhomerun.com/api/xmltv`) gives **2 days to everyone and 14 days with an HDHomeRun DVR subscription** (correction, verified 2026-09-23). Each request authenticates with the tuner's `DeviceAuth` (rotates, valid 16-24 h, read fresh per request, never stored), must accept gzip, and SiliconDust asks for the next download at a **random 20-28 h** after the last. It includes `<icon src>` channel logos and program images. On the user's lineup it lists only 9 of 27 channels.
+- The SiliconDust XMLTV feed (`api.hdhomerun.com/api/xmltv`) gives **2 days to everyone and 14 days with an HDHomeRun DVR subscription** (correction, verified 2026-09-23). Each request authenticates with the tuner's `DeviceAuth` (rotates, valid 16-24 h, read fresh per request, never stored), must accept gzip, and SiliconDust asks for the next download at a **random 20-28 h** after the last. It includes `<icon src>` channel logos and program images. On the user's lineup it lists only 9 of 27 channels. Checked again 2026-09-23 against `lineup.json`: both XMLTV and `api/guide` publish the same nine (4.1, 5.1, 9.1, 9.4, 29.1, 38.1, 39.7, 41.1, 62.1). 14.1–14.16, 43.3, and 46.7 are not in either feed under any call sign, so a matcher cannot invent their listings.
 - SiliconDust also has a JSON guide endpoint (`api.hdhomerun.com/api/guide?DeviceAuth=...`, fields `ImageURL`, `EpisodeNumber`, `Synopsis`, paged by start time) — check coverage and terms before using it.
 - Schedules Direct is the fallback, with a paid account.
 
