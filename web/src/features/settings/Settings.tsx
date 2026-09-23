@@ -113,7 +113,7 @@ export function SettingsScreen({
         <span className="hint">{copy.settings.recordingsHint}</span>
       </label>
       <ReserveField value={settings.watermarkGB || "10"} storage={storage} onSave={(watermarkGB) => onChange({ watermarkGB })} />
-      <a className="btn" href="/api/backup">
+      <a className="btn" href="/api/v1/backup">
         {copy.settings.backup}
       </a>
       <form
@@ -123,7 +123,7 @@ export function SettingsScreen({
           const input = event.currentTarget.elements.namedItem("backup") as HTMLInputElement;
           const file = input.files?.[0];
           if (!file) return;
-          void fetch("/api/backup", { method: "POST", body: file }).then((res) => {
+          void fetch("/api/v1/backup", { method: "POST", body: file }).then((res) => {
             if (!res.ok) throw new Error("Restore failed");
             window.location.reload();
           });
