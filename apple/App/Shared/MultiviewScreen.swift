@@ -199,9 +199,12 @@ final class TilePlayer {
         guard audible else { return }
         let arbiter = AVRoutingPlaybackArbiter.shared()
         arbiter.preferredParticipantForExternalPlayback = player
-        if #available(iOS 27, tvOS 26, *) {
-            arbiter.preferredParticipantForNonMixableAudioRoutes = player
-        }
+        // The iOS declaration first ships in the iOS 27 SDK (Swift 6.4); CI still builds with Xcode 26.
+        #if os(tvOS) || compiler(>=6.4)
+            if #available(iOS 27, tvOS 26, *) {
+                arbiter.preferredParticipantForNonMixableAudioRoutes = player
+            }
+        #endif
     }
 
     private func clearRoute() {
