@@ -1,5 +1,5 @@
 import qrcode from "qrcode-generator";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { refreshGuide } from "../../api";
 import { useData } from "../../app/data";
 import { navigate } from "../../app/router";
@@ -23,11 +23,32 @@ export function Setup() {
   const [busy, setBusy] = useState(false);
   const [guideNote, setGuideNote] = useState("");
   const diag = useDiagnostics(step);
+  const pulledGuide = useRef(false);
 
   useEffect(() => {
     if (devices.length === 0) void rediscover();
     // Search once when the wizard opens.
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Startup refresh runs before a tuner added by hand exists, so the guide
+  // step loads listings itself the first time it opens on an empty catalog.
+  useEffect(() => {
+    if (step !== "guide" || devices.length === 0 || pulledGuide.current) return;
+    if (!diag?.guide) return;
+    if (diag.guide.airings > 0) {
+      pulledGuide.current = true;
+      return;
+    }
+    pulledGuide.current = true;
+    setBusy(true);
+    void refreshGuide()
+      .then((r) => setGuideNote(`Loaded ${r.airings} listings.`))
+      .catch((e: unknown) => setGuideNote(e instanceof Error ? e.message : "Listings did not load."))
+      .finally(() => {
+        setBusy(false);
+        void refresh(["airings"]);
+      });
+  }, [step, devices.length, diag, refresh]);
 
   const index = steps.findIndex((s) => s.id === step);
   const next = () => setStep(steps[Math.min(steps.length - 1, index + 1)].id);

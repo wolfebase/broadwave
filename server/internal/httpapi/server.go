@@ -230,6 +230,17 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	if values["hdhrEmulate"] == "" {
 		values["hdhrEmulate"] = "0"
 	}
+	needs, err := s.Store.ApplySetupDefault(r.Context(), time.Now())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if needs {
+		values["needsSetup"] = "1"
+	} else {
+		values["needsSetup"] = "0"
+		values["setupComplete"] = "1"
+	}
 	writeJSON(w, http.StatusOK, values)
 }
 

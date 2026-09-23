@@ -13,14 +13,17 @@ import (
 // Identity names this server to clients. The id survives restarts and renames,
 // so a paired app recognizes the same server on a new address.
 type Identity struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 func (s *Store) Identity(ctx context.Context, defaultName string) (Identity, error) {
 	var id Identity
-	err := s.db.QueryRowContext(ctx, `SELECT server_id, name FROM server_identity WHERE id = 1`).Scan(&id.ID, &id.Name)
+	var created string
+	err := s.db.QueryRowContext(ctx, `SELECT server_id, name, created_at FROM server_identity WHERE id = 1`).Scan(&id.ID, &id.Name, &created)
 	if err == nil {
+		id.CreatedAt, _ = time.Parse(time.RFC3339, created)
 		return id, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {

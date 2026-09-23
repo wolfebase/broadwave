@@ -20,6 +20,7 @@
 
 .setup-steps {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   list-style: none;
   padding: 0;
@@ -79,17 +80,20 @@
 }
 
 .setup-list li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 12px;
   padding: 14px 16px;
   border-radius: var(--radius-md);
   background: var(--color-surface2);
 }
 
+.setup-list li .dim {
+  grid-column: 1 / -1;
+}
+
 .ok {
-  margin-left: auto;
   color: var(--color-success);
   font-weight: 700;
   font-size: var(--type-footnote-size);
@@ -175,7 +179,8 @@
   height: 180px;
   padding: 10px;
   border-radius: var(--radius-md);
-  background: #fff;
+  /* Scanners need a light field; the canvas stays dark everywhere else. */
+  background: white;
 }
 
 .qr svg {
@@ -187,6 +192,7 @@
   font-size: var(--type-title3-size);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .activity {
@@ -202,6 +208,23 @@
   color: var(--color-text-tertiary);
   margin-right: 8px;
   font-variant-numeric: tabular-nums;
+}
+
+.layout-phone .setup {
+  padding: var(--space-6) var(--space-4) var(--space-12);
+}
+
+.layout-phone .setup-head h1 {
+  font-size: var(--type-title1-size);
+}
+
+.layout-phone .setup-card {
+  padding: var(--space-5);
+}
+
+.layout-phone .setup-row input {
+  min-width: 0;
+  flex-basis: 100%;
 }
 
 .layout-phone .signal {

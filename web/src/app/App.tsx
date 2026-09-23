@@ -39,12 +39,12 @@ export function App() {
 function Shell() {
   const { path, params } = useRoute();
   const layout = useLayout();
-  const { ready, error, recordings, passes, settings } = useData();
+  const { ready, error, recordings, settings } = useData();
   const player = usePlayer();
   const [online, setOnline] = useState(true);
   const recordingCount = recordings.filter((r) => r.status === "recording").length;
   const fullPlayer = path === "/watch" && player.mode === "full" && !!player.channel;
-  const firstRun = ready && settings.setupComplete !== "1" && recordings.length === 0 && passes.length === 0;
+  const firstRun = ready && settings.needsSetup === "1";
   const immersive = path === "/play" || (path === "/watch" && params.has("virtual")) || path === "/setup" || firstRun;
 
   useEffect(() => {
