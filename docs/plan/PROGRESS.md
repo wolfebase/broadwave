@@ -1,6 +1,21 @@
 # Progress
 
-Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`). Keep notes short. The executing agent updates this file after every task.
+Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
+
+## Resume here
+- Plan v2 written 2026-09-23 after run 1 (A1–D6). CI fixed in `e411da1` and `0984064`.
+- Next task: **R2** (start `CHANGELOG.md`, tag v0.2.0, wait for the release workflow, deploy to Unraid with `MODE=ghcr GHCR_IMAGE=ghcr.io/wolfebase/waveguide:0.2.0`, check A–D features on the LAN, log it).
+- Half done: nothing.
+- Update this block at the start of every task: current task, what is half done, next command.
+
+## Phase R — Repair and consolidate
+- [x] R1 CI green on all four jobs at 0984064 (lint fixes e411da1, Xcode 26 guard 0984064); `make check`; CI section in the dev-loop skill
+- [ ] R2 v0.2.0 tagged with CHANGELOG, deployed to Unraid via GHCR, A–D features checked on the LAN
+- [ ] R3 Instant boot: cached shell, windowed airings, gzip/brotli + ETag, Apple snapshot cache (< 300 ms warm)
+- [ ] R4 Artwork layouts by size and aspect; no upscaling past 1.25x
+- [ ] R5 Live preview frames from tuned muxes (no extra tunes)
+- [ ] R6 Apple screenshots of B–D on iPhone, iPad, Apple TV; defects fixed or listed
+- [ ] R7 Code review of run 1; `go test -race` clean
 
 ## Phase A — Stabilize and ship
 - [x] A1 Setup wizard verified at desktop/phone; robust first-run detection (commit d6bd17f)
@@ -9,13 +24,14 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [x] A4 Hygiene: unused copy removed, web on /api/v1 only, eslint and swiftlint clean in CI (commit ca94523)
 - [x] A5 Restart kills leftover ffmpeg, fails a cut-off recording, resumes a show still on, and SIGTERM releases the tuner
 - [x] A6 Public repo wolfebase/waveguide (twolfekc does not exist; see BLOCKERS), CI green, ghcr.io/wolfebase/waveguide:0.1.0 public for amd64 and arm64 (commit 5c9308b, tag v0.1.0)
-- [ ] A7 Apple signing (team D4MC63SS36, bundle IDs, profiles, `scripts/testflight.sh`, iOS archive signs). Upload blocked: no App Store Connect app record until an Apple ID login (see BLOCKERS)
+- [ ] A7 Apple signing done (team D4MC63SS36, bundle IDs, profiles, `scripts/testflight.sh`, iOS archive signs). Remaining: app records, App Group on profiles, iOS + tvOS uploads. Blocked on one Apple ID login (see BLOCKERS); retry at the start of every phase
 
 ## Phase B — Multiview
 - [x] B1 Tile renditions (540.none, 360.none), tuner plan, and a shared multiview room (commit feb8c17). Mosaic waits until the tiles exist (ADR 0004). 14.x still has no stored frequency, so the plan treats those as separate tuners until one tune locks.
 - [x] B2 Web multiview: 2-up, 1+2, 1+3, quad, PiP; sound follows focus; quick guide; saved sets; TV keys (commit efd9bf4). Real DUO 4.1 and 9.1 stayed 4 ms apart on 540 tiles; tuners released after leaving.
 - [x] B3 Apple multiview: tvOS 2-up and quad, iPad up to 4, iPhone portrait stacked; sound and AirPlay follow focus (commit fd51f07). Simulator check on the real DUO: Apple TV showed 4.1 and 9.1 side by side and in the top row of quad; iPhone stacked both with sound on 4.1.
 - [x] B4 Multiview polish + accessibility (commit 58af4e3). First open says to select a tile. The focused tile shows how it is sent. Make big is in the tile menu. VoiceOver reads the channel and the program.
+- [ ] B5 Mosaic rendition (xstack) for AirPlay, older devices, and exports
 
 ## Phase C — Guide and metadata
 - [x] C1 Channel matching (commit 716382d). SiliconDust XMLTV and the JSON guide both publish the same 9 of 27 (4.1, 5.1, 9.1, 9.4, 29.1, 38.1, 39.7, 41.1, 62.1). 14.1–14.16, 43.3, and 46.7 are absent, so they stay empty until another source is added. Call signs that differ by DT or HD still match, and Settings can pin a guide match.
@@ -24,6 +40,9 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [x] C4 Rich program model (commit f291b7d). Season and episode, the onscreen label, original air date, series id, live, premiere, finale, rating, and cast are stored and shown. This feed sends season, episode, and a date on most programs, and live on a couple. It does not send ratings or cast, so those stay empty. Listings already saved pick this up on the next guide refresh.
 - [x] C5 Guide UX (commit 37be574). The grid covers the listings on hand (up to two days). Now, Tonight, and Tomorrow jump the time. A Now button returns when now has scrolled away. Wide cells show a picture. Drag a channel to reorder it on this screen; right-click or H hides it. iPhone landscape and Apple TV use the grid, play/pause on Apple TV starts the focused show, and iPad keeps the program beside the guide.
 - [x] C6 Search (commit d7def66). Full-text search covers titles, subtitles, descriptions, and cast, plus recordings. Search on the web and on Apple lists the matches. Record every airing makes a pass for that title.
+- [ ] C7 Guide from the broadcast: PSIP EIT/ETT parser, passive harvest, preemptible idle scan, merge; >= 25/27 channels listed
+- [ ] C8 Honest guide depth and per-listing source
+- [ ] C9 Antenna and signal tools (Settings > Tuners)
 
 ## Phase D — Sports
 - [x] D1 Sports provider (commit 7923323). ESPN scoreboard for twelve leagues, with F1 and NASCAR as schedules only. A live board refreshes every 30 seconds; a quiet board waits two hours. A failed fetch backs off and keeps the last good board.
@@ -32,6 +51,8 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [x] D4 Team follows + team passes (commit 2a6777a). Follow a team from Sports. Home shows Your teams. Record every game is a pass that matches the team on any channel. The activity log announces the next game once.
 - [x] D5 Spoiler-safe score bugs (commit ee8f7a4). Scores show on the guide, sports cards, the player, and multiview. Hide scores in Settings blanks every result. A recorded game stays blank until it is watched.
 - [x] D6 Sports hub redesign (commit 9db0294). Sports shows what is on now, with the score and how long is left when the game is linked. A matched game uses its logo and color. Watch together plays the games that are on at once.
+- [ ] D7 Game Switcher (auto focus on the game that matters in multiview)
+- [ ] D8 Game alerts (followed teams, close games; spoiler-safe)
 
 ## Phase E — DVR
 - [ ] E1 Passes UI overhaul
@@ -54,7 +75,7 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [ ] F7 Latency modes
 
 ## Phase G — Relay and infrastructure
-- [ ] G1 Ring buffer
+- [ ] G1 Ring buffer (do right after K1; unblocks E7, F4, M1)
 - [ ] G2 ABR ladder
 - [ ] G3 LL-HLS packager
 - [ ] G4 HEVC renditions
@@ -63,6 +84,8 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [ ] G7 Multi-device tuner pool + recording reservations
 - [ ] G8 Metrics and structured logging
 - [ ] G9 Performance profiling on Unraid
+- [ ] G10 HDHomeRun health surface (read-only)
+- [ ] G11 Exports verified in the Plex/Jellyfin/Channels the user runs
 
 ## Phase H — Accounts and remote
 - [ ] H1 Profiles
@@ -92,11 +115,12 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [ ] J7 Brand: name decided (Waveguide, renamed everywhere); logo, app icon, marketing site to do
 
 ## Phase K — Quality
-- [ ] K1 Fake HDHomeRun + Go integration tests
+- [ ] K1 Fake HDHomeRun + Go integration tests + relay smoke in CI (do right after C9)
 - [ ] K2 Playwright e2e + visual snapshots + sync test
 - [ ] K3 Apple tests (Swift Testing + XCUITest)
 - [ ] K4 24 h Unraid soak
 - [ ] K5 CI expansion
+- [ ] K6 Performance budgets in CI
 
 ## Phase L — Release
 - [ ] L1 Versioning + changelog
@@ -104,3 +128,10 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [ ] L3 Community Apps: researched, template installed on TUS via URL, Validate + Scan clean, submitted
 - [ ] L4 TestFlight external + App Store readiness (icon, screenshots, privacy labels, review notes)
 - [ ] L5 Docs site
+
+## Phase M — Category-best extras
+- [ ] M1 Catch-up rewind and start over from the ring buffer
+- [ ] M2 Commercial skip while behind live
+- [ ] M3 "Which channel has the game?" from search, Siri, and widgets
+- [ ] M4 Smart favorites by time of day (on-device)
+- [ ] M5 Improvements found in J1 and K4 (add tasks, then do them)

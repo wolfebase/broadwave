@@ -73,6 +73,11 @@ Scripts: `scripts/dev-server.sh` (safe rebuild + restart on :18477 with a copy o
 - Restart the dev server with `scripts/dev-server.sh` (`pkill -x`, port wait). `pkill -f otav` kills your own shell.
 - The free SiliconDust XMLTV feed is 2 days (14 with their DVR subscription), must be refreshed at randomized 20-28 h intervals, and currently lists only 9 of the user's 27 channels.
 - Apple: tvOS has a system `.card` style; screenshots must be written into the workspace and downscaled before the Read tool can open them.
+- Run `make check` (tests + eslint + swiftlint + swiftformat) before every push and look at CI after it. `make test` alone skips lint, and `main` stayed red for four tasks unnoticed.
+- CI builds Apple with Xcode 26.6; this Mac has Xcode 27 (Swift 6.4). An API that is new in the 27 SDK needs `#if compiler(>=6.4)` around its `#available` check, or CI fails to compile.
+- The Mac dev server and the Unraid server share the one DUO. Check Unraid's diagnostics and schedule before a test that tunes; never make a real recording fail.
+- The Mac reaches Unraid through `utun4`, so Bonjour from TUS is invisible here. Check it on TUS with `avahi-browse`, and connect simulators by address.
+- Deploy to Unraid with `MODE=ghcr`; large uploads over the SSH tunnel drop mid-transfer.
 
 ## Definition of done
 
