@@ -2,8 +2,11 @@ package httpapi
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -170,7 +173,7 @@ func (s *Server) channels(w http.ResponseWriter, r *http.Request) {
 	if channels == nil {
 		channels = []store.Channel{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	writeCachedJSON(w, r, http.StatusOK, map[string]any{
 		"channels": channels,
 		"listings": "empty",
 		"message":  "Listings turn on when you add an XMLTV file. Live picture arrives with the player.",
@@ -266,7 +269,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		values["needsSetup"] = "0"
 		values["setupComplete"] = "1"
 	}
-	writeJSON(w, http.StatusOK, values)
+	writeCachedJSON(w, r, http.StatusOK, values)
 }
 
 func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
@@ -311,6 +314,16 @@ func (s *Server) ui(w http.ResponseWriter, r *http.Request) {
 }
 
 func serveFile(w http.ResponseWriter, r *http.Request, assets fs.FS, path string) bool {
+	if enc, ext := compressedEncoding(r); ext != "" {
+		if body, err := fs.ReadFile(assets, path+"."+ext); err == nil {
+			w.Header().Set("Content-Encoding", enc)
+			w.Header().Set("Vary", "Accept-Encoding")
+			w.Header().Set("Content-Type", contentType(path))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(body)
+			return true
+		}
+	}
 	f, err := assets.Open(path)
 	if err != nil {
 		return false
@@ -332,6 +345,37 @@ func serveFile(w http.ResponseWriter, r *http.Request, assets fs.FS, path string
 	return true
 }
 
+// compressedEncoding prefers brotli, then gzip, when the browser accepts it.
+func compressedEncoding(r *http.Request) (encoding, ext string) {
+	ae := r.Header.Get("Accept-Encoding")
+	if strings.Contains(ae, "br") {
+		return "br", "br"
+	}
+	if strings.Contains(ae, "gzip") {
+		return "gzip", "gz"
+	}
+	return "", ""
+}
+
+func contentType(path string) string {
+	switch {
+	case strings.HasSuffix(path, ".js"):
+		return "text/javascript; charset=utf-8"
+	case strings.HasSuffix(path, ".css"):
+		return "text/css; charset=utf-8"
+	case strings.HasSuffix(path, ".html"):
+		return "text/html; charset=utf-8"
+	case strings.HasSuffix(path, ".svg"):
+		return "image/svg+xml"
+	case strings.HasSuffix(path, ".json"):
+		return "application/json"
+	case strings.HasSuffix(path, ".woff2"):
+		return "font/woff2"
+	default:
+		return "application/octet-stream"
+	}
+}
+
 func (s *Server) withDevCORS(next http.Handler) http.Handler {
 	if !s.Dev {
 		return next
@@ -340,8 +384,9 @@ func (s *Server) withDevCORS(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 		if strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:") {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, If-None-Match")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, OPTIONS")
+			w.Header().Set("Access-Control-Expose-Headers", "ETag")
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -352,9 +397,53 @@ func (s *Server) withDevCORS(next http.Handler) http.Handler {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
+	body, err := marshalJSON(v)
+	if err != nil {
+		http.Error(w, "json", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	enc := json.NewEncoder(w)
-	enc.SetEscapeHTML(true)
-	_ = enc.Encode(v)
+	_, _ = w.Write(body)
+}
+
+// writeCachedJSON sets an ETag and gzips when the client accepts it.
+// A matching If-None-Match returns 304. The tag is the body, so gzip and plain share it.
+func writeCachedJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
+	body, err := marshalJSON(v)
+	if err != nil {
+		http.Error(w, "json", http.StatusInternalServerError)
+		return
+	}
+	sum := sha256.Sum256(body)
+	etag := `"` + hex.EncodeToString(sum[:16]) + `"`
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "private, no-cache")
+	w.Header().Set("Vary", "Accept-Encoding")
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		var buf bytes.Buffer
+		gz, _ := gzip.NewWriterLevel(&buf, gzip.DefaultCompression)
+		_, _ = gz.Write(body)
+		_ = gz.Close()
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(status)
+		_, _ = w.Write(buf.Bytes())
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
+}
+
+func marshalJSON(v any) ([]byte, error) {
+	body, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	return append(body, '\n'), nil
 }

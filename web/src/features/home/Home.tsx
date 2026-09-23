@@ -18,7 +18,7 @@ function mentions(text: string, name: string) {
 }
 
 export function Home() {
-  const { channels, index, now, recordings, ready, record } = useData();
+  const { channels, index, now, recordings, ready, settled, record } = useData();
   const player = usePlayer();
   const [teams, setTeams] = useState<TeamFollow[]>([]);
   useEffect(() => {
@@ -84,7 +84,20 @@ export function Home() {
   const resume = recordings.filter((r) => r.status !== "recording" && (r.position ?? 0) > 30 && !r.watched).slice(0, 10);
   const recent = recordings.filter((r) => r.status !== "recording" && !resume.includes(r)).slice(0, 12);
 
-  if (ready && channels.length === 0) {
+  if (!settled && channels.length === 0) {
+    return (
+      <div className="home" aria-busy="true">
+        <div className="skel hero-skel" />
+        <div className="skel-row">
+          <div className="skel" />
+          <div className="skel" />
+          <div className="skel" />
+        </div>
+      </div>
+    );
+  }
+
+  if (ready && settled && channels.length === 0) {
     return (
       <div className="home">
         <Empty title="Let's find your tuner" action={<button className="btn primary" onClick={() => navigate("/settings#sources")}>Set up</button>}>
@@ -152,6 +165,12 @@ export function Home() {
       ) : null}
 
       <Shelf title="On now" action={<button className="text-btn" onClick={() => navigate("/guide")}>Guide</button>}>
+        {onNow.length === 0 && !settled ? (
+          <div className="skel-row" aria-hidden="true">
+            <div className="skel" />
+            <div className="skel" />
+          </div>
+        ) : null}
         {onNow.map((l) => (
           <button key={l.channel.id} type="button" className="now-card" data-cat={l.cat} onClick={() => player.open(l.channel)}>
             <span className="nc-top">

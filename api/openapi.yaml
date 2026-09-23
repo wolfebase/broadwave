@@ -262,12 +262,29 @@ paths:
       operationId: listAirings
       parameters:
         - in: query
+          name: from
+          schema: { type: string, format: date-time }
+          description: Start of the window. Defaults to 30 minutes ago.
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+          description: End of the window. Defaults to 48 hours ahead when hours is omitted.
+        - in: query
+          name: channels
+          schema: { type: string }
+          description: Comma-separated channel ids. Omit for every channel.
+        - in: query
           name: hours
           schema: { type: integer, minimum: 1, maximum: 168, default: 48 }
-          description: How far ahead to return listings.
+          description: How far ahead to return listings when to is omitted. Kept for older clients.
       responses:
         "200":
-          description: Guide listings from 30 minutes ago through the window
+          description: Guide listings in the window
+          headers:
+            ETag:
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string }
           content:
             application/json:
               schema:

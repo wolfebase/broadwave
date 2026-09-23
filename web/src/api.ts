@@ -87,8 +87,13 @@ export function search(q: string) {
   return request<{ query: string; airings: SearchAiring[]; recordings: Recording[] }>(`/api/v1/search?q=${encodeURIComponent(q)}`);
 }
 
-export function getAirings() {
-  return request<{ airings: Airing[] }>("/api/v1/airings");
+export function getAirings(window?: { from?: string; to?: string; channels?: string }) {
+  const q = new URLSearchParams();
+  if (window?.from) q.set("from", window.from);
+  if (window?.to) q.set("to", window.to);
+  if (window?.channels) q.set("channels", window.channels);
+  const s = q.toString();
+  return request<{ airings: Airing[] }>(`/api/v1/airings${s ? `?${s}` : ""}`);
 }
 
 export function refreshGuide() {

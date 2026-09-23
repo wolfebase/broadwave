@@ -18,6 +18,7 @@ import {
 } from "../api";
 import { events } from "../lib/events";
 import { indexAirings, sortChannels, type AiringIndex } from "../lib/guide";
+import { hasSnapshotFlag, loadSnapshot, saveSnapshot } from "../lib/snapshot";
 import type { Airing, Channel, ChannelPatch, Device, Pass, PlannedAiring, Recording, Settings, StorageInfo, VirtualChannel } from "../types";
 
 const defaults: Settings = {
@@ -33,6 +34,10 @@ const defaults: Settings = {
 
 type Data = {
   ready: boolean;
+  /** True once a cached snapshot or the first network window is on screen. */
+  settled: boolean;
+  /** Full-screen boot. Only the very first visit, before any snapshot exists. */
+  booting: boolean;
   error: string;
   now: number;
   channels: Channel[];
@@ -65,8 +70,27 @@ export function useData(): Data {
   return v;
 }
 
+function guideWindow(now = Date.now()) {
+  return {
+    from: new Date(now - 30 * 60_000).toISOString(),
+    to: new Date(now + 4 * 60 * 60_000).toISOString(),
+    restTo: new Date(now + 48 * 60 * 60_000).toISOString(),
+  };
+}
+
+function mergeAirings(current: Airing[], more: Airing[]): Airing[] {
+  const seen = new Set(current.map((airing) => airing.id));
+  const out = current.slice();
+  for (const airing of more) {
+    if (!seen.has(airing.id)) out.push(airing);
+  }
+  return out;
+}
+
 export function DataProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
+  const [settled, setSettled] = useState(false);
+  const [booting, setBooting] = useState(() => !hasSnapshotFlag());
   const [error, setError] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -113,13 +137,79 @@ export function DataProvider({ children }: { children: ReactNode }) {
     loading.current = true;
     void (async () => {
       try {
-        const found = await getDevices();
-        if (found.devices.length === 0) await discover().catch(() => undefined);
-        await refresh();
+        const snap = await loadSnapshot();
+        if (snap) {
+          setChannels(sortChannels(snap.channels));
+          setAllChannels(sortChannels(snap.allChannels));
+          setAirings(snap.airings);
+          setRecordings(snap.recordings);
+          setSettled(true);
+          setBooting(false);
+          setReady(true);
+        }
+        const nextSettings = await getSettings();
+        setSettings(nextSettings);
+        if (nextSettings.needsSetup === "1") {
+          setReady(true);
+          setSettled(true);
+          setBooting(false);
+          return;
+        }
+        const span = guideWindow();
+        const [guideChannels, everyChannel, windowed, recs] = await Promise.all([
+          getChannels(true),
+          getChannels(false),
+          getAirings({ from: span.from, to: span.to }),
+          getRecordings(),
+        ]);
+        const channelsNow = sortChannels(guideChannels.channels);
+        const allNow = sortChannels(everyChannel.channels);
+        setChannels(channelsNow);
+        setAllChannels(allNow);
+        setAirings(windowed.airings);
+        setRecordings(recs.recordings);
+        setSettled(true);
+        setReady(true);
+        setBooting(false);
+        void saveSnapshot({
+          channels: channelsNow,
+          allChannels: allNow,
+          airings: windowed.airings,
+          recordings: recs.recordings,
+          savedAt: Date.now(),
+        });
+        const idle = window.requestIdleCallback ?? ((cb: IdleRequestCallback) => window.setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 0 } as IdleDeadline), 400));
+        idle(() => {
+          void (async () => {
+            const rest = await getAirings({ from: span.to, to: span.restTo }).catch(() => null);
+            if (rest) {
+              setAirings((current) => {
+                const merged = mergeAirings(current, rest.airings);
+                void saveSnapshot({
+                  channels: channelsNow,
+                  allChannels: allNow,
+                  airings: merged,
+                  recordings: recs.recordings,
+                  savedAt: Date.now(),
+                });
+                return merged;
+              });
+            }
+            await refresh(["devices", "passes", "virtuals"]);
+            void getStorage().then(setStorage).catch(() => undefined);
+            const found = await getDevices().catch(() => null);
+            if (found && found.devices.length === 0) {
+              const again = await discover().catch(() => null);
+              if (again) setDevices(again.devices);
+              await refresh(["channels"]);
+            }
+          })();
+        });
       } catch (err) {
         setError(err instanceof Error ? err.message : "The server could not be reached.");
-      } finally {
         setReady(true);
+        setSettled(true);
+        setBooting(false);
       }
     })();
   }, [refresh]);
@@ -146,6 +236,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Data>(
     () => ({
       ready,
+      settled,
+      booting,
       error,
       now,
       channels,
@@ -201,7 +293,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh(["channels"]);
       },
     }),
-    [ready, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, storage, refresh],
+    [ready, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, storage, refresh],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
