@@ -38,6 +38,7 @@ export function Multiview() {
   const guide = params.get("add") === "1";
   const [plan, setPlan] = useState<MultiviewPlan | null>(null);
   const [menu, setMenu] = useState(false);
+  const [hint] = useState(() => localStorage.getItem("waveguide-mv-hint-seen") !== "1");
   const [room] = useState(roomId);
   const chKey = params.get("ch") ?? "";
   const known = ids.map((id) => channels.find((c) => c.id === id)).filter((c): c is Channel => !!c);
@@ -49,6 +50,10 @@ export function Multiview() {
   useEffect(() => {
     rememberLayout(layout);
   }, [layout]);
+
+  useEffect(() => {
+    if (hint) localStorage.setItem("waveguide-mv-hint-seen", "1");
+  }, [hint]);
 
   useEffect(() => {
     const list = parseIds(chKey);
@@ -157,6 +162,7 @@ export function Multiview() {
           Save
         </button>
       </header>
+      {hint ? <p className="mv-note">Select a tile to hear it.</p> : null}
       {notice ? <p className="mv-note" role="status">{notice}</p> : null}
       <div className={`mv-grid${layoutMode === "phone" && layout === "2up" ? " stacked" : ""}`} data-layout={layout}>
         {ordered.length === 0 ? <p className="mv-empty">Pick two channels.</p> : null}
@@ -244,10 +250,12 @@ function Tile({
             <VolumeIcon /> Sound
           </span>
         ) : null}
+        {focused && stream.session?.stream.reason ? <span className="mv-detail">{stream.session.stream.reason}</span> : null}
       </div>
       {stream.error ? <p className="mv-error" role="alert">{stream.error}</p> : null}
       {menu ? (
         <div className="mv-menu" role="menu">
+          <button type="button" className="btn" onClick={(e) => { e.stopPropagation(); onFocus(); }}>Make big</button>
           <button type="button" className="btn" onClick={(e) => { e.stopPropagation(); onRecord(); }}>Record</button>
           <button type="button" className="btn" onClick={(e) => { e.stopPropagation(); onRemove(); }}>Remove</button>
           <button
