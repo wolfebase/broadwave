@@ -11,9 +11,11 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"waveguide/internal/discovery"
@@ -57,7 +59,24 @@ func main() {
 	work := filepath.Join(*configDir, "work")
 	ffmpegPath, _ := execLook("ffmpeg")
 	encoder := live.DetectEncoder(ffmpegPath)
+	live.Reap(work)
 	hub := live.New(st, work, ffmpegPath, encoder)
+	if err := dvr.Recover(context.Background(), st, time.Now(), func(rec store.Recording, left time.Duration) error {
+		minutes := int(left / time.Minute)
+		if minutes < 1 {
+			return nil
+		}
+		_, err := hub.RecordMeta(context.Background(), minutes, store.Recording{
+			ChannelID: rec.ChannelID, Title: rec.Title, Subtitle: rec.Subtitle,
+			Description: rec.Description, Category: rec.Category, ProgramID: rec.ProgramID,
+		})
+		if err != nil {
+			log.Printf("recording: resume %s: %v", rec.Title, err)
+		}
+		return nil
+	}); err != nil {
+		log.Printf("recording: %v", err)
+	}
 	hub.OnSaved = func(rec store.Recording) {
 		dvr.OnSaved(context.Background(), st, hub, rec)
 	}
@@ -114,6 +133,15 @@ func main() {
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	go func() {
+		<-ctx.Done()
+		hub.Shutdown()
+		shut, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shut)
+	}()
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
