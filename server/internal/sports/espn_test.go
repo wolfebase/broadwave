@@ -43,6 +43,10 @@ func TestParseScoreboardReadsTeamsAndBroadcast(t *testing.T) {
 	if game.Start.Format(time.RFC3339) != "2026-09-25T00:15:00Z" {
 		t.Fatal(game.Start)
 	}
+	short, err := ParseScoreboard("nfl", []byte(strings.Replace(chiefsAtBills, "2026-09-25T00:15:00Z", "2026-09-25T00:15Z", 1)))
+	if err != nil || len(short) != 1 || short[0].Start.Format(time.RFC3339) != "2026-09-25T00:15:00Z" {
+		t.Fatal(err, short)
+	}
 }
 
 func TestESPNAsksForTheLeagueAndDay(t *testing.T) {

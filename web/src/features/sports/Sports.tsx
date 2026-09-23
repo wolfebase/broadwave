@@ -7,6 +7,7 @@ import { categoryOf, dayLabel, isRecording, minutesLeft, progress, recordingKeys
 import type { Airing, Channel, TeamFollow } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
 import { ChannelBadge, Chip, Empty, LiveDot, Progress, RecDot } from "../../ui/primitives";
+import { useScoreMap } from "./scores";
 import "./sports.css";
 
 type Range = "live" | "today" | "week";
@@ -32,6 +33,7 @@ export function Sports() {
   const [range, setRange] = useState<Range>("today");
   const [leagueFilter, setLeague] = useState("all");
   const [teams, setTeams] = useState<TeamFollow[]>([]);
+  const scores = useScoreMap();
   useEffect(() => {
     getTeams().then((r) => setTeams(r.teams)).catch(() => setTeams([]));
   }, []);
@@ -121,6 +123,7 @@ export function Sports() {
                   ) : (
                     <h3 className="gc-title">{airing.subtitle || airing.title}</h3>
                   )}
+                  {airing.gameId && scores.get(airing.gameId) ? <p className="gc-score">{scores.get(airing.gameId)}</p> : null}
                   {liveNow ? (
                     <div className="gc-progress">
                       <Progress value={progress(airing, now)} category="sports" />

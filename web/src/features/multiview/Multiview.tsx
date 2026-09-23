@@ -9,6 +9,7 @@ import { events } from "../../lib/events";
 import type { Channel, MultiviewPlan } from "../../types";
 import { CloseIcon, VolumeIcon } from "../../ui/icons";
 import { useLiveStream } from "../player/useLiveStream";
+import { useScoreMap } from "../sports/scores";
 import { isLayout, rememberLayout, roomId, saveSet, savedLayout, slotsFor, type MvLayout } from "./storage";
 import "./multiview.css";
 
@@ -46,6 +47,7 @@ export function Multiview() {
   const visible = known.filter((c) => !blocked.has(c.id)).slice(0, slotsFor(layout));
   const ordered = layout === "2up" || layout === "quad" ? visible : [visible.find((c) => c.id === focus) ?? visible[0], ...visible.filter((c) => c.id !== focus)].filter((c): c is Channel => !!c);
   const notice = plan?.blocked[0]?.reason || plan?.note || "";
+  const scores = useScoreMap();
 
   useEffect(() => {
     rememberLayout(layout);
@@ -171,6 +173,7 @@ export function Multiview() {
             key={channel.id}
             channel={channel}
             title={airingAt(index, channel.id, now)?.title || channel.displayName}
+            score={scores.get(airingAt(index, channel.id, now)?.gameId ?? "")}
             focused={channel.id === (focused?.id ?? 0)}
             layout={layout}
             room={room}
@@ -208,6 +211,7 @@ export function Multiview() {
 function Tile({
   channel,
   title,
+  score,
   focused,
   layout,
   room,
@@ -218,6 +222,7 @@ function Tile({
 }: {
   channel: Channel;
   title: string;
+  score?: string;
   focused: boolean;
   layout: MvLayout;
   room: string;
@@ -244,7 +249,7 @@ function Tile({
       <video ref={videoRef} className="mv-video" autoPlay playsInline data-channel={channel.id} />
       <div className="mv-meta">
         <span>{channel.displayNumber}</span>
-        <span className="mv-title">{title}</span>
+        <span className="mv-title">{title}{score ? ` · ${score}` : ""}</span>
         {focused ? (
           <span className="mv-audio">
             <VolumeIcon /> Sound

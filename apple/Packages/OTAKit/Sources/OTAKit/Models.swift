@@ -61,6 +61,7 @@ public struct Airing: Codable, Sendable, Hashable, Identifiable {
     public var finale: Bool?
     public var rating: String?
     public var cast: String?
+    public var gameId: String? = nil
     public var guideNumber: String?
     public var channelName: String?
     public var start: Date
@@ -94,6 +95,31 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
 
     public var isRecording: Bool {
         status == "recording"
+    }
+}
+
+public struct ScoreTeam: Codable, Sendable, Hashable {
+    public var name: String
+    public var short: String?
+    public var abbr: String?
+    public var score: String?
+    public var home: Bool?
+}
+
+public struct ScoreGame: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var state: String?
+    public var teams: [ScoreTeam]?
+
+    public var line: String? {
+        guard state != "pre", let teams else { return nil }
+        guard let home = teams.first(where: { $0.home == true }),
+              let away = teams.first(where: { $0.home != true }),
+              let homeScore = home.score, !homeScore.isEmpty,
+              let awayScore = away.score, !awayScore.isEmpty else { return nil }
+        let awayName = away.abbr ?? away.short ?? away.name
+        let homeName = home.abbr ?? home.short ?? home.name
+        return "\(awayName) \(awayScore) · \(homeName) \(homeScore)"
     }
 }
 

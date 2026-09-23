@@ -10,6 +10,7 @@ struct GuideView: View {
     @State private var favoritesOnly = false
     @State private var selected: Selection?
     @State private var jump: Date?
+    @State private var scores: [String: String] = [:]
 
     struct Selection: Identifiable {
         let channel: Channel
@@ -35,16 +36,25 @@ struct GuideView: View {
             filters
             dayJump
             #if os(tvOS)
-                GuideGrid(channels: rows, highlight: filter, jump: jump) { selected = Selection(channel: $0, airing: $1) }
-            #else
+                GuideGrid(channels: rows, highlight: filter, jump: jump, scores: scores) { selected = Selection(channel: $0, airing: $1) }
+                #else
                 if sizeClass == .compact && verticalSize != .compact {
                     onNowList
                 } else {
-                    GuideGrid(channels: rows, highlight: filter, jump: jump) { selected = Selection(channel: $0, airing: $1) }
+                    GuideGrid(channels: rows, highlight: filter, jump: jump, scores: scores) { selected = Selection(channel: $0, airing: $1) }
                 }
             #endif
         }
         .navigationTitle("Guide")
+        .task {
+            guard let api = store.api else { return }
+            let games = (try? await api.scoreboard()) ?? []
+            var map: [String: String] = [:]
+            for game in games {
+                if let line = game.line { map[game.id] = line }
+            }
+            scores = map
+        }
         #if os(iOS)
             .toolbarTitleDisplayMode(.inline)
             .modifier(GuideDetail(selected: $selected, wide: sizeClass == .regular))
@@ -155,6 +165,7 @@ struct GuideGrid: View {
     let channels: [Channel]
     let highlight: OTAKit.Category?
     let jump: Date?
+    var scores: [String: String] = [:]
     let onSelect: (Channel, Airing?) -> Void
     @State private var offset: CGPoint = .zero
 
@@ -288,7 +299,7 @@ struct GuideGrid: View {
                 let e = min(airing.end, end)
                 let w = max(24, x(e) - x(s) - 4)
                 Button { onSelect(channel, airing) } label: {
-                    GuideCell(airing: airing, now: store.now, dim: highlight != nil && airing.kind != highlight, recording: store.activeRecording(on: channel) != nil && airing.isOn(at: store.now))
+                    GuideCell(airing: airing, now: store.now, dim: highlight != nil && airing.kind != highlight, recording: store.activeRecording(on: channel) != nil && airing.isOn(at: store.now), score: airing.gameId.flatMap { scores[$0] })
                         .frame(width: w, height: rowH - 10)
                 }
                 .buttonStyle(GuideCellStyle())
@@ -310,6 +321,7 @@ struct GuideCell: View {
     let now: Date
     let dim: Bool
     let recording: Bool
+    var score: String? = nil
 
     var body: some View {
         let kind = airing.kind
@@ -330,6 +342,9 @@ struct GuideCell: View {
                         Circle().fill(Tokens.ColorToken.tally).frame(width: 7, height: 7)
                     }
                     Text(airing.title).font(.footnote.weight(.semibold)).lineLimit(1)
+                    if let score, !score.isEmpty {
+                        Text(score).font(.caption2.weight(.semibold)).monospacedDigit().lineLimit(1)
+                    }
                     if airing.new == true {
                         Text("NEW").font(.caption2.weight(.heavy)).foregroundStyle(Tokens.ColorToken.accent)
                     }

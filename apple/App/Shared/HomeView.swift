@@ -218,6 +218,7 @@ struct GameCard: View {
     let channel: Channel
     let airing: Airing
     let now: Date
+    var score: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -236,6 +237,9 @@ struct GameCard: View {
                 Text(airing.subtitle ?? airing.title).font(.headline.weight(.heavy)).lineLimit(3)
             }
             Spacer(minLength: 0)
+            if let score, !score.isEmpty {
+                Text(score).font(.subheadline.weight(.semibold)).monospacedDigit()
+            }
             ChannelBadge(channel)
         }
         .padding(16)

@@ -298,6 +298,7 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		"pictureMode":    true,
 		"autoplay":       true,
 		"hdhrEmulate":    true,
+		"hideScores":     true,
 		"setupComplete":  true,
 		"sdUser":         true,
 		"sdPassword":     true,
@@ -323,6 +324,9 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 			if err != nil || n < 0 || n > 1000000 {
 				return fmt.Errorf("watermarkGB must be a whole number of gigabytes from 0 to 1000000")
 			}
+		}
+		if k == "hideScores" && v != "0" && v != "1" {
+			return fmt.Errorf("hideScores must be 0 or 1")
 		}
 		if k == "guideUrl" {
 			v = strings.TrimSpace(v)

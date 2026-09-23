@@ -15,7 +15,26 @@ import (
 type stubSports struct{}
 
 func (stubSports) Scoreboard(context.Context, string, time.Time) ([]sports.Game, error) {
-	return []sports.Game{{ID: "1", League: "nfl", Name: "Chiefs at Bills", State: "pre", Start: time.Now()}}, nil
+	return []sports.Game{{
+		ID: "1", League: "nfl", Name: "Chiefs at Bills", State: "in", Start: time.Now(),
+		Teams: []sports.Team{{Name: "Chiefs", Score: "27", Home: true}, {Name: "Bills", Score: "24"}},
+	}}, nil
+}
+
+func TestScoreboardHidesAnUnwatchedRecording(t *testing.T) {
+	st := testStore(t)
+	ends := time.Now().Add(time.Hour)
+	if _, err := st.CreateRecording(t.Context(), store.Recording{
+		ChannelID: 1, GuideNumber: "4.1", Title: "Chiefs at Bills", Status: "recording",
+		StartedAt: time.Now(), EndsAt: &ends, GameID: "1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st, Sports: stubSports{}}).Handler()
+	res := get(t, h, "/api/v1/sports/scoreboard?league=nfl")
+	if strings.Contains(res.Body.String(), `"score":"27"`) || !strings.Contains(res.Body.String(), "Chiefs at Bills") {
+		t.Fatalf("%s", res.Body.String())
+	}
 }
 
 func TestFollowTeamRoute(t *testing.T) {

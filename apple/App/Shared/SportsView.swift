@@ -5,6 +5,7 @@ import SwiftUI
 struct SportsView: View {
     @Environment(AppStore.self) private var store
     @Environment(NowPlaying.self) private var nowPlaying
+    @State private var scores: [String: String] = [:]
 
     var body: some View {
         let games = store.sports(hours: 7 * 24)
@@ -27,6 +28,15 @@ struct SportsView: View {
             .padding(.vertical)
         }
         .navigationTitle("Sports")
+        .task {
+            guard let api = store.api else { return }
+            let games = (try? await api.scoreboard()) ?? []
+            var map: [String: String] = [:]
+            for game in games {
+                if let line = game.line { map[game.id] = line }
+            }
+            scores = map
+        }
         .toolbar {
             if live.count >= 2 {
                 Button("Watch together") {
@@ -46,7 +56,7 @@ struct SportsView: View {
                             nowPlaying.play(channel)
                         }
                     } label: {
-                        GameCard(channel: channel, airing: airing, now: store.now)
+                        GameCard(channel: channel, airing: airing, now: store.now, score: airing.gameId.flatMap { scores[$0] })
                     }
                     .cardButton()
                     .contextMenu { ChannelActions(channel: channel, airing: airing) }

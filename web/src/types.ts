@@ -39,6 +39,7 @@ export type Settings = {
   pictureMode: "broadcast" | "smooth" | "film";
   autoplay: string;
   hdhrEmulate: string;
+  hideScores?: string;
   setupComplete?: string;
   needsSetup?: "0" | "1";
   lastGuidePull?: string;

@@ -133,6 +133,11 @@ public struct APIClient: Sendable {
         _ = try? await send("PUT", "/recordings/\(recordingID)/progress", body: B(position: position), as: R.self)
     }
 
+    public func scoreboard() async throws -> [ScoreGame] {
+        struct R: Decodable { var games: [ScoreGame] }
+        return try await send("GET", "/sports/scoreboard", as: R.self).games
+    }
+
     public func teams() async throws -> [TeamFollow] {
         struct R: Decodable { var teams: [TeamFollow] }
         return try await send("GET", "/teams", as: R.self).teams

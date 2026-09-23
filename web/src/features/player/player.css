@@ -70,6 +70,12 @@
   text-overflow: ellipsis;
 }
 
+.stage-score {
+  margin: 2px 0 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
 .stage-eyebrow {
   font-size: var(--type-footnote-size);
   color: rgba(255, 255, 255, 0.78);

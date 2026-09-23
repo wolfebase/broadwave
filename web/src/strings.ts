@@ -41,6 +41,8 @@ export const copy = {
     guideAddressHint: "An XMLTV link for channels the tuner guide skips.",
     movieArt: "Movie artwork",
     movieArtHint: "Fills posters the guide does not include.",
+    hideScores: "Hide scores",
+    hideScoresHint: "A recorded game stays hidden until you watch it.",
     passwordTitle: "This server is for the home network",
     passwordBody: "A password is required before remote access.",
     profile: "Profile",

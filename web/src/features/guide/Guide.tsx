@@ -18,6 +18,7 @@ import {
 import type { Airing, Channel } from "../../types";
 import { SearchIcon, StarIcon } from "../../ui/icons";
 import { ChannelBadge, Chip, Empty, Progress, RecDot } from "../../ui/primitives";
+import { useScoreMap } from "../sports/scores";
 import { ProgramSheet } from "./ProgramSheet";
 import "./guide.css";
 
@@ -63,6 +64,7 @@ export function Guide() {
   const [view, setView] = useState({ top: 0, left: 0, height: 800, width: 1200 });
   const [order, setOrder] = useState<number[]>(loadOrder);
   const [landscape, setLandscape] = useState(() => window.matchMedia("(orientation: landscape) and (max-height: 520px)").matches);
+  const scores = useScoreMap();
 
   const tv = layout === "tv";
   const rowH = tv ? 96 : 68;
@@ -407,6 +409,7 @@ export function Guide() {
                       <span className="cell-title">
                         {rec ? <RecDot scheduled={rec === "scheduled"} /> : null}
                         {a.title}
+                        {a.gameId && scores.get(a.gameId) ? <span className="cell-score">{scores.get(a.gameId)}</span> : null}
                         {a.new ? <span className="cell-new">New</span> : null}
                       </span>
                       <span className="cell-sub">{a.subtitle || (w > 160 ? spanLabel(a) : timeLabel(a.start))}</span>

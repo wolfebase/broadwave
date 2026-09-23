@@ -96,6 +96,17 @@ func (g Game) Away() (Team, bool) {
 // Live is true while the event is in progress.
 func (g Game) Live() bool { return g.State == "in" }
 
+// HideScore clears the result. A finished game also drops the detail line, which often repeats the score.
+func HideScore(game Game) Game {
+	for i := range game.Teams {
+		game.Teams[i].Score = ""
+	}
+	if game.Completed || game.State == "post" {
+		game.Detail = ""
+	}
+	return game
+}
+
 // Provider reads one league's scoreboard for a calendar day.
 type Provider interface {
 	Scoreboard(ctx context.Context, league string, day time.Time) ([]Game, error)
