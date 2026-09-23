@@ -12,12 +12,16 @@ struct GuideView: View {
     struct Selection: Identifiable {
         let channel: Channel
         let airing: Airing?
-        var id: String { "\(channel.id)-\(airing?.id ?? 0)" }
+        var id: String {
+            "\(channel.id)-\(airing?.id ?? 0)"
+        }
     }
 
     private var rows: [Channel] {
         store.channels.filter { c in
-            if favoritesOnly && !c.favorite { return false }
+            if favoritesOnly, !c.favorite {
+                return false
+            }
             guard let filter else { return true }
             let soon = store.now.addingTimeInterval(4 * 3600)
             return store.index.airings(c.id).contains { $0.end > store.now && $0.start < soon && $0.kind == filter }
@@ -28,23 +32,23 @@ struct GuideView: View {
         VStack(spacing: 0) {
             filters
             #if os(tvOS)
-            GuideGrid(channels: rows, highlight: filter) { selected = Selection(channel: $0, airing: $1) }
-            #else
-            if sizeClass == .compact {
-                onNowList
-            } else {
                 GuideGrid(channels: rows, highlight: filter) { selected = Selection(channel: $0, airing: $1) }
-            }
+            #else
+                if sizeClass == .compact {
+                    onNowList
+                } else {
+                    GuideGrid(channels: rows, highlight: filter) { selected = Selection(channel: $0, airing: $1) }
+                }
             #endif
         }
         .navigationTitle("Guide")
         #if os(iOS)
-        .toolbarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inline)
         #endif
-        .sheet(item: $selected) { sel in
-            ProgramSheet(channel: sel.channel, airing: sel.airing)
-                .presentationDetents([.medium, .large])
-        }
+            .sheet(item: $selected) { sel in
+                ProgramSheet(channel: sel.channel, airing: sel.airing)
+                    .presentationDetents([.medium, .large])
+            }
     }
 
     private var filters: some View {
@@ -65,7 +69,9 @@ struct GuideView: View {
     private func chip(_ title: String, color: Color? = nil, on: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                if let color { Circle().fill(color).frame(width: 8, height: 8) }
+                if let color {
+                    Circle().fill(color).frame(width: 8, height: 8)
+                }
                 Text(title).font(.subheadline.weight(.semibold))
             }
             .padding(.horizontal, 6)
@@ -77,27 +83,27 @@ struct GuideView: View {
     }
 
     #if os(iOS)
-    private var onNowList: some View {
-        List(rows) { channel in
-            let airing = store.index.on(channel.id, at: store.now)
-            Button {
-                selected = Selection(channel: channel, airing: airing)
-            } label: {
-                OnNowRow(
-                    channel: channel,
-                    airing: airing,
-                    next: store.index.next(channel.id, after: airing?.end ?? store.now),
-                    now: store.now,
-                    recording: store.activeRecording(on: channel) != nil
-                )
+        private var onNowList: some View {
+            List(rows) { channel in
+                let airing = store.index.on(channel.id, at: store.now)
+                Button {
+                    selected = Selection(channel: channel, airing: airing)
+                } label: {
+                    OnNowRow(
+                        channel: channel,
+                        airing: airing,
+                        next: store.index.next(channel.id, after: airing?.end ?? store.now),
+                        now: store.now,
+                        recording: store.activeRecording(on: channel) != nil
+                    )
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(Tokens.ColorToken.surface1)
+                .contextMenu { ChannelActions(channel: channel, airing: airing) }
             }
-            .buttonStyle(.plain)
-            .listRowBackground(Tokens.ColorToken.surface1)
-            .contextMenu { ChannelActions(channel: channel, airing: airing) }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-    }
     #endif
 }
 
@@ -111,13 +117,13 @@ struct GuideGrid: View {
     @State private var offset: CGPoint = .zero
 
     #if os(tvOS)
-    private let rowH: CGFloat = 110
-    private let perMinute: CGFloat = 10
-    private let channelW: CGFloat = 300
+        private let rowH: CGFloat = 110
+        private let perMinute: CGFloat = 10
+        private let channelW: CGFloat = 300
     #else
-    private let rowH: CGFloat = 72
-    private let perMinute: CGFloat = 6.4
-    private let channelW: CGFloat = 170
+        private let rowH: CGFloat = 72
+        private let perMinute: CGFloat = 6.4
+        private let channelW: CGFloat = 170
     #endif
     private let headH: CGFloat = 44
     private let hours = 24.0
@@ -131,7 +137,9 @@ struct GuideGrid: View {
         return clean.addingTimeInterval(-30 * 60)
     }
 
-    private func x(_ date: Date) -> CGFloat { CGFloat(date.timeIntervalSince(origin) / 60) * perMinute }
+    private func x(_ date: Date) -> CGFloat {
+        CGFloat(date.timeIntervalSince(origin) / 60) * perMinute
+    }
 
     var body: some View {
         let width = CGFloat(hours * 60) * perMinute
@@ -162,7 +170,9 @@ struct GuideGrid: View {
                                 Text(channel.displayNumber).font(.title3.weight(.heavy)).monospacedDigit()
                                 Text(channel.displayName).font(.caption.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
                                 Spacer(minLength: 0)
-                                if channel.favorite { Image(systemName: "star.fill").font(.caption2).foregroundStyle(Tokens.ColorToken.warning) }
+                                if channel.favorite {
+                                    Image(systemName: "star.fill").font(.caption2).foregroundStyle(Tokens.ColorToken.warning)
+                                }
                             }
                             .padding(.horizontal, 14)
                             .frame(width: channelW, height: rowH)
@@ -177,7 +187,7 @@ struct GuideGrid: View {
                 // Pinned time header
                 ZStack(alignment: .topLeading) {
                     Rectangle().fill(.ultraThinMaterial).frame(width: width + channelW, height: headH)
-                    ForEach(0..<Int(hours * 2), id: \.self) { i in
+                    ForEach(0 ..< Int(hours * 2), id: \.self) { i in
                         let t = origin.addingTimeInterval(Double(i) * 1800)
                         Text(t.formatted(date: .omitted, time: .shortened))
                             .font(.footnote.weight(.semibold))
@@ -249,7 +259,9 @@ struct GuideCell: View {
             RoundedRectangle(cornerRadius: 2).fill(kind.color).frame(width: 3).padding(.vertical, 10)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
-                    if recording { Circle().fill(Tokens.ColorToken.tally).frame(width: 7, height: 7) }
+                    if recording {
+                        Circle().fill(Tokens.ColorToken.tally).frame(width: 7, height: 7)
+                    }
                     Text(airing.title).font(.footnote.weight(.semibold)).lineLimit(1)
                     if airing.new == true {
                         Text("NEW").font(.caption2.weight(.heavy)).foregroundStyle(Tokens.ColorToken.accent)
@@ -305,7 +317,9 @@ struct ProgramSheet: View {
                 HStack {
                     ChannelBadge(channel, large: true)
                     Spacer()
-                    if on && airing != nil { LiveDot() }
+                    if on, airing != nil {
+                        LiveDot()
+                    }
                 }
                 if let airing {
                     Text("\(kind.label) · \(airing.start.formatted(.dateTime.weekday().hour().minute())) – \(airing.end.formatted(date: .omitted, time: .shortened))")
@@ -313,14 +327,18 @@ struct ProgramSheet: View {
                         .foregroundStyle(.secondary)
                 }
                 Text(airing?.title ?? channel.displayName).font(.largeTitle.weight(.heavy))
-                if let sub = airing?.subtitle { Text(sub).font(.title3).foregroundStyle(.secondary) }
+                if let sub = airing?.subtitle {
+                    Text(sub).font(.title3).foregroundStyle(.secondary)
+                }
                 if let airing, on {
                     HStack {
                         AiringProgress(airing.progress(at: store.now), color: kind.color)
                         Text(airing.minutesLeft(at: store.now)).font(.footnote).foregroundStyle(.secondary)
                     }
                 }
-                if let desc = airing?.description { Text(desc).foregroundStyle(.secondary) }
+                if let desc = airing?.description {
+                    Text(desc).foregroundStyle(.secondary)
+                }
                 VStack(spacing: 10) {
                     if on {
                         Button {

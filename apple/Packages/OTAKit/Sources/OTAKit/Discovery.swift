@@ -73,10 +73,10 @@ public final class Discovery {
                 guard let url = await Self.resolve(result.endpoint, port: port) else { return }
                 let server = FoundServer(id: id, name: display, url: url)
                 guard let self else { return }
-                if let i = self.servers.firstIndex(where: { $0.id == id }) {
-                    self.servers[i] = server
+                if let i = servers.firstIndex(where: { $0.id == id }) {
+                    servers[i] = server
                 } else {
-                    self.servers.append(server)
+                    servers.append(server)
                 }
             }
         }
@@ -96,14 +96,22 @@ public final class Discovery {
                     var url: URL?
                     if case let .hostPort(host, _) = conn.currentPath?.remoteEndpoint {
                         var h = "\(host)"
-                        if let pct = h.firstIndex(of: "%") { h = String(h[..<pct]) }
-                        if h.contains(":") { h = "[\(h)]" }
+                        if let pct = h.firstIndex(of: "%") {
+                            h = String(h[..<pct])
+                        }
+                        if h.contains(":") {
+                            h = "[\(h)]"
+                        }
                         url = URL(string: "http://\(h):\(port)")
                     }
                     conn.cancel()
-                    if once.claim() { cont.resume(returning: url) }
+                    if once.claim() {
+                        cont.resume(returning: url)
+                    }
                 case .failed, .cancelled:
-                    if once.claim() { cont.resume(returning: nil) }
+                    if once.claim() {
+                        cont.resume(returning: nil)
+                    }
                 default:
                     break
                 }
@@ -111,7 +119,9 @@ public final class Discovery {
             conn.start(queue: .global())
             DispatchQueue.global().asyncAfter(deadline: .now() + 4) {
                 conn.cancel()
-                if once.claim() { cont.resume(returning: nil) }
+                if once.claim() {
+                    cont.resume(returning: nil)
+                }
             }
         }
     }
@@ -124,7 +134,9 @@ final class OnceBox: @unchecked Sendable {
     func claim() -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        if done { return false }
+        if done {
+            return false
+        }
         done = true
         return true
     }

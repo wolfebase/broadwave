@@ -5,7 +5,9 @@ public struct APIError: LocalizedError, Sendable {
     public var message: String
     public var status: Int
 
-    public var errorDescription: String? { message }
+    public var errorDescription: String? {
+        message
+    }
 }
 
 /// Typed access to one server's /api/v1.
@@ -34,7 +36,7 @@ public struct APIClient: Sendable {
         URL(string: path, relativeTo: base)?.absoluteURL ?? base
     }
 
-    func send<T: Decodable>(_ method: String, _ path: String, body: (any Encodable)? = nil, as: T.Type = T.self) async throws -> T {
+    func send<T: Decodable>(_ method: String, _ path: String, body: (any Encodable)? = nil, as _: T.Type = T.self) async throws -> T {
         var req = URLRequest(url: url("/api/v1" + path))
         req.httpMethod = method
         req.timeoutInterval = 30
@@ -44,7 +46,7 @@ public struct APIClient: Sendable {
         }
         let (data, res) = try await session.data(for: req)
         let status = (res as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else {
+        guard (200 ..< 300).contains(status) else {
             if let err = try? JSONDecoder().decode(APIErrorBody.self, from: data) {
                 throw APIError(code: err.code, message: err.message, status: status)
             }
@@ -55,7 +57,9 @@ public struct APIClient: Sendable {
 
     // MARK: Server
 
-    public func server() async throws -> ServerInfo { try await send("GET", "/server") }
+    public func server() async throws -> ServerInfo {
+        try await send("GET", "/server")
+    }
 
     public func clock() async throws -> Double {
         struct R: Decodable { var serverTime: Double }
@@ -125,7 +129,9 @@ public struct APIClient: Sendable {
         _ = try await send("POST", "/passes", body: B(title: title, channelId: channelID), as: R.self)
     }
 
-    public func posterURL(recordingID: Int64) -> URL { url("/media/poster/\(recordingID)") }
+    public func posterURL(recordingID: Int64) -> URL {
+        url("/media/poster/\(recordingID)")
+    }
 }
 
 extension ISO8601DateFormatter {

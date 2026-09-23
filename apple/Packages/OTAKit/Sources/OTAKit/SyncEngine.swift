@@ -41,9 +41,9 @@ public final class SyncEngine {
     public func start() {
         handler = socket.on("sync.state") { [weak self] data in
             guard let self, let st = try? JSONDecoder().decode(RoomState.self, from: data), st.room == self.room else { return }
-            self.room_ = st
-            self.members = st.members
-            self.apply()
+            room_ = st
+            members = st.members
+            apply()
         }
         socket.join(room: room, channelID: channelID)
         state = .waiting
@@ -54,7 +54,9 @@ public final class SyncEngine {
 
     public func stop() {
         timer?.invalidate()
-        if let handler { socket.off("sync.state", handler) }
+        if let handler {
+            socket.off("sync.state", handler)
+        }
         socket.leave(room: room)
         player.rate = player.rate == 0 ? 0 : 1
         state = .off
@@ -81,7 +83,9 @@ public final class SyncEngine {
         drift = d
         if st.rate == 0 {
             player.pause()
-            if abs(d) > Self.trimMS * 2 { seek(to: target) }
+            if abs(d) > Self.trimMS * 2 {
+                seek(to: target)
+            }
             state = .locked
             return
         }
@@ -96,12 +100,16 @@ public final class SyncEngine {
             state = .syncing
             return
         }
-        if player.timeControlStatus == .paused { player.play() }
+        if player.timeControlStatus == .paused {
+            player.play()
+        }
         if abs(d) > Self.trimMS {
             player.rate = Float(1 + max(-Self.maxTrim, min(Self.maxTrim, -d / 2000)))
             state = .syncing
         } else {
-            if player.rate != 1 { player.rate = 1 }
+            if player.rate != 1 {
+                player.rate = 1
+            }
             state = .locked
         }
     }

@@ -35,7 +35,9 @@ struct SportsView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: cardWidth), spacing: 14)], spacing: 14) {
                 ForEach(list, id: \.1.id) { channel, airing in
                     Button {
-                        if airing.isOn(at: store.now) { nowPlaying.play(channel) }
+                        if airing.isOn(at: store.now) {
+                            nowPlaying.play(channel)
+                        }
                     } label: {
                         GameCard(channel: channel, airing: airing, now: store.now)
                     }
@@ -71,7 +73,9 @@ struct RecordingsView: View {
                                 .clipShape(.rect(cornerRadius: Tokens.Radius.sm))
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack(spacing: 6) {
-                                        if rec.isRecording { LiveDot("Recording") }
+                                        if rec.isRecording {
+                                            LiveDot("Recording")
+                                        }
                                         Text(rec.subtitle ?? rec.title).font(.headline).lineLimit(1)
                                     }
                                     Text(rec.startedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
@@ -102,7 +106,9 @@ struct SettingsView: View {
                 LabeledContent("Address", value: store.server?.url.absoluteString ?? "")
                 if let info = store.info {
                     LabeledContent("Version", value: info.version)
-                    if let enc = info.encoder { LabeledContent("Encoding", value: enc.replacingOccurrences(of: "h264_", with: "").uppercased()) }
+                    if let enc = info.encoder {
+                        LabeledContent("Encoding", value: enc.replacingOccurrences(of: "h264_", with: "").uppercased())
+                    }
                 }
                 Button("Use a different server", role: .destructive) { store.forget() }
             }

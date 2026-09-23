@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import OTAKit
+import Testing
 
 private func fixture(_ name: String) throws -> Data {
     let url = try #require(Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Fixtures"))
@@ -27,19 +27,19 @@ private func fixture(_ name: String) throws -> Data {
 }
 
 @Test func airingProgress() {
-    let start = Date(timeIntervalSince1970: 1_000)
-    let a = Airing(id: 1, channelId: 1, title: "News", start: start, end: start.addingTimeInterval(1_800))
+    let start = Date(timeIntervalSince1970: 1000)
+    let a = Airing(id: 1, channelId: 1, title: "News", start: start, end: start.addingTimeInterval(1800))
     #expect(a.progress(at: start.addingTimeInterval(900)) == 0.5)
     #expect(a.progress(at: start.addingTimeInterval(-10)) == 0)
     #expect(a.isOn(at: start.addingTimeInterval(1)))
-    #expect(!a.isOn(at: start.addingTimeInterval(1_800)))
+    #expect(!a.isOn(at: start.addingTimeInterval(1800)))
 }
 
 @Test func roomTargetAdvancesOnlyWhilePlaying() {
-    var room = RoomState(room: "channel:1", channelId: 1, mode: "follow", anchorServer: 10_000, anchorMedia: 5_000, rate: 1, latency: "balanced", version: 1, members: 2)
-    #expect(room.target(atServer: 12_000) == 7_000)
+    var room = RoomState(room: "channel:1", channelId: 1, mode: "follow", anchorServer: 10000, anchorMedia: 5000, rate: 1, latency: "balanced", version: 1, members: 2)
+    #expect(room.target(atServer: 12000) == 7000)
     room.rate = 0
-    #expect(room.target(atServer: 12_000) == 5_000)
+    #expect(room.target(atServer: 12000) == 5000)
 }
 
 @Test func appleDevicesAskForTheOriginalBroadcast() {

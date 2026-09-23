@@ -1,39 +1,4 @@
 export const copy = {
-  brand: "Waveguide",
-  nav: {
-    home: "Home",
-    guide: "Guide",
-    library: "Library",
-    schedule: "Schedule",
-    sources: "Sources",
-    settings: "Settings",
-  },
-  home: {
-    kicker: "On your antenna",
-    listings: "Nothing is listed on this channel right now.",
-    picture: "Watch starts the picture from the antenna.",
-    favorites: "Favorites",
-    noFavorites: "Mark a channel with a star on the guide and it will wait here.",
-    recording: "Nothing is recording",
-    recordingBody: "A recording you start from the guide will show its progress here.",
-    continueTitle: "Continue watching",
-    continueBody: "Pause a recording and its place shows up here.",
-  },
-  guide: {
-    channel: "Channel",
-    noListings: "No listings yet",
-    empty: "No channels match this filter.",
-    filters: { all: "All", favorites: "Favorites", hd: "HD" },
-    now: "Now",
-    watch: "Watch",
-    watchWhy: "Watch uses the antenna once for this broadcast, then shares it with every screen.",
-    record: "Record",
-    recordWhy: "Record keeps the original broadcast through the end of this airing.",
-    favoriteOn: "Favorited",
-    favoriteOff: "Add favorite",
-    sheetListings: "XMLTV listings fill this title, the episode, and the record time. Until then the guide is your lineup.",
-    help: "Arrows move. Enter opens the channel. Type a number to jump. F favorites. Watch starts the picture.",
-  },
   sources: {
     title: "Sources",
     lead: "The server reads the lineup only. It does not open a tuner from this screen.",
@@ -56,7 +21,6 @@ export const copy = {
   },
   schedule: {
     title: "Schedule",
-    body: "Series passes record matching airings for as far ahead as the guide goes.",
   },
   settings: {
     title: "Settings",
@@ -69,11 +33,7 @@ export const copy = {
     backup: "Download backup",
     backupHint: "The backup is the catalog: channels, passes, and markers. The video files stay on the recordings share.",
     passwordTitle: "This server is for the home network",
-    passwordBody: "A password is required before remote access. Accounts are a later session, and this screen will not pretend a password is already in force.",
+    passwordBody: "A password is required before remote access.",
     profile: "Profile",
-  },
-  status: {
-    looking: "Looking for an HDHomeRun on the network.",
-    failed: "The tuner could not be read.",
   },
 } as const;

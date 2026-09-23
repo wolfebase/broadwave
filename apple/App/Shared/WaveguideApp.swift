@@ -9,7 +9,7 @@ struct WaveguideApp: App {
 
     init() {
         #if os(iOS)
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         #endif
     }
 

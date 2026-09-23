@@ -65,7 +65,9 @@ final class LivePlayer {
         }
         var out = [item(.commonIdentifierTitle, airing?.title ?? channel.displayName)]
         out.append(item(.iTunesMetadataTrackSubTitle, "\(channel.displayNumber) \(channel.displayName)"))
-        if let d = airing?.description { out.append(item(.commonIdentifierDescription, d)) }
+        if let d = airing?.description {
+            out.append(item(.commonIdentifierDescription, d))
+        }
         return out
     }
 }
@@ -81,7 +83,7 @@ struct PlayerScreen: View {
             SystemPlayer(player: live.player, menu: channelMenu)
                 .ignoresSafeArea()
             #if os(iOS)
-            overlay
+                overlay
             #endif
             if let error = live.error {
                 Text(error)
@@ -91,18 +93,22 @@ struct PlayerScreen: View {
             }
         }
         .task(id: nowPlaying.channel?.id) {
-            if let channel = nowPlaying.channel { await live.start(channel, store: store) }
+            if let channel = nowPlaying.channel {
+                await live.start(channel, store: store)
+            }
         }
         .onDisappear {
             if nowPlaying.channel == nil || !nowPlaying.expanded {
                 #if os(tvOS)
-                Task { await live.stop() }
+                    Task { await live.stop() }
                 #endif
             }
         }
         #if os(iOS)
         .onChange(of: nowPlaying.channel) { _, new in
-            if new == nil { Task { await live.stop() } }
+            if new == nil {
+                Task { await live.stop() }
+            }
         }
         #endif
     }
@@ -123,45 +129,47 @@ struct PlayerScreen: View {
     }
 
     #if os(iOS)
-    private var overlay: some View {
-        HStack(spacing: 10) {
-            Button("Minimize", systemImage: "chevron.down") { nowPlaying.expanded = false }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.glass)
-            Spacer()
-            if let sync = live.sync, sync.state != .off {
-                HStack(spacing: 5) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                    if sync.members > 1 { Text("\(sync.members)").monospacedDigit() }
+        private var overlay: some View {
+            HStack(spacing: 10) {
+                Button("Minimize", systemImage: "chevron.down") { nowPlaying.expanded = false }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                Spacer()
+                if let sync = live.sync, sync.state != .off {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                        if sync.members > 1 {
+                            Text("\(sync.members)").monospacedDigit()
+                        }
+                    }
+                    .font(.footnote.weight(.bold))
+                    .fixedSize()
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .glassEffect(.regular.tint(sync.state == .locked ? Tokens.ColorToken.success.opacity(0.4) : nil))
+                    .accessibilityLabel(sync.members > 1 ? "Synced with \(sync.members) screens" : "Synced")
                 }
-                .font(.footnote.weight(.bold))
-                .fixedSize()
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .glassEffect(.regular.tint(sync.state == .locked ? Tokens.ColorToken.success.opacity(0.4) : nil))
-                .accessibilityLabel(sync.members > 1 ? "Synced with \(sync.members) screens" : "Synced")
-            }
-            GlassEffectContainer {
-                HStack(spacing: 6) {
-                    Button("Previous channel", systemImage: "chevron.up") { step(-1) }
-                    Button("Next channel", systemImage: "chevron.down") { step(1) }
+                GlassEffectContainer {
+                    HStack(spacing: 6) {
+                        Button("Previous channel", systemImage: "chevron.up") { step(-1) }
+                        Button("Next channel", systemImage: "chevron.down") { step(1) }
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.glass)
-            }
-            if let channel = nowPlaying.channel {
-                let recording = store.activeRecording(on: channel) != nil
-                Button(recording ? "Stop recording" : "Record", systemImage: recording ? "record.circle.fill" : "record.circle") {
-                    Task { await store.toggleRecord(channel) }
+                if let channel = nowPlaying.channel {
+                    let recording = store.activeRecording(on: channel) != nil
+                    Button(recording ? "Stop recording" : "Record", systemImage: recording ? "record.circle.fill" : "record.circle") {
+                        Task { await store.toggleRecord(channel) }
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                    .foregroundStyle(Tokens.ColorToken.tally)
                 }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.glass)
-                .foregroundStyle(Tokens.ColorToken.tally)
             }
+            .padding(.horizontal)
+            .padding(.top, 8)
         }
-        .padding(.horizontal)
-        .padding(.top, 8)
-    }
     #endif
 }
 
@@ -177,26 +185,28 @@ struct SystemPlayer: UIViewControllerRepresentable {
     let player: AVPlayer
     var menu: [ChannelMenuEntry] = []
 
-    func makeUIViewController(context: Context) -> AVPlayerViewController {
+    func makeUIViewController(context _: Context) -> AVPlayerViewController {
         let vc = AVPlayerViewController()
         vc.player = player
         vc.allowsPictureInPicturePlayback = true
         #if os(iOS)
-        vc.canStartPictureInPictureAutomaticallyFromInline = true
+            vc.canStartPictureInPictureAutomaticallyFromInline = true
         #endif
         #if os(tvOS)
-        vc.appliesPreferredDisplayCriteriaAutomatically = true
+            vc.appliesPreferredDisplayCriteriaAutomatically = true
         #endif
         return vc
     }
 
-    func updateUIViewController(_ vc: AVPlayerViewController, context: Context) {
-        if vc.player !== player { vc.player = player }
-        #if os(tvOS)
-        let actions = menu.map { entry in
-            UIAction(title: entry.title, state: entry.current ? .on : .off) { _ in entry.action() }
+    func updateUIViewController(_ vc: AVPlayerViewController, context _: Context) {
+        if vc.player !== player {
+            vc.player = player
         }
-        vc.transportBarCustomMenuItems = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions)]
+        #if os(tvOS)
+            let actions = menu.map { entry in
+                UIAction(title: entry.title, state: entry.current ? .on : .off) { _ in entry.action() }
+            }
+            vc.transportBarCustomMenuItems = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions)]
         #endif
     }
 }
@@ -211,7 +221,9 @@ struct RecordingPlayerScreen: View {
         SystemPlayer(player: player)
             .ignoresSafeArea()
             .overlay {
-                if let error { Text(error).padding().glassEffect() }
+                if let error {
+                    Text(error).padding().glassEffect()
+                }
             }
             .task {
                 guard let api = store.api else { return }
@@ -234,8 +246,8 @@ struct RecordingPlayerScreen: View {
                     Task { await api.saveProgress(recordingID: recording.id, position: pos) }
                 }
             }
-            #if os(iOS)
+        #if os(iOS)
             .toolbarVisibility(.hidden, for: .tabBar)
-            #endif
+        #endif
     }
 }

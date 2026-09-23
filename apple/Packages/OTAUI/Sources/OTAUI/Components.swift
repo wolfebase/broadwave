@@ -1,8 +1,8 @@
 import OTAKit
 import SwiftUI
 
-extension OTAKit.Category {
-    public var color: Color {
+public extension OTAKit.Category {
+    var color: Color {
         switch self {
         case .sports: Tokens.Category.sports
         case .news: Tokens.Category.news
@@ -47,7 +47,9 @@ public struct LiveDot: View {
     var label: String
     @State private var pulse = false
 
-    public init(_ label: String = "Live") { self.label = label }
+    public init(_ label: String = "Live") {
+        self.label = label
+    }
 
     public var body: some View {
         HStack(spacing: 6) {
@@ -157,7 +159,9 @@ public struct OnNowRow: View {
             .frame(width: 84, alignment: .leading)
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    if recording { Circle().fill(Tokens.ColorToken.tally).frame(width: 8, height: 8) }
+                    if recording {
+                        Circle().fill(Tokens.ColorToken.tally).frame(width: 8, height: 8)
+                    }
                     Text(airing?.title ?? "No listing").font(.body.weight(.semibold)).lineLimit(1)
                 }
                 AiringProgress(airing?.progress(at: now) ?? 0, color: kind.color)

@@ -40,7 +40,9 @@ public struct Airing: Codable, Sendable, Hashable, Identifiable {
     public var start: Date
     public var end: Date
 
-    public func isOn(at date: Date) -> Bool { start <= date && end > date }
+    public func isOn(at date: Date) -> Bool {
+        start <= date && end > date
+    }
 
     public func progress(at date: Date) -> Double {
         let span = end.timeIntervalSince(start)
@@ -64,7 +66,9 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
     public var durationSec: Double?
     public var watched: Int?
 
-    public var isRecording: Bool { status == "recording" }
+    public var isRecording: Bool {
+        status == "recording"
+    }
 }
 
 public struct Pass: Codable, Sendable, Hashable, Identifiable {

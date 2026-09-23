@@ -22,9 +22,13 @@ public final class EventSocket {
         url = comps.url!
     }
 
-    public static func nowMS() -> Double { Date().timeIntervalSince1970 * 1000 }
+    public static func nowMS() -> Double {
+        Date().timeIntervalSince1970 * 1000
+    }
 
-    public func serverNow() -> Double { Self.nowMS() + offset }
+    public func serverNow() -> Double {
+        Self.nowMS() + offset
+    }
 
     public func connect() {
         guard task == nil else { return }
@@ -33,14 +37,16 @@ public final class EventSocket {
         task.resume()
         receive(task)
         bestRTT = .infinity
-        for i in 0..<5 {
+        for i in 0 ..< 5 {
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200 + i * 300)) { [weak self] in self?.sampleClock() }
         }
         clockTimer?.invalidate()
         clockTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.sampleClock() }
         }
-        for (room, channel) in rooms { send("sync.join", ["room": room, "channelId": channel]) }
+        for (room, channel) in rooms {
+            send("sync.join", ["room": room, "channelId": channel])
+        }
     }
 
     public func disconnect() {
@@ -73,7 +79,9 @@ public final class EventSocket {
 
     public func command(room: String, action: String, mediaTime: Double? = nil) {
         var body: [String: Any] = ["room": room, "action": action]
-        if let mediaTime { body["mediaTime"] = mediaTime }
+        if let mediaTime {
+            body["mediaTime"] = mediaTime
+        }
         send("sync.command", body)
     }
 
@@ -113,7 +121,7 @@ public final class EventSocket {
 
     private func dispatch(_ data: Data) {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let type = obj["type"] as? String else { return }
-        let payload = (obj["data"]).flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.fragmentsAllowed]) } ?? Data()
+        let payload = obj["data"].flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.fragmentsAllowed]) } ?? Data()
         if type == "clock", let d = obj["data"] as? [String: Any], let t0 = d["t0"] as? Double, let t1 = d["t1"] as? Double {
             let t2 = Self.nowMS()
             let rtt = t2 - t0

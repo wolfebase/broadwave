@@ -41,11 +41,13 @@ struct RootView: View {
         .background(Tokens.ColorToken.canvas.ignoresSafeArea())
         .onOpenURL(perform: open)
         #if DEBUG
-        .task {
-            // Simulator testing: launch with -OTAWatch <channel id>.
-            let id = UserDefaults.standard.integer(forKey: "OTAWatch")
-            if id > 0 { open(URL(string: "waveguide://watch/\(id)")!) }
-        }
+            .task {
+                // Simulator testing: launch with -OTAWatch <channel id>.
+                let id = UserDefaults.standard.integer(forKey: "OTAWatch")
+                if id > 0 {
+                    open(URL(string: "waveguide://watch/\(id)")!)
+                }
+            }
         #endif
     }
 
@@ -65,8 +67,12 @@ struct RootView: View {
         case "watch":
             let id = Int64(url.lastPathComponent) ?? 0
             Task {
-                if store.channels.isEmpty { await store.refresh() }
-                if let channel = store.channels.first(where: { $0.id == id }) { nowPlaying.play(channel) }
+                if store.channels.isEmpty {
+                    await store.refresh()
+                }
+                if let channel = store.channels.first(where: { $0.id == id }) {
+                    nowPlaying.play(channel)
+                }
             }
         case "guide": tab = .guide
         case "sports": tab = .sports
@@ -95,52 +101,56 @@ struct RootView: View {
         }
         .tabViewStyle(.sidebarAdaptable)
         #if os(iOS)
-        .tabBarMinimizeBehavior(.onScrollDown)
-        .tabViewBottomAccessory(isEnabled: nowPlaying.channel != nil && !nowPlaying.expanded) {
-            MiniPlayerBar()
-        }
-        .fullScreenCover(isPresented: Binding(get: { nowPlaying.expanded && nowPlaying.channel != nil }, set: { nowPlaying.expanded = $0 })) {
-            PlayerScreen()
-                .environment(store)
-                .environment(nowPlaying)
-        }
+            .tabBarMinimizeBehavior(.onScrollDown)
+            .tabViewBottomAccessory(isEnabled: nowPlaying.channel != nil && !nowPlaying.expanded) {
+                MiniPlayerBar()
+            }
+            .fullScreenCover(isPresented: Binding(get: { nowPlaying.expanded && nowPlaying.channel != nil }, set: { nowPlaying.expanded = $0 })) {
+                PlayerScreen()
+                    .environment(store)
+                    .environment(nowPlaying)
+            }
         #else
-        .fullScreenCover(isPresented: Binding(get: { nowPlaying.channel != nil }, set: { if !$0 { nowPlaying.stop() } })) {
-            PlayerScreen()
-                .environment(store)
-                .environment(nowPlaying)
-        }
+            .fullScreenCover(isPresented: Binding(get: { nowPlaying.channel != nil }, set: {
+                if !$0 {
+                    nowPlaying.stop()
+                }
+            })) {
+                PlayerScreen()
+                    .environment(store)
+                    .environment(nowPlaying)
+            }
         #endif
-        .refreshable { await store.refresh() }
+            .refreshable { await store.refresh() }
     }
 }
 
 #if os(iOS)
-/// Live TV keeps a place at the bottom while you browse.
-struct MiniPlayerBar: View {
-    @Environment(AppStore.self) private var store
-    @Environment(NowPlaying.self) private var nowPlaying
+    /// Live TV keeps a place at the bottom while you browse.
+    struct MiniPlayerBar: View {
+        @Environment(AppStore.self) private var store
+        @Environment(NowPlaying.self) private var nowPlaying
 
-    var body: some View {
-        if let channel = nowPlaying.channel {
-            HStack(spacing: 12) {
-                LiveDot("")
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(store.index.on(channel.id, at: store.now)?.title ?? channel.displayName)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                    Text("\(channel.displayNumber) \(channel.displayName)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        var body: some View {
+            if let channel = nowPlaying.channel {
+                HStack(spacing: 12) {
+                    LiveDot("")
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(store.index.on(channel.id, at: store.now)?.title ?? channel.displayName)
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                        Text("\(channel.displayNumber) \(channel.displayName)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Close", systemImage: "xmark") { nowPlaying.stop() }
+                        .labelStyle(.iconOnly)
                 }
-                Spacer()
-                Button("Close", systemImage: "xmark") { nowPlaying.stop() }
-                    .labelStyle(.iconOnly)
+                .padding(.horizontal, 16)
+                .contentShape(.rect)
+                .onTapGesture { nowPlaying.expanded = true }
             }
-            .padding(.horizontal, 16)
-            .contentShape(.rect)
-            .onTapGesture { nowPlaying.expanded = true }
         }
     }
-}
 #endif

@@ -54,7 +54,7 @@ export function Stage({
   onTogglePlay?: () => void;
 }) {
   const [paused, setPaused] = useState(false);
-  const [idle, setIdle] = useState(false);
+  const [timedIdle, setTimedIdle] = useState(false);
   const [open, setOpen] = useState(false);
   const [muted, setMuted] = useState(false);
   const ownRoot = useRef<HTMLElement>(null);
@@ -77,16 +77,21 @@ export function Stage({
     };
   }, [videoRef]);
 
+  const showChrome = paused || open || mode === "mini";
+  const idle = !showChrome && timedIdle;
+  const [seenShow, setSeenShow] = useState(showChrome);
+  if (seenShow !== showChrome) {
+    setSeenShow(showChrome);
+    if (!showChrome) setTimedIdle(false);
+  }
+
   useEffect(() => {
-    if (paused || open || mode === "mini") {
-      setIdle(false);
-      return;
-    }
-    let timer = window.setTimeout(() => setIdle(true), 3200);
+    if (showChrome) return;
+    let timer = window.setTimeout(() => setTimedIdle(true), 3200);
     const poke = () => {
-      setIdle(false);
+      setTimedIdle(false);
       window.clearTimeout(timer);
-      timer = window.setTimeout(() => setIdle(true), 3200);
+      timer = window.setTimeout(() => setTimedIdle(true), 3200);
     };
     window.addEventListener("mousemove", poke);
     window.addEventListener("keydown", poke);
@@ -97,7 +102,7 @@ export function Stage({
       window.removeEventListener("keydown", poke);
       window.removeEventListener("touchstart", poke);
     };
-  }, [paused, open, mode]);
+  }, [showChrome]);
 
   function toggle() {
     if (onTogglePlay) return onTogglePlay();

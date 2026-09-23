@@ -29,7 +29,9 @@ struct ConnectView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("On your network").font(.headline)
-                            if discovery.searching && discovery.servers.isEmpty { ProgressView().padding(.leading, 6) }
+                            if discovery.searching, discovery.servers.isEmpty {
+                                ProgressView().padding(.leading, 6)
+                            }
                         }
                         if discovery.servers.isEmpty {
                             Text("Looking…").foregroundStyle(.secondary)
@@ -59,10 +61,10 @@ struct ConnectView: View {
                         HStack {
                             TextField("192.168.1.20:8477", text: $address)
                                 .textContentType(.URL)
-                                #if os(iOS)
+                            #if os(iOS)
                                 .keyboardType(.URL)
                                 .textInputAutocapitalization(.never)
-                                #endif
+                            #endif
                                 .autocorrectionDisabled()
                                 .padding(12)
                                 .background(Tokens.ColorToken.surface2, in: .rect(cornerRadius: Tokens.Radius.sm))
@@ -89,9 +91,13 @@ struct ConnectView: View {
 
     private func manualURL() -> URL? {
         var raw = address.trimmingCharacters(in: .whitespaces)
-        if !raw.contains("://") { raw = "http://" + raw }
+        if !raw.contains("://") {
+            raw = "http://" + raw
+        }
         guard var comps = URLComponents(string: raw) else { return nil }
-        if comps.port == nil { comps.port = 8477 }
+        if comps.port == nil {
+            comps.port = 8477
+        }
         return comps.url
     }
 

@@ -38,7 +38,9 @@ public final class AppStore {
         }
     }
 
-    public var connected: Bool { api != nil }
+    public var connected: Bool {
+        api != nil
+    }
 
     public func connect(_ server: FoundServer) {
         socket?.disconnect()
@@ -78,9 +80,9 @@ public final class AppStore {
             if lineup || self.channels.isEmpty {
                 self.channels = try await channels.sorted(by: Channel.guideOrder)
             }
-            self.index = GuideIndex(try await airings)
+            index = try await GuideIndex(airings)
             self.recordings = try await recordings
-            self.now = Date()
+            now = Date()
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -112,7 +114,9 @@ public final class AppStore {
 
     public func toggleFavorite(_ channel: Channel) async {
         guard let api, let updated = try? await api.setFavorite(channel, !channel.favorite) else { return }
-        if let i = channels.firstIndex(where: { $0.id == updated.id }) { channels[i] = updated }
+        if let i = channels.firstIndex(where: { $0.id == updated.id }) {
+            channels[i] = updated
+        }
     }
 
     public func recordSeries(_ airing: Airing) async {
@@ -122,17 +126,30 @@ public final class AppStore {
 
     /// What most likely deserves the big spot: sports first, then favorites.
     public func featured() -> (Channel, Airing?)? {
-        let scored = channels.map { c -> (Channel, Airing?, Double) in
+        struct Pick {
+            var channel: Channel
+            var airing: Airing?
+            var score: Double
+        }
+        let scored = channels.map { c -> Pick in
             let a = index.on(c.id, at: now)
             var s = 0.0
-            if a?.kind == .sports { s += 4 }
-            if c.favorite { s += 2 }
-            if a != nil { s += 1 }
-            if c.hd { s += 0.5 }
-            return (c, a, s)
+            if a?.kind == .sports {
+                s += 4
+            }
+            if c.favorite {
+                s += 2
+            }
+            if a != nil {
+                s += 1
+            }
+            if c.hd {
+                s += 0.5
+            }
+            return Pick(channel: c, airing: a, score: s)
         }
-        guard let best = scored.max(by: { $0.2 < $1.2 }) else { return nil }
-        return (best.0, best.1)
+        guard let best = scored.max(by: { $0.score < $1.score }) else { return nil }
+        return (best.channel, best.airing)
     }
 
     public func sports(hours: Double = 48) -> [(Channel, Airing)] {
@@ -146,8 +163,10 @@ public final class AppStore {
         return out.sorted { $0.1.start < $1.1.start }
     }
 
-    private func save<T: Encodable>(_ value: T, _ key: String) {
-        if let data = try? JSONEncoder().encode(value) { UserDefaults.standard.set(data, forKey: key) }
+    private func save(_ value: some Encodable, _ key: String) {
+        if let data = try? JSONEncoder().encode(value) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
     }
 
     private static func load<T: Decodable>(_ key: String) -> T? {

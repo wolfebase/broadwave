@@ -60,7 +60,14 @@ export function LivePlayer({
   const [behind, setBehind] = useState(0);
   const [span, setSpan] = useState({ at: 0, len: 1 });
   const [panel, setPanel] = useState<"none" | "guide" | "info" | "sync">("none");
-  const [guideRow, setGuideRow] = useState(0);
+  const matchedRow = Math.max(0, channels.findIndex((c) => c.id === channel.id));
+  const [guideRow, setGuideRow] = useState(matchedRow);
+  const [rowFor, setRowFor] = useState(`${channel.id}:${channels.map((c) => c.id).join(",")}`);
+  const rowKey = `${channel.id}:${channels.map((c) => c.id).join(",")}`;
+  if (rowFor !== rowKey) {
+    setRowFor(rowKey);
+    setGuideRow(matchedRow);
+  }
   const [zoom, setZoom] = useState<Zoom>(readZoom);
   const [sleepUntil, setSleepUntil] = useState<number | null>(null);
   const typed = useRef("");
@@ -127,6 +134,8 @@ export function LivePlayer({
       hlsRef.current = null;
       void stopWatch(id, joined);
     };
+    // The channel record is replaced on every guide poll; the id is the tune.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel.id, opts.quality, opts.audio, picture]);
 
   useEffect(() => {
@@ -163,10 +172,8 @@ export function LivePlayer({
   }, [sleepUntil, onClose]);
 
   useEffect(() => {
-    const i = channels.findIndex((c) => c.id === channel.id);
-    setGuideRow(i < 0 ? 0 : i);
     if (mode === "full") rootRef.current?.focus();
-  }, [channel.id, channels, mode]);
+  }, [channel.id, mode]);
 
   function detachSync() {
     if (opts.sync && !opts.shared) setOpts((o) => ({ ...o, sync: false }));

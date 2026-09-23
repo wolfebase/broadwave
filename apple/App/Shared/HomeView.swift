@@ -31,7 +31,9 @@ struct HomeView: View {
                     Shelf("Sports") {
                         ForEach(games.prefix(16), id: \.1.id) { channel, airing in
                             Button {
-                                if airing.isOn(at: store.now) { nowPlaying.play(channel) }
+                                if airing.isOn(at: store.now) {
+                                    nowPlaying.play(channel)
+                                }
                             } label: {
                                 GameCard(channel: channel, airing: airing, now: store.now)
                             }
@@ -57,11 +59,13 @@ struct HomeView: View {
         .navigationDestination(for: Recording.self) { RecordingPlayerScreen(recording: $0) }
         .navigationTitle("Home")
         #if os(iOS)
-        .toolbarTitleDisplayMode(.inlineLarge)
+            .toolbarTitleDisplayMode(.inlineLarge)
         #endif
-        .overlay {
-            if store.channels.isEmpty && store.loading { ProgressView() }
-        }
+            .overlay {
+                if store.channels.isEmpty, store.loading {
+                    ProgressView()
+                }
+            }
     }
 }
 
@@ -228,9 +232,9 @@ struct ChannelActions: View {
 }
 
 #if os(tvOS)
-let cardWidth: CGFloat = 380
+    let cardWidth: CGFloat = 380
 #else
-let cardWidth: CGFloat = 250
+    let cardWidth: CGFloat = 250
 #endif
 
 extension View {
@@ -238,9 +242,9 @@ extension View {
     @ViewBuilder
     func cardButton() -> some View {
         #if os(tvOS)
-        frame(width: cardWidth).buttonStyle(.card)
+            frame(width: cardWidth).buttonStyle(.card)
         #else
-        buttonStyle(PressCardStyle())
+            buttonStyle(PressCardStyle())
         #endif
     }
 }
