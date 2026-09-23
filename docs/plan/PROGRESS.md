@@ -19,7 +19,7 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 
 ## Phase C — Guide and metadata
 - [x] C1 Channel matching (commit 716382d). SiliconDust XMLTV and the JSON guide both publish the same 9 of 27 (4.1, 5.1, 9.1, 9.4, 29.1, 38.1, 39.7, 41.1, 62.1). 14.1–14.16, 43.3, and 46.7 are absent, so they stay empty until another source is added. Call signs that differ by DT or HD still match, and Settings can pin a guide match.
-- [ ] C2 Sources: SiliconDust JSON guide (if permitted), Schedules Direct UI, XMLTV URL/file, priorities
+- [x] C2 Guide sources (commit 82a80a7). The JSON guide lists the same 9 channels as XMLTV, so it is not a second listing source. Settings takes a Schedules Direct account (14 days, one day if the account refuses) and an XMLTV link. Both fill only channels the tuner guide skipped. No Schedules Direct account was found in other projects. A lineup list and a file upload wait on an account.
 - [ ] C3 Artwork: channel logos, program images, image proxy/cache, TMDB fallback
 - [ ] C4 Rich program model (season/episode, rating, flags, cast)
 - [ ] C5 Guide UX (web day scrubber, logos, column virtualization; Apple focus, iPhone landscape grid, iPad split)
