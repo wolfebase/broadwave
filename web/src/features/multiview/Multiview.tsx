@@ -8,6 +8,7 @@ import { airingAt } from "../../lib/guide";
 import { events } from "../../lib/events";
 import type { Channel, MultiviewPlan } from "../../types";
 import { CloseIcon, VolumeIcon } from "../../ui/icons";
+import { LiveFrame } from "../../ui/LiveFrame";
 import { useLiveStream } from "../player/useLiveStream";
 import { useScoreMap } from "../sports/scores";
 import { isLayout, rememberLayout, roomId, saveSet, savedLayout, slotsFor, type MvLayout } from "./storage";
@@ -198,6 +199,7 @@ export function Multiview() {
         <div className="mv-guide" role="listbox" aria-label="Add a channel">
           {channels.map((c) => (
             <button key={c.id} type="button" role="option" aria-selected={ids.includes(c.id)} className={ids.includes(c.id) ? "mv-ch on" : "mv-ch"} onClick={() => addChannel(c.id)}>
+              <LiveFrame id={c.id} className="mv-frame" />
               {c.displayNumber}
               <small>{c.displayName}</small>
             </button>

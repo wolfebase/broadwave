@@ -58,6 +58,7 @@ func (s *Server) Handler() http.Handler {
 	api("POST /sources", s.addSource)
 	api("GET /channels", s.channels)
 	api("PATCH /channels/{id}", s.patchChannel)
+	api("GET /channels/{id}/frame", s.frame)
 	api("GET /settings", s.getSettings)
 	api("PUT /settings", s.putSettings)
 	api("POST /watch", s.watch)

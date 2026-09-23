@@ -20,6 +20,7 @@ import { SearchIcon, StarIcon } from "../../ui/icons";
 import { ChannelBadge, Chip, Empty, Progress, RecDot } from "../../ui/primitives";
 import { useScoreMap } from "../sports/scores";
 import { ProgramSheet } from "./ProgramSheet";
+import { LiveFrame } from "../../ui/LiveFrame";
 import "./guide.css";
 
 type Filter = "all" | "favorites" | Category | "recording";
@@ -375,6 +376,7 @@ export function Guide() {
                 </button>
                 {list.length === 0 ? (
                   <div className="guide-cell empty" style={{ left: channelW + view.left + 4, width: Math.max(200, view.width - channelW - 8) }}>
+                    <LiveFrame id={c.id} className="cell-frame" />
                     <span className="cell-title">No listings</span>
                   </div>
                 ) : null}

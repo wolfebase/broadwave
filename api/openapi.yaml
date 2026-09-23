@@ -256,6 +256,27 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Channel" }
         "404": { $ref: "#/components/responses/Error" }
+  /channels/{id}/frame:
+    get:
+      tags: [channels]
+      operationId: channelFrame
+      summary: Latest preview from a mux that is already tuned.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - in: query
+          name: w
+          schema: { type: string, enum: ["480", "1280"] }
+          description: 480 is the small frame. 1280 is the wide one. A missing size is not upscaled.
+      responses:
+        "200":
+          description: JPEG preview. X-Frame-Stale is 1 when the picture is older than 10 minutes.
+          headers:
+            Last-Modified: { schema: { type: string } }
+            X-Frame-Stale: { schema: { type: string } }
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+        "404": { description: No preview yet. Watching is not started to make one. }
   /airings:
     get:
       tags: [guide]

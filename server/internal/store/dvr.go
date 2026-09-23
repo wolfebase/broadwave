@@ -171,6 +171,34 @@ func (s *Store) SetFieldOrder(ctx context.Context, channelID int64, order string
 	return err
 }
 
+// FrameTarget is a channel sharing a frequency that is already tuned.
+type FrameTarget struct {
+	ID         int64
+	ProgramNum int
+}
+
+func (s *Store) FrameTargets(ctx context.Context, deviceID string, freq int) ([]FrameTarget, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, program_num FROM channels
+WHERE device_id = ? AND frequency_hz = ? AND present = 1 AND hidden = 0`, deviceID, freq)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []FrameTarget
+	for rows.Next() {
+		var t FrameTarget
+		if err := rows.Scan(&t.ID, &t.ProgramNum); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	if out == nil {
+		out = []FrameTarget{}
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ReplaceAirings(ctx context.Context, rows []Airing) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

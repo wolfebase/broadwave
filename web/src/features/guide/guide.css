@@ -256,6 +256,14 @@
   opacity: 0.9;
 }
 
+.cell-frame {
+  width: auto;
+  max-width: 120px;
+  max-height: 36px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
 .guide-cell.now {
   background: color-mix(in srgb, var(--cat-color) 16%, var(--color-surface2));
 }
