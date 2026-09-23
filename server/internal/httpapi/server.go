@@ -20,57 +20,68 @@ import (
 )
 
 type Server struct {
-	Store  *store.Store
-	HDHR   *hdhr.Client
-	Hub    *live.Hub
-	Assets fs.FS
-	Dev    bool
+	Store   *store.Store
+	HDHR    *hdhr.Client
+	Hub     *live.Hub
+	Assets  fs.FS
+	Dev     bool
+	Version string
+
+	routes []string
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/health", s.health)
-	mux.HandleFunc("GET /api/profile", s.profile)
-	mux.HandleFunc("GET /api/devices", s.devices)
-	mux.HandleFunc("POST /api/sources/discover", s.discover)
-	mux.HandleFunc("GET /api/sources", s.listSources)
-	mux.HandleFunc("POST /api/sources", s.addSource)
-	mux.HandleFunc("GET /api/channels", s.channels)
-	mux.HandleFunc("PATCH /api/channels/{id}", s.patchChannel)
-	mux.HandleFunc("GET /api/settings", s.getSettings)
-	mux.HandleFunc("PUT /api/settings", s.putSettings)
-	mux.HandleFunc("POST /api/watch", s.watch)
-	mux.HandleFunc("POST /api/watch/{id}/stop", s.release)
-	mux.HandleFunc("GET /api/tuners", s.tuners)
-	mux.HandleFunc("POST /api/recordings", s.startRecording)
-	mux.HandleFunc("POST /api/recordings/{id}/stop", s.stopRecording)
-	mux.HandleFunc("GET /api/recordings", s.recordings)
-	mux.HandleFunc("DELETE /api/recordings/{id}", s.deleteRecording)
-	mux.HandleFunc("GET /api/recordings/{id}/file", s.downloadRecording)
-	mux.HandleFunc("GET /api/airings", s.airings)
-	mux.HandleFunc("GET /api/schedule", s.schedule)
-	mux.HandleFunc("POST /api/schedule/skip", s.skipAiring)
-	mux.HandleFunc("GET /api/events", s.events)
-	mux.HandleFunc("POST /api/guide/refresh", s.refreshGuide)
-	mux.HandleFunc("GET /api/passes", s.passes)
-	mux.HandleFunc("POST /api/passes", s.addPass)
-	mux.HandleFunc("PATCH /api/passes/{id}", s.updatePass)
-	mux.HandleFunc("DELETE /api/passes/{id}", s.deletePass)
-	mux.HandleFunc("POST /api/recordings/{id}/play", s.playRecording)
-	mux.HandleFunc("PUT /api/recordings/{id}/progress", s.saveProgress)
-	mux.HandleFunc("PUT /api/recordings/{id}/watched", s.setWatched)
-	mux.HandleFunc("GET /api/recordings/{id}/markers", s.markers)
-	mux.HandleFunc("POST /api/recordings/{id}/markers", s.addMarker)
-	mux.HandleFunc("DELETE /api/markers/{id}", s.deleteMarker)
-	mux.HandleFunc("POST /api/recordings/{id}/detect", s.detectBreaks)
-	mux.HandleFunc("GET /api/virtuals", s.virtuals)
-	mux.HandleFunc("POST /api/virtuals", s.createVirtual)
-	mux.HandleFunc("PATCH /api/virtuals/{id}", s.updateVirtual)
-	mux.HandleFunc("GET /api/virtuals/schedule", s.virtualSchedule)
-	mux.HandleFunc("POST /api/virtuals/{id}/play", s.playVirtual)
-	mux.HandleFunc("GET /api/storage", s.storage)
-	mux.HandleFunc("GET /api/backup", s.backup)
-	mux.HandleFunc("POST /api/backup", s.restore)
+	api := func(pattern string, h http.HandlerFunc) {
+		method, path, _ := strings.Cut(pattern, " ")
+		s.routes = append(s.routes, pattern)
+		mux.HandleFunc(method+" /api/v1"+path, h)
+		mux.HandleFunc(method+" /api"+path, h)
+	}
+	api("GET /health", s.health)
+	api("GET /server", s.serverInfo)
+	api("PATCH /server", s.renameServer)
+	api("GET /profile", s.profile)
+	api("GET /devices", s.devices)
+	api("POST /sources/discover", s.discover)
+	api("GET /sources", s.listSources)
+	api("POST /sources", s.addSource)
+	api("GET /channels", s.channels)
+	api("PATCH /channels/{id}", s.patchChannel)
+	api("GET /settings", s.getSettings)
+	api("PUT /settings", s.putSettings)
+	api("POST /watch", s.watch)
+	api("POST /watch/{id}/stop", s.release)
+	api("GET /tuners", s.tuners)
+	api("POST /recordings", s.startRecording)
+	api("POST /recordings/{id}/stop", s.stopRecording)
+	api("GET /recordings", s.recordings)
+	api("DELETE /recordings/{id}", s.deleteRecording)
+	api("GET /recordings/{id}/file", s.downloadRecording)
+	api("GET /airings", s.airings)
+	api("GET /schedule", s.schedule)
+	api("POST /schedule/skip", s.skipAiring)
+	api("GET /events", s.events)
+	api("POST /guide/refresh", s.refreshGuide)
+	api("GET /passes", s.passes)
+	api("POST /passes", s.addPass)
+	api("PATCH /passes/{id}", s.updatePass)
+	api("DELETE /passes/{id}", s.deletePass)
+	api("POST /recordings/{id}/play", s.playRecording)
+	api("PUT /recordings/{id}/progress", s.saveProgress)
+	api("PUT /recordings/{id}/watched", s.setWatched)
+	api("GET /recordings/{id}/markers", s.markers)
+	api("POST /recordings/{id}/markers", s.addMarker)
+	api("DELETE /markers/{id}", s.deleteMarker)
+	api("POST /recordings/{id}/detect", s.detectBreaks)
+	api("GET /virtuals", s.virtuals)
+	api("POST /virtuals", s.createVirtual)
+	api("PATCH /virtuals/{id}", s.updateVirtual)
+	api("GET /virtuals/schedule", s.virtualSchedule)
+	api("POST /virtuals/{id}/play", s.playVirtual)
+	api("GET /storage", s.storage)
+	api("GET /backup", s.backup)
+	api("POST /backup", s.restore)
 	mux.HandleFunc("GET /media/live/", s.media)
 	mux.HandleFunc("GET /media/file/", s.fileMedia)
 	mux.HandleFunc("GET /media/poster/{id}", s.poster)
@@ -110,7 +121,7 @@ func (s *Server) discover(w http.ResponseWriter, r *http.Request) {
 	if r.Body != nil {
 		dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
 		if err := dec.Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-			http.Error(w, "invalid json", http.StatusBadRequest)
+			httpError(w, "invalid json", http.StatusBadRequest)
 			return
 		}
 	}
@@ -152,7 +163,7 @@ func (s *Server) channels(w http.ResponseWriter, r *http.Request) {
 func (s *Server) patchChannel(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid channel", http.StatusBadRequest)
+		httpError(w, "invalid channel", http.StatusBadRequest)
 		return
 	}
 	var body struct {
@@ -163,7 +174,7 @@ func (s *Server) patchChannel(w http.ResponseWriter, r *http.Request) {
 		CustomNumber *string `json:"customNumber"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 	ch, err := s.Store.PatchChannel(r.Context(), id, store.ChannelPatch{
@@ -171,7 +182,7 @@ func (s *Server) patchChannel(w http.ResponseWriter, r *http.Request) {
 		CustomName: body.CustomName, CustomNumber: body.CustomNumber,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "channel not found", http.StatusNotFound)
+		httpError(w, "channel not found", http.StatusNotFound)
 		return
 	}
 	if err != nil {
@@ -217,11 +228,11 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	var body map[string]string
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 	if err := s.Store.PutSettings(r.Context(), body); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httpError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	s.getSettings(w, r)
@@ -229,7 +240,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) ui(w http.ResponseWriter, r *http.Request) {
 	if s.Assets == nil {
-		http.Error(w, "site is not built", http.StatusNotFound)
+		httpError(w, "site is not built", http.StatusNotFound)
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/")
@@ -295,8 +306,4 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(true)
 	_ = enc.Encode(v)
-}
-
-func writeError(w http.ResponseWriter, err error) {
-	http.Error(w, err.Error(), http.StatusBadGateway)
 }

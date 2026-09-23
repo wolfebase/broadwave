@@ -14,7 +14,7 @@ alwaysApply: false
 - **Recordings are the original MPEG-TS** (`-c copy`). Transcoding is only for delivery.
 - ffmpeg arguments are built in pure functions (see `live.PictureArgs`) and covered by table tests. Hardware encoders are detected at startup; always keep a software fallback.
 - Keep live HLS timestamps (`EXT-X-PROGRAM-DATE-TIME`) accurate. Whole-Home Sync depends on them.
-- **API:** routes live under `/api/v1` (legacy `/api` stays until the web app moves). Every route change updates `api/openapi.yaml`. JSON is camelCase. Errors are `{"error": {"code": "...", "message": "..."}}` with a correct status (400 validation, 404 missing, 409 busy or conflict, 507 disk low).
+- **API:** routes live under `/api/v1` (legacy `/api` stays until the web app moves). Every route change updates `api/openapi.yaml`. JSON is camelCase. Errors go through `apiError`/`writeError` and look like `{"code": "tuners_busy", "message": "...", ...details}` with a correct status (400 validation, 404 missing, 409 busy or conflict, 507 disk low).
 - **Schema:** numbered migrations in `internal/store/migrations/NNNN_name.sql`, applied in order and recorded in `schema_migrations`. Never edit a shipped migration.
 - Never persist or log secrets or tuner `DeviceAuth`. Don't hardcode IPs, ports other than defaults, or device paths; make them flags or settings.
 - Tests use fakes for the tuner and ffmpeg. `go test ./server/...` must pass without a network or tuner. Use `t.TempDir()` for files.

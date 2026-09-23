@@ -22,6 +22,9 @@ import (
 //go:embed all:assets
 var embedded embed.FS
 
+// version is set at build time with -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	addr := flag.String("addr", ":8477", "listen address")
 	configDir := flag.String("config", "data", "directory for the catalog database")
@@ -47,7 +50,7 @@ func main() {
 		dvr.OnSaved(context.Background(), st, hub, rec)
 	}
 	log.Printf("encoder: %s deint: %s smooth: %s blend: %v", encoder, hub.DeintBroadcast, hub.DeintSmooth, hub.Blend)
-	api := &httpapi.Server{Store: st, Assets: assets, Dev: *dev, Hub: hub}
+	api := &httpapi.Server{Store: st, Assets: assets, Dev: *dev, Hub: hub, Version: version}
 	handler := api.Handler()
 
 	go func() {

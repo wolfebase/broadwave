@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"ota-viewer/internal/disk"
 	"ota-viewer/internal/dvr"
 	"ota-viewer/internal/guide"
 	"ota-viewer/internal/live"
@@ -23,7 +22,7 @@ import (
 
 func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	if s.Hub == nil {
-		http.Error(w, "player is not configured", http.StatusServiceUnavailable)
+		httpError(w, "player is not configured", http.StatusServiceUnavailable)
 		return
 	}
 	var body struct {
@@ -33,17 +32,12 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		Picture   string `json:"pictureMode"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 	_, mode := s.playbackChoice(r.Context(), 0, body.Picture)
 	session, err := s.Hub.Watch(r.Context(), body.ChannelID, body.Profile, body.Audio, mode)
 	if err != nil {
-		var busy *live.BusyError
-		if errors.As(err, &busy) {
-			writeJSON(w, http.StatusConflict, map[string]any{"error": "tuners_busy", "message": err.Error(), "tuners": busy.Tuners})
-			return
-		}
 		writeError(w, err)
 		return
 	}
@@ -57,7 +51,7 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 func (s *Server) release(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid channel", http.StatusBadRequest)
+		httpError(w, "invalid channel", http.StatusBadRequest)
 		return
 	}
 	if s.Hub != nil {
@@ -89,7 +83,7 @@ func (s *Server) startRecording(w http.ResponseWriter, r *http.Request) {
 		Title     string `json:"title"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 	meta := store.Recording{ChannelID: body.ChannelID, Title: strings.TrimSpace(body.Title)}
@@ -108,16 +102,6 @@ func (s *Server) startRecording(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, err := s.Hub.RecordMeta(r.Context(), minutes, meta)
 	if err != nil {
-		var busy *live.BusyError
-		if errors.As(err, &busy) {
-			writeJSON(w, http.StatusConflict, map[string]any{"error": "tuners_busy", "message": err.Error(), "tuners": busy.Tuners})
-			return
-		}
-		var low *disk.LowError
-		if errors.As(err, &low) {
-			writeJSON(w, http.StatusInsufficientStorage, map[string]any{"error": "disk_low", "message": err.Error(), "freeBytes": low.Free, "needBytes": low.Need})
-			return
-		}
 		writeError(w, err)
 		return
 	}
@@ -127,7 +111,7 @@ func (s *Server) startRecording(w http.ResponseWriter, r *http.Request) {
 func (s *Server) stopRecording(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid recording", http.StatusBadRequest)
+		httpError(w, "invalid recording", http.StatusBadRequest)
 		return
 	}
 	s.Hub.StopRecord(id)
@@ -171,16 +155,16 @@ func (s *Server) recordings(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteRecording(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid recording", http.StatusBadRequest)
+		httpError(w, "invalid recording", http.StatusBadRequest)
 		return
 	}
 	rec, err := s.Store.Recording(r.Context(), id)
 	if err != nil {
-		http.Error(w, "recording not found", http.StatusNotFound)
+		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
 	if rec.Status == "recording" {
-		http.Error(w, "stop the recording before deleting it", http.StatusConflict)
+		httpError(w, "stop the recording before deleting it", http.StatusConflict)
 		return
 	}
 	if s.Hub != nil {
@@ -376,7 +360,7 @@ func (s *Server) addPass(w http.ResponseWriter, r *http.Request) {
 		PadAfter  *int   `json:"padAfter"`
 	}
 	if err := decodeJSON(r, &body); err != nil || strings.TrimSpace(body.Title) == "" {
-		http.Error(w, "title required", http.StatusBadRequest)
+		httpError(w, "title required", http.StatusBadRequest)
 		return
 	}
 	before, after := 1, 2
@@ -396,17 +380,17 @@ func (s *Server) addPass(w http.ResponseWriter, r *http.Request) {
 func (s *Server) updatePass(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid pass", http.StatusBadRequest)
+		httpError(w, "invalid pass", http.StatusBadRequest)
 		return
 	}
 	var body map[string]any
 	if err := decodeJSON(r, &body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 	current, err := s.passByID(r.Context(), id)
 	if err != nil {
-		http.Error(w, "pass not found", http.StatusNotFound)
+		httpError(w, "pass not found", http.StatusNotFound)
 		return
 	}
 	if v, ok := body["padBefore"]; ok {
@@ -450,7 +434,7 @@ func (s *Server) updatePass(w http.ResponseWriter, r *http.Request) {
 	}
 	current.ID = id
 	if err := s.Store.UpdatePassRules(r.Context(), current); err != nil {
-		http.Error(w, "pass not found", http.StatusNotFound)
+		httpError(w, "pass not found", http.StatusNotFound)
 		return
 	}
 	s.passes(w, r)

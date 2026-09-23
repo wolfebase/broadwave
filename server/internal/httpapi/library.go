@@ -17,16 +17,16 @@ import (
 func (s *Server) playRecording(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid recording", http.StatusBadRequest)
+		httpError(w, "invalid recording", http.StatusBadRequest)
 		return
 	}
 	rec, err := s.Store.Recording(r.Context(), id)
 	if err != nil {
-		http.Error(w, "recording not found", http.StatusNotFound)
+		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
 	if s.Hub == nil {
-		http.Error(w, "player is not configured", http.StatusServiceUnavailable)
+		httpError(w, "player is not configured", http.StatusServiceUnavailable)
 		return
 	}
 	var body struct {
@@ -64,18 +64,18 @@ func (s *Server) playRecording(w http.ResponseWriter, r *http.Request) {
 func (s *Server) saveProgress(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid recording", http.StatusBadRequest)
+		httpError(w, "invalid recording", http.StatusBadRequest)
 		return
 	}
 	var body struct {
 		Position float64 `json:"position"`
 	}
 	if err := decodeJSON(r, &body); err != nil || body.Position < 0 {
-		http.Error(w, "position required", http.StatusBadRequest)
+		httpError(w, "position required", http.StatusBadRequest)
 		return
 	}
 	if _, err := s.Store.Recording(r.Context(), id); err != nil {
-		http.Error(w, "recording not found", http.StatusNotFound)
+		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
 	if err := s.Store.SaveProgress(r.Context(), id, body.Position); err != nil {
@@ -88,7 +88,7 @@ func (s *Server) saveProgress(w http.ResponseWriter, r *http.Request) {
 func (s *Server) markers(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid recording", http.StatusBadRequest)
+		httpError(w, "invalid recording", http.StatusBadRequest)
 		return
 	}
 	list, err := s.Store.Markers(r.Context(), id)
@@ -105,7 +105,7 @@ func (s *Server) markers(w http.ResponseWriter, r *http.Request) {
 func (s *Server) addMarker(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid recording", http.StatusBadRequest)
+		httpError(w, "invalid recording", http.StatusBadRequest)
 		return
 	}
 	var body struct {
@@ -113,7 +113,7 @@ func (s *Server) addMarker(w http.ResponseWriter, r *http.Request) {
 		End   float64 `json:"end"`
 	}
 	if err := decodeJSON(r, &body); err != nil || body.End <= body.Start {
-		http.Error(w, "start and end required", http.StatusBadRequest)
+		httpError(w, "start and end required", http.StatusBadRequest)
 		return
 	}
 	marker, err := s.Store.AddMarker(r.Context(), id, body.Start, body.End)
@@ -128,7 +128,7 @@ func (s *Server) addMarker(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteMarker(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid marker", http.StatusBadRequest)
+		httpError(w, "invalid marker", http.StatusBadRequest)
 		return
 	}
 	recordingID, err := s.Store.DeleteMarker(r.Context(), id)
@@ -143,12 +143,12 @@ func (s *Server) deleteMarker(w http.ResponseWriter, r *http.Request) {
 func (s *Server) detectBreaks(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid recording", http.StatusBadRequest)
+		httpError(w, "invalid recording", http.StatusBadRequest)
 		return
 	}
 	rec, err := s.Store.Recording(r.Context(), id)
 	if err != nil {
-		http.Error(w, "recording not found", http.StatusNotFound)
+		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
 	found, err := live.DetectBreaks(s.Hub.FFmpeg, rec.Path)
@@ -175,11 +175,11 @@ func (s *Server) detectBreaks(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deletePass(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid pass", http.StatusBadRequest)
+		httpError(w, "invalid pass", http.StatusBadRequest)
 		return
 	}
 	if err := s.Store.DeletePass(r.Context(), id); err != nil {
-		http.Error(w, "pass not found", http.StatusNotFound)
+		httpError(w, "pass not found", http.StatusNotFound)
 		return
 	}
 	s.passes(w, r)
@@ -188,17 +188,17 @@ func (s *Server) deletePass(w http.ResponseWriter, r *http.Request) {
 func (s *Server) downloadRecording(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid recording", http.StatusBadRequest)
+		httpError(w, "invalid recording", http.StatusBadRequest)
 		return
 	}
 	rec, err := s.Store.Recording(r.Context(), id)
 	if err != nil || rec.Path == "" {
-		http.Error(w, "recording not found", http.StatusNotFound)
+		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
 	clean := filepath.Clean(rec.Path)
 	if !strings.EqualFold(filepath.Ext(clean), ".ts") {
-		http.Error(w, "recording not found", http.StatusNotFound)
+		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", "video/mp2t")
@@ -209,7 +209,7 @@ func (s *Server) downloadRecording(w http.ResponseWriter, r *http.Request) {
 func (s *Server) playVirtual(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid channel", http.StatusBadRequest)
+		httpError(w, "invalid channel", http.StatusBadRequest)
 		return
 	}
 	var body struct {
@@ -217,25 +217,25 @@ func (s *Server) playVirtual(w http.ResponseWriter, r *http.Request) {
 		Picture string `json:"pictureMode"`
 	}
 	if err := decodeJSON(r, &body); err != nil || body.Index < 0 {
-		http.Error(w, "index required", http.StatusBadRequest)
+		httpError(w, "index required", http.StatusBadRequest)
 		return
 	}
 	channel, err := s.Store.Virtual(r.Context(), id)
 	if err != nil {
-		http.Error(w, "channel not found", http.StatusNotFound)
+		httpError(w, "channel not found", http.StatusNotFound)
 		return
 	}
 	if body.Index >= len(channel.Recordings) {
-		http.Error(w, "this channel has no recording at that position", http.StatusBadRequest)
+		httpError(w, "this channel has no recording at that position", http.StatusBadRequest)
 		return
 	}
 	if s.Hub == nil {
-		http.Error(w, "player is not configured", http.StatusServiceUnavailable)
+		httpError(w, "player is not configured", http.StatusServiceUnavailable)
 		return
 	}
 	rec, err := s.Store.Recording(r.Context(), channel.Recordings[body.Index])
 	if err != nil {
-		http.Error(w, "recording not found", http.StatusNotFound)
+		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
 	codec, mode := s.playbackChoice(r.Context(), rec.ChannelID, body.Picture)
@@ -279,7 +279,7 @@ func (s *Server) createVirtual(w http.ResponseWriter, r *http.Request) {
 		Recordings []int64 `json:"recordings"`
 	}
 	if err := decodeJSON(r, &body); err != nil || strings.TrimSpace(body.Name) == "" {
-		http.Error(w, "name required", http.StatusBadRequest)
+		httpError(w, "name required", http.StatusBadRequest)
 		return
 	}
 	if body.Number == "" {
@@ -310,7 +310,7 @@ func (s *Server) writeEDL(ctx context.Context, recordingID int64) {
 
 func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 	if s.Hub == nil || s.Hub.Dir == "" {
-		http.Error(w, "player is not configured", http.StatusServiceUnavailable)
+		httpError(w, "player is not configured", http.StatusServiceUnavailable)
 		return
 	}
 	dir := filepath.Join(s.Hub.Dir, "recordings")
@@ -393,7 +393,7 @@ func (s *Server) backup(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) restore(w http.ResponseWriter, r *http.Request) {
 	if s.Hub == nil {
-		http.Error(w, "player is not configured", http.StatusServiceUnavailable)
+		httpError(w, "player is not configured", http.StatusServiceUnavailable)
 		return
 	}
 	path := filepath.Join(s.Hub.Dir, "backup", "restore.db")

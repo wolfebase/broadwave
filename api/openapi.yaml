@@ -1,35 +1,110 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: OTA Viewer
-  version: 0.1.0
+  version: 1.0.0
   description: |
-    Home DVR API. Tuner stream URLs are never returned. Device auth is never stored.
-    Library channels play recordings and do not take an antenna tuner.
+    Live TV and DVR server for HDHomeRun tuners. This document is the contract for the
+    web app and the iOS and tvOS apps; generated clients come from it.
+
+    Every route is served under `/api/v1`. The same routes are also mounted under `/api`
+    for the current web app and will be removed once it moves to `/api/v1`.
+
+    Errors use one envelope: `{"code": "tuners_busy", "message": "...", ...details}`.
+    Tuner stream URLs and tuner DeviceAuth are never returned.
 servers:
-  - url: http://127.0.0.1:8477
+  - url: http://localhost:8477/api/v1
+tags:
+  - name: server
+  - name: sources
+  - name: channels
+  - name: guide
+  - name: live
+  - name: recordings
+  - name: dvr
+  - name: virtuals
+  - name: settings
 paths:
-  /api/health:
+  /health:
     get:
+      tags: [server]
       operationId: health
       responses:
         "200":
           description: Server is up
-  /api/profile:
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, service]
+                properties:
+                  ok: { type: boolean }
+                  service: { type: string }
+  /server:
     get:
-      operationId: profile
+      tags: [server]
+      operationId: getServer
+      description: Identity and capabilities. Clients use `id` to recognize a paired server at a new address.
       responses:
         "200":
-          description: The single home profile. Accounts arrive later.
-  /api/devices:
+          description: Server info
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServerInfo" }
+    patch:
+      tags: [server]
+      operationId: renameServer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 63 }
+      responses:
+        "200":
+          description: Updated server info
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServerInfo" }
+        "400": { $ref: "#/components/responses/Error" }
+  /profile:
     get:
+      tags: [server]
+      operationId: getProfile
+      responses:
+        "200":
+          description: The household profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer, format: int64 }
+                  name: { type: string }
+                  auth: { type: string }
+  /devices:
+    get:
+      tags: [sources]
       operationId: listDevices
       responses:
         "200":
-          description: HDHomeRun devices already saved
-  /api/sources/discover:
+          description: Tuner and source devices
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [devices]
+                properties:
+                  devices:
+                    type: array
+                    items: { $ref: "#/components/schemas/Device" }
+  /sources/discover:
     post:
+      tags: [sources]
       operationId: discoverSources
-      description: Broadcast for a tuner, or read discover.json and lineup.json for one address. Does not open port 5004.
+      description: Find HDHomeRun tuners by broadcast, or read one address. Reads the lineup only.
       requestBody:
         required: false
         content:
@@ -37,63 +112,414 @@ paths:
             schema:
               type: object
               properties:
-                ip:
-                  type: string
-                  description: Host or host:port. Empty broadcasts.
+                ip: { type: string, description: "Host or host:port. Empty broadcasts." }
       responses:
         "200":
           description: Devices after the refresh
-  /api/channels:
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [devices, found]
+                properties:
+                  devices:
+                    type: array
+                    items: { $ref: "#/components/schemas/Device" }
+                  found: { type: integer }
+        "500": { $ref: "#/components/responses/Error" }
+  /sources:
     get:
+      tags: [sources]
+      operationId: listSources
+      responses:
+        "200":
+          description: M3U, stream link, and folder sources
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sources]
+                properties:
+                  sources:
+                    type: array
+                    items: { $ref: "#/components/schemas/Source" }
+    post:
+      tags: [sources]
+      operationId: addSource
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind: { type: string, enum: [m3u, link, folder] }
+                name: { type: string }
+                url: { type: string, description: "Playlist URL, stream URL, or folder path" }
+                xmltvUrl: { type: string }
+      responses:
+        "200":
+          description: Source added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  source: { $ref: "#/components/schemas/Source" }
+                  added: { type: integer }
+        "400": { $ref: "#/components/responses/Error" }
+  /channels:
+    get:
+      tags: [channels]
       operationId: listChannels
       parameters:
         - in: query
           name: guide
-          schema:
-            type: string
-            enum: ["1"]
-          description: When 1, hide disabled, hidden, and missing channels.
+          schema: { type: string, enum: ["1"] }
+          description: When 1, only channels that belong on the guide (present, enabled, not hidden).
       responses:
         "200":
-          description: Lineup. listings is empty until XMLTV.
-  /api/channels/{id}:
+          description: Lineup
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [channels]
+                properties:
+                  channels:
+                    type: array
+                    items: { $ref: "#/components/schemas/Channel" }
+  /channels/{id}:
     patch:
+      tags: [channels]
       operationId: patchChannel
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
+        - $ref: "#/components/parameters/Id"
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                favorite:
-                  type: boolean
-                enabled:
-                  type: boolean
-                hidden:
-                  type: boolean
-                customName:
-                  type: string
-                customNumber:
-                  type: string
+            schema: { $ref: "#/components/schemas/ChannelPatch" }
       responses:
         "200":
           description: Updated channel
-  /api/settings:
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Channel" }
+        "404": { $ref: "#/components/responses/Error" }
+  /airings:
     get:
-      operationId: getSettings
+      tags: [guide]
+      operationId: listAirings
+      parameters:
+        - in: query
+          name: hours
+          schema: { type: integer, minimum: 1, maximum: 168, default: 48 }
+          description: How far ahead to return listings.
       responses:
         "200":
-          description: layout and recordingsPath
+          description: Guide listings from 30 minutes ago through the window
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [airings]
+                properties:
+                  airings:
+                    type: array
+                    items: { $ref: "#/components/schemas/Airing" }
+  /guide/refresh:
+    post:
+      tags: [guide]
+      operationId: refreshGuide
+      responses:
+        "200":
+          description: Listings reloaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  airings: { type: integer }
+        "500": { $ref: "#/components/responses/Error" }
+  /watch:
+    post:
+      tags: [live]
+      operationId: watchChannel
+      description: Start or join live playback. Viewers on the same frequency share one tuner.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channelId]
+              properties:
+                channelId: { type: integer, format: int64 }
+                profile: { type: string, enum: [transparent, balanced, saver] }
+                audio: { type: string, enum: [stereo, surround] }
+                pictureMode: { $ref: "#/components/schemas/PictureMode" }
+      responses:
+        "200":
+          description: Live session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WatchSession" }
+        "409": { $ref: "#/components/responses/Error" }
+  /watch/{id}/stop:
+    post:
+      tags: [live]
+      operationId: stopWatching
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+  /tuners:
+    get:
+      tags: [live]
+      operationId: listTuners
+      description: Live tuner status, including tuners held by other devices.
+      responses:
+        "200":
+          description: Tuners
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tuners]
+                properties:
+                  tuners:
+                    type: array
+                    items: { $ref: "#/components/schemas/Tuner" }
+                  encoder: { type: string }
+  /recordings:
+    get:
+      tags: [recordings]
+      operationId: listRecordings
+      responses:
+        "200":
+          description: Recordings, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recordings]
+                properties:
+                  recordings:
+                    type: array
+                    items: { $ref: "#/components/schemas/Recording" }
+    post:
+      tags: [recordings]
+      operationId: startRecording
+      description: Record a channel now. When the guide has the current airing, the recording runs to its end plus padding.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channelId]
+              properties:
+                channelId: { type: integer, format: int64 }
+                minutes: { type: integer }
+                title: { type: string }
+      responses:
+        "200":
+          description: Recording started
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Recording" }
+        "409": { $ref: "#/components/responses/Error" }
+        "507": { $ref: "#/components/responses/Error" }
+  /recordings/{id}:
+    delete:
+      tags: [recordings]
+      operationId: deleteRecording
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "404": { $ref: "#/components/responses/Error" }
+  /recordings/{id}/stop:
+    post:
+      tags: [recordings]
+      operationId: stopRecording
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+  /recordings/{id}/play:
+    post:
+      tags: [recordings]
+      operationId: playRecording
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pictureMode: { $ref: "#/components/schemas/PictureMode" }
+      responses:
+        "200":
+          description: Playback for a finished or in-progress recording
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [playlist, position, growing, markers]
+                properties:
+                  playlist: { type: string }
+                  position: { type: number, description: "Resume position in seconds" }
+                  growing: { type: boolean, description: "True while the recording is still being written" }
+                  markers:
+                    type: array
+                    items: { $ref: "#/components/schemas/Marker" }
+        "404": { $ref: "#/components/responses/Error" }
+  /recordings/{id}/progress:
     put:
-      operationId: putSettings
-      description: Password is not a setting.
+      tags: [recordings]
+      operationId: saveProgress
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [position]
+              properties:
+                position: { type: number }
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  position: { type: number }
+  /recordings/{id}/watched:
+    put:
+      tags: [recordings]
+      operationId: setWatched
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [watched]
+              properties:
+                watched: { type: boolean }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+  /recordings/{id}/file:
+    get:
+      tags: [recordings]
+      operationId: downloadRecording
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: The original broadcast
+          content:
+            video/mp2t:
+              schema: { type: string, format: binary }
+  /recordings/{id}/markers:
+    get:
+      tags: [recordings]
+      operationId: listMarkers
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Commercial markers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [markers]
+                properties:
+                  markers:
+                    type: array
+                    items: { $ref: "#/components/schemas/Marker" }
+    post:
+      tags: [recordings]
+      operationId: addMarker
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [start, end]
+              properties:
+                start: { type: number }
+                end: { type: number }
+      responses:
+        "200":
+          description: Marker added
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Marker" }
+  /recordings/{id}/detect:
+    post:
+      tags: [recordings]
+      operationId: detectBreaks
+      description: Find commercial breaks (comskip when installed, otherwise black frames).
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Markers after detection
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [markers]
+                properties:
+                  markers:
+                    type: array
+                    items: { $ref: "#/components/schemas/Marker" }
+  /markers/{id}:
+    delete:
+      tags: [recordings]
+      operationId: deleteMarker
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+  /schedule:
+    get:
+      tags: [dvr]
+      operationId: getSchedule
+      description: Upcoming recordings from passes for the next 14 days, with conflicts marked.
+      responses:
+        "200":
+          description: Planned recordings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tunerCount, items]
+                properties:
+                  tunerCount: { type: integer }
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/PlannedAiring" }
+  /schedule/skip:
+    post:
+      tags: [dvr]
+      operationId: skipAiring
       requestBody:
         required: true
         content:
@@ -101,72 +527,519 @@ paths:
             schema:
               type: object
               properties:
-                layout:
-                  type: string
-                  enum: [auto, desktop, tv, phone]
-                recordingsPath:
-                  type: string
+                programId: { type: string }
+                title: { type: string }
+                subtitle: { type: string }
+                channelId: { type: integer, format: int64 }
+                start: { type: string, format: date-time }
       responses:
-        "200":
-          description: Saved settings
-        "400":
-          description: Unknown key or bad layout
-  /api/tuners:
+        "200": { $ref: "#/components/responses/Ok" }
+  /passes:
     get:
-      operationId: listTuners
-      description: Live HDHomeRun tuner rows, including tuners held by another device. Does not retune.
+      tags: [dvr]
+      operationId: listPasses
       responses:
         "200":
-          description: Tuner rows and the detected encoder name
-  /api/watch:
+          description: Passes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PassList" }
     post:
-      operationId: watchChannel
-      description: Start or join a live transcode. One tuner is shared by every viewer on that frequency.
+      tags: [dvr]
+      operationId: addPass
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                channelId: { type: integer, format: int64, description: "0 records on any channel" }
       responses:
         "200":
-          description: Playlist and encoder
-        "409":
-          description: Both tuners are busy
-  /api/schedule:
-    get:
-      operationId: schedule
-      description: Series-pass airings in the next 18 hours. conflict is true when more channels overlap than the tuner count.
+          description: Passes after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PassList" }
+  /passes/{id}:
+    patch:
+      tags: [dvr]
+      operationId: updatePass
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Pass" }
       responses:
         "200":
-          description: Planned recordings
-  /api/virtuals:
+          description: Passes after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PassList" }
+    delete:
+      tags: [dvr]
+      operationId: deletePass
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Passes after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PassList" }
+  /events:
     get:
+      tags: [server]
+      operationId: listEvents
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    items: { $ref: "#/components/schemas/Event" }
+  /virtuals:
+    get:
+      tags: [virtuals]
       operationId: listVirtuals
       responses:
         "200":
           description: Library channels
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [virtuals]
+                properties:
+                  virtuals:
+                    type: array
+                    items: { $ref: "#/components/schemas/VirtualChannel" }
     post:
+      tags: [virtuals]
       operationId: createVirtual
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                number: { type: string }
+                name: { type: string }
+                recordings:
+                  type: array
+                  items: { type: integer, format: int64 }
       responses:
         "200":
-          description: Created library channel
-  /api/virtuals/{id}/play:
-    post:
-      operationId: playVirtual
-      description: Transcode one recording on a library channel. usesTuner is false.
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VirtualChannel" }
+  /virtuals/{id}:
+    patch:
+      tags: [virtuals]
+      operationId: updateVirtual
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderMode: { type: string, enum: [custom, release, random, season, show, marathon] }
+                ruleTitle: { type: string }
+                recordings:
+                  type: array
+                  items: { type: integer, format: int64 }
       responses:
         "200":
-          description: File playlist
-  /api/recordings/{id}/file:
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VirtualChannel" }
+  /virtuals/schedule:
     get:
-      operationId: downloadRecording
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
+      tags: [virtuals]
+      operationId: virtualSchedule
       responses:
         "200":
-          description: Original MPEG-TS file
+          description: Library channel slots for the next 48 hours
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [virtuals]
+                properties:
+                  virtuals:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/VirtualChannel"
+                        - type: object
+                          properties:
+                            slots:
+                              type: array
+                              items: { $ref: "#/components/schemas/Slot" }
+  /virtuals/{id}/play:
+    post:
+      tags: [virtuals]
+      operationId: playVirtual
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                index: { type: integer }
+                pictureMode: { $ref: "#/components/schemas/PictureMode" }
+      responses:
+        "200":
+          description: Playback for one recording on the channel. Uses no tuner.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usesTuner: { type: boolean }
+                  index: { type: integer }
+                  count: { type: integer }
+                  playlist: { type: string }
+                  number: { type: string }
+                  name: { type: string }
+                  recording: { $ref: "#/components/schemas/Recording" }
+                  markers:
+                    type: array
+                    items: { $ref: "#/components/schemas/Marker" }
+  /settings:
+    get:
+      tags: [settings]
+      operationId: getSettings
+      responses:
+        "200":
+          description: Settings with defaults filled in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Settings" }
+    put:
+      tags: [settings]
+      operationId: putSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Settings" }
+      responses:
+        "200":
+          description: Saved settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Settings" }
+        "400": { $ref: "#/components/responses/Error" }
+  /storage:
+    get:
+      tags: [settings]
+      operationId: getStorage
+      responses:
+        "200":
+          description: Recordings disk
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  freeBytes: { type: integer, format: int64 }
+                  totalBytes: { type: integer, format: int64 }
+                  watermarkGB: { type: integer }
+  /backup:
+    get:
+      tags: [settings]
+      operationId: downloadBackup
+      responses:
+        "200":
+          description: Catalog database (channels edits, passes, markers, settings). Video files are not included.
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+    post:
+      tags: [settings]
+      operationId: restoreBackup
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+components:
+  parameters:
+    Id:
+      in: path
+      name: id
+      required: true
+      schema: { type: integer, format: int64 }
+  responses:
+    Ok:
+      description: Done
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ok: { type: boolean }
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      additionalProperties: true
+      properties:
+        code:
+          type: string
+          description: Stable machine code, for example tuners_busy, disk_low, not_found, bad_request.
+        message: { type: string, description: Short text safe to show a user. }
+        tuners:
+          type: array
+          items: { $ref: "#/components/schemas/Tuner" }
+        freeBytes: { type: integer, format: int64 }
+        needBytes: { type: integer, format: int64 }
+    ServerInfo:
+      type: object
+      required: [id, name, version, apiVersion, features]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        version: { type: string }
+        apiVersion: { type: integer }
+        encoder: { type: string }
+        tunerCount: { type: integer }
+        features:
+          type: array
+          items: { type: string }
+    Device:
+      type: object
+      required: [deviceId, friendlyName, baseUrl, tunerCount]
+      properties:
+        deviceId: { type: string }
+        friendlyName: { type: string }
+        modelNumber: { type: string }
+        firmwareName: { type: string }
+        firmwareVersion: { type: string }
+        upgradeAvailable: { type: string }
+        baseUrl: { type: string }
+        lineupUrl: { type: string }
+        tunerCount: { type: integer }
+        priority: { type: integer }
+        lastSeen: { type: string }
+    Source:
+      type: object
+      required: [id, kind, name, enabled]
+      properties:
+        id: { type: integer, format: int64 }
+        kind: { type: string, enum: [m3u, link, folder] }
+        name: { type: string }
+        url: { type: string }
+        xmltvUrl: { type: string }
+        enabled: { type: boolean }
+    Channel:
+      type: object
+      required: [id, deviceId, guideNumber, guideName, displayNumber, displayName, hd, favorite, enabled, hidden, present]
+      properties:
+        id: { type: integer, format: int64 }
+        deviceId: { type: string }
+        guideNumber: { type: string }
+        guideName: { type: string }
+        displayNumber: { type: string }
+        displayName: { type: string }
+        videoCodec: { type: string }
+        audioCodec: { type: string }
+        hd: { type: boolean }
+        favorite: { type: boolean }
+        enabled: { type: boolean }
+        hidden: { type: boolean }
+        present: { type: boolean }
+    ChannelPatch:
+      type: object
+      properties:
+        favorite: { type: boolean }
+        enabled: { type: boolean }
+        hidden: { type: boolean }
+        customName: { type: string }
+        customNumber: { type: string }
+    Airing:
+      type: object
+      required: [id, channelId, title, start, end]
+      properties:
+        id: { type: integer, format: int64 }
+        channelId: { type: integer, format: int64 }
+        title: { type: string }
+        subtitle: { type: string }
+        description: { type: string }
+        category: { type: string }
+        programId: { type: string }
+        new: { type: boolean }
+        start: { type: string, format: date-time }
+        end: { type: string, format: date-time }
+    PictureMode:
+      type: string
+      enum: [broadcast, smooth, film]
+      description: broadcast rebuilds interlaced video at 60 frames a second; smooth uses motion-compensated deinterlacing; film recovers 24p.
+    Tuner:
+      type: object
+      required: [index, ours]
+      properties:
+        index: { type: integer }
+        guide: { type: string }
+        name: { type: string }
+        target: { type: string }
+        ours: { type: boolean }
+        strength: { type: integer }
+        quality: { type: integer }
+        symbol: { type: integer }
+        viewers: { type: integer }
+    WatchSession:
+      type: object
+      required: [channelId, playlist, profile, audio, encoder, videoMode, shared, viewers]
+      properties:
+        channelId: { type: integer, format: int64 }
+        playlist: { type: string, description: "HLS playlist path, relative to the server origin" }
+        profile: { type: string }
+        audio: { type: string }
+        encoder: { type: string }
+        picture: { $ref: "#/components/schemas/PictureMode" }
+        videoMode: { type: string }
+        shared: { type: boolean }
+        viewers: { type: integer }
+        frequencyHz: { type: integer }
+        program: { type: integer }
+        hints:
+          type: array
+          items: { type: string }
+        tuners:
+          type: array
+          items: { $ref: "#/components/schemas/Tuner" }
+    Recording:
+      type: object
+      required: [id, channelId, guideNumber, title, status, startedAt]
+      properties:
+        id: { type: integer, format: int64 }
+        channelId: { type: integer, format: int64 }
+        guideNumber: { type: string }
+        title: { type: string }
+        subtitle: { type: string }
+        description: { type: string }
+        category: { type: string }
+        programId: { type: string }
+        status: { type: string, enum: [recording, complete, failed, stopped, imported] }
+        error: { type: string }
+        startedAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time }
+        bytes: { type: integer, format: int64 }
+        position: { type: number }
+        durationSec: { type: number }
+        watched: { type: integer }
+    Marker:
+      type: object
+      required: [id, start, end]
+      properties:
+        id: { type: integer, format: int64 }
+        recordingId: { type: integer, format: int64 }
+        start: { type: number }
+        end: { type: number }
+    Pass:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        title: { type: string }
+        channelId: { type: integer, format: int64 }
+        kind: { type: string }
+        padBefore: { type: integer, minimum: 0, maximum: 30 }
+        padAfter: { type: integer, minimum: 0, maximum: 30 }
+        priority: { type: integer }
+        episodes: { type: string, enum: [all, new] }
+        keepMode: { type: string, enum: [all, latest] }
+        keepCount: { type: integer }
+        limitCount: { type: integer }
+        rerecord: { type: boolean }
+        commercials: { type: boolean }
+        timeStart: { type: string, description: "HH:MM local" }
+        timeEnd: { type: string, description: "HH:MM local" }
+        matchKind: { type: string, enum: [title, contains, category] }
+    PassList:
+      type: object
+      required: [passes]
+      properties:
+        passes:
+          type: array
+          items: { $ref: "#/components/schemas/Pass" }
+    PlannedAiring:
+      type: object
+      required: [passId, airing, priority, padBefore, padAfter, conflict, skipped]
+      properties:
+        passId: { type: integer, format: int64 }
+        airing: { $ref: "#/components/schemas/Airing" }
+        priority: { type: integer }
+        padBefore: { type: integer }
+        padAfter: { type: integer }
+        conflict: { type: boolean }
+        skipped: { type: boolean }
+        reason: { type: string }
+    Event:
+      type: object
+      required: [id, at, kind, message]
+      properties:
+        id: { type: integer, format: int64 }
+        at: { type: string, format: date-time }
+        kind: { type: string }
+        message: { type: string }
+    VirtualChannel:
+      type: object
+      required: [id, number, name, recordings]
+      properties:
+        id: { type: integer, format: int64 }
+        number: { type: string }
+        name: { type: string }
+        orderMode: { type: string }
+        ruleTitle: { type: string }
+        recordings:
+          type: array
+          items: { type: integer, format: int64 }
+    Slot:
+      type: object
+      required: [recordingId, title, start, end]
+      properties:
+        recordingId: { type: integer, format: int64 }
+        title: { type: string }
+        start: { type: string, format: date-time }
+        end: { type: string, format: date-time }
+    Settings:
+      type: object
+      properties:
+        layout: { type: string, enum: [auto, desktop, tv, phone] }
+        recordingsPath: { type: string }
+        profile: { type: string, enum: [transparent, balanced, saver] }
+        audio: { type: string, enum: [stereo, surround] }
+        encoder: { type: string }
+        watermarkGB: { type: string, description: "Free-space reserve in GB; 0 turns it off" }
+        pictureMode: { $ref: "#/components/schemas/PictureMode" }
+        autoplay: { type: string, enum: ["0", "1"] }
+        hdhrEmulate: { type: string, enum: ["0", "1"] }

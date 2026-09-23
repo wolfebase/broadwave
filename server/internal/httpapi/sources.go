@@ -23,7 +23,7 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 		XMLTV string `json:"xmltvUrl"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 	kind := strings.ToLower(strings.TrimSpace(body.Kind))
@@ -96,7 +96,7 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"source": item, "added": added})
 	default:
-		http.Error(w, "kind must be m3u, link, or folder", http.StatusBadRequest)
+		httpError(w, "kind must be m3u, link, or folder", http.StatusBadRequest)
 	}
 }
 
@@ -142,14 +142,14 @@ func (s *Server) attachXMLTV(ctx context.Context, sourceID int64, rawURL string)
 func (s *Server) setWatched(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
 	if err != nil {
-		http.Error(w, "invalid recording", http.StatusBadRequest)
+		httpError(w, "invalid recording", http.StatusBadRequest)
 		return
 	}
 	var body struct {
 		Watched bool `json:"watched"`
 	}
 	if err := decodeJSON(r, &body); err != nil && err != io.EOF {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 	flag := 2
@@ -157,7 +157,7 @@ func (s *Server) setWatched(w http.ResponseWriter, r *http.Request) {
 		flag = 1
 	}
 	if err := s.Store.SetWatched(r.Context(), id, flag); err != nil {
-		http.Error(w, "recording not found", http.StatusNotFound)
+		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "watched": body.Watched})
@@ -172,7 +172,7 @@ func (s *Server) skipAiring(w http.ResponseWriter, r *http.Request) {
 		Start     string `json:"start"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 	key := store.EpisodeKey(body.ProgramID, body.Title, body.Subtitle, body.ChannelID)
@@ -189,7 +189,7 @@ func (s *Server) skipAiring(w http.ResponseWriter, r *http.Request) {
 func (s *Server) updateVirtual(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
 	if err != nil {
-		http.Error(w, "invalid channel", http.StatusBadRequest)
+		httpError(w, "invalid channel", http.StatusBadRequest)
 		return
 	}
 	var body struct {
@@ -198,7 +198,7 @@ func (s *Server) updateVirtual(w http.ResponseWriter, r *http.Request) {
 		Recordings []int64 `json:"recordings"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 	if body.RuleTitle != "" && body.Recordings == nil {
@@ -211,7 +211,7 @@ func (s *Server) updateVirtual(w http.ResponseWriter, r *http.Request) {
 	}
 	updated, err := s.Store.UpdateVirtual(r.Context(), id, body.OrderMode, body.RuleTitle, body.Recordings)
 	if err != nil {
-		http.Error(w, "channel not found", http.StatusNotFound)
+		httpError(w, "channel not found", http.StatusNotFound)
 		return
 	}
 	writeJSON(w, http.StatusOK, updated)
