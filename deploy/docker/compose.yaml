@@ -1,6 +1,6 @@
 services:
   waveguide:
-    image: ghcr.io/twolfekc/waveguide:latest
+    image: ghcr.io/wolfebase/waveguide:latest
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile

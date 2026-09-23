@@ -1,14 +1,14 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>Waveguide</Name>
-  <Repository>ghcr.io/twolfekc/waveguide:latest</Repository>
-  <Registry>https://github.com/twolfekc/waveguide/pkgs/container/waveguide</Registry>
+  <Repository>ghcr.io/wolfebase/waveguide:latest</Repository>
+  <Registry>https://github.com/wolfebase/waveguide/pkgs/container/waveguide</Registry>
   <Network>host</Network>
   <MyIP/>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/twolfekc/waveguide/issues</Support>
-  <Project>https://github.com/twolfekc/waveguide</Project>
+  <Support>https://github.com/wolfebase/waveguide/issues</Support>
+  <Project>https://github.com/wolfebase/waveguide</Project>
   <Overview>Live TV and DVR for your antenna. Finds your HDHomeRun, fills a 14-day guide, records the original broadcast, and shares one tuner with every screen in the house, in sync. Apps for iPhone and Apple TV find this server on their own.</Overview>
   <Category>MediaApp:Video MediaServer:Video</Category>
   <WebUI>http://[IP]:[PORT:8477]/</WebUI>
