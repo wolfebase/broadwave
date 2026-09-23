@@ -1006,6 +1006,16 @@ components:
         programId: { type: string }
         new: { type: boolean }
         imageUrl: { type: string, description: "Program artwork from the guide. Empty when the source has none." }
+        season: { type: integer, description: "1-based season. Omitted when the guide does not say." }
+        episode: { type: integer, description: "1-based episode. Omitted when the guide does not say." }
+        episodeLabel: { type: string }
+        originalAir: { type: string, description: "YYYY-MM-DD or a year." }
+        seriesId: { type: string }
+        live: { type: boolean }
+        premiere: { type: boolean }
+        finale: { type: boolean }
+        rating: { type: string }
+        cast: { type: string }
         start: { type: string, format: date-time }
         end: { type: string, format: date-time }
     PictureMode:

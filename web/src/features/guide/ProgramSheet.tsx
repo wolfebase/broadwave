@@ -57,9 +57,16 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
           ) : null}
           <div className="ps-tags">
             {airing?.new ? <span className="tag new">New</span> : null}
+            {airing?.live ? <span className="tag">Live</span> : null}
+            {airing?.premiere ? <span className="tag">Premiere</span> : null}
+            {airing?.finale ? <span className="tag">Finale</span> : null}
+            {airing?.rating ? <span className="tag">{airing.rating}</span> : null}
+            {airing?.episodeLabel ? <span className="tag">{airing.episodeLabel}</span> : null}
             {channel.hd ? <span className="tag">HD</span> : null}
             {rec === "recording" ? <span className="tag rec">Recording</span> : rec === "scheduled" ? <span className="tag rec">Will record</span> : null}
           </div>
+          {airing?.originalAir ? <p className="ps-sub">First aired {airing.originalAir}</p> : null}
+          {airing?.cast ? <p className="ps-sub">{airing.cast}</p> : null}
           {airing?.description ? <p className="ps-desc">{airing.description}</p> : null}
           <div className="ps-actions">
             {onNow ? (

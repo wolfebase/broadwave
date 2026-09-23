@@ -20,17 +20,27 @@ type SourceChannel struct {
 }
 
 type Airing struct {
-	ID          int64     `json:"id"`
-	ChannelID   int64     `json:"channelId"`
-	Title       string    `json:"title"`
-	Subtitle    string    `json:"subtitle,omitempty"`
-	Description string    `json:"description,omitempty"`
-	Category    string    `json:"category,omitempty"`
-	ProgramID   string    `json:"programId,omitempty"`
-	New         bool      `json:"new,omitempty"`
-	ImageURL    string    `json:"imageUrl,omitempty"`
-	Start       time.Time `json:"start"`
-	End         time.Time `json:"end"`
+	ID           int64     `json:"id"`
+	ChannelID    int64     `json:"channelId"`
+	Title        string    `json:"title"`
+	Subtitle     string    `json:"subtitle,omitempty"`
+	Description  string    `json:"description,omitempty"`
+	Category     string    `json:"category,omitempty"`
+	ProgramID    string    `json:"programId,omitempty"`
+	New          bool      `json:"new,omitempty"`
+	ImageURL     string    `json:"imageUrl,omitempty"`
+	Season       int       `json:"season,omitempty"`
+	Episode      int       `json:"episode,omitempty"`
+	EpisodeLabel string    `json:"episodeLabel,omitempty"`
+	OriginalAir  string    `json:"originalAir,omitempty"`
+	SeriesID     string    `json:"seriesId,omitempty"`
+	Live         bool      `json:"live,omitempty"`
+	Premiere     bool      `json:"premiere,omitempty"`
+	Finale       bool      `json:"finale,omitempty"`
+	Rating       string    `json:"rating,omitempty"`
+	Cast         string    `json:"cast,omitempty"`
+	Start        time.Time `json:"start"`
+	End          time.Time `json:"end"`
 }
 
 type Recording struct {
@@ -149,24 +159,34 @@ func (s *Store) ReplaceAirings(ctx context.Context, rows []Airing) error {
 		return err
 	}
 	for _, row := range rows {
-		newFlag := 0
-		if row.New {
-			newFlag = 1
-		}
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			row.ChannelID, row.Title, row.Subtitle, row.Description, row.Category,
-			row.Start.UTC().Format(time.RFC3339), row.End.UTC().Format(time.RFC3339), row.ProgramID, newFlag, row.ImageURL); err != nil {
+		if err := insertAiring(ctx, tx, row); err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
 }
 
+func insertAiring(ctx context.Context, tx *sql.Tx, row Airing) error {
+	bit := func(v bool) int {
+		if v {
+			return 1
+		}
+		return 0
+	}
+	_, err := tx.ExecContext(ctx, `
+INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url,
+	season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		row.ChannelID, row.Title, row.Subtitle, row.Description, row.Category,
+		row.Start.UTC().Format(time.RFC3339), row.End.UTC().Format(time.RFC3339), row.ProgramID, bit(row.New), row.ImageURL,
+		row.Season, row.Episode, row.EpisodeLabel, row.OriginalAir, row.SeriesID, bit(row.Live), bit(row.Premiere), bit(row.Finale), row.Rating, row.Cast)
+	return err
+}
+
 func (s *Store) Airings(ctx context.Context, from, to time.Time) ([]Airing, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url
+SELECT id, channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url,
+	season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list
 FROM airings WHERE ends_at > ? AND starts_at < ? ORDER BY starts_at`,
 		from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
 	if err != nil {
@@ -177,11 +197,15 @@ FROM airings WHERE ends_at > ? AND starts_at < ? ORDER BY starts_at`,
 	for rows.Next() {
 		var row Airing
 		var start, end string
-		var isNew int
-		if err := rows.Scan(&row.ID, &row.ChannelID, &row.Title, &row.Subtitle, &row.Description, &row.Category, &start, &end, &row.ProgramID, &isNew, &row.ImageURL); err != nil {
+		var isNew, isLive, isPremiere, isFinale int
+		if err := rows.Scan(&row.ID, &row.ChannelID, &row.Title, &row.Subtitle, &row.Description, &row.Category, &start, &end, &row.ProgramID, &isNew, &row.ImageURL,
+			&row.Season, &row.Episode, &row.EpisodeLabel, &row.OriginalAir, &row.SeriesID, &isLive, &isPremiere, &isFinale, &row.Rating, &row.Cast); err != nil {
 			return nil, err
 		}
 		row.New = isNew != 0
+		row.Live = isLive != 0
+		row.Premiere = isPremiere != 0
+		row.Finale = isFinale != 0
 		row.Start, _ = time.Parse(time.RFC3339, start)
 		row.End, _ = time.Parse(time.RFC3339, end)
 		out = append(out, row)
@@ -482,15 +506,7 @@ func (s *Store) ReplaceAiringsFor(ctx context.Context, channelIDs []int64, rows 
 		}
 	}
 	for _, row := range rows {
-		newFlag := 0
-		if row.New {
-			newFlag = 1
-		}
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			row.ChannelID, row.Title, row.Subtitle, row.Description, row.Category,
-			row.Start.UTC().Format(time.RFC3339), row.End.UTC().Format(time.RFC3339), row.ProgramID, newFlag, row.ImageURL); err != nil {
+		if err := insertAiring(ctx, tx, row); err != nil {
 			return err
 		}
 	}

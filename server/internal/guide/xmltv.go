@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,8 +47,19 @@ type programme struct {
 	Cats    []string     `xml:"category"`
 	EpNums  []episodeNum `xml:"episode-num"`
 	Icons   []iconEl     `xml:"icon"`
-	New     *struct{}    `xml:"new"`
-	Shown   *struct{}    `xml:"previously-shown"`
+	Date    string       `xml:"date"`
+	Series  string       `xml:"series-id"`
+	Rating  *struct {
+		Value string `xml:"value"`
+	} `xml:"rating"`
+	Credits *struct {
+		Actors []string `xml:"actor"`
+	} `xml:"credits"`
+	New      *struct{} `xml:"new"`
+	Shown    *struct{} `xml:"previously-shown"`
+	Live     *struct{} `xml:"live"`
+	Premiere *struct{} `xml:"premiere"`
+	Finale   *struct{} `xml:"finale"`
 }
 
 // PullURL reads an XMLTV document from an http address the user supplied.
@@ -168,10 +180,14 @@ func Parse(data []byte, channels []store.Channel) ([]store.Airing, map[int64]str
 		if err1 != nil || err2 != nil || !end.After(start) {
 			continue
 		}
+		programID, label, season, episode := episodeDetail(p.EpNums)
 		out = append(out, store.Airing{
 			ChannelID: channelID, Title: strings.TrimSpace(p.Title), Subtitle: strings.TrimSpace(p.Sub),
-			Description: strings.TrimSpace(p.Desc), Category: joinCats(p.Cats), ProgramID: programID(p.EpNums),
-			ImageURL: iconURL(p.Icons), New: p.New != nil && p.Shown == nil, Start: start, End: end,
+			Description: strings.TrimSpace(p.Desc), Category: joinCats(p.Cats), ProgramID: programID,
+			ImageURL: iconURL(p.Icons), Season: season, Episode: episode, EpisodeLabel: label,
+			OriginalAir: originalAir(p.Date), SeriesID: strings.TrimSpace(p.Series),
+			New: p.New != nil && p.Shown == nil, Live: p.Live != nil, Premiere: p.Premiere != nil, Finale: p.Finale != nil,
+			Rating: ratingValue(p.Rating), Cast: castList(p.Credits), Start: start, End: end,
 		})
 	}
 	return out, art, nil
@@ -201,21 +217,87 @@ func joinCats(cats []string) string {
 	return strings.Join(parts, ", ")
 }
 
-func programID(nums []episodeNum) string {
-	fallback := ""
+func episodeDetail(nums []episodeNum) (programID, label string, season, episode int) {
 	for _, num := range nums {
 		value := strings.TrimSpace(num.Value)
 		if value == "" {
 			continue
 		}
-		if strings.EqualFold(num.System, "dd_progid") || num.System == "" {
-			return value
-		}
-		if fallback == "" {
-			fallback = value
+		switch strings.ToLower(num.System) {
+		case "dd_progid", "":
+			if programID == "" {
+				programID = value
+			}
+		case "onscreen":
+			label = value
+		case "xmltv_ns":
+			season, episode = xmltvNS(value)
 		}
 	}
-	return fallback
+	return programID, label, season, episode
+}
+
+// xmltvNS is zero-based season.episode.part. Empty parts stay unknown.
+func xmltvNS(value string) (int, int) {
+	parts := strings.Split(value, ".")
+	read := func(i int) int {
+		if i >= len(parts) {
+			return 0
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(parts[i]))
+		if err != nil || n < 0 {
+			return 0
+		}
+		return n + 1
+	}
+	return read(0), read(1)
+}
+
+func originalAir(value string) string {
+	value = strings.TrimSpace(value)
+	digits := 0
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			break
+		}
+		digits++
+	}
+	if digits >= 8 {
+		return value[:4] + "-" + value[4:6] + "-" + value[6:8]
+	}
+	if digits >= 4 {
+		return value[:4]
+	}
+	return ""
+}
+
+func ratingValue(r *struct {
+	Value string `xml:"value"`
+}) string {
+	if r == nil {
+		return ""
+	}
+	return strings.TrimSpace(r.Value)
+}
+
+func castList(c *struct {
+	Actors []string `xml:"actor"`
+}) string {
+	if c == nil {
+		return ""
+	}
+	var names []string
+	for _, name := range c.Actors {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		names = append(names, name)
+		if len(names) == 8 {
+			break
+		}
+	}
+	return strings.Join(names, ", ")
 }
 
 func parseWhen(value string) (time.Time, error) {

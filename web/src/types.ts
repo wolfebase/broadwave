@@ -69,6 +69,16 @@ export type Airing = {
   programId?: string;
   new?: boolean;
   imageUrl?: string;
+  season?: number;
+  episode?: number;
+  episodeLabel?: string;
+  originalAir?: string;
+  seriesId?: string;
+  live?: boolean;
+  premiere?: boolean;
+  finale?: boolean;
+  rating?: string;
+  cast?: string;
   start: string;
   end: string;
 };
