@@ -15,6 +15,7 @@ import (
 
 	"ota-viewer/internal/hdhr"
 	"ota-viewer/internal/live"
+	"ota-viewer/internal/realtime"
 	"ota-viewer/internal/source"
 	"ota-viewer/internal/store"
 )
@@ -26,6 +27,7 @@ type Server struct {
 	Assets  fs.FS
 	Dev     bool
 	Version string
+	Bus     *realtime.Bus
 
 	routes []string
 }
@@ -41,6 +43,8 @@ func (s *Server) Handler() http.Handler {
 	api("GET /health", s.health)
 	api("GET /server", s.serverInfo)
 	api("PATCH /server", s.renameServer)
+	api("GET /clock", s.clock)
+	api("GET /ws", s.socket)
 	api("GET /profile", s.profile)
 	api("GET /devices", s.devices)
 	api("POST /sources/discover", s.discover)

@@ -87,6 +87,10 @@ type Hub struct {
 	Blend          bool
 	OnSaved        func(store.Recording)
 
+	// OnChange is called, outside the hub lock, when viewers, renditions,
+	// recordings, or tuners change.
+	OnChange func()
+
 	// RenditionIdle is how long a rendition with no viewers keeps running,
 	// so flipping back to a channel is instant.
 	RenditionIdle time.Duration
@@ -232,6 +236,7 @@ func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition) (Sessi
 	r.viewers++
 	r.seen = time.Now()
 	stopTimer(&r.idle)
+	h.changed()
 	return h.sessionLocked(f, r), nil
 }
 
@@ -429,6 +434,7 @@ func (h *Hub) Release(channelID int64, key string) {
 		return
 	}
 	r.viewers--
+	h.changed()
 	if r.viewers == 0 {
 		stopTimer(&r.idle)
 		r.idle = time.AfterFunc(h.RenditionIdle, func() { h.idleStop(channelID, key) })
@@ -525,6 +531,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	rec.sub = h.attachPipeLocked(muxOf(h, f), stdin)
 	f.recording = rec
 	rec.timer = time.AfterFunc(time.Duration(minutes)*time.Minute, func() { h.StopRecord(id) })
+	h.changed()
 	return h.Store.Recording(ctx, id)
 }
 
@@ -697,6 +704,7 @@ func (h *Hub) stopRenditionLocked(f *feed, key string) {
 	}
 	delete(f.renditions, key)
 	_ = os.RemoveAll(r.dir)
+	h.changed()
 }
 
 // dropIfUnusedLocked releases the feed, and the tuner with the last feed, once
@@ -758,6 +766,7 @@ func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 		}
 	}
 	f.recording = nil
+	h.changed()
 	_ = h.Store.FinishRecording(context.Background(), rec.id, status, errText)
 	if saved, err := h.Store.Recording(context.Background(), rec.id); err == nil {
 		writeSidecar(saved)
@@ -811,6 +820,12 @@ func (h *Hub) ensureSpace(ctx context.Context) error {
 		return &disk.LowError{Free: space.Free, Need: reserve}
 	}
 	return nil
+}
+
+func (h *Hub) changed() {
+	if h.OnChange != nil {
+		go h.OnChange()
+	}
 }
 
 func stopTimer(t **time.Timer) {

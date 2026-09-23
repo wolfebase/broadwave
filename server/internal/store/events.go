@@ -29,10 +29,16 @@ func (s *Store) AddEvent(ctx context.Context, kind, message string) error {
 			}
 		}
 	}
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO events (at, kind, message) VALUES (?, ?, ?)`, time.Now().UTC().Format(time.RFC3339), kind, message); err != nil {
+	at := time.Now().UTC()
+	res, err := s.db.ExecContext(ctx, `INSERT INTO events (at, kind, message) VALUES (?, ?, ?)`, at.Format(time.RFC3339), kind, message)
+	if err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, `DELETE FROM events WHERE id NOT IN (SELECT id FROM events ORDER BY id DESC LIMIT 200)`)
+	if s.OnEvent != nil {
+		id, _ := res.LastInsertId()
+		s.OnEvent(Event{ID: id, At: at, Kind: kind, Message: message})
+	}
+	_, err = s.db.ExecContext(ctx, `DELETE FROM events WHERE id NOT IN (SELECT id FROM events ORDER BY id DESC LIMIT 200)`)
 	return err
 }
 

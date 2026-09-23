@@ -65,7 +65,7 @@ type emuHandler struct {
 
 func (h *emuHandler) discover(w http.ResponseWriter, r *http.Request) {
 	host := r.Host
-	id, _ := h.store.Identity(r.Context(), defaultServerName())
+	id, _ := h.store.Identity(r.Context(), DefaultServerName())
 	deviceID := "OTAVIEW01"
 	if len(id.ID) >= 8 {
 		deviceID = strings.ToUpper(id.ID[:8])

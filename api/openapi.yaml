@@ -69,6 +69,41 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ServerInfo" }
         "400": { $ref: "#/components/responses/Error" }
+  /clock:
+    get:
+      tags: [server]
+      operationId: getClock
+      description: Server time for a first clock-offset estimate. The socket's clock messages refine it.
+      responses:
+        "200":
+          description: Server time
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [serverTime]
+                properties:
+                  serverTime: { type: number, description: "Unix milliseconds" }
+  /ws:
+    get:
+      tags: [server]
+      operationId: openSocket
+      description: |
+        WebSocket for live updates and Whole-Home Sync. Every frame is `{"type", "data"}`.
+
+        Server to client: `hello` {serverTime}, `clock` {t0, t1}, `activity` (Event),
+        `live.changed` (refetch tuners and sessions), `sync.state` (RoomState), `error` {code, message}.
+
+        Client to server: `clock` {t0}, `sync.join` {room, channelId}, `sync.leave` {room},
+        `sync.command` {room, action: play|pause|seek|live|latency, mediaTime, latency}.
+
+        Rooms are `channel:<id>` (everyone on a channel, following live) or `group:<code>`
+        (shared controls). At server time T a room shows media time
+        `anchorMedia + (T - anchorServer) * rate`, where media time is the segment
+        program date-time (Unix ms). See docs/decisions/0003-whole-home-sync.md.
+      responses:
+        "101":
+          description: Switching to WebSocket
   /profile:
     get:
       tags: [server]
@@ -836,6 +871,19 @@ components:
           items: { $ref: "#/components/schemas/Tuner" }
         freeBytes: { type: integer, format: int64 }
         needBytes: { type: integer, format: int64 }
+    RoomState:
+      type: object
+      required: [room, mode, anchorServer, anchorMedia, rate, latency, version, members]
+      properties:
+        room: { type: string }
+        channelId: { type: integer, format: int64 }
+        mode: { type: string, enum: [follow, group] }
+        anchorServer: { type: number, description: "Server Unix ms when the anchor was set" }
+        anchorMedia: { type: number, description: "Program date-time (Unix ms) playing at anchorServer" }
+        rate: { type: number, enum: [0, 1] }
+        latency: { type: string, enum: [lowest, balanced, stable] }
+        version: { type: integer }
+        members: { type: integer }
     ServerInfo:
       type: object
       required: [id, name, version, apiVersion, features]

@@ -19,6 +19,9 @@ import (
 
 type Store struct {
 	db *sql.DB
+
+	// OnEvent is called after an activity event is saved, to push it to clients.
+	OnEvent func(Event)
 }
 
 type Device struct {

@@ -37,6 +37,53 @@ export interface paths {
         patch: operations["renameServer"];
         trace?: never;
     };
+    "/clock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Server time for a first clock-offset estimate. The socket's clock messages refine it. */
+        get: operations["getClock"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ws": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description WebSocket for live updates and Whole-Home Sync. Every frame is `{"type", "data"}`.
+         *
+         *     Server to client: `hello` {serverTime}, `clock` {t0, t1}, `activity` (Event),
+         *     `live.changed` (refetch tuners and sessions), `sync.state` (RoomState), `error` {code, message}.
+         *
+         *     Client to server: `clock` {t0}, `sync.join` {room, channelId}, `sync.leave` {room},
+         *     `sync.command` {room, action: play|pause|seek|live|latency, mediaTime, latency}.
+         *
+         *     Rooms are `channel:<id>` (everyone on a channel, following live) or `group:<code>`
+         *     (shared controls). At server time T a room shows media time
+         *     `anchorMedia + (T - anchorServer) * rate`, where media time is the segment
+         *     program date-time (Unix ms). See docs/decisions/0003-whole-home-sync.md.
+         */
+        get: operations["openSocket"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/profile": {
         parameters: {
             query?: never;
@@ -593,6 +640,23 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        RoomState: {
+            room: string;
+            /** Format: int64 */
+            channelId?: number;
+            /** @enum {string} */
+            mode: "follow" | "group";
+            /** @description Server Unix ms when the anchor was set */
+            anchorServer: number;
+            /** @description Program date-time (Unix ms) playing at anchorServer */
+            anchorMedia: number;
+            /** @enum {number} */
+            rate: 0 | 1;
+            /** @enum {string} */
+            latency: "lowest" | "balanced" | "stable";
+            version: number;
+            members: number;
+        };
         ServerInfo: {
             id: string;
             name: string;
@@ -949,6 +1013,47 @@ export interface operations {
                 };
             };
             400: components["responses"]["Error"];
+        };
+    };
+    getClock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Server time */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Unix milliseconds */
+                        serverTime: number;
+                    };
+                };
+            };
+        };
+    };
+    openSocket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Switching to WebSocket */
+            101: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     getProfile: {

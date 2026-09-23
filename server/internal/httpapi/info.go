@@ -4,11 +4,12 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 const apiVersion = 1
 
-func defaultServerName() string {
+func DefaultServerName() string {
 	host, err := os.Hostname()
 	if err != nil || host == "" {
 		return "OTA Viewer"
@@ -18,7 +19,7 @@ func defaultServerName() string {
 }
 
 func (s *Server) serverInfo(w http.ResponseWriter, r *http.Request) {
-	id, err := s.Store.Identity(r.Context(), defaultServerName())
+	id, err := s.Store.Identity(r.Context(), DefaultServerName())
 	if err != nil {
 		writeError(w, err)
 		return
@@ -56,7 +57,7 @@ func (s *Server) renameServer(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
-	if _, err := s.Store.Identity(r.Context(), defaultServerName()); err != nil {
+	if _, err := s.Store.Identity(r.Context(), DefaultServerName()); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -69,5 +70,19 @@ func (s *Server) renameServer(w http.ResponseWriter, r *http.Request) {
 
 // features lets clients light up UI only for what this server build supports.
 func (s *Server) features() []string {
-	return []string{"live", "dvr", "passes", "virtualChannels", "commercialDetection", "hdhrEmulation"}
+	return []string{"live", "renditions", "wholeHomeSync", "events", "dvr", "passes", "virtualChannels", "commercialDetection", "hdhrEmulation", "export"}
+}
+
+// clock gives clients the server time (Unix ms) for a first offset estimate;
+// the socket's clock messages refine it.
+func (s *Server) clock(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]float64{"serverTime": float64(time.Now().UnixNano()) / 1e6})
+}
+
+func (s *Server) socket(w http.ResponseWriter, r *http.Request) {
+	if s.Bus == nil {
+		httpError(w, "Live updates are not available.", http.StatusServiceUnavailable)
+		return
+	}
+	s.Bus.ServeHTTP(w, r)
 }
