@@ -117,7 +117,7 @@ func TestRenditionsShareOneTimeline(t *testing.T) {
 		for _, line := range strings.Split(stamped, "\n") {
 			if v, ok := strings.CutPrefix(line, "#EXT-X-PROGRAM-DATE-TIME:"); ok {
 				last, _ = time.Parse("2006-01-02T15:04:05.000Z", v)
-			} else if strings.HasSuffix(line, ".ts") {
+			} else if strings.HasSuffix(line, ".m4s") {
 				out[line] = last
 			}
 		}
@@ -136,8 +136,11 @@ func TestRenditionsShareOneTimeline(t *testing.T) {
 			t.Errorf("%s: renditions disagree by %v (%v vs %v)", name, d, ta, tb)
 		}
 	}
-	if first := a["seg00000.ts"]; !first.Equal(fixed.Add(-4 * time.Second)) {
-		t.Errorf("first segment should anchor the timeline, got %v", first)
+	if first := a["seg00001.m4s"]; !first.Equal(fixed.Add(-4 * time.Second)) {
+		t.Errorf("the first served segment should anchor the timeline, got %v", first)
+	}
+	if _, served := a["seg00000.m4s"]; served {
+		t.Error("segment 0 must not be served")
 	}
 }
 
@@ -147,5 +150,21 @@ func TestPTSDiffWraps(t *testing.T) {
 	}
 	if d := ptsDiff(ptsWrap-5, 5); d != -10 {
 		t.Fatalf("wrap back: %d", d)
+	}
+}
+
+func TestFirstSegmentIsWithheld(t *testing.T) {
+	src := "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:2.0,\nseg00000.ts\n#EXTINF:2.0,\nseg00001.ts\n#EXTINF:2.0,\nseg00002.ts\n"
+	var p playlistStamper
+	out := string(p.stamp(t.TempDir(), []byte(src), nil))
+	if strings.Contains(out, "seg00000.ts") {
+		t.Fatalf("first segment must not be served:\n%s", out)
+	}
+	if !strings.Contains(out, "#EXT-X-MEDIA-SEQUENCE:1\n") || strings.Count(out, "#EXTINF") != 2 {
+		t.Fatalf("sequence and entries should follow the withheld segment:\n%s", out)
+	}
+	later := "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:40\n#EXTINF:2.0,\nseg00040.ts\n"
+	if got := string(p.stamp(t.TempDir(), []byte(later), nil)); !strings.Contains(got, "#EXT-X-MEDIA-SEQUENCE:40\n") {
+		t.Fatalf("once segment 0 has rolled off, the sequence is untouched:\n%s", got)
 	}
 }

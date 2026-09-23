@@ -254,6 +254,12 @@ func (s *Server) ui(w http.ResponseWriter, r *http.Request) {
 	if path == "" {
 		path = "index.html"
 	}
+	// Bundles are content-hashed, so they never change; the page that names them always can.
+	if strings.HasPrefix(path, "assets/") {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		w.Header().Set("Cache-Control", "no-cache")
+	}
 	if serveFile(w, r, s.Assets, path) {
 		return
 	}
@@ -261,6 +267,7 @@ func (s *Server) ui(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-cache")
 	if !serveFile(w, r, s.Assets, "index.html") {
 		http.NotFound(w, r)
 	}

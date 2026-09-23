@@ -1,9 +1,9 @@
 import Hls from "hls.js";
 import { useEffect, useRef, useState } from "react";
-import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "./api";
-import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "./picture";
-import { Stage } from "./Stage";
-import type { Recording } from "./types";
+import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
+import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
+import { Stage } from "../player/Stage";
+import type { Recording } from "../../types";
 
 type Marker = { id: number; start: number; end: number };
 

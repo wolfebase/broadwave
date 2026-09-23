@@ -1,0 +1,105 @@
+.sports-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-6) var(--space-16);
+}
+
+.league-chips {
+  margin: calc(var(--space-2) * -1) 0 var(--space-6);
+}
+
+.sports-day {
+  margin-bottom: var(--space-8);
+}
+
+.sports-day-title {
+  font-size: var(--type-title2-size);
+  margin-bottom: var(--space-4);
+}
+
+.sports-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-3);
+}
+
+.game-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface1);
+  border: 1px solid var(--color-line);
+}
+
+.game-card.live {
+  background:
+    radial-gradient(100% 120% at 100% 0%, color-mix(in srgb, var(--cat-sports) 24%, transparent), transparent 60%),
+    var(--color-surface1);
+  border-color: color-mix(in srgb, var(--cat-sports) 40%, var(--color-line));
+}
+
+.gc-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gc-league {
+  font-size: var(--type-caption-size);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cat-sports);
+  margin-right: auto;
+}
+
+.gc-time {
+  font-size: var(--type-footnote-size);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.gc-matchup {
+  display: grid;
+  gap: 2px;
+}
+
+.gc-matchup .team {
+  font-size: var(--type-title3-size);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.gc-matchup .at {
+  font-size: var(--type-caption-size);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+.gc-title {
+  font-size: var(--type-title3-size);
+  font-weight: 750;
+}
+
+.gc-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--type-footnote-size);
+  color: var(--color-text-secondary);
+}
+
+.gc-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.gc-actions {
+  display: flex;
+  gap: 6px;
+}

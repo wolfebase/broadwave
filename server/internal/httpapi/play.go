@@ -568,7 +568,17 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(body)
 		return
 	}
-	if !strings.HasPrefix(name, "seg") || !strings.HasSuffix(name, ".ts") || strings.Contains(name, "..") {
+	var contentType string
+	switch {
+	case strings.Contains(name, ".."):
+	case name == "init.mp4":
+		contentType = "video/mp4"
+	case strings.HasPrefix(name, "seg") && strings.HasSuffix(name, ".m4s"):
+		contentType = "video/iso.segment"
+	case strings.HasPrefix(name, "seg") && strings.HasSuffix(name, ".ts"):
+		contentType = "video/mp2t"
+	}
+	if contentType == "" {
 		http.NotFound(w, r)
 		return
 	}
@@ -577,7 +587,7 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	w.Header().Set("Content-Type", "video/mp2t")
+	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Cache-Control", "max-age=3600")
 	http.ServeFile(w, r, path)
 }
@@ -587,10 +597,12 @@ func decodeJSON(r *http.Request, dest any) error {
 	return json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(dest)
 }
 
+// waitPlaylist returns once a live playlist has three segments; the first is
+// withheld, so players still get two to start from.
 func waitPlaylist(path string, d time.Duration) {
 	deadline := time.Now().Add(d)
 	for time.Now().Before(deadline) {
-		if info, err := os.Stat(path); err == nil && info.Size() > 0 {
+		if body, err := os.ReadFile(path); err == nil && strings.Count(string(body), "#EXTINF") >= 3 {
 			return
 		}
 		time.Sleep(200 * time.Millisecond)

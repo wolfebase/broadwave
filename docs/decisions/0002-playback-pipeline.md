@@ -15,7 +15,9 @@ Every live channel currently gets one ffmpeg transcode to H.264 and AAC. When on
   - `h264-1080`, `h264-720`, `h264-540`: for browsers, cellular, and weak Wi-Fi.
 - Deinterlacing modes (Broadcast 60p, Smooth, Film 24p) are part of the transcoded rendition key.
 - Clients send a capability profile (codecs, audio, display, network) and the server chooses the starting rendition. It reports the reason in `streamInfo`, and a user override always wins.
-- Segments keep `EXT-X-PROGRAM-DATE-TIME` and aligned keyframes across renditions so switching and syncing are seamless.
+- Segments are CMAF (fMP4) with `-copyts`, so every rendition keeps the broadcast's timestamps. Browsers play fMP4 without transmuxing; with MPEG-TS, hls.js mis-mapped broadcast timestamps partway into a stream. The server reads each segment's first video time from its `tfdt`/`trun` boxes and stamps `EXT-X-PROGRAM-DATE-TIME` from one per-channel timeline, identical across renditions.
+- The first segment of a rendition is never served: it holds decoder warm-up and its audio starts before its video.
+- VideoToolbox (Mac hosts) runs with `-a53cc 0`; its embedded caption SEI makes segments undecodable.
 - Captions (CEA-608/708) are preserved in every rendition.
 
 ## Consequences
