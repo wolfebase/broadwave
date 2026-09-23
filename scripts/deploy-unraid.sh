@@ -3,6 +3,7 @@
 #
 #   UNRAID_HOST=root@192.168.1.2 scripts/deploy-unraid.sh            # build + deploy + recreate
 #   UNRAID_HOST=... MODE=image-only scripts/deploy-unraid.sh           # build image, keep container
+#   UNRAID_HOST=... MODE=ghcr scripts/deploy-unraid.sh                 # pull the public image on the server
 #
 # Layout on the server (matches the user's existing install):
 #   $APPDATA/build/   Dockerfile + waveguide binary (image context)
@@ -20,15 +21,33 @@ TZ_NAME="${TZ_NAME:-America/Chicago}"
 VERSION="${VERSION:-$(cd "$ROOT" && git describe --tags --always --dirty 2>/dev/null || echo dev)}"
 MODE="${MODE:-full}"
 
+# IPQoS=none: the path from this Mac to TUS is a tunnel, and the default QoS
+# marking has dropped SSH mid-transfer. Short commands still win; large uploads
+# should be avoided. MODE=ghcr pulls the public image on the server instead.
+SSH=(ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=8 -o ConnectTimeout=20 -o IPQoS=none)
+SCP=(scp -o ServerAliveInterval=15 -o ServerAliveCountMax=8 -o ConnectTimeout=20 -o IPQoS=none)
+
+if [[ "$MODE" == "ghcr" ]]; then
+  IMAGE="${GHCR_IMAGE:-ghcr.io/wolfebase/waveguide:latest}"
+  echo "==> pulling $IMAGE on $UNRAID_HOST (detached) and recreating $NAME"
+  # The pull runs on the server. A marker file is the signal that the new
+  # container was started; /health stays up on the old container during the pull.
+  "${SSH[@]}" "$UNRAID_HOST" "mkdir -p $APPDATA && rm -f $APPDATA/deploy.ok && nohup sh -c 'docker pull $IMAGE && docker rm -f $NAME >/dev/null 2>&1 || true; docker run -d --name $NAME --restart unless-stopped --network host --device /dev/dri -e TZ=$TZ_NAME -v $APPDATA/config:/config -v $RECORDINGS:/config/work/recordings $IMAGE && touch $APPDATA/deploy.ok' > $APPDATA/deploy.log 2>&1 & echo launched"
+  HOSTIP="${UNRAID_HOST#*@}"
+  for _ in $(seq 1 90); do
+    if "${SSH[@]}" "$UNRAID_HOST" "test -f $APPDATA/deploy.ok" 2>/dev/null; then
+      curl -fsS -m 5 "http://$HOSTIP:8477/api/v1/server"; echo
+      exit 0
+    fi
+    sleep 2
+  done
+  echo "deploy did not finish; see $APPDATA/deploy.log on the server"
+  exit 1
+fi
+
 echo "==> building web + linux/amd64 binary ($VERSION)"
 (cd "$ROOT/web" && npm run build >/dev/null)
 (cd "$ROOT/server" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=$VERSION" -o "$ROOT/bin/waveguide-linux-amd64" ./cmd/waveguide)
-
-# A long docker build used to drop the session ("Operation timed out") and leave
-# the container stopped. Keep the connection up, and don't let a dropped client
-# kill the remote build.
-SSH=(ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=8 -o ConnectTimeout=20)
-SCP=(scp -o ServerAliveInterval=15 -o ServerAliveCountMax=8 -o ConnectTimeout=20)
 
 echo "==> adopting a pre-rename install on $UNRAID_HOST (if any)"
 # Before the Waveguide rename the container was OTA-Viewer with appdata in .../ota-viewer.
