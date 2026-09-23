@@ -983,6 +983,7 @@ components:
         hidden: { type: boolean }
         present: { type: boolean }
         guideKey: { type: string, description: "XMLTV channel id or call sign to use for this channel. Blank uses the number and call sign." }
+        artUrl: { type: string, description: "Channel logo from the guide. Empty when the source has none." }
     ChannelPatch:
       type: object
       properties:
@@ -1004,6 +1005,7 @@ components:
         category: { type: string }
         programId: { type: string }
         new: { type: boolean }
+        imageUrl: { type: string, description: "Program artwork from the guide. Empty when the source has none." }
         start: { type: string, format: date-time }
         end: { type: string, format: date-time }
     PictureMode:

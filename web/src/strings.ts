@@ -39,6 +39,8 @@ export const copy = {
     guideLineup: "Lineup",
     guideAddress: "Guide address",
     guideAddressHint: "An XMLTV link for channels the tuner guide skips.",
+    movieArt: "Movie artwork",
+    movieArtHint: "Fills posters the guide does not include.",
     passwordTitle: "This server is for the home network",
     passwordBody: "A password is required before remote access.",
     profile: "Profile",

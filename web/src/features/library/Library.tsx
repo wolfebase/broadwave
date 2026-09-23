@@ -88,7 +88,20 @@ function LibraryRow({
   return (
     <li className="media-card">
       <span className="poster-wrap">
-        <img className="poster" alt="" src={`/media/poster/${rec.id}`} onError={(event) => { event.currentTarget.style.visibility = "hidden"; }} />
+        <img
+          className="poster"
+          alt=""
+          src={`/media/poster/${rec.id}`}
+          onError={(event) => {
+            const img = event.currentTarget;
+            if (img.dataset.fallback) {
+              img.style.visibility = "hidden";
+              return;
+            }
+            img.dataset.fallback = "1";
+            img.src = `/media/art/channel/${rec.channelId}?w=320`;
+          }}
+        />
       </span>
       <div>
         <strong>{rec.subtitle || rec.title}</strong>

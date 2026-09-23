@@ -26,6 +26,7 @@ public struct Channel: Codable, Sendable, Hashable, Identifiable {
     public var enabled: Bool
     public var hidden: Bool
     public var present: Bool
+    public var artUrl: String?
 }
 
 public struct Airing: Codable, Sendable, Hashable, Identifiable {
@@ -37,6 +38,7 @@ public struct Airing: Codable, Sendable, Hashable, Identifiable {
     public var category: String?
     public var programId: String?
     public var new: Bool?
+    public var imageUrl: String?
     public var start: Date
     public var end: Date
 

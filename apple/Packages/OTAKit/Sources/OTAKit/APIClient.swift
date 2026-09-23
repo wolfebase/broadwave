@@ -137,6 +137,10 @@ public struct APIClient: Sendable {
     public func posterURL(recordingID: Int64) -> URL {
         url("/media/poster/\(recordingID)")
     }
+
+    public func artURL(kind: String, id: Int64, width: Int) -> URL {
+        url("/media/art/\(kind)/\(id)?w=\(width)")
+    }
 }
 
 extension ISO8601DateFormatter {

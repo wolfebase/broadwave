@@ -114,6 +114,21 @@ export function SettingsScreen({
         />
         <span className="hint">{copy.settings.guideAddressHint}</span>
       </label>
+      <label className="field">
+        {copy.settings.movieArt}
+        <input
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={settings.tmdbKeySet === "1" ? "Saved" : ""}
+          onBlur={(event) => {
+            const value = event.target.value;
+            if (value) onChange({ tmdbKey: value });
+            event.target.value = "";
+          }}
+        />
+        <span className="hint">{copy.settings.movieArtHint}</span>
+      </label>
       <h3 className="section-title">DVR</h3>
       <label className="field">
         Play the next episode

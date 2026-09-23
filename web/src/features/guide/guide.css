@@ -190,12 +190,23 @@
 }
 
 .gc-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   font-size: var(--type-footnote-size);
   font-weight: 600;
   color: var(--color-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.gc-logo {
+  width: 28px;
+  height: 18px;
+  object-fit: contain;
+  flex: none;
 }
 
 .gc-star {
@@ -443,6 +454,7 @@
 
 .ps-art {
   position: relative;
+  overflow: hidden;
   min-height: 170px;
   padding: var(--space-5);
   display: flex;
@@ -453,13 +465,25 @@
     var(--color-surface2);
 }
 
+.ps-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.55;
+}
+
 .ps-close {
   position: absolute;
+  z-index: 1;
   top: 14px;
   right: 14px;
 }
 
 .ps-art-meta {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 14px;

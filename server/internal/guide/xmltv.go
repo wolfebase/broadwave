@@ -21,9 +21,14 @@ type tv struct {
 	Programmes []programme `xml:"programme"`
 }
 
+type iconEl struct {
+	Src string `xml:"src,attr"`
+}
+
 type channel struct {
 	ID    string   `xml:"id,attr"`
 	Names []string `xml:"display-name"`
+	Icons []iconEl `xml:"icon"`
 }
 
 type episodeNum struct {
@@ -40,6 +45,7 @@ type programme struct {
 	Desc    string       `xml:"desc"`
 	Cats    []string     `xml:"category"`
 	EpNums  []episodeNum `xml:"episode-num"`
+	Icons   []iconEl     `xml:"icon"`
 	New     *struct{}    `xml:"new"`
 	Shown   *struct{}    `xml:"previously-shown"`
 }
@@ -135,12 +141,22 @@ func Pull(ctx context.Context, client *hdhr.Client, baseURL string) ([]byte, err
 	return body, nil
 }
 
-func Parse(data []byte, channels []store.Channel) ([]store.Airing, error) {
+func Parse(data []byte, channels []store.Channel) ([]store.Airing, map[int64]string, error) {
 	var doc tv
 	if err := xml.Unmarshal(data, &doc); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	xmlToChannel := assign(doc.Channels, channels)
+	art := map[int64]string{}
+	for _, ch := range doc.Channels {
+		id := xmlToChannel[ch.ID]
+		if id == 0 || art[id] != "" {
+			continue
+		}
+		if src := iconURL(ch.Icons); src != "" {
+			art[id] = src
+		}
+	}
 	var out []store.Airing
 	for _, p := range doc.Programmes {
 		channelID := xmlToChannel[p.Channel]
@@ -155,10 +171,23 @@ func Parse(data []byte, channels []store.Channel) ([]store.Airing, error) {
 		out = append(out, store.Airing{
 			ChannelID: channelID, Title: strings.TrimSpace(p.Title), Subtitle: strings.TrimSpace(p.Sub),
 			Description: strings.TrimSpace(p.Desc), Category: joinCats(p.Cats), ProgramID: programID(p.EpNums),
-			New: p.New != nil && p.Shown == nil, Start: start, End: end,
+			ImageURL: iconURL(p.Icons), New: p.New != nil && p.Shown == nil, Start: start, End: end,
 		})
 	}
-	return out, nil
+	return out, art, nil
+}
+
+func iconURL(icons []iconEl) string {
+	for _, icon := range icons {
+		src := strings.TrimSpace(icon.Src)
+		if len(src) > 500 {
+			continue
+		}
+		if strings.HasPrefix(src, "https://") || strings.HasPrefix(src, "http://") {
+			return src
+		}
+	}
+	return ""
 }
 
 func joinCats(cats []string) string {

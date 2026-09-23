@@ -72,6 +72,7 @@ export function Home() {
     <div className="home">
       {hero ? (
         <section className="hero" data-cat={hero.cat}>
+          {hero.airing?.imageUrl ? <img className="hero-art" alt="" src={`/media/art/airing/${hero.airing.id}?w=960`} /> : null}
           <div className="hero-glow" aria-hidden="true" />
           <div className="hero-num" aria-hidden="true">
             {hero.channel.displayNumber}
@@ -235,7 +236,20 @@ function RecordingCard({ rec }: { rec: Recording }) {
   return (
     <button type="button" className="rec-card" onClick={() => navigate(`/play?recording=${rec.id}`)}>
       <span className="rc-poster">
-        <img src={`/media/poster/${rec.id}`} alt="" loading="lazy" onError={(e) => ((e.target as HTMLImageElement).style.visibility = "hidden")} />
+        <img
+          src={`/media/poster/${rec.id}`}
+          alt=""
+          loading="lazy"
+          onError={(e) => {
+            const img = e.currentTarget;
+            if (img.dataset.fallback) {
+              img.style.visibility = "hidden";
+              return;
+            }
+            img.dataset.fallback = "1";
+            img.src = `/media/art/channel/${rec.channelId}?w=320`;
+          }}
+        />
         {pct > 0 ? <Progress value={pct} /> : null}
       </span>
       <span className="rc-title">{rec.title}</span>

@@ -34,6 +34,7 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
     <div className="sheet-layer" onClick={onClose}>
       <div ref={ref} className="program-sheet glass" data-cat={cat} role="dialog" aria-modal="true" aria-label={airing?.title ?? channel.displayName} onClick={(e) => e.stopPropagation()}>
         <div className="ps-art" data-cat={cat}>
+          {airing?.imageUrl ? <img className="ps-photo" alt="" src={`/media/art/airing/${airing.id}?w=640`} /> : null}
           <button type="button" className="glass-icon ps-close" onClick={onClose} aria-label="Close">
             <CloseIcon />
           </button>

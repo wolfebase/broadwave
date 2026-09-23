@@ -743,6 +743,8 @@ export interface components {
             present: boolean;
             /** @description XMLTV channel id or call sign to use for this channel. Blank uses the number and call sign. */
             guideKey?: string;
+            /** @description Channel logo from the guide. Empty when the source has none. */
+            artUrl?: string;
         };
         ChannelPatch: {
             favorite?: boolean;
@@ -763,6 +765,8 @@ export interface components {
             category?: string;
             programId?: string;
             new?: boolean;
+            /** @description Program artwork from the guide. Empty when the source has none. */
+            imageUrl?: string;
             /** Format: date-time */
             start: string;
             /** Format: date-time */

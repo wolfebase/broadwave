@@ -28,6 +28,7 @@ type Airing struct {
 	Category    string    `json:"category,omitempty"`
 	ProgramID   string    `json:"programId,omitempty"`
 	New         bool      `json:"new,omitempty"`
+	ImageURL    string    `json:"imageUrl,omitempty"`
 	Start       time.Time `json:"start"`
 	End         time.Time `json:"end"`
 }
@@ -101,6 +102,31 @@ FROM channels c JOIN devices d ON d.device_id = c.device_id WHERE c.id = ?`, id)
 	return ch, nil
 }
 
+func (s *Store) SetChannelArt(ctx context.Context, art map[int64]string) error {
+	for id, raw := range art {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		if _, err := s.db.ExecContext(ctx, `UPDATE channels SET art_url = ? WHERE id = ?`, raw, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) Artwork(ctx context.Context, kind string, id int64) (rawURL, label string, err error) {
+	switch kind {
+	case "channel":
+		err = s.db.QueryRowContext(ctx, `SELECT art_url, guide_name FROM channels WHERE id = ?`, id).Scan(&rawURL, &label)
+	case "airing":
+		err = s.db.QueryRowContext(ctx, `SELECT image_url, category FROM airings WHERE id = ?`, id).Scan(&rawURL, &label)
+	default:
+		err = sql.ErrNoRows
+	}
+	return rawURL, label, err
+}
+
 func (s *Store) RememberProgram(ctx context.Context, deviceID, guide string, freq, program int) error {
 	_, err := s.db.ExecContext(ctx, `
 UPDATE channels SET frequency_hz = ?, program_num = ?
@@ -128,10 +154,10 @@ func (s *Store) ReplaceAirings(ctx context.Context, rows []Airing) error {
 			newFlag = 1
 		}
 		if _, err := tx.ExecContext(ctx, `
-INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			row.ChannelID, row.Title, row.Subtitle, row.Description, row.Category,
-			row.Start.UTC().Format(time.RFC3339), row.End.UTC().Format(time.RFC3339), row.ProgramID, newFlag); err != nil {
+			row.Start.UTC().Format(time.RFC3339), row.End.UTC().Format(time.RFC3339), row.ProgramID, newFlag, row.ImageURL); err != nil {
 			return err
 		}
 	}
@@ -140,7 +166,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
 func (s *Store) Airings(ctx context.Context, from, to time.Time) ([]Airing, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new
+SELECT id, channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url
 FROM airings WHERE ends_at > ? AND starts_at < ? ORDER BY starts_at`,
 		from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
 	if err != nil {
@@ -152,7 +178,7 @@ FROM airings WHERE ends_at > ? AND starts_at < ? ORDER BY starts_at`,
 		var row Airing
 		var start, end string
 		var isNew int
-		if err := rows.Scan(&row.ID, &row.ChannelID, &row.Title, &row.Subtitle, &row.Description, &row.Category, &start, &end, &row.ProgramID, &isNew); err != nil {
+		if err := rows.Scan(&row.ID, &row.ChannelID, &row.Title, &row.Subtitle, &row.Description, &row.Category, &start, &end, &row.ProgramID, &isNew, &row.ImageURL); err != nil {
 			return nil, err
 		}
 		row.New = isNew != 0
@@ -461,10 +487,10 @@ func (s *Store) ReplaceAiringsFor(ctx context.Context, channelIDs []int64, rows 
 			newFlag = 1
 		}
 		if _, err := tx.ExecContext(ctx, `
-INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			row.ChannelID, row.Title, row.Subtitle, row.Description, row.Category,
-			row.Start.UTC().Format(time.RFC3339), row.End.UTC().Format(time.RFC3339), row.ProgramID, newFlag); err != nil {
+			row.Start.UTC().Format(time.RFC3339), row.End.UTC().Format(time.RFC3339), row.ProgramID, newFlag, row.ImageURL); err != nil {
 			return err
 		}
 	}

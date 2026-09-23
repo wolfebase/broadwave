@@ -168,6 +168,15 @@ struct GuideGrid: View {
                         Button { onSelect(channel, store.index.on(channel.id, at: store.now)) } label: {
                             HStack(spacing: 10) {
                                 Text(channel.displayNumber).font(.title3.weight(.heavy)).monospacedDigit()
+                                if let api = store.api, channel.artUrl?.isEmpty == false {
+                                    AsyncImage(url: api.artURL(kind: "channel", id: channel.id, width: 72)) { phase in
+                                        if let image = phase.image {
+                                            image.resizable().scaledToFit()
+                                        }
+                                    }
+                                    .frame(width: 36, height: 22)
+                                    .accessibilityHidden(true)
+                                }
                                 Text(channel.displayName).font(.caption.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
                                 Spacer(minLength: 0)
                                 if channel.favorite {
@@ -314,6 +323,17 @@ struct ProgramSheet: View {
         let on = airing?.isOn(at: store.now) ?? true
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                if let airing, let api = store.api, airing.imageUrl?.isEmpty == false {
+                    AsyncImage(url: api.artURL(kind: "airing", id: airing.id, width: 640)) { phase in
+                        if let image = phase.image {
+                            image.resizable().scaledToFill()
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 180)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .accessibilityHidden(true)
+                }
                 HStack {
                     ChannelBadge(channel, large: true)
                     Spacer()
