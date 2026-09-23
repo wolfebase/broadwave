@@ -809,6 +809,10 @@ export interface components {
             guideKey?: string;
             /** @description Channel logo from the guide. Empty when the source has none. */
             artUrl?: string;
+            /** @description Native logo width in pixels. Omitted until the picture has been measured. */
+            artWidth?: number;
+            /** @description Native logo height in pixels. Omitted until the picture has been measured. */
+            artHeight?: number;
         };
         ChannelPatch: {
             favorite?: boolean;
@@ -831,6 +835,10 @@ export interface components {
             new?: boolean;
             /** @description Program artwork from the guide. Empty when the source has none. */
             imageUrl?: string;
+            /** @description Native artwork width in pixels. Omitted until the picture has been measured. */
+            imageWidth?: number;
+            /** @description Native artwork height in pixels. Omitted until the picture has been measured. */
+            imageHeight?: number;
             /** @description 1-based season. Omitted when the guide does not say. */
             season?: number;
             /** @description 1-based episode. Omitted when the guide does not say. */

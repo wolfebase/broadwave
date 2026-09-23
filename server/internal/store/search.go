@@ -36,7 +36,7 @@ func (s *Store) Search(ctx context.Context, query string, from time.Time, limit 
 func (s *Store) searchAirings(ctx context.Context, match string, from time.Time, limit int) ([]AiringHit, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT a.id, a.channel_id, a.title, a.subtitle, a.description, a.category, a.starts_at, a.ends_at,
-	a.program_id, a.is_new, a.image_url, a.season, a.episode, a.episode_label, a.original_air, a.series_id,
+	a.program_id, a.is_new, a.image_url, a.image_width, a.image_height, a.season, a.episode, a.episode_label, a.original_air, a.series_id,
 	a.is_live, a.is_premiere, a.is_finale, a.rating, a.cast_list, a.game_id, c.guide_number, c.guide_name
 FROM airing_search
 JOIN airings a ON a.id = airing_search.rowid
@@ -54,7 +54,7 @@ LIMIT ?`, match, from.UTC().Format(time.RFC3339), limit)
 		var start, end string
 		var isNew, isLive, isPremiere, isFinale int
 		if err := rows.Scan(&hit.ID, &hit.ChannelID, &hit.Title, &hit.Subtitle, &hit.Description, &hit.Category, &start, &end,
-			&hit.ProgramID, &isNew, &hit.ImageURL, &hit.Season, &hit.Episode, &hit.EpisodeLabel, &hit.OriginalAir, &hit.SeriesID,
+			&hit.ProgramID, &isNew, &hit.ImageURL, &hit.ImageWidth, &hit.ImageHeight, &hit.Season, &hit.Episode, &hit.EpisodeLabel, &hit.OriginalAir, &hit.SeriesID,
 			&isLive, &isPremiere, &isFinale, &hit.Rating, &hit.Cast, &hit.GameID, &hit.GuideNumber, &hit.ChannelName); err != nil {
 			return nil, err
 		}

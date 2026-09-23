@@ -29,7 +29,7 @@ func (s *Server) art(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	rawURL, label, err := s.Store.Artwork(r.Context(), kind, id)
+	rawURL, label, knownW, knownH, err := s.Store.Artwork(r.Context(), kind, id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -59,16 +59,24 @@ func (s *Server) art(w http.ResponseWriter, r *http.Request) {
 	}
 	if dir != "" {
 		if body, ctype, ok := readCached(dir, name); ok {
+			if knownW == 0 || knownH == 0 {
+				if pw, ph, perr := probeArtSize(r.Context(), rawURL); perr == nil {
+					_ = s.Store.SetArtworkSize(r.Context(), kind, id, pw, ph)
+				}
+			}
 			w.Header().Set("Content-Type", ctype)
 			w.Header().Set("Cache-Control", "public, max-age=86400")
 			_, _ = w.Write(body)
 			return
 		}
 	}
-	body, ctype, err := fetchArt(r.Context(), rawURL, width)
+	body, ctype, nativeW, nativeH, err := fetchArt(r.Context(), rawURL, width)
 	if err != nil {
 		writePlaceholder(w, label)
 		return
+	}
+	if nativeW > 0 && nativeH > 0 {
+		_ = s.Store.SetArtworkSize(r.Context(), kind, id, nativeW, nativeH)
 	}
 	if dir != "" {
 		_ = os.MkdirAll(dir, 0o755)
@@ -93,7 +101,7 @@ func readCached(dir, name string) ([]byte, string, bool) {
 	return nil, "", false
 }
 
-func fetchArt(ctx context.Context, rawURL string, width int) ([]byte, string, error) {
+func getArtBytes(ctx context.Context, rawURL string) ([]byte, error) {
 	client := &http.Client{
 		Timeout: 12 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -108,37 +116,57 @@ func fetchArt(ctx context.Context, rawURL string, width int) ([]byte, string, er
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	req.Header.Set("User-Agent", "Waveguide/0.1")
 	res, err := client.Do(req)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("art returned %s", res.Status)
+		return nil, fmt.Errorf("art returned %s", res.Status)
 	}
-	raw, err := io.ReadAll(io.LimitReader(res.Body, 4<<20))
+	return io.ReadAll(io.LimitReader(res.Body, 4<<20))
+}
+
+func probeArtSize(ctx context.Context, rawURL string) (int, int, error) {
+	raw, err := getArtBytes(ctx, rawURL)
 	if err != nil {
-		return nil, "", err
+		return 0, 0, err
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(raw))
+	if err != nil {
+		return 0, 0, err
+	}
+	return cfg.Width, cfg.Height, nil
+}
+
+func fetchArt(ctx context.Context, rawURL string, width int) ([]byte, string, int, int, error) {
+	raw, err := getArtBytes(ctx, rawURL)
+	if err != nil {
+		return nil, "", 0, 0, err
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(raw))
+	if err != nil {
+		return nil, "", 0, 0, err
 	}
 	img, _, err := image.Decode(bytes.NewReader(raw))
 	if err != nil {
-		return nil, "", err
+		return nil, "", 0, 0, err
 	}
 	fitted := fitWidth(img, width)
 	var buf bytes.Buffer
 	if hasAlpha(fitted) {
 		if err := png.Encode(&buf, fitted); err != nil {
-			return nil, "", err
+			return nil, "", 0, 0, err
 		}
-		return buf.Bytes(), "image/png", nil
+		return buf.Bytes(), "image/png", cfg.Width, cfg.Height, nil
 	}
 	if err := jpeg.Encode(&buf, fitted, &jpeg.Options{Quality: 80}); err != nil {
-		return nil, "", err
+		return nil, "", 0, 0, err
 	}
-	return buf.Bytes(), "image/jpeg", nil
+	return buf.Bytes(), "image/jpeg", cfg.Width, cfg.Height, nil
 }
 
 func fitWidth(src image.Image, maxW int) image.Image {

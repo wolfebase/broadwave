@@ -1090,6 +1090,8 @@ components:
         present: { type: boolean }
         guideKey: { type: string, description: "XMLTV channel id or call sign to use for this channel. Blank uses the number and call sign." }
         artUrl: { type: string, description: "Channel logo from the guide. Empty when the source has none." }
+        artWidth: { type: integer, description: "Native logo width in pixels. Omitted until the picture has been measured." }
+        artHeight: { type: integer, description: "Native logo height in pixels. Omitted until the picture has been measured." }
     ChannelPatch:
       type: object
       properties:
@@ -1112,6 +1114,8 @@ components:
         programId: { type: string }
         new: { type: boolean }
         imageUrl: { type: string, description: "Program artwork from the guide. Empty when the source has none." }
+        imageWidth: { type: integer, description: "Native artwork width in pixels. Omitted until the picture has been measured." }
+        imageHeight: { type: integer, description: "Native artwork height in pixels. Omitted until the picture has been measured." }
         season: { type: integer, description: "1-based season. Omitted when the guide does not say." }
         episode: { type: integer, description: "1-based episode. Omitted when the guide does not say." }
         episodeLabel: { type: string }

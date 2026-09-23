@@ -3,9 +3,9 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **R4**. Artwork layouts by size and aspect; no upscaling past 1.25x.
+- Current task: **R5**. Live preview frames from tuned muxes. Never tune just for a frame.
 - Half done: nothing.
-- Next command: read the art cache and Home hero, then choose a layout from image size.
+- Next command: read the relay and frame plan, then grab keyframes only from a mux that is already tuned.
 - Unraid is on `v0.2.0`. Jeopardy records 4.1 until about 21:02 UTC on 2026-09-23. Do not take both tuners in that window.
 - A7 retry at phase R: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
@@ -13,7 +13,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] R1 CI green on all four jobs at 0984064 (lint fixes e411da1, Xcode 26 guard 0984064); `make check`; CI section in the dev-loop skill
 - [x] R2 v0.2.0 tagged with CHANGELOG, deployed to Unraid via GHCR, A–D features checked on the LAN (tag v0.2.0, log in UNRAID_LOG)
 - [x] R3 Instant boot: cached shell, windowed airings, gzip/brotli + ETag, Apple snapshot cache (< 300 ms warm)
-- [ ] R4 Artwork layouts by size and aspect; no upscaling past 1.25x
+- [x] R4 Artwork layouts by size and aspect; no upscaling past 1.25x
 - [ ] R5 Live preview frames from tuned muxes (no extra tunes)
 - [ ] R6 Apple screenshots of B–D on iPhone, iPad, Apple TV; defects fixed or listed
 - [ ] R7 Code review of run 1; `go test -race` clean

@@ -3,6 +3,7 @@
   margin: 0 auto;
   padding: var(--space-5) var(--space-6) var(--space-16);
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-10);
 }
 
@@ -20,6 +21,8 @@
 .hero {
   position: relative;
   overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
   min-height: min(58vh, 560px);
   border-radius: var(--radius-xl);
   display: flex;
@@ -30,16 +33,6 @@
   isolation: isolate;
 }
 
-.hero-art {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.38;
-  z-index: 0;
-  pointer-events: none;
-}
 
 .hero-glow {
   position: absolute;
@@ -288,7 +281,8 @@
 
 .rc-poster {
   position: relative;
-  display: block;
+  display: grid;
+  place-items: center;
   aspect-ratio: 16 / 9;
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -297,16 +291,14 @@
 }
 
 .rc-poster img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
   display: block;
-  transition: transform var(--motion-slow) var(--ease-out);
 }
 
-.rec-card:hover img {
-  transform: scale(1.04);
-}
 
 .rc-poster .progress {
   position: absolute;

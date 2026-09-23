@@ -23,7 +23,9 @@ type tv struct {
 }
 
 type iconEl struct {
-	Src string `xml:"src,attr"`
+	Src    string `xml:"src,attr"`
+	Width  string `xml:"width,attr"`
+	Height string `xml:"height,attr"`
 }
 
 type channel struct {
@@ -181,10 +183,11 @@ func Parse(data []byte, channels []store.Channel) ([]store.Airing, map[int64]str
 			continue
 		}
 		programID, label, season, episode := episodeDetail(p.EpNums)
+		imageURL, imageW, imageH := PickIcon(p.Icons)
 		out = append(out, store.Airing{
 			ChannelID: channelID, Title: strings.TrimSpace(p.Title), Subtitle: strings.TrimSpace(p.Sub),
 			Description: strings.TrimSpace(p.Desc), Category: joinCats(p.Cats), ProgramID: programID,
-			ImageURL: iconURL(p.Icons), Season: season, Episode: episode, EpisodeLabel: label,
+			ImageURL: imageURL, ImageWidth: imageW, ImageHeight: imageH, Season: season, Episode: episode, EpisodeLabel: label,
 			OriginalAir: originalAir(p.Date), SeriesID: strings.TrimSpace(p.Series),
 			New: p.New != nil && p.Shown == nil, Live: p.Live != nil, Premiere: p.Premiere != nil, Finale: p.Finale != nil,
 			Rating: ratingValue(p.Rating), Cast: castList(p.Credits), Start: start, End: end,
@@ -194,14 +197,17 @@ func Parse(data []byte, channels []store.Channel) ([]store.Airing, map[int64]str
 }
 
 func iconURL(icons []iconEl) string {
-	for _, icon := range icons {
-		src := strings.TrimSpace(icon.Src)
-		if len(src) > 500 {
-			continue
-		}
-		if strings.HasPrefix(src, "https://") || strings.HasPrefix(src, "http://") {
-			return src
-		}
+	src, _, _ := PickIcon(icons)
+	return src
+}
+
+func cleanIcon(src string) string {
+	src = strings.TrimSpace(src)
+	if len(src) > 500 {
+		return ""
+	}
+	if strings.HasPrefix(src, "https://") || strings.HasPrefix(src, "http://") {
+		return src
 	}
 	return ""
 }
