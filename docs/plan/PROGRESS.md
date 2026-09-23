@@ -18,7 +18,7 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [x] B4 Multiview polish + accessibility (commit 58af4e3). First open says to select a tile. The focused tile shows how it is sent. Make big is in the tile menu. VoiceOver reads the channel and the program.
 
 ## Phase C — Guide and metadata
-- [ ] C1 Channel matching; >= 25/27 channels listed (or documented)
+- [x] C1 Channel matching (commit 716382d). SiliconDust XMLTV and the JSON guide both publish the same 9 of 27 (4.1, 5.1, 9.1, 9.4, 29.1, 38.1, 39.7, 41.1, 62.1). 14.1–14.16, 43.3, and 46.7 are absent, so they stay empty until another source is added. Call signs that differ by DT or HD still match, and Settings can pin a guide match.
 - [ ] C2 Sources: SiliconDust JSON guide (if permitted), Schedules Direct UI, XMLTV URL/file, priorities
 - [ ] C3 Artwork: channel logos, program images, image proxy/cache, TMDB fallback
 - [ ] C4 Rich program model (season/episode, rating, flags, cast)
