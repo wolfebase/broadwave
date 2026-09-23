@@ -1,9 +1,19 @@
 .guide-page {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: calc(100vh - 70px);
   padding: var(--space-4) var(--space-4) 0;
   gap: var(--space-3);
+}
+
+.guide-now-float {
+  position: absolute;
+  z-index: 6;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
 }
 
 .layout-tv .guide-page {
@@ -248,6 +258,21 @@
 
 .guide-cell.now {
   background: color-mix(in srgb, var(--cat-color) 16%, var(--color-surface2));
+}
+
+.guide-cell.has-thumb {
+  padding-right: 64px;
+}
+
+.cell-thumb {
+  position: absolute;
+  right: 6px;
+  top: 8px;
+  width: 48px;
+  height: calc(100% - 16px);
+  object-fit: cover;
+  border-radius: 4px;
+  pointer-events: none;
 }
 
 /* The part of the current show that has aired fills in. */

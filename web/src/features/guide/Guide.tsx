@@ -22,8 +22,8 @@ import { ProgramSheet } from "./ProgramSheet";
 import "./guide.css";
 
 type Filter = "all" | "favorites" | Category | "recording";
-const HOURS = 24;
 const MIN = 60_000;
+const ORDER_KEY = "waveguide-guide-order";
 
 function floorHalfHour(t: number) {
   const d = new Date(t);
@@ -32,8 +32,27 @@ function floorHalfHour(t: number) {
   return d.getTime();
 }
 
+function loadOrder(): number[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(ORDER_KEY) || "[]") as unknown;
+    return Array.isArray(raw) ? raw.filter((id): id is number => typeof id === "number") : [];
+  } catch {
+    return [];
+  }
+}
+
+function dayWord(midnight: number, now: number) {
+  const day = new Date(midnight);
+  const today = new Date(now);
+  if (day.toDateString() === today.toDateString()) return "Today";
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (day.toDateString() === tomorrow.toDateString()) return "Tomorrow";
+  return day.toLocaleDateString([], { weekday: "short" });
+}
+
 export function Guide() {
-  const { channels, index, now, planned, recordings, virtuals, favorite } = useData();
+  const { channels, index, now, planned, recordings, virtuals, favorite, editChannel } = useData();
   const player = usePlayer();
   const layout = useLayout();
   const [filter, setFilter] = useState<Filter>("all");
@@ -42,6 +61,8 @@ export function Guide() {
   const [focus, setFocus] = useState<{ row: number; at: number }>({ row: 0, at: now });
   const scrollRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ top: 0, left: 0, height: 800, width: 1200 });
+  const [order, setOrder] = useState<number[]>(loadOrder);
+  const [landscape, setLandscape] = useState(() => window.matchMedia("(orientation: landscape) and (max-height: 520px)").matches);
 
   const tv = layout === "tv";
   const rowH = tv ? 96 : 68;
@@ -49,14 +70,34 @@ export function Guide() {
   const channelW = tv ? 280 : 220;
   const headH = 48;
   const origin = useMemo(() => floorHalfHour(now) - 30 * MIN, [Math.floor(now / (30 * MIN))]); // eslint-disable-line react-hooks/exhaustive-deps
-  const end = origin + HOURS * 60 * MIN;
-  const width = HOURS * 60 * pxPerMin;
+  const hours = useMemo(() => {
+    let latest = origin + 24 * 60 * MIN;
+    for (const list of index.values()) {
+      const last = list[list.length - 1];
+      if (last) latest = Math.max(latest, Date.parse(last.end));
+    }
+    return Math.min(48, Math.max(24, Math.ceil((latest - origin) / (60 * MIN))));
+  }, [index, origin]);
+  const end = origin + hours * 60 * MIN;
+  const width = hours * 60 * pxPerMin;
+  const days = useMemo(() => {
+    const start = new Date(origin);
+    start.setHours(0, 0, 0, 0);
+    const out: number[] = [];
+    for (let t = start.getTime(); t < end && out.length < 3; t += 24 * 60 * MIN) out.push(t);
+    return out;
+  }, [origin, end]);
   const keys = useMemo(() => recordingKeys(planned, recordings), [planned, recordings]);
+
+  const ordered = useMemo(() => {
+    const rank = new Map(order.map((id, i) => [id, i]));
+    return [...channels].sort((a, b) => (rank.get(a.id) ?? 10_000) - (rank.get(b.id) ?? 10_000) || a.id - b.id);
+  }, [channels, order]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const windowEnd = now + 4 * 60 * MIN;
-    return channels.filter((c) => {
+    return ordered.filter((c) => {
       if (filter === "favorites" && !c.favorite) return false;
       const list = index.get(c.id) ?? [];
       if (filter === "recording") {
@@ -68,7 +109,7 @@ export function Guide() {
       if (c.displayNumber.startsWith(q) || c.displayName.toLowerCase().includes(q)) return true;
       return list.some((a) => a.title.toLowerCase().includes(q) || (a.subtitle ?? "").toLowerCase().includes(q));
     });
-  }, [channels, index, filter, query, now, keys]);
+  }, [ordered, index, filter, query, now, keys]);
 
   const counts = useMemo(() => {
     const windowEnd = now + 4 * 60 * MIN;
@@ -82,6 +123,14 @@ export function Guide() {
     }
     return out;
   }, [channels, index, now]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(orientation: landscape) and (max-height: 520px)");
+    const apply = () => setLandscape(media.matches);
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, []);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -113,6 +162,31 @@ export function Guide() {
     d.setHours(20, 0, 0, 0);
     if (d.getTime() < now) d.setDate(d.getDate() + 1);
     scrollToTime(d.getTime() - 30 * MIN);
+  }
+
+  function jumpToDay(midnight: number) {
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
+    if (midnight === today.getTime()) {
+      scrollToTime(now - 30 * MIN);
+      return;
+    }
+    const prime = new Date(midnight);
+    prime.setHours(20, 0, 0, 0);
+    scrollToTime(prime.getTime() - 30 * MIN);
+  }
+
+  function reorder(fromId: number, toId: number) {
+    const ids = rows.map((c) => c.id);
+    const from = ids.indexOf(fromId);
+    const to = ids.indexOf(toId);
+    if (from < 0 || to < 0 || from === to) return;
+    const [moved] = ids.splice(from, 1);
+    ids.splice(to, 0, moved);
+    const rest = channels.map((c) => c.id).filter((id) => !ids.includes(id));
+    const next = [...ids, ...rest];
+    localStorage.setItem(ORDER_KEY, JSON.stringify(next));
+    setOrder(next);
   }
 
   function open(channel: Channel, airing?: Airing) {
@@ -176,6 +250,10 @@ export function Guide() {
         handled();
         void favorite(row);
         break;
+      case "h":
+        handled();
+        void editChannel(row, { hidden: true });
+        break;
     }
   }
 
@@ -184,9 +262,10 @@ export function Guide() {
   const leftT = origin + ((view.left - 200) / pxPerMin) * MIN;
   const rightT = origin + ((view.left + view.width) / pxPerMin) * MIN;
   const nowX = ((now - origin) / MIN) * pxPerMin;
-  const slots = Array.from({ length: HOURS * 2 }, (_, i) => origin + i * 30 * MIN);
+  const slots = Array.from({ length: hours * 2 }, (_, i) => origin + i * 30 * MIN).filter((t) => t > leftT - 60 * MIN && t < rightT + 60 * MIN);
+  const nowInView = nowX - view.left > channelW - 8 && nowX - view.left < view.width - 24;
 
-  if (layout === "phone") {
+  if (layout === "phone" && !landscape) {
     return (
       <div className="guide-page phone">
         <GuideControls filter={filter} setFilter={setFilter} query={query} setQuery={setQuery} counts={counts} onNow={() => undefined} onTonight={() => undefined} compact />
@@ -230,8 +309,11 @@ export function Guide() {
         query={query}
         setQuery={setQuery}
         counts={counts}
+        days={days}
+        now={now}
         onNow={() => scrollToTime(now - 30 * MIN)}
         onTonight={tonight}
+        onDay={jumpToDay}
       />
       <div
         ref={scrollRef}
@@ -261,7 +343,27 @@ export function Guide() {
             const list = (index.get(c.id) ?? []).filter((a) => Date.parse(a.end) > leftT && Date.parse(a.start) < rightT);
             return (
               <div key={c.id} className="guide-row" role="row" aria-rowindex={r + 1} style={{ top: headH + r * rowH, width: channelW + width }}>
-                <button type="button" className="guide-channel" onClick={() => watch(c)} aria-label={`Watch ${c.displayNumber} ${c.displayName}`}>
+                <button
+                  type="button"
+                  className="guide-channel"
+                  draggable
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData("text/plain", String(c.id));
+                    event.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    reorder(Number(event.dataTransfer.getData("text/plain")), c.id);
+                  }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    void editChannel(c, { hidden: true });
+                  }}
+                  onClick={() => watch(c)}
+                  aria-label={`Watch ${c.displayNumber} ${c.displayName}`}
+                  title="Drag to reorder. Right-click to hide."
+                >
                   <span className="gc-num">{c.displayNumber}</span>
                   <span className="gc-name">
                     {c.artUrl ? <img className="gc-logo" alt="" src={`/media/art/channel/${c.id}?w=72`} /> : null}
@@ -293,7 +395,7 @@ export function Guide() {
                       type="button"
                       role="gridcell"
                       tabIndex={-1}
-                      className={`guide-cell${onNow ? " now" : ""}${past ? " past" : ""}${focused ? " focused" : ""}${dim ? " dim" : ""}`}
+                      className={`guide-cell${onNow ? " now" : ""}${past ? " past" : ""}${focused ? " focused" : ""}${dim ? " dim" : ""}${a.imageUrl && w > 220 ? " has-thumb" : ""}`}
                       data-cat={cat}
                       style={{ left, width: w, paddingLeft: 14 + inset, ["--p" as string]: onNow ? progress(a, now) : 0 }}
                       onClick={() => {
@@ -308,6 +410,7 @@ export function Guide() {
                         {a.new ? <span className="cell-new">New</span> : null}
                       </span>
                       <span className="cell-sub">{a.subtitle || (w > 160 ? spanLabel(a) : timeLabel(a.start))}</span>
+                      {a.imageUrl && w > 220 ? <img className="cell-thumb" alt="" loading="lazy" src={`/media/art/airing/${a.id}?w=96`} /> : null}
                     </button>
                   );
                 })}
@@ -326,6 +429,11 @@ export function Guide() {
           ))}
         </div>
       ) : null}
+      {nowInView ? null : (
+        <button type="button" className="guide-now-float pill-btn" onClick={() => scrollToTime(now - 30 * MIN)}>
+          Now
+        </button>
+      )}
       {sheet ? <ProgramSheet {...sheet} onClose={() => setSheet(null)} onWatch={watch} /> : null}
     </div>
   );
@@ -337,8 +445,11 @@ function GuideControls({
   query,
   setQuery,
   counts,
+  days,
+  now,
   onNow,
   onTonight,
+  onDay,
   compact,
 }: {
   filter: Filter;
@@ -346,8 +457,11 @@ function GuideControls({
   query: string;
   setQuery: (q: string) => void;
   counts: Partial<Record<Category, number>>;
+  days?: number[];
+  now?: number;
   onNow: () => void;
   onTonight: () => void;
+  onDay?: (midnight: number) => void;
   compact?: boolean;
 }) {
   const cats: Category[] = ["sports", "news", "movies", "kids"];
@@ -361,6 +475,15 @@ function GuideControls({
           <button type="button" className="pill-btn" onClick={onTonight}>
             Tonight
           </button>
+          {days && now != null
+            ? days
+                .filter((day) => dayWord(day, now) !== "Today")
+                .map((day) => (
+                  <button key={day} type="button" className="pill-btn" onClick={() => onDay?.(day)}>
+                    {dayWord(day, now)}
+                  </button>
+                ))
+            : null}
         </div>
       ) : null}
       <div className="guide-chips" role="group" aria-label="Filter">
