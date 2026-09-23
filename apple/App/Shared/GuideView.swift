@@ -5,9 +5,11 @@ import SwiftUI
 struct GuideView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.verticalSizeClass) private var verticalSize
     @State private var filter: OTAKit.Category?
     @State private var favoritesOnly = false
     @State private var selected: Selection?
+    @State private var jump: Date?
 
     struct Selection: Identifiable {
         let channel: Channel
@@ -31,24 +33,62 @@ struct GuideView: View {
     var body: some View {
         VStack(spacing: 0) {
             filters
+            dayJump
             #if os(tvOS)
-                GuideGrid(channels: rows, highlight: filter) { selected = Selection(channel: $0, airing: $1) }
+                GuideGrid(channels: rows, highlight: filter, jump: jump) { selected = Selection(channel: $0, airing: $1) }
             #else
-                if sizeClass == .compact {
+                if sizeClass == .compact && verticalSize != .compact {
                     onNowList
                 } else {
-                    GuideGrid(channels: rows, highlight: filter) { selected = Selection(channel: $0, airing: $1) }
+                    GuideGrid(channels: rows, highlight: filter, jump: jump) { selected = Selection(channel: $0, airing: $1) }
                 }
             #endif
         }
         .navigationTitle("Guide")
         #if os(iOS)
             .toolbarTitleDisplayMode(.inline)
-        #endif
+            .modifier(GuideDetail(selected: $selected, wide: sizeClass == .regular))
+        #else
             .sheet(item: $selected) { sel in
                 ProgramSheet(channel: sel.channel, airing: sel.airing)
-                    .presentationDetents([.medium, .large])
             }
+        #endif
+    }
+
+    private var dayJump: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                Button("Now") { jump = store.now.addingTimeInterval(-15 * 60) }.buttonStyle(.glass)
+                Button("Tonight") { jump = primeTime(on: store.now, after: store.now) }.buttonStyle(.glass)
+                ForEach(comingDays, id: \.timeIntervalSince1970) { day in
+                    Button(dayLabel(day)) { jump = primeTime(on: day, after: day) }.buttonStyle(.glass)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private var comingDays: [Date] {
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: store.now)
+        return (1 ... 2).compactMap { cal.date(byAdding: .day, value: $0, to: start) }
+    }
+
+    private func dayLabel(_ day: Date) -> String {
+        if Calendar.current.isDateInTomorrow(day) { return "Tomorrow" }
+        return day.formatted(.dateTime.weekday(.abbreviated))
+    }
+
+    /// 8 pm on that day. If that moment has passed, the next day's 8 pm.
+    private func primeTime(on day: Date, after now: Date) -> Date {
+        let cal = Calendar.current
+        var parts = cal.dateComponents([.year, .month, .day], from: day)
+        parts.hour = 20
+        let prime = cal.date(from: parts) ?? day
+        if prime > now { return prime.addingTimeInterval(-15 * 60) }
+        return primeTime(on: cal.date(byAdding: .day, value: 1, to: day) ?? day, after: now)
     }
 
     private var filters: some View {
@@ -111,8 +151,10 @@ struct GuideView: View {
 /// scrolls both ways, and the tally-red line marks now.
 struct GuideGrid: View {
     @Environment(AppStore.self) private var store
+    @Environment(NowPlaying.self) private var nowPlaying
     let channels: [Channel]
     let highlight: OTAKit.Category?
+    let jump: Date?
     let onSelect: (Channel, Airing?) -> Void
     @State private var offset: CGPoint = .zero
 
@@ -126,7 +168,7 @@ struct GuideGrid: View {
         private let channelW: CGFloat = 170
     #endif
     private let headH: CGFloat = 44
-    private let hours = 24.0
+    private let hours = 48.0
 
     private var origin: Date {
         let cal = Calendar.current
@@ -144,6 +186,7 @@ struct GuideGrid: View {
     var body: some View {
         let width = CGFloat(hours * 60) * perMinute
         let end = origin.addingTimeInterval(hours * 3600)
+        ScrollViewReader { proxy in
         ScrollView([.horizontal, .vertical]) {
             ZStack(alignment: .topLeading) {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -153,6 +196,12 @@ struct GuideGrid: View {
                             .frame(width: width, height: rowH, alignment: .leading)
                             .padding(.leading, channelW)
                     }
+                }
+                ForEach(0 ..< Int(hours), id: \.self) { hour in
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .id(hour)
+                        .offset(x: channelW + CGFloat(hour * 60) * perMinute)
                 }
                 // Now line
                 Rectangle()
@@ -223,6 +272,12 @@ struct GuideGrid: View {
         }
         .defaultScrollAnchor(UnitPoint(x: max(0, x(store.now.addingTimeInterval(-900)) / (width + channelW)), y: 0))
         .background(Tokens.ColorToken.surface1)
+        .onChange(of: jump) { _, date in
+            guard let date else { return }
+            let hour = max(0, min(Int(hours) - 1, Int(date.timeIntervalSince(origin) / 3600)))
+            proxy.scrollTo(hour, anchor: .leading)
+        }
+        }
     }
 
     private func row(_ channel: Channel, end: Date) -> some View {
@@ -237,6 +292,9 @@ struct GuideGrid: View {
                         .frame(width: w, height: rowH - 10)
                 }
                 .buttonStyle(GuideCellStyle())
+                #if os(tvOS)
+                    .onPlayPauseCommand { nowPlaying.play(channel) }
+                #endif
                 .offset(x: x(s))
             }
             if list.isEmpty {
@@ -414,5 +472,32 @@ struct ProgramSheet: View {
             RadialGradient(colors: [kind.color.opacity(0.35), .clear], center: .topLeading, startRadius: 0, endRadius: 400)
                 .ignoresSafeArea()
         }
+    }
+}
+
+/// A wide screen keeps the program beside the guide. A phone covers it with a sheet.
+private struct GuideDetail: ViewModifier {
+    @Binding var selected: GuideView.Selection?
+    var wide: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        #if os(iOS)
+            if wide {
+                content.inspector(isPresented: Binding(get: { selected != nil }, set: { if !$0 { selected = nil } })) {
+                    if let selected {
+                        ProgramSheet(channel: selected.channel, airing: selected.airing)
+                            .inspectorColumnWidth(min: 320, ideal: 380, max: 440)
+                    }
+                }
+            } else {
+                content.sheet(item: $selected) { sel in
+                    ProgramSheet(channel: sel.channel, airing: sel.airing)
+                        .presentationDetents([.medium, .large])
+                }
+            }
+        #else
+            content
+        #endif
     }
 }
