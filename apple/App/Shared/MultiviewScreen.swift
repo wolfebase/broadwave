@@ -223,6 +223,7 @@ struct MultiviewScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var session: MultiviewSession
     @State private var blocked: Set<Int64> = []
+    @State private var planReady = false
     @State private var hint = !UserDefaults.standard.bool(forKey: "waveguide-mv-hint-seen")
 
     init() {
@@ -289,8 +290,14 @@ struct MultiviewScreen: View {
                         .glassEffect(in: .capsule)
                         .accessibilityAddTraits(.updatesFrequently)
                 }
-                grid(tiles)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Tiles start a tune on appear. Wait for the plan so a channel it would refuse never takes a tuner.
+                if nowPlaying.together.count > 1, !planReady {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    grid(tiles)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
                 layoutBar
                 if session.guide {
                     channelStrip
@@ -307,7 +314,11 @@ struct MultiviewScreen: View {
             }
         }
         .task(id: nowPlaying.together) {
+            if nowPlaying.together.count > 1 {
+                planReady = false
+            }
             await refreshPlan()
+            planReady = true
         }
         #if os(tvOS)
         .onPlayPauseCommand {

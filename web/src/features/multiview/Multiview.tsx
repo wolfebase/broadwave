@@ -39,13 +39,15 @@ export function Multiview() {
   const focus = Number(params.get("focus")) || ids[0] || 0;
   const guide = params.get("add") === "1";
   const [plan, setPlan] = useState<MultiviewPlan | null>(null);
+  const [planFor, setPlanFor] = useState("");
   const [menu, setMenu] = useState(false);
   const [hint] = useState(() => localStorage.getItem("waveguide-mv-hint-seen") !== "1");
   const [room] = useState(roomId);
   const chKey = params.get("ch") ?? "";
+  const waiting = ids.length > 1 && planFor !== chKey;
   const known = ids.map((id) => channels.find((c) => c.id === id)).filter((c): c is Channel => !!c);
   const blocked = new Set(plan?.blocked.map((b) => b.channelId) ?? []);
-  const visible = known.filter((c) => !blocked.has(c.id)).slice(0, slotsFor(layout));
+  const visible = waiting ? [] : known.filter((c) => !blocked.has(c.id)).slice(0, slotsFor(layout));
   const ordered = layout === "2up" || layout === "quad" ? visible : [visible.find((c) => c.id === focus) ?? visible[0], ...visible.filter((c) => c.id !== focus)].filter((c): c is Channel => !!c);
   const notice = plan?.blocked[0]?.reason || plan?.note || "";
   const scores = useScoreMap();
@@ -60,13 +62,18 @@ export function Multiview() {
 
   useEffect(() => {
     const list = parseIds(chKey);
-    if (list.length === 0) return;
+    if (list.length < 2) return;
     let dead = false;
     void planMultiview(list)
       .then((next) => {
         if (!dead) setPlan(next);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!dead) setPlan(null);
+      })
+      .finally(() => {
+        if (!dead) setPlanFor(chKey);
+      });
     return () => {
       dead = true;
     };
@@ -146,12 +153,12 @@ export function Multiview() {
   const focused = ordered.find((c) => c.id === focus) ?? ordered[0];
 
   return (
-    <section className="mv" tabIndex={0} onKeyDown={onKey} aria-label="Side by side">
+    <section className="mv" tabIndex={0} onKeyDown={onKey} aria-label={layoutLabels.find((item) => item.id === layout)?.label ?? "Side by side"}>
       <header className="mv-top">
         <button type="button" className="glass-icon" aria-label="Back to one channel" onClick={() => (focused ? player.open(focused) : navigate("/guide"))}>
           <CloseIcon />
         </button>
-        <h1>Side by side</h1>
+        <h1>{layoutLabels.find((item) => item.id === layout)?.label ?? "Side by side"}</h1>
         <span className="mv-spacer" />
         <button
           type="button"
@@ -168,7 +175,7 @@ export function Multiview() {
       {hint ? <p className="mv-note">Select a tile to hear it.</p> : null}
       {notice ? <p className="mv-note" role="status">{notice}</p> : null}
       <div className={`mv-grid${layoutMode === "phone" && layout === "2up" ? " stacked" : ""}`} data-layout={layout}>
-        {ordered.length === 0 ? <p className="mv-empty">Pick two channels.</p> : null}
+        {waiting ? null : ordered.length === 0 ? <p className="mv-empty">Pick two channels.</p> : null}
         {ordered.map((channel) => (
           <Tile
             key={channel.id}
