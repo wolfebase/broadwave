@@ -23,7 +23,7 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [x] C3 Artwork (commit e246413). Eight of the nine listed channels have logos (38.1 does not). All 609 of their programs have an image. `/media/art` caches a resized copy, and a blank program gets a category placeholder. Settings can store a movie artwork key for programs the guide left blank. No key was required for this lineup.
 - [x] C4 Rich program model (commit f291b7d). Season and episode, the onscreen label, original air date, series id, live, premiere, finale, rating, and cast are stored and shown. This feed sends season, episode, and a date on most programs, and live on a couple. It does not send ratings or cast, so those stay empty. Listings already saved pick this up on the next guide refresh.
 - [x] C5 Guide UX (commit 37be574). The grid covers the listings on hand (up to two days). Now, Tonight, and Tomorrow jump the time. A Now button returns when now has scrolled away. Wide cells show a picture. Drag a channel to reorder it on this screen; right-click or H hides it. iPhone landscape and Apple TV use the grid, play/pause on Apple TV starts the focused show, and iPad keeps the program beside the guide.
-- [ ] C6 Search (FTS5) on web + Apple
+- [x] C6 Search (commit d7def66). Full-text search covers titles, subtitles, descriptions, and cast, plus recordings. Search on the web and on Apple lists the matches. Record every airing makes a pass for that title.
 
 ## Phase D — Sports
 - [ ] D1 Sports provider (ESPN scoreboard, cached, pluggable)
