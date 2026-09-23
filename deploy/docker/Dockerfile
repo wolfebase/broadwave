@@ -6,12 +6,13 @@ COPY web/ ./
 RUN npm run build
 
 FROM golang:1.25-bookworm AS build
+ARG VERSION=dev
 WORKDIR /src/server
 COPY server/go.mod server/go.sum ./
 RUN go mod download
 COPY server/ ./
 COPY --from=web /src/server/cmd/ota-viewer/assets/web ./cmd/ota-viewer/assets/web
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ota-viewer ./cmd/ota-viewer
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/ota-viewer ./cmd/ota-viewer
 
 FROM debian:bookworm-slim
 ARG TARGETARCH
@@ -21,6 +22,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/ota-viewer /usr/local/bin/ota-viewer
 EXPOSE 8477
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD ["ota-viewer", "-healthcheck"]
 VOLUME /config
 ENTRYPOINT ["ota-viewer"]
 CMD ["-config", "/config", "-addr", ":8477"]

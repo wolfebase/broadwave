@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log"
 	"net"
@@ -36,7 +37,11 @@ func main() {
 	dev := flag.Bool("dev", false, "allow a local Vite dev server to call the API")
 	hdhrHost := flag.String("hdhr", os.Getenv("HDHR_HOST"), "tuner address when the container cannot hear broadcast discovery")
 	bonjour := flag.Bool("bonjour", true, "advertise this server to the apps over Bonjour")
+	healthcheck := flag.Bool("healthcheck", false, "check a running server on -addr and exit (for container health checks)")
 	flag.Parse()
+	if *healthcheck {
+		os.Exit(checkHealth(*addr))
+	}
 
 	st, err := store.Open(*configDir)
 	if err != nil {
@@ -122,6 +127,19 @@ func refreshGuide(api *httpapi.Server) {
 		return
 	}
 	log.Printf("guide: %d airings", count)
+}
+
+func checkHealth(addr string) int {
+	client := http.Client{Timeout: 4 * time.Second}
+	res, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/api/v1/health", portOf(addr)))
+	if err != nil {
+		return 1
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return 1
+	}
+	return 0
 }
 
 func portOf(addr string) int {

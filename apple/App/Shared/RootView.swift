@@ -53,6 +53,15 @@ struct RootView: View {
     private func open(_ url: URL) {
         guard url.scheme == "otaviewer" else { return }
         switch url.host() {
+        case "connect":
+            let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+            if let raw = q?.first(where: { $0.name == "url" })?.value, let server = URL(string: raw) {
+                Task {
+                    if let info = try? await APIClient(base: server).server() {
+                        store.connect(FoundServer(id: info.id, name: info.name, url: server))
+                    }
+                }
+            }
         case "watch":
             let id = Int64(url.lastPathComponent) ?? 0
             Task {

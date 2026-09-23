@@ -190,3 +190,8 @@
 .layout-tv .tab-icon {
   font-size: 28px;
 }
+
+.shell.immersive .content:has(.setup) {
+  position: static;
+  overflow: auto;
+}
