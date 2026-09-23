@@ -1,0 +1,9 @@
+OTA Viewer
+Copyright 2026 OTA Viewer contributors
+
+This product includes software developed for OTA Viewer, licensed under
+the Apache License, Version 2.0.
+
+Later sessions run ffmpeg and comskip as separate programs. Those tools
+are not linked into this binary. ffmpeg builds that include GPL components
+are GPL. comskip is GPL. Their licenses apply to those programs only.

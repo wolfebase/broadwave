@@ -1,0 +1,11 @@
+services:
+  ota-viewer:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    ports:
+      - "8477:8477"
+    volumes:
+      - ./config:/config
+      - ./recordings:/config/work/recordings
+    restart: unless-stopped

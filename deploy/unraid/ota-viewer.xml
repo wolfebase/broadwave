@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>OTA-Viewer</Name>
+  <Repository>ota-viewer:latest</Repository>
+  <Registry/>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project/>
+  <Overview>Local over-the-air DVR for an HDHomeRun. One tune is shared with every screen. Recordings are the original broadcast files.</Overview>
+  <Category>MediaApp:Video</Category>
+  <WebUI>http://[IP]:[PORT:8477]</WebUI>
+  <TemplateURL/>
+  <Icon/>
+  <ExtraParams>--device=/dev/dri</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="Web UI" Target="8477" Default="8477" Mode="tcp" Description="Browser port" Type="Port" Display="always" Required="true" Mask="false">8477</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/cache/appdata/ota-viewer/config" Mode="rw" Description="Database and transcode scratch. Kept on the cache pool, in the config folder beside the image build." Type="Path" Display="always" Required="true" Mask="false">/mnt/cache/appdata/ota-viewer/config</Config>
+  <Config Name="Recordings" Target="/config/work/recordings" Default="/mnt/user/media/ota-recordings" Mode="rw" Description="Original broadcast files." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media/ota-recordings</Config>
+  <Config Name="HDHR_HOST" Target="HDHR_HOST" Default="192.168.1.252" Mode="" Description="HDHomeRun address. Bridge mode cannot always hear tuner discovery." Type="Variable" Display="always" Required="true" Mask="false">192.168.1.252</Config>
+  <Config Name="TZ" Target="TZ" Default="America/Chicago" Mode="" Description="Guide timezone" Type="Variable" Display="always" Required="false" Mask="false">America/Chicago</Config>
+</Container>

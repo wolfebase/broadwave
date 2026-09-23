@@ -1,0 +1,172 @@
+openapi: 3.0.3
+info:
+  title: OTA Viewer
+  version: 0.1.0
+  description: |
+    Home DVR API. Tuner stream URLs are never returned. Device auth is never stored.
+    Library channels play recordings and do not take an antenna tuner.
+servers:
+  - url: http://127.0.0.1:8477
+paths:
+  /api/health:
+    get:
+      operationId: health
+      responses:
+        "200":
+          description: Server is up
+  /api/profile:
+    get:
+      operationId: profile
+      responses:
+        "200":
+          description: The single home profile. Accounts arrive later.
+  /api/devices:
+    get:
+      operationId: listDevices
+      responses:
+        "200":
+          description: HDHomeRun devices already saved
+  /api/sources/discover:
+    post:
+      operationId: discoverSources
+      description: Broadcast for a tuner, or read discover.json and lineup.json for one address. Does not open port 5004.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ip:
+                  type: string
+                  description: Host or host:port. Empty broadcasts.
+      responses:
+        "200":
+          description: Devices after the refresh
+  /api/channels:
+    get:
+      operationId: listChannels
+      parameters:
+        - in: query
+          name: guide
+          schema:
+            type: string
+            enum: ["1"]
+          description: When 1, hide disabled, hidden, and missing channels.
+      responses:
+        "200":
+          description: Lineup. listings is empty until XMLTV.
+  /api/channels/{id}:
+    patch:
+      operationId: patchChannel
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                favorite:
+                  type: boolean
+                enabled:
+                  type: boolean
+                hidden:
+                  type: boolean
+                customName:
+                  type: string
+                customNumber:
+                  type: string
+      responses:
+        "200":
+          description: Updated channel
+  /api/settings:
+    get:
+      operationId: getSettings
+      responses:
+        "200":
+          description: layout and recordingsPath
+    put:
+      operationId: putSettings
+      description: Password is not a setting.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                layout:
+                  type: string
+                  enum: [auto, desktop, tv, phone]
+                recordingsPath:
+                  type: string
+      responses:
+        "200":
+          description: Saved settings
+        "400":
+          description: Unknown key or bad layout
+  /api/tuners:
+    get:
+      operationId: listTuners
+      description: Live HDHomeRun tuner rows, including tuners held by another device. Does not retune.
+      responses:
+        "200":
+          description: Tuner rows and the detected encoder name
+  /api/watch:
+    post:
+      operationId: watchChannel
+      description: Start or join a live transcode. One tuner is shared by every viewer on that frequency.
+      responses:
+        "200":
+          description: Playlist and encoder
+        "409":
+          description: Both tuners are busy
+  /api/schedule:
+    get:
+      operationId: schedule
+      description: Series-pass airings in the next 18 hours. conflict is true when more channels overlap than the tuner count.
+      responses:
+        "200":
+          description: Planned recordings
+  /api/virtuals:
+    get:
+      operationId: listVirtuals
+      responses:
+        "200":
+          description: Library channels
+    post:
+      operationId: createVirtual
+      responses:
+        "200":
+          description: Created library channel
+  /api/virtuals/{id}/play:
+    post:
+      operationId: playVirtual
+      description: Transcode one recording on a library channel. usesTuner is false.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: File playlist
+  /api/recordings/{id}/file:
+    get:
+      operationId: downloadRecording
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Original MPEG-TS file
