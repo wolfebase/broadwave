@@ -60,7 +60,7 @@ The main source is the SiliconDust XMLTV feed, authenticated per request with th
 
 ### Sports (`internal/sports`)
 
-Scores come from the public ESPN scoreboard for twelve leagues. F1 and NASCAR are schedules only. A live board refreshes every 30 seconds; a quiet board waits two hours. A failed fetch backs off and keeps the last good board. `GET /api/v1/sports/scoreboard` serves one league or the whole day.
+Scores come from the public ESPN scoreboard for twelve leagues. F1 and NASCAR are schedules only. A live board refreshes every 30 seconds; a quiet board waits two hours. A failed fetch backs off and keeps the last good board. `GET /api/v1/sports/scoreboard` serves one league or the whole day. A listing is linked to a game when both teams (or the race name) appear in the title or subtitle and the start times are within 90 minutes. The id is stored on the airing.
 
 ### Store (`internal/store`)
 

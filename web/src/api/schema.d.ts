@@ -812,6 +812,8 @@ export interface components {
             finale?: boolean;
             rating?: string;
             cast?: string;
+            /** @description Scoreboard game this listing is. Empty when it is not a matched game. */
+            gameId?: string;
             /** Format: date-time */
             start: string;
             /** Format: date-time */

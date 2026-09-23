@@ -39,6 +39,7 @@ type Airing struct {
 	Finale       bool      `json:"finale,omitempty"`
 	Rating       string    `json:"rating,omitempty"`
 	Cast         string    `json:"cast,omitempty"`
+	GameID       string    `json:"gameId,omitempty"`
 	Start        time.Time `json:"start"`
 	End          time.Time `json:"end"`
 }
@@ -175,18 +176,18 @@ func insertAiring(ctx context.Context, tx *sql.Tx, row Airing) error {
 	}
 	_, err := tx.ExecContext(ctx, `
 INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url,
-	season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list, game_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		row.ChannelID, row.Title, row.Subtitle, row.Description, row.Category,
 		row.Start.UTC().Format(time.RFC3339), row.End.UTC().Format(time.RFC3339), row.ProgramID, bit(row.New), row.ImageURL,
-		row.Season, row.Episode, row.EpisodeLabel, row.OriginalAir, row.SeriesID, bit(row.Live), bit(row.Premiere), bit(row.Finale), row.Rating, row.Cast)
+		row.Season, row.Episode, row.EpisodeLabel, row.OriginalAir, row.SeriesID, bit(row.Live), bit(row.Premiere), bit(row.Finale), row.Rating, row.Cast, row.GameID)
 	return err
 }
 
 func (s *Store) Airings(ctx context.Context, from, to time.Time) ([]Airing, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url,
-	season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list
+	season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list, game_id
 FROM airings WHERE ends_at > ? AND starts_at < ? ORDER BY starts_at`,
 		from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
 	if err != nil {
@@ -199,7 +200,7 @@ FROM airings WHERE ends_at > ? AND starts_at < ? ORDER BY starts_at`,
 		var start, end string
 		var isNew, isLive, isPremiere, isFinale int
 		if err := rows.Scan(&row.ID, &row.ChannelID, &row.Title, &row.Subtitle, &row.Description, &row.Category, &start, &end, &row.ProgramID, &isNew, &row.ImageURL,
-			&row.Season, &row.Episode, &row.EpisodeLabel, &row.OriginalAir, &row.SeriesID, &isLive, &isPremiere, &isFinale, &row.Rating, &row.Cast); err != nil {
+			&row.Season, &row.Episode, &row.EpisodeLabel, &row.OriginalAir, &row.SeriesID, &isLive, &isPremiere, &isFinale, &row.Rating, &row.Cast, &row.GameID); err != nil {
 			return nil, err
 		}
 		row.New = isNew != 0
@@ -211,6 +212,28 @@ FROM airings WHERE ends_at > ? AND starts_at < ? ORDER BY starts_at`,
 		out = append(out, row)
 	}
 	return out, rows.Err()
+}
+
+// SetAiringGames writes game ids for listings in the window and clears the rest of that window.
+func (s *Store) SetAiringGames(ctx context.Context, from, to time.Time, ids map[int64]string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `UPDATE airings SET game_id = '' WHERE starts_at >= ? AND starts_at < ?`,
+		from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339)); err != nil {
+		return err
+	}
+	for id, gameID := range ids {
+		if gameID == "" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE airings SET game_id = ? WHERE id = ?`, gameID, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *Store) CreateRecording(ctx context.Context, rec Recording) (int64, error) {

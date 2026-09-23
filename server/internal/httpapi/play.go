@@ -378,6 +378,7 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 	}
 	log.Printf("guide: source=silicondust-xmltv airings=%d channels=%d next=%s", len(rows), len(listed), next.Format(time.RFC3339))
 	_ = s.Store.AddEvent(ctx, "guide", fmt.Sprintf("Guide updated, %d airings", len(rows)))
+	s.LinkGames(ctx)
 	return len(rows), nil
 }
 

@@ -84,6 +84,7 @@ export type Airing = {
   finale?: boolean;
   rating?: string;
   cast?: string;
+  gameId?: string;
   start: string;
   end: string;
 };
