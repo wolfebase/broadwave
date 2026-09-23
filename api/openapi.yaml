@@ -982,6 +982,7 @@ components:
         enabled: { type: boolean }
         hidden: { type: boolean }
         present: { type: boolean }
+        guideKey: { type: string, description: "XMLTV channel id or call sign to use for this channel. Blank uses the number and call sign." }
     ChannelPatch:
       type: object
       properties:
@@ -990,6 +991,7 @@ components:
         hidden: { type: boolean }
         customName: { type: string }
         customNumber: { type: string }
+        guideKey: { type: string }
     Airing:
       type: object
       required: [id, channelId, title, start, end]

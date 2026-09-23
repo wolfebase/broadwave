@@ -181,6 +181,7 @@ func (s *Server) patchChannel(w http.ResponseWriter, r *http.Request) {
 		Hidden       *bool   `json:"hidden"`
 		CustomName   *string `json:"customName"`
 		CustomNumber *string `json:"customNumber"`
+		GuideKey     *string `json:"guideKey"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err != nil {
 		httpError(w, "invalid json", http.StatusBadRequest)
@@ -188,7 +189,7 @@ func (s *Server) patchChannel(w http.ResponseWriter, r *http.Request) {
 	}
 	ch, err := s.Store.PatchChannel(r.Context(), id, store.ChannelPatch{
 		Favorite: body.Favorite, Enabled: body.Enabled, Hidden: body.Hidden,
-		CustomName: body.CustomName, CustomNumber: body.CustomNumber,
+		CustomName: body.CustomName, CustomNumber: body.CustomNumber, GuideKey: body.GuideKey,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		httpError(w, "channel not found", http.StatusNotFound)

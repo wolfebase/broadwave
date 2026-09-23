@@ -12,6 +12,7 @@ export type Channel = {
   enabled: boolean;
   hidden: boolean;
   present: boolean;
+  guideKey?: string;
 };
 
 export type Device = {
@@ -201,4 +202,5 @@ export type ChannelPatch = {
   hidden?: boolean;
   customName?: string;
   customNumber?: string;
+  guideKey?: string;
 };

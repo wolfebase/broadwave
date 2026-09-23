@@ -14,6 +14,8 @@ export const copy = {
     hidden: "Hidden",
     name: "Name on the guide",
     number: "Number",
+    match: "Guide match",
+    matchHint: "Leave guide match blank to use the number and call sign.",
   },
   library: {
     title: "Library",

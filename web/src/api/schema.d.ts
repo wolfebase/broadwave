@@ -741,6 +741,8 @@ export interface components {
             enabled: boolean;
             hidden: boolean;
             present: boolean;
+            /** @description XMLTV channel id or call sign to use for this channel. Blank uses the number and call sign. */
+            guideKey?: string;
         };
         ChannelPatch: {
             favorite?: boolean;
@@ -748,6 +750,7 @@ export interface components {
             hidden?: boolean;
             customName?: string;
             customNumber?: string;
+            guideKey?: string;
         };
         Airing: {
             /** Format: int64 */
