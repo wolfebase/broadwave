@@ -30,10 +30,12 @@ struct SportsView: View {
         .navigationTitle("Sports")
         .task {
             guard let api = store.api else { return }
-            let games = (try? await api.scoreboard()) ?? []
+            let games = await (try? api.scoreboard()) ?? []
             var map: [String: String] = [:]
             for game in games {
-                if let line = game.line { map[game.id] = line }
+                if let line = game.line {
+                    map[game.id] = line
+                }
             }
             scores = map
         }

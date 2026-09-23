@@ -37,8 +37,8 @@ struct GuideView: View {
             dayJump
             #if os(tvOS)
                 GuideGrid(channels: rows, highlight: filter, jump: jump, scores: scores) { selected = Selection(channel: $0, airing: $1) }
-                #else
-                if sizeClass == .compact && verticalSize != .compact {
+            #else
+                if sizeClass == .compact, verticalSize != .compact {
                     onNowList
                 } else {
                     GuideGrid(channels: rows, highlight: filter, jump: jump, scores: scores) { selected = Selection(channel: $0, airing: $1) }
@@ -48,20 +48,22 @@ struct GuideView: View {
         .navigationTitle("Guide")
         .task {
             guard let api = store.api else { return }
-            let games = (try? await api.scoreboard()) ?? []
+            let games = await (try? api.scoreboard()) ?? []
             var map: [String: String] = [:]
             for game in games {
-                if let line = game.line { map[game.id] = line }
+                if let line = game.line {
+                    map[game.id] = line
+                }
             }
             scores = map
         }
         #if os(iOS)
-            .toolbarTitleDisplayMode(.inline)
-            .modifier(GuideDetail(selected: $selected, wide: sizeClass == .regular))
+        .toolbarTitleDisplayMode(.inline)
+        .modifier(GuideDetail(selected: $selected, wide: sizeClass == .regular))
         #else
-            .sheet(item: $selected) { sel in
-                ProgramSheet(channel: sel.channel, airing: sel.airing)
-            }
+        .sheet(item: $selected) { sel in
+            ProgramSheet(channel: sel.channel, airing: sel.airing)
+        }
         #endif
     }
 
@@ -87,7 +89,9 @@ struct GuideView: View {
     }
 
     private func dayLabel(_ day: Date) -> String {
-        if Calendar.current.isDateInTomorrow(day) { return "Tomorrow" }
+        if Calendar.current.isDateInTomorrow(day) {
+            return "Tomorrow"
+        }
         return day.formatted(.dateTime.weekday(.abbreviated))
     }
 
@@ -97,7 +101,9 @@ struct GuideView: View {
         var parts = cal.dateComponents([.year, .month, .day], from: day)
         parts.hour = 20
         let prime = cal.date(from: parts) ?? day
-        if prime > now { return prime.addingTimeInterval(-15 * 60) }
+        if prime > now {
+            return prime.addingTimeInterval(-15 * 60)
+        }
         return primeTime(on: cal.date(byAdding: .day, value: 1, to: day) ?? day, after: now)
     }
 
@@ -198,96 +204,96 @@ struct GuideGrid: View {
         let width = CGFloat(hours * 60) * perMinute
         let end = origin.addingTimeInterval(hours * 3600)
         ScrollViewReader { proxy in
-        ScrollView([.horizontal, .vertical]) {
-            ZStack(alignment: .topLeading) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    Color.clear.frame(height: headH)
-                    ForEach(channels) { channel in
-                        row(channel, end: end)
-                            .frame(width: width, height: rowH, alignment: .leading)
-                            .padding(.leading, channelW)
-                    }
-                }
-                ForEach(0 ..< Int(hours), id: \.self) { hour in
-                    Color.clear
-                        .frame(width: 1, height: 1)
-                        .id(hour)
-                        .offset(x: channelW + CGFloat(hour * 60) * perMinute)
-                }
-                // Now line
-                Rectangle()
-                    .fill(Tokens.ColorToken.tally)
-                    .frame(width: 2, height: CGFloat(channels.count) * rowH)
-                    .shadow(color: Tokens.ColorToken.tally.opacity(0.7), radius: 6)
-                    .offset(x: channelW + x(store.now) - 1, y: headH)
-                    .allowsHitTesting(false)
-                // Pinned channel column
-                VStack(spacing: 0) {
-                    Color.clear.frame(height: headH)
-                    ForEach(channels) { channel in
-                        Button { onSelect(channel, store.index.on(channel.id, at: store.now)) } label: {
-                            HStack(spacing: 10) {
-                                Text(channel.displayNumber).font(.title3.weight(.heavy)).monospacedDigit()
-                                if let api = store.api, channel.artUrl?.isEmpty == false {
-                                    AsyncImage(url: api.artURL(kind: "channel", id: channel.id, width: 72)) { phase in
-                                        if let image = phase.image {
-                                            image.resizable().scaledToFit()
-                                        }
-                                    }
-                                    .frame(width: 36, height: 22)
-                                    .accessibilityHidden(true)
-                                }
-                                Text(channel.displayName).font(.caption.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
-                                Spacer(minLength: 0)
-                                if channel.favorite {
-                                    Image(systemName: "star.fill").font(.caption2).foregroundStyle(Tokens.ColorToken.warning)
-                                }
-                            }
-                            .padding(.horizontal, 14)
-                            .frame(width: channelW, height: rowH)
-                            .background(Tokens.ColorToken.surface1)
-                            .overlay(alignment: .bottom) { Rectangle().fill(Tokens.ColorToken.line).frame(height: 1) }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .offset(x: offset.x)
-                .zIndex(2)
-                // Pinned time header
+            ScrollView([.horizontal, .vertical]) {
                 ZStack(alignment: .topLeading) {
-                    Rectangle().fill(.ultraThinMaterial).frame(width: width + channelW, height: headH)
-                    ForEach(0 ..< Int(hours * 2), id: \.self) { i in
-                        let t = origin.addingTimeInterval(Double(i) * 1800)
-                        Text(t.formatted(date: .omitted, time: .shortened))
-                            .font(.footnote.weight(.semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                            .offset(x: channelW + x(t) + 8, y: 13)
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        Color.clear.frame(height: headH)
+                        ForEach(channels) { channel in
+                            row(channel, end: end)
+                                .frame(width: width, height: rowH, alignment: .leading)
+                                .padding(.leading, channelW)
+                        }
                     }
-                    Text(store.now.formatted(date: .omitted, time: .shortened))
-                        .font(.caption.weight(.heavy))
-                        .monospacedDigit()
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Tokens.ColorToken.tally, in: .capsule)
-                        .shadow(color: Tokens.ColorToken.tally.opacity(0.6), radius: 8)
-                        .offset(x: channelW + x(store.now) - 30, y: 10)
+                    ForEach(0 ..< Int(hours), id: \.self) { hour in
+                        Color.clear
+                            .frame(width: 1, height: 1)
+                            .id(hour)
+                            .offset(x: channelW + CGFloat(hour * 60) * perMinute)
+                    }
+                    // Now line
+                    Rectangle()
+                        .fill(Tokens.ColorToken.tally)
+                        .frame(width: 2, height: CGFloat(channels.count) * rowH)
+                        .shadow(color: Tokens.ColorToken.tally.opacity(0.7), radius: 6)
+                        .offset(x: channelW + x(store.now) - 1, y: headH)
+                        .allowsHitTesting(false)
+                    // Pinned channel column
+                    VStack(spacing: 0) {
+                        Color.clear.frame(height: headH)
+                        ForEach(channels) { channel in
+                            Button { onSelect(channel, store.index.on(channel.id, at: store.now)) } label: {
+                                HStack(spacing: 10) {
+                                    Text(channel.displayNumber).font(.title3.weight(.heavy)).monospacedDigit()
+                                    if let api = store.api, channel.artUrl?.isEmpty == false {
+                                        AsyncImage(url: api.artURL(kind: "channel", id: channel.id, width: 72)) { phase in
+                                            if let image = phase.image {
+                                                image.resizable().scaledToFit()
+                                            }
+                                        }
+                                        .frame(width: 36, height: 22)
+                                        .accessibilityHidden(true)
+                                    }
+                                    Text(channel.displayName).font(.caption.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
+                                    Spacer(minLength: 0)
+                                    if channel.favorite {
+                                        Image(systemName: "star.fill").font(.caption2).foregroundStyle(Tokens.ColorToken.warning)
+                                    }
+                                }
+                                .padding(.horizontal, 14)
+                                .frame(width: channelW, height: rowH)
+                                .background(Tokens.ColorToken.surface1)
+                                .overlay(alignment: .bottom) { Rectangle().fill(Tokens.ColorToken.line).frame(height: 1) }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .offset(x: offset.x)
+                    .zIndex(2)
+                    // Pinned time header
+                    ZStack(alignment: .topLeading) {
+                        Rectangle().fill(.ultraThinMaterial).frame(width: width + channelW, height: headH)
+                        ForEach(0 ..< Int(hours * 2), id: \.self) { i in
+                            let t = origin.addingTimeInterval(Double(i) * 1800)
+                            Text(t.formatted(date: .omitted, time: .shortened))
+                                .font(.footnote.weight(.semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                                .offset(x: channelW + x(t) + 8, y: 13)
+                        }
+                        Text(store.now.formatted(date: .omitted, time: .shortened))
+                            .font(.caption.weight(.heavy))
+                            .monospacedDigit()
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Tokens.ColorToken.tally, in: .capsule)
+                            .shadow(color: Tokens.ColorToken.tally.opacity(0.6), radius: 8)
+                            .offset(x: channelW + x(store.now) - 30, y: 10)
+                    }
+                    .offset(y: offset.y)
+                    .zIndex(3)
                 }
-                .offset(y: offset.y)
-                .zIndex(3)
             }
-        }
-        .scrollIndicators(.hidden)
-        .onScrollGeometryChange(for: CGPoint.self) { $0.contentOffset } action: { _, new in
-            offset = CGPoint(x: max(0, new.x), y: max(0, new.y))
-        }
-        .defaultScrollAnchor(UnitPoint(x: max(0, x(store.now.addingTimeInterval(-900)) / (width + channelW)), y: 0))
-        .background(Tokens.ColorToken.surface1)
-        .onChange(of: jump) { _, date in
-            guard let date else { return }
-            let hour = max(0, min(Int(hours) - 1, Int(date.timeIntervalSince(origin) / 3600)))
-            proxy.scrollTo(hour, anchor: .leading)
-        }
+            .scrollIndicators(.hidden)
+            .onScrollGeometryChange(for: CGPoint.self) { $0.contentOffset } action: { _, new in
+                offset = CGPoint(x: max(0, new.x), y: max(0, new.y))
+            }
+            .defaultScrollAnchor(UnitPoint(x: max(0, x(store.now.addingTimeInterval(-900)) / (width + channelW)), y: 0))
+            .background(Tokens.ColorToken.surface1)
+            .onChange(of: jump) { _, date in
+                guard let date else { return }
+                let hour = max(0, min(Int(hours) - 1, Int(date.timeIntervalSince(origin) / 3600)))
+                proxy.scrollTo(hour, anchor: .leading)
+            }
         }
     }
 
@@ -306,7 +312,7 @@ struct GuideGrid: View {
                 #if os(tvOS)
                     .onPlayPauseCommand { nowPlaying.play(channel) }
                 #endif
-                .offset(x: x(s))
+                    .offset(x: x(s))
             }
             if list.isEmpty {
                 Text("No listings").font(.footnote).foregroundStyle(.tertiary).offset(x: offset.x + 12)
@@ -321,7 +327,7 @@ struct GuideCell: View {
     let now: Date
     let dim: Bool
     let recording: Bool
-    var score: String? = nil
+    var score: String?
 
     var body: some View {
         let kind = airing.kind
@@ -495,11 +501,14 @@ private struct GuideDetail: ViewModifier {
     @Binding var selected: GuideView.Selection?
     var wide: Bool
 
-    @ViewBuilder
     func body(content: Content) -> some View {
         #if os(iOS)
             if wide {
-                content.inspector(isPresented: Binding(get: { selected != nil }, set: { if !$0 { selected = nil } })) {
+                content.inspector(isPresented: Binding(get: { selected != nil }, set: {
+                    if !$0 {
+                        selected = nil
+                    }
+                })) {
                     if let selected {
                         ProgramSheet(channel: selected.channel, airing: selected.airing)
                             .inspectorColumnWidth(min: 320, ideal: 380, max: 440)

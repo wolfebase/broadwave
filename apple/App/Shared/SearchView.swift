@@ -13,9 +13,9 @@ struct SearchView: View {
         List {
             Section {
                 TextField("Shows, people, recordings", text: $query)
-                    #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                    #endif
+                #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                #endif
                     .submitLabel(.search)
                     .onSubmit { Task { await run() } }
             }
@@ -58,8 +58,10 @@ struct SearchView: View {
 
     private func meta(_ airing: Airing) -> String {
         let when = airing.start.formatted(.dateTime.weekday(.abbreviated).hour().minute())
-        let channel = [airing.guideNumber, airing.channelName].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
-        if channel.isEmpty { return when }
+        let channel = [airing.guideNumber, airing.channelName].compactMap(\.self).filter { !$0.isEmpty }.joined(separator: " ")
+        if channel.isEmpty {
+            return when
+        }
         return "\(channel) · \(when)"
     }
 

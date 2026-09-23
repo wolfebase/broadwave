@@ -39,7 +39,9 @@ struct HomeView: View {
                     Shelf("Your teams") {
                         ForEach(yours.prefix(12), id: \.1.id) { channel, airing in
                             Button {
-                                if airing.isOn(at: store.now) { nowPlaying.play(channel) }
+                                if airing.isOn(at: store.now) {
+                                    nowPlaying.play(channel)
+                                }
                             } label: {
                                 GameCard(channel: channel, airing: airing, now: store.now)
                             }
@@ -114,7 +116,7 @@ struct HomeView: View {
         .scrollClipDisabled()
         .task {
             if let api = store.api {
-                teams = (try? await api.teams()) ?? []
+                teams = await (try? api.teams()) ?? []
             }
         }
         .navigationDestination(for: Recording.self) { RecordingPlayerScreen(recording: $0) }
@@ -218,7 +220,7 @@ struct GameCard: View {
     let channel: Channel
     let airing: Airing
     let now: Date
-    var score: String? = nil
+    var score: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {

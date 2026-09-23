@@ -1,4 +1,4 @@
-.PHONY: help web server run dev test vet lint build docker clean tokens apple apple-test
+.PHONY: help web server run dev test vet lint check build docker clean tokens apple apple-test
 
 CONFIG ?= data
 ADDR ?= :8477
@@ -8,6 +8,7 @@ help:
 	@echo "make dev      run the server with -dev; pair with 'npm run dev' in web/"
 	@echo "make test     go test + web typecheck"
 	@echo "make lint     eslint, swiftlint, and swiftformat"
+	@echo "make check    everything CI runs before a push: test + lint"
 	@echo "make build    web + server binary in bin/"
 	@echo "make docker   build the container image"
 	@echo "make apple    generate the Xcode project and build the iOS and tvOS apps"
@@ -40,6 +41,8 @@ lint: web/node_modules
 	cd web && npm run lint
 	swiftlint lint --strict
 	swiftformat --lint .
+
+check: test lint
 
 build: web server
 
