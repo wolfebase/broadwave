@@ -43,6 +43,11 @@ export type Settings = {
   lastGuidePull?: string;
   nextGuidePull?: string;
   lastManualGuidePull?: string;
+  sdUser?: string;
+  sdPassword?: string;
+  sdLineup?: string;
+  sdPasswordSet?: string;
+  guideUrl?: string;
 };
 
 export type StorageInfo = {

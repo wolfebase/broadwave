@@ -331,28 +331,27 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 	if err := s.Store.ReplaceAiringsFor(ctx, ids, rows); err != nil {
 		return 0, err
 	}
-	if extra, _, err := guide.SchedulesDirect(ctx, antenna); err == nil && len(extra) > 0 {
-		have := map[int64]bool{}
-		for _, row := range rows {
-			have[row.ChannelID] = true
-		}
-		var fill []store.Airing
-		for _, row := range extra {
-			if !have[row.ChannelID] {
-				fill = append(fill, row)
+	settings, _ := s.Store.Settings(ctx)
+	user := strings.TrimSpace(settings["sdUser"])
+	pass := settings["sdPassword"]
+	lineup := strings.TrimSpace(settings["sdLineup"])
+	if user == "" {
+		user = strings.TrimSpace(os.Getenv("SD_USERNAME"))
+	}
+	if pass == "" {
+		pass = os.Getenv("SD_PASSWORD")
+	}
+	if lineup == "" {
+		lineup = strings.TrimSpace(os.Getenv("SD_LINEUP"))
+	}
+	if extra, _, err := guide.SchedulesDirect(ctx, antenna, user, pass, lineup); err == nil && len(extra) > 0 {
+		rows = s.fillUnlisted(ctx, rows, extra)
+	}
+	if rawURL := strings.TrimSpace(settings["guideUrl"]); rawURL != "" {
+		if body, err := guide.PullURL(ctx, rawURL); err == nil {
+			if extra, err := guide.Parse(body, antenna); err == nil && len(extra) > 0 {
+				rows = s.fillUnlisted(ctx, rows, extra)
 			}
-		}
-		if len(fill) > 0 {
-			var fillIDs []int64
-			seen := map[int64]bool{}
-			for _, row := range fill {
-				if !seen[row.ChannelID] {
-					seen[row.ChannelID] = true
-					fillIDs = append(fillIDs, row.ChannelID)
-				}
-			}
-			_ = s.Store.ReplaceAiringsFor(ctx, fillIDs, fill)
-			rows = append(rows, fill...)
 		}
 	}
 	now := time.Now().UTC()
@@ -369,6 +368,33 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 	log.Printf("guide: source=silicondust-xmltv airings=%d channels=%d next=%s", len(rows), len(listed), next.Format(time.RFC3339))
 	_ = s.Store.AddEvent(ctx, "guide", fmt.Sprintf("Guide updated, %d airings", len(rows)))
 	return len(rows), nil
+}
+
+// fillUnlisted keeps the listings a channel already has and adds rows only for channels that have none.
+func (s *Server) fillUnlisted(ctx context.Context, rows, extra []store.Airing) []store.Airing {
+	have := map[int64]bool{}
+	for _, row := range rows {
+		have[row.ChannelID] = true
+	}
+	var fill []store.Airing
+	for _, row := range extra {
+		if !have[row.ChannelID] {
+			fill = append(fill, row)
+		}
+	}
+	if len(fill) == 0 {
+		return rows
+	}
+	var fillIDs []int64
+	seen := map[int64]bool{}
+	for _, row := range fill {
+		if !seen[row.ChannelID] {
+			seen[row.ChannelID] = true
+			fillIDs = append(fillIDs, row.ChannelID)
+		}
+	}
+	_ = s.Store.ReplaceAiringsFor(ctx, fillIDs, fill)
+	return append(rows, fill...)
 }
 
 func (s *Server) schedule(w http.ResponseWriter, r *http.Request) {

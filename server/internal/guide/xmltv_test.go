@@ -1,6 +1,9 @@
 package guide
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"waveguide/internal/store"
@@ -23,5 +26,19 @@ func TestParseEpisodeIdentity(t *testing.T) {
 	}
 	if got[0].ProgramID != "EP1" || !got[0].New || got[0].Subtitle != "Show 9001" || got[0].Category != "Game show" {
 		t.Fatalf("%+v", got[0])
+	}
+}
+
+func TestPullURLReadsXMLTV(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<tv><channel id="14.1"><display-name>14.1</display-name></channel></tv>`))
+	}))
+	defer srv.Close()
+	body, err := PullURL(t.Context(), srv.URL)
+	if err != nil || !strings.Contains(string(body), "14.1") {
+		t.Fatal(err, string(body))
+	}
+	if _, err := PullURL(t.Context(), "ftp://example.com/guide.xml"); err == nil {
+		t.Fatal("expected a non-http address to be refused")
 	}
 }

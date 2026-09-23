@@ -232,6 +232,12 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	if values["hdhrEmulate"] == "" {
 		values["hdhrEmulate"] = "0"
 	}
+	if strings.TrimSpace(values["sdPassword"]) != "" {
+		values["sdPasswordSet"] = "1"
+	} else {
+		values["sdPasswordSet"] = "0"
+	}
+	delete(values, "sdPassword")
 	needs, err := s.Store.ApplySetupDefault(r.Context(), time.Now())
 	if err != nil {
 		writeError(w, err)

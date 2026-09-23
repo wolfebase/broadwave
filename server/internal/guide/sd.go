@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -17,12 +16,10 @@ import (
 )
 
 // SchedulesDirect fills guide rows for channels the free SiliconDust feed left empty.
-// It runs only when SD_USERNAME, SD_PASSWORD, and SD_LINEUP are set. The password is
-// read from the environment and is not stored.
-func SchedulesDirect(ctx context.Context, channels []store.Channel) ([]store.Airing, []int64, error) {
-	user := strings.TrimSpace(os.Getenv("SD_USERNAME"))
-	pass := os.Getenv("SD_PASSWORD")
-	lineup := strings.TrimSpace(os.Getenv("SD_LINEUP"))
+// Empty account fields mean skip. The password is passed in and is not logged.
+func SchedulesDirect(ctx context.Context, channels []store.Channel, user, pass, lineup string) ([]store.Airing, []int64, error) {
+	user = strings.TrimSpace(user)
+	lineup = strings.TrimSpace(lineup)
 	if user == "" || pass == "" || lineup == "" {
 		return nil, nil, nil
 	}
@@ -71,12 +68,21 @@ func fetchSchedules(ctx context.Context, client *http.Client, base, user, pass, 
 	if len(stations) == 0 {
 		return nil, nil, nil
 	}
-	day := time.Now().Format("2006-01-02")
+	dates := make([]string, 14)
+	for i := range dates {
+		dates[i] = time.Now().AddDate(0, 0, i).Format("2006-01-02")
+	}
 	var req []map[string]any
 	for _, id := range stations {
-		req = append(req, map[string]any{"stationID": id, "date": []string{day}})
+		req = append(req, map[string]any{"stationID": id, "date": dates})
 	}
 	raw, err := sdPost(ctx, client, base+"/schedules", tok.Token, req)
+	if err != nil {
+		for i := range req {
+			req[i]["date"] = dates[:1]
+		}
+		raw, err = sdPost(ctx, client, base+"/schedules", tok.Token, req)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
