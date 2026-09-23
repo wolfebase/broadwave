@@ -12,7 +12,7 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [ ] A7 Apple signing (team D4MC63SS36, bundle IDs, profiles, `scripts/testflight.sh`, iOS archive signs). Upload blocked: no App Store Connect app record until an Apple ID login (see BLOCKERS)
 
 ## Phase B — Multiview
-- [x] B1 Tile renditions (540.none, 360.none), tuner plan, and a shared multiview room. Mosaic waits until the tiles exist (ADR 0004). 14.x still has no stored frequency, so the plan treats those as separate tuners until one tune locks.
+- [x] B1 Tile renditions (540.none, 360.none), tuner plan, and a shared multiview room (commit feb8c17). Mosaic waits until the tiles exist (ADR 0004). 14.x still has no stored frequency, so the plan treats those as separate tuners until one tune locks.
 - [ ] B2 Web multiview: 2-up side-by-side, 1+2, 1+3, quad, PiP; audio focus; quick guide; saved sets; TV keys
 - [ ] B3 Apple multiview: tvOS 2-up/quad, iPad 4-up, iPhone landscape 2-up; focus audio; AirPlay arbiter
 - [ ] B4 Multiview polish + accessibility
