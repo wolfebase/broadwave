@@ -49,6 +49,7 @@ A room per channel holds a target presentation time derived from segment program
 
 - `Plan` expands passes against the guide for 14 days and resolves conflicts by priority against the tuner count. Two airings on one channel need only one tuner.
 - `Tick` runs every 20 seconds and starts recordings with padding.
+- A crash leaves ffmpeg pid files in `work/pids`. The next start kills those processes, deletes `work/live`, and marks in-progress recordings failed. A show that is still on is recorded again for the time left. SIGTERM finishes the open recording and releases the tuner before exit.
 - `OnSaved` runs commercial detection (comskip when installed, otherwise ffmpeg blackdetect) and writes EDL and JSON sidecars.
 - Virtual (library) channels schedule recordings as a 24-hour channel without using a tuner.
 

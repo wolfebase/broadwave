@@ -354,10 +354,15 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
+	pid := cmd.Process.Pid
+	NotePID(h.Dir, pid)
 	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: time.Now()}
 	r.sub = h.attachPipeLocked(muxOf(h, f), stdin)
 	f.renditions[key] = r
-	go func() { _ = cmd.Wait() }()
+	go func() {
+		_ = cmd.Wait()
+		ForgetPID(h.Dir, pid)
+	}()
 	return r, nil
 }
 
@@ -527,12 +532,27 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 		h.dropIfUnusedLocked(f)
 		return store.Recording{}, err
 	}
+	NotePID(h.Dir, cmd.Process.Pid)
 	rec := &recording{id: id, cmd: cmd, stdin: stdin}
 	rec.sub = h.attachPipeLocked(muxOf(h, f), stdin)
 	f.recording = rec
 	rec.timer = time.AfterFunc(time.Duration(minutes)*time.Minute, func() { h.StopRecord(id) })
 	h.changed()
 	return h.Store.Recording(ctx, id)
+}
+
+// Shutdown stops every rendition, finishes recordings that are in progress,
+// and releases tuners. Used on SIGTERM so a restart does not leave ffmpeg
+// running or a tuner locked.
+func (h *Hub) Shutdown() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, f := range h.feedsLocked() {
+		if f.recording != nil {
+			h.finishRecordingLocked(f, "complete", "")
+		}
+		h.stopFeedLocked(f)
+	}
 }
 
 func (h *Hub) StopRecord(id int64) {
@@ -699,6 +719,7 @@ func (h *Hub) stopRenditionLocked(f *feed, key string) {
 	stopTimer(&r.idle)
 	muxOf(h, f).detach(r.sub)
 	if r.cmd != nil && r.cmd.Process != nil {
+		ForgetPID(h.Dir, r.cmd.Process.Pid)
 		_ = r.stdin.Close()
 		_ = r.cmd.Process.Kill()
 	}
@@ -757,6 +778,7 @@ func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 	muxOf(h, f).detach(rec.sub)
 	_ = rec.stdin.Close()
 	if rec.cmd.Process != nil {
+		ForgetPID(h.Dir, rec.cmd.Process.Pid)
 		done := make(chan struct{})
 		go func() { _ = rec.cmd.Wait(); close(done) }()
 		select {
