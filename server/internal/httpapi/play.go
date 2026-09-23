@@ -242,22 +242,67 @@ func removeInside(root, path string) {
 }
 
 func (s *Server) airings(w http.ResponseWriter, r *http.Request) {
-	from := time.Now().Add(-30 * time.Minute)
-	to := time.Now().Add(48 * time.Hour)
-	if raw := r.URL.Query().Get("hours"); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 168 {
-			to = time.Now().Add(time.Duration(n) * time.Hour)
+	now := time.Now()
+	from := now.Add(-30 * time.Minute)
+	to := now.Add(48 * time.Hour)
+	if raw := r.URL.Query().Get("from"); raw != "" {
+		parsed, err := parseGuideTime(raw)
+		if err != nil {
+			httpError(w, "from needs to be a time", http.StatusBadRequest)
+			return
 		}
+		from = parsed
+	}
+	if raw := r.URL.Query().Get("to"); raw != "" {
+		parsed, err := parseGuideTime(raw)
+		if err != nil {
+			httpError(w, "to needs to be a time", http.StatusBadRequest)
+			return
+		}
+		to = parsed
+	} else if raw := r.URL.Query().Get("hours"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 168 {
+			to = now.Add(time.Duration(n) * time.Hour)
+		}
+	}
+	if !to.After(from) {
+		httpError(w, "The guide window is backwards.", http.StatusBadRequest)
+		return
 	}
 	list, err := s.Store.Airings(r.Context(), from, to)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("channels")); raw != "" {
+		want := map[int64]bool{}
+		for _, part := range strings.Split(raw, ",") {
+			id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
+			if err != nil {
+				httpError(w, "channels needs to be a list of ids", http.StatusBadRequest)
+				return
+			}
+			want[id] = true
+		}
+		filtered := make([]store.Airing, 0, len(list))
+		for _, row := range list {
+			if want[row.ChannelID] {
+				filtered = append(filtered, row)
+			}
+		}
+		list = filtered
+	}
 	if list == nil {
 		list = []store.Airing{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"airings": list})
+	writeCachedJSON(w, r, http.StatusOK, map[string]any{"airings": list})
+}
+
+func parseGuideTime(raw string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t, nil
+	}
+	return time.Parse(time.RFC3339Nano, raw)
 }
 
 func (s *Server) refreshGuide(w http.ResponseWriter, r *http.Request) {

@@ -31,6 +31,11 @@ public final class AppStore {
         prefs = Self.load("prefs") ?? Prefs()
         syncEnabled = UserDefaults.standard.object(forKey: "sync") as? Bool ?? true
         if let saved: FoundServer = Self.load("server") {
+            if let snap = CatalogCache.load(serverID: saved.id) {
+                channels = snap.channels
+                index = GuideIndex(snap.airings)
+                recordings = snap.recordings
+            }
             connect(saved)
         }
         clock = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
@@ -72,18 +77,35 @@ public final class AppStore {
         loading = true
         defer { loading = false }
         do {
+            let moment = Date()
             async let info = api.server()
             async let channels = api.channels()
-            async let airings = api.airings(hours: 36)
+            async let airings = api.airings(from: moment.addingTimeInterval(-30 * 60), to: moment.addingTimeInterval(4 * 3600))
             async let recordings = api.recordings()
             self.info = try await info
             if lineup || self.channels.isEmpty {
                 self.channels = try await channels.sorted(by: Channel.guideOrder)
             }
-            index = try await GuideIndex(airings)
+            let window = try await airings
+            index = GuideIndex(window)
             self.recordings = try await recordings
             now = Date()
             error = nil
+            if let id = server?.id {
+                CatalogCache.save(CatalogSnapshot(channels: self.channels, airings: window, recordings: self.recordings), serverID: id)
+            }
+            if let rest = try? await api.airings(from: moment.addingTimeInterval(4 * 3600), to: moment.addingTimeInterval(48 * 3600)) {
+                var seen = Set(window.map(\.id))
+                var merged = window
+                for airing in rest where !seen.contains(airing.id) {
+                    seen.insert(airing.id)
+                    merged.append(airing)
+                }
+                index = GuideIndex(merged)
+                if let id = server?.id {
+                    CatalogCache.save(CatalogSnapshot(channels: self.channels, airings: merged, recordings: self.recordings), serverID: id)
+                }
+            }
         } catch {
             self.error = error.localizedDescription
         }

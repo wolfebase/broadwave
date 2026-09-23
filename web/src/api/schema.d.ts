@@ -1478,7 +1478,13 @@ export interface operations {
     listAirings: {
         parameters: {
             query?: {
-                /** @description How far ahead to return listings. */
+                /** @description Start of the window. Defaults to 30 minutes ago. */
+                from?: string;
+                /** @description End of the window. Defaults to 48 hours ahead when hours is omitted. */
+                to?: string;
+                /** @description Comma-separated channel ids. Omit for every channel. */
+                channels?: string;
+                /** @description How far ahead to return listings when to is omitted. Kept for older clients. */
                 hours?: number;
             };
             header?: never;
@@ -1487,9 +1493,11 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Guide listings from 30 minutes ago through the window */
+            /** @description Guide listings in the window */
             200: {
                 headers: {
+                    ETag?: string;
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {

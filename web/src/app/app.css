@@ -109,6 +109,40 @@
   animation: tally 1.6s ease-out infinite;
 }
 
+.skel {
+  background: var(--color-surface2);
+  border-radius: var(--radius-lg);
+  min-height: 96px;
+}
+
+.hero-skel {
+  min-height: 280px;
+  margin: 24px auto;
+  max-width: 1180px;
+}
+
+.skel-row {
+  display: flex;
+  gap: 12px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.skel-row .skel {
+  flex: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skel {
+    animation: skel 1.2s ease-in-out infinite;
+  }
+}
+
+@keyframes skel {
+  50% { opacity: 0.55; }
+}
+
 .banner-error {
   max-width: 1180px;
   margin: 12px auto 0;

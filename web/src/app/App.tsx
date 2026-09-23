@@ -42,7 +42,7 @@ export function App() {
 function Shell() {
   const { path, params } = useRoute();
   const layout = useLayout();
-  const { ready, error, recordings, settings } = useData();
+  const { ready, booting, error, recordings, settings } = useData();
   const player = usePlayer();
   const [online, setOnline] = useState(true);
   const recordingCount = recordings.filter((r) => r.status === "recording").length;
@@ -97,10 +97,10 @@ function Shell() {
           </div>
         </nav>
       ) : null}
-      <main className="content" aria-busy={!ready}>
-        {!ready ? <div className="boot"><span className="brand-tally" /> Finding your tuner…</div> : null}
-        {ready && error ? <p className="banner-error" role="alert">{error}</p> : null}
-        {ready ? <Suspense fallback={null}>{page}</Suspense> : null}
+      <main className="content" aria-busy={booting} data-ready={ready ? "1" : "0"}>
+        {booting ? <div className="boot"><span className="brand-tally" /> Finding your tuner…</div> : null}
+        {!booting && error ? <p className="banner-error" role="alert">{error}</p> : null}
+        {!booting ? <Suspense fallback={null}>{page}</Suspense> : null}
       </main>
     </div>
   );

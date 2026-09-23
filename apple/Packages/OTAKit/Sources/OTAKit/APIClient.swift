@@ -79,8 +79,22 @@ public struct APIClient: Sendable {
     }
 
     public func airings(hours: Int = 48) async throws -> [Airing] {
+        try await airings(path: "/airings?hours=\(hours)")
+    }
+
+    /// Listings in a window. The apps paint this first, then ask for the rest.
+    public func airings(from: Date, to: Date) async throws -> [Airing] {
+        var parts = URLComponents()
+        parts.queryItems = [
+            URLQueryItem(name: "from", value: ISO8601DateFormatter.plain.string(from: from)),
+            URLQueryItem(name: "to", value: ISO8601DateFormatter.plain.string(from: to)),
+        ]
+        return try await airings(path: "/airings?\(parts.percentEncodedQuery ?? "")")
+    }
+
+    private func airings(path: String) async throws -> [Airing] {
         struct R: Decodable { var airings: [Airing] }
-        return try await send("GET", "/airings?hours=\(hours)", as: R.self).airings
+        return try await send("GET", path, as: R.self).airings
     }
 
     public func setFavorite(_ channel: Channel, _ on: Bool) async throws -> Channel {

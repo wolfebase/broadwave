@@ -26,3 +26,6 @@ apple/Packages/*/.swiftpm/
 .DS_Store
 .env
 .env.*
+
+# Project-local SSH material (do not commit)
+.ssh/
