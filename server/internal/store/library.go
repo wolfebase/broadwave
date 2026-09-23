@@ -24,35 +24,6 @@ type VirtualChannel struct {
 	Recordings []int64 `json:"recordings"`
 }
 
-func (s *Store) migrateLibrary() {
-	_, _ = s.db.Exec(`
-CREATE TABLE IF NOT EXISTS markers (
-	id INTEGER PRIMARY KEY,
-	recording_id INTEGER NOT NULL,
-	start_sec REAL NOT NULL,
-	end_sec REAL NOT NULL
-);
-CREATE TABLE IF NOT EXISTS virtual_channels (
-	id INTEGER PRIMARY KEY,
-	number TEXT NOT NULL,
-	name TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS virtual_items (
-	id INTEGER PRIMARY KEY,
-	virtual_id INTEGER NOT NULL,
-	recording_id INTEGER NOT NULL,
-	position INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS progress (
-	recording_id INTEGER PRIMARY KEY,
-	position_sec REAL NOT NULL,
-	updated_at TEXT NOT NULL
-);
-`)
-	_, _ = s.db.Exec(`ALTER TABLE virtual_channels ADD COLUMN order_mode TEXT NOT NULL DEFAULT 'custom'`)
-	_, _ = s.db.Exec(`ALTER TABLE virtual_channels ADD COLUMN rule_title TEXT NOT NULL DEFAULT ''`)
-}
-
 func (s *Store) SaveProgress(ctx context.Context, recordingID int64, seconds float64) error {
 	if seconds < 0 {
 		seconds = 0

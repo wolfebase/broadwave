@@ -13,17 +13,6 @@ type Event struct {
 	Message string    `json:"message"`
 }
 
-func (s *Store) migrateEvents() {
-	_, _ = s.db.Exec(`
-CREATE TABLE IF NOT EXISTS events (
-	id INTEGER PRIMARY KEY,
-	at TEXT NOT NULL,
-	kind TEXT NOT NULL,
-	message TEXT NOT NULL
-);
-`)
-}
-
 func (s *Store) AddEvent(ctx context.Context, kind, message string) error {
 	kind = clip(kind, 40)
 	message = clip(strings.TrimSpace(message), 240)

@@ -60,69 +60,14 @@ func Open(dir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{db: db}
-	if err := s.migrate(); err != nil {
+	if err := Migrate(db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
-	s.migrateDVR()
-	s.migrateLibrary()
-	s.migrateEvents()
-	return s, nil
+	return &Store{db: db}, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
-
-func (s *Store) migrate() error {
-	_, err := s.db.Exec(`
-CREATE TABLE IF NOT EXISTS profiles (
-	id INTEGER PRIMARY KEY,
-	name TEXT NOT NULL,
-	created_at TEXT NOT NULL
-);
-INSERT INTO profiles (id, name, created_at)
-	SELECT 1, 'Home', ` + "'" + time.Now().UTC().Format(time.RFC3339) + "'" + `
-	WHERE NOT EXISTS (SELECT 1 FROM profiles WHERE id = 1);
-
-CREATE TABLE IF NOT EXISTS devices (
-	device_id TEXT PRIMARY KEY,
-	friendly_name TEXT NOT NULL DEFAULT '',
-	model_number TEXT NOT NULL DEFAULT '',
-	firmware_name TEXT NOT NULL DEFAULT '',
-	firmware_version TEXT NOT NULL DEFAULT '',
-	upgrade_available TEXT NOT NULL DEFAULT '',
-	base_url TEXT NOT NULL,
-	lineup_url TEXT NOT NULL DEFAULT '',
-	tuner_count INTEGER NOT NULL DEFAULT 0,
-	priority INTEGER NOT NULL DEFAULT 0,
-	last_seen TEXT NOT NULL DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS channels (
-	id INTEGER PRIMARY KEY,
-	device_id TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
-	guide_number TEXT NOT NULL,
-	guide_name TEXT NOT NULL DEFAULT '',
-	stream_url TEXT NOT NULL DEFAULT '',
-	video_codec TEXT NOT NULL DEFAULT '',
-	audio_codec TEXT NOT NULL DEFAULT '',
-	hd INTEGER NOT NULL DEFAULT 0,
-	favorite INTEGER NOT NULL DEFAULT 0,
-	enabled INTEGER NOT NULL DEFAULT 1,
-	hidden INTEGER NOT NULL DEFAULT 0,
-	custom_name TEXT NOT NULL DEFAULT '',
-	custom_number TEXT NOT NULL DEFAULT '',
-	present INTEGER NOT NULL DEFAULT 1,
-	UNIQUE(device_id, guide_number)
-);
-
-CREATE TABLE IF NOT EXISTS settings (
-	key TEXT PRIMARY KEY,
-	value TEXT NOT NULL
-);
-`)
-	return err
-}
 
 func (s *Store) UpsertDevice(ctx context.Context, dev hdhr.Device, channels []hdhr.Channel) error {
 	tx, err := s.db.BeginTx(ctx, nil)
