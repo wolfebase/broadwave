@@ -23,11 +23,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function getDevices() {
-  return request<{ devices: Device[] }>("/api/devices");
+  return request<{ devices: Device[] }>("/api/v1/devices");
 }
 
 export function discover(ip?: string) {
-  return request<{ devices: Device[]; found: number }>("/api/sources/discover", {
+  return request<{ devices: Device[]; found: number }>("/api/v1/sources/discover", {
     method: "POST",
     body: JSON.stringify({ ip: ip ?? "" }),
   });
@@ -35,27 +35,27 @@ export function discover(ip?: string) {
 
 export function getChannels(guide: boolean) {
   return request<{ channels: Channel[]; listings: string; message: string }>(
-    `/api/channels${guide ? "?guide=1" : ""}`,
+    `/api/v1/channels${guide ? "?guide=1" : ""}`,
   );
 }
 
 export function patchChannel(id: number, patch: ChannelPatch) {
-  return request<Channel>(`/api/channels/${id}`, {
+  return request<Channel>(`/api/v1/channels/${id}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
   });
 }
 
 export function getSettings() {
-  return request<Settings>("/api/settings");
+  return request<Settings>("/api/v1/settings");
 }
 
 export function getStorage() {
-  return request<StorageInfo>("/api/storage");
+  return request<StorageInfo>("/api/v1/storage");
 }
 
 export function putSettings(values: Partial<Settings>) {
-  return request<Settings>("/api/settings", {
+  return request<Settings>("/api/v1/settings", {
     method: "PUT",
     body: JSON.stringify(values),
   });
@@ -77,73 +77,73 @@ export function getServer() {
 }
 
 export function getAirings() {
-  return request<{ airings: Airing[] }>("/api/airings");
+  return request<{ airings: Airing[] }>("/api/v1/airings");
 }
 
 export function refreshGuide() {
-  return request<{ airings: number }>("/api/guide/refresh", { method: "POST", body: "{}" });
+  return request<{ airings: number }>("/api/v1/guide/refresh", { method: "POST", body: "{}" });
 }
 
 export function getRecordings() {
-  return request<{ recordings: Recording[] }>("/api/recordings");
+  return request<{ recordings: Recording[] }>("/api/v1/recordings");
 }
 
 export function startRecording(channelId: number, minutes: number, title: string) {
-  return request<Recording>("/api/recordings", {
+  return request<Recording>("/api/v1/recordings", {
     method: "POST",
     body: JSON.stringify({ channelId, minutes, title }),
   });
 }
 
 export function stopRecording(id: number) {
-  return request<{ ok: boolean }>(`/api/recordings/${id}/stop`, { method: "POST", body: "{}" });
+  return request<{ ok: boolean }>(`/api/v1/recordings/${id}/stop`, { method: "POST", body: "{}" });
 }
 
 export function getPasses() {
-  return request<{ passes: Pass[] }>("/api/passes");
+  return request<{ passes: Pass[] }>("/api/v1/passes");
 }
 
 export function addPass(title: string, channelId: number) {
-  return request<{ passes: Pass[] }>("/api/passes", {
+  return request<{ passes: Pass[] }>("/api/v1/passes", {
     method: "POST",
     body: JSON.stringify({ title, channelId }),
   });
 }
 
 export function updatePass(id: number, patch: Partial<Pass>) {
-  return request<{ passes: Pass[] }>(`/api/passes/${id}`, {
+  return request<{ passes: Pass[] }>(`/api/v1/passes/${id}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
   });
 }
 
 export function setWatched(id: number, watched: boolean) {
-  return request<{ ok: boolean }>(`/api/recordings/${id}/watched`, {
+  return request<{ ok: boolean }>(`/api/v1/recordings/${id}/watched`, {
     method: "PUT",
     body: JSON.stringify({ watched }),
   });
 }
 
 export function addSource(kind: string, name: string, url: string, xmltvUrl = "") {
-  return request<{ id?: number; added?: number }>(`/api/sources`, {
+  return request<{ id?: number; added?: number }>(`/api/v1/sources`, {
     method: "POST",
     body: JSON.stringify({ kind, name, url, xmltvUrl }),
   });
 }
 
 export function updateVirtual(id: number, orderMode: string, ruleTitle: string) {
-  return request<VirtualChannel>(`/api/virtuals/${id}`, {
+  return request<VirtualChannel>(`/api/v1/virtuals/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ orderMode, ruleTitle }),
   });
 }
 
 export function deleteRecording(id: number) {
-  return request<{ ok: boolean }>(`/api/recordings/${id}`, { method: "DELETE" });
+  return request<{ ok: boolean }>(`/api/v1/recordings/${id}`, { method: "DELETE" });
 }
 
 export function deletePass(id: number) {
-  return request<{ passes: Pass[] }>(`/api/passes/${id}`, { method: "DELETE" });
+  return request<{ passes: Pass[] }>(`/api/v1/passes/${id}`, { method: "DELETE" });
 }
 
 export function playRecording(id: number, pictureMode: string) {
@@ -152,40 +152,40 @@ export function playRecording(id: number, pictureMode: string) {
     position: number;
     growing: boolean;
     markers: { id: number; recordingId: number; start: number; end: number }[];
-  }>(`/api/recordings/${id}/play`, { method: "POST", body: JSON.stringify({ pictureMode }) });
+  }>(`/api/v1/recordings/${id}/play`, { method: "POST", body: JSON.stringify({ pictureMode }) });
 }
 
 export function saveProgress(id: number, position: number) {
-  return request<{ position: number }>(`/api/recordings/${id}/progress`, {
+  return request<{ position: number }>(`/api/v1/recordings/${id}/progress`, {
     method: "PUT",
     body: JSON.stringify({ position }),
   });
 }
 
 export function deleteMarker(id: number) {
-  return request<{ ok: boolean }>(`/api/markers/${id}`, { method: "DELETE" });
+  return request<{ ok: boolean }>(`/api/v1/markers/${id}`, { method: "DELETE" });
 }
 
 export function addMarker(id: number, start: number, end: number) {
-  return request<{ id: number; start: number; end: number }>(`/api/recordings/${id}/markers`, {
+  return request<{ id: number; start: number; end: number }>(`/api/v1/recordings/${id}/markers`, {
     method: "POST",
     body: JSON.stringify({ start, end }),
   });
 }
 
 export function detectBreaks(id: number) {
-  return request<{ markers: { id: number; start: number; end: number }[] }>(`/api/recordings/${id}/detect`, {
+  return request<{ markers: { id: number; start: number; end: number }[] }>(`/api/v1/recordings/${id}/detect`, {
     method: "POST",
     body: "{}",
   });
 }
 
 export function getVirtuals() {
-  return request<{ virtuals: VirtualChannel[] }>("/api/virtuals");
+  return request<{ virtuals: VirtualChannel[] }>("/api/v1/virtuals");
 }
 
 export function createVirtual(number: string, name: string, recordings: number[]) {
-  return request<VirtualChannel>("/api/virtuals", {
+  return request<VirtualChannel>("/api/v1/virtuals", {
     method: "POST",
     body: JSON.stringify({ number, name, recordings }),
   });
@@ -201,20 +201,20 @@ export function playVirtual(id: number, index: number, pictureMode = "broadcast"
     name: string;
     recording: Recording;
     markers: { id: number; recordingId: number; start: number; end: number }[];
-  }>(`/api/virtuals/${id}/play`, {
+  }>(`/api/v1/virtuals/${id}/play`, {
     method: "POST",
     body: JSON.stringify({ index, pictureMode }),
   });
 }
 
 export function getTuners() {
-  return request<{ tuners: TunerStatus[]; encoder: string }>("/api/tuners");
+  return request<{ tuners: TunerStatus[]; encoder: string }>("/api/v1/tuners");
 }
 
 export function getSchedule() {
-  return request<{ tunerCount: number; items: PlannedAiring[] }>("/api/schedule");
+  return request<{ tunerCount: number; items: PlannedAiring[] }>("/api/v1/schedule");
 }
 
 export function getEvents() {
-  return request<{ events: { id: number; at: string; kind: string; message: string }[] }>("/api/events");
+  return request<{ events: { id: number; at: string; kind: string; message: string }[] }>("/api/v1/events");
 }

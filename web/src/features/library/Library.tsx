@@ -107,7 +107,7 @@ function LibraryRow({
       <button type="button" className="btn primary" onClick={() => onPlay(rec)}>Play</button>
       {rec.status !== "recording" ? <button type="button" className="btn" onClick={() => onWatched(rec, !seen)}>{seen ? "Mark unwatched" : "Mark watched"}</button> : null}
       {rec.status !== "recording" ? <button type="button" className="btn" onClick={() => onVirtual(rec)}>Make channel</button> : null}
-      <a className="btn" href={`/api/recordings/${rec.id}/file`}>Download</a>
+      <a className="btn" href={`/api/v1/recordings/${rec.id}/file`}>Download</a>
       {rec.status === "recording" ? null : armed === rec.id ? (
         <button type="button" className="btn primary" onClick={() => onDelete(rec)}>Delete this file</button>
       ) : (
