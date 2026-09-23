@@ -72,6 +72,7 @@ export function Schedule({
             <li key={pass.id} className="source-row">
               <span>{pass.title}</span>
               <PadFields
+                key={`${pass.id}:${pass.padBefore}:${pass.padAfter}:${pass.priority}:${pass.episodes}:${pass.keepMode}:${pass.commercials}`}
                 pass={pass}
                 onSave={(patch) => void updatePass(pass.id, patch).then(onPasses)}
               />
@@ -135,14 +136,6 @@ function PadFields({ pass, onSave }: { pass: Pass; onSave: (patch: Partial<Pass>
   const [episodes, setEpisodes] = useState(pass.episodes || "all");
   const [keepMode, setKeepMode] = useState(pass.keepMode || "all");
   const [commercials, setCommercials] = useState(pass.commercials !== false);
-  useEffect(() => {
-    setBefore(String(pass.padBefore ?? 0));
-    setAfter(String(pass.padAfter ?? 0));
-    setPriority(String(pass.priority ?? 0));
-    setEpisodes(pass.episodes || "all");
-    setKeepMode(pass.keepMode || "all");
-    setCommercials(pass.commercials !== false);
-  }, [pass]);
   function commit(extra: Partial<Pass> = {}) {
     const padBefore = clampMinutes(before);
     const padAfter = clampMinutes(after);

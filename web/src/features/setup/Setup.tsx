@@ -40,7 +40,7 @@ export function Setup() {
       return;
     }
     pulledGuide.current = true;
-    setBusy(true);
+    queueMicrotask(() => setBusy(true));
     void refreshGuide()
       .then((r) => setGuideNote(`Loaded ${r.airings} listings.`))
       .catch((e: unknown) => setGuideNote(e instanceof Error ? e.message : "Listings did not load."))

@@ -30,14 +30,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [channel, setChannel] = useState<Channel | null>(null);
   const back = useRef("/guide");
   const watchId = path === "/watch" ? Number(params.get("channel") || 0) : 0;
-  const mode: "full" | "mini" = watchId && channel && watchId === channel.id ? "full" : "mini";
-
-  useEffect(() => {
-    if (!ready || !watchId) return;
-    if (channel?.id === watchId) return;
-    const hit = channels.find((c) => c.id === watchId);
-    if (hit) setChannel(hit);
-  }, [ready, watchId, channels, channel]);
+  const fromList = ready && watchId ? channels.find((c) => c.id === watchId) ?? null : null;
+  const playing = channel && (!watchId || channel.id === watchId) ? channel : fromList;
+  const mode: "full" | "mini" = watchId && playing && playing.id === watchId ? "full" : "mini";
 
   useEffect(() => {
     if (path !== "/watch") back.current = path + (params.toString() ? `?${params}` : "");
@@ -53,20 +48,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (path === "/watch") navigate(back.current || "/guide");
   }, [path]);
 
-  const value = useMemo(() => ({ channel, mode, open, close }), [channel, mode, open, close]);
+  const value = useMemo(() => ({ channel: playing, mode, open, close }), [playing, mode, open, close]);
 
   return (
     <Ctx.Provider value={value}>
       {children}
-      {channel ? (
+      {playing ? (
         <Suspense fallback={null}>
         <LivePlayer
           key="live"
-          channel={channel}
+          channel={playing}
           mode={mode}
           onChannel={open}
           onMinimize={() => navigate(back.current || "/guide")}
-          onExpand={() => navigate(`/watch?channel=${channel.id}`)}
+          onExpand={() => navigate(`/watch?channel=${playing.id}`)}
           onClose={close}
         />
         </Suspense>

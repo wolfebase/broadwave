@@ -146,7 +146,11 @@ export function SettingsScreen({
 
 function ReserveField({ value, storage, onSave }: { value: string; storage: StorageInfo | null; onSave: (value: string) => void }) {
   const [text, setText] = useState(value);
-  useEffect(() => setText(value), [value]);
+  const [seen, setSeen] = useState(value);
+  if (value !== seen) {
+    setSeen(value);
+    setText(value);
+  }
   return (
     <label className="field">
       {copy.settings.reserve}
