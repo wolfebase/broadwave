@@ -30,7 +30,7 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [x] D2 Airing <-> game matching (commit ce1fcb7). A listing matches a game when both teams, or the race name, appear in the title or subtitle and the start is within 90 minutes. The game id is stored on the airing.
 - [x] D3 Game-aware recording extension (commit c444120). A matched game keeps recording while it is on, and for a delay before the start. It stops 8 minutes after the game ends. A sports listing that did not match records an extra hour. The activity log says when a recording was extended.
 - [x] D4 Team follows + team passes (commit 2a6777a). Follow a team from Sports. Home shows Your teams. Record every game is a pass that matches the team on any channel. The activity log announces the next game once.
-- [ ] D5 Spoiler-safe score bugs everywhere
+- [x] D5 Spoiler-safe score bugs (commit ee8f7a4). Scores show on the guide, sports cards, the player, and multiview. Hide scores in Settings blanks every result. A recorded game stays blank until it is watched.
 - [ ] D6 Sports hub redesign
 
 ## Phase E — DVR
