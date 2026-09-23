@@ -1,4 +1,4 @@
-.PHONY: help web server run dev test vet lint build docker clean
+.PHONY: help web server run dev test vet lint build docker clean tokens apple apple-test
 
 CONFIG ?= data
 ADDR ?= :8477
@@ -9,6 +9,8 @@ help:
 	@echo "make test     go test + web typecheck"
 	@echo "make build    web + server binary in bin/"
 	@echo "make docker   build the container image"
+	@echo "make apple    generate the Xcode project and build the iOS and tvOS apps"
+	@echo "make tokens   regenerate CSS and Swift from design/tokens.json"
 
 web/node_modules: web/package-lock.json
 	cd web && npm ci
@@ -40,3 +42,14 @@ docker:
 
 clean:
 	rm -rf bin server/cmd/ota-viewer/assets/web
+
+tokens:
+	node design/build.mjs
+
+apple:
+	cd apple && xcodegen generate
+	cd apple && xcodebuild -project OTAViewer.xcodeproj -scheme OTAViewer -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build
+	cd apple && xcodebuild -project OTAViewer.xcodeproj -scheme OTAViewerTV -destination 'generic/platform=tvOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build
+
+apple-test:
+	cd apple/Packages/OTAKit && swift test

@@ -7,7 +7,7 @@ alwaysApply: false
 # Apple apps
 
 - Swift 6 language mode with strict concurrency. SwiftUI throughout, `@Observable` models, `async`/`await`. UIKit only where AVKit or tvOS focus requires it.
-- Targets: iOS and tvOS apps (then widgets, Live Activity, Top Shelf). Minimum iOS 26 and tvOS 26 so Liquid Glass is the baseline. Gate newer APIs with `if #available(iOS 27, tvOS 27, *)`.
+- Targets: iOS and tvOS apps (then widgets, Live Activity, Top Shelf). Minimum iOS 26.1 and tvOS 26.1 so Liquid Glass (and the toggleable tab accessory) is the baseline. Gate newer APIs with `if #available(iOS 27, tvOS 27, *)`.
 - Shared code lives in Swift packages under `apple/Packages/`:
   - `OTAKit` holds models, the API client (from `api/openapi.yaml`), Bonjour discovery (`NWBrowser` for `_otaviewer._tcp`), pairing and auth (tokens in Keychain), the events WebSocket, the sync engine, and the device capability profile. No SwiftUI imports.
   - `OTAUI` holds the theme (generated from `design/tokens.json`) and shared components: guide cell, program card, channel badge, live badge, sync indicator.
