@@ -1,0 +1,137 @@
+import OTAKit
+import OTAUI
+import SwiftUI
+
+/// Which channel is playing, and whether the player is full screen or docked.
+@MainActor
+@Observable
+final class NowPlaying {
+    var channel: Channel?
+    var expanded = false
+
+    func play(_ channel: Channel) {
+        self.channel = channel
+        expanded = true
+    }
+
+    func stop() {
+        channel = nil
+        expanded = false
+    }
+}
+
+enum AppTab: Hashable {
+    case home, guide, sports, recordings, settings
+}
+
+struct RootView: View {
+    @Environment(AppStore.self) private var store
+    @State private var nowPlaying = NowPlaying()
+    @State private var tab: AppTab = .home
+
+    var body: some View {
+        Group {
+            if store.connected {
+                tabs
+            } else {
+                ConnectView()
+            }
+        }
+        .environment(nowPlaying)
+        .background(Tokens.ColorToken.canvas.ignoresSafeArea())
+        .onOpenURL(perform: open)
+        #if DEBUG
+        .task {
+            // Simulator testing: launch with -OTAWatch <channel id>.
+            let id = UserDefaults.standard.integer(forKey: "OTAWatch")
+            if id > 0 { open(URL(string: "otaviewer://watch/\(id)")!) }
+        }
+        #endif
+    }
+
+    /// otaviewer://watch/<channel id>, otaviewer://guide, otaviewer://sports — for widgets, Top Shelf, and Siri.
+    private func open(_ url: URL) {
+        guard url.scheme == "otaviewer" else { return }
+        switch url.host() {
+        case "watch":
+            let id = Int64(url.lastPathComponent) ?? 0
+            Task {
+                if store.channels.isEmpty { await store.refresh() }
+                if let channel = store.channels.first(where: { $0.id == id }) { nowPlaying.play(channel) }
+            }
+        case "guide": tab = .guide
+        case "sports": tab = .sports
+        case "recordings": tab = .recordings
+        default: tab = .home
+        }
+    }
+
+    private var tabs: some View {
+        TabView(selection: $tab) {
+            Tab("Home", systemImage: "house.fill", value: AppTab.home) {
+                NavigationStack { HomeView() }
+            }
+            Tab("Guide", systemImage: "square.grid.3x3.topleft.filled", value: AppTab.guide) {
+                NavigationStack { GuideView() }
+            }
+            Tab("Sports", systemImage: "sportscourt.fill", value: AppTab.sports) {
+                NavigationStack { SportsView() }
+            }
+            Tab("Recordings", systemImage: "play.rectangle.on.rectangle.fill", value: AppTab.recordings) {
+                NavigationStack { RecordingsView() }
+            }
+            Tab("Settings", systemImage: "gearshape.fill", value: AppTab.settings) {
+                NavigationStack { SettingsView() }
+            }
+        }
+        .tabViewStyle(.sidebarAdaptable)
+        #if os(iOS)
+        .tabBarMinimizeBehavior(.onScrollDown)
+        .tabViewBottomAccessory(isEnabled: nowPlaying.channel != nil && !nowPlaying.expanded) {
+            MiniPlayerBar()
+        }
+        .fullScreenCover(isPresented: Binding(get: { nowPlaying.expanded && nowPlaying.channel != nil }, set: { nowPlaying.expanded = $0 })) {
+            PlayerScreen()
+                .environment(store)
+                .environment(nowPlaying)
+        }
+        #else
+        .fullScreenCover(isPresented: Binding(get: { nowPlaying.channel != nil }, set: { if !$0 { nowPlaying.stop() } })) {
+            PlayerScreen()
+                .environment(store)
+                .environment(nowPlaying)
+        }
+        #endif
+        .refreshable { await store.refresh() }
+    }
+}
+
+#if os(iOS)
+/// Live TV keeps a place at the bottom while you browse.
+struct MiniPlayerBar: View {
+    @Environment(AppStore.self) private var store
+    @Environment(NowPlaying.self) private var nowPlaying
+
+    var body: some View {
+        if let channel = nowPlaying.channel {
+            HStack(spacing: 12) {
+                LiveDot("")
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(store.index.on(channel.id, at: store.now)?.title ?? channel.displayName)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    Text("\(channel.displayNumber) \(channel.displayName)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Close", systemImage: "xmark") { nowPlaying.stop() }
+                    .labelStyle(.iconOnly)
+            }
+            .padding(.horizontal, 16)
+            .contentShape(.rect)
+            .onTapGesture { nowPlaying.expanded = true }
+        }
+    }
+}
+#endif

@@ -1,0 +1,93 @@
+name: OTAViewer
+options:
+  bundleIdPrefix: com.otaviewer
+  deploymentTarget:
+    iOS: "26.1"
+    tvOS: "26.1"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+packages:
+  OTAKit:
+    path: Packages/OTAKit
+  OTAUI:
+    path: Packages/OTAUI
+targetTemplates:
+  App:
+    type: application
+    sources:
+      - path: App/Shared
+    dependencies:
+      - package: OTAKit
+      - package: OTAUI
+    info:
+      path: App/Info-${platform}.plist
+      properties:
+        CFBundleDisplayName: OTA Viewer
+        UILaunchScreen: {}
+        NSLocalNetworkUsageDescription: OTA Viewer finds your TV server on your home network.
+        NSBonjourServices:
+          - _otaviewer._tcp
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
+        ITSAppUsesNonExemptEncryption: false
+targets:
+  OTAViewer:
+    templates: [App]
+    platform: iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.otaviewer.app
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+    info:
+      path: App/Info-iOS.plist
+      properties:
+        CFBundleDisplayName: OTA Viewer
+        UILaunchScreen: {}
+        UIBackgroundModes: [audio]
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSLocalNetworkUsageDescription: OTA Viewer finds your TV server on your home network.
+        NSBonjourServices:
+          - _otaviewer._tcp
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
+        ITSAppUsesNonExemptEncryption: false
+        CFBundleURLTypes:
+          - CFBundleURLName: com.otaviewer.app
+            CFBundleURLSchemes: [otaviewer]
+  OTAViewerTV:
+    templates: [App]
+    platform: tvOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.otaviewer.app
+        TARGETED_DEVICE_FAMILY: "3"
+    info:
+      path: App/Info-tvOS.plist
+      properties:
+        CFBundleDisplayName: OTA Viewer
+        UILaunchScreen: {}
+        NSLocalNetworkUsageDescription: OTA Viewer finds your TV server on your home network.
+        NSBonjourServices:
+          - _otaviewer._tcp
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
+        ITSAppUsesNonExemptEncryption: false
+        CFBundleURLTypes:
+          - CFBundleURLName: com.otaviewer.app
+            CFBundleURLSchemes: [otaviewer]

@@ -1,0 +1,255 @@
+import OTAKit
+import OTAUI
+import SwiftUI
+
+struct HomeView: View {
+    @Environment(AppStore.self) private var store
+    @Environment(NowPlaying.self) private var nowPlaying
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 36) {
+                if let (channel, airing) = store.featured() {
+                    Hero(channel: channel, airing: airing)
+                }
+                let live = store.channels.compactMap { c -> (Channel, Airing)? in
+                    guard let a = store.index.on(c.id, at: store.now) else { return nil }
+                    return (c, a)
+                }
+                .sorted { $0.0.favorite && !$1.0.favorite }
+                Shelf("On now") {
+                    ForEach(live, id: \.0.id) { channel, airing in
+                        Button { nowPlaying.play(channel) } label: {
+                            NowCard(channel: channel, airing: airing, now: store.now)
+                        }
+                        .cardButton()
+                        .contextMenu { ChannelActions(channel: channel, airing: airing) }
+                    }
+                }
+                let games = store.sports()
+                if !games.isEmpty {
+                    Shelf("Sports") {
+                        ForEach(games.prefix(16), id: \.1.id) { channel, airing in
+                            Button {
+                                if airing.isOn(at: store.now) { nowPlaying.play(channel) }
+                            } label: {
+                                GameCard(channel: channel, airing: airing, now: store.now)
+                            }
+                            .cardButton()
+                        }
+                    }
+                }
+                let recent = store.recordings.filter { !$0.isRecording }.prefix(12)
+                if !recent.isEmpty {
+                    Shelf("Recently recorded") {
+                        ForEach(Array(recent)) { rec in
+                            NavigationLink(value: rec) {
+                                RecordingCard(recording: rec)
+                            }
+                            .cardButton()
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 20)
+        }
+        .scrollClipDisabled()
+        .navigationDestination(for: Recording.self) { RecordingPlayerScreen(recording: $0) }
+        .navigationTitle("Home")
+        #if os(iOS)
+        .toolbarTitleDisplayMode(.inlineLarge)
+        #endif
+        .overlay {
+            if store.channels.isEmpty && store.loading { ProgressView() }
+        }
+    }
+}
+
+struct Hero: View {
+    @Environment(AppStore.self) private var store
+    @Environment(NowPlaying.self) private var nowPlaying
+    let channel: Channel
+    let airing: Airing?
+
+    var body: some View {
+        let kind = airing?.kind ?? .other
+        ZStack(alignment: .bottomLeading) {
+            RoundedRectangle(cornerRadius: Tokens.Radius.xl)
+                .fill(Tokens.ColorToken.surface1)
+                .overlay(
+                    RadialGradient(colors: [kind.color.opacity(0.6), .clear], center: .topTrailing, startRadius: 0, endRadius: 520)
+                        .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
+                )
+                .overlay(alignment: .topTrailing) {
+                    Text(channel.displayNumber)
+                        .font(.system(size: 220, weight: .black))
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.06))
+                        .offset(x: 20, y: -40)
+                        .clipped()
+                }
+                .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
+                    LiveDot("Live now")
+                    Text(kind.label.uppercased()).font(.caption.weight(.bold)).tracking(1).foregroundStyle(.secondary)
+                }
+                Text(airing?.title ?? channel.displayName)
+                    .font(.system(.largeTitle, weight: .heavy))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+                if let sub = airing?.subtitle {
+                    Text(sub).font(.title3).foregroundStyle(.secondary).lineLimit(1)
+                }
+                HStack(spacing: 12) {
+                    ChannelBadge(channel)
+                    if let airing {
+                        AiringProgress(airing.progress(at: store.now), color: kind.color).frame(maxWidth: 220)
+                        Text(airing.minutesLeft(at: store.now)).font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+                HStack(spacing: 12) {
+                    Button("Watch", systemImage: "play.fill") { nowPlaying.play(channel) }
+                        .buttonStyle(.glassProminent)
+                        .controlSize(.large)
+                    Button(store.activeRecording(on: channel) == nil ? "Record" : "Recording", systemImage: "record.circle") {
+                        Task { await store.toggleRecord(channel) }
+                    }
+                    .buttonStyle(.glass)
+                    .controlSize(.large)
+                }
+            }
+            .padding(28)
+        }
+        .frame(minHeight: 380)
+        .padding(.horizontal)
+    }
+}
+
+struct Shelf<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title).font(.title2.weight(.bold)).padding(.horizontal)
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 14) { content }
+                    .padding(.horizontal)
+            }
+            .scrollIndicators(.hidden)
+            .scrollClipDisabled()
+        }
+    }
+}
+
+struct GameCard: View {
+    let channel: Channel
+    let airing: Airing
+    let now: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if airing.isOn(at: now) {
+                LiveDot()
+            } else {
+                Text(airing.start.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+            }
+            if let (a, b) = airing.matchup {
+                Text(a).font(.headline.weight(.heavy)).lineLimit(1)
+                Text("AT").font(.caption2.weight(.bold)).foregroundStyle(.tertiary)
+                Text(b).font(.headline.weight(.heavy)).lineLimit(1)
+            } else {
+                Text(airing.subtitle ?? airing.title).font(.headline.weight(.heavy)).lineLimit(3)
+            }
+            Spacer(minLength: 0)
+            ChannelBadge(channel)
+        }
+        .padding(16)
+        .frame(width: cardWidth, height: 190, alignment: .topLeading)
+        .background(
+            LinearGradient(colors: [Tokens.Category.sports.opacity(0.3), .clear], startPoint: .topLeading, endPoint: .bottomTrailing),
+            in: .rect(cornerRadius: Tokens.Radius.lg)
+        )
+        .background(Tokens.ColorToken.surface1, in: .rect(cornerRadius: Tokens.Radius.lg))
+    }
+}
+
+struct RecordingCard: View {
+    @Environment(AppStore.self) private var store
+    let recording: Recording
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AsyncImage(url: store.api?.posterURL(recordingID: recording.id)) { image in
+                image.resizable().aspectRatio(16 / 9, contentMode: .fill)
+            } placeholder: {
+                Rectangle().fill(Tokens.ColorToken.surface2)
+            }
+            .frame(width: cardWidth, height: cardWidth * 9 / 16)
+            .clipShape(.rect(cornerRadius: Tokens.Radius.md))
+            Text(recording.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+            Text(recording.subtitle ?? recording.startedAt.formatted(date: .abbreviated, time: .omitted))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(width: cardWidth)
+    }
+}
+
+struct ChannelActions: View {
+    @Environment(AppStore.self) private var store
+    @Environment(NowPlaying.self) private var nowPlaying
+    let channel: Channel
+    let airing: Airing?
+
+    var body: some View {
+        Button("Watch", systemImage: "play.fill") { nowPlaying.play(channel) }
+        Button(store.activeRecording(on: channel) == nil ? "Record" : "Stop recording", systemImage: "record.circle") {
+            Task { await store.toggleRecord(channel) }
+        }
+        if let airing {
+            Button(airing.kind == .sports ? "Record every airing" : "Record series", systemImage: "repeat") {
+                Task { await store.recordSeries(airing) }
+            }
+        }
+        Button(channel.favorite ? "Remove favorite" : "Add favorite", systemImage: channel.favorite ? "star.slash" : "star") {
+            Task { await store.toggleFavorite(channel) }
+        }
+    }
+}
+
+#if os(tvOS)
+let cardWidth: CGFloat = 380
+#else
+let cardWidth: CGFloat = 250
+#endif
+
+extension View {
+    /// Native focus lift and parallax on tvOS; a press-in on touch screens.
+    @ViewBuilder
+    func cardButton() -> some View {
+        #if os(tvOS)
+        frame(width: cardWidth).buttonStyle(.card)
+        #else
+        buttonStyle(PressCardStyle())
+        #endif
+    }
+}
+
+struct PressCardStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: cardWidth)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(Tokens.Motion.spring, value: configuration.isPressed)
+    }
+}

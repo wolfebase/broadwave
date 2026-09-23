@@ -16,6 +16,9 @@ web/dist/
 apple/**/xcuserdata/
 apple/**/DerivedData/
 apple/build/
+apple/*.xcodeproj/
+apple/Packages/*/.build/
+apple/Packages/*/.swiftpm/
 *.xcresult
 
 # Misc

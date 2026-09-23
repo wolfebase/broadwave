@@ -7,38 +7,40 @@ Phases run roughly in order. Later phases can start when their dependencies are 
 - [x] Git, CI, monorepo layout (`server/`, `web/`, `apple/`, `design/`), Makefile
 - [x] Agent guidance: `AGENTS.md`, scoped rules, architecture and decisions
 - [x] Fix-first bugs: macOS disk stats, periodic guide refresh, fan-out subscriber leak
-- [ ] Numbered SQL migrations
-- [ ] `/api/v1` contract in OpenAPI with generated Swift and TypeScript clients
-- [ ] Design tokens that generate CSS and Swift
+- [x] Numbered SQL migrations
+- [x] `/api/v1` contract in OpenAPI with generated TypeScript types (Swift models are hand-mirrored in OTAKit for now)
+- [x] Design tokens that generate CSS and Swift
 
 ## 2. Relay engine v2
 
 - [ ] Per-frequency ring buffer shared by live, recordings, and exports
-- [ ] Rendition ladder with direct play and AC-3 passthrough (ADR 0002)
-- [ ] Capability-based stream decision with `streamInfo`
+- [x] Rendition ladder with direct play and AC-3 passthrough (ADR 0002)
+- [x] Capability-based stream decision with `streamInfo`
 - [ ] Live captions
 - [ ] Multi-tuner pool across devices; ATSC 3.0 (FLEX 4K) with AC-4 handling
-- [ ] Events WebSocket to replace polling
+- [x] Events WebSocket to replace polling
 - [ ] Accounts, profiles, device pairing
-- [ ] Bonjour `_otaviewer._tcp`
-- [ ] Sync clock and rooms (ADR 0003)
+- [x] Bonjour `_otaviewer._tcp`
+- [x] Sync clock and rooms (ADR 0003)
 - [ ] Multi-arch image on GHCR, Unraid Community Apps, setup wizard, diagnostics
 
 ## 3. Web redesign
 
-- [ ] Feature folders, router, query layer, route code-splitting
-- [ ] New Home, Guide, Sports, Library, Player, Settings, and Setup on the design system
-- [ ] Player: fullscreen, PiP, captions, audio tracks, stats, sync
+- [x] Feature folders, router, query layer, route code-splitting
+- [x] New Home, Guide, Sports, Library, Player, Settings, and Setup on the design system
+- [x] Player: fullscreen, PiP, stats, Whole-Home Sync (verified 15 ms between screens)
+- [ ] Player: caption and audio-track pickers on web
 
 ## 4. Apple TV and iPhone MVP
 
-- [ ] `OTAKit` and `OTAUI` packages
-- [ ] Discover and pair, Home, Guide, Player, Recordings, record and passes
+- [x] `OTAKit` and `OTAUI` packages
+- [x] Discover and pair, Home, Guide, Player, Recordings, record and passes
 - [ ] TestFlight
 
 ## 5. Signature features
 
-- [ ] Whole-Home Sync UX and group mode
+- [x] Whole-Home Sync (web + Apple engines)
+- [ ] Group mode UI (shared pause/rewind) on Apple TV and iPhone
 - [ ] Multiview (4 on Apple TV, 2 on iPhone landscape)
 - [ ] Sports hub, team passes, game-aware recording extension
 - [ ] Rich guide artwork and metadata
