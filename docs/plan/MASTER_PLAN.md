@@ -16,7 +16,7 @@ Read in this order before touching code:
 - **Autonomous run.** Do not pause at phase boundaries to ask. Finish a task, verify it, commit it, tick it in `PROGRESS.md`, move to the next. The user explicitly wants the agent to "rip through the whole thing."
 - **Verify, don't assume.** Every task has acceptance checks. Server: Go tests + `scripts/relay-smoke.sh`. Web: typecheck + build + browser check at desktop, phone, and TV sizes with the real tuner. Apple: both schemes build + simulator screenshot of the changed screen. Unraid: deploy and hit it from the LAN.
 - **Commit small and often** with descriptive messages (what + why). Never leave the tree broken at a commit.
-- **When blocked**, write the blocker (what, why, what was tried, what would unblock) to `docs/plan/BLOCKERS.md`, stub or feature-flag around it, and continue with the next task. Only things needing the user's hands (Apple developer team ID, APNs key, TestFlight upload, buying hardware) are legitimate blockers.
+- **When blocked**, write the blocker (what, why, what was tried, what would unblock) to `docs/plan/BLOCKERS.md`, stub or feature-flag around it, and continue with the next task. Legitimate blockers are only things needing the user's money, hardware, or a third party's approval (paid data accounts, ATSC 3.0 hardware, review queues). **You are expected to handle yourself:** finding the Apple developer team ID, signing, App Store Connect records, TestFlight uploads (use the `asc-*` skills in `~/.claude/skills/`), creating/pushing the GitHub repo and releases (`gh` is logged in as `twolfekc`), and researching + submitting to Unraid Community Apps.
 - **Protect what works.** The relay, Whole-Home Sync (15 ms measured), CMAF pipeline, and the real-tuner playback paths are proven. Any change to `internal/live`, `web/src/lib/sync.ts`, or `OTAKit/SyncEngine.swift` must re-run the relay smoke test and the two-screen sync measurement (see skill `ota-viewer-dev-loop`).
 - **Keep the docs true.** Update `docs/architecture.md`, ADRs, `api/openapi.yaml` (drift test enforces routes), `AGENTS.md`, and the skills when behavior changes. Add ADRs for big decisions (multiview, guide sources, LL-HLS, auth).
 - **Real hardware.** HDHomeRun CONNECT DUO at 192.168.1.252 (2 tuners, ATSC 1.0, 27 channels). Unraid TUS at 192.168.1.2 (i9-12900K, UHD 770, VAAPI). The dev Mac has VideoToolbox. The user's live catalog is in `data/` (never delete it; copy it for tests).
@@ -40,7 +40,7 @@ Read in this order before touching code:
 
 **Apple (`apple/`)**: XcodeGen project (iOS + tvOS 26.1), `OTAKit` (models tested against real JSON, API client, Bonjour discovery, event socket, AVPlayer SyncEngine, AppStore, guide logic), `OTAUI` (tokens, components). Screens: Connect, Home, Guide (grid with pinned column/header; iPhone On-now list), Sports, Recordings, Settings, AVPlayerViewController live player (sync pill, channel up/down, record, tvOS Channels menu), recording player, deep links (`otaviewer://watch/<id>`, `connect?url=`), debug `-OTAWatch <id>`. Verified live playback on iPhone 17 Pro and Apple TV 4K simulators.
 
-**Deploy**: Dockerfile (web + Go multi-stage, VA drivers, HEALTHCHECK), Dockerfile.runtime (prebuilt binary), compose + Unraid template (host network), GHCR release workflow (amd64+arm64), CI (Go, web, Apple, Docker). `scripts/dev-server.sh`, `scripts/relay-smoke.sh`, `scripts/deploy-unraid.sh`.
+**Deploy**: Dockerfile (web + Go multi-stage, VA drivers, HEALTHCHECK), Dockerfile.runtime (prebuilt binary), compose + Unraid template (host network), GHCR release workflow (amd64+arm64), CI (Go, web, Apple, Docker). No GitHub remote yet (`gh` is logged in as `twolfekc`); image names still say `ghcr.io/ota-viewer/ota-viewer` placeholders. Apple `DEVELOPMENT_TEAM` is empty (simulator-only so far). `scripts/dev-server.sh`, `scripts/relay-smoke.sh`, `scripts/deploy-unraid.sh`.
 
 **Known gaps and debt (fix early)**
 1. **Guide coverage is poor:** only 9 of 27 channels have listings, and only ~2 days deep. SiliconDust's free XMLTV gives 2 days (14 needs their DVR subscription) and asks for refreshes at randomized 20-28 h intervals; we refresh every 4 h. See Phase 3.
@@ -87,6 +87,10 @@ A3. **Deploy to Unraid** with `scripts/deploy-unraid.sh` (see skill `ota-viewer-
 A4. **Hygiene.** Remove stale `.player*`-era CSS, unused `strings.ts` entries, legacy `/api` callers in the web app (move everything to `/api/v1`), dead code (`live/file.go` PictureArgs paths stay for recordings). Add `web` lint (eslint + typescript-eslint, react-hooks) and `swiftformat`/`swiftlint` config. **Accept:** lint clean in CI.
 
 A5. **Crash/restart robustness.** On server start: kill orphaned ffmpeg children from a previous run (track PIDs in `work/pids`), clear stale `work/live/*`, mark interrupted recordings `failed` or resume them if their airing is still on. Graceful shutdown on SIGTERM (stop renditions, finish recordings cleanly, release tuners). **Accept:** kill -9 the server mid-recording, restart, see correct state; tuners released.
+
+A6. **GitHub.** Create the repository `twolfekc/ota-viewer` with `gh repo create` (public: the product is Apache-2.0, public GHCR images and Community Apps require a public repo — unless the user has said otherwise), add the remote, push `main`, and make CI green (fix anything the macOS/Linux runners reveal; if `macos-26` isn't available, use the newest macOS image with Xcode 26 and note it). Set the image name everywhere to `ghcr.io/twolfekc/ota-viewer` (Unraid template `Repository`/`Registry`/`Icon`/`Support`/`Project` URLs, compose, README, release workflow). Tag `v0.1.0` to exercise the release workflow; make the GHCR package public. Push after every task from then on. **Accept:** CI green on GitHub, `docker pull ghcr.io/twolfekc/ota-viewer:0.1.0` works on the Mac and on Unraid for both amd64 (Unraid) and arm64 (Mac) manifests.
+
+A7. **Apple signing + TestFlight pipeline.** Find the Apple developer team ID (Xcode > Settings > Accounts, `security find-identity -v -p codesigning`, `defaults read com.apple.dt.Xcode`, `DEVELOPMENT_TEAM` in the user's other Xcode projects under `~/Projects`), set `DEVELOPMENT_TEAM` in `apple/project.yml`, and register bundle IDs (`com.otaviewer.app` for iOS and tvOS; add `.widgets`, `.topshelf`, and an App Group now so later extensions don't need rework — pick a prefix the team owns if `com.otaviewer` is taken). Create the App Store Connect app record(s) (skill `asc-app-create-ui`; API key via `asc-team-key-create`, stored in `~/.blitz`). Add `PrivacyInfo.xcprivacy`, an app icon placeholder good enough for TestFlight, export compliance (`ITSAppUsesNonExemptEncryption=false`, already set), build numbers from `git rev-list --count HEAD`. Script it: `scripts/testflight.sh` (xcodegen, archive both schemes, `xcodebuild -exportArchive` with an `ExportOptions.plist` using `app-store-connect` method + upload destination, or `xcrun altool`/App Store Connect API). Upload iOS and tvOS builds to internal TestFlight and add the user as an internal tester. Re-run after every phase that touches Apple code. **Accept:** both builds show "Ready to test" in TestFlight; the script is documented in the `ota-viewer-apple` skill.
 
 ### Phase B — MULTIVIEW (the user's must-have; make it the best in the category)
 
@@ -218,15 +222,15 @@ K5. CI: add Playwright job, Apple UI tests (simulator) where feasible, Docker im
 
 L1. Versioning (semver tags), CHANGELOG.md, release notes.
 L2. GHCR images via release workflow (verify multi-arch), image size budget, SBOM.
-L3. Unraid Community Apps repo layout (`ca_profile.xml`, `templates/ota-viewer.xml`, `icon.svg`, LICENSE) — validate with ca.unraid.net scan (blocked on a public repo: record in BLOCKERS if not public).
-L4. TestFlight builds for iOS + tvOS (blocked on the user's Apple developer team; prepare everything: bundle ids, entitlements, privacy manifest `PrivacyInfo.xcprivacy`, export compliance, screenshots).
+L3. **Unraid Community Apps — research, then submit.** Research the current process first (ca.unraid.net/submit/help and its builder guide, the official starter repository, the XML field reference, recent forum guidance on template requirements, icon rules, support-thread expectations, and how updates propagate). Decide: templates in this repo (`ca_profile.xml` at root, `templates/ota-viewer.xml`, `icon.svg`) or a dedicated `twolfekc/unraid-templates` repo — follow what CA recommends. Make the template excellent (host network default with a clear explanation, `/dev/dri` optional for Intel/AMD, NVIDIA variant notes, `Config` descriptions in the copy voice, WebUI, Support/Project links to the GitHub repo, `Changes` field). Install it on TUS via the template URL to prove it works exactly as a stranger would experience it, run Validate + Scan at ca.unraid.net/submit/new, fix every finding, submit, and create the support thread if required. Record the submission status in BLOCKERS (review is asynchronous) and keep working.
+L4. **TestFlight and App Store readiness.** Keep the A7 pipeline shipping: final app icon (Icon Composer), screenshots for iPhone/iPad/Apple TV, App Store description and keywords, privacy nutrition labels (skill `asc-privacy-nutrition-labels`), review notes explaining local-network use, then submit for external TestFlight review. App Store submission itself waits for the user's go-ahead.
 L5. Docs site: install (Docker, Unraid, Mac), apps, multiview, sports, DVR, troubleshooting (diagnostics), FAQ.
 
 ---
 
 ## 4. Suggested execution order (dependency-aware)
 
-A1 -> A2 -> A3 (deploy early, then redeploy after each phase) -> A5 -> A4 ->
+A1 -> A2 -> A6 (GitHub + CI + GHCR) -> A3 (deploy to Unraid from GHCR or local build, then redeploy after each phase) -> A7 (TestFlight pipeline) -> A5 -> A4 ->
 B1 -> B2 -> B3 -> B4 (multiview end to end; redeploy; verify on Unraid) ->
 C1 -> C2 -> C3 -> C4 -> C5 -> C6 ->
 D1 -> D2 -> D3 -> D4 -> D5 -> D6 ->
@@ -237,7 +241,7 @@ I1 ... I10 ->
 H1 -> H2 -> H3 -> H4 ->
 J (dedicated pass; also continuous) -> K (continuous; dedicated pass at the end) -> L.
 
-After every phase: run all tests, relay smoke, two-screen sync check, deploy to Unraid, smoke it from the LAN, update `PROGRESS.md`, `UNRAID_LOG.md`, docs, and skills.
+After every phase: run all tests, relay smoke, two-screen sync check, push to GitHub (CI green), deploy to Unraid and smoke it from the LAN, upload new TestFlight builds if Apple code changed, and update `PROGRESS.md`, `UNRAID_LOG.md`, docs, and skills.
 
 ---
 
@@ -248,4 +252,5 @@ After every phase: run all tests, relay smoke, two-screen sync check, deploy to 
 - Recordings of games end when the game ends; commercials skip reliably; followed teams record automatically.
 - The Apple TV app feels native: Top Shelf, focus, remote gestures, info panels, frame-rate matching; the iPhone app has widgets, Live Activities, Siri, PiP, and the mini player.
 - Everything runs on Unraid with hardware encoding, survives restarts, and a 24 h soak shows no leaks.
+- The repo is on GitHub with green CI and published multi-arch images; iOS and tvOS builds are in TestFlight on the user's devices; the Community Apps submission is in (or approved).
 - Docs, tests, CI, and releases are in place; the plan's checklist is fully ticked or each gap is recorded in `BLOCKERS.md` with a clear reason.
