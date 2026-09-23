@@ -13,7 +13,7 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 
 ## Phase B — Multiview
 - [x] B1 Tile renditions (540.none, 360.none), tuner plan, and a shared multiview room (commit feb8c17). Mosaic waits until the tiles exist (ADR 0004). 14.x still has no stored frequency, so the plan treats those as separate tuners until one tune locks.
-- [ ] B2 Web multiview: 2-up side-by-side, 1+2, 1+3, quad, PiP; audio focus; quick guide; saved sets; TV keys
+- [x] B2 Web multiview: 2-up, 1+2, 1+3, quad, PiP; sound follows focus; quick guide; saved sets; TV keys (commit efd9bf4). Real DUO 4.1 and 9.1 stayed 4 ms apart on 540 tiles; tuners released after leaving.
 - [ ] B3 Apple multiview: tvOS 2-up/quad, iPad 4-up, iPhone landscape 2-up; focus audio; AirPlay arbiter
 - [ ] B4 Multiview polish + accessibility
 
