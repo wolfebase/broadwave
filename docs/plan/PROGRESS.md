@@ -4,7 +4,7 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 
 ## Phase A — Stabilize and ship
 - [x] A1 Setup wizard verified at desktop/phone; robust first-run detection (commit d6bd17f)
-- [ ] A2 Guide refresh follows SiliconDust terms (random 20-28 h, rate-limited manual)
+- [x] A2 Guide refresh follows SiliconDust terms (random 20-28 h, rate-limited manual) (commit ce5d6a6)
 - [ ] A3 Deployed to Unraid (host network, VAAPI, Bonjour, sync from LAN, iPhone sim connects)
 - [ ] A4 Hygiene: dead CSS/strings, web on /api/v1 only, eslint + swiftlint in CI
 - [ ] A5 Restart robustness: orphan ffmpeg cleanup, interrupted recordings, graceful SIGTERM
