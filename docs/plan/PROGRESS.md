@@ -26,7 +26,7 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [x] C6 Search (commit d7def66). Full-text search covers titles, subtitles, descriptions, and cast, plus recordings. Search on the web and on Apple lists the matches. Record every airing makes a pass for that title.
 
 ## Phase D — Sports
-- [ ] D1 Sports provider (ESPN scoreboard, cached, pluggable)
+- [x] D1 Sports provider (commit 7923323). ESPN scoreboard for twelve leagues, with F1 and NASCAR as schedules only. A live board refreshes every 30 seconds; a quiet board waits two hours. A failed fetch backs off and keeps the last good board.
 - [ ] D2 Airing <-> game matching
 - [ ] D3 Game-aware recording extension
 - [ ] D4 Team follows + team passes
