@@ -5,6 +5,7 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppStore.self) private var store
     @Environment(NowPlaying.self) private var nowPlaying
+    @State private var saved = SavedMultiview.load()
 
     var body: some View {
         ScrollView {
@@ -28,14 +29,50 @@ struct HomeView: View {
                 }
                 let games = store.sports()
                 if !games.isEmpty {
-                    Shelf("Sports") {
-                        ForEach(games.prefix(16), id: \.1.id) { channel, airing in
+                    let liveGames = games.filter { $0.1.isOn(at: store.now) }
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Sports").font(.title2.weight(.bold))
+                            Spacer()
+                            if liveGames.count >= 2 {
+                                Button("Watch together") {
+                                    nowPlaying.watchTogether(liveGames.prefix(4).map(\.0))
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                        .padding(.horizontal)
+                        ScrollView(.horizontal) {
+                            LazyHStack(spacing: 14) {
+                                ForEach(games.prefix(16), id: \.1.id) { channel, airing in
+                                    Button {
+                                        if airing.isOn(at: store.now) {
+                                            nowPlaying.play(channel)
+                                        }
+                                    } label: {
+                                        GameCard(channel: channel, airing: airing, now: store.now)
+                                    }
+                                    .cardButton()
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                        .scrollIndicators(.hidden)
+                        .scrollClipDisabled()
+                    }
+                }
+                if !saved.isEmpty {
+                    Shelf("Saved sets") {
+                        ForEach(saved) { set in
                             Button {
-                                if airing.isOn(at: store.now) {
-                                    nowPlaying.play(channel)
+                                let channels = set.channels.compactMap { id in store.channels.first { $0.id == id } }
+                                if !channels.isEmpty {
+                                    nowPlaying.watchTogether(channels)
                                 }
                             } label: {
-                                GameCard(channel: channel, airing: airing, now: store.now)
+                                Text(set.name)
+                                    .font(.headline.weight(.semibold))
+                                    .frame(width: cardWidth, height: 88)
                             }
                             .cardButton()
                         }
@@ -66,6 +103,7 @@ struct HomeView: View {
                     ProgressView()
                 }
             }
+            .onAppear { saved = SavedMultiview.load() }
     }
 }
 
@@ -217,6 +255,13 @@ struct ChannelActions: View {
 
     var body: some View {
         Button("Watch", systemImage: "play.fill") { nowPlaying.play(channel) }
+        Button("Watch together", systemImage: "rectangle.split.2x1") {
+            if let current = nowPlaying.channel, current.id != channel.id {
+                nowPlaying.watchTogether([current, channel])
+            } else {
+                nowPlaying.watchTogether([channel])
+            }
+        }
         Button(store.activeRecording(on: channel) == nil ? "Record" : "Stop recording", systemImage: "record.circle") {
             Task { await store.toggleRecord(channel) }
         }

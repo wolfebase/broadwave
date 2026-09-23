@@ -35,6 +35,26 @@ private func fixture(_ name: String) throws -> Data {
     #expect(!a.isOn(at: start.addingTimeInterval(1800)))
 }
 
+@Test func multiviewPlanNamesTheBusyChannel() throws {
+    let json = Data("""
+    {"playable":[{"channelId":1,"frequencyHz":593000000,"shared":false}],"blocked":[{"channelId":2,"reason":"The tuner is busy. 4.1 is on.","holders":["4.1"]}],"tunersNeeded":1,"tunersFree":0}
+    """.utf8)
+    let plan = try APIClient.decoder.decode(MultiviewPlan.self, from: json)
+    #expect(plan.playable.count == 1)
+    #expect(plan.blocked.first?.reason == "The tuner is busy. 4.1 is on.")
+}
+
+@Test @MainActor func secondTileKeepsTheMultiviewRoom() throws {
+    let socket = try EventSocket(base: #require(URL(string: "http://127.0.0.1:18477")))
+    socket.join(room: "multiview:abc", channelID: 1)
+    socket.join(room: "multiview:abc", channelID: 3)
+    #expect(socket.membership(of: "multiview:abc") == 2)
+    socket.leave(room: "multiview:abc")
+    #expect(socket.membership(of: "multiview:abc") == 1)
+    socket.leave(room: "multiview:abc")
+    #expect(socket.membership(of: "multiview:abc") == 0)
+}
+
 @Test func roomTargetAdvancesOnlyWhilePlaying() {
     var room = RoomState(room: "channel:1", channelId: 1, mode: "follow", anchorServer: 10000, anchorMedia: 5000, rate: 1, latency: "balanced", version: 1, members: 2)
     #expect(room.target(atServer: 12000) == 7000)

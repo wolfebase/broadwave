@@ -47,6 +47,11 @@ public final class SyncEngine {
         }
         socket.join(room: room, channelID: channelID)
         state = .waiting
+        if let cached = socket.roomState(room), let st = try? JSONDecoder().decode(RoomState.self, from: cached), st.room == room {
+            room_ = st
+            members = st.members
+            apply()
+        }
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.apply() }
         }

@@ -80,8 +80,12 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack(alignment: .top) {
             Color.black.ignoresSafeArea()
-            SystemPlayer(player: live.player, menu: channelMenu)
-                .ignoresSafeArea()
+            SystemPlayer(player: live.player, menu: channelMenu) {
+                if let channel = nowPlaying.channel {
+                    nowPlaying.watchTogether([channel])
+                }
+            }
+            .ignoresSafeArea()
             #if os(iOS)
                 overlay
             #endif
@@ -98,19 +102,8 @@ struct PlayerScreen: View {
             }
         }
         .onDisappear {
-            if nowPlaying.channel == nil || !nowPlaying.expanded {
-                #if os(tvOS)
-                    Task { await live.stop() }
-                #endif
-            }
+            Task { await live.stop() }
         }
-        #if os(iOS)
-        .onChange(of: nowPlaying.channel) { _, new in
-            if new == nil {
-                Task { await live.stop() }
-            }
-        }
-        #endif
     }
 
     private func step(_ dir: Int) {
@@ -149,6 +142,13 @@ struct PlayerScreen: View {
                     .glassEffect(.regular.tint(sync.state == .locked ? Tokens.ColorToken.success.opacity(0.4) : nil))
                     .accessibilityLabel(sync.members > 1 ? "Synced with \(sync.members) screens" : "Synced")
                 }
+                Button("Side by side", systemImage: "rectangle.split.2x1") {
+                    if let channel = nowPlaying.channel {
+                        nowPlaying.watchTogether([channel])
+                    }
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.glass)
                 GlassEffectContainer {
                     HStack(spacing: 6) {
                         Button("Previous channel", systemImage: "chevron.up") { step(-1) }
@@ -184,6 +184,7 @@ struct ChannelMenuEntry: Identifiable {
 struct SystemPlayer: UIViewControllerRepresentable {
     let player: AVPlayer
     var menu: [ChannelMenuEntry] = []
+    var onTogether: () -> Void = {}
 
     func makeUIViewController(context _: Context) -> AVPlayerViewController {
         let vc = AVPlayerViewController()
@@ -206,7 +207,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
             let actions = menu.map { entry in
                 UIAction(title: entry.title, state: entry.current ? .on : .off) { _ in entry.action() }
             }
-            vc.transportBarCustomMenuItems = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions)]
+            let together = UIAction(title: "Side by side", image: UIImage(systemName: "rectangle.split.2x1")) { _ in onTogether() }
+            vc.transportBarCustomMenuItems = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions), together]
         #endif
     }
 }

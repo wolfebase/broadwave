@@ -8,14 +8,27 @@ import SwiftUI
 final class NowPlaying {
     var channel: Channel?
     var expanded = false
+    /// Channel ids playing side by side. Empty means one channel.
+    var together: [Int64] = []
 
     func play(_ channel: Channel) {
+        together = []
         self.channel = channel
+        expanded = true
+    }
+
+    func watchTogether(_ channels: [Channel]) {
+        var seen = Set<Int64>()
+        together = channels.map(\.id).filter { seen.insert($0).inserted }
+        if channel == nil {
+            channel = channels.first
+        }
         expanded = true
     }
 
     func stop() {
         channel = nil
+        together = []
         expanded = false
     }
 }
@@ -42,7 +55,20 @@ struct RootView: View {
         .onOpenURL(perform: open)
         #if DEBUG
             .task {
-                // Simulator testing: launch with -OTAWatch <channel id>.
+                // Simulator testing: -OTAWatch <channel id>, or -OTAMultiview 1,3.
+                if let raw = UserDefaults.standard.string(forKey: "OTAMultiview"), !raw.isEmpty {
+                    if store.channels.isEmpty {
+                        await store.refresh()
+                    }
+                    let channels = raw.split(separator: ",").compactMap { piece -> Channel? in
+                        let id = Int64(piece.trimmingCharacters(in: .whitespaces)) ?? 0
+                        return store.channels.first { $0.id == id }
+                    }
+                    if !channels.isEmpty {
+                        nowPlaying.watchTogether(channels)
+                    }
+                    return
+                }
                 let id = UserDefaults.standard.integer(forKey: "OTAWatch")
                 if id > 0 {
                     open(URL(string: "waveguide://watch/\(id)")!)
@@ -106,9 +132,7 @@ struct RootView: View {
                 MiniPlayerBar()
             }
             .fullScreenCover(isPresented: Binding(get: { nowPlaying.expanded && nowPlaying.channel != nil }, set: { nowPlaying.expanded = $0 })) {
-                PlayerScreen()
-                    .environment(store)
-                    .environment(nowPlaying)
+                playingCover
             }
         #else
             .fullScreenCover(isPresented: Binding(get: { nowPlaying.channel != nil }, set: {
@@ -116,12 +140,22 @@ struct RootView: View {
                     nowPlaying.stop()
                 }
             })) {
-                PlayerScreen()
-                    .environment(store)
-                    .environment(nowPlaying)
+                playingCover
             }
         #endif
             .refreshable { await store.refresh() }
+    }
+
+    private var playingCover: some View {
+        Group {
+            if nowPlaying.together.isEmpty {
+                PlayerScreen()
+            } else {
+                MultiviewScreen()
+            }
+        }
+        .environment(store)
+        .environment(nowPlaying)
     }
 }
 

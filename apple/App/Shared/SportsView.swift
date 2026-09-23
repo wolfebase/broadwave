@@ -27,6 +27,13 @@ struct SportsView: View {
             .padding(.vertical)
         }
         .navigationTitle("Sports")
+        .toolbar {
+            if live.count >= 2 {
+                Button("Watch together") {
+                    nowPlaying.watchTogether(live.prefix(4).map(\.0))
+                }
+            }
+        }
     }
 
     private func section(_ title: String, _ list: [(Channel, Airing)]) -> some View {

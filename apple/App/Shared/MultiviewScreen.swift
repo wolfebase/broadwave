@@ -1,0 +1,639 @@
+import AVFoundation
+import AVKit
+import AVRouting
+import OTAKit
+import OTAUI
+import SwiftUI
+
+enum TileLayout: String, CaseIterable, Identifiable {
+    case side = "2up"
+    case oneTwo = "1+2"
+    case oneThree = "1+3"
+    case quad
+    case pip
+
+    var id: String {
+        rawValue
+    }
+
+    var label: String {
+        switch self {
+        case .side: "Side by side"
+        case .oneTwo: "One big and two"
+        case .oneThree: "One big and three"
+        case .quad: "Quad"
+        case .pip: "Small over big"
+        }
+    }
+
+    var slots: Int {
+        switch self {
+        case .side, .pip: 2
+        case .oneTwo: 3
+        case .oneThree, .quad: 4
+        }
+    }
+
+    var equal: Bool {
+        self == .side || self == .quad
+    }
+
+    static var saved: TileLayout {
+        TileLayout(rawValue: UserDefaults.standard.string(forKey: "waveguide-mv-layout") ?? "") ?? .side
+    }
+}
+
+struct SavedSet: Codable, Identifiable, Hashable {
+    var name: String
+    var channels: [Int64]
+    var id: String {
+        channels.map(String.init).joined(separator: ",")
+    }
+}
+
+enum SavedMultiview {
+    private static let key = "waveguide-multiview"
+
+    static func load() -> [SavedSet] {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let sets = try? JSONDecoder().decode([SavedSet].self, from: data) else { return [] }
+        return sets
+    }
+
+    static func save(name: String, channels: [Int64]) {
+        var sets = load().filter { $0.channels != channels }
+        sets.insert(SavedSet(name: name, channels: channels), at: 0)
+        if let data = try? JSONEncoder().encode(Array(sets.prefix(8))) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+}
+
+/// Tiles share one multiview room. `AVPlaybackCoordinationMedium` is not used:
+/// it would seek every player to one timeline, and each tile is a different
+/// live edge. The room already pauses them together.
+@MainActor
+@Observable
+final class MultiviewSession {
+    var layout: TileLayout
+    var focusID: Int64
+    var guide = false
+    var notice = ""
+    var split: CGFloat = 0.5
+    var dragOrigin: CGFloat?
+    let room: String
+    private var command: ((String) -> Void)?
+    var paused = false
+
+    init(focusID: Int64) {
+        layout = .saved
+        self.focusID = focusID
+        let id = String(UUID().uuidString.prefix(8)).lowercased()
+        room = "multiview:\(id)"
+    }
+
+    func rememberLayout() {
+        UserDefaults.standard.set(layout.rawValue, forKey: "waveguide-mv-layout")
+    }
+
+    func bind(_ send: @escaping (String) -> Void) {
+        command = send
+    }
+
+    func togglePause() {
+        command?(paused ? "play" : "pause")
+        paused.toggle()
+    }
+
+    func prefs(for id: Int64) -> Prefs {
+        let big = id == focusID && !layout.equal
+        if big {
+            return Prefs(quality: .auto, audio: .auto, picture: "broadcast")
+        }
+        let quality: Prefs.Quality = (layout == .quad || layout == .pip) ? .tile360 : .tile
+        return Prefs(quality: quality, audio: layout.equal ? .stereo : .none, picture: "broadcast")
+    }
+}
+
+@MainActor
+@Observable
+final class TilePlayer {
+    let player = AVPlayer()
+    private(set) var error: String?
+    private var audible = false
+    private var attempts = 0
+    private var channelID: Int64?
+    private var session: WatchSession?
+    private var sync: SyncEngine?
+    private var api: APIClient?
+
+    struct Request {
+        var channel: Channel
+        var prefs: Prefs
+        var audible: Bool
+    }
+
+    func start(_ request: Request, room: String, store: AppStore, bind: @escaping (@escaping (String) -> Void) -> Void) async {
+        let channel = request.channel
+        let prefs = request.prefs
+        await stop()
+        guard let api = store.api else { return }
+        self.api = api
+        channelID = channel.id
+        audible = request.audible
+        error = nil
+        do {
+            let session = try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: prefs)
+            guard channelID == channel.id else {
+                await api.stopWatching(channelID: channel.id, rendition: session.rendition)
+                return
+            }
+            self.session = session
+            let item = AVPlayerItem(url: api.url(session.playlist))
+            item.preferredForwardBufferDuration = prefs.quality == .auto ? 6 : 2
+            player.replaceCurrentItem(with: item)
+            applyAudible()
+            player.play()
+            if let socket = store.socket {
+                let engine = SyncEngine(player: player, socket: socket, room: room, channelID: channel.id)
+                engine.start()
+                sync = engine
+                bind { engine.command($0) }
+            }
+            attempts = 0
+        } catch {
+            attempts += 1
+            if attempts == 1, error.localizedDescription.localizedStandardContains("tuner") {
+                try? await Task.sleep(for: .seconds(2))
+                guard channelID == channel.id else { return }
+                await start(request, room: room, store: store, bind: bind)
+                return
+            }
+            self.error = error.localizedDescription
+        }
+    }
+
+    func setAudible(_ on: Bool) {
+        audible = on
+        applyAudible()
+    }
+
+    func stop() async {
+        sync?.stop()
+        sync = nil
+        clearRoute()
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        if let api, let id = channelID, let session {
+            await api.stopWatching(channelID: id, rendition: session.rendition)
+        }
+        session = nil
+        channelID = nil
+    }
+
+    private func applyAudible() {
+        player.isMuted = !audible
+        player.networkResourcePriority = audible ? .high : .low
+        guard audible else { return }
+        let arbiter = AVRoutingPlaybackArbiter.shared()
+        arbiter.preferredParticipantForExternalPlayback = player
+        if #available(iOS 27, tvOS 26, *) {
+            arbiter.preferredParticipantForNonMixableAudioRoutes = player
+        }
+    }
+
+    private func clearRoute() {
+        let arbiter = AVRoutingPlaybackArbiter.shared()
+        if arbiter.preferredParticipantForExternalPlayback === player {
+            arbiter.preferredParticipantForExternalPlayback = nil
+        }
+    }
+}
+
+struct MultiviewScreen: View {
+    @Environment(AppStore.self) private var store
+    @Environment(NowPlaying.self) private var nowPlaying
+    @Environment(\.horizontalSizeClass) private var width
+    @Environment(\.verticalSizeClass) private var height
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var session: MultiviewSession
+    @State private var blocked: Set<Int64> = []
+
+    init() {
+        _session = State(initialValue: MultiviewSession(focusID: 0))
+    }
+
+    private var cap: Int {
+        #if os(tvOS)
+            4
+        #else
+            UIDevice.current.userInterfaceIdiom == .pad ? 4 : 2
+        #endif
+    }
+
+    private var layouts: [TileLayout] {
+        #if os(iOS)
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                return [.side, .pip]
+            }
+        #endif
+        return Array(TileLayout.allCases)
+    }
+
+    private var chosen: [Channel] {
+        nowPlaying.together.compactMap { id in store.channels.first { $0.id == id } }
+    }
+
+    private var ordered: [Channel] {
+        let visible = chosen.filter { !blocked.contains($0.id) }
+        let capped = Array(visible.prefix(min(session.layout.slots, cap)))
+        guard !session.layout.equal, let focus = capped.first(where: { $0.id == session.focusID }) ?? capped.first else {
+            return capped
+        }
+        return [focus] + capped.filter { $0.id != focus.id }
+    }
+
+    private var stacked: Bool {
+        #if os(iOS)
+            session.layout == .side && width == .compact && height == .regular
+        #else
+            false
+        #endif
+    }
+
+    var body: some View {
+        let tiles = ordered
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 10) {
+                topBar(tiles)
+                if !session.notice.isEmpty {
+                    Text(session.notice)
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .glassEffect(in: .capsule)
+                        .accessibilityAddTraits(.updatesFrequently)
+                }
+                grid(tiles)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                layoutBar
+                if session.guide {
+                    channelStrip
+                }
+            }
+            .padding(12)
+        }
+        .onAppear {
+            if session.focusID == 0 {
+                session.focusID = nowPlaying.together.first ?? 0
+            }
+            if nowPlaying.together.count < 2 {
+                session.guide = true
+            }
+        }
+        .task(id: nowPlaying.together) {
+            await refreshPlan()
+        }
+        #if os(tvOS)
+        .onPlayPauseCommand {
+            session.togglePause()
+        }
+        .onExitCommand {
+            if session.guide {
+                session.guide = false
+            } else {
+                leave()
+            }
+        }
+        #endif
+    }
+
+    private func topBar(_ tiles: [Channel]) -> some View {
+        HStack(spacing: 12) {
+            Button("Back to one channel", systemImage: "xmark") { leave() }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.glass)
+            Text("Side by side")
+                .font(.headline)
+            Spacer()
+            Button(session.paused ? "Play" : "Pause") { session.togglePause() }
+                .buttonStyle(.glass)
+            Button("Save") {
+                let name = tiles.map(\.displayNumber).joined(separator: " and ")
+                SavedMultiview.save(name: name, channels: tiles.map(\.id))
+            }
+            .buttonStyle(.glass)
+            .disabled(tiles.count < 2)
+        }
+    }
+
+    private var layoutBar: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(layouts) { item in
+                    Button(item.label) {
+                        let change = { session.layout = item; session.rememberLayout() }
+                        if reduceMotion {
+                            change()
+                        } else {
+                            withAnimation(.snappy) { change() }
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(session.layout == item ? Color.accentColor : nil)
+                    .accessibilityAddTraits(session.layout == item ? .isSelected : [])
+                }
+                Button("Channels") { session.guide.toggle() }
+                    .buttonStyle(.bordered)
+                    .accessibilityAddTraits(session.guide ? .isSelected : [])
+            }
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private var channelStrip: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(store.channels) { channel in
+                    let on = nowPlaying.together.contains(channel.id)
+                    Button {
+                        add(channel)
+                    } label: {
+                        VStack(spacing: 2) {
+                            Text(channel.displayNumber).font(.headline.weight(.bold))
+                            Text(channel.displayName).font(.caption2).lineLimit(1)
+                        }
+                        .frame(minWidth: 72, minHeight: 48)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(on ? Color.accentColor : nil)
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
+        .accessibilityLabel("Add a channel")
+    }
+
+    @ViewBuilder
+    private func grid(_ tiles: [Channel]) -> some View {
+        if tiles.isEmpty {
+            Text("Pick two channels.")
+                .foregroundStyle(.secondary)
+        } else if stacked, tiles.count >= 2 {
+            stackedPair(tiles[0], tiles[1])
+        } else {
+            GeometryReader { geo in
+                let gap: CGFloat = 8
+                switch session.layout {
+                case .side:
+                    HStack(spacing: gap) { tileRow(tiles) }
+                case .quad:
+                    let row = (geo.size.height - gap) / 2
+                    VStack(spacing: gap) {
+                        HStack(spacing: gap) {
+                            slot(tiles, 0, height: row)
+                            slot(tiles, 1, height: row)
+                        }
+                        HStack(spacing: gap) {
+                            slot(tiles, 2, height: row)
+                            slot(tiles, 3, height: row)
+                        }
+                    }
+                case .oneTwo, .oneThree:
+                    let smalls = Array(tiles.dropFirst())
+                    let count = CGFloat(max(smalls.count, 1))
+                    let row = (geo.size.height - gap * (count - 1)) / count
+                    HStack(spacing: gap) {
+                        if let first = tiles.first {
+                            tile(first)
+                        }
+                        VStack(spacing: gap) {
+                            ForEach(smalls) { channel in
+                                tile(channel).frame(height: row)
+                            }
+                        }
+                        .frame(width: geo.size.width * (session.layout == .oneThree ? 0.32 : 0.38))
+                    }
+                case .pip:
+                    ZStack(alignment: .bottomTrailing) {
+                        if let first = tiles.first {
+                            tile(first)
+                        }
+                        if tiles.count > 1 {
+                            tile(tiles[1])
+                                .frame(width: min(360, geo.size.width * 0.32), height: min(202, geo.size.height * 0.32))
+                                .padding(16)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func stackedPair(_ a: Channel, _ b: Channel) -> some View {
+        GeometryReader { geo in
+            let gap: CGFloat = 28
+            let top = max(80, (geo.size.height - gap) * session.split)
+            VStack(spacing: 0) {
+                tile(a).frame(height: top)
+                Rectangle()
+                    .fill(.white.opacity(0.35))
+                    .frame(height: gap)
+                    .accessibilityLabel("Divider")
+                #if os(iOS)
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                if session.dragOrigin == nil {
+                                    session.dragOrigin = session.split
+                                }
+                                let base = session.dragOrigin ?? session.split
+                                let span = max(geo.size.height - gap, 1)
+                                session.split = min(0.75, max(0.25, base + value.translation.height / span))
+                            }
+                            .onEnded { _ in session.dragOrigin = nil }
+                    )
+                #endif
+                tile(b).frame(height: max(80, geo.size.height - gap - top))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func slot(_ tiles: [Channel], _ index: Int, height: CGFloat) -> some View {
+        if tiles.indices.contains(index) {
+            tile(tiles[index]).frame(maxWidth: .infinity).frame(height: height)
+        } else {
+            Color.clear.frame(maxWidth: .infinity).frame(height: height)
+        }
+    }
+
+    private func tileRow(_ tiles: [Channel]) -> some View {
+        ForEach(tiles) { tile($0) }
+    }
+
+    private func tile(_ channel: Channel) -> some View {
+        let focused = channel.id == (ordered.first { $0.id == session.focusID }?.id ?? ordered.first?.id)
+        return MultiviewTile(
+            channel: channel,
+            title: store.index.on(channel.id, at: store.now)?.title ?? channel.displayName,
+            prefs: session.prefs(for: channel.id),
+            room: session.room,
+            focused: focused,
+            pip: focused
+        ) {
+            session.focusID = channel.id
+        } bind: { session.bind($0) }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contextMenu {
+                Button("Record") {
+                    Task { await store.toggleRecord(channel) }
+                }
+                Button("Remove") {
+                    nowPlaying.together.removeAll { $0 == channel.id }
+                }
+                Button("Full screen") {
+                    nowPlaying.play(channel)
+                }
+            }
+    }
+
+    private func add(_ channel: Channel) {
+        if nowPlaying.together.contains(channel.id) {
+            session.focusID = channel.id
+            session.guide = false
+            return
+        }
+        let limit = min(session.layout.slots, cap)
+        var next = nowPlaying.together
+        if next.count >= limit {
+            if let drop = next.last(where: { $0 != session.focusID }) {
+                next.removeAll { $0 == drop }
+            }
+        }
+        next.append(channel.id)
+        nowPlaying.together = next
+        session.focusID = channel.id
+        session.guide = false
+    }
+
+    private func leave() {
+        let id = session.focusID
+        if let channel = store.channels.first(where: { $0.id == id }) ?? chosen.first {
+            nowPlaying.play(channel)
+        } else {
+            nowPlaying.stop()
+        }
+    }
+
+    private func refreshPlan() async {
+        let ids = nowPlaying.together
+        guard ids.count >= 1, let api = store.api else { return }
+        guard let plan = try? await api.planMultiview(ids) else { return }
+        blocked = Set(plan.blocked.map(\.channelId))
+        session.notice = plan.blocked.first?.reason ?? plan.note ?? ""
+    }
+}
+
+struct MultiviewTile: View {
+    @Environment(AppStore.self) private var store
+    let channel: Channel
+    let title: String
+    let prefs: Prefs
+    let room: String
+    let focused: Bool
+    let pip: Bool
+    let onFocus: () -> Void
+    let bind: (@escaping (String) -> Void) -> Void
+    @State private var live = TilePlayer()
+
+    var body: some View {
+        Button(action: onFocus) {
+            ZStack(alignment: .bottomLeading) {
+                PlayerLayerBox(player: live.player, pip: pip)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.black)
+                HStack(spacing: 8) {
+                    Text(channel.displayNumber).font(.caption.weight(.bold))
+                    Text(title).font(.caption).lineLimit(1)
+                    Spacer(minLength: 0)
+                    if focused {
+                        Label("Sound", systemImage: "speaker.wave.2.fill")
+                            .font(.caption.weight(.bold))
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+                .padding(8)
+                .background(.black.opacity(0.45))
+                if let error = live.error {
+                    Text(error)
+                        .font(.footnote)
+                        .padding(8)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(.black.opacity(0.55))
+                }
+            }
+            .clipShape(.rect(cornerRadius: Tokens.Radius.md))
+            .overlay {
+                RoundedRectangle(cornerRadius: Tokens.Radius.md)
+                    .strokeBorder(focused ? .white : .white.opacity(0.15), lineWidth: focused ? 3 : 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityLabel("\(channel.displayNumber) \(channel.displayName)")
+        .accessibilityValue(focused ? "Sound on" : "Sound off")
+        .accessibilityAddTraits(focused ? .isSelected : [])
+        .task(id: "\(channel.id)-\(prefs.quality.rawValue)-\(prefs.audio.rawValue)") {
+            await live.start(TilePlayer.Request(channel: channel, prefs: prefs, audible: focused), room: room, store: store, bind: bind)
+        }
+        .onChange(of: focused) { _, on in
+            live.setAudible(on)
+        }
+        .onDisappear {
+            Task { await live.stop() }
+        }
+    }
+}
+
+struct PlayerLayerBox: UIViewRepresentable {
+    let player: AVPlayer
+    var pip = false
+
+    func makeUIView(context _: Context) -> PlayerHost {
+        let view = PlayerHost()
+        view.playerLayer?.player = player
+        view.playerLayer?.videoGravity = .resizeAspect
+        return view
+    }
+
+    func updateUIView(_ view: PlayerHost, context _: Context) {
+        view.playerLayer?.player = player
+        #if os(iOS)
+            if pip, view.pip == nil, let layer = view.playerLayer, AVPictureInPictureController.isPictureInPictureSupported() {
+                view.pip = AVPictureInPictureController(playerLayer: layer)
+                view.pip?.canStartPictureInPictureAutomaticallyFromInline = true
+            }
+            if !pip {
+                view.pip = nil
+            }
+        #endif
+    }
+}
+
+final class PlayerHost: UIView {
+    override static var layerClass: AnyClass {
+        AVPlayerLayer.self
+    }
+
+    var playerLayer: AVPlayerLayer? {
+        layer as? AVPlayerLayer
+    }
+
+    #if os(iOS)
+        var pip: AVPictureInPictureController?
+    #endif
+}

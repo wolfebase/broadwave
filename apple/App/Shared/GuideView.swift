@@ -350,6 +350,18 @@ struct ProgramSheet: View {
                         .buttonStyle(.glassProminent)
                         .controlSize(.large)
                         Button {
+                            dismiss()
+                            if let current = nowPlaying.channel, current.id != channel.id {
+                                nowPlaying.watchTogether([current, channel])
+                            } else {
+                                nowPlaying.watchTogether([channel])
+                            }
+                        } label: {
+                            Label("Watch together", systemImage: "rectangle.split.2x1").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.glass)
+                        .controlSize(.large)
+                        Button {
                             Task { await store.toggleRecord(channel) }
                         } label: {
                             Label(store.activeRecording(on: channel) == nil ? "Record" : "Stop recording", systemImage: "record.circle")

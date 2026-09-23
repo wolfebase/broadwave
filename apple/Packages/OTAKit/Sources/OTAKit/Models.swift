@@ -132,6 +132,26 @@ public struct WatchSession: Codable, Sendable, Hashable {
     public var viewers: Int
 }
 
+public struct MultiviewPlan: Codable, Sendable, Hashable {
+    public struct Playable: Codable, Sendable, Hashable {
+        public var channelId: Int64
+        public var frequencyHz: Int
+        public var shared: Bool
+    }
+
+    public struct Blocked: Codable, Sendable, Hashable {
+        public var channelId: Int64
+        public var reason: String
+        public var holders: [String]
+    }
+
+    public var playable: [Playable]
+    public var blocked: [Blocked]
+    public var tunersNeeded: Int
+    public var tunersFree: Int
+    public var note: String?
+}
+
 public struct PlaybackStart: Codable, Sendable, Hashable {
     public var playlist: String
     public var position: Double

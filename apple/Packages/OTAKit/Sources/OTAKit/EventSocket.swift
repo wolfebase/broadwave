@@ -11,6 +11,8 @@ public final class EventSocket {
     private var task: URLSessionWebSocketTask?
     private var handlers: [String: [UUID: (Data) -> Void]] = [:]
     private var rooms: [String: Int64] = [:]
+    private var refs: [String: Int] = [:]
+    private var latest: [String: Data] = [:]
     private var bestRTT = Double.infinity
     private var retry = 0
     private var clockTimer: Timer?
@@ -68,13 +70,34 @@ public final class EventSocket {
     }
 
     public func join(room: String, channelID: Int64) {
+        let n = (refs[room] ?? 0) + 1
+        refs[room] = n
         rooms[room] = channelID
-        send("sync.join", ["room": room, "channelId": channelID])
+        if n == 1 {
+            send("sync.join", ["room": room, "channelId": channelID])
+        }
     }
 
     public func leave(room: String) {
+        let n = (refs[room] ?? 0) - 1
+        if n > 0 {
+            refs[room] = n
+            return
+        }
+        refs[room] = nil
+        latest[room] = nil
         guard rooms.removeValue(forKey: room) != nil else { return }
         send("sync.leave", ["room": room])
+    }
+
+    /// How many tiles in this process are in the room.
+    public func membership(of room: String) -> Int {
+        refs[room] ?? 0
+    }
+
+    /// Last `sync.state` for the room. A second tile joins without a new push, so it reads this.
+    public func roomState(_ room: String) -> Data? {
+        latest[room]
     }
 
     public func command(room: String, action: String, mediaTime: Double? = nil) {
@@ -122,6 +145,9 @@ public final class EventSocket {
     private func dispatch(_ data: Data) {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let type = obj["type"] as? String else { return }
         let payload = obj["data"].flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.fragmentsAllowed]) } ?? Data()
+        if type == "sync.state", let d = obj["data"] as? [String: Any], let room = d["room"] as? String {
+            latest[room] = payload
+        }
         if type == "clock", let d = obj["data"] as? [String: Any], let t0 = d["t0"] as? Double, let t1 = d["t1"] as? Double {
             let t2 = Self.nowMS()
             let rtt = t2 - t0
