@@ -32,8 +32,8 @@ A waveguide is the structure that carries a radio signal to where it's needed. T
 | Bonjour | `_waveguide._tcp` |
 | URL scheme | `waveguide://watch/<id>`, `waveguide://connect?url=` |
 | Bundle ID | `com.wolfeup.waveguide` (iOS and tvOS) |
-| Container image | `ghcr.io/twolfekc/waveguide` |
-| GitHub | `twolfekc/waveguide` |
+| Container image | `ghcr.io/wolfebase/waveguide` |
+| GitHub | `wolfebase/waveguide` |
 | Unraid | container `Waveguide`, appdata `/mnt/user/appdata/waveguide` |
 
 The Swift packages `OTAKit` and `OTAUI` keep their names: "OTA" (over the air) describes the domain, not the brand.

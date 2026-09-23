@@ -4,7 +4,7 @@ Only things that truly need the user's hands, money, hardware, or a third party'
 
 **Not blockers (the executing agent handles these itself):**
 - Apple developer team ID, signing, bundle IDs, App Store Connect app records, TestFlight uploads (plan A7, L4). Find the team in Xcode/keychain/other projects; use the `asc-*` skills in `~/.claude/skills/` for App Store Connect.
-- GitHub: creating the repo, pushing, CI, GHCR images, releases (plan A6, L2). `gh` is logged in as `twolfekc`.
+- GitHub: creating the repo, pushing, CI, GHCR images, releases (plan A6, L2). The token authenticates as `wolfebase` (see the entry below).
 - Unraid Community Apps: research the current submission process and submit (plan L3).
 
 ## Known before the run starts
@@ -15,4 +15,5 @@ Only things that truly need the user's hands, money, hardware, or a third party'
 - **Third-party review time** — Community Apps moderation and TestFlight external review are asynchronous; submit, record status here, and keep working.
 
 ## Encountered during the run
-<!-- Append entries here. -->
+
+- **GitHub username `twolfekc` does not exist.** `gh auth status` labels the keychain item `twolfekc`, but `gh api user` is `wolfebase` (id 78864560) and `GET /users/twolfekc` is 404. The public REST API cannot create a user or organization. The repo and images are `wolfebase/waveguide` and `ghcr.io/wolfebase/waveguide` so CI and releases can proceed. Unblock the original name by creating the GitHub user `twolfekc` (or an org) and transferring the repo.

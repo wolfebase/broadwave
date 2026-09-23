@@ -19,7 +19,7 @@ docker run -d --name waveguide --network host \
   -v /path/to/config:/config \
   -v /path/to/recordings:/config/work/recordings \
   --device /dev/dri \
-  ghcr.io/twolfekc/waveguide:latest
+  ghcr.io/wolfebase/waveguide:latest
 ```
 
 Open `http://<server>:8477`. Host networking lets the server find your tuner and lets the apps find the server. See `deploy/docker/compose.yaml` for Compose.
