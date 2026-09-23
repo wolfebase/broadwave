@@ -1,8 +1,8 @@
 import Hls from "hls.js";
 import { useEffect, useRef, useState } from "react";
-import { playVirtual } from "./api";
-import { fileHlsConfig, type PictureMode } from "./picture";
-import { Stage } from "./Stage";
+import { playVirtual } from "../../api";
+import { fileHlsConfig, type PictureMode } from "../../picture";
+import { Stage } from "../player/Stage";
 
 type Marker = { id: number; start: number; end: number };
 

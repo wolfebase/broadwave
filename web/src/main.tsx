@@ -1,13 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import "@fontsource/source-sans-3/latin-400.css";
-import "@fontsource/source-sans-3/latin-ext-400.css";
-import "@fontsource/source-sans-3/latin-600.css";
-import "@fontsource/source-sans-3/latin-ext-600.css";
-import "@fontsource/source-serif-4/latin-500.css";
-import "@fontsource/source-serif-4/latin-ext-500.css";
-import { App } from "./App";
-import "./styles.css";
+import "@fontsource-variable/inter";
+import "./theme/tokens.css";
+import "./theme/base.css";
+import { App } from "./app/App";
 
 const root = document.getElementById("root");
 if (!root) {

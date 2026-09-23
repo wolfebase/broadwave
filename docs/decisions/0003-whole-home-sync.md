@@ -23,8 +23,10 @@ At any server time `T`, the target media time is `anchorMediaTime + (T - anchorS
 
 **Clients.**
 
-- Apple: start with `AVPlayer.setRate(1, time: target, atHostTime: hostTime)` for a frame-accurate start. Then hold sync by nudging `rate` between 0.97 and 1.03 when drift exceeds 20 ms, and seek when it exceeds 1 second. The `OTAKit` sync engine owns this logic.
-- Web: map `video.currentTime` to program date-time with hls.js, then nudge `playbackRate` or seek using the same thresholds.
+- Apple: start with `AVPlayer.setRate(1, time: target, atHostTime: hostTime)` for a frame-accurate start. Then hold sync by nudging `rate` between 0.97 and 1.03 when drift exceeds 20 ms, and seek when it exceeds 400 ms. The `OTAKit` sync engine owns this logic.
+- Web: map `video.currentTime` to program date-time through the playlist's segments (both directions), trim `playbackRate` up to 3% under 400 ms of drift, and above that pause for exactly the drift when ahead or seek forward when behind. Backward seeks in a live buffer stall hls.js, so the engine never makes them outside group rewinds, and it seeks at most every 2 s.
+
+Measured on a real ATSC broadcast (2026-09-22): two browser screens locked 15 ms apart, each within 5 ms of the room target.
 
 **Group mode.** Pause, seek, and jump-to-live become room commands sent over the WebSocket. The server rewrites the anchor and broadcasts it, and every client converges. Because everyone reads the same buffer, rewinding for the room needs no extra tuner or transcode.
 

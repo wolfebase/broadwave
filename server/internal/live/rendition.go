@@ -254,8 +254,13 @@ func RenditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 	default:
 		args = append(args, "-af", "aresample=async=1000", "-c:a", "aac", "-ac", "2", "-b:a", "160k")
 	}
+	// CMAF (fMP4) segments: players read timing straight from the boxes with no
+	// transmuxing, Apple devices need it for HEVC, and it is the base for LL-HLS.
 	return append(args,
-		"-f", "hls", "-hls_time", "2", "-hls_segment_filename", "seg%05d.ts",
+		"-video_track_timescale", "90000",
+		"-f", "hls", "-hls_time", "2",
+		"-hls_segment_type", "fmp4", "-hls_fmp4_init_filename", "init.mp4",
+		"-hls_segment_filename", "seg%05d.m4s",
 		"-hls_list_size", "2700",
 		"-hls_flags", "delete_segments+independent_segments+omit_endlist",
 		"index.m3u8",

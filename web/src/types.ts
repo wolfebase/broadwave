@@ -97,9 +97,46 @@ export type Recording = {
   watched?: number;
 };
 
+export type Caps = {
+  platform: "web" | "ios" | "tvos" | "ipados" | "macos";
+  video: string[];
+  audio: string[];
+  maxHeight?: number;
+  network?: "lan" | "wifi" | "cellular" | "remote";
+};
+
+export type Prefs = {
+  quality?: "auto" | "original" | "high" | "medium" | "saver";
+  audio?: "auto" | "surround" | "stereo";
+  picture?: "broadcast" | "smooth" | "film";
+};
+
+export type StreamInfo = {
+  rendition: string;
+  video: string;
+  audio: string;
+  mode?: string;
+  reason: string;
+  sourceVideo?: string;
+  sourceAudio?: string;
+  encoder?: string;
+};
+
+export type ServerInfo = {
+  id: string;
+  name: string;
+  version: string;
+  apiVersion: number;
+  encoder?: string;
+  tunerCount?: number;
+  features: string[];
+};
+
 export type WatchSession = {
   channelId: number;
   playlist: string;
+  rendition: string;
+  stream: StreamInfo;
   profile: string;
   audio: string;
   encoder: string;

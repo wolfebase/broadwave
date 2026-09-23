@@ -1,4 +1,4 @@
-import type { Airing, Channel, ChannelPatch, Device, Pass, PlannedAiring, Recording, Settings, StorageInfo, TunerStatus, VirtualChannel, WatchSession } from "./types";
+import type { Airing, Caps, Channel, ChannelPatch, Device, Pass, PlannedAiring, Prefs, Recording, ServerInfo, Settings, StorageInfo, TunerStatus, VirtualChannel, WatchSession } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -61,15 +61,19 @@ export function putSettings(values: Partial<Settings>) {
   });
 }
 
-export function watchChannel(channelId: number, profile: string, audio: string, pictureMode: string) {
-  return request<WatchSession>("/api/watch", {
+export function watchChannel(channelId: number, caps: Caps, prefs: Prefs, rendition = "") {
+  return request<WatchSession>("/api/v1/watch", {
     method: "POST",
-    body: JSON.stringify({ channelId, profile, audio, pictureMode }),
+    body: JSON.stringify({ channelId, caps, prefs, rendition }),
   });
 }
 
-export function stopWatch(channelId: number) {
-  return request<{ ok: boolean }>(`/api/watch/${channelId}/stop`, { method: "POST", body: "{}" });
+export function stopWatch(channelId: number, rendition = "") {
+  return request<{ ok: boolean }>(`/api/v1/watch/${channelId}/stop`, { method: "POST", body: JSON.stringify({ rendition }) });
+}
+
+export function getServer() {
+  return request<ServerInfo>("/api/v1/server");
 }
 
 export function getAirings() {
