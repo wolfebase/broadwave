@@ -8,6 +8,8 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [ ] A3 Deployed to Unraid (host network, VAAPI, Bonjour, sync from LAN, iPhone sim connects)
 - [ ] A4 Hygiene: dead CSS/strings, web on /api/v1 only, eslint + swiftlint in CI
 - [ ] A5 Restart robustness: orphan ffmpeg cleanup, interrupted recordings, graceful SIGTERM
+- [ ] A6 GitHub repo twolfekc/ota-viewer, pushed, CI green, image names = ghcr.io/twolfekc/ota-viewer, v0.1.0 release, public package
+- [ ] A7 Apple signing (team ID found), bundle IDs + App Group, ASC app records, scripts/testflight.sh, iOS + tvOS builds in TestFlight
 
 ## Phase B — Multiview
 - [ ] B1 Server: tile renditions (540/360, audio none), multiview plan endpoint, mosaic rendition, multiview sync room
@@ -99,6 +101,6 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 ## Phase L — Release
 - [ ] L1 Versioning + changelog
 - [ ] L2 GHCR images verified
-- [ ] L3 Community Apps repo
-- [ ] L4 TestFlight prep
+- [ ] L3 Community Apps: researched, template installed on TUS via URL, Validate + Scan clean, submitted
+- [ ] L4 TestFlight external + App Store readiness (icon, screenshots, privacy labels, review notes)
 - [ ] L5 Docs site

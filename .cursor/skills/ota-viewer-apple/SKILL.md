@@ -56,6 +56,13 @@ Reading files just written to /tmp often fails with "File not found"; tvOS 4K PN
 - Local network: Info.plist has `NSLocalNetworkUsageDescription`, `NSBonjourServices`, ATS `NSAllowsLocalNetworking` + `NSAllowsArbitraryLoads` (self-hosted http). Revisit ATS before App Store.
 - `AVPlayerItem.currentDate()` and `seek(to: Date)` use the server's PDT; that's what the SyncEngine relies on.
 
+## Signing and TestFlight (plan A7/L4)
+
+- Team ID: Xcode > Settings > Accounts, `security find-identity -v -p codesigning`, or `grep -r DEVELOPMENT_TEAM ~/Projects --include=project.pbxproj --include=project.yml | head`. Put it in `apple/project.yml` (`settings.base.DEVELOPMENT_TEAM`), then `xcodegen generate`.
+- App Store Connect: skills `asc-app-create-ui` (create app records), `asc-team-key-create` (API key -> `~/.blitz`), `asc-privacy-nutrition-labels`.
+- Pipeline: `scripts/testflight.sh` (created in A7) archives `OTAViewer` and `OTAViewerTV` (`xcodebuild archive -destination 'generic/platform=iOS'|'generic/platform=tvOS'`), exports with an `ExportOptions.plist` (`method: app-store-connect`, `destination: upload`, `teamID`), using `-allowProvisioningUpdates` and the ASC API key (`-authenticationKeyPath/-authenticationKeyID/-authenticationKeyIssuerID`). Build number = `git rev-list --count HEAD`.
+- Extensions to come (widgets, Top Shelf, Live Activities) need an App Group and their own bundle IDs; register them early.
+
 ## Multiview (Phase B3)
 
 See skill `ota-viewer-multiview`. Apple APIs: `AVPlaybackCoordinationMedium` (`player.playbackCoordinator.coordinate(using:)`), `AVRoutingPlaybackArbiter.shared.preferredParticipantForExternalPlayback`, `AVPlayer.networkResourcePriority` (.high focused / .low others). Sample: WWDC25 session 302 "Create a seamless multiview playback experience".
