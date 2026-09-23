@@ -56,7 +56,7 @@ make tokens     # regenerate web CSS and Swift theme from design/tokens.json
 
 Apple apps: `apple/project.yml` is the source of truth (XcodeGen); the `.xcodeproj` is generated and ignored. For simulator testing, launch with `-OTAWatch <channel id>` (debug builds) to start a channel without tapping; deep links are `waveguide://watch/<id>`, `waveguide://guide`, `waveguide://sports`.
 
-Tools: Go 1.25+, Node 22+, ffmpeg (with ffprobe) on PATH, Xcode 26+ for `apple/`. `go.work` at the root makes `go` commands work from here.
+Tools: Go 1.26+, Node 22+, ffmpeg (with ffprobe) on PATH, Xcode 26+ for `apple/`. `go.work` at the root makes `go` commands work from here.
 
 Tests never open a real tuner. Live tuner checks happen by running the server on the LAN.
 
