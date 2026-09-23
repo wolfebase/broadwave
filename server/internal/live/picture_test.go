@@ -88,3 +88,10 @@ func TestSmoothBlendOnlyWhenProbePassed(t *testing.T) {
 		t.Fatalf("blend: %s", on)
 	}
 }
+
+func TestVideoToolboxIsRealtime(t *testing.T) {
+	line := strings.Join(PictureArgs(Graph{VideoCodec: "MPEG2", Encoder: "h264_videotoolbox", Mode: "broadcast"}), " ")
+	if !strings.Contains(line, "-c:v h264_videotoolbox -realtime 1") {
+		t.Fatalf("videotoolbox args: %s", line)
+	}
+}

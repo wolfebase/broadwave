@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -32,20 +33,38 @@ type Tuner struct {
 	Shared   int    `json:"viewers,omitempty"`
 }
 
+// StreamInfo explains what a viewer is getting and why.
+type StreamInfo struct {
+	Rendition   string `json:"rendition"`
+	Video       string `json:"video"`
+	Audio       string `json:"audio"`
+	Mode        string `json:"mode,omitempty"`
+	Reason      string `json:"reason"`
+	SourceVideo string `json:"sourceVideo,omitempty"`
+	SourceAudio string `json:"sourceAudio,omitempty"`
+	Encoder     string `json:"encoder,omitempty"`
+}
+
 type Session struct {
-	ChannelID int64    `json:"channelId"`
-	Playlist  string   `json:"playlist"`
+	ChannelID int64      `json:"channelId"`
+	Playlist  string     `json:"playlist"`
+	Rendition string     `json:"rendition"`
+	Stream    StreamInfo `json:"stream"`
+	Encoder   string     `json:"encoder"`
+	Shared    bool       `json:"shared"`
+	Viewers   int        `json:"viewers"`
+	Frequency int        `json:"frequencyHz"`
+	Program   int        `json:"program"`
+	Tuners    []Tuner    `json:"tuners,omitempty"`
+
+	// Fields the current web player reads.
 	Profile   string   `json:"profile"`
 	Audio     string   `json:"audio"`
-	Encoder   string   `json:"encoder"`
-	Picture   string   `json:"picture"`
+	Picture   string   `json:"picture,omitempty"`
 	VideoMode string   `json:"videoMode"`
-	Shared    bool     `json:"shared"`
-	Viewers   int      `json:"viewers"`
-	Frequency int      `json:"frequencyHz"`
-	Program   int      `json:"program"`
 	Hints     []string `json:"hints"`
-	Tuners    []Tuner  `json:"tuners"`
+
+	File string `json:"-"`
 }
 
 type BusyError struct {
@@ -53,9 +72,11 @@ type BusyError struct {
 }
 
 func (e *BusyError) Error() string {
-	return "both antenna tuners are busy"
+	return "every tuner is busy"
 }
 
+// Hub owns the tuners. It tunes a whole frequency once, and every subchannel,
+// rendition, and recording on that frequency reads from the same stream.
 type Hub struct {
 	Store          *store.Store
 	Dir            string
@@ -65,13 +86,18 @@ type Hub struct {
 	DeintSmooth    string
 	Blend          bool
 	OnSaved        func(store.Recording)
-	mu             sync.Mutex
-	muxes          map[int]*mux
-	channels       map[int64]*feed
-	reserved       map[int]bool
-	next           int
-	playMu         sync.Mutex
-	plays          map[int64]struct{}
+
+	// RenditionIdle is how long a rendition with no viewers keeps running,
+	// so flipping back to a channel is instant.
+	RenditionIdle time.Duration
+
+	mu       sync.Mutex
+	muxes    map[int]*mux
+	channels map[int64]*feed
+	reserved map[int]bool
+	next     int
+	playMu   sync.Mutex
+	plays    map[int64]struct{}
 }
 
 type mux struct {
@@ -87,20 +113,30 @@ type mux struct {
 	pipeMu   sync.Mutex
 }
 
+// feed is one channel on a tuned frequency.
 type feed struct {
-	channel   store.SourceChannel
-	program   int
-	viewers   int
-	profile   string
-	audio     string
-	picture   string
-	dir       string
-	cmd       *exec.Cmd
-	stdin     io.WriteCloser
-	sub       *pipeSub
-	recording *recording
-	idle      *time.Timer
-	seen      time.Time
+	channel    store.SourceChannel
+	program    int
+	source     Source
+	renditions map[string]*rendition
+	recording  *recording
+	timeline   *Timeline
+	probing    bool
+	// exports counts raw MPEG-TS readers such as Plex or Jellyfin using the emulated tuner.
+	exports int
+}
+
+// rendition is one ffmpeg process producing HLS for one delivery form.
+type rendition struct {
+	spec    Rendition
+	dir     string
+	cmd     *exec.Cmd
+	stdin   io.WriteCloser
+	sub     *pipeSub
+	viewers int
+	seen    time.Time
+	idle    *time.Timer
+	stamper playlistStamper
 }
 
 type recording struct {
@@ -133,12 +169,16 @@ func New(st *store.Store, dir, ffmpeg, encoder string) *Hub {
 	return &Hub{
 		Store: st, Dir: dir, FFmpeg: ffmpeg, Encoder: encoder,
 		DeintBroadcast: broadcast, DeintSmooth: smooth, Blend: ProbeBlend(ffmpeg),
-		muxes: map[int]*mux{}, channels: map[int64]*feed{}, reserved: map[int]bool{},
+		RenditionIdle: 20 * time.Second,
+		muxes:         map[int]*mux{}, channels: map[int64]*feed{}, reserved: map[int]bool{},
 	}
 }
 
 func (h *Hub) deintFor(mode, codec string) string {
-	if !InterlacedCodec(codec) || NormalizeMode(mode) == "film" {
+	if NormalizeMode(mode) == "film" {
+		return ""
+	}
+	if !InterlacedCodec(codec) && codecName(codec) != "h264" {
 		return ""
 	}
 	if NormalizeMode(mode) == "smooth" && h.DeintSmooth != "" {
@@ -147,130 +187,273 @@ func (h *Hub) deintFor(mode, codec string) string {
 	return h.DeintBroadcast
 }
 
-func (h *Hub) liveArgs(program int, codec, profile, audio, mode string) []string {
-	return PictureArgs(Graph{
-		Program: program, VideoCodec: codec, Profile: profile, Audio: audio,
-		Encoder: h.Encoder, Mode: mode, Deint: h.deintFor(mode, codec), Blend: h.Blend,
-		Input: "pipe:0", Live: true,
-	})
+// SourceOf describes a channel for the stream decision.
+func (h *Hub) SourceOf(ctx context.Context, channelID int64) (Source, error) {
+	ch, err := h.Store.SourceChannel(ctx, channelID)
+	if err != nil {
+		return Source{}, err
+	}
+	return sourceOf(ch), nil
 }
 
-func (h *Hub) Watch(ctx context.Context, channelID int64, profile, audio, picture string) (Session, error) {
-	if profile == "" {
-		profile = "transparent"
-	}
-	if audio == "" {
-		audio = "stereo"
-	}
-	picture = NormalizeMode(picture)
+func sourceOf(ch store.SourceChannel) Source {
+	return Source{VideoCodec: ch.VideoCodec, AudioCodec: ch.AudioCodec, Progressive: ch.FieldOrder == "progressive"}
+}
+
+// Watch starts or joins one rendition of a channel.
+func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition) (Session, error) {
+	want = want.normalized()
 	ch, err := h.Store.SourceChannel(ctx, channelID)
 	if err != nil {
 		return Session{}, err
 	}
+	var res *http.Response
 	if ch.TunerCount == 0 && ch.StreamURL != "" {
-		return h.openURL(ch, profile, audio, picture)
+		h.mu.Lock()
+		_, tuned := h.channels[channelID]
+		h.mu.Unlock()
+		if !tuned {
+			if res, err = openStream(ch.StreamURL); err != nil {
+				return Session{}, err
+			}
+		}
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if feed := h.channels[channelID]; feed != nil {
-		if feed.profile != profile || feed.audio != audio || feed.picture != picture {
-			_ = h.restartFeedLocked(feed, profile, audio, picture)
+	f, err := h.ensureFeedLocked(ctx, ch, res)
+	if err != nil {
+		return Session{}, err
+	}
+	r, err := h.ensureRenditionLocked(f, want)
+	if err != nil {
+		h.dropIfUnusedLocked(f)
+		return Session{}, err
+	}
+	r.viewers++
+	r.seen = time.Now()
+	stopTimer(&r.idle)
+	return h.sessionLocked(f, r), nil
+}
+
+// ensureFeedLocked returns the tuned feed for a channel, tuning if needed. It does
+// not start ffmpeg; renditions and recordings attach to the feed on demand.
+func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stream *http.Response) (*feed, error) {
+	if f := h.channels[ch.ID]; f != nil {
+		if stream != nil {
+			stream.Body.Close()
 		}
-		feed.viewers++
-		feed.seen = time.Now()
-		h.stopIdle(feed)
-		return h.sessionLocked(feed, false), nil
+		return f, nil
+	}
+	if stream != nil {
+		return h.addFeedLocked(h.streamMuxLocked(ch, stream.Body, "stream"), ch), nil
 	}
 	host := hostOf(ch.BaseURL)
 	if ch.FrequencyHz > 0 {
 		if m := h.muxes[ch.FrequencyHz]; m != nil {
-			return h.addFeedLocked(ctx, m, ch, profile, audio, picture)
+			return h.addFeedLocked(m, ch), nil
 		}
 	}
 	tuners, err := h.readTuners(ctx, host)
 	if err != nil {
-		return Session{}, err
+		return nil, err
 	}
 	tuner, ok := firstFree(tuners, h.usedTunersLocked(), h.reserved)
 	if !ok {
-		return Session{}, &BusyError{Tuners: tuners}
+		return nil, &BusyError{Tuners: tuners}
 	}
 	h.reserved[tuner] = true
 	defer delete(h.reserved, tuner)
 	freq, programs, err := probe(host, tuner, ch.GuideNumber)
 	if err != nil {
-		delete(h.reserved, tuner)
-		return h.openSingleLocked(host, ch, profile, audio, picture)
+		res, err := openStream(fmt.Sprintf("http://%s:5004/auto/v%s", host, ch.GuideNumber))
+		if err != nil {
+			return nil, err
+		}
+		return h.addFeedLocked(h.streamMuxLocked(ch, res.Body, host), ch), nil
 	}
 	for _, p := range programs {
 		_ = h.Store.RememberProgram(ctx, ch.DeviceID, p.GuideNumber, freq, p.Number)
-		if p.GuideNumber == ch.GuideNumber {
-			ch.ProgramNum = p.Number
-			ch.FrequencyHz = freq
-		}
 	}
-	if ch.ProgramNum == 0 {
-		ch.ProgramNum = programFor(programs, ch.GuideNumber)
-		ch.FrequencyHz = freq
-	}
+	ch.ProgramNum = programFor(programs, ch.GuideNumber)
+	ch.FrequencyHz = freq
 	body, err := openMux(host, tuner, freq)
 	if err != nil {
 		_, _ = hdhr.Control{Addr: host}.Set(fmt.Sprintf("/tuner%d/channel", tuner), "none")
-		return Session{}, err
+		return nil, err
 	}
-	m := &mux{
-		freq: freq, tuner: tuner, host: host, device: ch.DeviceID,
-		body: body, feeds: map[string]*feed{}, programs: programs,
-	}
+	m := &mux{freq: freq, tuner: tuner, host: host, device: ch.DeviceID, body: body, feeds: map[string]*feed{}, programs: programs}
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 	h.muxes[freq] = m
 	go m.readLoop(runCtx)
-	return h.addFeedLocked(ctx, m, ch, profile, audio, picture)
+	return h.addFeedLocked(m, ch), nil
 }
 
-func (h *Hub) Touch(channelID int64) {
+// streamMuxLocked wraps a single-program stream (IPTV, or the tuner's /auto URL).
+func (h *Hub) streamMuxLocked(ch store.SourceChannel, body io.ReadCloser, host string) *mux {
+	h.next--
+	m := &mux{freq: h.next, tuner: -1, host: host, device: ch.DeviceID, body: body, feeds: map[string]*feed{}}
+	runCtx, cancel := context.WithCancel(context.Background())
+	m.cancel = cancel
+	h.muxes[m.freq] = m
+	go m.readLoop(runCtx)
+	return m
+}
+
+func (h *Hub) addFeedLocked(m *mux, ch store.SourceChannel) *feed {
+	if m.tuner < 0 {
+		ch.FrequencyHz = m.freq
+		ch.ProgramNum = 0
+	} else {
+		if ch.ProgramNum == 0 {
+			ch.ProgramNum = programFor(m.programs, ch.GuideNumber)
+		}
+		ch.FrequencyHz = m.freq
+	}
+	if f := m.feeds[ch.GuideNumber]; f != nil {
+		h.channels[ch.ID] = f
+		return f
+	}
+	f := &feed{
+		channel: ch, program: ch.ProgramNum, source: sourceOf(ch),
+		renditions: map[string]*rendition{}, timeline: NewTimeline(),
+	}
+	m.feeds[ch.GuideNumber] = f
+	h.channels[ch.ID] = f
+	if ch.FieldOrder == "" {
+		h.probeFieldOrderLocked(m, f)
+	}
+	return f
+}
+
+func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error) {
+	key := want.Key()
+	if r := f.renditions[key]; r != nil {
+		return r, nil
+	}
+	dir := filepath.Join(h.Dir, "live", fmt.Sprintf("%d", f.channel.ID), key)
+	if err := os.RemoveAll(dir); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	args := RenditionArgs(f.program, f.source, want, h.Encoder, h.deintFor(want.Mode, f.source.VideoCodec), h.Blend)
+	cmd := exec.Command(h.FFmpeg, args...)
+	cmd.Dir = dir
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: time.Now()}
+	r.sub = h.attachPipeLocked(muxOf(h, f), stdin)
+	f.renditions[key] = r
+	go func() { _ = cmd.Wait() }()
+	return r, nil
+}
+
+// Playlist returns a rendition's live playlist stamped with the channel timeline.
+func (h *Hub) Playlist(channelID int64, key string) ([]byte, error) {
+	h.mu.Lock()
+	f := h.channels[channelID]
+	var r *rendition
+	if f != nil {
+		r = f.renditions[key]
+		if r != nil {
+			r.seen = time.Now()
+		}
+	}
+	h.mu.Unlock()
+	if r == nil {
+		return nil, os.ErrNotExist
+	}
+	raw, err := readPlaylist(filepath.Join(r.dir, "index.m3u8"))
+	if err != nil {
+		return nil, err
+	}
+	return r.stamper.stamp(r.dir, raw, f.timeline), nil
+}
+
+// Touch records that a viewer of a rendition is still fetching video.
+func (h *Hub) Touch(channelID int64, key string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if feed := h.channels[channelID]; feed != nil {
-		feed.seen = time.Now()
+	if f := h.channels[channelID]; f != nil {
+		if r := f.renditions[key]; r != nil {
+			r.seen = time.Now()
+		}
 	}
 }
 
-// ReleaseAbandoned drops viewers that stopped asking for video, so a closed browser does not keep a tuner.
+// ReleaseAbandoned drops viewers that stopped asking for video, so a closed
+// browser or a sleeping phone does not hold a tuner.
 func (h *Hub) ReleaseAbandoned(maxAge time.Duration) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	now := time.Now()
-	for _, feed := range h.channels {
-		if feed.recording != nil || feed.viewers == 0 || feed.seen.IsZero() {
-			continue
+	for _, f := range h.feedsLocked() {
+		for key, r := range f.renditions {
+			if r.viewers == 0 || now.Sub(r.seen) < maxAge {
+				continue
+			}
+			r.viewers = 0
+			h.stopRenditionLocked(f, key)
 		}
-		if now.Sub(feed.seen) < maxAge {
-			continue
-		}
-		feed.viewers = 0
-		h.stopFeedLocked(feed)
+		h.dropIfUnusedLocked(f)
 	}
 }
 
-func (h *Hub) Release(channelID int64) {
+// Release removes one viewer. An empty key releases from the busiest rendition,
+// for clients that don't track which one they joined.
+func (h *Hub) Release(channelID int64, key string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	feed := h.channels[channelID]
-	if feed == nil || feed.viewers == 0 {
+	f := h.channels[channelID]
+	if f == nil {
 		return
 	}
-	feed.viewers--
-	if feed.viewers == 0 && feed.recording == nil {
-		feed.idle = time.AfterFunc(20*time.Second, func() { h.idleStop(channelID) })
+	if key == "" {
+		best := 0
+		for k, r := range f.renditions {
+			if r.viewers > best {
+				key, best = k, r.viewers
+			}
+		}
 	}
+	r := f.renditions[key]
+	if r == nil || r.viewers == 0 {
+		return
+	}
+	r.viewers--
+	if r.viewers == 0 {
+		stopTimer(&r.idle)
+		r.idle = time.AfterFunc(h.RenditionIdle, func() { h.idleStop(channelID, key) })
+	}
+}
+
+func (h *Hub) idleStop(channelID int64, key string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	f := h.channels[channelID]
+	if f == nil {
+		return
+	}
+	if r := f.renditions[key]; r != nil && r.viewers == 0 {
+		h.stopRenditionLocked(f, key)
+	}
+	h.dropIfUnusedLocked(f)
 }
 
 func (h *Hub) Record(ctx context.Context, channelID int64, minutes int, title string) (store.Recording, error) {
 	return h.RecordMeta(ctx, minutes, store.Recording{ChannelID: channelID, Title: title})
 }
 
+// RecordMeta records the original broadcast of a channel. It shares the tuned
+// frequency with anyone watching and starts no transcode.
 func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording) (store.Recording, error) {
 	channelID := meta.ChannelID
 	title := meta.Title
@@ -280,56 +463,67 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	if err := h.ensureSpace(ctx); err != nil {
 		return store.Recording{}, err
 	}
-	if _, err := h.Watch(ctx, channelID, "transparent", "stereo", "broadcast"); err != nil {
+	ch, err := h.Store.SourceChannel(ctx, channelID)
+	if err != nil {
 		return store.Recording{}, err
 	}
-	// Watch counted a viewer so the mux stays up. Recording holds its own ref.
-	h.Release(channelID)
+	var res *http.Response
+	if ch.TunerCount == 0 && ch.StreamURL != "" {
+		h.mu.Lock()
+		_, tuned := h.channels[channelID]
+		h.mu.Unlock()
+		if !tuned {
+			if res, err = openStream(ch.StreamURL); err != nil {
+				return store.Recording{}, err
+			}
+		}
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	feed := h.channels[channelID]
-	if feed == nil {
-		return store.Recording{}, fmt.Errorf("channel is not tuned")
+	f, err := h.ensureFeedLocked(ctx, ch, res)
+	if err != nil {
+		return store.Recording{}, err
 	}
-	if feed.recording != nil {
-		rec, err := h.Store.Recording(ctx, feed.recording.id)
-		return rec, err
+	if f.recording != nil {
+		return h.Store.Recording(ctx, f.recording.id)
 	}
 	dir := filepath.Join(h.Dir, "recordings")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
+		h.dropIfUnusedLocked(f)
 		return store.Recording{}, err
 	}
-	name := fmt.Sprintf("%s_%s_%s.ts", time.Now().Format("20060102_150405"), feed.channel.GuideNumber, sanitize(feed.channel.DisplayName))
+	name := fmt.Sprintf("%s_%s_%s.ts", time.Now().Format("20060102_150405"), f.channel.GuideNumber, sanitize(f.channel.DisplayName))
 	path := filepath.Join(dir, name)
 	ends := time.Now().Add(time.Duration(minutes) * time.Minute)
 	if title == "" {
-		title = feed.channel.DisplayName
+		title = f.channel.DisplayName
 	}
 	id, err := h.Store.CreateRecording(ctx, store.Recording{
-		ChannelID: channelID, GuideNumber: feed.channel.GuideNumber, Title: title,
+		ChannelID: channelID, GuideNumber: f.channel.GuideNumber, Title: title,
 		Subtitle: meta.Subtitle, Description: meta.Description, Category: meta.Category, ProgramID: meta.ProgramID,
 		Path: path, Status: "recording", StartedAt: time.Now(), EndsAt: &ends,
 	})
 	if err != nil {
+		h.dropIfUnusedLocked(f)
 		return store.Recording{}, err
 	}
 	if key := store.EpisodeKey(meta.ProgramID, title, meta.Subtitle, channelID); key != "" {
 		_ = h.Store.RememberSeen(ctx, key, false)
 	}
-	_ = h.Store.AddEvent(ctx, "recording", fmt.Sprintf("Started %s on %s", title, feed.channel.GuideNumber))
-	cmd := exec.Command(h.FFmpeg, copyArgs(feed.program, path)...)
+	_ = h.Store.AddEvent(ctx, "recording", fmt.Sprintf("Started %s on %s", title, f.channel.GuideNumber))
+	cmd := exec.Command(h.FFmpeg, copyArgs(f.program, path)...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return store.Recording{}, err
 	}
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
+		h.dropIfUnusedLocked(f)
 		return store.Recording{}, err
 	}
-	sub := h.attachPipeLocked(muxOf(h, feed), stdin)
-	rec := &recording{id: id, cmd: cmd, stdin: stdin, sub: sub}
-	feed.recording = rec
-	h.stopIdle(feed)
+	rec := &recording{id: id, cmd: cmd, stdin: stdin}
+	rec.sub = h.attachPipeLocked(muxOf(h, f), stdin)
+	f.recording = rec
 	rec.timer = time.AfterFunc(time.Duration(minutes)*time.Minute, func() { h.StopRecord(id) })
 	return h.Store.Recording(ctx, id)
 }
@@ -337,23 +531,38 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 func (h *Hub) StopRecord(id int64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	for _, feed := range h.channels {
-		if feed.recording != nil && feed.recording.id == id {
-			h.finishRecordingLocked(feed, "complete", "")
-			if feed.viewers == 0 {
-				feed.idle = time.AfterFunc(5*time.Second, func() { h.idleStop(feed.channel.ID) })
-			}
+	for _, f := range h.feedsLocked() {
+		if f.recording != nil && f.recording.id == id {
+			h.finishRecordingLocked(f, "complete", "")
+			h.dropIfUnusedLocked(f)
 			return
 		}
 	}
+}
+
+// ExtendRecording moves the end of an in-progress recording.
+func (h *Hub) ExtendRecording(ctx context.Context, id int64, until time.Time) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, f := range h.feedsLocked() {
+		if f.recording == nil || f.recording.id != id {
+			continue
+		}
+		stopTimer(&f.recording.timer)
+		f.recording.timer = time.AfterFunc(time.Until(until), func() { h.StopRecord(id) })
+		return h.Store.SetRecordingEnd(ctx, id, until)
+	}
+	return fmt.Errorf("recording %d is not in progress", id)
 }
 
 func (h *Hub) Tuners(ctx context.Context) ([]Tuner, error) {
 	h.mu.Lock()
 	host := ""
 	for _, m := range h.muxes {
-		host = m.host
-		break
+		if m.tuner >= 0 {
+			host = m.host
+			break
+		}
 	}
 	h.mu.Unlock()
 	if host == "" && h.Store != nil {
@@ -361,8 +570,11 @@ func (h *Hub) Tuners(ctx context.Context) ([]Tuner, error) {
 		if err != nil {
 			return nil, err
 		}
-		if len(devices) > 0 {
-			host = hostOf(devices[0].BaseURL)
+		for _, d := range devices {
+			if d.TunerCount > 0 {
+				host = hostOf(d.BaseURL)
+				break
+			}
 		}
 	}
 	if host == "" {
@@ -373,47 +585,6 @@ func (h *Hub) Tuners(ctx context.Context) ([]Tuner, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.readTuners(ctx, host)
-}
-
-func (h *Hub) addFeedLocked(_ context.Context, m *mux, ch store.SourceChannel, profile, audio, picture string) (Session, error) {
-	if ch.ProgramNum == 0 {
-		ch.ProgramNum = programFor(m.programs, ch.GuideNumber)
-	}
-	if ch.FrequencyHz == 0 {
-		ch.FrequencyHz = m.freq
-	}
-	if existing := m.feeds[ch.GuideNumber]; existing != nil {
-		existing.viewers++
-		h.stopIdle(existing)
-		h.channels[ch.ID] = existing
-		return h.sessionLocked(existing, true), nil
-	}
-	dir := filepath.Join(h.Dir, "live", fmt.Sprintf("%d", ch.ID))
-	if err := os.RemoveAll(dir); err != nil {
-		return Session{}, err
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return Session{}, err
-	}
-	cmd := exec.Command(h.FFmpeg, h.liveArgs(ch.ProgramNum, ch.VideoCodec, profile, audio, picture)...)
-	cmd.Dir = dir
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return Session{}, err
-	}
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		return Session{}, err
-	}
-	sub := h.attachPipeLocked(m, stdin)
-	f := &feed{
-		channel: ch, program: ch.ProgramNum, viewers: 1, profile: profile, audio: audio, picture: picture, seen: time.Now(),
-		dir: dir, cmd: cmd, stdin: stdin, sub: sub,
-	}
-	m.feeds[ch.GuideNumber] = f
-	h.channels[ch.ID] = f
-	go func() { _ = cmd.Wait() }()
-	return h.sessionLocked(f, len(m.feeds) > 1), nil
 }
 
 func (h *Hub) attachPipeLocked(m *mux, w io.WriteCloser) *pipeSub {
@@ -445,6 +616,8 @@ func (h *Hub) attachPipeLocked(m *mux, w io.WriteCloser) *pipeSub {
 	return sub
 }
 
+// readLoop is the only reader of the tuner. A slow subscriber loses chunks
+// rather than stalling the tuner for everyone else.
 func (m *mux) readLoop(ctx context.Context) {
 	buf := make([]byte, 188*49)
 	for {
@@ -468,93 +641,95 @@ func (m *mux) readLoop(ctx context.Context) {
 	}
 }
 
-func (h *Hub) sessionLocked(f *feed, shared bool) Session {
-	mode := "transcode"
-	hints := []string{}
-	if strings.EqualFold(f.channel.VideoCodec, "MPEG2") {
-		hints = append(hints, "This channel is MPEG-2, which a browser cannot play. The server is converting the picture. A recording stays the original broadcast.")
-	} else if strings.EqualFold(f.channel.VideoCodec, "H264") {
-		hints = append(hints, "This channel is already H.264. It is still resized for the browser, and the sound is converted from Dolby Digital.")
-		mode = "transcode"
+func (h *Hub) sessionLocked(f *feed, r *rendition) Session {
+	viewers := 0
+	for _, other := range f.renditions {
+		viewers += other.viewers
 	}
-	hints = append(hints, "The sound is Dolby Digital. This browser is hearing AAC. Surround is a choice in the player.")
-	if shared || f.viewers > 1 {
-		hints = append(hints, "Other screens on this broadcast are sharing the antenna tuner.")
+	m := muxOf(h, f)
+	shared := viewers > 1 || f.recording != nil || (m != nil && len(m.feeds) > 1)
+	spec := r.spec
+	key := spec.Key()
+	info := StreamInfo{
+		Rendition: key, Video: spec.Video, Audio: spec.Audio, Mode: spec.Mode,
+		SourceVideo: f.source.VideoCodec, SourceAudio: f.source.AudioCodec,
 	}
-	hints = append(hints, "Live sits a few seconds behind the broadcast. The picture stays at normal speed.")
-	if InterlacedCodec(f.channel.VideoCodec) && f.picture != "film" && f.profile != "saver" {
-		hints = append(hints, "Interlaced channels are rebuilt at 60 frames a second.")
+	if spec.Video != "copy" {
+		info.Encoder = h.Encoder
+	}
+	legacyAudio := "stereo"
+	if spec.Audio == "aac6" || spec.Audio == "copy" {
+		legacyAudio = "surround"
+	}
+	videoMode := "transcode"
+	if spec.Video == "copy" {
+		videoMode = "copy"
 	}
 	return Session{
 		ChannelID: f.channel.ID,
-		Playlist:  fmt.Sprintf("/media/live/%d/index.m3u8", f.channel.ID),
-		Profile:   f.profile,
-		Audio:     f.audio,
-		Picture:   f.picture,
+		Playlist:  fmt.Sprintf("/media/live/%d/%s/index.m3u8", f.channel.ID, key),
+		Rendition: key,
+		Stream:    info,
 		Encoder:   h.Encoder,
-		VideoMode: mode,
-		Shared:    shared || f.viewers > 1,
-		Viewers:   f.viewers,
+		Shared:    shared,
+		Viewers:   viewers,
 		Frequency: f.channel.FrequencyHz,
 		Program:   f.program,
-		Hints:     hints,
+		Profile:   renditionProfile(spec.Video),
+		Audio:     legacyAudio,
+		Picture:   spec.Mode,
+		VideoMode: videoMode,
+		Hints:     []string{},
+		File:      filepath.Join(r.dir, "index.m3u8"),
 	}
 }
 
-func (h *Hub) restartFeedLocked(f *feed, profile, audio, picture string) error {
-	muxOf(h, f).detach(f.sub)
-	if f.cmd != nil && f.cmd.Process != nil {
-		_ = f.stdin.Close()
-		_ = f.cmd.Process.Kill()
+func (h *Hub) stopRenditionLocked(f *feed, key string) {
+	r := f.renditions[key]
+	if r == nil {
+		return
 	}
-	_ = os.RemoveAll(f.dir)
-	_ = os.MkdirAll(f.dir, 0o755)
-	cmd := exec.Command(h.FFmpeg, h.liveArgs(f.program, f.channel.VideoCodec, profile, audio, picture)...)
-	cmd.Dir = f.dir
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return err
+	stopTimer(&r.idle)
+	muxOf(h, f).detach(r.sub)
+	if r.cmd != nil && r.cmd.Process != nil {
+		_ = r.stdin.Close()
+		_ = r.cmd.Process.Kill()
 	}
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	f.cmd = cmd
-	f.stdin = stdin
-	f.profile = profile
-	f.audio = audio
-	f.picture = picture
-	f.sub = h.attachPipeLocked(muxOf(h, f), stdin)
-	go func() { _ = cmd.Wait() }()
-	return nil
+	delete(f.renditions, key)
+	_ = os.RemoveAll(r.dir)
 }
 
-func (h *Hub) idleStop(channelID int64) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	f := h.channels[channelID]
-	if f == nil || f.viewers > 0 || f.recording != nil {
+// dropIfUnusedLocked releases the feed, and the tuner with the last feed, once
+// nobody is watching or recording it.
+func (h *Hub) dropIfUnusedLocked(f *feed) {
+	if len(f.renditions) > 0 || f.recording != nil || f.probing || f.exports > 0 {
 		return
 	}
 	h.stopFeedLocked(f)
 }
 
 func (h *Hub) stopFeedLocked(f *feed) {
-	h.stopIdle(f)
-	if f.cmd != nil && f.cmd.Process != nil {
-		_ = f.stdin.Close()
-		_ = f.cmd.Process.Kill()
+	for key := range f.renditions {
+		h.stopRenditionLocked(f, key)
 	}
-	delete(h.channels, f.channel.ID)
-	m := h.muxes[f.channel.FrequencyHz]
+	if h.channels[f.channel.ID] == f {
+		delete(h.channels, f.channel.ID)
+	}
+	for id, other := range h.channels {
+		if other == f {
+			delete(h.channels, id)
+		}
+	}
+	m := muxOf(h, f)
 	if m == nil {
 		return
 	}
 	delete(m.feeds, f.channel.GuideNumber)
-	m.detach(f.sub)
 	if len(m.feeds) == 0 {
 		m.cancel()
-		_ = m.body.Close()
+		if m.body != nil {
+			_ = m.body.Close()
+		}
 		for _, sub := range m.snapshot() {
 			sub.stop()
 		}
@@ -570,13 +745,17 @@ func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 	if rec == nil {
 		return
 	}
-	if rec.timer != nil {
-		rec.timer.Stop()
-	}
+	stopTimer(&rec.timer)
 	muxOf(h, f).detach(rec.sub)
 	_ = rec.stdin.Close()
 	if rec.cmd.Process != nil {
-		_ = rec.cmd.Process.Kill()
+		done := make(chan struct{})
+		go func() { _ = rec.cmd.Wait(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			_ = rec.cmd.Process.Kill()
+		}
 	}
 	f.recording = nil
 	_ = h.Store.FinishRecording(context.Background(), rec.id, status, errText)
@@ -634,19 +813,50 @@ func (h *Hub) ensureSpace(ctx context.Context) error {
 	return nil
 }
 
-func (h *Hub) stopIdle(f *feed) {
-	if f.idle != nil {
-		f.idle.Stop()
-		f.idle = nil
+func stopTimer(t **time.Timer) {
+	if *t != nil {
+		(*t).Stop()
+		*t = nil
 	}
+}
+
+// feedsLocked lists each feed once; several channel ids can point at one feed.
+func (h *Hub) feedsLocked() []*feed {
+	seen := map[*feed]bool{}
+	var out []*feed
+	for _, f := range h.channels {
+		if !seen[f] {
+			seen[f] = true
+			out = append(out, f)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].channel.ID < out[j].channel.ID })
+	return out
 }
 
 func (h *Hub) usedTunersLocked() map[int]bool {
 	used := map[int]bool{}
 	for _, m := range h.muxes {
-		used[m.tuner] = true
+		if m.tuner >= 0 {
+			used[m.tuner] = true
+		}
 	}
 	return used
+}
+
+func (h *Hub) viewersOnTunerLocked(tuner int) int {
+	n := 0
+	for _, m := range h.muxes {
+		if m.tuner != tuner {
+			continue
+		}
+		for _, f := range m.feeds {
+			for _, r := range f.renditions {
+				n += r.viewers
+			}
+		}
+	}
+	return n
 }
 
 func (h *Hub) readTuners(ctx context.Context, host string) ([]Tuner, error) {
@@ -678,6 +888,7 @@ func (h *Hub) readTuners(ctx context.Context, host string) ([]Tuner, error) {
 		out = append(out, Tuner{
 			Index: i, Guide: row.VctNumber, Name: row.VctName, Target: row.TargetIP,
 			Ours: ours[i], Strength: row.SignalStrengthPercent, Quality: row.SignalQualityPercent, Symbol: row.SymbolQualityPercent,
+			Shared: h.viewersOnTunerLocked(i),
 		})
 	}
 	return out, nil
@@ -693,72 +904,20 @@ func firstFree(tuners []Tuner, used, reserved map[int]bool) (int, bool) {
 	return 0, false
 }
 
-func (h *Hub) openURL(ch store.SourceChannel, profile, audio, picture string) (Session, error) {
-	req, err := http.NewRequest(http.MethodGet, ch.StreamURL, nil)
+func openStream(u string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
-		return Session{}, err
+		return nil, err
 	}
 	res, err := (&http.Client{Timeout: 0}).Do(req)
 	if err != nil {
-		return Session{}, err
+		return nil, err
 	}
 	if res.StatusCode != http.StatusOK {
 		res.Body.Close()
-		return Session{}, fmt.Errorf("stream returned %s", res.Status)
+		return nil, fmt.Errorf("stream returned %s", res.Status)
 	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if feed := h.channels[ch.ID]; feed != nil {
-		res.Body.Close()
-		if feed.profile != profile || feed.audio != audio || feed.picture != picture {
-			_ = h.restartFeedLocked(feed, profile, audio, picture)
-		}
-		feed.viewers++
-		feed.seen = time.Now()
-		h.stopIdle(feed)
-		return h.sessionLocked(feed, false), nil
-	}
-	h.next--
-	key := h.next
-	m := &mux{freq: key, tuner: -1, host: "stream", device: ch.DeviceID, body: res.Body, feeds: map[string]*feed{}}
-	runCtx, cancel := context.WithCancel(context.Background())
-	m.cancel = cancel
-	h.muxes[key] = m
-	go m.readLoop(runCtx)
-	ch.FrequencyHz = key
-	ch.ProgramNum = 0
-	session, err := h.addFeedLocked(context.Background(), m, ch, profile, audio, picture)
-	if err != nil {
-		return Session{}, err
-	}
-	session.Shared = false
-	return session, nil
-}
-
-func (h *Hub) openSingleLocked(host string, ch store.SourceChannel, profile, audio, picture string) (Session, error) {
-	u := fmt.Sprintf("http://%s:5004/auto/v%s", host, ch.GuideNumber)
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, u, nil)
-	if err != nil {
-		return Session{}, err
-	}
-	res, err := (&http.Client{Timeout: 0}).Do(req)
-	if err != nil {
-		return Session{}, err
-	}
-	if res.StatusCode != http.StatusOK {
-		res.Body.Close()
-		return Session{}, fmt.Errorf("tuner returned %s", res.Status)
-	}
-	h.next--
-	key := h.next
-	m := &mux{freq: key, tuner: -1, host: host, device: ch.DeviceID, body: res.Body, feeds: map[string]*feed{}}
-	runCtx, cancel := context.WithCancel(context.Background())
-	m.cancel = cancel
-	h.muxes[key] = m
-	go m.readLoop(runCtx)
-	ch.FrequencyHz = key
-	ch.ProgramNum = 0
-	return h.addFeedLocked(context.Background(), m, ch, profile, audio, picture)
+	return res, nil
 }
 
 func probe(host string, tuner int, guide string) (int, []hdhr.Program, error) {

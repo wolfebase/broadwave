@@ -22,26 +22,47 @@ import (
 
 func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	if s.Hub == nil {
-		httpError(w, "player is not configured", http.StatusServiceUnavailable)
+		httpError(w, "Live TV is not set up on this server.", http.StatusServiceUnavailable)
 		return
 	}
 	var body struct {
-		ChannelID int64  `json:"channelId"`
-		Profile   string `json:"profile"`
-		Audio     string `json:"audio"`
-		Picture   string `json:"pictureMode"`
+		ChannelID int64      `json:"channelId"`
+		Caps      *live.Caps `json:"caps"`
+		Prefs     live.Prefs `json:"prefs"`
+		Rendition string     `json:"rendition"`
+		Profile   string     `json:"profile"`
+		Audio     string     `json:"audio"`
+		Picture   string     `json:"pictureMode"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
-	_, mode := s.playbackChoice(r.Context(), 0, body.Picture)
-	session, err := s.Hub.Watch(r.Context(), body.ChannelID, body.Profile, body.Audio, mode)
+	src, err := s.Hub.SourceOf(r.Context(), body.ChannelID)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	waitPlaylist(filepath.Join(s.Hub.Dir, "live", strconv.FormatInt(body.ChannelID, 10), "index.m3u8"), 12*time.Second)
+	var decision live.Decision
+	if forced, ok := live.ParseRenditionKey(body.Rendition); ok {
+		decision = live.Decision{Rendition: forced, Reason: "Chosen in the player"}
+	} else {
+		caps, prefs := live.LegacyCaps(body.Profile, body.Audio, body.Picture)
+		if body.Caps != nil {
+			caps, prefs = *body.Caps, body.Prefs
+		}
+		if prefs.Picture == "" {
+			_, prefs.Picture = s.playbackChoice(r.Context(), 0, "")
+		}
+		decision = live.Decide(src, caps, prefs)
+	}
+	session, err := s.Hub.Watch(r.Context(), body.ChannelID, decision.Rendition)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	session.Stream.Reason = decision.Reason
+	waitPlaylist(session.File, 12*time.Second)
 	if tuners, err := s.Hub.Tuners(r.Context()); err == nil {
 		session.Tuners = tuners
 	}
@@ -54,8 +75,12 @@ func (s *Server) release(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "invalid channel", http.StatusBadRequest)
 		return
 	}
+	var body struct {
+		Rendition string `json:"rendition"`
+	}
+	_ = decodeJSON(r, &body)
 	if s.Hub != nil {
-		s.Hub.Release(id)
+		s.Hub.Release(id, body.Rendition)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
@@ -516,30 +541,44 @@ func clampPad(minutes int) int {
 }
 
 func (s *Server) media(w http.ResponseWriter, r *http.Request) {
-	rel := strings.TrimPrefix(r.URL.Path, "/media/live/")
-	id, name, ok := strings.Cut(rel, "/")
-	if !ok || id == "" || strings.Contains(name, "..") || strings.Contains(id, "..") {
+	if s.Hub == nil {
 		http.NotFound(w, r)
 		return
 	}
-	if name != "index.m3u8" && !(strings.HasPrefix(name, "seg") && strings.HasSuffix(name, ".ts")) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/media/live/"), "/")
+	if len(parts) != 3 {
 		http.NotFound(w, r)
 		return
 	}
-	if channelID, err := strconv.ParseInt(id, 10, 64); err == nil && s.Hub != nil {
-		s.Hub.Touch(channelID)
+	channelID, err := strconv.ParseInt(parts[0], 10, 64)
+	key, name := parts[1], parts[2]
+	if _, ok := live.ParseRenditionKey(key); err != nil || !ok {
+		http.NotFound(w, r)
+		return
 	}
-	path := filepath.Join(s.Hub.Dir, "live", id, filepath.Base(name))
+	s.Hub.Touch(channelID, key)
+	w.Header().Set("Cache-Control", "no-cache")
+	if name == "index.m3u8" {
+		body, err := s.Hub.Playlist(channelID, key)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		_, _ = w.Write(body)
+		return
+	}
+	if !strings.HasPrefix(name, "seg") || !strings.HasSuffix(name, ".ts") || strings.Contains(name, "..") {
+		http.NotFound(w, r)
+		return
+	}
+	path := filepath.Join(s.Hub.Dir, "live", parts[0], key, name)
 	if _, err := os.Stat(path); err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	switch {
-	case strings.HasSuffix(name, ".m3u8"):
-		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-	case strings.HasSuffix(name, ".ts"):
-		w.Header().Set("Content-Type", "video/mp2t")
-	}
+	w.Header().Set("Content-Type", "video/mp2t")
+	w.Header().Set("Cache-Control", "max-age=3600")
 	http.ServeFile(w, r, path)
 }
 

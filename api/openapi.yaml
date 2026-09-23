@@ -247,7 +247,11 @@ paths:
     post:
       tags: [live]
       operationId: watchChannel
-      description: Start or join live playback. Viewers on the same frequency share one tuner.
+      description: |
+        Start or join live playback. Everyone on the same frequency shares one tuner.
+        Send `caps` (what this device can play) and optional `prefs`; the server picks a
+        rendition and explains the choice in `stream.reason`. `rendition` forces a specific
+        one. `profile`/`audio`/`pictureMode` are the older web fields and still work.
       requestBody:
         required: true
         content:
@@ -257,8 +261,11 @@ paths:
               required: [channelId]
               properties:
                 channelId: { type: integer, format: int64 }
-                profile: { type: string, enum: [transparent, balanced, saver] }
-                audio: { type: string, enum: [stereo, surround] }
+                caps: { $ref: "#/components/schemas/Caps" }
+                prefs: { $ref: "#/components/schemas/Prefs" }
+                rendition: { type: string, description: "Force a rendition key, for example copy.copy or 720.aac2.broadcast" }
+                profile: { type: string, enum: [transparent, balanced, saver], deprecated: true }
+                audio: { type: string, enum: [stereo, surround], deprecated: true }
                 pictureMode: { $ref: "#/components/schemas/PictureMode" }
       responses:
         "200":
@@ -273,6 +280,14 @@ paths:
       operationId: stopWatching
       parameters:
         - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rendition: { type: string, description: "The rendition this viewer joined; empty releases from the busiest" }
       responses:
         "200": { $ref: "#/components/responses/Ok" }
   /tuners:
@@ -915,12 +930,50 @@ components:
         quality: { type: integer }
         symbol: { type: integer }
         viewers: { type: integer }
+    Caps:
+      type: object
+      description: What the client can decode and display.
+      properties:
+        platform: { type: string, enum: [tvos, ios, ipados, macos, visionos, web] }
+        video:
+          type: array
+          items: { type: string, enum: [h264, hevc, mpeg2] }
+        audio:
+          type: array
+          items: { type: string, enum: [aac, ac3, eac3] }
+        maxHeight: { type: integer }
+        network: { type: string, enum: [lan, wifi, cellular, remote] }
+    Prefs:
+      type: object
+      description: The viewer's choices. Empty means automatic.
+      properties:
+        quality: { type: string, enum: [auto, original, high, medium, saver] }
+        audio: { type: string, enum: [auto, surround, stereo] }
+        picture: { $ref: "#/components/schemas/PictureMode" }
+    StreamInfo:
+      type: object
+      required: [rendition, video, audio, reason]
+      properties:
+        rendition: { type: string }
+        video: { type: string, enum: [copy, "1080", "720", "540"] }
+        audio: { type: string, enum: [copy, aac2, aac6] }
+        mode: { $ref: "#/components/schemas/PictureMode" }
+        reason: { type: string, description: "Short, user-facing explanation of the choice" }
+        sourceVideo: { type: string }
+        sourceAudio: { type: string }
+        encoder: { type: string }
     WatchSession:
       type: object
-      required: [channelId, playlist, profile, audio, encoder, videoMode, shared, viewers]
+      required: [channelId, playlist, rendition, stream, encoder, shared, viewers]
       properties:
         channelId: { type: integer, format: int64 }
-        playlist: { type: string, description: "HLS playlist path, relative to the server origin" }
+        playlist:
+          type: string
+          description: |
+            HLS playlist path, relative to the server origin. Every segment carries
+            EXT-X-PROGRAM-DATE-TIME on the channel's shared timeline, identical across renditions.
+        rendition: { type: string }
+        stream: { $ref: "#/components/schemas/StreamInfo" }
         profile: { type: string }
         audio: { type: string }
         encoder: { type: string }

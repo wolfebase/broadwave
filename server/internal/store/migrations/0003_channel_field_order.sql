@@ -1,0 +1,1 @@
+ALTER TABLE channels ADD COLUMN field_order TEXT NOT NULL DEFAULT '';

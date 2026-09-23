@@ -180,6 +180,8 @@ func videoCodec(encoder, rate string, gop int) []string {
 		return []string{"-c:v", "h264_qsv", "-preset", "veryfast", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
 	case "h264_vaapi":
 		return []string{"-c:v", "h264_vaapi", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
+	case "h264_videotoolbox":
+		return []string{"-c:v", "h264_videotoolbox", "-realtime", "1", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g, "-profile:v", "high"}
 	default:
 		return []string{"-c:v", "libx264", "-preset", "veryfast", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
 	}

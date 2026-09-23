@@ -8,7 +8,7 @@ import (
 )
 
 func DetectEncoder(ffmpeg string) string {
-	for _, name := range []string{"h264_nvenc", "h264_qsv"} {
+	for _, name := range []string{"h264_nvenc", "h264_qsv", "h264_videotoolbox"} {
 		cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
 			"-f", "lavfi", "-i", "testsrc=size=160x120:rate=30:duration=0.2",
 			"-pix_fmt", "yuv420p", "-c:v", name, "-f", "null", "-")

@@ -175,7 +175,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start or join live playback. Viewers on the same frequency share one tuner. */
+        /**
+         * @description Start or join live playback. Everyone on the same frequency shares one tuner.
+         *     Send `caps` (what this device can play) and optional `prefs`; the server picks a
+         *     rendition and explains the choice in `stream.reason`. `rendition` forces a specific
+         *     one. `profile`/`audio`/`pictureMode` are the older web fields and still work.
+         */
         post: operations["watchChannel"];
         delete?: never;
         options?: never;
@@ -675,16 +680,52 @@ export interface components {
             symbol?: number;
             viewers?: number;
         };
+        /** @description What the client can decode and display. */
+        Caps: {
+            /** @enum {string} */
+            platform?: "tvos" | "ios" | "ipados" | "macos" | "visionos" | "web";
+            video?: ("h264" | "hevc" | "mpeg2")[];
+            audio?: ("aac" | "ac3" | "eac3")[];
+            maxHeight?: number;
+            /** @enum {string} */
+            network?: "lan" | "wifi" | "cellular" | "remote";
+        };
+        /** @description The viewer's choices. Empty means automatic. */
+        Prefs: {
+            /** @enum {string} */
+            quality?: "auto" | "original" | "high" | "medium" | "saver";
+            /** @enum {string} */
+            audio?: "auto" | "surround" | "stereo";
+            picture?: components["schemas"]["PictureMode"];
+        };
+        StreamInfo: {
+            rendition: string;
+            /** @enum {string} */
+            video: "copy" | "1080" | "720" | "540";
+            /** @enum {string} */
+            audio: "copy" | "aac2" | "aac6";
+            mode?: components["schemas"]["PictureMode"];
+            /** @description Short, user-facing explanation of the choice */
+            reason: string;
+            sourceVideo?: string;
+            sourceAudio?: string;
+            encoder?: string;
+        };
         WatchSession: {
             /** Format: int64 */
             channelId: number;
-            /** @description HLS playlist path, relative to the server origin */
+            /**
+             * @description HLS playlist path, relative to the server origin. Every segment carries
+             *     EXT-X-PROGRAM-DATE-TIME on the channel's shared timeline, identical across renditions.
+             */
             playlist: string;
-            profile: string;
-            audio: string;
+            rendition: string;
+            stream: components["schemas"]["StreamInfo"];
+            profile?: string;
+            audio?: string;
             encoder: string;
             picture?: components["schemas"]["PictureMode"];
-            videoMode: string;
+            videoMode?: string;
             shared: boolean;
             viewers: number;
             frequencyHz?: number;
@@ -1157,9 +1198,19 @@ export interface operations {
                 "application/json": {
                     /** Format: int64 */
                     channelId: number;
-                    /** @enum {string} */
+                    caps?: components["schemas"]["Caps"];
+                    prefs?: components["schemas"]["Prefs"];
+                    /** @description Force a rendition key, for example copy.copy or 720.aac2.broadcast */
+                    rendition?: string;
+                    /**
+                     * @deprecated
+                     * @enum {string}
+                     */
                     profile?: "transparent" | "balanced" | "saver";
-                    /** @enum {string} */
+                    /**
+                     * @deprecated
+                     * @enum {string}
+                     */
                     audio?: "stereo" | "surround";
                     pictureMode?: components["schemas"]["PictureMode"];
                 };
@@ -1187,7 +1238,14 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description The rendition this viewer joined; empty releases from the busiest */
+                    rendition?: string;
+                };
+            };
+        };
         responses: {
             200: components["responses"]["Ok"];
         };

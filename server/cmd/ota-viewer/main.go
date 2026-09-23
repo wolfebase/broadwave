@@ -76,7 +76,7 @@ func main() {
 			dvr.Tick(context.Background(), st, hub)
 			if hub != nil {
 				hub.ReleaseAbandoned(45 * time.Second)
-				httpapi.SyncEmulator(st, hub.FFmpeg)
+				httpapi.SyncEmulator(st, hub)
 			}
 		}
 	}()

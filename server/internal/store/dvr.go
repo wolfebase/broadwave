@@ -15,6 +15,8 @@ type SourceChannel struct {
 	TunerCount  int    `json:"tunerCount"`
 	FrequencyHz int    `json:"frequencyHz"`
 	ProgramNum  int    `json:"programNum"`
+	// FieldOrder is what a probe saw: progressive, tt, bb, tb, bt, or empty when unknown.
+	FieldOrder string `json:"fieldOrder,omitempty"`
 }
 
 type Airing struct {
@@ -78,11 +80,11 @@ func (s *Store) SourceChannel(ctx context.Context, id int64) (SourceChannel, err
 	err := s.db.QueryRowContext(ctx, `
 SELECT c.id, c.device_id, c.guide_number, c.guide_name, c.custom_number, c.custom_name,
 	c.video_codec, c.audio_codec, c.hd, c.favorite, c.enabled, c.hidden, c.present,
-	c.stream_url, c.frequency_hz, c.program_num, d.base_url, d.tuner_count
+	c.stream_url, c.frequency_hz, c.program_num, c.field_order, d.base_url, d.tuner_count
 FROM channels c JOIN devices d ON d.device_id = c.device_id WHERE c.id = ?`, id).Scan(
 		&ch.ID, &ch.DeviceID, &ch.GuideNumber, &ch.GuideName, &customNumber, &customName,
 		&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present,
-		&ch.StreamURL, &ch.FrequencyHz, &ch.ProgramNum, &ch.BaseURL, &ch.TunerCount,
+		&ch.StreamURL, &ch.FrequencyHz, &ch.ProgramNum, &ch.FieldOrder, &ch.BaseURL, &ch.TunerCount,
 	)
 	if err != nil {
 		return ch, err
@@ -103,6 +105,11 @@ func (s *Store) RememberProgram(ctx context.Context, deviceID, guide string, fre
 	_, err := s.db.ExecContext(ctx, `
 UPDATE channels SET frequency_hz = ?, program_num = ?
 WHERE device_id = ? AND guide_number = ?`, freq, program, deviceID, guide)
+	return err
+}
+
+func (s *Store) SetFieldOrder(ctx context.Context, channelID int64, order string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE channels SET field_order = ? WHERE id = ?`, order, channelID)
 	return err
 }
 
@@ -176,6 +183,11 @@ func (s *Store) FinishRecording(ctx context.Context, id int64, status, errText s
 	_, err := s.db.ExecContext(ctx, `
 UPDATE recordings SET status = ?, error = ?, ended_at = ? WHERE id = ?`,
 		status, errText, time.Now().UTC().Format(time.RFC3339), id)
+	return err
+}
+
+func (s *Store) SetRecordingEnd(ctx context.Context, id int64, ends time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE recordings SET ends_at = ? WHERE id = ?`, ends.UTC().Format(time.RFC3339), id)
 	return err
 }
 
