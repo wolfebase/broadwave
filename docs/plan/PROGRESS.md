@@ -14,7 +14,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] R2 v0.2.0 tagged with CHANGELOG, deployed to Unraid via GHCR, A–D features checked on the LAN (tag v0.2.0, log in UNRAID_LOG)
 - [x] R3 Instant boot: cached shell, windowed airings, gzip/brotli + ETag, Apple snapshot cache (< 300 ms warm)
 - [x] R4 Artwork layouts by size and aspect; no upscaling past 1.25x
-- [ ] R5 Live preview frames from tuned muxes (no extra tunes)
+- [x] R5 Live preview frames from tuned muxes (no extra tunes). Unraid CPU sample is the phase R deploy line.
 - [ ] R6 Apple screenshots of B–D on iPhone, iPad, Apple TV; defects fixed or listed
 - [ ] R7 Code review of run 1; `go test -race` clean
 - [ ] Phase R deploy: tag, Unraid smoke, and preview-frame CPU under 3% of one core per mux
