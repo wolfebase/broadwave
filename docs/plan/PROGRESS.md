@@ -28,7 +28,7 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 ## Phase D — Sports
 - [x] D1 Sports provider (commit 7923323). ESPN scoreboard for twelve leagues, with F1 and NASCAR as schedules only. A live board refreshes every 30 seconds; a quiet board waits two hours. A failed fetch backs off and keeps the last good board.
 - [x] D2 Airing <-> game matching (commit ce1fcb7). A listing matches a game when both teams, or the race name, appear in the title or subtitle and the start is within 90 minutes. The game id is stored on the airing.
-- [ ] D3 Game-aware recording extension
+- [x] D3 Game-aware recording extension (commit c444120). A matched game keeps recording while it is on, and for a delay before the start. It stops 8 minutes after the game ends. A sports listing that did not match records an extra hour. The activity log says when a recording was extended.
 - [ ] D4 Team follows + team passes
 - [ ] D5 Spoiler-safe score bugs everywhere
 - [ ] D6 Sports hub redesign
