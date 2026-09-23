@@ -564,6 +564,38 @@ export interface paths {
         patch: operations["updatePass"];
         trace?: never;
     };
+    "/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listTeams"];
+        put: operations["followTeam"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["unfollowTeam"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/events": {
         parameters: {
             query?: never;
@@ -995,7 +1027,22 @@ export interface components {
             /** @description HH:MM local */
             timeEnd?: string;
             /** @enum {string} */
-            matchKind?: "title" | "contains" | "category";
+            matchKind?: "title" | "contains" | "category" | "team";
+        };
+        TeamFollow: {
+            /** Format: int64 */
+            id?: number;
+            name: string;
+            short?: string;
+            abbr?: string;
+            league?: string;
+            logo?: string;
+            color?: string;
+            /** @description Record every game for this team. */
+            record?: boolean;
+        };
+        TeamList: {
+            teams: components["schemas"]["TeamFollow"][];
         };
         PassList: {
             passes: components["schemas"]["Pass"][];
@@ -2079,6 +2126,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PassList"];
+                };
+            };
+        };
+    };
+    listTeams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Teams this household follows */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamList"];
+                };
+            };
+        };
+    };
+    followTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamFollow"];
+            };
+        };
+        responses: {
+            /** @description Teams after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamList"];
+                };
+            };
+        };
+    };
+    unfollowTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Teams after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamList"];
                 };
             };
         };

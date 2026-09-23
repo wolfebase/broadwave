@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS team_follows (
+	id INTEGER PRIMARY KEY,
+	name TEXT NOT NULL,
+	short_name TEXT NOT NULL DEFAULT '',
+	abbr TEXT NOT NULL DEFAULT '',
+	league TEXT NOT NULL DEFAULT '',
+	logo TEXT NOT NULL DEFAULT '',
+	color TEXT NOT NULL DEFAULT '',
+	record INTEGER NOT NULL DEFAULT 0,
+	last_notice TEXT NOT NULL DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS team_follows_name ON team_follows(league, name);

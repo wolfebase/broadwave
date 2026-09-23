@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"waveguide/internal/sports"
 	"waveguide/internal/store"
 )
 
@@ -68,6 +69,9 @@ func passMatches(pass store.Pass, airing store.Airing) bool {
 	kind := strings.ToLower(strings.TrimSpace(pass.MatchKind))
 	title := strings.ToLower(strings.TrimSpace(airing.Title))
 	want := strings.ToLower(strings.TrimSpace(pass.Title))
+	if strings.EqualFold(pass.Kind, "team") || kind == "team" {
+		return sports.Mentions(airing.Title+" "+airing.Subtitle, pass.Title)
+	}
 	switch kind {
 	case "category":
 		if !categoryHas(airing.Category, want) {

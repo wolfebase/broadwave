@@ -18,6 +18,17 @@ func (stubSports) Scoreboard(context.Context, string, time.Time) ([]sports.Game,
 	return []sports.Game{{ID: "1", League: "nfl", Name: "Chiefs at Bills", State: "pre", Start: time.Now()}}, nil
 }
 
+func TestFollowTeamRoute(t *testing.T) {
+	h := (&Server{Store: testStore(t)}).Handler()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/teams", strings.NewReader(`{"name":"Kansas City Chiefs","short":"Chiefs","league":"nfl","record":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), "Chiefs") {
+		t.Fatalf("%d %s", res.Code, res.Body.String())
+	}
+}
+
 func TestScoreboardReturnsGames(t *testing.T) {
 	h := (&Server{Store: testStore(t), Sports: stubSports{}}).Handler()
 	res := get(t, h, "/api/v1/sports/scoreboard?league=nfl")

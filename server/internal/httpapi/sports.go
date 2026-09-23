@@ -113,6 +113,7 @@ func (s *Server) LinkGames(ctx context.Context) {
 	if len(links) > 0 {
 		log.Printf("sports: matched %d listings", len(links))
 	}
+	s.NoteTeams(ctx)
 }
 
 // ExtendRecordings keeps a matched game recording going until the game is over.

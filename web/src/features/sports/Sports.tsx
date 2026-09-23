@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { followTeam, getTeams } from "../../api";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { navigate } from "../../app/router";
 import { categoryOf, dayLabel, isRecording, minutesLeft, progress, recordingKeys, spanLabel } from "../../lib/guide";
-import type { Airing, Channel } from "../../types";
+import type { Airing, Channel, TeamFollow } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
 import { ChannelBadge, Chip, Empty, LiveDot, Progress, RecDot } from "../../ui/primitives";
 import "./sports.css";
@@ -30,6 +31,10 @@ export function Sports() {
   const player = usePlayer();
   const [range, setRange] = useState<Range>("today");
   const [leagueFilter, setLeague] = useState("all");
+  const [teams, setTeams] = useState<TeamFollow[]>([]);
+  useEffect(() => {
+    getTeams().then((r) => setTeams(r.teams)).catch(() => setTeams([]));
+  }, []);
   const keys = useMemo(() => recordingKeys(planned, recordings), [planned, recordings]);
 
   const all = useMemo(() => {
@@ -97,7 +102,7 @@ export function Sports() {
           <div className="sports-grid">
             {list.map(({ channel, airing }) => {
               const liveNow = Date.parse(airing.start) <= now;
-              const teams = matchup(airing);
+              const sides = matchup(airing);
               const rec = isRecording(keys, airing, now);
               const passed = passes.some((p) => p.title.toLowerCase() === airing.title.toLowerCase());
               return (
@@ -107,11 +112,11 @@ export function Sports() {
                     {liveNow ? <LiveDot /> : <span className="gc-time">{spanLabel(airing)}</span>}
                     {rec ? <RecDot scheduled={rec === "scheduled"} /> : null}
                   </div>
-                  {teams ? (
+                  {sides ? (
                     <div className="gc-matchup">
-                      <span className="team">{teams[0]}</span>
+                      <span className="team">{sides[0]}</span>
                       <span className="at">at</span>
-                      <span className="team">{teams[1]}</span>
+                      <span className="team">{sides[1]}</span>
                     </div>
                   ) : (
                     <h3 className="gc-title">{airing.subtitle || airing.title}</h3>
@@ -140,6 +145,22 @@ export function Sports() {
                           Record all
                         </button>
                       ) : null}
+                      {sides?.map((side) => {
+                        const mine = teams.find((team) => team.short?.toLowerCase() === side.toLowerCase() || team.name.toLowerCase() === side.toLowerCase());
+                        if (mine?.record) return <span key={side} className="dim">Every {side} game</span>;
+                        if (mine) {
+                          return (
+                            <button key={side} type="button" className="btn small ghost" onClick={() => void followTeam({ ...mine, record: true }).then((r) => setTeams(r.teams))}>
+                              Record every {side} game
+                            </button>
+                          );
+                        }
+                        return (
+                          <button key={side} type="button" className="btn small ghost" onClick={() => void followTeam({ name: side, short: side, league: league(airing) }).then((r) => setTeams(r.teams))}>
+                            Follow {side}
+                          </button>
+                        );
+                      })}
                     </span>
                   </div>
                 </article>
