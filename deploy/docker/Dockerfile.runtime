@@ -5,5 +5,6 @@ RUN apt-get update \
 COPY ota-viewer /usr/local/bin/ota-viewer
 RUN chmod 755 /usr/local/bin/ota-viewer
 EXPOSE 8477
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD ["/usr/local/bin/ota-viewer", "-healthcheck"]
 ENTRYPOINT ["/usr/local/bin/ota-viewer"]
 CMD ["-config", "/config", "-addr", ":8477"]

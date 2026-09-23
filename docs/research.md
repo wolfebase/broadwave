@@ -13,7 +13,8 @@ Facts gathered while building. Each should shape a decision or a test.
 
 ## Guide data
 
-- The SiliconDust XMLTV feed (`api.hdhomerun.com/api/xmltv`) no longer needs their DVR subscription as of May 2026. Each request authenticates with the tuner's `DeviceAuth`, which rotates every 16 to 24 hours, so it is read fresh per request and never stored.
+- The SiliconDust XMLTV feed (`api.hdhomerun.com/api/xmltv`) gives **2 days to everyone and 14 days with an HDHomeRun DVR subscription** (correction, verified 2026-09-23). Each request authenticates with the tuner's `DeviceAuth` (rotates, valid 16-24 h, read fresh per request, never stored), must accept gzip, and SiliconDust asks for the next download at a **random 20-28 h** after the last. It includes `<icon src>` channel logos and program images. On the user's lineup it lists only 9 of 27 channels.
+- SiliconDust also has a JSON guide endpoint (`api.hdhomerun.com/api/guide?DeviceAuth=...`, fields `ImageURL`, `EpisodeNumber`, `Synopsis`, paged by start time) — check coverage and terms before using it.
 - Schedules Direct is the fallback, with a paid account.
 
 ## Competitors
@@ -28,3 +29,15 @@ Facts gathered while building. Each should shape a decision or a test.
 - iOS 27 and tvOS 27 refine Liquid Glass (better diffusion, a user transparency slider, darker edges). Standard components pick this up automatically. tvOS applies glass to focused standard controls on Apple TV 4K (2nd generation) and later.
 - WWDC25 introduced multiview sync via `AVPlaybackCoordinationMedium` and AirPlay routing with `AVRoutingPlaybackArbiter`.
 - WWDC26 introduced the Now Playing framework, remote media sessions, and CarPlay video apps (iOS 27).
+
+## Research for the master plan (2026-09-23)
+
+- Multiview on Apple: `AVPlaybackCoordinationMedium`, `AVRoutingPlaybackArbiter`, `networkResourcePriority` — WWDC25 session 302 and the "Creating a seamless multiview playback experience" sample (tvOS/iOS 26+).
+- hls.js multiview: ~3-4 players per page is reasonable; fMP4 cuts CPU; Chrome MSE limits ~150 MB video / 12 MB audio per SourceBuffer, so cap back buffer per tile and use `capLevelToPlayerSize`. iPhone Safari uses ManagedMediaSource (hls.js 1.6+).
+- LL-HLS: ffmpeg's HLS muxer does not emit `EXT-X-PART`/`EXT-X-PRELOAD-HINT`; a custom packager with blocking playlist reload is required. hls.js needs `lowLatencyMode: true`; AVPlayer supports it natively.
+- ATSC 3.0: AC-4 decode exists in jellyfin-ffmpeg (experimental, resample to 48 kHz); DRM (A3SA) stations can't be decrypted.
+- Sports status: ESPN unofficial scoreboard `site.api.espn.com/apis/site/v2/sports/{sport}/{league}/scoreboard?dates=YYYYMMDD` with `status.type.state` pre/in/post, competitors, logos, colors, broadcasts.
+- Live Activities: iOS 18+ broadcast push channels need the developer's APNs key; self-hosted servers can't push without it.
+- Top Shelf: `TVTopShelfContentProvider` + `TVTopShelfCarouselContent`; Swift 6 needs `@preconcurrency import TVServices` or the completion-handler override.
+- Unraid Community Apps: public repo, OSI license, `ca_profile.xml` with non-empty `<Profile>`, template XML, real icon; validate at ca.unraid.net/submit/new.
+- Channels DVR 2026: Enhanced Commercial Detection (fingerprinting, re-fingerprint, idle backfill), season-aware intro detection, multiview up to 4 (live only, no buffer).

@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# End-to-end relay test with no tuner: ffmpeg serves a live test broadcast over
+# HTTP, the server tunes it as a "link" source, and clients with different
+# capabilities watch at once. Verifies renditions, the shared timeline, and the
+# export path. Needs ffmpeg, curl, python3, sqlite3.
+#
+#   scripts/relay-smoke.sh
+set -uo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PORT=18499
+SRC_PORT=18500
+T=$(mktemp -d)
+BIN="$T/otav-smoke"
+(cd "$ROOT" && go build -o "$BIN" ./server/cmd/ota-viewer) || exit 1
+
+ffmpeg -hide_banner -loglevel error -re \
+  -f lavfi -i "testsrc2=size=1280x720:rate=60000/1001" -f lavfi -i "sine=frequency=500" \
+  -c:v libx264 -preset ultrafast -g 30 -pix_fmt yuv420p -c:a ac3 \
+  -f mpegts -listen 1 "http://127.0.0.1:$SRC_PORT/live.ts" >"$T/src.log" 2>&1 &
+SRC=$!
+sleep 1
+"$BIN" -config "$T" -addr "127.0.0.1:$PORT" -hdhr 127.0.0.1:1 -bonjour=false >"$T/log.txt" 2>&1 &
+SRV=$!
+trap 'kill $SRV $SRC 2>/dev/null; wait 2>/dev/null' EXIT
+sleep 2
+API="http://127.0.0.1:$PORT/api/v1"
+curl -s -XPOST "$API/sources" -d "{\"kind\":\"link\",\"name\":\"Smoke Broadcast\",\"url\":\"http://127.0.0.1:$SRC_PORT/live.ts\"}" >/dev/null
+ID=$(curl -s "$API/channels" | python3 -c "import sys,json; print([c['id'] for c in json.load(sys.stdin)['channels'] if c['displayName']=='Smoke Broadcast'][0])")
+fail=0
+check() { if eval "$2"; then echo "PASS $1"; else echo "FAIL $1"; fail=1; fi; }
+
+TV=$(curl -s -XPOST "$API/watch" -d "{\"channelId\":$ID,\"caps\":{\"platform\":\"tvos\",\"video\":[\"h264\",\"hevc\"],\"audio\":[\"aac\",\"ac3\"]}}")
+check "apple tv session" "echo '$TV' | grep -q rendition"
+sleep 6
+FO=$(sqlite3 "$T/ota-viewer.db" "select field_order from channels where id=$ID")
+check "field-order probe recorded ($FO)" "[ -n '$FO' ]"
+TV2=$(curl -s -XPOST "$API/watch" -d "{\"channelId\":$ID,\"caps\":{\"platform\":\"tvos\",\"video\":[\"h264\",\"hevc\"],\"audio\":[\"aac\",\"ac3\"]}}" | python3 -c "import sys,json;print(json.load(sys.stdin)['rendition'])")
+check "progressive h264 goes direct (copy.copy, got $TV2)" "[ '$TV2' = 'copy.copy' ]"
+PH=$(curl -s -XPOST "$API/watch" -d "{\"channelId\":$ID,\"caps\":{\"platform\":\"ios\",\"video\":[\"h264\"],\"audio\":[\"aac\"]},\"prefs\":{\"quality\":\"saver\"}}" | python3 -c "import sys,json;print(json.load(sys.stdin)['rendition'])")
+check "data saver gets its own rendition ($PH)" "[ '$PH' = '540.aac2.broadcast' ]"
+sleep 6
+for k in copy.copy 540.aac2.broadcast; do
+  PL=$(curl -s "http://127.0.0.1:$PORT/media/live/$ID/$k/index.m3u8")
+  check "$k playlist has program date-times" "echo '$PL' | grep -q PROGRAM-DATE-TIME"
+  check "$k is CMAF with init segment" "echo '$PL' | grep -q 'EXT-X-MAP'"
+  check "$k withholds segment 0" "! echo '$PL' | grep -q 'seg00000'"
+done
+curl -s -m 10 "http://127.0.0.1:$PORT/export/stream/$ID" -o "$T/export.ts"
+SZ=$(stat -f%z "$T/export.ts" 2>/dev/null || stat -c%s "$T/export.ts")
+check "export stream carries video ($SZ bytes)" "[ ${SZ:-0} -gt 100000 ]"
+check "m3u export lists the channel" "curl -s http://127.0.0.1:$PORT/export/lineup.m3u | grep -q 'Smoke Broadcast'"
+curl -s -XPOST "$API/watch/$ID/stop" -d '{}' >/dev/null
+echo "logs: $T"
+exit $fail

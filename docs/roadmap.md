@@ -1,5 +1,7 @@
 # Roadmap
 
+> Superseded for execution by `docs/plan/MASTER_PLAN.md` (phases A-L) and its checklist `docs/plan/PROGRESS.md`. This file keeps the high-level history.
+
 Phases run roughly in order. Later phases can start when their dependencies are in place.
 
 ## 1. Foundation
