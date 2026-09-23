@@ -15,6 +15,16 @@ Template: `/boot/config/plugins/dockerMan/templates-user/my-OTA-Viewer.xml`.
 ## Entries
 <!-- Append: date, commit, what was deployed, checks run, results, issues. -->
 
+## 2026-09-23 14:55 CDT — R2 deploy v0.2.0
+
+- Image `ghcr.io/wolfebase/waveguide:0.2.0` (tag `v0.2.0`, commit `83c8904`), pulled on TUS with `MODE=ghcr`. Container `Waveguide`, host network, `/dev/dri`, `TZ=America/Chicago`. `/api/v1/server` reports `version: v0.2.0`, encoder `h264_vaapi`.
+- Startup: discovery found 1 device. Guide still 9 of 27 channels, 575 airings, listings through 2026-09-25. Tuners were free before and after the checks. Jeopardy on 4.1 was due at 20:00 UTC; both tuners were released at 19:54 UTC.
+- Guide matching: listings on 4.1, 5.1, 9.1, 9.4, 29.1, 38.1, 39.7, 41.1, 62.1. Search for Jeopardy returned 4 airings and 1 recording.
+- Sports: live scoreboard (WSH @ DET 4–1). Hide scores blanked that game, then the setting was turned back off and the score returned.
+- Team pass: following "Waveguide Probe FC" with record on created a team pass; unfollowing removed it. The Jeopardy series pass was left as it was.
+- Multiview 2-up: 4.1 and 9.1 as `540.none.broadcast` on VAAPI (`h264_vaapi`, deinterlace on 9.1). Both playlists carried program date times; a segment from each started with an fMP4 `styp` box. During the pair, `docker stats` showed CPU 47.62% and memory 341.5 MiB. Each ffmpeg was about 18% of a core. `intel_gpu_top`: render engine 12–20%, video enhance 11–20%, video codec 3–5%, GPU power about 0.5 W. Idle afterward: CPU 0%, memory 106 MiB. No Waveguide ffmpeg left running.
+- iPhone 17 Pro and Apple TV 4K (1080p) simulators opened Home against `http://192.168.1.2:8477` and showed The Drew Barrymore Show on 4.1. They did not tune. Screenshots: `docs/screenshots/r2-iphone.jpg`, `docs/screenshots/r2-tv.jpg`.
+
 ## 2026-09-23 11:04 CDT — A3 migrate OTA-Viewer to Waveguide (v0.1.0)
 
 - Appdata moved `/mnt/cache/appdata/ota-viewer` → `/mnt/cache/appdata/waveguide`. Catalog backups: `backups/ota-viewer-20260923-105232.db` and `backups/ota-viewer-20260923-105753.db`. On start the server renamed `config/ota-viewer.db` to `config/waveguide.db`. `schema_migrations` is 1, 2, 3, 4. Server name is "Waveguide on TUS".
