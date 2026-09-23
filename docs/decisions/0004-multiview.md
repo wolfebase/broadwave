@@ -14,6 +14,8 @@ Watch two or more live channels at once, aligned to the same wall-clock moment, 
 
 **One room for the session.** Tiles join `multiview:<id>`. The room uses the same anchor math as any other room, so every tile aims at one program date-time. The room is a group: pause, play, and jump to live move every tile. Each tile still reads its own channel's playlist; the shared value is wall-clock time, which is the same on every broadcast timeline.
 
+**Apple tiles are player layers.** Each tile is its own `AVPlayer`, not its own player controller. Mute, network priority, and `AVRoutingPlaybackArbiter` follow focus, so AirPlay takes the tile you are listening to. `AVPlaybackCoordinationMedium` is not attached: it seeks every player onto one timeline, and these are different live edges. The shared room already pauses them together.
+
 **Mosaic later.** A single ffmpeg `xstack` of several channels (`mosaic:<ids>:<layout>`) is for AirPlay and older devices. It waits until the tiles themselves are solid, because a mosaic is a delivery shortcut, not the way the apps watch.
 
 ## Consequences
