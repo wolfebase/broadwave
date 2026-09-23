@@ -1,4 +1,4 @@
-import type { Airing, Caps, Channel, ChannelPatch, Device, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, ServerInfo, Settings, StorageInfo, TunerStatus, VirtualChannel, WatchSession } from "./types";
+import type { Airing, Caps, Channel, ChannelPatch, Device, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, TunerStatus, VirtualChannel, WatchSession } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -81,6 +81,10 @@ export function planMultiview(channelIds: number[]) {
 
 export function getServer() {
   return request<ServerInfo>("/api/v1/server");
+}
+
+export function search(q: string) {
+  return request<{ query: string; airings: SearchAiring[]; recordings: Recording[] }>(`/api/v1/search?q=${encodeURIComponent(q)}`);
 }
 
 export function getAirings() {

@@ -34,7 +34,7 @@ final class NowPlaying {
 }
 
 enum AppTab: Hashable {
-    case home, guide, sports, recordings, settings
+    case home, guide, search, sports, recordings, settings
 }
 
 struct RootView: View {
@@ -114,6 +114,9 @@ struct RootView: View {
             }
             Tab("Guide", systemImage: "square.grid.3x3.topleft.filled", value: AppTab.guide) {
                 NavigationStack { GuideView() }
+            }
+            Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) {
+                NavigationStack { SearchView() }
             }
             Tab("Sports", systemImage: "sportscourt.fill", value: AppTab.sports) {
                 NavigationStack { SportsView() }

@@ -69,6 +69,7 @@ func (s *Server) Handler() http.Handler {
 	api("POST /schedule/skip", s.skipAiring)
 	api("GET /events", s.events)
 	api("POST /guide/refresh", s.refreshGuide)
+	api("GET /search", s.search)
 	api("GET /passes", s.passes)
 	api("POST /passes", s.addPass)
 	api("PATCH /passes/{id}", s.updatePass)

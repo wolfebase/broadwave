@@ -59,6 +59,11 @@ export type StorageInfo = {
   watermarkGB: number;
 };
 
+export type SearchAiring = Airing & {
+  guideNumber: string;
+  channelName: string;
+};
+
 export type Airing = {
   id: number;
   channelId: number;

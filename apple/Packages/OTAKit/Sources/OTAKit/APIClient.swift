@@ -73,6 +73,11 @@ public struct APIClient: Sendable {
         return try await send("GET", "/channels?guide=1", as: R.self).channels
     }
 
+    public func search(_ query: String) async throws -> SearchResult {
+        let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        return try await send("GET", "/search?q=\(q)")
+    }
+
     public func airings(hours: Int = 48) async throws -> [Airing] {
         struct R: Decodable { var airings: [Airing] }
         return try await send("GET", "/airings?hours=\(hours)", as: R.self).airings

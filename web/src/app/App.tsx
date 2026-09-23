@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { Guide } from "../features/guide/Guide";
 import { Home } from "../features/home/Home";
 import { events } from "../lib/events";
-import { GuideIcon, HomeIcon, RecordingsIcon, ScheduleIcon, SettingsIcon, SportsIcon } from "../ui/icons";
+import { GuideIcon, HomeIcon, RecordingsIcon, ScheduleIcon, SearchIcon, SettingsIcon, SportsIcon } from "../ui/icons";
 import { DataProvider, useData } from "./data";
 import { useLayout } from "./layout";
 import { PlayerProvider, usePlayer } from "./player";
@@ -18,10 +18,12 @@ const Setup = lazy(() => import("../features/setup/Setup").then((m) => ({ defaul
 const DiagnosticsPage = lazy(() => import("../features/setup/Diagnostics").then((m) => ({ default: m.DiagnosticsPage })));
 const VirtualPage = lazy(() => import("../features/pages").then((m) => ({ default: m.VirtualPage })));
 const Multiview = lazy(() => import("../features/multiview/Multiview").then((m) => ({ default: m.Multiview })));
+const SearchPage = lazy(() => import("../features/search/Search").then((m) => ({ default: m.SearchPage })));
 
 const tabs = [
   { path: "/", label: "Home", Icon: HomeIcon },
   { path: "/guide", label: "Guide", Icon: GuideIcon },
+  { path: "/search", label: "Search", Icon: SearchIcon },
   { path: "/sports", label: "Sports", Icon: SportsIcon },
   { path: "/recordings", label: "Recordings", Icon: RecordingsIcon },
   { path: "/schedule", label: "Schedule", Icon: ScheduleIcon },
@@ -60,6 +62,7 @@ function Shell() {
   if (path === "/setup" || firstRun) page = <Setup />;
   else if (path === "/diagnostics") page = <DiagnosticsPage />;
   else if (path === "/guide") page = <Guide />;
+  else if (path === "/search") page = <SearchPage />;
   else if (path === "/sports") page = <Sports />;
   else if (path === "/recordings" || path === "/library") page = <RecordingsPage />;
   else if (path === "/schedule") page = <SchedulePage />;

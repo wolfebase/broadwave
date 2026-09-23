@@ -29,6 +29,18 @@ public struct Channel: Codable, Sendable, Hashable, Identifiable {
     public var artUrl: String?
 }
 
+public struct SearchResult: Codable, Sendable {
+    public var query: String?
+    public var airings: [Airing]
+    public var recordings: [Recording]
+
+    public init(query: String? = nil, airings: [Airing] = [], recordings: [Recording] = []) {
+        self.query = query
+        self.airings = airings
+        self.recordings = recordings
+    }
+}
+
 public struct Airing: Codable, Sendable, Hashable, Identifiable {
     public var id: Int64
     public var channelId: Int64
@@ -49,6 +61,8 @@ public struct Airing: Codable, Sendable, Hashable, Identifiable {
     public var finale: Bool?
     public var rating: String?
     public var cast: String?
+    public var guideNumber: String?
+    public var channelName: String?
     public var start: Date
     public var end: Date
 
