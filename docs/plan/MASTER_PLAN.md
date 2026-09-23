@@ -1,256 +1,288 @@
-# Waveguide — Master Plan: from great to spectacular
+# Waveguide — Master Plan v2
 
-Written 2026-09-23 as a handoff. The product is named **Waveguide** (renamed from "OTA Viewer" on 2026-09-23; see `docs/brand.md`). The repo folder on disk is still `ota viewer`; do not rename it. The executing agent works through **every phase in order without stopping for approval between milestones**, committing as it goes, and only stops when the whole plan is done or a hard blocker (listed in `docs/plan/BLOCKERS.md`) makes further progress impossible everywhere.
+Written 2026-09-23 after reviewing run 1 (tasks A1–D6, 46 commits). This version supersedes v1 (see git history before `0984064`). Task IDs from v1 are kept so `PROGRESS.md` carries over; new tasks get new IDs (R*, B5, C7–C9, D7–D8, G10–G11, K6, M*).
+
+The product is **Waveguide** (renamed from "OTA Viewer"; see `docs/brand.md`). The repo folder on disk is still `ota viewer`; quote paths and do not rename it.
 
 Read in this order before touching code:
 
-1. `AGENTS.md` (project guide), then `.cursor/rules/*.mdc`
-2. This file, then `docs/plan/PROGRESS.md` (live checklist; update it as you go)
-3. Skills: `waveguide-dev-loop`, `waveguide-media-pipeline`, `waveguide-apple`, `waveguide-unraid` (personal), `waveguide-multiview`
-4. `docs/architecture.md`, `docs/decisions/0001-0003`, `docs/research.md`
+1. `AGENTS.md` (project guide + Lessons learned), then `.cursor/rules/*.mdc`
+2. This file, then `docs/plan/PROGRESS.md` (start at "Resume here"), `docs/plan/BLOCKERS.md`, `docs/plan/UNRAID_LOG.md`
+3. Skills: `waveguide-dev-loop`, `waveguide-media-pipeline`, `waveguide-apple`, `waveguide-multiview` (project, `.cursor/skills/`), `waveguide-unraid` (personal, `~/.cursor/skills/`)
+4. `docs/architecture.md`, `docs/decisions/0001-0005`, `docs/research.md`
 
 ---
 
-## 0. Operating mode (non-negotiable)
+## 0. How to run this plan (read this section twice)
 
-- **Autonomous run.** Do not pause at phase boundaries to ask. Finish a task, verify it, commit it, tick it in `PROGRESS.md`, move to the next. The user explicitly wants the agent to "rip through the whole thing."
-- **Verify, don't assume.** Every task has acceptance checks. Server: Go tests + `scripts/relay-smoke.sh`. Web: typecheck + build + browser check at desktop, phone, and TV sizes with the real tuner. Apple: both schemes build + simulator screenshot of the changed screen. Unraid: deploy and hit it from the LAN.
-- **Commit small and often** with descriptive messages (what + why). Never leave the tree broken at a commit.
-- **When blocked**, write the blocker (what, why, what was tried, what would unblock) to `docs/plan/BLOCKERS.md`, stub or feature-flag around it, and continue with the next task. Legitimate blockers are only things needing the user's money, hardware, or a third party's approval (paid data accounts, ATSC 3.0 hardware, review queues). **You are expected to handle yourself:** finding the Apple developer team ID, signing, App Store Connect records, TestFlight uploads (use the `asc-*` skills in `~/.claude/skills/`), creating/pushing the GitHub repo and releases (`gh` is logged in as `twolfekc`), and researching + submitting to Unraid Community Apps.
-- **Protect what works.** The relay, Whole-Home Sync (15 ms measured), CMAF pipeline, and the real-tuner playback paths are proven. Any change to `internal/live`, `web/src/lib/sync.ts`, or `OTAKit/SyncEngine.swift` must re-run the relay smoke test and the two-screen sync measurement (see skill `waveguide-dev-loop`).
-- **Keep the docs true.** Update `docs/architecture.md`, ADRs, `api/openapi.yaml` (drift test enforces routes), `AGENTS.md`, and the skills when behavior changes. Add ADRs for big decisions (multiview, guide sources, LL-HLS, auth).
-- **Real hardware.** HDHomeRun CONNECT DUO at 192.168.1.252 (2 tuners, ATSC 1.0, 27 channels). Unraid TUS at 192.168.1.2 (i9-12900K, UHD 770, VAAPI). The dev Mac has VideoToolbox. The user's live catalog is in `data/` (never delete it; copy it for tests).
+### 0.1 Nonstop protocol
+
+Run 1 did good work but ended its turn after almost every phase; the user had to type "continue" eight times. That is the main thing to fix.
+
+1. **Start with a goal.** First action: call `GetDynamicTools {"namespace":"cursor","toolName":"CreateGoal"}`, then `CallDynamicTool` `cursor/CreateGoal` with the objective: "Complete every task in docs/plan/PROGRESS.md for Waveguide (tick it or record a real blocker in BLOCKERS.md), verifying, committing, pushing, and deploying as the plan says." The user explicitly asks for this goal. Only call `UpdateGoal complete` when every line in `PROGRESS.md` is ticked or blocked.
+2. **Never end your turn to report progress.** A finished task or phase is not a stopping point. Progress goes into `PROGRESS.md`, commit messages, and `UNRAID_LOG.md`, not into a chat summary. Write the next tool call instead of a recap.
+3. **Background notifications are not stops.** When a background shell or subagent finishes, read its result, act on it, and continue with the current task in the same turn. Do not summarize it to the user.
+4. **The only reasons to end a turn:** the plan is complete; every remaining task is blocked and recorded in `BLOCKERS.md`; or an irreversible action needs the user (App Store submission, deleting user data, spending money).
+5. **Protect your context.** Delegate bulky work to subagents (Task tool) with self-contained prompts (paths, commands, acceptance, what to return): research (`docs-researcher`/`generalPurpose`), code exploration (`explore`), browser verification at three sizes (`browser-use`), Apple simulator screenshot runs, and code review (`code-reviewer`). Run independent subagents in parallel when they touch disjoint directories (for example `server/` vs `apple/`). Only the main agent commits. Never let two agents edit the same files at once.
+6. **Crash-safe resume.** The top of `PROGRESS.md` has a "Resume here" block: the current task ID, what is half done, and the next command. Update it at the start of every task. If the session dies, a fresh agent reads it and continues without rediscovery.
+7. **No silent deferrals.** If a task's acceptance can't be met in full, finish what can be, then add a new explicit task line in `PROGRESS.md` for the remainder, placed in the execution order (section 4). Prose notes alone are not enough (run 1 left the mosaic, the 18 empty channels, and TestFlight uploads only as notes).
+
+### 0.2 Per-task loop
+
+1. Update "Resume here". Read the relevant code and skill.
+2. Implement. Match the surrounding style (`AGENTS.md` working agreements, copy voice).
+3. `make check` (Go tests, web typecheck, eslint, swiftlint, swiftformat — the same gates as CI). Plus the task's gates: `scripts/relay-smoke.sh` for relay changes; the two-screen sync measurement for anything under `internal/live`, `web/src/lib/sync.ts`, or `OTAKit/SyncEngine.swift`; browser checks at phone (390×844), desktop (1440×900), and TV (1920×1080) for web UI; `make apple` + a simulator screenshot for Apple UI.
+4. One commit per task that includes its `PROGRESS.md` tick (no separate "Tick X" commits). Message: what changed and why.
+5. `git push`, then check the previous push's CI (`gh run list -L 3`). **Red CI is stop-the-line:** fix it before the next task. Run 1 left `main` red from D3 to D6 without noticing (swiftlint, plus an iOS 27-only API). CI builds with **Xcode 26.6** while this Mac has **Xcode 27** (Swift 6.4): guard iOS/tvOS 27 APIs with `#if compiler(>=6.4)` around the `#available` check.
+
+### 0.3 Per-phase loop
+
+At the end of every phase (R, C, K1, G1, F, E, D-extras, B5, I, G, H, J, K, L):
+
+1. Add a `CHANGELOG.md` entry and tag `v0.N.0` (next minor). The release workflow publishes `ghcr.io/wolfebase/waveguide:<tag>` for amd64 and arm64.
+2. Deploy to Unraid with `MODE=ghcr` (skill `waveguide-unraid`; large SSH uploads over the tunnel drop, so pull from GHCR). Smoke it: health, version, a channel plays, two tabs sync, the phase's features work. Log it in `UNRAID_LOG.md`. Run 1 deployed only once (A3); Unraid still runs v0.1.0.
+3. If Apple code changed and A7 is unblocked, run `scripts/testflight.sh`.
+4. Update `docs/architecture.md`, ADRs, `api/openapi.yaml`, `AGENTS.md` lessons, and skills where behavior changed.
+
+### 0.4 Shared tuner etiquette
+
+The Mac dev server and the Unraid server share one HDHomeRun CONNECT DUO (2 tuners). Unraid is the household's real DVR.
+
+- Before any test that tunes, check Unraid: `curl -s http://192.168.1.2:8477/api/v1/diagnostics` (tuners in use, active recordings) and `/api/v1/schedule` (recordings in the next 30 minutes). If a recording is on or due, test with at most one tuner, or use the relay smoke test or the fake tuner (K1).
+- Never cause a scheduled recording to fail. Never hold a tuner after a test; stop dev servers you started (`pkill -9 -x otav`) and leave at most one running.
+
+### 0.5 Secrets and accounts
+
+The user allows reading other projects under `~/Projects` and `~/.blitz` for keys and credentials. Never commit or log them. The App Store Connect API key is in `~/.blitz/asc-credentials.json`; the `asc` CLI is `~/.blitz/bin/asc`.
 
 ---
 
 ## 1. Where it stands (verified 2026-09-23)
 
-**Server (Go, `server/`)**
-- One tune per RF frequency; subchannels, renditions, recordings, and exports read one stream (`internal/live/hub.go`).
-- Renditions are independent ffmpeg processes keyed `video.audio[.mode]` (`copy`, `1080`, `720`, `540` × `copy`, `aac2`, `aac6`). One viewer's change never restarts another (tested).
-- `Decide()` picks per device: Apple gets original H.264 + AC-3; browsers get copy video + AAC; MPEG-2 is transcoded; unprobed H.264 is deinterlaced until the background ffprobe learns field order (stored in `channels.field_order`).
-- CMAF/fMP4 HLS with `-copyts`; the server reads each segment's first video PTS from `tfdt`/`trun` and stamps `EXT-X-PROGRAM-DATE-TIME` from a per-feed Timeline, identical across renditions. Segment 0 withheld. Watch waits for 3 segments.
-- Encoders: NVENC, QSV, VideoToolbox (with `-a53cc 0`), VAAPI, libx264 fallback.
-- Realtime WebSocket `/api/v1/ws`: activity, live.changed, clock sync, sync rooms (follow + group).
-- Bonjour `_waveguide._tcp` with id/name/version TXT. HDHomeRun emulator on :8478 (whole lineup), `/export/lineup.m3u`, `/export/guide.xml`, `/export/stream/{id}`.
-- Numbered SQL migrations (0001-0003), server identity, `/api/v1/diagnostics`, `-healthcheck` flag, index.html no-cache.
-- DVR: passes (title/contains/category, pads, priority, keep, new-only), conflicts, comskip/blackdetect markers, virtual (library) channels.
+| Thing | Value |
+| --- | --- |
+| GitHub | `wolfebase/waveguide` (public; `twolfekc` is not a GitHub account, see BLOCKERS) |
+| Images | `ghcr.io/wolfebase/waveguide` (v0.1.0, amd64 + arm64, public) |
+| Apple | team `D4MC63SS36`, bundle `com.wolfeup.waveguide` (iOS + tvOS), App Group `group.com.wolfeup.waveguide` (not yet on profiles) |
+| Unraid | TUS `root@192.168.1.2`, container `Waveguide`, `ghcr.io/wolfebase/waveguide:0.1.0`, host network, VAAPI, appdata `/mnt/cache/appdata/waveguide`, recordings `/mnt/user/media/ota-recordings` |
+| Tuner | CONNECT DUO `192.168.1.252`, 2 tuners, 27 channels, ATSC 1.0 |
+| Network | This Mac reaches TUS through `utun4`, so Bonjour from TUS is not visible here. Check Bonjour on TUS itself (`avahi-browse -rt _waveguide._tcp`); point simulators at `http://192.168.1.2:8477` by address. |
 
-**Web (`web/`)**: React 19 + Vite, design tokens (`design/tokens.json` -> CSS + Swift), glass shell, Home (hero, On now, Sports, Tonight, recordings), Guide (virtualized grid, tally now line, category tints, progress fill, recording badges, jump, program sheet, phone On-now list), Sports hub, persistent live player (full <-> mini on one `<video>`), stream info, mini guide, options, Whole-Home Sync engine (`lib/sync.ts`), setup wizard (not yet visually verified), diagnostics page, route code-splitting (81 KB gz initial).
+**Done in run 1:** setup wizard and first-run detection (A1), SiliconDust refresh cadence (A2), Unraid migration and deploy (A3), lint in CI and web on `/api/v1` (A4), crash and SIGTERM recovery (A5), GitHub + GHCR (A6), Apple signing and archive (A7, upload blocked), multiview on web and Apple with tile renditions, tuner plan, and a shared room (B1–B4), guide matching, extra sources, artwork, rich programs, guide UX, and search (C1–C6), ESPN scores, game matching, game-aware recording, team passes, spoiler-safe scores, and the sports hub (D1–D6).
 
-**Apple (`apple/`)**: XcodeGen project (iOS + tvOS 26.1), `OTAKit` (models tested against real JSON, API client, Bonjour discovery, event socket, AVPlayer SyncEngine, AppStore, guide logic), `OTAUI` (tokens, components). Screens: Connect, Home, Guide (grid with pinned column/header; iPhone On-now list), Sports, Recordings, Settings, AVPlayerViewController live player (sync pill, channel up/down, record, tvOS Channels menu), recording player, deep links (`waveguide://watch/<id>`, `connect?url=`), debug `-OTAWatch <id>`. Verified live playback on iPhone 17 Pro and Apple TV 4K simulators.
+**Found in review (v2 fixes these):**
 
-**Deploy**: Dockerfile (web + Go multi-stage, VA drivers, HEALTHCHECK), Dockerfile.runtime (prebuilt binary), compose + Unraid template (host network), GHCR release workflow (amd64+arm64), CI (Go, web, Apple, Docker). No GitHub remote yet (`gh` is logged in as `twolfekc`); image names still say `ghcr.io/twolfekc/waveguide` placeholders. Apple `DEVELOPMENT_TEAM` is empty (simulator-only so far). `scripts/dev-server.sh`, `scripts/relay-smoke.sh`, `scripts/deploy-unraid.sh`.
-
-**Known gaps and debt (fix early)**
-1. **Guide coverage is poor:** only 9 of 27 channels have listings, and only ~2 days deep. SiliconDust's free XMLTV gives 2 days (14 needs their DVR subscription). Refreshes follow their 20-28 h rule (A2). Coverage is Phase C.
-2. The Unraid container still runs the **old build, bridge network, old template** — no Bonjour, no new UI. See Phase 1.
-3. Setup wizard not visually verified; first-run detection heuristic (`setupComplete` / no recordings / no passes).
-4. Accounts/pairing/remote access not started; the API is open on the LAN.
-5. Captions: live renditions don't carry a caption track the web UI can select; VideoToolbox transcodes drop A/53 captions entirely.
-6. Only one rendition per client (no ABR ladder); no LL-HLS.
-7. No multiview anywhere (user's must-have).
-8. Swift models are hand-mirrored (no generator yet); Apple apps are MVP-level in polish.
-9. Old web screens (Library, Schedule, Sources, Settings forms) got the new styles but not a redesign.
-10. Debug data attributes on `<video>` (`data-sync-drift`, `data-sync-offset`, `data-hls-error`) and `video.hls` are intentional diagnostics; keep them but document them.
+1. Turn-ending after each phase (section 0.1).
+2. CI red from D3 to D6; fixed in `e411da1` and `0984064`. `make check` now mirrors CI.
+3. Unraid not redeployed since A3.
+4. **Guide coverage is the biggest product gap:** 18 of 27 channels say "No listing" (all of 14.x, plus 43.3, 46.7, and others), and the guide is only 2 days deep. The tuner guide cannot grow. → C7 (read the guide from the broadcast itself).
+5. **Web boot:** every page load shows a full-screen "Finding your tuner…" until every dataset has loaded, including a 258 KB airings payload. The API answers in under 3 ms, so this is a client waterfall. JSON is not compressed. → R3.
+6. **Artwork:** the Home hero stretches a small poster across the full width, so it looks blurry. → R4.
+7. Multiview mosaic deferred (ADR 0004). → B5.
+8. The 14.x frequency is unknown, so the multiview plan treats each 14.x subchannel as its own tuner. → C7 learns frequencies.
+9. TestFlight upload blocked on the App Store Connect app record (needs one Apple ID login). → A7.
 
 ---
 
-## 2. Research digest (sources in `docs/research.md`; re-verify anything version-sensitive)
+## 2. Research digest (sources in `docs/research.md`; re-verify version-sensitive facts)
 
-- **Apple multiview (tvOS/iOS 26+):** `AVPlaybackCoordinationMedium` synchronizes rate changes, seeks, stalls, and startup across multiple `AVPlayer`s (`player.playbackCoordinator.coordinate(using: medium)`). `AVRoutingPlaybackArbiter.shared.preferredParticipantForExternalPlayback` / `preferredParticipantForNonMixableAudioRoutes` pick which tile goes to AirPlay/HomePod. Set `AVPlayer.networkResourcePriority` high for the focused tile, low for others. Apple sample: "Creating a seamless multiview playback experience" (WWDC25 session 302). AVFoundation types are `@Observable` on 26+.
-- **Channels DVR parity:** multiview up to 4 (live only, no buffer, Quick Guide to add, hold-to-replace, layouts cycle with Select), intro/credits detection (preview, per-show opt-in, needs 10+ episodes), Enhanced Commercial Detection (fingerprinting, re-fingerprint, idle backfill), Personal Sections, Theater Mode, Sports/News sections, "upcoming airings" context menu, Live Activities for downloads. We beat them with: sync across screens, multiview with a buffer and sync, modern design, open exports, free.
-- **LL-HLS:** ffmpeg's HLS muxer does not emit `EXT-X-PART` / `EXT-X-PRELOAD-HINT`; true LL-HLS needs our own packager (we already parse fMP4 boxes) and blocking playlist reload (`_HLS_msn`, `_HLS_part`, `CAN-BLOCK-RELOAD=YES`). hls.js needs `lowLatencyMode: true` and a server that really blocks. AVPlayer supports it fully.
-- **hls.js multiview:** 3-4 instances per page is reasonable; fMP4 is key for CPU; Chrome MSE budget ~150 MB video / 12 MB audio **per SourceBuffer**, so cap back buffer per tile (`backBufferLength` 20-30 s) and use `capLevelToPlayerSize`. On iPhone Safari use ManagedMediaSource (hls.js 1.6 does automatically) and `disableRemotePlayback`.
-- **ATSC 3.0:** HEVC video + AC-4 audio. Stock ffmpeg lacks an AC-4 decoder; **jellyfin-ffmpeg** has one (experimental; resample to 48 kHz). DRM (A3SA/Widevine) stations cannot be decrypted by ffmpeg; show them as "Protected."
-- **Guide data:** SiliconDust XMLTV at `api.hdhomerun.com/api/xmltv?DeviceAuth=` (read DeviceAuth fresh each call; accept gzip; randomized 20-28 h cadence) includes `<icon src>` channel logos and program images. There is also a JSON guide endpoint `api.hdhomerun.com/api/guide?DeviceAuth=...` (fields include `ImageURL`, `EpisodeNumber`, `Synopsis`; paged by start time) — investigate coverage/terms for the missing channels. Schedules Direct remains the paid, complete, 14-day option. TMDB for fallback artwork.
-- **Live sports status:** ESPN's unofficial `site.api.espn.com/apis/site/v2/sports/{sport}/{league}/scoreboard[?dates=YYYYMMDD]` gives events with `status.type.state` (`pre`/`in`/`post`), `completed`, clock, period, competitors (names, abbreviations, logos, colors, scores), broadcasts. Unofficial: cache, back off, degrade gracefully.
-- **Live Activities:** iOS 18+ broadcast push via channels (`api-manage-broadcast.push.apple.com` to create; `apns-push-type: liveactivity` + `apns-channel-id`) needs the developer's APNs .p8 key — a self-hosted server cannot push without it. Plan: local Live Activities updated by the app while running + optional APNs relay later.
-- **Top Shelf:** `TVTopShelfContentProvider` returning `TVTopShelfCarouselContent` (`.actions` / `.details`), action URLs deep link; Swift 6 needs `@preconcurrency import TVServices` or the completion-handler override.
-- **Unraid Community Apps:** public repo with OSI LICENSE, `ca_profile.xml` (non-empty `<Profile>`), template XMLs (e.g. `templates/waveguide.xml`), real `icon.svg`; validate at ca.unraid.net/submit/new.
-- **Commercial detection:** multi-signal (black frames, silence, uniform frames, scene cuts, logo presence) + audio fingerprinting of repeated ads across recordings beats comskip-only; Channels re-fingerprints recordings.
+- **ATSC PSIP (A/65) — the guide inside the broadcast.** Base PID `0x1FFB` carries MGT (`0xC7`), TVCT (`0xC8`), CVCT (`0xC9`), RRT (`0xCA`), and STT (`0xCD`). The MGT lists PIDs for EIT-0…EIT-127 (table types `0x0100+k`) and channel ETTs and EIT ETTs (`0x0200+k`). EIT (`0xCB`) sections carry events per `source_id` (the VCT maps `source_id` to major.minor); each EIT-k covers a 3-hour block, so EIT-0..3 (required) is 12 hours and stations can carry up to 16 days. ETT (`0xCC`) holds descriptions. Times are GPS seconds since 1980-01-06 minus the STT's GPS-UTC offset. Strings are `multiple_string_structure`, sometimes Huffman-compressed (A/65 Annex C tables, compression types 1 and 2). The genre descriptor (`0xAB`) gives categories, useful for sports matching. MythTV and TVHeadend both harvest EIT this way; Channels DVR does not.
+- **Apple multiview (tvOS/iOS 26+):** `AVRoutingPlaybackArbiter` preferred participants route AirPlay and non-mixable audio to the focused tile; `networkResourcePriority` high for the focused tile. `AVPlaybackCoordinationMedium` is not used (it forces one timeline; see ADR 0004).
+- **Channels DVR parity:** multiview up to 4 (live only, no buffer), intro/credits detection, Enhanced Commercial Detection (fingerprinting, idle backfill), commercial skip modes (auto, button, manual, double-forward inside a break), Personal Sections, Theater Mode. **AIRDVR** has side-by-side multiview and live scores; iOS app pending. We win with sync across screens, multiview with a buffer and sync, the broadcast-harvested guide, modern Apple-native design, open exports, and no subscription.
+- **LL-HLS:** ffmpeg does not emit `EXT-X-PART`/`EXT-X-PRELOAD-HINT`; true LL-HLS needs our own packager (we already parse fMP4) with blocking reload (`_HLS_msn`, `_HLS_part`, `CAN-BLOCK-RELOAD=YES`). hls.js needs `lowLatencyMode` and a server that really blocks.
+- **hls.js multiview:** 3-4 instances per page; cap back buffer per tile (20-30 s); `capLevelToPlayerSize`; ManagedMediaSource on iPhone Safari.
+- **Captions:** OTA carries CEA-608/708 in the video SEI (A/53). VideoToolbox transcodes must run with `-a53cc 0`, which drops them, so captions must come from the source TS (a separate lightweight extractor reading the mux) into WebVTT aligned by PDT. `copy` renditions keep A/53 for AVPlayer's native CC.
+- **ATSC 3.0:** HEVC + AC-4; jellyfin-ffmpeg has an AC-4 decoder; DRM stations cannot be decrypted, so show them as "Protected".
+- **Live Activities:** broadcast push needs the developer's APNs `.p8`; without it, update locally while the app runs.
+- **Top Shelf:** `TVTopShelfContentProvider` with carousel content; Swift 6 needs `@preconcurrency import TVServices`.
+- **Unraid Community Apps:** public repo, OSI license, `ca_profile.xml`, template XMLs, real `icon.svg`, validate at ca.unraid.net/submit/new.
+- **Commercial detection:** multi-signal (black frames, silence, scene cuts, logo presence) plus fingerprinting of repeated ads across recordings beats comskip alone.
 
 ---
 
 ## 3. Phases
 
-Each task: **Do** / **Accept**. Tick them in `PROGRESS.md`.
+Each task: **Do** / **Accept**. Tick it in `PROGRESS.md` in the same commit.
 
-### Phase A — Stabilize, verify, and ship what exists (first)
+### Phase R — Repair and consolidate (first)
 
-A1. **Setup wizard verification.** Start `FRESH=1 CONFIG=/tmp/otav-fresh scripts/dev-server.sh`; load with cache disabled (CDP `Network.setCacheDisabled`); walk all 4 steps at desktop and phone sizes; fix layout/logic bugs. First-run detection: prefer an explicit server-side flag (`setupComplete` unset AND server age < 1 day OR no favorites/passes/recordings) — make it robust and testable. **Accept:** screenshots of each step; completing sets `setupComplete=1`; existing installs never see it unasked.
+R1. **CI green and kept green.** Confirm run for `0984064` is green on all four jobs (`gh run list`). If Apple fails again, fix it. Add a short "CI" section to skill `waveguide-dev-loop` (what each job runs, Xcode 26 vs 27, `make check`). **Accept:** green `main`; skill updated.
 
-A2. **Guide refresh compliance.** SiliconDust XMLTV: next pull at a random 20-28 h after success; store `lastGuidePull` + `nextGuidePull` in settings; manual refresh allowed but rate-limited (e.g. 1/hour). Log source and counts per refresh. **Accept:** unit test for the scheduler; diagnostics shows next refresh time.
+R2. **Deploy A–D to Unraid.** Tag `v0.2.0` with a `CHANGELOG.md` (start it now; L1 expands it). Deploy with `MODE=ghcr`. On the LAN: multiview 2-up from Unraid (VAAPI tiles; record CPU and GPU use from `docker stats` and `intel_gpu_top` if present), search, sports hub, team pass, spoiler-safe scores, guide matching. iPhone and Apple TV simulators connect to `http://192.168.1.2:8477`. **Accept:** `UNRAID_LOG.md` entry with version, checks, and numbers.
 
-A3. **Deploy to Unraid** with `scripts/deploy-unraid.sh` (see skill `waveguide-unraid`): back up the catalog, switch to host networking, drop `HDHR_HOST` (discovery works on host network; keep the variable optional), move the pre-rename install over (today it is container `OTA-Viewer` with appdata `/mnt/cache/appdata/ota-viewer`; the script moves the appdata to `/mnt/cache/appdata/waveguide`, replaces the container with `Waveguide`, and the server renames `ota-viewer.db` to `waveguide.db` on start), replace the user template `my-OTA-Viewer.xml` with `/boot/config/plugins/dockerMan/templates-user/my-Waveguide.xml` matching `deploy/unraid/waveguide.xml` (host network, no personal defaults except values the user needs), confirm VAAPI encoder detected, migrations applied to the real catalog, Bonjour visible from the Mac (`dns-sd -B _waveguide._tcp`), web UI at `http://192.168.1.2:8477`, live playback + sync from two browser tabs against the Unraid server, and the iPhone simulator connecting to it. **Accept:** all of that, recorded in `docs/plan/UNRAID_LOG.md` with timestamps.
+R3. **Instant boot and lean data.**
+- Web: render the shell immediately; show cached data from the last session (IndexedDB) and revalidate in the background; per-section skeletons. The full-screen boot screen appears only on the very first load. Keep first-run detection for setup.
+- Load the guide by window: `GET /api/v1/airings?from=&to=` (and optional `channels=`). First paint needs now−30 min to +4 h; prefetch the rest when idle. Keep the full-range call for compatibility and update `api/openapi.yaml`.
+- Server: gzip (or brotli) for JSON; precompressed `.br`/`.gz` static assets from the Vite build, served when accepted; `ETag` + `304` on channels, airings, and settings.
+- Apple: cache the last snapshot (Codable in Caches) and show it at launch while refreshing.
+- **Accept:** warm reload on LAN shows real content in < 300 ms and the guide is interactive in < 800 ms cold (CDP `Performance.getMetrics` and `performance.timing`, desktop and phone); airings transfer < 60 KB compressed for the first window; Go tests for windowing and compression; Lighthouse performance ≥ 90 on Home.
 
-A4. **Hygiene.** Remove stale `.player*`-era CSS, unused `strings.ts` entries, legacy `/api` callers in the web app (move everything to `/api/v1`), dead code (`live/file.go` PictureArgs paths stay for recordings). Add `web` lint (eslint + typescript-eslint, react-hooks) and `swiftformat`/`swiftlint` config. **Accept:** lint clean in CI.
+R4. **Artwork that never looks cheap.** The API returns image size and aspect with each image (probe once when caching in `/media/art`). Clients pick a layout by what the art can support: a full-bleed hero only with landscape art ≥ 1280 px wide; otherwise a composed hero (crisp poster or logo at native size over a blurred, darkened backdrop of the same art, or a live frame from R5). Never upscale an image beyond 1.25× its native size anywhere. Prefer the largest landscape icon when XMLTV lists several. **Accept:** Home, program sheet, sports, and recordings screenshots at three sizes with no blurry art; a unit test for layout choice.
 
-A5. **Crash/restart robustness.** On server start: kill orphaned ffmpeg children from a previous run (track PIDs in `work/pids`), clear stale `work/live/*`, mark interrupted recordings `failed` or resume them if their airing is still on. Graceful shutdown on SIGTERM (stop renditions, finish recordings cleanly, release tuners). **Accept:** kill -9 the server mid-recording, restart, see correct state; tuners released.
+R5. **Live preview frames.** For every frequency already tuned (a viewer, a recording, an export, or a C7 scan), grab a keyframe for each program in the mux every 60 s (`-skip_frame nokey`, scaled 480 w and 1280 w JPEG) into `work/frames/`. Never tune just for a frame. `GET /api/v1/channels/{id}/frame` with `Last-Modified`; frames older than 10 minutes are marked stale. Use frames on guide rows with no listing, Home "On now" cards, the multiview picker, the hero fallback (R4), and later Top Shelf (I1). **Accept:** frames appear for all subchannels of a tuned mux; CPU < 3% of one core per mux on Unraid; Go test for scheduling and staleness.
 
-A6. **GitHub.** Create the repository `twolfekc/waveguide` with `gh repo create` (public: the product is Apache-2.0, public GHCR images and Community Apps require a public repo — unless the user has said otherwise), add the remote, push `main`, and make CI green (fix anything the macOS/Linux runners reveal; if `macos-26` isn't available, use the newest macOS image with Xcode 26 and note it). Set the image name everywhere to `ghcr.io/twolfekc/waveguide` (Unraid template `Repository`/`Registry`/`Icon`/`Support`/`Project` URLs, compose, README, release workflow). Tag `v0.1.0` to exercise the release workflow; make the GHCR package public. Push after every task from then on. **Accept:** CI green on GitHub, `docker pull ghcr.io/twolfekc/waveguide:0.1.0` works on the Mac and on Unraid for both amd64 (Unraid) and arm64 (Mac) manifests.
+R6. **Apple review of B–D.** Screenshot every Apple screen that B–D touched (multiview 2-up/quad, guide, search, sports, Your teams, score bugs) on iPhone 17 Pro, iPad Pro 13", and Apple TV 4K, including Dynamic Type XL on iPhone and focus states on tvOS. Fix defects that take under an hour; add the rest as J1 sub-items. **Accept:** screenshots in `docs/screenshots/r6-*`; defects fixed or listed.
 
-A7. **Apple signing + TestFlight pipeline.** Find the Apple developer team ID (Xcode > Settings > Accounts, `security find-identity -v -p codesigning`, `defaults read com.apple.dt.Xcode`, `DEVELOPMENT_TEAM` in the user's other Xcode projects under `~/Projects`), set `DEVELOPMENT_TEAM` in `apple/project.yml`, and register bundle IDs (`com.wolfeup.waveguide` for iOS and tvOS; add `.widgets`, `.topshelf`, and an App Group now so later extensions don't need rework; `com.wolfeup` matches the user's other apps — if the ID is taken, use another `com.wolfeup.*` ID and update `project.yml`). Create the App Store Connect app record(s) (skill `asc-app-create-ui`; API key via `asc-team-key-create`, stored in `~/.blitz`). Add `PrivacyInfo.xcprivacy`, an app icon placeholder good enough for TestFlight, export compliance (`ITSAppUsesNonExemptEncryption=false`, already set), build numbers from `git rev-list --count HEAD`. Script it: `scripts/testflight.sh` (xcodegen, archive both schemes, `xcodebuild -exportArchive` with an `ExportOptions.plist` using `app-store-connect` method + upload destination, or `xcrun altool`/App Store Connect API). Upload iOS and tvOS builds to internal TestFlight and add the user as an internal tester. Re-run after every phase that touches Apple code. **Accept:** both builds show "Ready to test" in TestFlight; the script is documented in the `waveguide-apple` skill.
+R7. **Code review of run 1.** Run a `code-reviewer` subagent over `8f91dfc..HEAD` (server, web, Apple): tuner leaks on error paths, goroutine leaks, missing `ctx` cancellation, SQL without indexes on hot paths, unbounded memory, race conditions (`go test -race ./server/...`), missing tests, copy-voice violations. Fix every real finding. **Accept:** `go test -race` clean; findings and fixes listed in the commit message.
 
-### Phase B — MULTIVIEW (the user's must-have; make it the best in the category)
+### Phase C (continued) — Fill every channel
 
-Read skill `waveguide-multiview` first. Write ADR 0004 (multiview).
+C7. **Guide from the broadcast (PSIP EIT harvesting).** Package `internal/psip`.
+- First verify what the relay reads: capture 30 s of the mux the relay already tunes and list PIDs. If it is the full mux, PSIP (`0x1FFB` and the MGT-listed EIT/ETT PIDs) is already there. If the tuner URL filters to one program, switch that feed to the full-mux form and keep program filtering in our demux.
+- Parser: MGT, TVCT/CVCT, STT, EIT, ETT, with Huffman string decoding and the genre descriptor. Table-driven tests on a captured sample filtered to PSIP PIDs only (keep `testdata` small: a few hundred KB).
+- **Passive harvesting:** whenever a frequency is tuned for any reason, feed its PSIP to the harvester at no tuner cost.
+- **Idle scan:** when no tuner is in use and no recording starts within 30 minutes, tune each frequency whose listings are missing or ending within 12 h, dwell 30-45 s, release (`/tunerN/channel none`). Preempt instantly: a watch or recording request cancels the scan before it tunes. At most one scan per frequency every 6 h, none between the user's quiet hours if set. It also learns every channel's frequency (fixes the 14.x note in B1).
+- **Merge:** PSIP becomes a guide source with the lowest priority (user XMLTV / Schedules Direct > SiliconDust > PSIP), filling only channels and time ranges the others leave empty. Match by major.minor. Normalize ALL-CAPS titles to title case for display (keep the original). ETT text becomes the description. Genre feeds categories and sports matching (D2).
+- Diagnostics shows per-channel guide source and depth, and the last scan per frequency. ADR 0006 (broadcast guide).
+- **Accept:** ≥ 25 of 27 channels show a current and next listing on the real lineup (list any exceptions and why); guide depth per channel logged; a test proves a watch request preempts a scan; zero scan tunes while Unraid or the dev server has a viewer or recording.
 
-B1. **Server: multiview-aware relay.**
-- Add a `tile` quality class: `540` and a new `360` video rendition (`360.aac2`), both with aligned 2 s keyframes; allow `copy` tiles when bandwidth allows (Apple TV on LAN).
-- Tuner budgeting: an endpoint `POST /api/v1/multiview/plan {channelIds:[...]}` returns which channels can play together given tuners in use (channels on the same frequency cost one tuner), with explanations ("5.1 and 5.2 share one tuner"). Busy responses name what holds the tuners.
-- Audio-follows-focus stays client-side (mute non-focused tiles), but offer `audio=none` renditions (`540.none`) so unfocused tiles cost no audio transcode.
-- Optional **server-composited mosaic**: one ffmpeg `xstack` rendition combining 2-4 channels into a single 1080p stream (for AirPlay targets, older devices, low bandwidth, and exporting a mosaic channel to Plex). Key `mosaic:<ids>:<layout>`.
-- Sync: every tile already has PDT on its channel's timeline; add a multiview room type `multiview:<sessionId>` whose target is shared across tiles (all tiles aim at "now - latency" in wall-clock terms, so the same moment in real time across different channels — critical for watching two games at once).
-- **Accept:** Go tests for planning and keys; relay smoke extended to two channels + mosaic; tuner math verified on the real DUO (e.g. 14.1+14.2+14.3 on one tuner).
+C8. **Guide depth and freshness.** With C7, show honest depth ("Listings through Thursday"); the guide scrolls as far as any source goes; when a channel's data ends, its row says so instead of "No listing". Program sheet shows which source a listing came from (in the Stream Info style, not on every cell). **Accept:** screenshots; test for merge boundaries.
 
-B2. **Web multiview.**
-- Layouts: side-by-side 2-up (the user's primary ask: two channels next to each other, clean and seamless), 1 big + 2 small, 1 big + 3 small, 2×2 quad, picture-in-picture (small tile over big). Smooth animated transitions between layouts (FLIP/View Transitions API).
-- Entry points: "Add to multiview" in the guide sheet, program context menu, player toolbar button, Sports hub "Watch together" on simultaneous games, keyboard `m`.
-- Tile chrome: channel badge, live dot, title, score bug (Phase D), audio indicator; hover/focus shows swap, make big, remove, record. Click/Enter on a tile moves audio focus (and makes it big in 1+N layouts). Drag to reorder.
-- A "Quick Guide" strip at the bottom to add/replace tiles without leaving multiview.
-- Performance: one hls.js per tile, `capLevelToPlayerSize`, `backBufferLength: 20`, request smaller renditions for small tiles (`540`/`360` + `none` audio), upgrade the focused tile to `copy`/`1080`; pause decode of fully hidden tiles.
-- Sync: all tiles join one multiview room; each tile uses the existing SyncEngine logic (pause-to-align, forward seeks only).
-- Tuner-limit UX: disabled "Add" with a clear reason; suggest same-frequency channels that are free.
-- Saved sets: "Sunday games", persisted per profile; a Multiview entry on Home when 2+ sports are live.
-- Full-screen and TV layout (arrow keys move focus between tiles; Select swaps audio; long-press/`o` opens tile menu).
-- **Accept:** two real channels side by side from the DUO, synced (measure tile-to-tile offset < 100 ms in wall-clock terms), audio focus switching instant, 60 fps UI, memory stable over 30 minutes (Chrome task manager), works at phone (stacked 2-up), desktop, TV sizes.
+C9. **Antenna and signal tools.** A Settings > Tuners screen: per-channel signal strength, SNR quality, and symbol quality from `/tunerN/status` for channels on a tuned frequency; a "Check all channels" run that uses idle tuners the same way as C7 (preemptible). Show a simple verdict per channel (Great / OK / Weak / Lost) and a tip for weak ones in the copy voice. **Accept:** real readings from the DUO; the run yields to viewers.
 
-B3. **Apple multiview (tvOS first, then iPad/iPhone).**
-- `MultiviewScreen` with N `AVPlayer`s (N ≤ 4 on Apple TV 4K, 2 on iPhone landscape, 4 on iPad), layouts matching web, focus-driven audio (`isMuted` on non-focused), `networkResourcePriority` high for focused.
-- Coordination: channels are different live streams, so use our SyncEngine per tile against the shared multiview room for wall-clock alignment; use `AVPlaybackCoordinationMedium` for pause/resume/stall behavior across tiles (evaluate: if it conflicts with independent live edges, restrict it to group pause/play).
-- AirPlay: `AVRoutingPlaybackArbiter` preferred participant = focused tile.
-- tvOS interactions: Select swaps focus/audio; play/pause pauses all; long-press tile -> Replace/Remove/Record/Make full screen; swipe up shows Quick Guide row; Menu exits to single view of the focused tile.
-- iPhone: landscape 2-up side by side; portrait stacked with a draggable divider; PiP of the focused tile.
-- **Accept:** tvOS simulator screenshots of 2-up and quad with real channels; focus + audio switching; builds with strict concurrency.
+### Phase K1 — Fake tuner early (before the heavy DVR and player work)
 
-B4. **Multiview polish.** Layout animation tuning, per-tile stream info, "swap with main" gesture, remember last layout, onboarding hint the first time. Accessibility: VoiceOver announces tile channel + program, focus order logical.
+K1. **Fake HDHomeRun.** `internal/hdhr/fake` (or `internal/fakehdhr`): HTTP `discover.json`, `lineup.json`, `lineup_status.json`, a UDP control-protocol shim (`/tunerN/channel`, `/tunerN/status`, busy 805), and a TS streamer that loops a sample file with PSIP. Integration tests for tuning, frequency sharing, busy tuners, multiview planning, idle-scan preemption (C7), recordings start/stop/extend, restart recovery. `scripts/relay-smoke.sh` gains a mode that uses the fake instead of a real tuner, so CI can run it. **Accept:** integration tests in CI; relay smoke runs in CI with the fake.
 
-### Phase C — Guide and metadata excellence
+### Phase G1 — Ring buffer (unblocks start-over, instant switching, and catch-up)
 
-C1. **Coverage.** Diagnose why 18/27 channels lack listings (compare `lineup.json` guide numbers/call signs vs XMLTV `<channel>` ids/display-names; subchannels like 14.x may be listed under call signs). Build a channel-matching layer (station id, call sign, number, name fuzzy) with manual override in Settings > Channels ("Match guide data").
-C2. **More sources.** Implement the SiliconDust JSON guide (`/api/guide`, paged by `Start`) if it covers more channels/days within terms; full Schedules Direct integration with a Settings UI (account, lineup picker, 14 days, images); user XMLTV URL/file; per-channel source priority; merge rules. ADR 0005 for guide sources.
-C3. **Artwork.** Parse XMLTV `<icon>` for channels and programmes; store image URLs; server-side image proxy + resize cache (`/media/art/...?w=`), placeholders by category. TMDB fallback (requires user API key; optional). Use art everywhere: guide cells (optional thumbnails in TV layout), program sheet hero, Home hero backdrop, recordings posters, Top Shelf.
-C4. **Rich program model.** Series/season/episode numbers, original air date, rating, cast, genres, `new`/`live`/`premiere`/`finale` flags, sports teams (Phase D). Migration + API + clients.
-C5. **Guide UX.** Web: time scrubber to any day, "jump to prime time", mini-thumbnails, channel logos, column virtualization, sticky "now" return button, reorder/hide channels inline, per-profile channel lists. Apple: guide focus behavior perfection (tvOS: focus follows time, swipe to change day, play/pause to watch focused), iPhone landscape full grid, iPad split view (guide + preview).
-C6. **Search.** Server full-text search over titles/subtitles/descriptions/cast (SQLite FTS5) across 14 days + recordings; web and Apple search tabs; "search results -> record every airing".
-**Accept (phase):** ≥ 25/27 channels with listings on the real lineup (or documented reason), 7+ days where the source allows, art on most programs, search fast (< 50 ms).
-
-### Phase D — Sports: the reason people cancel YouTube TV
-
-D1. **Sports data provider** (`internal/sports`): ESPN scoreboard client for NFL, NCAAF, NBA, WNBA, NCAAB, MLB, NHL, MLS, NWSL, EPL, F1/NASCAR (schedule-only), with caching (30 s during live windows, hours otherwise), backoff, and a provider interface so it can be swapped.
-D2. **Matching.** Link guide airings to games (league from category/title, teams from title/subtitle vs competitor names/abbreviations/aliases, start time ±90 min, broadcaster hints). Store `game_id` on airings.
-D3. **Game-aware recording.** When recording a matched game: keep extending while `state == "in"` (poll), stop 5-10 min after `post`/`completed`; fall back to generous padding when unmatched. Handle overtime and delays before start. Event log entries ("Extended 22 min for overtime").
-D4. **Team follows + team passes.** Follow teams (profile); "Record every game" pass type `team` matching across leagues/channels; Home "Your teams" row; notifications of upcoming games.
-D5. **Scores UI (spoiler-safe).** Score bugs on guide cells, sports cards, multiview tiles, player info; global "Hide scores" and per-recording spoiler protection (never show scores for games you're recording and haven't watched).
-D6. **Sports hub redesign.** Live now with scores and time left, today by league, matchup tiles with team colors/logos (from provider), "Watch together" (multiview) for simultaneous games, standings later.
-**Accept:** unit tests with recorded ESPN JSON fixtures; a real game on the DUO matched and extended correctly (or simulated with fixtures + fake clock).
-
-### Phase E — DVR excellence
-
-E1. Passes UI overhaul (web + Apple): series, team, keyword, category, time/day windows, channel restrictions, keep rules, priority drag-reorder, conflict preview.
-E2. Conflict resolver: when tuners are short, suggest alternate airings, show what will be skipped, one-click fixes.
-E3. Recording library redesign: shows with art, seasons/episodes, watched state per profile, "continue watching", sort/filter, bulk actions, storage usage per show.
-E4. Commercial detection v2: bundle comskip in the image (or build), multi-signal detector (blackdetect + silencedetect + scene + logo mask), per-show learning (repeat-ad fingerprints across recordings), confidence scores, background queue with idle scheduling; skip UX parity with Channels (auto/button/manual, double-forward skip).
-E5. Intro/credits detection for series (audio fingerprint across episodes), "skip intro" button, next-episode timing.
-E6. Recording health: detect signal drops/CC errors during recording (`mpegts` corrupt packet counts), mark and optionally re-record next airing.
-E7. Start-over and record-from-buffer: when starting a recording mid-show, include what's already in the live buffer (ring buffer, Phase G).
-E8. Storage manager: per-pass keep rules enforcement, auto-delete watched after N days, low-space policy, recordings on a separate path, move/rename via sidecars.
-E9. Export/import: download original TS, share to Plex library folder structure (optional `.nfo`/sidecars).
+G1. **Ring buffer.** Per-mux raw TS ring on disk (default 60 min, configurable 30-240), shared by live renditions, recordings (record from the start of a show already in the buffer), exports, and new renditions (start instantly from the buffer instead of waiting for the tuner). Disk budget and cleanup honor the storage settings. **Accept:** Go tests with the fake tuner; a recording started 10 minutes into a show includes those 10 minutes; memory flat over 1 h.
 
 ### Phase F — Player excellence (all clients)
 
-F1. Captions: extract CEA-608/708 server-side into a WebVTT rendition (`ffmpeg ... -f webvtt` via `movie=...[out+subcc]` or `-c:s webvtt` from `eia_608` streams) linked from a master playlist; web caption picker (hls.js subtitle tracks), Apple via `AVMediaSelectionGroup`. Keep A/53 in `copy` renditions for AVPlayer native CC.
-F2. Master playlists: publish `index.m3u8` master per session listing the chosen rendition plus alternates (audio groups for AC-3 vs AAC, subtitles), so clients can switch without new watch calls.
-F3. Web player: audio track picker, stats overlay (bitrate, dropped frames, buffer, latency, sync drift, rendition, encoder), keyboard help overlay, last-channel toggle, number-pad entry overlay, sleep timer UI, volume memory, theater mode.
-F4. Instant channel switching: pre-warm the previous channel's rendition for 20 s (already via RenditionIdle), and if the next channel is on an already-tuned frequency, start its rendition speculatively on hover/focus in the mini guide.
-F5. Apple player: custom tvOS info panel tabs (`customInfoViewControllers`: Info, Channels, Stream), contextual actions (Record, Start Over, Multiview), Siri Remote clickpad swipe up/down for channels, frame-rate/range matching verified, iPhone gestures (swipe up/down to change channel, pinch to fill), PiP everywhere, AirPlay.
-F6. Group mode UI (shared pause/rewind) on web and Apple: "Watch together" toggle, who's in the room, host controls optional.
-F7. Latency modes (Lowest/Balanced/Stable) exposed in player options and settings; per-device default.
+F1. **Captions.** Extract CEA-608/708 from the source TS into a WebVTT rendition aligned to the feed's PDT timeline, published in the master playlist (F2). Web caption picker (hls.js subtitle tracks, styling from settings); Apple via `AVMediaSelectionGroup` (the `copy` rendition keeps A/53 for native CC; transcoded renditions use the WebVTT track). **Accept:** captions on a real channel in web, iPhone, and Apple TV, in sync (±200 ms); a "Captions on by default" setting.
+
+F2. **Master playlists.** `index.m3u8` per session listing the chosen rendition plus alternates (audio groups AC-3 vs AAC, subtitles), so clients switch without new watch calls. **Accept:** AVPlayer and hls.js switch audio and captions without a stall.
+
+F3. **Web player extras.** Audio track picker, stats overlay (bitrate, dropped frames, buffer, latency, sync drift, rendition, encoder), keyboard help (`?`), last-channel toggle, number-pad entry, sleep timer, volume memory, theater mode. **Accept:** keyboard-only walkthrough; screenshots at three sizes.
+
+F4. **Instant channel switching.** Keep the previous channel's rendition warm for 20 s; start renditions speculatively for the focused row in the mini guide when its frequency is already tuned; with G1, start from the buffer. Report time to first frame in Diagnostics. **Accept:** same-frequency switch < 1.0 s, already-tuned < 1.5 s, new tune < 3 s, measured on the DUO and recorded in `docs/dev-lab.md`.
+
+F5. **Apple player.** tvOS info panel tabs (`customInfoViewControllers`: Info, Channels, Stream), contextual actions (Record, Start over, Multiview), clickpad swipe for channel up/down, frame-rate and dynamic-range matching verified, iPhone swipe to change channel and pinch to fill, PiP everywhere, AirPlay. **Accept:** tvOS and iPhone screenshots of each panel; frame-rate matching confirmed with a 59.94 and a 29.97 channel.
+
+F6. **Group mode UI.** "Watch together" on web and Apple: who's in the room, shared pause/rewind, leave. **Accept:** two browsers plus one simulator pause and seek together.
+
+F7. **Latency modes.** Lowest / Balanced / Stable in player options and settings, with a per-device default. **Accept:** measured latency per mode in `docs/dev-lab.md`.
+
+### Phase E — DVR excellence
+
+E1. Passes UI overhaul (web + Apple): series, team, keyword, category, time/day windows, channel limits, keep rules, priority drag-reorder, conflict preview.
+E2. Conflict resolver: when tuners are short, suggest other airings, show what will be skipped, one-click fixes; never let live viewing starve a scheduled recording (warn the viewer first).
+E3. Recording library redesign: shows with art (R4), seasons and episodes, watched state, continue watching, sort and filter, bulk actions, storage per show.
+E4. Commercial detection v2: comskip in the image, plus a multi-signal detector (blackdetect + silencedetect + scene cuts + logo mask) with confidence scores, repeated-ad fingerprints across recordings, and an idle-time queue. Skip UX at Channels parity (auto, button, manual; double-forward inside a break skips it).
+E5. Intro and credits detection for series (audio fingerprint across episodes); "Skip intro" and next-episode timing.
+E6. Recording health: count TS continuity errors and signal drops during recording; mark the recording and offer to re-record the next airing.
+E7. Start over and record from the buffer (uses G1): start-over on any show whose start is in the buffer; recordings started late include what the buffer holds.
+E8. Storage manager: keep rules, auto-delete watched after N days, low-space policy, recordings on a separate path, move and rename via sidecars.
+E9. Export and import: download the original TS; a Plex/Jellyfin-friendly folder layout with optional `.nfo`.
+**Accept (phase):** each task has Go tests with the fake tuner (K1), web and Apple screenshots, and one real recording on Unraid exercising E2, E4, E6, and E7 (logged).
+
+### Phase D (continued) — Sports that beat cable
+
+D7. **Game Switcher.** In multiview with 2+ games, an optional auto mode moves the big tile and the audio to the game that matters most right now: a scoring chance (ESPN `situation.isRedZone` in football, power plays, late close games), a lead change, or the final minutes of a close game. A short banner says why ("Red zone: KC at LV"). Manual focus always wins for 2 minutes. **Accept:** tests with recorded ESPN live JSON and a fake clock; web and tvOS screenshots.
+
+D8. **Game alerts.** Followed-team and close-game alerts: in the web app (toast), iPhone notifications while the app is active (and Live Activities after I3), with a one-tap Watch. Spoiler-safe: no score in an alert for a game you are recording and have not watched. **Accept:** fixture-driven tests; screenshots.
+
+### Phase B (continued)
+
+B5. **Mosaic rendition.** One ffmpeg `xstack` output combining 2-4 channels (`mosaic:<ids>:<layout>`) for AirPlay targets, older devices, low bandwidth, and as a virtual channel in exports (Plex/Jellyfin see "Multiview"). Same `-copyts`/CMAF/PDT invariants; audio from the chosen tile. **Accept:** relay smoke covers a 2-up mosaic; a mosaic plays in Safari and via the M3U export.
+
+### Phase I — Apple platform integration
+
+Start this phase by retrying A7 (app record + upload). Every Apple task below ends with a TestFlight build once A7 works.
+
+I1. Top Shelf (tvOS): live sports and favorites now (with R5 frames) and continue watching; deep links.
+I2. Widgets (iOS): On now, Your teams (scores), Recording now, Up next; interactive Record via App Intents. Needs the App Group on the profiles.
+I3. Live Activities and Dynamic Island: recording in progress, followed game in progress (local updates; APNs broadcast behind a setting when the user supplies a key).
+I4. App Intents, Siri, Shortcuts: "Watch channel 9", "Watch the Chiefs game", "Record Jeopardy", "What's on", "Start multiview with …"; Spotlight for recordings and channels; a Control Center control.
+I5. Handoff / Move to Apple TV: continue the same live moment on another screen (sync makes it seamless).
+I6. SharePlay for remote friends (GroupSession + playback coordinator).
+I7. iPad: sidebar layout, guide beside a live preview, 4-up multiview, keyboard shortcuts.
+I8. Apple Watch: remote (channel up/down, pause, record), followed-team scores, recording alerts.
+I9. Now Playing adoption; CarPlay optional.
+I10. App icon (Icon Composer, layered Liquid Glass, from J7), launch, onboarding, App Store assets.
+**Accept (phase):** each feature screenshotted on the simulator, builds green on Xcode 26 and 27, TestFlight build uploaded (if A7 is unblocked).
 
 ### Phase G — Relay and infrastructure depth
 
-G1. Ring buffer: per-mux raw TS ring on disk (configurable 30-240 min), shared by live, recordings (record-from-start), exports, and new renditions (start instantly from buffer).
-G2. ABR ladder with aligned segments (one ffmpeg producing multiple outputs via `-map` + `-var_stream_map` or tee) for remote/cellular clients; master playlist with bandwidths; keep independent single-rendition mode for LAN.
-G3. LL-HLS: custom Go packager that splits fMP4 fragments into ~330 ms parts (ffmpeg `-frag_duration` / `movflags frag_every_frame` fed via pipe), emits `EXT-X-PART`, `EXT-X-PRELOAD-HINT`, `EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK`, supports `_HLS_msn/_HLS_part` blocking reloads. Target glass-to-glass < 3 s on LAN. ADR 0006. Keep classic HLS as default until proven.
-G4. HEVC renditions for Apple devices (lower bitrate for same quality; fMP4 required) with hardware encoders (VAAPI `hevc_vaapi`, QSV, VT `hevc_videotoolbox`, NVENC).
-G5. jellyfin-ffmpeg in the Docker image (broad HW accel + AC-4 decoder); detect capabilities at startup; diagnostics shows them.
-G6. ATSC 3.0: detect FLEX 4K / ATSC 3.0 channels (lineup flags), HEVC copy + AC-4 -> AAC/E-AC-3 transcode, mark DRM channels "Protected" and hide from guide by default.
-G7. Multi-device tuner pool: multiple HDHomeRuns, per-device priority, failover, tuner reservation for scheduled recordings (never let live viewing starve a recording; warn viewers).
-G8. Metrics and logging: structured `slog`, per-feed stats (bitrate, errors, ffmpeg restarts), Prometheus `/metrics` optional, log viewer in Diagnostics.
-G9. Performance: profile Go (pprof) under 4 simultaneous renditions + recording on Unraid; ffmpeg thread tuning; memory caps.
+G5. jellyfin-ffmpeg in the Docker image (broad hardware acceleration + AC-4); detect capabilities at startup; Diagnostics shows them.
+G4. HEVC renditions for Apple devices with hardware encoders (VAAPI `hevc_vaapi`, QSV, VideoToolbox, NVENC).
+G6. ATSC 3.0: detect 3.0 channels, HEVC copy + AC-4 to AAC/E-AC-3, mark DRM channels "Protected" and hide them by default. Test against sample files.
+G7. Multi-device tuner pool: several HDHomeRuns, per-device priority, failover, reservations for scheduled recordings.
+G2. ABR ladder with aligned segments for remote and cellular clients (one ffmpeg, several outputs); keep independent single renditions on the LAN.
+G3. LL-HLS packager (ADR 0007): parts ~330 ms, `EXT-X-PART`, `EXT-X-PRELOAD-HINT`, blocking reload. Target glass-to-glass < 3 s on the LAN. Classic HLS stays default until it is proven.
+G8. Metrics and logging: `slog` everywhere, per-feed stats, optional Prometheus `/metrics`, a log viewer in Diagnostics.
+G9. Performance on Unraid: pprof under 4 renditions + a recording + a mosaic; ffmpeg thread tuning; memory caps.
+G10. HDHomeRun firmware and health surface (read-only: version, tuner status, lock; never install firmware from the app).
+G11. Verify exports in the real apps the user runs (check TUS for Plex, Jellyfin, or Channels containers): lineup, guide, and a stream through the HDHomeRun emulator. Log results; fix gaps.
 
 ### Phase H — Accounts, profiles, pairing, remote access
 
-H1. Household profiles (name, avatar color, kids flag + max rating), per-profile favorites, watched/progress, follows, saved multiview sets. Profile picker on Apple TV (tvOS user integration) and web.
-H2. Device pairing: apps get long-lived tokens (6-digit code or QR from web); LAN trust mode default on; tokens required for non-LAN clients; device list with revoke. Media URLs carry signed short-lived tokens when auth is on.
-H3. Remote access: document Tailscale first (zero code); then built-in secure remote (TLS via Let's Encrypt with DNS challenge or a relay option) — ADR 0007; bandwidth-aware defaults (cellular -> 720/540, HEVC).
-H4. Downloads for offline (recordings) on iPhone/iPad (AVAssetDownloadTask of HLS, progress Live Activity).
+H1. Household profiles (name, color, kids flag + max rating), per-profile favorites, watched state, follows, saved multiview sets; profile picker on Apple TV and web.
+H2. Device pairing: long-lived tokens (6-digit code or QR); trusted-LAN mode on by default; tokens required off the LAN; device list with revoke; signed short-lived media URLs when auth is on.
+H3. Remote access: Tailscale docs first, then built-in (ADR 0008); bandwidth-aware defaults off the LAN (720/540, HEVC).
+H4. Offline downloads of recordings on iPhone and iPad (`AVAssetDownloadTask`), with a progress Live Activity.
 
-### Phase I — Apple platform integration (make it feel built by Apple)
+### Phase J — Design system and UX polish
 
-I1. Top Shelf (tvOS): carousel of live sports/favorites now + continue watching; deep links.
-I2. Widgets (iOS): On Now, Your Teams (scores), Recording now, Up next; interactive buttons (Record) via App Intents.
-I3. Live Activities + Dynamic Island: recording in progress, followed game in progress (local updates while app runs; APNs broadcast channel support behind a setting when the user supplies an APNs key).
-I4. App Intents + Siri + Shortcuts: "Watch channel 9", "Watch the Chiefs game", "Record Jeopardy", "What's on", "Start multiview with ..."; Spotlight indexing of recordings and channels; Control Center control (Watch favorite).
-I5. Handoff / "Move to Apple TV": continue the same live moment on another screen (sync makes it seamless) via NSUserActivity + deep link.
-I6. SharePlay for remote friends (AVPlayer `playbackCoordinator` with GroupSession).
-I7. iPad: sidebar layout, split guide + preview, 4-up multiview, keyboard shortcuts.
-I8. Apple Watch: remote control (channel up/down, pause, record), scores for followed teams, recording alerts.
-I9. Now Playing framework (iOS 27) adoption where available; CarPlay video browsing (iOS 27, parked) optional.
-I10. App icon (Icon Composer, multi-layer Liquid Glass), launch experience, onboarding, App Store assets.
-
-### Phase J — Design system and UX polish (continuous, with a dedicated pass)
-
-J1. Design review of every screen at phone/desktop/TV and iPhone/tvOS: spacing, type scale, color, motion, empty/loading/error states, copy voice. Produce before/after screenshots in `docs/screenshots/`.
-J2. Redesign legacy web screens (Library -> Recordings, Schedule -> DVR, Sources/Settings -> Settings with sections) to match Home/Guide quality.
-J3. Motion system: View Transitions for route changes, shared-element transitions (guide cell -> player, card -> sheet), spring presets from tokens; honor Reduce Motion.
-J4. Accessibility audit: VoiceOver/TalkBack labels, focus order, contrast (WCAG AA), Dynamic Type, captions default setting.
-J5. Light mode for iPhone/web (optional, dark default), accent color picker in settings (tokens support it).
+J1. Full design review of every screen at phone, desktop, TV and on iPhone, iPad, Apple TV: spacing, type scale, color, motion, empty/loading/error states, copy voice; include R6 leftovers. Before/after screenshots in `docs/screenshots/`. Bar: it should look like Apple made it (TV app, Sports app) and feel faster than YouTube TV.
+J2. Redesign the remaining legacy web screens (Recordings, Schedule/DVR, Settings with sections) to Home/Guide quality.
+J3. Motion system: View Transitions for routes, shared-element transitions (guide cell to player, card to sheet), springs from tokens; Reduce Motion respected.
+J4. Accessibility audit: labels, focus order, WCAG AA contrast, Dynamic Type, captions default.
+J5. Light mode for iPhone and web (dark stays default); accent color picker.
 J6. Localization readiness (String Catalogs on Apple, message catalog on web).
-J7. Brand: the name is decided — **Waveguide** (see `docs/brand.md`). Do the rest: logo, app icon, marketing site in `site/` (static, deployable to GitHub Pages).
+J7. Brand: logo, app icon (feeds I10), `icon.svg` for Unraid (feeds L3), marketing site in `site/` (static, GitHub Pages).
 
-### Phase K — Quality engineering
+### Phase K — Quality engineering (continuous; dedicated pass here)
 
-K1. Go: fake HDHomeRun (HTTP lineup/status + control protocol shim + TS streamer from a sample file) for integration tests of tuning, busy tuners, multiview planning, recordings.
-K2. Web: Playwright e2e (home, guide nav, open player, multiview add/swap, setup wizard) against a server using the fake tuner; visual regression snapshots at 3 sizes; sync measurement test (two pages, assert drift).
-K3. Apple: Swift Testing for OTAKit (SyncEngine math with a fake clock, discovery parsing, AppStore), XCUITest smoke for launch/connect/guide/player on both platforms.
-K4. Soak test on Unraid: 24 h with a recording schedule + intermittent viewers + multiview; watch memory, fds, ffmpeg counts, tuner releases. Log results in `docs/plan/UNRAID_LOG.md`.
-K5. CI: add Playwright job, Apple UI tests (simulator) where feasible, Docker image build + smoke (`scripts/relay-smoke.sh` inside container).
+K2. Playwright e2e against the fake tuner (home, guide, player, multiview add/swap, setup wizard, search, sports) with visual snapshots at three sizes and a two-page sync assertion.
+K3. Apple: Swift Testing for OTAKit (SyncEngine with a fake clock, discovery parsing, AppStore, caching from R3); XCUITest smoke for launch, connect, guide, player, multiview on iOS and tvOS.
+K4. 24 h soak on Unraid: a recording schedule, intermittent viewers, multiview, idle scans; watch memory, file descriptors, ffmpeg count, tuner release. Log results.
+K5. CI: Playwright job, Apple UI tests where feasible, container smoke (`relay-smoke.sh` in the image with the fake tuner).
+K6. Performance budgets in CI: web bundle size, Home first paint (Playwright trace), API p95 under the fake tuner.
 
 ### Phase L — Release and distribution
 
-L1. Versioning (semver tags), CHANGELOG.md, release notes.
-L2. GHCR images via release workflow (verify multi-arch), image size budget, SBOM.
-L3. **Unraid Community Apps — research, then submit.** Research the current process first (ca.unraid.net/submit/help and its builder guide, the official starter repository, the XML field reference, recent forum guidance on template requirements, icon rules, support-thread expectations, and how updates propagate). Decide: templates in this repo (`ca_profile.xml` at root, `templates/waveguide.xml`, `icon.svg`) or a dedicated `twolfekc/unraid-templates` repo — follow what CA recommends. Make the template excellent (host network default with a clear explanation, `/dev/dri` optional for Intel/AMD, NVIDIA variant notes, `Config` descriptions in the copy voice, WebUI, Support/Project links to the GitHub repo, `Changes` field). Install it on TUS via the template URL to prove it works exactly as a stranger would experience it, run Validate + Scan at ca.unraid.net/submit/new, fix every finding, submit, and create the support thread if required. Record the submission status in BLOCKERS (review is asynchronous) and keep working.
-L4. **TestFlight and App Store readiness.** Keep the A7 pipeline shipping: final app icon (Icon Composer), screenshots for iPhone/iPad/Apple TV, App Store description and keywords, privacy nutrition labels (skill `asc-privacy-nutrition-labels`), review notes explaining local-network use, then submit for external TestFlight review. App Store submission itself waits for the user's go-ahead.
-L5. Docs site: install (Docker, Unraid, Mac), apps, multiview, sports, DVR, troubleshooting (diagnostics), FAQ.
+L1. Semver tags per phase (already started in R2), `CHANGELOG.md`, release notes on GitHub.
+L2. GHCR images verified multi-arch; image size budget; SBOM.
+L3. **Unraid Community Apps.** Research the current process (ca.unraid.net/submit/help, the builder guide, the starter repository, the XML reference, recent forum guidance on requirements, icons, support threads, updates). Decide where templates live (this repo or a `wolfebase/unraid-templates` repo) per CA guidance. Make the template excellent (host network explained, `/dev/dri` optional, NVIDIA notes, copy-voice descriptions, WebUI, Support/Project, `Changes`, the J7 icon). Install it on TUS from its public URL the way a stranger would; Validate + Scan clean; submit; create the support thread if required. Record status in `BLOCKERS.md` (review is asynchronous) and keep working.
+L4. **TestFlight and App Store readiness.** Final icon, screenshots for iPhone, iPad, Apple TV, description and keywords, privacy labels (skill `asc-privacy-nutrition-labels`), review notes explaining local-network use; submit for external TestFlight review. The App Store submission itself waits for the user.
+L5. Docs site: install (Docker, Unraid, Mac), apps, multiview, sports, DVR, antenna tools, troubleshooting, FAQ.
+
+### Phase M — Category-best extras (after L; keep going)
+
+M1. Catch-up: rewind any channel you have had tuned up to the ring window; "Start over" wherever the buffer covers the start.
+M2. Commercial skip while behind live (detect breaks in the live buffer and offer Skip).
+M3. "Which channel has the game?": search a team or league from anywhere (Siri, search, widgets) and jump to the right channel, or to multiview when several games are on.
+M4. Smart favorites: learn what the household watches by time of day to order Home and the mini guide (on-device, per profile, never sent anywhere).
+M5. Anything the J1 review or K4 soak surfaced that makes the product better than Channels DVR and YouTube TV. Add tasks, then do them.
 
 ---
 
-## 4. Suggested execution order (dependency-aware)
+## 4. Execution order (dependency-aware)
 
-A1 -> A2 -> A6 (GitHub + CI + GHCR) -> A3 (deploy to Unraid from GHCR or local build, then redeploy after each phase) -> A7 (TestFlight pipeline) -> A5 -> A4 ->
-B1 -> B2 -> B3 -> B4 (multiview end to end; redeploy; verify on Unraid) ->
-C1 -> C2 -> C3 -> C4 -> C5 -> C6 ->
-D1 -> D2 -> D3 -> D4 -> D5 -> D6 ->
-F1 -> F2 -> F3 -> F4 -> F5 -> F6 -> F7 ->
-E1 ... E9 ->
-G5 -> G1 -> G4 -> G6 -> G7 -> G2 -> G3 -> G8 -> G9 ->
-I1 ... I10 ->
-H1 -> H2 -> H3 -> H4 ->
-J (dedicated pass; also continuous) -> K (continuous; dedicated pass at the end) -> L.
+R1 → R2 → R3 → R4 → R5 → R6 → R7 →
+C7 → C8 → C9 → (tag + deploy) →
+K1 → G1 → (tag + deploy) →
+F1 → F2 → F3 → F4 → F5 → F6 → F7 → (tag + deploy + TestFlight) →
+E1 … E9 → (tag + deploy) →
+D7 → D8 → B5 → (tag + deploy) →
+A7 retry → I1 … I10 → (tag + deploy + TestFlight) →
+G5 → G4 → G6 → G7 → G2 → G3 → G8 → G9 → G10 → G11 → (tag + deploy) →
+H1 → H2 → H3 → H4 → (tag + deploy + TestFlight) →
+J1 … J7 → K2 … K6 → L1 … L5 → M1 … M5.
 
-After every phase: run all tests, relay smoke, two-screen sync check, push to GitHub (CI green), deploy to Unraid and smoke it from the LAN, upload new TestFlight builds if Apple code changed, and update `PROGRESS.md`, `UNRAID_LOG.md`, docs, and skills.
+A7 is retried at the start of every phase: if `~/.blitz/bin/asc web auth status` (or an API call) shows a valid session, create the app records, attach the App Group to the profiles, and upload.
 
 ---
 
 ## 5. Definition of spectacular (final acceptance)
 
-- A new user installs from the Unraid template or `docker run`, opens the web UI, finishes setup in under 3 minutes, and sees a full, art-rich guide for every channel.
-- Two games play side by side (web, Apple TV, iPad), in sync with each other and with every other screen in the house; audio follows focus; adding a tile never interrupts others.
+- A new user installs from the Unraid template or `docker run`, finishes setup in under 3 minutes, and sees a full, art-rich guide for every channel their antenna gets, including channels no online guide lists.
+- The app opens instantly with real content; channel changes feel instant.
+- Two games play side by side (web, Apple TV, iPad), in sync with each other and every other screen; audio follows focus; Game Switcher catches the big moments.
 - Recordings of games end when the game ends; commercials skip reliably; followed teams record automatically.
-- The Apple TV app feels native: Top Shelf, focus, remote gestures, info panels, frame-rate matching; the iPhone app has widgets, Live Activities, Siri, PiP, and the mini player.
+- The Apple TV app feels native (Top Shelf, focus, remote gestures, info panels, frame-rate matching); the iPhone app has widgets, Live Activities, Siri, PiP, and the mini player.
 - Everything runs on Unraid with hardware encoding, survives restarts, and a 24 h soak shows no leaks.
-- The repo is on GitHub with green CI and published multi-arch images; iOS and tvOS builds are in TestFlight on the user's devices; the Community Apps submission is in (or approved).
-- Docs, tests, CI, and releases are in place; the plan's checklist is fully ticked or each gap is recorded in `BLOCKERS.md` with a clear reason.
+- `main` is green; images are published per phase; iOS and tvOS builds are in TestFlight; the Community Apps submission is in (or approved).
+- Every line in `PROGRESS.md` is ticked or recorded in `BLOCKERS.md` with a clear reason.

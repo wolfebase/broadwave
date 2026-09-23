@@ -30,7 +30,8 @@ Pitfalls that cost hours before:
 ## Test gates
 
 ```bash
-make test                  # go test ./server/... + web typecheck
+make check                 # everything CI runs: tests + eslint + swiftlint + swiftformat
+make test                  # go test ./server/... + web typecheck (no lint)
 scripts/relay-smoke.sh     # no-tuner end-to-end relay: renditions, CMAF, PDT, export (12 checks)
 cd apple/Packages/OTAKit && swift test
 make apple                 # iOS + tvOS builds
@@ -58,6 +59,21 @@ Open two tabs on `/watch?channel=1`, mute+play both, wait ~20 s, then in each ta
 
 `data-sync-offset` is media time minus local wall clock (ms); the difference between tabs is the screen-to-screen offset (target < 50 ms; last measured 15 ms). `data-sync-drift` is drift from the room target. `data-hls-error` shows the last hls.js error; `video.hls` is the hls.js instance (check `hls.levels[0].details.fragments` for negative `start`/`duration`, which means hls.js timeline corruption).
 
+## Shared tuner
+
+Unraid (`http://192.168.1.2:8477`) is the household DVR on the same DUO. Before a test that tunes, check `curl -s http://192.168.1.2:8477/api/v1/diagnostics` and `/api/v1/schedule`; if a recording is on or due within 30 minutes, use one tuner at most or the relay smoke test. Stop your dev servers when done (`pkill -9 -x otav`).
+
+## CI (`.github/workflows/ci.yml`)
+
+| Job | Runs | Local equivalent |
+| --- | --- | --- |
+| server | `go vet`, `go test ./server/...` | `make test` |
+| web | eslint, build (`tsc --noEmit` first) | `make test`, `make lint` |
+| apple (macos-26, **Xcode 26.6**) | swiftlint `--strict`, swiftformat `--lint`, `make apple-test`, `make apple` | `make lint`, `make apple-test`, `make apple` (this Mac has Xcode 27) |
+| docker | image build | `make docker` |
+
+Run `make check` before every push, then `gh run list -L 3` after it; fix red before the next task (`gh run view <id> --log-failed`). Anything new in the iOS/tvOS 27 SDK needs `#if compiler(>=6.4)` around its `#available` check, because Xcode 26 cannot see the declaration.
+
 ## Commit
 
-Small commits with what + why. Tick `docs/plan/PROGRESS.md`. Never commit `data/`, `server/cmd/waveguide/assets/web/`, or `apple/*.xcodeproj`.
+One commit per task, including its `docs/plan/PROGRESS.md` tick (no separate tick commits). What + why. Never commit `data/`, `server/cmd/waveguide/assets/web/`, or `apple/*.xcodeproj`.
