@@ -55,6 +55,16 @@ struct RootView: View {
         .onOpenURL(perform: open)
         #if DEBUG
             .task {
+                if let name = UserDefaults.standard.string(forKey: "OTATab") {
+                    switch name {
+                    case "guide": tab = .guide
+                    case "search": tab = .search
+                    case "sports": tab = .sports
+                    case "recordings": tab = .recordings
+                    case "settings": tab = .settings
+                    default: tab = .home
+                    }
+                }
                 // Simulator testing: -OTAWatch <channel id>, or -OTAMultiview 1,3.
                 if let raw = UserDefaults.standard.string(forKey: "OTAMultiview"), !raw.isEmpty {
                     if store.channels.isEmpty {
@@ -101,6 +111,7 @@ struct RootView: View {
                 }
             }
         case "guide": tab = .guide
+        case "search": tab = .search
         case "sports": tab = .sports
         case "recordings": tab = .recordings
         default: tab = .home

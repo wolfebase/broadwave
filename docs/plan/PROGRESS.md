@@ -3,10 +3,10 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **R6**. Apple screenshots of multiview, guide, search, sports, and Your teams on iPhone, iPad, and Apple TV.
+- Current task: **R7**. Code review of run 1, then `go test -race`.
 - Half done: nothing.
-- Next command: boot the simulators and capture each screen without starting a tune.
-- Unraid is on `v0.2.0`. Do not take both tuners if a recording is on.
+- Next command: review run 1 against the plan, then `go test -race ./server/...`.
+- Unraid is on `v0.2.0`. Both tuners are free.
 - A7 retry at phase R: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
 ## Phase R — Repair and consolidate
@@ -15,7 +15,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] R3 Instant boot: cached shell, windowed airings, gzip/brotli + ETag, Apple snapshot cache (< 300 ms warm)
 - [x] R4 Artwork layouts by size and aspect; no upscaling past 1.25x
 - [x] R5 Live preview frames from tuned muxes (no extra tunes). Unraid CPU sample is the phase R deploy line.
-- [ ] R6 Apple screenshots of B–D on iPhone, iPad, Apple TV; defects fixed or listed
+- [x] R6 Apple screenshots of B–D on iPhone, iPad, and Apple TV (`docs/screenshots/r6-*`). iPhone multiview stays 2-up. Quad layout is on iPad and Apple TV; those tiles timed out when :8477 flapped, and the 2-up shots are the live picture. Scoreboard was empty, so no score was on screen.
 - [ ] R7 Code review of run 1; `go test -race` clean
 - [ ] Phase R deploy: tag, Unraid smoke, and preview-frame CPU under 3% of one core per mux
 
@@ -141,6 +141,9 @@ Tick items as they are verified and committed, in the same commit as the work (`
 
 ## Phase J — Design polish
 - [ ] J1 Full design review with screenshots
+  - R6: iPad side-by-side tiles stretch to the full height, so the picture sits in a short band (`r6-ipad-multiview-2.jpg`).
+  - R6: a blocked tile's note can name a channel that is not on (4.1 listed while that tile said both tuners were busy).
+  - R6: tvOS focused layout control can read as an empty pill. Confirm the label is actually missing.
 - [ ] J2 Legacy web screens redesigned
 - [ ] J3 Motion system
 - [ ] J4 Accessibility audit

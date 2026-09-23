@@ -9,6 +9,13 @@ struct HomeView: View {
     @State private var teams: [TeamFollow] = []
 
     var body: some View {
+        ScrollViewReader { proxy in
+            homeStack
+                .task(id: teams.count) { await scrollForScreenshot(proxy) }
+        }
+    }
+
+    private var homeStack: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 36) {
                 if let (channel, airing) = store.featured() {
@@ -48,6 +55,7 @@ struct HomeView: View {
                             .cardButton()
                         }
                     }
+                    .id("teams")
                 }
                 if !games.isEmpty {
                     let liveGames = games.filter { $0.1.isOn(at: store.now) }
@@ -130,6 +138,15 @@ struct HomeView: View {
                 }
             }
             .onAppear { saved = SavedMultiview.load() }
+    }
+
+    /// `-OTAScroll teams` on a debug launch. Off-screen shelves cannot be reached with a click while another simulator window is in front.
+    private func scrollForScreenshot(_ proxy: ScrollViewProxy) async {
+        #if DEBUG
+            guard UserDefaults.standard.string(forKey: "OTAScroll") == "teams", !teams.isEmpty else { return }
+            try? await Task.sleep(for: .milliseconds(500))
+            proxy.scrollTo("teams", anchor: .top)
+        #endif
     }
 }
 

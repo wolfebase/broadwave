@@ -328,7 +328,7 @@ struct MultiviewScreen: View {
             Button("Back to one channel", systemImage: "xmark") { leave() }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.glass)
-            Text("Side by side")
+            Text(session.layout.label)
                 .font(.headline)
             Spacer()
             Button(session.paused ? "Play" : "Pause") { session.togglePause() }
