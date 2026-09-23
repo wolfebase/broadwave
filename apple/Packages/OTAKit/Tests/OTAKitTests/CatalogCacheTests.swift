@@ -23,3 +23,10 @@ import Testing
     #expect(loaded.recordings.first?.title == "News")
     #expect(CatalogCache.load(serverID: "other", directory: dir) == nil)
 }
+
+@Test func artLayoutMatchesPictureSize() {
+    #expect(ArtLayout.choose(width: 1920, height: 1080, slot: 1400) == "bleed")
+    #expect(ArtLayout.choose(width: 1280, height: 720, slot: 1920) == "composed")
+    #expect(ArtLayout.choose(width: 0, height: 0, slot: 800) == "composed")
+    #expect(ArtLayout.displayEdge(native: 800, slot: 2000) == 1000)
+}

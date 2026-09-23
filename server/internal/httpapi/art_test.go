@@ -61,6 +61,10 @@ func TestArtResizesAndFallsBack(t *testing.T) {
 	if err != nil || got.Bounds().Dx() != 40 {
 		t.Fatal(err, got.Bounds())
 	}
+	channels, err = st.Channels(ctx, false)
+	if err != nil || channels[0].ArtWidth != 80 || channels[0].ArtHeight != 40 {
+		t.Fatalf("probed size %+v %v", channels, err)
+	}
 	airings, err := st.Airings(ctx, time.Now().Add(-time.Minute), time.Now().Add(2*time.Hour))
 	if err != nil || len(airings) != 1 {
 		t.Fatal(err, airings)

@@ -29,6 +29,8 @@ type Airing struct {
 	ProgramID    string    `json:"programId,omitempty"`
 	New          bool      `json:"new,omitempty"`
 	ImageURL     string    `json:"imageUrl,omitempty"`
+	ImageWidth   int       `json:"imageWidth,omitempty"`
+	ImageHeight  int       `json:"imageHeight,omitempty"`
 	Season       int       `json:"season,omitempty"`
 	Episode      int       `json:"episode,omitempty"`
 	EpisodeLabel string    `json:"episodeLabel,omitempty"`
@@ -127,16 +129,34 @@ func (s *Store) SetChannelArt(ctx context.Context, art map[int64]string) error {
 	return nil
 }
 
-func (s *Store) Artwork(ctx context.Context, kind string, id int64) (rawURL, label string, err error) {
+func (s *Store) Artwork(ctx context.Context, kind string, id int64) (rawURL, label string, width, height int, err error) {
 	switch kind {
 	case "channel":
-		err = s.db.QueryRowContext(ctx, `SELECT art_url, guide_name FROM channels WHERE id = ?`, id).Scan(&rawURL, &label)
+		err = s.db.QueryRowContext(ctx, `SELECT art_url, guide_name, art_width, art_height FROM channels WHERE id = ?`, id).Scan(&rawURL, &label, &width, &height)
 	case "airing":
-		err = s.db.QueryRowContext(ctx, `SELECT image_url, category FROM airings WHERE id = ?`, id).Scan(&rawURL, &label)
+		err = s.db.QueryRowContext(ctx, `SELECT image_url, category, image_width, image_height FROM airings WHERE id = ?`, id).Scan(&rawURL, &label, &width, &height)
 	default:
 		err = sql.ErrNoRows
 	}
-	return rawURL, label, err
+	return rawURL, label, width, height, err
+}
+
+// SetArtworkSize records a picture's real pixel size the first time it is measured.
+func (s *Store) SetArtworkSize(ctx context.Context, kind string, id int64, width, height int) error {
+	if id <= 0 || width <= 0 || height <= 0 {
+		return nil
+	}
+	var q string
+	switch kind {
+	case "channel":
+		q = `UPDATE channels SET art_width = ?, art_height = ? WHERE id = ? AND art_width = 0`
+	case "airing":
+		q = `UPDATE airings SET image_width = ?, image_height = ? WHERE id = ? AND image_width = 0`
+	default:
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, q, width, height, id)
+	return err
 }
 
 func (s *Store) RememberProgram(ctx context.Context, deviceID, guide string, freq, program int) error {
@@ -177,10 +197,11 @@ func insertAiring(ctx context.Context, tx *sql.Tx, row Airing) error {
 	}
 	_, err := tx.ExecContext(ctx, `
 INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url,
-	season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list, game_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	image_width, image_height, season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list, game_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		row.ChannelID, row.Title, row.Subtitle, row.Description, row.Category,
 		row.Start.UTC().Format(time.RFC3339), row.End.UTC().Format(time.RFC3339), row.ProgramID, bit(row.New), row.ImageURL,
+		row.ImageWidth, row.ImageHeight,
 		row.Season, row.Episode, row.EpisodeLabel, row.OriginalAir, row.SeriesID, bit(row.Live), bit(row.Premiere), bit(row.Finale), row.Rating, row.Cast, row.GameID)
 	return err
 }
@@ -188,7 +209,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 func (s *Store) Airings(ctx context.Context, from, to time.Time) ([]Airing, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url,
-	season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list, game_id
+	image_width, image_height, season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list, game_id
 FROM airings WHERE ends_at > ? AND starts_at < ? ORDER BY starts_at`,
 		from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
 	if err != nil {
@@ -201,6 +222,7 @@ FROM airings WHERE ends_at > ? AND starts_at < ? ORDER BY starts_at`,
 		var start, end string
 		var isNew, isLive, isPremiere, isFinale int
 		if err := rows.Scan(&row.ID, &row.ChannelID, &row.Title, &row.Subtitle, &row.Description, &row.Category, &start, &end, &row.ProgramID, &isNew, &row.ImageURL,
+			&row.ImageWidth, &row.ImageHeight,
 			&row.Season, &row.Episode, &row.EpisodeLabel, &row.OriginalAir, &row.SeriesID, &isLive, &isPremiere, &isFinale, &row.Rating, &row.Cast, &row.GameID); err != nil {
 			return nil, err
 		}

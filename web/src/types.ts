@@ -75,6 +75,8 @@ export type Airing = {
   programId?: string;
   new?: boolean;
   imageUrl?: string;
+  imageWidth?: number;
+  imageHeight?: number;
   season?: number;
   episode?: number;
   episodeLabel?: string;

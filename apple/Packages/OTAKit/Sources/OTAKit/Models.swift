@@ -27,6 +27,8 @@ public struct Channel: Codable, Sendable, Hashable, Identifiable {
     public var hidden: Bool
     public var present: Bool
     public var artUrl: String?
+    public var artWidth: Int?
+    public var artHeight: Int?
 }
 
 public struct SearchResult: Codable, Sendable {
@@ -51,6 +53,8 @@ public struct Airing: Codable, Sendable, Hashable, Identifiable {
     public var programId: String?
     public var new: Bool?
     public var imageUrl: String?
+    public var imageWidth: Int?
+    public var imageHeight: Int?
     public var season: Int?
     public var episode: Int?
     public var episodeLabel: String?

@@ -256,16 +256,19 @@ struct GameCard: View {
 
 struct RecordingCard: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.displayScale) private var displayScale
     let recording: Recording
 
     var body: some View {
+        let cap = min(cardWidth, 480 * 1.25 / max(displayScale, 1))
         VStack(alignment: .leading, spacing: 8) {
             AsyncImage(url: store.api?.posterURL(recordingID: recording.id)) { image in
-                image.resizable().aspectRatio(16 / 9, contentMode: .fill)
+                image.resizable().scaledToFit().frame(maxWidth: cap, maxHeight: cap * 9 / 16)
             } placeholder: {
                 Rectangle().fill(Tokens.ColorToken.surface2)
             }
             .frame(width: cardWidth, height: cardWidth * 9 / 16)
+            .background(Tokens.ColorToken.surface2)
             .clipShape(.rect(cornerRadius: Tokens.Radius.md))
             Text(recording.title).font(.subheadline.weight(.semibold)).lineLimit(1)
             Text(recording.subtitle ?? recording.startedAt.formatted(date: .abbreviated, time: .omitted))

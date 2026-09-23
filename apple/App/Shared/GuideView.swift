@@ -403,15 +403,11 @@ struct ProgramSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if let airing, let api = store.api, airing.imageUrl?.isEmpty == false {
-                    AsyncImage(url: api.artURL(kind: "airing", id: airing.id, width: 640)) { phase in
-                        if let image = phase.image {
-                            image.resizable().scaledToFill()
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 180)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .accessibilityHidden(true)
+                    ProgramArt(url: api.artURL(kind: "airing", id: airing.id, width: 640), width: airing.imageWidth ?? 0, height: airing.imageHeight ?? 0)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 180)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .accessibilityHidden(true)
                 }
                 HStack {
                     ChannelBadge(channel, large: true)
@@ -492,6 +488,34 @@ struct ProgramSheet: View {
         .background {
             RadialGradient(colors: [kind.color.opacity(0.35), .clear], center: .topLeading, startRadius: 0, endRadius: 400)
                 .ignoresSafeArea()
+        }
+    }
+}
+
+/// Crisp poster over a blurred copy, unless the art is wide enough to fill the slot.
+private struct ProgramArt: View {
+    let url: URL
+    let width: Int
+    let height: Int
+
+    var body: some View {
+        GeometryReader { geo in
+            let bleed = ArtLayout.choose(width: width, height: height, slot: Int(geo.size.width)) == "bleed"
+            let cap = CGFloat(ArtLayout.displayEdge(native: max(width, 1), slot: Int(geo.size.width)))
+            AsyncImage(url: url) { phase in
+                if let image = phase.image {
+                    ZStack {
+                        image.resizable().scaledToFill().blur(radius: bleed ? 0 : 22).opacity(bleed ? 0.85 : 0.45)
+                        if !bleed {
+                            image.resizable().scaledToFit()
+                                .frame(maxWidth: width > 0 ? min(geo.size.width * 0.72, cap) : min(geo.size.width * 0.55, 320),
+                                       maxHeight: geo.size.height * 0.82)
+                        }
+                    }
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
         }
     }
 }

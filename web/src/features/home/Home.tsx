@@ -7,6 +7,7 @@ import { airingAt, categoryLabel, categoryOf, dayLabel, minutesLeft, nextAfter, 
 import type { Airing, Channel, Recording, TeamFollow } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
 import { savedSets } from "../multiview/storage";
+import { ArtFrame } from "../../ui/ArtFrame";
 import { ChannelBadge, Empty, LiveDot, Progress, SectionHeader } from "../../ui/primitives";
 import "./home.css";
 
@@ -111,7 +112,9 @@ export function Home() {
     <div className="home">
       {hero ? (
         <section className="hero" data-cat={hero.cat}>
-          {hero.airing?.imageUrl ? <img className="hero-art" alt="" src={`/media/art/airing/${hero.airing.id}?w=960`} /> : null}
+          {hero.airing?.imageUrl ? (
+            <ArtFrame src={`/media/art/airing/${hero.airing.id}?w=960`} width={hero.airing.imageWidth} height={hero.airing.imageHeight} />
+          ) : null}
           <div className="hero-glow" aria-hidden="true" />
           <div className="hero-num" aria-hidden="true">
             {hero.channel.displayNumber}
