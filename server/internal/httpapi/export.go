@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"ota-viewer/internal/live"
-	"ota-viewer/internal/store"
+	"waveguide/internal/live"
+	"waveguide/internal/store"
 )
 
 func asBusy(err error, target **live.BusyError) bool {
@@ -92,7 +92,7 @@ func (s *Server) exportGuide(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	doc := xmltvDoc{Generator: "OTA Viewer"}
+	doc := xmltvDoc{Generator: "Waveguide"}
 	ids := map[int64]string{}
 	for _, ch := range channels {
 		id := xmltvChannelID(ch)

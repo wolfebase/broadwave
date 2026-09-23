@@ -1,6 +1,6 @@
-name: OTAViewer
+name: Waveguide
 options:
-  bundleIdPrefix: com.otaviewer
+  bundleIdPrefix: com.wolfeup
   deploymentTarget:
     iOS: "26.1"
     tvOS: "26.1"
@@ -28,66 +28,54 @@ targetTemplates:
     dependencies:
       - package: OTAKit
       - package: OTAUI
-    info:
-      path: App/Info-${platform}.plist
-      properties:
-        CFBundleDisplayName: OTA Viewer
-        UILaunchScreen: {}
-        NSLocalNetworkUsageDescription: OTA Viewer finds your TV server on your home network.
-        NSBonjourServices:
-          - _otaviewer._tcp
-        NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
-          NSAllowsArbitraryLoads: true
-        ITSAppUsesNonExemptEncryption: false
 targets:
-  OTAViewer:
+  Waveguide:
     templates: [App]
     platform: iOS
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.otaviewer.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.waveguide
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
     info:
       path: App/Info-iOS.plist
       properties:
-        CFBundleDisplayName: OTA Viewer
+        CFBundleDisplayName: Waveguide
         UILaunchScreen: {}
         UIBackgroundModes: [audio]
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        NSLocalNetworkUsageDescription: OTA Viewer finds your TV server on your home network.
+        NSLocalNetworkUsageDescription: Waveguide finds your TV server on your home network.
         NSBonjourServices:
-          - _otaviewer._tcp
+          - _waveguide._tcp
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
           NSAllowsArbitraryLoads: true
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
-          - CFBundleURLName: com.otaviewer.app
-            CFBundleURLSchemes: [otaviewer]
-  OTAViewerTV:
+          - CFBundleURLName: com.wolfeup.waveguide
+            CFBundleURLSchemes: [waveguide]
+  WaveguideTV:
     templates: [App]
     platform: tvOS
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.otaviewer.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.waveguide
         TARGETED_DEVICE_FAMILY: "3"
     info:
       path: App/Info-tvOS.plist
       properties:
-        CFBundleDisplayName: OTA Viewer
+        CFBundleDisplayName: Waveguide
         UILaunchScreen: {}
-        NSLocalNetworkUsageDescription: OTA Viewer finds your TV server on your home network.
+        NSLocalNetworkUsageDescription: Waveguide finds your TV server on your home network.
         NSBonjourServices:
-          - _otaviewer._tcp
+          - _waveguide._tcp
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
           NSAllowsArbitraryLoads: true
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
-          - CFBundleURLName: com.otaviewer.app
-            CFBundleURLSchemes: [otaviewer]
+          - CFBundleURLName: com.wolfeup.waveguide
+            CFBundleURLSchemes: [waveguide]

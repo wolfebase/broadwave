@@ -11,7 +11,7 @@ PORT=18499
 SRC_PORT=18500
 T=$(mktemp -d)
 BIN="$T/otav-smoke"
-(cd "$ROOT" && go build -o "$BIN" ./server/cmd/ota-viewer) || exit 1
+(cd "$ROOT" && go build -o "$BIN" ./server/cmd/waveguide) || exit 1
 
 ffmpeg -hide_banner -loglevel error -re \
   -f lavfi -i "testsrc2=size=1280x720:rate=60000/1001" -f lavfi -i "sine=frequency=500" \
@@ -32,7 +32,7 @@ check() { if eval "$2"; then echo "PASS $1"; else echo "FAIL $1"; fail=1; fi; }
 TV=$(curl -s -XPOST "$API/watch" -d "{\"channelId\":$ID,\"caps\":{\"platform\":\"tvos\",\"video\":[\"h264\",\"hevc\"],\"audio\":[\"aac\",\"ac3\"]}}")
 check "apple tv session" "echo '$TV' | grep -q rendition"
 sleep 6
-FO=$(sqlite3 "$T/ota-viewer.db" "select field_order from channels where id=$ID")
+FO=$(sqlite3 "$T/waveguide.db" "select field_order from channels where id=$ID")
 check "field-order probe recorded ($FO)" "[ -n '$FO' ]"
 TV2=$(curl -s -XPOST "$API/watch" -d "{\"channelId\":$ID,\"caps\":{\"platform\":\"tvos\",\"video\":[\"h264\",\"hevc\"],\"audio\":[\"aac\",\"ac3\"]}}" | python3 -c "import sys,json;print(json.load(sys.stdin)['rendition'])")
 check "progressive h264 goes direct (copy.copy, got $TV2)" "[ '$TV2' = 'copy.copy' ]"

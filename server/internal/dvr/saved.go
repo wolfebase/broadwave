@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"ota-viewer/internal/live"
-	"ota-viewer/internal/store"
+	"waveguide/internal/live"
+	"waveguide/internal/store"
 )
 
 // OnSaved indexes commercials and applies keep rules after a recording finishes.

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"ota-viewer/internal/hdhr"
-	"ota-viewer/internal/store"
+	"waveguide/internal/hdhr"
+	"waveguide/internal/store"
 )
 
 type tv struct {
@@ -61,7 +61,7 @@ func Pull(ctx context.Context, client *hdhr.Client, baseURL string) ([]byte, err
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "OTAViewer/0.1")
+	req.Header.Set("User-Agent", "Waveguide/0.1")
 	req.Header.Set("Accept-Encoding", "gzip")
 	var res *http.Response
 	for attempt := 0; attempt < 2; attempt++ {
@@ -80,7 +80,7 @@ func Pull(ctx context.Context, client *hdhr.Client, baseURL string) ([]byte, err
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("User-Agent", "OTAViewer/0.1")
+		req.Header.Set("User-Agent", "Waveguide/0.1")
 		req.Header.Set("Accept-Encoding", "gzip")
 	}
 	defer res.Body.Close()

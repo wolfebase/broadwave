@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"ota-viewer/internal/store"
+	"waveguide/internal/store"
 )
 
 // Planned is one airing a series pass will record inside the window.

@@ -18,11 +18,11 @@ struct ConnectView: View {
                         HStack(spacing: 10) {
                             Circle().fill(Tokens.ColorToken.tally).frame(width: 12, height: 12)
                                 .shadow(color: Tokens.ColorToken.tally, radius: 8)
-                            Text("OTA Viewer").font(.title2.weight(.heavy))
+                            Text("Waveguide").font(.title2.weight(.heavy))
                         }
                         Text("Your antenna, on every screen.")
                             .font(.largeTitle.weight(.heavy))
-                        Text("Pick your server. It's the computer running OTA Viewer next to your HDHomeRun.")
+                        Text("Pick your server. It's the computer running Waveguide next to your HDHomeRun.")
                             .foregroundStyle(.secondary)
                     }
 
@@ -106,7 +106,7 @@ struct ConnectView: View {
             let info = try await APIClient(base: url).server()
             store.connect(FoundServer(id: id ?? info.id, name: name ?? info.name, url: url))
         } catch {
-            problem = "No OTA Viewer server answered at \(url.host() ?? url.absoluteString)."
+            problem = "No Waveguide server answered at \(url.host() ?? url.absoluteString)."
         }
     }
 }

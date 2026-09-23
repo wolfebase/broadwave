@@ -44,14 +44,14 @@ struct RootView: View {
         .task {
             // Simulator testing: launch with -OTAWatch <channel id>.
             let id = UserDefaults.standard.integer(forKey: "OTAWatch")
-            if id > 0 { open(URL(string: "otaviewer://watch/\(id)")!) }
+            if id > 0 { open(URL(string: "waveguide://watch/\(id)")!) }
         }
         #endif
     }
 
-    /// otaviewer://watch/<channel id>, otaviewer://guide, otaviewer://sports — for widgets, Top Shelf, and Siri.
+    /// waveguide://watch/<channel id>, waveguide://guide, waveguide://sports — for widgets, Top Shelf, and Siri.
     private func open(_ url: URL) {
-        guard url.scheme == "otaviewer" else { return }
+        guard url.scheme == "waveguide" else { return }
         switch url.host() {
         case "connect":
             let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems

@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"ota-viewer/internal/dvr"
-	"ota-viewer/internal/guide"
-	"ota-viewer/internal/live"
-	"ota-viewer/internal/store"
+	"waveguide/internal/dvr"
+	"waveguide/internal/guide"
+	"waveguide/internal/live"
+	"waveguide/internal/store"
 )
 
 func (s *Server) watch(w http.ResponseWriter, r *http.Request) {

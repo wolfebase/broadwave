@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"ota-viewer/internal/store"
+	"waveguide/internal/store"
 )
 
 func TestSchedulesDirectMapsChannelNumbers(t *testing.T) {

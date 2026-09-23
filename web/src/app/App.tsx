@@ -72,9 +72,9 @@ function Shell() {
     <div className={`shell layout-${layout}${fullPlayer || immersive ? " immersive" : ""}${player.channel && !fullPlayer ? " has-mini" : ""}`}>
       {!immersive ? (
         <nav className="topbar glass" aria-label="Primary">
-          <button type="button" className="brand" onClick={() => navigate("/")} aria-label="OTA Viewer home">
+          <button type="button" className="brand" onClick={() => navigate("/")} aria-label="Waveguide home">
             <span className="brand-tally" aria-hidden="true" />
-            <span className="brand-word">OTA Viewer</span>
+            <span className="brand-word">Waveguide</span>
           </button>
           <div className="tabs" role="tablist">
             {tabs.map(({ path: p, label, Icon }) => (

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"ota-viewer/internal/store"
+	"waveguide/internal/store"
 )
 
 // ApplyLibrary marks airings a pass should not start: already recorded, over the limit, or skipped once.

@@ -3,7 +3,7 @@ package dvr
 import (
 	"time"
 
-	"ota-viewer/internal/store"
+	"waveguide/internal/store"
 )
 
 // StartDecision reports whether a pass should start recording this airing now,

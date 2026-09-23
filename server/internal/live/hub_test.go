@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"ota-viewer/internal/store"
+	"waveguide/internal/store"
 )
 
 type nopWriter struct{ closed bool }

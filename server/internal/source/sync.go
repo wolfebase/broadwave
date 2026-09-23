@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"ota-viewer/internal/hdhr"
-	"ota-viewer/internal/store"
+	"waveguide/internal/hdhr"
+	"waveguide/internal/store"
 )
 
 // Sync reads discover.json and lineup.json. It does not open a tuner stream.

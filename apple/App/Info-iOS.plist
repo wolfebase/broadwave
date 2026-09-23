@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>OTA Viewer</string>
+	<string>Waveguide</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -22,10 +22,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.otaviewer.app</string>
+			<string>com.wolfeup.waveguide</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>otaviewer</string>
+				<string>waveguide</string>
 			</array>
 		</dict>
 	</array>
@@ -42,11 +42,10 @@
 	</dict>
 	<key>NSBonjourServices</key>
 	<array>
-		<string>_otaviewer._tcp</string>
-		<string>_otaviewer._tcp</string>
+		<string>_waveguide._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>OTA Viewer finds your TV server on your home network.</string>
+	<string>Waveguide finds your TV server on your home network.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

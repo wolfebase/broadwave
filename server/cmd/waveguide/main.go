@@ -16,13 +16,13 @@ import (
 	"sync"
 	"time"
 
-	"ota-viewer/internal/discovery"
-	"ota-viewer/internal/dvr"
-	"ota-viewer/internal/httpapi"
-	"ota-viewer/internal/live"
-	"ota-viewer/internal/realtime"
-	"ota-viewer/internal/source"
-	"ota-viewer/internal/store"
+	"waveguide/internal/discovery"
+	"waveguide/internal/dvr"
+	"waveguide/internal/httpapi"
+	"waveguide/internal/live"
+	"waveguide/internal/realtime"
+	"waveguide/internal/source"
+	"waveguide/internal/store"
 )
 
 //go:embed all:assets
@@ -104,7 +104,7 @@ func main() {
 			}
 		}
 	}
-	log.Printf("OTA Viewer listening on %s", *addr)
+	log.Printf("Waveguide listening on %s", *addr)
 	server := &http.Server{
 		Addr:              *addr,
 		Handler:           handler,

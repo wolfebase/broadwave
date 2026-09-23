@@ -1,4 +1,4 @@
-module ota-viewer
+module waveguide
 
 go 1.26.0
 

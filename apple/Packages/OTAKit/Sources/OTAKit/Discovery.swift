@@ -15,7 +15,7 @@ public struct FoundServer: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
-/// Finds OTA Viewer servers advertised over Bonjour as `_otaviewer._tcp`.
+/// Finds Waveguide servers advertised over Bonjour as `_waveguide._tcp`.
 @MainActor
 @Observable
 public final class Discovery {
@@ -30,7 +30,7 @@ public final class Discovery {
         guard browser == nil else { return }
         let params = NWParameters.tcp
         params.includePeerToPeer = false
-        let browser = NWBrowser(for: .bonjourWithTXTRecord(type: "_otaviewer._tcp", domain: nil), using: params)
+        let browser = NWBrowser(for: .bonjourWithTXTRecord(type: "_waveguide._tcp", domain: nil), using: params)
         browser.browseResultsChangedHandler = { [weak self] results, _ in
             Task { @MainActor in self?.update(results) }
         }

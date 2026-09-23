@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"ota-viewer/internal/hdhr"
-	"ota-viewer/internal/live"
-	"ota-viewer/internal/realtime"
-	"ota-viewer/internal/source"
-	"ota-viewer/internal/store"
+	"waveguide/internal/hdhr"
+	"waveguide/internal/live"
+	"waveguide/internal/realtime"
+	"waveguide/internal/source"
+	"waveguide/internal/store"
 )
 
 type Server struct {
@@ -98,7 +98,7 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": "ota-viewer"})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": "waveguide"})
 }
 
 func (s *Server) profile(w http.ResponseWriter, r *http.Request) {

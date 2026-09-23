@@ -1,8 +1,8 @@
-# OTA Viewer
+# Waveguide
 
 Live TV and DVR for your antenna, built for Apple devices.
 
-OTA Viewer runs on your server (Docker, Unraid, or a Mac), finds your HDHomeRun, and fills a guide with your local channels. It records the original broadcast and shares one tuner with every screen in the house, in sync. Watch on iPhone, Apple TV, or any browser.
+Waveguide runs on your server (Docker, Unraid, or a Mac), finds your HDHomeRun, and fills a guide with your local channels. It records the original broadcast and shares one tuner with every screen in the house, in sync. Watch on iPhone, Apple TV, or any browser.
 
 - **One tuner, every screen.** Everyone watching the same channel shares one tune, and Plex, Jellyfin, or Channels can use it too.
 - **Whole-Home Sync.** Every room plays the same frame, with no echo and no spoilers from the next room.
@@ -15,18 +15,18 @@ OTA Viewer runs on your server (Docker, Unraid, or a Mac), finds your HDHomeRun,
 ### Docker
 
 ```bash
-docker run -d --name ota-viewer --network host \
+docker run -d --name waveguide --network host \
   -v /path/to/config:/config \
   -v /path/to/recordings:/config/work/recordings \
   --device /dev/dri \
-  ghcr.io/ota-viewer/ota-viewer:latest
+  ghcr.io/twolfekc/waveguide:latest
 ```
 
 Open `http://<server>:8477`. Host networking lets the server find your tuner and lets the apps find the server. See `deploy/docker/compose.yaml` for Compose.
 
 ### Unraid
 
-Use the template in `deploy/unraid/ota-viewer.xml` (Community Apps listing coming).
+Use the template in `deploy/unraid/waveguide.xml` (Community Apps listing coming).
 
 ## Develop
 

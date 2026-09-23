@@ -1,9 +1,9 @@
 ---
-name: ota-viewer-multiview
-description: Design and implementation guide for OTA Viewer multiview (two or more live channels side by side, synced, with audio focus) across the Go server, web app, and iPhone/iPad/Apple TV apps, including tuner budgeting, tile renditions, layouts, and verification. Use when building or changing multiview, side-by-side viewing, quad view, picture-in-picture tiles, or mosaic streams.
+name: waveguide-multiview
+description: Design and implementation guide for Waveguide multiview (two or more live channels side by side, synced, with audio focus) across the Go server, web app, and iPhone/iPad/Apple TV apps, including tuner budgeting, tile renditions, layouts, and verification. Use when building or changing multiview, side-by-side viewing, quad view, picture-in-picture tiles, or mosaic streams.
 ---
 
-# OTA Viewer multiview
+# Waveguide multiview
 
 The user's must-have: watch one channel and a different channel **right next to each other, clean and seamless**. Beat Channels DVR (live-only, no buffer, no sync) with synced tiles, instant audio focus, buffer-aware controls, and great layouts everywhere.
 
@@ -18,7 +18,7 @@ The user's must-have: watch one channel and a different channel **right next to 
 
 ## Server work (Phase B1)
 
-1. Tile renditions: add `360` video and `none` audio (`540.none`, `360.none`); keep `-copyts`, CMAF, keyframe expr (skill `ota-viewer-media-pipeline`). Table-test keys and `Decide` with a `tile: true` pref (or `quality: "tile"`).
+1. Tile renditions: add `360` video and `none` audio (`540.none`, `360.none`); keep `-copyts`, CMAF, keyframe expr (skill `waveguide-media-pipeline`). Table-test keys and `Decide` with a `tile: true` pref (or `quality: "tile"`).
 2. `POST /api/v1/multiview/plan {channelIds}` -> `{playable:[...], blocked:[{channelId, reason, holders:[...]}], tunersNeeded, tunersFree}`; compute via frequency grouping (`channels.frequency_hz`, learned on tune) and live tuner status. Unknown frequency -> assume one tuner each.
 3. Multiview sync room `multiview:<id>`: same RoomState math; all tiles join it. Optional group controls (pause all).
 4. Mosaic rendition (optional, after web/Apple tiles work): one ffmpeg with multiple inputs from different feeds' pipes is hard because each feed is a separate mux subscriber — implement as a special feed reading N feeds' `copy` renditions (local HLS) or N pipe subscribers into `xstack=inputs=N:layout=...`, audio from the focused input; key `mosaic:<ids>:<layout>`.

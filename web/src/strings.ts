@@ -1,5 +1,5 @@
 export const copy = {
-  brand: "OTA Viewer",
+  brand: "Waveguide",
   nav: {
     home: "Home",
     guide: "Guide",

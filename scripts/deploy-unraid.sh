@@ -1,34 +1,41 @@
 #!/usr/bin/env bash
-# Build OTA Viewer for linux/amd64 and deploy it to an Unraid server over SSH.
+# Build Waveguide for linux/amd64 and deploy it to an Unraid server over SSH.
 #
 #   UNRAID_HOST=root@192.168.1.2 scripts/deploy-unraid.sh            # build + deploy + recreate
 #   UNRAID_HOST=... MODE=image-only scripts/deploy-unraid.sh           # build image, keep container
 #
 # Layout on the server (matches the user's existing install):
-#   $APPDATA/build/   Dockerfile + ota-viewer binary (image context)
+#   $APPDATA/build/   Dockerfile + waveguide binary (image context)
 #   $APPDATA/config/  mounted at /config (catalog, live buffers)
 #   $RECORDINGS       mounted at /config/work/recordings
 # The container runs with host networking (tuner discovery + Bonjour) and /dev/dri (VAAPI/QSV).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 : "${UNRAID_HOST:?set UNRAID_HOST, e.g. root@192.168.1.2}"
-APPDATA="${APPDATA:-/mnt/cache/appdata/ota-viewer}"
+APPDATA="${APPDATA:-/mnt/cache/appdata/waveguide}"
 RECORDINGS="${RECORDINGS:-/mnt/user/media/ota-recordings}"
-NAME="${NAME:-OTA-Viewer}"
-IMAGE="${IMAGE:-ota-viewer:latest}"
+NAME="${NAME:-Waveguide}"
+IMAGE="${IMAGE:-waveguide:latest}"
 TZ_NAME="${TZ_NAME:-America/Chicago}"
 VERSION="${VERSION:-$(cd "$ROOT" && git describe --tags --always --dirty 2>/dev/null || echo dev)}"
 MODE="${MODE:-full}"
 
 echo "==> building web + linux/amd64 binary ($VERSION)"
 (cd "$ROOT/web" && npm run build >/dev/null)
-(cd "$ROOT/server" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=$VERSION" -o "$ROOT/bin/ota-viewer-linux-amd64" ./cmd/ota-viewer)
+(cd "$ROOT/server" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=$VERSION" -o "$ROOT/bin/waveguide-linux-amd64" ./cmd/waveguide)
+
+echo "==> adopting a pre-rename install on $UNRAID_HOST (if any)"
+# Before the Waveguide rename the container was OTA-Viewer with appdata in .../ota-viewer.
+# Move the appdata once; the server renames ota-viewer.db to waveguide.db on start.
+OLD_APPDATA="${OLD_APPDATA:-$(dirname "$APPDATA")/ota-viewer}"
+ssh "$UNRAID_HOST" "if [ -d $OLD_APPDATA ] && [ ! -e $APPDATA ]; then docker stop OTA-Viewer >/dev/null 2>&1 || true; mv $OLD_APPDATA $APPDATA && echo moved $OLD_APPDATA to $APPDATA; fi; \
+  docker rm -f OTA-Viewer >/dev/null 2>&1 && echo removed old container OTA-Viewer; true"
 
 echo "==> backing up catalog on $UNRAID_HOST"
-ssh "$UNRAID_HOST" "mkdir -p $APPDATA/build $APPDATA/backups && cp $APPDATA/config/ota-viewer.db $APPDATA/backups/ota-viewer-\$(date +%Y%m%d-%H%M%S).db 2>/dev/null || true"
+ssh "$UNRAID_HOST" "mkdir -p $APPDATA/build $APPDATA/backups && for db in waveguide ota-viewer; do [ -f $APPDATA/config/\$db.db ] && cp $APPDATA/config/\$db.db $APPDATA/backups/\$db-\$(date +%Y%m%d-%H%M%S).db; done; true"
 
 echo "==> uploading"
-scp -q "$ROOT/bin/ota-viewer-linux-amd64" "$UNRAID_HOST:$APPDATA/build/ota-viewer"
+scp -q "$ROOT/bin/waveguide-linux-amd64" "$UNRAID_HOST:$APPDATA/build/waveguide"
 scp -q "$ROOT/deploy/docker/Dockerfile.runtime" "$UNRAID_HOST:$APPDATA/build/Dockerfile"
 
 echo "==> building image on server"

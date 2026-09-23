@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ota-viewer/internal/store"
+	"waveguide/internal/store"
 )
 
 func writeSidecar(rec store.Recording) {

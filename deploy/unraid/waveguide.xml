@@ -1,14 +1,14 @@
 <?xml version="1.0"?>
 <Container version="2">
-  <Name>OTA-Viewer</Name>
-  <Repository>ghcr.io/ota-viewer/ota-viewer:latest</Repository>
-  <Registry>https://github.com/ota-viewer/ota-viewer/pkgs/container/ota-viewer</Registry>
+  <Name>Waveguide</Name>
+  <Repository>ghcr.io/twolfekc/waveguide:latest</Repository>
+  <Registry>https://github.com/twolfekc/waveguide/pkgs/container/waveguide</Registry>
   <Network>host</Network>
   <MyIP/>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
-  <Support/>
-  <Project/>
+  <Support>https://github.com/twolfekc/waveguide/issues</Support>
+  <Project>https://github.com/twolfekc/waveguide</Project>
   <Overview>Live TV and DVR for your antenna. Finds your HDHomeRun, fills a 14-day guide, records the original broadcast, and shares one tuner with every screen in the house, in sync. Apps for iPhone and Apple TV find this server on their own.</Overview>
   <Category>MediaApp:Video MediaServer:Video</Category>
   <WebUI>http://[IP]:[PORT:8477]/</WebUI>
@@ -22,7 +22,7 @@
   <DonateLink/>
   <Requires>An HDHomeRun tuner on the same network. Host networking lets the server find it and lets the apps find the server. Remove --device=/dev/dri if the server has no Intel or AMD graphics.</Requires>
   <Config Name="Web UI" Target="8477" Default="8477" Mode="tcp" Description="Web app and API port" Type="Port" Display="always" Required="true" Mask="false">8477</Config>
-  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/ota-viewer" Mode="rw" Description="Database, guide, and live buffer. Put this on a fast pool." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/ota-viewer</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/waveguide" Mode="rw" Description="Database, guide, and live buffer. Put this on a fast pool." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/waveguide</Config>
   <Config Name="Recordings" Target="/config/work/recordings" Default="/mnt/user/media/recordings" Mode="rw" Description="Where recordings are saved as original broadcast files." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media/recordings</Config>
   <Config Name="Tuner address" Target="HDHR_HOST" Default="" Mode="" Description="Optional. Only needed if the tuner is on another subnet or the container is not on host networking." Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="TZ" Target="TZ" Default="America/New_York" Mode="" Description="Timezone for the guide" Type="Variable" Display="always" Required="false" Mask="false">America/New_York</Config>

@@ -4,7 +4,7 @@
 flowchart LR
   subgraph home [Home network]
     HDHR[HDHomeRun tuners]
-    subgraph server [OTA Viewer server]
+    subgraph server [Waveguide server]
       TunerPool[Tuner pool]
       Relay[Broadcast relay]
       Renditions[Renditions]
@@ -66,7 +66,7 @@ JSON under `/api`, HLS under `/media`, the SPA at `/`. The optional HDHomeRun em
 
 ## Web app (`web/`)
 
-React and Vite, built into `server/cmd/ota-viewer/assets/web` and embedded with `go:embed`. It plays HLS through hls.js and doubles as the setup and admin console.
+React and Vite, built into `server/cmd/waveguide/assets/web` and embedded with `go:embed`. It plays HLS through hls.js and doubles as the setup and admin console.
 
 ## Apple apps (`apple/`)
 

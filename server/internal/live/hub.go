@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"ota-viewer/internal/disk"
-	"ota-viewer/internal/hdhr"
-	"ota-viewer/internal/store"
+	"waveguide/internal/disk"
+	"waveguide/internal/hdhr"
+	"waveguide/internal/store"
 )
 
 type Tuner struct {

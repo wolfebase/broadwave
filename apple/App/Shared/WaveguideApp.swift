@@ -4,7 +4,7 @@ import OTAUI
 import SwiftUI
 
 @main
-struct OTAViewerApp: App {
+struct WaveguideApp: App {
     @State private var store = AppStore()
 
     init() {

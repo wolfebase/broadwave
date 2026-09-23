@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"ota-viewer/internal/dvr"
-	"ota-viewer/internal/live"
-	"ota-viewer/internal/store"
+	"waveguide/internal/dvr"
+	"waveguide/internal/live"
+	"waveguide/internal/store"
 )
 
 // emulatedTuners is what other apps see. Every "tuner" rides the shared tune, so
@@ -66,7 +66,7 @@ type emuHandler struct {
 func (h *emuHandler) discover(w http.ResponseWriter, r *http.Request) {
 	host := r.Host
 	id, _ := h.store.Identity(r.Context(), DefaultServerName())
-	deviceID := "OTAVIEW01"
+	deviceID := "WAVEGD01"
 	if len(id.ID) >= 8 {
 		deviceID = strings.ToUpper(id.ID[:8])
 	}
@@ -76,7 +76,7 @@ func (h *emuHandler) discover(w http.ResponseWriter, r *http.Request) {
 		"FirmwareName":    "hdhomeruntc_atsc",
 		"FirmwareVersion": "20260101",
 		"DeviceID":        deviceID,
-		"DeviceAuth":      "ota-viewer",
+		"DeviceAuth":      "waveguide",
 		"TunerCount":      emulatedTuners,
 		"BaseURL":         "http://" + host,
 		"LineupURL":       "http://" + host + "/lineup.json",

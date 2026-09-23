@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Go server
 
-- Module `ota-viewer` under `server/`. Standard library first: `net/http` method routing, `log/slog` for new logging, `database/sql` with `modernc.org/sqlite` (pure Go, no cgo, so the binary cross-compiles).
+- Module `waveguide` under `server/`. Standard library first: `net/http` method routing, `log/slog` for new logging, `database/sql` with `modernc.org/sqlite` (pure Go, no cgo, so the binary cross-compiles).
 - Packages stay small and named for the domain: `hdhr`, `live`, `dvr`, `guide`, `store`, `httpapi`, `source`, `disk`. Put new domains in new packages (for example `sync`, `auth`, `sports`) rather than growing `httpapi`.
 - **Tuners are precious.** Every code path that opens a tuner must reuse an already-tuned frequency first, release on every error path, and set `/tunerN/channel none` when done. Busy tuners come back as HTTP 503 with `X-HDHomeRun-Error: 805`; surface that as a typed busy error.
 - **One tune, many readers.** The relay reads a frequency once and fans out to live renditions, recordings, and exports. Never open a second HTTP stream from the tuner for the same frequency. A slow reader must never stall the tuner read loop (drop or buffer per reader).
