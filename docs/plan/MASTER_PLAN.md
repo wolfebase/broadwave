@@ -1,6 +1,6 @@
 # Waveguide — Master Plan v2
 
-Written 2026-09-23 after reviewing run 1 (tasks A1–D6, 46 commits). This version supersedes v1 (see git history before `0984064`). Task IDs from v1 are kept so `PROGRESS.md` carries over; new tasks get new IDs (R*, B5, C7–C9, D7–D8, G10–G11, K6, M*).
+Written 2026-09-23 after reviewing run 1 (tasks A1–D6, 46 commits). This version supersedes v1 (see git history before `0984064`). Task IDs from v1 are kept so `PROGRESS.md` carries over; new tasks get new IDs (R*, S*, P*, N*, B5, C7–C9, D7–D8, G10, K6, M*). Revised the same day to add Phase S (every source, auto-found), Phase P (server and Apple apps as one), and Phase N (every other screen).
 
 The product is **Waveguide** (renamed from "OTA Viewer"; see `docs/brand.md`). The repo folder on disk is still `ota viewer`; quote paths and do not rename it.
 
@@ -8,7 +8,7 @@ Read in this order before touching code:
 
 1. `AGENTS.md` (project guide + Lessons learned), then `.cursor/rules/*.mdc`
 2. This file, then `docs/plan/PROGRESS.md` (start at "Resume here"), `docs/plan/BLOCKERS.md`, `docs/plan/UNRAID_LOG.md`
-3. Skills: `waveguide-dev-loop`, `waveguide-media-pipeline`, `waveguide-apple`, `waveguide-multiview` (project, `.cursor/skills/`), `waveguide-unraid` (personal, `~/.cursor/skills/`)
+3. Skills: `waveguide-dev-loop`, `waveguide-media-pipeline`, `waveguide-apple`, `waveguide-multiview`, `waveguide-sources` (project, `.cursor/skills/`), `waveguide-unraid` (personal, `~/.cursor/skills/`)
 4. `docs/architecture.md`, `docs/decisions/0001-0005`, `docs/research.md`
 
 ---
@@ -37,7 +37,7 @@ Run 1 did good work but ended its turn after almost every phase; the user had to
 
 ### 0.3 Per-phase loop
 
-At the end of every phase (R, C, K1, G1, F, E, D-extras, B5, I, G, H, J, K, L):
+At the end of every phase (R, S, C, K1, P, G1, F, E, D-extras, B5, I, G, H, N, J, K, L):
 
 1. Add a `CHANGELOG.md` entry and tag `v0.N.0` (next minor). The release workflow publishes `ghcr.io/wolfebase/waveguide:<tag>` for amd64 and arm64.
 2. Deploy to Unraid with `MODE=ghcr` (skill `waveguide-unraid`; large SSH uploads over the tunnel drop, so pull from GHCR). Smoke it: health, version, a channel plays, two tabs sync, the phase's features work. Log it in `UNRAID_LOG.md`. Run 1 deployed only once (A3); Unraid still runs v0.1.0.
@@ -81,11 +81,15 @@ The user allows reading other projects under `~/Projects` and `~/.blitz` for key
 7. Multiview mosaic deferred (ADR 0004). → B5.
 8. The 14.x frequency is unknown, so the multiview plan treats each 14.x subchannel as its own tuner. → C7 learns frequencies.
 9. TestFlight upload blocked on the App Store Connect app record (needs one Apple ID login). → A7.
+10. **Sources are thin.** Discovery is only the HDHomeRun UDP broadcast, which fails when Docker runs in bridge mode or the tuner is on another VLAN. M3U parsing ignores `tvg-id`, `tvg-chno`, `tvg-logo`, `group-title`, and `url-tvg`, numbers every channel from 801, never refreshes, and has no stream limit. An XMLTV link is applied to every playlist channel instead of its own source, and fetch errors are swallowed. No Xtream Codes, tvheadend, Channels DVR, HDHomeRun-emulator, or free-channel sources. → Phase S.
+11. **Apps can watch but not set up.** The iPhone and Apple TV apps connect (Bonjour or typed address) but cannot add a tuner, scan channels, add a playlist, or run setup; Swift models are hand-mirrored from the API with no contract tests, so a server change can silently break decoding. → Phase P.
+12. **Only Apple screens and browsers.** People also watch on Fire TV, Android/Google TV, Roku, smart TVs, and inside Channels, Plex, Jellyfin, and IPTV players. The HDHomeRun emulator and M3U/XMLTV exports exist but were never verified against those apps. → Phase N.
 
 ---
 
 ## 2. Research digest (sources in `docs/research.md`; re-verify version-sensitive facts)
 
+- **The source ecosystem (verify in S0; details in `docs/research.md`).** HDHomeRun: UDP 65001 broadcast discovery (works only on the same L2 segment and with host networking), `https://api.hdhomerun.com/discover` cloud lookup (lists devices behind the same public IP with their `LocalIP`, works from a bridged container), `discover.json`, `lineup.json`, `lineup_status.json`, channel scan with `POST /lineup.post?scan=start&source=Antenna`, streams on port 5004 (`/auto/v<ch>`; full-mux form to verify). Models: CONNECT/DUO/QUATTRO (ATSC 1.0), FLEX 4K (ATSC 3.0), PRIME (CableCARD, copy-protection flags), EXTEND (hardware transcode profiles). HDHomeRun emulators that Plex/Channels users run: tvheadend (9981, `/playlist/channels.m3u`, `/xmltv/channels`, HTSP 9982), Threadfin/xTeVe (34400), ErsatzTV (8409), Dispatcharr, Antennas; many answer SSDP and serve `discover.json`. Channels DVR itself serves `http://host:8089/devices/ANY/channels.m3u` and `/devices/ANY/guide/xmltv`. IPTV: extended M3U (`#EXTM3U url-tvg=`, `tvg-id`, `tvg-name`, `tvg-logo`, `tvg-chno`/`channel-number`, `group-title`, Channels' `tvc-guide-stationid`, `tvg-shift`, catchup attributes, `#EXTVLCOPT:http-user-agent/referrer`) and Xtream Codes (`player_api.php?username=&password=&action=get_live_categories|get_live_streams`, `xmltv.php`, streams at `/live/<user>/<pass>/<id>.ts|.m3u8`). Free channels: community Pluto TV, Samsung TV Plus, Plex, Roku, and Stirr playlists with EPG (for example the widely used i.mjh.nz lists) — offer as presets, never scrape. Channels DVR's M3U source UX: URL or file, stream format (HLS/MPEG-TS/auto), stream limit, "prefer channel numbers from M3U", XMLTV URL, refresh interval.
 - **ATSC PSIP (A/65) — the guide inside the broadcast.** Base PID `0x1FFB` carries MGT (`0xC7`), TVCT (`0xC8`), CVCT (`0xC9`), RRT (`0xCA`), and STT (`0xCD`). The MGT lists PIDs for EIT-0…EIT-127 (table types `0x0100+k`) and channel ETTs and EIT ETTs (`0x0200+k`). EIT (`0xCB`) sections carry events per `source_id` (the VCT maps `source_id` to major.minor); each EIT-k covers a 3-hour block, so EIT-0..3 (required) is 12 hours and stations can carry up to 16 days. ETT (`0xCC`) holds descriptions. Times are GPS seconds since 1980-01-06 minus the STT's GPS-UTC offset. Strings are `multiple_string_structure`, sometimes Huffman-compressed (A/65 Annex C tables, compression types 1 and 2). The genre descriptor (`0xAB`) gives categories, useful for sports matching. MythTV and TVHeadend both harvest EIT this way; Channels DVR does not.
 - **Apple multiview (tvOS/iOS 26+):** `AVRoutingPlaybackArbiter` preferred participants route AirPlay and non-mixable audio to the focused tile; `networkResourcePriority` high for the focused tile. `AVPlaybackCoordinationMedium` is not used (it forces one timeline; see ADR 0004).
 - **Channels DVR parity:** multiview up to 4 (live only, no buffer), intro/credits detection, Enhanced Commercial Detection (fingerprinting, idle backfill), commercial skip modes (auto, button, manual, double-forward inside a break), Personal Sections, Theater Mode. **AIRDVR** has side-by-side multiview and live scores; iOS app pending. We win with sync across screens, multiview with a buffer and sync, the broadcast-harvested guide, modern Apple-native design, open exports, and no subscription.
@@ -124,6 +128,77 @@ R5. **Live preview frames.** For every frequency already tuned (a viewer, a reco
 R6. **Apple review of B–D.** Screenshot every Apple screen that B–D touched (multiview 2-up/quad, guide, search, sports, Your teams, score bugs) on iPhone 17 Pro, iPad Pro 13", and Apple TV 4K, including Dynamic Type XL on iPhone and focus states on tvOS. Fix defects that take under an hour; add the rest as J1 sub-items. **Accept:** screenshots in `docs/screenshots/r6-*`; defects fixed or listed.
 
 R7. **Code review of run 1.** Run a `code-reviewer` subagent over `8f91dfc..HEAD` (server, web, Apple): tuner leaks on error paths, goroutine leaks, missing `ctx` cancellation, SQL without indexes on hot paths, unbounded memory, race conditions (`go test -race ./server/...`), missing tests, copy-voice violations. Fix every real finding. **Accept:** `go test -race` clean; findings and fixes listed in the commit message.
+
+### Phase S — Every source, found automatically
+
+The bar: a stranger with any common tuner or playlist gets a working guide without typing an IP address. Anything Channels DVR accepts as a source, Waveguide accepts too, and it finds more of it on its own.
+
+S0. **Research and ADR.** Verify the ecosystem facts in section 2 against current docs and forums (a `docs-researcher` subagent): discovery for each device family, stream URL forms (including whether `/auto/v<ch>` carries PSIP and how to get the full mux), M3U attribute conventions, Xtream endpoints, what Channels DVR supports today (including Tablo, AirTV, TV Everywhere) and what has no open API (write those down as unsupported, with the reason). Record it in `docs/research.md` and write ADR 0009 (sources and discovery). **Accept:** ADR merged; a support matrix in `docs/sources.md` (device or service, how found, how streamed, guide, status).
+
+S1. **One source model.** Replace the ad hoc `src-*` device ids with a real `sources` abstraction: kind (`hdhomerun`, `hdhr-compatible`, `m3u`, `xtream`, `tvheadend`, `channels-dvr`, `link`, `folder`, and later `tablo` if S0 finds a usable API), a stable id, display name, enabled flag, priority, capabilities (tuner count or stream limit, stream format TS/HLS, whether it carries its own guide, whether it needs a tuner), credentials stored separately (never in logs, masked in every URL the API or Diagnostics returns), refresh policy, and health. Channels keep stable ids across refreshes (key by device + guide number, `tvg-id`, or stream URL). New numbered migration that moves existing channels, recordings, and passes without loss (test it on a copy of the real catalog and the Unraid backup). **Accept:** migration test on real catalogs; every existing screen still works; OpenAPI updated.
+
+S2. **Auto-find engine** (`internal/discovery`). Runs at startup, every 5 minutes, and on demand, and streams results to clients over the WebSocket as they arrive:
+- HDHomeRun UDP broadcast on every interface (exists), plus unicast discovery to hosts on the local /24 of each interface when broadcast gets no answer (bridge networking, VLANs).
+- SiliconDust cloud lookup (`api.hdhomerun.com/discover`), which works from a bridged container; verify each `LocalIP` answers before offering it.
+- SSDP `M-SEARCH` for HDHomeRun emulators and UPnP media servers.
+- mDNS browse for known service types found in S0.
+- **"Look harder"** (explicit, user-started): probe the local /24 for well-known ports of tvheadend, Threadfin/xTeVe, ErsatzTV, Dispatcharr, Channels DVR, and Plex/Jellyfin (for N1), rate-limited, local subnets only.
+- Results are a list of found things with kind, name, address, and channel count, each with one-tap Add. A brand-new install adds a found HDHomeRun automatically; everything else waits for a tap. Devices are tracked by device id, so a DHCP address change is followed automatically.
+- **Accept:** Go tests with fake responders for each method; on the real network the DUO is found by broadcast and by cloud lookup; a bridged `docker run` on the Mac still finds it (cloud or unicast); results appear in setup within 5 s.
+
+S3. **HDHomeRun family, complete.** Multi-device tuner pool (moves G7 here): several devices, per-device priority, failover, recording reservations. Channel scan from the UI (`lineup.post?scan=start`, live progress from `lineup_status.json`, then refresh the lineup). Model awareness: FLEX 4K ATSC 3.0 channels (hand to G6), PRIME CableCARD copy-protection flags (mark "Copy protected" and don't offer them), EXTEND transcode profiles as an alternative to server transcoding on weak servers. Firmware version shown read-only. **Accept:** fake-device tests for two devices, failover, and scan; a real rescan on the DUO.
+
+S4. **M3U done right.** Parse `#EXTM3U url-tvg`/`x-tvg-url`, `tvg-id`, `tvg-name`, `tvg-logo`, `tvg-chno`/`channel-number`, `group-title`, `tvc-guide-stationid`, `tvg-shift`, catchup attributes, and `#EXTVLCOPT` user agent/referrer (sent when streaming). Add from a URL, an uploaded file, or a path on the server; gzip. Options matching Channels DVR: stream format (auto/HLS/MPEG-TS, probed), stream limit, numbering (use playlist numbers, or start at N), include/exclude groups, and an XMLTV URL (auto-filled from `url-tvg`) matched by `tvg-id` to **this source's** channels only (fixes the current bug). Refresh on a schedule (default 24 h) with a diff that keeps channel ids, favorites, and passes. Large playlists (> 300 channels) open a channel picker instead of flooding the guide. The relay reads HLS inputs with reconnect and uses their program date-times when present so sync still works; TS inputs go through the same mux path as tuners. Errors say what failed and what to try. **Accept:** parser table tests over real-world samples (anonymized); a 5,000-channel playlist imports in < 3 s; an HLS and a TS channel play, record, and sync in two tabs.
+
+S5. **Xtream Codes.** Server URL, username, password: import live categories and streams, EPG from `xmltv.php`, the same options as S4 (groups, numbering, limit). Credentials are masked everywhere. **Accept:** tests against a fake Xtream server; a live channel plays.
+
+S6. **Servers and emulators as sources.** tvheadend (M3U + XMLTV with auth, or its HDHomeRun emulation), Threadfin/xTeVe/ErsatzTV/Dispatcharr/Antennas (HDHomeRun emulation or M3U + XMLTV), a Channels DVR server (its M3U and XMLTV; say "uses your Channels DVR tuners" so the user knows who owns the tuner), and "HDHomeRun-compatible device at an address". Tablo only if S0 finds a documented local API; AirTV and Fire TV Recast listed as unsupported in `docs/sources.md` if they have no open API. **Accept:** one integration test per kind against fakes; tvheadend or ErsatzTV verified for real in a local container.
+
+S7. **Free channels gallery.** "Add free channels": presets for community Pluto TV, Samsung TV Plus, Plex, Roku, and similar playlists with EPG (from S0), each a normal M3U source underneath, off by default, clearly labeled "Streamed from the internet", with region choice. **Accept:** one preset adds channels with a guide and art; they show in their own guide group and never take a tuner.
+
+S8. **Setup wizard v2 (web, Apple TV, iPhone).** Step 1 "Looking for your tuner…" fills in live as S2 finds things (HDHomeRun preselected), with Add a playlist (URL, file, Xtream), Free channels, Look harder, and Enter an address. Step 2 channels: scan if the lineup is empty, show logos, preselect favorites for the big four networks the user gets, and offer to hide duplicates and shopping channels. Step 3 guide: shows coverage per source (and later PSIP from C7) in one line per channel group. Step 4 recordings: where they go, with the volume check from S9. Step 5 apps: QR for iPhone, "Open Waveguide on your Apple TV" instructions. The same flow runs natively on Apple TV and iPhone (Phase P5). **Accept:** fresh install to first live channel with an HDHomeRun in < 90 s and zero typing; screenshots of every step at three sizes and on tvOS/iPhone.
+
+S9. **Setup doctor.** Detect and explain, in one line each with the fix: bridge networking (container IP in a Docker range and no broadcast replies), missing `/dev/dri` when the host has an iGPU, the recordings path not on a mounted volume (`/proc/mounts`), low disk, time zone unset, clock skew (Whole-Home Sync needs a sane clock), file ownership (support `PUID`/`PGID`/`UMASK` so Unraid recordings are `99:100`, not root), and a tuner that stopped answering. Shown in setup, Diagnostics, and the apps. **Accept:** tests for each check; the Unraid template and compose file carry the right defaults.
+
+S10. **Source health.** Per-source status: online, last refresh, errors, streams in use against the limit, next refresh. A source that goes away raises one activity event and a banner, and comes back on its own. **Accept:** fake-source tests for offline, back online, and limit reached ("All 2 streams from this playlist are in use. Stop one or raise the limit.").
+
+### Phase P — Server and Apple apps, working as one
+
+The Docker server and the iPhone and Apple TV apps must behave like one product: find each other instantly, never disagree about data, recover from anything, and let the living-room TV do everything the web console can.
+
+P1. **Generated clients.** Generate Swift types and client from `api/openapi.yaml` (swift-openapi-generator, or a small generator if that fits better) into OTAKit, and TypeScript types for the web; CI fails when generated code is out of date. Retire the hand-mirrored models (keep thin wrappers where the UI needs them). **Accept:** OTAKit builds from generated code; drift check in CI.
+
+P2. **Contract tests.** A test mode of the server (fake tuner from K1, fixed clock) records golden responses for every endpoint and WebSocket event; OTAKit and web decode tests run against them in CI, so a server change that breaks a client fails the build. **Accept:** golden fixtures in the repo; decode tests in `make check`.
+
+P3. **Compatibility.** `apiVersion` + `features` negotiation: the apps hide what the server lacks and say "Update your Waveguide server to use this" when needed; the server keeps working with the previous app version for one release. `GET /api/v1/server` reports a minimum app version. **Accept:** tests with an older fixture set; a clear screen for incompatible versions.
+
+P4. **Find each other, always.** Bonjour first. Fallback discovery for networks that filter mDNS: the server answers a small UDP broadcast probe on a documented port with its id, name, and URL; the apps send it when Bonjour finds nothing in 3 s. Remembered servers, reconnect by server id when the address changes, a Local Network permission explainer on iOS and tvOS, and QR/deep link connect. tvOS: typing an address is the last resort (Continuity keyboard works). **Accept:** simulators find the dev server with Bonjour disabled on the server; an address change is followed without user action.
+
+P5. **Set up and manage from the apps.** Native SwiftUI for the S8 setup flow (Apple TV first: most people set up in the living room), sources and discovery results, channel scan, favorites and hiding, passes, recordings management, settings, and a Diagnostics screen with the S9 doctor. Keep `docs/parity.md`: every feature × web / iPhone / iPad / Apple TV, updated in the same commit as any feature. **Accept:** a fresh server set up entirely from the Apple TV simulator; parity doc complete.
+
+P6. **Realtime and resilience.** EventSocket reconnect with backoff and room re-join; clock re-sync after sleep; an offline banner with cached data (R3); the player survives a server restart or container upgrade (recovers within 5 s, same channel, same sync room); correct behavior on iOS background/foreground and tvOS sleep/wake; guide and recordings update live from events, never by polling. **Accept:** scripted test restarts the container while web and simulators play; all recover; timings logged.
+
+P7. **End-to-end in CI.** A job that runs the built Docker image with the fake tuner, then XCUITest on iOS and tvOS simulators: find the server, finish setup, guide renders, a channel reaches playing, multiview 2-up, record creates a recording, and web + simulator stay in sync (< 100 ms). **Accept:** the job is green and required.
+
+P8. **The container is the reference server.** Every end-to-end and soak test runs against the image, not `go run`, so ffmpeg builds, hardware fallback, permissions, `PUID`/`PGID`, time zone, and healthcheck problems show up in CI. Image variants documented (Intel/AMD VAAPI default; NVIDIA with `--runtime=nvidia` notes). **Accept:** CI e2e uses the image; `docs/sources.md` and README list image options.
+
+### Phase N — Every screen people already own
+
+Apple stays the flagship. Everyone else in the house still gets a great way in.
+
+N1. **Be the best tuner for Channels, Plex, Jellyfin, and Emby.** Harden the HDHomeRun emulator and the M3U/XMLTV exports so those apps see Waveguide as a tuner with the merged guide (tuner, PSIP, M3U, and free channels), unlimited streams from one tune, and stable channel ids. Verify for real with each app in a container on the Mac or TUS (moves G11 here): add as a tuner, guide maps, live plays, a recording in their DVR works. Settings shows ready-to-copy URLs for each app. **Accept:** a log of each app working; fixes for every gap found.
+
+N2. **IPTV players.** Per-profile M3U + XMLTV with tokens (after H2), and an Xtream Codes-compatible output (`player_api.php`, `xmltv.php`, `/live/...`) so TiviMate, IPTV Smarters, Kodi, and VLC on Fire TV, Android TV, and phones get channels, guide, and logos. **Accept:** TiviMate or IPTV Smarters (on an Android TV emulator) loads channels and guide and plays.
+
+N3. **Web app on TV browsers.** Installable PWA; the TV layout driven fully by D-pad on Fire TV Silk, Android/Google TV browsers, and LG/Samsung browsers; checked in Chrome with TV emulation and on a real Fire TV if one is on the network. **Accept:** D-pad walkthrough of Home, Guide, player, multiview.
+
+N4. **Google Cast.** Cast from the web app (and later Android) to Chromecast and Google TV: HLS with AAC, CORS set, a custom receiver that runs our sync engine so a cast screen joins Whole-Home Sync. **Accept:** casts from Chrome to a Cast device or the Cast emulator; receiver in sync with a web tab.
+
+N5. **DLNA/UPnP media server (optional setting).** Live channels and recordings as items for smart TVs, VLC, and game consoles. **Accept:** VLC's UPnP browser lists and plays a channel and a recording.
+
+N6. **Android and Android TV app (after Apple is flagship-complete).** Kotlin + Media3/ExoPlayer against the same generated API (P1): Home, Guide, player, multiview, sync. Fire TV build from the same code. If time runs out, write the design and API gaps into `docs/android.md` instead. **Accept:** emulator screenshots, or the design doc.
+
+N7. **Roku.** Design notes only (`docs/roku.md`): SceneGraph client scope, HLS constraints, sync feasibility.
 
 ### Phase C (continued) — Fill every channel
 
@@ -208,13 +283,13 @@ I10. App icon (Icon Composer, layered Liquid Glass, from J7), launch, onboarding
 G5. jellyfin-ffmpeg in the Docker image (broad hardware acceleration + AC-4); detect capabilities at startup; Diagnostics shows them.
 G4. HEVC renditions for Apple devices with hardware encoders (VAAPI `hevc_vaapi`, QSV, VideoToolbox, NVENC).
 G6. ATSC 3.0: detect 3.0 channels, HEVC copy + AC-4 to AAC/E-AC-3, mark DRM channels "Protected" and hide them by default. Test against sample files.
-G7. Multi-device tuner pool: several HDHomeRuns, per-device priority, failover, reservations for scheduled recordings.
+G7. (Moved to S3.)
 G2. ABR ladder with aligned segments for remote and cellular clients (one ffmpeg, several outputs); keep independent single renditions on the LAN.
 G3. LL-HLS packager (ADR 0007): parts ~330 ms, `EXT-X-PART`, `EXT-X-PRELOAD-HINT`, blocking reload. Target glass-to-glass < 3 s on the LAN. Classic HLS stays default until it is proven.
 G8. Metrics and logging: `slog` everywhere, per-feed stats, optional Prometheus `/metrics`, a log viewer in Diagnostics.
 G9. Performance on Unraid: pprof under 4 renditions + a recording + a mosaic; ffmpeg thread tuning; memory caps.
 G10. HDHomeRun firmware and health surface (read-only: version, tuner status, lock; never install firmware from the app).
-G11. Verify exports in the real apps the user runs (check TUS for Plex, Jellyfin, or Channels containers): lineup, guide, and a stream through the HDHomeRun emulator. Log results; fix gaps.
+G11. (Moved to N1.)
 
 ### Phase H — Accounts, profiles, pairing, remote access
 
@@ -262,14 +337,16 @@ M5. Anything the J1 review or K4 soak surfaced that makes the product better tha
 ## 4. Execution order (dependency-aware)
 
 R1 → R2 → R3 → R4 → R5 → R6 → R7 →
+S0 → S1 → S2 → S3 → S4 → S5 → S6 → S7 → S8 → S9 → S10 → (tag + deploy) →
 C7 → C8 → C9 → (tag + deploy) →
-K1 → G1 → (tag + deploy) →
+K1 → P1 → P2 → P3 → P4 → P5 → P6 → P7 → P8 → G1 → (tag + deploy + TestFlight) →
 F1 → F2 → F3 → F4 → F5 → F6 → F7 → (tag + deploy + TestFlight) →
 E1 … E9 → (tag + deploy) →
 D7 → D8 → B5 → (tag + deploy) →
 A7 retry → I1 … I10 → (tag + deploy + TestFlight) →
-G5 → G4 → G6 → G7 → G2 → G3 → G8 → G9 → G10 → G11 → (tag + deploy) →
+G5 → G4 → G6 → G2 → G3 → G8 → G9 → G10 → (tag + deploy) →
 H1 → H2 → H3 → H4 → (tag + deploy + TestFlight) →
+N1 → N2 → N3 → N4 → N5 → N6 → N7 → (tag + deploy) →
 J1 … J7 → K2 … K6 → L1 … L5 → M1 … M5.
 
 A7 is retried at the start of every phase: if `~/.blitz/bin/asc web auth status` (or an API call) shows a valid session, create the app records, attach the App Group to the profiles, and upload.
@@ -278,7 +355,10 @@ A7 is retried at the start of every phase: if `~/.blitz/bin/asc web auth status`
 
 ## 5. Definition of spectacular (final acceptance)
 
-- A new user installs from the Unraid template or `docker run`, finishes setup in under 3 minutes, and sees a full, art-rich guide for every channel their antenna gets, including channels no online guide lists.
+- A new user installs from the Unraid template or `docker run`, and Waveguide finds their HDHomeRun (or other tuner, emulator, or Channels DVR server) by itself. Setup takes under 90 seconds with no typing for an HDHomeRun, and they see a full, art-rich guide for every channel their antenna gets, including channels no online guide lists.
+- Any M3U, Xtream, tvheadend, emulator, or free-channel source that works in Channels DVR works here, with its guide, logos, numbering, and stream limits.
+- The iPhone and Apple TV apps find the server instantly, can do the whole setup and administration, recover from a server restart or upgrade on their own, and never break on a server update (contract tests in CI).
+- Channels, Plex, Jellyfin, Emby, and IPTV players on Fire TV, Android TV, and smart TVs can use Waveguide as their tuner and guide.
 - The app opens instantly with real content; channel changes feel instant.
 - Two games play side by side (web, Apple TV, iPad), in sync with each other and every other screen; audio follows focus; Game Switcher catches the big moments.
 - Recordings of games end when the game ends; commercials skip reliably; followed teams record automatically.
