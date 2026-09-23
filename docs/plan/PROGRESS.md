@@ -3,10 +3,11 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Plan v2 written 2026-09-23 after run 1 (A1–D6). CI fixed in `e411da1` and `0984064`.
-- Next task: **R2** (start `CHANGELOG.md`, tag v0.2.0, wait for the release workflow, deploy to Unraid with `MODE=ghcr GHCR_IMAGE=ghcr.io/wolfebase/waveguide:0.2.0`, check A–D features on the LAN, log it).
-- Half done: nothing.
-- Update this block at the start of every task: current task, what is half done, next command.
+- Current task: **R2**. CHANGELOG written. Tag `v0.2.0`, wait for the release workflow, deploy with `MODE=ghcr GHCR_IMAGE=ghcr.io/wolfebase/waveguide:0.2.0`, check A–D on the LAN, log it.
+- Half done: `CHANGELOG.md` only. Image not published. Unraid still on v0.1.0.
+- Next command: commit, `git tag v0.2.0 && git push origin v0.2.0`, then `gh run list --workflow=release.yml -L 3`.
+- Jeopardy on 4.1 starts 2026-09-23 20:00 UTC (1 min pad). Deploy and any tune must finish before 19:59 UTC, or wait until after 21:02 UTC.
+- A7 retry at phase R: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS). Do not stop for it.
 
 ## Phase R — Repair and consolidate
 - [x] R1 CI green on all four jobs at 0984064 (lint fixes e411da1, Xcode 26 guard 0984064); `make check`; CI section in the dev-loop skill
