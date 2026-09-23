@@ -1,8 +1,10 @@
 package guide
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"waveguide/internal/store"
@@ -16,6 +18,11 @@ func TestSchedulesDirectMapsChannelNumbers(t *testing.T) {
 		case "/lineups/USA-TEST":
 			_, _ = w.Write([]byte(`{"map":[{"stationID":"1","channel":"14.1"}]}`))
 		case "/schedules":
+			body, _ := io.ReadAll(r.Body)
+			if strings.Count(string(body), "20") > 8 && !strings.Contains(r.Header.Get("X-Test"), "wide") {
+				http.Error(w, "one day", http.StatusBadRequest)
+				return
+			}
 			_, _ = w.Write([]byte(`[{"stationID":"1","programs":[{"programID":"SH1","airDateTime":"2026-09-22T20:00:00Z","duration":1800}]}]`))
 		case "/programs":
 			_, _ = w.Write([]byte(`[{"programID":"SH1","titles":[{"title120":"Diginet"}]}]`))

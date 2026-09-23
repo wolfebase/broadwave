@@ -298,7 +298,13 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		"autoplay":       true,
 		"hdhrEmulate":    true,
 		"setupComplete":  true,
+		"sdUser":         true,
+		"sdPassword":     true,
+		"sdLineup":       true,
+		"guideUrl":       true,
+		"sdPasswordSet":  true,
 	}
+	cleaned := map[string]string{}
 	for k, v := range values {
 		if !allowed[k] {
 			return fmt.Errorf("unknown setting %q", k)
@@ -315,8 +321,21 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 				return fmt.Errorf("watermarkGB must be a whole number of gigabytes from 0 to 1000000")
 			}
 		}
+		if k == "guideUrl" {
+			v = strings.TrimSpace(v)
+			if v != "" && !strings.HasPrefix(v, "https://") && !strings.HasPrefix(v, "http://") {
+				return fmt.Errorf("the guide address needs to start with http")
+			}
+		}
+		if k == "sdPassword" && strings.TrimSpace(v) == "" {
+			continue
+		}
+		if k == "sdPasswordSet" {
+			continue
+		}
+		cleaned[k] = v
 	}
-	return s.writeSettings(ctx, values)
+	return s.writeSettings(ctx, cleaned)
 }
 
 func (s *Store) writeSettings(ctx context.Context, values map[string]string) error {

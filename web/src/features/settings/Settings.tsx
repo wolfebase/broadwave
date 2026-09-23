@@ -72,6 +72,48 @@ export function SettingsScreen({
         </div>
         <span className="hint">Broadcast rebuilds interlaced channels at 60 frames a second. Smooth adds motion compensation when this server can hold it. Film is for movies.</span>
       </div>
+      <h3 className="section-title">Guide</h3>
+      <label className="field">
+        {copy.settings.guideAccount}
+        <input
+          value={settings.sdUser ?? ""}
+          autoComplete="username"
+          spellCheck={false}
+          onChange={(event) => onChange({ sdUser: event.target.value })}
+        />
+        <span className="hint">{copy.settings.guideAccountHint}</span>
+      </label>
+      <label className="field">
+        Password
+        <input
+          type="password"
+          autoComplete="current-password"
+          placeholder={settings.sdPasswordSet === "1" ? "Saved" : ""}
+          onBlur={(event) => {
+            const value = event.target.value;
+            if (value) onChange({ sdPassword: value });
+            event.target.value = "";
+          }}
+        />
+      </label>
+      <label className="field">
+        {copy.settings.guideLineup}
+        <input
+          value={settings.sdLineup ?? ""}
+          spellCheck={false}
+          onChange={(event) => onChange({ sdLineup: event.target.value })}
+        />
+      </label>
+      <label className="field">
+        {copy.settings.guideAddress}
+        <input
+          value={settings.guideUrl ?? ""}
+          spellCheck={false}
+          placeholder="https://"
+          onChange={(event) => onChange({ guideUrl: event.target.value })}
+        />
+        <span className="hint">{copy.settings.guideAddressHint}</span>
+      </label>
       <h3 className="section-title">DVR</h3>
       <label className="field">
         Play the next episode

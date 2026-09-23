@@ -44,6 +44,38 @@ type programme struct {
 	Shown   *struct{}    `xml:"previously-shown"`
 }
 
+// PullURL reads an XMLTV document from an http address the user supplied.
+func PullURL(ctx context.Context, rawURL string) ([]byte, error) {
+	rawURL = strings.TrimSpace(rawURL)
+	if !strings.HasPrefix(rawURL, "https://") && !strings.HasPrefix(rawURL, "http://") {
+		return nil, fmt.Errorf("the guide address needs to start with http")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Waveguide/0.1")
+	req.Header.Set("Accept-Encoding", "gzip")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("guide returned %s", res.Status)
+	}
+	var reader io.Reader = res.Body
+	if res.Header.Get("Content-Encoding") == "gzip" || strings.HasSuffix(strings.ToLower(rawURL), ".gz") {
+		gz, err := gzip.NewReader(res.Body)
+		if err != nil {
+			return nil, err
+		}
+		defer gz.Close()
+		reader = gz
+	}
+	return io.ReadAll(io.LimitReader(reader, 32<<20))
+}
+
 // Pull asks SiliconDust for XMLTV. DeviceAuth is read for this call and not returned.
 func Pull(ctx context.Context, client *hdhr.Client, baseURL string) ([]byte, error) {
 	if client == nil {
