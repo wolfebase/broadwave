@@ -20,12 +20,12 @@ Tick items as they are verified and committed, in the same commit as the work (`
 ## Phase S — Every source, found automatically
 - [ ] S0 Research sources and discovery; ADR 0009; `docs/sources.md` support matrix
 - [ ] S1 One source model (kinds, capabilities, masked credentials, stable channel ids) with a lossless migration
-- [ ] S2 Auto-find engine: broadcast, unicast subnet, SiliconDust cloud, SSDP, mDNS, opt-in "Look harder"; live results; follows DHCP changes
+- [ ] S2 Auto-find engine: broadcast, unicast subnet, SSDP, mDNS (hdhomerun.local, _channels_dvr, _htsp), opt-in "Look harder" port probe (+ cloud lookup as verified last resort); live results; follows DHCP changes
 - [ ] S3 HDHomeRun family: multi-device pool + failover + reservations (was G7), channel scan, FLEX/PRIME/EXTEND awareness
 - [ ] S4 M3U done right: tvg-* / group / url-tvg / tvc-guide-stationid, file + URL + path, stream format and limit, numbering, groups, per-source XMLTV, refresh with stable ids, picker for big lists
 - [ ] S5 Xtream Codes source
 - [ ] S6 tvheadend, Threadfin/xTeVe/ErsatzTV/Dispatcharr/Antennas, Channels DVR server, HDHomeRun-compatible by address; unsupported devices documented
-- [ ] S7 Free channels gallery (Pluto, Samsung TV Plus, Plex, Roku presets)
+- [ ] S7 Free channels: detect FastChannels / Pluto / Samsung generator containers, or guide the user to run FastChannels
 - [ ] S8 Setup wizard v2 on web, Apple TV, and iPhone (< 90 s, no typing for HDHomeRun)
 - [ ] S9 Setup doctor: bridge network, /dev/dri, volumes, disk, TZ, clock, PUID/PGID/UMASK
 - [ ] S10 Source health and limits
@@ -72,7 +72,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] C4 Rich program model (commit f291b7d). Season and episode, the onscreen label, original air date, series id, live, premiere, finale, rating, and cast are stored and shown. This feed sends season, episode, and a date on most programs, and live on a couple. It does not send ratings or cast, so those stay empty. Listings already saved pick this up on the next guide refresh.
 - [x] C5 Guide UX (commit 37be574). The grid covers the listings on hand (up to two days). Now, Tonight, and Tomorrow jump the time. A Now button returns when now has scrolled away. Wide cells show a picture. Drag a channel to reorder it on this screen; right-click or H hides it. iPhone landscape and Apple TV use the grid, play/pause on Apple TV starts the focused show, and iPad keeps the program beside the guide.
 - [x] C6 Search (commit d7def66). Full-text search covers titles, subtitles, descriptions, and cast, plus recordings. Search on the web and on Apple lists the matches. Record every airing makes a pass for that title.
-- [ ] C7 Guide from the broadcast: PSIP EIT/ETT parser, passive harvest, preemptible idle scan, merge; >= 25/27 channels listed
+- [ ] C7 Guide from the broadcast: relay on full mux `/auto/ch<freq>`, PSIP EIT/ETT parser, passive harvest, preemptible idle scan, merge; >= 25/27 channels listed
 - [ ] C8 Honest guide depth and per-listing source
 - [ ] C9 Antenna and signal tools (Settings > Tuners)
 
