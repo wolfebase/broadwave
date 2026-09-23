@@ -1,0 +1,1 @@
+ALTER TABLE airings ADD COLUMN game_id TEXT NOT NULL DEFAULT '';

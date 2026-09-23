@@ -1069,6 +1069,7 @@ components:
         finale: { type: boolean }
         rating: { type: string }
         cast: { type: string }
+        gameId: { type: string, description: "Scoreboard game this listing is. Empty when it is not a matched game." }
         start: { type: string, format: date-time }
         end: { type: string, format: date-time }
     Game:

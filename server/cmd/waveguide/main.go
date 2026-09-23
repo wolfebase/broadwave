@@ -108,6 +108,15 @@ func main() {
 		}
 	}()
 	go func() {
+		time.Sleep(20 * time.Second)
+		tick := time.NewTicker(10 * time.Minute)
+		defer tick.Stop()
+		api.LinkGames(context.Background())
+		for range tick.C {
+			api.LinkGames(context.Background())
+		}
+	}()
+	go func() {
 		tick := time.NewTicker(20 * time.Second)
 		defer tick.Stop()
 		for range tick.C {
