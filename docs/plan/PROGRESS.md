@@ -8,7 +8,7 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [ ] A3 Deployed to Unraid (host network, VAAPI, Bonjour, sync from LAN, iPhone sim connects)
 - [ ] A4 Hygiene: dead CSS/strings, web on /api/v1 only, eslint + swiftlint in CI
 - [ ] A5 Restart robustness: orphan ffmpeg cleanup, interrupted recordings, graceful SIGTERM
-- [ ] A6 GitHub repo twolfekc/waveguide, pushed, CI green, image names = ghcr.io/twolfekc/waveguide, v0.1.0 release, public package
+- [x] A6 Public repo wolfebase/waveguide (twolfekc does not exist; see BLOCKERS), CI green, ghcr.io/wolfebase/waveguide:0.1.0 public for amd64 and arm64 (commit 5c9308b, tag v0.1.0)
 - [ ] A7 Apple signing (team ID found), bundle IDs + App Group, ASC app records, scripts/testflight.sh, iOS + tvOS builds in TestFlight
 
 ## Phase B — Multiview
