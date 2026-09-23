@@ -1,0 +1,15 @@
+---
+description: Voice and tone for every user-facing string
+alwaysApply: true
+---
+
+# Copy voice
+
+User-facing text (UI strings, errors, notifications, API `message` fields shown to users) is short, confident, and friendly.
+
+- Say what's happening or what to do next in one line. "Recording until the game ends." not "The server will attempt to keep recording beyond the scheduled end time if the event is still in progress."
+- Don't explain the architecture in the UI. Codec, tuner, transcode, and sync details go in the Stream Info panel or docs, not in hints on every screen.
+- Don't apologize for features that don't exist yet, and don't mention future sessions or roadmap in the product.
+- Errors say what failed and what to try: "Both tuners are busy. Stop a recording or watch something already on." Include the cause the user can act on.
+- Use the words people use: Watch, Record, Guide, Live, Recordings, Your Teams. Say "tuner" rather than "antenna tuner resource"; say "channel" rather than "program number".
+- Sentence case for titles and buttons. No exclamation marks, no emoji.

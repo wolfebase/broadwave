@@ -1,0 +1,20 @@
+---
+description: Go server conventions (relay, DVR, guide, API, store)
+globs: server/**/*.go
+alwaysApply: false
+---
+
+# Go server
+
+- Module `ota-viewer` under `server/`. Standard library first: `net/http` method routing, `log/slog` for new logging, `database/sql` with `modernc.org/sqlite` (pure Go, no cgo, so the binary cross-compiles).
+- Packages stay small and named for the domain: `hdhr`, `live`, `dvr`, `guide`, `store`, `httpapi`, `source`, `disk`. Put new domains in new packages (for example `sync`, `auth`, `sports`) rather than growing `httpapi`.
+- **Tuners are precious.** Every code path that opens a tuner must reuse an already-tuned frequency first, release on every error path, and set `/tunerN/channel none` when done. Busy tuners come back as HTTP 503 with `X-HDHomeRun-Error: 805`; surface that as a typed busy error.
+- **One tune, many readers.** The relay reads a frequency once and fans out to live renditions, recordings, and exports. Never open a second HTTP stream from the tuner for the same frequency. A slow reader must never stall the tuner read loop (drop or buffer per reader).
+- **Renditions are independent.** One viewer changing quality must not restart another viewer's stream.
+- **Recordings are the original MPEG-TS** (`-c copy`). Transcoding is only for delivery.
+- ffmpeg arguments are built in pure functions (see `live.PictureArgs`) and covered by table tests. Hardware encoders are detected at startup; always keep a software fallback.
+- Keep live HLS timestamps (`EXT-X-PROGRAM-DATE-TIME`) accurate. Whole-Home Sync depends on them.
+- **API:** routes live under `/api/v1` (legacy `/api` stays until the web app moves). Every route change updates `api/openapi.yaml`. JSON is camelCase. Errors are `{"error": {"code": "...", "message": "..."}}` with a correct status (400 validation, 404 missing, 409 busy or conflict, 507 disk low).
+- **Schema:** numbered migrations in `internal/store/migrations/NNNN_name.sql`, applied in order and recorded in `schema_migrations`. Never edit a shipped migration.
+- Never persist or log secrets or tuner `DeviceAuth`. Don't hardcode IPs, ports other than defaults, or device paths; make them flags or settings.
+- Tests use fakes for the tuner and ffmpeg. `go test ./server/...` must pass without a network or tuner. Use `t.TempDir()` for files.

@@ -1,6 +1,25 @@
+# Local server state (catalog database, live segments, recordings)
 data/
+
+# Web build output embedded into the server binary
+server/cmd/ota-viewer/assets/web/
 web/node_modules/
 web/dist/
+
+# Go
+/bin/
 *.exe
+*.test
+*.out
+
+# Apple
+apple/**/xcuserdata/
+apple/**/DerivedData/
+apple/build/
+*.xcresult
+
+# Misc
 *.log
 .DS_Store
+.env
+.env.*

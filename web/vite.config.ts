@@ -4,12 +4,13 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   build: {
-    outDir: "../cmd/ota-viewer/assets",
+    outDir: "../server/cmd/ota-viewer/assets/web",
     emptyOutDir: true,
   },
   server: {
     proxy: {
       "/api": "http://127.0.0.1:8477",
+      "/media": "http://127.0.0.1:8477",
     },
   },
 });

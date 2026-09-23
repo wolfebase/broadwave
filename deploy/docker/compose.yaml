@@ -1,11 +1,19 @@
 services:
   ota-viewer:
+    image: ghcr.io/ota-viewer/ota-viewer:latest
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
-    ports:
-      - "8477:8477"
+    # Host networking lets the server hear HDHomeRun discovery and lets the
+    # iPhone and Apple TV apps find the server over Bonjour.
+    network_mode: host
+    environment:
+      TZ: America/New_York
+      # HDHR_HOST: 192.168.1.50   # only if discovery cannot reach the tuner
     volumes:
       - ./config:/config
       - ./recordings:/config/work/recordings
+    # Intel or AMD graphics for hardware transcoding. Remove if not present.
+    devices:
+      - /dev/dri:/dev/dri
     restart: unless-stopped
