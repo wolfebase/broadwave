@@ -267,6 +267,7 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		"pictureMode":    true,
 		"autoplay":       true,
 		"hdhrEmulate":    true,
+		"setupComplete":  true,
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

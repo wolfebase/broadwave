@@ -108,6 +108,14 @@ export function SettingsPage() {
           </p>
         ) : null}
       </header>
+      <div className="setup-row" style={{ marginBottom: 8 }}>
+        <button type="button" className="btn" onClick={() => navigate("/diagnostics")}>
+          Diagnostics
+        </button>
+        <button type="button" className="btn" onClick={() => navigate("/setup")}>
+          Run setup again
+        </button>
+      </div>
       <section id="sources" className="settings-section">
         <h2>Tuners and channels</h2>
         <Sources

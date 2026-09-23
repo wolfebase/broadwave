@@ -104,6 +104,19 @@ paths:
       responses:
         "101":
           description: Switching to WebSocket
+  /diagnostics:
+    get:
+      tags: [server]
+      operationId: getDiagnostics
+      description: Tuners and signal, encoder and ffmpeg, storage, guide freshness, what the relay is carrying, connected apps, and recent activity.
+      responses:
+        "200":
+          description: Diagnostics
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
   /profile:
     get:
       tags: [server]
@@ -1144,3 +1157,4 @@ components:
         pictureMode: { $ref: "#/components/schemas/PictureMode" }
         autoplay: { type: string, enum: ["0", "1"] }
         hdhrEmulate: { type: string, enum: ["0", "1"] }
+        setupComplete: { type: string, enum: ["0", "1"] }

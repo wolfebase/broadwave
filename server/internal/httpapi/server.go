@@ -44,6 +44,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /server", s.serverInfo)
 	api("PATCH /server", s.renameServer)
 	api("GET /clock", s.clock)
+	api("GET /diagnostics", s.diagnostics)
 	api("GET /ws", s.socket)
 	api("GET /profile", s.profile)
 	api("GET /devices", s.devices)

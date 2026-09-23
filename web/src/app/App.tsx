@@ -14,6 +14,8 @@ const RecordingsPage = lazy(() => import("../features/pages").then((m) => ({ def
 const SchedulePage = lazy(() => import("../features/pages").then((m) => ({ default: m.SchedulePage })));
 const SettingsPage = lazy(() => import("../features/pages").then((m) => ({ default: m.SettingsPage })));
 const PlayPage = lazy(() => import("../features/pages").then((m) => ({ default: m.PlayPage })));
+const Setup = lazy(() => import("../features/setup/Setup").then((m) => ({ default: m.Setup })));
+const DiagnosticsPage = lazy(() => import("../features/setup/Diagnostics").then((m) => ({ default: m.DiagnosticsPage })));
 const VirtualPage = lazy(() => import("../features/pages").then((m) => ({ default: m.VirtualPage })));
 
 const tabs = [
@@ -37,12 +39,13 @@ export function App() {
 function Shell() {
   const { path, params } = useRoute();
   const layout = useLayout();
-  const { ready, error, recordings } = useData();
+  const { ready, error, recordings, passes, settings } = useData();
   const player = usePlayer();
   const [online, setOnline] = useState(true);
   const recordingCount = recordings.filter((r) => r.status === "recording").length;
   const fullPlayer = path === "/watch" && player.mode === "full" && !!player.channel;
-  const immersive = path === "/play" || (path === "/watch" && params.has("virtual"));
+  const firstRun = ready && settings.setupComplete !== "1" && recordings.length === 0 && passes.length === 0;
+  const immersive = path === "/play" || (path === "/watch" && params.has("virtual")) || path === "/setup" || firstRun;
 
   useEffect(() => {
     const off = events().on("connection", (v) => setOnline(Boolean(v)));
@@ -53,7 +56,9 @@ function Shell() {
 
   const active = (p: string) => (p === "/" ? path === "/" : path.startsWith(p));
   let page: React.ReactNode;
-  if (path === "/guide") page = <Guide />;
+  if (path === "/setup" || firstRun) page = <Setup />;
+  else if (path === "/diagnostics") page = <DiagnosticsPage />;
+  else if (path === "/guide") page = <Guide />;
   else if (path === "/sports") page = <Sports />;
   else if (path === "/recordings" || path === "/library") page = <RecordingsPage />;
   else if (path === "/schedule") page = <SchedulePage />;

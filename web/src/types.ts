@@ -37,6 +37,7 @@ export type Settings = {
   pictureMode: "broadcast" | "smooth" | "film";
   autoplay: string;
   hdhrEmulate: string;
+  setupComplete?: string;
 };
 
 export type StorageInfo = {
