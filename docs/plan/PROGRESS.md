@@ -17,6 +17,38 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] R6 Apple screenshots of B–D on iPhone, iPad, Apple TV; defects fixed or listed
 - [ ] R7 Code review of run 1; `go test -race` clean
 
+## Phase S — Every source, found automatically
+- [ ] S0 Research sources and discovery; ADR 0009; `docs/sources.md` support matrix
+- [ ] S1 One source model (kinds, capabilities, masked credentials, stable channel ids) with a lossless migration
+- [ ] S2 Auto-find engine: broadcast, unicast subnet, SiliconDust cloud, SSDP, mDNS, opt-in "Look harder"; live results; follows DHCP changes
+- [ ] S3 HDHomeRun family: multi-device pool + failover + reservations (was G7), channel scan, FLEX/PRIME/EXTEND awareness
+- [ ] S4 M3U done right: tvg-* / group / url-tvg / tvc-guide-stationid, file + URL + path, stream format and limit, numbering, groups, per-source XMLTV, refresh with stable ids, picker for big lists
+- [ ] S5 Xtream Codes source
+- [ ] S6 tvheadend, Threadfin/xTeVe/ErsatzTV/Dispatcharr/Antennas, Channels DVR server, HDHomeRun-compatible by address; unsupported devices documented
+- [ ] S7 Free channels gallery (Pluto, Samsung TV Plus, Plex, Roku presets)
+- [ ] S8 Setup wizard v2 on web, Apple TV, and iPhone (< 90 s, no typing for HDHomeRun)
+- [ ] S9 Setup doctor: bridge network, /dev/dri, volumes, disk, TZ, clock, PUID/PGID/UMASK
+- [ ] S10 Source health and limits
+
+## Phase P — Server and Apple apps, working as one
+- [ ] P1 Generated Swift and TypeScript clients from OpenAPI; drift check in CI
+- [ ] P2 Golden-response contract tests for OTAKit and web in `make check`
+- [ ] P3 apiVersion/features negotiation and minimum app version
+- [ ] P4 Bonjour + UDP fallback discovery, remembered servers, follow address changes, permission explainer
+- [ ] P5 Full setup and management from the Apple apps; `docs/parity.md`
+- [ ] P6 Realtime resilience: reconnect, re-join, survive server restart/upgrade, sleep/wake
+- [ ] P7 End-to-end CI: Docker image + fake tuner + XCUITest on iOS and tvOS + sync check
+- [ ] P8 The container is the reference server for e2e and soak
+
+## Phase N — Every screen people already own
+- [ ] N1 Verified as a tuner in Channels, Plex, Jellyfin, Emby (was G11); copyable URLs in Settings
+- [ ] N2 Tokened M3U/XMLTV and an Xtream-compatible output for IPTV players (after H2)
+- [ ] N3 Web app as a PWA with full D-pad control on TV browsers
+- [ ] N4 Google Cast with a synced custom receiver
+- [ ] N5 DLNA/UPnP media server (optional)
+- [ ] N6 Android / Android TV / Fire TV app (or `docs/android.md` design)
+- [ ] N7 Roku design notes
+
 ## Phase A — Stabilize and ship
 - [x] A1 Setup wizard verified at desktop/phone; robust first-run detection (commit d6bd17f)
 - [x] A2 Guide refresh follows SiliconDust terms (random 20-28 h, rate-limited manual) (commit ce5d6a6)
@@ -81,11 +113,11 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] G4 HEVC renditions
 - [ ] G5 jellyfin-ffmpeg in image + capability detection
 - [ ] G6 ATSC 3.0 (AC-4, DRM handling)
-- [ ] G7 Multi-device tuner pool + recording reservations
+- [x] G7 moved to S3 (tracked there)
 - [ ] G8 Metrics and structured logging
 - [ ] G9 Performance profiling on Unraid
 - [ ] G10 HDHomeRun health surface (read-only)
-- [ ] G11 Exports verified in the Plex/Jellyfin/Channels the user runs
+- [x] G11 moved to N1 (tracked there)
 
 ## Phase H — Accounts and remote
 - [ ] H1 Profiles

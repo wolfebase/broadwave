@@ -4,7 +4,7 @@ Waveguide is live TV and DVR for people with an antenna. A self-hosted server (D
 
 Read this file first, then the scoped rules in `.cursor/rules/` for the area you are touching, then `docs/architecture.md` and `docs/roadmap.md`.
 
-**Active work:** `docs/plan/MASTER_PLAN.md` is the plan of record (phases A-L, executed autonomously in order); `docs/plan/PROGRESS.md` is the live checklist; `docs/plan/BLOCKERS.md` lists what needs the user; `docs/plan/UNRAID_LOG.md` records deployments. Project skills live in `.cursor/skills/` (`waveguide-dev-loop`, `waveguide-media-pipeline`, `waveguide-apple`, `waveguide-multiview`); the personal skill `waveguide-unraid` covers the user's Unraid server.
+**Active work:** `docs/plan/MASTER_PLAN.md` is the plan of record (phases A-L, executed autonomously in order); `docs/plan/PROGRESS.md` is the live checklist; `docs/plan/BLOCKERS.md` lists what needs the user; `docs/plan/UNRAID_LOG.md` records deployments. Project skills live in `.cursor/skills/` (`waveguide-dev-loop`, `waveguide-media-pipeline`, `waveguide-apple`, `waveguide-multiview`, `waveguide-sources`); the personal skill `waveguide-unraid` covers the user's Unraid server.
 
 ## What we are building
 
