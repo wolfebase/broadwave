@@ -3,10 +3,11 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **Phase R deploy**. Changelog, tag, Unraid smoke, and preview-frame CPU.
-- Half done: nothing.
-- Next command: write the phase R changelog, tag it, and deploy with MODE=ghcr.
-- Unraid is on `v0.2.0`. Both tuners are free.
+- Current task: **Phase R deploy**. Tag `v0.3.0`, pull it on Unraid, smoke, and sample preview-frame CPU.
+- Half done: changelog is written. R7 CI `35923852492` is green.
+- Next command: tag `v0.3.0`, wait for GHCR, then `MODE=ghcr` deploy.
+- Unraid is on `v0.2.0`. Both tuners are free. No recording is due until tomorrow's Jeopardy.
+- A7 retry at phase R: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 - A7 retry at phase R: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 - A7 retry at phase R: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 

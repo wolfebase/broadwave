@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0 — 2026-09-23
+
+The guide is there when you open the app, artwork stays sharp, and a channel that is already on can show a still.
+
+### Added
+
+- The web app and the Apple apps open on the last guide, then refresh. The first hours load first.
+- A still from a channel that is already tuned, for listings and On now cards that have no artwork. Taking one never starts a tune.
+
+### Fixed
+
+- A small poster stays its real size instead of being stretched across the hero.
+- Hiding a score no longer changes that score for the rest of the house.
+- Side by side checks that the channels fit on the tuners before it starts them.
+- The multiview title matches the layout.
+
 ## 0.2.0 — 2026-09-23
 
 Everything since the first public image: multiview, a fuller guide, and sports that follow the game.
