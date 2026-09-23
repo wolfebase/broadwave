@@ -4,6 +4,8 @@ OTA Viewer is live TV and DVR for people with an antenna. A self-hosted server (
 
 Read this file first, then the scoped rules in `.cursor/rules/` for the area you are touching, then `docs/architecture.md` and `docs/roadmap.md`.
 
+**Active work:** `docs/plan/MASTER_PLAN.md` is the plan of record (phases A-L, executed autonomously in order); `docs/plan/PROGRESS.md` is the live checklist; `docs/plan/BLOCKERS.md` lists what needs the user; `docs/plan/UNRAID_LOG.md` records deployments. Project skills live in `.cursor/skills/` (`ota-viewer-dev-loop`, `ota-viewer-media-pipeline`, `ota-viewer-apple`, `ota-viewer-multiview`); the personal skill `ota-viewer-unraid` covers the user's Unraid server.
+
 ## What we are building
 
 The bar is "better than paying for YouTube TV to get ABC, CBS, FOX, and NBC", with the best experience on Apple devices of any live TV app, Channels DVR included.
@@ -57,6 +59,18 @@ Apple apps: `apple/project.yml` is the source of truth (XcodeGen); the `.xcodepr
 Tools: Go 1.25+, Node 22+, ffmpeg (with ffprobe) on PATH, Xcode 26+ for `apple/`. `go.work` at the root makes `go` commands work from here.
 
 Tests never open a real tuner. Live tuner checks happen by running the server on the LAN.
+
+Scripts: `scripts/dev-server.sh` (safe rebuild + restart on :18477 with a copy of the real catalog), `scripts/relay-smoke.sh` (no-tuner end-to-end relay test), `scripts/deploy-unraid.sh` (build linux/amd64 + deploy over SSH).
+
+## Lessons learned (each cost real time; don't relearn them)
+
+- Live renditions use `-copyts` + CMAF fMP4; MPEG-TS segments made hls.js corrupt its fragment table mid-stream. Segment 0 is withheld. See skill `ota-viewer-media-pipeline` for the full invariant list.
+- VideoToolbox must run with `-a53cc 0` or every segment is undecodable.
+- Sync engines never seek backward in a live buffer: pause for the drift when ahead, seek forward when behind.
+- `index.html` must be served `no-cache`; stale bundles silently invalidated several test runs. Verify loaded script hashes when testing.
+- Restart the dev server with `scripts/dev-server.sh` (`pkill -x`, port wait). `pkill -f otav` kills your own shell.
+- The free SiliconDust XMLTV feed is 2 days (14 with their DVR subscription), must be refreshed at randomized 20-28 h intervals, and currently lists only 9 of the user's 27 channels.
+- Apple: tvOS has a system `.card` style; screenshots must be written into the workspace and downscaled before the Read tool can open them.
 
 ## Definition of done
 
