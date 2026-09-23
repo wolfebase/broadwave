@@ -1,9 +1,22 @@
 import { useEffect, useState } from "react";
 
+export type ScoreTeam = {
+  name: string;
+  short?: string;
+  abbr?: string;
+  score?: string;
+  home?: boolean;
+  color?: string;
+  altColor?: string;
+  logo?: string;
+};
+
 export type ScoreGame = {
   id: string;
   state?: string;
-  teams?: { name: string; short?: string; abbr?: string; score?: string; home?: boolean }[];
+  detail?: string;
+  clock?: string;
+  teams?: ScoreTeam[];
 };
 
 const cache: { at: number; games: ScoreGame[] } = { at: 0, games: [] };
@@ -35,6 +48,20 @@ export function scoreLine(game: ScoreGame | undefined): string {
   if (!home?.score || !away?.score) return "";
   const label = (team: { abbr?: string; short?: string; name: string }) => team.abbr || team.short || team.name;
   return `${label(away)} ${away.score} · ${label(home)} ${home.score}`;
+}
+
+export function useScoreboard() {
+  const [games, setGames] = useState<ScoreGame[]>([]);
+  useEffect(() => {
+    let cancel = false;
+    loadScores().then((next) => {
+      if (!cancel) setGames(next);
+    });
+    return () => {
+      cancel = true;
+    };
+  }, []);
+  return games;
 }
 
 export function useScoreMap() {

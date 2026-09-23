@@ -66,9 +66,28 @@
 }
 
 .gc-matchup .team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: var(--type-title3-size);
   font-weight: 800;
   letter-spacing: -0.02em;
+}
+
+.team-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 99px;
+}
+
+.team-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.team-score {
+  font-variant-numeric: tabular-nums;
 }
 
 .gc-score {
