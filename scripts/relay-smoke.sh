@@ -38,8 +38,14 @@ TV2=$(curl -s -XPOST "$API/watch" -d "{\"channelId\":$ID,\"caps\":{\"platform\":
 check "progressive h264 goes direct (copy.copy, got $TV2)" "[ '$TV2' = 'copy.copy' ]"
 PH=$(curl -s -XPOST "$API/watch" -d "{\"channelId\":$ID,\"caps\":{\"platform\":\"ios\",\"video\":[\"h264\"],\"audio\":[\"aac\"]},\"prefs\":{\"quality\":\"saver\"}}" | python3 -c "import sys,json;print(json.load(sys.stdin)['rendition'])")
 check "data saver gets its own rendition ($PH)" "[ '$PH' = '540.aac2.broadcast' ]"
+TILE=$(curl -s -XPOST "$API/watch" -d "{\"channelId\":$ID,\"caps\":{\"platform\":\"web\",\"video\":[\"h264\"],\"audio\":[\"aac\"]},\"prefs\":{\"quality\":\"tile\",\"audio\":\"none\"}}" | python3 -c "import sys,json;print(json.load(sys.stdin)['rendition'])")
+check "a tile is silent 540 ($TILE)" "[ '$TILE' = '540.none.broadcast' ]"
+SMALL=$(curl -s -XPOST "$API/watch" -d "{\"channelId\":$ID,\"caps\":{\"platform\":\"web\",\"video\":[\"h264\"],\"audio\":[\"aac\"]},\"prefs\":{\"quality\":\"360\",\"audio\":\"none\"}}" | python3 -c "import sys,json;print(json.load(sys.stdin)['rendition'])")
+check "a small tile is silent 360 ($SMALL)" "[ '$SMALL' = '360.none.broadcast' ]"
+PLAN=$(curl -s -XPOST "$API/multiview/plan" -d "{\"channelIds\":[$ID]}")
+check "the plan can play the channel" "echo '$PLAN' | grep -q '\"channelId\":$ID'"
 sleep 6
-for k in copy.copy 540.aac2.broadcast; do
+for k in copy.copy 540.aac2.broadcast 540.none.broadcast 360.none.broadcast; do
   PL=$(curl -s "http://127.0.0.1:$PORT/media/live/$ID/$k/index.m3u8")
   check "$k playlist has program date-times" "echo '$PL' | grep -q PROGRAM-DATE-TIME"
   check "$k is CMAF with init segment" "echo '$PL' | grep -q 'EXT-X-MAP'"

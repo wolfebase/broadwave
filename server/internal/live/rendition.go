@@ -16,12 +16,12 @@ type Rendition struct {
 
 func (r Rendition) normalized() Rendition {
 	switch r.Video {
-	case "copy", "1080", "720", "540":
+	case "copy", "1080", "720", "540", "360":
 	default:
 		r.Video = "1080"
 	}
 	switch r.Audio {
-	case "copy", "aac2", "aac6":
+	case "copy", "aac2", "aac6", "none":
 	default:
 		r.Audio = "aac2"
 	}
@@ -68,8 +68,8 @@ type Caps struct {
 
 // Prefs are the viewer's choices. Empty fields mean automatic.
 type Prefs struct {
-	Quality string `json:"quality,omitempty"` // auto, original, high, medium, saver
-	Audio   string `json:"audio,omitempty"`   // auto, surround, stereo
+	Quality string `json:"quality,omitempty"` // auto, original, high, medium, saver, tile, 360
+	Audio   string `json:"audio,omitempty"`   // auto, surround, stereo, none
 	Picture string `json:"picture,omitempty"` // broadcast, smooth, film
 }
 
@@ -137,6 +137,12 @@ func Decide(src Source, caps Caps, p Prefs) Decision {
 	case "saver":
 		r.Video = "540"
 		why = append(why, "Data saver")
+	case "tile":
+		r.Video = "540"
+		why = append(why, "540p tile")
+	case "360":
+		r.Video = "360"
+		why = append(why, "360p tile")
 	default:
 		if canCopyVideo {
 			r.Video = "copy"
@@ -155,13 +161,22 @@ func Decide(src Source, caps Caps, p Prefs) Decision {
 	}
 	if caps.MaxHeight > 0 && r.Video != "copy" {
 		switch {
+		case caps.MaxHeight < 480:
+			r.Video = "360"
 		case caps.MaxHeight < 720:
 			r.Video = "540"
 		case caps.MaxHeight < 1080 && r.Video == "1080":
 			r.Video = "720"
 		}
 	}
-	switch strings.ToLower(p.Audio) {
+	audio := strings.ToLower(p.Audio)
+	if (audio == "" || audio == "auto") && (quality == "tile" || quality == "360") {
+		audio = "none"
+	}
+	switch audio {
+	case "none":
+		r.Audio = "none"
+		why = append(why, "silent tile")
 	case "stereo":
 		r.Audio = "aac2"
 		why = append(why, "stereo")
@@ -214,6 +229,8 @@ func renditionProfile(video string) string {
 		return "balanced"
 	case "540":
 		return "saver"
+	case "360":
+		return "tile"
 	default:
 		return "transparent"
 	}
@@ -230,14 +247,20 @@ func RenditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 	}
 	args = append(args, "-probesize", "2000000", "-analyzeduration", "1500000", "-i", "pipe:0")
 	if program > 0 {
-		args = append(args, "-map", fmt.Sprintf("0:p:%d:v:0", program), "-map", fmt.Sprintf("0:p:%d:a:0", program))
+		args = append(args, "-map", fmt.Sprintf("0:p:%d:v:0", program))
+		if r.Audio != "none" {
+			args = append(args, "-map", fmt.Sprintf("0:p:%d:a:0", program))
+		}
 	} else {
-		args = append(args, "-map", "0:v:0", "-map", "0:a:0")
+		args = append(args, "-map", "0:v:0")
+		if r.Audio != "none" {
+			args = append(args, "-map", "0:a:0")
+		}
 	}
 	if transcode {
 		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: encoder, Mode: r.Mode, Deint: deint, Blend: blend}
 		interlaced := (InterlacedCodec(src.VideoCodec) || (!src.Progressive && codecName(src.VideoCodec) == "h264")) && g.Mode != "film"
-		field := interlaced && g.Profile != "saver"
+		field := interlaced && !smallPicture(g.Profile)
 		width, height, rate := pictureSize(g.Profile, field)
 		fps, gop := pictureRate(g, field)
 		args = append(args, "-vf", videoFilter(g, vaapiDeintMode(g, interlaced), interlaced, field, width, height, fps))
@@ -247,6 +270,8 @@ func RenditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		args = append(args, "-c:v", "copy")
 	}
 	switch r.Audio {
+	case "none":
+		args = append(args, "-an")
 	case "copy":
 		args = append(args, "-c:a", "copy")
 	case "aac6":

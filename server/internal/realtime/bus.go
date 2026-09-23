@@ -221,5 +221,5 @@ func validRoom(room string) bool {
 	if len(room) > 64 {
 		return false
 	}
-	return strings.HasPrefix(room, "channel:") || strings.HasPrefix(room, "group:")
+	return strings.HasPrefix(room, "channel:") || strings.HasPrefix(room, "group:") || strings.HasPrefix(room, "multiview:")
 }

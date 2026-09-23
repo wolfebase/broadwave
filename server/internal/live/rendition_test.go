@@ -25,6 +25,9 @@ func TestDecide(t *testing.T) {
 		{"unprobed h264 is deinterlaced, not copied", Source{"H264", "AC3", false}, web, Prefs{}, "1080.aac2.broadcast"},
 		{"cellular drops to 720", Source{"MPEG2", "AC3", false}, Caps{Platform: "ios", Video: []string{"h264"}, Audio: []string{"ac3", "aac"}, Network: "cellular"}, Prefs{}, "720.copy.broadcast"},
 		{"saver is small and stereo", Source{"MPEG2", "AC3", false}, apple, Prefs{Quality: "saver"}, "540.aac2.broadcast"},
+		{"a tile is 540 and silent", Source{"MPEG2", "AC3", false}, apple, Prefs{Quality: "tile"}, "540.none.broadcast"},
+		{"the smaller tile is 360", Source{"MPEG2", "AC3", false}, apple, Prefs{Quality: "360", Audio: "none"}, "360.none.broadcast"},
+		{"a tile can keep sound when asked", Source{"MPEG2", "AC3", false}, apple, Prefs{Quality: "tile", Audio: "stereo"}, "540.aac2.broadcast"},
 		{"surround without dolby decode is 5.1 aac", Source{"MPEG2", "AC3", false}, web, Prefs{Audio: "surround"}, "1080.aac6.broadcast"},
 		{"film mode is part of the key", Source{"MPEG2", "AC3", false}, web, Prefs{Picture: "film"}, "1080.aac2.film"},
 		{"small screens cap the height", Source{"MPEG2", "AC3", false}, Caps{Video: []string{"h264"}, Audio: []string{"aac"}, MaxHeight: 720}, Prefs{}, "720.aac2.broadcast"},
@@ -41,7 +44,7 @@ func TestDecide(t *testing.T) {
 }
 
 func TestRenditionKeyRoundTrip(t *testing.T) {
-	for _, key := range []string{"copy.copy", "copy.aac2", "1080.copy.broadcast", "540.aac6.film"} {
+	for _, key := range []string{"copy.copy", "copy.aac2", "1080.copy.broadcast", "540.aac6.film", "540.none.broadcast", "360.none.broadcast"} {
 		r, ok := ParseRenditionKey(key)
 		if !ok || r.Key() != key {
 			t.Errorf("%s did not round trip: %+v %v", key, r, ok)
@@ -63,6 +66,18 @@ func TestCopyRenditionKeepsBroadcastTimestamps(t *testing.T) {
 	}
 	if strings.Contains(line, "first_pts=0") || strings.Contains(line, "n_forced*2") {
 		t.Errorf("copyts graphs must not rebase audio or force keyframes from zero: %s", line)
+	}
+}
+
+func TestTileRenditionIsSilentAndSmall(t *testing.T) {
+	line := strings.Join(RenditionArgs(0, Source{VideoCodec: "MPEG2", AudioCodec: "AC3"}, Rendition{Video: "360", Audio: "none", Mode: "broadcast"}, "libx264", "", false), " ")
+	for _, want := range []string{"-copyts", "-an", "min(640,iw)", "min(360,ih)", "prev_forced_t+2", "-hls_segment_type fmp4"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("missing %q in %s", want, line)
+		}
+	}
+	if strings.Contains(line, "-c:a") || strings.Contains(line, "0:a:0") {
+		t.Errorf("a silent tile must not encode audio: %s", line)
 	}
 }
 

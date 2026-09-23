@@ -40,6 +40,20 @@ func TestFollowRoomTracksLiveAndRefusesControls(t *testing.T) {
 	}
 }
 
+func TestMultiviewRoomSharesOneTarget(t *testing.T) {
+	start := time.Date(2026, 9, 22, 20, 0, 0, 0, time.UTC)
+	r, _ := fixedRooms(start)
+	a := r.Join("multiview:games", 0)
+	b := r.Join("multiview:games", 0)
+	if a.Mode != "group" || b.Members != 2 || a.AnchorMedia != b.AnchorMedia {
+		t.Fatalf("tiles share one live target: %+v %+v", a, b)
+	}
+	st, err := r.Apply("multiview:games", Command{Action: "pause"})
+	if err != nil || st.Rate != 0 {
+		t.Fatalf("pause moves every tile: %+v %v", st, err)
+	}
+}
+
 func TestGroupRoomPauseSeekLive(t *testing.T) {
 	start := time.Date(2026, 9, 22, 20, 0, 0, 0, time.UTC)
 	r, now := fixedRooms(start)

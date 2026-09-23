@@ -268,6 +268,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/multiview/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Which of these channels can play together. Channels on one frequency share a tuner.
+         *     A channel with no known frequency needs a tuner of its own.
+         */
+        post: operations["planMultiview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tuners": {
         parameters: {
             query?: never;
@@ -774,17 +794,35 @@ export interface components {
         /** @description The viewer's choices. Empty means automatic. */
         Prefs: {
             /** @enum {string} */
-            quality?: "auto" | "original" | "high" | "medium" | "saver";
+            quality?: "auto" | "original" | "high" | "medium" | "saver" | "tile" | "360";
             /** @enum {string} */
-            audio?: "auto" | "surround" | "stereo";
+            audio?: "auto" | "surround" | "stereo" | "none";
             picture?: components["schemas"]["PictureMode"];
+        };
+        MultiviewPlan: {
+            playable: {
+                /** Format: int64 */
+                channelId: number;
+                frequencyHz: number;
+                /** @description True when this channel shares a tuner with another tile. */
+                shared: boolean;
+            }[];
+            blocked: {
+                /** Format: int64 */
+                channelId: number;
+                reason: string;
+                holders: string[];
+            }[];
+            tunersNeeded: number;
+            tunersFree: number;
+            note?: string;
         };
         StreamInfo: {
             rendition: string;
             /** @enum {string} */
-            video: "copy" | "1080" | "720" | "540";
+            video: "copy" | "1080" | "720" | "540" | "360";
             /** @enum {string} */
-            audio: "copy" | "aac2" | "aac6";
+            audio: "copy" | "aac2" | "aac6" | "none";
             mode?: components["schemas"]["PictureMode"];
             /** @description Short, user-facing explanation of the choice */
             reason: string;
@@ -931,13 +969,25 @@ export interface components {
             hdhrEmulate?: "0" | "1";
             /** @enum {string} */
             setupComplete?: "0" | "1";
-            /** @description 1 when this catalog should show the setup wizard. Set by the server; ignored on write. */
+            /**
+             * @description 1 when this catalog should show the setup wizard. Set by the server; ignored on write.
+             * @enum {string}
+             */
             needsSetup?: "0" | "1";
-            /** @description When listings last loaded. Set by the server. */
+            /**
+             * Format: date-time
+             * @description When listings last loaded. Set by the server.
+             */
             lastGuidePull?: string;
-            /** @description When the next automatic listing refresh is due. Set by the server. */
+            /**
+             * Format: date-time
+             * @description When the next automatic listing refresh is due. Set by the server.
+             */
             nextGuidePull?: string;
-            /** @description When listings were last reloaded by hand. Set by the server. */
+            /**
+             * Format: date-time
+             * @description When listings were last reloaded by hand. Set by the server.
+             */
             lastManualGuidePull?: string;
         };
     };
@@ -1337,6 +1387,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Manual refresh is limited to once an hour */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             500: components["responses"]["Error"];
         };
     };
@@ -1402,6 +1461,33 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["Ok"];
+        };
+    };
+    planMultiview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    channelIds: number[];
+                };
+            };
+        };
+        responses: {
+            /** @description Tuner budget for the requested channels */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MultiviewPlan"];
+                };
+            };
+            400: components["responses"]["Error"];
         };
     };
     listTuners: {

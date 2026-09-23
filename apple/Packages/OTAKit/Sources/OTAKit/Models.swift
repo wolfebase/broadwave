@@ -94,8 +94,12 @@ public struct Caps: Codable, Sendable, Hashable {
 }
 
 public struct Prefs: Codable, Sendable, Hashable {
-    public enum Quality: String, Codable, Sendable, CaseIterable { case auto, original, high, medium, saver }
-    public enum Sound: String, Codable, Sendable, CaseIterable { case auto, surround, stereo }
+    public enum Quality: String, Codable, Sendable, CaseIterable {
+        case auto, original, high, medium, saver, tile
+        case tile360 = "360"
+    }
+
+    public enum Sound: String, Codable, Sendable, CaseIterable { case auto, surround, stereo, none }
 
     public var quality: Quality
     public var audio: Sound
