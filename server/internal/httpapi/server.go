@@ -240,6 +240,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	if values["hdhrEmulate"] == "" {
 		values["hdhrEmulate"] = "0"
 	}
+	if values["hideScores"] == "" {
+		values["hideScores"] = "0"
+	}
 	if strings.TrimSpace(values["sdPassword"]) != "" {
 		values["sdPasswordSet"] = "1"
 	} else {

@@ -7,6 +7,7 @@ export function Stage({
   rootRef,
   videoClass,
   title,
+  score,
   eyebrow,
   onBack,
   backLabel,
@@ -32,6 +33,7 @@ export function Stage({
   rootRef?: RefObject<HTMLElement | null>;
   videoClass: string;
   title: string;
+  score?: string;
   eyebrow: ReactNode;
   onBack: () => void;
   backLabel: string;
@@ -166,6 +168,7 @@ export function Stage({
           <div className="stage-title">
             <p className="stage-eyebrow">{eyebrow}</p>
             <h2>{title}</h2>
+            {score ? <p className="stage-score">{score}</p> : null}
           </div>
           <div className="stage-top-right">
             {badge}

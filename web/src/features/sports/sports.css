@@ -71,6 +71,11 @@
   letter-spacing: -0.02em;
 }
 
+.gc-score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
 .gc-matchup .at {
   font-size: var(--type-caption-size);
   color: var(--color-text-tertiary);

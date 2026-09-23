@@ -129,6 +129,15 @@ export function SettingsScreen({
         />
         <span className="hint">{copy.settings.movieArtHint}</span>
       </label>
+      <h3 className="section-title">Sports</h3>
+      <label className="field">
+        {copy.settings.hideScores}
+        <select value={settings.hideScores || "0"} onChange={(event) => onChange({ hideScores: event.target.value })}>
+          <option value="0">Show</option>
+          <option value="1">Hide</option>
+        </select>
+        <span className="hint">{copy.settings.hideScoresHint}</span>
+      </label>
       <h3 className="section-title">DVR</h3>
       <label className="field">
         Play the next episode

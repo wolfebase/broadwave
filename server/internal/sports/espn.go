@@ -38,7 +38,7 @@ func (e *ESPN) Scoreboard(ctx context.Context, leagueID string, day time.Time) (
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "Waveguide/0.1")
+	// ESPN rejects some user agents. The default Go client is accepted.
 	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func parseEvent(league string, raw json.RawMessage) (Game, bool) {
 	if err := json.Unmarshal(raw, &event); err != nil || event.ID == "" {
 		return Game{}, false
 	}
-	start, err := time.Parse(time.RFC3339, event.Date)
+	start, err := parseStart(event.Date)
 	if err != nil {
 		return Game{}, false
 	}
@@ -147,6 +147,13 @@ type statusDoc struct {
 		Completed   bool   `json:"completed"`
 		ShortDetail string `json:"shortDetail"`
 	} `json:"type"`
+}
+
+func parseStart(raw string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t, nil
+	}
+	return time.Parse("2006-01-02T15:04Z07:00", raw)
 }
 
 func hexColor(raw string) string {

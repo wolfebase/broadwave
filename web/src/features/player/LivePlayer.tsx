@@ -7,6 +7,7 @@ import { readZoom, saveZoom, type PictureMode, type Zoom } from "../../picture";
 import type { Channel } from "../../types";
 import { InfoIcon, ListIcon, RecordIcon, SideBySideIcon, SyncIcon } from "../../ui/icons";
 import { Progress } from "../../ui/primitives";
+import { useScoreMap } from "../sports/scores";
 import { Stage } from "./Stage";
 import { useLiveStream } from "./useLiveStream";
 
@@ -76,6 +77,7 @@ export function LivePlayer({
   const typedTimer = useRef(0);
 
   const airing = airingAt(index, channel.id, now);
+  const scores = useScoreMap();
   const active = recordings.find((r) => r.status === "recording" && r.channelId === channel.id);
 
   useEffect(() => localStorage.setItem("ota-live", JSON.stringify(opts)), [opts]);
@@ -224,6 +226,7 @@ export function LivePlayer({
       videoClass={zoom === "fit" ? "stage-video" : `stage-video ${zoom}`}
       eyebrow={eyebrow}
       title={title}
+      score={airing?.gameId ? scores.get(airing.gameId) : undefined}
       onBack={onMinimize}
       backLabel="Back to browsing"
       onExpand={onExpand}

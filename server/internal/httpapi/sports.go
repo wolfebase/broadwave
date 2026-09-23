@@ -46,13 +46,42 @@ func (s *Server) scoreboard(w http.ResponseWriter, r *http.Request) {
 		games, err = provider.Scoreboard(r.Context(), league, day)
 	}
 	if err != nil {
-		writeError(w, err)
+		log.Printf("sports: %v", err)
+		httpError(w, "Scores are unavailable right now.", http.StatusBadGateway)
 		return
 	}
 	if games == nil {
 		games = []sports.Game{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"games": games})
+	writeJSON(w, http.StatusOK, map[string]any{"games": s.withoutSpoilers(r.Context(), games)})
+}
+
+func (s *Server) withoutSpoilers(ctx context.Context, games []sports.Game) []sports.Game {
+	if s.Store == nil || len(games) == 0 {
+		return games
+	}
+	settings, err := s.Store.Settings(ctx)
+	if err != nil {
+		settings = map[string]string{}
+	}
+	hideAll := settings["hideScores"] == "1"
+	hidden := map[string]bool{}
+	if !hideAll {
+		recs, recErr := s.Store.Recordings(ctx)
+		if recErr == nil {
+			for _, rec := range recs {
+				if rec.GameID != "" && rec.Watched != 1 {
+					hidden[rec.GameID] = true
+				}
+			}
+		}
+	}
+	for i := range games {
+		if hideAll || hidden[games[i].ID] {
+			games[i] = sports.HideScore(games[i])
+		}
+	}
+	return games
 }
 
 func (s *Server) boardsAround(ctx context.Context, now time.Time) []sports.Game {
