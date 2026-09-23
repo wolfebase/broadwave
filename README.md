@@ -30,7 +30,7 @@ Use the template in `deploy/unraid/waveguide.xml` (Community Apps listing coming
 
 ## Develop
 
-You need Go 1.25+, Node 22+, and ffmpeg. On a Mac: `brew install go node ffmpeg`.
+You need Go 1.26+, Node 22+, and ffmpeg. On a Mac: `brew install go node ffmpeg`.
 
 ```bash
 make run      # build the web app and run the server on :8477 with ./data
