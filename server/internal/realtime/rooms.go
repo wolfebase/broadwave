@@ -66,7 +66,8 @@ func liveAnchor(now time.Time, latency string) float64 {
 }
 
 // Join adds a member, creating the room at the live target if it is new.
-// Channel rooms ("channel:ID") follow live; group rooms ("group:CODE") share controls.
+// Channel rooms ("channel:ID") follow live. Group rooms ("group:CODE") and
+// multiview rooms ("multiview:ID") share controls, so pause hits every tile.
 func (r *Rooms) Join(room string, channelID int64) RoomState {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -74,7 +75,7 @@ func (r *Rooms) Join(room string, channelID int64) RoomState {
 	if st == nil {
 		now := r.now()
 		mode := "follow"
-		if strings.HasPrefix(room, "group:") {
+		if strings.HasPrefix(room, "group:") || strings.HasPrefix(room, "multiview:") {
 			mode = "group"
 		}
 		st = &RoomState{

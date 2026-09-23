@@ -343,6 +343,31 @@ paths:
                 rendition: { type: string, description: "The rendition this viewer joined; empty releases from the busiest" }
       responses:
         "200": { $ref: "#/components/responses/Ok" }
+  /multiview/plan:
+    post:
+      tags: [live]
+      operationId: planMultiview
+      description: |
+        Which of these channels can play together. Channels on one frequency share a tuner.
+        A channel with no known frequency needs a tuner of its own.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channelIds]
+              properties:
+                channelIds:
+                  type: array
+                  items: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: Tuner budget for the requested channels
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MultiviewPlan" }
+        "400": { $ref: "#/components/responses/Error" }
   /tuners:
     get:
       tags: [live]
@@ -1013,16 +1038,43 @@ components:
       type: object
       description: The viewer's choices. Empty means automatic.
       properties:
-        quality: { type: string, enum: [auto, original, high, medium, saver] }
-        audio: { type: string, enum: [auto, surround, stereo] }
+        quality: { type: string, enum: [auto, original, high, medium, saver, tile, "360"] }
+        audio: { type: string, enum: [auto, surround, stereo, none] }
         picture: { $ref: "#/components/schemas/PictureMode" }
+    MultiviewPlan:
+      type: object
+      required: [playable, blocked, tunersNeeded, tunersFree]
+      properties:
+        playable:
+          type: array
+          items:
+            type: object
+            required: [channelId, frequencyHz, shared]
+            properties:
+              channelId: { type: integer, format: int64 }
+              frequencyHz: { type: integer }
+              shared: { type: boolean, description: "True when this channel shares a tuner with another tile." }
+        blocked:
+          type: array
+          items:
+            type: object
+            required: [channelId, reason, holders]
+            properties:
+              channelId: { type: integer, format: int64 }
+              reason: { type: string }
+              holders:
+                type: array
+                items: { type: string }
+        tunersNeeded: { type: integer }
+        tunersFree: { type: integer }
+        note: { type: string }
     StreamInfo:
       type: object
       required: [rendition, video, audio, reason]
       properties:
         rendition: { type: string }
-        video: { type: string, enum: [copy, "1080", "720", "540"] }
-        audio: { type: string, enum: [copy, aac2, aac6] }
+        video: { type: string, enum: [copy, "1080", "720", "540", "360"] }
+        audio: { type: string, enum: [copy, aac2, aac6, none] }
         mode: { $ref: "#/components/schemas/PictureMode" }
         reason: { type: string, description: "Short, user-facing explanation of the choice" }
         sourceVideo: { type: string }

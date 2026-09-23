@@ -51,7 +51,7 @@ func PictureArgs(g Graph) []string {
 		g.Audio = "stereo"
 	}
 	interlaced := InterlacedCodec(g.VideoCodec) && g.Mode != "film"
-	field := interlaced && g.Profile != "saver"
+	field := interlaced && !smallPicture(g.Profile)
 	width, height, rate := pictureSize(g.Profile, field)
 	fps, gop := pictureRate(g, field)
 
@@ -94,6 +94,11 @@ func PictureArgs(g Graph) []string {
 	return args
 }
 
+// smallPicture is a bandwidth rendition: one frame per broadcast frame, no motion blend.
+func smallPicture(profile string) bool {
+	return profile == "saver" || profile == "tile"
+}
+
 func pictureSize(profile string, field bool) (int, int, string) {
 	switch profile {
 	case "balanced":
@@ -103,6 +108,8 @@ func pictureSize(profile string, field bool) (int, int, string) {
 		return 1280, 720, "5M"
 	case "saver":
 		return 960, 540, "2500k"
+	case "tile":
+		return 640, 360, "1200k"
 	default:
 		if field {
 			return 1920, 1080, "14M"
@@ -115,7 +122,7 @@ func pictureRate(g Graph, field bool) (string, int) {
 	if g.Mode == "film" {
 		return "24000/1001", 48
 	}
-	if field || (g.Mode == "smooth" && g.Blend && g.Profile != "saver") {
+	if field || (g.Mode == "smooth" && g.Blend && !smallPicture(g.Profile)) {
 		return "60000/1001", 120
 	}
 	return "30000/1001", 60
@@ -152,7 +159,7 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 			mode = "send_field"
 		}
 		pre = append(pre, "bwdif=mode="+mode+":parity=auto:deint=interlaced")
-	} else if g.Mode == "smooth" && g.Blend && g.Profile != "saver" {
+	} else if g.Mode == "smooth" && g.Blend && !smallPicture(g.Profile) {
 		pre = append(pre, "minterpolate=fps=60000/1001:mi_mode=blend")
 	}
 	if len(pre) == 0 {

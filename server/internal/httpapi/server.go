@@ -56,6 +56,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /settings", s.getSettings)
 	api("PUT /settings", s.putSettings)
 	api("POST /watch", s.watch)
+	api("POST /multiview/plan", s.multiviewPlan)
 	api("POST /watch/{id}/stop", s.release)
 	api("GET /tuners", s.tuners)
 	api("POST /recordings", s.startRecording)

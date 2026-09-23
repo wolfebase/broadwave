@@ -38,12 +38,13 @@ One Go binary. It embeds the web app, keeps its catalog in SQLite under `-config
 - Viewers of the same channel share the same feed and HLS playlist. Recordings attach another subscriber that copies the original MPEG-TS to disk.
 - Tuners are released 20 seconds after the last viewer leaves, or after 45 seconds without segment requests (a closed tab or a sleeping phone).
 - Live HLS uses 2-second segments with `EXT-X-PROGRAM-DATE-TIME`, keeping about 90 minutes for rewind.
+- Multiview tiles use `540` and `360` renditions, including silent ones (`540.none`, `360.none`), so an unfocused tile does not transcode audio. `POST /api/v1/multiview/plan` says which channels fit on the tuners. Tiles in one session share a `multiview:<id>` sync room. See `docs/decisions/0004-multiview.md`.
 
 **Next (relay v2):** a per-frequency ring buffer that live, recordings, and exports read from; a rendition ladder (direct remux with AC-3 passthrough for Apple devices, plus HEVC and H.264 transcodes) served from a master playlist, so a quality change never restarts anyone else; and a per-client stream decision. See `docs/decisions/0002-playback-pipeline.md`.
 
 ### Whole-Home Sync (`internal/sync`, planned)
 
-A room per channel holds a target presentation time derived from segment program date-times. Clients measure their clock offset against the server over the events WebSocket and align playback to the room's target. See `docs/decisions/0003-whole-home-sync.md`.
+A room per channel holds a target presentation time derived from segment program date-times. Clients measure their clock offset against the server over the events WebSocket and align playback to the room's target. A multiview session uses one room so every tile aims at the same wall-clock moment, and pause applies to all of them. See `docs/decisions/0003-whole-home-sync.md`.
 
 ### DVR (`internal/dvr`)
 
