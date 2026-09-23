@@ -7,10 +7,37 @@ import { categoryOf, dayLabel, isRecording, minutesLeft, progress, recordingKeys
 import type { Airing, Channel, TeamFollow } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
 import { ChannelBadge, Chip, Empty, LiveDot, Progress, RecDot } from "../../ui/primitives";
-import { useScoreMap } from "./scores";
+import { scoreLine, useScoreboard, type ScoreGame, type ScoreTeam } from "./scores";
 import "./sports.css";
 
 type Range = "live" | "today" | "week";
+
+function Matchup({ names, game }: { names: [string, string]; game?: ScoreGame }) {
+  const home = game?.teams?.find((team) => team.home);
+  const away = game?.teams?.find((team) => team !== home);
+  const line = scoreLine(game);
+  return (
+    <>
+      <div className="gc-matchup">
+        <TeamMark name={names[0]} team={away} />
+        <span className="at">at</span>
+        <TeamMark name={names[1]} team={home} />
+      </div>
+      {game?.state === "in" && (game.detail || game.clock) ? <p className="gc-score">{game.detail || game.clock}</p> : null}
+      {line && game?.state !== "in" ? <p className="gc-score">{line}</p> : null}
+    </>
+  );
+}
+
+function TeamMark({ name, team }: { name: string; team?: ScoreTeam }) {
+  return (
+    <span className="team">
+      {team?.logo ? <img className="team-logo" alt="" src={team.logo} /> : team?.color ? <span className="team-swatch" style={{ background: team.color }} /> : null}
+      <span>{team?.short || name}</span>
+      {team?.score && team.score !== "0" ? <span className="team-score">{team.score}</span> : null}
+    </span>
+  );
+}
 
 /** Splits "Chiefs at Bills" or "Lakers vs. Celtics" into a matchup. */
 export function matchup(a: Airing): [string, string] | null {
@@ -33,7 +60,7 @@ export function Sports() {
   const [range, setRange] = useState<Range>("today");
   const [leagueFilter, setLeague] = useState("all");
   const [teams, setTeams] = useState<TeamFollow[]>([]);
-  const scores = useScoreMap();
+  const board = useScoreboard();
   useEffect(() => {
     getTeams().then((r) => setTeams(r.teams)).catch(() => setTeams([]));
   }, []);
@@ -115,15 +142,10 @@ export function Sports() {
                     {rec ? <RecDot scheduled={rec === "scheduled"} /> : null}
                   </div>
                   {sides ? (
-                    <div className="gc-matchup">
-                      <span className="team">{sides[0]}</span>
-                      <span className="at">at</span>
-                      <span className="team">{sides[1]}</span>
-                    </div>
+                    <Matchup names={sides} game={board.find((game) => game.id === airing.gameId)} />
                   ) : (
                     <h3 className="gc-title">{airing.subtitle || airing.title}</h3>
                   )}
-                  {airing.gameId && scores.get(airing.gameId) ? <p className="gc-score">{scores.get(airing.gameId)}</p> : null}
                   {liveNow ? (
                     <div className="gc-progress">
                       <Progress value={progress(airing, now)} category="sports" />
