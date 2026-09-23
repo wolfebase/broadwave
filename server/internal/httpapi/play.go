@@ -324,14 +324,23 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 		antenna = append(antenna, ch)
 		ids = append(ids, ch.ID)
 	}
-	rows, err := guide.Parse(raw, antenna)
+	rows, art, err := guide.Parse(raw, antenna)
 	if err != nil {
 		return 0, err
 	}
+	_ = s.Store.SetChannelArt(ctx, art)
+	settings, _ := s.Store.Settings(ctx)
+	if settings == nil {
+		settings = map[string]string{}
+	}
+	tmdbKey := strings.TrimSpace(settings["tmdbKey"])
+	if tmdbKey == "" {
+		tmdbKey = strings.TrimSpace(os.Getenv("TMDB_API_KEY"))
+	}
+	rows = guide.FillImages(ctx, tmdbKey, rows)
 	if err := s.Store.ReplaceAiringsFor(ctx, ids, rows); err != nil {
 		return 0, err
 	}
-	settings, _ := s.Store.Settings(ctx)
 	user := strings.TrimSpace(settings["sdUser"])
 	pass := settings["sdPassword"]
 	lineup := strings.TrimSpace(settings["sdLineup"])
@@ -349,7 +358,9 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 	}
 	if rawURL := strings.TrimSpace(settings["guideUrl"]); rawURL != "" {
 		if body, err := guide.PullURL(ctx, rawURL); err == nil {
-			if extra, err := guide.Parse(body, antenna); err == nil && len(extra) > 0 {
+			if extra, extraArt, err := guide.Parse(body, antenna); err == nil && len(extra) > 0 {
+				_ = s.Store.SetChannelArt(ctx, extraArt)
+				extra = guide.FillImages(ctx, tmdbKey, extra)
 				rows = s.fillUnlisted(ctx, rows, extra)
 			}
 		}

@@ -13,6 +13,7 @@ export type Channel = {
   hidden: boolean;
   present: boolean;
   guideKey?: string;
+  artUrl?: string;
 };
 
 export type Device = {
@@ -48,6 +49,8 @@ export type Settings = {
   sdLineup?: string;
   sdPasswordSet?: string;
   guideUrl?: string;
+  tmdbKey?: string;
+  tmdbKeySet?: string;
 };
 
 export type StorageInfo = {
@@ -65,6 +68,7 @@ export type Airing = {
   category?: string;
   programId?: string;
   new?: boolean;
+  imageUrl?: string;
   start: string;
   end: string;
 };

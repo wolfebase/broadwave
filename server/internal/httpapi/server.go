@@ -94,6 +94,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /media/live/", s.media)
 	mux.HandleFunc("GET /media/file/", s.fileMedia)
 	mux.HandleFunc("GET /media/poster/{id}", s.poster)
+	mux.HandleFunc("GET /media/art/{kind}/{id}", s.art)
 	mux.HandleFunc("GET /", s.ui)
 	return s.withDevCORS(mux)
 }
@@ -238,6 +239,12 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		values["sdPasswordSet"] = "0"
 	}
 	delete(values, "sdPassword")
+	if strings.TrimSpace(values["tmdbKey"]) != "" {
+		values["tmdbKeySet"] = "1"
+	} else {
+		values["tmdbKeySet"] = "0"
+	}
+	delete(values, "tmdbKey")
 	needs, err := s.Store.ApplySetupDefault(r.Context(), time.Now())
 	if err != nil {
 		writeError(w, err)

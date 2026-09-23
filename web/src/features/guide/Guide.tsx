@@ -263,7 +263,10 @@ export function Guide() {
               <div key={c.id} className="guide-row" role="row" aria-rowindex={r + 1} style={{ top: headH + r * rowH, width: channelW + width }}>
                 <button type="button" className="guide-channel" onClick={() => watch(c)} aria-label={`Watch ${c.displayNumber} ${c.displayName}`}>
                   <span className="gc-num">{c.displayNumber}</span>
-                  <span className="gc-name">{c.displayName}</span>
+                  <span className="gc-name">
+                    {c.artUrl ? <img className="gc-logo" alt="" src={`/media/art/channel/${c.id}?w=72`} /> : null}
+                    {c.displayName}
+                  </span>
                   {c.favorite ? <StarIcon filled className="gc-star" /> : null}
                 </button>
                 {list.length === 0 ? (

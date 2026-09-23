@@ -45,6 +45,7 @@ type Channel struct {
 	Hidden        bool   `json:"hidden"`
 	Present       bool   `json:"present"`
 	GuideKey      string `json:"guideKey,omitempty"`
+	ArtURL        string `json:"artUrl,omitempty"`
 }
 
 type ChannelPatch struct {
@@ -172,7 +173,7 @@ FROM devices ORDER BY priority, friendly_name`)
 
 func (s *Store) Channels(ctx context.Context, guideOnly bool) ([]Channel, error) {
 	q := `SELECT id, device_id, guide_number, guide_name, custom_number, custom_name,
-		video_codec, audio_codec, hd, favorite, enabled, hidden, present, guide_key FROM channels`
+		video_codec, audio_codec, hd, favorite, enabled, hidden, present, guide_key, art_url FROM channels`
 	if guideOnly {
 		q += ` WHERE present=1 AND enabled=1 AND hidden=0`
 	}
@@ -187,7 +188,7 @@ func (s *Store) Channels(ctx context.Context, guideOnly bool) ([]Channel, error)
 		var customNumber, customName string
 		var hd, fav, en, hidden, present int
 		if err := rows.Scan(&ch.ID, &ch.DeviceID, &ch.GuideNumber, &ch.GuideName, &customNumber, &customName,
-			&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present, &ch.GuideKey); err != nil {
+			&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present, &ch.GuideKey, &ch.ArtURL); err != nil {
 			return nil, err
 		}
 		ch.HD = hd != 0
@@ -303,6 +304,8 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		"sdLineup":       true,
 		"guideUrl":       true,
 		"sdPasswordSet":  true,
+		"tmdbKey":        true,
+		"tmdbKeySet":     true,
 	}
 	cleaned := map[string]string{}
 	for k, v := range values {
@@ -330,7 +333,10 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		if k == "sdPassword" && strings.TrimSpace(v) == "" {
 			continue
 		}
-		if k == "sdPasswordSet" {
+		if k == "sdPasswordSet" || k == "tmdbKeySet" {
+			continue
+		}
+		if k == "tmdbKey" && strings.TrimSpace(v) == "" {
 			continue
 		}
 		cleaned[k] = v

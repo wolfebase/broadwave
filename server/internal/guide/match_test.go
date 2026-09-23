@@ -13,7 +13,7 @@ func TestCallSignSuffixStillMatches(t *testing.T) {
     <title>News</title>
   </programme>
 </tv>`)
-	got, err := Parse(raw, []store.Channel{{ID: 2, GuideNumber: "5.1", GuideName: "KCTVDT1"}})
+	got, _, err := Parse(raw, []store.Channel{{ID: 2, GuideNumber: "5.1", GuideName: "KCTVDT1"}})
 	if err != nil || len(got) != 1 || got[0].ChannelID != 2 || got[0].Title != "News" {
 		t.Fatalf("%v %+v", err, got)
 	}
@@ -26,7 +26,7 @@ func TestGuideKeyPinsAChannelTheFeedNamesDifferently(t *testing.T) {
     <title>Noticias</title>
   </programme>
 </tv>`)
-	got, err := Parse(raw, []store.Channel{{ID: 5, GuideNumber: "14.1", GuideName: "KUKC", GuideKey: "DIGI.14"}})
+	got, _, err := Parse(raw, []store.Channel{{ID: 5, GuideNumber: "14.1", GuideName: "KUKC", GuideKey: "DIGI.14"}})
 	if err != nil || len(got) != 1 || got[0].ChannelID != 5 {
 		t.Fatalf("%v %+v", err, got)
 	}
@@ -39,7 +39,7 @@ func TestMissingFeedChannelStaysEmpty(t *testing.T) {
     <title>News</title>
   </programme>
 </tv>`)
-	got, err := Parse(raw, []store.Channel{
+	got, _, err := Parse(raw, []store.Channel{
 		{ID: 1, GuideNumber: "4.1", GuideName: "WDAF-DT"},
 		{ID: 5, GuideNumber: "14.1", GuideName: "KUKC"},
 	})

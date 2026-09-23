@@ -131,10 +131,11 @@ func (s *Server) attachXMLTV(ctx context.Context, sourceID int64, rawURL string)
 			ids = append(ids, ch.ID)
 		}
 	}
-	rows, err := guide.Parse(body, mine)
+	rows, art, err := guide.Parse(body, mine)
 	if err != nil {
 		return
 	}
+	_ = s.Store.SetChannelArt(ctx, art)
 	_ = s.Store.ReplaceAiringsFor(ctx, ids, rows)
 	_ = sourceID
 }
