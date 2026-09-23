@@ -98,6 +98,11 @@ func (g Game) Live() bool { return g.State == "in" }
 
 // HideScore clears the result. A finished game also drops the detail line, which often repeats the score.
 func HideScore(game Game) Game {
+	if len(game.Teams) > 0 {
+		teams := make([]Team, len(game.Teams))
+		copy(teams, game.Teams)
+		game.Teams = teams
+	}
 	for i := range game.Teams {
 		game.Teams[i].Score = ""
 	}

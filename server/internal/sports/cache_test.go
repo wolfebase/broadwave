@@ -68,3 +68,20 @@ func TestCacheKeepsTheLastBoardWhenTheFeedFails(t *testing.T) {
 		t.Fatal("a failed feed should back off before trying again")
 	}
 }
+
+func TestHideScoreLeavesTheBoardAlone(t *testing.T) {
+	original := Game{
+		ID: "1", State: "post", Completed: true, Detail: "Final",
+		Teams: []Team{{Name: "Chiefs", Score: "27"}, {Name: "Bills", Score: "24"}},
+	}
+	hidden := HideScore(original)
+	if original.Teams[0].Score != "27" || original.Detail != "Final" {
+		t.Fatalf("board was changed: %+v", original)
+	}
+	if hidden.Teams[0].Score != "" || hidden.Teams[1].Score != "" || hidden.Detail != "" {
+		t.Fatalf("score still visible: %+v", hidden)
+	}
+	if hidden.Teams[0].Name != "Chiefs" {
+		t.Fatalf("team name lost: %+v", hidden)
+	}
+}
