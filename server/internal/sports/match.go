@@ -166,6 +166,11 @@ func fold(s string) string {
 	return strings.TrimSpace(b.String())
 }
 
+// Mentions reports whether name appears as its own words in text.
+func Mentions(text, name string) bool {
+	return phrase(fold(text), fold(name))
+}
+
 func phrase(text, part string) bool {
 	if part == "" || text == "" {
 		return false

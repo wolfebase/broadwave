@@ -112,8 +112,10 @@ func main() {
 		tick := time.NewTicker(10 * time.Minute)
 		defer tick.Stop()
 		api.LinkGames(context.Background())
+		api.NoteTeams(context.Background())
 		for range tick.C {
 			api.LinkGames(context.Background())
+			api.NoteTeams(context.Background())
 		}
 	}()
 	go func() {

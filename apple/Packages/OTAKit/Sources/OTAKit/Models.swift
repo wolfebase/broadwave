@@ -97,6 +97,15 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
+public struct TeamFollow: Codable, Sendable, Hashable, Identifiable {
+    public var id: Int64
+    public var name: String
+    public var short: String?
+    public var abbr: String?
+    public var league: String?
+    public var record: Bool?
+}
+
 public struct Pass: Codable, Sendable, Hashable, Identifiable {
     public var id: Int64
     public var title: String

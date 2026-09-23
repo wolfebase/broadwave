@@ -1,9 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getTeams } from "../../api";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { navigate } from "../../app/router";
 import { airingAt, categoryLabel, categoryOf, dayLabel, minutesLeft, nextAfter, progress, timeLabel, type Category } from "../../lib/guide";
-import type { Airing, Channel, Recording } from "../../types";
+import type { Airing, Channel, Recording, TeamFollow } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
 import { savedSets } from "../multiview/storage";
 import { ChannelBadge, Empty, LiveDot, Progress, SectionHeader } from "../../ui/primitives";
@@ -11,9 +12,18 @@ import "./home.css";
 
 type Live = { channel: Channel; airing?: Airing; cat: Category };
 
+function mentions(text: string, name: string) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}\\b`, "i").test(text);
+}
+
 export function Home() {
   const { channels, index, now, recordings, ready, record } = useData();
   const player = usePlayer();
+  const [teams, setTeams] = useState<TeamFollow[]>([]);
+  useEffect(() => {
+    getTeams().then((r) => setTeams(r.teams)).catch(() => setTeams([]));
+  }, []);
 
   const live: Live[] = useMemo(
     () =>
@@ -30,6 +40,22 @@ export function Home() {
   }, [live]);
 
   const onNow = useMemo(() => [...live].filter((l) => l.airing).sort((a, b) => Number(b.channel.favorite) - Number(a.channel.favorite)), [live]);
+
+  const yours = useMemo(() => {
+    const names = teams.flatMap((team) => [team.short, team.name].filter((name): name is string => !!name && name.length >= 4));
+    if (names.length === 0) return [];
+    const out: { channel: Channel; airing: Airing }[] = [];
+    const until = now + 36 * 3600_000;
+    for (const channel of channels) {
+      for (const airing of index.get(channel.id) ?? []) {
+        const start = Date.parse(airing.start);
+        if (Date.parse(airing.end) <= now || start > until) continue;
+        const text = `${airing.title} ${airing.subtitle ?? ""}`;
+        if (names.some((name) => mentions(text, name))) out.push({ channel, airing });
+      }
+    }
+    return out.sort((a, b) => a.airing.start.localeCompare(b.airing.start)).slice(0, 12);
+  }, [teams, channels, index, now]);
 
   const sports = useMemo(() => {
     const out: { channel: Channel; airing: Airing }[] = [];
@@ -140,6 +166,21 @@ export function Home() {
           </button>
         ))}
       </Shelf>
+
+      {yours.length > 0 ? (
+        <Shelf title="Your teams" action={<button className="text-btn" onClick={() => navigate("/sports")}>Sports</button>}>
+          {yours.map(({ channel, airing }) => {
+            const liveNow = Date.parse(airing.start) <= now;
+            return (
+              <button key={airing.id} type="button" className="sport-card" onClick={() => (liveNow ? player.open(channel) : navigate("/sports"))}>
+                <span className="sc-when">{liveNow ? <LiveDot /> : `${dayLabel(airing.start, now)} · ${timeLabel(airing.start)}`}</span>
+                <span className="sc-title">{airing.title}</span>
+                <ChannelBadge channel={channel} size="sm" />
+              </button>
+            );
+          })}
+        </Shelf>
+      ) : null}
 
       {sports.length > 0 ? (
         <Shelf

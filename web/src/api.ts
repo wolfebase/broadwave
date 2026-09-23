@@ -1,4 +1,4 @@
-import type { Airing, Caps, Channel, ChannelPatch, Device, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, TunerStatus, VirtualChannel, WatchSession } from "./types";
+import type { Airing, Caps, Channel, ChannelPatch, Device, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -108,6 +108,17 @@ export function startRecording(channelId: number, minutes: number, title: string
 
 export function stopRecording(id: number) {
   return request<{ ok: boolean }>(`/api/v1/recordings/${id}/stop`, { method: "POST", body: "{}" });
+}
+
+export function getTeams() {
+  return request<{ teams: TeamFollow[] }>("/api/v1/teams");
+}
+
+export function followTeam(team: TeamFollow) {
+  return request<{ teams: TeamFollow[] }>("/api/v1/teams", {
+    method: "PUT",
+    body: JSON.stringify(team),
+  });
 }
 
 export function getPasses() {

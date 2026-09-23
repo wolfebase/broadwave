@@ -89,6 +89,17 @@ export type Airing = {
   end: string;
 };
 
+export type TeamFollow = {
+  id?: number;
+  name: string;
+  short?: string;
+  abbr?: string;
+  league?: string;
+  logo?: string;
+  color?: string;
+  record?: boolean;
+};
+
 export type Pass = {
   id: number;
   title: string;

@@ -6,6 +6,7 @@ struct HomeView: View {
     @Environment(AppStore.self) private var store
     @Environment(NowPlaying.self) private var nowPlaying
     @State private var saved = SavedMultiview.load()
+    @State private var teams: [TeamFollow] = []
 
     var body: some View {
         ScrollView {
@@ -28,6 +29,24 @@ struct HomeView: View {
                     }
                 }
                 let games = store.sports()
+                let yours = games.filter { pair in
+                    teams.contains { team in
+                        let name = team.short.flatMap { $0.isEmpty ? nil : $0 } ?? team.name
+                        return name.count >= 4 && (pair.1.title.localizedCaseInsensitiveContains(name) || (pair.1.subtitle ?? "").localizedCaseInsensitiveContains(name))
+                    }
+                }
+                if !yours.isEmpty {
+                    Shelf("Your teams") {
+                        ForEach(yours.prefix(12), id: \.1.id) { channel, airing in
+                            Button {
+                                if airing.isOn(at: store.now) { nowPlaying.play(channel) }
+                            } label: {
+                                GameCard(channel: channel, airing: airing, now: store.now)
+                            }
+                            .cardButton()
+                        }
+                    }
+                }
                 if !games.isEmpty {
                     let liveGames = games.filter { $0.1.isOn(at: store.now) }
                     VStack(alignment: .leading, spacing: 12) {
@@ -93,6 +112,11 @@ struct HomeView: View {
             .padding(.vertical, 20)
         }
         .scrollClipDisabled()
+        .task {
+            if let api = store.api {
+                teams = (try? await api.teams()) ?? []
+            }
+        }
         .navigationDestination(for: Recording.self) { RecordingPlayerScreen(recording: $0) }
         .navigationTitle("Home")
         #if os(iOS)
