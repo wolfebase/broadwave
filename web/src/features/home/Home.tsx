@@ -8,6 +8,7 @@ import type { Airing, Channel, Recording, TeamFollow } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
 import { savedSets } from "../multiview/storage";
 import { ArtFrame } from "../../ui/ArtFrame";
+import { LiveFrame } from "../../ui/LiveFrame";
 import { ChannelBadge, Empty, LiveDot, Progress, SectionHeader } from "../../ui/primitives";
 import "./home.css";
 
@@ -114,7 +115,9 @@ export function Home() {
         <section className="hero" data-cat={hero.cat}>
           {hero.airing?.imageUrl ? (
             <ArtFrame src={`/media/art/airing/${hero.airing.id}?w=960`} width={hero.airing.imageWidth} height={hero.airing.imageHeight} />
-          ) : null}
+          ) : (
+            <ArtFrame src={`/api/v1/channels/${hero.channel.id}/frame?w=1280`} width={1280} height={720} />
+          )}
           <div className="hero-glow" aria-hidden="true" />
           <div className="hero-num" aria-hidden="true">
             {hero.channel.displayNumber}
@@ -176,6 +179,7 @@ export function Home() {
         ) : null}
         {onNow.map((l) => (
           <button key={l.channel.id} type="button" className="now-card" data-cat={l.cat} onClick={() => player.open(l.channel)}>
+            <LiveFrame id={l.channel.id} className="nc-frame" />
             <span className="nc-top">
               <span className="nc-num">{l.channel.displayNumber}</span>
               <span className="nc-name">{l.channel.displayName}</span>

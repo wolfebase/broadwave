@@ -3,10 +3,10 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **R5**. Live preview frames from tuned muxes. Never tune just for a frame.
+- Current task: **R6**. Apple screenshots of multiview, guide, search, sports, and Your teams on iPhone, iPad, and Apple TV.
 - Half done: nothing.
-- Next command: read the relay and frame plan, then grab keyframes only from a mux that is already tuned.
-- Unraid is on `v0.2.0`. Jeopardy records 4.1 until about 21:02 UTC on 2026-09-23. Do not take both tuners in that window.
+- Next command: boot the simulators and capture each screen without starting a tune.
+- Unraid is on `v0.2.0`. Do not take both tuners if a recording is on.
 - A7 retry at phase R: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
 ## Phase R — Repair and consolidate
@@ -17,6 +17,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] R5 Live preview frames from tuned muxes (no extra tunes)
 - [ ] R6 Apple screenshots of B–D on iPhone, iPad, Apple TV; defects fixed or listed
 - [ ] R7 Code review of run 1; `go test -race` clean
+- [ ] Phase R deploy: tag, Unraid smoke, and preview-frame CPU under 3% of one core per mux
 
 ## Phase S — Every source, found automatically
 - [ ] S0 Research sources and discovery; ADR 0009; `docs/sources.md` support matrix

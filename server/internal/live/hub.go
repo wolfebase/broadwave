@@ -115,6 +115,7 @@ type mux struct {
 	pipes    []*pipeSub
 	programs []hdhr.Program
 	pipeMu   sync.Mutex
+	frames   sync.Once
 }
 
 // feed is one channel on a tuned frequency.
@@ -291,6 +292,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	m.cancel = cancel
 	h.muxes[freq] = m
 	go m.readLoop(runCtx)
+	h.startFrames(runCtx, m)
 	return h.addFeedLocked(m, ch), nil
 }
 
@@ -302,6 +304,7 @@ func (h *Hub) streamMuxLocked(ch store.SourceChannel, body io.ReadCloser, host s
 	m.cancel = cancel
 	h.muxes[m.freq] = m
 	go m.readLoop(runCtx)
+	h.startFrames(runCtx, m)
 	return m
 }
 

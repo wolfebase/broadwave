@@ -161,6 +161,15 @@
   border: 0;
 }
 
+.mv-frame {
+  display: block;
+  width: auto;
+  height: 40px;
+  max-width: 100%;
+  object-fit: contain;
+  margin-bottom: 4px;
+}
+
 .mv-ch.on { background: #fff; color: #111; }
 .mv-ch small { display: block; opacity: 0.7; }
 

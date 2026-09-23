@@ -198,6 +198,23 @@ export interface paths {
         patch: operations["patchChannel"];
         trace?: never;
     };
+    "/channels/{id}/frame": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Latest preview from a mux that is already tuned. */
+        get: operations["channelFrame"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/airings": {
         parameters: {
             query?: never;
@@ -1481,6 +1498,40 @@ export interface operations {
                 };
             };
             404: components["responses"]["Error"];
+        };
+    };
+    channelFrame: {
+        parameters: {
+            query?: {
+                /** @description 480 is the small frame. 1280 is the wide one. A missing size is not upscaled. */
+                w?: "480" | "1280";
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description JPEG preview. X-Frame-Stale is 1 when the picture is older than 10 minutes. */
+            200: {
+                headers: {
+                    "Last-Modified"?: string;
+                    "X-Frame-Stale"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            /** @description No preview yet. Watching is not started to make one. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     listAirings: {
