@@ -17,6 +17,7 @@ import (
 	"waveguide/internal/live"
 	"waveguide/internal/realtime"
 	"waveguide/internal/source"
+	"waveguide/internal/sports"
 	"waveguide/internal/store"
 )
 
@@ -28,6 +29,7 @@ type Server struct {
 	Dev     bool
 	Version string
 	Bus     *realtime.Bus
+	Sports  sports.Provider
 
 	routes []string
 }
@@ -70,6 +72,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /events", s.events)
 	api("POST /guide/refresh", s.refreshGuide)
 	api("GET /search", s.search)
+	api("GET /sports/scoreboard", s.scoreboard)
 	api("GET /passes", s.passes)
 	api("POST /passes", s.addPass)
 	api("PATCH /passes/{id}", s.updatePass)

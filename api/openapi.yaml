@@ -322,6 +322,33 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/Recording" }
         "500": { $ref: "#/components/responses/Error" }
+  /sports/scoreboard:
+    get:
+      tags: [guide]
+      operationId: scoreboard
+      parameters:
+        - in: query
+          name: league
+          schema: { type: string }
+          description: nfl, ncaaf, nba, wnba, ncaab, mlb, nhl, mls, nwsl, epl, f1, or nascar. Blank asks for every league.
+        - in: query
+          name: date
+          schema: { type: string, format: date }
+          description: Calendar day. Blank is today on the server.
+      responses:
+        "200":
+          description: Games for the day
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [games]
+                properties:
+                  games:
+                    type: array
+                    items: { $ref: "#/components/schemas/Game" }
+        "400": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
   /watch:
     post:
       tags: [live]
@@ -1044,6 +1071,38 @@ components:
         cast: { type: string }
         start: { type: string, format: date-time }
         end: { type: string, format: date-time }
+    Game:
+      type: object
+      required: [id, league, name, start, state]
+      properties:
+        id: { type: string }
+        league: { type: string }
+        name: { type: string }
+        shortName: { type: string }
+        start: { type: string, format: date-time }
+        state: { type: string, description: "pre, in, or post" }
+        completed: { type: boolean }
+        detail: { type: string }
+        clock: { type: string }
+        period: { type: integer }
+        broadcasts:
+          type: array
+          items: { type: string }
+        teams:
+          type: array
+          items: { $ref: "#/components/schemas/SportsTeam" }
+    SportsTeam:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        short: { type: string }
+        abbr: { type: string }
+        score: { type: string }
+        home: { type: boolean }
+        color: { type: string }
+        altColor: { type: string }
+        logo: { type: string }
     SearchAiring:
       allOf:
         - $ref: "#/components/schemas/Airing"

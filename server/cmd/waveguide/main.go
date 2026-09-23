@@ -25,6 +25,7 @@ import (
 	"waveguide/internal/live"
 	"waveguide/internal/realtime"
 	"waveguide/internal/source"
+	"waveguide/internal/sports"
 	"waveguide/internal/store"
 )
 
@@ -84,7 +85,7 @@ func main() {
 	bus := realtime.NewBus()
 	st.OnEvent = func(ev store.Event) { bus.Publish("activity", ev) }
 	hub.OnChange = debounce(500*time.Millisecond, func() { bus.Publish("live.changed", nil) })
-	api := &httpapi.Server{Store: st, Assets: assets, Dev: *dev, Hub: hub, Version: version, Bus: bus}
+	api := &httpapi.Server{Store: st, Assets: assets, Dev: *dev, Hub: hub, Version: version, Bus: bus, Sports: sports.NewCache(sports.NewESPN())}
 	handler := api.Handler()
 
 	go func() {

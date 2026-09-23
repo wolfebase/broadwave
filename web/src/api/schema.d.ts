@@ -246,6 +246,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sports/scoreboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["scoreboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/watch": {
         parameters: {
             query?: never;
@@ -800,6 +816,32 @@ export interface components {
             start: string;
             /** Format: date-time */
             end: string;
+        };
+        Game: {
+            id: string;
+            league: string;
+            name: string;
+            shortName?: string;
+            /** Format: date-time */
+            start: string;
+            /** @description pre, in, or post */
+            state: string;
+            completed?: boolean;
+            detail?: string;
+            clock?: string;
+            period?: number;
+            broadcasts?: string[];
+            teams?: components["schemas"]["SportsTeam"][];
+        };
+        SportsTeam: {
+            name: string;
+            short?: string;
+            abbr?: string;
+            score?: string;
+            home?: boolean;
+            color?: string;
+            altColor?: string;
+            logo?: string;
         };
         SearchAiring: components["schemas"]["Airing"] & {
             guideNumber: string;
@@ -1464,6 +1506,35 @@ export interface operations {
                     };
                 };
             };
+            500: components["responses"]["Error"];
+        };
+    };
+    scoreboard: {
+        parameters: {
+            query?: {
+                /** @description nfl, ncaaf, nba, wnba, ncaab, mlb, nhl, mls, nwsl, epl, f1, or nascar. Blank asks for every league. */
+                league?: string;
+                /** @description Calendar day. Blank is today on the server. */
+                date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Games for the day */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        games: components["schemas"]["Game"][];
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
     };
