@@ -58,6 +58,12 @@ export const PauseIcon = (p: P) => (
     <rect x="13.5" y="5" width="4" height="14" rx="1.2" fill="currentColor" />
   </Base>
 );
+export const SideBySideIcon = (p: P) => (
+  <Base {...p}>
+    <rect x="3" y="5" width="7.5" height="14" rx="1.5" />
+    <rect x="13.5" y="5" width="7.5" height="14" rx="1.5" />
+  </Base>
+);
 export const BackIcon = (p: P) => (
   <Base {...p}>
     <path d="M15 5.5 8.5 12l6.5 6.5" />

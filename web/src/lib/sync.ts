@@ -46,7 +46,9 @@ export class SyncEngine {
       this.apply();
     });
     bus.join(this.room, this.channelId);
-    this.setStatus({ state: "waiting", drift: 0, members: 0 });
+    const cached = bus.roomState(this.room) as RoomState | undefined;
+    if (cached?.room === this.room) this.state = cached;
+    this.setStatus({ state: "waiting", drift: 0, members: this.state?.members ?? 0 });
     this.timer = window.setInterval(() => this.apply(), 250);
   }
 

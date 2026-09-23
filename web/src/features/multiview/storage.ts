@@ -1,0 +1,59 @@
+export type MvLayout = "2up" | "1+2" | "1+3" | "quad" | "pip";
+
+export type SavedSet = { name: string; channels: number[] };
+
+const KEY = "waveguide-multiview";
+
+type Store = { layout: MvLayout; sets: SavedSet[] };
+
+function read(): Store {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY) || "{}") as Partial<Store>;
+    return { layout: isLayout(raw.layout) ? raw.layout : "2up", sets: Array.isArray(raw.sets) ? raw.sets : [] };
+  } catch {
+    return { layout: "2up", sets: [] };
+  }
+}
+
+function write(next: Store) {
+  localStorage.setItem(KEY, JSON.stringify(next));
+  localStorage.setItem("waveguide-mv-layout", next.layout);
+}
+
+export function isLayout(value: unknown): value is MvLayout {
+  return value === "2up" || value === "1+2" || value === "1+3" || value === "quad" || value === "pip";
+}
+
+export function savedLayout(): MvLayout {
+  return read().layout;
+}
+
+export function rememberLayout(layout: MvLayout) {
+  write({ ...read(), layout });
+}
+
+export function savedSets(): SavedSet[] {
+  return read().sets;
+}
+
+export function saveSet(name: string, channels: number[]) {
+  const cur = read();
+  const key = channels.join(",");
+  const sets = [{ name, channels }, ...cur.sets.filter((s) => s.channels.join(",") !== key)].slice(0, 8);
+  write({ ...cur, sets });
+}
+
+export function slotsFor(layout: MvLayout) {
+  if (layout === "1+2") return 3;
+  if (layout === "1+3" || layout === "quad") return 4;
+  return 2;
+}
+
+export function roomId() {
+  let id = sessionStorage.getItem("waveguide-mv-room");
+  if (!id) {
+    id = Math.random().toString(36).slice(2, 10);
+    sessionStorage.setItem("waveguide-mv-room", id);
+  }
+  return `multiview:${id}`;
+}

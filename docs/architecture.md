@@ -68,7 +68,7 @@ JSON under `/api`, HLS under `/media`, the SPA at `/`. The optional HDHomeRun em
 
 ## Web app (`web/`)
 
-React and Vite, built into `server/cmd/waveguide/assets/web` and embedded with `go:embed`. It plays HLS through hls.js and doubles as the setup and admin console.
+React and Vite, built into `server/cmd/waveguide/assets/web` and embedded with `go:embed`. It plays HLS through hls.js and doubles as the setup and admin console. Side by side is `/multiview`: each tile has its own player, sound follows the focused tile, and the tiles share one multiview sync room.
 
 ## Apple apps (`apple/`)
 

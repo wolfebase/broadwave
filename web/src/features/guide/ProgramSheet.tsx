@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useData } from "../../app/data";
+import { usePlayer } from "../../app/player";
+import { navigate } from "../../app/router";
 import { categoryLabel, categoryOf, isRecording, minutesLeft, progress, recordingKeys, spanLabel, dayLabel } from "../../lib/guide";
 import type { Airing, Channel } from "../../types";
 import { CloseIcon, PlayIcon, RecordIcon, StarIcon } from "../../ui/icons";
@@ -7,6 +9,7 @@ import { ChannelBadge, LiveDot, Progress } from "../../ui/primitives";
 
 export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: Channel; airing?: Airing; onClose: () => void; onWatch: (c: Channel) => void }) {
   const { now, planned, recordings, passes, record, recordSeries, favorite, stopRecord } = useData();
+  const player = usePlayer();
   const ref = useRef<HTMLDivElement>(null);
   const cat = categoryOf(airing);
   const onNow = airing ? Date.parse(airing.start) <= now && Date.parse(airing.end) > now : true;
@@ -61,6 +64,20 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
             {onNow ? (
               <button type="button" className="btn primary" onClick={() => onWatch(channel)}>
                 <PlayIcon /> Watch
+              </button>
+            ) : null}
+            {onNow ? (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  const current = player.channel?.id;
+                  const ids = current && current !== channel.id ? [current, channel.id] : [channel.id];
+                  navigate(`/multiview?ch=${ids.join(",")}&layout=2up&focus=${channel.id}${ids.length < 2 ? "&add=1" : ""}`);
+                  onClose();
+                }}
+              >
+                Watch together
               </button>
             ) : null}
             {airing && onNow ? (

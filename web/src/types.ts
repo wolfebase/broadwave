@@ -111,9 +111,17 @@ export type Caps = {
 };
 
 export type Prefs = {
-  quality?: "auto" | "original" | "high" | "medium" | "saver";
-  audio?: "auto" | "surround" | "stereo";
+  quality?: "auto" | "original" | "high" | "medium" | "saver" | "tile" | "360";
+  audio?: "auto" | "surround" | "stereo" | "none";
   picture?: "broadcast" | "smooth" | "film";
+};
+
+export type MultiviewPlan = {
+  playable: { channelId: number; frequencyHz: number; shared: boolean }[];
+  blocked: { channelId: number; reason: string; holders: string[] }[];
+  tunersNeeded: number;
+  tunersFree: number;
+  note?: string;
 };
 
 export type StreamInfo = {
