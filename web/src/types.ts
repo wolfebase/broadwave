@@ -125,6 +125,7 @@ export type Recording = {
   description?: string;
   category?: string;
   programId?: string;
+  gameId?: string;
   watched?: number;
 };
 

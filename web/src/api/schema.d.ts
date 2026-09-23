@@ -947,6 +947,8 @@ export interface components {
             description?: string;
             category?: string;
             programId?: string;
+            /** @description Scoreboard game this recording is following. Empty when it is not a matched game. */
+            gameId?: string;
             /** @enum {string} */
             status: "recording" | "complete" | "failed" | "stopped" | "imported";
             error?: string;

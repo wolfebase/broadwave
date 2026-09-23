@@ -62,6 +62,7 @@ type Recording struct {
 	Description string     `json:"description,omitempty"`
 	Category    string     `json:"category,omitempty"`
 	ProgramID   string     `json:"programId,omitempty"`
+	GameID      string     `json:"gameId,omitempty"`
 	// Watched is 0 when inferred from the playhead, 1 when marked watched, 2 when marked unwatched.
 	Watched int `json:"watched,omitempty"`
 }
@@ -236,16 +237,37 @@ func (s *Store) SetAiringGames(ctx context.Context, from, to time.Time, ids map[
 	return tx.Commit()
 }
 
+// AiringGame is the scoreboard id of the listing on this channel now, if it is a game.
+func (s *Store) AiringGame(ctx context.Context, channelID int64, title string, now time.Time) string {
+	rows, err := s.Airings(ctx, now.Add(-6*time.Hour), now.Add(15*time.Minute))
+	if err != nil {
+		return ""
+	}
+	current := ""
+	for _, row := range rows {
+		if row.ChannelID != channelID || row.GameID == "" {
+			continue
+		}
+		if title != "" && strings.EqualFold(row.Title, title) && row.End.After(now.Add(-time.Minute)) {
+			return row.GameID
+		}
+		if !row.Start.After(now) && row.End.After(now) {
+			current = row.GameID
+		}
+	}
+	return current
+}
+
 func (s *Store) CreateRecording(ctx context.Context, rec Recording) (int64, error) {
 	ends := ""
 	if rec.EndsAt != nil {
 		ends = rec.EndsAt.UTC().Format(time.RFC3339)
 	}
 	res, err := s.db.ExecContext(ctx, `
-INSERT INTO recordings (channel_id, guide_number, title, path, status, started_at, ends_at, subtitle, description, category, program_id, watched)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+INSERT INTO recordings (channel_id, guide_number, title, path, status, started_at, ends_at, subtitle, description, category, program_id, watched, game_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rec.ChannelID, rec.GuideNumber, rec.Title, rec.Path, rec.Status,
-		rec.StartedAt.UTC().Format(time.RFC3339), ends, rec.Subtitle, rec.Description, rec.Category, rec.ProgramID, rec.Watched)
+		rec.StartedAt.UTC().Format(time.RFC3339), ends, rec.Subtitle, rec.Description, rec.Category, rec.ProgramID, rec.Watched, rec.GameID)
 	if err != nil {
 		return 0, err
 	}
@@ -267,7 +289,7 @@ func (s *Store) SetRecordingEnd(ctx context.Context, id int64, ends time.Time) e
 func (s *Store) Recordings(ctx context.Context) ([]Recording, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, channel_id, guide_number, title, path, status, error, started_at, ends_at, ended_at, duration_sec,
-	subtitle, description, category, program_id, watched
+	subtitle, description, category, program_id, watched, game_id
 FROM recordings ORDER BY id DESC`)
 	if err != nil {
 		return nil, err
@@ -277,7 +299,7 @@ FROM recordings ORDER BY id DESC`)
 	for rows.Next() {
 		var rec Recording
 		var start, ends, ended string
-		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID); err != nil {
 			return nil, err
 		}
 		rec.StartedAt, _ = time.Parse(time.RFC3339, start)

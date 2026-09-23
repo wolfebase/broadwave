@@ -1227,6 +1227,7 @@ components:
         description: { type: string }
         category: { type: string }
         programId: { type: string }
+        gameId: { type: string, description: "Scoreboard game this recording is following. Empty when it is not a matched game." }
         status: { type: string, enum: [recording, complete, failed, stopped, imported] }
         error: { type: string }
         startedAt: { type: string, format: date-time }

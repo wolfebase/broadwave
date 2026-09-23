@@ -1,0 +1,1 @@
+ALTER TABLE recordings ADD COLUMN game_id TEXT NOT NULL DEFAULT '';
