@@ -120,6 +120,7 @@ final class MultiviewSession {
 final class TilePlayer {
     let player = AVPlayer()
     private(set) var error: String?
+    private(set) var detail = ""
     private var audible = false
     private var attempts = 0
     private var channelID: Int64?
@@ -149,6 +150,7 @@ final class TilePlayer {
                 return
             }
             self.session = session
+            detail = session.stream.reason
             let item = AVPlayerItem(url: api.url(session.playlist))
             item.preferredForwardBufferDuration = prefs.quality == .auto ? 6 : 2
             player.replaceCurrentItem(with: item)
@@ -218,6 +220,7 @@ struct MultiviewScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var session: MultiviewSession
     @State private var blocked: Set<Int64> = []
+    @State private var hint = !UserDefaults.standard.bool(forKey: "waveguide-mv-hint-seen")
 
     init() {
         _session = State(initialValue: MultiviewSession(focusID: 0))
@@ -267,6 +270,14 @@ struct MultiviewScreen: View {
             Color.black.ignoresSafeArea()
             VStack(spacing: 10) {
                 topBar(tiles)
+                if hint {
+                    Text("Select a tile to hear it.")
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .glassEffect(in: .capsule)
+                        .onAppear { UserDefaults.standard.set(true, forKey: "waveguide-mv-hint-seen") }
+                }
                 if !session.notice.isEmpty {
                     Text(session.notice)
                         .font(.footnote.weight(.semibold))
@@ -488,6 +499,9 @@ struct MultiviewScreen: View {
         } bind: { session.bind($0) }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contextMenu {
+                Button("Make big") {
+                    session.focusID = channel.id
+                }
                 Button("Record") {
                     Task { await store.toggleRecord(channel) }
                 }
@@ -555,17 +569,26 @@ struct MultiviewTile: View {
                 PlayerLayerBox(player: live.player, pip: pip)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(.black)
-                HStack(spacing: 8) {
-                    Text(channel.displayNumber).font(.caption.weight(.bold))
-                    Text(title).font(.caption).lineLimit(1)
-                    Spacer(minLength: 0)
-                    if focused {
-                        Label("Sound", systemImage: "speaker.wave.2.fill")
-                            .font(.caption.weight(.bold))
-                            .labelStyle(.titleAndIcon)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text(channel.displayNumber).font(.caption.weight(.bold))
+                        Text(title).font(.caption).lineLimit(1)
+                        Spacer(minLength: 0)
+                        if focused {
+                            Label("Sound", systemImage: "speaker.wave.2.fill")
+                                .font(.caption.weight(.bold))
+                                .labelStyle(.titleAndIcon)
+                        }
+                    }
+                    if focused, !live.detail.isEmpty {
+                        Text(live.detail)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                 }
                 .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.black.opacity(0.45))
                 if let error = live.error {
                     Text(error)
@@ -584,7 +607,7 @@ struct MultiviewTile: View {
         .buttonStyle(.plain)
         .focusEffectDisabled()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityLabel("\(channel.displayNumber) \(channel.displayName)")
+        .accessibilityLabel("\(channel.displayNumber) \(channel.displayName), \(title)")
         .accessibilityValue(focused ? "Sound on" : "Sound off")
         .accessibilityAddTraits(focused ? .isSelected : [])
         .task(id: "\(channel.id)-\(prefs.quality.rawValue)-\(prefs.audio.rawValue)") {
