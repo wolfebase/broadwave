@@ -20,6 +20,8 @@ class EventSocket {
   private queue: string[] = [];
   private retry = 0;
   private rooms = new Map<string, number>();
+  private roomRefs = new Map<string, number>();
+  private latest = new Map<string, unknown>();
   /** Estimated server clock minus local clock, in ms. */
   offset = 0;
   private bestRtt = Infinity;
@@ -47,6 +49,9 @@ class EventSocket {
       try {
         const msg = JSON.parse(event.data as string) as { type: string; data?: unknown };
         if (msg.type === "clock") this.onClock(msg.data as { t0: number; t1: number });
+        if (msg.type === "sync.state" && msg.data && typeof msg.data === "object" && "room" in msg.data) {
+          this.latest.set((msg.data as { room: string }).room, msg.data);
+        }
         this.emit(msg.type, msg.data);
       } catch {
         // Ignore malformed frames.
@@ -85,6 +90,11 @@ class EventSocket {
     return Date.now() + this.offset;
   }
 
+  /** Last room state this tab has seen, so a second tile can catch up without another join. */
+  roomState(room: string) {
+    return this.latest.get(room);
+  }
+
   private emit(type: string, data: unknown) {
     this.handlers.get(type)?.forEach((fn) => fn(data));
   }
@@ -97,11 +107,19 @@ class EventSocket {
   }
 
   join(room: string, channelId: number) {
+    const n = (this.roomRefs.get(room) ?? 0) + 1;
+    this.roomRefs.set(room, n);
     this.rooms.set(room, channelId);
-    this.raw("sync.join", { room, channelId });
+    if (n === 1) this.raw("sync.join", { room, channelId });
   }
 
   leave(room: string) {
+    const n = (this.roomRefs.get(room) ?? 0) - 1;
+    if (n > 0) {
+      this.roomRefs.set(room, n);
+      return;
+    }
+    this.roomRefs.delete(room);
     if (!this.rooms.delete(room)) return;
     this.raw("sync.leave", { room });
   }

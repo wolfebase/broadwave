@@ -1,26 +1,18 @@
-import Hls from "hls.js";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { stopWatch, watchChannel } from "../../api";
 import { useData } from "../../app/data";
+import { navigate } from "../../app/router";
 import { airingAt, categoryOf, minutesLeft, progress } from "../../lib/guide";
-import { SyncEngine, type SyncStatus } from "../../lib/sync";
+import type { SyncStatus } from "../../lib/sync";
 import { readZoom, saveZoom, type PictureMode, type Zoom } from "../../picture";
-import { rememberChannel } from "../../recent";
-import type { Caps, Channel, Prefs, WatchSession } from "../../types";
-import { InfoIcon, ListIcon, RecordIcon, SyncIcon } from "../../ui/icons";
+import type { Channel } from "../../types";
+import { InfoIcon, ListIcon, RecordIcon, SideBySideIcon, SyncIcon } from "../../ui/icons";
 import { Progress } from "../../ui/primitives";
 import { Stage } from "./Stage";
+import { useLiveStream } from "./useLiveStream";
 
-function webCaps(): Caps {
-  const mse = typeof MediaSource !== "undefined" ? MediaSource : undefined;
-  const audio = ["aac"];
-  if (mse?.isTypeSupported('audio/mp4; codecs="ac-3"')) audio.push("ac3");
-  if (mse?.isTypeSupported('audio/mp4; codecs="ec-3"')) audio.push("eac3");
-  const conn = (navigator as Navigator & { connection?: { type?: string; saveData?: boolean } }).connection;
-  return { platform: "web", video: ["h264"], audio, network: conn?.type === "cellular" || conn?.saveData ? "cellular" : "lan" };
-}
-
-type Options = { quality: NonNullable<Prefs["quality"]>; audio: NonNullable<Prefs["audio"]>; sync: boolean; shared: boolean };
+type Quality = "auto" | "original" | "high" | "medium" | "saver";
+type Sound = "auto" | "surround" | "stereo";
+type Options = { quality: Quality; audio: Sound; sync: boolean; shared: boolean };
 
 function readOptions(): Options {
   try {
@@ -50,13 +42,23 @@ export function LivePlayer({
   const { channels, index, now, recordings, settings, saveSettings, record, stopRecord } = useData();
   const videoRef = useRef<HTMLVideoElement>(null);
   const rootRef = useRef<HTMLElement>(null);
-  const hlsRef = useRef<Hls | null>(null);
-  const syncRef = useRef<SyncEngine | null>(null);
-  const [session, setSession] = useState<WatchSession | null>(null);
-  const [error, setError] = useState("");
   const [opts, setOpts] = useState<Options>(readOptions);
   const [picture, setPicture] = useState<PictureMode>(settings.pictureMode || "broadcast");
-  const [sync, setSync] = useState<SyncStatus>({ state: "off", drift: 0, members: 0 });
+  const room = opts.shared ? `group:ch${channel.id}` : `channel:${channel.id}`;
+  const stream = useLiveStream(videoRef, {
+    channelId: channel.id,
+    quality: opts.quality,
+    audio: opts.audio,
+    picture,
+    room,
+    sync: opts.sync,
+    small: false,
+    audible: true,
+    remember: channel,
+  });
+  const session = stream.session;
+  const error = stream.error;
+  const sync: SyncStatus = stream.syncStatus;
   const [behind, setBehind] = useState(0);
   const [span, setSpan] = useState({ at: 0, len: 1 });
   const [panel, setPanel] = useState<"none" | "guide" | "info" | "sync">("none");
@@ -75,80 +77,8 @@ export function LivePlayer({
 
   const airing = airingAt(index, channel.id, now);
   const active = recordings.find((r) => r.status === "recording" && r.channelId === channel.id);
-  const room = opts.shared ? `group:ch${channel.id}` : `channel:${channel.id}`;
 
   useEffect(() => localStorage.setItem("ota-live", JSON.stringify(opts)), [opts]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    let dead = false;
-    let hls: Hls | null = null;
-    let joined = "";
-    const id = channel.id;
-    setError("");
-    setSession(null);
-    rememberChannel(channel);
-    void (async () => {
-      try {
-        const next = await watchChannel(id, webCaps(), { quality: opts.quality, audio: opts.audio, picture });
-        joined = next.rendition;
-        if (dead) {
-          await stopWatch(id, joined);
-          return;
-        }
-        setSession(next);
-        if (Hls.isSupported()) {
-          hls = new Hls({
-            liveSyncDurationCount: 3,
-            liveMaxLatencyDurationCount: 100000,
-            maxLiveSyncPlaybackRate: 1,
-            backBufferLength: 120,
-            maxBufferHole: 0.5,
-            stretchShortVideoTrack: true,
-          });
-          hlsRef.current = hls;
-          (video as HTMLVideoElement & { hls?: Hls }).hls = hls;
-          hls.loadSource(next.playlist);
-          hls.attachMedia(video);
-          hls.on(Hls.Events.ERROR, (_e, data) => {
-            video.dataset.hlsError = `${data.type}:${data.details}${data.fatal ? ":fatal" : ""}`;
-            if (data.fatal) setError("The picture stopped. Trying again usually fixes it.");
-          });
-        } else {
-          video.src = next.playlist;
-        }
-        await video.play().catch(() => undefined);
-      } catch (err) {
-        if (!dead) setError(err instanceof Error ? err.message : "This channel did not start.");
-      }
-    })();
-    const beacon = () => navigator.sendBeacon?.(`/api/v1/watch/${id}/stop`, new Blob([JSON.stringify({ rendition: joined })], { type: "application/json" }));
-    window.addEventListener("pagehide", beacon);
-    return () => {
-      dead = true;
-      window.removeEventListener("pagehide", beacon);
-      syncRef.current?.stop();
-      syncRef.current = null;
-      hls?.destroy();
-      hlsRef.current = null;
-      void stopWatch(id, joined);
-    };
-    // The channel record is replaced on every guide poll; the id is the tune.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel.id, opts.quality, opts.audio, picture]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !session || !opts.sync) return;
-    const engine = new SyncEngine(video, hlsRef.current, room, channel.id, setSync);
-    syncRef.current = engine;
-    engine.start();
-    return () => {
-      engine.stop();
-      if (syncRef.current === engine) syncRef.current = null;
-    };
-  }, [session, opts.sync, room, channel.id]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -182,9 +112,9 @@ export function LivePlayer({
   function jump(delta: number) {
     const video = videoRef.current;
     if (!video) return;
-    if (opts.sync && opts.shared && syncRef.current) {
-      const media = syncRef.current.mediaNow();
-      if (media) syncRef.current.command("seek", media + delta * 1000);
+    if (opts.sync && opts.shared) {
+      const media = stream.mediaNow();
+      if (media) stream.command("seek", media + delta * 1000);
       return;
     }
     detachSync();
@@ -194,8 +124,8 @@ export function LivePlayer({
   function togglePlay() {
     const video = videoRef.current;
     if (!video) return;
-    if (opts.sync && opts.shared && syncRef.current) {
-      syncRef.current.command(video.paused ? "play" : "pause");
+    if (opts.sync && opts.shared) {
+      stream.command(video.paused ? "play" : "pause");
       return;
     }
     if (!video.paused) detachSync();
@@ -206,7 +136,7 @@ export function LivePlayer({
   function goLive() {
     const video = videoRef.current;
     if (!video) return;
-    if (opts.sync && opts.shared && syncRef.current) return syncRef.current.command("live");
+    if (opts.sync && opts.shared) return stream.command("live");
     if (!opts.sync) return setOpts((o) => ({ ...o, sync: true }));
     if (video.seekable.length) video.currentTime = video.seekable.end(video.seekable.length - 1) - 10;
     void video.play();
@@ -253,6 +183,7 @@ export function LivePlayer({
       ArrowUp: () => step(-1),
       ArrowDown: () => step(1),
       g: () => setPanel("guide"),
+      m: () => navigate(`/multiview?ch=${channel.id}&layout=${localStorage.getItem("waveguide-mv-layout") || "2up"}&focus=${channel.id}&add=1`),
       i: () => setPanel((p) => (p === "info" ? "none" : "info")),
       r: () => void toggleRecord(),
       l: goLive,
@@ -315,6 +246,14 @@ export function LivePlayer({
         <>
           <button type="button" className={panel === "guide" ? "glass-icon on" : "glass-icon"} onClick={() => setPanel((p) => (p === "guide" ? "none" : "guide"))} aria-label="Channels">
             <ListIcon />
+          </button>
+          <button
+            type="button"
+            className="glass-icon"
+            aria-label="Side by side"
+            onClick={() => navigate(`/multiview?ch=${channel.id}&layout=${localStorage.getItem("waveguide-mv-layout") || "2up"}&focus=${channel.id}&add=1`)}
+          >
+            <SideBySideIcon />
           </button>
           <button type="button" className={active ? "record-btn on" : "record-btn"} onClick={() => void toggleRecord()} aria-pressed={!!active}>
             <RecordIcon />

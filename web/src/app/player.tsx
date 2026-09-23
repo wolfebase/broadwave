@@ -35,7 +35,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const mode: "full" | "mini" = watchId && playing && playing.id === watchId ? "full" : "mini";
 
   useEffect(() => {
-    if (path !== "/watch") back.current = path + (params.toString() ? `?${params}` : "");
+    if (path !== "/watch" && path !== "/multiview") back.current = path + (params.toString() ? `?${params}` : "");
   }, [path, params]);
 
   const open = useCallback((c: Channel) => {
@@ -53,7 +53,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={value}>
       {children}
-      {playing ? (
+      {playing && path !== "/multiview" ? (
         <Suspense fallback={null}>
         <LivePlayer
           key="live"

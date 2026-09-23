@@ -5,6 +5,7 @@ import { navigate } from "../../app/router";
 import { airingAt, categoryLabel, categoryOf, dayLabel, minutesLeft, nextAfter, progress, timeLabel, type Category } from "../../lib/guide";
 import type { Airing, Channel, Recording } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
+import { savedSets } from "../multiview/storage";
 import { ChannelBadge, Empty, LiveDot, Progress, SectionHeader } from "../../ui/primitives";
 import "./home.css";
 
@@ -140,7 +141,27 @@ export function Home() {
       </Shelf>
 
       {sports.length > 0 ? (
-        <Shelf title="Sports" action={<button className="text-btn" onClick={() => navigate("/sports")}>All sports</button>}>
+        <Shelf
+          title="Sports"
+          action={
+            <>
+              {sports.filter((s) => Date.parse(s.airing.start) <= now).length >= 2 ? (
+                <button
+                  type="button"
+                  className="text-btn"
+                  onClick={() => {
+                    const ids = sports.filter((s) => Date.parse(s.airing.start) <= now).slice(0, 4).map((s) => s.channel.id);
+                    const layout = ids.length >= 4 ? "quad" : ids.length === 3 ? "1+2" : "2up";
+                    navigate(`/multiview?ch=${ids.join(",")}&layout=${layout}&focus=${ids[0]}`);
+                  }}
+                >
+                  Watch together
+                </button>
+              ) : null}
+              <button className="text-btn" onClick={() => navigate("/sports")}>All sports</button>
+            </>
+          }
+        >
           {sports.map(({ channel, airing }) => {
             const liveNow = Date.parse(airing.start) <= now;
             return (
@@ -152,6 +173,17 @@ export function Home() {
               </button>
             );
           })}
+        </Shelf>
+      ) : null}
+
+      {savedSets().length > 0 ? (
+        <Shelf title="Saved sets">
+          {savedSets().map((set) => (
+            <button key={set.channels.join(",")} type="button" className="now-card" onClick={() => navigate(`/multiview?ch=${set.channels.join(",")}&layout=${set.channels.length >= 4 ? "quad" : set.channels.length === 3 ? "1+2" : "2up"}&focus=${set.channels[0]}`)}>
+              <span className="nc-title">{set.name}</span>
+              <span className="nc-foot dim">Side by side</span>
+            </button>
+          ))}
         </Shelf>
       ) : null}
 

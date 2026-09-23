@@ -1,4 +1,4 @@
-import type { Airing, Caps, Channel, ChannelPatch, Device, Pass, PlannedAiring, Prefs, Recording, ServerInfo, Settings, StorageInfo, TunerStatus, VirtualChannel, WatchSession } from "./types";
+import type { Airing, Caps, Channel, ChannelPatch, Device, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, ServerInfo, Settings, StorageInfo, TunerStatus, VirtualChannel, WatchSession } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -70,6 +70,13 @@ export function watchChannel(channelId: number, caps: Caps, prefs: Prefs, rendit
 
 export function stopWatch(channelId: number, rendition = "") {
   return request<{ ok: boolean }>(`/api/v1/watch/${channelId}/stop`, { method: "POST", body: JSON.stringify({ rendition }) });
+}
+
+export function planMultiview(channelIds: number[]) {
+  return request<MultiviewPlan>("/api/v1/multiview/plan", {
+    method: "POST",
+    body: JSON.stringify({ channelIds }),
+  });
 }
 
 export function getServer() {

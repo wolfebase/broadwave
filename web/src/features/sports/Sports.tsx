@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
+import { navigate } from "../../app/router";
 import { categoryOf, dayLabel, isRecording, minutesLeft, progress, recordingKeys, spanLabel } from "../../lib/guide";
 import type { Airing, Channel } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
@@ -42,6 +43,7 @@ export function Sports() {
   }, [channels, index, now]);
 
   const leagues = useMemo(() => Array.from(new Set(all.map((x) => league(x.airing)))).slice(0, 10), [all]);
+  const liveGames = all.filter((x) => Date.parse(x.airing.start) <= now);
 
   const items = all.filter(({ airing }) => {
     const s = Date.parse(airing.start);
@@ -66,6 +68,19 @@ export function Sports() {
           <Chip on={range === "today"} onClick={() => setRange("today")}>Today</Chip>
           <Chip on={range === "week"} onClick={() => setRange("week")}>Coming up</Chip>
         </div>
+        {liveGames.length >= 2 ? (
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => {
+              const ids = liveGames.slice(0, 4).map((g) => g.channel.id);
+              const layout = ids.length >= 4 ? "quad" : ids.length === 3 ? "1+2" : "2up";
+              navigate(`/multiview?ch=${ids.join(",")}&layout=${layout}&focus=${ids[0]}`);
+            }}
+          >
+            Watch together
+          </button>
+        ) : null}
       </header>
       {leagues.length > 1 ? (
         <div className="guide-chips league-chips">

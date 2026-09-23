@@ -17,6 +17,7 @@ const PlayPage = lazy(() => import("../features/pages").then((m) => ({ default: 
 const Setup = lazy(() => import("../features/setup/Setup").then((m) => ({ default: m.Setup })));
 const DiagnosticsPage = lazy(() => import("../features/setup/Diagnostics").then((m) => ({ default: m.DiagnosticsPage })));
 const VirtualPage = lazy(() => import("../features/pages").then((m) => ({ default: m.VirtualPage })));
+const Multiview = lazy(() => import("../features/multiview/Multiview").then((m) => ({ default: m.Multiview })));
 
 const tabs = [
   { path: "/", label: "Home", Icon: HomeIcon },
@@ -45,7 +46,7 @@ function Shell() {
   const recordingCount = recordings.filter((r) => r.status === "recording").length;
   const fullPlayer = path === "/watch" && player.mode === "full" && !!player.channel;
   const firstRun = ready && settings.needsSetup === "1";
-  const immersive = path === "/play" || (path === "/watch" && params.has("virtual")) || path === "/setup" || firstRun;
+  const immersive = path === "/play" || path === "/multiview" || (path === "/watch" && params.has("virtual")) || path === "/setup" || firstRun;
 
   useEffect(() => {
     const off = events().on("connection", (v) => setOnline(Boolean(v)));
@@ -65,11 +66,11 @@ function Shell() {
   else if (path === "/settings" || path === "/sources") page = <SettingsPage />;
   else if (path === "/play") page = <PlayPage />;
   else if (path === "/watch" && params.has("virtual")) page = <VirtualPage />;
-  else if (path === "/watch") page = null;
+  else if (path === "/watch" || path === "/multiview") page = path === "/multiview" ? <Multiview /> : null;
   else page = <Home />;
 
   return (
-    <div className={`shell layout-${layout}${fullPlayer || immersive ? " immersive" : ""}${player.channel && !fullPlayer ? " has-mini" : ""}`}>
+    <div className={`shell layout-${layout}${fullPlayer || immersive ? " immersive" : ""}${player.channel && !fullPlayer && path !== "/multiview" ? " has-mini" : ""}`}>
       {!immersive ? (
         <nav className="topbar glass" aria-label="Primary">
           <button type="button" className="brand" onClick={() => navigate("/")} aria-label="Waveguide home">
