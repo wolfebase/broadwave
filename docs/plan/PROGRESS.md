@@ -21,7 +21,7 @@ Tick items as they are verified and committed (`- [x] A1 ... (commit abc1234)`).
 - [x] C1 Channel matching (commit 716382d). SiliconDust XMLTV and the JSON guide both publish the same 9 of 27 (4.1, 5.1, 9.1, 9.4, 29.1, 38.1, 39.7, 41.1, 62.1). 14.1–14.16, 43.3, and 46.7 are absent, so they stay empty until another source is added. Call signs that differ by DT or HD still match, and Settings can pin a guide match.
 - [x] C2 Guide sources (commit 82a80a7). The JSON guide lists the same 9 channels as XMLTV, so it is not a second listing source. Settings takes a Schedules Direct account (14 days, one day if the account refuses) and an XMLTV link. Both fill only channels the tuner guide skipped. No Schedules Direct account was found in other projects. A lineup list and a file upload wait on an account.
 - [x] C3 Artwork (commit e246413). Eight of the nine listed channels have logos (38.1 does not). All 609 of their programs have an image. `/media/art` caches a resized copy, and a blank program gets a category placeholder. Settings can store a movie artwork key for programs the guide left blank. No key was required for this lineup.
-- [ ] C4 Rich program model (season/episode, rating, flags, cast)
+- [x] C4 Rich program model (commit f291b7d). Season and episode, the onscreen label, original air date, series id, live, premiere, finale, rating, and cast are stored and shown. This feed sends season, episode, and a date on most programs, and live on a couple. It does not send ratings or cast, so those stay empty. Listings already saved pick this up on the next guide refresh.
 - [ ] C5 Guide UX (web day scrubber, logos, column virtualization; Apple focus, iPhone landscape grid, iPad split)
 - [ ] C6 Search (FTS5) on web + Apple
 
