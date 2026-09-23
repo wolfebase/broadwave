@@ -230,6 +230,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/watch": {
         parameters: {
             query?: never;
@@ -784,6 +800,10 @@ export interface components {
             start: string;
             /** Format: date-time */
             end: string;
+        };
+        SearchAiring: components["schemas"]["Airing"] & {
+            guideNumber: string;
+            channelName: string;
         };
         /**
          * @description broadcast rebuilds interlaced video at 60 frames a second; smooth uses motion-compensated deinterlacing; film recovers 24p.
@@ -1414,6 +1434,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["Error"];
+        };
+    };
+    search: {
+        parameters: {
+            query?: {
+                /** @description Words to match in titles, descriptions, cast, and recordings. */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Upcoming listings and recordings that match */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        query: string;
+                        airings: components["schemas"]["SearchAiring"][];
+                        recordings: components["schemas"]["Recording"][];
+                    };
                 };
             };
             500: components["responses"]["Error"];

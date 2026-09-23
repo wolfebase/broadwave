@@ -505,7 +505,16 @@ function GuideControls({
       </div>
       <label className="guide-search">
         <SearchIcon />
-        <input type="search" placeholder="Search shows and channels" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search the guide" />
+        <input
+          type="search"
+          placeholder="Search shows and channels"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && query.trim().length >= 2) navigate(`/search?q=${encodeURIComponent(query.trim())}`);
+          }}
+          aria-label="Search the guide"
+        />
       </label>
     </div>
   );

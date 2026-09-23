@@ -296,6 +296,32 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "500": { $ref: "#/components/responses/Error" }
+  /search:
+    get:
+      tags: [guide]
+      operationId: search
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Words to match in titles, descriptions, cast, and recordings.
+      responses:
+        "200":
+          description: Upcoming listings and recordings that match
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [query, airings, recordings]
+                properties:
+                  query: { type: string }
+                  airings:
+                    type: array
+                    items: { $ref: "#/components/schemas/SearchAiring" }
+                  recordings:
+                    type: array
+                    items: { $ref: "#/components/schemas/Recording" }
+        "500": { $ref: "#/components/responses/Error" }
   /watch:
     post:
       tags: [live]
@@ -1018,6 +1044,14 @@ components:
         cast: { type: string }
         start: { type: string, format: date-time }
         end: { type: string, format: date-time }
+    SearchAiring:
+      allOf:
+        - $ref: "#/components/schemas/Airing"
+        - type: object
+          required: [guideNumber, channelName]
+          properties:
+            guideNumber: { type: string }
+            channelName: { type: string }
     PictureMode:
       type: string
       enum: [broadcast, smooth, film]
