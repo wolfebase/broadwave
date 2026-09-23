@@ -121,7 +121,8 @@ func (s *Server) startRecording(w http.ResponseWriter, r *http.Request) {
 		meta.Description = air.Description
 		meta.Category = air.Category
 		meta.ProgramID = air.ProgramID
-		pad := 2
+		meta.GameID = air.GameID
+		pad := 2 + int(dvr.SportsTail(air)/time.Minute)
 		left := int(time.Until(air.End.Add(time.Duration(pad)*time.Minute)).Minutes()) + 1
 		if left > minutes {
 			minutes = left

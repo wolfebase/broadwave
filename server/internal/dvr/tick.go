@@ -46,7 +46,7 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 		}
 		if _, err := hub.RecordMeta(ctx, minutes, store.Recording{
 			ChannelID: item.Airing.ChannelID, Title: item.Airing.Title, Subtitle: item.Airing.Subtitle,
-			Description: item.Airing.Description, Category: item.Airing.Category, ProgramID: item.Airing.ProgramID,
+			Description: item.Airing.Description, Category: item.Airing.Category, ProgramID: item.Airing.ProgramID, GameID: item.Airing.GameID,
 		}); err != nil {
 			log.Printf("pass record: %v", err)
 		}

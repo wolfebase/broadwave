@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"time"
 
+	"waveguide/internal/dvr"
 	"waveguide/internal/sports"
+	"waveguide/internal/store"
 )
 
 func (s *Server) scoreboard(w http.ResponseWriter, r *http.Request) {
@@ -53,20 +55,13 @@ func (s *Server) scoreboard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"games": games})
 }
 
-// LinkGames writes a scoreboard id onto each listing that is a game.
-func (s *Server) LinkGames(ctx context.Context) {
-	if s == nil || s.Store == nil || s.Sports == nil {
-		return
-	}
+func (s *Server) boardsAround(ctx context.Context, now time.Time) []sports.Game {
 	board, ok := s.Sports.(interface {
 		Boards(ctx context.Context, day time.Time) ([]sports.Game, error)
 	})
 	if !ok {
-		return
+		return nil
 	}
-	now := time.Now()
-	from := now.Add(-3 * time.Hour)
-	to := now.Add(48 * time.Hour)
 	seen := map[string]bool{}
 	var games []sports.Game
 	for _, day := range []time.Time{now, now.Add(24 * time.Hour), now.Add(48 * time.Hour)} {
@@ -76,13 +71,25 @@ func (s *Server) LinkGames(ctx context.Context) {
 			continue
 		}
 		for _, game := range part {
-			if seen[game.ID] {
+			if game.ID == "" || seen[game.ID] {
 				continue
 			}
 			seen[game.ID] = true
 			games = append(games, game)
 		}
 	}
+	return games
+}
+
+// LinkGames writes a scoreboard id onto each listing that is a game.
+func (s *Server) LinkGames(ctx context.Context) {
+	if s == nil || s.Store == nil || s.Sports == nil {
+		return
+	}
+	now := time.Now()
+	from := now.Add(-3 * time.Hour)
+	to := now.Add(48 * time.Hour)
+	games := s.boardsAround(ctx, now)
 	if len(games) == 0 {
 		return
 	}
@@ -105,5 +112,42 @@ func (s *Server) LinkGames(ctx context.Context) {
 	}
 	if len(links) > 0 {
 		log.Printf("sports: matched %d listings", len(links))
+	}
+}
+
+// ExtendRecordings keeps a matched game recording going until the game is over.
+func (s *Server) ExtendRecordings(ctx context.Context) {
+	if s == nil || s.Store == nil || s.Hub == nil || s.Sports == nil {
+		return
+	}
+	recs, err := s.Store.Recordings(ctx)
+	if err != nil {
+		return
+	}
+	var open []store.Recording
+	for _, rec := range recs {
+		if rec.Status == "recording" && rec.GameID != "" && rec.EndsAt != nil {
+			open = append(open, rec)
+		}
+	}
+	if len(open) == 0 {
+		return
+	}
+	now := time.Now()
+	byID := map[string]sports.Game{}
+	for _, game := range s.boardsAround(ctx, now) {
+		byID[game.ID] = game
+	}
+	for _, rec := range open {
+		game, found := byID[rec.GameID]
+		ext, ok := dvr.NextExtension(rec.ID, *rec.EndsAt, game, found, now)
+		if !ok {
+			continue
+		}
+		if err := s.Hub.ExtendRecording(ctx, ext.ID, ext.Until); err != nil {
+			log.Printf("recording: %v", err)
+			continue
+		}
+		_ = s.Store.AddEvent(ctx, "recording", ext.Note)
 	}
 }

@@ -69,7 +69,7 @@ func main() {
 		}
 		_, err := hub.RecordMeta(context.Background(), minutes, store.Recording{
 			ChannelID: rec.ChannelID, Title: rec.Title, Subtitle: rec.Subtitle,
-			Description: rec.Description, Category: rec.Category, ProgramID: rec.ProgramID,
+			Description: rec.Description, Category: rec.Category, ProgramID: rec.ProgramID, GameID: rec.GameID,
 		})
 		if err != nil {
 			log.Printf("recording: resume %s: %v", rec.Title, err)
@@ -121,6 +121,7 @@ func main() {
 		defer tick.Stop()
 		for range tick.C {
 			dvr.Tick(context.Background(), st, hub)
+			api.ExtendRecordings(context.Background())
 			if hub != nil {
 				hub.ReleaseAbandoned(45 * time.Second)
 				httpapi.SyncEmulator(st, hub)

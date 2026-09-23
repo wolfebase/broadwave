@@ -21,7 +21,7 @@ func StartDecision(pass store.Pass, airing store.Airing, now time.Time) (bool, i
 	if now.After(airing.Start.Add(90 * time.Second)) {
 		return false, 0
 	}
-	tail := time.Duration(pass.PadAfter) * time.Minute
+	tail := time.Duration(pass.PadAfter)*time.Minute + SportsTail(airing)
 	minutes := int(airing.End.Add(tail).Sub(now).Minutes()) + 1
 	if minutes < 1 {
 		minutes = 1

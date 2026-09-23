@@ -509,9 +509,12 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	if title == "" {
 		title = f.channel.DisplayName
 	}
+	if meta.GameID == "" {
+		meta.GameID = h.Store.AiringGame(ctx, channelID, title, time.Now())
+	}
 	id, err := h.Store.CreateRecording(ctx, store.Recording{
 		ChannelID: channelID, GuideNumber: f.channel.GuideNumber, Title: title,
-		Subtitle: meta.Subtitle, Description: meta.Description, Category: meta.Category, ProgramID: meta.ProgramID,
+		Subtitle: meta.Subtitle, Description: meta.Description, Category: meta.Category, ProgramID: meta.ProgramID, GameID: meta.GameID,
 		Path: path, Status: "recording", StartedAt: time.Now(), EndsAt: &ends,
 	})
 	if err != nil {
