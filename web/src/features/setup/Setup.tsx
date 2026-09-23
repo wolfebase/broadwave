@@ -135,7 +135,7 @@ export function Setup() {
       {step === "guide" ? (
         <section className="setup-card glass">
           <h2>Fill the guide</h2>
-          <p className="dim">Listings come free from SiliconDust through your tuner. They refresh every few hours.</p>
+          <p className="dim">Listings come free from SiliconDust through your tuner. They refresh about once a day.</p>
           {diag?.guide ? (
             <div className="stat-row">
               <Stat value={diag.guide.channels} label="channels" />

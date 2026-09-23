@@ -293,11 +293,6 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		"hdhrEmulate":    true,
 		"setupComplete":  true,
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
 	for k, v := range values {
 		if !allowed[k] {
 			return fmt.Errorf("unknown setting %q", k)
@@ -314,6 +309,20 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 				return fmt.Errorf("watermarkGB must be a whole number of gigabytes from 0 to 1000000")
 			}
 		}
+	}
+	return s.writeSettings(ctx, values)
+}
+
+func (s *Store) writeSettings(ctx context.Context, values map[string]string) error {
+	if len(values) == 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for k, v := range values {
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO settings (key, value) VALUES (?, ?)
 ON CONFLICT(key) DO UPDATE SET value=excluded.value`, k, v); err != nil {

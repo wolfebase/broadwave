@@ -54,11 +54,19 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 			last = a.End
 		}
 	}
-	guide := map[string]any{"channels": len(channels), "channelsWithListings": len(listed), "airings": len(airings)}
+	guideInfo := map[string]any{"channels": len(channels), "channelsWithListings": len(listed), "airings": len(airings)}
 	if !last.IsZero() {
-		guide["listingsUntil"] = last
+		guideInfo["listingsUntil"] = last
 	}
-	out["guide"] = guide
+	if lastPull, next, _, err := s.Store.GuideSchedule(ctx); err == nil {
+		if !lastPull.IsZero() {
+			guideInfo["lastRefresh"] = lastPull
+		}
+		if !next.IsZero() {
+			guideInfo["nextRefresh"] = next
+		}
+	}
+	out["guide"] = guideInfo
 	if s.Bus != nil {
 		out["connectedApps"] = s.Bus.Clients()
 	}

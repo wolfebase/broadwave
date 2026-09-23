@@ -54,7 +54,7 @@ A room per channel holds a target presentation time derived from segment program
 
 ### Guide (`internal/guide`)
 
-The main source is the SiliconDust XMLTV feed, authenticated per request with the tuner's current `DeviceAuth`, which is never stored. Schedules Direct fills channels the feed misses, and M3U sources can bring their own XMLTV. Listings refresh at startup and every 4 hours.
+The main source is the SiliconDust XMLTV feed, authenticated per request with the tuner's current `DeviceAuth`, which is never stored. Schedules Direct fills channels the feed misses, and M3U sources can bring their own XMLTV. After a successful pull the next one is scheduled at a random time 20–28 hours later (`nextGuidePull`). A failed pull retries in 30 minutes. A manual refresh is limited to once an hour. A restart waits out the stored deadline instead of pulling again.
 
 ### Store (`internal/store`)
 

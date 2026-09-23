@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -258,12 +260,43 @@ func (s *Server) airings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) refreshGuide(w http.ResponseWriter, r *http.Request) {
+	_, _, lastManual, err := s.Store.GuideSchedule(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if ok, retry := guide.ManualAllowed(lastManual, time.Now()); !ok {
+		mins := int(time.Until(retry).Minutes()) + 1
+		if mins < 1 {
+			mins = 1
+		}
+		apiError(w, http.StatusTooManyRequests, "guide_rate_limited", fmt.Sprintf("Listings were just refreshed. Try again in %d minutes.", mins), map[string]any{"retryAt": retry.UTC()})
+		return
+	}
+	if err := s.Store.SetManualGuidePull(r.Context(), time.Now()); err != nil {
+		writeError(w, err)
+		return
+	}
 	n, err := s.RefreshGuide(r.Context())
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"airings": n})
+}
+
+// GuideDelay is how long the automatic refresh should wait. Zero means pull now.
+func (s *Server) GuideDelay(now time.Time) time.Duration {
+	_, next, _, err := s.Store.GuideSchedule(context.Background())
+	if err != nil {
+		return 0
+	}
+	return guide.Delay(next, now)
+}
+
+// DeferGuide schedules another attempt after a failed pull without counting it as a success.
+func (s *Server) DeferGuide(ctx context.Context, after time.Duration) {
+	_ = s.Store.SetNextGuidePull(ctx, time.Now().Add(after))
 }
 
 func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
@@ -322,6 +355,18 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 			rows = append(rows, fill...)
 		}
 	}
+	now := time.Now().UTC()
+	span := int64(guide.PullMax - guide.PullMin)
+	jitter := time.Duration(rand.Int64N(span + 1))
+	next := guide.NextPull(now, jitter)
+	if err := s.Store.SetGuideSchedule(ctx, now, next); err != nil {
+		return len(rows), err
+	}
+	listed := map[int64]struct{}{}
+	for _, row := range rows {
+		listed[row.ChannelID] = struct{}{}
+	}
+	log.Printf("guide: source=silicondust-xmltv airings=%d channels=%d next=%s", len(rows), len(listed), next.Format(time.RFC3339))
 	_ = s.Store.AddEvent(ctx, "guide", fmt.Sprintf("Guide updated, %d airings", len(rows)))
 	return len(rows), nil
 }

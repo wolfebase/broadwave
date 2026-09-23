@@ -18,6 +18,7 @@ import (
 
 	"waveguide/internal/discovery"
 	"waveguide/internal/dvr"
+	"waveguide/internal/guide"
 	"waveguide/internal/httpapi"
 	"waveguide/internal/live"
 	"waveguide/internal/realtime"
@@ -76,10 +77,13 @@ func main() {
 			return
 		}
 		log.Printf("discovery: %d device(s)", n)
-		refreshGuide(api)
-		tick := time.NewTicker(guideRefreshEvery)
-		defer tick.Stop()
-		for range tick.C {
+		// SiliconDust asks for a random 20-28 h gap after each successful pull.
+		// A restart waits out whatever nextGuidePull was already stored.
+		for {
+			if wait := api.GuideDelay(time.Now()); wait > 0 {
+				time.Sleep(wait)
+				continue
+			}
 			refreshGuide(api)
 		}
 	}()
@@ -115,18 +119,13 @@ func main() {
 	}
 }
 
-// Listings shift through the day (late news, sports overruns), so the guide is re-read regularly.
-const guideRefreshEvery = 4 * time.Hour
-
 func refreshGuide(api *httpapi.Server) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	count, err := api.RefreshGuide(ctx)
-	if err != nil {
+	if _, err := api.RefreshGuide(ctx); err != nil {
 		log.Printf("guide: %v", err)
-		return
+		api.DeferGuide(ctx, guide.RetryAfterError)
 	}
-	log.Printf("guide: %d airings", count)
 }
 
 func checkHealth(addr string) int {

@@ -66,6 +66,7 @@ export function DiagnosticsPage() {
           <dd>
             {d.guide?.channelsWithListings}/{d.guide?.channels} channels listed · {d.guide?.airings} shows
             {d.guide?.listingsUntil ? ` · through ${new Date(d.guide.listingsUntil).toLocaleDateString()}` : ""}
+            {d.guide?.nextRefresh ? ` · refreshes ${new Date(d.guide.nextRefresh).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : ""}
           </dd>
         </dl>
       </section>
