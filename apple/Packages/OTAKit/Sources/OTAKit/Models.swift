@@ -39,6 +39,16 @@ public struct Airing: Codable, Sendable, Hashable, Identifiable {
     public var programId: String?
     public var new: Bool?
     public var imageUrl: String?
+    public var season: Int?
+    public var episode: Int?
+    public var episodeLabel: String?
+    public var originalAir: String?
+    public var seriesId: String?
+    public var live: Bool?
+    public var premiere: Bool?
+    public var finale: Bool?
+    public var rating: String?
+    public var cast: String?
     public var start: Date
     public var end: Date
 

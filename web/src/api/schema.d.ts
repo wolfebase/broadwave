@@ -767,6 +767,19 @@ export interface components {
             new?: boolean;
             /** @description Program artwork from the guide. Empty when the source has none. */
             imageUrl?: string;
+            /** @description 1-based season. Omitted when the guide does not say. */
+            season?: number;
+            /** @description 1-based episode. Omitted when the guide does not say. */
+            episode?: number;
+            episodeLabel?: string;
+            /** @description YYYY-MM-DD or a year. */
+            originalAir?: string;
+            seriesId?: string;
+            live?: boolean;
+            premiere?: boolean;
+            finale?: boolean;
+            rating?: string;
+            cast?: string;
             /** Format: date-time */
             start: string;
             /** Format: date-time */

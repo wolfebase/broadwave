@@ -16,8 +16,15 @@ func TestParseEpisodeIdentity(t *testing.T) {
     <title>Jeopardy!</title>
     <sub-title>Show 9001</sub-title>
     <episode-num system="dd_progid">EP1</episode-num>
+    <episode-num system="onscreen">S12E34</episode-num>
+    <episode-num system="xmltv_ns">11.33.</episode-num>
+    <date>19960923</date>
+    <series-id>SH1</series-id>
     <category>Game show</category>
     <icon src="https://img.example/jeopardy.jpg" />
+    <rating><value>TV-G</value></rating>
+    <credits><actor>Alex Trebek</actor></credits>
+    <live />
     <new />
   </programme>
 </tv>`)
@@ -30,6 +37,9 @@ func TestParseEpisodeIdentity(t *testing.T) {
 	}
 	if art[7] != "https://img.example/wdaf.png" || got[0].ImageURL != "https://img.example/jeopardy.jpg" {
 		t.Fatalf("art %+v image %s", art, got[0].ImageURL)
+	}
+	if got[0].Season != 12 || got[0].Episode != 34 || got[0].EpisodeLabel != "S12E34" || got[0].OriginalAir != "1996-09-23" || got[0].SeriesID != "SH1" || !got[0].Live || got[0].Rating != "TV-G" || got[0].Cast != "Alex Trebek" {
+		t.Fatalf("%+v", got[0])
 	}
 }
 

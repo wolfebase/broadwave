@@ -64,15 +64,17 @@ type xmltvChannel struct {
 }
 
 type xmltvProgram struct {
-	Start    string      `xml:"start,attr"`
-	Stop     string      `xml:"stop,attr"`
-	Channel  string      `xml:"channel,attr"`
-	Title    string      `xml:"title"`
-	SubTitle string      `xml:"sub-title,omitempty"`
-	Desc     string      `xml:"desc,omitempty"`
-	Category []string    `xml:"category,omitempty"`
-	Episode  *xmltvEpNum `xml:"episode-num,omitempty"`
-	New      *struct{}   `xml:"new,omitempty"`
+	Start    string       `xml:"start,attr"`
+	Stop     string       `xml:"stop,attr"`
+	Channel  string       `xml:"channel,attr"`
+	Title    string       `xml:"title"`
+	SubTitle string       `xml:"sub-title,omitempty"`
+	Desc     string       `xml:"desc,omitempty"`
+	Category []string     `xml:"category,omitempty"`
+	Date     string       `xml:"date,omitempty"`
+	Episode  []xmltvEpNum `xml:"episode-num,omitempty"`
+	New      *struct{}    `xml:"new,omitempty"`
+	Live     *struct{}    `xml:"live,omitempty"`
 }
 
 type xmltvEpNum struct {
@@ -111,11 +113,18 @@ func (s *Server) exportGuide(w http.ResponseWriter, r *http.Request) {
 				p.Category = append(p.Category, c)
 			}
 		}
+		p.Date = strings.ReplaceAll(a.OriginalAir, "-", "")
 		if a.ProgramID != "" {
-			p.Episode = &xmltvEpNum{System: "dd_progid", Value: a.ProgramID}
+			p.Episode = append(p.Episode, xmltvEpNum{System: "dd_progid", Value: a.ProgramID})
+		}
+		if a.EpisodeLabel != "" {
+			p.Episode = append(p.Episode, xmltvEpNum{System: "onscreen", Value: a.EpisodeLabel})
 		}
 		if a.New {
 			p.New = &struct{}{}
+		}
+		if a.Live {
+			p.Live = &struct{}{}
 		}
 		doc.Programmes = append(doc.Programmes, p)
 	}

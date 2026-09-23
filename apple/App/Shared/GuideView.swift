@@ -350,6 +350,12 @@ struct ProgramSheet: View {
                 if let sub = airing?.subtitle {
                     Text(sub).font(.title3).foregroundStyle(.secondary)
                 }
+                if let label = airing?.episodeLabel, !label.isEmpty {
+                    Text(label).font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                }
+                if let aired = airing?.originalAir, !aired.isEmpty {
+                    Text("First aired \(aired)").font(.caption).foregroundStyle(.secondary)
+                }
                 if let airing, on {
                     HStack {
                         AiringProgress(airing.progress(at: store.now), color: kind.color)
