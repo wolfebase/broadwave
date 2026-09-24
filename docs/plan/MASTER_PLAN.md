@@ -37,6 +37,20 @@ A review of R1–P1 found good, real work (CI green every commit, real container
 4. **`make check` now mirrors CI** (commit after 97d3ade): gofmt, go vet, the API drift check (`apigen -check`), and `FAKE=1 scripts/relay-smoke.sh` were in CI or missing entirely, not in `make check`. `internal/httpapi/server.go` was committed unformatted; run `gofmt -w server` before the next commit. → R8 adds gofmt to CI once that file is clean.
 5. **Round-trip every secret.** 97d3ade fixed a bug the tests missed. `maskURL` percent-encodes its dots, so `FetchURL`'s `strings.Contains(public, "••••")` never matched. Every source with a password fetched the masked address on its daily refresh and went offline. Xtream guides also lost their password, because only one secret per source was stored. Tests now fetch through `FetchURL`. Any new credential path needs a test that stores, lists (masked), and fetches (real). Logins live only in `source_secrets`. They never appear in `sources`, channel JSON (`json:"-"`), logs, events, or exports.
 
+### 0.1b Review 3 (2026-09-24): test like a person, on staging, with the iGPU
+
+The owner's priorities, in order: **playback that is the best available**, **setup that finds everything in the house by itself**, **multiview done right on web, iPhone, iPad, and Apple TV**, and **every device a stranger might own, not just this one DUO**. Phases PB, HOME, MV, and HW below cover them and come first in section 4.
+
+How every task is verified from now on:
+
+1. **Staging beside production.** TUS runs a second container, `Waveguide-Staging`, on `http://192.168.1.2:8490`. It uses the production image with the branch binary mounted, host network, `/dev/dri` (the UHD 770 iGPU), `--cpus 6 --memory 3g`, `-staging -bonjour=false`, a catalog copied from the latest backup with passes deleted, and its own `server_identity` ("Waveguide Staging"). `-staging` (8dac5dd) never records, never pulls the guide, never runs the idle scan, and never starts the emulator, so it tunes only when someone presses play. Every change goes to staging first (U1 scripts this). **Never** touch the `Waveguide` container except in a phase deploy. Nothing else on TUS may be restarted, and that includes `channelsdvr_intel`, a Channels DVR that can also use the DUO.
+2. **Tuner etiquette with two servers.** Before tuning, check both `:8477/api/v1/tuners` and `/api/v1/schedule`. Don't tune within 20 minutes of a scheduled recording. Use one tuner at most when production has a viewer. Stop what you start (`POST /api/v1/watch/{channelId}/stop`) and confirm `ours:false` afterward.
+3. **Click like a person, then measure.**
+   - Web: real Chrome through Playwright (`playwright-cli open --browser=chrome`; the bundled Chromium has no H.264 or AAC) at 390×844, 1440×900, and 1920×1080. Go Home → Watch, open a guide cell and play it, add a tile in multiview, then open settings. Read `getVideoPlaybackQuality()` (dropped frames), `videoWidth`/`videoHeight`, and the console; 404 noise counts as a defect.
+   - Apple: dedicated simulators "WG Staging iPhone" (iOS 26.5) and "WG Staging TV" (tvOS 26.5, 1080p) point at staging through the `server` default. Leave the other booted simulators alone. Drive them with XCUITest (focus and remote on tvOS, taps on iPhone), not only launch arguments. Screenshot every screen the task touched.
+   - Server output: download the rendition's `init.mp4` plus segments and measure frames/span, WxH, and decode errors (method in skill `waveguide-media-pipeline`, section "Picture lab").
+4. **Use the iGPU and prove it.** Every playback measurement names the encoder and says whether decode ran on the GPU, with CPU per rendition taken from `docker stats`.
+
 ### 0.2 Per-task loop
 
 1. Update "Resume here". Read the relevant code and skill.
@@ -138,6 +152,72 @@ R5. **Live preview frames.** For every frequency already tuned (a viewer, a reco
 R6. **Apple review of B–D.** Screenshot every Apple screen that B–D touched (multiview 2-up/quad, guide, search, sports, Your teams, score bugs) on iPhone 17 Pro, iPad Pro 13", and Apple TV 4K, including Dynamic Type XL on iPhone and focus states on tvOS. Fix defects that take under an hour; add the rest as J1 sub-items. **Accept:** screenshots in `docs/screenshots/r6-*`; defects fixed or listed.
 
 R7. **Code review of run 1.** Run a `code-reviewer` subagent over `8f91dfc..HEAD` (server, web, Apple): tuner leaks on error paths, goroutine leaks, missing `ctx` cancellation, SQL without indexes on hot paths, unbounded memory, race conditions (`go test -race ./server/...`), missing tests, copy-voice violations. Fix every real finding. **Accept:** `go test -race` clean; findings and fixes listed in the commit message.
+
+### Phase U — Staging and hotfix (first)
+
+U1. **Staging as a script, and ship the 720p fix.** Add `MODE=staging` to `scripts/deploy-unraid.sh`, doing exactly what section 0.1b rule 1 describes (idempotent; it refuses to touch `Waveguide`). Add `scripts/staging-watch.sh <channelId> [seconds]`, which watches through the API, measures the rendition (WxH, fps, segment length, decode errors), stops, and confirms the tuner was released. Then tag `v0.5.1` with 8dac5dd. Production v0.5.0 sends every 720p station (4.1 here) as 1080p at 119.88 fps. Deploy it and log the before/after in `UNRAID_LOG`. **Accept:** `staging-watch.sh 1` prints 1280x720 59.94 on production after the deploy.
+
+### Phase PB — Playback that beats everything
+
+The picture is the product. OTA broadcasts are MPEG-2 or H.264: 1080i (29.97 frames = 59.94 fields), 720p59.94, and 480i SD. **Real 60-frame motion comes from field-rate deinterlacing (bob, motion-adaptive or motion-compensated on the iGPU), which rebuilds all 60 real moments per second from 1080i.** Frame interpolation invents frames and is only for true 30p/24p sources, and only if it passes a visual review (PB4).
+
+PB1. [done, 8dac5dd] A progressive source is never deinterlaced and keeps its frame rate (720p60 was sent at 119.88 fps on VAAPI and 29.97 in software). A `-staging` flag was added.
+PB2. **The first tune is right.** On a fresh install the field order is unknown until ffprobe finishes, so the first rendition of a 720p station still takes the interlaced path. Read the scan type straight from the mux within 200 ms: MPEG-2 `sequence_extension.progressive_sequence` and `picture_coding_extension.progressive_frame`, and H.264 SPS `frame_mbs_only_flag`. Pass it to `Source` before the rendition starts, and store it. **Accept:** an empty-catalog staging tune of 4.1 is 1280x720 59.94 on the first try; unit tests on captured headers.
+PB3. **Scan-type matrix.** Fixtures made with ffmpeg (`tinterlace`, `telecine`, `-flags +ildct+ilme`, PAFF and MBAFF H.264), plus real captures from 1080i, 720p, 480i SD MPEG-2, and the H.264 subchannels (14.x). Each case goes through every encoder path (VAAPI, VideoToolbox, libx264). Assert output fps, frame count, `idet` on the output (≈0 interlaced frames), and `mpdecimate` (no duplicate frames at 60). Detect 3:2 film cadence automatically and switch to 24p on its own (hybrid: `fieldmatch,decimate` on the CPU, then GPU scale/encode). **Accept:** table in `docs/dev-lab.md`; Go table tests on the args; lab runs on TUS.
+PB4. **Honest "30 to 60".** Measure `minterpolate` (mci and blend), `framerate`, and any VAAPI/QSV frame-rate conversion that jellyfin-ffmpeg exposes on the UHD 770: CPU/GPU cost at 1080p, and ghosting on a sports clip (stills plus a 10 s clip per method, reviewed side by side). Keep a method only if it holds real time within one core and looks better; otherwise remove the `blend` path and say why in ADR 0010. Also confirm the Apple TV "Match Frame Rate" switch at 59.94 (F5).
+PB5. **GPU end to end.** Decode on the GPU: `-hwaccel vaapi -hwaccel_output_format vaapi`, dropping `format=nv12,hwupload` when frames are already on the GPU (the lab run failed with "Impossible to convert between the formats"), with a software-decode fallback on error. Move the image to jellyfin-ffmpeg 7 (pulls G5 forward; the image's Debian ffmpeg 5.1 misbehaves with VAAPI deinterlace when fed faster than real time). Encoder tuning on VAAPI: `-rc_mode`, `-profile:v high`, B-frames, low-power. Choose bitrates by VMAF (libvmaf in the lab; ≥ 95 at 1080p60 on the LAN, ≥ 90 at 720p on cellular). Add HEVC renditions (`hvc1`) for Apple TV/iPhone (G4 pulled forward). **Accept:** CPU per 1080p60 rendition on TUS before/after (baseline about 18% of a core), VMAF table, and decode errors = 0 over a 10-minute live run.
+PB6. **Sound.** AC-3 5.1 passthrough to Apple TV and AVPlayer (AC-3 in fMP4 HLS) when the route supports it; E-AC-3. Pick audio by PMT, not stream order: ISO-639 language plus AC-3 descriptor `bsmod`. Here, 4.1 carries Spanish SAP on PID 0x102 and 41.1 a second English stereo track (probably described video). Add an audio picker in every player (main / second language / described video) and an optional "Even volume" (light `loudnorm`), off by default. **Accept:** fixtures for PMT parsing; Apple TV sim plays 5.1 passthrough; the web picker switches without a stall (F2).
+PB7. **Player tuning.** hls.js buffer and back-buffer settings per device; AVPlayer `preferredForwardBufferDuration`, no peak-bitrate cap on the LAN, `AVDisplayCriteria` frame-rate and range matching on tvOS. Measure time to first frame and stalls per hour on web, iPhone, and Apple TV (staging).
+PB8. **Show the truth.** A Stream panel in the web and Apple players (pulls F3's stats forward): source codec, WxH, scan type, and fps; output WxH, fps, encoder, bitrate, and whether decode ran on the GPU; client dropped frames and buffer; and the sync offset. **Accept:** screenshots on all three platforms at staging.
+PB9. **Picture lab in the repo.** `scripts/picture-lab.sh` captures samples (etiquette rules), runs candidate args in `wg-lab-*` containers on TUS at real time (`-re`), and outputs a table (fps, frames, WxH, decode errors, speed, CPU, VMAF) plus stills. Every PB task attaches its table. Do this first in Phase PB.
+
+### Phase HOME — The house sets itself up
+
+HOME1. **Your home.** One scan that finds every tuner or source (S2), plus every screen and server that can use Waveguide:
+- Apple TVs and iPhones running the app (clients announce themselves over the event socket);
+- Chromecast and Google TV (`_googlecast._tcp`), Fire TV and Android TV (DIAL/SSDP), smart TVs (UPnP MediaRenderer);
+- AirPlay targets (`_airplay._tcp`);
+- Plex, Jellyfin, Emby, and Channels DVR servers (offer "Use Waveguide as your tuner", N1).
+
+Show it in setup step 1 and in Settings > Your home, with one action per item. It's read-only and local-subnet only; nothing is added without a tap, except a new install's first HDHomeRun. **Accept:** on the real LAN it finds the DUO, `channelsdvr_intel`, Plex, and the simulators. Screenshots on web and Apple TV.
+HOME2. **Setup finishes itself.** After the tuner step, setup runs on its own:
+- a scan if the lineup is empty;
+- guide sources (SiliconDust, then PSIP harvesting scheduled);
+- the recordings folder check;
+- big-four favorites by affiliation (S8b);
+- a live encoder self-test ("Intel GPU found: 1080p60 at 11x real time");
+- one signal check (C9), summarized ("6 channels great, 1 weak").
+
+It ends on "Ready: 27 channels, guide for 21, 2 tuners, Intel GPU". **Accept:** empty-catalog staging to first live channel in < 90 s with zero typing, on web, Apple TV, and iPhone; screenshots of every step.
+HOME3. **Later arrivals.** A device that appears later (a second HDHomeRun, a new Apple TV, a Plex server) raises one activity event and a banner ("New tuner found: HDHomeRun FLEX 4K. Add it?"). **Accept:** a fake device started mid-run produces exactly one banner.
+
+### Phase MV — Multiview, configured right everywhere
+
+Seen on 2026-09-24 in `docs/screenshots/pb-tv-mv.jpg` and in Chrome at 1920×1080: side-by-side tiles fill the full height, so each picture sits in a band with large black bars. The tvOS focused layout button is an empty blue pill (its label vanishes on focus). "Select a tile to hear it" stays after a tile has sound. The focused web tile dropped 8 of its first 129 frames.
+
+MV1. **Geometry.** Tiles are 16:9 boxes sized to the screen for 2-up, 1+2, 1+3, quad, and PiP, on web (phone, desktop, TV), iPhone portrait and landscape, iPad, and Apple TV. **Accept:** screenshots of every layout × platform with no letterbox bars inside a tile.
+MV2. **Remote and focus on tvOS.** Visible focus labels. Swipe moves between tiles, click moves audio focus, long-press opens the tile menu, Play/Pause pauses all, and Menu leaves. **Accept:** an XCUITest drives it.
+MV3. **Tuner-aware picker.** The add-a-channel picker says "same tune as 9.1", "uses a tuner", or "no tuner free". It works with 1, 2, 4, and 8 tuners and with several devices (HW1 fakes). A scheduled recording always wins, and the viewer is warned before a tile stops. **Accept:** fake-tuner tests; web and tvOS screenshots.
+MV4. **Tile quality.** The focused tile runs at 60 fps (540p60 or 720p60) and the others at 30, within the host budget from HW4. No dropped frames after warm-up. Hide the hint once a tile has sound. **Accept:** per-tile dropped frames measured in Chrome and on the Apple TV simulator.
+MV5. **Sync and sound.** All tiles and every other screen stay within 50 ms of the broadcast timeline. Audio focus follows to AirPlay and HomePod. Saved sets work, and Sports "Watch together" opens the right layout. **Accept:** sync numbers from two browsers plus the TV simulator.
+MV6. **Parity.** For each platform and layout, a screenshot and a 10 s screen recording; the multiview rows in `docs/parity.md` are complete.
+
+### Phase HW — Every device, not just this DUO
+
+The owner has one CONNECT DUO (ATSC 1.0, 2 tuners, MPEG-2). Strangers own everything else. Nothing may assume one device, two tuners, ATSC 1.0, MPEG-2, or this lineup.
+
+HW1. **Fake device fleet** (extends the K1 fake). Each profile answers discover, lineup, status, and control the way the real model does, and streams the right codecs:
+- HDHR3-US, CONNECT DUO/QUATRO, FLEX DUO/QUATRO;
+- FLEX 4K (2 of 4 tuners ATSC 3.0, channels 100+, DRM tags, HEVC + AC-4 samples);
+- PRIME (CableCARD, copy-once/never flags, 3 tuners);
+- EXTEND (transcode profiles) and SCRIBE/SERVIO (storage);
+- old firmware, and 1 to 8 tuners.
+
+A table test runs discovery, scan, tune, multiview plan, recording, and failover for every profile. `docs/hardware.md` lists each model as verified on real hardware, verified on a fake, or untested.
+HW2. **Pools.** Two DUOs plus a FLEX 4K, and 8-tuner pools. 3.0-capable tuners are kept for 3.0 channels. A device that vanishes mid-stream hands the stream to another device within 5 s.
+HW3. **Servers and emulators for real.** tvheadend, Threadfin, ErsatzTV, and Dispatcharr in containers; the Channels DVR already on TUS (read-only); Plex Live TV reading Waveguide (N1). CI keeps the tvheadend and Threadfin fakes.
+HW4. **Server hardware.** Cover Intel VAAPI/QSV (TUS), AMD VAAPI, NVIDIA NVENC, Apple VideoToolbox, and software-only (Raspberry Pi 5 arm64; a Synology-class J4125). A startup self-benchmark picks the rendition and tile budget per host and shows it in Diagnostics. Test the arm64 image under QEMU.
+HW5. **Client matrix.** Apple TV HD (1080p, no 10-bit HEVC), each Apple TV 4K generation, older iPhones, iPad, Safari, Chrome, Edge, and Firefox (no HEVC; no AC-3 in Chrome). A table test shows each gets the right rendition from `Decide`.
 
 ### Phase S — Every source, found automatically
 
@@ -356,7 +436,7 @@ M5. Anything the J1 review or K4 soak surfaced that makes the product better tha
 R1 → R2 → R3 → R4 → R5 → R6 → R7 →
 S0 → S1 → S2 → S3 → S4 → S5 → S6 → S7 → S8 → S9 → S10 → (tag + deploy) →
 C7 → C8 → C9 → (tag + deploy) →
-K1 → P1 → P2 → R8 → C7b → S8b → P3 → P4 → P5 → P6 → P7 → P8 → G1 → (tag + deploy + TestFlight) →
+K1 → P1 → P2 → R8 → U1 → PB9 → PB2 → PB3 → PB5 → PB6 → PB4 → PB7 → PB8 → (tag + deploy) → C7b → S8b → HOME1 → HOME2 → HOME3 → MV1 → MV2 → MV3 → MV4 → MV5 → MV6 → (tag + deploy + TestFlight) → HW1 → HW2 → HW3 → HW4 → HW5 → (tag + deploy) → P3 → P4 → P5 → P6 → P7 → P8 → G1 → (tag + deploy + TestFlight) →
 F1 → F2 → F3 → F4 → F5 → F6 → F7 → (tag + deploy + TestFlight) →
 E1 … E9 → (tag + deploy) →
 D7 → D8 → B5 → (tag + deploy) →
@@ -382,5 +462,7 @@ A7 is retried at the start of every phase: if `~/.blitz/bin/asc web auth status`
 - The Apple TV app feels native (Top Shelf, focus, remote gestures, info panels, frame-rate matching); the iPhone app has widgets, Live Activities, Siri, PiP, and the mini player.
 - Everything runs on Unraid with hardware encoding, survives restarts, and a 24 h soak shows no leaks.
 - `main` is green; images are published per phase; iOS and tvOS builds are in TestFlight; the Community Apps submission is in (or approved).
+- Every OTA format (1080i, 720p, 480i, H.264 subchannels, film cadence) plays at its true motion rate on the GPU, measured, with 0 dropped frames after warm-up on web, iPhone, and Apple TV.
+- A stranger's house is found by itself: tuners, servers, and screens appear in setup with one action each, on hardware we never owned (HW matrix).
 - Every line in `PROGRESS.md` is ticked with its evidence (0.1a) or recorded in `BLOCKERS.md` with a clear reason.
 - `docs/parity.md` shows the Apple apps doing everything the web app does.

@@ -15,6 +15,45 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - `make check` now runs gofmt, go vet, `apigen -check`, and the fake-tuner relay smoke, like CI does. Run `gofmt -w server` (`internal/httpapi/server.go` is unformatted).
 - 97d3ade (migration 0019) fixed sources with passwords going offline on refresh, and Xtream guides losing their password. Don't redo it; the next migration is 0020.
 
+## Review 3 (2026-09-24): read MASTER_PLAN section 0.1b; new phases come right after R8
+- Order after P2: R8 → **U1** (staging script + v0.5.1 hotfix) → **PB9, PB2, PB3, PB5, PB6, PB4, PB7, PB8** → C7b → S8b → **HOME1-3** → **MV1-6** → **HW1-5** → P3.
+- Test every change on `Waveguide-Staging` (`:8490`, iGPU, `-staging`) like a person: Chrome via Playwright `--browser=chrome` at three sizes, and the "WG Staging iPhone" / "WG Staging TV" simulators. Production `Waveguide` is only touched in phase deploys.
+- Production v0.5.0 sends 720p stations at 1080p 119.88 fps; 8dac5dd fixes it (measured 1280x720 59.94 on staging). U1 ships it as v0.5.1.
+
+## Phase U — Staging and hotfix
+- [ ] U1 `MODE=staging` deploy + `scripts/staging-watch.sh`; tag v0.5.1 (8dac5dd) and deploy; 4.1 measures 1280x720 59.94 on production
+
+## Phase PB — Playback
+- [x] PB1 Progressive broadcasts keep every frame and are never bobbed; `-staging` flag. Staging on TUS iGPU: 4.1 1280x720 59.94 in 2.002 s segments, 0 decode errors (v0.5.0: 1920x1080 119.88 in 1.001 s); 9.1 1920x1080 59.94 unchanged; Chrome 0 dropped frames on both; iPhone and Apple TV sims played 4.1 and a 4.1+9.1 multiview (`docs/screenshots/pb-*`); `TestProgressive720pKeepsEveryFrame` (commit 8dac5dd)
+- [ ] PB2 First tune reads scan type from the mux (no interlaced guess on a fresh install)
+- [ ] PB3 Scan-type matrix (1080i, 720p, 480i, H.264 PAFF/MBAFF, auto film cadence) on every encoder path, measured with idet/mpdecimate
+- [ ] PB4 Honest 30→60: measure interpolation methods on TUS; keep only what is real time and looks better (ADR 0010)
+- [ ] PB5 GPU decode + jellyfin-ffmpeg 7 + VAAPI rate control + VMAF-chosen bitrates + HEVC renditions
+- [ ] PB6 AC-3 5.1 passthrough to Apple; audio picked by PMT language/bsmod; SAP and described-video picker; Even volume
+- [ ] PB7 Player tuning (hls.js buffers, AVPlayer buffer, tvOS frame-rate/range matching); time to first frame and stalls measured
+- [ ] PB8 Stream panel (source, output, GPU decode, dropped frames, sync) on web, iPhone, Apple TV
+- [ ] PB9 `scripts/picture-lab.sh` on TUS at real time with a results table
+
+## Phase HOME — The house sets itself up
+- [ ] HOME1 Your home: tuners, servers (Plex, Jellyfin, Emby, Channels), and screens (Apple TV, Chromecast, Fire TV, smart TVs, AirPlay), one action each
+- [ ] HOME2 Setup finishes itself: scan, guide, folder, favorites, encoder self-test, signal summary, "Ready" screen; < 90 s on staging with an empty catalog on web, Apple TV, iPhone
+- [ ] HOME3 A device that shows up later gets one banner
+
+## Phase MV — Multiview everywhere
+- [ ] MV1 16:9 tile geometry for every layout × platform (no black bands inside tiles)
+- [ ] MV2 tvOS focus labels and remote gestures, proven by XCUITest
+- [ ] MV3 Tuner-aware add-channel picker with 1/2/4/8 tuners and several devices
+- [ ] MV4 Focused tile at 60 fps, others 30; no drops after warm-up; hint hides once a tile has sound
+- [ ] MV5 Tiles and other screens within 50 ms; audio focus to AirPlay; saved sets; Watch together
+- [ ] MV6 Screenshot + 10 s recording per layout × platform; parity rows complete
+
+## Phase HW — Every device, not just this DUO
+- [ ] HW1 Fake fleet (HDHR3, DUO/QUATRO, FLEX, FLEX 4K ATSC 3.0, PRIME, EXTEND, SCRIBE, 1–8 tuners) with a table test; `docs/hardware.md`
+- [ ] HW2 Multi-device pools, 3.0 tuner reservation, mid-stream failover < 5 s
+- [ ] HW3 tvheadend, Threadfin, ErsatzTV, Dispatcharr, Channels DVR, and Plex verified for real
+- [ ] HW4 Server hardware matrix (Intel, AMD, NVIDIA, Apple, software/arm64) with a startup self-benchmark
+- [ ] HW5 Client matrix table tests (Apple TV HD, Apple TV 4K, older iPhones, Safari, Chrome, Firefox)
+
 ## Phase R — Repair and consolidate
 - [x] R1 CI green on all four jobs at 0984064 (lint fixes e411da1, Xcode 26 guard 0984064); `make check`; CI section in the dev-loop skill
 - [x] R2 v0.2.0 tagged with CHANGELOG, deployed to Unraid via GHCR, A–D features checked on the LAN (tag v0.2.0, log in UNRAID_LOG)
@@ -154,7 +193,10 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] J1 Full design review with screenshots
   - R6: iPad side-by-side tiles stretch to the full height, so the picture sits in a short band (`r6-ipad-multiview-2.jpg`).
   - R6: a blocked tile's note can name a channel that is not on (4.1 listed while that tile said both tuners were busy).
-  - R6: tvOS focused layout control can read as an empty pill. Confirm the label is actually missing.
+  - R6: tvOS focused layout control can read as an empty pill. Confirmed 2026-09-24 (`pb-tv-mv.jpg`); fixed in MV2.
+  - 2026-09-24 web Home: only the tuned channel's "On now" card has a picture; the others are mostly empty space. A faint oversized channel-number outline sits over the hero image.
+  - 2026-09-24 web: no favicon (404). Home asks for `/channels/{id}/frame` on untuned channels and logs a 404 for each; the API should say which channels have a frame.
+  - 2026-09-24 iPhone portrait player: a small band of video under unlabeled buttons, with no channel or program info.
 - [ ] J2 Legacy web screens redesigned
 - [ ] J3 Motion system
 - [ ] J4 Accessibility audit
