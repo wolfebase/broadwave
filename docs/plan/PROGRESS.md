@@ -3,9 +3,9 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **S1**. One source model, with a migration that keeps channels, recordings, and passes.
-- Half done: S0 facts are checked. ADR 0009 and `docs/sources.md` are written.
-- Next command: add the sources migration and the OpenAPI shape, with a test on a copy of a real catalog.
+- Current task: **S2**. Auto-find tuners and servers, and show them in setup.
+- Half done: S1 migration kept the TUS catalog's channels, recordings, and the Jeopardy pass. Source passwords are stored apart from the URL.
+- Next command: fake responders for HDHomeRun broadcast, SSDP, and mDNS, then confirm the DUO is found on the LAN.
 - Unraid is on `v0.3.3`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
 - A7 retry at phase S: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
@@ -21,7 +21,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 
 ## Phase S — Every source, found automatically
 - [x] S0 Research sources and discovery; ADR 0009; `docs/sources.md` support matrix
-- [ ] S1 One source model (kinds, capabilities, masked credentials, stable channel ids) with a lossless migration
+- [x] S1 One source model (kinds, capabilities, masked credentials, stable channel ids) with a lossless migration
 - [ ] S2 Auto-find engine: broadcast, unicast subnet, SSDP, mDNS (hdhomerun.local, _channels_dvr, _htsp), opt-in "Look harder" port probe (+ cloud lookup as verified last resort); live results; follows DHCP changes
 - [ ] S3 HDHomeRun family: multi-device pool + failover + reservations (was G7), channel scan, FLEX/PRIME/EXTEND awareness
 - [ ] S4 M3U done right: tvg-* / group / url-tvg / tvc-guide-stationid, file + URL + path, stream format and limit, numbering, groups, per-source XMLTV, refresh with stable ids, picker for big lists

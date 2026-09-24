@@ -133,6 +133,18 @@ ON CONFLICT(device_id) DO UPDATE SET
 		return err
 	}
 	for _, ch := range channels {
+		if ch.StreamURL != "" {
+			res, err := tx.ExecContext(ctx, `
+UPDATE channels SET guide_name=?, video_codec=?, audio_codec=?, hd=?, present=1
+WHERE device_id=? AND stream_url=?`,
+				ch.GuideName, ch.VideoCodec, ch.AudioCodec, boolInt(ch.HD), dev.DeviceID, ch.StreamURL)
+			if err != nil {
+				return err
+			}
+			if n, _ := res.RowsAffected(); n > 0 {
+				continue
+			}
+		}
 		_, err := tx.ExecContext(ctx, `
 INSERT INTO channels (
 	device_id, guide_number, guide_name, stream_url, video_codec, audio_codec, hd, favorite, present
