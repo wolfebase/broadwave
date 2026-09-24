@@ -5,7 +5,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 ## Resume here
 - Current task: **U1** (staging script + v0.5.1 hotfix for 720p at 119.88 fps), then Phase PB.
 - P2 was committed for the previous session, which died on a Cursor HTTP/2 stream error at 11:13 with the work uncommitted; `make check` was green.
-- Staging: `Broadwave-Staging` on `http://192.168.1.2:8490` (iGPU, `-staging`). Production `Broadwave` on :8477 is still v0.5.0. Next recording is Jeopardy at 20:00 UTC.
+- Staging: `Broadwave-Staging` on `http://192.168.1.2:8490` (iGPU, `-staging`). Production `Broadwave` on :8477 is v0.6.0. Next recording is Jeopardy at 20:00 UTC.
 - A7 is done. Broadwave 1.0 is uploaded (build 2) and submitted to App Review for iOS and tvOS (see BLOCKERS for status).
 
 ## Review 2 (2026-09-24): read MASTER_PLAN section 0.1a before your next task
@@ -20,7 +20,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - Production v0.5.0 sends 720p stations at 1080p 119.88 fps; 8dac5dd fixes it (measured 1280x720 59.94 on staging). U1 ships it as v0.5.1.
 
 ## Phase U — Staging and hotfix
-- [ ] U1 `MODE=staging` deploy + `scripts/staging-watch.sh`; tag v0.5.1 (8dac5dd) and deploy; 4.1 measures 1280x720 59.94 on production
+- [ ] U1 `MODE=staging` deploy + `scripts/staging-watch.sh`. (The hotfix shipped as v0.6.0 on 2026-09-24: 4.1 measures 1280x720 59.94 on production, see UNRAID_LOG. Only the two scripts remain.)
 
 ## Phase PB — Playback
 - [x] PB1 Progressive broadcasts keep every frame and are never bobbed; `-staging` flag. Staging on TUS iGPU: 4.1 1280x720 59.94 in 2.002 s segments, 0 decode errors (v0.5.0: 1920x1080 119.88 in 1.001 s); 9.1 1920x1080 59.94 unchanged; Chrome 0 dropped frames on both; iPhone and Apple TV sims played 4.1 and a 4.1+9.1 multiview (`docs/screenshots/pb-*`); `TestProgressive720pKeepsEveryFrame` (commit 8dac5dd)

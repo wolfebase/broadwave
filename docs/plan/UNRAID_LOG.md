@@ -9,6 +9,14 @@ Staging: `Broadwave-Staging` on `:8490` (`-staging`, iGPU), appdata `/mnt/cache/
 ## Entries
 <!-- Append: date, commit, what was deployed, checks run, results, issues. -->
 
+## 2026-09-24 16:06 CDT — v0.6.0, renamed to Broadwave
+
+- Image `ghcr.io/wolfebase/broadwave:0.6.0` (tag `v0.6.0`). Catalog backed up to `backups/broadwave-20260924-160627-pre060.db`, then moved by hand: appdata to `/mnt/cache/appdata/broadwave`, catalog file to `broadwave.db`, server name to "Broadwave on TUS", template to `my-Broadwave.xml`, container to `Broadwave`. 27 channels, 5 recordings, and 1 pass carried over. Old images removed.
+- `/api/v1/server` reports `v0.6.0`, encoder `h264_vaapi`. `avahi-browse` shows `Broadwave on TUS` on `_broadwave._tcp`.
+- Channel 4.1 (720p MPEG-2) now plays 1280x720 at 59.94 fps in 2.002 s segments with 0 decode errors (v0.5.0 sent 1920x1080 at 119.88). Tuners free before and after. Next recording is Jeopardy on 2026-09-25 at 20:00 UTC.
+- Staging is `Broadwave-Staging` on `:8490` with the same image and the branch binary.
+
+
 ## 2026-09-24 10:34 CDT — Phase C deploy v0.5.0
 
 - Image `ghcr.io/wolfebase/broadwave:0.5.0` (tag `v0.5.0`, commit `2463a86`). Catalog backed up to `backups/broadwave-20260924-pre050.db` before recreate. Container `Broadwave`, host network, `/dev/dri`, `TZ=America/Chicago`. No PUID/PGID. `/api/v1/server` reports `version: v0.5.0`, encoder `h264_vaapi`. The deploy script's health curl raced container startup and exited 7; the container was Up healthy.
