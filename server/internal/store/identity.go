@@ -45,6 +45,20 @@ ON CONFLICT(id) DO NOTHING`, id.ID, id.Name, time.Now().UTC().Format(time.RFC333
 	return s.Identity(ctx, defaultName)
 }
 
+// SetIdentity pins the server id. Clients recognize a server by this id.
+func (s *Store) SetIdentity(ctx context.Context, id, name string, created time.Time) error {
+	id = strings.TrimSpace(id)
+	name = strings.TrimSpace(name)
+	if id == "" || name == "" {
+		return errors.New("server id and name are required")
+	}
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO server_identity (id, server_id, name, created_at) VALUES (1, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET server_id = excluded.server_id, name = excluded.name, created_at = excluded.created_at`,
+		id, name, created.UTC().Format(time.RFC3339))
+	return err
+}
+
 func (s *Store) RenameServer(ctx context.Context, name string) error {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 63 {

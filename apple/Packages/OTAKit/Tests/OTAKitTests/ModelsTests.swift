@@ -3,8 +3,11 @@ import Foundation
 import Testing
 
 private func fixture(_ name: String) throws -> Data {
-    let url = try #require(Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Fixtures"))
-    return try Data(contentsOf: url)
+    var url = URL(fileURLWithPath: #filePath)
+    for _ in 0 ..< 6 {
+        url.deleteLastPathComponent()
+    }
+    return try Data(contentsOf: url.appendingPathComponent("api/fixtures/\(name).json"))
 }
 
 @Test func decodesServerResponses() throws {
@@ -24,6 +27,29 @@ private func fixture(_ name: String) throws -> Data {
     let server = try APIClient.decoder.decode(ServerInfo.self, from: fixture("server"))
     #expect(server.apiVersion == 1)
     #expect(server.features.contains("wholeHomeSync"))
+
+    struct Devices: Decodable { var devices: [Device] }
+    struct Passes: Decodable { var passes: [Pass] }
+    struct Teams: Decodable { var teams: [TeamFollow] }
+    struct Events: Decodable { var events: [Event] }
+    struct Markers: Decodable { var markers: [Marker] }
+    struct Signals: Decodable { var channels: [ChannelSignal] }
+    struct Tuners: Decodable { var tuners: [Tuner] }
+    struct SyncFrame: Decodable { var data: RoomState }
+    _ = try APIClient.decoder.decode(Devices.self, from: fixture("devices"))
+    _ = try APIClient.decoder.decode(Passes.self, from: fixture("passes"))
+    _ = try APIClient.decoder.decode(Teams.self, from: fixture("teams"))
+    _ = try APIClient.decoder.decode(Events.self, from: fixture("events"))
+    _ = try APIClient.decoder.decode(Markers.self, from: fixture("markers"))
+    _ = try APIClient.decoder.decode(Signals.self, from: fixture("signals"))
+    _ = try APIClient.decoder.decode(Tuners.self, from: fixture("tuners"))
+    _ = try APIClient.decoder.decode(Settings.self, from: fixture("settings"))
+    _ = try APIClient.decoder.decode(MultiviewPlan.self, from: fixture("multiview"))
+    struct Hello: Decodable { var type: String }
+    let hello = try APIClient.decoder.decode(Hello.self, from: fixture("ws-hello"))
+    #expect(hello.type == "hello")
+    let sync = try APIClient.decoder.decode(SyncFrame.self, from: fixture("ws-sync"))
+    #expect(sync.data.room == "channel:1")
 }
 
 @Test func airingProgress() {

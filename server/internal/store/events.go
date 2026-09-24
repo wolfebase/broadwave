@@ -29,7 +29,17 @@ func (s *Store) AddEvent(ctx context.Context, kind, message string) error {
 			}
 		}
 	}
-	at := time.Now().UTC()
+	return s.AddEventAt(ctx, time.Now().UTC(), kind, message)
+}
+
+// AddEventAt records an activity line at a chosen time. The live path uses AddEvent.
+func (s *Store) AddEventAt(ctx context.Context, at time.Time, kind, message string) error {
+	kind = clip(kind, 40)
+	message = clip(strings.TrimSpace(message), 240)
+	if kind == "" || message == "" {
+		return nil
+	}
+	at = at.UTC()
 	res, err := s.db.ExecContext(ctx, `INSERT INTO events (at, kind, message) VALUES (?, ?, ?)`, at.Format(time.RFC3339), kind, message)
 	if err != nil {
 		return err

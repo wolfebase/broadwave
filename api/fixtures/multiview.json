@@ -1,0 +1,17 @@
+{
+  "blocked": [],
+  "playable": [
+    {
+      "channelId": 1,
+      "frequencyHz": 0,
+      "shared": false
+    },
+    {
+      "channelId": 2,
+      "frequencyHz": 0,
+      "shared": false
+    }
+  ],
+  "tunersFree": 0,
+  "tunersNeeded": 2
+}

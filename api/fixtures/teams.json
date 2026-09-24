@@ -1,0 +1,11 @@
+{
+  "teams": [
+    {
+      "abbr": "KC",
+      "id": 1,
+      "league": "nfl",
+      "name": "Chiefs",
+      "record": true
+    }
+  ]
+}

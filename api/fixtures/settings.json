@@ -1,0 +1,15 @@
+{
+  "audio": "stereo",
+  "autoplay": "1",
+  "hdhrEmulate": "0",
+  "hideScores": "0",
+  "layout": "auto",
+  "needsSetup": "0",
+  "pictureMode": "broadcast",
+  "profile": "transparent",
+  "recordingsPath": "",
+  "sdPasswordSet": "0",
+  "setupComplete": "1",
+  "tmdbKeySet": "0",
+  "watermarkGB": "10"
+}

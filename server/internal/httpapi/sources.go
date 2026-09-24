@@ -488,7 +488,7 @@ func (s *Server) virtualSchedule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	now := time.Now()
+	now := s.now()
 	type row struct {
 		store.VirtualChannel
 		Slots []any `json:"slots"`

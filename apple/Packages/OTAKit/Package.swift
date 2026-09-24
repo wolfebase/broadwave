@@ -9,6 +9,6 @@ let package = Package(
     ],
     targets: [
         .target(name: "OTAKit"),
-        .testTarget(name: "OTAKitTests", dependencies: ["OTAKit"], resources: [.copy("Fixtures")]),
+        .testTarget(name: "OTAKitTests", dependencies: ["OTAKit"]),
     ]
 )

@@ -17,7 +17,7 @@ func (s *Server) scoreboard(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "scores are unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	day := time.Now()
+	day := s.now()
 	if raw := r.URL.Query().Get("date"); raw != "" {
 		parsed, err := time.Parse("2006-01-02", raw)
 		if err != nil {

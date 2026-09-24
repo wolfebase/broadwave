@@ -3,10 +3,9 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **P2**. Golden responses so a server change cannot break the apps.
-- Half done: P1 is in this commit. Swift and TypeScript types are generated from the API spec, and CI fails if they drift.
-- Next command: record golden responses from the fake tuner and decode them in the apps.
-- Unraid is on `v0.5.0`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
+- Current task: **R8** (gofmt step in CI; `internal/httpapi/server.go` is formatted now). Then **U1** (staging script + v0.5.1 hotfix for 720p at 119.88 fps), then Phase PB.
+- P2 was committed for the previous session, which died on a Cursor HTTP/2 stream error at 11:13 with the work uncommitted; `make check` was green.
+- Staging: `Waveguide-Staging` on `http://192.168.1.2:8490` (iGPU, `-staging`). Production `Waveguide` on :8477 is still v0.5.0. Next recording is Jeopardy at 20:00 UTC.
 - A7 stays blocked on an Apple ID login (see BLOCKERS).
 
 ## Review 2 (2026-09-24): read MASTER_PLAN section 0.1a before your next task
@@ -82,7 +81,8 @@ Tick items as they are verified and committed, in the same commit as the work (`
 
 ## Phase P — Server and Apple apps, working as one
 - [x] P1 Generated Swift and TypeScript clients from OpenAPI; drift check in CI. OTAKit models come from `api/openapi.yaml`. `go run ./server/cmd/apigen -check` fails when the generated files drift.
-- [ ] P2 Golden-response contract tests for OTAKit and web in `make check`
+- [x] P2 Golden responses recorded from the fake tuner at a fixed clock: 28 fixtures in `api/fixtures` (25 of 49 paths plus the ws hello, clock, and sync events). `TestContractFixtures` fails on drift (`CONTRACT_UPDATE=1` re-records). OTAKit `swift test` and `web/src/api/contract.ts` decode them, and `make check` runs both.
+- [ ] P2b Golden responses for the other 24 paths (watch session, sources and discovery results, scan status, signals check, frames, Xtream/free sources) and every ws event kind (`sources.found`, `live.changed`, `activity`)
 - [ ] P3 apiVersion/features negotiation and minimum app version
 - [ ] P4 Bonjour + UDP fallback discovery, remembered servers, follow address changes, permission explainer
 - [ ] P5 Full setup and management from the Apple apps; `docs/parity.md` with no unexplained "web only" cells; Recordings and Settings out of `SportsView.swift` at web depth

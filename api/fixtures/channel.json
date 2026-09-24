@@ -1,0 +1,15 @@
+{
+  "audioCodec": "AC3",
+  "deviceId": "FAKEHDHR",
+  "displayName": "Fox 4",
+  "displayNumber": "4.1",
+  "enabled": true,
+  "favorite": true,
+  "guideName": "WDAF",
+  "guideNumber": "4.1",
+  "hd": true,
+  "hidden": false,
+  "id": 1,
+  "present": true,
+  "videoCodec": "MPEG2"
+}

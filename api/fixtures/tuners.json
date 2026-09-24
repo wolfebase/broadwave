@@ -1,0 +1,19 @@
+{
+  "encoder": "libx264",
+  "tuners": [
+    {
+      "index": 0,
+      "ours": false,
+      "quality": 88,
+      "strength": 90,
+      "symbol": 100
+    },
+    {
+      "index": 1,
+      "ours": false,
+      "quality": 88,
+      "strength": 90,
+      "symbol": 100
+    }
+  ]
+}
