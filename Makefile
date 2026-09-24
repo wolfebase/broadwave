@@ -45,6 +45,7 @@ lint: web/node_modules
 	swiftformat --lint .
 
 check: test lint
+	cd apple/Packages/OTAKit && swift test
 	go run ./server/cmd/apigen -check
 	FAKE=1 scripts/relay-smoke.sh
 

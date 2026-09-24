@@ -76,7 +76,14 @@ func (s *Server) features() []string {
 // clock gives clients the server time (Unix ms) for a first offset estimate;
 // the socket's clock messages refine it.
 func (s *Server) clock(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]float64{"serverTime": float64(time.Now().UnixNano()) / 1e6})
+	writeJSON(w, http.StatusOK, map[string]float64{"serverTime": float64(s.now().UnixNano()) / 1e6})
+}
+
+func (s *Server) now() time.Time {
+	if s.Clock != nil {
+		return s.Clock()
+	}
+	return time.Now()
 }
 
 func (s *Server) socket(w http.ResponseWriter, r *http.Request) {

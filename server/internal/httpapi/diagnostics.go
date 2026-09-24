@@ -21,7 +21,7 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{
 		"version":  s.Version,
 		"os":       runtime.GOOS + "/" + runtime.GOARCH,
-		"checked":  time.Now().UTC(),
+		"checked":  s.now().UTC(),
 		"features": s.features(),
 	}
 	if id, err := s.Store.Identity(ctx, DefaultServerName()); err == nil {
@@ -50,7 +50,7 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	channels, _ := s.Store.Channels(ctx, true)
-	airings, _ := s.Store.Airings(ctx, time.Now(), time.Now().Add(14*24*time.Hour))
+	airings, _ := s.Store.Airings(ctx, s.now(), s.now().Add(14*24*time.Hour))
 	listed := map[int64]bool{}
 	var last time.Time
 	for _, a := range airings {
@@ -144,7 +144,7 @@ func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {
 	return doctor.Notes(doctor.Facts{
 		IPs: ips, BroadcastOK: heard, HostHasGPU: hostGPU(), DevDri: driPresent(),
 		RecordingsPath: path, Mounts: string(mounts), FreeBytes: free,
-		Timezone: os.Getenv("TZ"), Now: time.Now(), UID: os.Getuid(),
+		Timezone: os.Getenv("TZ"), Now: s.now(), UID: os.Getuid(),
 		PUID: os.Getenv("PUID"), PGID: os.Getenv("PGID"), TunerQuiet: quiet,
 	})
 }

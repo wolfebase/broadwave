@@ -1,0 +1,23 @@
+{
+  "channels": [
+    {
+      "channelId": 1,
+      "frequencyHz": 0,
+      "name": "WDAF",
+      "number": "4.1"
+    },
+    {
+      "channelId": 2,
+      "frequencyHz": 0,
+      "name": "WDAF2",
+      "number": "4.2"
+    },
+    {
+      "channelId": 3,
+      "frequencyHz": 0,
+      "name": "KCTV",
+      "number": "5.1"
+    }
+  ],
+  "running": false
+}

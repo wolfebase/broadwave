@@ -1,0 +1,51 @@
+{
+  "channels": [
+    {
+      "audioCodec": "AC3",
+      "deviceId": "FAKEHDHR",
+      "displayName": "WDAF",
+      "displayNumber": "4.1",
+      "enabled": true,
+      "favorite": false,
+      "guideName": "WDAF",
+      "guideNumber": "4.1",
+      "hd": true,
+      "hidden": false,
+      "id": 1,
+      "present": true,
+      "videoCodec": "MPEG2"
+    },
+    {
+      "audioCodec": "AC3",
+      "deviceId": "FAKEHDHR",
+      "displayName": "WDAF2",
+      "displayNumber": "4.2",
+      "enabled": true,
+      "favorite": false,
+      "guideName": "WDAF2",
+      "guideNumber": "4.2",
+      "hd": true,
+      "hidden": false,
+      "id": 2,
+      "present": true,
+      "videoCodec": "MPEG2"
+    },
+    {
+      "audioCodec": "AC3",
+      "deviceId": "FAKEHDHR",
+      "displayName": "KCTV",
+      "displayNumber": "5.1",
+      "enabled": true,
+      "favorite": false,
+      "guideName": "KCTV",
+      "guideNumber": "5.1",
+      "hd": true,
+      "hidden": false,
+      "id": 3,
+      "present": true,
+      "videoCodec": "MPEG2"
+    }
+  ],
+  "listings": "empty",
+  "message": "Listings turn on when you add an XMLTV file. Live picture arrives with the player."
+}

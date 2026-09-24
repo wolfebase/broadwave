@@ -242,7 +242,7 @@ func removeInside(root, path string) {
 }
 
 func (s *Server) airings(w http.ResponseWriter, r *http.Request) {
-	now := time.Now()
+	now := s.now()
 	from := now.Add(-30 * time.Minute)
 	to := now.Add(48 * time.Hour)
 	if raw := r.URL.Query().Get("from"); raw != "" {

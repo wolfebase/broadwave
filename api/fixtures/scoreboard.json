@@ -1,0 +1,24 @@
+{
+  "games": [
+    {
+      "detail": "Sun 1:00 PM",
+      "id": "nfl-1",
+      "league": "nfl",
+      "name": "Chiefs at Bills",
+      "shortName": "KC @ BUF",
+      "start": "2026-09-24T15:00:00Z",
+      "state": "pre",
+      "teams": [
+        {
+          "abbr": "KC",
+          "home": true,
+          "name": "Chiefs"
+        },
+        {
+          "abbr": "BUF",
+          "name": "Bills"
+        }
+      ]
+    }
+  ]
+}

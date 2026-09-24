@@ -35,6 +35,8 @@ type Server struct {
 	Version string
 	Bus     *realtime.Bus
 	Sports  sports.Provider
+	// Clock is the server's idea of now. Tests set it; production leaves it nil.
+	Clock    func() time.Time
 	signalOn bool
 
 	routes []string
@@ -345,7 +347,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		values["tmdbKeySet"] = "0"
 	}
 	delete(values, "tmdbKey")
-	needs, err := s.Store.ApplySetupDefault(r.Context(), time.Now())
+	needs, err := s.Store.ApplySetupDefault(r.Context(), s.now())
 	if err != nil {
 		writeError(w, err)
 		return

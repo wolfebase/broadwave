@@ -1,0 +1,95 @@
+{
+  "checked": "2026-09-24T15:00:00Z",
+  "connectedApps": 0,
+  "devices": [
+    {
+      "baseUrl": "http://127.0.0.1:9",
+      "deviceId": "FAKEHDHR",
+      "firmwareName": "hdhomerun_fake",
+      "firmwareVersion": "20260101",
+      "friendlyName": "Fake HDHomeRun",
+      "lastSeen": "2026-09-24T15:00:00Z",
+      "lineupUrl": "http://127.0.0.1:9/lineup.json",
+      "modelNumber": "HDHR4-2US",
+      "priority": 0,
+      "tunerCount": 2
+    }
+  ],
+  "doctor": [],
+  "encoder": {
+    "deinterlace": "",
+    "ffmpeg": "test",
+    "hardware": false,
+    "name": "libx264"
+  },
+  "features": [
+    "live",
+    "renditions",
+    "wholeHomeSync",
+    "events",
+    "dvr",
+    "passes",
+    "virtualChannels",
+    "commercialDetection",
+    "hdhrEmulation",
+    "export"
+  ],
+  "guide": {
+    "airings": 1,
+    "channels": 3,
+    "channelsWithListings": 1,
+    "coverage": [
+      {
+        "name": "WDAF",
+        "number": "4.1",
+        "source": "broadcast",
+        "until": "2026-09-24T16:00:00Z"
+      },
+      {
+        "name": "WDAF2",
+        "number": "4.2"
+      },
+      {
+        "name": "KCTV",
+        "number": "5.1"
+      }
+    ],
+    "listingsUntil": "2026-09-24T16:00:00Z"
+  },
+  "os": "test",
+  "recentActivity": [
+    {
+      "at": "2026-09-24T15:00:00Z",
+      "id": 1,
+      "kind": "guide",
+      "message": "Listings are in."
+    }
+  ],
+  "relay": [],
+  "server": {
+    "createdAt": "2026-09-24T15:00:00Z",
+    "id": "contract-server",
+    "name": "Home"
+  },
+  "storage": {
+    "Free": 0,
+    "Total": 0
+  },
+  "tuners": [
+    {
+      "index": 0,
+      "ours": false,
+      "quality": 88,
+      "strength": 90,
+      "symbol": 100
+    },
+    {
+      "index": 1,
+      "ours": false,
+      "quality": 88,
+      "strength": 90,
+      "symbol": 100
+    }
+  ],
+  "version": "dev"
+}

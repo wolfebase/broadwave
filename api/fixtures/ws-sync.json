@@ -1,0 +1,14 @@
+{
+  "data": {
+    "anchorMedia": 1790261990000,
+    "anchorServer": 1790262000000,
+    "channelId": 1,
+    "latency": "balanced",
+    "members": 1,
+    "mode": "follow",
+    "rate": 1,
+    "room": "channel:1",
+    "version": 1
+  },
+  "type": "sync.state"
+}

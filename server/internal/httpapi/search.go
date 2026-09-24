@@ -8,7 +8,7 @@ import (
 
 func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
-	airings, recordings, err := s.Store.Search(r.Context(), query, time.Now().Add(-2*time.Hour), 40)
+	airings, recordings, err := s.Store.Search(r.Context(), query, s.now().Add(-2*time.Hour), 40)
 	if err != nil {
 		writeError(w, err)
 		return

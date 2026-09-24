@@ -36,6 +36,17 @@ func NewBus() *Bus {
 	return &Bus{Rooms: NewRooms(), clients: map[*client]struct{}{}, now: time.Now}
 }
 
+// SetClock pins the time on hello, clock, and sync messages. Tests use it.
+func (b *Bus) SetClock(now func() time.Time) {
+	if now == nil {
+		return
+	}
+	b.now = now
+	if b.Rooms != nil {
+		b.Rooms.now = now
+	}
+}
+
 func frame(kind string, v any) []byte {
 	data, _ := json.Marshal(v)
 	b, _ := json.Marshal(Message{Type: kind, Data: data})
