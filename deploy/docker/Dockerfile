@@ -3,6 +3,8 @@ WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
+# The typecheck decodes the golden API responses (web/src/api/contract.ts).
+COPY api/fixtures /src/api/fixtures
 RUN npm run build
 
 FROM golang:1.26-bookworm AS build

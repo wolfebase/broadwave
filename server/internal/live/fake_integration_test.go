@@ -137,8 +137,14 @@ func TestFakeTunerSharesFrequencyAndYields(t *testing.T) {
 		t.Fatalf("extend %+v %v", got.EndsAt, err)
 	}
 	h.StopRecord(rec.ID)
-	time.Sleep(300 * time.Millisecond)
-	if info, err := os.Stat(got.Path); err != nil || info.Size() == 0 {
+	// ffmpeg closes the file after StopRecord returns; a slow CI runner needs more than a fixed pause.
+	var info os.FileInfo
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		if info, err = os.Stat(got.Path); err == nil && info.Size() > 0 {
+			break
+		}
+	}
+	if err != nil || info.Size() == 0 {
 		t.Fatalf("recording file %v", err)
 	}
 
