@@ -17,8 +17,10 @@ const (
 	FrameEvery = 60 * time.Second
 	// FrameStaleAfter marks a preview that no longer matches the broadcast.
 	FrameStaleAfter = 10 * time.Minute
-	// A grab that runs longer than this is stopped so it cannot sit on a core.
-	frameGrabLimit = 1500 * time.Millisecond
+	// A grab waits for the next keyframe, which can be a couple of seconds
+	// away. -skip_frame nokey does not decode the frames in between, so the
+	// wait is not a busy core. Anything longer is stopped.
+	frameGrabLimit = 4 * time.Second
 )
 
 // FrameJob is one program on an already-tuned mux.
