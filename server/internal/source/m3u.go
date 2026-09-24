@@ -40,6 +40,7 @@ type Entry struct {
 	Audio         string
 	UserAgent     string
 	Referrer      string
+	DRM           bool
 }
 
 // ParseM3U reads an extended M3U playlist. Lines that are not channels are ignored.
@@ -89,6 +90,7 @@ func ParseM3U(r io.Reader) []Entry {
 				GuideArt: attr(line, "tvc-guide-art"), GuideTags: attr(line, "tvc-guide-tags"),
 				GuideGenres: attr(line, "tvc-guide-genres"),
 				Video:       attr(line, "tvc-stream-vcodec"), Audio: attr(line, "tvc-stream-acodec"),
+				DRM: drmFlag(attr(line, "drm")),
 			}
 			have = true
 			continue
@@ -259,6 +261,20 @@ func applyStreamOpt(e *Entry, line string) {
 		e.UserAgent = strings.TrimSpace(val)
 	case "http-referrer", "http-referer":
 		e.Referrer = strings.TrimSpace(val)
+	case "inputstream.adaptive.license_type":
+		kind := strings.ToLower(strings.TrimSpace(val))
+		if strings.Contains(kind, "widevine") || strings.Contains(kind, "playready") {
+			e.DRM = true
+		}
+	}
+}
+
+func drmFlag(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
 	}
 }
 

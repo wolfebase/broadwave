@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Channel, Device, TunerStatus } from "../../types";
-import { addPlaylistFile, addSource, getTuners, lookHarder, startScan, type SourceAdded } from "../../api";
+import { addFree, addPlaylistFile, addSource, findFree, getTuners, lookHarder, startScan, type FreeFeed, type SourceAdded } from "../../api";
 import { copy } from "../../strings";
 export function Sources({
   devices,
@@ -24,6 +24,10 @@ export function Sources({
   const [scanning, setScanning] = useState("");
   const [looked, setLooked] = useState(false);
   const [hits, setHits] = useState<{ kind: string; name: string; addr: string }[]>([]);
+  const [freeFeeds, setFreeFeeds] = useState<FreeFeed[]>([]);
+  const [freeGuide, setFreeGuide] = useState("");
+  const [freeNote, setFreeNote] = useState("");
+  const [findingFree, setFindingFree] = useState(false);
   const [tuners, setTuners] = useState<TunerStatus[]>([]);
   const [encoder, setEncoder] = useState("");
   useEffect(() => {
@@ -54,6 +58,29 @@ export function Sources({
         </div>
         <button type="button" className="btn primary" onClick={onDiscover} disabled={busy || looking}>
           {copy.sources.search}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy || looking || findingFree}
+          onClick={() => {
+            setFindingFree(true);
+            setFreeNote("");
+            setFreeGuide("");
+            void findFree()
+              .then((res) => {
+                setFreeFeeds(res.found ?? []);
+                setFreeGuide(res.found?.length ? "" : res.guide);
+              })
+              .catch(() => {
+                setFreeFeeds([]);
+                setFreeGuide("");
+                setFreeNote(copy.sources.freeEmpty);
+              })
+              .finally(() => setFindingFree(false));
+          }}
+        >
+          {copy.sources.free}
         </button>
         <button
           type="button"
@@ -99,6 +126,32 @@ export function Sources({
         </button>
         <p className="hint">{copy.sources.addressHint}</p>
       </form>
+      {findingFree ? <p className="hint">{copy.sources.freeHint}</p> : null}
+      {freeFeeds.length > 0 ? (
+        <ul className="source-list">
+          {freeFeeds.map((feed) => (
+            <li key={feed.playlist} className="source-row">
+              <span>{feed.name}</span>
+              <span className="codec">{feed.addr}</span>
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={() => {
+                  setFreeNote("");
+                  void addFree(feed)
+                    .then((res) => setFreeNote(res.message || "Source added. It shows up with the lineup."))
+                    .catch((err: unknown) => setFreeNote(err instanceof Error ? err.message : copy.sources.freeEmpty));
+                }}
+              >
+                {copy.sources.add}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {freeGuide ? <pre className="hint">{freeGuide}</pre> : null}
+      {freeNote ? <p className="hint">{freeNote}</p> : null}
       {looking ? <p className="hint">{copy.sources.lookHint}</p> : null}
       {looked && hits.length === 0 ? <p className="empty">{copy.sources.lookEmpty}</p> : null}
       {hits.length > 0 ? (

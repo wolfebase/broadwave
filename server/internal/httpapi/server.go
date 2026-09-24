@@ -59,6 +59,8 @@ func (s *Server) Handler() http.Handler {
 	api("GET /devices/{id}/scan", s.scanStatus)
 	api("POST /sources/discover", s.discover)
 	api("POST /sources/look", s.look)
+	api("GET /sources/free", s.freeSources)
+	api("POST /sources/free", s.freeSources)
 	api("GET /sources", s.listSources)
 	api("POST /sources", s.addSource)
 	api("GET /channels", s.channels)

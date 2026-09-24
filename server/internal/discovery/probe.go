@@ -29,6 +29,9 @@ var KnownPorts = []ProbePort{
 	{8409, "/discover.json", "hdhr-compatible"},
 	{9191, "/hdhr/discover.json", "hdhr-compatible"},
 	{8089, "/devices/ANY/channels.m3u", "channels-dvr"},
+	{5523, "/feeds/default/m3u", "fastchannels"},
+	{7777, "/playlist.m3u", "pluto"},
+	{8182, "/playlist.m3u8?regions=us", "samsung"},
 	{8885, "/", "tablo"},
 	{32400, "/identity", "plex"},
 	{8096, "/System/Info/Public", "jellyfin"},
@@ -83,11 +86,20 @@ func matchProbe(port ProbePort, body []byte) (Found, bool) {
 			name = "HDHomeRun"
 		}
 		return Found{Kind: port.Kind, Name: name, ID: doc.DeviceID}, true
-	case "tvheadend", "channels-dvr":
+	case "tvheadend", "channels-dvr", "fastchannels", "pluto", "samsung":
 		if !bytes.Contains(body, []byte("#EXTM3U")) {
 			return Found{}, false
 		}
-		return Found{Kind: port.Kind, Name: port.Kind}, true
+		name := port.Kind
+		switch port.Kind {
+		case "fastchannels":
+			name = "FastChannels"
+		case "pluto":
+			name = "Pluto"
+		case "samsung":
+			name = "Samsung TV Plus"
+		}
+		return Found{Kind: port.Kind, Name: name}, true
 	default:
 		if !strings.Contains(strings.ToLower(string(body)), port.Kind) {
 			return Found{}, false
