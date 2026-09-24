@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"waveguide/internal/discovery"
+	"waveguide/internal/doctor"
 	"waveguide/internal/dvr"
 	"waveguide/internal/guide"
 	"waveguide/internal/httpapi"
@@ -46,6 +47,7 @@ func main() {
 	if *healthcheck {
 		os.Exit(checkHealth(*addr))
 	}
+	doctor.ApplyIdentity(filepath.Join(*configDir, "work", "recordings"))
 
 	st, err := store.Open(*configDir)
 	if err != nil {

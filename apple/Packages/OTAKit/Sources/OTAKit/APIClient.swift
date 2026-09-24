@@ -107,6 +107,16 @@ public struct APIClient: Sendable {
         return try await send("PATCH", "/channels/\(channel.id)", body: B(hidden: on))
     }
 
+    public struct DoctorNote: Decodable, Sendable, Hashable {
+        public var id: String
+        public var message: String
+    }
+
+    public func doctorNotes() async throws -> [DoctorNote] {
+        struct R: Decodable { var doctor: [DoctorNote]? }
+        return try await send("GET", "/diagnostics", as: R.self).doctor ?? []
+    }
+
     public func settings() async throws -> [String: String] {
         try await send("GET", "/settings")
     }

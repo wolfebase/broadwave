@@ -8,7 +8,10 @@ services:
     # iPhone and Apple TV apps find the server over Bonjour.
     network_mode: host
     environment:
-      TZ: America/New_York
+      TZ: UTC
+      PUID: "99"
+      PGID: "100"
+      UMASK: "022"
       # HDHR_HOST: 192.168.1.50   # only if discovery cannot reach the tuner
     volumes:
       - ./config:/config

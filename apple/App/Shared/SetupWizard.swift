@@ -8,6 +8,7 @@ struct SetupWizard: View {
     @Environment(AppStore.self) private var store
     @State private var step = 0
     @State private var note = ""
+    @State private var doctor: [APIClient.DoctorNote] = []
     private let titles = ["Sources", "Channels", "Guide", "Recordings", "Apps"]
 
     var body: some View {
@@ -60,6 +61,9 @@ struct SetupWizard: View {
                 }
             #endif
             await starBigFour()
+            if let notes = try? await store.api?.doctorNotes() {
+                doctor = notes
+            }
         }
     }
 
@@ -116,6 +120,9 @@ struct SetupWizard: View {
             Text("Where recordings go").font(.title2.weight(.bold))
             Text("Recordings save in the folder mapped for this server.")
                 .foregroundStyle(.secondary)
+            ForEach(doctor, id: \.id) { item in
+                Text(item.message).foregroundStyle(Tokens.ColorToken.warning)
+            }
         }
     }
 

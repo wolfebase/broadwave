@@ -59,8 +59,8 @@ function Shell() {
 
   const active = (p: string) => (p === "/" ? path === "/" : path.startsWith(p));
   let page: React.ReactNode;
-  if (path === "/setup" || firstRun) page = <Setup />;
-  else if (path === "/diagnostics") page = <DiagnosticsPage />;
+  if (path === "/diagnostics") page = <DiagnosticsPage />;
+  else if (path === "/setup" || firstRun) page = <Setup />;
   else if (path === "/guide") page = <Guide />;
   else if (path === "/search") page = <SearchPage />;
   else if (path === "/sports") page = <Sports />;

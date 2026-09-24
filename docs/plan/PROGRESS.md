@@ -3,9 +3,9 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **S9**. Setup doctor.
-- Half done: S8 is in this commit. A fresh catalog found the HDHomeRun with no typing, and a channel was playing 15 seconds after the wizard opened.
-- Next command: add the setup checks for networking, disk, clock, and file ownership.
+- Current task: **S10**. Source health.
+- Half done: S9 is in this commit. Each doctor check has a test. Diagnostics shows the time zone note when TZ is unset.
+- Next command: report when a source goes offline, comes back, or hits its stream limit.
 - Unraid is on `v0.3.3`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
 - A7 retry at phase S: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
@@ -28,8 +28,8 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] S5 Xtream Codes source (commit b9e48ae)
 - [x] S6 tvheadend, Threadfin/xTeVe/ErsatzTV/Dispatcharr/Antennas, Channels DVR server, HDHomeRun-compatible by address; unsupported devices documented (commit e464ec9)
 - [x] S7 Free channels: detect FastChannels / Pluto / Samsung generator containers, or guide the user to run FastChannels (commit 1eababe)
-- [x] S8 Setup wizard v2 on web, Apple TV, and iPhone (< 90 s, no typing for HDHomeRun)
-- [ ] S9 Setup doctor: bridge network, /dev/dri, volumes, disk, TZ, clock, PUID/PGID/UMASK
+- [x] S8 Setup wizard v2 on web, Apple TV, and iPhone (< 90 s, no typing for HDHomeRun) (commit 0991df2)
+- [x] S9 Setup doctor: bridge network, /dev/dri, volumes, disk, TZ, clock, PUID/PGID/UMASK
 - [ ] S10 Source health and limits
 
 ## Phase P — Server and Apple apps, working as one

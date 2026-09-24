@@ -1,13 +1,18 @@
 package httpapi
 
 import (
+	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"waveguide/internal/disk"
+	"waveguide/internal/doctor"
 	"waveguide/internal/live"
+	"waveguide/internal/store"
 )
 
 // diagnostics is everything a support conversation needs, in one call.
@@ -72,5 +77,67 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 	}
 	events, _ := s.Store.Events(ctx, 20)
 	out["recentActivity"] = events
+	out["doctor"] = s.doctorNotes(devices)
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {
+	var ips []string
+	ifaces, _ := net.Interfaces()
+	for _, iface := range ifaces {
+		addrs, _ := iface.Addrs()
+		for _, addr := range addrs {
+			ip, _, err := net.ParseCIDR(addr.String())
+			if err != nil || ip.IsLoopback() {
+				continue
+			}
+			ips = append(ips, ip.String())
+		}
+	}
+	path := ""
+	var free int64
+	if s.Hub != nil {
+		path = filepath.Join(s.Hub.Dir, "recordings")
+		if space, err := disk.Stat(path); err == nil {
+			free = int64(space.Free)
+		}
+	}
+	mounts, _ := os.ReadFile("/proc/mounts")
+	quiet := false
+	for _, d := range devices {
+		seen, err := time.Parse(time.RFC3339, d.LastSeen)
+		if d.TunerCount > 0 && err == nil && time.Since(seen) > 3*time.Minute {
+			quiet = true
+		}
+	}
+	heard := false
+	for _, d := range devices {
+		if d.TunerCount > 0 {
+			heard = true
+		}
+	}
+	return doctor.Notes(doctor.Facts{
+		IPs: ips, BroadcastOK: heard, HostHasGPU: hostGPU(), DevDri: driPresent(),
+		RecordingsPath: path, Mounts: string(mounts), FreeBytes: free,
+		Timezone: os.Getenv("TZ"), Now: time.Now(), UID: os.Getuid(),
+		PUID: os.Getenv("PUID"), PGID: os.Getenv("PGID"), TunerQuiet: quiet,
+	})
+}
+
+func driPresent() bool {
+	_, err := os.Stat("/dev/dri")
+	return err == nil
+}
+
+func hostGPU() bool {
+	entries, err := os.ReadDir("/sys/class/drm")
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "card") {
+			return true
+		}
+	}
+	return false
 }
