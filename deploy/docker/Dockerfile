@@ -17,7 +17,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}"
 FROM debian:bookworm-slim
 ARG TARGETARCH
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg ca-certificates mesa-va-drivers \
+  && apt-get install -y --no-install-recommends ffmpeg xz-utils ca-certificates mesa-va-drivers \
      $(if [ "$TARGETARCH" = "amd64" ]; then echo intel-media-va-driver; fi) \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/waveguide /usr/local/bin/waveguide

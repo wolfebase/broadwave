@@ -11,12 +11,16 @@ import (
 
 type SourceChannel struct {
 	Channel
-	StreamURL   string `json:"-"`
-	BaseURL     string `json:"-"`
-	TunerCount  int    `json:"tunerCount"`
-	ModelNumber string `json:"modelNumber,omitempty"`
-	FrequencyHz int    `json:"frequencyHz"`
-	ProgramNum  int    `json:"programNum"`
+	StreamURL    string `json:"-"`
+	BaseURL      string `json:"-"`
+	TunerCount   int    `json:"tunerCount"`
+	ModelNumber  string `json:"modelNumber,omitempty"`
+	StreamLimit  int    `json:"streamLimit,omitempty"`
+	StreamFormat string `json:"streamFormat,omitempty"`
+	UserAgent    string `json:"-"`
+	Referrer     string `json:"-"`
+	FrequencyHz  int    `json:"frequencyHz"`
+	ProgramNum   int    `json:"programNum"`
 	// FieldOrder is what a probe saw: progressive, tt, bb, tb, bt, or empty when unknown.
 	FieldOrder string `json:"fieldOrder,omitempty"`
 }
@@ -97,11 +101,15 @@ func (s *Store) SourceChannel(ctx context.Context, id int64) (SourceChannel, err
 	err := s.db.QueryRowContext(ctx, `
 SELECT c.id, c.device_id, c.guide_number, c.guide_name, c.custom_number, c.custom_name,
 	c.video_codec, c.audio_codec, c.hd, c.favorite, c.enabled, c.hidden, c.present,
-	c.stream_url, c.frequency_hz, c.program_num, c.field_order, d.base_url, d.tuner_count, d.model_number
+	c.stream_url, c.frequency_hz, c.program_num, c.field_order, c.user_agent, c.referrer,
+	d.base_url, d.tuner_count, d.model_number,
+	COALESCE((SELECT stream_limit FROM sources WHERE device_id = c.device_id LIMIT 1), 0),
+	COALESCE((SELECT stream_format FROM sources WHERE device_id = c.device_id LIMIT 1), '')
 FROM channels c JOIN devices d ON d.device_id = c.device_id WHERE c.id = ?`, id).Scan(
 		&ch.ID, &ch.DeviceID, &ch.GuideNumber, &ch.GuideName, &customNumber, &customName,
 		&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present,
-		&ch.StreamURL, &ch.FrequencyHz, &ch.ProgramNum, &ch.FieldOrder, &ch.BaseURL, &ch.TunerCount, &ch.ModelNumber,
+		&ch.StreamURL, &ch.FrequencyHz, &ch.ProgramNum, &ch.FieldOrder, &ch.UserAgent, &ch.Referrer,
+		&ch.BaseURL, &ch.TunerCount, &ch.ModelNumber, &ch.StreamLimit, &ch.StreamFormat,
 	)
 	if err != nil {
 		return ch, err
@@ -568,6 +576,8 @@ type Source struct {
 	Refresh      string `json:"refresh,omitempty"`
 	Health       string `json:"health,omitempty"`
 	DeviceID     string `json:"deviceId,omitempty"`
+	Groups       string `json:"groups,omitempty"`
+	NumberStart  int    `json:"start,omitempty"`
 }
 
 // maskURL returns a URL safe to show and the original when it carried a secret.
@@ -606,7 +616,7 @@ func (s *Store) AddSource(ctx context.Context, kind, name, rawURL, xmltv string)
 	}
 	id, _ := res.LastInsertId()
 	key := fmt.Sprintf("src:%d", id)
-	if _, err := s.db.ExecContext(ctx, `UPDATE sources SET stable_key=? WHERE id=? AND stable_key=''`, key, id); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE sources SET stable_key=?, device_id=? WHERE id=? AND stable_key=''`, key, fmt.Sprintf("src-%d", id), id); err != nil {
 		return Source{}, err
 	}
 	kept := secret
@@ -622,7 +632,7 @@ func (s *Store) AddSource(ctx context.Context, kind, name, rawURL, xmltv string)
 }
 
 func (s *Store) Sources(ctx context.Context) ([]Source, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, name, url, xmltv_url, enabled, stable_key, priority, tuner_count, stream_limit, stream_format, has_guide, needs_tuner, refresh, health, device_id FROM sources ORDER BY id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, name, url, xmltv_url, enabled, stable_key, priority, tuner_count, stream_limit, stream_format, has_guide, needs_tuner, refresh, health, device_id, groups, number_start FROM sources ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -631,7 +641,7 @@ func (s *Store) Sources(ctx context.Context) ([]Source, error) {
 	for rows.Next() {
 		var item Source
 		var enabled, hasGuide, needsTuner int
-		if err := rows.Scan(&item.ID, &item.Kind, &item.Name, &item.URL, &item.XMLTV, &enabled, &item.StableKey, &item.Priority, &item.TunerCount, &item.StreamLimit, &item.StreamFormat, &hasGuide, &needsTuner, &item.Refresh, &item.Health, &item.DeviceID); err != nil {
+		if err := rows.Scan(&item.ID, &item.Kind, &item.Name, &item.URL, &item.XMLTV, &enabled, &item.StableKey, &item.Priority, &item.TunerCount, &item.StreamLimit, &item.StreamFormat, &hasGuide, &needsTuner, &item.Refresh, &item.Health, &item.DeviceID, &item.Groups, &item.NumberStart); err != nil {
 			return nil, err
 		}
 		item.Enabled = enabled != 0
@@ -643,6 +653,35 @@ func (s *Store) Sources(ctx context.Context) ([]Source, error) {
 		out = []Source{}
 	}
 	return out, rows.Err()
+}
+
+// RememberPlaylist keeps the filter used at import and the next daily refresh.
+func (s *Store) RememberPlaylist(ctx context.Context, id int64, groups string, start int, next time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE sources SET groups=?, number_start=?, refresh=? WHERE id=?`, groups, start, next.UTC().Format(time.RFC3339), id)
+	return err
+}
+
+// NoteRefresh records when the playlist should be fetched again and the last result.
+func (s *Store) NoteRefresh(ctx context.Context, id int64, next time.Time, health string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE sources SET refresh=?, health=? WHERE id=?`, next.UTC().Format(time.RFC3339), health, id)
+	return err
+}
+
+// FetchURL returns the stored address, using the secret when the public copy is masked.
+func (s *Store) FetchURL(ctx context.Context, id int64, public string) string {
+	if !strings.Contains(public, "••••") {
+		return public
+	}
+	var secret string
+	if err := s.db.QueryRowContext(ctx, `SELECT secret FROM source_secrets WHERE source_id=?`, id).Scan(&secret); err != nil || secret == "" {
+		return public
+	}
+	return secret
+}
+
+func (s *Store) SetStreamFormat(ctx context.Context, id int64, format string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE sources SET stream_format=? WHERE id=?`, format, id)
+	return err
 }
 
 func (s *Store) ReplaceAiringsFor(ctx context.Context, channelIDs []int64, rows []Airing) error {

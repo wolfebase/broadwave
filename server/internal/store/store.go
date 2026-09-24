@@ -137,9 +137,31 @@ ON CONFLICT(device_id) DO UPDATE SET
 		if ch.StreamURL != "" {
 			res, err := tx.ExecContext(ctx, `
 UPDATE channels SET guide_name=?, video_codec=?, audio_codec=?, hd=?, present=1,
+	user_agent=CASE WHEN ?!='' THEN ? ELSE user_agent END,
+	referrer=CASE WHEN ?!='' THEN ? ELSE referrer END,
 	hidden=CASE WHEN ?=1 THEN 1 ELSE hidden END
 WHERE device_id=? AND stream_url=?`,
-				ch.GuideName, ch.VideoCodec, ch.AudioCodec, boolInt(ch.HD), protect, dev.DeviceID, ch.StreamURL)
+				ch.GuideName, ch.VideoCodec, ch.AudioCodec, boolInt(ch.HD),
+				ch.UserAgent, ch.UserAgent, ch.Referrer, ch.Referrer,
+				protect, dev.DeviceID, ch.StreamURL)
+			if err != nil {
+				return err
+			}
+			if n, _ := res.RowsAffected(); n > 0 {
+				continue
+			}
+		}
+		if ch.GuideKey != "" {
+			res, err := tx.ExecContext(ctx, `
+UPDATE channels SET guide_number=?, guide_name=?, stream_url=?, video_codec=?, audio_codec=?, hd=?, present=1,
+	art_url=CASE WHEN ?!='' THEN ? ELSE art_url END,
+	user_agent=CASE WHEN ?!='' THEN ? ELSE user_agent END,
+	referrer=CASE WHEN ?!='' THEN ? ELSE referrer END,
+	hidden=CASE WHEN ?=1 THEN 1 ELSE hidden END
+WHERE device_id=? AND guide_key=?`,
+				ch.GuideNumber, ch.GuideName, ch.StreamURL, ch.VideoCodec, ch.AudioCodec, boolInt(ch.HD),
+				ch.ArtURL, ch.ArtURL, ch.UserAgent, ch.UserAgent, ch.Referrer, ch.Referrer,
+				protect, dev.DeviceID, ch.GuideKey)
 			if err != nil {
 				return err
 			}
@@ -149,8 +171,8 @@ WHERE device_id=? AND stream_url=?`,
 		}
 		_, err := tx.ExecContext(ctx, `
 INSERT INTO channels (
-	device_id, guide_number, guide_name, stream_url, video_codec, audio_codec, hd, favorite, present, hidden
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+	device_id, guide_number, guide_name, stream_url, video_codec, audio_codec, hd, favorite, present, hidden, guide_key, art_url, user_agent, referrer
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
 ON CONFLICT(device_id, guide_number) DO UPDATE SET
 	guide_name=excluded.guide_name,
 	stream_url=excluded.stream_url,
@@ -158,8 +180,12 @@ ON CONFLICT(device_id, guide_number) DO UPDATE SET
 	audio_codec=excluded.audio_codec,
 	hd=excluded.hd,
 	present=1,
-	hidden=CASE WHEN excluded.hidden=1 THEN 1 ELSE channels.hidden END
-`, dev.DeviceID, ch.GuideNumber, ch.GuideName, ch.StreamURL, ch.VideoCodec, ch.AudioCodec, boolInt(ch.HD), boolInt(ch.Favorite), protect)
+	hidden=CASE WHEN excluded.hidden=1 THEN 1 ELSE channels.hidden END,
+	guide_key=CASE WHEN excluded.guide_key!='' THEN excluded.guide_key ELSE channels.guide_key END,
+	art_url=CASE WHEN excluded.art_url!='' THEN excluded.art_url ELSE channels.art_url END,
+	user_agent=CASE WHEN excluded.user_agent!='' THEN excluded.user_agent ELSE channels.user_agent END,
+	referrer=CASE WHEN excluded.referrer!='' THEN excluded.referrer ELSE channels.referrer END
+`, dev.DeviceID, ch.GuideNumber, ch.GuideName, ch.StreamURL, ch.VideoCodec, ch.AudioCodec, boolInt(ch.HD), boolInt(ch.Favorite), protect, ch.GuideKey, ch.ArtURL, ch.UserAgent, ch.Referrer)
 		if err != nil {
 			return err
 		}
@@ -189,6 +215,28 @@ ORDER BY d.priority, d.device_id`, guideNumber, exceptDevice)
 		}
 	}
 	return out, rows.Err()
+}
+
+// AlternateChannels lists other present channels with this guide number, lowest device priority first.
+func (s *Store) AlternateChannels(ctx context.Context, guideNumber string, exceptID int64) ([]int64, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT c.id FROM channels c
+JOIN devices d ON d.device_id = c.device_id
+WHERE c.guide_number = ? AND c.id != ? AND c.present = 1 AND c.hidden = 0 AND c.stream_url != ''
+ORDER BY d.priority, c.id`, guideNumber, exceptID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func (s *Store) Devices(ctx context.Context) ([]Device, error) {

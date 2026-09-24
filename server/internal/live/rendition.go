@@ -79,6 +79,8 @@ type Source struct {
 	AudioCodec string
 	// Progressive is true only once a probe has shown the picture is not interlaced.
 	Progressive bool
+	UserAgent   string
+	Referrer    string
 }
 
 type Decision struct {
@@ -239,13 +241,24 @@ func renditionProfile(video string) string {
 // RenditionArgs builds ffmpeg for one live rendition. Timestamps are kept from
 // the broadcast (-copyts) so every rendition of a channel shares one timeline.
 func RenditionArgs(program int, src Source, r Rendition, encoder, deint string, blend bool) []string {
+	return renditionArgs(program, src, r, encoder, deint, blend, "pipe:0")
+}
+
+func renditionArgs(program int, src Source, r Rendition, encoder, deint string, blend bool, input string) []string {
 	r = r.normalized()
 	args := []string{"-hide_banner", "-loglevel", "warning", "-fflags", "+genpts+discardcorrupt", "-copyts"}
 	transcode := r.Video != "copy"
 	if transcode && encoder == "h264_vaapi" {
 		args = append(args, "-init_hw_device", "vaapi=va:/dev/dri/renderD128", "-filter_hw_device", "va")
 	}
-	args = append(args, "-probesize", "2000000", "-analyzeduration", "1500000", "-i", "pipe:0")
+	if input == "" {
+		input = "pipe:0"
+	}
+	if strings.Contains(input, "://") {
+		args = append(args, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5")
+	}
+	args = append(args, headerArgs(src.UserAgent, src.Referrer)...)
+	args = append(args, "-probesize", "2000000", "-analyzeduration", "1500000", "-i", input)
 	if program > 0 {
 		args = append(args, "-map", fmt.Sprintf("0:p:%d:v:0", program))
 		if r.Audio != "none" {
@@ -274,6 +287,9 @@ func RenditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		args = append(args, "-an")
 	case "copy":
 		args = append(args, "-c:a", "copy")
+		if strings.EqualFold(src.AudioCodec, "AAC") {
+			args = append(args, "-bsf:a", "aac_adtstoasc")
+		}
 	case "aac6":
 		args = append(args, "-af", "aresample=async=1000", "-c:a", "aac", "-ac", "6", "-b:a", "384k")
 	default:

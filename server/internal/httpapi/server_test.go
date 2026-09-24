@@ -2,8 +2,10 @@ package httpapi
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -406,6 +408,80 @@ func TestScanUsesTheFakeTuner(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || !started {
 		t.Fatalf("%d %s started=%v", rec.Code, rec.Body.String(), started)
+	}
+}
+
+func TestUploadedPlaylist(t *testing.T) {
+	st := testStore(t)
+	h := (&Server{Store: st}).Handler()
+	var gz bytes.Buffer
+	zw := gzip.NewWriter(&gz)
+	_, _ = zw.Write([]byte("#EXTM3U\n#EXTINF:-1 tvg-id=\"news\",Local News\nhttp://example/news.ts\n"))
+	_ = zw.Close()
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	_ = w.WriteField("name", "Home")
+	part, err := w.CreateFormFile("file", "home.m3u.gz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(gz.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	_ = w.Close()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources", &body)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	channels, err := st.Channels(context.Background(), false)
+	if err != nil || len(channels) != 1 || channels[0].GuideName != "Local News" {
+		t.Fatalf("%+v %v", channels, err)
+	}
+}
+
+func TestRefreshKeepsTheChannel(t *testing.T) {
+	body := "#EXTM3U\n#EXTINF:-1 tvg-id=\"news\",Local News\nhttp://example/news.ts\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	st := testStore(t)
+	api := &Server{Store: st}
+	h := api.Handler()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources", strings.NewReader(`{"kind":"m3u","name":"Home","url":"`+srv.URL+`/pl.m3u"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	channels, err := st.Channels(context.Background(), false)
+	if err != nil || len(channels) != 1 {
+		t.Fatalf("%+v %v", channels, err)
+	}
+	id := channels[0].ID
+	fav := true
+	if _, err := st.PatchChannel(context.Background(), id, store.ChannelPatch{Favorite: &fav}); err != nil {
+		t.Fatal(err)
+	}
+	body = "#EXTM3U\n#EXTINF:-1 tvg-id=\"news\",News Tonight\nhttp://example/news2.ts\n"
+	sources, err := st.Sources(context.Background())
+	if err != nil || len(sources) != 1 {
+		t.Fatal(err, len(sources))
+	}
+	if err := st.NoteRefresh(context.Background(), sources[0].ID, time.Now().Add(-time.Minute), ""); err != nil {
+		t.Fatal(err)
+	}
+	n, err := api.RefreshSources(context.Background(), time.Now())
+	if err != nil || n != 1 {
+		t.Fatalf("refreshed %d: %v", n, err)
+	}
+	channels, err = st.Channels(context.Background(), false)
+	if err != nil || len(channels) != 1 || channels[0].ID != id || channels[0].GuideName != "News Tonight" || !channels[0].Favorite {
+		t.Fatalf("%+v %v", channels, err)
 	}
 }
 

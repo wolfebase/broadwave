@@ -109,6 +109,22 @@ func main() {
 		}
 	}()
 	go func() {
+		tick := time.NewTicker(time.Hour)
+		defer tick.Stop()
+		for range tick.C {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			n, err := api.RefreshSources(ctx, time.Now())
+			cancel()
+			if err != nil {
+				log.Printf("playlist refresh: %v", err)
+				continue
+			}
+			if n > 0 {
+				log.Printf("playlist refresh: %d", n)
+			}
+		}
+	}()
+	go func() {
 		tick := time.NewTicker(5 * time.Minute)
 		defer tick.Stop()
 		for range tick.C {

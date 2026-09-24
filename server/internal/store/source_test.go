@@ -107,6 +107,78 @@ func TestOtherDeviceIsTheFailover(t *testing.T) {
 	}
 }
 
+func TestGuideKeyKeepsTheChannelWhenTheAddressChanges(t *testing.T) {
+	st := openTestStore(t)
+	dev := hdhr.Device{DeviceID: "src-9", FriendlyName: "Playlist", BaseURL: "source"}
+	first := []hdhr.Channel{{GuideNumber: "801", GuideName: "News", StreamURL: "http://old/news.ts", GuideKey: "wdaf"}}
+	if err := st.UpsertDevice(context.Background(), dev, first); err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.Channels(context.Background(), false)
+	if err != nil || len(channels) != 1 {
+		t.Fatalf("%+v %v", channels, err)
+	}
+	id := channels[0].ID
+	moved := []hdhr.Channel{{GuideNumber: "4.1", GuideName: "ABC", StreamURL: "http://new/abc.ts", GuideKey: "wdaf"}}
+	if err := st.UpsertDevice(context.Background(), dev, moved); err != nil {
+		t.Fatal(err)
+	}
+	channels, err = st.Channels(context.Background(), false)
+	if err != nil || len(channels) != 1 || channels[0].ID != id || channels[0].GuideNumber != "4.1" {
+		t.Fatalf("%+v %v", channels, err)
+	}
+}
+
+func TestChannelKeepsTheStreamHeaders(t *testing.T) {
+	st := openTestStore(t)
+	dev := hdhr.Device{DeviceID: "src-9", FriendlyName: "Playlist", BaseURL: "source"}
+	row := hdhr.Channel{GuideNumber: "801", GuideName: "News", StreamURL: "http://example/news.ts", UserAgent: "Waveguide", Referrer: "http://example/"}
+	if err := st.UpsertDevice(context.Background(), dev, []hdhr.Channel{row}); err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.Channels(context.Background(), false)
+	if err != nil || len(channels) != 1 {
+		t.Fatalf("%+v %v", channels, err)
+	}
+	got, err := st.SourceChannel(context.Background(), channels[0].ID)
+	if err != nil || got.UserAgent != "Waveguide" || got.Referrer != "http://example/" {
+		t.Fatalf("%+v %v", got, err)
+	}
+}
+
+func TestAlternateChannelFollowsPriority(t *testing.T) {
+	st := openTestStore(t)
+	low := hdhr.Device{DeviceID: "src-low", FriendlyName: "Second", BaseURL: "http://second"}
+	high := hdhr.Device{DeviceID: "src-high", FriendlyName: "First", BaseURL: "http://first"}
+	if err := st.UpsertDevice(context.Background(), high, []hdhr.Channel{{GuideNumber: "4.1", GuideName: "ABC", StreamURL: "http://first/4.1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertDevice(context.Background(), low, []hdhr.Channel{{GuideNumber: "4.1", GuideName: "ABC", StreamURL: "http://second/4.1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`UPDATE devices SET priority=1 WHERE device_id='src-low'`); err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.Channels(context.Background(), false)
+	if err != nil || len(channels) != 2 {
+		t.Fatalf("%+v %v", channels, err)
+	}
+	var first int64
+	for _, ch := range channels {
+		if ch.DeviceID == "src-high" {
+			first = ch.ID
+		}
+	}
+	alts, err := st.AlternateChannels(context.Background(), "4.1", first)
+	if err != nil || len(alts) != 1 {
+		t.Fatalf("%v %v", alts, err)
+	}
+	got, err := st.SourceChannel(context.Background(), alts[0])
+	if err != nil || got.DeviceID != "src-low" {
+		t.Fatalf("%+v %v", got, err)
+	}
+}
+
 func TestSourcePasswordIsMasked(t *testing.T) {
 	st := openTestStore(t)
 	item, err := st.AddSource(context.Background(), "m3u", "IPTV", "http://user:s3cret@example/pl.m3u?password=s3cret", "")

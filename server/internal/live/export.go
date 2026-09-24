@@ -23,7 +23,7 @@ func (h *Hub) Export(ctx context.Context, channelID int64, w io.Writer) error {
 		_, tuned := h.channels[channelID]
 		h.mu.Unlock()
 		if !tuned {
-			if res, err = openStream(ch.StreamURL); err != nil {
+			if res, err = openStream(ch.StreamURL, ch.UserAgent, ch.Referrer); err != nil {
 				return err
 			}
 		}
