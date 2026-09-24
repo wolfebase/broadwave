@@ -46,7 +46,7 @@ func (h *Hub) Measure(ctx context.Context, channelID int64) (hdhr.Lock, error) {
 		if ctx.Err() != nil {
 			return last, ctx.Err()
 		}
-		status, err := (hdhr.Control{Addr: host}).Get("/tuner" + strconv.Itoa(tuner) + "/status")
+		status, err := (hdhr.Control{Addr: controlAddr(host)}).Get("/tuner" + strconv.Itoa(tuner) + "/status")
 		if err == nil {
 			last = hdhr.ParseStatus(status)
 			if last.Locked && (last.Symbol > 0 || time.Now().After(deadline)) {
@@ -80,7 +80,7 @@ func (h *Hub) TunedLocks() map[int]hdhr.Lock {
 	h.mu.Unlock()
 	out := map[int]hdhr.Lock{}
 	for _, m := range open {
-		status, err := (hdhr.Control{Addr: m.host}).Get("/tuner" + strconv.Itoa(m.tuner) + "/status")
+		status, err := (hdhr.Control{Addr: controlAddr(m.host)}).Get("/tuner" + strconv.Itoa(m.tuner) + "/status")
 		if err != nil {
 			continue
 		}

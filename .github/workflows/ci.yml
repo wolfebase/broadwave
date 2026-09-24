@@ -17,6 +17,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: go vet ./server/...
       - run: go test ./server/...
+      - run: FAKE=1 scripts/relay-smoke.sh
 
   web:
     runs-on: ubuntu-latest

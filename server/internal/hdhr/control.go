@@ -24,6 +24,13 @@ type Control struct {
 	Addr string
 }
 
+func controlDial(addr string) string {
+	if _, _, err := net.SplitHostPort(addr); err == nil {
+		return addr
+	}
+	return net.JoinHostPort(addr, "65001")
+}
+
 func (c Control) Get(name string) (string, error) {
 	return c.exchange(name, "", 0, false)
 }
@@ -33,7 +40,7 @@ func (c Control) Set(name, value string) (string, error) {
 }
 
 func (c Control) exchange(name, value string, lockKey uint32, set bool) (string, error) {
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort(c.Addr, "65001"), 3*time.Second)
+	conn, err := net.DialTimeout("tcp", controlDial(c.Addr), 3*time.Second)
 	if err != nil {
 		return "", err
 	}
