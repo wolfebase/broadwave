@@ -41,17 +41,32 @@ struct RootView: View {
     @Environment(AppStore.self) private var store
     @State private var nowPlaying = NowPlaying()
     @State private var tab: AppTab = .home
+    @State private var showSetup = false
 
     var body: some View {
         Group {
-            if store.connected {
-                tabs
-            } else {
+            if !store.connected {
                 ConnectView()
+            } else if showSetup {
+                SetupWizard { showSetup = false }
+            } else {
+                tabs
             }
         }
         .environment(nowPlaying)
         .background(Tokens.ColorToken.canvas.ignoresSafeArea())
+        .task(id: store.connected) {
+            guard store.connected else { return }
+            #if DEBUG
+                if UserDefaults.standard.string(forKey: "OTASetup") != nil {
+                    showSetup = true
+                    return
+                }
+            #endif
+            if let values = try? await store.api?.settings(), values["needsSetup"] == "1" {
+                showSetup = true
+            }
+        }
         .onOpenURL(perform: open)
         #if DEBUG
             .task {

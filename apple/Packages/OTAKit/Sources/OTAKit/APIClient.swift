@@ -102,6 +102,19 @@ public struct APIClient: Sendable {
         return try await send("PATCH", "/channels/\(channel.id)", body: B(favorite: on))
     }
 
+    public func setHidden(_ channel: Channel, _ on: Bool) async throws -> Channel {
+        struct B: Encodable { var hidden: Bool }
+        return try await send("PATCH", "/channels/\(channel.id)", body: B(hidden: on))
+    }
+
+    public func settings() async throws -> [String: String] {
+        try await send("GET", "/settings")
+    }
+
+    public func saveSettings(_ values: [String: String]) async throws {
+        _ = try await send("PUT", "/settings", body: values, as: [String: String].self)
+    }
+
     // MARK: Live
 
     public func watch(channelID: Int64, caps: Caps, prefs: Prefs) async throws -> WatchSession {

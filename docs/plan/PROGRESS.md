@@ -3,9 +3,9 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **S8**. Setup wizard.
-- Half done: S7 is in this commit. `make check` passed. A local FastChannels container was detected, and one feed added 5 channels with art and 106 guide listings.
-- Next command: walk a fresh install through the setup steps.
+- Current task: **S9**. Setup doctor.
+- Half done: S8 is in this commit. A fresh catalog found the HDHomeRun with no typing, and a channel was playing 15 seconds after the wizard opened.
+- Next command: add the setup checks for networking, disk, clock, and file ownership.
 - Unraid is on `v0.3.3`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
 - A7 retry at phase S: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
@@ -27,8 +27,8 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] S4 M3U done right: tvg-* / group / url-tvg / tvc-guide-stationid, file + URL + path, stream format and limit, numbering, groups, per-source XMLTV, refresh with stable ids, picker for big lists (commit b14a82e)
 - [x] S5 Xtream Codes source (commit b9e48ae)
 - [x] S6 tvheadend, Threadfin/xTeVe/ErsatzTV/Dispatcharr/Antennas, Channels DVR server, HDHomeRun-compatible by address; unsupported devices documented (commit e464ec9)
-- [x] S7 Free channels: detect FastChannels / Pluto / Samsung generator containers, or guide the user to run FastChannels
-- [ ] S8 Setup wizard v2 on web, Apple TV, and iPhone (< 90 s, no typing for HDHomeRun)
+- [x] S7 Free channels: detect FastChannels / Pluto / Samsung generator containers, or guide the user to run FastChannels (commit 1eababe)
+- [x] S8 Setup wizard v2 on web, Apple TV, and iPhone (< 90 s, no typing for HDHomeRun)
 - [ ] S9 Setup doctor: bridge network, /dev/dri, volumes, disk, TZ, clock, PUID/PGID/UMASK
 - [ ] S10 Source health and limits
 
