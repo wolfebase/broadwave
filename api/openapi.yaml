@@ -269,7 +269,7 @@ paths:
               type: object
               required: [kind]
               properties:
-                kind: { type: string, enum: [m3u, xtream, link, folder] }
+                kind: { type: string, enum: [m3u, xtream, tvheadend, channels, threadfin, xteve, ersatztv, dispatcharr, link, folder] }
                 name: { type: string }
                 url: { type: string, description: "Playlist URL, Xtream server, stream URL, or folder path" }
                 username: { type: string }
