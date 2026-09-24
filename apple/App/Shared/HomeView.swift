@@ -227,11 +227,11 @@ struct HeroArt: View {
     var body: some View {
         AsyncImage(url: url) { image in
             ZStack(alignment: .trailing) {
-                image.resizable().aspectRatio(contentMode: .fill)
+                image.resizable().scaledToFill()
                     .blur(radius: layout == "bleed" ? 0 : 40)
                     .opacity(layout == "bleed" ? 1 : 0.6)
                 if layout != "bleed" {
-                    image.resizable().aspectRatio(contentMode: .fit)
+                    image.resizable().scaledToFit()
                         .clipShape(.rect(cornerRadius: Tokens.Radius.lg))
                         .padding(28)
                 }
