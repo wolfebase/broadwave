@@ -80,6 +80,7 @@ Scripts: `scripts/dev-server.sh` (safe rebuild + restart on :18477 with a copy o
 - The Mac reaches Unraid through `utun4`, so Bonjour from TUS is invisible here. Check it on TUS with `avahi-browse`, and connect simulators by address.
 - Deploy to Unraid with `MODE=ghcr`; large uploads over the SSH tunnel drop mid-transfer.
 - CI builds the Docker image and `make check` does not. The image's web stage copies only `web/` and `api/fixtures`, so a web import from anywhere else breaks the release. Run `docker build -f deploy/docker/Dockerfile --target web .` when you add one.
+- App Store screenshots must be JPEG or PNG without alpha. Simulator PNGs carry an alpha channel; three of them sat "upload in progress" for 40 minutes and blocked the review submission until they were re-uploaded as JPEG (`sips -s format jpeg`). The API's `associatedErrors` on a failed `reviewSubmissionItems` POST names the stuck asset; `asc` hides it.
 - Test on `Broadwave-Staging` (TUS :8490, `-staging`, iGPU) before production. ffmpeg 5.1 in the image, fed a file faster than real time with `-copyts` and VAAPI deinterlace, runs away without ever exiting; feed lab samples at real time.
 
 ## Definition of done
