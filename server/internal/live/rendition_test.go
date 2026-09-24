@@ -19,18 +19,18 @@ func TestDecide(t *testing.T) {
 		p    Prefs
 		want string
 	}{
-		{"apple tv gets the original h264 with dolby", Source{"H264", "AC3", true}, apple, Prefs{}, "copy.copy"},
-		{"mpeg-2 is converted but keeps dolby on apple tv", Source{"MPEG2", "AC3", false}, apple, Prefs{}, "1080.copy.broadcast"},
-		{"browser keeps h264 picture, converts sound", Source{"H264", "AC3", true}, web, Prefs{}, "copy.aac2"},
-		{"unprobed h264 is deinterlaced, not copied", Source{"H264", "AC3", false}, web, Prefs{}, "1080.aac2.broadcast"},
-		{"cellular drops to 720", Source{"MPEG2", "AC3", false}, Caps{Platform: "ios", Video: []string{"h264"}, Audio: []string{"ac3", "aac"}, Network: "cellular"}, Prefs{}, "720.copy.broadcast"},
-		{"saver is small and stereo", Source{"MPEG2", "AC3", false}, apple, Prefs{Quality: "saver"}, "540.aac2.broadcast"},
-		{"a tile is 540 and silent", Source{"MPEG2", "AC3", false}, apple, Prefs{Quality: "tile"}, "540.none.broadcast"},
-		{"the smaller tile is 360", Source{"MPEG2", "AC3", false}, apple, Prefs{Quality: "360", Audio: "none"}, "360.none.broadcast"},
-		{"a tile can keep sound when asked", Source{"MPEG2", "AC3", false}, apple, Prefs{Quality: "tile", Audio: "stereo"}, "540.aac2.broadcast"},
-		{"surround without dolby decode is 5.1 aac", Source{"MPEG2", "AC3", false}, web, Prefs{Audio: "surround"}, "1080.aac6.broadcast"},
-		{"film mode is part of the key", Source{"MPEG2", "AC3", false}, web, Prefs{Picture: "film"}, "1080.aac2.film"},
-		{"small screens cap the height", Source{"MPEG2", "AC3", false}, Caps{Video: []string{"h264"}, Audio: []string{"aac"}, MaxHeight: 720}, Prefs{}, "720.aac2.broadcast"},
+		{"apple tv gets the original h264 with dolby", Source{"H264", "AC3", true, "", ""}, apple, Prefs{}, "copy.copy"},
+		{"mpeg-2 is converted but keeps dolby on apple tv", Source{"MPEG2", "AC3", false, "", ""}, apple, Prefs{}, "1080.copy.broadcast"},
+		{"browser keeps h264 picture, converts sound", Source{"H264", "AC3", true, "", ""}, web, Prefs{}, "copy.aac2"},
+		{"unprobed h264 is deinterlaced, not copied", Source{"H264", "AC3", false, "", ""}, web, Prefs{}, "1080.aac2.broadcast"},
+		{"cellular drops to 720", Source{"MPEG2", "AC3", false, "", ""}, Caps{Platform: "ios", Video: []string{"h264"}, Audio: []string{"ac3", "aac"}, Network: "cellular"}, Prefs{}, "720.copy.broadcast"},
+		{"saver is small and stereo", Source{"MPEG2", "AC3", false, "", ""}, apple, Prefs{Quality: "saver"}, "540.aac2.broadcast"},
+		{"a tile is 540 and silent", Source{"MPEG2", "AC3", false, "", ""}, apple, Prefs{Quality: "tile"}, "540.none.broadcast"},
+		{"the smaller tile is 360", Source{"MPEG2", "AC3", false, "", ""}, apple, Prefs{Quality: "360", Audio: "none"}, "360.none.broadcast"},
+		{"a tile can keep sound when asked", Source{"MPEG2", "AC3", false, "", ""}, apple, Prefs{Quality: "tile", Audio: "stereo"}, "540.aac2.broadcast"},
+		{"surround without dolby decode is 5.1 aac", Source{"MPEG2", "AC3", false, "", ""}, web, Prefs{Audio: "surround"}, "1080.aac6.broadcast"},
+		{"film mode is part of the key", Source{"MPEG2", "AC3", false, "", ""}, web, Prefs{Picture: "film"}, "1080.aac2.film"},
+		{"small screens cap the height", Source{"MPEG2", "AC3", false, "", ""}, Caps{Video: []string{"h264"}, Audio: []string{"aac"}, MaxHeight: 720}, Prefs{}, "720.aac2.broadcast"},
 	}
 	for _, c := range cases {
 		got := Decide(c.src, c.caps, c.p)
@@ -54,6 +54,13 @@ func TestRenditionKeyRoundTrip(t *testing.T) {
 		if _, ok := ParseRenditionKey(bad); ok {
 			t.Errorf("%q should not parse", bad)
 		}
+	}
+}
+
+func TestHLSInputReconnects(t *testing.T) {
+	line := strings.Join(renditionArgs(0, Source{VideoCodec: "H264", AudioCodec: "AAC", Progressive: true, UserAgent: "Waveguide", Referrer: "http://example/"}, Rendition{Video: "copy", Audio: "copy"}, "libx264", "", false, "http://example/live.m3u8"), " ")
+	if !strings.Contains(line, "-reconnect 1") || !strings.Contains(line, "-i http://example/live.m3u8") || !strings.Contains(line, "aac_adtstoasc") || !strings.Contains(line, "User-Agent: Waveguide") {
+		t.Fatal(line)
 	}
 }
 
@@ -181,5 +188,15 @@ func TestFirstSegmentIsWithheld(t *testing.T) {
 	later := "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:40\n#EXTINF:2.0,\nseg00040.ts\n"
 	if got := string(p.stamp(t.TempDir(), []byte(later), nil)); !strings.Contains(got, "#EXT-X-MEDIA-SEQUENCE:40\n") {
 		t.Fatalf("once segment 0 has rolled off, the sequence is untouched:\n%s", got)
+	}
+}
+
+func TestCopyArgsReadsURL(t *testing.T) {
+	line := strings.Join(copyArgs(0, "http://example/live.m3u8", "Waveguide", "http://example/", "out.ts"), " ")
+	if strings.Contains(line, "pipe:0") || !strings.Contains(line, "-reconnect 1") || !strings.Contains(line, "-i http://example/live.m3u8") || !strings.Contains(line, "User-Agent: Waveguide") {
+		t.Fatalf("hls recording args: %s", line)
+	}
+	if pipe := strings.Join(copyArgs(0, "", "", "", "out.ts"), " "); !strings.Contains(pipe, "-i pipe:0") || strings.Contains(pipe, "-headers") {
+		t.Fatalf("tuner recording args: %s", pipe)
 	}
 }

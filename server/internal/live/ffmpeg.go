@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -71,12 +72,19 @@ func ProbeBlend(ffmpeg string) bool {
 	return time.Since(start) <= 2500*time.Millisecond
 }
 
-func copyArgs(program int, path string) []string {
+func copyArgs(program int, input, userAgent, referrer, path string) []string {
+	if input == "" {
+		input = "pipe:0"
+	}
 	args := []string{
 		"-hide_banner", "-loglevel", "warning",
 		"-fflags", "+genpts+discardcorrupt",
-		"-i", "pipe:0",
 	}
+	if strings.Contains(input, "://") {
+		args = append(args, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5")
+	}
+	args = append(args, headerArgs(userAgent, referrer)...)
+	args = append(args, "-i", input)
 	if program > 0 {
 		args = append(args, "-map", fmt.Sprintf("0:p:%d:v:0", program), "-map", fmt.Sprintf("0:p:%d:a:0", program))
 	} else {
@@ -84,4 +92,22 @@ func copyArgs(program int, path string) []string {
 	}
 	args = append(args, "-c", "copy", "-f", "mpegts", path)
 	return args
+}
+
+func headerArgs(userAgent, referrer string) []string {
+	var b strings.Builder
+	if userAgent != "" {
+		b.WriteString("User-Agent: ")
+		b.WriteString(userAgent)
+		b.WriteString("\r\n")
+	}
+	if referrer != "" {
+		b.WriteString("Referer: ")
+		b.WriteString(referrer)
+		b.WriteString("\r\n")
+	}
+	if b.Len() == 0 {
+		return nil
+	}
+	return []string{"-headers", b.String()}
 }

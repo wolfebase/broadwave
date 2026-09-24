@@ -47,6 +47,10 @@ type Channel struct {
 	Favorite    bool   `json:"favorite"`
 	Protected   bool   `json:"protected,omitempty"`
 	StreamURL   string `json:"-"`
+	GuideKey    string `json:"-"`
+	ArtURL      string `json:"-"`
+	UserAgent   string `json:"-"`
+	Referrer    string `json:"-"`
 }
 
 type lineupJSON struct {

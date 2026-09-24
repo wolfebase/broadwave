@@ -165,10 +165,41 @@ export function setWatched(id: number, watched: boolean) {
   });
 }
 
-export function addSource(kind: string, name: string, url: string, xmltvUrl = "") {
-  return request<{ id?: number; added?: number }>(`/api/v1/sources`, {
+export function addSource(kind: string, name: string, url: string, xmltvUrl = "", groups = "", keep = "") {
+  return request<SourceAdded>(`/api/v1/sources`, {
     method: "POST",
-    body: JSON.stringify({ kind, name, url, xmltvUrl }),
+    body: JSON.stringify({ kind, name, url, xmltvUrl, groups, keep }),
+  });
+}
+
+export type SourceAdded = {
+  id?: number;
+  added?: number;
+  pick?: boolean;
+  message?: string;
+  groups?: string[];
+  channels?: { name: string; id: string; number: string }[];
+};
+
+export function addPlaylistFile(name: string, groups: string, file: File, keep = "") {
+  const body = new FormData();
+  body.set("name", name);
+  body.set("groups", groups);
+  body.set("keep", keep);
+  body.set("file", file);
+  return fetch("/api/v1/sources", { method: "POST", body }).then(async (res) => {
+    const text = await res.text();
+    if (!res.ok) {
+      let message = text;
+      try {
+        const parsed = JSON.parse(text) as { message?: string };
+        if (parsed.message) message = parsed.message;
+      } catch {
+        message = text;
+      }
+      throw new Error(message || res.statusText);
+    }
+    return JSON.parse(text) as SourceAdded;
   });
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Channel, Device, TunerStatus } from "../../types";
-import { addSource, getTuners, lookHarder, startScan } from "../../api";
+import { addPlaylistFile, addSource, getTuners, lookHarder, startScan, type SourceAdded } from "../../api";
 import { copy } from "../../strings";
 export function Sources({
   devices,
@@ -235,15 +235,42 @@ function SourceAdd() {
   const [kind, setKind] = useState("m3u");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [groups, setGroups] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState("");
+  const [pick, setPick] = useState<SourceAdded | null>(null);
+  const [chosen, setChosen] = useState<string[]>([]);
+  const options = pick?.groups?.length ? pick.groups : (pick?.channels ?? []).map((ch) => ch.name);
   return (
     <form
       className="lookup"
       onSubmit={(event) => {
         event.preventDefault();
-        void addSource(kind, name, url)
-          .then((res) => setNote(kind === "folder" ? `Added ${res.added ?? 0} files to the library.` : "Source added. It shows up with the lineup."))
-          .catch((err: unknown) => setNote(err instanceof Error ? err.message : "The source did not add."));
+        const fail = (err: unknown) => setNote(err instanceof Error ? err.message : "The source did not add.");
+        const finish = (res: SourceAdded) => {
+          if (res.pick) {
+            setPick(res);
+            setNote(res.message || copy.sources.pick);
+            return;
+          }
+          setPick(null);
+          setNote(kind === "folder" ? `Added ${res.added ?? 0} files to the library.` : "Source added. It shows up with the lineup.");
+        };
+        let useGroups = groups;
+        let useKeep = "";
+        if (pick) {
+          if (chosen.length === 0) {
+            setNote(copy.sources.pick);
+            return;
+          }
+          if (pick.groups?.length) useGroups = chosen.join(", ");
+          else useKeep = chosen.join(", ");
+        }
+        if (kind === "m3u" && file) {
+          void addPlaylistFile(name, useGroups, file, useKeep).then(finish).catch(fail);
+          return;
+        }
+        void addSource(kind, name, url, "", useGroups, useKeep).then(finish).catch(fail);
       }}
     >
       <label>
@@ -262,7 +289,41 @@ function SourceAdd() {
         Address
         <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={kind === "folder" ? "D:\\TV" : "https://example/playlist.m3u"} spellCheck={false} />
       </label>
-      <button type="submit" className="btn" disabled={url.trim() === ""}>Add</button>
+      {kind === "m3u" ? (
+        <label>
+          {copy.sources.file}
+          <input
+            type="file"
+            accept=".m3u,.m3u8,.gz,application/gzip,application/vnd.apple.mpegurl"
+            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          />
+        </label>
+      ) : null}
+      {kind === "m3u" ? (
+        <label>
+          {copy.sources.groups}
+          <input value={groups} onChange={(event) => setGroups(event.target.value)} placeholder="News, Sports, -Shopping" spellCheck={false} />
+        </label>
+      ) : null}
+      <button type="submit" className="btn" disabled={url.trim() === "" && file == null}>Add</button>
+      {kind === "m3u" ? <p className="hint">{copy.sources.groupsHint}</p> : null}
+      {options.length > 0 ? (
+        <fieldset>
+          <legend>{copy.sources.pick}</legend>
+          {options.map((option) => (
+            <label className="check" key={option}>
+              <input
+                type="checkbox"
+                checked={chosen.includes(option)}
+                onChange={(event) =>
+                  setChosen((prev) => (event.target.checked ? [...prev, option] : prev.filter((item) => item !== option)))
+                }
+              />
+              {option}
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
       {note ? <p className="hint">{note}</p> : null}
     </form>
   );

@@ -273,6 +273,19 @@ paths:
                 name: { type: string }
                 url: { type: string, description: "Playlist URL, stream URL, or folder path" }
                 xmltvUrl: { type: string }
+                groups: { type: string, description: "Comma-separated group names. Prefix one with - to leave it out." }
+                keep: { type: string, description: "Comma-separated channel names or tvg-ids to keep from a large playlist." }
+                start: { type: integer, description: "First channel number. 0 keeps the numbers in the playlist." }
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                name: { type: string }
+                groups: { type: string }
+                keep: { type: string }
+                xmltvUrl: { type: string }
+                file: { type: string, format: binary, description: "An M3U playlist. Gzip is unpacked." }
       responses:
         "200":
           description: Source added

@@ -40,6 +40,23 @@ func addTestRendition(h *Hub, f *feed, key string, viewers int, seen time.Time) 
 	return r
 }
 
+func TestPlaylistStreamCountIsPerSource(t *testing.T) {
+	h, _ := testHub(t)
+	h.channels[1] = &feed{channel: store.SourceChannel{Channel: store.Channel{DeviceID: "src-1"}}}
+	h.channels[2] = &feed{channel: store.SourceChannel{Channel: store.Channel{DeviceID: "src-1"}}}
+	h.channels[3] = &feed{channel: store.SourceChannel{Channel: store.Channel{DeviceID: "src-2"}}}
+	if h.streamsForDeviceLocked("src-1") != 2 || h.streamsForDeviceLocked("src-2") != 1 {
+		t.Fatalf("src-1 %d src-2 %d", h.streamsForDeviceLocked("src-1"), h.streamsForDeviceLocked("src-2"))
+	}
+	full := store.SourceChannel{Channel: store.Channel{DeviceID: "src-1"}, StreamURL: "http://example/a.ts", StreamLimit: 1}
+	if !streamBusy(full, 1) {
+		t.Fatal("a playlist at its limit is busy")
+	}
+	if streamBusy(full, 0) {
+		t.Fatal("a playlist with room is not busy")
+	}
+}
+
 func TestReleaseAbandonedFreesQuietViewersButKeepsRecordings(t *testing.T) {
 	h, m := testHub(t)
 	quiet := addTestFeed(h, m, 1, "4.1")

@@ -1,6 +1,6 @@
 FROM debian:bookworm-slim
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg ca-certificates intel-media-va-driver \
+  && apt-get install -y --no-install-recommends ffmpeg xz-utils ca-certificates intel-media-va-driver \
   && rm -rf /var/lib/apt/lists/*
 COPY waveguide /usr/local/bin/waveguide
 RUN chmod 755 /usr/local/bin/waveguide

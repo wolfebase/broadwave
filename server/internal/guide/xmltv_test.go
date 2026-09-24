@@ -1,8 +1,11 @@
 package guide
 
 import (
+	"bytes"
+	"compress/gzip"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -54,5 +57,42 @@ func TestPullURLReadsXMLTV(t *testing.T) {
 	}
 	if _, err := PullURL(t.Context(), "ftp://example.com/guide.xml"); err == nil {
 		t.Fatal("expected a non-http address to be refused")
+	}
+}
+
+func TestPullURLReadsGzip(t *testing.T) {
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	_, _ = zw.Write([]byte(`<tv><channel id="4.1"><display-name>4.1</display-name></channel></tv>`))
+	_ = zw.Close()
+	payload := buf.Bytes()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(payload)
+	}))
+	defer srv.Close()
+	body, err := PullURL(t.Context(), srv.URL+"/guide.xml.gz")
+	if err != nil || !strings.Contains(string(body), "4.1") {
+		t.Fatal(err, string(body))
+	}
+}
+
+func TestPullURLReadsXZ(t *testing.T) {
+	if _, err := exec.LookPath("xz"); err != nil {
+		t.Skip("xz is not installed")
+	}
+	cmd := exec.Command("xz", "-c")
+	cmd.Stdin = strings.NewReader(`<tv><channel id="9.1"><display-name>9.1</display-name></channel></tv>`)
+	payload, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(payload)
+	}))
+	defer srv.Close()
+	body, err := PullURL(t.Context(), srv.URL+"/guide.xml.xz")
+	if err != nil || !strings.Contains(string(body), "9.1") {
+		t.Fatal(err, string(body))
 	}
 }

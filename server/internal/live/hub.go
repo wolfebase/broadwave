@@ -111,6 +111,7 @@ type mux struct {
 	host     string
 	device   string
 	body     io.ReadCloser
+	input    string
 	cancel   context.CancelFunc
 	feeds    map[string]*feed
 	pipes    []*pipeSub
@@ -203,7 +204,7 @@ func (h *Hub) SourceOf(ctx context.Context, channelID int64) (Source, error) {
 }
 
 func sourceOf(ch store.SourceChannel) Source {
-	return Source{VideoCodec: ch.VideoCodec, AudioCodec: ch.AudioCodec, Progressive: ch.FieldOrder == "progressive"}
+	return Source{VideoCodec: ch.VideoCodec, AudioCodec: ch.AudioCodec, Progressive: ch.FieldOrder == "progressive", UserAgent: ch.UserAgent, Referrer: ch.Referrer}
 }
 
 // Watch starts or joins one rendition of a channel.
@@ -213,16 +214,44 @@ func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition) (Sessi
 	if err != nil {
 		return Session{}, err
 	}
-	var res *http.Response
-	if ch.TunerCount == 0 && ch.StreamURL != "" {
-		h.mu.Lock()
-		_, tuned := h.channels[channelID]
-		h.mu.Unlock()
-		if !tuned {
-			if res, err = openStream(ch.StreamURL); err != nil {
-				return Session{}, err
+	candidates := []store.SourceChannel{ch}
+	if ids, err := h.Store.AlternateChannels(ctx, ch.GuideNumber, ch.ID); err == nil {
+		for _, id := range ids {
+			if alt, err := h.Store.SourceChannel(ctx, id); err == nil {
+				candidates = append(candidates, alt)
 			}
 		}
+	}
+	var res *http.Response
+	var last error
+	chosen := -1
+	for i, cand := range candidates {
+		h.mu.Lock()
+		_, tuned := h.channels[cand.ID]
+		inUse := h.streamsForDeviceLocked(cand.DeviceID)
+		h.mu.Unlock()
+		if streamBusy(cand, inUse) && !tuned {
+			last = fmt.Errorf("All %d streams from this playlist are in use. Stop one or raise the limit.", cand.StreamLimit)
+			continue
+		}
+		if cand.TunerCount == 0 && cand.StreamURL != "" && !hlsStream(cand) && !tuned {
+			opened, err := openStream(cand.StreamURL, cand.UserAgent, cand.Referrer)
+			if err != nil {
+				last = err
+				continue
+			}
+			res = opened
+		}
+		ch = cand
+		chosen = i
+		last = nil
+		break
+	}
+	if chosen < 0 {
+		if last == nil {
+			last = fmt.Errorf("no source has this channel")
+		}
+		return Session{}, last
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -253,6 +282,9 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	}
 	if stream != nil {
 		return h.addFeedLocked(h.streamMuxLocked(ch, stream.Body, "stream"), ch), nil
+	}
+	if hlsStream(ch) {
+		return h.addFeedLocked(h.hlsMuxLocked(ch), ch), nil
 	}
 	host := hostOf(ch.BaseURL)
 	if ch.FrequencyHz > 0 {
@@ -308,7 +340,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 				streamURL += "?" + q
 			}
 		}
-		res, err := openStream(streamURL)
+		res, err := openStream(streamURL, "", "")
 		if err != nil {
 			return nil, err
 		}
@@ -345,6 +377,29 @@ func (h *Hub) streamMuxLocked(ch store.SourceChannel, body io.ReadCloser, host s
 	return m
 }
 
+func (h *Hub) hlsMuxLocked(ch store.SourceChannel) *mux {
+	h.next--
+	m := &mux{freq: h.next, tuner: -1, host: "hls", device: ch.DeviceID, input: ch.StreamURL, feeds: map[string]*feed{}, cancel: func() {}}
+	h.muxes[m.freq] = m
+	return m
+}
+
+func hlsURL(raw string) bool {
+	u := strings.ToLower(raw)
+	return strings.Contains(u, ".m3u8")
+}
+
+func hlsStream(ch store.SourceChannel) bool {
+	switch strings.ToLower(ch.StreamFormat) {
+	case "hls":
+		return true
+	case "mpegts", "ts":
+		return false
+	default:
+		return hlsURL(ch.StreamURL)
+	}
+}
+
 func (h *Hub) addFeedLocked(m *mux, ch store.SourceChannel) *feed {
 	if m.tuner < 0 {
 		ch.FrequencyHz = m.freq
@@ -365,7 +420,7 @@ func (h *Hub) addFeedLocked(m *mux, ch store.SourceChannel) *feed {
 	}
 	m.feeds[ch.GuideNumber] = f
 	h.channels[ch.ID] = f
-	if ch.FieldOrder == "" {
+	if ch.FieldOrder == "" && m.input == "" {
 		h.probeFieldOrderLocked(m, f)
 	}
 	return f
@@ -383,12 +438,20 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	args := RenditionArgs(f.program, f.source, want, h.Encoder, h.deintFor(want.Mode, f.source.VideoCodec), h.Blend)
+	input := "pipe:0"
+	if m := muxOf(h, f); m != nil && m.input != "" {
+		input = m.input
+	}
+	args := renditionArgs(f.program, f.source, want, h.Encoder, h.deintFor(want.Mode, f.source.VideoCodec), h.Blend, input)
 	cmd := exec.Command(h.FFmpeg, args...)
 	cmd.Dir = dir
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, err
+	var stdin io.WriteCloser
+	if input == "pipe:0" {
+		var err error
+		stdin, err = cmd.StdinPipe()
+		if err != nil {
+			return nil, err
+		}
 	}
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -397,7 +460,9 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	pid := cmd.Process.Pid
 	NotePID(h.Dir, pid)
 	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: time.Now()}
-	r.sub = h.attachPipeLocked(muxOf(h, f), stdin)
+	if stdin != nil {
+		r.sub = h.attachPipeLocked(muxOf(h, f), stdin)
+	}
 	f.renditions[key] = r
 	go func() {
 		_ = cmd.Wait()
@@ -519,12 +584,12 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 		return store.Recording{}, err
 	}
 	var res *http.Response
-	if ch.TunerCount == 0 && ch.StreamURL != "" {
+	if ch.TunerCount == 0 && ch.StreamURL != "" && !hlsStream(ch) {
 		h.mu.Lock()
 		_, tuned := h.channels[channelID]
 		h.mu.Unlock()
 		if !tuned {
-			if res, err = openStream(ch.StreamURL); err != nil {
+			if res, err = openStream(ch.StreamURL, ch.UserAgent, ch.Referrer); err != nil {
 				return store.Recording{}, err
 			}
 		}
@@ -565,11 +630,18 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 		_ = h.Store.RememberSeen(ctx, key, false)
 	}
 	_ = h.Store.AddEvent(ctx, "recording", fmt.Sprintf("Started %s on %s", title, f.channel.GuideNumber))
-	cmd := exec.Command(h.FFmpeg, copyArgs(f.program, path)...)
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		h.abortRecordingLocked(ctx, f, id)
-		return store.Recording{}, err
+	input := "pipe:0"
+	if mux := muxOf(h, f); mux != nil && mux.input != "" {
+		input = mux.input
+	}
+	cmd := exec.Command(h.FFmpeg, copyArgs(f.program, input, f.channel.UserAgent, f.channel.Referrer, path)...)
+	var stdin io.WriteCloser
+	if input == "pipe:0" {
+		stdin, err = cmd.StdinPipe()
+		if err != nil {
+			h.abortRecordingLocked(ctx, f, id)
+			return store.Recording{}, err
+		}
 	}
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -578,7 +650,9 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	}
 	NotePID(h.Dir, cmd.Process.Pid)
 	rec := &recording{id: id, cmd: cmd, stdin: stdin}
-	rec.sub = h.attachPipeLocked(muxOf(h, f), stdin)
+	if stdin != nil {
+		rec.sub = h.attachPipeLocked(muxOf(h, f), stdin)
+	}
 	f.recording = rec
 	rec.timer = time.AfterFunc(time.Duration(minutes)*time.Minute, func() { h.StopRecord(id) })
 	h.changed()
@@ -806,7 +880,9 @@ func (h *Hub) stopRenditionLocked(f *feed, key string) {
 	muxOf(h, f).detach(r.sub)
 	if r.cmd != nil && r.cmd.Process != nil {
 		ForgetPID(h.Dir, r.cmd.Process.Pid)
-		_ = r.stdin.Close()
+		if r.stdin != nil {
+			_ = r.stdin.Close()
+		}
 		_ = r.cmd.Process.Kill()
 	}
 	delete(f.renditions, key)
@@ -862,7 +938,9 @@ func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 	}
 	stopTimer(&rec.timer)
 	muxOf(h, f).detach(rec.sub)
-	_ = rec.stdin.Close()
+	if rec.stdin != nil {
+		_ = rec.stdin.Close()
+	}
 	if rec.cmd.Process != nil {
 		ForgetPID(h.Dir, rec.cmd.Process.Pid)
 		done := make(chan struct{})
@@ -967,6 +1045,20 @@ func (h *Hub) usedTunersLocked() map[int]bool {
 	return used
 }
 
+func streamBusy(ch store.SourceChannel, inUse int) bool {
+	return ch.TunerCount == 0 && ch.StreamURL != "" && ch.StreamLimit > 0 && inUse >= ch.StreamLimit
+}
+
+func (h *Hub) streamsForDeviceLocked(deviceID string) int {
+	n := 0
+	for _, f := range h.channels {
+		if f.channel.DeviceID == deviceID {
+			n++
+		}
+	}
+	return n
+}
+
 func (h *Hub) viewersOnTunerLocked(tuner int) int {
 	n := 0
 	for _, m := range h.muxes {
@@ -1027,10 +1119,16 @@ func firstFree(tuners []Tuner, used, reserved map[int]bool) (int, bool) {
 	return 0, false
 }
 
-func openStream(u string) (*http.Response, error) {
+func openStream(u, userAgent, referrer string) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
+	}
+	if userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
+	}
+	if referrer != "" {
+		req.Header.Set("Referer", referrer)
 	}
 	res, err := (&http.Client{Timeout: 0}).Do(req)
 	if err != nil {

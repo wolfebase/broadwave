@@ -22,6 +22,10 @@ export const copy = {
     number: "Number",
     match: "Guide match",
     matchHint: "Leave guide match blank to use the number and call sign.",
+    groups: "Groups",
+    groupsHint: "News, Sports, -Shopping. Leave blank to keep every group.",
+    file: "Playlist file",
+    pick: "Choose what to keep",
   },
   library: {
     title: "Library",

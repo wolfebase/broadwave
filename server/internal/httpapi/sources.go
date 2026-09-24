@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -16,11 +17,18 @@ import (
 )
 
 func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
+	if strings.Contains(r.Header.Get("Content-Type"), "multipart/form-data") {
+		s.addPlaylistFile(w, r)
+		return
+	}
 	var body struct {
-		Kind  string `json:"kind"`
-		Name  string `json:"name"`
-		URL   string `json:"url"`
-		XMLTV string `json:"xmltvUrl"`
+		Kind   string `json:"kind"`
+		Name   string `json:"name"`
+		URL    string `json:"url"`
+		XMLTV  string `json:"xmltvUrl"`
+		Groups string `json:"groups"`
+		Keep   string `json:"keep"`
+		Start  int    `json:"start"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		httpError(w, "invalid json", http.StatusBadRequest)
@@ -31,23 +39,12 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	switch kind {
 	case "m3u":
-		raw, err := source.FetchText(ctx, strings.TrimSpace(body.URL))
+		raw, err := source.ReadPlaylist(ctx, strings.TrimSpace(body.URL))
 		if err != nil {
 			writeError(w, err)
 			return
 		}
-		entries := source.ParseM3U(strings.NewReader(string(raw)))
-		item, err := s.Store.AddSource(ctx, "m3u", strings.TrimSpace(body.Name), body.URL, body.XMLTV)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		if err := source.Install(ctx, s.Store, item.ID, item.Name, "Playlist", entries); err != nil {
-			writeError(w, err)
-			return
-		}
-		s.attachXMLTV(ctx, item.ID, body.XMLTV)
-		writeJSON(w, http.StatusOK, item)
+		s.installPlaylist(w, ctx, body.Name, body.URL, body.Groups, body.Keep, body.XMLTV, body.Start, raw)
 	case "link":
 		name := strings.TrimSpace(body.Name)
 		if name == "" {
@@ -100,6 +97,103 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) addPlaylistFile(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		httpError(w, "Choose a playlist file.", http.StatusBadRequest)
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		httpError(w, "Choose a playlist file.", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+	raw, err := io.ReadAll(io.LimitReader(file, 32<<20))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	raw, err = source.UnpackPlaylist(raw)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	name := strings.TrimSpace(r.FormValue("name"))
+	if name == "" && header != nil {
+		name = header.Filename
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+	s.installPlaylist(w, ctx, name, "file:"+header.Filename, r.FormValue("groups"), r.FormValue("keep"), r.FormValue("xmltvUrl"), 0, raw)
+}
+
+func (s *Server) installPlaylist(w http.ResponseWriter, ctx context.Context, name, loc, groups, keep, xmltv string, start int, raw []byte) {
+	parsed := source.ParseM3U(strings.NewReader(string(raw)))
+	if strings.TrimSpace(groups) == "" && strings.TrimSpace(keep) == "" {
+		if msg := source.BigPlaylistMessage(parsed); msg != "" {
+			writeJSON(w, http.StatusOK, source.PlaylistPick(parsed, msg))
+			return
+		}
+	}
+	entries := source.Renumber(source.FilterKeep(source.FilterGroups(parsed, groups), keep), start)
+	guideURL := source.GuideFromPlaylist(xmltv, entries)
+	item, err := s.Store.AddSource(ctx, "m3u", strings.TrimSpace(name), loc, guideURL)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := source.Install(ctx, s.Store, item.ID, item.Name, "Playlist", entries); err != nil {
+		writeError(w, err)
+		return
+	}
+	s.attachXMLTV(ctx, item.ID, guideURL)
+	_ = s.Store.RememberPlaylist(ctx, item.ID, groups, start, time.Now().Add(24*time.Hour))
+	if len(entries) > 0 {
+		if format := source.ProbeFormat(ctx, entries[0].URL); format != "" {
+			_ = s.Store.SetStreamFormat(ctx, item.ID, format)
+		}
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+// RefreshSources reloads playlists whose next refresh time has passed.
+// Channel ids stay put when the stream address or tvg-id still matches.
+func (s *Server) RefreshSources(ctx context.Context, now time.Time) (int, error) {
+	list, err := s.Store.Sources(ctx)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, item := range list {
+		if item.Kind != "m3u" || !item.Enabled || strings.HasPrefix(item.URL, "file:") {
+			continue
+		}
+		if item.Refresh != "" {
+			at, err := time.Parse(time.RFC3339, item.Refresh)
+			if err == nil && at.After(now) {
+				continue
+			}
+		}
+		loc := s.Store.FetchURL(ctx, item.ID, item.URL)
+		raw, err := source.ReadPlaylist(ctx, loc)
+		if err != nil {
+			_ = s.Store.NoteRefresh(ctx, item.ID, now.Add(time.Hour), err.Error())
+			continue
+		}
+		entries := source.Renumber(source.FilterGroups(source.ParseM3U(strings.NewReader(string(raw))), item.Groups), item.NumberStart)
+		if err := source.Install(ctx, s.Store, item.ID, item.Name, "Playlist", entries); err != nil {
+			_ = s.Store.NoteRefresh(ctx, item.ID, now.Add(time.Hour), err.Error())
+			continue
+		}
+		s.attachXMLTV(ctx, item.ID, item.XMLTV)
+		if err := s.Store.NoteRefresh(ctx, item.ID, now.Add(24*time.Hour), ""); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
 func (s *Server) listSources(w http.ResponseWriter, r *http.Request) {
 	list, err := s.Store.Sources(r.Context())
 	if err != nil {
@@ -122,11 +216,11 @@ func (s *Server) attachXMLTV(ctx context.Context, sourceID int64, rawURL string)
 	if err != nil {
 		return
 	}
-	prefix := "src-"
+	want := fmt.Sprintf("src-%d", sourceID)
 	var mine []store.Channel
 	var ids []int64
 	for _, ch := range channels {
-		if strings.HasPrefix(ch.DeviceID, prefix) {
+		if ch.DeviceID == want {
 			mine = append(mine, ch)
 			ids = append(ids, ch.ID)
 		}

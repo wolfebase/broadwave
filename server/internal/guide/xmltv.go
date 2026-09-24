@@ -1,6 +1,7 @@
 package guide
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/xml"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -84,16 +86,50 @@ func PullURL(ctx context.Context, rawURL string) ([]byte, error) {
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("guide returned %s", res.Status)
 	}
-	var reader io.Reader = res.Body
-	if res.Header.Get("Content-Encoding") == "gzip" || strings.HasSuffix(strings.ToLower(rawURL), ".gz") {
-		gz, err := gzip.NewReader(res.Body)
-		if err != nil {
-			return nil, err
-		}
-		defer gz.Close()
-		reader = gz
+	body, err := io.ReadAll(io.LimitReader(res.Body, 32<<20))
+	if err != nil {
+		return nil, err
 	}
-	return io.ReadAll(io.LimitReader(reader, 32<<20))
+	return inflateGuide(body, res.Header.Get("Content-Encoding"), rawURL)
+}
+
+func inflateGuide(body []byte, encoding, rawURL string) ([]byte, error) {
+	gzipped := strings.EqualFold(encoding, "gzip") || strings.HasSuffix(strings.ToLower(rawURL), ".gz")
+	if !gzipped && len(body) >= 2 && body[0] == 0x1f && body[1] == 0x8b {
+		gzipped = true
+	}
+	if xzCompressed(body, encoding, rawURL) {
+		return inflateXZ(body)
+	}
+	if !gzipped {
+		return body, nil
+	}
+	gz, err := gzip.NewReader(bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer gz.Close()
+	return io.ReadAll(io.LimitReader(gz, 32<<20))
+}
+
+func xzCompressed(body []byte, encoding, rawURL string) bool {
+	if strings.EqualFold(encoding, "xz") || strings.HasSuffix(strings.ToLower(rawURL), ".xz") {
+		return true
+	}
+	return len(body) >= 6 && body[0] == 0xfd && body[1] == 0x37 && body[2] == 0x7a && body[3] == 0x58 && body[4] == 0x5a && body[5] == 0x00
+}
+
+func inflateXZ(body []byte) ([]byte, error) {
+	cmd := exec.Command("xz", "-dc")
+	cmd.Stdin = bytes.NewReader(body)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("this guide is xz compressed and xz is not available")
+	}
+	if len(out) > 32<<20 {
+		out = out[:32<<20]
+	}
+	return out, nil
 }
 
 // Pull asks SiliconDust for XMLTV. DeviceAuth is read for this call and not returned.
