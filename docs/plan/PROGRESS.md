@@ -3,11 +3,11 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **K1**. Fake HDHomeRun so CI can tune without the DUO.
-- Half done: Phase C is on Unraid as v0.5.0. Two screens on 4.1 stayed 12 ms apart, and the tuner was released.
-- Next command: a fake tuner, then integration tests and relay smoke in CI.
+- Current task: **G1**. Ring buffer for live, recordings, and instant channel changes.
+- Half done: K1 is in this commit. A local fake HDHomeRun covers tune, share, busy, and relay smoke. CI runs that smoke.
+- Next command: a per-mux raw recording ring, then a recording that includes time already in the buffer.
 - Unraid is on `v0.5.0`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
-- A7 retry at phase C: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
+- A7 stays blocked on an Apple ID login (see BLOCKERS).
 
 ## Phase R — Repair and consolidate
 - [x] R1 CI green on all four jobs at 0984064 (lint fixes e411da1, Xcode 26 guard 0984064); `make check`; CI section in the dev-loop skill
@@ -154,7 +154,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] J7 Brand: name decided (Waveguide, renamed everywhere); logo, app icon, marketing site to do
 
 ## Phase K — Quality
-- [ ] K1 Fake HDHomeRun + Go integration tests + relay smoke in CI (do right after C9)
+- [x] K1 Fake HDHomeRun + Go integration tests + relay smoke in CI. `FAKE=1 scripts/relay-smoke.sh` tunes the fake and checks renditions, program date-times, and export. The Go test covers a shared frequency, a busy tuner, a recording that extends and restarts, and a scan that yields.
 - [ ] K2 Playwright e2e + visual snapshots + sync test
 - [ ] K3 Apple tests (Swift Testing + XCUITest)
 - [ ] K4 24 h Unraid soak

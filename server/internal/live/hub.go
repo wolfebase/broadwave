@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -300,26 +301,25 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 			return h.addFeedLocked(m, ch), nil
 		}
 	}
-	hosts := []string{host}
+	bases := []string{ch.BaseURL}
 	if h.Store != nil {
 		if more, err := h.Store.OtherDevices(ctx, ch.GuideNumber, ch.DeviceID); err == nil {
 			for _, base := range more {
-				alt := hostOf(base)
-				if alt != "" && alt != host {
-					hosts = append(hosts, alt)
+				if base != "" && base != ch.BaseURL {
+					bases = append(bases, base)
 				}
 			}
 		}
 	}
 	var devices []DeviceTuners
 	var last []Tuner
-	for _, candidate := range hosts {
+	for _, candidate := range bases {
 		tuners, err := h.readTuners(ctx, candidate)
 		if err != nil {
 			continue
 		}
 		last = tuners
-		devices = append(devices, DeviceTuners{Host: candidate, Tuners: tuners})
+		devices = append(devices, DeviceTuners{Host: hostOf(candidate), Tuners: tuners})
 	}
 	if len(devices) == 0 {
 		return nil, fmt.Errorf("the tuner did not answer")
@@ -342,7 +342,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	defer delete(h.reserved, tuner)
 	freq, programs, err := probe(host, tuner, ch.GuideNumber)
 	if err != nil {
-		streamURL := fmt.Sprintf("http://%s:5004/auto/v%s", host, ch.GuideNumber)
+		streamURL := streamRoot(ch) + "/auto/v" + ch.GuideNumber
 		if h.Encoder == "" || h.Encoder == "libx264" {
 			if q := hdhr.ExtendQuery(ch.ModelNumber); q != "" {
 				streamURL += "?" + q
@@ -359,9 +359,9 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	}
 	ch.ProgramNum = programFor(programs, ch.GuideNumber)
 	ch.FrequencyHz = freq
-	body, err := openMux(host, tuner, freq)
+	body, err := openMux(streamRoot(ch), tuner, freq)
 	if err != nil {
-		_, _ = hdhr.Control{Addr: host}.Set(fmt.Sprintf("/tuner%d/channel", tuner), "none")
+		_, _ = hdhr.Control{Addr: controlAddr(host)}.Set(fmt.Sprintf("/tuner%d/channel", tuner), "none")
 		return nil, err
 	}
 	m := &mux{freq: freq, tuner: tuner, host: host, device: ch.DeviceID, body: body, feeds: map[string]*feed{}, programs: programs}
@@ -729,14 +729,14 @@ func (h *Hub) Tuners(ctx context.Context) ([]Tuner, error) {
 		}
 	}
 	h.mu.Unlock()
-	if host == "" && h.Store != nil {
+	if h.Store != nil && !strings.Contains(host, "://") {
 		devices, err := h.Store.Devices(ctx)
 		if err != nil {
 			return nil, err
 		}
 		for _, d := range devices {
-			if d.TunerCount > 0 {
-				host = hostOf(d.BaseURL)
+			if d.TunerCount > 0 && (host == "" || hostOf(d.BaseURL) == host) {
+				host = d.BaseURL
 				break
 			}
 		}
@@ -1109,7 +1109,11 @@ func (h *Hub) readTuners(ctx context.Context, host string) ([]Tuner, error) {
 		SignalQualityPercent  int
 		SymbolQualityPercent  int
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+host+"/status.json", nil)
+	base := host
+	if !strings.Contains(base, "://") {
+		base = "http://" + base
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(base, "/")+"/status.json", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1167,7 +1171,7 @@ func openStream(u, userAgent, referrer string) (*http.Response, error) {
 }
 
 func probe(host string, tuner int, guide string) (int, []hdhr.Program, error) {
-	c := hdhr.Control{Addr: host}
+	c := hdhr.Control{Addr: controlAddr(host)}
 	name := fmt.Sprintf("/tuner%d/vchannel", tuner)
 	if _, err := c.Set(name, guide); err != nil {
 		return 0, nil, err
@@ -1211,8 +1215,22 @@ func probe(host string, tuner int, guide string) (int, []hdhr.Program, error) {
 	return freq, programs, nil
 }
 
-func openMux(host string, tuner, freq int) (io.ReadCloser, error) {
-	u := fmt.Sprintf("http://%s:5004/tuner%d/ch%d", host, tuner, freq)
+func controlAddr(host string) string {
+	if p := os.Getenv("HDHR_CONTROL_PORT"); p != "" {
+		return net.JoinHostPort(host, p)
+	}
+	return host
+}
+
+func streamRoot(ch store.SourceChannel) string {
+	if u, err := url.Parse(ch.StreamURL); err == nil && u.Host != "" {
+		return u.Scheme + "://" + u.Host
+	}
+	return "http://" + hostOf(ch.BaseURL) + ":5004"
+}
+
+func openMux(root string, tuner, freq int) (io.ReadCloser, error) {
+	u := fmt.Sprintf("%s/tuner%d/ch%d", strings.TrimRight(root, "/"), tuner, freq)
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
