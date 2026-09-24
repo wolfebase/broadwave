@@ -252,8 +252,13 @@ func renderSwift(names []string, schemas map[string]map[string]any) string {
 			return
 		}
 		props, _ := schema["properties"].(map[string]any)
-		for propName, raw := range props {
-			prop, _ := raw.(map[string]any)
+		propNames := make([]string, 0, len(props))
+		for n := range props {
+			propNames = append(propNames, n)
+		}
+		sort.Strings(propNames)
+		for _, propName := range propNames {
+			prop, _ := props[propName].(map[string]any)
 			if prop != nil && prop["type"] == "object" {
 				emit(name+export(propName), prop)
 			}

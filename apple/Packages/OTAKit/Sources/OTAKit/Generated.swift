@@ -252,18 +252,6 @@ public struct Marker: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
-public struct MultiviewPlanPlayable: Codable, Sendable, Hashable {
-    public var channelId: Int64
-    public var frequencyHz: Int
-    public var shared: Bool
-
-    public init(channelId: Int64, frequencyHz: Int, shared: Bool) {
-        self.channelId = channelId
-        self.frequencyHz = frequencyHz
-        self.shared = shared
-    }
-}
-
 public struct MultiviewPlanBlocked: Codable, Sendable, Hashable {
     public var channelId: Int64
     public var holders: [String]
@@ -273,6 +261,18 @@ public struct MultiviewPlanBlocked: Codable, Sendable, Hashable {
         self.channelId = channelId
         self.holders = holders
         self.reason = reason
+    }
+}
+
+public struct MultiviewPlanPlayable: Codable, Sendable, Hashable {
+    public var channelId: Int64
+    public var frequencyHz: Int
+    public var shared: Bool
+
+    public init(channelId: Int64, frequencyHz: Int, shared: Bool) {
+        self.channelId = channelId
+        self.frequencyHz = frequencyHz
+        self.shared = shared
     }
 }
 
