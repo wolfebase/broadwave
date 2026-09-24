@@ -269,9 +269,11 @@ paths:
               type: object
               required: [kind]
               properties:
-                kind: { type: string, enum: [m3u, link, folder] }
+                kind: { type: string, enum: [m3u, xtream, link, folder] }
                 name: { type: string }
-                url: { type: string, description: "Playlist URL, stream URL, or folder path" }
+                url: { type: string, description: "Playlist URL, Xtream server, stream URL, or folder path" }
+                username: { type: string }
+                password: { type: string }
                 xmltvUrl: { type: string }
                 groups: { type: string, description: "Comma-separated group names. Prefix one with - to leave it out." }
                 keep: { type: string, description: "Comma-separated channel names or tvg-ids to keep from a large playlist." }

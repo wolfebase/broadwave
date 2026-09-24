@@ -235,6 +235,8 @@ function SourceAdd() {
   const [kind, setKind] = useState("m3u");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [groups, setGroups] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState("");
@@ -270,13 +272,14 @@ function SourceAdd() {
           void addPlaylistFile(name, useGroups, file, useKeep).then(finish).catch(fail);
           return;
         }
-        void addSource(kind, name, url, "", useGroups, useKeep).then(finish).catch(fail);
+        void addSource(kind, name, url, "", useGroups, useKeep, username, password).then(finish).catch(fail);
       }}
     >
       <label>
         Add a source
         <select value={kind} onChange={(event) => setKind(event.target.value)}>
           <option value="m3u">Playlist</option>
+          <option value="xtream">Xtream Codes</option>
           <option value="link">Stream link</option>
           <option value="folder">Media folder</option>
         </select>
@@ -287,8 +290,20 @@ function SourceAdd() {
       </label>
       <label>
         Address
-        <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={kind === "folder" ? "D:\\TV" : "https://example/playlist.m3u"} spellCheck={false} />
+        <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={kind === "folder" ? "D:\\TV" : kind === "xtream" ? "http://example:8080" : "https://example/playlist.m3u"} spellCheck={false} />
       </label>
+      {kind === "xtream" ? (
+        <>
+          <label>
+            Username
+            <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="off" />
+          </label>
+          <label>
+            Password
+            <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="off" />
+          </label>
+        </>
+      ) : null}
       {kind === "m3u" ? (
         <label>
           {copy.sources.file}
@@ -299,14 +314,14 @@ function SourceAdd() {
           />
         </label>
       ) : null}
-      {kind === "m3u" ? (
+      {kind === "m3u" || kind === "xtream" ? (
         <label>
           {copy.sources.groups}
           <input value={groups} onChange={(event) => setGroups(event.target.value)} placeholder="News, Sports, -Shopping" spellCheck={false} />
         </label>
       ) : null}
-      <button type="submit" className="btn" disabled={url.trim() === "" && file == null}>Add</button>
-      {kind === "m3u" ? <p className="hint">{copy.sources.groupsHint}</p> : null}
+      <button type="submit" className="btn" disabled={(url.trim() === "" && file == null) || (kind === "xtream" && (username.trim() === "" || password === ""))}>Add</button>
+      {kind === "m3u" || kind === "xtream" ? <p className="hint">{copy.sources.groupsHint}</p> : null}
       {options.length > 0 ? (
         <fieldset>
           <legend>{copy.sources.pick}</legend>

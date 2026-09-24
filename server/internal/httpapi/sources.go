@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -26,6 +27,8 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 		Name   string `json:"name"`
 		URL    string `json:"url"`
 		XMLTV  string `json:"xmltvUrl"`
+		User   string `json:"username"`
+		Pass   string `json:"password"`
 		Groups string `json:"groups"`
 		Keep   string `json:"keep"`
 		Start  int    `json:"start"`
@@ -44,7 +47,7 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 			writeError(w, err)
 			return
 		}
-		s.installPlaylist(w, ctx, body.Name, body.URL, body.Groups, body.Keep, body.XMLTV, body.Start, raw)
+		s.installPlaylist(w, ctx, "m3u", body.Name, body.URL, body.Groups, body.Keep, body.XMLTV, body.Start, raw)
 	case "link":
 		name := strings.TrimSpace(body.Name)
 		if name == "" {
@@ -61,6 +64,23 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, item)
+	case "xtream":
+		playlist, _, err := source.Xtream(ctx, body.URL, body.User, body.Pass)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		stored := strings.TrimRight(strings.TrimSpace(body.URL), "/")
+		if body.User != "" {
+			u, err := url.Parse(stored)
+			if err != nil || u.Host == "" {
+				httpError(w, "The server address should start with http:// or https://.", http.StatusBadRequest)
+				return
+			}
+			u.User = url.UserPassword(body.User, body.Pass)
+			stored = u.String()
+		}
+		s.installPlaylist(w, ctx, "xtream", body.Name, stored, body.Groups, body.Keep, body.XMLTV, body.Start, playlist)
 	case "folder":
 		found, err := source.ScanMedia(strings.TrimSpace(body.URL))
 		if err != nil {
@@ -93,7 +113,7 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"source": item, "added": added})
 	default:
-		httpError(w, "kind must be m3u, link, or folder", http.StatusBadRequest)
+		httpError(w, "kind must be m3u, xtream, link, or folder", http.StatusBadRequest)
 	}
 }
 
@@ -124,10 +144,10 @@ func (s *Server) addPlaylistFile(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
-	s.installPlaylist(w, ctx, name, "file:"+header.Filename, r.FormValue("groups"), r.FormValue("keep"), r.FormValue("xmltvUrl"), 0, raw)
+	s.installPlaylist(w, ctx, "m3u", name, "file:"+header.Filename, r.FormValue("groups"), r.FormValue("keep"), r.FormValue("xmltvUrl"), 0, raw)
 }
 
-func (s *Server) installPlaylist(w http.ResponseWriter, ctx context.Context, name, loc, groups, keep, xmltv string, start int, raw []byte) {
+func (s *Server) installPlaylist(w http.ResponseWriter, ctx context.Context, kind, name, loc, groups, keep, xmltv string, start int, raw []byte) {
 	parsed := source.ParseM3U(strings.NewReader(string(raw)))
 	if strings.TrimSpace(groups) == "" && strings.TrimSpace(keep) == "" {
 		if msg := source.BigPlaylistMessage(parsed); msg != "" {
@@ -137,7 +157,7 @@ func (s *Server) installPlaylist(w http.ResponseWriter, ctx context.Context, nam
 	}
 	entries := source.Renumber(source.FilterKeep(source.FilterGroups(parsed, groups), keep), start)
 	guideURL := source.GuideFromPlaylist(xmltv, entries)
-	item, err := s.Store.AddSource(ctx, "m3u", strings.TrimSpace(name), loc, guideURL)
+	item, err := s.Store.AddSource(ctx, kind, strings.TrimSpace(name), loc, guideURL)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -165,7 +185,7 @@ func (s *Server) RefreshSources(ctx context.Context, now time.Time) (int, error)
 	}
 	n := 0
 	for _, item := range list {
-		if item.Kind != "m3u" || !item.Enabled || strings.HasPrefix(item.URL, "file:") {
+		if (item.Kind != "m3u" && item.Kind != "xtream") || !item.Enabled || strings.HasPrefix(item.URL, "file:") {
 			continue
 		}
 		if item.Refresh != "" {
@@ -175,7 +195,12 @@ func (s *Server) RefreshSources(ctx context.Context, now time.Time) (int, error)
 			}
 		}
 		loc := s.Store.FetchURL(ctx, item.ID, item.URL)
-		raw, err := source.ReadPlaylist(ctx, loc)
+		var raw []byte
+		if item.Kind == "xtream" {
+			raw, _, err = source.XtreamFromStored(ctx, loc)
+		} else {
+			raw, err = source.ReadPlaylist(ctx, loc)
+		}
 		if err != nil {
 			_ = s.Store.NoteRefresh(ctx, item.ID, now.Add(time.Hour), err.Error())
 			continue

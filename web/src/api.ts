@@ -165,10 +165,10 @@ export function setWatched(id: number, watched: boolean) {
   });
 }
 
-export function addSource(kind: string, name: string, url: string, xmltvUrl = "", groups = "", keep = "") {
+export function addSource(kind: string, name: string, url: string, xmltvUrl = "", groups = "", keep = "", username = "", password = "") {
   return request<SourceAdded>(`/api/v1/sources`, {
     method: "POST",
-    body: JSON.stringify({ kind, name, url, xmltvUrl, groups, keep }),
+    body: JSON.stringify({ kind, name, url, xmltvUrl, groups, keep, username, password }),
   });
 }
 
