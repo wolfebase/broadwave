@@ -48,6 +48,7 @@ type Airing struct {
 	Rating       string    `json:"rating,omitempty"`
 	Cast         string    `json:"cast,omitempty"`
 	GameID       string    `json:"gameId,omitempty"`
+	GuideSource  string    `json:"guideSource,omitempty"`
 	Start        time.Time `json:"start"`
 	End          time.Time `json:"end"`
 }
@@ -235,19 +236,19 @@ func insertAiring(ctx context.Context, tx *sql.Tx, row Airing) error {
 	}
 	_, err := tx.ExecContext(ctx, `
 INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url,
-	image_width, image_height, season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list, game_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	image_width, image_height, season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list, game_id, guide_source)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		row.ChannelID, row.Title, row.Subtitle, row.Description, row.Category,
 		row.Start.UTC().Format(time.RFC3339), row.End.UTC().Format(time.RFC3339), row.ProgramID, bit(row.New), row.ImageURL,
 		row.ImageWidth, row.ImageHeight,
-		row.Season, row.Episode, row.EpisodeLabel, row.OriginalAir, row.SeriesID, bit(row.Live), bit(row.Premiere), bit(row.Finale), row.Rating, row.Cast, row.GameID)
+		row.Season, row.Episode, row.EpisodeLabel, row.OriginalAir, row.SeriesID, bit(row.Live), bit(row.Premiere), bit(row.Finale), row.Rating, row.Cast, row.GameID, row.GuideSource)
 	return err
 }
 
 func (s *Store) Airings(ctx context.Context, from, to time.Time) ([]Airing, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url,
-	image_width, image_height, season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list, game_id
+	image_width, image_height, season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list, game_id, guide_source
 FROM airings WHERE ends_at > ? AND starts_at < ? ORDER BY starts_at`,
 		from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
 	if err != nil {
@@ -261,7 +262,7 @@ FROM airings WHERE ends_at > ? AND starts_at < ? ORDER BY starts_at`,
 		var isNew, isLive, isPremiere, isFinale int
 		if err := rows.Scan(&row.ID, &row.ChannelID, &row.Title, &row.Subtitle, &row.Description, &row.Category, &start, &end, &row.ProgramID, &isNew, &row.ImageURL,
 			&row.ImageWidth, &row.ImageHeight,
-			&row.Season, &row.Episode, &row.EpisodeLabel, &row.OriginalAir, &row.SeriesID, &isLive, &isPremiere, &isFinale, &row.Rating, &row.Cast, &row.GameID); err != nil {
+			&row.Season, &row.Episode, &row.EpisodeLabel, &row.OriginalAir, &row.SeriesID, &isLive, &isPremiere, &isFinale, &row.Rating, &row.Cast, &row.GameID, &row.GuideSource); err != nil {
 			return nil, err
 		}
 		row.New = isNew != 0
@@ -692,17 +693,64 @@ func (s *Store) ReplaceAiringsFor(ctx context.Context, channelIDs []int64, rows 
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	for _, id := range channelIDs {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM airings WHERE channel_id = ?`, id); err != nil {
-			return err
-		}
-	}
 	for _, row := range rows {
 		if err := insertAiring(ctx, tx, row); err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
+}
+
+// InsertAirings adds listings without removing what is already there.
+func (s *Store) InsertAirings(ctx context.Context, rows []Airing) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, row := range rows {
+		if err := insertAiring(ctx, tx, row); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// NoteGuideScan records when a frequency was last read for the broadcast guide.
+func (s *Store) NoteGuideScan(ctx context.Context, freqHz int, at time.Time) error {
+	if freqHz <= 0 {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO guide_scans (frequency_hz, scanned_at) VALUES (?, ?)
+ON CONFLICT(frequency_hz) DO UPDATE SET scanned_at=excluded.scanned_at`, freqHz, at.UTC().Format(time.RFC3339))
+	return err
+}
+
+// GuideScans returns the last time each frequency was scanned.
+func (s *Store) GuideScans(ctx context.Context) (map[int]time.Time, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT frequency_hz, scanned_at FROM guide_scans`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int]time.Time{}
+	for rows.Next() {
+		var freq int
+		var raw string
+		if err := rows.Scan(&freq, &raw); err != nil {
+			return nil, err
+		}
+		when, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			continue
+		}
+		out[freq] = when
+	}
+	return out, rows.Err()
 }
 
 func blank(value, fallback string) string {

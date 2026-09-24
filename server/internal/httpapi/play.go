@@ -384,6 +384,7 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 		tmdbKey = strings.TrimSpace(os.Getenv("TMDB_API_KEY"))
 	}
 	rows = guide.FillImages(ctx, tmdbKey, rows)
+	rows = tagGuideSource(rows, "silicondust")
 	if err := s.Store.ReplaceAiringsFor(ctx, ids, rows); err != nil {
 		return 0, err
 	}
@@ -400,14 +401,14 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 		lineup = strings.TrimSpace(os.Getenv("SD_LINEUP"))
 	}
 	if extra, _, err := guide.SchedulesDirect(ctx, antenna, user, pass, lineup); err == nil && len(extra) > 0 {
-		rows = s.fillUnlisted(ctx, rows, extra)
+		rows = s.fillUnlisted(ctx, rows, tagGuideSource(extra, "schedules-direct"))
 	}
 	if rawURL := strings.TrimSpace(settings["guideUrl"]); rawURL != "" {
 		if body, err := guide.PullURL(ctx, rawURL); err == nil {
 			if extra, extraArt, err := guide.Parse(body, antenna); err == nil && len(extra) > 0 {
 				_ = s.Store.SetChannelArt(ctx, extraArt)
 				extra = guide.FillImages(ctx, tmdbKey, extra)
-				rows = s.fillUnlisted(ctx, rows, extra)
+				rows = s.fillUnlisted(ctx, rows, tagGuideSource(extra, "xmltv"))
 			}
 		}
 	}

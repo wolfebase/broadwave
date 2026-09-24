@@ -24,6 +24,7 @@ import (
 	"waveguide/internal/guide"
 	"waveguide/internal/httpapi"
 	"waveguide/internal/live"
+	"waveguide/internal/psip"
 	"waveguide/internal/realtime"
 	"waveguide/internal/source"
 	"waveguide/internal/sports"
@@ -88,6 +89,16 @@ func main() {
 	st.OnEvent = func(ev store.Event) { bus.Publish("activity", ev) }
 	hub.OnChange = debounce(500*time.Millisecond, func() { bus.Publish("live.changed", nil) })
 	api := &httpapi.Server{Store: st, Assets: assets, Dev: *dev, Hub: hub, Version: version, Bus: bus, Sports: sports.NewCache(sports.NewESPN())}
+	hub.OnPSIP = func(_ int, g psip.Guide) {
+		n, err := api.ApplyBroadcast(context.Background(), g)
+		if err != nil {
+			log.Printf("guide: broadcast: %v", err)
+			return
+		}
+		if n > 0 {
+			log.Printf("guide: broadcast filled %d listings", n)
+		}
+	}
 	handler := api.Handler()
 
 	go func() {
@@ -150,6 +161,10 @@ func main() {
 			api.LinkGames(context.Background())
 			api.NoteTeams(context.Background())
 		}
+	}()
+	go func() {
+		time.Sleep(20 * time.Second)
+		api.BroadcastScan(context.Background())
 	}()
 	go func() {
 		tick := time.NewTicker(20 * time.Second)

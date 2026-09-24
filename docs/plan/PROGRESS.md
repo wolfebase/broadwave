@@ -3,11 +3,11 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **C7**. Guide from the broadcast (PSIP).
-- Half done: Phase S is on Unraid as v0.4.0. Two tabs on 4.1 differed by 5–8 ms. Tuners are free.
-- Next command: capture a full mux and confirm PID 0x1FFB arrives, then start `internal/psip`.
+- Current task: **C8**. Honest guide depth and per-listing source.
+- Half done: C7 is in this commit. Nine of 27 stored channels have current and next listings. 14.1–14.16, 9.4, 43.3, and 46.7 were not in the antenna scan on 2026-09-24, so they have no broadcast listing.
+- Next command: show how far listings go, and which source a program came from, on the guide.
 - Unraid is on `v0.4.0`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
-- A7 retry at phase S: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
+- A7 retry at phase C: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
 ## Phase R — Repair and consolidate
 - [x] R1 CI green on all four jobs at 0984064 (lint fixes e411da1, Xcode 26 guard 0984064); `make check`; CI section in the dev-loop skill
@@ -75,7 +75,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] C4 Rich program model (commit f291b7d). Season and episode, the onscreen label, original air date, series id, live, premiere, finale, rating, and cast are stored and shown. This feed sends season, episode, and a date on most programs, and live on a couple. It does not send ratings or cast, so those stay empty. Listings already saved pick this up on the next guide refresh.
 - [x] C5 Guide UX (commit 37be574). The grid covers the listings on hand (up to two days). Now, Tonight, and Tomorrow jump the time. A Now button returns when now has scrolled away. Wide cells show a picture. Drag a channel to reorder it on this screen; right-click or H hides it. iPhone landscape and Apple TV use the grid, play/pause on Apple TV starts the focused show, and iPad keeps the program beside the guide.
 - [x] C6 Search (commit d7def66). Full-text search covers titles, subtitles, descriptions, and cast, plus recordings. Search on the web and on Apple lists the matches. Record every airing makes a pass for that title.
-- [ ] C7 Guide from the broadcast: relay on full mux `/auto/ch<freq>`, PSIP EIT/ETT parser, passive harvest, preemptible idle scan, merge; >= 25/27 channels listed
+- [x] C7 Guide from the broadcast: relay on full mux `/tunerN/ch<freq>` (PSIP present; `/auto/v` is not), EIT parser, passive harvest, preemptible idle scan, gap merge. Nine of 27 stored channels have current and next listings. An antenna scan on 2026-09-24 did not find 14.1–14.16, 9.4, 43.3, or 46.7, and tuning them returns not found, so they stay empty (ADR 0006).
 - [ ] C8 Honest guide depth and per-listing source
 - [ ] C9 Antenna and signal tools (Settings > Tuners)
 
