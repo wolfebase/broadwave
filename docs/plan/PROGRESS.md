@@ -3,7 +3,7 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **R8** (gofmt step in CI; `internal/httpapi/server.go` is formatted now). Then **U1** (staging script + v0.5.1 hotfix for 720p at 119.88 fps), then Phase PB.
+- Current task: **U1** (staging script + v0.5.1 hotfix for 720p at 119.88 fps), then Phase PB.
 - P2 was committed for the previous session, which died on a Cursor HTTP/2 stream error at 11:13 with the work uncommitted; `make check` was green.
 - Staging: `Waveguide-Staging` on `http://192.168.1.2:8490` (iGPU, `-staging`). Production `Waveguide` on :8477 is still v0.5.0. Next recording is Jeopardy at 20:00 UTC.
 - A7 stays blocked on an Apple ID login (see BLOCKERS).
@@ -61,7 +61,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] R5 Live preview frames from tuned muxes (no extra tunes). Unraid CPU sample is the phase R deploy line.
 - [x] R6 Apple screenshots of B–D on iPhone, iPad, and Apple TV (`docs/screenshots/r6-*`). iPhone multiview stays 2-up. Quad layout is on iPad and Apple TV; those tiles timed out when :8477 flapped, and the 2-up shots are the live picture. Scoreboard was empty, so no score was on screen.
 - [x] R7 Code review of run 1. `go test -race ./server/...` clean. Hiding a score no longer edits the cached board. Multiview waits for the tuner plan before a tile starts, on web and Apple.
-- [ ] R8 gofmt check in CI (after `server.go` is formatted)
+- [x] R8 gofmt check in the CI Go job; `gofmt -l server` is empty at 8843648
 - [x] Phase R deploy: tag, Unraid smoke, and preview-frame CPU under 3% of one core per mux
 
 ## Phase S — Every source, found automatically
