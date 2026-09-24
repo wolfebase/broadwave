@@ -3,10 +3,10 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **Phase C deploy**. Tag v0.5.0 and update Unraid.
-- Half done: C9 is pushed. Changelog for 0.5.0 is written. A7 retry is still unauthenticated.
-- Next command: tag v0.5.0 after CI is green, then deploy with MODE=ghcr and smoke two-screen sync.
-- Unraid is on `v0.4.0`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
+- Current task: **K1**. Fake HDHomeRun so CI can tune without the DUO.
+- Half done: Phase C is on Unraid as v0.5.0. Two screens on 4.1 stayed 12 ms apart, and the tuner was released.
+- Next command: a fake tuner, then integration tests and relay smoke in CI.
+- Unraid is on `v0.5.0`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
 - A7 retry at phase C: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
 ## Phase R — Repair and consolidate
@@ -77,7 +77,8 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] C6 Search (commit d7def66). Full-text search covers titles, subtitles, descriptions, and cast, plus recordings. Search on the web and on Apple lists the matches. Record every airing makes a pass for that title.
 - [x] C7 Guide from the broadcast: relay on full mux `/tunerN/ch<freq>` (PSIP present; `/auto/v` is not), EIT parser, passive harvest, preemptible idle scan, gap merge. Nine of 27 stored channels have current and next listings. An antenna scan on 2026-09-24 did not find 14.1–14.16, 9.4, 43.3, or 46.7, and tuning them returns not found, so they stay empty (ADR 0006). (commit 7d7a49a)
 - [x] C8 Honest guide depth and per-listing source. The grid runs to the last listing (up to 14 days). A row past its data says "Listings through Saturday" instead of "No listings". The program sheet says where the listing came from. (commit b123bdd)
-- [x] C9 Antenna and signal tools. Settings > Tuners reads strength, quality, and symbols, then says Great, OK, Weak, or Lost. Check all channels uses an idle tuner and stops when a viewer starts. On the DUO, 4.1, 5.1, 9.1, 29.1, 38.1, and 41.1 were Great and 39.7 was OK.
+- [x] C9 Antenna and signal tools. Settings > Tuners reads strength, quality, and symbols, then says Great, OK, Weak, or Lost. Check all channels uses an idle tuner and stops when a viewer starts. On the DUO, 4.1, 5.1, 9.1, 29.1, 38.1, and 41.1 were Great and 39.7 was OK. (commit 4e51316)
+- [x] Phase C deploy: tag v0.5.0, Unraid smoke, two-screen sync (commit 2463a86, log in UNRAID_LOG)
 
 ## Phase D — Sports
 - [x] D1 Sports provider (commit 7923323). ESPN scoreboard for twelve leagues, with F1 and NASCAR as schedules only. A live board refreshes every 30 seconds; a quiet board waits two hours. A failed fetch backs off and keeps the last good board.
