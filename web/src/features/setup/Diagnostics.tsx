@@ -71,6 +71,17 @@ export function DiagnosticsPage() {
         </dl>
       </section>
 
+      {(d.doctor ?? []).length > 0 ? (
+        <section className="settings-section">
+          <h2>Fix these</h2>
+          <ul className="activity">
+            {d.doctor?.map((note) => (
+              <li key={note.id}>{note.message}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="settings-section">
         <h2>Recent activity</h2>
         <ul className="activity">

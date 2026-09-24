@@ -312,7 +312,11 @@ export function Setup() {
             <Stat value={diag?.encoder ? (diag.encoder.hardware ? "Hardware" : "Software") : "—"} label={diag?.encoder?.name?.replace("h264_", "").toUpperCase() ?? "encoding"} />
           </div>
           <p className="dim">{settings.recordingsPath || "Recordings save in the folder mapped for this server."}</p>
-          {storage && storage.freeBytes < 20 * 1e9 ? <p className="warn">Less than 20 GB is free. Free some space before a long recording.</p> : null}
+          {(diag?.doctor ?? []).map((item) => (
+            <p key={item.id} className="warn">
+              {item.message}
+            </p>
+          ))}
           <label className="field">
             Keep this much space free
             <select value={settings.watermarkGB} onChange={(e) => void saveSettings({ watermarkGB: e.target.value })}>

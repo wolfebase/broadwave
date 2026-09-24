@@ -13,6 +13,7 @@ export type Diagnostics = {
   relay?: { channelId: number; guideNumber: string; name: string; tuner: number; recording: boolean; exports: number; fieldOrder?: string; renditions: { key: string; viewers: number }[] }[];
   connectedApps?: number;
   recentActivity?: { id: number; at: string; kind: string; message: string }[];
+  doctor?: { id: string; message: string }[];
 };
 
 /** Diagnostics, refreshed every few seconds while mounted. */

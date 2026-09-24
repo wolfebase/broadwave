@@ -25,5 +25,8 @@
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/waveguide" Mode="rw" Description="Database, guide, and live buffer. Put this on a fast pool." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/waveguide</Config>
   <Config Name="Recordings" Target="/config/work/recordings" Default="/mnt/user/media/recordings" Mode="rw" Description="Where recordings are saved as original broadcast files." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media/recordings</Config>
   <Config Name="Tuner address" Target="HDHR_HOST" Default="" Mode="" Description="Optional. Only needed if the tuner is on another subnet or the container is not on host networking." Type="Variable" Display="advanced" Required="false" Mask="false"/>
-  <Config Name="TZ" Target="TZ" Default="America/New_York" Mode="" Description="Timezone for the guide" Type="Variable" Display="always" Required="false" Mask="false">America/New_York</Config>
+  <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Time zone for the guide, like America/Chicago." Type="Variable" Display="always" Required="false" Mask="false">UTC</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User id for recordings. 99 is Unraid's nobody user." Type="Variable" Display="always" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group id for recordings. 100 is Unraid's users group." Type="Variable" Display="always" Required="false" Mask="false">100</Config>
+  <Config Name="UMASK" Target="UMASK" Default="022" Mode="" Description="File mode mask for new recordings." Type="Variable" Display="advanced" Required="false" Mask="false">022</Config>
 </Container>
