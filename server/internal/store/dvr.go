@@ -21,7 +21,7 @@ type SourceChannel struct {
 	Referrer     string `json:"-"`
 	FrequencyHz  int    `json:"frequencyHz"`
 	ProgramNum   int    `json:"programNum"`
-	// FieldOrder is what a probe saw: progressive, tt, bb, tb, bt, or empty when unknown.
+	// FieldOrder is what a probe saw: progressive, film (soft 3:2), tt, bb, tb, bt, or empty when unknown.
 	FieldOrder string `json:"fieldOrder,omitempty"`
 }
 

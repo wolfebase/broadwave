@@ -519,7 +519,7 @@ R1 → R2 → R3 → R4 → R5 → R6 → R7 →
 S0 → S1 → S2 → S3 → S4 → S5 → S6 → S7 → S8 → S9 → S10 → (tag + deploy) →
 C7 → C8 → C9 → (tag + deploy) →
 K1 → P1 → P2 → R8 → **U1** →
-PB9 → PB2 → PB3 → PB5 → PB6 → PB4 → PB7 → PB8 → (tag + deploy + TestFlight) →
+PB9 → PB2 → PB3 → PB3b → PB5 → PB6 → PB4 → PB7 → PB8 → (tag + deploy + TestFlight) →
 C7b → S8b → HOME1 → HOME2 → HOME3 → (tag + deploy + TestFlight) →
 MV1 → MV2 → MV3 → MV4 → MV5 → MV6 → AP1 → AP2 → AP3 → AS2 → AS3 → (tag + deploy + TestFlight + **App Store update 1.1 = AS4**) →
 OPS1 → OPS2 → OPS3 → LEGAL1 → AS6 → (tag + deploy) →

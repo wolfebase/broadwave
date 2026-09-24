@@ -19,18 +19,18 @@ func TestDecide(t *testing.T) {
 		p    Prefs
 		want string
 	}{
-		{"apple tv gets the original h264 with dolby", Source{"H264", "AC3", true, "", ""}, apple, Prefs{}, "copy.copy"},
-		{"mpeg-2 is converted but keeps dolby on apple tv", Source{"MPEG2", "AC3", false, "", ""}, apple, Prefs{}, "1080.copy.broadcast"},
-		{"browser keeps h264 picture, converts sound", Source{"H264", "AC3", true, "", ""}, web, Prefs{}, "copy.aac2"},
-		{"unprobed h264 is deinterlaced, not copied", Source{"H264", "AC3", false, "", ""}, web, Prefs{}, "1080.aac2.broadcast"},
-		{"cellular drops to 720", Source{"MPEG2", "AC3", false, "", ""}, Caps{Platform: "ios", Video: []string{"h264"}, Audio: []string{"ac3", "aac"}, Network: "cellular"}, Prefs{}, "720.copy.broadcast"},
-		{"saver is small and stereo", Source{"MPEG2", "AC3", false, "", ""}, apple, Prefs{Quality: "saver"}, "540.aac2.broadcast"},
-		{"a tile is 540 and silent", Source{"MPEG2", "AC3", false, "", ""}, apple, Prefs{Quality: "tile"}, "540.none.broadcast"},
-		{"the smaller tile is 360", Source{"MPEG2", "AC3", false, "", ""}, apple, Prefs{Quality: "360", Audio: "none"}, "360.none.broadcast"},
-		{"a tile can keep sound when asked", Source{"MPEG2", "AC3", false, "", ""}, apple, Prefs{Quality: "tile", Audio: "stereo"}, "540.aac2.broadcast"},
-		{"surround without dolby decode is 5.1 aac", Source{"MPEG2", "AC3", false, "", ""}, web, Prefs{Audio: "surround"}, "1080.aac6.broadcast"},
-		{"film mode is part of the key", Source{"MPEG2", "AC3", false, "", ""}, web, Prefs{Picture: "film"}, "1080.aac2.film"},
-		{"small screens cap the height", Source{"MPEG2", "AC3", false, "", ""}, Caps{Video: []string{"h264"}, Audio: []string{"aac"}, MaxHeight: 720}, Prefs{}, "720.aac2.broadcast"},
+		{"apple tv gets the original h264 with dolby", Source{"H264", "AC3", true, false, "", ""}, apple, Prefs{}, "copy.copy"},
+		{"mpeg-2 is converted but keeps dolby on apple tv", Source{"MPEG2", "AC3", false, false, "", ""}, apple, Prefs{}, "1080.copy.broadcast"},
+		{"browser keeps h264 picture, converts sound", Source{"H264", "AC3", true, false, "", ""}, web, Prefs{}, "copy.aac2"},
+		{"unprobed h264 is deinterlaced, not copied", Source{"H264", "AC3", false, false, "", ""}, web, Prefs{}, "1080.aac2.broadcast"},
+		{"cellular drops to 720", Source{"MPEG2", "AC3", false, false, "", ""}, Caps{Platform: "ios", Video: []string{"h264"}, Audio: []string{"ac3", "aac"}, Network: "cellular"}, Prefs{}, "720.copy.broadcast"},
+		{"saver is small and stereo", Source{"MPEG2", "AC3", false, false, "", ""}, apple, Prefs{Quality: "saver"}, "540.aac2.broadcast"},
+		{"a tile is 540 and silent", Source{"MPEG2", "AC3", false, false, "", ""}, apple, Prefs{Quality: "tile"}, "540.none.broadcast"},
+		{"the smaller tile is 360", Source{"MPEG2", "AC3", false, false, "", ""}, apple, Prefs{Quality: "360", Audio: "none"}, "360.none.broadcast"},
+		{"a tile can keep sound when asked", Source{"MPEG2", "AC3", false, false, "", ""}, apple, Prefs{Quality: "tile", Audio: "stereo"}, "540.aac2.broadcast"},
+		{"surround without dolby decode is 5.1 aac", Source{"MPEG2", "AC3", false, false, "", ""}, web, Prefs{Audio: "surround"}, "1080.aac6.broadcast"},
+		{"film mode is part of the key", Source{"MPEG2", "AC3", false, false, "", ""}, web, Prefs{Picture: "film"}, "1080.aac2.film"},
+		{"small screens cap the height", Source{"MPEG2", "AC3", false, false, "", ""}, Caps{Video: []string{"h264"}, Audio: []string{"aac"}, MaxHeight: 720}, Prefs{}, "720.aac2.broadcast"},
 	}
 	for _, c := range cases {
 		got := Decide(c.src, c.caps, c.p)

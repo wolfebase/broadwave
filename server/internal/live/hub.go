@@ -213,7 +213,7 @@ func (h *Hub) SourceOf(ctx context.Context, channelID int64) (Source, error) {
 }
 
 func sourceOf(ch store.SourceChannel) Source {
-	return Source{VideoCodec: ch.VideoCodec, AudioCodec: ch.AudioCodec, Progressive: ch.FieldOrder == "progressive", UserAgent: ch.UserAgent, Referrer: ch.Referrer}
+	return Source{VideoCodec: ch.VideoCodec, AudioCodec: ch.AudioCodec, Progressive: ch.FieldOrder == "progressive", Film: ch.FieldOrder == "film", UserAgent: ch.UserAgent, Referrer: ch.Referrer}
 }
 
 // Watch starts or joins one rendition of a channel.

@@ -22,6 +22,9 @@ func TestScanTypeCapturedHeaders(t *testing.T) {
 	if order, ok := scanType(h264TS(1, true), 1); !ok || order != "progressive" {
 		t.Fatalf("h264 frames: got %q %v", order, ok)
 	}
+	if order, ok := scanType(filmTS(1), 1); !ok || order != "film" {
+		t.Fatalf("soft 3:2: got %q %v", order, ok)
+	}
 	if order, ok := scanType(h264TS(1, false), 1); !ok || order != "tt" {
 		t.Fatalf("h264 fields: got %q %v", order, ok)
 	}
@@ -74,6 +77,19 @@ func mpeg2TS(program int, progressive bool) []byte {
 		ext = append(ext, pic...)
 	}
 	return programTS(program, streamMPEG2, 0x100, ext)
+}
+
+func filmTS(program int) []byte {
+	// Interlaced sequence, then four progressive pictures with repeat_first_field on two of them.
+	es := []byte{0x00, 0x00, 0x01, 0xB5, 0x10, 0x00}
+	for i := 0; i < 4; i++ {
+		pic := []byte{0x00, 0x00, 0x01, 0xB5, 0x80, 0x00, 0x00, 0x00, 0x80}
+		if i%2 == 0 {
+			pic[7] = 0x02
+		}
+		es = append(es, pic...)
+	}
+	return programTS(program, streamMPEG2, 0x100, es)
 }
 
 func h264TS(program int, frames bool) []byte {

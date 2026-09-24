@@ -3,7 +3,7 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **PB2** committed this round. Next is **PB3**. App Review unchanged (WAITING_FOR_REVIEW, iOS and tvOS, checked 2026-09-24 23:17 UTC).
+- Current task: **PB3** done this round. Next is **PB3b** (hard telecine still combs). App Review unchanged (WAITING_FOR_REVIEW, iOS and tvOS, checked 2026-09-24 23:39 UTC).
 - App Review: Broadwave 1.0 (iOS and tvOS, app 6815795649, build 2) was WAITING_FOR_REVIEW at 2026-09-24 22:55 UTC. Check it at the start of every round (AS1).
 - Production `Broadwave` on TUS `:8477` is v0.6.0. Staging `Broadwave-Staging` is on `:8490`. Next recording: Jeopardy, 2026-09-25 20:00 UTC.
 - The tree is clean at the last commit. The repo is `~/Projects/active/broadwave`.
@@ -46,7 +46,8 @@ Tick items as they are verified and committed, in the same commit as the work (`
 ## Phase PB — Playback
 - [x] PB1 Progressive broadcasts keep every frame and are never bobbed; `-staging` flag. Staging on TUS iGPU: 4.1 1280x720 59.94 in 2.002 s segments, 0 decode errors (v0.5.0: 1920x1080 119.88 in 1.001 s); 9.1 1920x1080 59.94 unchanged; Chrome 0 dropped frames on both; iPhone and Apple TV sims played 4.1 and a 4.1+9.1 multiview (`docs/screenshots/pb-*`); `TestProgressive720pKeepsEveryFrame` (commit 8dac5dd)
 - [x] PB2 First tune reads scan type from the mux (no interlaced guess on a fresh install). Staging with `field_order` cleared on 4.1: `scan type progressive for 4.1 in 800ms`, then 1280x720 59.94, segment 2.002s, 0 decode errors, 240 frames, tuner released. A sequence header can sit ~460 ms into the GOP, so the read waits up to 800 ms and returns when the header arrives. `TestScanTypeCapturedHeaders`, `TestScanTypeFFmpegHeaders`.
-- [ ] PB3 Scan-type matrix (1080i, 720p, 480i, H.264 PAFF/MBAFF, auto film cadence) on every encoder path, measured with idet/mpdecimate
+- [x] PB3 Scan-type matrix. Soft 3:2 (`repeat_first_field`) is field order `film` and plays at 24p (`fieldmatch,decimate` on the CPU, `scale_vaapi` after). `TestScanTypeMatrix` covers VAAPI, libx264, and VideoToolbox for 1080i, 720p, 480i, H.264 PAFF/MBAFF, and film. `TestScanMatrixPicture`: libx264 and VideoToolbox, 59.940 fps, 60 frames, idet 0/60, mpdecimate kept them. TUS VAAPI: 10s fixture 59.94 fps, 479 frames, 0 decode errors, idet 4/476; real 5.1 1920×1080 59.94, 0 decode errors, idet matches `bwdif` (209/103); real 4.1 stays 1280×720 59.94. Table in `docs/dev-lab.md`. Hard telecine idet is PB3b. 14.x and 480i were not on the air, so those rows are fixtures.
+- [ ] PB3b Hard telecine (no repeat_first_field) still combs after fieldmatch on a 1s fixture (idet 23 interlaced, 23.976 fps). Soft 3:2 is detected from the headers.
 - [ ] PB4 Honest 30→60: measure interpolation methods on TUS; keep only what is real time and looks better (ADR 0010)
 - [ ] PB5 GPU decode + jellyfin-ffmpeg 7 + VAAPI rate control + VMAF-chosen bitrates + HEVC renditions
 - [ ] PB6 AC-3 5.1 passthrough to Apple; audio picked by PMT language/bsmod; SAP and described-video picker; Even volume

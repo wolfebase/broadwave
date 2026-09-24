@@ -87,6 +87,7 @@ func (h *Hub) probeFieldOrderLocked(m *mux, f *feed) {
 		if order != "" {
 			f.channel.FieldOrder = order
 			f.source.Progressive = order == "progressive"
+			f.source.Film = order == "film"
 		}
 		if h.channels[channelID] == f {
 			h.dropIfUnusedLocked(f)

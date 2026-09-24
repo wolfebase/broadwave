@@ -154,6 +154,14 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 	if fps != "" {
 		rate = ",fps=" + fps
 	}
+	if g.Mode == "film" && g.Encoder == "h264_vaapi" {
+		// Inverse telecine stays on the CPU. Scale and encode stay on the GPU.
+		rate = fps
+		if rate == "" {
+			rate = "24000/1001"
+		}
+		return fmt.Sprintf("fieldmatch,decimate,fps=%s,format=nv12,hwupload,scale_vaapi=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease", rate, width, height)
+	}
 	if g.Encoder == "h264_vaapi" && g.Mode != "film" && (vaapiDeint != "" || !interlaced) && !(g.Mode == "smooth" && g.Blend && !interlaced && !smallPicture(g.Profile)) {
 		// Stay on the GPU: upload once, deinterlace and scale there, never upscale.
 		vf := "format=nv12,hwupload"

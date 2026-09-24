@@ -192,38 +192,59 @@ func eachPacket(data []byte, pid int, fn func(start bool, payload []byte)) {
 }
 
 // mpeg2Scan reads sequence_extension.progressive_sequence. A progressive
-// sequence is the answer. An interlaced sequence waits for
-// picture_coding_extension.progressive_frame so a late header cannot flip it.
+// sequence is the answer. An interlaced sequence is field video unless the
+// pictures are soft 3:2 pulldown (progressive_frame plus repeat_first_field),
+// which is film and should play at 24p.
 func mpeg2Scan(es []byte) (string, bool) {
-	sawInterlaced := false
-	for i := 0; i+5 < len(es); i++ {
+	sawSeq := false
+	progressiveSeq := false
+	var pics, progPics, rff int
+	sawInterlacedPic := false
+	for i := 0; i+8 < len(es); i++ {
 		if es[i] != 0 || es[i+1] != 0 || es[i+2] != 1 || es[i+3] != 0xB5 {
 			continue
 		}
 		id := es[i+4] >> 4
 		switch id {
 		case 1: // sequence_extension
-			if i+6 >= len(es) {
-				continue
-			}
 			// identifier 4 + profile_and_level 8; progressive_sequence is the next bit.
-			if es[i+5]&0x08 != 0 {
-				return "progressive", true
-			}
-			return "tt", true
+			sawSeq = true
+			progressiveSeq = es[i+5]&0x08 != 0
 		case 8: // picture_coding_extension
-			// progressive_frame is per picture. A 1 here is film or graphics
-			// inside an interlaced sequence, so it does not mean progressive.
-			if i+8 >= len(es) || es[i+8]&0x80 != 0 {
-				continue
+			pics++
+			if es[i+8]&0x80 != 0 {
+				progPics++
+				if es[i+7]&0x02 != 0 { // repeat_first_field
+					rff++
+				}
+			} else {
+				sawInterlacedPic = true
 			}
-			sawInterlaced = true
 		}
 	}
-	if sawInterlaced {
+	if progressiveSeq {
+		return "progressive", true
+	}
+	if sawInterlacedPic {
+		return "tt", true
+	}
+	if filmCadence(pics, progPics, rff) {
+		return "film", true
+	}
+	if sawSeq && pics >= 8 {
 		return "tt", true
 	}
 	return "", false
+}
+
+// filmCadence is soft NTSC 3:2: every picture is progressive, and
+// repeat_first_field is set on about half of them (two of every four).
+func filmCadence(pics, prog, rff int) bool {
+	if pics < 4 || prog != pics || rff == 0 || rff == pics {
+		return false
+	}
+	ratio := float64(rff) / float64(pics)
+	return ratio >= 0.25 && ratio <= 0.75
 }
 
 // h264Scan reads SPS frame_mbs_only_flag. Set means every picture is a frame.
@@ -495,6 +516,7 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 	log.Printf("scan type %s for %s in %s", order, f.channel.GuideNumber, time.Since(started).Round(time.Millisecond))
 	f.channel.FieldOrder = order
 	f.source.Progressive = order == "progressive"
+	f.source.Film = order == "film"
 	if h.Store != nil {
 		id := f.channel.ID
 		go func() { _ = h.Store.SetFieldOrder(context.Background(), id, order) }()

@@ -96,6 +96,46 @@ func TestSmoothCanUseMotionCompensated(t *testing.T) {
 	}
 }
 
+func TestScanTypeMatrix(t *testing.T) {
+	type row struct {
+		name    string
+		src     Source
+		encoder string
+		want    []string
+		forbid  []string
+	}
+	rows := []row{
+		{"1080i vaapi", Source{VideoCodec: "MPEG2"}, "h264_vaapi", []string{"deinterlace_vaapi=mode=motion_adaptive:rate=field"}, []string{"bwdif", "fieldmatch", "fps="}},
+		{"1080i libx264", Source{VideoCodec: "MPEG2"}, "libx264", []string{"bwdif=mode=send_field", "fps=60000/1001"}, []string{"deinterlace_vaapi", "fieldmatch"}},
+		{"1080i videotoolbox", Source{VideoCodec: "MPEG2"}, "h264_videotoolbox", []string{"bwdif=mode=send_field", "fps=60000/1001", "-a53cc 0"}, []string{"fieldmatch"}},
+		{"480i libx264", Source{VideoCodec: "MPEG2"}, "libx264", []string{"bwdif=mode=send_field", "fps=60000/1001", "min(1920,iw)"}, []string{"fieldmatch"}},
+		{"720p vaapi", Source{VideoCodec: "MPEG2", Progressive: true}, "h264_vaapi", []string{"scale_vaapi=w='min(1920,iw)'"}, []string{"deinterlace_vaapi", "bwdif", "fps=", "fieldmatch"}},
+		{"720p libx264", Source{VideoCodec: "MPEG2", Progressive: true}, "libx264", []string{"scale='min(1920,iw)'"}, []string{"bwdif", "fps=", "fieldmatch"}},
+		{"720p videotoolbox", Source{VideoCodec: "MPEG2", Progressive: true}, "h264_videotoolbox", []string{"scale='min(1920,iw)'", "-a53cc 0"}, []string{"bwdif", "fps="}},
+		{"h264 paff vaapi", Source{VideoCodec: "H264"}, "h264_vaapi", []string{"deinterlace_vaapi=mode=motion_adaptive:rate=field"}, []string{"bwdif", "fieldmatch"}},
+		{"h264 mbaff libx264", Source{VideoCodec: "H264"}, "libx264", []string{"bwdif=mode=send_field", "fps=60000/1001"}, []string{"fieldmatch"}},
+		{"h264 mbaff videotoolbox", Source{VideoCodec: "H264"}, "h264_videotoolbox", []string{"bwdif=mode=send_field", "-a53cc 0"}, []string{"fieldmatch"}},
+		{"film vaapi", Source{VideoCodec: "MPEG2", Film: true}, "h264_vaapi", []string{"fieldmatch,decimate,fps=24000/1001,format=nv12,hwupload,scale_vaapi"}, []string{"bwdif", "deinterlace_vaapi"}},
+		{"film libx264", Source{VideoCodec: "MPEG2", Film: true}, "libx264", []string{"fieldmatch,decimate", "fps=24000/1001"}, []string{"bwdif", "hwupload"}},
+		{"film videotoolbox", Source{VideoCodec: "MPEG2", Film: true}, "h264_videotoolbox", []string{"fieldmatch,decimate", "fps=24000/1001", "-a53cc 0"}, []string{"bwdif"}},
+	}
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			line := strings.Join(RenditionArgs(0, row.src, Rendition{Video: "1080", Audio: "aac2"}, row.encoder, "motion_adaptive", false), " ")
+			for _, want := range row.want {
+				if !strings.Contains(line, want) {
+					t.Fatalf("missing %q in %s", want, line)
+				}
+			}
+			for _, bad := range row.forbid {
+				if strings.Contains(line, bad) {
+					t.Fatalf("unexpected %q in %s", bad, line)
+				}
+			}
+		})
+	}
+}
+
 func TestFilmRecovers24p(t *testing.T) {
 	line := strings.Join(PictureArgs(Graph{VideoCodec: "MPEG2", Encoder: "libx264", Mode: "film", Live: false}), " ")
 	if !strings.Contains(line, "fieldmatch,decimate") || !strings.Contains(line, "fps=24000/1001") {
