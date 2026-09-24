@@ -26,7 +26,7 @@ description: Rules and hard-won gotchas for Broadwave's live relay, ffmpeg rendi
 ## Picture lab (real encodes on the Unraid iGPU)
 
 - Capture samples through the running server (`curl -m 11 :8477/export/stream/<id>`) only when `/api/v1/tuners` is free and nothing records soon.
-- Run encodes in throwaway containers named `wg-lab-*` with `--cpus 4 --device /dev/dri`, and clean up with `docker ps -aq --filter name=wg-lab | xargs -r docker rm -f`. Kill remote runners with `pkill -f "[r]unner-name"`; a plain `pkill -f name` matches your own SSH shell.
+- Run encodes in throwaway containers named `bw-lab-*` with `--cpus 4 --device /dev/dri`, and clean up with `docker ps -aq --filter name=bw-lab | xargs -r docker rm -f`. Kill remote runners with `pkill -f "[r]unner-name"`; a plain `pkill -f name` matches your own SSH shell.
 - **Feed samples at real time** (`ffmpeg -re` or a rate-limited pipe). ffmpeg 5.1 (the image's Debian build) with `-copyts` and VAAPI deinterlace, fed a file faster than real time, emits thousands of 0.0007 s segments and never exits. Production (live pipe) is fine. This cost an hour.
 - Measure the result, not the args: `cat init.mp4 seg*.m4s`, then count frames from `frame=pts_time` (fps = frames / span), read width and height, and count decode errors.
 - Staging beside production: container `Broadwave-Staging` on `:8490` runs `-staging -bonjour=false` (no recordings, no guide pulls, no idle scans, no emulator) with its own `server_identity`. Test there first, like a viewer would, in Chrome and the simulators; production stays untouched.
