@@ -30,3 +30,8 @@ apple/Packages/*/.swiftpm/
 # Project-local SSH material (do not commit)
 .ssh/
 __pycache__/
+
+# Picture-lab captures and stills are broadcast video. The results table is committed.
+docs/lab/samples/
+docs/lab/stills/
+docs/lab/runs/

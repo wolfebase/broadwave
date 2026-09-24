@@ -3,7 +3,7 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **PB9** (`scripts/picture-lab.sh`). U1 is done this round.
+- Current task: **PB9** committed this round. Next is **PB2**. App Review unchanged (WAITING_FOR_REVIEW, iOS and tvOS, checked 2026-09-24 23:07 UTC).
 - App Review: Broadwave 1.0 (iOS and tvOS, app 6815795649, build 2) was WAITING_FOR_REVIEW at 2026-09-24 22:55 UTC. Check it at the start of every round (AS1).
 - Production `Broadwave` on TUS `:8477` is v0.6.0. Staging `Broadwave-Staging` is on `:8490`. Next recording: Jeopardy, 2026-09-25 20:00 UTC.
 - The tree is clean at the last commit. The repo is `~/Projects/active/broadwave`.
@@ -52,7 +52,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] PB6 AC-3 5.1 passthrough to Apple; audio picked by PMT language/bsmod; SAP and described-video picker; Even volume
 - [ ] PB7 Player tuning (hls.js buffers, AVPlayer buffer, tvOS frame-rate/range matching); time to first frame and stalls measured
 - [ ] PB8 Stream panel (source, output, GPU decode, dropped frames, sync) on web, iPhone, Apple TV
-- [ ] PB9 `scripts/picture-lab.sh` on TUS at real time with a results table
+- [x] PB9 `scripts/picture-lab.sh` on TUS at real time. Staging capture of channel 1 (12 s, tuner released, no recording within 20 min). `bw-lab-field-deint` 1280x720 119.88 fps, 959 frames, 0 decode errors, 0.993x, CPU 21.34%. `bw-lab-progressive-scale` 1280x720 59.94 fps, 479 frames, 0 decode errors, 0.993x, CPU 19.96%. VMAF n/a: image ffmpeg has no libvmaf (PB5). Table `docs/lab/picture-lab.md`. Stills `docs/lab/runs/latest/stills/`.
 
 ## Phase HOME — The house sets itself up
 - [ ] HOME1 Your home: tuners, servers (Plex, Jellyfin, Emby, Channels), and screens (Apple TV, Chromecast, Fire TV, smart TVs, AirPlay), one action each

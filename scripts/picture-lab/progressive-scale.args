@@ -1,0 +1,6 @@
+# Keep a progressive picture on the iGPU. Do not deinterlace. Do not upscale.
+-init_hw_device vaapi=va:/dev/dri/renderD128 -filter_hw_device va
+-map 0:v:0 -map 0:a:0?
+-vf format=nv12,hwupload,scale_vaapi=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease
+-c:v h264_vaapi -b:v 8M -maxrate 8M -bufsize 16M -g 120
+-c:a aac -ac 2 -b:a 160k
