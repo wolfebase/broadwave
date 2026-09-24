@@ -30,7 +30,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] S7 Free channels: detect FastChannels / Pluto / Samsung generator containers, or guide the user to run FastChannels (commit 1eababe)
 - [x] S8 Setup wizard v2 on web, Apple TV, and iPhone (< 90 s, no typing for HDHomeRun) (commit 0991df2)
 - [x] S9 Setup doctor: bridge network, /dev/dri, volumes, disk, TZ, clock, PUID/PGID/UMASK (commit 9f70a73)
-- [x] S10 Source health and limits
+- [x] S10 Source health and limits (commit 56451fc)
 
 ## Phase P — Server and Apple apps, working as one
 - [ ] P1 Generated Swift and TypeScript clients from OpenAPI; drift check in CI
