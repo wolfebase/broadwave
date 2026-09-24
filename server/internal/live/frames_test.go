@@ -43,6 +43,9 @@ func TestFrameArgsSampleTheOpenMux(t *testing.T) {
 	if !strings.Contains(text, "scale=480:-2") || !strings.Contains(text, "scale=1280:-2") {
 		t.Fatal("both sizes are written")
 	}
+	if strings.Count(text, "-f image2") != 4 {
+		t.Fatal("a .part path needs an image format or ffmpeg will not write it")
+	}
 	if !strings.Contains(text, "/work/frames/4.jpg.part") || !strings.Contains(text, "/work/frames/5-1280.jpg.part") {
 		t.Fatalf("paths = %s", text)
 	}

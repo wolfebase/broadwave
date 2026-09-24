@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2 — 2026-09-23
+
+### Fixed
+
+- A preview still is saved. The temporary file name was not one ffmpeg would write.
+
 ## 0.3.1 — 2026-09-23
 
 ### Fixed

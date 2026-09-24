@@ -3,10 +3,10 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **Phase R deploy**. `v0.3.0` is on Unraid. Preview grabs were killed before a keyframe (`signal: killed`). `v0.3.1` lengthens that wait.
-- Half done: health and version checked. One channel played (VAAPI, one tuner). Two-tab sync and frame CPU still to measure after `v0.3.1`.
-- Next command: tag `v0.3.1`, deploy `MODE=ghcr`, then sample the frame grab and two-tab sync.
-- Unraid is on `v0.3.0` until that pull. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
+- Current task: **Phase R deploy**. `v0.3.1` is on Unraid. A channel plays. The grab now reaches a keyframe, then ffmpeg refuses `*.jpg.part` (`Unable to find a suitable output format`). `v0.3.2` names the image format.
+- Half done: one tuner, VAAPI, then released. Frame JPEG and two-tab sync still to measure after `v0.3.2`.
+- Next command: tag `v0.3.2`, deploy `MODE=ghcr`, confirm a JPEG, sample grab CPU, measure two-tab sync.
+- Unraid is on `v0.3.1` until that pull. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
 - A7 retry at phase R: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
 ## Phase R — Repair and consolidate

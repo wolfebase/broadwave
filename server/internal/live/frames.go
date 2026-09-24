@@ -68,9 +68,11 @@ func FrameArgs(jobs []FrameJob, dir string) []string {
 		}
 		small := filepath.Join(dir, fmt.Sprintf("%d.jpg.part", job.ChannelID))
 		large := filepath.Join(dir, fmt.Sprintf("%d-1280.jpg.part", job.ChannelID))
+		// .part is not an image extension, so the format has to be named or
+		// ffmpeg refuses the file and the still never lands.
 		args = append(args,
-			"-map", mapSpec, "-vf", "scale=480:-2", "-frames:v", "1", small,
-			"-map", mapSpec, "-vf", "scale=1280:-2", "-frames:v", "1", large,
+			"-map", mapSpec, "-vf", "scale=480:-2", "-frames:v", "1", "-f", "image2", small,
+			"-map", mapSpec, "-vf", "scale=1280:-2", "-frames:v", "1", "-f", "image2", large,
 		)
 	}
 	return args
