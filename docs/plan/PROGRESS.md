@@ -3,10 +3,10 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **Phase R deploy**. `v0.3.1` is on Unraid. A channel plays. The grab now reaches a keyframe, then ffmpeg refuses `*.jpg.part` (`Unable to find a suitable output format`). `v0.3.2` names the image format.
-- Half done: one tuner, VAAPI, then released. Frame JPEG and two-tab sync still to measure after `v0.3.2`.
-- Next command: tag `v0.3.2`, deploy `MODE=ghcr`, confirm a JPEG, sample grab CPU, measure two-tab sync.
-- Unraid is on `v0.3.1` until that pull. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
+- Current task: **S0**. Research sources and write ADR 0009 plus `docs/sources.md`.
+- Half done: Phase R is deployed. `v0.3.3` is on Unraid. Preview frames and two-tab sync are logged.
+- Next command: re-verify the source facts in `docs/research.md`, then write the ADR and the support matrix.
+- Unraid is on `v0.3.3`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
 - A7 retry at phase R: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
 ## Phase R — Repair and consolidate
@@ -17,7 +17,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] R5 Live preview frames from tuned muxes (no extra tunes). Unraid CPU sample is the phase R deploy line.
 - [x] R6 Apple screenshots of B–D on iPhone, iPad, and Apple TV (`docs/screenshots/r6-*`). iPhone multiview stays 2-up. Quad layout is on iPad and Apple TV; those tiles timed out when :8477 flapped, and the 2-up shots are the live picture. Scoreboard was empty, so no score was on screen.
 - [x] R7 Code review of run 1. `go test -race ./server/...` clean. Hiding a score no longer edits the cached board. Multiview waits for the tuner plan before a tile starts, on web and Apple.
-- [ ] Phase R deploy: tag, Unraid smoke, and preview-frame CPU under 3% of one core per mux
+- [x] Phase R deploy: tag, Unraid smoke, and preview-frame CPU under 3% of one core per mux
 
 ## Phase S — Every source, found automatically
 - [ ] S0 Research sources and discovery; ADR 0009; `docs/sources.md` support matrix
