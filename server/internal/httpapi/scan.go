@@ -12,7 +12,7 @@ import (
 // BroadcastScan tunes each frequency that is missing a current listing, dwells
 // long enough to read the broadcast guide, and stops if someone wants the tuner.
 func (s *Server) BroadcastScan(ctx context.Context) {
-	if s == nil || s.Hub == nil || s.Store == nil {
+	if s == nil || s.Hub == nil || s.Store == nil || s.signalRunning() {
 		return
 	}
 	s.Hub.RunScan(ctx, []int{1}, 20*time.Minute, func(ctx context.Context, _ int) error {
