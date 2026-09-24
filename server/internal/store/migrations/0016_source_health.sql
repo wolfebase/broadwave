@@ -1,0 +1,1 @@
+ALTER TABLE sources ADD COLUMN last_refresh TEXT NOT NULL DEFAULT '';

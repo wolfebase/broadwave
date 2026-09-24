@@ -43,6 +43,20 @@ export function addFree(feed: { kind?: string; addr?: string; playlist?: string;
   return request<SourceAdded>("/api/v1/sources/free", { method: "POST", body: JSON.stringify(feed) });
 }
 
+export type SourceStatus = {
+  id: number;
+  name: string;
+  health?: string;
+  refresh?: string;
+  lastRefresh?: string;
+  streamLimit?: number;
+  streamsInUse?: number;
+};
+
+export function sourceStatuses() {
+  return request<{ sources: SourceStatus[] }>("/api/v1/sources");
+}
+
 export function lookHarder() {
   return request<{ found: { kind: string; name: string; addr: string; id?: string }[] }>("/api/v1/sources/look", {
     method: "POST",

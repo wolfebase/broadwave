@@ -485,6 +485,73 @@ func TestRefreshKeepsTheChannel(t *testing.T) {
 	}
 }
 
+func TestSourceGoesOfflineAndComesBack(t *testing.T) {
+	up := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !up {
+			http.Error(w, "gone", http.StatusBadGateway)
+			return
+		}
+		_, _ = w.Write([]byte("#EXTM3U\n#EXTINF:-1 tvg-id=\"news\",News\nhttp://example/a.ts\n"))
+	}))
+	defer srv.Close()
+	st := testStore(t)
+	api := &Server{Store: st}
+	h := api.Handler()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources", strings.NewReader(`{"kind":"m3u","name":"News","url":"`+srv.URL+`/pl.m3u"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	sources, err := st.Sources(context.Background())
+	if err != nil || len(sources) != 1 {
+		t.Fatal(err)
+	}
+	if err := st.NoteRefresh(context.Background(), sources[0].ID, time.Now().Add(-time.Minute), ""); err != nil {
+		t.Fatal(err)
+	}
+	up = false
+	if _, err := api.RefreshSources(context.Background(), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := api.RefreshSources(context.Background(), time.Now().Add(2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	events, err := st.Events(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	offline := 0
+	for _, ev := range events {
+		if ev.Kind == "source" && ev.Message == "News is offline." {
+			offline++
+		}
+	}
+	if offline != 1 {
+		t.Fatalf("offline events %d in %+v", offline, events)
+	}
+	up = true
+	if n, err := api.RefreshSources(context.Background(), time.Now().Add(3*time.Hour)); err != nil || n != 1 {
+		t.Fatalf("back %d %v", n, err)
+	}
+	events, _ = st.Events(context.Background(), 10)
+	back := false
+	for _, ev := range events {
+		if ev.Message == "News is back." {
+			back = true
+		}
+	}
+	if !back {
+		t.Fatalf("no return event in %+v", events)
+	}
+	sources, _ = st.Sources(context.Background())
+	if sources[0].Health != "" || sources[0].LastRefresh == "" {
+		t.Fatalf("%+v", sources[0])
+	}
+}
+
 func testStore(t *testing.T) *store.Store {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))

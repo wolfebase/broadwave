@@ -3,9 +3,9 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **S10**. Source health.
-- Half done: S9 is in this commit. Each doctor check has a test. Diagnostics shows the time zone note when TZ is unset.
-- Next command: report when a source goes offline, comes back, or hits its stream limit.
+- Current task: **Phase S deploy**. Tag v0.4.0 and update Unraid.
+- Half done: S10 is in this commit. A playlist that fails raises one offline event, a later success says it is back, and a full playlist says how many streams are in use.
+- Next command: write the phase S changelog, tag v0.4.0, and deploy with MODE=ghcr.
 - Unraid is on `v0.3.3`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
 - A7 retry at phase S: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
@@ -29,8 +29,8 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] S6 tvheadend, Threadfin/xTeVe/ErsatzTV/Dispatcharr/Antennas, Channels DVR server, HDHomeRun-compatible by address; unsupported devices documented (commit e464ec9)
 - [x] S7 Free channels: detect FastChannels / Pluto / Samsung generator containers, or guide the user to run FastChannels (commit 1eababe)
 - [x] S8 Setup wizard v2 on web, Apple TV, and iPhone (< 90 s, no typing for HDHomeRun) (commit 0991df2)
-- [x] S9 Setup doctor: bridge network, /dev/dri, volumes, disk, TZ, clock, PUID/PGID/UMASK
-- [ ] S10 Source health and limits
+- [x] S9 Setup doctor: bridge network, /dev/dri, volumes, disk, TZ, clock, PUID/PGID/UMASK (commit 9f70a73)
+- [x] S10 Source health and limits
 
 ## Phase P — Server and Apple apps, working as one
 - [ ] P1 Generated Swift and TypeScript clients from OpenAPI; drift check in CI

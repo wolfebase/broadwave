@@ -574,7 +574,9 @@ type Source struct {
 	HasGuide     bool   `json:"hasGuide,omitempty"`
 	NeedsTuner   bool   `json:"needsTuner,omitempty"`
 	Refresh      string `json:"refresh,omitempty"`
+	LastRefresh  string `json:"lastRefresh,omitempty"`
 	Health       string `json:"health,omitempty"`
+	StreamsInUse int    `json:"streamsInUse,omitempty"`
 	DeviceID     string `json:"deviceId,omitempty"`
 	Groups       string `json:"groups,omitempty"`
 	NumberStart  int    `json:"start,omitempty"`
@@ -632,7 +634,7 @@ func (s *Store) AddSource(ctx context.Context, kind, name, rawURL, xmltv string)
 }
 
 func (s *Store) Sources(ctx context.Context) ([]Source, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, name, url, xmltv_url, enabled, stable_key, priority, tuner_count, stream_limit, stream_format, has_guide, needs_tuner, refresh, health, device_id, groups, number_start FROM sources ORDER BY id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, name, url, xmltv_url, enabled, stable_key, priority, tuner_count, stream_limit, stream_format, has_guide, needs_tuner, refresh, last_refresh, health, device_id, groups, number_start FROM sources ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -641,7 +643,7 @@ func (s *Store) Sources(ctx context.Context) ([]Source, error) {
 	for rows.Next() {
 		var item Source
 		var enabled, hasGuide, needsTuner int
-		if err := rows.Scan(&item.ID, &item.Kind, &item.Name, &item.URL, &item.XMLTV, &enabled, &item.StableKey, &item.Priority, &item.TunerCount, &item.StreamLimit, &item.StreamFormat, &hasGuide, &needsTuner, &item.Refresh, &item.Health, &item.DeviceID, &item.Groups, &item.NumberStart); err != nil {
+		if err := rows.Scan(&item.ID, &item.Kind, &item.Name, &item.URL, &item.XMLTV, &enabled, &item.StableKey, &item.Priority, &item.TunerCount, &item.StreamLimit, &item.StreamFormat, &hasGuide, &needsTuner, &item.Refresh, &item.LastRefresh, &item.Health, &item.DeviceID, &item.Groups, &item.NumberStart); err != nil {
 			return nil, err
 		}
 		item.Enabled = enabled != 0
@@ -663,7 +665,7 @@ func (s *Store) RememberPlaylist(ctx context.Context, id int64, groups string, s
 
 // NoteRefresh records when the playlist should be fetched again and the last result.
 func (s *Store) NoteRefresh(ctx context.Context, id int64, next time.Time, health string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE sources SET refresh=?, health=? WHERE id=?`, next.UTC().Format(time.RFC3339), health, id)
+	_, err := s.db.ExecContext(ctx, `UPDATE sources SET refresh=?, last_refresh=?, health=? WHERE id=?`, next.UTC().Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339), health, id)
 	return err
 }
 
