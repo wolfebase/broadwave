@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0 — 2026-09-24
+
+Waveguide can take a tuner, a playlist, or a free-channel server, and a new install walks you there.
+
+### Added
+
+- The server finds an HDHomeRun on the network, and looks harder for the other servers people already run.
+- A playlist keeps the channel details Channels uses, including artwork and its own guide. A big list asks what to keep.
+- Xtream Codes, tvheadend, Channels DVR, and the usual emulator playlists can be added. Passwords stay masked.
+- Add free channels finds a FastChannels, Pluto, or Samsung server that is already running. Streams that need DRM are left out.
+- Setup is five steps: sources, channels, guide, recordings, and the apps. The same steps are on iPhone and Apple TV.
+- Diagnostics says what to fix, in one line, when the network, disk, clock, or tuner is in the way.
+- A source says when it goes offline, when it comes back, and when every stream from it is in use.
+
 ## 0.3.3 — 2026-09-23
 
 ### Fixed
