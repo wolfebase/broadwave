@@ -33,8 +33,39 @@ func TestProgressiveSkipsDeinterlace(t *testing.T) {
 	if strings.Contains(line, "bwdif") || strings.Contains(line, "deinterlace_vaapi") {
 		t.Fatalf("progressive picture should not be bobbed: %s", line)
 	}
-	if !strings.Contains(line, "fps=30000/1001") {
-		t.Fatalf("progressive rate: %s", line)
+	if strings.Contains(line, "fps=") {
+		t.Fatalf("a progressive picture keeps its own frame rate: %s", line)
+	}
+}
+
+// A 720p60 MPEG-2 broadcast (most ABC and FOX stations) is progressive. Bobbing it
+// as fields halves its detail, and a 29.97 cap throws away every other frame.
+func TestProgressive720pKeepsEveryFrame(t *testing.T) {
+	src := Source{VideoCodec: "MPEG2", AudioCodec: "AC3", Progressive: true}
+	for _, enc := range []string{"h264_vaapi", "libx264", "h264_videotoolbox"} {
+		line := strings.Join(RenditionArgs(0, src, Rendition{Video: "1080", Audio: "aac2"}, enc, "motion_adaptive", false), " ")
+		if strings.Contains(line, "deinterlace_vaapi") || strings.Contains(line, "bwdif") {
+			t.Fatalf("%s: progressive broadcast was deinterlaced: %s", enc, line)
+		}
+		if strings.Contains(line, "fps=") {
+			t.Fatalf("%s: progressive broadcast lost its frame rate: %s", enc, line)
+		}
+	}
+	line := strings.Join(RenditionArgs(0, src, Rendition{Video: "1080", Audio: "aac2"}, "h264_vaapi", "motion_adaptive", false), " ")
+	if !strings.Contains(line, "format=nv12,hwupload,scale_vaapi=w='min(1920,iw)'") {
+		t.Fatalf("vaapi should scale on the GPU and never upscale 720p: %s", line)
+	}
+}
+
+func TestInterlacedStaysFieldRateOnTheGPU(t *testing.T) {
+	src := Source{VideoCodec: "MPEG2", AudioCodec: "AC3"}
+	line := strings.Join(RenditionArgs(0, src, Rendition{Video: "1080", Audio: "aac2"}, "h264_vaapi", "motion_adaptive", false), " ")
+	if !strings.Contains(line, "deinterlace_vaapi=mode=motion_adaptive:rate=field,scale_vaapi") {
+		t.Fatalf("1080i should be bobbed to 59.94 on the GPU: %s", line)
+	}
+	tile := strings.Join(RenditionArgs(0, src, Rendition{Video: "360", Audio: "none"}, "h264_vaapi", "motion_adaptive", false), " ")
+	if !strings.Contains(tile, "fps=30000/1001,format=nv12,hwupload,deinterlace_vaapi=mode=motion_adaptive:rate=frame") {
+		t.Fatalf("tiles stay at frame rate: %s", tile)
 	}
 }
 

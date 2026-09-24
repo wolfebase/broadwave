@@ -271,8 +271,8 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		}
 	}
 	if transcode {
-		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: encoder, Mode: r.Mode, Deint: deint, Blend: blend}
-		interlaced := (InterlacedCodec(src.VideoCodec) || (!src.Progressive && codecName(src.VideoCodec) == "h264")) && g.Mode != "film"
+		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: encoder, Mode: r.Mode, Deint: deint, Blend: blend, Progressive: src.Progressive}
+		interlaced := !src.Progressive && (InterlacedCodec(src.VideoCodec) || codecName(src.VideoCodec) == "h264") && g.Mode != "film"
 		field := interlaced && !smallPicture(g.Profile)
 		width, height, rate := pictureSize(g.Profile, field)
 		fps, gop := pictureRate(g, field)

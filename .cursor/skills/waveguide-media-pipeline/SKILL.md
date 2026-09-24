@@ -19,8 +19,17 @@ description: Rules and hard-won gotchas for Waveguide's live relay, ffmpeg rendi
 6. **Segment 0 is never served** (decoder warm-up; audio starts before video; browsers reject it) and `EXT-X-MEDIA-SEQUENCE` is bumped by one while it's listed. Watch waits for 3 `#EXTINF` before answering.
 7. **VideoToolbox needs `-a53cc 0`** — its A/53 caption SEI makes every segment undecodable (0x0 frames). Captions for VT transcodes must come from a separate WebVTT path.
 8. **Copy video only when progressive** (`channels.field_order == "progressive"`, learned by the background ffprobe in `live/probe.go`). Browsers don't deinterlace; interlaced H.264 subchannels get transcoded with bwdif.
+8a. **Never deinterlace a progressive source, and keep its frame rate.** Most ABC and FOX stations send MPEG-2 720p59.94, which is progressive. Before 2026-09-24 every MPEG-2 channel was bobbed at field rate: on VAAPI that sent 720p60 out as 1920x1080 at 119.88 fps in 1 s segments (measured on Unraid, channel 4.1). The software path capped it at 29.97. Progressive sources now skip deinterlace, keep their own rate (no `fps=`), and scale on the GPU with `scale_vaapi=w='min(W,iw)'` so 720p is never upscaled. Tiles (`saver`, `tile`) cap at 29.97. `TestProgressive720pKeepsEveryFrame` guards this.
 9. **Sync engines never seek backward in a live buffer** (hls.js stalls/corrupts). Ahead -> pause for exactly the drift; behind -> seek forward; trim rate ±3% under 400 ms; at most one seek per 2 s; ignore fragments with `duration <= 0 || > 30`. Map position <-> PDT through the playlist fragments, not `hls.playingDate`.
 10. **Room target** = `anchorMedia + (serverNow - anchorServer) * rate`; default latency 10 s behind real time (`balanced`). On a fresh tune the target is older than the window for a few seconds — the engine waits, it doesn't clamp-seek.
+
+## Picture lab (real encodes on the Unraid iGPU)
+
+- Capture samples through the running server (`curl -m 11 :8477/export/stream/<id>`) only when `/api/v1/tuners` is free and nothing records soon.
+- Run encodes in throwaway containers named `wg-lab-*` with `--cpus 4 --device /dev/dri`, and clean up with `docker ps -aq --filter name=wg-lab | xargs -r docker rm -f`. Kill remote runners with `pkill -f "[r]unner-name"`; a plain `pkill -f name` matches your own SSH shell.
+- **Feed samples at real time** (`ffmpeg -re` or a rate-limited pipe). ffmpeg 5.1 (the image's Debian build) with `-copyts` and VAAPI deinterlace, fed a file faster than real time, emits thousands of 0.0007 s segments and never exits. Production (live pipe) is fine. This cost an hour.
+- Measure the result, not the args: `cat init.mp4 seg*.m4s`, then count frames from `frame=pts_time` (fps = frames / span), read width and height, and count decode errors.
+- Staging beside production: container `Waveguide-Staging` on `:8490` runs `-staging -bonjour=false` (no recordings, no guide pulls, no idle scans, no emulator) with its own `server_identity`. Test there first, like a viewer would, in Chrome and the simulators; production stays untouched.
 
 ## Testing changes
 

@@ -44,6 +44,7 @@ func main() {
 	hdhrHost := flag.String("hdhr", os.Getenv("HDHR_HOST"), "tuner address when the container cannot hear broadcast discovery")
 	bonjour := flag.Bool("bonjour", true, "advertise this server to the apps over Bonjour")
 	healthcheck := flag.Bool("healthcheck", false, "check a running server on -addr and exit (for container health checks)")
+	staging := flag.Bool("staging", false, "test copy beside a real server: never record, scan, or pull the guide; tune only when someone watches")
 	flag.Parse()
 	if *healthcheck {
 		os.Exit(checkHealth(*addr))
@@ -65,7 +66,9 @@ func main() {
 	encoder := live.DetectEncoder(ffmpegPath)
 	live.Reap(work)
 	hub := live.New(st, work, ffmpegPath, encoder)
-	if err := dvr.Recover(context.Background(), st, time.Now(), func(rec store.Recording, left time.Duration) error {
+	if *staging {
+		log.Printf("staging: recordings, guide pulls, background tunes, and the tuner emulator are off")
+	} else if err := dvr.Recover(context.Background(), st, time.Now(), func(rec store.Recording, left time.Duration) error {
 		minutes := int(left / time.Minute)
 		if minutes < 1 {
 			return nil
@@ -113,7 +116,7 @@ func main() {
 		bus.Publish("sources.found", map[string]int{"found": n})
 		// SiliconDust asks for a random 20-28 h gap after each successful pull.
 		// A restart waits out whatever nextGuidePull was already stored.
-		for {
+		for !*staging {
 			if wait := api.GuideDelay(time.Now()); wait > 0 {
 				time.Sleep(wait)
 				continue
@@ -164,17 +167,23 @@ func main() {
 	}()
 	go func() {
 		time.Sleep(20 * time.Second)
-		api.BroadcastScan(context.Background())
+		if !*staging {
+			api.BroadcastScan(context.Background())
+		}
 	}()
 	go func() {
 		tick := time.NewTicker(20 * time.Second)
 		defer tick.Stop()
 		for range tick.C {
-			dvr.Tick(context.Background(), st, hub)
-			api.ExtendRecordings(context.Background())
+			if !*staging {
+				dvr.Tick(context.Background(), st, hub)
+				api.ExtendRecordings(context.Background())
+			}
 			if hub != nil {
 				hub.ReleaseAbandoned(45 * time.Second)
-				httpapi.SyncEmulator(st, hub)
+				if !*staging {
+					httpapi.SyncEmulator(st, hub)
+				}
 			}
 		}
 	}()
