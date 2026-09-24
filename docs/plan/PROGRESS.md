@@ -3,8 +3,8 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **U1** (`MODE=staging` in `scripts/deploy-unraid.sh`, and `scripts/staging-watch.sh`). Then Phase PB, starting with PB9.
-- App Review: Broadwave 1.0 (iOS and tvOS, app 6815795649, build 2) was WAITING_FOR_REVIEW at 2026-09-24 21:30 UTC. Check it at the start of every round (AS1).
+- Current task: **PB9** (`scripts/picture-lab.sh`). U1 is done this round.
+- App Review: Broadwave 1.0 (iOS and tvOS, app 6815795649, build 2) was WAITING_FOR_REVIEW at 2026-09-24 22:55 UTC. Check it at the start of every round (AS1).
 - Production `Broadwave` on TUS `:8477` is v0.6.0. Staging `Broadwave-Staging` is on `:8490`. Next recording: Jeopardy, 2026-09-25 20:00 UTC.
 - The tree is clean at the last commit. The repo is `~/Projects/active/broadwave`.
 
@@ -41,7 +41,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] LEGAL2 Threat model and security review before H2/H3; every finding fixed with tests
 
 ## Phase U — Staging and hotfix
-- [ ] U1 `MODE=staging` in `scripts/deploy-unraid.sh` + `scripts/staging-watch.sh` (the 720p fix already shipped in v0.6.0; see UNRAID_LOG)
+- [x] U1 `MODE=staging` in `scripts/deploy-unraid.sh` + `scripts/staging-watch.sh`. Staging recreate left `Broadwave` alone (`docker inspect` name `/Broadwave-Staging`, args `-staging -bonjour=false`, `:8490`, identity "Broadwave Staging"). `staging-watch.sh 1 15 192.168.1.2:8477` printed `1280x720 59.94`, segment 2.002s, 0 decode errors, tuner released. The same against `:8490`.
 
 ## Phase PB — Playback
 - [x] PB1 Progressive broadcasts keep every frame and are never bobbed; `-staging` flag. Staging on TUS iGPU: 4.1 1280x720 59.94 in 2.002 s segments, 0 decode errors (v0.5.0: 1920x1080 119.88 in 1.001 s); 9.1 1920x1080 59.94 unchanged; Chrome 0 dropped frames on both; iPhone and Apple TV sims played 4.1 and a 4.1+9.1 multiview (`docs/screenshots/pb-*`); `TestProgressive720pKeepsEveryFrame` (commit 8dac5dd)
