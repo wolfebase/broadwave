@@ -27,6 +27,16 @@ Run 1 did good work but ended its turn after almost every phase; the user had to
 6. **Crash-safe resume.** The top of `PROGRESS.md` has a "Resume here" block: the current task ID, what is half done, and the next command. Update it at the start of every task. If the session dies, a fresh agent reads it and continues without rediscovery.
 7. **No silent deferrals.** If a task's acceptance can't be met in full, finish what can be, then add a new explicit task line in `PROGRESS.md` for the remainder, placed in the execution order (section 4). Prose notes alone are not enough (run 1 left the mosaic, the 18 empty channels, and TestFlight uploads only as notes).
 
+### 0.1a Review 2 (2026-09-24, after v0.5.0): what changes from here
+
+A review of R1–P1 found good, real work (CI green every commit, real containers tested, three clean Unraid deploys) and five habits to fix. These override anything below that disagrees.
+
+1. **Every tick carries its evidence.** A `PROGRESS.md` tick lists each **Accept** bullet with the proof: a number (ms, KB, %, count), a test name, a screenshot path, or an `UNRAID_LOG` entry. If a bullet was not met, say so on the line and add a follow-up task line (0.1 rule 7). The commit body says what was verified and how. Phase S ticked ten tasks in two hours, and most commit bodies are one line, so nobody can tell which acceptance criteria actually ran.
+2. **Apple is the flagship, so Apple depth is the bar.** When a task names iPhone, iPad, or Apple TV, the Apple part must do what the web part does. A screen that only shows text where the web version has actions is a placeholder, not done. S8's Apple setup is a placeholder: it never searches for tuners, scans, adds a playlist, or checks the recordings folder. Its "big four" favorites match `ABC|CBS|FOX|NBC` in the channel name, but broadcast names are call signs (WDAF, KCTV), so nothing gets starred. → S8b and P5. Recordings and Settings on Apple live inside `SportsView.swift` and are thin. → P5 and E3 must bring them to parity.
+3. **No partial work hidden in comments.** `internal/psip/text.go` skips Huffman-compressed strings "until a capture needs them". A stranger's stations will use them, and their titles will come out blank. Anything left out of a task's Do list becomes a task line, never a code comment. → C7b.
+4. **`make check` now mirrors CI** (commit after 97d3ade): gofmt, go vet, the API drift check (`apigen -check`), and `FAKE=1 scripts/relay-smoke.sh` were in CI or missing entirely, not in `make check`. `internal/httpapi/server.go` was committed unformatted; run `gofmt -w server` before the next commit. → R8 adds gofmt to CI once that file is clean.
+5. **Round-trip every secret.** 97d3ade fixed a bug the tests missed. `maskURL` percent-encodes its dots, so `FetchURL`'s `strings.Contains(public, "••••")` never matched. Every source with a password fetched the masked address on its daily refresh and went offline. Xtream guides also lost their password, because only one secret per source was stored. Tests now fetch through `FetchURL`. Any new credential path needs a test that stores, lists (masked), and fetches (real). Logins live only in `source_secrets`. They never appear in `sources`, channel JSON (`json:"-"`), logs, events, or exports.
+
 ### 0.2 Per-task loop
 
 1. Update "Resume here". Read the relevant code and skill.
@@ -175,7 +185,7 @@ P3. **Compatibility.** `apiVersion` + `features` negotiation: the apps hide what
 
 P4. **Find each other, always.** Bonjour first. Fallback discovery for networks that filter mDNS: the server answers a small UDP broadcast probe on a documented port with its id, name, and URL; the apps send it when Bonjour finds nothing in 3 s. Remembered servers, reconnect by server id when the address changes, a Local Network permission explainer on iOS and tvOS, and QR/deep link connect. tvOS: typing an address is the last resort (Continuity keyboard works). **Accept:** simulators find the dev server with Bonjour disabled on the server; an address change is followed without user action.
 
-P5. **Set up and manage from the apps.** Native SwiftUI for the S8 setup flow (Apple TV first: most people set up in the living room), sources and discovery results, channel scan, favorites and hiding, passes, recordings management, settings, and a Diagnostics screen with the S9 doctor. Keep `docs/parity.md`: every feature × web / iPhone / iPad / Apple TV, updated in the same commit as any feature. **Accept:** a fresh server set up entirely from the Apple TV simulator; parity doc complete.
+P5. **Set up and manage from the apps.** Native SwiftUI for the S8 setup flow (Apple TV first: most people set up in the living room), sources and discovery results, channel scan, favorites and hiding, passes, recordings management, settings, and a Diagnostics screen with the S9 doctor. Keep `docs/parity.md`: every feature × web / iPhone / iPad / Apple TV, updated in the same commit as any feature. Move Recordings and Settings out of `SportsView.swift` into their own files and bring them up to the web's depth: every setting the web Settings page has, grouped the same way. The antenna check (C9), guide source and depth (C8), sources with health (S10), and the doctor (S9) all appear on Apple. **Accept:** a fresh server set up entirely from the Apple TV simulator; parity doc complete with **no "web only" cell except where the platform forbids it** (each such cell gives the reason); screenshots per section on tvOS and iPhone.
 
 P6. **Realtime and resilience.** EventSocket reconnect with backoff and room re-join; clock re-sync after sleep; an offline banner with cached data (R3); the player survives a server restart or container upgrade (recovers within 5 s, same channel, same sync room); correct behavior on iOS background/foreground and tvOS sleep/wake; guide and recordings update live from events, never by polling. **Accept:** scripted test restarts the container while web and simulators play; all recover; timings logged.
 
@@ -215,6 +225,12 @@ C7. **Guide from the broadcast (PSIP EIT harvesting).** Package `internal/psip`.
 C8. **Guide depth and freshness.** With C7, show honest depth ("Listings through Thursday"); the guide scrolls as far as any source goes; when a channel's data ends, its row says so instead of "No listing". Program sheet shows which source a listing came from (in the Stream Info style, not on every cell). **Accept:** screenshots; test for merge boundaries.
 
 C9. **Antenna and signal tools.** A Settings > Tuners screen: per-channel signal strength, SNR quality, and symbol quality from `/tunerN/status` for channels on a tuned frequency; a "Check all channels" run that uses idle tuners the same way as C7 (preemptible). Show a simple verdict per channel (Great / OK / Weak / Lost) and a tip for weak ones in the copy voice. **Accept:** real readings from the DUO; the run yields to viewers.
+
+C7b. **Every string a station sends.** Implement A/65 Annex C Huffman decoding (compression types 1 and 2, both title and program-description tables) in `internal/psip/text.go`, plus multi-language strings (prefer the device locale, then `eng`). Put a table-driven test on the Annex C examples, and on a real compressed string if any station on the DUO sends one. Also handle mode `0x3F` (UTF-16) and ISO-8859 modes where the spec allows them. **Accept:** no event decodes to an empty title while its ETT or EIT has bytes; test names in the tick.
+
+S8b. **Apple setup, for real.** Replace `apple/App/Shared/SetupWizard.swift` with the same flow as the web wizard. Discovery results arrive live over the event socket, with one-tap Add, Look harder, and Enter an address. Then a channel scan with live progress, Add a playlist (URL or Xtream, with the Continuity keyboard on tvOS), Free channels, favorites for the big four chosen by **network affiliation**, and the recordings volume check from the S9 doctor. Pick the affiliation the same way on web and Apple: from the guide (XMLTV `display-name` or the station's network), then from a call-sign table the server exposes. The server decides; the clients never guess from the name. Setup reruns from Settings. **Accept:** a fresh server (fake tuner, empty catalog) gets set up from the Apple TV simulator and from the iPhone simulator with zero typing, to a playing channel, in < 90 s. Screenshots of every step: `docs/screenshots/s8b-*`.
+
+R8. **Lint in CI matches `make check`.** After `server.go` is gofmt-clean, add `test -z "$(gofmt -l server)"` to the Go job in `.github/workflows/ci.yml`. **Accept:** CI green with the step.
 
 ### Phase K1 — Fake tuner early (before the heavy DVR and player work)
 
@@ -340,7 +356,7 @@ M5. Anything the J1 review or K4 soak surfaced that makes the product better tha
 R1 → R2 → R3 → R4 → R5 → R6 → R7 →
 S0 → S1 → S2 → S3 → S4 → S5 → S6 → S7 → S8 → S9 → S10 → (tag + deploy) →
 C7 → C8 → C9 → (tag + deploy) →
-K1 → P1 → P2 → P3 → P4 → P5 → P6 → P7 → P8 → G1 → (tag + deploy + TestFlight) →
+K1 → P1 → P2 → R8 → C7b → S8b → P3 → P4 → P5 → P6 → P7 → P8 → G1 → (tag + deploy + TestFlight) →
 F1 → F2 → F3 → F4 → F5 → F6 → F7 → (tag + deploy + TestFlight) →
 E1 … E9 → (tag + deploy) →
 D7 → D8 → B5 → (tag + deploy) →
@@ -366,4 +382,5 @@ A7 is retried at the start of every phase: if `~/.blitz/bin/asc web auth status`
 - The Apple TV app feels native (Top Shelf, focus, remote gestures, info panels, frame-rate matching); the iPhone app has widgets, Live Activities, Siri, PiP, and the mini player.
 - Everything runs on Unraid with hardware encoding, survives restarts, and a 24 h soak shows no leaks.
 - `main` is green; images are published per phase; iOS and tvOS builds are in TestFlight; the Community Apps submission is in (or approved).
-- Every line in `PROGRESS.md` is ticked or recorded in `BLOCKERS.md` with a clear reason.
+- Every line in `PROGRESS.md` is ticked with its evidence (0.1a) or recorded in `BLOCKERS.md` with a clear reason.
+- `docs/parity.md` shows the Apple apps doing everything the web app does.

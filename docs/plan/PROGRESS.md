@@ -9,6 +9,12 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - Unraid is on `v0.5.0`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
 - A7 stays blocked on an Apple ID login (see BLOCKERS).
 
+## Review 2 (2026-09-24): read MASTER_PLAN section 0.1a before your next task
+- Next after P2: **R8 → C7b → S8b**, then P3 (section 4 is updated).
+- Every tick now lists the evidence for each Accept bullet (0.1a rule 1).
+- `make check` now runs gofmt, go vet, `apigen -check`, and the fake-tuner relay smoke, like CI does. Run `gofmt -w server` (`internal/httpapi/server.go` is unformatted).
+- 97d3ade (migration 0019) fixed sources with passwords going offline on refresh, and Xtream guides losing their password. Don't redo it; the next migration is 0020.
+
 ## Phase R — Repair and consolidate
 - [x] R1 CI green on all four jobs at 0984064 (lint fixes e411da1, Xcode 26 guard 0984064); `make check`; CI section in the dev-loop skill
 - [x] R2 v0.2.0 tagged with CHANGELOG, deployed to Unraid via GHCR, A–D features checked on the LAN (tag v0.2.0, log in UNRAID_LOG)
@@ -17,6 +23,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] R5 Live preview frames from tuned muxes (no extra tunes). Unraid CPU sample is the phase R deploy line.
 - [x] R6 Apple screenshots of B–D on iPhone, iPad, and Apple TV (`docs/screenshots/r6-*`). iPhone multiview stays 2-up. Quad layout is on iPad and Apple TV; those tiles timed out when :8477 flapped, and the 2-up shots are the live picture. Scoreboard was empty, so no score was on screen.
 - [x] R7 Code review of run 1. `go test -race ./server/...` clean. Hiding a score no longer edits the cached board. Multiview waits for the tuner plan before a tile starts, on web and Apple.
+- [ ] R8 gofmt check in CI (after `server.go` is formatted)
 - [x] Phase R deploy: tag, Unraid smoke, and preview-frame CPU under 3% of one core per mux
 
 ## Phase S — Every source, found automatically
@@ -29,6 +36,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] S6 tvheadend, Threadfin/xTeVe/ErsatzTV/Dispatcharr/Antennas, Channels DVR server, HDHomeRun-compatible by address; unsupported devices documented (commit e464ec9)
 - [x] S7 Free channels: detect FastChannels / Pluto / Samsung generator containers, or guide the user to run FastChannels (commit 1eababe)
 - [x] S8 Setup wizard v2 on web, Apple TV, and iPhone (< 90 s, no typing for HDHomeRun) (commit 0991df2)
+- [ ] S8b Apple setup at web depth: live discovery, scan, playlist/Xtream, free channels, server-chosen big-four favorites by affiliation, volume check (the S8 Apple wizard is a placeholder)
 - [x] S9 Setup doctor: bridge network, /dev/dri, volumes, disk, TZ, clock, PUID/PGID/UMASK (commit 9f70a73)
 - [x] S10 Source health and limits (commit 56451fc)
 - [x] Phase S deploy: tag v0.4.0, Unraid smoke, two-screen sync (commit 6442a79, log in UNRAID_LOG)
@@ -38,7 +46,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] P2 Golden-response contract tests for OTAKit and web in `make check`
 - [ ] P3 apiVersion/features negotiation and minimum app version
 - [ ] P4 Bonjour + UDP fallback discovery, remembered servers, follow address changes, permission explainer
-- [ ] P5 Full setup and management from the Apple apps; `docs/parity.md`
+- [ ] P5 Full setup and management from the Apple apps; `docs/parity.md` with no unexplained "web only" cells; Recordings and Settings out of `SportsView.swift` at web depth
 - [ ] P6 Realtime resilience: reconnect, re-join, survive server restart/upgrade, sleep/wake
 - [ ] P7 End-to-end CI: Docker image + fake tuner + XCUITest on iOS and tvOS + sync check
 - [ ] P8 The container is the reference server for e2e and soak
@@ -76,6 +84,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] C5 Guide UX (commit 37be574). The grid covers the listings on hand (up to two days). Now, Tonight, and Tomorrow jump the time. A Now button returns when now has scrolled away. Wide cells show a picture. Drag a channel to reorder it on this screen; right-click or H hides it. iPhone landscape and Apple TV use the grid, play/pause on Apple TV starts the focused show, and iPad keeps the program beside the guide.
 - [x] C6 Search (commit d7def66). Full-text search covers titles, subtitles, descriptions, and cast, plus recordings. Search on the web and on Apple lists the matches. Record every airing makes a pass for that title.
 - [x] C7 Guide from the broadcast: relay on full mux `/tunerN/ch<freq>` (PSIP present; `/auto/v` is not), EIT parser, passive harvest, preemptible idle scan, gap merge. Nine of 27 stored channels have current and next listings. An antenna scan on 2026-09-24 did not find 14.1–14.16, 9.4, 43.3, or 46.7, and tuning them returns not found, so they stay empty (ADR 0006). (commit 7d7a49a)
+- [ ] C7b PSIP Huffman (A/65 Annex C) and multi-language/UTF-16 strings; no blank titles
 - [x] C8 Honest guide depth and per-listing source. The grid runs to the last listing (up to 14 days). A row past its data says "Listings through Saturday" instead of "No listings". The program sheet says where the listing came from. (commit b123bdd)
 - [x] C9 Antenna and signal tools. Settings > Tuners reads strength, quality, and symbols, then says Great, OK, Weak, or Lost. Check all channels uses an idle tuner and stops when a viewer starts. On the DUO, 4.1, 5.1, 9.1, 29.1, 38.1, and 41.1 were Great and 39.7 was OK. (commit 4e51316)
 - [x] Phase C deploy: tag v0.5.0, Unraid smoke, two-screen sync (commit 2463a86, log in UNRAID_LOG)
