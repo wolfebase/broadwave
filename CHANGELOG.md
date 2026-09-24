@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.0 — 2026-09-24
+
+The product is now Broadwave, and 720p channels play at a true 60 frames.
+
+### Changed
+
+- The app, server, image, and repo are named Broadwave: `ghcr.io/wolfebase/broadwave`, `github.com/wolfebase/broadwave`, Bonjour `_broadwave._tcp`, and links `broadwave://`. The catalog file is `broadwave.db`.
+- The iPhone, iPad, and Apple TV Home screen shows each program's picture.
+
+### Fixed
+
+- A 720p station (most ABC and FOX affiliates) played at 120 frames per second on Intel graphics and 30 without them. It now keeps its own 60 frames and is never deinterlaced or upscaled.
+- A playlist or Xtream source with a password went offline at its first daily refresh, and an Xtream guide lost its password. Both refresh now, and a guide that fails says so in the activity log.
+
+### Added
+
+- The apps and web client check every server response against recorded examples, so a server change can't quietly break them.
+- `-staging` runs a test copy next to a real server without recording, scanning, or pulling the guide.
+
 ## 0.5.0 — 2026-09-24
 
 The guide fills in from the broadcast, and Settings says how the antenna is doing.
