@@ -383,6 +383,32 @@ func TestGuideDelayFollowsStoredSchedule(t *testing.T) {
 	}
 }
 
+func TestScanUsesTheFakeTuner(t *testing.T) {
+	var started bool
+	tuner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/lineup.post" && r.URL.Query().Get("scan") == "start" {
+			started = true
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer tuner.Close()
+	st := testStore(t)
+	if err := st.UpsertDevice(context.Background(), hdhr.Device{
+		DeviceID: "FAKE", FriendlyName: "Fake", BaseURL: tuner.URL, TunerCount: 1,
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st, HDHR: &hdhr.Client{HTTP: tuner.Client()}}).Handler()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/devices/FAKE/scan", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !started {
+		t.Fatalf("%d %s started=%v", rec.Code, rec.Body.String(), started)
+	}
+}
+
 func testStore(t *testing.T) *store.Store {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))

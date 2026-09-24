@@ -32,6 +32,7 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 	skips, _ := st.Skips(ctx)
 	planned := Plan(passes, rows, countTuners(ctx, st), now.Add(-time.Minute), now.Add(lead))
 	planned = ApplyLibrary(planned, passes, active, seen, skips)
+	hold := 0
 	for _, item := range planned {
 		if item.Skipped || already(active, item.Airing) {
 			continue
@@ -42,6 +43,7 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 		}
 		start, minutes := StartDecision(pass, item.Airing, now)
 		if !start {
+			hold++
 			continue
 		}
 		if _, err := hub.RecordMeta(ctx, minutes, store.Recording{
@@ -51,6 +53,7 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 			log.Printf("pass record: %v", err)
 		}
 	}
+	hub.SetHold(hold)
 }
 
 func countTuners(ctx context.Context, st *store.Store) int {

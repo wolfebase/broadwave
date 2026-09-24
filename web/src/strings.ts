@@ -13,6 +13,8 @@ export const copy = {
     none: "No HDHomeRun has answered yet.",
     tuners: "tuners",
     firmware: "Firmware",
+    scan: "Scan channels",
+    scanning: "Scanning for channels.",
     channels: "Lineup",
     enabled: "On guide",
     hidden: "Hidden",

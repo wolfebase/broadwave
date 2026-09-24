@@ -26,6 +26,13 @@ export function getDevices() {
   return request<{ devices: Device[] }>("/api/v1/devices");
 }
 
+export function startScan(deviceId: string) {
+  return request<{ scanning: boolean }>(`/api/v1/devices/${encodeURIComponent(deviceId)}/scan`, {
+    method: "POST",
+    body: "{}",
+  });
+}
+
 export function lookHarder() {
   return request<{ found: { kind: string; name: string; addr: string; id?: string }[] }>("/api/v1/sources/look", {
     method: "POST",

@@ -71,6 +71,42 @@ func TestNewAddressKeepsTheChannelID(t *testing.T) {
 	}
 }
 
+func TestOtherDeviceIsTheFailover(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	a := hdhr.Device{DeviceID: "AAAA", FriendlyName: "First", BaseURL: "http://192.168.1.20", TunerCount: 2}
+	b := hdhr.Device{DeviceID: "BBBB", FriendlyName: "Second", BaseURL: "http://192.168.1.30", TunerCount: 2}
+	if err := st.UpsertDevice(ctx, a, []hdhr.Channel{{GuideNumber: "4.1", GuideName: "ABC", StreamURL: "http://a/4.1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertDevice(ctx, b, []hdhr.Channel{{GuideNumber: "4.1", GuideName: "ABC", StreamURL: "http://b/4.1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`UPDATE devices SET priority=1 WHERE device_id='AAAA'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`UPDATE devices SET priority=2 WHERE device_id='BBBB'`); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.OtherDevices(ctx, "4.1", "AAAA")
+	if err != nil || len(got) != 1 || got[0] != "http://192.168.1.30" {
+		t.Fatalf("%v %v", got, err)
+	}
+	locked := []hdhr.Channel{{GuideNumber: "702", GuideName: "HBO", StreamURL: "http://a/702", Protected: true}}
+	if err := st.UpsertDevice(ctx, a, append([]hdhr.Channel{{GuideNumber: "4.1", GuideName: "ABC", StreamURL: "http://a/4.1"}}, locked...)); err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.Channels(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range channels {
+		if item.GuideNumber == "702" {
+			t.Fatalf("copy protected channel was offered: %+v", item)
+		}
+	}
+}
+
 func TestSourcePasswordIsMasked(t *testing.T) {
 	st := openTestStore(t)
 	item, err := st.AddSource(context.Background(), "m3u", "IPTV", "http://user:s3cret@example/pl.m3u?password=s3cret", "")

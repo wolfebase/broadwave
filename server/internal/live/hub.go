@@ -99,6 +99,7 @@ type Hub struct {
 	muxes    map[int]*mux
 	channels map[int64]*feed
 	reserved map[int]bool
+	hold     int
 	next     int
 	playMu   sync.Mutex
 	plays    map[int64]struct{}
@@ -259,19 +260,55 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 			return h.addFeedLocked(m, ch), nil
 		}
 	}
-	tuners, err := h.readTuners(ctx, host)
-	if err != nil {
-		return nil, err
+	hosts := []string{host}
+	if h.Store != nil {
+		if more, err := h.Store.OtherDevices(ctx, ch.GuideNumber, ch.DeviceID); err == nil {
+			for _, base := range more {
+				alt := hostOf(base)
+				if alt != "" && alt != host {
+					hosts = append(hosts, alt)
+				}
+			}
+		}
 	}
-	tuner, ok := firstFree(tuners, h.usedTunersLocked(), h.reserved)
+	var devices []DeviceTuners
+	var last []Tuner
+	for _, candidate := range hosts {
+		tuners, err := h.readTuners(ctx, candidate)
+		if err != nil {
+			continue
+		}
+		last = tuners
+		devices = append(devices, DeviceTuners{Host: candidate, Tuners: tuners})
+	}
+	if len(devices) == 0 {
+		return nil, fmt.Errorf("the tuner did not answer")
+	}
+	held := h.reserved
+	if h.hold > 0 && len(devices) > 0 {
+		held = map[int]bool{}
+		for k, v := range h.reserved {
+			held[k] = v
+		}
+		for k, v := range HoldBack(devices[0].Tuners, h.hold) {
+			held[k] = v
+		}
+	}
+	host, tuner, ok := PickTuner(devices, h.usedTunersLocked(), held)
 	if !ok {
-		return nil, &BusyError{Tuners: tuners}
+		return nil, &BusyError{Tuners: last}
 	}
 	h.reserved[tuner] = true
 	defer delete(h.reserved, tuner)
 	freq, programs, err := probe(host, tuner, ch.GuideNumber)
 	if err != nil {
-		res, err := openStream(fmt.Sprintf("http://%s:5004/auto/v%s", host, ch.GuideNumber))
+		streamURL := fmt.Sprintf("http://%s:5004/auto/v%s", host, ch.GuideNumber)
+		if h.Encoder == "" || h.Encoder == "libx264" {
+			if q := hdhr.ExtendQuery(ch.ModelNumber); q != "" {
+				streamURL += "?" + q
+			}
+		}
+		res, err := openStream(streamURL)
 		if err != nil {
 			return nil, err
 		}
@@ -587,6 +624,16 @@ func (h *Hub) ExtendRecording(ctx context.Context, id int64, until time.Time) er
 		return h.Store.SetRecordingEnd(ctx, id, until)
 	}
 	return fmt.Errorf("recording %d is not in progress", id)
+}
+
+// SetHold keeps that many tuners free for recordings that are about to start.
+func (h *Hub) SetHold(n int) {
+	if n < 0 {
+		n = 0
+	}
+	h.mu.Lock()
+	h.hold = n
+	h.mu.Unlock()
 }
 
 func (h *Hub) Tuners(ctx context.Context) ([]Tuner, error) {

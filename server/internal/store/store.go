@@ -133,11 +133,13 @@ ON CONFLICT(device_id) DO UPDATE SET
 		return err
 	}
 	for _, ch := range channels {
+		protect := boolInt(ch.Protected)
 		if ch.StreamURL != "" {
 			res, err := tx.ExecContext(ctx, `
-UPDATE channels SET guide_name=?, video_codec=?, audio_codec=?, hd=?, present=1
+UPDATE channels SET guide_name=?, video_codec=?, audio_codec=?, hd=?, present=1,
+	hidden=CASE WHEN ?=1 THEN 1 ELSE hidden END
 WHERE device_id=? AND stream_url=?`,
-				ch.GuideName, ch.VideoCodec, ch.AudioCodec, boolInt(ch.HD), dev.DeviceID, ch.StreamURL)
+				ch.GuideName, ch.VideoCodec, ch.AudioCodec, boolInt(ch.HD), protect, dev.DeviceID, ch.StreamURL)
 			if err != nil {
 				return err
 			}
@@ -147,21 +149,46 @@ WHERE device_id=? AND stream_url=?`,
 		}
 		_, err := tx.ExecContext(ctx, `
 INSERT INTO channels (
-	device_id, guide_number, guide_name, stream_url, video_codec, audio_codec, hd, favorite, present
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+	device_id, guide_number, guide_name, stream_url, video_codec, audio_codec, hd, favorite, present, hidden
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
 ON CONFLICT(device_id, guide_number) DO UPDATE SET
 	guide_name=excluded.guide_name,
 	stream_url=excluded.stream_url,
 	video_codec=excluded.video_codec,
 	audio_codec=excluded.audio_codec,
 	hd=excluded.hd,
-	present=1
-`, dev.DeviceID, ch.GuideNumber, ch.GuideName, ch.StreamURL, ch.VideoCodec, ch.AudioCodec, boolInt(ch.HD), boolInt(ch.Favorite))
+	present=1,
+	hidden=CASE WHEN excluded.hidden=1 THEN 1 ELSE channels.hidden END
+`, dev.DeviceID, ch.GuideNumber, ch.GuideName, ch.StreamURL, ch.VideoCodec, ch.AudioCodec, boolInt(ch.HD), boolInt(ch.Favorite), protect)
 		if err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
+}
+
+// OtherDevices lists base URLs for other tuners that already have this channel number, lowest priority first.
+func (s *Store) OtherDevices(ctx context.Context, guideNumber, exceptDevice string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT d.base_url FROM devices d
+JOIN channels c ON c.device_id = d.device_id
+WHERE c.guide_number = ? AND c.present = 1 AND c.hidden = 0 AND d.device_id != ?
+ORDER BY d.priority, d.device_id`, guideNumber, exceptDevice)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var base string
+		if err := rows.Scan(&base); err != nil {
+			return nil, err
+		}
+		if base != "" {
+			out = append(out, base)
+		}
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) Devices(ctx context.Context) ([]Device, error) {

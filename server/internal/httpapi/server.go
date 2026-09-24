@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -54,6 +55,8 @@ func (s *Server) Handler() http.Handler {
 	api("GET /ws", s.socket)
 	api("GET /profile", s.profile)
 	api("GET /devices", s.devices)
+	api("POST /devices/{id}/scan", s.startScan)
+	api("GET /devices/{id}/scan", s.scanStatus)
 	api("POST /sources/discover", s.discover)
 	api("POST /sources/look", s.look)
 	api("GET /sources", s.listSources)
@@ -134,7 +137,64 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 	if devices == nil {
 		devices = []store.Device{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"devices": devices})
+	type noted struct {
+		store.Device
+		Note string `json:"note,omitempty"`
+	}
+	out := make([]noted, 0, len(devices))
+	for _, device := range devices {
+		out = append(out, noted{Device: device, Note: hdhr.ModelNote(device.ModelNumber)})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"devices": out})
+}
+
+func (s *Server) deviceBase(r *http.Request) (string, error) {
+	id := r.PathValue("id")
+	devices, err := s.Store.Devices(r.Context())
+	if err != nil {
+		return "", err
+	}
+	for _, device := range devices {
+		if device.DeviceID == id && device.BaseURL != "" {
+			return device.BaseURL, nil
+		}
+	}
+	return "", fmt.Errorf("no tuner named %s", id)
+}
+
+func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
+	base, err := s.deviceBase(r)
+	if err != nil {
+		httpError(w, "That tuner is not in the lineup.", http.StatusNotFound)
+		return
+	}
+	client := s.HDHR
+	if client == nil {
+		client = &hdhr.Client{}
+	}
+	if err := client.StartScan(r.Context(), base); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"scanning": true})
+}
+
+func (s *Server) scanStatus(w http.ResponseWriter, r *http.Request) {
+	base, err := s.deviceBase(r)
+	if err != nil {
+		httpError(w, "That tuner is not in the lineup.", http.StatusNotFound)
+		return
+	}
+	client := s.HDHR
+	if client == nil {
+		client = &hdhr.Client{}
+	}
+	prog, err := client.ScanProgress(r.Context(), base)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"scanning": prog.Scan, "found": prog.Found})
 }
 
 func (s *Server) discover(w http.ResponseWriter, r *http.Request) {

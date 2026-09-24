@@ -63,3 +63,56 @@ func TestFetchDropsDeviceAuth(t *testing.T) {
 		t.Fatalf("stream url not kept server-side: %+v", channels[1])
 	}
 }
+
+func TestLineupMarksCopyProtection(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[
+			{"GuideNumber":"702","GuideName":"HBO","URL":"http://tuner/v702","DRM":1},
+			{"GuideNumber":"4.1","GuideName":"ABC","URL":"http://tuner/v4.1"}
+		]`))
+	}))
+	defer srv.Close()
+	channels, err := (&Client{HTTP: srv.Client()}).FetchLineup(context.Background(), srv.URL)
+	if err != nil || len(channels) != 2 || !channels[0].Protected || channels[1].Protected {
+		t.Fatalf("%+v %v", channels, err)
+	}
+}
+
+func TestLibraryListsDeviceRecordings(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[{"Title":"News","EpisodeTitle":"At 6","Filename":"news.ts"},{"Title":""}]`))
+	}))
+	defer srv.Close()
+	files, err := (&Client{HTTP: srv.Client()}).FetchLibrary(context.Background(), srv.URL)
+	if err != nil || len(files) != 1 || files[0].Title != "News" || files[0].Filename != "news.ts" {
+		t.Fatalf("%+v %v", files, err)
+	}
+}
+
+func TestScanStartsAndReportsProgress(t *testing.T) {
+	var started bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/lineup.post":
+			if r.URL.Query().Get("scan") != "start" || r.Method != http.MethodPost {
+				http.Error(w, "bad scan", http.StatusBadRequest)
+				return
+			}
+			started = true
+			w.WriteHeader(http.StatusOK)
+		case "/lineup_status.json":
+			_, _ = w.Write([]byte(`{"Scan":1,"Found":12}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	c := &Client{HTTP: srv.Client()}
+	if err := c.StartScan(context.Background(), srv.URL); err != nil || !started {
+		t.Fatal(err)
+	}
+	prog, err := c.ScanProgress(context.Background(), srv.URL)
+	if err != nil || !prog.Scan || prog.Found != 12 {
+		t.Fatalf("%+v %v", prog, err)
+	}
+}

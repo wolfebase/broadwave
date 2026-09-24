@@ -65,7 +65,7 @@ export interface paths {
          * @description WebSocket for live updates and Whole-Home Sync. Every frame is `{"type", "data"}`.
          *
          *     Server to client: `hello` {serverTime}, `clock` {t0, t1}, `activity` (Event),
-         *     `live.changed` (refetch tuners and sessions), `sync.state` (RoomState), `error` {code, message}.
+         *     `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `error` {code, message}.
          *
          *     Client to server: `clock` {t0}, `sync.join` {room, channelId}, `sync.leave` {room},
          *     `sync.command` {room, action: play|pause|seek|live|latency, mediaTime, latency}.
@@ -127,6 +127,24 @@ export interface paths {
         get: operations["listDevices"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{id}/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description How far the channel scan has gotten. */
+        get: operations["channelScanStatus"];
+        put?: never;
+        /** @description Ask one tuner to scan for channels. This uses a tuner until the scan finishes. */
+        post: operations["startChannelScan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1386,6 +1404,57 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    channelScanStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scan progress */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        scanning: boolean;
+                        found: number;
+                    };
+                };
+            };
+            404: components["responses"]["Error"];
+        };
+    };
+    startChannelScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scan started */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        scanning: boolean;
+                    };
+                };
+            };
+            404: components["responses"]["Error"];
         };
     };
     discoverSources: {
