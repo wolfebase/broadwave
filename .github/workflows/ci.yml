@@ -15,6 +15,7 @@ jobs:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: test -z "$(gofmt -l server)" || { gofmt -l server; exit 1; }
       - run: go vet ./server/...
       - run: go test ./server/...
       - run: go run ./server/cmd/apigen -check
