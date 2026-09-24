@@ -316,7 +316,7 @@ func (s *Server) RefreshSources(ctx context.Context, now time.Time) (int, error)
 			raw, err = source.ReadPlaylist(ctx, loc)
 		}
 		if err != nil {
-			_ = s.Store.NoteRefresh(ctx, item.ID, now.Add(time.Hour), err.Error())
+			s.noteSourceDown(ctx, item, now, err)
 			continue
 		}
 		parsed := source.ParseM3U(strings.NewReader(string(raw)))
@@ -325,10 +325,13 @@ func (s *Server) RefreshSources(ctx context.Context, now time.Time) (int, error)
 		}
 		entries := source.Renumber(source.FilterGroups(parsed, item.Groups), item.NumberStart)
 		if err := source.Install(ctx, s.Store, item.ID, item.Name, "Playlist", entries); err != nil {
-			_ = s.Store.NoteRefresh(ctx, item.ID, now.Add(time.Hour), err.Error())
+			s.noteSourceDown(ctx, item, now, err)
 			continue
 		}
 		s.attachXMLTV(ctx, item.ID, item.XMLTV)
+		if item.Health != "" {
+			_ = s.Store.AddEvent(ctx, "source", item.Name+" is back.")
+		}
 		if err := s.Store.NoteRefresh(ctx, item.ID, now.Add(24*time.Hour), ""); err != nil {
 			return n, err
 		}
@@ -337,11 +340,23 @@ func (s *Server) RefreshSources(ctx context.Context, now time.Time) (int, error)
 	return n, nil
 }
 
+func (s *Server) noteSourceDown(ctx context.Context, item store.Source, now time.Time, cause error) {
+	_ = s.Store.NoteRefresh(ctx, item.ID, now.Add(time.Hour), cause.Error())
+	if item.Health == "" {
+		_ = s.Store.AddEvent(ctx, "source", item.Name+" is offline.")
+	}
+}
+
 func (s *Server) listSources(w http.ResponseWriter, r *http.Request) {
 	list, err := s.Store.Sources(r.Context())
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	if s.Hub != nil {
+		for i := range list {
+			list[i].StreamsInUse = s.Hub.StreamsInUse(list[i].DeviceID)
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"sources": list})
 }

@@ -225,6 +225,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const kind = (data as { kind?: string }).kind;
       if (kind === "recording") void refresh(["recordings", "passes"]);
       if (kind === "guide") void refresh(["airings"]);
+      if (kind === "source") {
+        const message = (data as { message?: string }).message;
+        if (message) setError(message);
+      }
     });
     const offLive = bus.on("live.changed", () => void refresh(["recordings"]));
     const offFound = bus.on("sources.found", () => void refresh(["devices", "channels"]));

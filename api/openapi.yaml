@@ -1227,8 +1227,10 @@ components:
         streamFormat: { type: string, description: "ts or hls. Empty until the source is probed." }
         hasGuide: { type: boolean }
         needsTuner: { type: boolean }
-        refresh: { type: string }
-        health: { type: string }
+        refresh: { type: string, description: "When this source will be fetched again." }
+        lastRefresh: { type: string }
+        health: { type: string, description: "Empty when the source is online. Otherwise the last error." }
+        streamsInUse: { type: integer }
         deviceId: { type: string }
     Channel:
       type: object

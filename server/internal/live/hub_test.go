@@ -55,6 +55,9 @@ func TestPlaylistStreamCountIsPerSource(t *testing.T) {
 	if streamBusy(full, 0) {
 		t.Fatal("a playlist with room is not busy")
 	}
+	if StreamLimitMessage(2) != "All 2 streams from this playlist are in use. Stop one or raise the limit." {
+		t.Fatal(StreamLimitMessage(2))
+	}
 }
 
 func TestReleaseAbandonedFreesQuietViewersButKeepsRecordings(t *testing.T) {

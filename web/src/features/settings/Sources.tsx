@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Channel, Device, TunerStatus } from "../../types";
-import { addFree, addPlaylistFile, addSource, findFree, getTuners, lookHarder, startScan, type FreeFeed, type SourceAdded } from "../../api";
+import { addFree, addPlaylistFile, addSource, findFree, getTuners, lookHarder, sourceStatuses, startScan, type FreeFeed, type SourceAdded, type SourceStatus } from "../../api";
 import { copy } from "../../strings";
 export function Sources({
   devices,
@@ -29,6 +29,7 @@ export function Sources({
   const [freeNote, setFreeNote] = useState("");
   const [findingFree, setFindingFree] = useState(false);
   const [tuners, setTuners] = useState<TunerStatus[]>([]);
+  const [statuses, setStatuses] = useState<SourceStatus[]>([]);
   const [encoder, setEncoder] = useState("");
   useEffect(() => {
     let stop = false;
@@ -38,6 +39,8 @@ export function Sources({
         if (stop) return;
         setTuners(res.tuners ?? []);
         setEncoder(res.encoder ?? "");
+        const sources = await sourceStatuses();
+        if (!stop) setStatuses(sources.sources ?? []);
       } catch {
         if (!stop) setTuners([]);
       }
@@ -188,6 +191,20 @@ export function Sources({
           ))}
         </ul>
       )}
+      {statuses.length > 0 ? (
+        <ul className="source-list">
+          {statuses.map((item) => (
+            <li key={item.id} className="source-row">
+              <span>{item.name}</span>
+              <span className="codec">{item.health ? "Offline" : "Online"}</span>
+              <span className="codec">
+                {item.streamLimit ? `${item.streamsInUse ?? 0} of ${item.streamLimit} streams` : "No stream limit"}
+                {item.health && !item.health.includes("://") ? `. ${item.health}` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {devices.length === 0 ? <p className="empty">{copy.sources.none}</p> : null}
       <div className="device-grid">
         {devices.map((device) => (

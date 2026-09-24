@@ -231,7 +231,7 @@ func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition) (Sessi
 		inUse := h.streamsForDeviceLocked(cand.DeviceID)
 		h.mu.Unlock()
 		if streamBusy(cand, inUse) && !tuned {
-			last = fmt.Errorf("All %d streams from this playlist are in use. Stop one or raise the limit.", cand.StreamLimit)
+			last = fmt.Errorf("%s", StreamLimitMessage(cand.StreamLimit))
 			continue
 		}
 		if cand.TunerCount == 0 && cand.StreamURL != "" && !hlsStream(cand) && !tuned {
@@ -1045,8 +1045,20 @@ func (h *Hub) usedTunersLocked() map[int]bool {
 	return used
 }
 
+// StreamLimitMessage is what a viewer sees when a playlist has no free stream.
+func StreamLimitMessage(limit int) string {
+	return fmt.Sprintf("All %d streams from this playlist are in use. Stop one or raise the limit.", limit)
+}
+
 func streamBusy(ch store.SourceChannel, inUse int) bool {
 	return ch.TunerCount == 0 && ch.StreamURL != "" && ch.StreamLimit > 0 && inUse >= ch.StreamLimit
+}
+
+// StreamsInUse counts channels from one source that are open right now.
+func (h *Hub) StreamsInUse(deviceID string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.streamsForDeviceLocked(deviceID)
 }
 
 func (h *Hub) streamsForDeviceLocked(deviceID string) int {
