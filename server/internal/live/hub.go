@@ -621,7 +621,10 @@ func (h *Hub) Tuners(ctx context.Context) ([]Tuner, error) {
 }
 
 func (h *Hub) attachPipeLocked(m *mux, w io.WriteCloser) *pipeSub {
-	sub := &pipeSub{w: w, ch: make(chan []byte, 800), done: make(chan struct{})}
+	// A few seconds of the mux have to fit. The rendition does not read during
+	// VAAPI startup, and a gap at the start leaves the deinterlacer with no
+	// picture, so the playlist stays an empty file.
+	sub := &pipeSub{w: w, ch: make(chan []byte, 4096), done: make(chan struct{})}
 	if m == nil {
 		sub.stop()
 		_ = w.Close()
