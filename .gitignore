@@ -29,3 +29,4 @@ apple/Packages/*/.swiftpm/
 
 # Project-local SSH material (do not commit)
 .ssh/
+__pycache__/
