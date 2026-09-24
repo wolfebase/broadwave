@@ -3,24 +3,45 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **U1** (staging script + v0.5.1 hotfix for 720p at 119.88 fps), then Phase PB.
-- P2 was committed for the previous session, which died on a Cursor HTTP/2 stream error at 11:13 with the work uncommitted; `make check` was green.
-- Staging: `Broadwave-Staging` on `http://192.168.1.2:8490` (iGPU, `-staging`). Production `Broadwave` on :8477 is v0.6.0. Next recording is Jeopardy at 20:00 UTC.
-- A7 is done. Broadwave 1.0 is uploaded (build 2) and submitted to App Review for iOS and tvOS (see BLOCKERS for status).
+- Current task: **U1** (`MODE=staging` in `scripts/deploy-unraid.sh`, and `scripts/staging-watch.sh`). Then Phase PB, starting with PB9.
+- App Review: Broadwave 1.0 (iOS and tvOS, app 6815795649, build 2) was WAITING_FOR_REVIEW at 2026-09-24 21:30 UTC. Check it at the start of every round (AS1).
+- Production `Broadwave` on TUS `:8477` is v0.6.0. Staging `Broadwave-Staging` is on `:8490`. Next recording: Jeopardy, 2026-09-25 20:00 UTC.
+- The tree is clean at the last commit. The repo is `~/Projects/active/broadwave`.
 
-## Review 2 (2026-09-24): read MASTER_PLAN section 0.1a before your next task
-- Next after P2: **R8 → C7b → S8b**, then P3 (section 4 is updated).
-- Every tick now lists the evidence for each Accept bullet (0.1a rule 1).
-- `make check` now runs gofmt, go vet, `apigen -check`, and the fake-tuner relay smoke, like CI does. Run `gofmt -w server` (`internal/httpapi/server.go` is unformatted).
-- 97d3ade (migration 0019) fixed sources with passwords going offline on refresh, and Xtream guides losing their password. Don't redo it; the next migration is 0020.
+## Read first (reviews 2–4; details in MASTER_PLAN 0.1a–0.1d)
+- **Order:** U1 → PB → C7b, S8b, HOME → MV, AP, AS2, AS3 → **App Store update 1.1** → OPS, LEGAL1, AS6 → HW → P2b–P8 … (MASTER_PLAN section 4).
+- **Evidence:** every tick lists the proof for each Accept bullet (numbers, test names, screenshot paths). A shortfall becomes a new task line.
+- **Verify like a person on staging:** Chrome through `playwright-cli --browser=chrome` at three sizes, plus the "Broadwave Staging iPhone" and "Broadwave Staging TV" simulators. Measure the output. Production changes only in phase deploys.
+- **Checks:** `make check` mirrors CI (gofmt, vet, tests, lint, API drift, relay smoke, retired-name guard). CI also builds the image. Run `docker build --target web` when web imports change.
+- **Apple:** App Store screenshots are JPEG only (alpha PNGs got stuck). No broadcast TV or real logos in store assets. Updates follow MASTER_PLAN 0.1d rule 2.
+- **Next migration is 0020.** Never edit an old one.
 
-## Review 3 (2026-09-24): read MASTER_PLAN section 0.1b; new phases come right after R8
-- Order after P2: R8 → **U1** (staging script + v0.5.1 hotfix) → **PB9, PB2, PB3, PB5, PB6, PB4, PB7, PB8** → C7b → S8b → **HOME1-3** → **MV1-6** → **HW1-5** → P3.
-- Test every change on `Broadwave-Staging` (`:8490`, iGPU, `-staging`) like a person: Chrome via Playwright `--browser=chrome` at three sizes, and the "Broadwave Staging iPhone" / "Broadwave Staging TV" simulators. Production `Broadwave` is only touched in phase deploys.
-- Production v0.5.0 sends 720p stations at 1080p 119.88 fps; 8dac5dd fixes it (measured 1280x720 59.94 on staging). U1 ships it as v0.5.1.
+## Phase AS — App Store life
+- [ ] AS1 Review follow-through every round (continuous; record state changes; handle rejections first)
+- [ ] AS2 "Try Broadwave" demo mode in the apps (DemoServer on loopback, bundled CC BY clips, attribution, airplane-mode test)
+- [ ] AS3 `scripts/demo-lineup.sh` + `scripts/appstore-shots.sh` regenerate and upload every screenshot set (JPEG)
+- [ ] AS4 App Store update 1.1 (demo mode, Apple art, multiview fixes, iPad multiview screenshots) submitted on both platforms
+- [ ] AS5 Public TestFlight group with a public link on both platforms
+- [ ] AS6 Sports data rights: ADR 0011, pluggable provider, owner's decision on the default
+
+## Phase AP — Apple apps at web depth
+- [ ] AP1 Program art on Apple guide cells, program sheet, search, sports cards, recordings (Home done in f22d4ab)
+- [ ] AP2 iPhone portrait player with channel/program info and labeled controls
+- [ ] AP3 R5 preview frames on Apple Home when a mux is tuned
+
+## Phase OPS — Running it for years
+- [ ] OPS1 Update notifier (GitHub releases, opt-out, banners on web and Apple)
+- [ ] OPS2 Nightly catalog backups with retention, pre-upgrade backup, restore from Settings
+- [ ] OPS3 Support bundle with redacted config (test proves no secrets)
+- [x] OPS4 Retired-name guard `scripts/check-names.sh` in `make check` and CI (2026-09-24)
+- [ ] OPS5 README with screenshots and installs; GitHub Pages site at wolfebase.github.io/broadwave
+
+## Phase LEGAL — Licenses, notices, security
+- [ ] LEGAL1 NOTICE, ffmpeg GPL/LGPL obligations in the image, CC BY credit in About and README, trademark-safe copy, `docs/legal.md`
+- [ ] LEGAL2 Threat model and security review before H2/H3; every finding fixed with tests
 
 ## Phase U — Staging and hotfix
-- [ ] U1 `MODE=staging` deploy + `scripts/staging-watch.sh`. (The hotfix shipped as v0.6.0 on 2026-09-24: 4.1 measures 1280x720 59.94 on production, see UNRAID_LOG. Only the two scripts remain.)
+- [ ] U1 `MODE=staging` in `scripts/deploy-unraid.sh` + `scripts/staging-watch.sh` (the 720p fix already shipped in v0.6.0; see UNRAID_LOG)
 
 ## Phase PB — Playback
 - [x] PB1 Progressive broadcasts keep every frame and are never bobbed; `-staging` flag. Staging on TUS iGPU: 4.1 1280x720 59.94 in 2.002 s segments, 0 decode errors (v0.5.0: 1920x1080 119.88 in 1.001 s); 9.1 1920x1080 59.94 unchanged; Chrome 0 dropped frames on both; iPhone and Apple TV sims played 4.1 and a 4.1+9.1 multiview (`docs/screenshots/pb-*`); `TestProgressive720pKeepsEveryFrame` (commit 8dac5dd)

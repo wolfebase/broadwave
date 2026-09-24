@@ -6,6 +6,7 @@
 #   scripts/agent-loop.sh              # run until every line is ticked or blocked
 #   touch ~/.broadwave-agent-stop      # stop after the current round
 #   tail -f ~/Library/Logs/broadwave-agent/loop.log
+#   scripts/agent-tmux.sh              # the loop plus a status pane in tmux
 #
 # Environment: AGENT (default: agent), MODEL (default: the CLI's selected model),
 # MAX_IDLE (rounds without a new commit before giving up, default 6).
@@ -66,8 +67,12 @@ while true; do
   note "round $round: $left open tasks, HEAD ${before:0:7}"
   args=(-p --force --trust --approve-mcps --workspace "$REPO" --output-format stream-json)
   [[ -n ${MODEL:-} ]] && args+=(--model "$MODEL")
-  "$AGENT" "${args[@]}" "$(cat docs/plan/AGENT_PROMPT.md)" >"$LOGS/round-$(printf %04d $round).jsonl" 2>&1
-  code=$?
+  log="$LOGS/round-$(printf %04d $round).jsonl"
+  # The raw stream is kept for later; the terminal shows a readable view of it.
+  "$AGENT" "${args[@]}" "$(cat docs/plan/AGENT_PROMPT.md)" 2>&1 | tee "$log" | python3 "$REPO/scripts/agent-view.py"
+  code=${pipestatus[1]}
+  session=$(grep -m1 -o '"session_id":"[^"]*"' "$log" | cut -d'"' -f4)
+  [[ -n $session ]] && note "round $round session $session (open it with: agent --resume $session)"
   after=$(git rev-parse HEAD)
   if [[ $before == "$after" ]]; then
     idle=$((idle + 1))
