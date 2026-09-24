@@ -38,6 +38,7 @@ vet:
 	go vet ./server/...
 
 lint: web/node_modules
+	scripts/check-names.sh
 	@test -z "$$(gofmt -l server)" || { gofmt -l server; echo "run: gofmt -w server"; exit 1; }
 	go vet ./server/...
 	cd web && npm run lint

@@ -19,7 +19,7 @@ Read in this order before touching code:
 
 Run 1 did good work but ended its turn after almost every phase; the user had to type "continue" eight times. That is the main thing to fix.
 
-1. **Start with a goal.** First action: call `GetDynamicTools {"namespace":"cursor","toolName":"CreateGoal"}`, then `CallDynamicTool` `cursor/CreateGoal` with the objective: "Complete every task in docs/plan/PROGRESS.md for Broadwave (tick it or record a real blocker in BLOCKERS.md), verifying, committing, pushing, and deploying as the plan says." The user explicitly asks for this goal. Only call `UpdateGoal complete` when every line in `PROGRESS.md` is ticked or blocked.
+1. **Start with a goal (interactive sessions only).** In the Cursor TUI, first call `GetDynamicTools {"namespace":"cursor","toolName":"CreateGoal"}`, then `CallDynamicTool` `cursor/CreateGoal` with the objective: "Complete every task in docs/plan/PROGRESS.md for Broadwave (tick it or record a real blocker in BLOCKERS.md), verifying, committing, pushing, and deploying as the plan says." Headless rounds from `scripts/agent-loop.sh` skip this; the loop is the goal.
 2. **Never end your turn to report progress.** A finished task or phase is not a stopping point. Progress goes into `PROGRESS.md`, commit messages, and `UNRAID_LOG.md`, not into a chat summary. Write the next tool call instead of a recap.
 3. **Background notifications are not stops.** When a background shell or subagent finishes, read its result, act on it, and continue with the current task in the same turn. Do not summarize it to the user.
 4. **The only reasons to end a turn:** the plan is complete; every remaining task is blocked and recorded in `BLOCKERS.md`; or an irreversible action needs the user (App Store submission, deleting user data, spending money).
@@ -55,10 +55,36 @@ How every task is verified from now on:
 
 Run 2's first session lasted 23 hours in one conversation. It made about 3,300 tool calls, with 2 subagent calls. The owner typed "continue" 9 times, because each stop followed a text-only "I'll do X next" message. It finally died on `[canceled] http/2 stream closed with error code CANCEL (0x8)` with P2 uncommitted. From now on:
 
-- **Run it with `scripts/agent-loop.sh`.** Each round is a fresh headless session (`agent -p --force`) started with `docs/plan/AGENT_PROMPT.md`. A dropped stream or an early stop costs one round. The loop forces `network.useHttp1ForAgent` (long HTTP/2 streams die through this Mac's VPN tunnel) and stops when every line is ticked or blocked, when `~/.broadwave-agent-stop` exists, or after 6 rounds with no commit. Logs: `~/Library/Logs/broadwave-agent/`.
+- **Run it with `scripts/agent-tmux.sh`** (the loop in a tmux session, a readable live view of every tool call, and a status pane), or `scripts/agent-loop.sh` alone. Each round is a fresh headless session (`agent -p --force`) started with `docs/plan/AGENT_PROMPT.md`. A dropped stream or an early stop costs one round. The loop forces `network.useHttp1ForAgent` (long HTTP/2 streams die through this Mac's VPN tunnel) and stops when every line is ticked or blocked, when `~/.broadwave-agent-stop` exists, or after 6 rounds with no commit. Logs: `~/Library/Logs/broadwave-agent/`.
 - **Steer by editing `AGENT_PROMPT.md` or this plan.** The next round reads them. Do not run two agent sessions on the repo at once.
 - **Every message carries a tool call.** Delegate as `AGENT_PROMPT.md` section 2 lists. `best-of-n-runner` gives parallel tasks their own worktree; only the main agent commits to `main`.
 - **CI also builds the Docker image,** which `make check` does not. A web import from outside `web/` (like `api/fixtures`) must be copied in the Dockerfile's web stage (fixed in the commit after 8843648).
+
+### 0.1d Review 4 (2026-09-24, evening): Broadwave 1.0 is in App Review
+
+What changed today: the product is Broadwave everywhere, with no compatibility shims. Production runs v0.6.0, including the 720p60 fix. The App Store has 1.0 for iOS and tvOS waiting for review, with screenshots from a demo lineup of Blender open movies (CC BY). The repo moved to `~/Projects/active/broadwave`. These rules apply from here to the end:
+
+1. **App Review follow-through (AS1) comes before everything else.** At the start of every round, run `~/.blitz/bin/asc versions list --app 6815795649` and write any state change into "Resume here".
+   - REJECTED, METADATA_REJECTED, or DEVELOPER_ACTION_NEEDED: make fixing it the current task. Read what `asc review status --app 6815795649` shows. The full message lives in the Resolution Center, which needs the owner's web sign-in, so record it in BLOCKERS and send a desktop notification (`osascript -e 'display notification "..." with title "Broadwave"'`). Then fix whatever the rejection names that is in our control (code, metadata, notes, screenshots, demo), and resubmit.
+   - Never reply in the Resolution Center; only the owner does.
+   - READY_FOR_SALE: record the date, add the App Store link to README and SUPPORT.md, and continue.
+2. **Release cadence.** Every phase ends with a tag `vX.Y.0`, a TUS deploy (0.3), and `scripts/testflight.sh`, which puts a TestFlight build on both platforms. An App Store update is submitted only where section 4 says "App Store update", and only when:
+   - `asc validate` shows 0 errors on both platforms;
+   - the screenshots were regenerated with `scripts/appstore-shots.sh` (JPEG, no alpha, demo content only);
+   - "What's New" is written in the copy voice;
+   - the review notes are current.
+   The owner authorized submissions. Anything that needs the owner's facts (legal, money, rights, contact) waits in BLOCKERS.
+3. **Store and legal hygiene.**
+   - Store assets never show broadcast TV or real team logos.
+   - Screenshots are JPEG. A PNG with alpha got stuck "upload in progress" and blocked a submission for 40 minutes; the `associatedErrors` field of a failed `reviewSubmissionItems` POST names the stuck asset.
+   - A new network call, stored data, or permission updates `PRIVACY.md` and the App Privacy answers in the same task.
+   - Third-party content keeps its attribution (Blender CC BY).
+4. **Product review every phase.** At the end of each phase:
+   - a `generalPurpose` subagent screenshots every screen on web (3 sizes), iPhone, iPad, and Apple TV against staging, and adds defects as J1 sub-items;
+   - `code-reviewer` reviews the phase diff;
+   - `security-review` reviews anything touching auth, network exposure, secrets, or file paths.
+   Fix what takes under an hour, and turn the rest into task lines.
+5. **The owner watches through `scripts/agent-tmux.sh`.** The live view shows tool calls and messages, and the status pane shows "Resume here", commits, CI, App Review, and the TUS tuners. Keep "Resume here" and commit messages honest and current. They are the owner's window into the run.
 
 ### 0.2 Per-task loop
 
@@ -74,7 +100,7 @@ At the end of every phase (R, S, C, K1, P, G1, F, E, D-extras, B5, I, G, H, N, J
 
 1. Add a `CHANGELOG.md` entry and tag `v0.N.0` (next minor). The release workflow publishes `ghcr.io/wolfebase/broadwave:<tag>` for amd64 and arm64.
 2. Deploy to Unraid with `MODE=ghcr` (skill `broadwave-unraid`; large SSH uploads over the tunnel drop, so pull from GHCR). Smoke it: health, version, a channel plays, two tabs sync, the phase's features work. Log it in `UNRAID_LOG.md`. Run 1 deployed only once (A3); Unraid still runs v0.1.0.
-3. If Apple code changed and A7 is unblocked, run `scripts/testflight.sh`.
+3. If Apple code changed, run `scripts/testflight.sh` (A7 is done; uploads need no sign-in). App Store updates follow 0.1d rule 2.
 4. Update `docs/architecture.md`, ADRs, `api/openapi.yaml`, `AGENTS.md` lessons, and skills where behavior changed.
 
 ### 0.4 Shared tuner etiquette
@@ -90,16 +116,19 @@ The user allows reading other projects under `~/Projects` and `~/.blitz` for key
 
 ---
 
-## 1. Where it stands (verified 2026-09-23)
+## 1. Where it stands (verified 2026-09-24, evening)
 
 | Thing | Value |
 | --- | --- |
-| GitHub | `wolfebase/broadwave` (public; `twolfekc` is not a GitHub account, see BLOCKERS) |
-| Images | `ghcr.io/wolfebase/broadwave` (v0.1.0, amd64 + arm64, public) |
-| Apple | team `D4MC63SS36`, bundle `com.wolfeup.broadwave` (iOS + tvOS), App Group `group.com.wolfeup.broadwave` (not yet on profiles) |
-| Unraid | TUS `root@192.168.1.2`, container `Broadwave`, `ghcr.io/wolfebase/broadwave:0.1.0`, host network, VAAPI, appdata `/mnt/cache/appdata/broadwave`, recordings `/mnt/user/media/ota-recordings` |
-| Tuner | CONNECT DUO `192.168.1.252`, 2 tuners, 27 channels, ATSC 1.0 |
-| Network | This Mac reaches TUS through `utun4`, so Bonjour from TUS is not visible here. Check Bonjour on TUS itself (`avahi-browse -rt _broadwave._tcp`); point simulators at `http://192.168.1.2:8477` by address. |
+| Product | **Broadwave** (renamed 2026-09-24; retired names are blocked by `scripts/check-names.sh` in `make check` and CI) |
+| Repo | `/Users/tyler/Projects/active/broadwave`, GitHub `wolfebase/broadwave` (public) |
+| Images | `ghcr.io/wolfebase/broadwave` (latest `0.6.0`, amd64 + arm64, public) |
+| Apple | team `D4MC63SS36`, app `6815795649` "Broadwave" (iOS + tvOS), bundle `com.wolfeup.broadwave`, App Group `group.com.wolfeup.broadwave`. Version 1.0 build 2 is **waiting for App Review** on both platforms. `asc` CLI with the API key in `~/.blitz` does uploads, metadata, screenshots, and submissions. New app records, App Groups, and first-time availability need the website (the owner signs in to Chrome, the agent drives it). |
+| Production | TUS `root@192.168.1.2`, container `Broadwave` on `:8477`, `ghcr.io/wolfebase/broadwave:0.6.0`, host network, VAAPI (UHD 770), appdata `/mnt/cache/appdata/broadwave`, recordings `/mnt/user/media/ota-recordings`, template `my-Broadwave.xml` |
+| Staging | TUS container `Broadwave-Staging` on `:8490` (`-staging`, branch binary at `/mnt/cache/appdata/broadwave-staging/broadwave`), lab samples in `/mnt/cache/appdata/broadwave-lab` |
+| Tuner | CONNECT DUO `192.168.1.252`, 2 tuners, 27 channels, ATSC 1.0. A Channels DVR container on TUS (`channelsdvr_intel`) can also use it. |
+| Network | This Mac reaches TUS through `utun4`; Bonjour from TUS is not visible here (check on TUS with `avahi-browse -rt _broadwave._tcp`). SSH over the tunnel flaps: retry, and send files with `gzip -c | ssh ... 'gunzip -c > file'` plus a checksum. |
+| Run | `scripts/agent-tmux.sh` (loop + live view + status pane). Logs in `~/Library/Logs/broadwave-agent/`. |
 
 **Done in run 1:** setup wizard and first-run detection (A1), SiliconDust refresh cadence (A2), Unraid migration and deploy (A3), lint in CI and web on `/api/v1` (A4), crash and SIGTERM recovery (A5), GitHub + GHCR (A6), Apple signing and archive (A7, upload blocked), multiview on web and Apple with tile renditions, tuner plan, and a shared room (B1–B4), guide matching, extra sources, artwork, rich programs, guide UX, and search (C1–C6), ESPN scores, game matching, game-aware recording, team passes, spoiler-safe scores, and the sports hub (D1–D6).
 
@@ -113,7 +142,7 @@ The user allows reading other projects under `~/Projects` and `~/.blitz` for key
 6. **Artwork:** the Home hero stretches a small poster across the full width, so it looks blurry. → R4.
 7. Multiview mosaic deferred (ADR 0004). → B5.
 8. The 14.x frequency is unknown, so the multiview plan treats each 14.x subchannel as its own tuner. → C7 learns frequencies.
-9. TestFlight upload blocked on the App Store Connect app record (needs one Apple ID login). → A7.
+9. TestFlight upload blocked on the App Store Connect app record. → A7 (done 2026-09-24; 1.0 is in App Review).
 10. **Sources are thin.** Discovery is only the HDHomeRun UDP broadcast, which fails when Docker runs in bridge mode or the tuner is on another VLAN. M3U parsing ignores `tvg-id`, `tvg-chno`, `tvg-logo`, `group-title`, and `url-tvg`, numbers every channel from 801, never refreshes, and has no stream limit. An XMLTV link is applied to every playlist channel instead of its own source, and fetch errors are swallowed. No Xtream Codes, tvheadend, Channels DVR, HDHomeRun-emulator, or free-channel sources. → Phase S.
 11. **Apps can watch but not set up.** The iPhone and Apple TV apps connect (Bonjour or typed address) but cannot add a tuner, scan channels, add a playlist, or run setup; Swift models are hand-mirrored from the API with no contract tests, so a server change can silently break decoding. → Phase P.
 12. **Only Apple screens and browsers.** People also watch on Fire TV, Android/Google TV, Roku, smart TVs, and inside Channels, Plex, Jellyfin, and IPTV players. The HDHomeRun emulator and M3U/XMLTV exports exist but were never verified against those apps. → Phase N.
@@ -164,7 +193,51 @@ R7. **Code review of run 1.** Run a `code-reviewer` subagent over `8f91dfc..HEAD
 
 ### Phase U — Staging and hotfix (first)
 
-U1. **Staging as a script, and ship the 720p fix.** Add `MODE=staging` to `scripts/deploy-unraid.sh`, doing exactly what section 0.1b rule 1 describes (idempotent; it refuses to touch `Broadwave`). Add `scripts/staging-watch.sh <channelId> [seconds]`, which watches through the API, measures the rendition (WxH, fps, segment length, decode errors), stops, and confirms the tuner was released. Then tag `v0.5.1` with 8dac5dd. Production v0.5.0 sends every 720p station (4.1 here) as 1080p at 119.88 fps. Deploy it and log the before/after in `UNRAID_LOG`. **Accept:** `staging-watch.sh 1` prints 1280x720 59.94 on production after the deploy.
+U1. **Staging as a script.** The 720p fix already shipped as v0.6.0 (UNRAID_LOG, 2026-09-24).
+- Add `MODE=staging` to `scripts/deploy-unraid.sh`, doing exactly what section 0.1b rule 1 describes. It must be idempotent and refuse to touch `Broadwave`. Today staging was replaced by hand: the binary is sent with `gzip | ssh`, the name goes in with `sqlite3` using single quotes, and the container runs `-staging -bonjour=false` on `:8490`. TUS has no Python, so do any checks on the Mac.
+- Add `scripts/staging-watch.sh <channelId> [seconds] [host:port]`. It watches through the API (`POST /api/v1/watch`, then `POST /api/v1/watch/<channelId>/stop`), measures the rendition (WxH, fps from frame timestamps, segment length, decode errors), and confirms the tuner was released.
+**Accept:** `staging-watch.sh 1 15 192.168.1.2:8477` prints 1280x720 59.94 against production, and the same against `:8490`.
+
+### Phase AS — App Store life
+
+AS1. **Review follow-through** (continuous; 0.1d rule 1). **Accept:** every state change is in "Resume here" and a rejection is handled in the round that sees it.
+AS2. **"Try Broadwave" demo mode in the apps.** Reviewers and people who haven't set up a server can use every screen.
+- `BroadwaveKit` gets `DemoServer`: an in-process HTTP server (Network.framework, loopback only) that serves a catalog, a guide with art, and live sessions, built from `api/fixtures` plus a demo lineup.
+- Short HLS loops of the Blender open movies are bundled (≤ 25 MB total, 720p, CMAF), with attribution in About.
+- ConnectView gets "Try the demo". Leaving the demo is one tap in Settings. Sync and multiview work between two simulators in demo.
+**Accept:** in airplane mode, the iPhone and Apple TV simulators run Home, Guide, Player, and Multiview from the demo. The app size change is reported, and the review notes say how to enter the demo.
+AS3. **`scripts/appstore-shots.sh` and `scripts/demo-lineup.sh`.** Script what was done by hand on 2026-09-24:
+- `demo-lineup.sh` fetches 4-minute clips of Big Buck Bunny, Sintel, Tears of Steel, and Elephants Dream from archive.org (`BigBuckBunny_124`, `Sintel`, `Tears-of-Steel`, `ElephantsDream`). It encodes them as 720p TS, picks bright, calm art frames (never blood or gore), builds looping HLS, and writes M3U + XMLTV (four channels 4.1/5.1/9.1/11.1 with art). It then runs a `-staging` server on `:18520`, adds the source, marks setup done, names the server "Living Room", and warms `/media/art` at 640 and 1600.
+- `appstore-shots.sh` creates the "Broadwave Shots" simulators (iPhone 17 Pro Max, iPad Pro 13-inch M5, Apple TV 4K 1080p) and sets the status bar to 9:41. For each device it captures Home, Guide (`-BroadwaveTab guide`), Watch (`-BroadwaveWatch 1`), and Multiview (`-BroadwaveMultiview 1,3`; iPad only once MV1 is done). It converts the captures to JPEG and uploads them with `asc screenshots upload --replace` (IPHONE_67, IPAD_PRO_3GEN_129, APPLE_TV). After AS2 lands, it uses the in-app demo instead of the server.
+**Accept:** one command regenerates and uploads every set, and `asc validate` is clean afterward.
+AS4. **App Store update 1.1** at its section 4 milestone: build, What's New, new screenshots (with iPad multiview), review notes (demo mode), and submit on both platforms. **Accept:** WAITING_FOR_REVIEW recorded; later updates follow the same recipe.
+AS5. **Public TestFlight.** An external group "Public" with a public link on both platforms, a beta description, beta review info, and submission for beta review. **Accept:** the link is in README and SUPPORT.md once beta review approves it.
+AS6. **Sports data rights.** The scores come from ESPN's unofficial, unlicensed scoreboard, and the owner attested to content rights. Research licensed or clearly permitted sources (official league APIs, TheSportsDB terms, others) and make the provider pluggable. Write ADR 0011. Put the owner's decision on the default in BLOCKERS as a question, and keep scores on until it is answered. **Accept:** ADR, pluggable provider, and the owner's answer recorded.
+
+### Phase AP — Apple apps at web depth (quick wins before 1.1)
+
+AP1. **Program art everywhere on Apple.** Wide guide cells, the program sheet hero, search results, sports cards, and recording posters (art fallback) all show art. Use `ArtLayout` and `store.artURL(_:width:)`; never upscale past 1.25×. The Home hero and On now cards already do this (f22d4ab). **Accept:** screenshots per platform against the demo lineup and against staging.
+AP2. **iPhone portrait player.** The channel and program are shown, controls have labels, and there's a clear way to reach the mini guide and multiview (overlaps F5; do the portrait layout here). **Accept:** screenshots plus VoiceOver labels.
+AP3. **Preview frames on Apple.** On now cards and the hero use R5 frames when a mux is tuned and there's no art, like the web. **Accept:** a staging screenshot with a tuned channel.
+
+### Phase OPS — Running it for years
+
+OPS1. **Update notifier.** The server checks GitHub releases once a day; it's opt-out and sends nothing but the request. Web and Apple show "Broadwave 0.7 is available", and the release notes link to the CHANGELOG. P3 carries the minimum app version. **Accept:** a test with a fake releases feed, and screenshots.
+OPS2. **Catalog backup and restore.** A nightly backup (keep 7 daily and 4 weekly) in `config/backups`, plus a backup before any version change. Settings > Backups lists, downloads, and restores them. **Accept:** a restore tested on staging, and Go tests.
+OPS3. **Support bundle.** One click exports logs, versions, doctor results, and a redacted config, with no secrets (reuse `maskURL`; a test proves no password is present). It's linked from SUPPORT.md. **Accept:** a redaction test and a sample bundle.
+OPS4. [done 2026-09-24] `scripts/check-names.sh` in `make check` and CI.
+OPS5. **README and site.** A README with screenshots and installs for Docker, Unraid, and Mac, and the App Store badge once live. A GitHub Pages site from `site/` (merges J7's site and L5's docs), on no paid domain until the owner buys one (BLOCKERS). **Accept:** the site is live at `wolfebase.github.io/broadwave`.
+
+### Phase LEGAL — Licenses, notices, security
+
+LEGAL1. **Licenses and notices.**
+- Confirm the repo LICENSE is OSI (needed for Community Apps).
+- Write a NOTICE listing Go, npm, and Swift dependencies.
+- Meet ffmpeg (and later jellyfin-ffmpeg) GPL/LGPL obligations for the image: source offer, notice, and OCI labels.
+- Credit the Blender open movies (CC BY) in the app's About and in README.
+- Keep trademark-safe copy (HDHomeRun, Apple TV, Plex, and Channels are named only to describe compatibility).
+**Accept:** NOTICE, image labels, the About screen, and a short `docs/legal.md`.
+LEGAL2. **Security pass before remote access.** Before H2/H3: a threat model in `docs/security.md`, then a `security-review` subagent over the server (auth, CSRF on admin routes, path traversal in media and file routes, SSRF in playlist and XMLTV fetch, secret handling, rate limits). Fix every real finding with tests. **Accept:** findings and fixes listed, `go test -race` clean.
 
 ### Phase PB — Playback that beats everything
 
@@ -370,7 +443,7 @@ B5. **Mosaic rendition.** One ffmpeg `xstack` output combining 2-4 channels (`mo
 
 ### Phase I — Apple platform integration
 
-Start this phase by retrying A7 (app record + upload). Every Apple task below ends with a TestFlight build once A7 works.
+Every Apple task below ends with a TestFlight build (`scripts/testflight.sh`). The phase ends with App Store update 1.3 (0.1d rule 2).
 
 I1. Top Shelf (tvOS): live sports and favorites now (with R5 frames) and continue watching; deep links.
 I2. Widgets (iOS): On now, Your teams (scores), Recording now, Up next; interactive Record via App Intents. Needs the App Group on the profiles.
@@ -382,7 +455,7 @@ I7. iPad: sidebar layout, guide beside a live preview, 4-up multiview, keyboard 
 I8. Apple Watch: remote (channel up/down, pause, record), followed-team scores, recording alerts.
 I9. Now Playing adoption; CarPlay optional.
 I10. App icon (Icon Composer, layered Liquid Glass, from J7), launch, onboarding, App Store assets.
-**Accept (phase):** each feature screenshotted on the simulator, builds green on Xcode 26 and 27, TestFlight build uploaded (if A7 is unblocked).
+**Accept (phase):** each feature screenshotted on the simulator, builds green on Xcode 26 and 27, TestFlight build uploaded.
 
 ### Phase G — Relay and infrastructure depth
 
@@ -445,17 +518,23 @@ M5. Anything the J1 review or K4 soak surfaced that makes the product better tha
 R1 → R2 → R3 → R4 → R5 → R6 → R7 →
 S0 → S1 → S2 → S3 → S4 → S5 → S6 → S7 → S8 → S9 → S10 → (tag + deploy) →
 C7 → C8 → C9 → (tag + deploy) →
-K1 → P1 → P2 → R8 → U1 → PB9 → PB2 → PB3 → PB5 → PB6 → PB4 → PB7 → PB8 → (tag + deploy) → C7b → S8b → HOME1 → HOME2 → HOME3 → MV1 → MV2 → MV3 → MV4 → MV5 → MV6 → (tag + deploy + TestFlight) → HW1 → HW2 → HW3 → HW4 → HW5 → (tag + deploy) → P3 → P4 → P5 → P6 → P7 → P8 → G1 → (tag + deploy + TestFlight) →
-F1 → F2 → F3 → F4 → F5 → F6 → F7 → (tag + deploy + TestFlight) →
+K1 → P1 → P2 → R8 → **U1** →
+PB9 → PB2 → PB3 → PB5 → PB6 → PB4 → PB7 → PB8 → (tag + deploy + TestFlight) →
+C7b → S8b → HOME1 → HOME2 → HOME3 → (tag + deploy + TestFlight) →
+MV1 → MV2 → MV3 → MV4 → MV5 → MV6 → AP1 → AP2 → AP3 → AS2 → AS3 → (tag + deploy + TestFlight + **App Store update 1.1 = AS4**) →
+OPS1 → OPS2 → OPS3 → LEGAL1 → AS6 → (tag + deploy) →
+HW1 → HW2 → HW3 → HW4 → HW5 → (tag + deploy) →
+P2b → P3 → P4 → P5 → P6 → P7 → P8 → G1 → (tag + deploy + TestFlight) →
+F1 → F2 → F3 → F4 → F5 → F6 → F7 → (tag + deploy + TestFlight + **App Store update 1.2**) →
 E1 … E9 → (tag + deploy) →
 D7 → D8 → B5 → (tag + deploy) →
-A7 retry → I1 … I10 → (tag + deploy + TestFlight) →
+I1 … I10 → (tag + deploy + TestFlight + **App Store update 1.3**) →
 G5 → G4 → G6 → G2 → G3 → G8 → G9 → G10 → (tag + deploy) →
-H1 → H2 → H3 → H4 → (tag + deploy + TestFlight) →
+LEGAL2 → H1 → H2 → H3 → H4 → (tag + deploy + TestFlight + **App Store update 1.4**) →
 N1 → N2 → N3 → N4 → N5 → N6 → N7 → (tag + deploy) →
-J1 … J7 → K2 … K6 → L1 … L5 → M1 … M5.
+J1 … J7 → K2 … K6 → L1 → L2 → L3 → AS5 → L4 → OPS5 → L5 → (**App Store update 2.0**) → M1 … M5.
 
-A7 is retried at the start of every phase: if `~/.blitz/bin/asc web auth status` (or an API call) shows a valid session, create the app records, attach the App Group to the profiles, and upload.
+AS1 runs continuously at the start of every round. Each phase ends with the product review in 0.1d rule 4.
 
 ---
 
@@ -473,5 +552,7 @@ A7 is retried at the start of every phase: if `~/.blitz/bin/asc web auth status`
 - `main` is green; images are published per phase; iOS and tvOS builds are in TestFlight; the Community Apps submission is in (or approved).
 - Every OTA format (1080i, 720p, 480i, H.264 subchannels, film cadence) plays at its true motion rate on the GPU, measured, with 0 dropped frames after warm-up on web, iPhone, and Apple TV.
 - A stranger's house is found by itself: tuners, servers, and screens appear in setup with one action each, on hardware we never owned (HW matrix).
+- Broadwave is live on the App Store for iPhone, iPad, and Apple TV, with a demo mode anyone can try. Every milestone update is approved, and a public TestFlight is open.
+- The server tells people when an update is out, backs itself up, and exports a support bundle without secrets. Licenses, notices, attributions, and the privacy policy are accurate.
 - Every line in `PROGRESS.md` is ticked with its evidence (0.1a) or recorded in `BLOCKERS.md` with a clear reason.
 - `docs/parity.md` shows the Apple apps doing everything the web app does.

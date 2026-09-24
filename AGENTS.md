@@ -60,6 +60,8 @@ Tools: Go 1.26+, Node 22+, ffmpeg (with ffprobe) on PATH, Xcode 26+ for `apple/`
 
 Tests never open a real tuner. Live tuner checks happen by running the server on the LAN.
 
+Agent run: `scripts/agent-tmux.sh` (loop, live view, status pane; detach with Ctrl-b d, reattach with `tmux attach -t broadwave`), `scripts/agent-loop.sh` (the loop alone), `scripts/agent-view.py` (readable view of a round log). Stop after the current round: `touch ~/.broadwave-agent-stop`.
+
 Scripts: `scripts/dev-server.sh` (safe rebuild + restart on :18477 with a copy of the real catalog), `scripts/relay-smoke.sh` (no-tuner end-to-end relay test), `scripts/deploy-unraid.sh` (build linux/amd64 + deploy over SSH).
 
 ## Lessons learned (each cost real time; don't relearn them)
