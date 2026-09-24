@@ -79,8 +79,11 @@ type Source struct {
 	AudioCodec string
 	// Progressive is true only once a probe has shown the picture is not interlaced.
 	Progressive bool
-	UserAgent   string
-	Referrer    string
+	// Film is soft 3:2 pulldown (repeat_first_field). The broadcast mode then
+	// recovers 24p instead of bobbing the flags into duplicate frames.
+	Film      bool
+	UserAgent string
+	Referrer  string
 }
 
 type Decision struct {
@@ -271,7 +274,11 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		}
 	}
 	if transcode {
-		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: encoder, Mode: r.Mode, Deint: deint, Blend: blend, Progressive: src.Progressive}
+		mode := r.Mode
+		if src.Film && NormalizeMode(mode) == "broadcast" {
+			mode = "film"
+		}
+		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: encoder, Mode: mode, Deint: deint, Blend: blend, Progressive: src.Progressive}
 		interlaced := !src.Progressive && (InterlacedCodec(src.VideoCodec) || codecName(src.VideoCodec) == "h264") && g.Mode != "film"
 		field := interlaced && !smallPicture(g.Profile)
 		width, height, rate := pictureSize(g.Profile, field)
