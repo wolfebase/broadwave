@@ -20,6 +20,9 @@ type Graph struct {
 	Blend      bool
 	Input      string
 	Live       bool
+	// Progressive is set once a probe has seen the picture is not interlaced.
+	// A progressive 720p60 broadcast keeps all 60 frames and is never deinterlaced.
+	Progressive bool
 }
 
 func NormalizeMode(mode string) string {
@@ -50,7 +53,7 @@ func PictureArgs(g Graph) []string {
 	if g.Audio == "" {
 		g.Audio = "stereo"
 	}
-	interlaced := InterlacedCodec(g.VideoCodec) && g.Mode != "film"
+	interlaced := InterlacedCodec(g.VideoCodec) && !g.Progressive && g.Mode != "film"
 	field := interlaced && !smallPicture(g.Profile)
 	width, height, rate := pictureSize(g.Profile, field)
 	fps, gop := pictureRate(g, field)
@@ -118,6 +121,9 @@ func pictureSize(profile string, field bool) (int, int, string) {
 	}
 }
 
+// pictureRate is the output frame rate, or "" to keep the source rate.
+// Interlaced video at field rate is 59.94; a progressive source keeps its own
+// rate so 720p60 stays 60. Small pictures cap at 29.97 to save bandwidth.
 func pictureRate(g Graph, field bool) (string, int) {
 	if g.Mode == "film" {
 		return "24000/1001", 48
@@ -125,7 +131,10 @@ func pictureRate(g Graph, field bool) (string, int) {
 	if field || (g.Mode == "smooth" && g.Blend && !smallPicture(g.Profile)) {
 		return "60000/1001", 120
 	}
-	return "30000/1001", 60
+	if smallPicture(g.Profile) {
+		return "30000/1001", 60
+	}
+	return "", 120
 }
 
 func vaapiDeintMode(g Graph, interlaced bool) string {
@@ -141,32 +150,41 @@ func vaapiDeintMode(g Graph, interlaced bool) string {
 }
 
 func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, height int, fps string) string {
-	scale := fmt.Sprintf("scale='min(%d,iw)':'min(%d,ih)':force_original_aspect_ratio=decrease,setsar=1,fps=%s", width, height, fps)
-	if g.Mode == "film" {
-		return "fieldmatch,decimate," + scale
+	rate := ""
+	if fps != "" {
+		rate = ",fps=" + fps
 	}
-	if vaapiDeint != "" {
-		rate := "frame"
-		if field {
-			rate = "field"
+	if g.Encoder == "h264_vaapi" && g.Mode != "film" && (vaapiDeint != "" || !interlaced) && !(g.Mode == "smooth" && g.Blend && !interlaced && !smallPicture(g.Profile)) {
+		// Stay on the GPU: upload once, deinterlace and scale there, never upscale.
+		vf := "format=nv12,hwupload"
+		if vaapiDeint != "" {
+			fieldRate := "frame"
+			if field {
+				fieldRate = "field"
+			}
+			vf += fmt.Sprintf(",deinterlace_vaapi=mode=%s:rate=%s", vaapiDeint, fieldRate)
 		}
-		return fmt.Sprintf("format=nv12,hwupload,deinterlace_vaapi=mode=%s:rate=%s,scale_vaapi=w=%d:h=%d:force_original_aspect_ratio=decrease", vaapiDeint, rate, width, height)
+		vf += fmt.Sprintf(",scale_vaapi=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease", width, height)
+		if smallPicture(g.Profile) && fps != "" {
+			vf = strings.Replace(vf, "format=nv12,hwupload", "fps="+fps+",format=nv12,hwupload", 1)
+		}
+		return vf
 	}
+	scale := fmt.Sprintf("scale='min(%d,iw)':'min(%d,ih)':force_original_aspect_ratio=decrease,setsar=1%s", width, height, rate)
 	var pre []string
-	if interlaced {
+	switch {
+	case g.Mode == "film":
+		pre = append(pre, "fieldmatch", "decimate")
+	case interlaced:
 		mode := "send_frame"
 		if field {
 			mode = "send_field"
 		}
 		pre = append(pre, "bwdif=mode="+mode+":parity=auto:deint=interlaced")
-	} else if g.Mode == "smooth" && g.Blend && !smallPicture(g.Profile) {
+	case g.Mode == "smooth" && g.Blend && !smallPicture(g.Profile):
 		pre = append(pre, "minterpolate=fps=60000/1001:mi_mode=blend")
 	}
-	if len(pre) == 0 {
-		pre = append(pre, scale)
-	} else {
-		pre = append(pre, scale)
-	}
+	pre = append(pre, scale)
 	vf := strings.Join(pre, ",")
 	if g.Encoder == "h264_vaapi" || g.Encoder == "h264_qsv" {
 		vf += ",format=nv12"
