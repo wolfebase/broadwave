@@ -14,6 +14,7 @@ type SourceChannel struct {
 	StreamURL   string `json:"-"`
 	BaseURL     string `json:"-"`
 	TunerCount  int    `json:"tunerCount"`
+	ModelNumber string `json:"modelNumber,omitempty"`
 	FrequencyHz int    `json:"frequencyHz"`
 	ProgramNum  int    `json:"programNum"`
 	// FieldOrder is what a probe saw: progressive, tt, bb, tb, bt, or empty when unknown.
@@ -96,11 +97,11 @@ func (s *Store) SourceChannel(ctx context.Context, id int64) (SourceChannel, err
 	err := s.db.QueryRowContext(ctx, `
 SELECT c.id, c.device_id, c.guide_number, c.guide_name, c.custom_number, c.custom_name,
 	c.video_codec, c.audio_codec, c.hd, c.favorite, c.enabled, c.hidden, c.present,
-	c.stream_url, c.frequency_hz, c.program_num, c.field_order, d.base_url, d.tuner_count
+	c.stream_url, c.frequency_hz, c.program_num, c.field_order, d.base_url, d.tuner_count, d.model_number
 FROM channels c JOIN devices d ON d.device_id = c.device_id WHERE c.id = ?`, id).Scan(
 		&ch.ID, &ch.DeviceID, &ch.GuideNumber, &ch.GuideName, &customNumber, &customName,
 		&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present,
-		&ch.StreamURL, &ch.FrequencyHz, &ch.ProgramNum, &ch.FieldOrder, &ch.BaseURL, &ch.TunerCount,
+		&ch.StreamURL, &ch.FrequencyHz, &ch.ProgramNum, &ch.FieldOrder, &ch.BaseURL, &ch.TunerCount, &ch.ModelNumber,
 	)
 	if err != nil {
 		return ch, err

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Channel, Device, TunerStatus } from "../../types";
-import { addSource, getTuners, lookHarder } from "../../api";
+import { addSource, getTuners, lookHarder, startScan } from "../../api";
 import { copy } from "../../strings";
 export function Sources({
   devices,
@@ -21,6 +21,7 @@ export function Sources({
 }) {
   const [ip, setIp] = useState("");
   const [looking, setLooking] = useState(false);
+  const [scanning, setScanning] = useState("");
   const [looked, setLooked] = useState(false);
   const [hits, setHits] = useState<{ kind: string; name: string; addr: string }[]>([]);
   const [tuners, setTuners] = useState<TunerStatus[]>([]);
@@ -142,12 +143,24 @@ export function Sources({
             <p>
               {device.modelNumber} · {device.tunerCount} {copy.sources.tuners}
             </p>
+            {device.note ? <p className="hint">{device.note}</p> : null}
             <p className="hint">
               {copy.sources.firmware} {device.firmwareVersion}
               {device.upgradeAvailable
                 ? `. A newer build, ${device.upgradeAvailable}, is published. This app will not install it.`
                 : "."}
             </p>
+            <button
+              type="button"
+              className="btn"
+              disabled={busy || scanning === device.deviceId}
+              onClick={() => {
+                setScanning(device.deviceId);
+                void startScan(device.deviceId).finally(() => setScanning(""));
+              }}
+            >
+              {scanning === device.deviceId ? copy.sources.scanning : copy.sources.scan}
+            </button>
           </article>
         ))}
       </div>

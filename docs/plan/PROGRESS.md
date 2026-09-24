@@ -3,9 +3,9 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **S3**. HDHomeRun family: several devices, scan, and model limits.
-- Half done: S2 is ready to commit. Search returned the DUO in 4.1 s. Look harder found the Channels DVR on this LAN and ignored ordinary web pages. A bridged container found the DUO without broadcast or the cloud.
-- Next command: read the S3 accept and add a second fake device with failover.
+- Current task: **S4**. M3U playlists with the attributes Channels DVR keeps, and stable channel ids.
+- Half done: S3 checks passed. The DUO scan finished (50 channels found) and both tuners are idle. FLEX ATSC 3.0 stays on G6.
+- Next command: parse tvg-id, tvg-chno, and url-tvg in the M3U reader, with a test that a refresh keeps the channel id.
 - Unraid is on `v0.3.3`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
 - A7 retry at phase S: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
@@ -22,8 +22,8 @@ Tick items as they are verified and committed, in the same commit as the work (`
 ## Phase S — Every source, found automatically
 - [x] S0 Research sources and discovery; ADR 0009; `docs/sources.md` support matrix
 - [x] S1 One source model (kinds, capabilities, masked credentials, stable channel ids) with a lossless migration
-- [x] S2 Auto-find engine: broadcast, unicast, SSDP, mDNS, Look harder, cloud last resort; the DUO answered on the LAN and from a bridged container; a new address keeps the channel id
-- [ ] S3 HDHomeRun family: multi-device pool + failover + reservations (was G7), channel scan, FLEX/PRIME/EXTEND awareness
+- [x] S2 Auto-find engine: broadcast, unicast, SSDP, mDNS, Look harder, cloud last resort; the DUO answered on the LAN and from a bridged container; a new address keeps the channel id (commit 4c3da1c)
+- [x] S3 HDHomeRun family: two devices with failover, a tuner held for a recording, copy-protected channels hidden, scan on a fake tuner and a finished scan on the DUO. FLEX ATSC 3.0 stays on G6. EXTEND adds transcode=mobile when the server encoder is software. SCRIBE recordings parse from recorded_files.json.
 - [ ] S4 M3U done right: tvg-* / group / url-tvg / tvc-guide-stationid, file + URL + path, stream format and limit, numbering, groups, per-source XMLTV, refresh with stable ids, picker for big lists
 - [ ] S5 Xtream Codes source
 - [ ] S6 tvheadend, Threadfin/xTeVe/ErsatzTV/Dispatcharr/Antennas, Channels DVR server, HDHomeRun-compatible by address; unsupported devices documented

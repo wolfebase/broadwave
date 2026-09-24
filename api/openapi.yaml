@@ -148,6 +148,48 @@ paths:
                   devices:
                     type: array
                     items: { $ref: "#/components/schemas/Device" }
+  /devices/{id}/scan:
+    post:
+      tags: [sources]
+      operationId: startChannelScan
+      description: Ask one tuner to scan for channels. This uses a tuner until the scan finishes.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Scan started
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [scanning]
+                properties:
+                  scanning: { type: boolean }
+        "404": { $ref: "#/components/responses/Error" }
+    get:
+      tags: [sources]
+      operationId: channelScanStatus
+      description: How far the channel scan has gotten.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Scan progress
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [scanning, found]
+                properties:
+                  scanning: { type: boolean }
+                  found: { type: integer }
+        "404": { $ref: "#/components/responses/Error" }
   /sources/discover:
     post:
       tags: [sources]

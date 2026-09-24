@@ -28,6 +28,7 @@ export type Device = {
   tunerCount: number;
   priority: number;
   lastSeen: string;
+  note?: string;
 };
 
 export type Settings = {

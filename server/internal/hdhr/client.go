@@ -45,6 +45,7 @@ type Channel struct {
 	AudioCodec  string `json:"audioCodec,omitempty"`
 	HD          bool   `json:"hd"`
 	Favorite    bool   `json:"favorite"`
+	Protected   bool   `json:"protected,omitempty"`
 	StreamURL   string `json:"-"`
 }
 
@@ -56,6 +57,7 @@ type lineupJSON struct {
 	AudioCodec  string `json:"AudioCodec"`
 	HD          *int   `json:"HD"`
 	Favorite    *int   `json:"Favorite"`
+	DRM         *int   `json:"DRM"`
 	Tags        string `json:"Tags"`
 }
 
@@ -125,10 +127,83 @@ func (c *Client) FetchLineup(ctx context.Context, lineupURL string) ([]Channel, 
 			AudioCodec:  item.AudioCodec,
 			HD:          item.HD != nil && *item.HD != 0,
 			Favorite:    item.Favorite != nil && *item.Favorite != 0,
+			Protected:   (item.DRM != nil && *item.DRM != 0) || strings.Contains(strings.ToLower(item.Tags), "drm"),
 			StreamURL:   item.URL,
 		})
 	}
 	return out, nil
+}
+
+// LibraryFile is one recording on a SCRIBE or SERVIO.
+type LibraryFile struct {
+	Title    string `json:"title"`
+	Episode  string `json:"episode,omitempty"`
+	Filename string `json:"filename"`
+}
+
+// FetchLibrary reads recorded_files.json. It does not copy the video.
+func (c *Client) FetchLibrary(ctx context.Context, baseURL string) ([]LibraryFile, error) {
+	var raw []struct {
+		Title        string `json:"Title"`
+		EpisodeTitle string `json:"EpisodeTitle"`
+		Filename     string `json:"Filename"`
+	}
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if err := c.getJSON(ctx, baseURL+"/recorded_files.json", &raw); err != nil {
+		return nil, err
+	}
+	out := make([]LibraryFile, 0, len(raw))
+	for _, item := range raw {
+		if item.Filename == "" && item.Title == "" {
+			continue
+		}
+		out = append(out, LibraryFile{Title: item.Title, Episode: item.EpisodeTitle, Filename: item.Filename})
+	}
+	return out, nil
+}
+
+// StartScan asks the tuner to rescan. It uses a tuner until the scan finishes.
+func (c *Client) StartScan(ctx context.Context, baseURL string) error {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/lineup.post?scan=start", nil)
+	if err != nil {
+		return err
+	}
+	res, err := c.httpClient().Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 1<<20))
+	if res.StatusCode >= 400 {
+		return fmt.Errorf("scan returned %s", res.Status)
+	}
+	return nil
+}
+
+// ScanProgress is lineup_status.json. Found grows while Scan is true.
+type ScanProgress struct {
+	Scan  bool
+	Found int
+}
+
+func (c *Client) ScanProgress(ctx context.Context, baseURL string) (ScanProgress, error) {
+	var raw struct {
+		Scan     *int `json:"Scan"`
+		Found    int  `json:"Found"`
+		Progress int  `json:"Progress"`
+		ScanIn   *int `json:"ScanInProgress"`
+	}
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if err := c.getJSON(ctx, baseURL+"/lineup_status.json", &raw); err != nil {
+		return ScanProgress{}, err
+	}
+	on := (raw.Scan != nil && *raw.Scan != 0) || (raw.ScanIn != nil && *raw.ScanIn != 0)
+	found := raw.Found
+	if found == 0 {
+		found = raw.Progress
+	}
+	return ScanProgress{Scan: on, Found: found}, nil
 }
 
 func (c *Client) getJSON(ctx context.Context, rawURL string, dest any) error {
