@@ -7,8 +7,8 @@ help:
 	@echo "make run      build the web app, then run the server on $(ADDR) with ./$(CONFIG)"
 	@echo "make dev      run the server with -dev; pair with 'npm run dev' in web/"
 	@echo "make test     go test + web typecheck"
-	@echo "make lint     eslint, swiftlint, and swiftformat"
-	@echo "make check    everything CI runs before a push: test + lint"
+	@echo "make lint     gofmt, go vet, eslint, swiftlint, and swiftformat"
+	@echo "make check    everything CI runs before a push: test + lint + API drift + fake-tuner relay smoke"
 	@echo "make build    web + server binary in bin/"
 	@echo "make docker   build the container image"
 	@echo "make apple    generate the Xcode project and build the iOS and tvOS apps"
@@ -38,11 +38,15 @@ vet:
 	go vet ./server/...
 
 lint: web/node_modules
+	@test -z "$$(gofmt -l server)" || { gofmt -l server; echo "run: gofmt -w server"; exit 1; }
+	go vet ./server/...
 	cd web && npm run lint
 	swiftlint lint --strict
 	swiftformat --lint .
 
 check: test lint
+	go run ./server/cmd/apigen -check
+	FAKE=1 scripts/relay-smoke.sh
 
 build: web server
 
