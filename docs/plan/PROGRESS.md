@@ -3,9 +3,9 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **G1**. Ring buffer for live, recordings, and instant channel changes.
-- Half done: K1 is in this commit. A local fake HDHomeRun covers tune, share, busy, and relay smoke. CI runs that smoke.
-- Next command: a per-mux raw recording ring, then a recording that includes time already in the buffer.
+- Current task: **P2**. Golden responses so a server change cannot break the apps.
+- Half done: P1 is in this commit. Swift and TypeScript types are generated from the API spec, and CI fails if they drift.
+- Next command: record golden responses from the fake tuner and decode them in the apps.
 - Unraid is on `v0.5.0`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
 - A7 stays blocked on an Apple ID login (see BLOCKERS).
 
@@ -34,7 +34,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] Phase S deploy: tag v0.4.0, Unraid smoke, two-screen sync (commit 6442a79, log in UNRAID_LOG)
 
 ## Phase P — Server and Apple apps, working as one
-- [ ] P1 Generated Swift and TypeScript clients from OpenAPI; drift check in CI
+- [x] P1 Generated Swift and TypeScript clients from OpenAPI; drift check in CI. OTAKit models come from `api/openapi.yaml`. `go run ./server/cmd/apigen -check` fails when the generated files drift.
 - [ ] P2 Golden-response contract tests for OTAKit and web in `make check`
 - [ ] P3 apiVersion/features negotiation and minimum app version
 - [ ] P4 Bonjour + UDP fallback discovery, remembered servers, follow address changes, permission explainer
@@ -154,7 +154,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] J7 Brand: name decided (Waveguide, renamed everywhere); logo, app icon, marketing site to do
 
 ## Phase K — Quality
-- [x] K1 Fake HDHomeRun + Go integration tests + relay smoke in CI. `FAKE=1 scripts/relay-smoke.sh` tunes the fake and checks renditions, program date-times, and export. The Go test covers a shared frequency, a busy tuner, a recording that extends and restarts, and a scan that yields.
+- [x] K1 Fake HDHomeRun + Go integration tests + relay smoke in CI. `FAKE=1 scripts/relay-smoke.sh` tunes the fake and checks renditions, program date-times, and export. The Go test covers a shared frequency, a busy tuner, a recording that extends and restarts, and a scan that yields. (commit 13274ea)
 - [ ] K2 Playwright e2e + visual snapshots + sync test
 - [ ] K3 Apple tests (Swift Testing + XCUITest)
 - [ ] K4 24 h Unraid soak

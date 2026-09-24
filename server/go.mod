@@ -6,6 +6,7 @@ require (
 	github.com/coder/websocket v1.8.15
 	github.com/libp2p/zeroconf/v2 v2.2.0
 	golang.org/x/sys v0.48.0
+	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.59.0
 )
 

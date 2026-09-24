@@ -65,7 +65,7 @@ export function PlayPage() {
     <div className="play-page">
       <Play
         recording={rec}
-        pictureMode={settings.pictureMode}
+        pictureMode={settings.pictureMode ?? "broadcast"}
         autoplay={settings.autoplay !== "0"}
         onNext={() => {
           const later = recordings.filter((r) => r.title === rec.title && r.id !== rec.id && r.status !== "recording").sort((a, b) => a.startedAt.localeCompare(b.startedAt));
@@ -83,7 +83,7 @@ export function VirtualPage() {
   const { settings } = useData();
   return (
     <div className="play-page">
-      <VirtualPlay id={Number(params.get("virtual") || 0)} pictureMode={settings.pictureMode} onBack={() => navigate("/guide")} />
+      <VirtualPlay id={Number(params.get("virtual") || 0)} pictureMode={settings.pictureMode ?? "broadcast"} onBack={() => navigate("/guide")} />
     </div>
   );
 }
