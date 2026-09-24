@@ -3,6 +3,7 @@ package live
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -618,7 +619,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 		return store.Recording{}, err
 	}
 	name := fmt.Sprintf("%s_%s_%s.ts", time.Now().Format("20060102_150405"), f.channel.GuideNumber, sanitize(f.channel.DisplayName))
-	path := filepath.Join(dir, name)
+	path := uniquePath(filepath.Join(dir, name))
 	ends := time.Now().Add(time.Duration(minutes) * time.Minute)
 	if title == "" {
 		title = f.channel.DisplayName
@@ -679,6 +680,23 @@ func (h *Hub) Shutdown() {
 			h.finishRecordingLocked(f, "complete", "")
 		}
 		h.stopFeedLocked(f)
+	}
+}
+
+// uniquePath adds -2, -3, ... when a recording file already exists. Names are
+// per second, and ffmpeg refuses to overwrite, so two recordings of one channel
+// started in the same second would otherwise lose the second one.
+func uniquePath(path string) string {
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return path
+	}
+	ext := filepath.Ext(path)
+	base := strings.TrimSuffix(path, ext)
+	for i := 2; ; i++ {
+		candidate := fmt.Sprintf("%s-%d%s", base, i, ext)
+		if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
+			return candidate
+		}
 	}
 }
 
