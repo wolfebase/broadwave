@@ -388,7 +388,7 @@ func (s *Server) attachXMLTV(ctx context.Context, sourceID int64, rawURL string)
 		return
 	}
 	_ = s.Store.SetChannelArt(ctx, art)
-	_ = s.Store.ReplaceAiringsFor(ctx, ids, rows)
+	_ = s.Store.ReplaceAiringsFor(ctx, ids, tagGuideSource(rows, "playlist"))
 	_ = sourceID
 }
 

@@ -63,6 +63,31 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 	if !last.IsZero() {
 		guideInfo["listingsUntil"] = last
 	}
+	until := map[int64]time.Time{}
+	for _, a := range airings {
+		if a.End.After(until[a.ChannelID]) {
+			until[a.ChannelID] = a.End
+		}
+	}
+	coverage := make([]map[string]any, 0, len(channels))
+	for _, ch := range channels {
+		item := map[string]any{"number": ch.GuideNumber, "name": ch.GuideName}
+		if t, ok := until[ch.ID]; ok && !t.IsZero() {
+			item["until"] = t
+		}
+		if src := sourceFor(ch.ID, airings); src != "" {
+			item["source"] = src
+		}
+		coverage = append(coverage, item)
+	}
+	guideInfo["coverage"] = coverage
+	if scans, err := s.Store.GuideScans(ctx); err == nil && len(scans) > 0 {
+		listedScans := make([]map[string]any, 0, len(scans))
+		for freq, when := range scans {
+			listedScans = append(listedScans, map[string]any{"frequencyHz": freq, "scannedAt": when})
+		}
+		guideInfo["scans"] = listedScans
+	}
 	if lastPull, next, _, err := s.Store.GuideSchedule(ctx); err == nil {
 		if !lastPull.IsZero() {
 			guideInfo["lastRefresh"] = lastPull
@@ -122,6 +147,15 @@ func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {
 		Timezone: os.Getenv("TZ"), Now: time.Now(), UID: os.Getuid(),
 		PUID: os.Getenv("PUID"), PGID: os.Getenv("PGID"), TunerQuiet: quiet,
 	})
+}
+
+func sourceFor(channelID int64, airings []store.Airing) string {
+	for _, a := range airings {
+		if a.ChannelID == channelID && a.GuideSource != "" {
+			return a.GuideSource
+		}
+	}
+	return ""
 }
 
 func driPresent() bool {

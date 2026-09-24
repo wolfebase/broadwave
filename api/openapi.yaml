@@ -1288,6 +1288,7 @@ components:
         rating: { type: string }
         cast: { type: string }
         gameId: { type: string, description: "Scoreboard game this listing is. Empty when it is not a matched game." }
+        guideSource: { type: string, description: "Where this listing came from: silicondust, schedules-direct, xmltv, playlist, or broadcast." }
         start: { type: string, format: date-time }
         end: { type: string, format: date-time }
     Game:

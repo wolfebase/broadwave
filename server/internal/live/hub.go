@@ -18,6 +18,7 @@ import (
 
 	"waveguide/internal/disk"
 	"waveguide/internal/hdhr"
+	"waveguide/internal/psip"
 	"waveguide/internal/store"
 )
 
@@ -91,18 +92,23 @@ type Hub struct {
 	// recordings, or tuners change.
 	OnChange func()
 
+	// OnPSIP is called, outside the read loop, when a tuned mux yields a guide.
+	OnPSIP func(freqHz int, guide psip.Guide)
+
 	// RenditionIdle is how long a rendition with no viewers keeps running,
 	// so flipping back to a channel is instant.
 	RenditionIdle time.Duration
 
-	mu       sync.Mutex
-	muxes    map[int]*mux
-	channels map[int64]*feed
-	reserved map[int]bool
-	hold     int
-	next     int
-	playMu   sync.Mutex
-	plays    map[int64]struct{}
+	mu         sync.Mutex
+	muxes      map[int]*mux
+	channels   map[int64]*feed
+	reserved   map[int]bool
+	hold       int
+	next       int
+	scanCancel context.CancelFunc
+	scanToken  *struct{}
+	playMu     sync.Mutex
+	plays      map[int64]struct{}
 }
 
 type mux struct {
@@ -118,6 +124,7 @@ type mux struct {
 	programs []hdhr.Program
 	pipeMu   sync.Mutex
 	frames   sync.Once
+	psip     psip.Harvester
 }
 
 // feed is one channel on a tuned frequency.
@@ -209,6 +216,7 @@ func sourceOf(ch store.SourceChannel) Source {
 
 // Watch starts or joins one rendition of a channel.
 func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition) (Session, error) {
+	h.preemptScan()
 	want = want.normalized()
 	ch, err := h.Store.SourceChannel(ctx, channelID)
 	if err != nil {
@@ -571,6 +579,7 @@ func (h *Hub) Record(ctx context.Context, channelID int64, minutes int, title st
 // RecordMeta records the original broadcast of a channel. It shares the tuned
 // frequency with anyone watching and starts no transcode.
 func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording) (store.Recording, error) {
+	h.preemptScan()
 	channelID := meta.ChannelID
 	title := meta.Title
 	if minutes <= 0 {
@@ -786,6 +795,10 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 		n, err := m.body.Read(buf)
 		if n > 0 {
 			chunk := append([]byte(nil), buf[:n]...)
+			if g, ok := m.psip.Add(chunk); ok && h.OnPSIP != nil {
+				freq, guide := m.freq, g
+				go h.OnPSIP(freq, guide)
+			}
 			for _, sub := range m.snapshot() {
 				select {
 				case sub.ch <- chunk:
