@@ -19,7 +19,7 @@ You are continuing **Broadwave** in `/Users/tyler/Projects/active/broadwave` (gi
   - `explore` subagents map the code you're about to change (in parallel when there are several areas).
   - `docs-researcher` handles anything version-sensitive (ffmpeg, AVKit, hls.js, jellyfin-ffmpeg, HDHomeRun, Unraid).
   - A `generalPurpose` subagent does the browser verification with `playwright-cli open --browser=chrome` against staging at 390×844, 1440×900, and 1920×1080. It returns screenshots, `getVideoPlaybackQuality()` numbers, and console errors.
-  - A `generalPurpose` subagent does Apple verification on the "WG Staging iPhone" and "WG Staging TV" simulators. It returns screenshot paths and defects.
+  - A `generalPurpose` subagent does Apple verification on the "Broadwave Staging iPhone" and "Broadwave Staging TV" simulators. It returns screenshot paths and defects.
   - A `code-reviewer` runs before committing any task over about 200 changed lines.
   - `best-of-n-runner` (its own git worktree) takes independent tasks in parallel, for example server work and Apple work that share no files. Only you commit to `main`. Merge a worktree's result, run `make check`, and then commit.
   - Give each subagent a self-contained prompt: paths, commands, acceptance criteria, and exactly what to return.

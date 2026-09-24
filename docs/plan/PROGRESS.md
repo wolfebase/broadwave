@@ -16,7 +16,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 
 ## Review 3 (2026-09-24): read MASTER_PLAN section 0.1b; new phases come right after R8
 - Order after P2: R8 → **U1** (staging script + v0.5.1 hotfix) → **PB9, PB2, PB3, PB5, PB6, PB4, PB7, PB8** → C7b → S8b → **HOME1-3** → **MV1-6** → **HW1-5** → P3.
-- Test every change on `Broadwave-Staging` (`:8490`, iGPU, `-staging`) like a person: Chrome via Playwright `--browser=chrome` at three sizes, and the "WG Staging iPhone" / "WG Staging TV" simulators. Production `Broadwave` is only touched in phase deploys.
+- Test every change on `Broadwave-Staging` (`:8490`, iGPU, `-staging`) like a person: Chrome via Playwright `--browser=chrome` at three sizes, and the "Broadwave Staging iPhone" / "Broadwave Staging TV" simulators. Production `Broadwave` is only touched in phase deploys.
 - Production v0.5.0 sends 720p stations at 1080p 119.88 fps; 8dac5dd fixes it (measured 1280x720 59.94 on staging). U1 ships it as v0.5.1.
 
 ## Phase U — Staging and hotfix
