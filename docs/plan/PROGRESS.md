@@ -3,9 +3,9 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **S5**. Xtream Codes.
-- Half done: S4 is in this commit. `make check` passed.
-- Next command: import live categories from a fake Xtream server.
+- Current task: **S6**. Servers and emulators as sources.
+- Half done: S5 is in this commit. `make check` passed. S4 CI is green (`b14a82e`).
+- Next command: add tvheadend from a fake server and keep its login masked.
 - Unraid is on `v0.3.3`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
 - A7 retry at phase S: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
@@ -24,8 +24,8 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] S1 One source model (kinds, capabilities, masked credentials, stable channel ids) with a lossless migration
 - [x] S2 Auto-find engine: broadcast, unicast, SSDP, mDNS, Look harder, cloud last resort; the DUO answered on the LAN and from a bridged container; a new address keeps the channel id (commit 4c3da1c)
 - [x] S3 HDHomeRun family: two devices with failover, a tuner held for a recording, copy-protected channels hidden, scan on a fake tuner and a finished scan on the DUO. FLEX ATSC 3.0 stays on G6. EXTEND adds transcode=mobile when the server encoder is software. SCRIBE recordings parse from recorded_files.json. (commit d18c9af)
-- [x] S4 M3U done right: tvg-* / group / url-tvg / tvc-guide-stationid, file + URL + path, stream format and limit, numbering, groups, per-source XMLTV, refresh with stable ids, picker for big lists
-- [ ] S5 Xtream Codes source
+- [x] S4 M3U done right: tvg-* / group / url-tvg / tvc-guide-stationid, file + URL + path, stream format and limit, numbering, groups, per-source XMLTV, refresh with stable ids, picker for big lists (commit b14a82e)
+- [x] S5 Xtream Codes source
 - [ ] S6 tvheadend, Threadfin/xTeVe/ErsatzTV/Dispatcharr/Antennas, Channels DVR server, HDHomeRun-compatible by address; unsupported devices documented
 - [ ] S7 Free channels: detect FastChannels / Pluto / Samsung generator containers, or guide the user to run FastChannels
 - [ ] S8 Setup wizard v2 on web, Apple TV, and iPhone (< 90 s, no typing for HDHomeRun)
