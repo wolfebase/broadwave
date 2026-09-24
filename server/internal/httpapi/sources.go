@@ -81,6 +81,38 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 			stored = u.String()
 		}
 		s.installPlaylist(w, ctx, "xtream", body.Name, stored, body.Groups, body.Keep, body.XMLTV, body.Start, playlist)
+	case "tvheadend":
+		playlist, loc, guide, err := source.TVHeadend(ctx, body.URL, body.User, body.Pass)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		if body.XMLTV != "" {
+			guide = body.XMLTV
+		}
+		s.installPlaylist(w, ctx, "tvheadend", body.Name, loc, body.Groups, body.Keep, guide, body.Start, playlist)
+	case "channels":
+		playlist, loc, guide, err := source.ChannelsDVR(ctx, body.URL)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		name := strings.TrimSpace(body.Name)
+		if name == "" {
+			name = "Channels DVR"
+		}
+		s.installPlaylist(w, ctx, "channels", name, loc, body.Groups, body.Keep, guide, body.Start, playlist)
+	case "threadfin", "xteve", "ersatztv", "dispatcharr":
+		playlist, loc, guide, err := source.EmulatorM3U(ctx, kind, body.URL)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		name := strings.TrimSpace(body.Name)
+		if name == "" {
+			name = kind
+		}
+		s.installPlaylist(w, ctx, kind, name, loc, body.Groups, body.Keep, guide, body.Start, playlist)
 	case "folder":
 		found, err := source.ScanMedia(strings.TrimSpace(body.URL))
 		if err != nil {
@@ -113,7 +145,7 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"source": item, "added": added})
 	default:
-		httpError(w, "kind must be m3u, xtream, link, or folder", http.StatusBadRequest)
+		httpError(w, "kind must be m3u, xtream, tvheadend, channels, threadfin, xteve, ersatztv, dispatcharr, link, or folder", http.StatusBadRequest)
 	}
 }
 
@@ -176,6 +208,15 @@ func (s *Server) installPlaylist(w http.ResponseWriter, ctx context.Context, kin
 	writeJSON(w, http.StatusOK, item)
 }
 
+func playlistKind(kind string) bool {
+	switch kind {
+	case "m3u", "xtream", "tvheadend", "channels", "threadfin", "xteve", "ersatztv", "dispatcharr":
+		return true
+	default:
+		return false
+	}
+}
+
 // RefreshSources reloads playlists whose next refresh time has passed.
 // Channel ids stay put when the stream address or tvg-id still matches.
 func (s *Server) RefreshSources(ctx context.Context, now time.Time) (int, error) {
@@ -185,7 +226,7 @@ func (s *Server) RefreshSources(ctx context.Context, now time.Time) (int, error)
 	}
 	n := 0
 	for _, item := range list {
-		if (item.Kind != "m3u" && item.Kind != "xtream") || !item.Enabled || strings.HasPrefix(item.URL, "file:") {
+		if !playlistKind(item.Kind) || !item.Enabled || strings.HasPrefix(item.URL, "file:") {
 			continue
 		}
 		if item.Refresh != "" {

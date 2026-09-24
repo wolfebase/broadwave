@@ -280,6 +280,12 @@ function SourceAdd() {
         <select value={kind} onChange={(event) => setKind(event.target.value)}>
           <option value="m3u">Playlist</option>
           <option value="xtream">Xtream Codes</option>
+          <option value="tvheadend">tvheadend</option>
+          <option value="channels">Channels DVR</option>
+          <option value="threadfin">Threadfin</option>
+          <option value="xteve">xTeVe</option>
+          <option value="ersatztv">ErsatzTV</option>
+          <option value="dispatcharr">Dispatcharr</option>
           <option value="link">Stream link</option>
           <option value="folder">Media folder</option>
         </select>
@@ -292,7 +298,7 @@ function SourceAdd() {
         Address
         <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={kind === "folder" ? "D:\\TV" : kind === "xtream" ? "http://example:8080" : "https://example/playlist.m3u"} spellCheck={false} />
       </label>
-      {kind === "xtream" ? (
+      {kind === "xtream" || kind === "tvheadend" ? (
         <>
           <label>
             Username
@@ -314,13 +320,14 @@ function SourceAdd() {
           />
         </label>
       ) : null}
-      {kind === "m3u" || kind === "xtream" ? (
+      {kind === "m3u" || kind === "xtream" || kind === "tvheadend" || kind === "channels" ? (
         <label>
           {copy.sources.groups}
           <input value={groups} onChange={(event) => setGroups(event.target.value)} placeholder="News, Sports, -Shopping" spellCheck={false} />
         </label>
       ) : null}
-      <button type="submit" className="btn" disabled={(url.trim() === "" && file == null) || (kind === "xtream" && (username.trim() === "" || password === ""))}>Add</button>
+      <button type="submit" className="btn" disabled={(url.trim() === "" && file == null) || ((kind === "xtream" || kind === "tvheadend") && (username.trim() === "" || password === ""))}>Add</button>
+      {kind === "channels" ? <p className="hint">Uses your Channels DVR tuners.</p> : null}
       {kind === "m3u" || kind === "xtream" ? <p className="hint">{copy.sources.groupsHint}</p> : null}
       {options.length > 0 ? (
         <fieldset>

@@ -3,8 +3,11 @@ package source
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"waveguide/internal/discovery"
@@ -18,11 +21,14 @@ func Sync(ctx context.Context, st *store.Store, client *hdhr.Client, ip string) 
 	if client == nil {
 		client = &hdhr.Client{}
 	}
-	bases, err := basesFor(ip)
+	bases, err := basesFor(ctx, ip)
 	if err != nil {
 		return 0, err
 	}
 	if len(bases) == 0 {
+		if strings.TrimSpace(ip) != "" {
+			return 0, fmt.Errorf("No HDHomeRun answered at that address. Add the port if it is not 80.")
+		}
 		return 0, nil
 	}
 	for _, base := range bases {
@@ -45,7 +51,7 @@ func Sync(ctx context.Context, st *store.Store, client *hdhr.Client, ip string) 
 	return len(devices), nil
 }
 
-func basesFor(ip string) ([]string, error) {
+func basesFor(ctx context.Context, ip string) ([]string, error) {
 	ip = strings.TrimSpace(ip)
 	if ip != "" {
 		ip = strings.TrimPrefix(ip, "http://")
@@ -54,7 +60,10 @@ func basesFor(ip string) ([]string, error) {
 		if strings.Contains(ip, "/") || strings.Contains(ip, " ") {
 			return nil, fmt.Errorf("enter a host or host:port")
 		}
-		return []string{"http://" + ip}, nil
+		if _, _, err := net.SplitHostPort(ip); err == nil {
+			return []string{"http://" + ip}, nil
+		}
+		return probeCompatible(ctx, ip)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
@@ -105,4 +114,46 @@ func basesFor(ip string) ([]string, error) {
 		}
 	}
 	return bases, nil
+}
+
+func probeCompatible(ctx context.Context, host string) ([]string, error) {
+	candidates := []struct{ base string }{
+		{"http://" + host},
+		{"http://" + host + ":5004"},
+		{"http://" + host + ":34400"},
+		{"http://" + host + ":8409"},
+		{"http://" + net.JoinHostPort(host, "9191") + "/hdhr"},
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	var bases []string
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, cand := range candidates {
+		wg.Add(1)
+		go func(base string) {
+			defer wg.Done()
+			if compatible(ctx, base) {
+				mu.Lock()
+				bases = append(bases, base)
+				mu.Unlock()
+			}
+		}(cand.base)
+	}
+	wg.Wait()
+	return bases, nil
+}
+
+func compatible(ctx context.Context, base string) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/discover.json", nil)
+	if err != nil {
+		return false
+	}
+	res, err := (&http.Client{Timeout: 700 * time.Millisecond}).Do(req)
+	if err != nil {
+		return false
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
+	return res.StatusCode == http.StatusOK && strings.Contains(string(body), "DeviceID")
 }
