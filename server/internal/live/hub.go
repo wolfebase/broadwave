@@ -430,7 +430,7 @@ func (h *Hub) addFeedLocked(m *mux, ch store.SourceChannel) *feed {
 	m.feeds[ch.GuideNumber] = f
 	h.channels[ch.ID] = f
 	if ch.FieldOrder == "" && m.input == "" {
-		h.probeFieldOrderLocked(m, f)
+		h.learnScanLocked(m, f)
 	}
 	return f
 }
