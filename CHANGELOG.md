@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0 — 2026-09-24
+
+The guide fills in from the broadcast, and Settings says how the antenna is doing.
+
+### Added
+
+- A channel with no listings gets them from the broadcast when that channel is tuned, and an idle tuner checks the ones that are still empty.
+- The guide runs as far as the listings go. A row says which day they run through, and a program says where its listing came from.
+- Settings shows each channel as Great, OK, Weak, or Lost. Check all channels uses a free tuner and stops when you start watching.
+
 ## 0.4.0 — 2026-09-24
 
 Waveguide can take a tuner, a playlist, or a free-channel server, and a new install walks you there.

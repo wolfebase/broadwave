@@ -3,11 +3,11 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **K1**. Fake HDHomeRun so CI can tune without the DUO.
-- Half done: C9 is in this commit. Settings > Tuners shows Great, OK, Weak, or Lost from a check that uses an idle tuner and stops when someone watches.
-- Next command: a fake tuner, then integration tests and relay smoke in CI.
+- Current task: **Phase C deploy**. Tag v0.5.0 and update Unraid.
+- Half done: C9 is pushed. Changelog for 0.5.0 is written. A7 retry is still unauthenticated.
+- Next command: tag v0.5.0 after CI is green, then deploy with MODE=ghcr and smoke two-screen sync.
 - Unraid is on `v0.4.0`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
-- A7 retry at the phase C boundary is still due before the tag. Last check was unauthenticated (see BLOCKERS).
+- A7 retry at phase C: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
 ## Phase R — Repair and consolidate
 - [x] R1 CI green on all four jobs at 0984064 (lint fixes e411da1, Xcode 26 guard 0984064); `make check`; CI section in the dev-loop skill
