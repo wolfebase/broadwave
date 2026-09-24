@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -550,25 +551,77 @@ func (s *Store) Skips(ctx context.Context) (map[string]bool, error) {
 }
 
 type Source struct {
-	ID      int64  `json:"id"`
-	Kind    string `json:"kind"`
-	Name    string `json:"name"`
-	URL     string `json:"url,omitempty"`
-	XMLTV   string `json:"xmltvUrl,omitempty"`
-	Enabled bool   `json:"enabled"`
+	ID           int64  `json:"id"`
+	Kind         string `json:"kind"`
+	Name         string `json:"name"`
+	URL          string `json:"url,omitempty"`
+	XMLTV        string `json:"xmltvUrl,omitempty"`
+	Enabled      bool   `json:"enabled"`
+	StableKey    string `json:"stableKey,omitempty"`
+	Priority     int    `json:"priority,omitempty"`
+	TunerCount   int    `json:"tunerCount,omitempty"`
+	StreamLimit  int    `json:"streamLimit,omitempty"`
+	StreamFormat string `json:"streamFormat,omitempty"`
+	HasGuide     bool   `json:"hasGuide,omitempty"`
+	NeedsTuner   bool   `json:"needsTuner,omitempty"`
+	Refresh      string `json:"refresh,omitempty"`
+	Health       string `json:"health,omitempty"`
+	DeviceID     string `json:"deviceId,omitempty"`
+}
+
+// maskURL returns a URL safe to show and the original when it carried a secret.
+func maskURL(raw string) (public, secret string) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return raw, ""
+	}
+	changed := false
+	if u.User != nil {
+		if pass, ok := u.User.Password(); ok && pass != "" {
+			u.User = url.UserPassword(u.User.Username(), "••••")
+			changed = true
+		}
+	}
+	q := u.Query()
+	for _, key := range []string{"password", "pass", "token", "secret"} {
+		if q.Get(key) != "" {
+			q.Set(key, "••••")
+			changed = true
+		}
+	}
+	if !changed {
+		return raw, ""
+	}
+	u.RawQuery = q.Encode()
+	return u.String(), raw
 }
 
 func (s *Store) AddSource(ctx context.Context, kind, name, rawURL, xmltv string) (Source, error) {
-	res, err := s.db.ExecContext(ctx, `INSERT INTO sources (kind, name, url, xmltv_url, enabled) VALUES (?, ?, ?, ?, 1)`, kind, name, rawURL, xmltv)
+	public, secret := maskURL(rawURL)
+	publicXML, xmlSecret := maskURL(xmltv)
+	res, err := s.db.ExecContext(ctx, `INSERT INTO sources (kind, name, url, xmltv_url, enabled) VALUES (?, ?, ?, ?, 1)`, kind, name, public, publicXML)
 	if err != nil {
 		return Source{}, err
 	}
 	id, _ := res.LastInsertId()
-	return Source{ID: id, Kind: kind, Name: name, URL: rawURL, XMLTV: xmltv, Enabled: true}, nil
+	key := fmt.Sprintf("src:%d", id)
+	if _, err := s.db.ExecContext(ctx, `UPDATE sources SET stable_key=? WHERE id=? AND stable_key=''`, key, id); err != nil {
+		return Source{}, err
+	}
+	kept := secret
+	if kept == "" {
+		kept = xmlSecret
+	}
+	if kept != "" {
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO source_secrets (source_id, secret) VALUES (?, ?)`, id, kept); err != nil {
+			return Source{}, err
+		}
+	}
+	return Source{ID: id, Kind: kind, Name: name, URL: public, XMLTV: publicXML, Enabled: true, StableKey: key}, nil
 }
 
 func (s *Store) Sources(ctx context.Context) ([]Source, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, name, url, xmltv_url, enabled FROM sources ORDER BY id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, name, url, xmltv_url, enabled, stable_key, priority, tuner_count, stream_limit, stream_format, has_guide, needs_tuner, refresh, health, device_id FROM sources ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -576,11 +629,13 @@ func (s *Store) Sources(ctx context.Context) ([]Source, error) {
 	var out []Source
 	for rows.Next() {
 		var item Source
-		var enabled int
-		if err := rows.Scan(&item.ID, &item.Kind, &item.Name, &item.URL, &item.XMLTV, &enabled); err != nil {
+		var enabled, hasGuide, needsTuner int
+		if err := rows.Scan(&item.ID, &item.Kind, &item.Name, &item.URL, &item.XMLTV, &enabled, &item.StableKey, &item.Priority, &item.TunerCount, &item.StreamLimit, &item.StreamFormat, &hasGuide, &needsTuner, &item.Refresh, &item.Health, &item.DeviceID); err != nil {
 			return nil, err
 		}
 		item.Enabled = enabled != 0
+		item.HasGuide = hasGuide != 0
+		item.NeedsTuner = needsTuner != 0
 		out = append(out, item)
 	}
 	if out == nil {

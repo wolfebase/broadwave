@@ -114,6 +114,9 @@ func upgradeLegacy(db *sql.DB) {
 		return
 	}
 	columns := []struct{ table, def string }{
+		{"devices", "friendly_name TEXT NOT NULL DEFAULT ''"},
+		{"devices", "priority INTEGER NOT NULL DEFAULT 0"},
+		{"devices", "tuner_count INTEGER NOT NULL DEFAULT 0"},
 		{"channels", "frequency_hz INTEGER NOT NULL DEFAULT 0"},
 		{"channels", "program_num INTEGER NOT NULL DEFAULT 0"},
 		{"passes", "pad_before INTEGER NOT NULL DEFAULT 0"},

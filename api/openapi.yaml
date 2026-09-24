@@ -1087,11 +1087,21 @@ components:
       required: [id, kind, name, enabled]
       properties:
         id: { type: integer, format: int64 }
-        kind: { type: string, enum: [m3u, link, folder] }
+        kind: { type: string, enum: [hdhomerun, hdhr-compatible, m3u, xtream, tvheadend, channels-dvr, link, folder] }
         name: { type: string }
         url: { type: string }
         xmltvUrl: { type: string }
         enabled: { type: boolean }
+        stableKey: { type: string }
+        priority: { type: integer }
+        tunerCount: { type: integer }
+        streamLimit: { type: integer }
+        streamFormat: { type: string, description: "ts or hls. Empty until the source is probed." }
+        hasGuide: { type: boolean }
+        needsTuner: { type: boolean }
+        refresh: { type: string }
+        health: { type: string }
+        deviceId: { type: string }
     Channel:
       type: object
       required: [id, deviceId, guideNumber, guideName, displayNumber, displayName, hd, favorite, enabled, hidden, present]
