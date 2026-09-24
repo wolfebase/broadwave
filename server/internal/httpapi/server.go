@@ -35,6 +35,7 @@ type Server struct {
 	Version string
 	Bus     *realtime.Bus
 	Sports  sports.Provider
+	signalOn bool
 
 	routes []string
 }
@@ -72,6 +73,8 @@ func (s *Server) Handler() http.Handler {
 	api("POST /multiview/plan", s.multiviewPlan)
 	api("POST /watch/{id}/stop", s.release)
 	api("GET /tuners", s.tuners)
+	api("GET /signals", s.signals)
+	api("POST /signals/check", s.checkSignals)
 	api("POST /recordings", s.startRecording)
 	api("POST /recordings/{id}/stop", s.stopRecording)
 	api("GET /recordings", s.recordings)

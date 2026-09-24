@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Channel, Device, TunerStatus } from "../../types";
-import { addFree, addPlaylistFile, addSource, findFree, getTuners, lookHarder, sourceStatuses, startScan, type FreeFeed, type SourceAdded, type SourceStatus } from "../../api";
+import { addFree, addPlaylistFile, addSource, checkSignals, findFree, getSignals, getTuners, lookHarder, sourceStatuses, startScan, type ChannelSignal, type FreeFeed, type SourceAdded, type SourceStatus } from "../../api";
 import { copy } from "../../strings";
 export function Sources({
   devices,
@@ -191,6 +191,7 @@ export function Sources({
           ))}
         </ul>
       )}
+      <SignalCheck />
       {statuses.length > 0 ? (
         <ul className="source-list">
           {statuses.map((item) => (
@@ -418,6 +419,67 @@ function SourceAdd() {
       ) : null}
       {note ? <p className="hint">{note}</p> : null}
     </form>
+  );
+}
+
+function SignalCheck() {
+  const [rows, setRows] = useState<ChannelSignal[]>([]);
+  const [running, setRunning] = useState(false);
+  const [note, setNote] = useState("");
+  const load = () => {
+    void getSignals()
+      .then((res) => {
+        setRows(res.channels ?? []);
+        setRunning(res.running);
+      })
+      .catch((err: Error) => setNote(err.message));
+  };
+  useEffect(() => {
+    load();
+    const timer = window.setInterval(load, running ? 2000 : 15000);
+    return () => window.clearInterval(timer);
+  }, [running]);
+  return (
+    <div>
+      <div className="setup-row">
+        <button
+          type="button"
+          className="btn"
+          disabled={running}
+          onClick={() => {
+            setNote("");
+            void checkSignals()
+              .then((res) => {
+                setRunning(true);
+                setNote(res.message ?? "");
+              })
+              .catch((err: Error) => setNote(err.message));
+          }}
+        >
+          {running ? "Checking channels" : "Check all channels"}
+        </button>
+      </div>
+      {note ? <p className="hint">{note}</p> : null}
+      {rows.some((row) => row.verdict) ? (
+        <ul className="source-list">
+          {rows
+            .filter((row) => row.verdict)
+            .map((row) => (
+              <li key={row.channelId} className="source-row">
+                <span className="ch-num">{row.number}</span>
+                <span>{row.name}</span>
+                <span className="codec">
+                  {row.verdict}
+                  {row.strength != null ? ` · signal ${row.strength}% · quality ${row.quality ?? 0}% · symbols ${row.symbol ?? 0}%` : ""}
+                  {row.tip ? `. ${row.tip}` : ""}
+                </span>
+              </li>
+            ))}
+        </ul>
+      ) : (
+        <p className="empty">Check all channels to see how the antenna is doing.</p>
+      )}
+    </div>
   );
 }
 

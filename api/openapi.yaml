@@ -587,6 +587,41 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/MultiviewPlan" }
         "400": { $ref: "#/components/responses/Error" }
+  /signals:
+    get:
+      tags: [live]
+      operationId: listSignals
+      description: Last antenna reading for each channel, plus a live reading when that frequency is already tuned.
+      responses:
+        "200":
+          description: Channel signals
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [channels, running]
+                properties:
+                  running: { type: boolean }
+                  channels:
+                    type: array
+                    items: { $ref: "#/components/schemas/ChannelSignal" }
+  /signals/check:
+    post:
+      tags: [live]
+      operationId: checkSignals
+      description: Tune each frequency on an idle tuner, read signal strength, and stop if someone starts watching.
+      responses:
+        "200":
+          description: Check started
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [running]
+                properties:
+                  running: { type: boolean }
+                  message: { type: string }
+        "409": { $ref: "#/components/responses/Error" }
   /tuners:
     get:
       tags: [live]
@@ -1348,6 +1383,21 @@ components:
         quality: { type: integer }
         symbol: { type: integer }
         viewers: { type: integer }
+    ChannelSignal:
+      type: object
+      required: [channelId, number, name]
+      properties:
+        channelId: { type: integer, format: int64 }
+        number: { type: string }
+        name: { type: string }
+        frequencyHz: { type: integer }
+        strength: { type: integer }
+        quality: { type: integer }
+        symbol: { type: integer }
+        verdict: { type: string, enum: [Great, OK, Weak, Lost] }
+        tip: { type: string }
+        live: { type: boolean }
+        checkedAt: { type: string, format: date-time }
     Caps:
       type: object
       description: What the client can decode and display.

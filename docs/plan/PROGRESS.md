@@ -3,11 +3,11 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **C9**. Antenna and signal tools.
-- Half done: C8 is in this commit. The guide extends to the last listing, a row says "Listings through Saturday" after its data ends, and the program sheet says "From the tuner guide."
-- Next command: a Settings > Tuners screen with signal readings, preemptible like the guide scan.
+- Current task: **K1**. Fake HDHomeRun so CI can tune without the DUO.
+- Half done: C9 is in this commit. Settings > Tuners shows Great, OK, Weak, or Lost from a check that uses an idle tuner and stops when someone watches.
+- Next command: a fake tuner, then integration tests and relay smoke in CI.
 - Unraid is on `v0.4.0`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
-- A7 retry at phase C: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
+- A7 retry at the phase C boundary is still due before the tag. Last check was unauthenticated (see BLOCKERS).
 
 ## Phase R — Repair and consolidate
 - [x] R1 CI green on all four jobs at 0984064 (lint fixes e411da1, Xcode 26 guard 0984064); `make check`; CI section in the dev-loop skill
@@ -75,9 +75,9 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] C4 Rich program model (commit f291b7d). Season and episode, the onscreen label, original air date, series id, live, premiere, finale, rating, and cast are stored and shown. This feed sends season, episode, and a date on most programs, and live on a couple. It does not send ratings or cast, so those stay empty. Listings already saved pick this up on the next guide refresh.
 - [x] C5 Guide UX (commit 37be574). The grid covers the listings on hand (up to two days). Now, Tonight, and Tomorrow jump the time. A Now button returns when now has scrolled away. Wide cells show a picture. Drag a channel to reorder it on this screen; right-click or H hides it. iPhone landscape and Apple TV use the grid, play/pause on Apple TV starts the focused show, and iPad keeps the program beside the guide.
 - [x] C6 Search (commit d7def66). Full-text search covers titles, subtitles, descriptions, and cast, plus recordings. Search on the web and on Apple lists the matches. Record every airing makes a pass for that title.
-- [x] C7 Guide from the broadcast: relay on full mux `/tunerN/ch<freq>` (PSIP present; `/auto/v` is not), EIT parser, passive harvest, preemptible idle scan, gap merge. Nine of 27 stored channels have current and next listings. An antenna scan on 2026-09-24 did not find 14.1–14.16, 9.4, 43.3, or 46.7, and tuning them returns not found, so they stay empty (ADR 0006).
-- [x] C8 Honest guide depth and per-listing source. The grid runs to the last listing (up to 14 days). A row past its data says "Listings through Saturday" instead of "No listings". The program sheet says where the listing came from.
-- [ ] C9 Antenna and signal tools (Settings > Tuners)
+- [x] C7 Guide from the broadcast: relay on full mux `/tunerN/ch<freq>` (PSIP present; `/auto/v` is not), EIT parser, passive harvest, preemptible idle scan, gap merge. Nine of 27 stored channels have current and next listings. An antenna scan on 2026-09-24 did not find 14.1–14.16, 9.4, 43.3, or 46.7, and tuning them returns not found, so they stay empty (ADR 0006). (commit 7d7a49a)
+- [x] C8 Honest guide depth and per-listing source. The grid runs to the last listing (up to 14 days). A row past its data says "Listings through Saturday" instead of "No listings". The program sheet says where the listing came from. (commit b123bdd)
+- [x] C9 Antenna and signal tools. Settings > Tuners reads strength, quality, and symbols, then says Great, OK, Weak, or Lost. Check all channels uses an idle tuner and stops when a viewer starts. On the DUO, 4.1, 5.1, 9.1, 29.1, 38.1, and 41.1 were Great and 39.7 was OK.
 
 ## Phase D — Sports
 - [x] D1 Sports provider (commit 7923323). ESPN scoreboard for twelve leagues, with F1 and NASCAR as schedules only. A live board refreshes every 30 seconds; a quiet board waits two hours. A failed fetch backs off and keeps the last good board.

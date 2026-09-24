@@ -307,6 +307,27 @@ export function getTuners() {
   return request<{ tuners: TunerStatus[]; encoder: string }>("/api/v1/tuners");
 }
 
+export type ChannelSignal = {
+  channelId: number;
+  number: string;
+  name: string;
+  strength?: number;
+  quality?: number;
+  symbol?: number;
+  verdict?: string;
+  tip?: string;
+  live?: boolean;
+  checkedAt?: string;
+};
+
+export function getSignals() {
+  return request<{ channels: ChannelSignal[]; running: boolean }>("/api/v1/signals");
+}
+
+export function checkSignals() {
+  return request<{ running: boolean; message?: string }>("/api/v1/signals/check", { method: "POST", body: "{}" });
+}
+
 export function getSchedule() {
   return request<{ tunerCount: number; items: PlannedAiring[] }>("/api/v1/schedule");
 }
