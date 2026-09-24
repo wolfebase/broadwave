@@ -79,6 +79,8 @@ Scripts: `scripts/dev-server.sh` (safe rebuild + restart on :18477 with a copy o
 - The Mac dev server and the Unraid server share the one DUO. Check Unraid's diagnostics and schedule before a test that tunes; never make a real recording fail.
 - The Mac reaches Unraid through `utun4`, so Bonjour from TUS is invisible here. Check it on TUS with `avahi-browse`, and connect simulators by address.
 - Deploy to Unraid with `MODE=ghcr`; large uploads over the SSH tunnel drop mid-transfer.
+- CI builds the Docker image and `make check` does not. The image's web stage copies only `web/` and `api/fixtures`, so a web import from anywhere else breaks the release. Run `docker build -f deploy/docker/Dockerfile --target web .` when you add one.
+- Test on `Waveguide-Staging` (TUS :8490, `-staging`, iGPU) before production. ffmpeg 5.1 in the image, fed a file faster than real time with `-copyts` and VAAPI deinterlace, runs away without ever exiting; feed lab samples at real time.
 
 ## Definition of done
 
