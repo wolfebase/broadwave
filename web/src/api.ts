@@ -33,6 +33,16 @@ export function startScan(deviceId: string) {
   });
 }
 
+export type FreeFeed = { kind: string; name: string; addr: string; playlist: string; guide: string };
+
+export function findFree() {
+  return request<{ found: FreeFeed[]; guide: string }>("/api/v1/sources/free");
+}
+
+export function addFree(feed: { kind?: string; addr?: string; playlist?: string; guide?: string; name?: string }) {
+  return request<SourceAdded>("/api/v1/sources/free", { method: "POST", body: JSON.stringify(feed) });
+}
+
 export function lookHarder() {
   return request<{ found: { kind: string; name: string; addr: string; id?: string }[] }>("/api/v1/sources/look", {
     method: "POST",

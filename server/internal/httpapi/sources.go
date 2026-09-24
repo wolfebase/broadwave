@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"waveguide/internal/discovery"
 	"waveguide/internal/dvr"
 	"waveguide/internal/guide"
 	"waveguide/internal/source"
@@ -210,11 +211,83 @@ func (s *Server) installPlaylist(w http.ResponseWriter, ctx context.Context, kin
 
 func playlistKind(kind string) bool {
 	switch kind {
-	case "m3u", "xtream", "tvheadend", "channels", "threadfin", "xteve", "ersatztv", "dispatcharr":
+	case "m3u", "xtream", "tvheadend", "channels", "threadfin", "xteve", "ersatztv", "dispatcharr", "free":
 		return true
 	default:
 		return false
 	}
+}
+
+func (s *Server) freeSources(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	if r.Method == http.MethodGet {
+		found := source.FindFree(ctx, discovery.LocalHosts())
+		if found == nil {
+			found = []source.Feed{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"found": found, "guide": source.FreeGuide})
+		return
+	}
+	var body struct {
+		Kind     string `json:"kind"`
+		Addr     string `json:"addr"`
+		Playlist string `json:"playlist"`
+		Guide    string `json:"guide"`
+		Name     string `json:"name"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		httpError(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	feed := source.Feed{Playlist: strings.TrimSpace(body.Playlist), Guide: strings.TrimSpace(body.Guide), Name: strings.TrimSpace(body.Name)}
+	if feed.Playlist == "" {
+		resolved, err := source.FeedByKind(body.Kind, body.Addr)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		feed = resolved
+	}
+	raw, err := source.ReadPlaylist(ctx, feed.Playlist)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	kept, skipped := source.PrepareFree(source.ParseM3U(strings.NewReader(string(raw))))
+	if len(kept) == 0 {
+		msg := "That feed has no channels yet. Give it a minute, then add it again."
+		if skipped > 0 {
+			msg = "Every channel in that feed needs DRM."
+		}
+		httpError(w, msg, http.StatusBadRequest)
+		return
+	}
+	name := feed.Name
+	if name == "" {
+		name = source.FreeGroup
+	}
+	item, err := s.Store.AddSource(ctx, "free", name, feed.Playlist, feed.Guide)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := source.Install(ctx, s.Store, item.ID, item.Name, "Playlist", kept); err != nil {
+		writeError(w, err)
+		return
+	}
+	s.attachXMLTV(ctx, item.ID, feed.Guide)
+	_ = s.Store.RememberPlaylist(ctx, item.ID, source.FreeGroup, 0, time.Now().Add(24*time.Hour))
+	if format := source.ProbeFormat(ctx, kept[0].URL); format != "" {
+		_ = s.Store.SetStreamFormat(ctx, item.ID, format)
+	}
+	note := ""
+	if skipped > 0 {
+		note = fmt.Sprintf("Skipped %d channels that need DRM.", skipped)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id": item.ID, "kind": item.Kind, "name": item.Name, "url": item.URL, "xmltvUrl": item.XMLTV, "message": note,
+	})
 }
 
 // RefreshSources reloads playlists whose next refresh time has passed.
@@ -246,7 +319,11 @@ func (s *Server) RefreshSources(ctx context.Context, now time.Time) (int, error)
 			_ = s.Store.NoteRefresh(ctx, item.ID, now.Add(time.Hour), err.Error())
 			continue
 		}
-		entries := source.Renumber(source.FilterGroups(source.ParseM3U(strings.NewReader(string(raw))), item.Groups), item.NumberStart)
+		parsed := source.ParseM3U(strings.NewReader(string(raw)))
+		if item.Kind == "free" {
+			parsed, _ = source.PrepareFree(parsed)
+		}
+		entries := source.Renumber(source.FilterGroups(parsed, item.Groups), item.NumberStart)
 		if err := source.Install(ctx, s.Store, item.ID, item.Name, "Playlist", entries); err != nil {
 			_ = s.Store.NoteRefresh(ctx, item.ID, now.Add(time.Hour), err.Error())
 			continue

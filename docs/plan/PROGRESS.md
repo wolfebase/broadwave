@@ -3,9 +3,9 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **S7**. Free channels.
-- Half done: S6 is in this commit. `make check` passed. A local tvheadend container returned `#EXTM3U` and the importer accepted it.
-- Next command: detect a FastChannels-style playlist and add it as a streamed source.
+- Current task: **S8**. Setup wizard.
+- Half done: S7 is in this commit. `make check` passed. A local FastChannels container was detected, and one feed added 5 channels with art and 106 guide listings.
+- Next command: walk a fresh install through the setup steps.
 - Unraid is on `v0.3.3`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
 - A7 retry at phase S: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
@@ -26,8 +26,8 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] S3 HDHomeRun family: two devices with failover, a tuner held for a recording, copy-protected channels hidden, scan on a fake tuner and a finished scan on the DUO. FLEX ATSC 3.0 stays on G6. EXTEND adds transcode=mobile when the server encoder is software. SCRIBE recordings parse from recorded_files.json. (commit d18c9af)
 - [x] S4 M3U done right: tvg-* / group / url-tvg / tvc-guide-stationid, file + URL + path, stream format and limit, numbering, groups, per-source XMLTV, refresh with stable ids, picker for big lists (commit b14a82e)
 - [x] S5 Xtream Codes source (commit b9e48ae)
-- [x] S6 tvheadend, Threadfin/xTeVe/ErsatzTV/Dispatcharr/Antennas, Channels DVR server, HDHomeRun-compatible by address; unsupported devices documented
-- [ ] S7 Free channels: detect FastChannels / Pluto / Samsung generator containers, or guide the user to run FastChannels
+- [x] S6 tvheadend, Threadfin/xTeVe/ErsatzTV/Dispatcharr/Antennas, Channels DVR server, HDHomeRun-compatible by address; unsupported devices documented (commit e464ec9)
+- [x] S7 Free channels: detect FastChannels / Pluto / Samsung generator containers, or guide the user to run FastChannels
 - [ ] S8 Setup wizard v2 on web, Apple TV, and iPhone (< 90 s, no typing for HDHomeRun)
 - [ ] S9 Setup doctor: bridge network, /dev/dri, volumes, disk, TZ, clock, PUID/PGID/UMASK
 - [ ] S10 Source health and limits

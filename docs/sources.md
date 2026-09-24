@@ -20,6 +20,7 @@ HDHomeRun on a new install is added when it is found. Everything else waits for 
 | Tablo Gen 4 | — | Needs Tablo's cloud and a signed call | — | Unsupported. No local API. |
 | AirTV, Fire TV Recast | — | Sling or Amazon only | — | Unsupported. No open API. |
 | TV Everywhere | — | Cable login inside a browser | — | Unsupported. No open API. |
+| Free channels (FastChannels, Pluto for Channels, Samsung TV Plus for Channels) | Ports 5523, 7777, and 8182 when the user asks | The generator's M3U. DRM streams are skipped. | The generator's XMLTV | Supported. One tap when a server is already running. Waveguide does not scrape those services itself. |
 | Pluto and other free apps as themselves | — | Pluto's stitcher wants a session from `boot.pluto.tv` | — | Unsupported as a built-in source. A generated M3U can still be added as a playlist. |
 
 The public `i.mjh.nz` playlists were removed in August 2024. They are not a source.

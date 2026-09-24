@@ -242,6 +242,52 @@ paths:
                         addr: { type: string }
                         id: { type: string }
         "500": { $ref: "#/components/responses/Error" }
+  /sources/free:
+    get:
+      tags: [sources]
+      operationId: findFreeChannels
+      description: Look for FastChannels, Pluto, and Samsung generators already on this network.
+      responses:
+        "200":
+          description: Feeds that answered, or a short guide when none did
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [found, guide]
+                properties:
+                  found:
+                    type: array
+                    items:
+                      type: object
+                      required: [kind, name, addr, playlist, guide]
+                      properties:
+                        kind: { type: string }
+                        name: { type: string }
+                        addr: { type: string }
+                        playlist: { type: string }
+                        guide: { type: string }
+                  guide: { type: string }
+    post:
+      tags: [sources]
+      operationId: addFreeChannels
+      description: Add one generator feed as a tuner-free playlist. DRM streams are skipped.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                kind: { type: string }
+                addr: { type: string }
+                playlist: { type: string }
+                guide: { type: string }
+                name: { type: string }
+      responses:
+        "200":
+          description: The source, plus a note when DRM channels were skipped
+        "400": { $ref: "#/components/responses/Error" }
   /sources:
     get:
       tags: [sources]
