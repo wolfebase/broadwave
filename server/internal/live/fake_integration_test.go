@@ -136,16 +136,20 @@ func TestFakeTunerSharesFrequencyAndYields(t *testing.T) {
 	if err != nil || got.EndsAt == nil || got.EndsAt.Before(time.Now().Add(4*time.Minute)) {
 		t.Fatalf("extend %+v %v", got.EndsAt, err)
 	}
-	h.StopRecord(rec.ID)
-	// ffmpeg closes the file after StopRecord returns; a slow CI runner needs more than a fixed pause.
+	// Stop only once ffmpeg has written the file: with a second of the fake
+	// stream it cannot identify the streams yet and exits without output.
 	var info os.FileInfo
-	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+	for deadline := time.Now().Add(20 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
 		if info, err = os.Stat(got.Path); err == nil && info.Size() > 0 {
 			break
 		}
 	}
 	if err != nil || info.Size() == 0 {
 		t.Fatalf("recording file %v", err)
+	}
+	h.StopRecord(rec.ID)
+	if after, err := st.Recording(ctx, rec.ID); err != nil || after.Status != "complete" {
+		t.Fatalf("stopped recording %+v %v", after.Status, err)
 	}
 
 	for _, row := range mustRecordings(t, st) {
