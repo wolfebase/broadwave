@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 func TestSchedulesDirectMapsChannelNumbers(t *testing.T) {

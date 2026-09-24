@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 type nopWriter struct{ closed bool }

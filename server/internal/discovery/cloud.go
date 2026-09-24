@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"waveguide/internal/hdhr"
+	"broadwave/internal/hdhr"
 )
 
 // KeepLocalCloud returns cloud devices whose LocalIP answers with the same device id.

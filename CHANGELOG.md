@@ -12,7 +12,7 @@ The guide fills in from the broadcast, and Settings says how the antenna is doin
 
 ## 0.4.0 — 2026-09-24
 
-Waveguide can take a tuner, a playlist, or a free-channel server, and a new install walks you there.
+Broadwave can take a tuner, a playlist, or a free-channel server, and a new install walks you there.
 
 ### Added
 

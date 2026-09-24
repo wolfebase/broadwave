@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 // Slot is one program on a library channel's clock.

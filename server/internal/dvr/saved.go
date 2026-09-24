@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"waveguide/internal/live"
-	"waveguide/internal/store"
+	"broadwave/internal/live"
+	"broadwave/internal/store"
 )
 
 // OnSaved indexes commercials and applies keep rules after a recording finishes.

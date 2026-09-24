@@ -3,7 +3,7 @@ package httpapi
 import (
 	"net/http"
 
-	"waveguide/internal/live"
+	"broadwave/internal/live"
 )
 
 func (s *Server) multiviewPlan(w http.ResponseWriter, r *http.Request) {

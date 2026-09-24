@@ -3,7 +3,7 @@ package dvr
 import (
 	"time"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 // StartDecision reports whether a pass should start recording this airing now,

@@ -1,14 +1,14 @@
 <?xml version="1.0"?>
 <Container version="2">
-  <Name>Waveguide</Name>
-  <Repository>ghcr.io/wolfebase/waveguide:latest</Repository>
-  <Registry>https://github.com/wolfebase/waveguide/pkgs/container/waveguide</Registry>
+  <Name>Broadwave</Name>
+  <Repository>ghcr.io/wolfebase/broadwave:latest</Repository>
+  <Registry>https://github.com/wolfebase/broadwave/pkgs/container/broadwave</Registry>
   <Network>host</Network>
   <MyIP/>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/wolfebase/waveguide/issues</Support>
-  <Project>https://github.com/wolfebase/waveguide</Project>
+  <Support>https://github.com/wolfebase/broadwave/issues</Support>
+  <Project>https://github.com/wolfebase/broadwave</Project>
   <Overview>Live TV and DVR for your antenna. Finds your HDHomeRun, fills a 14-day guide, records the original broadcast, and shares one tuner with every screen in the house, in sync. Apps for iPhone and Apple TV find this server on their own.</Overview>
   <Category>MediaApp:Video MediaServer:Video</Category>
   <WebUI>http://[IP]:[PORT:8477]/</WebUI>
@@ -22,7 +22,7 @@
   <DonateLink/>
   <Requires>An HDHomeRun tuner on the same network. Host networking lets the server find it and lets the apps find the server. Remove --device=/dev/dri if the server has no Intel or AMD graphics.</Requires>
   <Config Name="Web UI" Target="8477" Default="8477" Mode="tcp" Description="Web app and API port" Type="Port" Display="always" Required="true" Mask="false">8477</Config>
-  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/waveguide" Mode="rw" Description="Database, guide, and live buffer. Put this on a fast pool." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/waveguide</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/broadwave" Mode="rw" Description="Database, guide, and live buffer. Put this on a fast pool." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/broadwave</Config>
   <Config Name="Recordings" Target="/config/work/recordings" Default="/mnt/user/media/recordings" Mode="rw" Description="Where recordings are saved as original broadcast files." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media/recordings</Config>
   <Config Name="Tuner address" Target="HDHR_HOST" Default="" Mode="" Description="Optional. Only needed if the tuner is on another subnet or the container is not on host networking." Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Time zone for the guide, like America/Chicago." Type="Variable" Display="always" Required="false" Mask="false">UTC</Config>

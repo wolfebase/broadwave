@@ -1,14 +1,14 @@
-# Waveguide — Master Plan v2
+# Broadwave — Master Plan v2
 
 Written 2026-09-23 after reviewing run 1 (tasks A1–D6, 46 commits). This version supersedes v1 (see git history before `0984064`). Task IDs from v1 are kept so `PROGRESS.md` carries over; new tasks get new IDs (R*, S*, P*, N*, B5, C7–C9, D7–D8, G10, K6, M*). Revised the same day to add Phase S (every source, auto-found), Phase P (server and Apple apps as one), and Phase N (every other screen).
 
-The product is **Waveguide** (renamed from "OTA Viewer"; see `docs/brand.md`). The repo folder on disk is still `ota viewer`; quote paths and do not rename it.
+The product is **Broadwave** (see `docs/brand.md`). The repo is `/Users/tyler/Projects/active/broadwave`.
 
 Read in this order before touching code:
 
 1. `AGENTS.md` (project guide + Lessons learned), then `.cursor/rules/*.mdc`
 2. This file, then `docs/plan/PROGRESS.md` (start at "Resume here"), `docs/plan/BLOCKERS.md`, `docs/plan/UNRAID_LOG.md`
-3. Skills: `waveguide-dev-loop`, `waveguide-media-pipeline`, `waveguide-apple`, `waveguide-multiview`, `waveguide-sources` (project, `.cursor/skills/`), `waveguide-unraid` (personal, `~/.cursor/skills/`)
+3. Skills: `broadwave-dev-loop`, `broadwave-media-pipeline`, `broadwave-apple`, `broadwave-multiview`, `broadwave-sources` (project, `.cursor/skills/`), `broadwave-unraid` (personal, `~/.cursor/skills/`)
 4. `docs/architecture.md`, `docs/decisions/0001-0005`, `docs/research.md`
 
 ---
@@ -19,7 +19,7 @@ Read in this order before touching code:
 
 Run 1 did good work but ended its turn after almost every phase; the user had to type "continue" eight times. That is the main thing to fix.
 
-1. **Start with a goal.** First action: call `GetDynamicTools {"namespace":"cursor","toolName":"CreateGoal"}`, then `CallDynamicTool` `cursor/CreateGoal` with the objective: "Complete every task in docs/plan/PROGRESS.md for Waveguide (tick it or record a real blocker in BLOCKERS.md), verifying, committing, pushing, and deploying as the plan says." The user explicitly asks for this goal. Only call `UpdateGoal complete` when every line in `PROGRESS.md` is ticked or blocked.
+1. **Start with a goal.** First action: call `GetDynamicTools {"namespace":"cursor","toolName":"CreateGoal"}`, then `CallDynamicTool` `cursor/CreateGoal` with the objective: "Complete every task in docs/plan/PROGRESS.md for Broadwave (tick it or record a real blocker in BLOCKERS.md), verifying, committing, pushing, and deploying as the plan says." The user explicitly asks for this goal. Only call `UpdateGoal complete` when every line in `PROGRESS.md` is ticked or blocked.
 2. **Never end your turn to report progress.** A finished task or phase is not a stopping point. Progress goes into `PROGRESS.md`, commit messages, and `UNRAID_LOG.md`, not into a chat summary. Write the next tool call instead of a recap.
 3. **Background notifications are not stops.** When a background shell or subagent finishes, read its result, act on it, and continue with the current task in the same turn. Do not summarize it to the user.
 4. **The only reasons to end a turn:** the plan is complete; every remaining task is blocked and recorded in `BLOCKERS.md`; or an irreversible action needs the user (App Store submission, deleting user data, spending money).
@@ -43,19 +43,19 @@ The owner's priorities, in order: **playback that is the best available**, **set
 
 How every task is verified from now on:
 
-1. **Staging beside production.** TUS runs a second container, `Waveguide-Staging`, on `http://192.168.1.2:8490`. It uses the production image with the branch binary mounted, host network, `/dev/dri` (the UHD 770 iGPU), `--cpus 6 --memory 3g`, `-staging -bonjour=false`, a catalog copied from the latest backup with passes deleted, and its own `server_identity` ("Waveguide Staging"). `-staging` (8dac5dd) never records, never pulls the guide, never runs the idle scan, and never starts the emulator, so it tunes only when someone presses play. Every change goes to staging first (U1 scripts this). **Never** touch the `Waveguide` container except in a phase deploy. Nothing else on TUS may be restarted, and that includes `channelsdvr_intel`, a Channels DVR that can also use the DUO.
+1. **Staging beside production.** TUS runs a second container, `Broadwave-Staging`, on `http://192.168.1.2:8490`. It uses the production image with the branch binary mounted, host network, `/dev/dri` (the UHD 770 iGPU), `--cpus 6 --memory 3g`, `-staging -bonjour=false`, a catalog copied from the latest backup with passes deleted, and its own `server_identity` ("Broadwave Staging"). `-staging` (8dac5dd) never records, never pulls the guide, never runs the idle scan, and never starts the emulator, so it tunes only when someone presses play. Every change goes to staging first (U1 scripts this). **Never** touch the `Broadwave` container except in a phase deploy. Nothing else on TUS may be restarted, and that includes `channelsdvr_intel`, a Channels DVR that can also use the DUO.
 2. **Tuner etiquette with two servers.** Before tuning, check both `:8477/api/v1/tuners` and `/api/v1/schedule`. Don't tune within 20 minutes of a scheduled recording. Use one tuner at most when production has a viewer. Stop what you start (`POST /api/v1/watch/{channelId}/stop`) and confirm `ours:false` afterward.
 3. **Click like a person, then measure.**
    - Web: real Chrome through Playwright (`playwright-cli open --browser=chrome`; the bundled Chromium has no H.264 or AAC) at 390×844, 1440×900, and 1920×1080. Go Home → Watch, open a guide cell and play it, add a tile in multiview, then open settings. Read `getVideoPlaybackQuality()` (dropped frames), `videoWidth`/`videoHeight`, and the console; 404 noise counts as a defect.
    - Apple: dedicated simulators "WG Staging iPhone" (iOS 26.5) and "WG Staging TV" (tvOS 26.5, 1080p) point at staging through the `server` default. Leave the other booted simulators alone. Drive them with XCUITest (focus and remote on tvOS, taps on iPhone), not only launch arguments. Screenshot every screen the task touched.
-   - Server output: download the rendition's `init.mp4` plus segments and measure frames/span, WxH, and decode errors (method in skill `waveguide-media-pipeline`, section "Picture lab").
+   - Server output: download the rendition's `init.mp4` plus segments and measure frames/span, WxH, and decode errors (method in skill `broadwave-media-pipeline`, section "Picture lab").
 4. **Use the iGPU and prove it.** Every playback measurement names the encoder and says whether decode ran on the GPU, with CPU per rendition taken from `docker stats`.
 
 ### 0.1c How the run is operated (2026-09-24)
 
 Run 2's first session lasted 23 hours in one conversation. It made about 3,300 tool calls, with 2 subagent calls. The owner typed "continue" 9 times, because each stop followed a text-only "I'll do X next" message. It finally died on `[canceled] http/2 stream closed with error code CANCEL (0x8)` with P2 uncommitted. From now on:
 
-- **Run it with `scripts/agent-loop.sh`.** Each round is a fresh headless session (`agent -p --force`) started with `docs/plan/AGENT_PROMPT.md`. A dropped stream or an early stop costs one round. The loop forces `network.useHttp1ForAgent` (long HTTP/2 streams die through this Mac's VPN tunnel) and stops when every line is ticked or blocked, when `~/.waveguide-agent-stop` exists, or after 6 rounds with no commit. Logs: `~/Library/Logs/waveguide-agent/`.
+- **Run it with `scripts/agent-loop.sh`.** Each round is a fresh headless session (`agent -p --force`) started with `docs/plan/AGENT_PROMPT.md`. A dropped stream or an early stop costs one round. The loop forces `network.useHttp1ForAgent` (long HTTP/2 streams die through this Mac's VPN tunnel) and stops when every line is ticked or blocked, when `~/.broadwave-agent-stop` exists, or after 6 rounds with no commit. Logs: `~/Library/Logs/broadwave-agent/`.
 - **Steer by editing `AGENT_PROMPT.md` or this plan.** The next round reads them. Do not run two agent sessions on the repo at once.
 - **Every message carries a tool call.** Delegate as `AGENT_PROMPT.md` section 2 lists. `best-of-n-runner` gives parallel tasks their own worktree; only the main agent commits to `main`.
 - **CI also builds the Docker image,** which `make check` does not. A web import from outside `web/` (like `api/fixtures`) must be copied in the Dockerfile's web stage (fixed in the commit after 8843648).
@@ -64,7 +64,7 @@ Run 2's first session lasted 23 hours in one conversation. It made about 3,300 t
 
 1. Update "Resume here". Read the relevant code and skill.
 2. Implement. Match the surrounding style (`AGENTS.md` working agreements, copy voice).
-3. `make check` (Go tests, web typecheck, eslint, swiftlint, swiftformat — the same gates as CI). Plus the task's gates: `scripts/relay-smoke.sh` for relay changes; the two-screen sync measurement for anything under `internal/live`, `web/src/lib/sync.ts`, or `OTAKit/SyncEngine.swift`; browser checks at phone (390×844), desktop (1440×900), and TV (1920×1080) for web UI; `make apple` + a simulator screenshot for Apple UI.
+3. `make check` (Go tests, web typecheck, eslint, swiftlint, swiftformat — the same gates as CI). Plus the task's gates: `scripts/relay-smoke.sh` for relay changes; the two-screen sync measurement for anything under `internal/live`, `web/src/lib/sync.ts`, or `BroadwaveKit/SyncEngine.swift`; browser checks at phone (390×844), desktop (1440×900), and TV (1920×1080) for web UI; `make apple` + a simulator screenshot for Apple UI.
 4. One commit per task that includes its `PROGRESS.md` tick (no separate "Tick X" commits). Message: what changed and why.
 5. `git push`, then check the previous push's CI (`gh run list -L 3`). **Red CI is stop-the-line:** fix it before the next task. Run 1 left `main` red from D3 to D6 without noticing (swiftlint, plus an iOS 27-only API). CI builds with **Xcode 26.6** while this Mac has **Xcode 27** (Swift 6.4): guard iOS/tvOS 27 APIs with `#if compiler(>=6.4)` around the `#available` check.
 
@@ -72,8 +72,8 @@ Run 2's first session lasted 23 hours in one conversation. It made about 3,300 t
 
 At the end of every phase (R, S, C, K1, P, G1, F, E, D-extras, B5, I, G, H, N, J, K, L):
 
-1. Add a `CHANGELOG.md` entry and tag `v0.N.0` (next minor). The release workflow publishes `ghcr.io/wolfebase/waveguide:<tag>` for amd64 and arm64.
-2. Deploy to Unraid with `MODE=ghcr` (skill `waveguide-unraid`; large SSH uploads over the tunnel drop, so pull from GHCR). Smoke it: health, version, a channel plays, two tabs sync, the phase's features work. Log it in `UNRAID_LOG.md`. Run 1 deployed only once (A3); Unraid still runs v0.1.0.
+1. Add a `CHANGELOG.md` entry and tag `v0.N.0` (next minor). The release workflow publishes `ghcr.io/wolfebase/broadwave:<tag>` for amd64 and arm64.
+2. Deploy to Unraid with `MODE=ghcr` (skill `broadwave-unraid`; large SSH uploads over the tunnel drop, so pull from GHCR). Smoke it: health, version, a channel plays, two tabs sync, the phase's features work. Log it in `UNRAID_LOG.md`. Run 1 deployed only once (A3); Unraid still runs v0.1.0.
 3. If Apple code changed and A7 is unblocked, run `scripts/testflight.sh`.
 4. Update `docs/architecture.md`, ADRs, `api/openapi.yaml`, `AGENTS.md` lessons, and skills where behavior changed.
 
@@ -82,7 +82,7 @@ At the end of every phase (R, S, C, K1, P, G1, F, E, D-extras, B5, I, G, H, N, J
 The Mac dev server and the Unraid server share one HDHomeRun CONNECT DUO (2 tuners). Unraid is the household's real DVR.
 
 - Before any test that tunes, check Unraid: `curl -s http://192.168.1.2:8477/api/v1/diagnostics` (tuners in use, active recordings) and `/api/v1/schedule` (recordings in the next 30 minutes). If a recording is on or due, test with at most one tuner, or use the relay smoke test or the fake tuner (K1).
-- Never cause a scheduled recording to fail. Never hold a tuner after a test; stop dev servers you started (`pkill -9 -x otav`) and leave at most one running.
+- Never cause a scheduled recording to fail. Never hold a tuner after a test; stop dev servers you started (`pkill -9 -x broadwave-dev`) and leave at most one running.
 
 ### 0.5 Secrets and accounts
 
@@ -94,12 +94,12 @@ The user allows reading other projects under `~/Projects` and `~/.blitz` for key
 
 | Thing | Value |
 | --- | --- |
-| GitHub | `wolfebase/waveguide` (public; `twolfekc` is not a GitHub account, see BLOCKERS) |
-| Images | `ghcr.io/wolfebase/waveguide` (v0.1.0, amd64 + arm64, public) |
-| Apple | team `D4MC63SS36`, bundle `com.wolfeup.waveguide` (iOS + tvOS), App Group `group.com.wolfeup.waveguide` (not yet on profiles) |
-| Unraid | TUS `root@192.168.1.2`, container `Waveguide`, `ghcr.io/wolfebase/waveguide:0.1.0`, host network, VAAPI, appdata `/mnt/cache/appdata/waveguide`, recordings `/mnt/user/media/ota-recordings` |
+| GitHub | `wolfebase/broadwave` (public; `twolfekc` is not a GitHub account, see BLOCKERS) |
+| Images | `ghcr.io/wolfebase/broadwave` (v0.1.0, amd64 + arm64, public) |
+| Apple | team `D4MC63SS36`, bundle `com.wolfeup.broadwave` (iOS + tvOS), App Group `group.com.wolfeup.broadwave` (not yet on profiles) |
+| Unraid | TUS `root@192.168.1.2`, container `Broadwave`, `ghcr.io/wolfebase/broadwave:0.1.0`, host network, VAAPI, appdata `/mnt/cache/appdata/broadwave`, recordings `/mnt/user/media/ota-recordings` |
 | Tuner | CONNECT DUO `192.168.1.252`, 2 tuners, 27 channels, ATSC 1.0 |
-| Network | This Mac reaches TUS through `utun4`, so Bonjour from TUS is not visible here. Check Bonjour on TUS itself (`avahi-browse -rt _waveguide._tcp`); point simulators at `http://192.168.1.2:8477` by address. |
+| Network | This Mac reaches TUS through `utun4`, so Bonjour from TUS is not visible here. Check Bonjour on TUS itself (`avahi-browse -rt _broadwave._tcp`); point simulators at `http://192.168.1.2:8477` by address. |
 
 **Done in run 1:** setup wizard and first-run detection (A1), SiliconDust refresh cadence (A2), Unraid migration and deploy (A3), lint in CI and web on `/api/v1` (A4), crash and SIGTERM recovery (A5), GitHub + GHCR (A6), Apple signing and archive (A7, upload blocked), multiview on web and Apple with tile renditions, tuner plan, and a shared room (B1–B4), guide matching, extra sources, artwork, rich programs, guide UX, and search (C1–C6), ESPN scores, game matching, game-aware recording, team passes, spoiler-safe scores, and the sports hub (D1–D6).
 
@@ -143,7 +143,7 @@ Each task: **Do** / **Accept**. Tick it in `PROGRESS.md` in the same commit.
 
 ### Phase R — Repair and consolidate (first)
 
-R1. **CI green and kept green.** Confirm run for `0984064` is green on all four jobs (`gh run list`). If Apple fails again, fix it. Add a short "CI" section to skill `waveguide-dev-loop` (what each job runs, Xcode 26 vs 27, `make check`). **Accept:** green `main`; skill updated.
+R1. **CI green and kept green.** Confirm run for `0984064` is green on all four jobs (`gh run list`). If Apple fails again, fix it. Add a short "CI" section to skill `broadwave-dev-loop` (what each job runs, Xcode 26 vs 27, `make check`). **Accept:** green `main`; skill updated.
 
 R2. **Deploy A–D to Unraid.** Tag `v0.2.0` with a `CHANGELOG.md` (start it now; L1 expands it). Deploy with `MODE=ghcr`. On the LAN: multiview 2-up from Unraid (VAAPI tiles; record CPU and GPU use from `docker stats` and `intel_gpu_top` if present), search, sports hub, team pass, spoiler-safe scores, guide matching. iPhone and Apple TV simulators connect to `http://192.168.1.2:8477`. **Accept:** `UNRAID_LOG.md` entry with version, checks, and numbers.
 
@@ -164,7 +164,7 @@ R7. **Code review of run 1.** Run a `code-reviewer` subagent over `8f91dfc..HEAD
 
 ### Phase U — Staging and hotfix (first)
 
-U1. **Staging as a script, and ship the 720p fix.** Add `MODE=staging` to `scripts/deploy-unraid.sh`, doing exactly what section 0.1b rule 1 describes (idempotent; it refuses to touch `Waveguide`). Add `scripts/staging-watch.sh <channelId> [seconds]`, which watches through the API, measures the rendition (WxH, fps, segment length, decode errors), stops, and confirms the tuner was released. Then tag `v0.5.1` with 8dac5dd. Production v0.5.0 sends every 720p station (4.1 here) as 1080p at 119.88 fps. Deploy it and log the before/after in `UNRAID_LOG`. **Accept:** `staging-watch.sh 1` prints 1280x720 59.94 on production after the deploy.
+U1. **Staging as a script, and ship the 720p fix.** Add `MODE=staging` to `scripts/deploy-unraid.sh`, doing exactly what section 0.1b rule 1 describes (idempotent; it refuses to touch `Broadwave`). Add `scripts/staging-watch.sh <channelId> [seconds]`, which watches through the API, measures the rendition (WxH, fps, segment length, decode errors), stops, and confirms the tuner was released. Then tag `v0.5.1` with 8dac5dd. Production v0.5.0 sends every 720p station (4.1 here) as 1080p at 119.88 fps. Deploy it and log the before/after in `UNRAID_LOG`. **Accept:** `staging-watch.sh 1` prints 1280x720 59.94 on production after the deploy.
 
 ### Phase PB — Playback that beats everything
 
@@ -182,11 +182,11 @@ PB9. **Picture lab in the repo.** `scripts/picture-lab.sh` captures samples (eti
 
 ### Phase HOME — The house sets itself up
 
-HOME1. **Your home.** One scan that finds every tuner or source (S2), plus every screen and server that can use Waveguide:
+HOME1. **Your home.** One scan that finds every tuner or source (S2), plus every screen and server that can use Broadwave:
 - Apple TVs and iPhones running the app (clients announce themselves over the event socket);
 - Chromecast and Google TV (`_googlecast._tcp`), Fire TV and Android TV (DIAL/SSDP), smart TVs (UPnP MediaRenderer);
 - AirPlay targets (`_airplay._tcp`);
-- Plex, Jellyfin, Emby, and Channels DVR servers (offer "Use Waveguide as your tuner", N1).
+- Plex, Jellyfin, Emby, and Channels DVR servers (offer "Use Broadwave as your tuner", N1).
 
 Show it in setup step 1 and in Settings > Your home, with one action per item. It's read-only and local-subnet only; nothing is added without a tap, except a new install's first HDHomeRun. **Accept:** on the real LAN it finds the DUO, `channelsdvr_intel`, Plex, and the simulators. Screenshots on web and Apple TV.
 HOME2. **Setup finishes itself.** After the tuner step, setup runs on its own:
@@ -224,13 +224,13 @@ HW1. **Fake device fleet** (extends the K1 fake). Each profile answers discover,
 
 A table test runs discovery, scan, tune, multiview plan, recording, and failover for every profile. `docs/hardware.md` lists each model as verified on real hardware, verified on a fake, or untested.
 HW2. **Pools.** Two DUOs plus a FLEX 4K, and 8-tuner pools. 3.0-capable tuners are kept for 3.0 channels. A device that vanishes mid-stream hands the stream to another device within 5 s.
-HW3. **Servers and emulators for real.** tvheadend, Threadfin, ErsatzTV, and Dispatcharr in containers; the Channels DVR already on TUS (read-only); Plex Live TV reading Waveguide (N1). CI keeps the tvheadend and Threadfin fakes.
+HW3. **Servers and emulators for real.** tvheadend, Threadfin, ErsatzTV, and Dispatcharr in containers; the Channels DVR already on TUS (read-only); Plex Live TV reading Broadwave (N1). CI keeps the tvheadend and Threadfin fakes.
 HW4. **Server hardware.** Cover Intel VAAPI/QSV (TUS), AMD VAAPI, NVIDIA NVENC, Apple VideoToolbox, and software-only (Raspberry Pi 5 arm64; a Synology-class J4125). A startup self-benchmark picks the rendition and tile budget per host and shows it in Diagnostics. Test the arm64 image under QEMU.
 HW5. **Client matrix.** Apple TV HD (1080p, no 10-bit HEVC), each Apple TV 4K generation, older iPhones, iPad, Safari, Chrome, Edge, and Firefox (no HEVC; no AC-3 in Chrome). A table test shows each gets the right rendition from `Decide`.
 
 ### Phase S — Every source, found automatically
 
-The bar: a stranger with any common tuner or playlist gets a working guide without typing an IP address. Anything Channels DVR accepts as a source, Waveguide accepts too, and it finds more of it on its own.
+The bar: a stranger with any common tuner or playlist gets a working guide without typing an IP address. Anything Channels DVR accepts as a source, Broadwave accepts too, and it finds more of it on its own.
 
 S0. **Research and ADR.** Verify the ecosystem facts in section 2 against current docs and forums (a `docs-researcher` subagent): discovery for each device family, stream URL forms (including whether `/auto/v<ch>` carries PSIP and how to get the full mux), M3U attribute conventions, Xtream endpoints, what Channels DVR supports today (including Tablo, AirTV, TV Everywhere) and what has no open API (write those down as unsupported, with the reason). Record it in `docs/research.md` and write ADR 0009 (sources and discovery). **Accept:** ADR merged; a support matrix in `docs/sources.md` (device or service, how found, how streamed, guide, status).
 
@@ -254,9 +254,9 @@ S5. **Xtream Codes.** Server URL, username, password: import live categories and
 
 S6. **Servers and emulators as sources.** tvheadend (M3U + XMLTV with auth, or its HDHomeRun emulation), Threadfin/xTeVe/ErsatzTV/Dispatcharr/Antennas (HDHomeRun emulation or M3U + XMLTV), a Channels DVR server (its M3U and XMLTV; say "uses your Channels DVR tuners" so the user knows who owns the tuner), and "HDHomeRun-compatible device at an address". Legacy Tablo (Gen 1-3) through its local API on 8885 if S0 confirms it still works (optional; Gen 4 needs Tablo's cloud and is unsupported). AirTV, Fire TV Recast, and TV Everywhere are listed as unsupported in `docs/sources.md` with the reason. Pass `format=ts&codec=copy` to Channels DVR and explain its 403 for bridged containers. **Accept:** one integration test per kind against fakes; tvheadend or ErsatzTV verified for real in a local container.
 
-S7. **Free channels.** "Add free channels": detect generator containers already on the network (FastChannels, Pluto for Channels, Samsung TV Plus for Channels via the port probe) and add their feeds in one tap; otherwise show a short guide to running FastChannels next to Waveguide (a compose snippet and the Unraid app name), then add it. Each is a normal M3U source underneath, labeled "Streamed from the internet", in its own guide group, never taking a tuner; DRM-protected streams are skipped with a note. Never scrape services ourselves. **Accept:** a FastChannels container on the Mac is detected and one feed adds channels with a guide and art.
+S7. **Free channels.** "Add free channels": detect generator containers already on the network (FastChannels, Pluto for Channels, Samsung TV Plus for Channels via the port probe) and add their feeds in one tap; otherwise show a short guide to running FastChannels next to Broadwave (a compose snippet and the Unraid app name), then add it. Each is a normal M3U source underneath, labeled "Streamed from the internet", in its own guide group, never taking a tuner; DRM-protected streams are skipped with a note. Never scrape services ourselves. **Accept:** a FastChannels container on the Mac is detected and one feed adds channels with a guide and art.
 
-S8. **Setup wizard v2 (web, Apple TV, iPhone).** Step 1 "Looking for your tuner…" fills in live as S2 finds things (HDHomeRun preselected), with Add a playlist (URL, file, Xtream), Free channels, Look harder, and Enter an address. Step 2 channels: scan if the lineup is empty, show logos, preselect favorites for the big four networks the user gets, and offer to hide duplicates and shopping channels. Step 3 guide: shows coverage per source (and later PSIP from C7) in one line per channel group. Step 4 recordings: where they go, with the volume check from S9. Step 5 apps: QR for iPhone, "Open Waveguide on your Apple TV" instructions. The same flow runs natively on Apple TV and iPhone (Phase P5). **Accept:** fresh install to first live channel with an HDHomeRun in < 90 s and zero typing; screenshots of every step at three sizes and on tvOS/iPhone.
+S8. **Setup wizard v2 (web, Apple TV, iPhone).** Step 1 "Looking for your tuner…" fills in live as S2 finds things (HDHomeRun preselected), with Add a playlist (URL, file, Xtream), Free channels, Look harder, and Enter an address. Step 2 channels: scan if the lineup is empty, show logos, preselect favorites for the big four networks the user gets, and offer to hide duplicates and shopping channels. Step 3 guide: shows coverage per source (and later PSIP from C7) in one line per channel group. Step 4 recordings: where they go, with the volume check from S9. Step 5 apps: QR for iPhone, "Open Broadwave on your Apple TV" instructions. The same flow runs natively on Apple TV and iPhone (Phase P5). **Accept:** fresh install to first live channel with an HDHomeRun in < 90 s and zero typing; screenshots of every step at three sizes and on tvOS/iPhone.
 
 S9. **Setup doctor.** Detect and explain, in one line each with the fix: bridge networking (container IP in a Docker range and no broadcast replies), missing `/dev/dri` when the host has an iGPU, the recordings path not on a mounted volume (`/proc/mounts`), low disk, time zone unset, clock skew (Whole-Home Sync needs a sane clock), file ownership (support `PUID`/`PGID`/`UMASK` so Unraid recordings are `99:100`, not root), and a tuner that stopped answering. Shown in setup, Diagnostics, and the apps. **Accept:** tests for each check; the Unraid template and compose file carry the right defaults.
 
@@ -266,11 +266,11 @@ S10. **Source health.** Per-source status: online, last refresh, errors, streams
 
 The Docker server and the iPhone and Apple TV apps must behave like one product: find each other instantly, never disagree about data, recover from anything, and let the living-room TV do everything the web console can.
 
-P1. **Generated clients.** Generate Swift types and client from `api/openapi.yaml` (swift-openapi-generator, or a small generator if that fits better) into OTAKit, and TypeScript types for the web; CI fails when generated code is out of date. Retire the hand-mirrored models (keep thin wrappers where the UI needs them). **Accept:** OTAKit builds from generated code; drift check in CI.
+P1. **Generated clients.** Generate Swift types and client from `api/openapi.yaml` (swift-openapi-generator, or a small generator if that fits better) into BroadwaveKit, and TypeScript types for the web; CI fails when generated code is out of date. Retire the hand-mirrored models (keep thin wrappers where the UI needs them). **Accept:** BroadwaveKit builds from generated code; drift check in CI.
 
-P2. **Contract tests.** A test mode of the server (fake tuner from K1, fixed clock) records golden responses for every endpoint and WebSocket event; OTAKit and web decode tests run against them in CI, so a server change that breaks a client fails the build. **Accept:** golden fixtures in the repo; decode tests in `make check`.
+P2. **Contract tests.** A test mode of the server (fake tuner from K1, fixed clock) records golden responses for every endpoint and WebSocket event; BroadwaveKit and web decode tests run against them in CI, so a server change that breaks a client fails the build. **Accept:** golden fixtures in the repo; decode tests in `make check`.
 
-P3. **Compatibility.** `apiVersion` + `features` negotiation: the apps hide what the server lacks and say "Update your Waveguide server to use this" when needed; the server keeps working with the previous app version for one release. `GET /api/v1/server` reports a minimum app version. **Accept:** tests with an older fixture set; a clear screen for incompatible versions.
+P3. **Compatibility.** `apiVersion` + `features` negotiation: the apps hide what the server lacks and say "Update your Broadwave server to use this" when needed; the server keeps working with the previous app version for one release. `GET /api/v1/server` reports a minimum app version. **Accept:** tests with an older fixture set; a clear screen for incompatible versions.
 
 P4. **Find each other, always.** Bonjour first. Fallback discovery for networks that filter mDNS: the server answers a small UDP broadcast probe on a documented port with its id, name, and URL; the apps send it when Bonjour finds nothing in 3 s. Remembered servers, reconnect by server id when the address changes, a Local Network permission explainer on iOS and tvOS, and QR/deep link connect. tvOS: typing an address is the last resort (Continuity keyboard works). **Accept:** simulators find the dev server with Bonjour disabled on the server; an address change is followed without user action.
 
@@ -286,7 +286,7 @@ P8. **The container is the reference server.** Every end-to-end and soak test ru
 
 Apple stays the flagship. Everyone else in the house still gets a great way in.
 
-N1. **Be the best tuner for Channels, Plex, Jellyfin, and Emby.** Harden the HDHomeRun emulator and the M3U/XMLTV exports so those apps see Waveguide as a tuner with the merged guide (tuner, PSIP, M3U, and free channels), unlimited streams from one tune, and stable channel ids. Verify for real with each app in a container on the Mac or TUS (moves G11 here): add as a tuner, guide maps, live plays, a recording in their DVR works. Settings shows ready-to-copy URLs for each app. **Accept:** a log of each app working; fixes for every gap found.
+N1. **Be the best tuner for Channels, Plex, Jellyfin, and Emby.** Harden the HDHomeRun emulator and the M3U/XMLTV exports so those apps see Broadwave as a tuner with the merged guide (tuner, PSIP, M3U, and free channels), unlimited streams from one tune, and stable channel ids. Verify for real with each app in a container on the Mac or TUS (moves G11 here): add as a tuner, guide maps, live plays, a recording in their DVR works. Settings shows ready-to-copy URLs for each app. **Accept:** a log of each app working; fixes for every gap found.
 
 N2. **IPTV players.** Per-profile M3U + XMLTV with tokens (after H2), and an Xtream Codes-compatible output (`player_api.php`, `xmltv.php`, `/live/...`) so TiviMate, IPTV Smarters, Kodi, and VLC on Fire TV, Android TV, and phones get channels, guide, and logos. **Accept:** TiviMate or IPTV Smarters (on an Android TV emulator) loads channels and guide and plays.
 
@@ -417,7 +417,7 @@ J7. Brand: logo, app icon (feeds I10), `icon.svg` for Unraid (feeds L3), marketi
 ### Phase K — Quality engineering (continuous; dedicated pass here)
 
 K2. Playwright e2e against the fake tuner (home, guide, player, multiview add/swap, setup wizard, search, sports) with visual snapshots at three sizes and a two-page sync assertion.
-K3. Apple: Swift Testing for OTAKit (SyncEngine with a fake clock, discovery parsing, AppStore, caching from R3); XCUITest smoke for launch, connect, guide, player, multiview on iOS and tvOS.
+K3. Apple: Swift Testing for BroadwaveKit (SyncEngine with a fake clock, discovery parsing, AppStore, caching from R3); XCUITest smoke for launch, connect, guide, player, multiview on iOS and tvOS.
 K4. 24 h soak on Unraid: a recording schedule, intermittent viewers, multiview, idle scans; watch memory, file descriptors, ffmpeg count, tuner release. Log results.
 K5. CI: Playwright job, Apple UI tests where feasible, container smoke (`relay-smoke.sh` in the image with the fake tuner).
 K6. Performance budgets in CI: web bundle size, Home first paint (Playwright trace), API p95 under the fake tuner.
@@ -461,10 +461,10 @@ A7 is retried at the start of every phase: if `~/.blitz/bin/asc web auth status`
 
 ## 5. Definition of spectacular (final acceptance)
 
-- A new user installs from the Unraid template or `docker run`, and Waveguide finds their HDHomeRun (or other tuner, emulator, or Channels DVR server) by itself. Setup takes under 90 seconds with no typing for an HDHomeRun, and they see a full, art-rich guide for every channel their antenna gets, including channels no online guide lists.
+- A new user installs from the Unraid template or `docker run`, and Broadwave finds their HDHomeRun (or other tuner, emulator, or Channels DVR server) by itself. Setup takes under 90 seconds with no typing for an HDHomeRun, and they see a full, art-rich guide for every channel their antenna gets, including channels no online guide lists.
 - Any M3U, Xtream, tvheadend, emulator, or free-channel source that works in Channels DVR works here, with its guide, logos, numbering, and stream limits.
 - The iPhone and Apple TV apps find the server instantly, can do the whole setup and administration, recover from a server restart or upgrade on their own, and never break on a server update (contract tests in CI).
-- Channels, Plex, Jellyfin, Emby, and IPTV players on Fire TV, Android TV, and smart TVs can use Waveguide as their tuner and guide.
+- Channels, Plex, Jellyfin, Emby, and IPTV players on Fire TV, Android TV, and smart TVs can use Broadwave as their tuner and guide.
 - The app opens instantly with real content; channel changes feel instant.
 - Two games play side by side (web, Apple TV, iPad), in sync with each other and every other screen; audio follows focus; Game Switcher catches the big moments.
 - Recordings of games end when the game ends; commercials skip reliably; followed teams record automatically.

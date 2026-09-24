@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"time"
 
-	"waveguide/internal/sports"
-	"waveguide/internal/store"
+	"broadwave/internal/sports"
+	"broadwave/internal/store"
 )
 
 // TeamNotice is the next game for a followed team that has not been announced.

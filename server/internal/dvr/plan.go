@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"waveguide/internal/sports"
-	"waveguide/internal/store"
+	"broadwave/internal/sports"
+	"broadwave/internal/store"
 )
 
 // Planned is one airing a series pass will record inside the window.

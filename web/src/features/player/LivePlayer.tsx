@@ -185,7 +185,7 @@ export function LivePlayer({
       ArrowUp: () => step(-1),
       ArrowDown: () => step(1),
       g: () => setPanel("guide"),
-      m: () => navigate(`/multiview?ch=${channel.id}&layout=${localStorage.getItem("waveguide-mv-layout") || "2up"}&focus=${channel.id}&add=1`),
+      m: () => navigate(`/multiview?ch=${channel.id}&layout=${localStorage.getItem("broadwave-mv-layout") || "2up"}&focus=${channel.id}&add=1`),
       i: () => setPanel((p) => (p === "info" ? "none" : "info")),
       r: () => void toggleRecord(),
       l: goLive,
@@ -254,7 +254,7 @@ export function LivePlayer({
             type="button"
             className="glass-icon"
             aria-label="Side by side"
-            onClick={() => navigate(`/multiview?ch=${channel.id}&layout=${localStorage.getItem("waveguide-mv-layout") || "2up"}&focus=${channel.id}&add=1`)}
+            onClick={() => navigate(`/multiview?ch=${channel.id}&layout=${localStorage.getItem("broadwave-mv-layout") || "2up"}&focus=${channel.id}&add=1`)}
           >
             <SideBySideIcon />
           </button>

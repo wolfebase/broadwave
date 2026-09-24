@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"waveguide/internal/live"
-	"waveguide/internal/store"
+	"broadwave/internal/live"
+	"broadwave/internal/store"
 )
 
 // Tick starts a recording when a series pass matches an airing that is about to start.

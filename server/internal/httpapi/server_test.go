@@ -16,9 +16,9 @@ import (
 	"testing/fstest"
 	"time"
 
-	"waveguide/internal/hdhr"
-	"waveguide/internal/live"
-	"waveguide/internal/store"
+	"broadwave/internal/hdhr"
+	"broadwave/internal/live"
+	"broadwave/internal/store"
 )
 
 func TestGuideAndFavorite(t *testing.T) {
@@ -34,7 +34,7 @@ func TestGuideAndFavorite(t *testing.T) {
 		t.Fatal(err)
 	}
 	assets := fstest.MapFS{
-		"index.html": &fstest.MapFile{Data: []byte("<!doctype html><title>Waveguide</title>")},
+		"index.html": &fstest.MapFile{Data: []byte("<!doctype html><title>Broadwave</title>")},
 	}
 	h := (&Server{Store: st, Assets: assets}).Handler()
 
@@ -82,7 +82,7 @@ func TestGuideAndFavorite(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/guide", nil)
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte("Waveguide")) {
+	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte("Broadwave")) {
 		t.Fatalf("spa %d %s", rec.Code, rec.Body.String())
 	}
 }
@@ -127,7 +127,7 @@ func TestVirtualChannelAndSchedule(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := (&Server{Store: st, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Waveguide")}}}).Handler()
+	h := (&Server{Store: st, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Broadwave")}}}).Handler()
 	res := get(t, h, "/api/virtuals")
 	if !bytes.Contains(res.Body.Bytes(), []byte(`"number":"900"`)) {
 		t.Fatalf("virtuals %s", res.Body.String())
@@ -163,7 +163,7 @@ func TestVirtualChannelAndSchedule(t *testing.T) {
 	}
 
 	hub := &live.Hub{Store: st, Dir: t.TempDir(), FFmpeg: filepath.Join(t.TempDir(), "missing-ffmpeg"), Encoder: "libx264"}
-	h = (&Server{Store: st, Hub: hub, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Waveguide")}}}).Handler()
+	h = (&Server{Store: st, Hub: hub, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Broadwave")}}}).Handler()
 	req = httptest.NewRequest(http.MethodPost, "/api/virtuals/"+strconv.FormatInt(created.ID, 10)+"/play", bytes.NewBufferString(`{"index":0}`))
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -180,7 +180,7 @@ func TestProgressAndNewPassPadding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := (&Server{Store: st, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Waveguide")}}}).Handler()
+	h := (&Server{Store: st, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Broadwave")}}}).Handler()
 	req := httptest.NewRequest(http.MethodPut, "/api/recordings/"+strconv.FormatInt(recID, 10)+"/progress", bytes.NewBufferString(`{"position":12.5}`))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -213,7 +213,7 @@ func TestDiskReserveBlocksRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 	hub := &live.Hub{Store: st, Dir: dir, FFmpeg: filepath.Join(dir, "missing-ffmpeg")}
-	h := (&Server{Store: st, Hub: hub, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Waveguide")}}}).Handler()
+	h := (&Server{Store: st, Hub: hub, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Broadwave")}}}).Handler()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/recordings", bytes.NewBufferString(`{"channelId":1,"minutes":5,"title":"Nope"}`))
 	rec := httptest.NewRecorder()
@@ -273,7 +273,7 @@ func TestDeleteRecordingRemovesTheFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	hub := &live.Hub{Store: st, Dir: dir, FFmpeg: filepath.Join(dir, "missing-ffmpeg")}
-	h := (&Server{Store: st, Hub: hub, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Waveguide")}}}).Handler()
+	h := (&Server{Store: st, Hub: hub, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Broadwave")}}}).Handler()
 	res := get(t, h, "/api/recordings")
 	if !bytes.Contains(res.Body.Bytes(), []byte(`"bytes":4`)) || !bytes.Contains(res.Body.Bytes(), []byte(`"position":12`)) {
 		t.Fatalf("list %s", res.Body.String())
@@ -313,7 +313,7 @@ func TestRecordingDurationRoundTrip(t *testing.T) {
 	if err := st.SetDuration(context.Background(), id, 95); err != nil {
 		t.Fatal(err)
 	}
-	h := (&Server{Store: st, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Waveguide")}}}).Handler()
+	h := (&Server{Store: st, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Broadwave")}}}).Handler()
 	res := get(t, h, "/api/recordings")
 	if !bytes.Contains(res.Body.Bytes(), []byte(`"durationSec":95`)) {
 		t.Fatalf("duration %s", res.Body.String())
@@ -322,7 +322,7 @@ func TestRecordingDurationRoundTrip(t *testing.T) {
 
 func TestSetupSettings(t *testing.T) {
 	st := testStore(t)
-	if _, err := st.Identity(context.Background(), "Waveguide"); err != nil {
+	if _, err := st.Identity(context.Background(), "Broadwave"); err != nil {
 		t.Fatal(err)
 	}
 	h := (&Server{Store: st}).Handler()

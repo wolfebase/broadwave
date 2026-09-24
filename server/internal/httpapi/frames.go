@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"waveguide/internal/live"
+	"broadwave/internal/live"
 )
 
 func (s *Server) frame(w http.ResponseWriter, r *http.Request) {

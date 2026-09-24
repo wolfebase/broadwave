@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 func writeSidecar(rec store.Recording) {

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"waveguide/internal/hdhr"
+	"broadwave/internal/hdhr"
 )
 
 func TestNeedsSetup(t *testing.T) {
@@ -47,7 +47,7 @@ func TestApplySetupDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer old.Close()
-	if _, err := old.Identity(ctx, "Waveguide"); err != nil {
+	if _, err := old.Identity(ctx, "Broadwave"); err != nil {
 		t.Fatal(err)
 	}
 	aged := time.Now().Add(-72 * time.Hour).UTC().Format(time.RFC3339)
@@ -74,7 +74,7 @@ func TestApplySetupDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer fresh.Close()
-	if _, err := fresh.Identity(ctx, "Waveguide"); err != nil {
+	if _, err := fresh.Identity(ctx, "Broadwave"); err != nil {
 		t.Fatal(err)
 	}
 	needs, err = fresh.ApplySetupDefault(ctx, time.Now())

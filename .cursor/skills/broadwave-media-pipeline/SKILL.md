@@ -1,9 +1,9 @@
 ---
-name: waveguide-media-pipeline
-description: Rules and hard-won gotchas for Waveguide's live relay, ffmpeg rendition arguments, CMAF/HLS playlists, the shared broadcast timeline, and the browser/AVPlayer sync engines. Use when changing server/internal/live, ffmpeg args, HLS output, stream decisions, renditions, multiview streams, LL-HLS, captions, or web/src/lib/sync.ts and OTAKit SyncEngine.
+name: broadwave-media-pipeline
+description: Rules and hard-won gotchas for Broadwave's live relay, ffmpeg rendition arguments, CMAF/HLS playlists, the shared broadcast timeline, and the browser/AVPlayer sync engines. Use when changing server/internal/live, ffmpeg args, HLS output, stream decisions, renditions, multiview streams, LL-HLS, captions, or web/src/lib/sync.ts and BroadwaveKit SyncEngine.
 ---
 
-# Waveguide media pipeline
+# Broadwave media pipeline
 
 ## Architecture in one breath
 
@@ -29,13 +29,13 @@ description: Rules and hard-won gotchas for Waveguide's live relay, ffmpeg rendi
 - Run encodes in throwaway containers named `wg-lab-*` with `--cpus 4 --device /dev/dri`, and clean up with `docker ps -aq --filter name=wg-lab | xargs -r docker rm -f`. Kill remote runners with `pkill -f "[r]unner-name"`; a plain `pkill -f name` matches your own SSH shell.
 - **Feed samples at real time** (`ffmpeg -re` or a rate-limited pipe). ffmpeg 5.1 (the image's Debian build) with `-copyts` and VAAPI deinterlace, fed a file faster than real time, emits thousands of 0.0007 s segments and never exits. Production (live pipe) is fine. This cost an hour.
 - Measure the result, not the args: `cat init.mp4 seg*.m4s`, then count frames from `frame=pts_time` (fps = frames / span), read width and height, and count decode errors.
-- Staging beside production: container `Waveguide-Staging` on `:8490` runs `-staging -bonjour=false` (no recordings, no guide pulls, no idle scans, no emulator) with its own `server_identity`. Test there first, like a viewer would, in Chrome and the simulators; production stays untouched.
+- Staging beside production: container `Broadwave-Staging` on `:8490` runs `-staging -bonjour=false` (no recordings, no guide pulls, no idle scans, no emulator) with its own `server_identity`. Test there first, like a viewer would, in Chrome and the simulators; production stays untouched.
 
 ## Testing changes
 
 - Unit tests: `go test ./server/internal/live` (includes an ffmpeg-backed shared-timeline test).
 - `scripts/relay-smoke.sh` for end-to-end.
-- Real tuner in the browser, then two-screen sync measurement (skill `waveguide-dev-loop`).
+- Real tuner in the browser, then two-screen sync measurement (skill `broadwave-dev-loop`).
 - Generate test broadcasts: `ffmpeg -f lavfi -i testsrc2=size=1280x720:rate=60000/1001 -f lavfi -i sine -c:v libx264 -g 30 -c:a ac3 -output_ts_offset 95000 -f mpegts x.ts` (the offset exercises big PTS values). Serve live with `-re ... -f mpegts -listen 1 http://127.0.0.1:18500/live.ts` and add it as a `link` source.
 - Grab 8 s of a real channel: `curl -s -m 9 127.0.0.1:18477/export/stream/1 -o real.ts`.
 - Inspect segments: `ffprobe -v quiet -show_entries stream=codec_name,width,height -of csv=p=0 seg.m4s` (needs init: `cat init.mp4 seg.m4s > x.mp4`), `ffmpeg -v error -i x -f null - | wc -l` counts decode errors.

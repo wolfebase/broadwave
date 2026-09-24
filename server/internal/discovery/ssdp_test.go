@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"waveguide/internal/hdhr"
+	"broadwave/internal/hdhr"
 )
 
 func TestParseSSDPReadsAnHDHomeRun(t *testing.T) {

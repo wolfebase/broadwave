@@ -15,7 +15,7 @@ import (
 const FreeGroup = "Streamed from the internet"
 
 // FreeGuide is what to show when no free-channel server is on the network.
-const FreeGuide = `Run FastChannels next to Waveguide, then add it here.
+const FreeGuide = `Run FastChannels next to Broadwave, then add it here.
 
 services:
   fastchannels:

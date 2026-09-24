@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"waveguide/internal/sports"
-	"waveguide/internal/store"
+	"broadwave/internal/sports"
+	"broadwave/internal/store"
 )
 
 func TestNextExtensionFollowsTheGame(t *testing.T) {

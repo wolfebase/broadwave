@@ -9,7 +9,7 @@ import (
 )
 
 func TestBrowseReadsALocalService(t *testing.T) {
-	server, err := zeroconf.Register("WaveguideFake", "_wgfind._tcp", "local.", 9, []string{"id=fake"}, nil)
+	server, err := zeroconf.Register("BroadwaveFake", "_wgfind._tcp", "local.", 9, []string{"id=fake"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,7 +21,7 @@ func TestBrowseReadsALocalService(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, item := range found {
-		if item.Name == "WaveguideFake" {
+		if item.Name == "BroadwaveFake" {
 			return
 		}
 	}

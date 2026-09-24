@@ -1,6 +1,6 @@
 import type { Airing, Channel, Recording } from "../types";
 
-const DB = "waveguide";
+const DB = "broadwave";
 const STORE = "snapshot";
 const KEY = "home";
 export const CACHE_FLAG = "wg.cached";

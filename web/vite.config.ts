@@ -10,7 +10,7 @@ function precompress(): Plugin {
     name: "precompress",
     apply: "build",
     async closeBundle() {
-      const root = path.resolve("../server/cmd/waveguide/assets/web");
+      const root = path.resolve("../server/cmd/broadwave/assets/web");
       const files = await walk(root);
       await Promise.all(
         files.map(async (file) => {
@@ -38,7 +38,7 @@ async function walk(dir: string): Promise<string[]> {
 export default defineConfig({
   plugins: [react(), precompress()],
   build: {
-    outDir: "../server/cmd/waveguide/assets/web",
+    outDir: "../server/cmd/broadwave/assets/web",
     emptyOutDir: true,
   },
   server: {

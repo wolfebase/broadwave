@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"waveguide/internal/live"
+	"broadwave/internal/live"
 )
 
 func TestFrameIsStaleAfterTenMinutes(t *testing.T) {

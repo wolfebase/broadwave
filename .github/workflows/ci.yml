@@ -52,4 +52,4 @@ jobs:
     needs: [server, web]
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -f deploy/docker/Dockerfile -t waveguide:ci .
+      - run: docker build -f deploy/docker/Dockerfile -t broadwave:ci .

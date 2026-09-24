@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"waveguide/internal/discovery"
-	"waveguide/internal/dvr"
-	"waveguide/internal/guide"
-	"waveguide/internal/source"
-	"waveguide/internal/store"
+	"broadwave/internal/discovery"
+	"broadwave/internal/dvr"
+	"broadwave/internal/guide"
+	"broadwave/internal/source"
+	"broadwave/internal/store"
 )
 
 func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {

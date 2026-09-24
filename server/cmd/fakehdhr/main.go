@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/signal"
 
-	"waveguide/internal/hdhr/fake"
+	"broadwave/internal/hdhr/fake"
 )
 
 func main() {

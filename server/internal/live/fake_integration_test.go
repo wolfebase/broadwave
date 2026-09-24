@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"waveguide/internal/hdhr"
-	"waveguide/internal/hdhr/fake"
-	"waveguide/internal/store"
+	"broadwave/internal/hdhr"
+	"broadwave/internal/hdhr/fake"
+	"broadwave/internal/store"
 )
 
 func TestFakeTunerSharesFrequencyAndYields(t *testing.T) {

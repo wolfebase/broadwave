@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 func TestFillImagesUsesPoster(t *testing.T) {

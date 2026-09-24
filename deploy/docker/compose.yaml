@@ -1,6 +1,6 @@
 services:
-  waveguide:
-    image: ghcr.io/wolfebase/waveguide:latest
+  broadwave:
+    image: ghcr.io/wolfebase/broadwave:latest
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile

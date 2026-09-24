@@ -22,13 +22,13 @@ web: web/node_modules
 	cd web && npm run build
 
 server:
-	go build -o bin/waveguide ./server/cmd/waveguide
+	go build -o bin/broadwave ./server/cmd/broadwave
 
 run: web
-	go run ./server/cmd/waveguide -config $(CONFIG) -addr $(ADDR)
+	go run ./server/cmd/broadwave -config $(CONFIG) -addr $(ADDR)
 
 dev:
-	go run ./server/cmd/waveguide -config $(CONFIG) -addr $(ADDR) -dev
+	go run ./server/cmd/broadwave -config $(CONFIG) -addr $(ADDR) -dev
 
 test: web/node_modules
 	go test ./server/...
@@ -45,25 +45,25 @@ lint: web/node_modules
 	swiftformat --lint .
 
 check: test lint
-	cd apple/Packages/OTAKit && swift test
+	cd apple/Packages/BroadwaveKit && swift test
 	go run ./server/cmd/apigen -check
 	FAKE=1 scripts/relay-smoke.sh
 
 build: web server
 
 docker:
-	docker build -f deploy/docker/Dockerfile -t waveguide .
+	docker build -f deploy/docker/Dockerfile -t broadwave .
 
 clean:
-	rm -rf bin server/cmd/waveguide/assets/web
+	rm -rf bin server/cmd/broadwave/assets/web
 
 tokens:
 	node design/build.mjs
 
 apple:
 	cd apple && xcodegen generate
-	cd apple && xcodebuild -project Waveguide.xcodeproj -scheme Waveguide -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build
-	cd apple && xcodebuild -project Waveguide.xcodeproj -scheme WaveguideTV -destination 'generic/platform=tvOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build
+	cd apple && xcodebuild -project Broadwave.xcodeproj -scheme Broadwave -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build
+	cd apple && xcodebuild -project Broadwave.xcodeproj -scheme BroadwaveTV -destination 'generic/platform=tvOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build
 
 apple-test:
-	cd apple/Packages/OTAKit && swift test
+	cd apple/Packages/BroadwaveKit && swift test

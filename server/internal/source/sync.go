@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"waveguide/internal/discovery"
-	"waveguide/internal/hdhr"
-	"waveguide/internal/store"
+	"broadwave/internal/discovery"
+	"broadwave/internal/hdhr"
+	"broadwave/internal/store"
 )
 
 // Sync reads discover.json and lineup.json. It does not open a tuner stream.

@@ -2,7 +2,7 @@
 data/
 
 # Web build output embedded into the server binary
-server/cmd/waveguide/assets/web/
+server/cmd/broadwave/assets/web/
 web/node_modules/
 web/dist/
 

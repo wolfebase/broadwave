@@ -37,8 +37,8 @@ func main() {
 	swift := renderSwift(names, schemas)
 	ts := renderTS(names, schemas)
 	files := map[string]string{
-		filepath.Join(*root, "apple/Packages/OTAKit/Sources/OTAKit/Generated.swift"): swift,
-		filepath.Join(*root, "web/src/api/generated.ts"):                             ts,
+		filepath.Join(*root, "apple/Packages/BroadwaveKit/Sources/BroadwaveKit/Generated.swift"): swift,
+		filepath.Join(*root, "web/src/api/generated.ts"):                                         ts,
 	}
 	if *check {
 		bad := false

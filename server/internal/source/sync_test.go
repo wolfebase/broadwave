@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 func TestSyncAddsACompatibleDeviceByAddress(t *testing.T) {

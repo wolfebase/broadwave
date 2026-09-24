@@ -20,6 +20,6 @@ Read on 2026-09-21 from this PC. No tuner stream was opened and no lock key was 
 
 At the time of the read, both tuners were on 9.1 KMBC-HD (signal about 92%, quality 100%). Tuner 0 was streaming to 192.168.1.192. Tuner 1 was streaming to 192.168.1.2, the Unraid server.
 
-This PC has an RTX 5090 and Intel UHD 770. The Windows dev server uses NVENC. Unraid TUS is an i9-12900K with UHD 770. The Waveguide container there encodes with VAAPI (`h264_vaapi`) because the bookworm MFX library cannot open a session on that iGPU.
+This PC has an RTX 5090 and Intel UHD 770. The Windows dev server uses NVENC. Unraid TUS is an i9-12900K with UHD 770. The Broadwave container there encodes with VAAPI (`h264_vaapi`) because the bookworm MFX library cannot open a session on that iGPU.
 
 Channel 14.1 through 14.16 is the mux-sharing candidate. That test waits for a free tuner.

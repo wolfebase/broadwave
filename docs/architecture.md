@@ -4,7 +4,7 @@
 flowchart LR
   subgraph home [Home network]
     HDHR[HDHomeRun tuners]
-    subgraph server [Waveguide server]
+    subgraph server [Broadwave server]
       TunerPool[Tuner pool]
       Relay[Broadcast relay]
       Renditions[Renditions]
@@ -72,11 +72,11 @@ JSON under `/api`, HLS under `/media`, the SPA at `/`. The optional HDHomeRun em
 
 ## Web app (`web/`)
 
-React and Vite, built into `server/cmd/waveguide/assets/web` and embedded with `go:embed`. It plays HLS through hls.js and doubles as the setup and admin console. Side by side is `/multiview`: each tile has its own player, sound follows the focused tile, and the tiles share one multiview sync room.
+React and Vite, built into `server/cmd/broadwave/assets/web` and embedded with `go:embed`. It plays HLS through hls.js and doubles as the setup and admin console. Side by side is `/multiview`: each tile has its own player, sound follows the focused tile, and the tiles share one multiview sync room.
 
 ## Apple apps (`apple/`)
 
-SwiftUI apps for iOS and tvOS on shared packages: `OTAKit` (API client, discovery, pairing, sync engine) and `OTAUI` (theme and components). One channel plays in `AVPlayerViewController`. Side by side uses one `AVPlayer` layer per tile, sound and AirPlay follow the focused tile, and the tiles share a multiview sync room. See `.cursor/rules/apple-swift.mdc`.
+SwiftUI apps for iOS and tvOS on shared packages: `BroadwaveKit` (API client, discovery, pairing, sync engine) and `BroadwaveUI` (theme and components). One channel plays in `AVPlayerViewController`. Side by side uses one `AVPlayer` layer per tile, sound and AirPlay follow the focused tile, and the tiles share a multiview sync room. See `.cursor/rules/apple-swift.mdc`.
 
 ## Design tokens (`design/`)
 

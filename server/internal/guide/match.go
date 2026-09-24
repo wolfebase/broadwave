@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 // assign pairs each XMLTV channel with one lineup channel.

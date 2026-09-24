@@ -1,43 +1,34 @@
 # Brand
 
-## Name: Waveguide
+## Name: Broadwave
 
-Chosen 2026-09-23, replacing the working name "OTA Viewer".
+Chosen 2026-09-24.
 
-A waveguide is the structure that carries a radio signal to where it's needed. That is the product: it takes the broadcast off your antenna and carries it to every screen in the house. It also reads as "the guide for the airwaves", and the guide is the heart of the app.
+Broadwave is broadcast plus wave: TV that arrives over the air, free, and reaches every screen in the house at the same moment. One word, easy to say and spell, and it was free as an App Store name when it was chosen (checked in App Store Connect, not only App Store search, which misses reserved names).
 
-- One word, easy to say and spell, no "TV", "OTA", or "Air" prefix to blend in with.
-- No live TV or DVR product uses it. The closest match is a dormant open-source WebRTC server.
+### Names considered (all free in App Store Connect on 2026-09-24)
 
-### Names considered
+Rabbit Ears TV, Rooftop TV, Airloom TV, Porchlight TV, Overair, Freeair, Skyloft, Wavehouse, Aerial TV, Airhouse, Loftwave, Loft TV, Skywave TV, Tunewell TV.
 
-| Name | Why not |
-| --- | --- |
-| Towerlight | Strong runner-up (the red beacon on broadcast towers, matching our tally-red light). |
-| Rooftop | Too common a word to own in search. |
-| Openair | Clear, but less distinctive. |
-| Tally / TallyTV | Taken: a tracker app and a tvOS scoreboard app. |
-| Rabbit Ears | RabbitEars.info is the well-known OTA reference site. |
-| Hearth | Several TV launcher projects use it. |
-| Airloom | An heirloom-photo app. |
-| Air-anything | Crowded: AirTV, Aerial TV, IPTV Air, AIRDVR (a competitor with multiview and sports scores). |
+Taken at the time: Rooftop, Hearth, Rabbit Ears, Airwaves, Aerial, Relay, Uplink, UHF, Beacon, Antenna, Openair, Skywave, Airloom, Couchwave.
 
 ## Identifiers
 
 | Where | Value |
 | --- | --- |
-| Display name | Waveguide |
-| Go module and binary | `waveguide` (`server/cmd/waveguide`) |
-| Database | `waveguide.db` (the server adopts a pre-rename `ota-viewer.db` on start; migration 0004 renames a default "OTA Viewer on host" server name) |
-| Bonjour | `_waveguide._tcp` |
-| URL scheme | `waveguide://watch/<id>`, `waveguide://connect?url=` |
-| Bundle ID | `com.wolfeup.waveguide` (iOS and tvOS) |
-| Container image | `ghcr.io/wolfebase/waveguide` |
-| GitHub | `wolfebase/waveguide` |
-| Unraid | container `Waveguide`, appdata `/mnt/user/appdata/waveguide` |
-
-The Swift packages `OTAKit` and `OTAUI` keep their names: "OTA" (over the air) describes the domain, not the brand.
+| Display name | Broadwave |
+| App Store name | Broadwave (iOS and tvOS, one app record) |
+| Bundle ID | `com.wolfeup.broadwave`; App Group `group.com.wolfeup.broadwave` |
+| Go module and binary | `broadwave` (`server/cmd/broadwave`) |
+| Swift packages | `BroadwaveKit`, `BroadwaveUI` |
+| Database | `broadwave.db` |
+| Bonjour | `_broadwave._tcp` |
+| URL scheme | `broadwave://watch/<id>`, `broadwave://connect?url=` |
+| Container image | `ghcr.io/wolfebase/broadwave` |
+| GitHub | `wolfebase/broadwave` |
+| Unraid | container `Broadwave`, appdata `/mnt/cache/appdata/broadwave`, template `my-Broadwave.xml` |
+| Repo folder | `/Users/tyler/Projects/active/broadwave` |
 
 ## Visual identity
 
-The signature is the tally-red "live" light (`--color-tally`), shown next to the wordmark on web and Apple. Logo, app icon, and marketing site are plan task J7.
+The app icon is two crossing waves on a dark field. The signature is the tally-red "live" light (`--color-tally`), shown next to the wordmark on web and Apple. Logo refinements and the marketing site are plan task J7.

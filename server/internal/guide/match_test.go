@@ -3,7 +3,7 @@ package guide
 import (
 	"testing"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 func TestCallSignSuffixStillMatches(t *testing.T) {

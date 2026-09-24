@@ -37,7 +37,7 @@ type Facts struct {
 func Notes(f Facts) []Note {
 	var out []Note
 	if bridged(f) {
-		out = append(out, Note{ID: "bridge", Message: "Waveguide can't see your tuner from inside Docker. Switch the container to host networking."})
+		out = append(out, Note{ID: "bridge", Message: "Broadwave can't see your tuner from inside Docker. Switch the container to host networking."})
 	}
 	if f.HostHasGPU && !f.DevDri {
 		out = append(out, Note{ID: "dri", Message: "This server has graphics, but the container can't use them. Pass /dev/dri through."})

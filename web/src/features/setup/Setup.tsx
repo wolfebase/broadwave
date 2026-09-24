@@ -340,19 +340,19 @@ function AppsStep({ onFinish }: { onFinish: () => void }) {
   const url = window.location.origin;
   const svg = useMemo(() => {
     const qr = qrcode(0, "M");
-    qr.addData(`waveguide://connect?url=${encodeURIComponent(url)}`);
+    qr.addData(`broadwave://connect?url=${encodeURIComponent(url)}`);
     qr.make();
     return qr.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
   }, [url]);
   return (
     <section className="setup-card glass">
       <h2>Watch on iPhone and Apple TV</h2>
-      <p className="dim">Scan this with your iPhone. On Apple TV, open Waveguide. It finds this server on its own.</p>
+      <p className="dim">Scan this with your iPhone. On Apple TV, open Broadwave. It finds this server on its own.</p>
       <div className="apps-row">
         <div className="qr" dangerouslySetInnerHTML={{ __html: svg }} aria-label="QR code to connect the app" />
         <div>
           <p className="big-url">{url}</p>
-          <p className="dim">Open Waveguide on your Apple TV.</p>
+          <p className="dim">Open Broadwave on your Apple TV.</p>
         </div>
       </div>
       <div className="setup-foot">

@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"waveguide/internal/dvr"
-	"waveguide/internal/live"
-	"waveguide/internal/store"
+	"broadwave/internal/dvr"
+	"broadwave/internal/live"
+	"broadwave/internal/store"
 )
 
 // emulatedTuners is what other apps see. Every "tuner" rides the shared tune, so
@@ -76,7 +76,7 @@ func (h *emuHandler) discover(w http.ResponseWriter, r *http.Request) {
 		"FirmwareName":    "hdhomeruntc_atsc",
 		"FirmwareVersion": "20260101",
 		"DeviceID":        deviceID,
-		"DeviceAuth":      "waveguide",
+		"DeviceAuth":      "broadwave",
 		"TunerCount":      emulatedTuners,
 		"BaseURL":         "http://" + host,
 		"LineupURL":       "http://" + host + "/lineup.json",

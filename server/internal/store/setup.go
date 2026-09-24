@@ -45,7 +45,7 @@ func (s *Store) CreatedAt(ctx context.Context) (time.Time, error) {
 	return t, nil
 }
 
-// HouseholdMarks counts passes and recordings. Those are created in Waveguide,
+// HouseholdMarks counts passes and recordings. Those are created in Broadwave,
 // unlike channel favorites, which the tuner lineup can set on first discovery.
 func (s *Store) HouseholdMarks(ctx context.Context) (passes, recordings int, err error) {
 	err = s.db.QueryRowContext(ctx, `

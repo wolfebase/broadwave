@@ -17,13 +17,13 @@ import (
 	"strings"
 	"time"
 
-	"waveguide/internal/discovery"
-	"waveguide/internal/hdhr"
-	"waveguide/internal/live"
-	"waveguide/internal/realtime"
-	"waveguide/internal/source"
-	"waveguide/internal/sports"
-	"waveguide/internal/store"
+	"broadwave/internal/discovery"
+	"broadwave/internal/hdhr"
+	"broadwave/internal/live"
+	"broadwave/internal/realtime"
+	"broadwave/internal/source"
+	"broadwave/internal/sports"
+	"broadwave/internal/store"
 )
 
 type Server struct {
@@ -123,7 +123,7 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": "waveguide"})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": "broadwave"})
 }
 
 func (s *Server) profile(w http.ResponseWriter, r *http.Request) {

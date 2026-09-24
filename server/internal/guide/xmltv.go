@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"waveguide/internal/hdhr"
-	"waveguide/internal/store"
+	"broadwave/internal/hdhr"
+	"broadwave/internal/store"
 )
 
 type tv struct {
@@ -76,7 +76,7 @@ func PullURL(ctx context.Context, rawURL string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "Waveguide/0.1")
+	req.Header.Set("User-Agent", "Broadwave/0.1")
 	req.Header.Set("Accept-Encoding", "gzip")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -149,7 +149,7 @@ func Pull(ctx context.Context, client *hdhr.Client, baseURL string) ([]byte, err
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "Waveguide/0.1")
+	req.Header.Set("User-Agent", "Broadwave/0.1")
 	req.Header.Set("Accept-Encoding", "gzip")
 	var res *http.Response
 	for attempt := 0; attempt < 2; attempt++ {
@@ -168,7 +168,7 @@ func Pull(ctx context.Context, client *hdhr.Client, baseURL string) ([]byte, err
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("User-Agent", "Waveguide/0.1")
+		req.Header.Set("User-Agent", "Broadwave/0.1")
 		req.Header.Set("Accept-Encoding", "gzip")
 	}
 	defer res.Body.Close()

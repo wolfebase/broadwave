@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"waveguide/internal/hdhr"
-	"waveguide/internal/live"
-	"waveguide/internal/store"
+	"broadwave/internal/hdhr"
+	"broadwave/internal/live"
+	"broadwave/internal/store"
 )
 
 func TestArtResizesAndFallsBack(t *testing.T) {

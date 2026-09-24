@@ -26,7 +26,7 @@ import "./guide.css";
 
 type Filter = "all" | "favorites" | Category | "recording";
 const MIN = 60_000;
-const ORDER_KEY = "waveguide-guide-order";
+const ORDER_KEY = "broadwave-guide-order";
 
 function floorHalfHour(t: number) {
   const d = new Date(t);
