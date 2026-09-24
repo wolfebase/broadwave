@@ -1,8 +1,8 @@
 import AVFoundation
 import AVKit
 import AVRouting
-import OTAKit
-import OTAUI
+import BroadwaveKit
+import BroadwaveUI
 import SwiftUI
 
 enum TileLayout: String, CaseIterable, Identifiable {
@@ -39,7 +39,7 @@ enum TileLayout: String, CaseIterable, Identifiable {
     }
 
     static var saved: TileLayout {
-        TileLayout(rawValue: UserDefaults.standard.string(forKey: "waveguide-mv-layout") ?? "") ?? .side
+        TileLayout(rawValue: UserDefaults.standard.string(forKey: "broadwave-mv-layout") ?? "") ?? .side
     }
 }
 
@@ -52,7 +52,7 @@ struct SavedSet: Codable, Identifiable, Hashable {
 }
 
 enum SavedMultiview {
-    private static let key = "waveguide-multiview"
+    private static let key = "broadwave-multiview"
 
     static func load() -> [SavedSet] {
         guard let data = UserDefaults.standard.data(forKey: key),
@@ -93,7 +93,7 @@ final class MultiviewSession {
     }
 
     func rememberLayout() {
-        UserDefaults.standard.set(layout.rawValue, forKey: "waveguide-mv-layout")
+        UserDefaults.standard.set(layout.rawValue, forKey: "broadwave-mv-layout")
     }
 
     func bind(_ send: @escaping (String) -> Void) {
@@ -224,7 +224,7 @@ struct MultiviewScreen: View {
     @State private var session: MultiviewSession
     @State private var blocked: Set<Int64> = []
     @State private var planReady = false
-    @State private var hint = !UserDefaults.standard.bool(forKey: "waveguide-mv-hint-seen")
+    @State private var hint = !UserDefaults.standard.bool(forKey: "broadwave-mv-hint-seen")
 
     init() {
         _session = State(initialValue: MultiviewSession(focusID: 0))
@@ -280,7 +280,7 @@ struct MultiviewScreen: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
                         .glassEffect(in: .capsule)
-                        .onAppear { UserDefaults.standard.set(true, forKey: "waveguide-mv-hint-seen") }
+                        .onAppear { UserDefaults.standard.set(true, forKey: "broadwave-mv-hint-seen") }
                 }
                 if !session.notice.isEmpty {
                     Text(session.notice)

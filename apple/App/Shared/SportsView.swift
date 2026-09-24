@@ -1,5 +1,5 @@
-import OTAKit
-import OTAUI
+import BroadwaveKit
+import BroadwaveUI
 import SwiftUI
 
 struct SportsView: View {

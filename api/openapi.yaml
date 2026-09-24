@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Waveguide
+  title: Broadwave
   version: 1.0.0
   description: |
     Live TV and DVR server for HDHomeRun tuners. This document is the contract for the

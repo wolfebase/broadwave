@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Waveguide</string>
+	<string>Broadwave</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -22,10 +22,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.wolfeup.waveguide</string>
+			<string>com.wolfeup.broadwave</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>waveguide</string>
+				<string>broadwave</string>
 			</array>
 		</dict>
 	</array>
@@ -42,10 +42,10 @@
 	</dict>
 	<key>NSBonjourServices</key>
 	<array>
-		<string>_waveguide._tcp</string>
+		<string>_broadwave._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Waveguide finds your TV server on your home network.</string>
+	<string>Broadwave finds your TV server on your home network.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 </dict>

@@ -2,15 +2,15 @@
 import PackageDescription
 
 let package = Package(
-    name: "OTAUI",
+    name: "BroadwaveUI",
     platforms: [.iOS(.v26), .tvOS(.v26), .macOS(.v26)],
     products: [
-        .library(name: "OTAUI", targets: ["OTAUI"]),
+        .library(name: "BroadwaveUI", targets: ["BroadwaveUI"]),
     ],
     dependencies: [
-        .package(path: "../OTAKit"),
+        .package(path: "../BroadwaveKit"),
     ],
     targets: [
-        .target(name: "OTAUI", dependencies: ["OTAKit"]),
+        .target(name: "BroadwaveUI", dependencies: ["BroadwaveKit"]),
     ]
 )

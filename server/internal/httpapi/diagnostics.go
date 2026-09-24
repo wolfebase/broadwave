@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"waveguide/internal/disk"
-	"waveguide/internal/doctor"
-	"waveguide/internal/live"
-	"waveguide/internal/store"
+	"broadwave/internal/disk"
+	"broadwave/internal/doctor"
+	"broadwave/internal/live"
+	"broadwave/internal/store"
 )
 
 // diagnostics is everything a support conversation needs, in one call.

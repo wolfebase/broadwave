@@ -4,8 +4,8 @@
 # A crash, a dropped stream, or a turn that ends early costs one round, not the run.
 #
 #   scripts/agent-loop.sh              # run until every line is ticked or blocked
-#   touch ~/.waveguide-agent-stop      # stop after the current round
-#   tail -f ~/Library/Logs/waveguide-agent/loop.log
+#   touch ~/.broadwave-agent-stop      # stop after the current round
+#   tail -f ~/Library/Logs/broadwave-agent/loop.log
 #
 # Environment: AGENT (default: agent), MODEL (default: the CLI's selected model),
 # MAX_IDLE (rounds without a new commit before giving up, default 6).
@@ -14,8 +14,8 @@ set -u
 REPO=${0:A:h:h}
 AGENT=${AGENT:-agent}
 MAX_IDLE=${MAX_IDLE:-6}
-LOGS=$HOME/Library/Logs/waveguide-agent
-STOP=$HOME/.waveguide-agent-stop
+LOGS=$HOME/Library/Logs/broadwave-agent
+STOP=$HOME/.broadwave-agent-stop
 LOCK=$LOGS/lock
 mkdir -p "$LOGS"
 cd "$REPO" || exit 1
@@ -28,7 +28,7 @@ trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
 rm -f "$STOP"
 
 note() { print -r -- "$(date '+%F %T') $*" | tee -a "$LOGS/loop.log"; }
-notify() { osascript -e "display notification \"$1\" with title \"Waveguide agent\"" >/dev/null 2>&1; }
+notify() { osascript -e "display notification \"$1\" with title \"Broadwave agent\"" >/dev/null 2>&1; }
 
 # Long HTTP/2 streams die through this Mac's VPN tunnel ("http/2 stream closed
 # with error code CANCEL"); HTTP/1.1 does not. The CLI can rewrite its config, so set it every round.

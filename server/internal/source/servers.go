@@ -109,10 +109,10 @@ func authedGet(ctx context.Context, raw, user, pass string) ([]byte, int, error)
 	if user != "" || pass != "" {
 		req.SetBasicAuth(user, pass)
 	}
-	req.Header.Set("User-Agent", "Waveguide/0.1")
+	req.Header.Set("User-Agent", "Broadwave/0.1")
 	res, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("Waveguide could not reach that server. Check the address.")
+		return nil, 0, fmt.Errorf("Broadwave could not reach that server. Check the address.")
 	}
 	defer res.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(res.Body, 32<<20))

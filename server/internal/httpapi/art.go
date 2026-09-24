@@ -118,7 +118,7 @@ func getArtBytes(ctx context.Context, rawURL string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "Waveguide/0.1")
+	req.Header.Set("User-Agent", "Broadwave/0.1")
 	res, err := client.Do(req)
 	if err != nil {
 		return nil, err

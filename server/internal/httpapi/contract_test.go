@@ -16,12 +16,12 @@ import (
 
 	"github.com/coder/websocket"
 
-	"waveguide/internal/hdhr"
-	"waveguide/internal/hdhr/fake"
-	"waveguide/internal/live"
-	"waveguide/internal/realtime"
-	"waveguide/internal/sports"
-	"waveguide/internal/store"
+	"broadwave/internal/hdhr"
+	"broadwave/internal/hdhr/fake"
+	"broadwave/internal/live"
+	"broadwave/internal/realtime"
+	"broadwave/internal/sports"
+	"broadwave/internal/store"
 )
 
 // contractNow is the clock every golden response is recorded against.

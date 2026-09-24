@@ -1,4 +1,4 @@
-module waveguide
+module broadwave
 
 go 1.26.0
 

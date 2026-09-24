@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"waveguide/internal/hdhr"
+	"broadwave/internal/hdhr"
 )
 
 func TestFollowTeamRecordsEveryGame(t *testing.T) {

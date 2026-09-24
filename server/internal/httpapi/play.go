@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"waveguide/internal/dvr"
-	"waveguide/internal/guide"
-	"waveguide/internal/live"
-	"waveguide/internal/store"
+	"broadwave/internal/dvr"
+	"broadwave/internal/guide"
+	"broadwave/internal/live"
+	"broadwave/internal/store"
 )
 
 func (s *Server) watch(w http.ResponseWriter, r *http.Request) {

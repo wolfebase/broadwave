@@ -12,10 +12,10 @@ const apiVersion = 1
 func DefaultServerName() string {
 	host, err := os.Hostname()
 	if err != nil || host == "" {
-		return "Waveguide"
+		return "Broadwave"
 	}
 	host = strings.TrimSuffix(host, ".local")
-	return "Waveguide on " + host
+	return "Broadwave on " + host
 }
 
 func (s *Server) serverInfo(w http.ResponseWriter, r *http.Request) {

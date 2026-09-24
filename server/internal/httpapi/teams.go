@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"waveguide/internal/dvr"
-	"waveguide/internal/store"
+	"broadwave/internal/dvr"
+	"broadwave/internal/store"
 )
 
 func (s *Server) teams(w http.ResponseWriter, r *http.Request) {

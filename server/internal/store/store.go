@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"waveguide/internal/hdhr"
+	"broadwave/internal/hdhr"
 
 	_ "modernc.org/sqlite"
 )
@@ -63,10 +63,7 @@ func Open(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	path := filepath.Join(dir, "waveguide.db")
-	if err := adoptLegacyCatalog(dir, path); err != nil {
-		return nil, err
-	}
+	path := filepath.Join(dir, "broadwave.db")
 	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)")
 	if err != nil {
 		return nil, err
@@ -76,27 +73,6 @@ func Open(dir string) (*Store, error) {
 		return nil, err
 	}
 	return &Store{db: db}, nil
-}
-
-// legacyCatalog is the database file name from before the rename to Waveguide.
-const legacyCatalog = "ota-viewer.db"
-
-// adoptLegacyCatalog renames an existing ota-viewer.db (and its WAL files) to the
-// current name so upgrades keep every channel, pass, and recording.
-func adoptLegacyCatalog(dir, path string) error {
-	if _, err := os.Stat(path); err == nil {
-		return nil
-	}
-	old := filepath.Join(dir, legacyCatalog)
-	if _, err := os.Stat(old); err != nil {
-		return nil
-	}
-	for _, suffix := range []string{"-wal", "-shm", ""} {
-		if err := os.Rename(old+suffix, path+suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("adopt %s: %w", legacyCatalog, err)
-		}
-	}
-	return nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }

@@ -1,5 +1,5 @@
-import OTAKit
-import OTAUI
+import BroadwaveKit
+import BroadwaveUI
 import SwiftUI
 
 struct HomeView: View {
@@ -140,10 +140,10 @@ struct HomeView: View {
             .onAppear { saved = SavedMultiview.load() }
     }
 
-    /// `-OTAScroll teams` on a debug launch. Off-screen shelves cannot be reached with a click while another simulator window is in front.
+    /// `-BroadwaveScroll teams` on a debug launch. Off-screen shelves cannot be reached with a click while another simulator window is in front.
     private func scrollForScreenshot(_ proxy: ScrollViewProxy) async {
         #if DEBUG
-            guard UserDefaults.standard.string(forKey: "OTAScroll") == "teams", !teams.isEmpty else { return }
+            guard UserDefaults.standard.string(forKey: "BroadwaveScroll") == "teams", !teams.isEmpty else { return }
             try? await Task.sleep(for: .milliseconds(500))
             proxy.scrollTo("teams", anchor: .top)
         #endif

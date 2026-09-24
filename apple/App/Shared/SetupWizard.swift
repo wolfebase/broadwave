@@ -1,5 +1,5 @@
-import OTAKit
-import OTAUI
+import BroadwaveKit
+import BroadwaveUI
 import SwiftUI
 
 /// First-run steps, the same five as the web wizard.
@@ -56,7 +56,7 @@ struct SetupWizard: View {
                 await store.refresh()
             }
             #if DEBUG
-                if let raw = UserDefaults.standard.string(forKey: "OTASetup"), let n = Int(raw), n >= 0, n < titles.count {
+                if let raw = UserDefaults.standard.string(forKey: "BroadwaveSetup"), let n = Int(raw), n >= 0, n < titles.count {
                     step = n
                 }
             #endif
@@ -129,7 +129,7 @@ struct SetupWizard: View {
     private var apps: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Watch on iPhone and Apple TV").font(.title2.weight(.bold))
-            Text("Open Waveguide on your Apple TV. It finds this server on its own.")
+            Text("Open Broadwave on your Apple TV. It finds this server on its own.")
                 .foregroundStyle(.secondary)
             if let url = store.api?.base.absoluteString {
                 Text(url).font(.title3.weight(.semibold))
@@ -171,7 +171,7 @@ struct SetupWizard: View {
     private func finish() {
         Task {
             try? await store.api?.saveSettings(["setupComplete": "1"])
-            UserDefaults.standard.removeObject(forKey: "OTASetup")
+            UserDefaults.standard.removeObject(forKey: "BroadwaveSetup")
             onFinish()
         }
     }

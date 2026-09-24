@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"waveguide/internal/sports"
-	"waveguide/internal/store"
+	"broadwave/internal/sports"
+	"broadwave/internal/store"
 )
 
 const (

@@ -6,7 +6,7 @@
 # Uses the App Store Connect API key in ~/.blitz (key id + issuer in
 # asc-credentials.json, private key at AuthKey_<id>.p8). The Apple ID web
 # session is not required for the upload. The App Store Connect app record
-# for com.wolfeup.waveguide must already exist.
+# for com.wolfeup.broadwave must already exist.
 #
 # Build number is the number of commits on this checkout. Team is
 # D4MC63SS36 (Tyler Wolfe), the same team as the other com.wolfeup apps.
@@ -52,11 +52,11 @@ def call(method, path, payload=None):
 
 _, certs = call("GET", "/v1/certificates?filter[certificateType]=DISTRIBUTION&limit=5")
 cert_id = certs["data"][0]["id"]
-_, bundles = call("GET", "/v1/bundleIds?filter[identifier]=com.wolfeup.waveguide&limit=5")
-bundle_id = next(i["id"] for i in bundles["data"] if i["attributes"]["identifier"] == "com.wolfeup.waveguide")
+_, bundles = call("GET", "/v1/bundleIds?filter[identifier]=com.wolfeup.broadwave&limit=5")
+bundle_id = next(i["id"] for i in bundles["data"] if i["attributes"]["identifier"] == "com.wolfeup.broadwave")
 wanted = {
-    "IOS_APP_STORE": "Waveguide iOS App Store",
-    "TVOS_APP_STORE": "Waveguide tvOS App Store",
+    "IOS_APP_STORE": "Broadwave iOS App Store",
+    "TVOS_APP_STORE": "Broadwave tvOS App Store",
 }
 _, existing = call("GET", "/v1/profiles?limit=200")
 have = {i["attributes"]["profileType"]: i for i in existing.get("data", []) if i["attributes"]["name"] in wanted.values()}
@@ -107,7 +107,7 @@ archive_one() {
 	<string>Apple Distribution</string>
 	<key>provisioningProfiles</key>
 	<dict>
-		<key>com.wolfeup.waveguide</key>
+		<key>com.wolfeup.broadwave</key>
 		<string>${profile}</string>
 	</dict>
 	<key>uploadSymbols</key>
@@ -116,7 +116,7 @@ archive_one() {
 </plist>
 EOF
   xcodebuild archive \
-    -project Waveguide.xcodeproj \
+    -project Broadwave.xcodeproj \
     -scheme "$scheme" \
     -destination "generic/platform=$platform" \
     -archivePath "$APPLE/build/${name}.xcarchive" \
@@ -139,6 +139,6 @@ EOF
     -authenticationKeyIssuerID "$ISSUER"
 }
 
-archive_one Waveguide iOS ios "Waveguide iOS App Store"
-archive_one WaveguideTV tvOS tvos "Waveguide tvOS App Store"
+archive_one Broadwave iOS ios "Broadwave iOS App Store"
+archive_one BroadwaveTV tvOS tvos "Broadwave tvOS App Store"
 echo "==> uploaded build $BUILD"

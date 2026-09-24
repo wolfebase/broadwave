@@ -1,5 +1,5 @@
+@testable import BroadwaveKit
 import Foundation
-@testable import OTAKit
 import Testing
 
 private func fixture(_ name: String) throws -> Data {

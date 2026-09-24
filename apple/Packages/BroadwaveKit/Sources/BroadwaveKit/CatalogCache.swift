@@ -29,7 +29,7 @@ public enum CatalogCache {
     private static func file(_ serverID: String, _ directory: URL?) -> URL {
         let dir = directory ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         let safe = String(serverID.filter { $0.isLetter || $0.isNumber })
-        return dir.appendingPathComponent("waveguide-\(safe).json")
+        return dir.appendingPathComponent("broadwave-\(safe).json")
     }
 
     private static let encoder: JSONEncoder = {

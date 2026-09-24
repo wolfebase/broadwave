@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"waveguide/internal/hdhr"
+	"broadwave/internal/hdhr"
 )
 
 func TestTuneStatusAndBusy(t *testing.T) {

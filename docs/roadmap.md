@@ -10,7 +10,7 @@ Phases run roughly in order. Later phases can start when their dependencies are 
 - [x] Agent guidance: `AGENTS.md`, scoped rules, architecture and decisions
 - [x] Fix-first bugs: macOS disk stats, periodic guide refresh, fan-out subscriber leak
 - [x] Numbered SQL migrations
-- [x] `/api/v1` contract in OpenAPI with generated TypeScript types (Swift models are hand-mirrored in OTAKit for now)
+- [x] `/api/v1` contract in OpenAPI with generated TypeScript types (Swift models are hand-mirrored in BroadwaveKit for now)
 - [x] Design tokens that generate CSS and Swift
 
 ## 2. Relay engine v2
@@ -22,7 +22,7 @@ Phases run roughly in order. Later phases can start when their dependencies are 
 - [ ] Multi-tuner pool across devices; ATSC 3.0 (FLEX 4K) with AC-4 handling
 - [x] Events WebSocket to replace polling
 - [ ] Accounts, profiles, device pairing
-- [x] Bonjour `_waveguide._tcp`
+- [x] Bonjour `_broadwave._tcp`
 - [x] Sync clock and rooms (ADR 0003)
 - [ ] Multi-arch image on GHCR, Unraid Community Apps, setup wizard, diagnostics
 
@@ -35,7 +35,7 @@ Phases run roughly in order. Later phases can start when their dependencies are 
 
 ## 4. Apple TV and iPhone MVP
 
-- [x] `OTAKit` and `OTAUI` packages
+- [x] `BroadwaveKit` and `BroadwaveUI` packages
 - [x] Discover and pair, Home, Guide, Player, Recordings, record and passes
 - [ ] TestFlight
 

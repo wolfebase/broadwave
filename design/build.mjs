@@ -75,4 +75,4 @@ function write(path, body) {
 }
 
 write(join(root, "web/src/theme/tokens.css"), css());
-write(join(root, "apple/Packages/OTAUI/Sources/OTAUI/Theme+Tokens.swift"), swift());
+write(join(root, "apple/Packages/BroadwaveUI/Sources/BroadwaveUI/Theme+Tokens.swift"), swift());

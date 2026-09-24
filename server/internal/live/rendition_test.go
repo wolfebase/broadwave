@@ -58,8 +58,8 @@ func TestRenditionKeyRoundTrip(t *testing.T) {
 }
 
 func TestHLSInputReconnects(t *testing.T) {
-	line := strings.Join(renditionArgs(0, Source{VideoCodec: "H264", AudioCodec: "AAC", Progressive: true, UserAgent: "Waveguide", Referrer: "http://example/"}, Rendition{Video: "copy", Audio: "copy"}, "libx264", "", false, "http://example/live.m3u8"), " ")
-	if !strings.Contains(line, "-reconnect 1") || !strings.Contains(line, "-i http://example/live.m3u8") || !strings.Contains(line, "aac_adtstoasc") || !strings.Contains(line, "User-Agent: Waveguide") {
+	line := strings.Join(renditionArgs(0, Source{VideoCodec: "H264", AudioCodec: "AAC", Progressive: true, UserAgent: "Broadwave", Referrer: "http://example/"}, Rendition{Video: "copy", Audio: "copy"}, "libx264", "", false, "http://example/live.m3u8"), " ")
+	if !strings.Contains(line, "-reconnect 1") || !strings.Contains(line, "-i http://example/live.m3u8") || !strings.Contains(line, "aac_adtstoasc") || !strings.Contains(line, "User-Agent: Broadwave") {
 		t.Fatal(line)
 	}
 }
@@ -192,8 +192,8 @@ func TestFirstSegmentIsWithheld(t *testing.T) {
 }
 
 func TestCopyArgsReadsURL(t *testing.T) {
-	line := strings.Join(copyArgs(0, "http://example/live.m3u8", "Waveguide", "http://example/", "out.ts"), " ")
-	if strings.Contains(line, "pipe:0") || !strings.Contains(line, "-reconnect 1") || !strings.Contains(line, "-i http://example/live.m3u8") || !strings.Contains(line, "User-Agent: Waveguide") {
+	line := strings.Join(copyArgs(0, "http://example/live.m3u8", "Broadwave", "http://example/", "out.ts"), " ")
+	if strings.Contains(line, "pipe:0") || !strings.Contains(line, "-reconnect 1") || !strings.Contains(line, "-i http://example/live.m3u8") || !strings.Contains(line, "User-Agent: Broadwave") {
 		t.Fatalf("hls recording args: %s", line)
 	}
 	if pipe := strings.Join(copyArgs(0, "", "", "", "out.ts"), " "); !strings.Contains(pipe, "-i pipe:0") || strings.Contains(pipe, "-headers") {

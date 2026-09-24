@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"waveguide/internal/dvr"
-	"waveguide/internal/sports"
-	"waveguide/internal/store"
+	"broadwave/internal/dvr"
+	"broadwave/internal/sports"
+	"broadwave/internal/store"
 )
 
 func (s *Server) scoreboard(w http.ResponseWriter, r *http.Request) {

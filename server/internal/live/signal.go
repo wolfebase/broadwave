@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"waveguide/internal/hdhr"
+	"broadwave/internal/hdhr"
 )
 
 // Measure tunes a channel long enough to read /tunerN/status, then releases it

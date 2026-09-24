@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"waveguide/internal/live"
-	"waveguide/internal/store"
+	"broadwave/internal/live"
+	"broadwave/internal/store"
 )
 
 func asBusy(err error, target **live.BusyError) bool {
@@ -94,7 +94,7 @@ func (s *Server) exportGuide(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	doc := xmltvDoc{Generator: "Waveguide"}
+	doc := xmltvDoc{Generator: "Broadwave"}
 	ids := map[int64]string{}
 	for _, ch := range channels {
 		id := xmltvChannelID(ch)

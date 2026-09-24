@@ -1,12 +1,12 @@
-import OTAKit
-import OTAUI
+import BroadwaveKit
+import BroadwaveUI
 import SwiftUI
 
 struct GuideView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.verticalSizeClass) private var verticalSize
-    @State private var filter: OTAKit.Category?
+    @State private var filter: BroadwaveKit.Category?
     @State private var favoritesOnly = false
     @State private var selected: Selection?
     @State private var jump: Date?
@@ -112,7 +112,7 @@ struct GuideView: View {
             HStack(spacing: 8) {
                 chip("All", on: filter == nil && !favoritesOnly) { filter = nil; favoritesOnly = false }
                 chip("Favorites", on: favoritesOnly) { favoritesOnly.toggle() }
-                ForEach([OTAKit.Category.sports, .news, .movies, .kids], id: \.self) { c in
+                ForEach([BroadwaveKit.Category.sports, .news, .movies, .kids], id: \.self) { c in
                     chip(c.label, color: c.color, on: filter == c) { filter = filter == c ? nil : c }
                 }
             }
@@ -169,7 +169,7 @@ struct GuideGrid: View {
     @Environment(AppStore.self) private var store
     @Environment(NowPlaying.self) private var nowPlaying
     let channels: [Channel]
-    let highlight: OTAKit.Category?
+    let highlight: BroadwaveKit.Category?
     let jump: Date?
     var scores: [String: String] = [:]
     let onSelect: (Channel, Airing?) -> Void

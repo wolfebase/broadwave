@@ -45,12 +45,12 @@ http://example/abc.ts
 func TestParseM3UKeepsStreamOptions(t *testing.T) {
 	raw := `#EXTM3U
 #EXTINF:-1 channel-id="wdaf" tvg-shift="0" catchup="default" catchup-source="http://example/{utc}" catchup-days="3" tvc-guide-title="News" tvc-guide-description="At 6" tvc-guide-art="http://example/art.jpg" tvc-guide-tags="news" tvc-guide-genres="News" tvc-stream-vcodec="MPEG2" tvc-stream-acodec="AC3",ABC
-#EXTVLCOPT:http-user-agent=Waveguide
+#EXTVLCOPT:http-user-agent=Broadwave
 #KODIPROP:http-referrer=http://example/
 http://example/abc.ts
 `
 	e := ParseM3U(strings.NewReader(raw))[0]
-	if e.ID != "wdaf" || e.Shift != "0" || e.Catchup != "default" || e.CatchupDays != "3" || e.GuideTitle != "News" || e.Video != "MPEG2" || e.Audio != "AC3" || e.UserAgent != "Waveguide" || e.Referrer != "http://example/" {
+	if e.ID != "wdaf" || e.Shift != "0" || e.Catchup != "default" || e.CatchupDays != "3" || e.GuideTitle != "News" || e.Video != "MPEG2" || e.Audio != "AC3" || e.UserAgent != "Broadwave" || e.Referrer != "http://example/" {
 		t.Fatalf("%+v", e)
 	}
 }

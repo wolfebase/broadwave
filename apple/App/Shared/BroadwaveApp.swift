@@ -1,10 +1,10 @@
 import AVFoundation
-import OTAKit
-import OTAUI
+import BroadwaveKit
+import BroadwaveUI
 import SwiftUI
 
 @main
-struct WaveguideApp: App {
+struct BroadwaveApp: App {
     @State private var store = AppStore()
 
     init() {

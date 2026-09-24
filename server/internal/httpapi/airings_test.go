@@ -13,8 +13,8 @@ import (
 	"testing/fstest"
 	"time"
 
-	"waveguide/internal/hdhr"
-	"waveguide/internal/store"
+	"broadwave/internal/hdhr"
+	"broadwave/internal/store"
 )
 
 func TestAiringsWindowAndCompression(t *testing.T) {
@@ -113,8 +113,8 @@ func TestAiringsWindowAndCompression(t *testing.T) {
 
 func TestPrecompressedAsset(t *testing.T) {
 	assets := fstest.MapFS{
-		"index.html":       &fstest.MapFile{Data: []byte("<!doctype html><title>Waveguide</title>")},
-		"assets/app.js":    &fstest.MapFile{Data: []byte("console.log('waveguide')")},
+		"index.html":       &fstest.MapFile{Data: []byte("<!doctype html><title>Broadwave</title>")},
+		"assets/app.js":    &fstest.MapFile{Data: []byte("console.log('broadwave')")},
 		"assets/app.js.gz": &fstest.MapFile{Data: []byte{0x1f, 0x8b, 0x08, 0x00}},
 		"assets/app.js.br": &fstest.MapFile{Data: []byte("brotli-bytes")},
 	}

@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"waveguide/internal/disk"
-	"waveguide/internal/live"
-	"waveguide/internal/store"
+	"broadwave/internal/disk"
+	"broadwave/internal/live"
+	"broadwave/internal/store"
 )
 
 func (s *Server) playRecording(w http.ResponseWriter, r *http.Request) {
@@ -380,14 +380,14 @@ func (s *Server) backup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	path := filepath.Join(dir, "waveguide-backup.db")
+	path := filepath.Join(dir, "broadwave-backup.db")
 	_ = os.Remove(path)
 	if err := s.Store.BackupTo(r.Context(), path); err != nil {
 		writeError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", `attachment; filename="waveguide-backup.db"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="broadwave-backup.db"`)
 	http.ServeFile(w, r, path)
 }
 

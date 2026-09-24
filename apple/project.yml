@@ -1,4 +1,4 @@
-name: Waveguide
+name: Broadwave
 options:
   bundleIdPrefix: com.wolfeup
   deploymentTarget:
@@ -17,31 +17,31 @@ settings:
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
 packages:
-  OTAKit:
-    path: Packages/OTAKit
-  OTAUI:
-    path: Packages/OTAUI
+  BroadwaveKit:
+    path: Packages/BroadwaveKit
+  BroadwaveUI:
+    path: Packages/BroadwaveUI
 targetTemplates:
   App:
     type: application
     sources:
       - path: App/Shared
     dependencies:
-      - package: OTAKit
-      - package: OTAUI
+      - package: BroadwaveKit
+      - package: BroadwaveUI
 targets:
-  Waveguide:
+  Broadwave:
     templates: [App]
     platform: iOS
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.waveguide
+        PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.broadwave
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
     info:
       path: App/Info-iOS.plist
       properties:
-        CFBundleDisplayName: Waveguide
+        CFBundleDisplayName: Broadwave
         UILaunchScreen: {}
         UIBackgroundModes: [audio]
         UISupportedInterfaceOrientations:
@@ -49,35 +49,35 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        NSLocalNetworkUsageDescription: Waveguide finds your TV server on your home network.
+        NSLocalNetworkUsageDescription: Broadwave finds your TV server on your home network.
         NSBonjourServices:
-          - _waveguide._tcp
+          - _broadwave._tcp
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
           NSAllowsArbitraryLoads: true
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
-          - CFBundleURLName: com.wolfeup.waveguide
-            CFBundleURLSchemes: [waveguide]
-  WaveguideTV:
+          - CFBundleURLName: com.wolfeup.broadwave
+            CFBundleURLSchemes: [broadwave]
+  BroadwaveTV:
     templates: [App]
     platform: tvOS
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.waveguide
+        PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.broadwave
         TARGETED_DEVICE_FAMILY: "3"
     info:
       path: App/Info-tvOS.plist
       properties:
-        CFBundleDisplayName: Waveguide
+        CFBundleDisplayName: Broadwave
         UILaunchScreen: {}
-        NSLocalNetworkUsageDescription: Waveguide finds your TV server on your home network.
+        NSLocalNetworkUsageDescription: Broadwave finds your TV server on your home network.
         NSBonjourServices:
-          - _waveguide._tcp
+          - _broadwave._tcp
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
           NSAllowsArbitraryLoads: true
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
-          - CFBundleURLName: com.wolfeup.waveguide
-            CFBundleURLSchemes: [waveguide]
+          - CFBundleURLName: com.wolfeup.broadwave
+            CFBundleURLSchemes: [broadwave]

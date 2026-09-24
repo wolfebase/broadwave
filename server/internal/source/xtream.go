@@ -161,10 +161,10 @@ func xtreamGet(ctx context.Context, base, user, pass, action string) ([]byte, er
 	if err != nil {
 		return nil, fmt.Errorf("The server address should start with http:// or https://.")
 	}
-	req.Header.Set("User-Agent", "Waveguide/0.1")
+	req.Header.Set("User-Agent", "Broadwave/0.1")
 	res, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Waveguide could not reach that server. Check the address.")
+		return nil, fmt.Errorf("Broadwave could not reach that server. Check the address.")
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {

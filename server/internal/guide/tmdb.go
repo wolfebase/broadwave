@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 // FillImages adds a poster address to airings that have none.
@@ -62,7 +62,7 @@ func tmdbPoster(ctx context.Context, client *http.Client, base, key, title strin
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", "Waveguide/0.1")
+	req.Header.Set("User-Agent", "Broadwave/0.1")
 	res, err := client.Do(req)
 	if err != nil {
 		return "", err

@@ -1,5 +1,5 @@
+@testable import BroadwaveKit
 import Foundation
-@testable import OTAKit
 import Testing
 
 @Test func catalogCacheRoundTrip() throws {

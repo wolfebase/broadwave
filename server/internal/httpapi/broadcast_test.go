@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"waveguide/internal/hdhr"
-	"waveguide/internal/psip"
-	"waveguide/internal/store"
+	"broadwave/internal/hdhr"
+	"broadwave/internal/psip"
+	"broadwave/internal/store"
 )
 
 func TestBroadcastFillsOnlyGaps(t *testing.T) {

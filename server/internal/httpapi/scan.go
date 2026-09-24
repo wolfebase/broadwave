@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"waveguide/internal/dvr"
-	"waveguide/internal/store"
+	"broadwave/internal/dvr"
+	"broadwave/internal/store"
 )
 
 // BroadcastScan tunes each frequency that is missing a current listing, dwells

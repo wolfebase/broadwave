@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 // SchedulesDirect fills guide rows for channels the free SiliconDust feed left empty.

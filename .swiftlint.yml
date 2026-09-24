@@ -2,7 +2,7 @@ included:
   - apple
 excluded:
   - apple/build
-  - apple/Packages/OTAUI/Sources/OTAUI/Theme+Tokens.swift
+  - apple/Packages/BroadwaveUI/Sources/BroadwaveUI/Theme+Tokens.swift
   - apple/**/.build
 disabled_rules:
   - line_length

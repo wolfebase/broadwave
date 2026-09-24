@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 func TestParseEpisodeIdentity(t *testing.T) {

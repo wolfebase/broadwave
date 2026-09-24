@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"waveguide/internal/hdhr"
+	"broadwave/internal/hdhr"
 )
 
 func TestSearchFindsListingsAndRecordings(t *testing.T) {

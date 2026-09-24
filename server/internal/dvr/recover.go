@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 // Recover closes recordings that were in progress when the process died.

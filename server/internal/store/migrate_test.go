@@ -3,8 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"errors"
-	"os"
 	"path/filepath"
 	"testing"
 )
@@ -37,47 +35,8 @@ func TestOpenTwiceAppliesOnce(t *testing.T) {
 	}
 }
 
-func TestOldCatalogNameIsAdopted(t *testing.T) {
-	dir := t.TempDir()
-	st, err := Open(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.Identity(context.Background(), "OTA Viewer on den"); err != nil {
-		t.Fatal(err)
-	}
-	st.Close()
-	if err := os.Rename(filepath.Join(dir, "waveguide.db"), filepath.Join(dir, legacyCatalog)); err != nil {
-		t.Fatal(err)
-	}
-	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(filepath.Join(dir, legacyCatalog)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version = 4`); err != nil {
-		t.Fatal(err)
-	}
-	db.Close()
-
-	st, err = Open(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-	if _, err := os.Stat(filepath.Join(dir, legacyCatalog)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("old catalog should be renamed, stat err %v", err)
-	}
-	id, err := st.Identity(context.Background(), "unused")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if id.Name != "Waveguide on den" {
-		t.Fatalf("default server name should follow the rename, got %q", id.Name)
-	}
-}
-
 func TestLegacyCatalogUpgrades(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "waveguide.db")
+	path := filepath.Join(t.TempDir(), "broadwave.db")
 	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path))
 	if err != nil {
 		t.Fatal(err)
@@ -111,7 +70,7 @@ INSERT INTO passes (title) VALUES ('Jeopardy!');
 }
 
 func TestTunerBecomesASourceWithoutMovingChannels(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "waveguide.db")
+	path := filepath.Join(t.TempDir(), "broadwave.db")
 	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path))
 	if err != nil {
 		t.Fatal(err)

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	"waveguide/internal/disk"
-	"waveguide/internal/live"
+	"broadwave/internal/disk"
+	"broadwave/internal/live"
 )
 
 // apiError writes the error envelope every client reads: {"code", "message", ...details}.

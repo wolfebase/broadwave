@@ -1,10 +1,10 @@
-# Waveguide — guide for agents and contributors
+# Broadwave — guide for agents and contributors
 
-Waveguide is live TV and DVR for people with an antenna. A self-hosted server (Docker, Unraid, or a Mac) talks to HDHomeRun tuners, builds the guide, records, and relays every broadcast to native apps on iPhone and Apple TV and to a web app. It is a public product: strangers install it, so setup, polish, and reliability matter as much as features.
+Broadwave is live TV and DVR for people with an antenna. A self-hosted server (Docker, Unraid, or a Mac) talks to HDHomeRun tuners, builds the guide, records, and relays every broadcast to native apps on iPhone and Apple TV and to a web app. It is a public product: strangers install it, so setup, polish, and reliability matter as much as features.
 
 Read this file first, then the scoped rules in `.cursor/rules/` for the area you are touching, then `docs/architecture.md` and `docs/roadmap.md`.
 
-**Active work:** `docs/plan/MASTER_PLAN.md` is the plan of record (v2: phases R, S, C, K1, P, G1, F, E, I, G, H, N, J, K, L, M, run nonstop in the order of its section 4); `docs/plan/PROGRESS.md` is the live checklist; `docs/plan/BLOCKERS.md` lists what needs the user; `docs/plan/UNRAID_LOG.md` records deployments. Project skills live in `.cursor/skills/` (`waveguide-dev-loop`, `waveguide-media-pipeline`, `waveguide-apple`, `waveguide-multiview`, `waveguide-sources`); the personal skill `waveguide-unraid` covers the user's Unraid server.
+**Active work:** `docs/plan/MASTER_PLAN.md` is the plan of record (v2: phases R, S, C, K1, P, G1, F, E, I, G, H, N, J, K, L, M, run nonstop in the order of its section 4); `docs/plan/PROGRESS.md` is the live checklist; `docs/plan/BLOCKERS.md` lists what needs the user; `docs/plan/UNRAID_LOG.md` records deployments. Project skills live in `.cursor/skills/` (`broadwave-dev-loop`, `broadwave-media-pipeline`, `broadwave-apple`, `broadwave-multiview`, `broadwave-sources`); the personal skill `broadwave-unraid` covers the user's Unraid server.
 
 ## What we are building
 
@@ -31,9 +31,9 @@ Signature features. Protect them in every change:
 
 | Path | What lives there |
 | --- | --- |
-| `server/` | Go module `waveguide`. `cmd/waveguide` is the binary; `internal/` holds `hdhr` (tuner protocol), `live` (relay, ffmpeg, HLS), `dvr` (planning, passes, virtual channels), `guide` (XMLTV, Schedules Direct), `store` (SQLite), `httpapi` (HTTP API, HDHomeRun emulation), `source` (discovery, M3U, folders), `disk`. |
-| `web/` | React 19 + Vite + TypeScript web app. Builds into `server/cmd/waveguide/assets/web`, which is embedded into the binary. |
-| `apple/` | Xcode workspace for the iOS and tvOS apps and the shared Swift packages (`OTAKit`, `OTAUI`). |
+| `server/` | Go module `broadwave`. `cmd/broadwave` is the binary; `internal/` holds `hdhr` (tuner protocol), `live` (relay, ffmpeg, HLS), `dvr` (planning, passes, virtual channels), `guide` (XMLTV, Schedules Direct), `store` (SQLite), `httpapi` (HTTP API, HDHomeRun emulation), `source` (discovery, M3U, folders), `disk`. |
+| `web/` | React 19 + Vite + TypeScript web app. Builds into `server/cmd/broadwave/assets/web`, which is embedded into the binary. |
+| `apple/` | Xcode workspace for the iOS and tvOS apps and the shared Swift packages (`BroadwaveKit`, `BroadwaveUI`). |
 | `design/` | Design tokens (`tokens.json`) shared by the web and Apple apps. |
 | `api/openapi.yaml` | The HTTP contract. Source of truth for generated Swift and TypeScript clients. |
 | `deploy/` | Dockerfile, compose, Unraid template. |
@@ -47,14 +47,14 @@ Run from the repo root unless noted.
 make run        # build web, run server on :8477 with ./data
 make dev        # server with -dev (CORS for Vite); in another shell: cd web && npm run dev
 make test       # go test ./server/... and web typecheck
-make build      # bin/waveguide with the site embedded
+make build      # bin/broadwave with the site embedded
 make docker     # container image
 make apple      # xcodegen + build the iOS and tvOS apps (Xcode 26.1+, tvOS platform installed)
-make apple-test # OTAKit unit tests
+make apple-test # BroadwaveKit unit tests
 make tokens     # regenerate web CSS and Swift theme from design/tokens.json
 ```
 
-Apple apps: `apple/project.yml` is the source of truth (XcodeGen); the `.xcodeproj` is generated and ignored. For simulator testing, launch with `-OTAWatch <channel id>` (debug builds) to start a channel without tapping; deep links are `waveguide://watch/<id>`, `waveguide://guide`, `waveguide://sports`.
+Apple apps: `apple/project.yml` is the source of truth (XcodeGen); the `.xcodeproj` is generated and ignored. For simulator testing, launch with `-BroadwaveWatch <channel id>` (debug builds) to start a channel without tapping; deep links are `broadwave://watch/<id>`, `broadwave://guide`, `broadwave://sports`.
 
 Tools: Go 1.26+, Node 22+, ffmpeg (with ffprobe) on PATH, Xcode 26+ for `apple/`. `go.work` at the root makes `go` commands work from here.
 
@@ -64,13 +64,13 @@ Scripts: `scripts/dev-server.sh` (safe rebuild + restart on :18477 with a copy o
 
 ## Lessons learned (each cost real time; don't relearn them)
 
-- The product was renamed from "OTA Viewer" to **Waveguide** (`docs/brand.md`). The repo folder is still `ota viewer` (quote paths). Old installs keep working: the store adopts `ota-viewer.db`, migration 0004 renames a default server name, and `scripts/deploy-unraid.sh` moves the old Unraid appdata and container. `OTAKit`/`OTAUI` keep their names on purpose.
+- The product is **Broadwave** everywhere (`docs/brand.md`): app, server, bundle IDs, Bonjour, URL scheme, image, repo, skills, and Unraid. Earlier working names were retired on 2026-09-24 with no compatibility shims; don't reintroduce them.
 
-- Live renditions use `-copyts` + CMAF fMP4; MPEG-TS segments made hls.js corrupt its fragment table mid-stream. Segment 0 is withheld. See skill `waveguide-media-pipeline` for the full invariant list.
+- Live renditions use `-copyts` + CMAF fMP4; MPEG-TS segments made hls.js corrupt its fragment table mid-stream. Segment 0 is withheld. See skill `broadwave-media-pipeline` for the full invariant list.
 - VideoToolbox must run with `-a53cc 0` or every segment is undecodable.
 - Sync engines never seek backward in a live buffer: pause for the drift when ahead, seek forward when behind.
 - `index.html` must be served `no-cache`; stale bundles silently invalidated several test runs. Verify loaded script hashes when testing.
-- Restart the dev server with `scripts/dev-server.sh` (`pkill -x`, port wait). `pkill -f otav` kills your own shell.
+- Restart the dev server with `scripts/dev-server.sh` (`pkill -x`, port wait). `pkill -f broadwave-dev` kills your own shell.
 - The free SiliconDust XMLTV feed is 2 days (14 with their DVR subscription), must be refreshed at randomized 20-28 h intervals, and currently lists only 9 of the user's 27 channels.
 - Apple: tvOS has a system `.card` style; screenshots must be written into the workspace and downscaled before the Read tool can open them.
 - Run `make check` before every push and look at CI after it. It runs what CI runs: Go tests, gofmt, go vet, web typecheck and eslint, swiftlint, swiftformat, the API drift check, and the fake-tuner relay smoke. `make test` alone skips lint, and `main` stayed red for four tasks unnoticed.
@@ -80,7 +80,7 @@ Scripts: `scripts/dev-server.sh` (safe rebuild + restart on :18477 with a copy o
 - The Mac reaches Unraid through `utun4`, so Bonjour from TUS is invisible here. Check it on TUS with `avahi-browse`, and connect simulators by address.
 - Deploy to Unraid with `MODE=ghcr`; large uploads over the SSH tunnel drop mid-transfer.
 - CI builds the Docker image and `make check` does not. The image's web stage copies only `web/` and `api/fixtures`, so a web import from anywhere else breaks the release. Run `docker build -f deploy/docker/Dockerfile --target web .` when you add one.
-- Test on `Waveguide-Staging` (TUS :8490, `-staging`, iGPU) before production. ffmpeg 5.1 in the image, fed a file faster than real time with `-copyts` and VAAPI deinterlace, runs away without ever exiting; feed lab samples at real time.
+- Test on `Broadwave-Staging` (TUS :8490, `-staging`, iGPU) before production. ffmpeg 5.1 in the image, fed a file faster than real time with `-copyts` and VAAPI deinterlace, runs away without ever exiting; feed lab samples at real time.
 
 ## Definition of done
 

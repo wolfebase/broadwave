@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"waveguide/internal/psip"
-	"waveguide/internal/store"
+	"broadwave/internal/psip"
+	"broadwave/internal/store"
 )
 
 // ApplyBroadcast fills guide gaps from one mux's PSIP. Listings that overlap

@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# Build Waveguide for linux/amd64 and deploy it to an Unraid server over SSH.
+# Build Broadwave for linux/amd64 and deploy it to an Unraid server over SSH.
 #
 #   UNRAID_HOST=root@192.168.1.2 scripts/deploy-unraid.sh            # build + deploy + recreate
 #   UNRAID_HOST=... MODE=image-only scripts/deploy-unraid.sh           # build image, keep container
 #   UNRAID_HOST=... MODE=ghcr scripts/deploy-unraid.sh                 # pull the public image on the server
 #
 # Layout on the server (matches the user's existing install):
-#   $APPDATA/build/   Dockerfile + waveguide binary (image context)
+#   $APPDATA/build/   Dockerfile + broadwave binary (image context)
 #   $APPDATA/config/  mounted at /config (catalog, live buffers)
 #   $RECORDINGS       mounted at /config/work/recordings
 # The container runs with host networking (tuner discovery + Bonjour) and /dev/dri (VAAPI/QSV).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 : "${UNRAID_HOST:?set UNRAID_HOST, e.g. root@192.168.1.2}"
-APPDATA="${APPDATA:-/mnt/cache/appdata/waveguide}"
+APPDATA="${APPDATA:-/mnt/cache/appdata/broadwave}"
 RECORDINGS="${RECORDINGS:-/mnt/user/media/ota-recordings}"
-NAME="${NAME:-Waveguide}"
-IMAGE="${IMAGE:-waveguide:latest}"
+NAME="${NAME:-Broadwave}"
+IMAGE="${IMAGE:-broadwave:latest}"
 TZ_NAME="${TZ_NAME:-America/Chicago}"
 VERSION="${VERSION:-$(cd "$ROOT" && git describe --tags --always --dirty 2>/dev/null || echo dev)}"
 MODE="${MODE:-full}"
@@ -28,7 +28,7 @@ SSH=(ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=8 -o ConnectTimeout=20
 SCP=(scp -o ServerAliveInterval=15 -o ServerAliveCountMax=8 -o ConnectTimeout=20 -o IPQoS=none)
 
 if [[ "$MODE" == "ghcr" ]]; then
-  IMAGE="${GHCR_IMAGE:-ghcr.io/wolfebase/waveguide:latest}"
+  IMAGE="${GHCR_IMAGE:-ghcr.io/wolfebase/broadwave:latest}"
   echo "==> pulling $IMAGE on $UNRAID_HOST (detached) and recreating $NAME"
   # The pull runs on the server. A marker file is the signal that the new
   # container was started; /health stays up on the old container during the pull.
@@ -47,20 +47,13 @@ fi
 
 echo "==> building web + linux/amd64 binary ($VERSION)"
 (cd "$ROOT/web" && npm run build >/dev/null)
-(cd "$ROOT/server" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=$VERSION" -o "$ROOT/bin/waveguide-linux-amd64" ./cmd/waveguide)
-
-echo "==> adopting a pre-rename install on $UNRAID_HOST (if any)"
-# Before the Waveguide rename the container was OTA-Viewer with appdata in .../ota-viewer.
-# Move the appdata once; the server renames ota-viewer.db to waveguide.db on start.
-OLD_APPDATA="${OLD_APPDATA:-$(dirname "$APPDATA")/ota-viewer}"
-"${SSH[@]}" "$UNRAID_HOST" "if [ -d $OLD_APPDATA ] && [ ! -e $APPDATA ]; then docker stop OTA-Viewer >/dev/null 2>&1 || true; mv $OLD_APPDATA $APPDATA && echo moved $OLD_APPDATA to $APPDATA; fi; \
-  docker rm -f OTA-Viewer >/dev/null 2>&1 && echo removed old container OTA-Viewer; true"
+(cd "$ROOT/server" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=$VERSION" -o "$ROOT/bin/broadwave-linux-amd64" ./cmd/broadwave)
 
 echo "==> backing up catalog on $UNRAID_HOST"
-"${SSH[@]}" "$UNRAID_HOST" "mkdir -p $APPDATA/build $APPDATA/backups && for db in waveguide ota-viewer; do [ -f $APPDATA/config/\$db.db ] && cp $APPDATA/config/\$db.db $APPDATA/backups/\$db-\$(date +%Y%m%d-%H%M%S).db; done; true"
+"${SSH[@]}" "$UNRAID_HOST" "mkdir -p $APPDATA/build $APPDATA/backups && [ -f $APPDATA/config/broadwave.db ] && cp $APPDATA/config/broadwave.db $APPDATA/backups/broadwave-\$(date +%Y%m%d-%H%M%S).db; true"
 
 echo "==> uploading"
-"${SCP[@]}" -q "$ROOT/bin/waveguide-linux-amd64" "$UNRAID_HOST:$APPDATA/build/waveguide"
+"${SCP[@]}" -q "$ROOT/bin/broadwave-linux-amd64" "$UNRAID_HOST:$APPDATA/build/broadwave"
 "${SCP[@]}" -q "$ROOT/deploy/docker/Dockerfile.runtime" "$UNRAID_HOST:$APPDATA/build/Dockerfile"
 
 echo "==> building image on server"

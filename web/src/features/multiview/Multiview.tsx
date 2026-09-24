@@ -41,7 +41,7 @@ export function Multiview() {
   const [plan, setPlan] = useState<MultiviewPlan | null>(null);
   const [planFor, setPlanFor] = useState("");
   const [menu, setMenu] = useState(false);
-  const [hint] = useState(() => localStorage.getItem("waveguide-mv-hint-seen") !== "1");
+  const [hint] = useState(() => localStorage.getItem("broadwave-mv-hint-seen") !== "1");
   const [room] = useState(roomId);
   const chKey = params.get("ch") ?? "";
   const waiting = ids.length > 1 && planFor !== chKey;
@@ -57,7 +57,7 @@ export function Multiview() {
   }, [layout]);
 
   useEffect(() => {
-    if (hint) localStorage.setItem("waveguide-mv-hint-seen", "1");
+    if (hint) localStorage.setItem("broadwave-mv-hint-seen", "1");
   }, [hint]);
 
   useEffect(() => {

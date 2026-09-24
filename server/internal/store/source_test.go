@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"waveguide/internal/hdhr"
+	"broadwave/internal/hdhr"
 )
 
 func TestRefreshKeepsTheChannelID(t *testing.T) {
@@ -132,7 +132,7 @@ func TestGuideKeyKeepsTheChannelWhenTheAddressChanges(t *testing.T) {
 func TestChannelKeepsTheStreamHeaders(t *testing.T) {
 	st := openTestStore(t)
 	dev := hdhr.Device{DeviceID: "src-9", FriendlyName: "Playlist", BaseURL: "source"}
-	row := hdhr.Channel{GuideNumber: "801", GuideName: "News", StreamURL: "http://example/news.ts", UserAgent: "Waveguide", Referrer: "http://example/"}
+	row := hdhr.Channel{GuideNumber: "801", GuideName: "News", StreamURL: "http://example/news.ts", UserAgent: "Broadwave", Referrer: "http://example/"}
 	if err := st.UpsertDevice(context.Background(), dev, []hdhr.Channel{row}); err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func TestChannelKeepsTheStreamHeaders(t *testing.T) {
 		t.Fatalf("%+v %v", channels, err)
 	}
 	got, err := st.SourceChannel(context.Background(), channels[0].ID)
-	if err != nil || got.UserAgent != "Waveguide" || got.Referrer != "http://example/" {
+	if err != nil || got.UserAgent != "Broadwave" || got.Referrer != "http://example/" {
 		t.Fatalf("%+v %v", got, err)
 	}
 }

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 func TestTeamPassMatchesAcrossChannels(t *testing.T) {

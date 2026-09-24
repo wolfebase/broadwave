@@ -5,7 +5,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 ## Resume here
 - Current task: **U1** (staging script + v0.5.1 hotfix for 720p at 119.88 fps), then Phase PB.
 - P2 was committed for the previous session, which died on a Cursor HTTP/2 stream error at 11:13 with the work uncommitted; `make check` was green.
-- Staging: `Waveguide-Staging` on `http://192.168.1.2:8490` (iGPU, `-staging`). Production `Waveguide` on :8477 is still v0.5.0. Next recording is Jeopardy at 20:00 UTC.
+- Staging: `Broadwave-Staging` on `http://192.168.1.2:8490` (iGPU, `-staging`). Production `Broadwave` on :8477 is still v0.5.0. Next recording is Jeopardy at 20:00 UTC.
 - A7 stays blocked on an Apple ID login (see BLOCKERS).
 
 ## Review 2 (2026-09-24): read MASTER_PLAN section 0.1a before your next task
@@ -16,7 +16,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 
 ## Review 3 (2026-09-24): read MASTER_PLAN section 0.1b; new phases come right after R8
 - Order after P2: R8 → **U1** (staging script + v0.5.1 hotfix) → **PB9, PB2, PB3, PB5, PB6, PB4, PB7, PB8** → C7b → S8b → **HOME1-3** → **MV1-6** → **HW1-5** → P3.
-- Test every change on `Waveguide-Staging` (`:8490`, iGPU, `-staging`) like a person: Chrome via Playwright `--browser=chrome` at three sizes, and the "WG Staging iPhone" / "WG Staging TV" simulators. Production `Waveguide` is only touched in phase deploys.
+- Test every change on `Broadwave-Staging` (`:8490`, iGPU, `-staging`) like a person: Chrome via Playwright `--browser=chrome` at three sizes, and the "WG Staging iPhone" / "WG Staging TV" simulators. Production `Broadwave` is only touched in phase deploys.
 - Production v0.5.0 sends 720p stations at 1080p 119.88 fps; 8dac5dd fixes it (measured 1280x720 59.94 on staging). U1 ships it as v0.5.1.
 
 ## Phase U — Staging and hotfix
@@ -80,8 +80,8 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] Phase S deploy: tag v0.4.0, Unraid smoke, two-screen sync (commit 6442a79, log in UNRAID_LOG)
 
 ## Phase P — Server and Apple apps, working as one
-- [x] P1 Generated Swift and TypeScript clients from OpenAPI; drift check in CI. OTAKit models come from `api/openapi.yaml`. `go run ./server/cmd/apigen -check` fails when the generated files drift.
-- [x] P2 Golden responses recorded from the fake tuner at a fixed clock: 28 fixtures in `api/fixtures` (25 of 49 paths plus the ws hello, clock, and sync events). `TestContractFixtures` fails on drift (`CONTRACT_UPDATE=1` re-records). OTAKit `swift test` and `web/src/api/contract.ts` decode them, and `make check` runs both.
+- [x] P1 Generated Swift and TypeScript clients from OpenAPI; drift check in CI. BroadwaveKit models come from `api/openapi.yaml`. `go run ./server/cmd/apigen -check` fails when the generated files drift.
+- [x] P2 Golden responses recorded from the fake tuner at a fixed clock: 28 fixtures in `api/fixtures` (25 of 49 paths plus the ws hello, clock, and sync events). `TestContractFixtures` fails on drift (`CONTRACT_UPDATE=1` re-records). BroadwaveKit `swift test` and `web/src/api/contract.ts` decode them, and `make check` runs both.
 - [ ] P2b Golden responses for the other 24 paths (watch session, sources and discovery results, scan status, signals check, frames, Xtream/free sources) and every ws event kind (`sources.found`, `live.changed`, `activity`)
 - [ ] P3 apiVersion/features negotiation and minimum app version
 - [ ] P4 Bonjour + UDP fallback discovery, remembered servers, follow address changes, permission explainer
@@ -105,7 +105,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] A3 Deployed to Unraid: host network, VAAPI, catalog migrated, 6 ms two-tab sync, iPhone sim playing (see UNRAID_LOG)
 - [x] A4 Hygiene: unused copy removed, web on /api/v1 only, eslint and swiftlint clean in CI (commit ca94523)
 - [x] A5 Restart kills leftover ffmpeg, fails a cut-off recording, resumes a show still on, and SIGTERM releases the tuner
-- [x] A6 Public repo wolfebase/waveguide (twolfekc does not exist; see BLOCKERS), CI green, ghcr.io/wolfebase/waveguide:0.1.0 public for amd64 and arm64 (commit 5c9308b, tag v0.1.0)
+- [x] A6 Public repo wolfebase/broadwave (twolfekc does not exist; see BLOCKERS), CI green, ghcr.io/wolfebase/broadwave:0.1.0 public for amd64 and arm64 (commit 5c9308b, tag v0.1.0)
 - [ ] A7 Apple signing done (team D4MC63SS36, bundle IDs, profiles, `scripts/testflight.sh`, iOS archive signs). Remaining: app records, App Group on profiles, iOS + tvOS uploads. Blocked on one Apple ID login (see BLOCKERS); retry at the start of every phase
 
 ## Phase B — Multiview
@@ -202,7 +202,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] J4 Accessibility audit
 - [ ] J5 Light mode + accent picker
 - [ ] J6 Localization readiness
-- [ ] J7 Brand: name decided (Waveguide, renamed everywhere); logo, app icon, marketing site to do
+- [ ] J7 Brand: name decided (Broadwave, renamed everywhere); logo, app icon, marketing site to do
 
 ## Phase K — Quality
 - [x] K1 Fake HDHomeRun + Go integration tests + relay smoke in CI. `FAKE=1 scripts/relay-smoke.sh` tunes the fake and checks renditions, program date-times, and export. The Go test covers a shared frequency, a busy tuner, a recording that extends and restarts, and a scan that yields. (commit 13274ea)

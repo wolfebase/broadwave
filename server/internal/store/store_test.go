@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"waveguide/internal/hdhr"
+	"broadwave/internal/hdhr"
 )
 
 func TestLineupKeepsLocalEditsOnRefresh(t *testing.T) {

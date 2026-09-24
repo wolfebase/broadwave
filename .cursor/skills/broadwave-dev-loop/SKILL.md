@@ -1,29 +1,29 @@
 ---
-name: waveguide-dev-loop
-description: Build, run, restart, and verify the Waveguide server and web app against the real HDHomeRun, including relay smoke tests, browser checks at three layouts, and measuring Whole-Home Sync between two screens. Use when working in the Waveguide repo on server or web code, when starting/restarting the dev server, when verifying UI changes, or when asked to test playback or sync.
+name: broadwave-dev-loop
+description: Build, run, restart, and verify the Broadwave server and web app against the real HDHomeRun, including relay smoke tests, browser checks at three layouts, and measuring Whole-Home Sync between two screens. Use when working in the Broadwave repo on server or web code, when starting/restarting the dev server, when verifying UI changes, or when asked to test playback or sync.
 ---
 
-# Waveguide dev loop
+# Broadwave dev loop
 
-Repo: `/Users/tyler/Projects/active/ota viewer` (note the space; always quote paths). Read `AGENTS.md` and `docs/plan/MASTER_PLAN.md` first.
+Repo: `/Users/tyler/Projects/active/broadwave` (note the space; always quote paths). Read `AGENTS.md` and `docs/plan/MASTER_PLAN.md` first.
 
 ## Start / restart the dev server
 
 Run in the background (Shell tool `block_until_ms: 0`), then wait for "listening" in the log:
 
 ```bash
-scripts/dev-server.sh                                  # real catalog copy at /tmp/otav-live, :18477
+scripts/dev-server.sh                                  # real catalog copy at /tmp/broadwave-live, :18477
 SKIP_WEB=1 scripts/dev-server.sh                       # server-only change
-FRESH=1 CONFIG=/tmp/otav-fresh scripts/dev-server.sh   # empty catalog (setup wizard)
+FRESH=1 CONFIG=/tmp/broadwave-fresh scripts/dev-server.sh   # empty catalog (setup wizard)
 ```
 
 Log: `$CONFIG/stderr.log`. Startup takes ~5-10 s (encoder probes), discovery ~4 s, guide ~1 s.
 
 Pitfalls that cost hours before:
-- `pkill -f otav` kills the calling shell. Use `pkill -9 -x otav` (the script does).
+- `pkill -f broadwave-dev` kills the calling shell. Use `pkill -9 -x broadwave-dev` (the script does).
 - A killed server can hold :18477 briefly; the script waits for the port.
 - Shell commands to 127.0.0.1 need `required_permissions: ["all"]` (the sandbox blocks localhost and ~/go writes).
-- The browser caches old bundles from before `index.html` became `no-cache`. In a test tab run CDP `Network.setCacheDisabled {cacheDisabled:true}` and check loaded scripts: `performance.getEntriesByType('resource').filter(e=>e.name.endsWith('.js'))` must match `server/cmd/waveguide/assets/web/assets/index-*.js`.
+- The browser caches old bundles from before `index.html` became `no-cache`. In a test tab run CDP `Network.setCacheDisabled {cacheDisabled:true}` and check loaded scripts: `performance.getEntriesByType('resource').filter(e=>e.name.endsWith('.js'))` must match `server/cmd/broadwave/assets/web/assets/index-*.js`.
 - Navigating before the server listens leaves the tab on `chrome-error://`; open a new tab (`newTab: true`) after the server is up.
 - Autoplay with sound is blocked in automation tabs: `v.muted=true; await v.play()` before measuring.
 
@@ -33,11 +33,11 @@ Pitfalls that cost hours before:
 make check                 # everything CI runs: tests + eslint + swiftlint + swiftformat
 make test                  # go test ./server/... + web typecheck (no lint)
 scripts/relay-smoke.sh     # no-tuner end-to-end relay: renditions, CMAF, PDT, export (12 checks)
-cd apple/Packages/OTAKit && swift test
+cd apple/Packages/BroadwaveKit && swift test
 make apple                 # iOS + tvOS builds
 ```
 
-Any change under `server/internal/live`, `web/src/lib/sync.ts`, or `OTAKit/SyncEngine.swift` must also pass the two-screen sync measurement below.
+Any change under `server/internal/live`, `web/src/lib/sync.ts`, or `BroadwaveKit/SyncEngine.swift` must also pass the two-screen sync measurement below.
 
 ## Real tuner facts
 
@@ -61,7 +61,7 @@ Open two tabs on `/watch?channel=1`, mute+play both, wait ~20 s, then in each ta
 
 ## Shared tuner
 
-Unraid (`http://192.168.1.2:8477`) is the household DVR on the same DUO. Before a test that tunes, check `curl -s http://192.168.1.2:8477/api/v1/diagnostics` and `/api/v1/schedule`; if a recording is on or due within 30 minutes, use one tuner at most or the relay smoke test. Stop your dev servers when done (`pkill -9 -x otav`).
+Unraid (`http://192.168.1.2:8477`) is the household DVR on the same DUO. Before a test that tunes, check `curl -s http://192.168.1.2:8477/api/v1/diagnostics` and `/api/v1/schedule`; if a recording is on or due within 30 minutes, use one tuner at most or the relay smoke test. Stop your dev servers when done (`pkill -9 -x broadwave-dev`).
 
 ## CI (`.github/workflows/ci.yml`)
 
@@ -76,4 +76,4 @@ Run `make check` before every push, then `gh run list -L 3` after it; fix red be
 
 ## Commit
 
-One commit per task, including its `docs/plan/PROGRESS.md` tick (no separate tick commits). What + why. Never commit `data/`, `server/cmd/waveguide/assets/web/`, or `apple/*.xcodeproj`.
+One commit per task, including its `docs/plan/PROGRESS.md` tick (no separate tick commits). What + why. Never commit `data/`, `server/cmd/broadwave/assets/web/`, or `apple/*.xcodeproj`.

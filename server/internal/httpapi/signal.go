@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"waveguide/internal/hdhr"
+	"broadwave/internal/hdhr"
 )
 
 func (s *Server) signals(w http.ResponseWriter, r *http.Request) {

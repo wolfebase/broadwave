@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 func TestNewOnlySkipsReruns(t *testing.T) {

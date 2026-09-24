@@ -2,7 +2,7 @@ export type MvLayout = "2up" | "1+2" | "1+3" | "quad" | "pip";
 
 export type SavedSet = { name: string; channels: number[] };
 
-const KEY = "waveguide-multiview";
+const KEY = "broadwave-multiview";
 
 type Store = { layout: MvLayout; sets: SavedSet[] };
 
@@ -17,7 +17,7 @@ function read(): Store {
 
 function write(next: Store) {
   localStorage.setItem(KEY, JSON.stringify(next));
-  localStorage.setItem("waveguide-mv-layout", next.layout);
+  localStorage.setItem("broadwave-mv-layout", next.layout);
 }
 
 export function isLayout(value: unknown): value is MvLayout {
@@ -50,10 +50,10 @@ export function slotsFor(layout: MvLayout) {
 }
 
 export function roomId() {
-  let id = sessionStorage.getItem("waveguide-mv-room");
+  let id = sessionStorage.getItem("broadwave-mv-room");
   if (!id) {
     id = Math.random().toString(36).slice(2, 10);
-    sessionStorage.setItem("waveguide-mv-room", id);
+    sessionStorage.setItem("broadwave-mv-room", id);
   }
   return `multiview:${id}`;
 }

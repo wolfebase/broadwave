@@ -18,17 +18,17 @@ import (
 	"syscall"
 	"time"
 
-	"waveguide/internal/discovery"
-	"waveguide/internal/doctor"
-	"waveguide/internal/dvr"
-	"waveguide/internal/guide"
-	"waveguide/internal/httpapi"
-	"waveguide/internal/live"
-	"waveguide/internal/psip"
-	"waveguide/internal/realtime"
-	"waveguide/internal/source"
-	"waveguide/internal/sports"
-	"waveguide/internal/store"
+	"broadwave/internal/discovery"
+	"broadwave/internal/doctor"
+	"broadwave/internal/dvr"
+	"broadwave/internal/guide"
+	"broadwave/internal/httpapi"
+	"broadwave/internal/live"
+	"broadwave/internal/psip"
+	"broadwave/internal/realtime"
+	"broadwave/internal/source"
+	"broadwave/internal/sports"
+	"broadwave/internal/store"
 )
 
 //go:embed all:assets
@@ -197,7 +197,7 @@ func main() {
 			}
 		}
 	}
-	log.Printf("Waveguide listening on %s", *addr)
+	log.Printf("Broadwave listening on %s", *addr)
 	server := &http.Server{
 		Addr:              *addr,
 		Handler:           handler,

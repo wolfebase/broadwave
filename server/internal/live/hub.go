@@ -17,10 +17,10 @@ import (
 	"sync"
 	"time"
 
-	"waveguide/internal/disk"
-	"waveguide/internal/hdhr"
-	"waveguide/internal/psip"
-	"waveguide/internal/store"
+	"broadwave/internal/disk"
+	"broadwave/internal/hdhr"
+	"broadwave/internal/psip"
+	"broadwave/internal/store"
 )
 
 type Tuner struct {

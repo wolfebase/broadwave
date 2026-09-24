@@ -1,5 +1,5 @@
-import OTAKit
-import OTAUI
+import BroadwaveKit
+import BroadwaveUI
 import SwiftUI
 
 /// Which channel is playing, and whether the player is full screen or docked.
@@ -58,7 +58,7 @@ struct RootView: View {
         .task(id: store.connected) {
             guard store.connected else { return }
             #if DEBUG
-                if UserDefaults.standard.string(forKey: "OTASetup") != nil {
+                if UserDefaults.standard.string(forKey: "BroadwaveSetup") != nil {
                     showSetup = true
                     return
                 }
@@ -70,7 +70,7 @@ struct RootView: View {
         .onOpenURL(perform: open)
         #if DEBUG
             .task {
-                if let name = UserDefaults.standard.string(forKey: "OTATab") {
+                if let name = UserDefaults.standard.string(forKey: "BroadwaveTab") {
                     switch name {
                     case "guide": tab = .guide
                     case "search": tab = .search
@@ -80,8 +80,8 @@ struct RootView: View {
                     default: tab = .home
                     }
                 }
-                // Simulator testing: -OTAWatch <channel id>, or -OTAMultiview 1,3.
-                if let raw = UserDefaults.standard.string(forKey: "OTAMultiview"), !raw.isEmpty {
+                // Simulator testing: -BroadwaveWatch <channel id>, or -BroadwaveMultiview 1,3.
+                if let raw = UserDefaults.standard.string(forKey: "BroadwaveMultiview"), !raw.isEmpty {
                     if store.channels.isEmpty {
                         await store.refresh()
                     }
@@ -94,17 +94,17 @@ struct RootView: View {
                     }
                     return
                 }
-                let id = UserDefaults.standard.integer(forKey: "OTAWatch")
+                let id = UserDefaults.standard.integer(forKey: "BroadwaveWatch")
                 if id > 0 {
-                    open(URL(string: "waveguide://watch/\(id)")!)
+                    open(URL(string: "broadwave://watch/\(id)")!)
                 }
             }
         #endif
     }
 
-    /// waveguide://watch/<channel id>, waveguide://guide, waveguide://sports — for widgets, Top Shelf, and Siri.
+    /// broadwave://watch/<channel id>, broadwave://guide, broadwave://sports — for widgets, Top Shelf, and Siri.
     private func open(_ url: URL) {
-        guard url.scheme == "waveguide" else { return }
+        guard url.scheme == "broadwave" else { return }
         switch url.host() {
         case "connect":
             let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems

@@ -1,7 +1,7 @@
-import OTAKit
+import BroadwaveKit
 import SwiftUI
 
-public extension OTAKit.Category {
+public extension BroadwaveKit.Category {
     var color: Color {
         switch self {
         case .sports: Tokens.Category.sports

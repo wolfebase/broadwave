@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"waveguide/internal/store"
+	"broadwave/internal/store"
 )
 
 var episodeFile = regexp.MustCompile(`(?i)[sS](\d{1,2})[eE](\d{1,3})`)
