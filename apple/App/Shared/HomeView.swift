@@ -29,7 +29,7 @@ struct HomeView: View {
                 Shelf("On now") {
                     ForEach(live, id: \.0.id) { channel, airing in
                         Button { nowPlaying.play(channel) } label: {
-                            NowCard(channel: channel, airing: airing, now: store.now)
+                            NowCard(channel: channel, airing: airing, now: store.now, art: store.artURL(airing, width: 640))
                         }
                         .cardButton()
                         .contextMenu { ChannelActions(channel: channel, airing: airing) }
@@ -159,14 +159,21 @@ struct Hero: View {
     var body: some View {
         let kind = airing?.kind ?? .other
         ZStack(alignment: .bottomLeading) {
+            if let airing, let art = store.artURL(airing, width: 1600) {
+                // The art fills the hero's space; its own size must never widen the card.
+                Color.clear.overlay {
+                    HeroArt(url: art, layout: ArtLayout.choose(width: airing.imageWidth ?? 0, height: airing.imageHeight ?? 0, slot: 1400))
+                }
+                .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
+            }
             RoundedRectangle(cornerRadius: Tokens.Radius.xl)
-                .fill(Tokens.ColorToken.surface1)
+                .fill(airing?.imageUrl == nil ? Tokens.ColorToken.surface1 : .clear)
                 .overlay(
                     RadialGradient(colors: [kind.color.opacity(0.6), .clear], center: .topTrailing, startRadius: 0, endRadius: 520)
                         .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
                 )
                 .overlay(alignment: .topTrailing) {
-                    Text(channel.displayNumber)
+                    Text(airing?.imageUrl == nil ? channel.displayNumber : "")
                         .font(.system(size: 220, weight: .black))
                         .monospacedDigit()
                         .foregroundStyle(.white.opacity(0.06))
@@ -208,6 +215,35 @@ struct Hero: View {
         }
         .frame(minHeight: 380)
         .padding(.horizontal)
+    }
+}
+
+/// Program art behind the hero. A small or portrait picture is shown at its own size over a
+/// blurred copy of itself, never stretched.
+struct HeroArt: View {
+    let url: URL
+    let layout: String
+
+    var body: some View {
+        AsyncImage(url: url) { image in
+            ZStack(alignment: .trailing) {
+                image.resizable().aspectRatio(contentMode: .fill)
+                    .blur(radius: layout == "bleed" ? 0 : 40)
+                    .opacity(layout == "bleed" ? 1 : 0.6)
+                if layout != "bleed" {
+                    image.resizable().aspectRatio(contentMode: .fit)
+                        .clipShape(.rect(cornerRadius: Tokens.Radius.lg))
+                        .padding(28)
+                }
+            }
+        } placeholder: {
+            Color.clear
+        }
+        .overlay(
+            LinearGradient(colors: [.black.opacity(0.92), .black.opacity(0.6), .black.opacity(0.1)], startPoint: .bottomLeading, endPoint: .topTrailing)
+        )
+        .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
+        .accessibilityHidden(true)
     }
 }
 

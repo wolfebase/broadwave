@@ -94,16 +94,28 @@ public struct NowCard: View {
     let channel: Channel
     let airing: Airing?
     let now: Date
+    let art: URL?
 
-    public init(channel: Channel, airing: Airing?, now: Date) {
+    public init(channel: Channel, airing: Airing?, now: Date, art: URL? = nil) {
         self.channel = channel
         self.airing = airing
         self.now = now
+        self.art = art
     }
 
     public var body: some View {
         let kind = airing?.kind ?? .other
         VStack(alignment: .leading, spacing: 10) {
+            if let art {
+                AsyncImage(url: art) { image in
+                    image.resizable().aspectRatio(16 / 9, contentMode: .fill)
+                } placeholder: {
+                    Rectangle().fill(Tokens.ColorToken.surface2)
+                }
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .clipShape(.rect(cornerRadius: Tokens.Radius.md))
+                .accessibilityHidden(true)
+            }
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(channel.displayNumber).font(.title2.weight(.heavy)).monospacedDigit()
                 Text(channel.displayName).font(.footnote.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)

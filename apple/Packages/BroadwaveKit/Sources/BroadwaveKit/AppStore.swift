@@ -147,6 +147,12 @@ public final class AppStore {
     }
 
     /// What most likely deserves the big spot: sports first, then favorites.
+    /// The cached program picture for an airing, or nil when the guide has none.
+    public func artURL(_ airing: Airing, width: Int) -> URL? {
+        guard airing.imageUrl != nil else { return nil }
+        return api?.artURL(kind: "airing", id: airing.id, width: width)
+    }
+
     public func featured() -> (Channel, Airing?)? {
         struct Pick {
             var channel: Channel
