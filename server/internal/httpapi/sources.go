@@ -199,7 +199,9 @@ func (s *Server) installPlaylist(w http.ResponseWriter, ctx context.Context, kin
 		writeError(w, err)
 		return
 	}
-	s.attachXMLTV(ctx, item.ID, guideURL)
+	if err := s.attachXMLTV(ctx, item.ID, guideURL); err != nil {
+		_ = s.Store.AddEvent(ctx, "source", fmt.Sprintf("The guide for %s did not load. %v", item.Name, err))
+	}
 	_ = s.Store.RememberPlaylist(ctx, item.ID, groups, start, time.Now().Add(24*time.Hour))
 	if len(entries) > 0 {
 		if format := source.ProbeFormat(ctx, entries[0].URL); format != "" {
@@ -276,7 +278,9 @@ func (s *Server) freeSources(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	s.attachXMLTV(ctx, item.ID, feed.Guide)
+	if err := s.attachXMLTV(ctx, item.ID, feed.Guide); err != nil {
+		_ = s.Store.AddEvent(ctx, "source", fmt.Sprintf("The guide for %s did not load. %v", item.Name, err))
+	}
 	_ = s.Store.RememberPlaylist(ctx, item.ID, source.FreeGroup, 0, time.Now().Add(24*time.Hour))
 	if format := source.ProbeFormat(ctx, kept[0].URL); format != "" {
 		_ = s.Store.SetStreamFormat(ctx, item.ID, format)
@@ -328,7 +332,9 @@ func (s *Server) RefreshSources(ctx context.Context, now time.Time) (int, error)
 			s.noteSourceDown(ctx, item, now, err)
 			continue
 		}
-		s.attachXMLTV(ctx, item.ID, item.XMLTV)
+		if err := s.attachXMLTV(ctx, item.ID, s.Store.FetchURL(ctx, item.ID, item.XMLTV)); err != nil {
+			_ = s.Store.AddEvent(ctx, "source", fmt.Sprintf("The guide for %s did not load. %v", item.Name, err))
+		}
 		if item.Health != "" {
 			_ = s.Store.AddEvent(ctx, "source", item.Name+" is back.")
 		}
@@ -361,18 +367,18 @@ func (s *Server) listSources(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"sources": list})
 }
 
-func (s *Server) attachXMLTV(ctx context.Context, sourceID int64, rawURL string) {
+func (s *Server) attachXMLTV(ctx context.Context, sourceID int64, rawURL string) error {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
-		return
+		return nil
 	}
 	body, err := source.FetchText(ctx, rawURL)
 	if err != nil {
-		return
+		return err
 	}
 	channels, err := s.Store.Channels(ctx, false)
 	if err != nil {
-		return
+		return err
 	}
 	want := fmt.Sprintf("src-%d", sourceID)
 	var mine []store.Channel
@@ -385,11 +391,12 @@ func (s *Server) attachXMLTV(ctx context.Context, sourceID int64, rawURL string)
 	}
 	rows, art, err := guide.Parse(body, mine)
 	if err != nil {
-		return
+		return err
 	}
-	_ = s.Store.SetChannelArt(ctx, art)
-	_ = s.Store.ReplaceAiringsFor(ctx, ids, tagGuideSource(rows, "playlist"))
-	_ = sourceID
+	if err := s.Store.SetChannelArt(ctx, art); err != nil {
+		return err
+	}
+	return s.Store.ReplaceAiringsFor(ctx, ids, tagGuideSource(rows, "playlist"))
 }
 
 func (s *Server) setWatched(w http.ResponseWriter, r *http.Request) {
