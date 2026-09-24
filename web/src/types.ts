@@ -89,6 +89,7 @@ export type Airing = {
   rating?: string;
   cast?: string;
   gameId?: string;
+  guideSource?: string;
   start: string;
   end: string;
 };

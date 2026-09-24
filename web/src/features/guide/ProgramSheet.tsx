@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { navigate } from "../../app/router";
-import { categoryLabel, categoryOf, isRecording, minutesLeft, progress, recordingKeys, spanLabel, dayLabel } from "../../lib/guide";
+import { categoryLabel, categoryOf, guideSourceLine, isRecording, minutesLeft, progress, recordingKeys, spanLabel, dayLabel } from "../../lib/guide";
 import type { Airing, Channel } from "../../types";
 import { CloseIcon, PlayIcon, RecordIcon, StarIcon } from "../../ui/icons";
 import { ArtFrame } from "../../ui/ArtFrame";
@@ -69,6 +69,7 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
           {airing?.originalAir ? <p className="ps-sub">First aired {airing.originalAir}</p> : null}
           {airing?.cast ? <p className="ps-sub">{airing.cast}</p> : null}
           {airing?.description ? <p className="ps-desc">{airing.description}</p> : null}
+          {guideSourceLine(airing?.guideSource) ? <p className="ps-sub">{guideSourceLine(airing?.guideSource)}</p> : null}
           <div className="ps-actions">
             {onNow ? (
               <button type="button" className="btn primary" onClick={() => onWatch(channel)}>

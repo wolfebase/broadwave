@@ -74,7 +74,7 @@ function guideWindow(now = Date.now()) {
   return {
     from: new Date(now - 30 * 60_000).toISOString(),
     to: new Date(now + 4 * 60 * 60_000).toISOString(),
-    restTo: new Date(now + 48 * 60 * 60_000).toISOString(),
+    restTo: new Date(now + 14 * 24 * 60 * 60_000).toISOString(),
   };
 }
 
