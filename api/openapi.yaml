@@ -1245,6 +1245,7 @@ components:
         tunerCount: { type: integer }
         priority: { type: integer }
         lastSeen: { type: string }
+        note: { type: string }
     Source:
       type: object
       required: [id, kind, name, enabled]
@@ -1324,6 +1325,8 @@ components:
         cast: { type: string }
         gameId: { type: string, description: "Scoreboard game this listing is. Empty when it is not a matched game." }
         guideSource: { type: string, description: "Where this listing came from: silicondust, schedules-direct, xmltv, playlist, or broadcast." }
+        guideNumber: { type: string }
+        channelName: { type: string }
         start: { type: string, format: date-time }
         end: { type: string, format: date-time }
     Game:
@@ -1401,6 +1404,7 @@ components:
     Caps:
       type: object
       description: What the client can decode and display.
+      required: [platform, video, audio]
       properties:
         platform: { type: string, enum: [tvos, ios, ipados, macos, visionos, web] }
         video:
@@ -1516,6 +1520,7 @@ components:
         end: { type: number }
     Pass:
       type: object
+      required: [id, title]
       properties:
         id: { type: integer, format: int64 }
         title: { type: string }
@@ -1616,3 +1621,11 @@ components:
         lastGuidePull: { type: string, format: date-time, description: "When listings last loaded. Set by the server." }
         nextGuidePull: { type: string, format: date-time, description: "When the next automatic listing refresh is due. Set by the server." }
         lastManualGuidePull: { type: string, format: date-time, description: "When listings were last reloaded by hand. Set by the server." }
+        hideScores: { type: string, enum: ["0", "1"] }
+        sdUser: { type: string }
+        sdPassword: { type: string }
+        sdLineup: { type: string }
+        sdPasswordSet: { type: string, enum: ["0", "1"] }
+        guideUrl: { type: string }
+        tmdbKey: { type: string }
+        tmdbKeySet: { type: string, enum: ["0", "1"] }
