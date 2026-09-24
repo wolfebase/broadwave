@@ -1,6 +1,7 @@
 package live
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -48,5 +49,23 @@ func TestFrameArgsSampleTheOpenMux(t *testing.T) {
 	}
 	if !strings.Contains(text, "/work/frames/4.jpg.part") || !strings.Contains(text, "/work/frames/5-1280.jpg.part") {
 		t.Fatalf("paths = %s", text)
+	}
+}
+
+func TestQuietGrabReturns(t *testing.T) {
+	h, m := testHub(t)
+	h.FFmpeg = "/bin/sleep"
+	addTestFeed(h, m, 4, "4.1")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	done := make(chan struct{})
+	go func() {
+		_ = h.grabFrames(ctx, m)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a grab on a quiet mux should stop")
 	}
 }

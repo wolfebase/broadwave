@@ -48,6 +48,30 @@ func TestFollowTeamRoute(t *testing.T) {
 	}
 }
 
+func TestHidingAScoreLeavesTheCacheAlone(t *testing.T) {
+	st := testStore(t)
+	if err := st.PutSettings(t.Context(), map[string]string{"hideScores": "1"}); err != nil {
+		t.Fatal(err)
+	}
+	cache := sports.NewCache(stubSports{})
+	day := time.Now()
+	h := (&Server{Store: st, Sports: cache}).Handler()
+	res := get(t, h, "/api/v1/sports/scoreboard?league=nfl")
+	if strings.Contains(res.Body.String(), `"score":"27"`) {
+		t.Fatalf("hidden response still has a score: %s", res.Body.String())
+	}
+	if err := st.PutSettings(t.Context(), map[string]string{"hideScores": "0"}); err != nil {
+		t.Fatal(err)
+	}
+	games, err := cache.Scoreboard(t.Context(), "nfl", day)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(games) != 1 || len(games[0].Teams) == 0 || games[0].Teams[0].Score != "27" {
+		t.Fatalf("cache lost the score: %+v", games)
+	}
+}
+
 func TestScoreboardReturnsGames(t *testing.T) {
 	h := (&Server{Store: testStore(t), Sports: stubSports{}}).Handler()
 	res := get(t, h, "/api/v1/sports/scoreboard?league=nfl")
