@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 — 2026-09-23
+
+### Fixed
+
+- A preview still waits long enough for the next keyframe, so a tuned channel actually gets one.
+
 ## 0.3.0 — 2026-09-23
 
 The guide is there when you open the app, artwork stays sharp, and a channel that is already on can show a still.
