@@ -15,6 +15,14 @@ Template: `/boot/config/plugins/dockerMan/templates-user/my-OTA-Viewer.xml`.
 ## Entries
 <!-- Append: date, commit, what was deployed, checks run, results, issues. -->
 
+## 2026-09-23 22:05 CDT — Phase R deploy v0.3.3
+
+- Image `ghcr.io/wolfebase/waveguide:0.3.3` (commit `58793cf`). Container `Waveguide`, host network, `/dev/dri`. `/api/v1/server` reports `version: v0.3.3`, encoder `h264_vaapi`. CI and the release build for that commit are green.
+- `v0.3.0` killed preview grabs before a keyframe. `v0.3.1` waits 4 seconds. `v0.3.2` names the JPEG format, because ffmpeg will not write a `.jpg.part` file. On `v0.3.2`, channel 4.1 wrote `1.jpg` (21,091 bytes) and `1-1280.jpg` (74,824 bytes). Both frame URLs returned 200. The grab used about 6% of one core for under 2 seconds, which is about 0.2% of one core over the minute. Under the 3% budget.
+- `v0.3.2` left the live playlist as a 0-byte `init.mp4`. The same encode against a saved mux wrote segments, so the rendition was missing the start of the live stream. `v0.3.3` keeps a few seconds of that stream.
+- On `v0.3.3`, channel 4.1 (one tuner, 593 MHz, signal 100) produced `init.mp4` and segments. `GET /media/live/1/1080.aac2.broadcast/index.m3u8` returned 200 with program date times. Two browser tabs both reported sync offset `-4464` (0 ms apart) and the pill "2 screens". Drift differed by 1 ms.
+- Tuners were free before the checks and after the idle release. No recording was in progress. Next Jeopardy is 20:00 UTC.
+
 ## 2026-09-23 14:55 CDT — R2 deploy v0.2.0
 
 - Image `ghcr.io/wolfebase/waveguide:0.2.0` (tag `v0.2.0`, commit `83c8904`), pulled on TUS with `MODE=ghcr`. Container `Waveguide`, host network, `/dev/dri`, `TZ=America/Chicago`. `/api/v1/server` reports `version: v0.2.0`, encoder `h264_vaapi`.
