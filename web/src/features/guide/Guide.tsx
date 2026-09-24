@@ -7,6 +7,7 @@ import {
   airingAt,
   categoryLabel,
   categoryOf,
+  emptyGuideLabel,
   isRecording,
   nextAfter,
   progress,
@@ -79,7 +80,7 @@ export function Guide() {
       const last = list[list.length - 1];
       if (last) latest = Math.max(latest, Date.parse(last.end));
     }
-    return Math.min(48, Math.max(24, Math.ceil((latest - origin) / (60 * MIN))));
+    return Math.min(14 * 24, Math.max(6, Math.ceil((latest - origin) / (60 * MIN))));
   }, [index, origin]);
   const end = origin + hours * 60 * MIN;
   const width = hours * 60 * pxPerMin;
@@ -285,7 +286,7 @@ export function Guide() {
                   <span className="onnow-body">
                     <span className="onnow-title">
                       {rec ? <RecDot scheduled={rec === "scheduled"} /> : null}
-                      {a?.title ?? "No listing"}
+                      {a?.title ?? emptyGuideLabel(index.get(c.id) ?? [], now)}
                     </span>
                     <Progress value={progress(a, now)} category={categoryOf(a)} />
                     {n ? (
@@ -377,7 +378,12 @@ export function Guide() {
                 {list.length === 0 ? (
                   <div className="guide-cell empty" style={{ left: channelW + view.left + 4, width: Math.max(200, view.width - channelW - 8) }}>
                     <LiveFrame id={c.id} className="cell-frame" />
-                    <span className="cell-title">No listings</span>
+                    <span className="cell-title">{emptyGuideLabel(index.get(c.id) ?? [], leftT)}</span>
+                  </div>
+                ) : null}
+                {(index.get(c.id) ?? []).length > 0 && Date.parse((index.get(c.id) ?? []).at(-1)!.end) < end - 60_000 ? (
+                  <div className="guide-cell empty" style={{ left: channelW + ((Math.max(origin, Date.parse((index.get(c.id) ?? []).at(-1)!.end)) - origin) / MIN) * pxPerMin + 4, width: 280 }}>
+                    <span className="cell-title">{emptyGuideLabel(index.get(c.id) ?? [], end)}</span>
                   </div>
                 ) : null}
                 {list.map((a) => {

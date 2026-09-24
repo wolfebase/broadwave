@@ -66,6 +66,7 @@ public struct Airing: Codable, Sendable, Hashable, Identifiable {
     public var rating: String?
     public var cast: String?
     public var gameId: String?
+    public var guideSource: String?
     public var guideNumber: String?
     public var channelName: String?
     public var start: Date

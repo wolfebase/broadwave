@@ -94,7 +94,7 @@ public final class AppStore {
             if let id = server?.id {
                 CatalogCache.save(CatalogSnapshot(channels: self.channels, airings: window, recordings: self.recordings), serverID: id)
             }
-            if let rest = try? await api.airings(from: moment.addingTimeInterval(4 * 3600), to: moment.addingTimeInterval(48 * 3600)) {
+            if let rest = try? await api.airings(from: moment.addingTimeInterval(4 * 3600), to: moment.addingTimeInterval(14 * 24 * 3600)) {
                 var seen = Set(window.map(\.id))
                 var merged = window
                 for airing in rest where !seen.contains(airing.id) {

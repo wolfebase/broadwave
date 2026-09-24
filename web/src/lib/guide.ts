@@ -98,6 +98,28 @@ export function minutesLeft(a: Airing, now: number): string {
   return `${m}m left`;
 }
 
+const sourceLine: Record<string, string> = {
+  silicondust: "From the tuner guide.",
+  "schedules-direct": "From Schedules Direct.",
+  xmltv: "From your guide file.",
+  playlist: "From the playlist.",
+  broadcast: "From the broadcast.",
+};
+
+export function guideSourceLine(source?: string): string {
+  return source ? sourceLine[source] ?? "" : "";
+}
+
+// emptyGuideLabel is what a row says when the time on screen has no program.
+// After the last listing, it names the day the data runs out.
+export function emptyGuideLabel(airings: Airing[], windowStart: number): string {
+  if (airings.length === 0) return "No listings";
+  const end = Date.parse(airings[airings.length - 1].end);
+  if (windowStart < end - 60_000) return "No listings";
+  const day = new Date(end).toLocaleDateString([], { weekday: "long" });
+  return `Listings through ${day}`;
+}
+
 export function dayLabel(iso: string, now: number): string {
   const d = new Date(iso);
   const today = new Date(now);

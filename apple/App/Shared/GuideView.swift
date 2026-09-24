@@ -185,7 +185,17 @@ struct GuideGrid: View {
         private let channelW: CGFloat = 170
     #endif
     private let headH: CGFloat = 44
-    private let hours = 48.0
+
+    private var hours: Double {
+        var latest = origin.addingTimeInterval(6 * 3600)
+        for channel in channels {
+            if let last = store.index.airings(channel.id).last {
+                latest = max(latest, last.end)
+            }
+        }
+        let span = latest.timeIntervalSince(origin) / 3600
+        return min(14 * 24, max(6, span.rounded(.up)))
+    }
 
     private var origin: Date {
         let cal = Calendar.current
@@ -315,7 +325,12 @@ struct GuideGrid: View {
                     .offset(x: x(s))
             }
             if list.isEmpty {
-                Text("No listings").font(.footnote).foregroundStyle(.tertiary).offset(x: offset.x + 12)
+                Text(listingsNote(store.index.airings(channel.id), windowStart: origin)).font(.footnote).foregroundStyle(.tertiary).offset(x: offset.x + 12)
+            } else if let last = store.index.airings(channel.id).last, last.end < end.addingTimeInterval(-60) {
+                Text(listingsNote(store.index.airings(channel.id), windowStart: end))
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
+                    .offset(x: x(last.end) + 12)
             }
         }
         .overlay(alignment: .bottom) { Rectangle().fill(Tokens.ColorToken.line).frame(height: 1) }
@@ -390,6 +405,26 @@ struct GuideCellStyle: ButtonStyle {
 }
 
 /// Details for one airing, with the actions that matter.
+private func listingsNote(_ airings: [Airing], windowStart: Date) -> String {
+    guard let last = airings.last else { return "No listings" }
+    if windowStart < last.end.addingTimeInterval(-60) {
+        return "No listings"
+    }
+    let day = last.end.formatted(.dateTime.weekday(.wide))
+    return "Listings through \(day)"
+}
+
+private func guideSourceLine(_ source: String?) -> String? {
+    switch source {
+    case "silicondust": "From the tuner guide."
+    case "schedules-direct": "From Schedules Direct."
+    case "xmltv": "From your guide file."
+    case "playlist": "From the playlist."
+    case "broadcast": "From the broadcast."
+    default: nil
+    }
+}
+
 struct ProgramSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(NowPlaying.self) private var nowPlaying
@@ -420,6 +455,9 @@ struct ProgramSheet: View {
                     Text("\(kind.label) · \(airing.start.formatted(.dateTime.weekday().hour().minute())) – \(airing.end.formatted(date: .omitted, time: .shortened))")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
+                }
+                if let line = guideSourceLine(airing?.guideSource) {
+                    Text(line).font(.caption).foregroundStyle(.secondary)
                 }
                 Text(airing?.title ?? channel.displayName).font(.largeTitle.weight(.heavy))
                 if let sub = airing?.subtitle {
