@@ -3,10 +3,10 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **Phase S deploy**. Tag v0.4.0 and update Unraid.
-- Half done: S10 is in this commit. A playlist that fails raises one offline event, a later success says it is back, and a full playlist says how many streams are in use.
-- Next command: write the phase S changelog, tag v0.4.0, and deploy with MODE=ghcr.
-- Unraid is on `v0.3.3`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
+- Current task: **C7**. Guide from the broadcast (PSIP).
+- Half done: Phase S is on Unraid as v0.4.0. Two tabs on 4.1 differed by 5–8 ms. Tuners are free.
+- Next command: capture a full mux and confirm PID 0x1FFB arrives, then start `internal/psip`.
+- Unraid is on `v0.4.0`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
 - A7 retry at phase S: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
 ## Phase R — Repair and consolidate
@@ -31,6 +31,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] S8 Setup wizard v2 on web, Apple TV, and iPhone (< 90 s, no typing for HDHomeRun) (commit 0991df2)
 - [x] S9 Setup doctor: bridge network, /dev/dri, volumes, disk, TZ, clock, PUID/PGID/UMASK (commit 9f70a73)
 - [x] S10 Source health and limits (commit 56451fc)
+- [x] Phase S deploy: tag v0.4.0, Unraid smoke, two-screen sync (commit 6442a79, log in UNRAID_LOG)
 
 ## Phase P — Server and Apple apps, working as one
 - [ ] P1 Generated Swift and TypeScript clients from OpenAPI; drift check in CI

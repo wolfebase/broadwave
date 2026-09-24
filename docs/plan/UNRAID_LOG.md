@@ -15,6 +15,12 @@ Template: `/boot/config/plugins/dockerMan/templates-user/my-OTA-Viewer.xml`.
 ## Entries
 <!-- Append: date, commit, what was deployed, checks run, results, issues. -->
 
+## 2026-09-24 09:20 CDT — Phase S deploy v0.4.0
+
+- Image `ghcr.io/wolfebase/waveguide:0.4.0` (tag `v0.4.0`, commit `6442a79`). Catalog backed up to `backups/waveguide-20260924-pre040.db` before recreate. Container `Waveguide`, host network, `/dev/dri`, `TZ=America/Chicago`. No PUID/PGID: the catalog and recordings are owned by root, and dropping to uid 99 would not be able to open them. `/api/v1/server` reports `version: v0.4.0`, encoder `h264_vaapi`.
+- Sources list still returns the DUO, and that query reads `last_refresh`, so migration 0016 is applied. Guide still 9 channels with listings, 336 airings, through 2026-09-25. Diagnostics has one note: recordings are owned by root. That matches the ownership above.
+- Channel 4.1 (one tuner, 593 MHz, signal 100) produced a playlist with program date times. Two browser tabs both reported the pill "2 screens". Sync offsets differed by 5–8 ms. Tuners were free before the check and after the idle release. Next Jeopardy is 20:00 UTC. A7 is still unauthenticated.
+
 ## 2026-09-23 22:05 CDT — Phase R deploy v0.3.3
 
 - Image `ghcr.io/wolfebase/waveguide:0.3.3` (commit `58793cf`). Container `Waveguide`, host network, `/dev/dri`. `/api/v1/server` reports `version: v0.3.3`, encoder `h264_vaapi`. CI and the release build for that commit are green.
