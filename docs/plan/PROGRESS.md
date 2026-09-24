@@ -6,7 +6,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - Current task: **U1** (staging script + v0.5.1 hotfix for 720p at 119.88 fps), then Phase PB.
 - P2 was committed for the previous session, which died on a Cursor HTTP/2 stream error at 11:13 with the work uncommitted; `make check` was green.
 - Staging: `Broadwave-Staging` on `http://192.168.1.2:8490` (iGPU, `-staging`). Production `Broadwave` on :8477 is still v0.5.0. Next recording is Jeopardy at 20:00 UTC.
-- A7 stays blocked on an Apple ID login (see BLOCKERS).
+- A7 is done. Broadwave 1.0 is uploaded (build 2) and submitted to App Review for iOS and tvOS (see BLOCKERS for status).
 
 ## Review 2 (2026-09-24): read MASTER_PLAN section 0.1a before your next task
 - Next after P2: **R8 → C7b → S8b**, then P3 (section 4 is updated).
@@ -106,7 +106,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] A4 Hygiene: unused copy removed, web on /api/v1 only, eslint and swiftlint clean in CI (commit ca94523)
 - [x] A5 Restart kills leftover ffmpeg, fails a cut-off recording, resumes a show still on, and SIGTERM releases the tuner
 - [x] A6 Public repo wolfebase/broadwave (twolfekc does not exist; see BLOCKERS), CI green, ghcr.io/wolfebase/broadwave:0.1.0 public for amd64 and arm64 (commit 5c9308b, tag v0.1.0)
-- [ ] A7 Apple signing done (team D4MC63SS36, bundle IDs, profiles, `scripts/testflight.sh`, iOS archive signs). Remaining: app records, App Group on profiles, iOS + tvOS uploads. Blocked on one Apple ID login (see BLOCKERS); retry at the start of every phase
+- [x] A7 App record `6815795649` (Broadwave, `com.wolfeup.broadwave`, App Group `group.com.wolfeup.broadwave`); `scripts/testflight.sh` uploaded iOS and tvOS builds 1 and 2, all VALID
 
 ## Phase B — Multiview
 - [x] B1 Tile renditions (540.none, 360.none), tuner plan, and a shared multiview room (commit feb8c17). Mosaic waits until the tiles exist (ADR 0004). 14.x still has no stored frequency, so the plan treats those as separate tuners until one tune locks.
@@ -216,7 +216,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] L1 Versioning + changelog
 - [ ] L2 GHCR images verified
 - [ ] L3 Community Apps: researched, template installed on TUS via URL, Validate + Scan clean, submitted
-- [ ] L4 TestFlight external + App Store readiness (icon, screenshots, privacy labels, review notes)
+- [ ] L4 TestFlight external + App Store readiness. Done 2026-09-24: 1.0 listing, 11 screenshots (`docs/screenshots/appstore`, Blender open movies), privacy labels (Data Not Collected), age rating 12+, US and Canada, review notes and demo videos, submitted for review. Remaining: external TestFlight group, and redo the iPad screenshots with multiview once MV1 fixes the tile bands
 - [ ] L5 Docs site
 
 ## Phase M — Category-best extras
