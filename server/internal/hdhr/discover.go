@@ -111,6 +111,30 @@ func readVarLen(b []byte) (int, []byte, error) {
 	return n, b[2:], nil
 }
 
+// DiscoverHost asks one address, for a tuner that broadcast cannot reach.
+func DiscoverHost(host string, timeout time.Duration) (Reply, error) {
+	return discoverHostPort(host, fmt.Sprintf("%d", discoverPort), timeout)
+}
+
+func discoverHostPort(host, port string, timeout time.Duration) (Reply, error) {
+	conn, err := net.DialTimeout("udp4", net.JoinHostPort(host, port), timeout)
+	if err != nil {
+		return Reply{}, err
+	}
+	defer conn.Close()
+	deadline := time.Now().Add(timeout)
+	_ = conn.SetDeadline(deadline)
+	if _, err := conn.Write(DiscoverPacket()); err != nil {
+		return Reply{}, err
+	}
+	buf := make([]byte, 2048)
+	n, err := conn.Read(buf)
+	if err != nil {
+		return Reply{}, err
+	}
+	return ParseReply(buf[:n], host)
+}
+
 // Discover broadcasts for HDHomeRun tuners and returns one reply per address.
 func Discover(timeout time.Duration) ([]Reply, error) {
 	conn, err := net.ListenPacket("udp4", ":0")

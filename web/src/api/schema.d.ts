@@ -150,6 +150,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sources/look": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Probe this network for tuners and servers. Does not open a tuner stream. */
+        post: operations["lookHarder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sources": {
         parameters: {
             query?: never;
@@ -801,11 +818,22 @@ export interface components {
             /** Format: int64 */
             id: number;
             /** @enum {string} */
-            kind: "m3u" | "link" | "folder";
+            kind: "hdhomerun" | "hdhr-compatible" | "m3u" | "xtream" | "tvheadend" | "channels-dvr" | "link" | "folder";
             name: string;
             url?: string;
             xmltvUrl?: string;
             enabled: boolean;
+            stableKey?: string;
+            priority?: number;
+            tunerCount?: number;
+            streamLimit?: number;
+            /** @description ts or hls. Empty until the source is probed. */
+            streamFormat?: string;
+            hasGuide?: boolean;
+            needsTuner?: boolean;
+            refresh?: string;
+            health?: string;
+            deviceId?: string;
         };
         Channel: {
             /** Format: int64 */
@@ -1385,6 +1413,34 @@ export interface operations {
                     "application/json": {
                         devices: components["schemas"]["Device"][];
                         found: number;
+                    };
+                };
+            };
+            500: components["responses"]["Error"];
+        };
+    };
+    lookHarder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Devices and servers that answered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        found: {
+                            kind: string;
+                            name: string;
+                            addr: string;
+                            id?: string;
+                        }[];
                     };
                 };
             };

@@ -41,6 +41,36 @@ func TestRefreshKeepsTheChannelID(t *testing.T) {
 	}
 }
 
+func TestNewAddressKeepsTheChannelID(t *testing.T) {
+	st := openTestStore(t)
+	dev := hdhr.Device{DeviceID: "10611B4C", FriendlyName: "HDHomeRun", BaseURL: "http://192.168.1.20"}
+	first := []hdhr.Channel{{GuideNumber: "4.1", GuideName: "ABC", StreamURL: "http://192.168.1.20:5004/auto/v4.1"}}
+	if err := st.UpsertDevice(context.Background(), dev, first); err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.Channels(context.Background(), false)
+	if err != nil || len(channels) != 1 {
+		t.Fatalf("%+v %v", channels, err)
+	}
+	id := channels[0].ID
+	dev.BaseURL = "http://192.168.1.50"
+	moved := []hdhr.Channel{{GuideNumber: "4.1", GuideName: "ABC", StreamURL: "http://192.168.1.50:5004/auto/v4.1"}}
+	if err := st.UpsertDevice(context.Background(), dev, moved); err != nil {
+		t.Fatal(err)
+	}
+	channels, err = st.Channels(context.Background(), false)
+	if err != nil || len(channels) != 1 || channels[0].ID != id {
+		t.Fatalf("%+v %v", channels, err)
+	}
+	var url string
+	if err := st.db.QueryRow(`SELECT stream_url FROM channels WHERE id=?`, id).Scan(&url); err != nil {
+		t.Fatal(err)
+	}
+	if url != moved[0].StreamURL {
+		t.Fatalf("address stayed %s", url)
+	}
+}
+
 func TestSourcePasswordIsMasked(t *testing.T) {
 	st := openTestStore(t)
 	item, err := st.AddSource(context.Background(), "m3u", "IPTV", "http://user:s3cret@example/pl.m3u?password=s3cret", "")

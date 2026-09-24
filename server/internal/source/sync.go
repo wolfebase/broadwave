@@ -3,9 +3,11 @@ package source
 import (
 	"context"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
+	"waveguide/internal/discovery"
 	"waveguide/internal/hdhr"
 	"waveguide/internal/store"
 )
@@ -54,23 +56,53 @@ func basesFor(ip string) ([]string, error) {
 		}
 		return []string{"http://" + ip}, nil
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	ssdpCh := make(chan []discovery.Found, 1)
+	go func() {
+		extra, _ := discovery.SearchSSDP(ctx, "")
+		ssdpCh <- extra
+	}()
 	found, err := hdhr.Discover(4 * time.Second)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 	var bases []string
 	seen := map[string]bool{}
+	add := func(base string) {
+		base = strings.TrimRight(base, "/")
+		if base == "" || seen[base] {
+			return
+		}
+		seen[base] = true
+		bases = append(bases, base)
+	}
 	for _, reply := range found {
 		base := reply.BaseURL
 		if base == "" && reply.Addr != "" {
 			base = "http://" + reply.Addr
 		}
-		base = strings.TrimRight(base, "/")
-		if base == "" || seen[base] {
-			continue
+		add(base)
+	}
+	var extra []discovery.Found
+	select {
+	case extra = <-ssdpCh:
+	default:
+		cancel()
+		extra = <-ssdpCh
+	}
+	for _, item := range extra {
+		if item.Kind == "hdhomerun" && item.Addr != "" {
+			add("http://" + item.Addr)
 		}
-		seen[base] = true
-		bases = append(bases, base)
+	}
+	if len(bases) == 0 {
+		if hosts, err := net.LookupHost("hdhomerun.local"); err == nil {
+			for _, host := range hosts {
+				add("http://" + host)
+			}
+		}
 	}
 	return bases, nil
 }

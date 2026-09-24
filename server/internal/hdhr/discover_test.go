@@ -3,7 +3,9 @@ package hdhr
 import (
 	"encoding/binary"
 	"hash/crc32"
+	"net"
 	"testing"
+	"time"
 )
 
 func TestDiscoverPacketShape(t *testing.T) {
@@ -54,5 +56,47 @@ func TestParseReplyRejectsBadCRC(t *testing.T) {
 	binary.BigEndian.PutUint16(pkt[0:2], typeDiscoverRpy)
 	if _, err := ParseReply(pkt, "x"); err == nil {
 		t.Fatal("expected crc or type failure")
+	}
+}
+
+func sampleReply() []byte {
+	payload := []byte{tagDeviceType, 0x04, 0x00, 0x00, 0x00, 0x01}
+	payload = append(payload, tagDeviceID, 0x04, 0x10, 0x61, 0x1B, 0x4C)
+	base := "http://127.0.0.1"
+	payload = append(payload, tagBaseURL, byte(len(base)))
+	payload = append(payload, []byte(base)...)
+	payload = append(payload, tagTunerCount, 0x01, 0x02)
+	body := make([]byte, 4+len(payload))
+	binary.BigEndian.PutUint16(body[0:2], typeDiscoverRpy)
+	binary.BigEndian.PutUint16(body[2:4], uint16(len(payload)))
+	copy(body[4:], payload)
+	pkt := make([]byte, len(body)+4)
+	copy(pkt, body)
+	binary.LittleEndian.PutUint32(pkt[len(body):], crc32.ChecksumIEEE(body))
+	return pkt
+}
+
+func TestDiscoverHostReadsALoopbackTuner(t *testing.T) {
+	conn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	go func() {
+		buf := make([]byte, 2048)
+		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		n, addr, err := conn.ReadFrom(buf)
+		if err != nil || n == 0 {
+			return
+		}
+		_, _ = conn.WriteTo(sampleReply(), addr)
+	}()
+	host, port, _ := net.SplitHostPort(conn.LocalAddr().String())
+	reply, err := discoverHostPort(host, port, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reply.DeviceID != "10611B4C" || reply.TunerCount != 2 {
+		t.Fatalf("%+v", reply)
 	}
 }

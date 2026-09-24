@@ -3,9 +3,9 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **S2**. Auto-find tuners and servers, and show them in setup.
-- Half done: S1 migration kept the TUS catalog's channels, recordings, and the Jeopardy pass. Source passwords are stored apart from the URL.
-- Next command: fake responders for HDHomeRun broadcast, SSDP, and mDNS, then confirm the DUO is found on the LAN.
+- Current task: **S3**. HDHomeRun family: several devices, scan, and model limits.
+- Half done: S2 is ready to commit. Search returned the DUO in 4.1 s. Look harder found the Channels DVR on this LAN and ignored ordinary web pages. A bridged container found the DUO without broadcast or the cloud.
+- Next command: read the S3 accept and add a second fake device with failover.
 - Unraid is on `v0.3.3`. Both tuners are free. Next recording is Jeopardy at 20:00 UTC.
 - A7 retry at phase S: `asc web auth status` is unauthenticated. Still blocked (see BLOCKERS).
 
@@ -22,7 +22,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 ## Phase S — Every source, found automatically
 - [x] S0 Research sources and discovery; ADR 0009; `docs/sources.md` support matrix
 - [x] S1 One source model (kinds, capabilities, masked credentials, stable channel ids) with a lossless migration
-- [ ] S2 Auto-find engine: broadcast, unicast subnet, SSDP, mDNS (hdhomerun.local, _channels_dvr, _htsp), opt-in "Look harder" port probe (+ cloud lookup as verified last resort); live results; follows DHCP changes
+- [x] S2 Auto-find engine: broadcast, unicast, SSDP, mDNS, Look harder, cloud last resort; the DUO answered on the LAN and from a bridged container; a new address keeps the channel id
 - [ ] S3 HDHomeRun family: multi-device pool + failover + reservations (was G7), channel scan, FLEX/PRIME/EXTEND awareness
 - [ ] S4 M3U done right: tvg-* / group / url-tvg / tvc-guide-stationid, file + URL + path, stream format and limit, numbering, groups, per-source XMLTV, refresh with stable ids, picker for big lists
 - [ ] S5 Xtream Codes source

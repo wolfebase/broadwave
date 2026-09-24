@@ -92,7 +92,7 @@ paths:
         WebSocket for live updates and Whole-Home Sync. Every frame is `{"type", "data"}`.
 
         Server to client: `hello` {serverTime}, `clock` {t0, t1}, `activity` (Event),
-        `live.changed` (refetch tuners and sessions), `sync.state` (RoomState), `error` {code, message}.
+        `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `error` {code, message}.
 
         Client to server: `clock` {t0}, `sync.join` {room, channelId}, `sync.leave` {room},
         `sync.command` {room, action: play|pause|seek|live|latency, mediaTime, latency}.
@@ -174,6 +174,31 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/Device" }
                   found: { type: integer }
+        "500": { $ref: "#/components/responses/Error" }
+  /sources/look:
+    post:
+      tags: [sources]
+      operationId: lookHarder
+      description: Probe this network for tuners and servers. Does not open a tuner stream.
+      responses:
+        "200":
+          description: Devices and servers that answered
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [found]
+                properties:
+                  found:
+                    type: array
+                    items:
+                      type: object
+                      required: [kind, name, addr]
+                      properties:
+                        kind: { type: string }
+                        name: { type: string }
+                        addr: { type: string }
+                        id: { type: string }
         "500": { $ref: "#/components/responses/Error" }
   /sources:
     get:

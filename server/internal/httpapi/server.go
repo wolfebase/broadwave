@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"waveguide/internal/discovery"
 	"waveguide/internal/hdhr"
 	"waveguide/internal/live"
 	"waveguide/internal/realtime"
@@ -54,6 +55,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /profile", s.profile)
 	api("GET /devices", s.devices)
 	api("POST /sources/discover", s.discover)
+	api("POST /sources/look", s.look)
 	api("GET /sources", s.listSources)
 	api("POST /sources", s.addSource)
 	api("GET /channels", s.channels)
@@ -162,6 +164,25 @@ func (s *Server) discover(w http.ResponseWriter, r *http.Request) {
 		devices = []store.Device{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"devices": devices, "found": n})
+}
+
+func (s *Server) look(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	found := discovery.Look(ctx, discovery.LocalHosts())
+	browseCtx, stopBrowse := context.WithTimeout(ctx, 2*time.Second)
+	for _, service := range []string{"_channels_dvr._tcp", "_htsp._tcp"} {
+		extra, _ := discovery.Browse(browseCtx, service)
+		found = append(found, extra...)
+	}
+	stopBrowse()
+	if len(found) == 0 {
+		found = discovery.ConfirmCloud(ctx)
+	}
+	if found == nil {
+		found = []discovery.Found{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"found": found})
 }
 
 func (s *Server) channels(w http.ResponseWriter, r *http.Request) {

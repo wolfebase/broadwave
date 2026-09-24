@@ -97,6 +97,7 @@ func main() {
 			return
 		}
 		log.Printf("discovery: %d device(s)", n)
+		bus.Publish("sources.found", map[string]int{"found": n})
 		// SiliconDust asks for a random 20-28 h gap after each successful pull.
 		// A restart waits out whatever nextGuidePull was already stored.
 		for {
@@ -105,6 +106,20 @@ func main() {
 				continue
 			}
 			refreshGuide(api)
+		}
+	}()
+	go func() {
+		tick := time.NewTicker(5 * time.Minute)
+		defer tick.Stop()
+		for range tick.C {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			n, err := source.Sync(ctx, st, nil, *hdhrHost)
+			cancel()
+			if err != nil {
+				log.Printf("discovery: %v", err)
+				continue
+			}
+			bus.Publish("sources.found", map[string]int{"found": n})
 		}
 	}()
 	go func() {

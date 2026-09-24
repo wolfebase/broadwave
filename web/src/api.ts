@@ -26,6 +26,13 @@ export function getDevices() {
   return request<{ devices: Device[] }>("/api/v1/devices");
 }
 
+export function lookHarder() {
+  return request<{ found: { kind: string; name: string; addr: string; id?: string }[] }>("/api/v1/sources/look", {
+    method: "POST",
+    body: "{}",
+  });
+}
+
 export function discover(ip?: string) {
   return request<{ devices: Device[]; found: number }>("/api/v1/sources/discover", {
     method: "POST",
