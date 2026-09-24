@@ -15,6 +15,12 @@ Template: `/boot/config/plugins/dockerMan/templates-user/my-OTA-Viewer.xml`.
 ## Entries
 <!-- Append: date, commit, what was deployed, checks run, results, issues. -->
 
+## 2026-09-24 10:34 CDT — Phase C deploy v0.5.0
+
+- Image `ghcr.io/wolfebase/waveguide:0.5.0` (tag `v0.5.0`, commit `2463a86`). Catalog backed up to `backups/waveguide-20260924-pre050.db` before recreate. Container `Waveguide`, host network, `/dev/dri`, `TZ=America/Chicago`. No PUID/PGID. `/api/v1/server` reports `version: v0.5.0`, encoder `h264_vaapi`. The deploy script's health curl raced container startup and exited 7; the container was Up healthy.
+- `/api/v1/signals` returns the 8 present channels, so migration 0018 is applied. No stored readings yet; the earlier check ran against a catalog copy.
+- Channel 4.1 (one tuner, signal 100) produced a playlist with program date times. Two browser tabs both reported the pill "2 screens". Sync drift was 5607 ms and 5619 ms, 12 ms apart. Tuners were free before the check and after the idle release. Next Jeopardy is 20:00 UTC. A7 is still unauthenticated.
+
 ## 2026-09-24 09:20 CDT — Phase S deploy v0.4.0
 
 - Image `ghcr.io/wolfebase/waveguide:0.4.0` (tag `v0.4.0`, commit `6442a79`). Catalog backed up to `backups/waveguide-20260924-pre040.db` before recreate. Container `Waveguide`, host network, `/dev/dri`, `TZ=America/Chicago`. No PUID/PGID: the catalog and recordings are owned by root, and dropping to uid 99 would not be able to open them. `/api/v1/server` reports `version: v0.4.0`, encoder `h264_vaapi`.
