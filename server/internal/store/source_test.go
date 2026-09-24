@@ -201,6 +201,44 @@ func TestSourcePasswordIsMasked(t *testing.T) {
 	}
 }
 
+func TestMaskedSourceFetchesWithItsLogin(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	playlist := "http://user:s3cret@example/pl.m3u?token=abc"
+	guide := "http://example/xmltv.php?password=s3cret&username=user"
+	item, err := st.AddSource(ctx, "xtream", "IPTV", playlist, guide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(item.XMLTV, "s3cret") {
+		t.Fatalf("guide leaked the password: %s", item.XMLTV)
+	}
+	if got := st.FetchURL(ctx, item.ID, item.URL); got != playlist {
+		t.Fatalf("playlist fetch = %q", got)
+	}
+	if got := st.FetchURL(ctx, item.ID, item.XMLTV); got != guide {
+		t.Fatalf("guide fetch = %q", got)
+	}
+	if got := st.FetchURL(ctx, item.ID, "http://example/plain.m3u"); got != "http://example/plain.m3u" {
+		t.Fatalf("plain fetch = %q", got)
+	}
+}
+
+func TestOldXtreamGuideUsesThePlaylistLogin(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	item, err := st.AddSource(ctx, "xtream", "IPTV", "http://user:s3cret@example", "http://example/xmltv.php?password=s3cret&username=user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`UPDATE source_secrets SET guide_secret='' WHERE source_id=?`, item.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := st.FetchURL(ctx, item.ID, item.XMLTV); got != "http://example/xmltv.php?password=s3cret&username=user" {
+		t.Fatalf("guide fetch = %q", got)
+	}
+}
+
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
 	st, err := Open(t.TempDir())

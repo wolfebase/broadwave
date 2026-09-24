@@ -622,12 +622,8 @@ func (s *Store) AddSource(ctx context.Context, kind, name, rawURL, xmltv string)
 	if _, err := s.db.ExecContext(ctx, `UPDATE sources SET stable_key=?, device_id=? WHERE id=? AND stable_key=''`, key, fmt.Sprintf("src-%d", id), id); err != nil {
 		return Source{}, err
 	}
-	kept := secret
-	if kept == "" {
-		kept = xmlSecret
-	}
-	if kept != "" {
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO source_secrets (source_id, secret) VALUES (?, ?)`, id, kept); err != nil {
+	if secret != "" || xmlSecret != "" {
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO source_secrets (source_id, secret, guide_secret) VALUES (?, ?, ?)`, id, secret, xmlSecret); err != nil {
 			return Source{}, err
 		}
 	}
@@ -670,16 +666,46 @@ func (s *Store) NoteRefresh(ctx context.Context, id int64, next time.Time, healt
 	return err
 }
 
-// FetchURL returns the stored address, using the secret when the public copy is masked.
+// FetchURL returns the address to fetch for a stored playlist or guide URL,
+// putting back the login that the public copy masks.
 func (s *Store) FetchURL(ctx context.Context, id int64, public string) string {
-	if !strings.Contains(public, "••••") {
+	var secret, guide string
+	if err := s.db.QueryRowContext(ctx, `SELECT secret, guide_secret FROM source_secrets WHERE source_id=?`, id).Scan(&secret, &guide); err != nil {
 		return public
 	}
-	var secret string
-	if err := s.db.QueryRowContext(ctx, `SELECT secret FROM source_secrets WHERE source_id=?`, id).Scan(&secret); err != nil || secret == "" {
+	for _, candidate := range []string{secret, guide} {
+		if candidate == "" {
+			continue
+		}
+		if masked, _ := maskURL(candidate); masked == public {
+			return candidate
+		}
+	}
+	return guideFromLogin(public, secret)
+}
+
+// guideFromLogin fills an Xtream guide URL saved before guides kept their own
+// secret, using the password from the playlist login.
+func guideFromLogin(public, secret string) string {
+	login, err := url.Parse(secret)
+	if err != nil || login.User == nil {
 		return public
 	}
-	return secret
+	pass, ok := login.User.Password()
+	if !ok {
+		return public
+	}
+	u, err := url.Parse(public)
+	if err != nil {
+		return public
+	}
+	q := u.Query()
+	if q.Get("password") != "••••" || q.Get("username") != login.User.Username() {
+		return public
+	}
+	q.Set("password", pass)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func (s *Store) SetStreamFormat(ctx context.Context, id int64, format string) error {
