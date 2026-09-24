@@ -23,7 +23,7 @@ Run 1 did good work but ended its turn after almost every phase; the user had to
 2. **Never end your turn to report progress.** A finished task or phase is not a stopping point. Progress goes into `PROGRESS.md`, commit messages, and `UNRAID_LOG.md`, not into a chat summary. Write the next tool call instead of a recap.
 3. **Background notifications are not stops.** When a background shell or subagent finishes, read its result, act on it, and continue with the current task in the same turn. Do not summarize it to the user.
 4. **The only reasons to end a turn:** the plan is complete; every remaining task is blocked and recorded in `BLOCKERS.md`; or an irreversible action needs the user (App Store submission, deleting user data, spending money).
-5. **Protect your context.** Delegate bulky work to subagents (Task tool) with self-contained prompts (paths, commands, acceptance, what to return): research (`docs-researcher`/`generalPurpose`), code exploration (`explore`), browser verification at three sizes (`browser-use`), Apple simulator screenshot runs, and code review (`code-reviewer`). Run independent subagents in parallel when they touch disjoint directories (for example `server/` vs `apple/`). Only the main agent commits. Never let two agents edit the same files at once.
+5. **Protect your context.** Delegate bulky work to subagents (Task tool) with self-contained prompts (paths, commands, acceptance, what to return): research (`docs-researcher`/`generalPurpose`), code exploration (`explore`), browser verification at three sizes (`generalPurpose` running `playwright-cli open --browser=chrome`; there is no `browser-use` subagent), Apple simulator screenshot runs, and code review (`code-reviewer`). Run independent subagents in parallel when they touch disjoint directories (for example `server/` vs `apple/`). Only the main agent commits. Never let two agents edit the same files at once.
 6. **Crash-safe resume.** The top of `PROGRESS.md` has a "Resume here" block: the current task ID, what is half done, and the next command. Update it at the start of every task. If the session dies, a fresh agent reads it and continues without rediscovery.
 7. **No silent deferrals.** If a task's acceptance can't be met in full, finish what can be, then add a new explicit task line in `PROGRESS.md` for the remainder, placed in the execution order (section 4). Prose notes alone are not enough (run 1 left the mosaic, the 18 empty channels, and TestFlight uploads only as notes).
 
@@ -50,6 +50,15 @@ How every task is verified from now on:
    - Apple: dedicated simulators "WG Staging iPhone" (iOS 26.5) and "WG Staging TV" (tvOS 26.5, 1080p) point at staging through the `server` default. Leave the other booted simulators alone. Drive them with XCUITest (focus and remote on tvOS, taps on iPhone), not only launch arguments. Screenshot every screen the task touched.
    - Server output: download the rendition's `init.mp4` plus segments and measure frames/span, WxH, and decode errors (method in skill `waveguide-media-pipeline`, section "Picture lab").
 4. **Use the iGPU and prove it.** Every playback measurement names the encoder and says whether decode ran on the GPU, with CPU per rendition taken from `docker stats`.
+
+### 0.1c How the run is operated (2026-09-24)
+
+Run 2's first session lasted 23 hours in one conversation. It made about 3,300 tool calls, with 2 subagent calls. The owner typed "continue" 9 times, because each stop followed a text-only "I'll do X next" message. It finally died on `[canceled] http/2 stream closed with error code CANCEL (0x8)` with P2 uncommitted. From now on:
+
+- **Run it with `scripts/agent-loop.sh`.** Each round is a fresh headless session (`agent -p --force`) started with `docs/plan/AGENT_PROMPT.md`. A dropped stream or an early stop costs one round. The loop forces `network.useHttp1ForAgent` (long HTTP/2 streams die through this Mac's VPN tunnel) and stops when every line is ticked or blocked, when `~/.waveguide-agent-stop` exists, or after 6 rounds with no commit. Logs: `~/Library/Logs/waveguide-agent/`.
+- **Steer by editing `AGENT_PROMPT.md` or this plan.** The next round reads them. Do not run two agent sessions on the repo at once.
+- **Every message carries a tool call.** Delegate as `AGENT_PROMPT.md` section 2 lists. `best-of-n-runner` gives parallel tasks their own worktree; only the main agent commits to `main`.
+- **CI also builds the Docker image,** which `make check` does not. A web import from outside `web/` (like `api/fixtures`) must be copied in the Dockerfile's web stage (fixed in the commit after 8843648).
 
 ### 0.2 Per-task loop
 
