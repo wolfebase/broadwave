@@ -227,9 +227,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (kind === "guide") void refresh(["airings"]);
     });
     const offLive = bus.on("live.changed", () => void refresh(["recordings"]));
+    const offFound = bus.on("sources.found", () => void refresh(["devices", "channels"]));
     return () => {
       offActivity();
       offLive();
+      offFound();
     };
   }, [refresh]);
 

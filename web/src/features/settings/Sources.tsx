@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Channel, Device, TunerStatus } from "../../types";
-import { addSource, getTuners } from "../../api";
+import { addSource, getTuners, lookHarder } from "../../api";
 import { copy } from "../../strings";
 export function Sources({
   devices,
@@ -20,6 +20,9 @@ export function Sources({
   onPatch: (channel: Channel, patch: { enabled?: boolean; hidden?: boolean; customName?: string; customNumber?: string; guideKey?: string }) => void;
 }) {
   const [ip, setIp] = useState("");
+  const [looking, setLooking] = useState(false);
+  const [looked, setLooked] = useState(false);
+  const [hits, setHits] = useState<{ kind: string; name: string; addr: string }[]>([]);
   const [tuners, setTuners] = useState<TunerStatus[]>([]);
   const [encoder, setEncoder] = useState("");
   useEffect(() => {
@@ -48,8 +51,29 @@ export function Sources({
           <h2>{copy.sources.title}</h2>
           <p className="lede">{copy.sources.lead}</p>
         </div>
-        <button type="button" className="btn primary" onClick={onDiscover} disabled={busy}>
+        <button type="button" className="btn primary" onClick={onDiscover} disabled={busy || looking}>
           {copy.sources.search}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy || looking}
+          onClick={() => {
+            setLooking(true);
+            setLooked(false);
+            void lookHarder()
+              .then((res) => {
+                setHits(res.found ?? []);
+                setLooked(true);
+              })
+              .catch(() => {
+                setHits([]);
+                setLooked(true);
+              })
+              .finally(() => setLooking(false));
+          }}
+        >
+          {copy.sources.look}
         </button>
       </div>
       <form
@@ -74,6 +98,21 @@ export function Sources({
         </button>
         <p className="hint">{copy.sources.addressHint}</p>
       </form>
+      {looking ? <p className="hint">{copy.sources.lookHint}</p> : null}
+      {looked && hits.length === 0 ? <p className="empty">{copy.sources.lookEmpty}</p> : null}
+      {hits.length > 0 ? (
+        <ul className="source-list">
+          {hits.map((hit) => (
+            <li key={`${hit.kind}-${hit.addr}`} className="source-row">
+              <span>{hit.name}</span>
+              <span className="codec">{hit.addr}</span>
+              <button type="button" className="btn" disabled={busy} onClick={() => onLookup(hit.addr)}>
+                {copy.sources.add}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <SourceAdd />
       {error ? <p className="error">{error}</p> : null}
       <h3 className="section-title">Tuners</h3>
