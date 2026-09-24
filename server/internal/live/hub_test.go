@@ -1,6 +1,8 @@
 package live
 
 import (
+	"context"
+	"io"
 	"testing"
 	"time"
 
@@ -104,6 +106,56 @@ func TestStoppedSubchannelLeavesMuxFanout(t *testing.T) {
 	}
 	if _, ok := h.muxes[m.freq]; !ok {
 		t.Fatal("the frequency stays tuned while 14.2 is watched")
+	}
+}
+
+type endBody struct{}
+
+func (endBody) Read([]byte) (int, error) { return 0, io.EOF }
+func (endBody) Close() error             { return nil }
+
+func TestTunerReadEndingReleasesTheMux(t *testing.T) {
+	h, m := testHub(t)
+	m.body = endBody{}
+	addTestFeed(h, m, 1, "4.1")
+	h.readLoop(context.Background(), m)
+	if _, ok := h.muxes[m.freq]; ok {
+		t.Fatal("a tuner that stopped should be released")
+	}
+	if _, ok := h.channels[1]; ok {
+		t.Fatal("the channel should leave with the tuner")
+	}
+}
+
+func TestRecordingThatCannotStartIsMarkedFailed(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	h := &Hub{Dir: dir, Store: st, RenditionIdle: time.Hour, channels: map[int64]*feed{}, muxes: map[int]*mux{}, reserved: map[int]bool{}}
+	m := &mux{freq: 1, tuner: -1, feeds: map[string]*feed{}, cancel: func() {}, body: fakeBody{}}
+	h.muxes[m.freq] = m
+	f := addTestFeed(h, m, 1, "4.1")
+	ends := time.Now().Add(time.Hour)
+	id, err := st.CreateRecording(context.Background(), store.Recording{
+		ChannelID: 1, GuideNumber: "4.1", Title: "Jeopardy!", Path: dir + "/j.ts",
+		Status: "recording", StartedAt: time.Now(), EndsAt: &ends,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.abortRecordingLocked(context.Background(), f, id)
+	got, err := st.Recording(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "failed" || got.Error != "Could not start the recording." {
+		t.Fatalf("status %s error %q", got.Status, got.Error)
+	}
+	if _, ok := h.channels[1]; ok {
+		t.Fatal("a recording that did not start should release the tuner")
 	}
 }
 

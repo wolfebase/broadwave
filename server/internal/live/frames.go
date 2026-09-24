@@ -151,6 +151,12 @@ func (h *Hub) grabFrames(ctx context.Context, m *mux) error {
 	pr, pw := io.Pipe()
 	sub := h.attachPipeLocked(m, pw)
 	defer m.detach(sub)
+	// Wait does not return until the stdin copy finishes. Closing the pipe
+	// when the grab ends unblocks that copy if the mux has gone quiet.
+	go func() {
+		<-grabCtx.Done()
+		_ = pw.Close()
+	}()
 	cmd := exec.CommandContext(grabCtx, h.FFmpeg, FrameArgs(jobs, dir)...)
 	cmd.Stdin = pr
 	cmd.Stdout = io.Discard

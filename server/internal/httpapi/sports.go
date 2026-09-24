@@ -76,6 +76,7 @@ func (s *Server) withoutSpoilers(ctx context.Context, games []sports.Game) []spo
 			}
 		}
 	}
+	games = append([]sports.Game(nil), games...)
 	for i := range games {
 		if hideAll || hidden[games[i].ID] {
 			games[i] = sports.HideScore(games[i])

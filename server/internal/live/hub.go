@@ -291,7 +291,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 	h.muxes[freq] = m
-	go m.readLoop(runCtx)
+	go h.readLoop(runCtx, m)
 	h.startFrames(runCtx, m)
 	return h.addFeedLocked(m, ch), nil
 }
@@ -303,7 +303,7 @@ func (h *Hub) streamMuxLocked(ch store.SourceChannel, body io.ReadCloser, host s
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 	h.muxes[m.freq] = m
-	go m.readLoop(runCtx)
+	go h.readLoop(runCtx, m)
 	h.startFrames(runCtx, m)
 	return m
 }
@@ -531,11 +531,12 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	cmd := exec.Command(h.FFmpeg, copyArgs(f.program, path)...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
+		h.abortRecordingLocked(ctx, f, id)
 		return store.Recording{}, err
 	}
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
-		h.dropIfUnusedLocked(f)
+		h.abortRecordingLocked(ctx, f, id)
 		return store.Recording{}, err
 	}
 	NotePID(h.Dir, cmd.Process.Pid)
@@ -653,8 +654,9 @@ func (h *Hub) attachPipeLocked(m *mux, w io.WriteCloser) *pipeSub {
 }
 
 // readLoop is the only reader of the tuner. A slow subscriber loses chunks
-// rather than stalling the tuner for everyone else.
-func (m *mux) readLoop(ctx context.Context) {
+// rather than stalling the tuner for everyone else. When the tuner itself
+// ends, the mux is released so the tuner does not stay busy.
+func (h *Hub) readLoop(ctx context.Context, m *mux) {
 	buf := make([]byte, 188*49)
 	for {
 		if ctx.Err() != nil {
@@ -671,10 +673,38 @@ func (m *mux) readLoop(ctx context.Context) {
 			}
 		}
 		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
 			log.Printf("mux %d ended: %v", m.freq, err)
+			h.releaseMux(m)
 			return
 		}
 	}
+}
+
+// releaseMux drops every channel on a mux whose tuner read has ended.
+func (h *Hub) releaseMux(m *mux) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.muxes[m.freq] != m {
+		return
+	}
+	feeds := make([]*feed, 0, len(m.feeds))
+	for _, f := range m.feeds {
+		feeds = append(feeds, f)
+	}
+	for _, f := range feeds {
+		if f.recording != nil {
+			h.finishRecordingLocked(f, "failed", "The tuner stopped.")
+		}
+		h.stopFeedLocked(f)
+	}
+}
+
+func (h *Hub) abortRecordingLocked(ctx context.Context, f *feed, id int64) {
+	_ = h.Store.FinishRecording(ctx, id, "failed", "Could not start the recording.")
+	h.dropIfUnusedLocked(f)
 }
 
 func (h *Hub) sessionLocked(f *feed, r *rendition) Session {
