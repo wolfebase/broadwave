@@ -3,7 +3,7 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **PB9** committed this round. Next is **PB2**. App Review unchanged (WAITING_FOR_REVIEW, iOS and tvOS, checked 2026-09-24 23:07 UTC).
+- Current task: **PB2** committed this round. Next is **PB3**. App Review unchanged (WAITING_FOR_REVIEW, iOS and tvOS, checked 2026-09-24 23:17 UTC).
 - App Review: Broadwave 1.0 (iOS and tvOS, app 6815795649, build 2) was WAITING_FOR_REVIEW at 2026-09-24 22:55 UTC. Check it at the start of every round (AS1).
 - Production `Broadwave` on TUS `:8477` is v0.6.0. Staging `Broadwave-Staging` is on `:8490`. Next recording: Jeopardy, 2026-09-25 20:00 UTC.
 - The tree is clean at the last commit. The repo is `~/Projects/active/broadwave`.
@@ -45,7 +45,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 
 ## Phase PB — Playback
 - [x] PB1 Progressive broadcasts keep every frame and are never bobbed; `-staging` flag. Staging on TUS iGPU: 4.1 1280x720 59.94 in 2.002 s segments, 0 decode errors (v0.5.0: 1920x1080 119.88 in 1.001 s); 9.1 1920x1080 59.94 unchanged; Chrome 0 dropped frames on both; iPhone and Apple TV sims played 4.1 and a 4.1+9.1 multiview (`docs/screenshots/pb-*`); `TestProgressive720pKeepsEveryFrame` (commit 8dac5dd)
-- [ ] PB2 First tune reads scan type from the mux (no interlaced guess on a fresh install)
+- [x] PB2 First tune reads scan type from the mux (no interlaced guess on a fresh install). Staging with `field_order` cleared on 4.1: `scan type progressive for 4.1 in 800ms`, then 1280x720 59.94, segment 2.002s, 0 decode errors, 240 frames, tuner released. A sequence header can sit ~460 ms into the GOP, so the read waits up to 800 ms and returns when the header arrives. `TestScanTypeCapturedHeaders`, `TestScanTypeFFmpegHeaders`.
 - [ ] PB3 Scan-type matrix (1080i, 720p, 480i, H.264 PAFF/MBAFF, auto film cadence) on every encoder path, measured with idet/mpdecimate
 - [ ] PB4 Honest 30→60: measure interpolation methods on TUS; keep only what is real time and looks better (ADR 0010)
 - [ ] PB5 GPU decode + jellyfin-ffmpeg 7 + VAAPI rate control + VMAF-chosen bitrates + HEVC renditions
