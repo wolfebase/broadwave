@@ -130,13 +130,8 @@ func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {
 		}
 	}
 	mounts, _ := os.ReadFile("/proc/mounts")
-	quiet := false
-	for _, d := range devices {
-		seen, err := time.Parse(time.RFC3339, d.LastSeen)
-		if d.TunerCount > 0 && err == nil && time.Since(seen) > 3*time.Minute {
-			quiet = true
-		}
-	}
+	busy := s.Hub != nil && !s.Hub.Idle()
+	quiet := tunerWentQuiet(devices, busy, time.Now())
 	heard := false
 	for _, d := range devices {
 		if d.TunerCount > 0 {
@@ -149,6 +144,21 @@ func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {
 		Timezone: os.Getenv("TZ"), Now: s.now(), UID: os.Getuid(),
 		PUID: os.Getenv("PUID"), PGID: os.Getenv("PGID"), TunerQuiet: quiet,
 	})
+}
+
+// tunerWentQuiet is a tuner that has not answered in three minutes.
+// A tune in progress means it is answering, even if discovery has not refreshed LastSeen.
+func tunerWentQuiet(devices []store.Device, busy bool, now time.Time) bool {
+	if busy {
+		return false
+	}
+	for _, d := range devices {
+		seen, err := time.Parse(time.RFC3339, d.LastSeen)
+		if d.TunerCount > 0 && err == nil && now.Sub(seen) > 3*time.Minute {
+			return true
+		}
+	}
+	return false
 }
 
 func sourceFor(channelID int64, airings []store.Airing) string {
