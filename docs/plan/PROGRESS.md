@@ -3,11 +3,11 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **MV3** tuner-aware add-channel picker. App Review unchanged at 2026-09-25 16:06Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply.
-- Lane ledger: P2b merged `4a411d3`. LEGAL1 merged `0743bc6`. OPS3 merged `02554ea`. HW1 merged `8a815e8`, review fix `4c04373`. MV2 merged `cc726eb`. P2c merged `086265d`. OPS1 merged `a9abe62` (CI green). AS6 is ready in `…/706f9af145de` (registry plus ADR 0011, ESPN stays the default, no second client). The parent writes its BLOCKERS question; do not take a PROGRESS edit. G10 is ready in `…/707af1c4a73f` (`GET /api/v1/devices/health`, Diagnostics row, fake-tuner test). Take only the health files. Drop its copy of the update notifier, lab logs, and any PROGRESS edit. No lanes are running.
-- Disk: steering 11:10. Merged lane copies removed (they were clones, not registered worktrees). `apple/build`, Broadwave DerivedData, and the Go build cache cleared. `df -h ~` is 13 GB free. AS6 and G10 copies kept. No cloned simulators to delete.
+- Current task: **G10** tuner health (integrate the finished lane, then MV3). App Review unchanged at 2026-09-25 16:19Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply.
+- Lane ledger: P2b merged `4a411d3`. LEGAL1 merged `0743bc6`. OPS3 merged `02554ea`. HW1 merged `8a815e8`, review fix `4c04373`. MV2 merged `cc726eb`. P2c merged `086265d`. OPS1 merged `a9abe62`. AS6 merged this commit (registry and ADR 0011 only; the lane's update-notifier copy was dropped). G10 is ready in `…/707af1c4a73f` (`GET /api/v1/devices/health`, Diagnostics row, fake-tuner test). Take only the health files. Drop its copy of the update notifier, lab logs, and any PROGRESS edit. No lanes are running.
+- Disk: steering 11:10, checked 2026-09-25 16:19Z. `df -h ~` is 12 GB free after `go clean -cache`, `apple/build`, and `DerivedData/Broadwave-*` (those were already empty). Above 5 GB, so lanes can continue. AS6 and G10 copies kept until G10 is merged. No cloned simulators to delete.
 - Production `Broadwave` `:8477` is `v0.8.0`. Staging has the MV1 web bundle. Next recording Jeopardy 2026-09-25 20:00 UTC. Lane A is **MV3**.
-- App Review: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-25 16:06Z (AS1). Check it at the start of every round.
+- App Review: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-25 16:19Z (AS1). Check it at the start of every round.
 - Production `Broadwave` on TUS `:8477` is v0.8.0. Staging `Broadwave-Staging` on `:8490` is `v0.8.0-4-g6545f65` (encoder h264_vaapi). Next recording: Jeopardy, 2026-09-25 20:00 UTC.
 - The repo is `~/Projects/active/broadwave`.
 
@@ -25,7 +25,8 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] AS3 `scripts/demo-lineup.sh` + `scripts/appstore-shots.sh` regenerate and upload every screenshot set (JPEG)
 - [ ] AS4 App Store update 1.1 (demo mode, Apple art, multiview fixes, iPad multiview screenshots) submitted on both platforms
 - [ ] AS5 Public TestFlight group with a public link on both platforms
-- [ ] AS6 Sports data rights: ADR 0011, pluggable provider, owner's decision on the default
+- [x] AS6 Sports data rights: ADR 0011, pluggable provider, owner's decision on the default. `docs/decisions/0011-sports-provider.md`. `Open("")`, `Open("espn")`, and `Open("ESPN")` return the ESPN board and do not dial (`TestOpenESPNDoesNotDial`). `Open("no-such-provider")` errors. A registered fixture feeds the cache and is not ESPN (`TestRegisteredProviderFeedsTheCache`). No second client. Startup is still `NewCache(NewESPN())`. The owner's choice is the open question in BLOCKERS; scores stay on ESPN until they answer (`AS6b`).
+- [ ] AS6b Owner picks the default sports provider. Blocked: needs the owner's decision (BLOCKERS). Scores stay on ESPN.
 
 ## Phase AP — Apple apps at web depth
 - [ ] AP1 Program art on Apple guide cells, program sheet, search, sports cards, recordings (Home done in f22d4ab)
