@@ -11,7 +11,7 @@
 #   scripts/agent-tmux.sh              # the loop plus a status pane in tmux
 #
 # Environment: AGENT (agent or grok, default: agent), MODEL (default: the CLI's
-# selected model), MAX_IDLE (rounds without a new commit before giving up, default 6).
+# selected model), EFFORT (Grok reasoning effort, default high), MAX_IDLE (rounds without a new commit before giving up, default 6).
 #
 # Every Grok round runs with scripts/unraid-guard.py as a PreToolUse hook
 # (~/.grok/hooks/broadwave-unraid-guard.json): it denies any command that would
@@ -81,7 +81,7 @@ while true; do
   before=$(git rev-parse HEAD)
   note "round $round ($AGENT): $left open tasks, HEAD ${before:0:7}"
   if is_grok; then
-    args=(-p "$(cat docs/plan/AGENT_PROMPT.md)" --always-approve --cwd "$REPO" --output-format streaming-json)
+    args=(-p "$(cat docs/plan/AGENT_PROMPT.md)" --always-approve --cwd "$REPO" --output-format streaming-json --effort "${EFFORT:-high}")
   else
     force_http1
     args=(-p --force --trust --approve-mcps --workspace "$REPO" --output-format stream-json "$(cat docs/plan/AGENT_PROMPT.md)")

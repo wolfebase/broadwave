@@ -8,7 +8,7 @@ You are continuing **Broadwave** in `/Users/tyler/Projects/active/broadwave` (gi
 
 ## 1. Start of every round (in this order)
 
-1. Read `AGENTS.md`, then `docs/plan/PROGRESS.md` from the top ("Resume here" and "Read first"). Then read `docs/plan/MASTER_PLAN.md` sections 0.1 through 0.1d, the section 3 text for your current task, and section 4 (the order). Also read `docs/plan/BLOCKERS.md`.
+1. Read `AGENTS.md`, then `docs/plan/STEERING.md` (the reviewer's current notes; follow them), then `docs/plan/PROGRESS.md` from the top ("Resume here" and "Read first"). Then read `docs/plan/MASTER_PLAN.md` sections 0.1 through 0.1d, the section 3 text for your current task, and section 4 (the order). Also read `docs/plan/BLOCKERS.md`.
 2. **App Review check (AS1):** run `~/.blitz/bin/asc versions list --app 6815795649`. If a state changed, write it into "Resume here". If it was rejected, fixing that is your task now (MASTER_PLAN 0.1d rule 1).
 3. Run `git status`, `git log --oneline -5`, and `gh run list -L 3`. If the tree has uncommitted work, it belongs to the task in "Resume here": finish it, verify it, and commit it first. If CI is red, fix CI first.
 4. The next task is the first unticked line in section 4 order that isn't blocked. Update "Resume here" before you start it.
