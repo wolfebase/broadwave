@@ -478,7 +478,7 @@ func (s *Server) streamAllocated(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, code, errMsg)
 		return
 	}
-	defer s.release(idx)
+	defer s.release(idx, stop)
 	var pkt []byte
 	switch {
 	case transcode != "":
@@ -496,7 +496,7 @@ func (s *Server) streamAllocated(w http.ResponseWriter, r *http.Request) {
 	s.loopFile(w, stop, done)
 }
 
-func (s *Server) allocate(forced int, ch Channel) (int, <-chan struct{}, string) {
+func (s *Server) allocate(forced int, ch Channel) (int, chan struct{}, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.scanning {
@@ -509,7 +509,14 @@ func (s *Server) allocate(forced int, ch Channel) (int, <-chan struct{}, string)
 		if s.tuners[forced].dead || !s.canTune(forced, ch) {
 			return -1, nil, "806 Tune Failed"
 		}
+		// A control tune is not a second viewer. /tunerN/ch follows /tunerN/vchannel.
 		if s.tuners[forced].held {
+			same := s.tuners[forced].guide == ch.Number || s.tuners[forced].freq == ch.Freq
+			if same && s.tuners[forced].stop == nil {
+				stop := make(chan struct{})
+				s.tuners[forced].stop = stop
+				return forced, stop, ""
+			}
 			return -1, nil, "804 Tuner In Use"
 		}
 		return s.assignLocked(forced, ch)
@@ -531,7 +538,8 @@ func (s *Server) allocate(forced int, ch Channel) (int, <-chan struct{}, string)
 	return -1, nil, "805 All tuners in use"
 }
 
-func (s *Server) assignLocked(i int, ch Channel) (int, <-chan struct{}, string) {
+func (s *Server) assignLocked(i int, ch Channel) (int, chan struct{}, string) {
+	s.closeStopLocked(i)
 	stop := make(chan struct{})
 	s.tuners[i].stop = stop
 	s.tuners[i].held = true
@@ -547,10 +555,12 @@ func (s *Server) canTune(i int, ch Channel) bool {
 	return i < s.spec.ATSC3
 }
 
-func (s *Server) release(n int) {
+// release drops the tuner only when this stream still owns it.
+// A newer tune, or a control "none", keeps the tuner it just took.
+func (s *Server) release(n int, stop chan struct{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if n < 0 || n >= len(s.tuners) {
+	if n < 0 || n >= len(s.tuners) || s.tuners[n].stop != stop {
 		return
 	}
 	s.closeStopLocked(n)
@@ -752,7 +762,9 @@ func (s *Server) command(name, value string, set bool) (string, string) {
 			return fmt.Sprintf("auto:%d", t.freq), ""
 		}
 		if value == "none" {
-			t.guide, t.freq, t.held, t.transcode = "", 0, false, ""
+			dead := t.dead
+			s.closeStopLocked(n)
+			*t = tuner{dead: dead}
 			return "none", ""
 		}
 		if t.dead {
