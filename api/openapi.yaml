@@ -1268,6 +1268,17 @@ paths:
             schema: { type: string, format: binary }
       responses:
         "200": { $ref: "#/components/responses/Ok" }
+  /support:
+    get:
+      tags: [settings]
+      operationId: downloadSupport
+      description: Zip of recent logs, versions, doctor results, and redacted settings. Passwords and tuner DeviceAuth are left out.
+      responses:
+        "200":
+          description: Support bundle
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
 components:
   parameters:
     Id:

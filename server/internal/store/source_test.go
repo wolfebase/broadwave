@@ -224,6 +224,20 @@ func TestMaskedSourceFetchesWithItsLogin(t *testing.T) {
 	}
 }
 
+func TestMaskURLMatchesTheStoredForm(t *testing.T) {
+	raw := "http://ops3user:ops3-fixture-password@playlist.example/pl.m3u?password=ops3-fixture-password"
+	public, secret := maskURL(raw)
+	if MaskURL(raw) != public || secret != raw {
+		t.Fatalf("wrapper %q public %q", MaskURL(raw), public)
+	}
+	if strings.Contains(public, "ops3-fixture-password") {
+		t.Fatalf("leaked %s", public)
+	}
+	if MaskURL(public) != public {
+		t.Fatalf("unstable %q vs %q", MaskURL(public), public)
+	}
+}
+
 func TestOldXtreamGuideUsesThePlaylistLogin(t *testing.T) {
 	st := openTestStore(t)
 	ctx := context.Background()

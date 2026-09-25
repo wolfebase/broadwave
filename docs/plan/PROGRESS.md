@@ -3,8 +3,8 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **OPS3** next (LEGAL1 is in this commit). App Review unchanged at 2026-09-25 14:33Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply. P2b `4a411d3` CI green.
-- Lane ledger: P2b `…/bafd5006f4ed` merged. LEGAL1 `…/bb0358833876` merged (full Apache LICENSE; About shots in `.evidence/legal1/`). OPS3 `…/568371cff638` reviewed, ready to land (drop PROGRESS.md, lab logs, multiview; Apple Settings was not in the lane). HW1 `…/5692aafd57e5` reviewed, ready (keep its `lineup.post`, fix the EXTEND sentence in `docs/hardware.md`; drop PROGRESS.md, lab logs, multiview). Dead clones removed: `…/bb170514cf69`, `…/bb215ecf6174`.
+- Current task: **HW1** next (OPS3 is in this commit). App Review unchanged at 2026-09-25 14:33Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply.
+- Lane ledger: P2b merged `4a411d3` (CI green). LEGAL1 merged `0743bc6`. OPS3 merged in this commit. HW1 `…/5692aafd57e5` reviewed, ready (keep its `lineup.post`, fix the EXTEND sentence in `docs/hardware.md`; drop PROGRESS.md, lab logs, multiview). Dead clones removed. After HW1, Lane A is **MV2**. No background lanes are running.
 - Production `Broadwave` `:8477` is `v0.8.0`. Staging has the MV1 web bundle. Next recording Jeopardy 2026-09-25 20:00 UTC. After the lanes land, Lane A is **MV2**.
 - App Review: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-25 14:33Z (AS1). Check it at the start of every round.
 - Production `Broadwave` on TUS `:8477` is v0.8.0. Staging `Broadwave-Staging` on `:8490` is `v0.8.0-4-g6545f65` (encoder h264_vaapi). Next recording: Jeopardy, 2026-09-25 20:00 UTC.
@@ -34,7 +34,8 @@ Tick items as they are verified and committed, in the same commit as the work (`
 ## Phase OPS — Running it for years
 - [ ] OPS1 Update notifier (GitHub releases, opt-out, banners on web and Apple)
 - [ ] OPS2 Nightly catalog backups with retention, pre-upgrade backup, restore from Settings
-- [ ] OPS3 Support bundle with redacted config (test proves no secrets)
+- [x] OPS3 Support bundle with redacted config. `GET /api/v1/support` returns a zip of versions, doctor, redacted config, and logs. `TestSupportBundleLeavesOutSecrets` stores an Xtream password and a `DeviceAuth` token, then checks the zip bytes, every entry, and the log ring contain neither (it does not look for the mask dots, which `net/url` percent-encodes). `TestMaskURLMatchesTheStoredForm`. Web Settings links the download (`copy.settings.support`). SUPPORT.md links the route. Sample zip `.evidence/ops3/broadwave-support.zip` (not committed). OpenAPI `downloadSupport`. No admin auth, same as backup. `make check` green.
+- [ ] OPS3b Apple Settings downloads the support bundle, the way the web Settings button does.
 - [x] OPS4 Retired-name guard `scripts/check-names.sh` in `make check` and CI (2026-09-24)
 - [ ] OPS5 README with screenshots and installs; GitHub Pages site at wolfebase.github.io/broadwave
 

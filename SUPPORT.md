@@ -17,3 +17,5 @@ Broadwave is live TV and DVR for your antenna. You run the Broadwave server at h
 ## Contact
 
 Open an issue at https://github.com/wolfebase/broadwave/issues or email twolfekc@gmail.com.
+
+Download a support bundle from Settings, or at `http://<server>:8477/api/v1/support`.
