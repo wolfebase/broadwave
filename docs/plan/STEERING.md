@@ -4,6 +4,13 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
+- 2026-09-25 11:45 · **AS6 answered (the owner delegated the call to the reviewer).** Keep ESPN's public scoreboard as the default provider, with these conditions, then unblock AS6 and record the decision in ADR 0011:
+  1. Only the user's own server fetches scores (never the apps, never Wolfe Up), at the current polite refresh rates, and it caches responses.
+  2. Settings > Sports shows "Scores from ESPN's public scoreboard" and a switch to turn live scores off (on by default); the switch stops all scoreboard requests.
+  3. TheSportsDB is an optional provider in the registry, used only when the user enters their own key; no key is bundled and nothing is bought.
+  4. No ESPN, league, or team logos in store art, marketing, or the README; the apps show team names and colors, not fetched logos, unless the user's own server provides them.
+  5. PRIVACY.md and the App Privacy answers stay accurate: this is a request from the user's server, and no data goes to Wolfe Up.
+
 - 2026-09-25 11:10 · **The Mac's disk is 97% full (12 GB free). A full disk will fail builds and stall the run. Clean up after yourself, starting this round:**
   - Remove every lane worktree whose task is merged or dead with `git worktree remove --force` (P2b, LEGAL1, OPS3, HW1 and OPS1 are merged; the two `…01a0d8db…` multiview lanes are done). Remove each future lane's worktree as soon as its result is merged or rejected. There are 8 on disk now (1.2 GB).
   - Delete any simulator you cloned for a lane (`xcrun simctl delete <udid>`) when its lane ends. Never delete the "Broadwave Staging" or "Broadwave Shots" simulators, or any simulator you didn't create.
