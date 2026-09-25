@@ -1,9 +1,103 @@
 Broadwave
 Copyright 2026 Broadwave contributors
 
-This product includes software developed for Broadwave, licensed under
-the Apache License, Version 2.0.
+Broadwave is licensed under the Apache License, Version 2.0. See LICENSE.
 
-Later sessions run ffmpeg and comskip as separate programs. Those tools
-are not linked into this binary. ffmpeg builds that include GPL components
-are GPL. comskip is GPL. Their licenses apply to those programs only.
+Regenerate this file when a direct dependency changes. Direct Go modules are
+the require entries in server/go.mod that are not marked indirect; read the
+LICENSE file in that module version. Direct npm packages are dependencies
+and devDependencies in web/package.json; versions here are the ones resolved
+in web/package-lock.json, and the license is that package's license field.
+Swift packages are the dependencies in
+apple/Packages/BroadwaveKit/Package.swift, apple/Packages/BroadwaveUI/Package.swift,
+and the local packages named in apple/project.yml. Do not vendor those trees.
+
+Go modules (server/go.mod)
+
+  github.com/coder/websocket v1.8.15
+    ISC
+  github.com/libp2p/zeroconf/v2 v2.2.0
+    MIT
+  golang.org/x/sys v0.48.0
+    BSD-3-Clause
+  gopkg.in/yaml.v3 v3.0.1
+    Apache-2.0 AND MIT (libyaml ports are MIT; the other files are Apache-2.0)
+  modernc.org/sqlite v1.59.0
+    BSD-3-Clause. The module bundles SQLite (public domain) and sqlite-vec (MIT).
+
+npm packages (web/package.json)
+
+  Runtime dependencies. The version in parentheses is the package.json range.
+
+  @fontsource-variable/inter 5.3.0 (^5.3.0)
+    OFL-1.1
+  hls.js 1.7.3 (^1.7.3)
+    Apache-2.0
+  qrcode-generator 1.5.2 (^1.5.2)
+    MIT
+  react 19.3.0 (^19.1.1)
+    MIT
+  react-dom 19.3.0 (^19.1.1)
+    MIT
+
+  Dev dependencies. These are used to build and check the web app. They are
+  not part of the running server.
+
+  @eslint/js 10.0.1 (^10.0.1)
+    MIT
+  @types/react 19.3.0 (^19.1.12)
+    MIT
+  @types/react-dom 19.3.0 (^19.1.9)
+    MIT
+  @vitejs/plugin-react 5.2.0 (^5.0.2)
+    MIT
+  eslint 10.11.0 (^10.11.0)
+    MIT
+  eslint-plugin-react-hooks 7.1.1 (^7.1.1)
+    MIT
+  openapi-typescript 7.13.0 (^7.13.0)
+    MIT
+  typescript 5.9.3 (^5.9.2)
+    Apache-2.0
+  typescript-eslint 8.70.1 (^8.70.1)
+    MIT
+  vite 7.3.6 (^7.1.3)
+    MIT
+
+Swift packages
+
+  BroadwaveKit (apple/Packages/BroadwaveKit/Package.swift) has no external
+  package dependencies. It is part of this repository, Apache-2.0.
+  BroadwaveUI (apple/Packages/BroadwaveUI/Package.swift) depends on
+  BroadwaveKit by local path. Apache-2.0.
+  The iOS and tvOS apps have no Package.swift. apple/project.yml links the
+  same two local packages and no remote ones.
+
+ffmpeg
+
+  The published image (deploy/docker/Dockerfile) and the runtime image
+  (deploy/docker/Dockerfile.runtime) install the Debian package
+  jellyfin-ffmpeg7 from https://repo.jellyfin.org/debian, suite bookworm,
+  component main. They do not install Debian's ffmpeg package. The package
+  version is not pinned in either Dockerfile.
+
+  On 2026-09-25, apt's candidate in that suite for amd64 and arm64 was
+  jellyfin-ffmpeg7 7.1.4-3-bookworm (source package jellyfin-ffmpeg 7.1.4-3).
+  Corresponding source, tag v7.1.4-3:
+
+    https://github.com/jellyfin/jellyfin-ffmpeg
+    https://github.com/jellyfin/jellyfin-ffmpeg/archive/refs/tags/v7.1.4-3.tar.gz
+
+  debian/rules at that tag configures the build with --enable-gpl and
+  --enable-version3, and links GPL libraries including libx264 and libx265.
+  That ffmpeg is GPL-3.0-or-later. The same build also links libfdk-aac,
+  which the Jellyfin package ships under the FDK AAC license.
+
+  A later image build can install a newer jellyfin-ffmpeg7 from the same
+  suite, because the Dockerfiles do not pin it. For a package version
+  X.Y.Z-N-bookworm, the source is tag vX.Y.Z-N in the repository above.
+  The image carries this offer at /usr/share/doc/broadwave/ffmpeg-source-offer.txt.
+  Broadwave is not linked with ffmpeg. The server runs it as a separate program.
+
+  comskip is not installed by the image. If an operator installs it, it runs
+  as its own program under the GPL.
