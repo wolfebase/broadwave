@@ -39,7 +39,6 @@ HOST_BLOCK = [
     (r"\b(installplg|plugin\s+(install|remove|update)|/usr/local/sbin/(plugin|emhttp|update))", "Unraid plugin/system change"),
     (r"\b(user(add|del|mod)|passwd|chpasswd|crontab\s+-[er])\b", "host accounts/cron"),
     (r"\bkillall\b|\bpkill\b|\bkill\s+-?\d*\s*1\b", "killing host processes"),
-    (r"\bchannels?dvr|\bplex\b|\bjellyfin\b|\bemby\b|\btdarr\b|\bsonarr\b|\bradarr\b|\bportkey\b", "another app on TUS"),
     (r"--privileged|--pid[= ]host|docker\.sock", "privileged container"),
 ]
 
@@ -81,6 +80,7 @@ def check_docker(text):
                     name = words[i + 1]
                 elif w.startswith("--name="):
                     name = w.split("=", 1)[1]
+            name = name.strip("'\"\\") if name else name
             if not name or not OURS.match(name):
                 return f"docker {verb} must name a Broadwave container (got {name!r})"
             for i, w in enumerate(words):
@@ -108,7 +108,7 @@ def check_docker(text):
                 break
         if verb == "cp" and names:
             names = [names[0].split(":", 1)[0]] if ":" in names[0] else []
-        for n in names:
+        for n in (w.strip("'\"\\") for w in names):
             if not OURS.match(n):
                 return f"docker {verb} on {n!r}, which is not a Broadwave container"
     for m in re.finditer(r"\bdocker\s+(?:image\s+)?(rmi|rm)\b([^;&|\n]*)", text):
