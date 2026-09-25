@@ -3,6 +3,7 @@ import type { Pass, PlannedAiring, Recording } from "../../types";
 import { deletePass, fixSchedule, getEvents, getSchedule, stopRecording, updatePass } from "../../api";
 import { copy } from "../../strings";
 import { formatClock } from "../../time";
+import { missedLine } from "./missed";
 import "./schedule.css";
 export function Schedule({
   recordings,
@@ -59,6 +60,7 @@ export function Schedule({
         start: item.airing.start,
         suggestionChannelId: alt.channelId,
         suggestionStart: alt.start,
+        ...(alt.misses && alt.misses.length > 0 ? { acknowledgeMisses: true } : {}),
       });
       setItems(res.items);
       setTunerCount(res.tunerCount);
@@ -92,7 +94,18 @@ export function Schedule({
                       Later at {formatClock(new Date(item.suggestion.start))}
                       {item.suggestion.guideNumber ? ` on ${item.suggestion.guideNumber}` : ""}.
                     </span>
-                    <button type="button" className="btn small schedule-fix" disabled={fixing === fixKey} onClick={() => void recordLater(item)}>
+                    {item.suggestion.misses && item.suggestion.misses.length > 0 ? (
+                      <span className="schedule-miss" id={`miss-${item.passId}-${item.airing.id}`}>
+                        {missedLine(item.suggestion.misses)}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="btn small schedule-fix"
+                      disabled={fixing === fixKey}
+                      aria-describedby={item.suggestion.misses && item.suggestion.misses.length > 0 ? `miss-${item.passId}-${item.airing.id}` : undefined}
+                      onClick={() => void recordLater(item)}
+                    >
                       Record the later airing
                     </button>
                   </span>

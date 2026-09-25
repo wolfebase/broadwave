@@ -11,6 +11,11 @@
   min-width: 0;
 }
 
+.schedule-miss {
+  flex: 1 0 100%;
+  min-width: 0;
+}
+
 .schedule-fix {
   white-space: normal;
   text-align: center;

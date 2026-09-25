@@ -10,12 +10,22 @@ import (
 )
 
 // Suggestion is another airing of a skipped show that fits on the tuners already kept.
+// Misses are other showings a one-shot fix will not record. A channel-pin move leaves this empty.
 type Suggestion struct {
+	ChannelID   int64           `json:"channelId"`
+	GuideNumber string          `json:"guideNumber,omitempty"`
+	Title       string          `json:"title"`
+	Start       time.Time       `json:"start"`
+	End         time.Time       `json:"end"`
+	Misses      []MissedShowing `json:"misses,omitempty"`
+}
+
+// MissedShowing is one airing a one-shot would record and then drop.
+type MissedShowing struct {
 	ChannelID   int64     `json:"channelId"`
 	GuideNumber string    `json:"guideNumber,omitempty"`
 	Title       string    `json:"title"`
 	Start       time.Time `json:"start"`
-	End         time.Time `json:"end"`
 }
 
 // Soon is a recording that has not started. Pad is how early its tuner is reserved.
@@ -27,9 +37,10 @@ type Soon struct {
 }
 
 // FixPlan records a suggestion instead of a skipped airing.
-// Priority is never raised. A title pass pinned to a channel moves when that
-// pin is the only mismatch. Otherwise OneShot is a pass for this airing alone,
-// because a pass has no field for one start time.
+// Priority is never raised. When the pass already matches the later airing,
+// only that skipped showing is dropped. A title pass whose channel pin is the
+// only mismatch takes the later channel. Any other pass gets a one-shot, which
+// can skip other showings of that title for good.
 type FixPlan struct {
 	Skip       store.Airing
 	SetChannel int64
@@ -99,13 +110,18 @@ func laterAiring(items []Planned, skipped Planned, pass store.Pass, airings []st
 	if !found {
 		return Suggestion{}, false
 	}
-	return Suggestion{
+	sug := Suggestion{
 		ChannelID:   best.ChannelID,
 		GuideNumber: guides[best.ChannelID],
 		Title:       best.Title,
 		Start:       best.Start,
 		End:         best.End,
-	}, true
+	}
+	fix := PlanFix(pass, skipped.Airing, best)
+	if fix.OneShot != nil {
+		sug.Misses = MissedFrom(airings, *fix.OneShot, best, guides)
+	}
+	return sug, true
 }
 
 // rulesMatch applies the pass except its channel pin, so a later airing on
@@ -191,7 +207,9 @@ func sameShowing(a, b store.Airing) bool {
 	return a.ChannelID == b.ChannelID && !a.Start.IsZero() && a.Start.Equal(b.Start)
 }
 
-// PlanFix chooses a channel move or a one-shot. It does not raise priority.
+// PlanFix keeps the series on its channel when that pass already matches the
+// later airing. It moves a title pass's channel pin only when the pin is the
+// only mismatch. Everything else is a one-shot. It does not raise priority.
 func PlanFix(pass store.Pass, skipped, suggestion store.Airing) FixPlan {
 	fix := FixPlan{Skip: skipped}
 	if passMatches(pass, suggestion) {
@@ -258,7 +276,7 @@ func HaveOneShot(passes []store.Pass, suggestion store.Airing) bool {
 	return false
 }
 
-// OneShotSkips lists other airings the one-shot would grab before this one.
+// OneShotSkips lists other airings the one-shot would grab besides the one the viewer chose.
 func OneShotSkips(airings []store.Airing, shot store.Pass, keep store.Airing) []store.Airing {
 	var out []store.Airing
 	for _, air := range airings {
@@ -270,10 +288,76 @@ func OneShotSkips(airings []store.Airing, shot store.Pass, keep store.Airing) []
 	return out
 }
 
+// MissedFrom is the showings OneShotSkips would drop, in start order.
+func MissedFrom(airings []store.Airing, shot store.Pass, keep store.Airing, guides map[int64]string) []MissedShowing {
+	skipped := OneShotSkips(airings, shot, keep)
+	if len(skipped) == 0 {
+		return nil
+	}
+	out := make([]MissedShowing, 0, len(skipped))
+	for _, other := range skipped {
+		out = append(out, MissedShowing{
+			ChannelID:   other.ChannelID,
+			GuideNumber: guides[other.ChannelID],
+			Title:       other.Title,
+			Start:       other.Start,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Start.Equal(out[j].Start) {
+			return out[i].ChannelID < out[j].ChannelID
+		}
+		return out[i].Start.Before(out[j].Start)
+	})
+	return out
+}
+
+// MissedLine is the sentence shown before a one-shot fix is confirmed.
+func MissedLine(items []MissedShowing) string {
+	if len(items) == 0 {
+		return ""
+	}
+	parts := make([]string, len(items))
+	for i, item := range items {
+		parts[i] = missedPart(item)
+	}
+	return joinList(parts) + " will not record."
+}
+
+func missedPart(item MissedShowing) string {
+	title := strings.TrimSpace(item.Title)
+	if title == "" {
+		title = "A show"
+	}
+	when := item.Start.In(time.Local).Format("3:04 PM")
+	if number := strings.TrimSpace(item.GuideNumber); number != "" {
+		return fmt.Sprintf("%s at %s on %s", title, when, number)
+	}
+	return fmt.Sprintf("%s at %s", title, when)
+}
+
+func joinList(parts []string) string {
+	switch len(parts) {
+	case 0:
+		return ""
+	case 1:
+		return parts[0]
+	case 2:
+		return parts[0] + " and " + parts[1]
+	default:
+		return strings.Join(parts[:len(parts)-1], ", ") + ", and " + parts[len(parts)-1]
+	}
+}
+
+// preemptWindow is how early a recording keeps the last tuner when the pass
+// has no padding. The scheduler checks on that same interval.
+const preemptWindow = 20 * time.Second
+
 // LiveWatch reports whether a live tune that needs its own tuner would leave a
 // recording without one. busyOthers is how many tuners are already in use on
-// other channels. A recording counts while now is inside its start pad and
-// the recording has not started. allow is false when the viewer should confirm.
+// other channels. A recording counts while now is inside its start pad, or
+// inside preemptWindow, and the recording has not started. allow is false when
+// the viewer should confirm.
 func LiveWatch(tunerCount, busyOthers int, upcoming []Soon, now time.Time) (allow bool, warning string) {
 	if tunerCount < 1 {
 		tunerCount = 1
@@ -305,8 +389,8 @@ func inPad(item Soon, now time.Time) bool {
 		return false
 	}
 	pad := item.Pad
-	if pad < 0 {
-		pad = 0
+	if pad < preemptWindow {
+		pad = preemptWindow
 	}
 	return !now.Before(item.Start.Add(-pad))
 }
@@ -332,7 +416,7 @@ func liveWarningText(soon Soon, needed int) string {
 	}
 	when := soon.Start.In(time.Local).Format("3:04 PM")
 	if needed > 1 {
-		return fmt.Sprintf("%s starts at %s. %d recordings need a tuner, so this channel has to wait.", title, when, needed)
+		return fmt.Sprintf("%s starts at %s. Watching now will miss %d recordings.", title, when, needed)
 	}
-	return fmt.Sprintf("%s starts at %s and needs the last tuner.", title, when)
+	return fmt.Sprintf("%s starts at %s. Watching now will miss that recording.", title, when)
 }

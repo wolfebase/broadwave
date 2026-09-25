@@ -522,6 +522,7 @@ func (s *Server) fixSchedule(w http.ResponseWriter, r *http.Request) {
 		Start               time.Time `json:"start"`
 		SuggestionChannelID int64     `json:"suggestionChannelId"`
 		SuggestionStart     time.Time `json:"suggestionStart"`
+		AcknowledgeMisses   bool      `json:"acknowledgeMisses"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		httpError(w, "invalid json", http.StatusBadRequest)
@@ -558,6 +559,13 @@ func (s *Server) fixSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fix := dvr.PlanFix(pass, item.Airing, suggestion)
+	if fix.OneShot != nil && !dvr.HaveOneShot(snap.passes, suggestion) {
+		missed := dvr.MissedFrom(snap.airings, *fix.OneShot, suggestion, s.guideNumbers(r.Context()))
+		if len(missed) > 0 && !body.AcknowledgeMisses {
+			apiError(w, http.StatusConflict, "missed_showings", dvr.MissedLine(missed), nil)
+			return
+		}
+	}
 	// Save the replacement before skipping. A failed save must leave the original airing in place.
 	if fix.SetChannel != 0 && pass.ChannelID != fix.SetChannel {
 		pass.ChannelID = fix.SetChannel

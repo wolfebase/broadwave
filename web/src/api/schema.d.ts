@@ -1453,6 +1453,16 @@ export interface components {
             start: string;
             /** Format: date-time */
             end: string;
+            /** @description Showings a one-shot fix will not record. Empty when the later airing needs no extra skip. */
+            misses?: components["schemas"]["MissedShowing"][];
+        };
+        MissedShowing: {
+            /** Format: int64 */
+            channelId: number;
+            guideNumber?: string;
+            title: string;
+            /** Format: date-time */
+            start: string;
         };
         PlannedAiring: {
             /** Format: int64 */
@@ -2390,7 +2400,7 @@ export interface operations {
                      */
                     audio?: "stereo" | "surround";
                     pictureMode?: components["schemas"]["PictureMode"];
-                    /** @description Set when the viewer chooses to watch even though a recording needs the last tuner. */
+                    /** @description Set when the viewer chooses to watch even though that recording will be missed. */
                     confirmLive?: boolean;
                 };
             };
@@ -2882,6 +2892,8 @@ export interface operations {
                     suggestionChannelId: number;
                     /** Format: date-time */
                     suggestionStart: string;
+                    /** @description Set after the viewer has seen the showings this fix will not record. */
+                    acknowledgeMisses?: boolean;
                 };
             };
         };
