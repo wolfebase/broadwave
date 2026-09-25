@@ -63,6 +63,9 @@ type Server struct {
 	GuidePull func(ctx context.Context) (int, error)
 	// Updates is the daily release check. Nil leaves the server info without an update field.
 	Updates *update.Checker
+	// BackupDir is the catalog copy folder under the config directory.
+	// Empty means the backup list is empty.
+	BackupDir string
 
 	sportsMu  sync.Mutex
 	sportsKey string
@@ -154,6 +157,9 @@ func (s *Server) Handler() http.Handler {
 	api("GET /storage", s.storage)
 	api("GET /backup", s.backup)
 	api("POST /backup", s.restore)
+	api("GET /backups", s.listBackups)
+	api("GET /backups/{name}", s.downloadSavedBackup)
+	api("POST /backups/{name}/restore", s.restoreSavedBackup)
 	api("GET /support", s.support)
 	mux.HandleFunc("GET /export/lineup.m3u", s.exportLineup)
 	mux.HandleFunc("GET /export/guide.xml", s.exportGuide)

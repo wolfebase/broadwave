@@ -919,6 +919,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Catalog copies on this server. Video files are not included. */
+        get: operations["listBackups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description One saved catalog copy. Video files are not included. */
+        get: operations["downloadCatalogBackup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/{name}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Put the catalog back to this copy. Recordings on disk are left in place. */
+        post: operations["restoreCatalogBackup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/support": {
         parameters: {
             query?: never;
@@ -1421,6 +1472,15 @@ export interface components {
              */
             channelId?: number;
             steps: components["schemas"]["SetupStep"][];
+        };
+        CatalogBackup: {
+            name: string;
+            /** @enum {string} */
+            kind: "daily" | "weekly" | "version";
+            /** Format: date-time */
+            takenAt: string;
+            /** Format: int64 */
+            bytes: number;
         };
         Settings: {
             /** @enum {string} */
@@ -3232,6 +3292,66 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["Ok"];
+        };
+    };
+    listBackups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved catalog copies, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        backups: components["schemas"]["CatalogBackup"][];
+                    };
+                };
+            };
+        };
+    };
+    downloadCatalogBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Catalog database */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            404: components["responses"]["Error"];
+        };
+    };
+    restoreCatalogBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Ok"];
+            404: components["responses"]["Error"];
         };
     };
     downloadSupport: {

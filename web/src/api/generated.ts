@@ -38,6 +38,13 @@ export type Caps = {
   network?: string;
 };
 
+export type CatalogBackup = {
+  name: string;
+  kind: string;
+  takenAt: string;
+  bytes: number;
+};
+
 export type Channel = {
   id: number;
   deviceId: string;

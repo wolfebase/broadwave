@@ -1288,6 +1288,53 @@ paths:
             schema: { type: string, format: binary }
       responses:
         "200": { $ref: "#/components/responses/Ok" }
+  /backups:
+    get:
+      tags: [settings]
+      operationId: listBackups
+      description: Catalog copies on this server. Video files are not included.
+      responses:
+        "200":
+          description: Saved catalog copies, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [backups]
+                properties:
+                  backups:
+                    type: array
+                    items: { $ref: "#/components/schemas/CatalogBackup" }
+  /backups/{name}:
+    get:
+      tags: [settings]
+      operationId: downloadCatalogBackup
+      description: One saved catalog copy. Video files are not included.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Catalog database
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "404": { $ref: "#/components/responses/Error" }
+  /backups/{name}/restore:
+    post:
+      tags: [settings]
+      operationId: restoreCatalogBackup
+      description: Put the catalog back to this copy. Recordings on disk are left in place.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "404": { $ref: "#/components/responses/Error" }
   /support:
     get:
       tags: [settings]
@@ -1815,6 +1862,14 @@ components:
         steps:
           type: array
           items: { $ref: "#/components/schemas/SetupStep" }
+    CatalogBackup:
+      type: object
+      required: [name, kind, takenAt, bytes]
+      properties:
+        name: { type: string }
+        kind: { type: string, enum: [daily, weekly, version] }
+        takenAt: { type: string, format: date-time }
+        bytes: { type: integer, format: int64 }
     Settings:
       type: object
       properties:
