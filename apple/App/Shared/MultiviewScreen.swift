@@ -214,9 +214,9 @@ final class MultiviewSession {
     }
 
     func prefs(for id: Int64) -> Prefs {
-        let big = id == focusID && !layout.equal
-        if big {
-            return Prefs(quality: .auto, audio: .auto, picture: "broadcast")
+        if id == focusID {
+            let audio: Prefs.Sound = layout.equal ? .stereo : .auto
+            return Prefs(quality: .focus, audio: audio, picture: "broadcast")
         }
         let quality: Prefs.Quality = (layout == .quad || layout == .pip) ? .tile360 : .tile
         return Prefs(quality: quality, audio: layout.equal ? .stereo : .none, picture: "broadcast")
@@ -229,6 +229,7 @@ final class TilePlayer {
     let player = AVPlayer()
     private(set) var error: String?
     private(set) var detail = ""
+    private(set) var dropped = 0
     private var audible = false
     private var attempts = 0
     private var channelID: Int64?
@@ -240,6 +241,10 @@ final class TilePlayer {
         var channel: Channel
         var prefs: Prefs
         var audible: Bool
+    }
+
+    func noteDrops(_ count: Int) {
+        dropped = count
     }
 
     func start(_ request: Request, room: String, store: AppStore, bind: @escaping (@escaping (String) -> Void) -> Void) async {
@@ -403,7 +408,7 @@ struct MultiviewScreen: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
                         .glassEffect(in: .capsule)
-                        .onAppear { UserDefaults.standard.set(true, forKey: "broadwave-mv-hint-seen") }
+                        .accessibilityIdentifier("mv-hint")
                 }
                 if !session.notice.isEmpty {
                     Text(session.notice)
@@ -633,6 +638,12 @@ struct MultiviewScreen: View {
         }
     }
 
+    private func dismissHint() {
+        guard hint else { return }
+        hint = false
+        UserDefaults.standard.set(true, forKey: "broadwave-mv-hint-seen")
+    }
+
     private func tile(_ channel: Channel) -> some View {
         let focused = channel.id == (ordered.first { $0.id == session.focusID }?.id ?? ordered.first?.id)
         #if os(tvOS)
@@ -650,8 +661,10 @@ struct MultiviewScreen: View {
             pip: focused
         ) {
             session.focusID = channel.id
-        } bind: { session.bind($0) }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } bind: { session.bind($0) } onSound: {
+            dismissHint()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         #if os(tvOS)
             .focused($remoteFocus, equals: channel.id)
         #endif
@@ -746,7 +759,11 @@ struct MultiviewTile: View {
     let pip: Bool
     let onFocus: () -> Void
     let bind: (@escaping (String) -> Void) -> Void
+    let onSound: () -> Void
     @State private var live = TilePlayer()
+    private var tileStats: Bool {
+        UserDefaults.standard.bool(forKey: "BroadwaveTileStats")
+    }
 
     var body: some View {
         Button(action: onFocus) {
@@ -775,6 +792,11 @@ struct MultiviewTile: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
+                    if tileStats {
+                        Text("\(live.dropped) dropped")
+                            .font(.caption2)
+                            .accessibilityIdentifier("tile-drops-\(channel.id)")
+                    }
                 }
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -800,7 +822,7 @@ struct MultiviewTile: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityIdentifier("tile-\(channel.id)")
             .accessibilityLabel("\(channel.displayNumber) \(channel.displayName), \(title)")
-            .accessibilityValue([remoteFocused ? "Focused" : nil, focused ? "Sound on" : "Sound off"].compactMap(\.self).joined(separator: ", "))
+            .accessibilityValue(tileValue)
             .accessibilityAddTraits(focused ? .isSelected : [])
             .task(id: "\(channel.id)-\(prefs.quality.rawValue)-\(prefs.audio.rawValue)") {
                 #if DEBUG
@@ -813,9 +835,36 @@ struct MultiviewTile: View {
             .onChange(of: focused) { _, on in
                 live.setAudible(on)
             }
+            .task(id: focused) {
+                guard focused else { return }
+                while !Task.isCancelled {
+                    if live.player.timeControlStatus == .playing, !live.player.isMuted {
+                        onSound()
+                        return
+                    }
+                    try? await Task.sleep(for: .milliseconds(400))
+                }
+            }
+            .task(id: tileStats) {
+                guard tileStats else { return }
+                while !Task.isCancelled {
+                    if let event = live.player.currentItem?.accessLog()?.events.last {
+                        live.noteDrops(event.numberOfDroppedVideoFrames)
+                    }
+                    try? await Task.sleep(for: .seconds(1))
+                }
+            }
             .onDisappear {
                 Task { await live.stop() }
             }
+    }
+
+    private var tileValue: String {
+        var parts = [remoteFocused ? "Focused" : nil, focused ? "Sound on" : "Sound off"].compactMap(\.self)
+        if tileStats {
+            parts.append("\(live.dropped) dropped")
+        }
+        return parts.joined(separator: ", ")
     }
 }
 

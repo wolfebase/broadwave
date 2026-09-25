@@ -42,7 +42,7 @@ public struct ScoreGame: Codable, Sendable, Hashable, Identifiable {
 
 public struct Prefs: Codable, Sendable, Hashable {
     public enum Quality: String, Codable, Sendable, CaseIterable {
-        case auto, original, high, medium, saver, tile
+        case auto, original, high, medium, saver, tile, focus
         case tile360 = "360"
     }
 

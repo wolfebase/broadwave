@@ -47,7 +47,7 @@ func TestDecide(t *testing.T) {
 }
 
 func TestRenditionKeyRoundTrip(t *testing.T) {
-	for _, key := range []string{"copy.copy", "copy.aac2", "1080.copy.broadcast", "1080.copy.broadcast.hevc", "540.aac6.film", "540.none.broadcast", "360.none.broadcast", "1080.aac2.broadcast.lang.even.hevc", "copy.aac2.vi"} {
+	for _, key := range []string{"copy.copy", "copy.aac2", "1080.copy.broadcast", "1080.copy.broadcast.hevc", "540.aac6.film", "540.none.broadcast", "360.none.broadcast", "1080.aac2.broadcast.lang.even.hevc", "copy.aac2.vi", "540.aac2.broadcast.60", "360.none.broadcast.60.hevc"} {
 		r, ok := ParseRenditionKey(key)
 		if !ok || r.Key() != key {
 			t.Errorf("%s did not round trip: %+v %v", key, r, ok)
@@ -57,6 +57,31 @@ func TestRenditionKeyRoundTrip(t *testing.T) {
 		if _, ok := ParseRenditionKey(bad); ok {
 			t.Errorf("%q should not parse", bad)
 		}
+	}
+}
+
+func TestFocusedTileIs60(t *testing.T) {
+	src := Source{VideoCodec: "MPEG2", AudioCodec: "AC3"}
+	apple := Caps{Platform: "tvos", Video: []string{"h264", "hevc"}, Audio: []string{"aac", "ac3"}}
+	gpu := DecideOn(src, apple, Prefs{Quality: "focus", Audio: "stereo"}, "h264_vaapi")
+	if gpu.Rendition.Key() != "720.aac2.broadcast.hevc" || !strings.Contains(gpu.Reason, "720p60 tile") {
+		t.Fatalf("gpu focus: %s %s", gpu.Rendition.Key(), gpu.Reason)
+	}
+	soft := DecideOn(src, apple, Prefs{Quality: "focus", Audio: "stereo"}, "libx264")
+	if soft.Rendition.Key() != "540.aac2.broadcast.60.hevc" || !soft.Rendition.FullRate || !strings.Contains(soft.Reason, "540p60 tile") {
+		t.Fatalf("software focus: %+v %s", soft.Rendition, soft.Reason)
+	}
+	back := DecideOn(src, apple, Prefs{Quality: "tile"}, "h264_vaapi")
+	if back.Rendition.Key() != "540.none.broadcast.hevc" || back.Rendition.FullRate {
+		t.Fatalf("background tile: %+v", back.Rendition)
+	}
+	heard := DecideOn(src, apple, Prefs{Quality: "focus"}, "h264_vaapi")
+	if heard.Rendition.Audio != "copy" {
+		t.Fatalf("a focused tile keeps sound: %s", heard.Rendition.Audio)
+	}
+	capped := DecideOn(src, Caps{Video: []string{"h264"}, Audio: []string{"aac"}, MaxHeight: 400}, Prefs{Quality: "focus", Audio: "none"}, "h264_vaapi")
+	if capped.Rendition.Key() != "360.none.broadcast.60" {
+		t.Fatalf("a tiny screen still gets 60: %s", capped.Rendition.Key())
 	}
 }
 

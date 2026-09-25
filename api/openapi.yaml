@@ -1581,7 +1581,7 @@ components:
       type: object
       description: The viewer's choices. Empty means automatic.
       properties:
-        quality: { type: string, enum: [auto, original, high, medium, saver, tile, "360"] }
+        quality: { type: string, enum: [auto, original, high, medium, saver, tile, "360", focus] }
         audio: { type: string, enum: [auto, surround, stereo, none] }
         picture: { $ref: "#/components/schemas/PictureMode" }
         track: { type: string, enum: [main, language, described], description: "Which broadcast audio mix to play. Empty is main." }
