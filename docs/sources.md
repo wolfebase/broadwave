@@ -4,6 +4,8 @@ What Broadwave can take in, how it is found, and how it is played. Decision: [00
 
 HDHomeRun on a new install is added when it is found. Everything else waits for one tap. A "Look harder" probe runs only when asked, and only on local subnets.
 
+Your home is a separate read-only scan in setup and in Settings. It lists tuners already found, plus screens and servers on the local subnet: Chromecast (`_googlecast._tcp`), AirPlay (`_airplay._tcp`), Fire TV and Android TV (DIAL), smart TVs (UPnP MediaRenderer), Plex (GDM), Jellyfin and Emby (UDP 7359), and Channels DVR (`_channels_dvr._tcp`). iPhone, iPad, and Apple TV apps announce themselves on the event socket. The only actions are Add for a tuner that is not in the lineup yet, and Use as tuner for Plex, Jellyfin, Emby, and Channels, which copies this server's HDHomeRun address. Nothing else is contacted or changed.
+
 | Source | Found by | Stream | Guide | Status |
 | --- | --- | --- | --- | --- |
 | HDHomeRun (FLEX, CONNECT, PRIME) | UDP 65001, `hdhomerun.local`, `<deviceID>.local` | Full mux on port 5004. This server uses `/tunerN/ch<freq>`. Docs also describe `/auto/ch<rf>`. | Device XMLTV, then another guide for the gaps | Supported. Auto-added. |

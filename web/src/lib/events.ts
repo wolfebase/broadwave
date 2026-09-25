@@ -40,6 +40,7 @@ class EventSocket {
       this.connected = true;
       this.retry = 0;
       this.bestRtt = Infinity;
+      this.raw("here", { name: "This browser", kind: "web" });
       for (const [room, channelId] of this.rooms) this.raw("sync.join", { room, channelId });
       for (const msg of this.queue.splice(0)) ws.send(msg);
       for (let i = 0; i < 5; i++) window.setTimeout(() => this.sampleClock(), i * 300);

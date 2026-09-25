@@ -157,3 +157,41 @@ func TestSocketClockAndRoomBroadcast(t *testing.T) {
 		t.Fatal("events reach every client")
 	}
 }
+
+func TestHereAnnouncesAScreen(t *testing.T) {
+	bus := NewBus()
+	srv := httptest.NewServer(bus)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+	raw, _ := json.Marshal(Message{Type: "here", Data: json.RawMessage(`{"name":"Broadwave Staging TV","kind":"appletv"}`)})
+	if err := conn.Write(ctx, websocket.MessageText, raw); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	var screens []Presence
+	for time.Now().Before(deadline) {
+		screens = bus.Screens()
+		if len(screens) == 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(screens) != 1 || screens[0].Kind != "appletv" || screens[0].Name != "Broadwave Staging TV" {
+		t.Fatalf("%+v", screens)
+	}
+	conn.Close(websocket.StatusNormalClosure, "")
+	deadline = time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(bus.Screens()) == 0 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("screen stayed after disconnect: %+v", bus.Screens())
+}

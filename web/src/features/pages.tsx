@@ -7,6 +7,7 @@ import { Library } from "./library/Library";
 import { Play } from "./recordings/Play";
 import { VirtualPlay } from "./recordings/Virtual";
 import { Schedule } from "./schedule/Schedule";
+import { HomeList } from "./setup/HomeList";
 import { SettingsScreen } from "./settings/Settings";
 import { Sources } from "./settings/Sources";
 
@@ -116,6 +117,9 @@ export function SettingsPage() {
           Run setup again
         </button>
       </div>
+      <section className="settings-section">
+        <HomeList />
+      </section>
       <section id="sources" className="settings-section">
         <h2>Tuners and channels</h2>
         <Sources

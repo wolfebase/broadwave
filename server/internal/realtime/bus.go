@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -27,9 +28,17 @@ type Bus struct {
 	now     func() time.Time
 }
 
+// Presence is one app that announced itself on the event socket.
+type Presence struct {
+	Name string
+	Kind string
+	Addr string
+}
+
 type client struct {
 	send  chan []byte
 	rooms map[string]bool
+	here  Presence
 }
 
 func NewBus() *Bus {
@@ -81,6 +90,20 @@ func (b *Bus) publishRoom(st RoomState) {
 	}
 }
 
+// Screens returns clients that have announced a name and a kind.
+func (b *Bus) Screens() []Presence {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	var out []Presence
+	for c := range b.clients {
+		if c.here.Kind == "" {
+			continue
+		}
+		out = append(out, c.here)
+	}
+	return out
+}
+
 // Clients reports how many sockets are connected.
 func (b *Bus) Clients() int {
 	b.mu.Lock()
@@ -95,7 +118,7 @@ func (b *Bus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.CloseNow()
-	c := &client{send: make(chan []byte, 64), rooms: map[string]bool{}}
+	c := &client{send: make(chan []byte, 64), rooms: map[string]bool{}, here: Presence{Addr: hostOnly(r.RemoteAddr)}}
 	b.mu.Lock()
 	b.clients[c] = struct{}{}
 	b.mu.Unlock()
@@ -161,6 +184,28 @@ func (b *Bus) reply(c *client, kind string, v any) {
 
 func (b *Bus) handle(c *client, m Message) {
 	switch m.Type {
+	case "here":
+		var req struct {
+			Name string `json:"name"`
+			Kind string `json:"kind"`
+		}
+		if json.Unmarshal(m.Data, &req) != nil {
+			return
+		}
+		kind := strings.ToLower(strings.TrimSpace(req.Kind))
+		switch kind {
+		case "iphone", "ipad", "appletv", "web":
+		default:
+			return
+		}
+		name := cleanLabel(req.Name)
+		if name == "" {
+			name = kind
+		}
+		b.mu.Lock()
+		c.here.Name = name
+		c.here.Kind = kind
+		b.mu.Unlock()
 	case "clock":
 		var req struct {
 			T0 float64 `json:"t0"`
@@ -226,6 +271,30 @@ func (b *Bus) isMember(c *client, room string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return c.rooms[room]
+}
+
+func hostOnly(addr string) string {
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		return host
+	}
+	return addr
+}
+
+func cleanLabel(s string) string {
+	s = strings.TrimSpace(s)
+	var b strings.Builder
+	n := 0
+	for _, r := range s {
+		if r < 32 || r == 127 {
+			continue
+		}
+		b.WriteRune(r)
+		n++
+		if n >= 64 {
+			break
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func validRoom(room string) bool {

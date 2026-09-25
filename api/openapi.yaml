@@ -190,6 +190,40 @@ paths:
                   scanning: { type: boolean }
                   found: { type: integer }
         "404": { $ref: "#/components/responses/Error" }
+  /home:
+    get:
+      tags: [sources]
+      operationId: listHome
+      description: Tuners, screens, and servers on this network. Nothing is added.
+      parameters:
+        - in: query
+          name: fresh
+          schema: { type: string, enum: ["1"] }
+          description: When 1, scan again instead of using the last few seconds.
+      responses:
+        "200":
+          description: What this scan found, with one action each
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [places, tunerAddress, sharing]
+                properties:
+                  places:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, group, kind, name, action]
+                      properties:
+                        id: { type: string }
+                        group: { type: string, enum: [tuner, screen, server] }
+                        kind: { type: string }
+                        name: { type: string }
+                        addr: { type: string }
+                        action: { type: string, enum: [add, added, use, here, found] }
+                        detail: { type: string }
+                  tunerAddress: { type: string, description: "Host and port other apps add as an HDHomeRun." }
+                  sharing: { type: boolean, description: "True when this server is acting as an HDHomeRun." }
   /sources/discover:
     post:
       tags: [sources]

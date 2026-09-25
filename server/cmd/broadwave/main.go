@@ -91,7 +91,7 @@ func main() {
 	bus := realtime.NewBus()
 	st.OnEvent = func(ev store.Event) { bus.Publish("activity", ev) }
 	hub.OnChange = debounce(500*time.Millisecond, func() { bus.Publish("live.changed", nil) })
-	api := &httpapi.Server{Store: st, Assets: assets, Dev: *dev, Hub: hub, Version: version, Bus: bus, Sports: sports.NewCache(sports.NewESPN())}
+	api := &httpapi.Server{Store: st, Assets: assets, Dev: *dev, Hub: hub, Version: version, Bus: bus, Sports: sports.NewCache(sports.NewESPN()), Staging: *staging}
 	hub.OnPSIP = func(_ int, g psip.Guide) {
 		n, err := api.ApplyBroadcast(context.Background(), g)
 		if err != nil {

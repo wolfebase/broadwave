@@ -68,6 +68,22 @@ export function sourceStatuses() {
   return request<{ sources: SourceStatus[] }>("/api/v1/sources");
 }
 
+export type HomePlace = {
+  id: string;
+  group: string;
+  kind: string;
+  name: string;
+  addr?: string;
+  action: string;
+  detail?: string;
+};
+
+export function getHome(fresh = false) {
+  return request<{ places: HomePlace[]; tunerAddress: string; sharing: boolean }>(
+    `/api/v1/home${fresh ? "?fresh=1" : ""}`,
+  );
+}
+
 export function lookHarder() {
   return request<{ found: { kind: string; name: string; addr: string; id?: string }[] }>("/api/v1/sources/look", {
     method: "POST",
