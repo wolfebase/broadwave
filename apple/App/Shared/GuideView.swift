@@ -174,6 +174,7 @@ struct GuideGrid: View {
     var scores: [String: String] = [:]
     let onSelect: (Channel, Airing?) -> Void
     @State private var offset: CGPoint = .zero
+    @State private var hasScrollSample = false
 
     #if os(tvOS)
         private let rowH: CGFloat = 110
@@ -213,7 +214,7 @@ struct GuideGrid: View {
     var body: some View {
         GeometryReader { geo in
             let row = fittedRowHeight(geo.size.height)
-            scrollGrid(rowHeight: row, viewportHeight: geo.size.height)
+            scrollGrid(rowHeight: row, viewport: geo.size)
         }
     }
 
@@ -225,19 +226,34 @@ struct GuideGrid: View {
         return min(room / count, 280)
     }
 
-    private func scrollGrid(rowHeight: CGFloat, viewportHeight: CGFloat) -> some View {
+    private func scrollGrid(rowHeight: CGFloat, viewport: CGSize) -> some View {
         let width = CGFloat(hours * 60) * perMinute
         let end = origin.addingTimeInterval(hours * 3600)
+        let gridW = max(0, viewport.width - channelW)
+        let lead = x(store.now.addingTimeInterval(-900))
+        let fraction = max(0, min(1, width > 0 ? lead / width : 0))
+        let scrollX = hasScrollSample ? offset.x : max(0, fraction * (width - gridW))
         return ScrollViewReader { proxy in
-            ZStack(alignment: .topLeading) {
+            HStack(alignment: .top, spacing: 0) {
+                // A tvOS ScrollView scrolls its overlay with the content, so the column
+                // slid off the left when the grid opened on now. Keep it beside the scroller.
+                channelRail(rowHeight: rowHeight)
+                    .frame(width: channelW, height: viewport.height, alignment: .top)
+                    .background(Tokens.ColorToken.surface1)
+                    .clipped()
                 ScrollView([.horizontal, .vertical]) {
                     ZStack(alignment: .topLeading) {
+                        // Layout position, not offset: scrollTo ignores offset.
+                        Color.clear
+                            .frame(width: max(lead, 1), height: 1)
+                            .overlay(alignment: .trailing) {
+                                Color.clear.frame(width: 1, height: 1).id("guide-now")
+                            }
                         LazyVStack(alignment: .leading, spacing: 0) {
                             Color.clear.frame(height: headH)
                             ForEach(channels) { channel in
                                 row(channel, end: end, rowHeight: rowHeight)
                                     .frame(width: width, height: rowHeight, alignment: .leading)
-                                    .padding(.leading, channelW)
                             }
                         }
                         .frame(height: headH + CGFloat(channels.count) * rowHeight, alignment: .top)
@@ -245,56 +261,61 @@ struct GuideGrid: View {
                             Color.clear
                                 .frame(width: 1, height: 1)
                                 .id(hour)
-                                .offset(x: channelW + CGFloat(hour * 60) * perMinute)
+                                .offset(x: CGFloat(hour * 60) * perMinute)
                         }
                         // Now line
                         Rectangle()
                             .fill(Tokens.ColorToken.tally)
                             .frame(width: 2, height: CGFloat(channels.count) * rowHeight)
                             .shadow(color: Tokens.ColorToken.tally.opacity(0.7), radius: 6)
-                            .offset(x: channelW + x(store.now) - 1, y: headH)
+                            .offset(x: x(store.now) - 1, y: headH)
                             .allowsHitTesting(false)
-                        // Pinned time header
+                        // Omit a mark that has crossed this edge; the column would slice it.
                         ZStack(alignment: .topLeading) {
-                            Rectangle().fill(.ultraThinMaterial).frame(width: width + channelW, height: headH)
+                            Rectangle().fill(.ultraThinMaterial).frame(width: width, height: headH)
                             ForEach(0 ..< Int(hours * 2), id: \.self) { i in
                                 let t = origin.addingTimeInterval(Double(i) * 1800)
-                                Text(t.formatted(date: .omitted, time: .shortened))
-                                    .font(.footnote.weight(.semibold))
-                                    .monospacedDigit()
-                                    .foregroundStyle(.secondary)
-                                    .offset(x: channelW + x(t) + 8, y: 13)
+                                let markX = x(t) + 8
+                                if markX >= scrollX {
+                                    Text(t.formatted(date: .omitted, time: .shortened))
+                                        .font(.footnote.weight(.semibold))
+                                        .monospacedDigit()
+                                        .foregroundStyle(.secondary)
+                                        .offset(x: markX, y: 13)
+                                }
                             }
-                            Text(store.now.formatted(date: .omitted, time: .shortened))
-                                .font(.caption.weight(.heavy))
-                                .monospacedDigit()
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(Tokens.ColorToken.tally, in: .capsule)
-                                .shadow(color: Tokens.ColorToken.tally.opacity(0.6), radius: 8)
-                                .offset(x: channelW + x(store.now) - 30, y: 10)
+                            let nowX = x(store.now) - 30
+                            if nowX >= scrollX {
+                                Text(store.now.formatted(date: .omitted, time: .shortened))
+                                    .font(.caption.weight(.heavy))
+                                    .monospacedDigit()
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(Tokens.ColorToken.tally, in: .capsule)
+                                    .shadow(color: Tokens.ColorToken.tally.opacity(0.6), radius: 8)
+                                    .offset(x: nowX, y: 10)
+                            }
                         }
                         .offset(y: offset.y)
                         .zIndex(3)
                     }
                 }
+                .frame(width: gridW, height: viewport.height)
                 .scrollIndicators(.hidden)
                 .onScrollGeometryChange(for: CGPoint.self) { $0.contentOffset } action: { _, new in
                     offset = CGPoint(x: max(0, new.x), y: max(0, new.y))
+                    hasScrollSample = true
                 }
-                .defaultScrollAnchor(UnitPoint(x: max(0, x(store.now.addingTimeInterval(-900)) / (width + channelW)), y: 0))
+                .defaultScrollAnchor(UnitPoint(x: fraction, y: 0))
                 .background(Tokens.ColorToken.surface1)
+                .task {
+                    proxy.scrollTo("guide-now", anchor: .leading)
+                }
                 .onChange(of: jump) { _, date in
                     guard let date else { return }
                     let hour = max(0, min(Int(hours) - 1, Int(date.timeIntervalSince(origin) / 3600)))
                     proxy.scrollTo(hour, anchor: .leading)
                 }
-                // A tvOS ScrollView scrolls its overlay with the content, so the column
-                // slid off the left when the grid opened on now. Keep it beside the scroller.
-                channelRail(rowHeight: rowHeight)
-                    .frame(width: channelW, height: viewportHeight, alignment: .top)
-                    .background(Tokens.ColorToken.surface1)
-                    .clipped()
             }
         }
     }
