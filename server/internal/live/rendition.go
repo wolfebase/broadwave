@@ -15,6 +15,9 @@ type Rendition struct {
 	Codec string `json:"codec,omitempty"` // hevc, or empty for H.264
 	Track string `json:"track,omitempty"` // lang, vi; empty is the main mix
 	Even  bool   `json:"even,omitempty"`
+	// FullRate is a 540p or 360p tile at field rate. The key gains ".60" so it
+	// does not share ffmpeg with the 30 fps tile of the same size.
+	FullRate bool `json:"fullRate,omitempty"`
 }
 
 func (r Rendition) normalized() Rendition {
@@ -31,6 +34,7 @@ func (r Rendition) normalized() Rendition {
 	if r.Video == "copy" {
 		r.Mode = ""
 		r.Codec = ""
+		r.FullRate = false
 	} else {
 		r.Mode = NormalizeMode(r.Mode)
 		if r.Codec != "hevc" {
@@ -62,6 +66,9 @@ func (r Rendition) Key() string {
 	if r.Even {
 		key += ".even"
 	}
+	if r.FullRate {
+		key += ".60"
+	}
 	if r.Codec == "hevc" {
 		key += ".hevc"
 	}
@@ -70,7 +77,7 @@ func (r Rendition) Key() string {
 
 func ParseRenditionKey(key string) (Rendition, bool) {
 	parts := strings.Split(key, ".")
-	if len(parts) < 2 || len(parts) > 6 {
+	if len(parts) < 2 || len(parts) > 7 {
 		return Rendition{}, false
 	}
 	r := Rendition{Video: parts[0], Audio: parts[1]}
@@ -80,6 +87,8 @@ func ParseRenditionKey(key string) (Rendition, bool) {
 			r.Codec = "hevc"
 		case "even":
 			r.Even = true
+		case "60":
+			r.FullRate = true
 		case "lang", "vi":
 			r.Track = p
 		case "broadcast", "smooth", "film":
@@ -105,7 +114,7 @@ type Caps struct {
 
 // Prefs are the viewer's choices. Empty fields mean automatic.
 type Prefs struct {
-	Quality string `json:"quality,omitempty"` // auto, original, high, medium, saver, tile, 360
+	Quality string `json:"quality,omitempty"` // auto, original, high, medium, saver, tile, 360, focus
 	Audio   string `json:"audio,omitempty"`   // auto, surround, stereo, none
 	Picture string `json:"picture,omitempty"` // broadcast, smooth, film
 	Track   string `json:"track,omitempty"`   // main, language, described
@@ -164,9 +173,26 @@ func has(list []string, codec string) bool {
 	return codec != "" && slices.ContainsFunc(list, func(s string) bool { return codecName(s) == codec })
 }
 
+// hardwareEncoder is the stand-in for HW4's startup benchmark. These encoders
+// hold a 720p60 focused tile beside 30 fps tiles. Anything else stays at 540p60.
+func hardwareEncoder(encoder string) bool {
+	switch encoder {
+	case "h264_vaapi", "hevc_vaapi", "h264_qsv", "hevc_qsv", "h264_nvenc", "hevc_nvenc", "h264_videotoolbox", "hevc_videotoolbox":
+		return true
+	default:
+		return false
+	}
+}
+
 // Decide picks the rendition for one viewer. It never transcodes what the client
 // can play as broadcast, unless the viewer asked for less data.
 func Decide(src Source, caps Caps, p Prefs) Decision {
+	return DecideOn(src, caps, p, "")
+}
+
+// DecideOn is Decide with the server encoder, so a focused tile can be 720p60
+// on a GPU and 540p60 in software.
+func DecideOn(src Source, caps Caps, p Prefs, encoder string) Decision {
 	v := codecName(src.VideoCodec)
 	a := codecName(src.AudioCodec)
 	canCopyVideo := has(caps.Video, v) && (src.Progressive || v == "hevc")
@@ -189,6 +215,12 @@ func Decide(src Source, caps Caps, p Prefs) Decision {
 	case "tile":
 		r.Video = "540"
 		why = append(why, "540p tile")
+	case "focus":
+		// Height is chosen after the screen cap below.
+		r.Video = "720"
+		if !hardwareEncoder(encoder) {
+			r.Video = "540"
+		}
 	case "360":
 		r.Video = "360"
 		why = append(why, "360p tile")
@@ -216,6 +248,19 @@ func Decide(src Source, caps Caps, p Prefs) Decision {
 			r.Video = "540"
 		case caps.MaxHeight < 1080 && r.Video == "1080":
 			r.Video = "720"
+		}
+	}
+	if quality == "focus" && r.Video != "720" {
+		r.FullRate = true
+	}
+	if quality == "focus" {
+		switch r.Video {
+		case "720":
+			why = append(why, "720p60 tile")
+		case "360":
+			why = append(why, "360p60 tile")
+		default:
+			why = append(why, "540p60 tile")
 		}
 	}
 	audio := strings.ToLower(p.Audio)
@@ -328,7 +373,7 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		if src.Film && NormalizeMode(mode) == "broadcast" {
 			mode = "film"
 		}
-		probe := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive}
+		probe := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: r.FullRate}
 		inter := fieldDoubled(src.VideoCodec, probe.Mode, src.Progressive, src.Lace)
 		gpu = gpuDecode(probe, inter, vaapiDeintMode(probe, inter))
 	}
@@ -366,10 +411,10 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		if src.Film && NormalizeMode(mode) == "broadcast" {
 			mode = "film"
 		}
-		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive}
+		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: r.FullRate}
 		interlaced := fieldDoubled(src.VideoCodec, g.Mode, src.Progressive, src.Lace)
-		field := interlaced && !smallPicture(g.Profile)
-		width, height, rate := pictureSize(g.Profile, field)
+		field := interlaced && !smallPicture(g)
+		width, height, rate := outputSize(g, field)
 		fps, gop := pictureRate(g, field)
 		args = append(args, "-vf", videoFilter(g, vaapiDeintMode(g, interlaced), interlaced, field, width, height, fps))
 		args = append(args, videoCodec(outEnc, rate, gop)...)

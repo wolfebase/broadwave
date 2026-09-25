@@ -29,7 +29,7 @@ export type StorageInfo = {
 };
 
 export type Prefs = {
-  quality?: "auto" | "original" | "high" | "medium" | "saver" | "tile" | "360";
+  quality?: "auto" | "original" | "high" | "medium" | "saver" | "tile" | "360" | "focus";
   audio?: "auto" | "surround" | "stereo" | "none";
   picture?: "broadcast" | "smooth" | "film";
   track?: "main" | "language" | "described";

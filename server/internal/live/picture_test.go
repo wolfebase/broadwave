@@ -68,6 +68,19 @@ func TestInterlacedStaysFieldRateOnTheGPU(t *testing.T) {
 	if !strings.Contains(tile, "fps=30000/1001,format=nv12,hwupload,deinterlace_vaapi=mode=motion_adaptive:rate=frame") {
 		t.Fatalf("tiles stay at frame rate: %s", tile)
 	}
+	focus := strings.Join(RenditionArgs(0, src, Rendition{Video: "720", Audio: "aac2", Mode: "broadcast"}, "h264_vaapi", "motion_adaptive"), " ")
+	if !strings.Contains(focus, "deinterlace_vaapi=mode=motion_adaptive:rate=field") || strings.Contains(focus, "rate=frame") || strings.Contains(focus, "fps=30000/1001") {
+		t.Fatalf("focused 720p tile is field rate: %s", focus)
+	}
+	soft := strings.Join(RenditionArgs(0, src, Rendition{Video: "540", Audio: "aac2", Mode: "broadcast", FullRate: true}, "libx264", ""), " ")
+	if !strings.Contains(soft, "bwdif=mode=send_field") || !strings.Contains(soft, "fps=60000/1001") || !strings.Contains(soft, "5000k") {
+		t.Fatalf("focused 540p tile is field rate: %s", soft)
+	}
+	prog := Source{VideoCodec: "MPEG2", AudioCodec: "AC3", Progressive: true}
+	kept := strings.Join(RenditionArgs(0, prog, Rendition{Video: "720", Audio: "aac2", Mode: "broadcast"}, "h264_vaapi", "motion_adaptive"), " ")
+	if strings.Contains(kept, "deinterlace") || strings.Contains(kept, "bwdif") || strings.Contains(kept, "fps=") {
+		t.Fatalf("progressive focus keeps its own rate: %s", kept)
+	}
 }
 
 func TestSaverStaysFrameRate(t *testing.T) {

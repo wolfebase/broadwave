@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { planMultiview } from "../../api";
 import { useData } from "../../app/data";
 import { useLayout } from "../../app/layout";
@@ -56,7 +56,14 @@ export function Multiview() {
   const [plan, setPlan] = useState<MultiviewPlan | null>(null);
   const [planFor, setPlanFor] = useState("");
   const [menu, setMenu] = useState(false);
-  const [hint] = useState(() => localStorage.getItem("broadwave-mv-hint-seen") !== "1");
+  const [hint, setHint] = useState(() => localStorage.getItem("broadwave-mv-hint-seen") !== "1");
+  const heard = useCallback(() => {
+    setHint((on) => {
+      if (!on) return false;
+      localStorage.setItem("broadwave-mv-hint-seen", "1");
+      return false;
+    });
+  }, []);
   const [room] = useState(roomId);
   const chKey = params.get("ch") ?? "";
   const waiting = ids.length > 1 && planFor !== chKey;
@@ -72,10 +79,6 @@ export function Multiview() {
   useEffect(() => {
     rememberLayout(layout);
   }, [layout]);
-
-  useEffect(() => {
-    if (hint) localStorage.setItem("broadwave-mv-hint-seen", "1");
-  }, [hint]);
 
   useEffect(() => {
     const list = parseIds(chKey);
@@ -222,6 +225,7 @@ export function Multiview() {
             room={room}
             menu={menu && channel.id === (focused?.id ?? 0)}
             onFocus={() => go({ focus: channel.id })}
+            onHeard={heard}
             onRemove={() => remove(channel.id)}
             onRecord={() => void record(channel, airingAt(index, channel.id, now)?.title || channel.displayName)}
           />
@@ -267,6 +271,7 @@ function Tile({
   room,
   menu,
   onFocus,
+  onHeard,
   onRemove,
   onRecord,
 }: {
@@ -278,22 +283,33 @@ function Tile({
   room: string;
   menu: boolean;
   onFocus: () => void;
+  onHeard: () => void;
   onRemove: () => void;
   onRecord: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const layoutMode = useLayout();
   const equal = layout === "2up" || layout === "quad";
-  const big = focused && !equal;
   const stream = useLiveStream(videoRef, {
     channelId: channel.id,
-    quality: big ? "auto" : layout === "quad" || layout === "pip" ? "360" : "tile",
-    audio: big ? "auto" : equal ? "stereo" : "none",
+    quality: focused ? "focus" : layout === "quad" || layout === "pip" ? "360" : "tile",
+    audio: focused ? (equal ? "stereo" : "auto") : equal ? "stereo" : "none",
     picture: "broadcast",
     room,
     sync: true,
-    profile: big ? "desktop" : "tile",
-    audible: focused && (equal || big),
+    profile: focused ? (layoutMode === "tv" ? "tv" : "desktop") : "tile",
+    audible: focused,
   });
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!focused || !video) return;
+    const hear = () => {
+      if (!video.muted && !video.paused) onHeard();
+    };
+    video.addEventListener("playing", hear);
+    hear();
+    return () => video.removeEventListener("playing", hear);
+  }, [focused, onHeard]);
   return (
     <div className="mv-cell" onClick={onFocus}>
     <div className={focused ? "mv-tile focused" : "mv-tile"} role="group" aria-label={`${channel.displayNumber} ${channel.displayName}${focused ? ", sound on" : ""}`}>

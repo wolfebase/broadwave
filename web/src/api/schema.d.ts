@@ -1193,7 +1193,7 @@ export interface components {
         /** @description The viewer's choices. Empty means automatic. */
         Prefs: {
             /** @enum {string} */
-            quality?: "auto" | "original" | "high" | "medium" | "saver" | "tile" | "360";
+            quality?: "auto" | "original" | "high" | "medium" | "saver" | "tile" | "360" | "focus";
             /** @enum {string} */
             audio?: "auto" | "surround" | "stereo" | "none";
             picture?: components["schemas"]["PictureMode"];

@@ -56,7 +56,7 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		if prefs.Picture == "" {
 			_, prefs.Picture, _ = s.playbackChoice(r.Context(), 0, "")
 		}
-		decision = live.Decide(src, caps, prefs)
+		decision = live.DecideOn(src, caps, prefs, s.Hub.Encoder)
 	}
 	session, err := s.Hub.Watch(r.Context(), body.ChannelID, decision.Rendition)
 	if err != nil {

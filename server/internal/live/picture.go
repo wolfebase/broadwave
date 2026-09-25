@@ -22,6 +22,9 @@ type Graph struct {
 	// Progressive is set once a probe has seen the picture is not interlaced.
 	// A progressive 720p60 broadcast keeps all 60 frames and is never deinterlaced.
 	Progressive bool
+	// FullRate keeps field rate on a 540p or 360p tile. Saver and background
+	// tiles stay at one frame per broadcast frame.
+	FullRate bool
 }
 
 func NormalizeMode(mode string) string {
@@ -66,8 +69,8 @@ func PictureArgs(g Graph) []string {
 		g.Audio = "stereo"
 	}
 	interlaced := InterlacedCodec(g.VideoCodec) && !g.Progressive && g.Mode != "film"
-	field := interlaced && !smallPicture(g.Profile)
-	width, height, rate := pictureSize(g.Profile, field)
+	field := interlaced && !smallPicture(g)
+	width, height, rate := outputSize(g, field)
 	fps, gop := pictureRate(g, field)
 
 	args := []string{"-hide_banner", "-loglevel", "warning", "-fflags", "+genpts+discardcorrupt"}
@@ -113,8 +116,21 @@ func PictureArgs(g Graph) []string {
 }
 
 // smallPicture is a bandwidth rendition: one frame per broadcast frame, no motion blend.
-func smallPicture(profile string) bool {
-	return profile == "saver" || profile == "tile"
+// A focused tile sets FullRate so it keeps 59.94 while the others stay at 29.97.
+func smallPicture(g Graph) bool {
+	if g.FullRate {
+		return false
+	}
+	return g.Profile == "saver" || g.Profile == "tile"
+}
+
+// outputSize is the encoder cap. A full-rate small tile spends the extra bits on the second field.
+func outputSize(g Graph, field bool) (int, int, string) {
+	w, h, rate := pictureSize(g.Profile, field)
+	if g.FullRate && (g.Profile == "saver" || g.Profile == "tile") {
+		rate = twice(rate)
+	}
+	return w, h, rate
 }
 
 func pictureSize(profile string, field bool) (int, int, string) {
@@ -146,7 +162,7 @@ func pictureRate(g Graph, field bool) (string, int) {
 	if field {
 		return "60000/1001", 120
 	}
-	if smallPicture(g.Profile) {
+	if smallPicture(g) {
 		return "30000/1001", 60
 	}
 	return "", 120
@@ -178,7 +194,7 @@ func OutputEncoder(base, codec string) string {
 // gpuDecode keeps frames on the GPU. Software filters (pullup, bwdif) need
 // system memory, so those graphs stay on the upload path.
 func gpuDecode(g Graph, interlaced bool, vaapiDeint string) bool {
-	if !vaapiFamily(g.Encoder) || g.Mode == "film" || smallPicture(g.Profile) {
+	if !vaapiFamily(g.Encoder) || g.Mode == "film" || smallPicture(g) {
 		return false
 	}
 	if interlaced && vaapiDeint == "" {
@@ -236,7 +252,7 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 		} else {
 			vf += "," + scale
 		}
-		if smallPicture(g.Profile) && fps != "" {
+		if smallPicture(g) && fps != "" {
 			vf = "fps=" + fps + "," + vf
 		}
 		return vf
@@ -342,10 +358,10 @@ func streamFacts(src Source, fieldOrder string, spec Rendition, encoder, deint s
 		enc = OutputEncoder("libx264", spec.Codec)
 	}
 	out.Encoder = enc
-	g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(spec.Video), Encoder: enc, Mode: mode, Deint: deint, Progressive: src.Progressive}
+	g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(spec.Video), Encoder: enc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: spec.FullRate}
 	interlaced := fieldDoubled(src.VideoCodec, g.Mode, src.Progressive, src.Lace)
-	field := interlaced && !smallPicture(g.Profile)
-	capW, capH, rate := pictureSize(g.Profile, field)
+	field := interlaced && !smallPicture(g)
+	capW, capH, rate := outputSize(g, field)
 	fps, _ := pictureRate(g, field)
 	out.Bitrate = rate
 	out.OutputFPS = fpsLabel(fps)
