@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import type { Settings, StorageInfo } from "../../types";
-import { getEvents, getTuners } from "../../api";
+import type { CatalogBackup, Settings, StorageInfo } from "../../types";
+import { getEvents, getTuners, listBackups, restoreBackup } from "../../api";
 import { copy } from "../../strings";
 import { formatBytes } from "../../lib/format";
 export function SettingsScreen({
@@ -203,6 +203,8 @@ export function SettingsScreen({
         <span className="hint">{copy.settings.recordingsHint}</span>
       </label>
       <ReserveField value={settings.watermarkGB || "10"} storage={storage} onSave={(watermarkGB) => onChange({ watermarkGB })} />
+      <h3 className="section-title">{copy.settings.backups}</h3>
+      <BackupList />
       <a className="btn" href="/api/v1/backup">
         {copy.settings.backup}
       </a>
@@ -223,7 +225,7 @@ export function SettingsScreen({
           Restore a catalog backup
           <input name="backup" type="file" accept=".db" />
         </label>
-        <button type="submit" className="btn">Restore</button>
+        <button type="submit" className="btn">{copy.settings.restore}</button>
       </form>
       <p className="hint">{copy.settings.backupHint}</p>
       <h3 className="section-title">Updates</h3>
@@ -249,6 +251,90 @@ export function SettingsScreen({
       </article>
     </section>
   );
+}
+
+function BackupList() {
+  const [rows, setRows] = useState<CatalogBackup[] | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState("");
+  useEffect(() => {
+    let stop = false;
+    void listBackups()
+      .then((res) => {
+        if (!stop) setRows(res.backups ?? []);
+      })
+      .catch(() => {
+        if (!stop) setError(copy.settings.backupFailed);
+      });
+    return () => {
+      stop = true;
+    };
+  }, []);
+  async function restore(row: CatalogBackup) {
+    if (!window.confirm(copy.settings.restoreConfirm)) return;
+    setBusy(row.name);
+    setError("");
+    try {
+      await restoreBackup(row.name);
+      window.location.reload();
+    } catch {
+      setError(copy.settings.restoreFailed);
+      setBusy("");
+    }
+  }
+  return (
+    <>
+      {error ? (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {rows && rows.length === 0 ? <p className="hint">{copy.settings.backupEmpty}</p> : null}
+      {rows && rows.length > 0 ? (
+        <ul className="source-list">
+          {rows.map((row) => {
+            const when = backupWhen(row.takenAt);
+            const kind = backupKind(row.kind);
+            return (
+              <li key={row.name} className="source-row">
+                <span>{kind}</span>
+                <span>{when}</span>
+                <span className="hint">{formatBytes(row.bytes)}</span>
+                <a
+                  className="btn small"
+                  href={`/api/v1/backups/${encodeURIComponent(row.name)}`}
+                  aria-label={`${copy.settings.backupDownload} ${kind} ${when}`}
+                >
+                  {copy.settings.backupDownload}
+                </a>
+                <button
+                  type="button"
+                  className="btn small"
+                  disabled={busy !== ""}
+                  aria-label={`${copy.settings.restore} ${kind} ${when}`}
+                  onClick={() => void restore(row)}
+                >
+                  {copy.settings.restore}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </>
+  );
+}
+
+function backupKind(kind: string) {
+  if (kind === "weekly") return copy.settings.backupWeekly;
+  if (kind === "version") return copy.settings.backupUpdate;
+  return copy.settings.backupNightly;
+}
+
+function backupWhen(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
 }
 
 function ReserveField({ value, storage, onSave }: { value: string; storage: StorageInfo | null; onSave: (value: string) => void }) {

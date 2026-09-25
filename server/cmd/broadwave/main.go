@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"broadwave/internal/backup"
 	"broadwave/internal/discovery"
 	"broadwave/internal/doctor"
 	"broadwave/internal/dvr"
@@ -53,6 +54,10 @@ func main() {
 	}
 	logbuf.Install(os.Stderr)
 	doctor.ApplyIdentity(filepath.Join(*configDir, "work", "recordings"))
+	// Copy the catalog before Open migrates it, when this build is a new version.
+	if err := backup.SnapshotIfVersionChanged(context.Background(), *configDir, version, time.Now()); err != nil {
+		log.Printf("backup: %v", err)
+	}
 
 	st, err := store.Open(*configDir)
 	if err != nil {
@@ -94,7 +99,7 @@ func main() {
 	bus := realtime.NewBus()
 	st.OnEvent = func(ev store.Event) { bus.Publish("activity", ev) }
 	hub.OnChange = debounce(500*time.Millisecond, func() { bus.Publish("live.changed", nil) })
-	api := &httpapi.Server{Store: st, Assets: assets, Dev: *dev, Hub: hub, Version: version, Bus: bus, Sports: sports.NewCache(sports.NewESPN()), Staging: *staging}
+	api := &httpapi.Server{Store: st, Assets: assets, Dev: *dev, Hub: hub, Version: version, Bus: bus, Sports: sports.NewCache(sports.NewESPN()), Staging: *staging, BackupDir: filepath.Join(*configDir, "backups")}
 	api.Updates = releaseCheck(st, version)
 	hub.OnPSIP = func(_ int, g psip.Guide) {
 		n, err := api.ApplyBroadcast(context.Background(), g)
@@ -213,6 +218,7 @@ func main() {
 	if api.Updates != nil {
 		go api.Updates.Run(ctx)
 	}
+	go (&backup.Scheduler{Store: st, Dir: api.BackupDir}).Run(ctx)
 	go func() {
 		<-ctx.Done()
 		hub.Shutdown()

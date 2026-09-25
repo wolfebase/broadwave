@@ -78,6 +78,20 @@ public struct Caps: Codable, Sendable, Hashable {
     }
 }
 
+public struct CatalogBackup: Codable, Sendable, Hashable {
+    public var name: String
+    public var kind: String
+    public var takenAt: Date
+    public var bytes: Int64
+
+    public init(name: String, kind: String, takenAt: Date, bytes: Int64) {
+        self.name = name
+        self.kind = kind
+        self.takenAt = takenAt
+        self.bytes = bytes
+    }
+}
+
 public struct Channel: Codable, Sendable, Hashable, Identifiable {
     public var id: Int64
     public var deviceId: String

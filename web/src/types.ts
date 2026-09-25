@@ -1,6 +1,7 @@
 export type {
   Airing,
   Caps,
+  CatalogBackup,
   Channel,
   ChannelPatch,
   Device,

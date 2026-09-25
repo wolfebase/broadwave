@@ -1,4 +1,4 @@
-import type { Airing, Caps, Channel, ChannelPatch, Device, DeviceHealth, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
+import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, Device, DeviceHealth, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -132,6 +132,17 @@ export function getSettings() {
 
 export function getStorage() {
   return request<StorageInfo>("/api/v1/storage");
+}
+
+export function listBackups() {
+  return request<{ backups: CatalogBackup[] }>("/api/v1/backups");
+}
+
+export function restoreBackup(name: string) {
+  return request<{ ok: boolean }>(`/api/v1/backups/${encodeURIComponent(name)}/restore`, {
+    method: "POST",
+    body: "{}",
+  });
 }
 
 export function putSettings(values: Partial<Settings>) {
