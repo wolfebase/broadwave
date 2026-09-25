@@ -2,6 +2,7 @@ package live
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -257,6 +258,53 @@ func TestCleanExitReleasesTheTuner(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("a finished encode should release the tuner")
+}
+
+func TestRestartDropsStaleSegmentTimes(t *testing.T) {
+	h, f, mark := restartHub(t, time.Nanosecond, "hold")
+	startRendition(t, h, f, "1080.aac2.broadcast")
+	waitMark(t, mark, ".count")
+	h.mu.Lock()
+	r := f.renditions["1080.aac2.broadcast"]
+	r.stamper.cache = map[string]int64{"seg00001.m4s": 999}
+	pid := r.cmd.Process.Pid
+	h.mu.Unlock()
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := proc.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	waitMark(t, mark, ".args.2")
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if r.stamper.cache["seg00001.m4s"] == 999 {
+		t.Fatal("a restart kept the previous segment's timestamp")
+	}
+}
+
+func TestStopSkipsAProcessThatAlreadyExited(t *testing.T) {
+	h, m := testHub(t)
+	f := addTestFeed(h, m, 1, "4.1")
+	cmd := exec.Command("sleep", "30")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+	spec, _ := ParseRenditionKey("1080.aac2.broadcast")
+	r := &rendition{spec: spec, cmd: cmd, dir: t.TempDir()}
+	r.waited.Store(true)
+	f.renditions[spec.Key()] = r
+	h.stopRenditionLocked(f, spec.Key())
+	out, err := exec.Command("ps", "-p", strconv.Itoa(cmd.Process.Pid), "-o", "state=").Output()
+	state := strings.TrimSpace(string(out))
+	if err != nil || state == "" || state[0] == 'Z' {
+		t.Fatalf("stop signaled a waited pid, state %q err %v", state, err)
+	}
 }
 
 func TestStoppedRenditionDoesNotRestart(t *testing.T) {
