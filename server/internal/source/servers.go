@@ -77,6 +77,9 @@ func EmulatorM3U(ctx context.Context, kind, base string) (playlist []byte, playl
 	if err != nil {
 		return nil, "", "", err
 	}
+	if status == http.StatusUnauthorized || status == http.StatusForbidden {
+		return nil, "", "", fmt.Errorf("That server refused the playlist.")
+	}
 	if status != http.StatusOK || !bytesHasM3U(body) {
 		return nil, "", "", fmt.Errorf("That server did not return a channel list. Check the address.")
 	}
