@@ -116,8 +116,11 @@ if [[ "$MODE" == "ghcr" ]]; then
   HOSTIP="${UNRAID_HOST#*@}"
   for _ in $(seq 1 90); do
     if "${SSH[@]}" "$UNRAID_HOST" "test -f $APPDATA/deploy.ok" 2>/dev/null; then
-      curl -fsS -m 5 "http://$HOSTIP:8477/api/v1/server"; echo
-      exit 0
+      # The marker lands before the process is listening. Keep trying.
+      if curl -fsS -m 5 "http://$HOSTIP:8477/api/v1/server"; then
+        echo
+        exit 0
+      fi
     fi
     sleep 2
   done
