@@ -202,6 +202,11 @@ export function SettingsScreen({
         <button type="submit" className="btn">Restore</button>
       </form>
       <p className="hint">{copy.settings.backupHint}</p>
+      <h3 className="section-title">Support</h3>
+      <a className="btn" href="/api/v1/support">
+        {copy.settings.support}
+      </a>
+      <p className="hint">{copy.settings.supportHint}</p>
       <article className="quiet-card wide">
         <h3>{copy.settings.passwordTitle}</h3>
         <p>{copy.settings.passwordBody}</p>

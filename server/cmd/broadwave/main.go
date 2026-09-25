@@ -24,6 +24,7 @@ import (
 	"broadwave/internal/guide"
 	"broadwave/internal/httpapi"
 	"broadwave/internal/live"
+	"broadwave/internal/logbuf"
 	"broadwave/internal/psip"
 	"broadwave/internal/realtime"
 	"broadwave/internal/source"
@@ -49,6 +50,7 @@ func main() {
 	if *healthcheck {
 		os.Exit(checkHealth(*addr))
 	}
+	logbuf.Install(os.Stderr)
 	doctor.ApplyIdentity(filepath.Join(*configDir, "work", "recordings"))
 
 	st, err := store.Open(*configDir)

@@ -47,6 +47,8 @@ export const copy = {
     reserveHint: "Use 0 to turn the reserve off. A show already recording is left alone.",
     backup: "Download backup",
     backupHint: "The backup is the catalog: channels, passes, and markers. The video files stay on the recordings share.",
+    support: "Download a support bundle",
+    supportHint: "Logs, versions, and settings. Passwords are left out.",
     guideAccount: "Schedules Direct",
     guideAccountHint: "Fills channels the tuner guide skips. Fourteen days when the account allows it.",
     guideLineup: "Lineup",

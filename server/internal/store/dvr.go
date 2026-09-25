@@ -611,6 +611,52 @@ func maskURL(raw string) (public, secret string) {
 	return u.String(), raw
 }
 
+// MaskURL is the form of a URL that is safe to show.
+// Passwords use the same encoding stored source URLs do.
+func MaskURL(raw string) string {
+	public, _ := maskURL(raw)
+	return public
+}
+
+// CredentialValues lists stored logins so a support bundle can omit them.
+// The result must not be written to a response, a log, or the database.
+func (s *Store) CredentialValues(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT secret, guide_secret FROM source_secrets`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var secret, guide string
+		if err := rows.Scan(&secret, &guide); err != nil {
+			return nil, err
+		}
+		if secret != "" {
+			out = append(out, secret)
+		}
+		if guide != "" {
+			out = append(out, guide)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	settings, err := s.Settings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, key := range []string{"sdPassword", "tmdbKey", "guideUrl"} {
+		if v := strings.TrimSpace(settings[key]); v != "" {
+			out = append(out, v)
+		}
+	}
+	if out == nil {
+		out = []string{}
+	}
+	return out, nil
+}
+
 func (s *Store) AddSource(ctx context.Context, kind, name, rawURL, xmltv string) (Source, error) {
 	public, secret := maskURL(rawURL)
 	publicXML, xmlSecret := maskURL(xmltv)

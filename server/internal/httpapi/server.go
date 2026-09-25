@@ -140,6 +140,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /storage", s.storage)
 	api("GET /backup", s.backup)
 	api("POST /backup", s.restore)
+	api("GET /support", s.support)
 	mux.HandleFunc("GET /export/lineup.m3u", s.exportLineup)
 	mux.HandleFunc("GET /export/guide.xml", s.exportGuide)
 	mux.HandleFunc("GET /export/stream/{id}", s.exportStream)
