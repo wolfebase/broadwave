@@ -1,9 +1,13 @@
 package live
 
 import (
+	"context"
+	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
+	"time"
 
 	"broadwave/internal/store"
 )
@@ -140,6 +144,177 @@ func TestScanTypeFFmpegHeaders(t *testing.T) {
 				t.Fatalf("got %q ok=%v, want %s", order, ok, tc.want)
 			}
 		})
+	}
+}
+
+func TestStoredProgressiveStillScansForFilm(t *testing.T) {
+	h, m := testHub(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	pr, pw := io.Pipe()
+	m.body = pr
+	go h.readLoop(ctx, m)
+	defer func() {
+		cancel()
+		_ = pw.Close()
+	}()
+	f := &feed{
+		channel:    store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "5.1", VideoCodec: "MPEG2"}, FrequencyHz: m.freq, FieldOrder: "progressive"},
+		source:     Source{VideoCodec: "MPEG2", Progressive: true},
+		program:    1,
+		tracks:     []AudioTrack{{PID: 0x101, Role: "main", Codec: "ac3"}},
+		renditions: map[string]*rendition{},
+	}
+	m.feeds["5.1"] = f
+	h.channels[1] = f
+	go writeUntil(ctx, pw, filmTS(1))
+	h.learnScanLocked(m, f)
+	if !f.source.Film || f.source.Progressive {
+		t.Fatalf("stored progressive skipped film: %+v", f.source)
+	}
+	if f.channel.FieldOrder != "tt" {
+		t.Fatalf("film stored as %q", f.channel.FieldOrder)
+	}
+	if f.headerOrder != "film" {
+		t.Fatalf("header %q", f.headerOrder)
+	}
+}
+
+func TestLateHeaderAppliesAfterTheWindow(t *testing.T) {
+	h, m := testHub(t)
+	f := &feed{
+		channel:    store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "4.1", VideoCodec: "MPEG2"}, FrequencyHz: m.freq},
+		source:     Source{VideoCodec: "MPEG2"},
+		program:    1,
+		renditions: map[string]*rendition{},
+	}
+	m.feeds["4.1"] = f
+	h.channels[1] = f
+	buf := &scanBuf{wake: make(chan struct{}, 1), b: mpeg2TS(1, true)}
+	h.finishScan(m, f, buf, nil)
+	if !f.source.Progressive || f.source.Film || f.headerOrder != "progressive" {
+		t.Fatalf("late progressive: %+v %q", f.source, f.headerOrder)
+	}
+	if f.channel.FieldOrder != "progressive" {
+		t.Fatalf("stored %q", f.channel.FieldOrder)
+	}
+
+	film := &feed{
+		channel:    store.SourceChannel{Channel: store.Channel{ID: 2, GuideNumber: "5.1", VideoCodec: "MPEG2"}, FrequencyHz: m.freq, FieldOrder: "progressive"},
+		source:     Source{VideoCodec: "MPEG2", Progressive: true},
+		program:    1,
+		renditions: map[string]*rendition{},
+	}
+	h.channels[2] = film
+	buf = &scanBuf{wake: make(chan struct{}, 1), b: filmTS(1)}
+	h.finishScan(m, film, buf, nil)
+	if !film.source.Film || film.source.Progressive || film.channel.FieldOrder != "tt" || film.headerOrder != "film" {
+		t.Fatalf("late film: %+v stored %q header %q", film.source, film.channel.FieldOrder, film.headerOrder)
+	}
+}
+
+func TestProbeDoesNotOverrideTheHeader(t *testing.T) {
+	h, _ := testHub(t)
+	f := &feed{
+		channel:     store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "5.1", VideoCodec: "MPEG2"}, FieldOrder: "tt"},
+		source:      Source{VideoCodec: "MPEG2", Film: true},
+		headerOrder: "film",
+		renditions:  map[string]*rendition{},
+	}
+	h.applyProbeLocked(f, "progressive")
+	if !f.source.Film || f.source.Progressive || f.channel.FieldOrder != "tt" {
+		t.Fatalf("probe overrode film: %+v stored %q", f.source, f.channel.FieldOrder)
+	}
+}
+
+func TestProbeRebuildsTheRunningGraph(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not on PATH")
+	}
+	h, m := testHub(t)
+	h.FFmpeg = "ffmpeg"
+	h.Encoder = "libx264"
+	f := &feed{
+		channel:    store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "4.1", VideoCodec: "MPEG2"}, FrequencyHz: m.freq},
+		source:     Source{VideoCodec: "MPEG2"},
+		program:    1,
+		renditions: map[string]*rendition{},
+		timeline:   NewTimeline(),
+	}
+	m.feeds["4.1"] = f
+	h.channels[1] = f
+	t.Cleanup(func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		h.stopFeedLocked(f)
+	})
+	spec, ok := ParseRenditionKey("1080.aac2.broadcast")
+	if !ok {
+		t.Fatal("rendition key")
+	}
+	r, err := h.ensureRenditionLocked(f, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(r.args, " "), "bwdif") {
+		t.Fatalf("started without field deinterlace: %s", strings.Join(r.args, " "))
+	}
+	seen := time.Now().Add(-time.Second)
+	r.viewers = 2
+	r.seen = seen
+	h.applyProbeLocked(f, "progressive")
+	nr := f.renditions[spec.Key()]
+	if nr == nil || nr == r {
+		t.Fatal("probe did not rebuild the rendition")
+	}
+	if nr.viewers != 2 || !nr.seen.Equal(seen) {
+		t.Fatalf("viewers %d", nr.viewers)
+	}
+	line := strings.Join(nr.args, " ")
+	if strings.Contains(line, "bwdif") || strings.Contains(line, "60000/1001") {
+		t.Fatalf("rebuilt graph still field-deinterlaces: %s", line)
+	}
+	if !f.source.Progressive || f.channel.FieldOrder != "progressive" {
+		t.Fatalf("stored %+v %q", f.source, f.channel.FieldOrder)
+	}
+
+	// A stored progressive rendition is rebuilt when the late header is film.
+	r2, err := h.ensureRenditionLocked(f, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r2 != nr {
+		t.Fatal("same rendition should still be running")
+	}
+	buf := &scanBuf{wake: make(chan struct{}, 1), b: filmTS(1)}
+	h.finishScan(m, f, buf, nil)
+	filmR := f.renditions[spec.Key()]
+	if filmR == nil || filmR == nr {
+		t.Fatal("film header did not rebuild the rendition")
+	}
+	if filmR.viewers != 2 {
+		t.Fatalf("viewers %d", filmR.viewers)
+	}
+	filmLine := strings.Join(filmR.args, " ")
+	if !strings.Contains(filmLine, "pullup") || strings.Contains(filmLine, "bwdif") {
+		t.Fatalf("film graph: %s", filmLine)
+	}
+	if !f.source.Film || f.source.Progressive || f.channel.FieldOrder != "tt" {
+		t.Fatalf("film stored %+v %q", f.source, f.channel.FieldOrder)
+	}
+}
+
+func writeUntil(ctx context.Context, w io.Writer, payload []byte) {
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			if _, err := w.Write(payload); err != nil {
+				return
+			}
+		}
 	}
 }
 

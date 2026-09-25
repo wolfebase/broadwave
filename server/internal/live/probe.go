@@ -76,21 +76,27 @@ func (h *Hub) probeFieldOrderLocked(m *mux, f *feed) {
 	go func() {
 		defer cancel()
 		_ = cmd.Wait()
-		order := storedFieldOrder(fieldOrderFrom([]byte(out.String()), program))
-		if order != "" {
-			_ = h.Store.SetFieldOrder(context.Background(), channelID, order)
-		}
+		order := fieldOrderFrom([]byte(out.String()), program)
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		m.detach(sub)
 		f.probing = false
-		if order != "" {
-			f.channel.FieldOrder = order
-			f.source.Progressive = order == "progressive"
-			f.source.Film = order == "film"
+		// The packet scan is the one that can see film. A probe that lands
+		// first still corrects a rendition that started on the wrong graph.
+		if f.headerOrder != "" {
+			if h.channels[channelID] == f {
+				h.dropIfUnusedLocked(f)
+			}
+			return
 		}
-		if h.channels[channelID] == f {
-			h.dropIfUnusedLocked(f)
+		if h.channels[channelID] != f {
+			stored := storedFieldOrder(order)
+			if stored != "" && h.Store != nil {
+				_ = h.Store.SetFieldOrder(context.Background(), channelID, stored)
+			}
+			return
 		}
+		h.applyProbeLocked(f, order)
+		h.dropIfUnusedLocked(f)
 	}()
 }

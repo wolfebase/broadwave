@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -154,6 +155,10 @@ type feed struct {
 	timeline   *Timeline
 	tracks     []AudioTrack
 	probing    bool
+	// headerOrder is the scan read from this tune's packets. Soft 3:2 is film
+	// here even when the stored field order says progressive. ffprobe must not
+	// overwrite it: its field_order calls those pictures progressive.
+	headerOrder string
 	// exports counts raw MPEG-TS readers such as Plex or Jellyfin using the emulated tuner.
 	exports int
 }
@@ -170,6 +175,7 @@ type rendition struct {
 	idle     *time.Timer
 	stamper  playlistStamper
 	fallback bool
+	args     []string
 }
 
 type recording struct {
@@ -474,6 +480,44 @@ func (h *Hub) addFeedLocked(m *mux, ch store.SourceChannel) *feed {
 	return f
 }
 
+func (h *Hub) pictureArgs(f *feed, want Rendition) (string, []string) {
+	input := "pipe:0"
+	if m := muxOf(h, f); m != nil && m.input != "" {
+		input = m.input
+	}
+	args := renditionArgs(f.program, f.sourceFor(want), want, h.Encoder, h.deintFor(want.Mode, f.source.VideoCodec), input)
+	return input, args
+}
+
+// rebuildRenditionsLocked restarts renditions whose picture graph changed.
+// Viewers stay. The old segments go with the process so a bobbed init is not
+// served for a progressive or film picture.
+func (h *Hub) rebuildRenditionsLocked(f *feed) {
+	type kept struct {
+		spec    Rendition
+		viewers int
+		seen    time.Time
+	}
+	var list []kept
+	for key, r := range f.renditions {
+		_, next := h.pictureArgs(f, r.spec)
+		if slices.Equal(r.args, next) {
+			continue
+		}
+		list = append(list, kept{r.spec, r.viewers, r.seen})
+		h.stopRenditionLocked(f, key)
+	}
+	for _, k := range list {
+		r, err := h.ensureRenditionLocked(f, k.spec)
+		if err != nil {
+			log.Printf("rebuild %s on %s: %v", k.spec.Key(), f.channel.GuideNumber, err)
+			continue
+		}
+		r.viewers = k.viewers
+		r.seen = k.seen
+	}
+}
+
 func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error) {
 	if want.Codec == "hevc" && !h.HEVC {
 		want.Codec = ""
@@ -489,11 +533,7 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	input := "pipe:0"
-	if m := muxOf(h, f); m != nil && m.input != "" {
-		input = m.input
-	}
-	args := renditionArgs(f.program, f.sourceFor(want), want, h.Encoder, h.deintFor(want.Mode, f.source.VideoCodec), input)
+	input, args := h.pictureArgs(f, want)
 	cmd := exec.Command(h.FFmpeg, args...)
 	cmd.Dir = dir
 	var stdin io.WriteCloser
@@ -510,7 +550,7 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	}
 	pid := cmd.Process.Pid
 	NotePID(h.Dir, pid)
-	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: time.Now()}
+	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: time.Now(), args: args}
 	if stdin != nil {
 		r.sub = h.attachPipeLocked(muxOf(h, f), stdin)
 	}
@@ -569,6 +609,7 @@ func (h *Hub) watchRendition(f *feed, r *rendition, pid int, encoder string) {
 	NotePID(h.Dir, next)
 	r.cmd = cmd
 	r.stdin = stdin
+	r.args = args
 	if stdin != nil {
 		r.sub = h.attachPipeLocked(muxOf(h, f), stdin)
 	}
