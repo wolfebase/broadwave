@@ -4,6 +4,11 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
+- 2026-09-25 11:10 · **The Mac's disk is 97% full (12 GB free). A full disk will fail builds and stall the run. Clean up after yourself, starting this round:**
+  - Remove every lane worktree whose task is merged or dead with `git worktree remove --force` (P2b, LEGAL1, OPS3, HW1 and OPS1 are merged; the two `…01a0d8db…` multiview lanes are done). Remove each future lane's worktree as soon as its result is merged or rejected. There are 8 on disk now (1.2 GB).
+  - Delete any simulator you cloned for a lane (`xcrun simctl delete <udid>`) when its lane ends. Never delete the "Broadwave Staging" or "Broadwave Shots" simulators, or any simulator you didn't create.
+  - **Every round**, at the start and before any `xcodebuild`, check `df -h ~`. If less than 15 GB is free, clear regenerable caches you own: `go clean -cache`, `rm -rf apple/build`, and Broadwave's own folders under `~/Library/Developer/Xcode/DerivedData/Broadwave-*`. Never clear other projects' data. If less than 5 GB is free after that, stop starting lanes, write it in `BLOCKERS.md`, and notify the owner once.
+
 - 2026-09-25 09:10 · **Lanes are running, but their work isn't landing. Fix this before starting any new lane.**
   1. Integrate the two finished lane results still sitting in worktrees:
      - P2b: `~/.grok/worktrees/active-broadwave/subagent-01a0d8af-b202-7711-a2e0-bafd5006f4ed` (contract tests and fixtures);
