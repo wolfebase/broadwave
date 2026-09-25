@@ -4,6 +4,27 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
+- 2026-09-25 07:45 · **Owner's direction: go faster without lowering the bar. Run three lanes in parallel from now on.**
+  - **Lane A (you, serial):** the next task in section 4 order, plus anything that needs a shared resource: staging (`:8490`), tuners, production, App Store Connect or TestFlight, or the two "Broadwave Staging" simulators. You are also the only one who commits, edits `PROGRESS.md`, or deploys.
+  - **Lanes B and C (background subagents, `isolation: worktree`):** keep two running at all times. Each takes one open task that meets all of these:
+    - its dependencies are ticked;
+    - it needs no staging, tuner, or production (verify with unit tests, `FAKE=1` and the fake HDHomeRun, a local server on its own port, or a Vite dev server on its own port);
+    - it touches a different area from Lane A and from the other lane (server package vs web feature vs Apple target), so the merges don't conflict.
+    - Good lane tasks now: OPS1–OPS3, LEGAL1, P2b, P3, P4, P6, K2, K3, K5, K6, HW1, G8, G10, J4, J6, N3, E1–E3, E8, I1, I2, AP1, AP2, F3.
+    - Skip OPS5's README part: the new README is in PR #1. Do the GitHub Pages part only after PR #1 is merged.
+  - **Lane prompts** must be self-contained: the task's full Do and Accept text from MASTER_PLAN, file paths, the rules (no staging, tuners, or production; no keystrokes or clicks; no commits; no `PROGRESS.md` edits), the exact verification commands, and a return format: summary, diff stat, test output, and evidence paths under `.evidence/`.
+  - **Apple-lane rule:** at most one lane runs `xcodebuild` at a time (the Mac has 24 GB). An Apple lane that needs a simulator makes its own with `xcrun simctl clone` ("Broadwave Lane B iPhone", and so on), never the staging ones, and deletes it when done.
+  - **Integrating a lane:**
+    1. Read its diff.
+    2. Run a `code-reviewer` pass on it (every lane result, whatever its size).
+    3. Apply it to `main` and run `make check`.
+    4. If the Accept bullets need a real-hardware or staging check, do that check yourself in Lane A.
+    5. Commit it as its own task with its evidence, and push.
+    6. Start the next lane task immediately, so two lanes are always busy.
+  - **Waits:** don't wait on CI. Push, keep working, and check the run before the next push; red CI still stops new lane starts until it's fixed.
+  - **Round length:** don't end a round while a lane is running. Collect or hand off its result first, and note any in-flight lane in "Resume here". Aim for about six tasks per round instead of three.
+  - **Quality stays the same:** one task per commit, evidence for every Accept bullet, `make check` green, a review before commit, and the same Never rules and TUS scope.
+
 - 2026-09-25 07:30 · **Never send keystrokes, clicks, or menu actions to the Mac's desktop** (no `cliclick`, no `osascript` keystroke or click, no Cmd-W, no `System Events`). This Mac is the owner's workstation: synthetic input lands in whatever app is in front and can close the owner's windows. Round 14 closed a Simulator window with Cmd-W and then spent its time clicking menus to get it back. Drive the simulators only through `xcrun simctl` (boot, install, launch with `-BroadwaveWatch`/`-BroadwaveStream`, `openurl` deep links, `io screenshot`, `terminate`). Screenshots need no window. If a flow truly needs a tap, add a DEBUG launch argument or deep link for it.
 
 - 2026-09-24 23:55 · **Owner's direction: keep going through every task in section 4 order. The App Review video comes at the very end.** Finish the 2.1 reply draft and the review-notes update you started (`docs/appstore/`), commit it, and then don't wait on Apple or the recording. The owner records on real devices when the run is done. AS2 demo mode stays early, since it is what makes the next review easy.
