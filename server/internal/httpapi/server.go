@@ -55,6 +55,9 @@ type Server struct {
 	// SetupBench and SetupSignal replace the encoder test and the antenna check in tests.
 	SetupBench  func(ctx context.Context, ffmpeg, encoder string) (float64, error)
 	SetupSignal func(ctx context.Context) (great, ok, weak, lost int, err error)
+	// ScanWait is how long setup waits for a channel scan before stopping it.
+	// Zero waits 40 seconds. Tests set a short wait.
+	ScanWait time.Duration
 	// GuidePull replaces the listings pull in tests. Nil calls RefreshGuide.
 	// The public XMLTV host is not deterministic, and a failed pull can echo DeviceAuth.
 	GuidePull func(ctx context.Context) (int, error)

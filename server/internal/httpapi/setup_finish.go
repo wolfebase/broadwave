@@ -136,6 +136,24 @@ func (s *Server) setFinish(id, state, detail string) {
 	}
 }
 
+const setupScanLimit = 40 * time.Second
+
+func (s *Server) setupScanWait() time.Duration {
+	if s != nil && s.ScanWait > 0 {
+		return s.ScanWait
+	}
+	return setupScanLimit
+}
+
+// The caller's context may already be done. Abort on its own deadline so the tuner still hears it.
+func (s *Server) stopSetupScan(client *hdhr.Client, baseURL string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := client.AbortScan(ctx, baseURL); err != nil {
+		log.Printf("setup: scan abort: %v", err)
+	}
+}
+
 func (s *Server) stepScan(ctx context.Context) {
 	s.setFinish("scan", "running", "Looking at the lineup.")
 	devices, err := s.Store.Devices(ctx)
@@ -190,24 +208,44 @@ func (s *Server) stepScan(ctx context.Context) {
 		s.setFinish("scan", "done", "The scan did not start.")
 		return
 	}
-	deadline := time.Now().Add(40 * time.Second)
-	for time.Now().Before(deadline) {
+	// scanning stays true until a status read says the tuner is done. A progress
+	// error or a cancelled wait never counts as finished.
+	scanning := true
+	deadline := time.Now().Add(s.setupScanWait())
+	for {
 		prog, err := client.ScanProgress(ctx, tuner.BaseURL)
 		if err != nil {
+			if ctx.Err() != nil {
+				s.stopSetupScan(client, tuner.BaseURL)
+				s.setFinish("scan", "done", "The scan stopped.")
+				return
+			}
 			break
 		}
+		scanning = prog.Scan
 		if prog.Scan {
 			s.setFinish("scan", "running", fmt.Sprintf("Scanning for channels. %d found.", prog.Found))
 		}
-		if !prog.Scan {
+		if !prog.Scan || !time.Now().Before(deadline) {
+			break
+		}
+		wait := time.Second
+		if left := time.Until(deadline); left < wait {
+			wait = left
+		}
+		if wait <= 0 {
 			break
 		}
 		select {
 		case <-ctx.Done():
+			s.stopSetupScan(client, tuner.BaseURL)
 			s.setFinish("scan", "done", "The scan stopped.")
 			return
-		case <-time.After(time.Second):
+		case <-time.After(wait):
 		}
+	}
+	if scanning {
+		s.stopSetupScan(client, tuner.BaseURL)
 	}
 	host := tuner.BaseURL
 	if u, err := url.Parse(tuner.BaseURL); err == nil && u.Host != "" {

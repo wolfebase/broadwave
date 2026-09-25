@@ -170,3 +170,23 @@ func TestScanStartsAndReportsProgress(t *testing.T) {
 		t.Fatalf("%+v %v", prog, err)
 	}
 }
+
+func TestAbortScanPostsAbort(t *testing.T) {
+	var action, method string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/lineup.post" {
+			http.NotFound(w, r)
+			return
+		}
+		method = r.Method
+		action = r.URL.Query().Get("scan")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	if err := (&Client{HTTP: srv.Client()}).AbortScan(context.Background(), srv.URL+"/"); err != nil {
+		t.Fatal(err)
+	}
+	if method != http.MethodPost || action != "abort" {
+		t.Fatalf("%s scan=%q", method, action)
+	}
+}
