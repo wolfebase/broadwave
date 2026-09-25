@@ -585,8 +585,17 @@ public struct StreamInfo: Codable, Sendable, Hashable {
     public var sourceVideo: String?
     public var sourceAudio: String?
     public var encoder: String?
+    public var scan: String?
+    public var sourceWidth: Int?
+    public var sourceHeight: Int?
+    public var sourceFps: String?
+    public var outputWidth: Int?
+    public var outputHeight: Int?
+    public var outputFps: String?
+    public var bitrate: String?
+    public var decode: String?
 
-    public init(rendition: String, video: String, audio: String, mode: PictureMode? = nil, reason: String, sourceVideo: String? = nil, sourceAudio: String? = nil, encoder: String? = nil) {
+    public init(rendition: String, video: String, audio: String, mode: PictureMode? = nil, reason: String, sourceVideo: String? = nil, sourceAudio: String? = nil, encoder: String? = nil, scan: String? = nil, sourceWidth: Int? = nil, sourceHeight: Int? = nil, sourceFps: String? = nil, outputWidth: Int? = nil, outputHeight: Int? = nil, outputFps: String? = nil, bitrate: String? = nil, decode: String? = nil) {
         self.rendition = rendition
         self.video = video
         self.audio = audio
@@ -595,6 +604,15 @@ public struct StreamInfo: Codable, Sendable, Hashable {
         self.sourceVideo = sourceVideo
         self.sourceAudio = sourceAudio
         self.encoder = encoder
+        self.scan = scan
+        self.sourceWidth = sourceWidth
+        self.sourceHeight = sourceHeight
+        self.sourceFps = sourceFps
+        self.outputWidth = outputWidth
+        self.outputHeight = outputHeight
+        self.outputFps = outputFps
+        self.bitrate = bitrate
+        self.decode = decode
     }
 }
 

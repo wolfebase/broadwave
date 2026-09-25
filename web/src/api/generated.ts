@@ -327,6 +327,15 @@ export type StreamInfo = {
   sourceVideo?: string;
   sourceAudio?: string;
   encoder?: string;
+  scan?: string;
+  sourceWidth?: number;
+  sourceHeight?: number;
+  sourceFps?: string;
+  outputWidth?: number;
+  outputHeight?: number;
+  outputFps?: string;
+  bitrate?: string;
+  decode?: string;
 };
 
 export type TeamFollow = {

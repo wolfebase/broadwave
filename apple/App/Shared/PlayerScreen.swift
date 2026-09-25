@@ -5,6 +5,14 @@ import BroadwaveUI
 import CoreMedia
 import SwiftUI
 
+struct PictureStats: Equatable {
+    var width = 0
+    var height = 0
+    var dropped = 0
+    var buffer = 0.0
+    var fps: Float = 0
+}
+
 @MainActor
 @Observable
 final class LivePlayer {
@@ -24,6 +32,8 @@ final class LivePlayer {
     private var lastBeat = Date()
     /// Nominal frame rate once the asset reports it. 59.94 until then.
     private(set) var refreshRate: Float = 59.94
+    private(set) var picture = PictureStats()
+    private var statsTask: Task<Void, Never>?
 
     func start(_ channel: Channel, store: AppStore) async {
         await stop()
@@ -45,9 +55,8 @@ final class LivePlayer {
             player.automaticallyWaitsToMinimizeStalling = true
             watchStartup(item)
             player.play()
-            #if os(tvOS)
-                await matchRate(item)
-            #endif
+            await matchRate(item)
+            watchPicture()
             if store.syncEnabled, let socket = store.socket {
                 let engine = SyncEngine(player: player, socket: socket, room: "channel:\(channel.id)", channelID: channel.id)
                 engine.start()
@@ -59,6 +68,9 @@ final class LivePlayer {
     }
 
     func stop() async {
+        statsTask?.cancel()
+        statsTask = nil
+        picture = PictureStats()
         sync?.stop()
         sync = nil
         if let tick {
@@ -78,15 +90,49 @@ final class LivePlayer {
         channelID = nil
     }
 
-    #if os(tvOS)
-        private func matchRate(_ item: AVPlayerItem) async {
-            let tracks = await (try? item.asset.loadTracks(withMediaType: .video)) ?? []
-            let rate = await (try? tracks.first?.load(.nominalFrameRate)) ?? 0
-            if rate > 1 {
-                refreshRate = rate
+    private func matchRate(_ item: AVPlayerItem) async {
+        let tracks = await (try? item.asset.loadTracks(withMediaType: .video)) ?? []
+        let rate = await (try? tracks.first?.load(.nominalFrameRate)) ?? 0
+        if rate > 1 {
+            refreshRate = rate
+        }
+    }
+
+    private func watchPicture() {
+        statsTask?.cancel()
+        statsTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                self?.samplePicture()
             }
         }
-    #endif
+    }
+
+    private func samplePicture() {
+        guard let item = player.currentItem else { return }
+        var next = PictureStats()
+        let size = item.presentationSize
+        if size.width > 1 {
+            next.width = Int(size.width.rounded())
+            next.height = Int(size.height.rounded())
+        }
+        let now = CMTimeGetSeconds(item.currentTime())
+        if now.isFinite {
+            for value in item.loadedTimeRanges {
+                let range = value.timeRangeValue
+                let start = CMTimeGetSeconds(range.start)
+                let end = CMTimeGetSeconds(CMTimeRangeGetEnd(range))
+                if start.isFinite, end.isFinite, start <= now + 0.05, end >= now {
+                    next.buffer = max(next.buffer, end - now)
+                }
+            }
+        }
+        if let event = item.accessLog()?.events.last {
+            next.dropped = event.numberOfDroppedVideoFrames
+        }
+        next.fps = refreshRate
+        picture = next
+    }
 
     private func watchStartup(_ item: AVPlayerItem) {
         if let tick {
@@ -152,19 +198,33 @@ struct PlayerScreen: View {
     @Environment(AppStore.self) private var store
     @Environment(NowPlaying.self) private var nowPlaying
     @State private var live = LivePlayer()
+    @State private var showStream = false
 
     var body: some View {
         ZStack(alignment: .top) {
             Color.black.ignoresSafeArea()
-            SystemPlayer(player: live.player, refreshRate: live.refreshRate, menu: channelMenu, audio: audioMenu) {
-                if let channel = nowPlaying.channel {
-                    nowPlaying.watchTogether([channel])
+            SystemPlayer(
+                player: live.player,
+                refreshRate: live.refreshRate,
+                menu: channelMenu,
+                audio: audioMenu,
+                streamOn: showStream,
+                onStream: { showStream.toggle() },
+                onTogether: {
+                    if let channel = nowPlaying.channel {
+                        nowPlaying.watchTogether([channel])
+                    }
                 }
-            }
+            )
             .ignoresSafeArea()
             #if os(iOS)
                 overlay
             #endif
+            if showStream {
+                StreamPanel(stream: live.session?.stream, stats: live.picture, sync: live.sync)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding(24)
+            }
             if let error = live.error {
                 Text(error)
                     .padding()
@@ -177,6 +237,14 @@ struct PlayerScreen: View {
                 await live.start(channel, store: store)
             }
         }
+        #if DEBUG
+        .onAppear {
+            // Simulator checks: -BroadwaveStream YES opens the panel without a remote.
+            if UserDefaults.standard.bool(forKey: "BroadwaveStream") {
+                showStream = true
+            }
+        }
+        #endif
         .onDisappear {
             Task { await live.stop() }
         }
@@ -236,6 +304,10 @@ struct PlayerScreen: View {
                     .glassEffect(.regular.tint(sync.state == .locked ? Tokens.ColorToken.success.opacity(0.4) : nil))
                     .accessibilityLabel(sync.members > 1 ? "Synced with \(sync.members) screens" : "Synced")
                 }
+                Button(showStream ? "Hide stream" : "Stream", systemImage: "info.circle") { showStream.toggle() }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                    .accessibilityLabel(showStream ? "Hide stream" : "Stream")
                 Button("Side by side", systemImage: "rectangle.split.2x1") {
                     if let channel = nowPlaying.channel {
                         nowPlaying.watchTogether([channel])
@@ -293,6 +365,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
     var refreshRate: Float = 59.94
     var menu: [ChannelMenuEntry] = []
     var audio: [ChannelMenuEntry] = []
+    var streamOn = false
+    var onStream: () -> Void = {}
     var onTogether: () -> Void = {}
 
     func makeUIViewController(context _: Context) -> AVPlayerViewController {
@@ -344,10 +418,97 @@ struct SystemPlayer: UIViewControllerRepresentable {
                 UIAction(title: entry.title, state: entry.current ? .on : .off) { _ in entry.action() }
             }
             let together = UIAction(title: "Side by side", image: UIImage(systemName: "rectangle.split.2x1")) { _ in onTogether() }
+            let stream = UIAction(title: streamOn ? "Hide stream" : "Stream", image: UIImage(systemName: "info.circle"), state: streamOn ? .on : .off) { _ in onStream() }
             let audioMenu = UIMenu(title: "Audio", image: UIImage(systemName: "speaker.wave.2"), children: audioActions)
-            vc.transportBarCustomMenuItems = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions), audioMenu, together]
+            vc.transportBarCustomMenuItems = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions), audioMenu, stream, together]
         #endif
     }
+}
+
+struct StreamPanel: View {
+    let stream: StreamInfo?
+    let stats: PictureStats
+    let sync: SyncEngine?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Stream").font(.headline)
+            line("Source", sourceText)
+            line("Output", outputText)
+            line("Dropped frames", "\(stats.dropped)")
+            line("Buffer", String(format: "%.1fs", stats.buffer))
+            line("Sync", syncText)
+        }
+        .padding(16)
+        .frame(maxWidth: 420, alignment: .leading)
+        .glassEffect(in: .rect(cornerRadius: Tokens.Radius.lg))
+        .accessibilityElement(children: .combine)
+    }
+
+    private func line(_ name: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(name).foregroundStyle(.secondary)
+            Spacer(minLength: 12)
+            Text(value).fontWeight(.semibold).multilineTextAlignment(.trailing)
+        }
+        .font(.footnote)
+    }
+
+    private var sourceText: String {
+        guard let stream else { return "Waiting" }
+        return joinFacts([
+            stream.sourceVideo,
+            sizeText(stream.sourceWidth, stream.sourceHeight),
+            scanWord(stream.scan),
+            stream.sourceFps,
+        ])
+    }
+
+    private var outputText: String {
+        guard let stream else { return "Waiting" }
+        let width = stats.width > 0 ? stats.width : stream.outputWidth
+        let height = stats.height > 0 ? stats.height : stream.outputHeight
+        let fps = stream.outputFps ?? (stats.fps > 1 ? String(format: "%.2f", stats.fps) : nil)
+        let decode = stream.decode == "gpu" ? "GPU" : stream.decode == "cpu" ? "CPU" : stream.video == "copy" ? "Direct" : nil
+        return joinFacts([sizeText(width, height), fps, stream.encoder, bitrateText(stream.bitrate), decode])
+    }
+
+    private var syncText: String {
+        guard let sync, sync.state != .off else { return "Off" }
+        let raw = sync.state.rawValue
+        let word = raw.prefix(1).uppercased() + raw.dropFirst()
+        return "\(word) · \(Int(sync.drift.rounded())) ms"
+    }
+}
+
+private func sizeText(_ width: Int?, _ height: Int?) -> String? {
+    guard let width, let height, width > 0, height > 0 else { return nil }
+    return "\(width)×\(height)"
+}
+
+private func scanWord(_ scan: String?) -> String? {
+    switch scan {
+    case "progressive": "Progressive"
+    case "interlaced": "Interlaced"
+    case "film": "Film"
+    default: nil
+    }
+}
+
+private func bitrateText(_ rate: String?) -> String? {
+    guard let rate, !rate.isEmpty else { return nil }
+    if rate.hasSuffix("M") {
+        return String(rate.dropLast()) + " Mb/s"
+    }
+    if rate.hasSuffix("k") {
+        return String(rate.dropLast()) + " kb/s"
+    }
+    return rate
+}
+
+private func joinFacts(_ parts: [String?]) -> String {
+    let line = parts.compactMap(\.self).filter { !$0.isEmpty }.joined(separator: " · ")
+    return line.isEmpty ? "Waiting" : line
 }
 
 struct RecordingPlayerScreen: View {

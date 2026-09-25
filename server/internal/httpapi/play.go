@@ -65,6 +65,12 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	}
 	session.Stream.Reason = decision.Reason
 	waitPlaylist(session.File, 12*time.Second)
+	if fresh, ok := s.Hub.Session(session.ChannelID, session.Rendition); ok {
+		reason := session.Stream.Reason
+		fresh.Tuners = session.Tuners
+		session = fresh
+		session.Stream.Reason = reason
+	}
 	if tuners, err := s.Hub.Tuners(r.Context()); err == nil {
 		session.Tuners = tuners
 	}

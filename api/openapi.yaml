@@ -1463,6 +1463,15 @@ components:
         sourceVideo: { type: string }
         sourceAudio: { type: string }
         encoder: { type: string }
+        scan: { type: string, description: "progressive, interlaced, or film" }
+        sourceWidth: { type: integer }
+        sourceHeight: { type: integer }
+        sourceFps: { type: string, description: "Broadcast frame rate, such as 59.94" }
+        outputWidth: { type: integer }
+        outputHeight: { type: integer }
+        outputFps: { type: string }
+        bitrate: { type: string, description: "Encoder target, such as 14M" }
+        decode: { type: string, description: "gpu or cpu when this rendition is transcoded" }
     WatchSession:
       type: object
       required: [channelId, playlist, rendition, stream, encoder, shared, viewers]
