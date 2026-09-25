@@ -1208,6 +1208,31 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Settings" }
         "400": { $ref: "#/components/responses/Error" }
+  /setup/finish:
+    post:
+      tags: [settings]
+      operationId: startSetupFinish
+      description: |
+        After a tuner is in the lineup, finish setup on the server.
+        Scan when the lineup is empty, load listings, check the recordings folder,
+        star ABC, CBS, FOX, and NBC, time the encoder, and summarize the antenna.
+        Poll GET until running is false. The ready line is the summary.
+      responses:
+        "200":
+          description: Setup progress
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SetupFinish" }
+    get:
+      tags: [settings]
+      operationId: setupFinishStatus
+      description: Progress for the setup that is finishing itself.
+      responses:
+        "200":
+          description: Setup progress
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SetupFinish" }
   /storage:
     get:
       tags: [settings]
@@ -1691,6 +1716,24 @@ components:
         title: { type: string }
         start: { type: string, format: date-time }
         end: { type: string, format: date-time }
+    SetupStep:
+      type: object
+      required: [id, title, state]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        state: { type: string, enum: [waiting, running, done, skipped] }
+        detail: { type: string }
+    SetupFinish:
+      type: object
+      required: [running, steps]
+      properties:
+        running: { type: boolean }
+        ready: { type: string, description: "Summary once setup has finished, such as Ready: 27 channels, guide for 21, 2 tuners, Intel GPU." }
+        channelId: { type: integer, format: int64, description: "First channel to watch. A favorite when one was starred." }
+        steps:
+          type: array
+          items: { $ref: "#/components/schemas/SetupStep" }
     Settings:
       type: object
       properties:

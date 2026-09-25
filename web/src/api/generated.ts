@@ -280,6 +280,20 @@ export type Settings = {
   tmdbKeySet?: string;
 };
 
+export type SetupFinish = {
+  running: boolean;
+  ready?: string;
+  channelId?: number;
+  steps: SetupStep[];
+};
+
+export type SetupStep = {
+  id: string;
+  title: string;
+  state: string;
+  detail?: string;
+};
+
 export type Slot = {
   recordingId: number;
   title: string;

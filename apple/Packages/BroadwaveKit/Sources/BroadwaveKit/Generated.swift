@@ -500,6 +500,34 @@ public struct Settings: Codable, Sendable, Hashable {
     }
 }
 
+public struct SetupFinish: Codable, Sendable, Hashable {
+    public var running: Bool
+    public var ready: String?
+    public var channelId: Int64?
+    public var steps: [SetupStep]
+
+    public init(running: Bool, ready: String? = nil, channelId: Int64? = nil, steps: [SetupStep]) {
+        self.running = running
+        self.ready = ready
+        self.channelId = channelId
+        self.steps = steps
+    }
+}
+
+public struct SetupStep: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var title: String
+    public var state: String
+    public var detail: String?
+
+    public init(id: String, title: String, state: String, detail: String? = nil) {
+        self.id = id
+        self.title = title
+        self.state = state
+        self.detail = detail
+    }
+}
+
 public struct Slot: Codable, Sendable, Hashable {
     public var recordingId: Int64
     public var title: String

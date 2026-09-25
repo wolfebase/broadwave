@@ -2,7 +2,7 @@ import BroadwaveKit
 import BroadwaveUI
 import SwiftUI
 
-/// First-run steps, the same five as the web wizard.
+/// First run: find a tuner, then the server finishes setup on its own.
 struct SetupWizard: View {
     var onFinish: () -> Void = {}
     @Environment(AppStore.self) private var store
@@ -18,14 +18,10 @@ struct SetupWizard: View {
     @State private var playlistURL = ""
     @State private var xtreamUser = ""
     @State private var xtreamPass = ""
-    @State private var doctor: [APIClient.DoctorNote] = []
-    @State private var space: APIClient.StorageInfo?
-    @State private var watermark = "10"
-    @State private var watermarkReady = false
-    @State private var didScan = false
-    @State private var didStar = false
-    @State private var didPullGuide = false
-    private let titles = ["Sources", "Channels", "Guide", "Recordings", "Apps"]
+    @State private var held = false
+    @State private var autoWatch = false
+    @State private var progress: SetupFinish?
+    private let titles = ["Sources", "Ready"]
 
     var body: some View {
         NavigationStack {
@@ -33,38 +29,31 @@ struct SetupWizard: View {
                 VStack(alignment: .leading, spacing: 24) {
                     Text("Let's set up your TV")
                         .font(.largeTitle.weight(.heavy))
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
-                            ForEach(0 ..< 3, id: \.self) { i in
-                                stepChip(i)
-                            }
-                        }
-                        HStack(spacing: 8) {
-                            ForEach(3 ..< titles.count, id: \.self) { i in
-                                stepChip(i)
-                            }
+                    HStack(spacing: 8) {
+                        ForEach(0 ..< titles.count, id: \.self) { i in
+                            stepChip(i)
                         }
                     }
                     Group {
                         switch step {
                         case 0: sources
-                        case 1: channels
-                        case 2: guide
-                        case 3: recordings
-                        default: apps
+                        default: finishStep
                         }
                     }
                     if !note.isEmpty {
                         Text(note).foregroundStyle(.secondary)
                     }
-                    if step < titles.count - 1 {
-                        Button("Continue") { step += 1 }
-                            .buttonStyle(.glassProminent)
-                            .disabled(!canContinue || busy)
+                    if step == 0 {
+                        Button("Continue") {
+                            held = false
+                            step = 1
+                        }
+                        .buttonStyle(.glassProminent)
+                        .disabled(!canContinue || busy)
                     } else {
-                        Button("Start watching") { finish() }
+                        Button("Watch") { finish() }
                             .buttonStyle(.glassProminent)
-                            .disabled(busy)
+                            .disabled(busy || (progress?.ready ?? "").isEmpty)
                     }
                 }
                 .padding(28)
@@ -75,14 +64,13 @@ struct SetupWizard: View {
         }
         .task { await load() }
         .task(id: step) { await onStep() }
-        .onChange(of: watermark) { _, value in
-            guard watermarkReady else { return }
-            Task { try? await store.api?.saveSettings(["watermarkGB": value]) }
-        }
     }
 
     private func stepChip(_ i: Int) -> some View {
         Button {
+            if i == 0, step == 1 {
+                held = true
+            }
             step = i
         } label: {
             Text(titles[i])
@@ -97,16 +85,12 @@ struct SetupWizard: View {
     }
 
     private var canContinue: Bool {
-        switch step {
-        case 0: !devices.isEmpty || !store.channels.isEmpty
-        case 1: store.channels.contains { !$0.hidden }
-        default: true
-        }
+        !devices.isEmpty || store.channels.contains { !$0.hidden }
     }
 
     private var sources: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Looking for your tuner…").font(.title2.weight(.bold))
+            Text(devices.isEmpty ? "Looking for your tuner…" : "Your tuner").font(.title2.weight(.bold))
             Text("An HDHomeRun on this network is added for you. Everything else waits for a tap.")
                 .foregroundStyle(.secondary)
             if devices.isEmpty {
@@ -172,83 +156,50 @@ struct SetupWizard: View {
         }
     }
 
-    private var channels: some View {
+    private var finishStep: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Choose your channels").font(.title2.weight(.bold))
-            Text(busy ? "Scanning for channels." : "ABC, CBS, FOX, and NBC are already favorites when we can tell.")
-                .foregroundStyle(.secondary)
-            ForEach(store.channels.filter { !$0.hidden }) { channel in
-                Button {
-                    Task { await toggleFavorite(channel) }
-                } label: {
-                    HStack {
-                        Text(channel.displayNumber).font(.headline.monospacedDigit())
-                        Text(channel.displayName).lineLimit(1)
-                        if let network = channel.network, !network.isEmpty {
-                            Text(network).foregroundStyle(.secondary)
+            Text(readyTitle)
+                .font(.title2.weight(.bold))
+                .accessibilityAddTraits(.isHeader)
+            if let steps = progress?.steps {
+                ForEach(steps) { item in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(item.title).font(.headline)
+                            Spacer()
+                            Text(stateWord(item.state))
+                                .foregroundStyle(item.state == "done" ? Tokens.ColorToken.success : .secondary)
                         }
-                        Spacer()
-                        Text(channel.favorite ? "Favorite" : "Add favorite")
-                            .foregroundStyle(channel.favorite ? Tokens.ColorToken.success : .secondary)
+                        if let detail = item.detail, !detail.isEmpty {
+                            Text(detail).foregroundStyle(.secondary)
+                        }
                     }
                 }
-                .buttonStyle(.glass)
             }
-            if store.channels.isEmpty {
-                Text("No channels yet.").foregroundStyle(.secondary)
-            }
-            Button("Hide duplicates and shopping") { Task { await hideExtras() } }
-                .buttonStyle(.glass)
-        }
-    }
-
-    private var guide: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Guide coverage").font(.title2.weight(.bold))
-            let rows = coverage()
-            if rows.isEmpty {
-                Text("No sources yet.").foregroundStyle(.secondary)
-            }
-            ForEach(rows, id: \.id) { row in
-                HStack {
-                    Text(row.name).font(.headline)
-                    Spacer()
-                    Text("\(row.channels) channels · \(row.withListings) with listings")
-                        .foregroundStyle(.secondary)
+            if progress?.ready?.isEmpty == false {
+                Text("Open Broadwave on your other screens. They find this server on their own.")
+                    .foregroundStyle(.secondary)
+                if let url = store.api?.base.absoluteString {
+                    Text(url).font(.title3.weight(.semibold))
                 }
             }
         }
+        .accessibilityElement(children: .contain)
     }
 
-    private var recordings: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Where recordings go").font(.title2.weight(.bold))
-            HStack(spacing: 24) {
-                stat(space.map { formatFree($0.freeBytes) } ?? "—", "free")
-            }
-            Text("Recordings save in the folder mapped for this server.")
-                .foregroundStyle(.secondary)
-            ForEach(doctor, id: \.id) { item in
-                Text(item.message).foregroundStyle(Tokens.ColorToken.warning)
-            }
-            Picker("Keep this much space free", selection: $watermark) {
-                Text("No reserve").tag("0")
-                Text("10 GB").tag("10")
-                Text("25 GB").tag("25")
-                Text("50 GB").tag("50")
-                Text("100 GB").tag("100")
-            }
+    private var readyTitle: String {
+        if let ready = progress?.ready, !ready.isEmpty {
+            return ready
         }
+        return "Setting up your TV"
     }
 
-    private var apps: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Watch on iPhone and Apple TV").font(.title2.weight(.bold))
-            Text("Open Broadwave on your Apple TV. It finds this server on its own.")
-                .foregroundStyle(.secondary)
-            if let url = store.api?.base.absoluteString {
-                Text(url).font(.title3.weight(.semibold))
-            }
+    private func stateWord(_ state: String) -> String {
+        switch state {
+        case "running": "Working"
+        case "done": "Done"
+        case "skipped": "Skipped"
+        default: ""
         }
     }
 
@@ -273,16 +224,12 @@ struct SetupWizard: View {
         }
     }
 
-    private func stat(_ value: String, _ label: String) -> some View {
-        VStack(alignment: .leading) {
-            Text(value).font(.title.weight(.bold))
-            Text(label).foregroundStyle(.secondary)
-        }
-    }
-
     private func load() async {
         let token = store.socket?.on("sources.found") { _ in
-            Task { await loadDevices() }
+            Task {
+                await loadDevices()
+                await maybeAdvance()
+            }
         }
         defer {
             if let token {
@@ -294,99 +241,66 @@ struct SetupWizard: View {
             busy = true
             _ = try? await store.api?.discover(ip: "")
             await loadDevices()
+            await store.refresh()
             busy = false
         }
-        if let notes = try? await store.api?.doctorNotes() {
-            doctor = notes
-        }
-        if let storage = try? await store.api?.storage() {
-            space = storage
-        }
-        if let values = try? await store.api?.settings(), let mark = values["watermarkGB"], !mark.isEmpty {
-            watermark = mark
-        }
-        watermarkReady = true
         #if DEBUG
             if let raw = UserDefaults.standard.string(forKey: "BroadwaveSetup") {
                 if let n = Int(raw), n >= 0, n < titles.count {
                     step = n
                 } else if raw == "walk" {
+                    autoWatch = true
                     await walk()
                     return
                 }
             }
         #endif
+        await maybeAdvance()
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(3600))
         }
     }
 
     private func onStep() async {
-        if step == 1 {
-            await prepareChannels()
-        } else if step == 2 {
-            await prepareGuide()
+        guard step == 1 else { return }
+        await runFinish()
+    }
+
+    private func maybeAdvance() async {
+        guard step == 0, !held else { return }
+        guard !devices.isEmpty || store.channels.contains(where: { !$0.hidden }) else { return }
+        try? await Task.sleep(for: .seconds(2))
+        guard !Task.isCancelled, step == 0, !held else { return }
+        guard !devices.isEmpty || store.channels.contains(where: { !$0.hidden }) else { return }
+        step = 1
+    }
+
+    private func runFinish() async {
+        guard let api = store.api else { return }
+        do {
+            var status = try await api.setupFinish()
+            if !status.running, status.ready?.isEmpty != false {
+                status = try await api.startSetupFinish()
+            }
+            progress = status
+            while !Task.isCancelled, status.running {
+                try await Task.sleep(for: .milliseconds(500))
+                status = try await api.setupFinish()
+                progress = status
+            }
+            if !Task.isCancelled, status.ready?.isEmpty != false {
+                note = "Setup did not finish."
+            } else if autoWatch, !Task.isCancelled {
+                finish()
+            }
+        } catch {
+            note = error.localizedDescription
         }
     }
 
     private func loadDevices() async {
         if let found = try? await store.api?.devices() {
             devices = found
-        }
-    }
-
-    private func prepareChannels() async {
-        if !didScan, let tuner = devices.first(where: { $0.tunerCount > 0 }), store.channels.isEmpty {
-            didScan = true
-            await pollScan(tuner.deviceId)
-        }
-        guard !didStar, !store.channels.isEmpty else { return }
-        didStar = true
-        _ = try? await store.api?.starNetworks()
-        await store.refresh()
-    }
-
-    private func pollScan(_ id: String) async {
-        guard let api = store.api else { return }
-        busy = true
-        note = "Scanning for channels."
-        defer { busy = false }
-        do {
-            try await api.startScan(deviceID: id)
-            for _ in 0 ..< 40 {
-                if Task.isCancelled {
-                    return
-                }
-                let prog = try await api.scanStatus(deviceID: id)
-                note = prog.scanning ? "Scanning for channels. \(prog.found) found." : ""
-                if !prog.scanning {
-                    break
-                }
-                try await Task.sleep(for: .seconds(1))
-            }
-            await store.refresh()
-            await loadDevices()
-        } catch {
-            note = error.localizedDescription
-        }
-    }
-
-    private func prepareGuide() async {
-        guard !didPullGuide, let api = store.api, !devices.isEmpty else { return }
-        didPullGuide = true
-        let count = await (try? api.guideAirings()) ?? 0
-        if count > 0 {
-            return
-        }
-        busy = true
-        defer { busy = false }
-        do {
-            let loaded = try await api.refreshGuide()
-            note = "Loaded \(loaded) listings."
-            _ = try? await api.starNetworks()
-            await store.refresh()
-        } catch {
-            note = error.localizedDescription
         }
     }
 
@@ -485,71 +399,13 @@ struct SetupWizard: View {
         }
     }
 
-    private func toggleFavorite(_ channel: Channel) async {
-        _ = try? await store.api?.setFavorite(channel, !channel.favorite)
-        await store.refresh()
-    }
-
-    private func hideExtras() async {
-        guard let api = store.api else { return }
-        var seen = Set<String>()
-        var hidden = 0
-        for channel in store.channels where !channel.hidden {
-            let name = "\(channel.guideName) \(channel.displayName)"
-            if name.range(of: "shop|qvc|hsn|jewelry", options: [.regularExpression, .caseInsensitive]) != nil {
-                _ = try? await api.setHidden(channel, true)
-                hidden += 1
-                continue
-            }
-            let key = "\(channel.guideNumber)|\(channel.guideName)".lowercased()
-            if seen.contains(key) {
-                _ = try? await api.setHidden(channel, true)
-                hidden += 1
-            } else {
-                seen.insert(key)
-            }
-        }
-        note = hidden > 0 ? "Hid \(hidden) channels." : "Nothing to hide."
-        await store.refresh()
-    }
-
-    private struct Coverage {
-        var id: String
-        var name: String
-        var channels: Int
-        var withListings: Int
-    }
-
-    private func coverage() -> [Coverage] {
-        devices.map { device in
-            let mine = store.channels.filter { $0.deviceId == device.deviceId && !$0.hidden }
-            let listed = mine.filter { !store.index.airings($0.id).isEmpty }.count
-            let name = device.friendlyName.isEmpty ? (device.modelNumber ?? "Source") : device.friendlyName
-            return Coverage(id: device.deviceId, name: name, channels: mine.count, withListings: listed)
-        }
-    }
-
-    private func formatFree(_ bytes: Int64) -> String {
-        if bytes >= 1_000_000_000_000 {
-            return String(format: "%.1f TB", Double(bytes) / 1_000_000_000_000)
-        }
-        return "\(bytes / 1_000_000_000) GB"
-    }
-
-    /// Debug only: the same Continue taps, paced so a screenshot can land on each step.
+    /// Debug only: pause on Sources, then run the finish checklist.
     private func walk() async {
-        for next in 1 ..< titles.count {
-            try? await Task.sleep(for: .seconds(2))
-            if Task.isCancelled {
-                return
-            }
-            step = next
-        }
         try? await Task.sleep(for: .seconds(2))
         if Task.isCancelled {
             return
         }
-        finish()
+        step = 1
     }
 
     private func finish() {

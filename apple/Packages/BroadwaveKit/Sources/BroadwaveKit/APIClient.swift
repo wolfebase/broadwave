@@ -331,6 +331,14 @@ public struct APIClient: Sendable {
         struct R: Decodable { var starred: [StarredChannel] }
         return try await send("POST", "/channels/star", body: [String: String](), as: R.self).starred
     }
+
+    public func startSetupFinish() async throws -> SetupFinish {
+        try await send("POST", "/setup/finish", body: [String: String](), as: SetupFinish.self)
+    }
+
+    public func setupFinish() async throws -> SetupFinish {
+        try await send("GET", "/setup/finish", as: SetupFinish.self)
+    }
 }
 
 extension ISO8601DateFormatter {

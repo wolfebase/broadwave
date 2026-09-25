@@ -90,6 +90,10 @@
   gap: 8px;
 }
 
+.setup-finish .setup-list li {
+  padding: 8px 12px;
+}
+
 .setup-list li {
   display: grid;
   grid-template-columns: 1fr auto;
