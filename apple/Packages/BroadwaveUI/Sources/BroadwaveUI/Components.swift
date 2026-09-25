@@ -95,12 +95,15 @@ public struct NowCard: View {
     let airing: Airing?
     let now: Date
     let art: URL?
+    /// A preview from a mux already on. Shown only when it loads, and only when the listing has no art.
+    let frame: URL?
 
-    public init(channel: Channel, airing: Airing?, now: Date, art: URL? = nil) {
+    public init(channel: Channel, airing: Airing?, now: Date, art: URL? = nil, frame: URL? = nil) {
         self.channel = channel
         self.airing = airing
         self.now = now
         self.art = art
+        self.frame = frame
     }
 
     public var body: some View {
@@ -114,6 +117,15 @@ public struct NowCard: View {
                 }
                 .aspectRatio(16 / 9, contentMode: .fit)
                 .clipShape(.rect(cornerRadius: Tokens.Radius.md))
+                .accessibilityHidden(true)
+            } else if let frame {
+                AsyncImage(url: frame) { phase in
+                    if let image = phase.image {
+                        image.resizable().aspectRatio(16 / 9, contentMode: .fill)
+                            .aspectRatio(16 / 9, contentMode: .fit)
+                            .clipShape(.rect(cornerRadius: Tokens.Radius.md))
+                    }
+                }
                 .accessibilityHidden(true)
             }
             HStack(alignment: .firstTextBaseline, spacing: 8) {

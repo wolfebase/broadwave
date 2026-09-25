@@ -194,6 +194,12 @@ public struct APIClient: Sendable {
         url("/media/art/\(kind)/\(id)?w=\(width)")
     }
 
+    /// A still from a mux that is already tuned. The route keeps a 480 and a 1280 JPEG.
+    public func frameURL(channelID: Int64, width: Int) -> URL {
+        let w = width >= 1280 ? 1280 : 480
+        return url("/api/v1/channels/\(channelID)/frame?w=\(w)")
+    }
+
     public func supportURL() -> URL {
         url("/api/v1/support")
     }

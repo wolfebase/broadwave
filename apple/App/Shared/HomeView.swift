@@ -29,7 +29,14 @@ struct HomeView: View {
                 Shelf("On now") {
                     ForEach(live, id: \.0.id) { channel, airing in
                         Button { nowPlaying.play(channel) } label: {
-                            NowCard(channel: channel, airing: airing, now: store.now, art: store.artURL(airing, width: 640))
+                            let art = store.artURL(airing, width: 640)
+                            NowCard(
+                                channel: channel,
+                                airing: airing,
+                                now: store.now,
+                                art: art,
+                                frame: art == nil ? store.api?.frameURL(channelID: channel.id, width: 480) : nil
+                            )
                         }
                         .cardButton()
                         .contextMenu { ChannelActions(channel: channel, airing: airing) }
@@ -157,29 +164,24 @@ struct Hero: View {
 
     var body: some View {
         let kind = airing?.kind ?? .other
+        let art = airing.flatMap { store.artURL($0, width: 1600) }
         ZStack(alignment: .bottomLeading) {
-            if let airing, let art = store.artURL(airing, width: 1600) {
+            if let airing, let art {
                 // The art fills the hero's space; its own size must never widen the card.
                 Color.clear.overlay {
                     HeroArt(url: art, layout: ArtLayout.choose(width: airing.imageWidth ?? 0, height: airing.imageHeight ?? 0, slot: 1400))
                 }
                 .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
+                RoundedRectangle(cornerRadius: Tokens.Radius.xl)
+                    .fill(.clear)
+                    .overlay(
+                        RadialGradient(colors: [kind.color.opacity(0.6), .clear], center: .topTrailing, startRadius: 0, endRadius: 520)
+                            .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
+                    )
+                    .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
+            } else {
+                HeroBackdrop(frame: store.api?.frameURL(channelID: channel.id, width: 1280), number: channel.displayNumber, tint: kind.color)
             }
-            RoundedRectangle(cornerRadius: Tokens.Radius.xl)
-                .fill(airing?.imageUrl == nil ? Tokens.ColorToken.surface1 : .clear)
-                .overlay(
-                    RadialGradient(colors: [kind.color.opacity(0.6), .clear], center: .topTrailing, startRadius: 0, endRadius: 520)
-                        .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
-                )
-                .overlay(alignment: .topTrailing) {
-                    Text(airing?.imageUrl == nil ? channel.displayNumber : "")
-                        .font(.system(size: 220, weight: .black))
-                        .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.06))
-                        .offset(x: 20, y: -40)
-                        .clipped()
-                }
-                .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
                     LiveDot("Live now")
@@ -243,6 +245,53 @@ struct HeroArt: View {
         )
         .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
         .accessibilityHidden(true)
+    }
+}
+
+/// The hero's background when the listing has no art. A tuned mux shows its preview.
+/// A missing frame keeps the channel number on the empty card.
+struct HeroBackdrop: View {
+    var frame: URL?
+    let number: String
+    let tint: Color
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: Tokens.Radius.xl)
+            .fill(Tokens.ColorToken.surface1)
+            .overlay {
+                if let frame {
+                    AsyncImage(url: frame) { phase in
+                        if let image = phase.image {
+                            image.resizable().scaledToFill()
+                                .overlay(
+                                    LinearGradient(
+                                        colors: [.black.opacity(0.92), .black.opacity(0.6), .black.opacity(0.1)],
+                                        startPoint: .bottomLeading,
+                                        endPoint: .topTrailing
+                                    )
+                                )
+                        } else {
+                            fallback
+                        }
+                    }
+                } else {
+                    fallback
+                }
+            }
+            .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
+            .accessibilityHidden(true)
+    }
+
+    private var fallback: some View {
+        ZStack(alignment: .topTrailing) {
+            RadialGradient(colors: [tint.opacity(0.6), .clear], center: .topTrailing, startRadius: 0, endRadius: 520)
+            Text(number)
+                .font(.system(size: 220, weight: .black))
+                .monospacedDigit()
+                .foregroundStyle(.white.opacity(0.06))
+                .offset(x: 20, y: -40)
+        }
+        .clipped()
     }
 }
 
