@@ -194,6 +194,10 @@ public struct APIClient: Sendable {
         url("/media/art/\(kind)/\(id)?w=\(width)")
     }
 
+    public func supportURL() -> URL {
+        url("/api/v1/support")
+    }
+
     // MARK: Setup
 
     public struct FoundHit: Decodable, Sendable, Hashable, Identifiable {

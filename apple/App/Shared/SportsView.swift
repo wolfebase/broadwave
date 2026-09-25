@@ -1,6 +1,9 @@
 import BroadwaveKit
 import BroadwaveUI
 import SwiftUI
+#if os(iOS)
+    import UIKit
+#endif
 
 struct SportsView: View {
     @Environment(AppStore.self) private var store
@@ -119,6 +122,10 @@ struct SettingsView: View {
     @State private var scoresKnown = false
     @State private var sportsDB = false
     @State private var sportsKey = ""
+    @State private var supportBusy = false
+    #if os(tvOS)
+        @State private var supportSaved = false
+    #endif
 
     var body: some View {
         @Bindable var store = store
@@ -213,6 +220,19 @@ struct SettingsView: View {
                 Text("Once a day. Nothing else is sent.")
             }
             Section {
+                Button("Download a support bundle") {
+                    Task { await downloadSupport() }
+                }
+                .disabled(supportBusy || store.api == nil)
+                #if os(tvOS)
+                    if supportSaved {
+                        Text("Saved on this Apple TV.")
+                    }
+                #endif
+            } footer: {
+                Text("Logs, versions, and settings. Passwords are left out.")
+            }
+            Section {
                 Button("About") { showAbout = true }
                     .accessibilityLabel("About Broadwave")
             }
@@ -238,6 +258,42 @@ struct SettingsView: View {
         }
         #endif
     }
+
+    @MainActor
+    private func downloadSupport() async {
+        guard !supportBusy, let api = store.api else { return }
+        supportBusy = true
+        defer { supportBusy = false }
+        #if os(tvOS)
+            supportSaved = false
+        #endif
+        guard let file = await supportZip(from: api.supportURL()) else { return }
+        #if os(iOS)
+            SupportShare.present(file)
+        #elseif os(tvOS)
+            supportSaved = true
+        #endif
+    }
+
+    private func supportZip(from url: URL) async -> URL? {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        do {
+            let (temp, response) = try await URLSession.shared.download(for: request)
+            guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else { return nil }
+            let mime = http.mimeType?.lowercased() ?? ""
+            guard mime == "application/zip" || mime == "application/octet-stream" else { return nil }
+            let bytes = try temp.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+            guard bytes > 0 else { return nil }
+            let dest = FileManager.default.temporaryDirectory.appendingPathComponent("broadwave-support.zip")
+            try? FileManager.default.removeItem(at: dest)
+            try FileManager.default.moveItem(at: temp, to: dest)
+            return dest
+        } catch {
+            return nil
+        }
+    }
 }
 
 /// Keep this sentence in step with `blenderCredit` in web/src/legal.ts.
@@ -258,3 +314,30 @@ struct AboutView: View {
         #endif
     }
 }
+
+#if os(iOS)
+    /// tvOS marks UIActivityViewController prohibited, and ShareLink is unavailable there.
+    private enum SupportShare {
+        @MainActor static func present(_ file: URL) {
+            let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            var scene = scenes.first
+            for candidate in scenes where candidate.activationState == .foregroundActive {
+                scene = candidate
+                break
+            }
+            guard let root = scene?.keyWindow?.rootViewController else { return }
+            var host = root
+            while let next = host.presentedViewController, !next.isBeingDismissed {
+                host = next
+            }
+            let controller = UIActivityViewController(activityItems: [file], applicationActivities: nil)
+            if let pop = controller.popoverPresentationController {
+                pop.sourceView = host.view
+                let bounds = host.view.bounds
+                pop.sourceRect = CGRect(x: bounds.midX, y: bounds.midY, width: 1, height: 1)
+                pop.permittedArrowDirections = []
+            }
+            host.present(controller, animated: true)
+        }
+    }
+#endif
