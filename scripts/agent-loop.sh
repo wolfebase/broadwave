@@ -1,15 +1,21 @@
 #!/bin/zsh
-# Runs the Cursor agent through docs/plan/PROGRESS.md without stopping: one
-# fresh headless session per round, each started with docs/plan/AGENT_PROMPT.md.
+# Runs a coding agent (Cursor's `agent` or Grok Build's `grok`) through
+# docs/plan/PROGRESS.md without stopping: one fresh headless session per round,
+# each started with docs/plan/AGENT_PROMPT.md.
 # A crash, a dropped stream, or a turn that ends early costs one round, not the run.
 #
 #   scripts/agent-loop.sh              # run until every line is ticked or blocked
+#   AGENT=grok scripts/agent-loop.sh   # the same with Grok Build
 #   touch ~/.broadwave-agent-stop      # stop after the current round
 #   tail -f ~/Library/Logs/broadwave-agent/loop.log
 #   scripts/agent-tmux.sh              # the loop plus a status pane in tmux
 #
-# Environment: AGENT (default: agent), MODEL (default: the CLI's selected model),
-# MAX_IDLE (rounds without a new commit before giving up, default 6).
+# Environment: AGENT (agent or grok, default: agent), MODEL (default: the CLI's
+# selected model), MAX_IDLE (rounds without a new commit before giving up, default 6).
+#
+# Every Grok round runs with scripts/unraid-guard.py as a PreToolUse hook
+# (~/.grok/hooks/broadwave-unraid-guard.json): it denies any command that would
+# touch TUS outside Broadwave's own containers and appdata.
 
 set -u
 REPO=${0:A:h:h}
@@ -27,6 +33,16 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
 rm -f "$STOP"
+# Keep the Mac awake (idle and system sleep) for as long as the loop runs.
+caffeinate -ims -w $$ &!
+# Subagent worktrees live outside the repo; this tells the guard they count too.
+export BROADWAVE_UNRAID_GUARD=1
+
+is_grok() { [[ ${AGENT:t} == grok* ]]; }
+if is_grok && [[ ! -f $HOME/.grok/hooks/broadwave-unraid-guard.json ]]; then
+  echo "Missing ~/.grok/hooks/broadwave-unraid-guard.json (the TUS guard); see scripts/unraid-guard.py." >&2
+  exit 1
+fi
 
 note() { print -r -- "$(date '+%F %T') $*" | tee -a "$LOGS/loop.log"; }
 notify() { osascript -e "display notification \"$1\" with title \"Broadwave agent\"" >/dev/null 2>&1; }
@@ -51,7 +67,7 @@ open_tasks() {
   grep -E '^[[:space:]]*- \[ \]' docs/plan/PROGRESS.md | grep -viE 'blocked' | wc -l | tr -d ' '
 }
 
-if pgrep -fl "cursor-agent/versions" | grep -v worker >/dev/null; then
+if ! is_grok && pgrep -fl "cursor-agent/versions" | grep -v worker >/dev/null; then
   note "warning: another Cursor agent session is running; close it so two agents do not edit the repo at once"
 fi
 
@@ -63,16 +79,20 @@ while true; do
   if [[ $left -eq 0 ]]; then note "every task is ticked or blocked"; notify "Plan complete"; break; fi
   round=$((round + 1))
   before=$(git rev-parse HEAD)
-  force_http1
-  note "round $round: $left open tasks, HEAD ${before:0:7}"
-  args=(-p --force --trust --approve-mcps --workspace "$REPO" --output-format stream-json)
+  note "round $round ($AGENT): $left open tasks, HEAD ${before:0:7}"
+  if is_grok; then
+    args=(-p "$(cat docs/plan/AGENT_PROMPT.md)" --always-approve --cwd "$REPO" --output-format streaming-json)
+  else
+    force_http1
+    args=(-p --force --trust --approve-mcps --workspace "$REPO" --output-format stream-json "$(cat docs/plan/AGENT_PROMPT.md)")
+  fi
   [[ -n ${MODEL:-} ]] && args+=(--model "$MODEL")
-  log="$LOGS/round-$(printf %04d $round).jsonl"
+  log="$LOGS/round-$(date +%Y%m%d-%H%M%S)-$(printf %04d $round).jsonl"
   # The raw stream is kept for later; the terminal shows a readable view of it.
-  "$AGENT" "${args[@]}" "$(cat docs/plan/AGENT_PROMPT.md)" 2>&1 | tee "$log" | python3 "$REPO/scripts/agent-view.py"
+  "$AGENT" "${args[@]}" 2>&1 | tee "$log" | python3 "$REPO/scripts/agent-view.py"
   code=${pipestatus[1]}
-  session=$(grep -m1 -o '"session_id":"[^"]*"' "$log" | cut -d'"' -f4)
-  [[ -n $session ]] && note "round $round session $session (open it with: agent --resume $session)"
+  session=$(grep -m1 -oE '"(session_id|sessionId)":"[^"]*"' "$log" | cut -d'"' -f4)
+  [[ -n $session ]] && note "round $round session $session (open it with: ${AGENT:t} --resume $session)"
   after=$(git rev-parse HEAD)
   if [[ $before == "$after" ]]; then
     idle=$((idle + 1))

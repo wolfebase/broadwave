@@ -34,5 +34,7 @@ except Exception: print('  (unreachable)')"
   echo
   print -P "%BLoop%b"
   tail -4 ~/Library/Logs/broadwave-agent/loop.log 2>/dev/null | cut -c1-150
+  guard=~/Library/Logs/broadwave-agent/guard.log
+  [[ -s $guard ]] && echo "  TUS guard blocked $(wc -l < $guard | tr -d ' '): $(tail -1 $guard | python3 -c 'import json,sys; print(json.load(sys.stdin)["why"])' 2>/dev/null)"
   sleep 30
 done
