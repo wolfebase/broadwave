@@ -6,6 +6,8 @@
 
 .league-chips {
   margin: calc(var(--space-2) * -1) 0 var(--space-6);
+  flex-wrap: wrap;
+  overflow: visible;
 }
 
 .sports-day {
@@ -116,14 +118,25 @@
   color: var(--color-text-secondary);
 }
 
+.gc-progress > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
 .gc-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
 .gc-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+}
+
+.layout-phone .sports-grid {
+  grid-template-columns: minmax(0, 1fr);
 }

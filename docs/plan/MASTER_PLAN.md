@@ -254,6 +254,13 @@ PB7. **Player tuning.** hls.js buffer and back-buffer settings per device; AVPla
 PB7b. **Stall soak.** Watch one channel on staging for an hour on web, iPhone, and Apple TV. Record stalls and stall time. Tuner etiquette applies.
 PB8. **Show the truth.** A Stream panel in the web and Apple players (pulls F3's stats forward): source codec, WxH, scan type, and fps; output WxH, fps, encoder, bitrate, and whether decode ran on the GPU; client dropped frames and buffer; and the sync offset. **Accept:** screenshots on all three platforms at staging.
 PB9. **Picture lab in the repo.** `scripts/picture-lab.sh` captures samples (etiquette rules), runs candidate args in `bw-lab-*` containers on TUS at real time (`-re`), and outputs a table (fps, frames, WxH, decode errors, speed, CPU, VMAF) plus stills. Every PB task attaches its table. Do this first in Phase PB.
+PB10. **Recordings keep the scan type.** `fileGraph` never sets Progressive or Film, so library playback field-bobs a 720p60 file. **Accept:** a progressive recording stays 1280×720 at its native rate; regression test.
+PB11. **A late sequence header still fixes the graph.** If the header misses the 800 ms window, the stored probe must rebuild the rendition. A stored "progressive" must not skip the scan that finds film.
+PB12. **Unscanned H.264 is not interlaced by default.** HLS and other sources with an empty field order must not be doubled for the life of the channel.
+PB13. **A split PMT keeps every audio track.** The pointer-field tail of a section that spans packets is dropped today, so the last audio stream (SAP or described video) disappears.
+PB14. **Apple TV matches the picture it is showing.** Display criteria use the asset frame size and rate, and clear when the player closes. A 24p film is not left at 59.94, and a 720p stream is not signaled as 1080p.
+PB15. **A late VAAPI failure restarts cleanly.** An encode that dies after 8 seconds must release or rebuild, and a software fallback must not reuse a broken `init.mp4`.
+PB16. **A second full mix stays Main.** A same-language complete main is not labeled Described video.
 
 ### Phase HOME — The house sets itself up
 
@@ -522,6 +529,7 @@ S0 → S1 → S2 → S3 → S4 → S5 → S6 → S7 → S8 → S9 → S10 → (t
 C7 → C8 → C9 → (tag + deploy) →
 K1 → P1 → P2 → R8 → **U1** →
 PB9 → PB2 → PB3 → PB3b → PB5 → PB6 → PB4 → PB7 → PB7b → PB8 → PB5c → (tag + deploy + TestFlight) →
+PB10 → PB11 → PB12 → PB13 → PB14 → PB15 → PB16 →
 C7b → S8b → HOME1 → HOME2 → HOME3 → (tag + deploy + TestFlight) →
 MV1 → MV2 → MV3 → MV4 → MV5 → MV6 → AP1 → AP2 → AP3 → AS2 → AS3 → (tag + deploy + TestFlight + **App Store update 1.1 = AS4**) →
 OPS1 → OPS2 → OPS3 → LEGAL1 → AS6 → (tag + deploy) →

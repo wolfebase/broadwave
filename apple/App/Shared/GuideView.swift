@@ -229,72 +229,72 @@ struct GuideGrid: View {
         let width = CGFloat(hours * 60) * perMinute
         let end = origin.addingTimeInterval(hours * 3600)
         return ScrollViewReader { proxy in
-            ScrollView([.horizontal, .vertical]) {
-                ZStack(alignment: .topLeading) {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        Color.clear.frame(height: headH)
-                        ForEach(channels) { channel in
-                            row(channel, end: end, rowHeight: rowHeight)
-                                .frame(width: width, height: rowHeight, alignment: .leading)
-                                .padding(.leading, channelW)
-                        }
-                    }
-                    .frame(height: headH + CGFloat(channels.count) * rowHeight, alignment: .top)
-                    ForEach(0 ..< Int(hours), id: \.self) { hour in
-                        Color.clear
-                            .frame(width: 1, height: 1)
-                            .id(hour)
-                            .offset(x: channelW + CGFloat(hour * 60) * perMinute)
-                    }
-                    // Now line
-                    Rectangle()
-                        .fill(Tokens.ColorToken.tally)
-                        .frame(width: 2, height: CGFloat(channels.count) * rowHeight)
-                        .shadow(color: Tokens.ColorToken.tally.opacity(0.7), radius: 6)
-                        .offset(x: channelW + x(store.now) - 1, y: headH)
-                        .allowsHitTesting(false)
-                    // Pinned time header
+            ZStack(alignment: .topLeading) {
+                ScrollView([.horizontal, .vertical]) {
                     ZStack(alignment: .topLeading) {
-                        Rectangle().fill(.ultraThinMaterial).frame(width: width + channelW, height: headH)
-                        ForEach(0 ..< Int(hours * 2), id: \.self) { i in
-                            let t = origin.addingTimeInterval(Double(i) * 1800)
-                            Text(t.formatted(date: .omitted, time: .shortened))
-                                .font(.footnote.weight(.semibold))
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                                .offset(x: channelW + x(t) + 8, y: 13)
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            Color.clear.frame(height: headH)
+                            ForEach(channels) { channel in
+                                row(channel, end: end, rowHeight: rowHeight)
+                                    .frame(width: width, height: rowHeight, alignment: .leading)
+                                    .padding(.leading, channelW)
+                            }
                         }
-                        Text(store.now.formatted(date: .omitted, time: .shortened))
-                            .font(.caption.weight(.heavy))
-                            .monospacedDigit()
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Tokens.ColorToken.tally, in: .capsule)
-                            .shadow(color: Tokens.ColorToken.tally.opacity(0.6), radius: 8)
-                            .offset(x: channelW + x(store.now) - 30, y: 10)
+                        .frame(height: headH + CGFloat(channels.count) * rowHeight, alignment: .top)
+                        ForEach(0 ..< Int(hours), id: \.self) { hour in
+                            Color.clear
+                                .frame(width: 1, height: 1)
+                                .id(hour)
+                                .offset(x: channelW + CGFloat(hour * 60) * perMinute)
+                        }
+                        // Now line
+                        Rectangle()
+                            .fill(Tokens.ColorToken.tally)
+                            .frame(width: 2, height: CGFloat(channels.count) * rowHeight)
+                            .shadow(color: Tokens.ColorToken.tally.opacity(0.7), radius: 6)
+                            .offset(x: channelW + x(store.now) - 1, y: headH)
+                            .allowsHitTesting(false)
+                        // Pinned time header
+                        ZStack(alignment: .topLeading) {
+                            Rectangle().fill(.ultraThinMaterial).frame(width: width + channelW, height: headH)
+                            ForEach(0 ..< Int(hours * 2), id: \.self) { i in
+                                let t = origin.addingTimeInterval(Double(i) * 1800)
+                                Text(t.formatted(date: .omitted, time: .shortened))
+                                    .font(.footnote.weight(.semibold))
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                                    .offset(x: channelW + x(t) + 8, y: 13)
+                            }
+                            Text(store.now.formatted(date: .omitted, time: .shortened))
+                                .font(.caption.weight(.heavy))
+                                .monospacedDigit()
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Tokens.ColorToken.tally, in: .capsule)
+                                .shadow(color: Tokens.ColorToken.tally.opacity(0.6), radius: 8)
+                                .offset(x: channelW + x(store.now) - 30, y: 10)
+                        }
+                        .offset(y: offset.y)
+                        .zIndex(3)
                     }
-                    .offset(y: offset.y)
-                    .zIndex(3)
                 }
-            }
-            .scrollIndicators(.hidden)
-            .onScrollGeometryChange(for: CGPoint.self) { $0.contentOffset } action: { _, new in
-                offset = CGPoint(x: max(0, new.x), y: max(0, new.y))
-            }
-            .defaultScrollAnchor(UnitPoint(x: max(0, x(store.now.addingTimeInterval(-900)) / (width + channelW)), y: 0))
-            .background(Tokens.ColorToken.surface1)
-            .overlay(alignment: .topLeading) {
-                // The column lives on the scroll view, not in the content. Offsetting
-                // it by contentOffset left it at x=0 on the first frame, which is
-                // off screen once the grid opens on "now".
+                .scrollIndicators(.hidden)
+                .onScrollGeometryChange(for: CGPoint.self) { $0.contentOffset } action: { _, new in
+                    offset = CGPoint(x: max(0, new.x), y: max(0, new.y))
+                }
+                .defaultScrollAnchor(UnitPoint(x: max(0, x(store.now.addingTimeInterval(-900)) / (width + channelW)), y: 0))
+                .background(Tokens.ColorToken.surface1)
+                .onChange(of: jump) { _, date in
+                    guard let date else { return }
+                    let hour = max(0, min(Int(hours) - 1, Int(date.timeIntervalSince(origin) / 3600)))
+                    proxy.scrollTo(hour, anchor: .leading)
+                }
+                // A tvOS ScrollView scrolls its overlay with the content, so the column
+                // slid off the left when the grid opened on now. Keep it beside the scroller.
                 channelRail(rowHeight: rowHeight)
                     .frame(width: channelW, height: viewportHeight, alignment: .top)
+                    .background(Tokens.ColorToken.surface1)
                     .clipped()
-            }
-            .onChange(of: jump) { _, date in
-                guard let date else { return }
-                let hour = max(0, min(Int(hours) - 1, Int(date.timeIntervalSince(origin) / 3600)))
-                proxy.scrollTo(hour, anchor: .leading)
             }
         }
     }

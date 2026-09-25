@@ -28,7 +28,11 @@ export function useLayout(): Layout {
   const saved = settings.layout;
   const layout: Layout = saved === "desktop" || saved === "tv" || saved === "phone" ? saved : auto;
   useEffect(() => {
-    document.documentElement.dataset.layout = layout;
+    const root = document.documentElement;
+    root.dataset.layout = layout;
+    // The player is rendered beside the shell, so the layout class has to live on <html>.
+    root.classList.remove("layout-phone", "layout-desktop", "layout-tv");
+    root.classList.add(`layout-${layout}`);
   }, [layout]);
   return layout;
 }
