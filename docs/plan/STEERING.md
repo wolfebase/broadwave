@@ -4,6 +4,14 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
+- 2026-09-25 15:55 · **Sprint until 17:30 at `xhigh` effort: run 4 lanes instead of 2.** The owner wants maximum throughput for the next 90 minutes.
+  - Keep **4 background lanes** busy at all times, plus Lane A. At most **one** lane may run `xcodebuild` at a time; the other three take server, web, or docs tasks.
+  - Good picks now: OPS5's Pages part (only if PR #1 is merged), P4, P6, K2, K5, K6, J4, J6, N3, E1, E2, E3, E8, G8, F3, I1, I2, D7, D8, HW2, HW3's paper work.
+  - Every lane result still gets its own diff check, a review, your own test run, and one commit per task.
+  - The disk has 52 GB free. Follow the cleanup rule so worktrees don't pile up.
+  - This round was restarted to raise effort, so uncommitted AP2 work is in the tree: finish it first.
+  - After 17:30, go back to 2 lanes.
+
 - 2026-09-25 15:10 · **Clean up lanes at the start of every round, before starting new ones.** At 15:09 there were 8 lane worktrees: three were 1–2 hours old (created 13:26, 14:04, 14:14), and two pairs were duplicates (13:26 ×2, 15:04 ×2, with near-identical diffs). For each worktree in `~/.grok/worktrees/active-broadwave/`:
   - Match it to a ledger line in "Resume here".
   - If it's merged, rejected, or a duplicate, remove it.
