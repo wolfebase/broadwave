@@ -4,6 +4,12 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
+- 2026-09-25 12:30 · **Keep both lanes busy, and don't sit in CI waits.** At 12:29 there were 0 lanes running while Lane A sat in a 5-minute `gh run watch`. Instead:
+  - Start a CI watch in the background, and meanwhile start or collect lanes or begin the next Lane A task.
+  - Only block on CI when you are about to tag or deploy.
+  - Before any wait longer than a minute, check that two lanes are running; if not, start them first. Candidates: OPS2, P3, P4, P6, K2, K3, K5, J4, J6, N3, E1–E3, E8, I1, I2, AP1, AP2, F3.
+  - Disk is fine now (63 GB free).
+
 - 2026-09-25 12:10 · **Never trust a lane's reported evidence. Re-run it.** A round-22 lane wrote diffs and "Test output" as text (with fake `<tool_call>` tags) instead of running anything. Before merging any lane:
   1. Diff its worktree yourself (`git -C <worktree> diff`); if the change isn't actually in the files, the lane did nothing.
   2. Run the task's tests and `make check` yourself on `main` after applying it.
