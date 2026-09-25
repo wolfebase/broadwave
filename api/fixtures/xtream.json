@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "id": 2,
+  "kind": "xtream",
+  "name": "Lab",
+  "stableKey": "src:2",
+  "url": "http://lab:%E2%80%A2%E2%80%A2%E2%80%A2%E2%80%A2@127.0.0.1:9",
+  "xmltvUrl": "http://127.0.0.1:9/xmltv.php?password=%E2%80%A2%E2%80%A2%E2%80%A2%E2%80%A2\u0026username=lab"
+}

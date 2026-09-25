@@ -338,6 +338,16 @@ func (h *Hub) Session(channelID int64, rendition string) (Session, bool) {
 // ensureFeedLocked returns the tuned feed for a channel, tuning if needed. It does
 // not start ffmpeg; renditions and recordings attach to the feed on demand.
 func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stream *http.Response) (*feed, error) {
+	// New fills these. A hub literal in a test does not, and a write would panic.
+	if h.channels == nil {
+		h.channels = map[int64]*feed{}
+	}
+	if h.muxes == nil {
+		h.muxes = map[int]*mux{}
+	}
+	if h.reserved == nil {
+		h.reserved = map[int]bool{}
+	}
 	if f := h.channels[ch.ID]; f != nil {
 		if stream != nil {
 			stream.Body.Close()

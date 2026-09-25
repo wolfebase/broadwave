@@ -91,6 +91,7 @@ func (s *Server) serveHTTP() {
 	mux.HandleFunc("/discover.json", s.discover)
 	mux.HandleFunc("/lineup.json", s.lineup)
 	mux.HandleFunc("/lineup_status.json", s.lineupStatus)
+	mux.HandleFunc("/lineup.post", s.lineupPost)
 	mux.HandleFunc("/status.json", s.status)
 	mux.HandleFunc("/tuner0/", s.stream)
 	mux.HandleFunc("/tuner1/", s.stream)
@@ -118,6 +119,14 @@ func (s *Server) lineup(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) lineupStatus(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, `{"Scan":0,"Found":3,"Progress":100,"ScanInProgress":0}`)
+}
+
+func (s *Server) lineupPost(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost && r.URL.Query().Get("scan") == "start" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	http.NotFound(w, r)
 }
 
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {

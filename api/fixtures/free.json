@@ -1,0 +1,4 @@
+{
+  "found": [],
+  "guide": "Run FastChannels next to Broadwave, then add it here.\n\nservices:\n  fastchannels:\n    image: ghcr.io/kineticman/fastchannels:latest\n    ports:\n      - \"5523:5523\"\n    volumes:\n      - fastchannels:/data\nvolumes:\n  fastchannels:\n\nOn Unraid, the container name is FastChannels."
+}

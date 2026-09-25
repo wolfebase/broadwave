@@ -1,0 +1,43 @@
+{
+  "channelId": 1,
+  "ready": "Ready: 5 channels, guide for 1, 2 tuners, Software",
+  "running": false,
+  "steps": [
+    {
+      "detail": "5 channels already in the lineup.",
+      "id": "scan",
+      "state": "done",
+      "title": "Channels"
+    },
+    {
+      "detail": "Listings for 1 channel. More listings arrive from the broadcast.",
+      "id": "guide",
+      "state": "done",
+      "title": "Guide"
+    },
+    {
+      "detail": "0 GB free.",
+      "id": "folder",
+      "state": "done",
+      "title": "Recordings"
+    },
+    {
+      "detail": "CBS and FOX.",
+      "id": "favorites",
+      "state": "done",
+      "title": "Favorites"
+    },
+    {
+      "detail": "Software encoder: 1080p60 at 4.0x real time.",
+      "id": "encoder",
+      "state": "done",
+      "title": "Picture"
+    },
+    {
+      "detail": "2 channels great.",
+      "id": "signal",
+      "state": "done",
+      "title": "Signal"
+    }
+  ]
+}
