@@ -105,19 +105,19 @@ func TestScanTypeMatrix(t *testing.T) {
 		forbid  []string
 	}
 	rows := []row{
-		{"1080i vaapi", Source{VideoCodec: "MPEG2"}, "h264_vaapi", []string{"deinterlace_vaapi=mode=motion_adaptive:rate=field"}, []string{"bwdif", "fieldmatch", "fps="}},
-		{"1080i libx264", Source{VideoCodec: "MPEG2"}, "libx264", []string{"bwdif=mode=send_field", "fps=60000/1001"}, []string{"deinterlace_vaapi", "fieldmatch"}},
-		{"1080i videotoolbox", Source{VideoCodec: "MPEG2"}, "h264_videotoolbox", []string{"bwdif=mode=send_field", "fps=60000/1001", "-a53cc 0"}, []string{"fieldmatch"}},
-		{"480i libx264", Source{VideoCodec: "MPEG2"}, "libx264", []string{"bwdif=mode=send_field", "fps=60000/1001", "min(1920,iw)"}, []string{"fieldmatch"}},
-		{"720p vaapi", Source{VideoCodec: "MPEG2", Progressive: true}, "h264_vaapi", []string{"scale_vaapi=w='min(1920,iw)'"}, []string{"deinterlace_vaapi", "bwdif", "fps=", "fieldmatch"}},
-		{"720p libx264", Source{VideoCodec: "MPEG2", Progressive: true}, "libx264", []string{"scale='min(1920,iw)'"}, []string{"bwdif", "fps=", "fieldmatch"}},
+		{"1080i vaapi", Source{VideoCodec: "MPEG2"}, "h264_vaapi", []string{"deinterlace_vaapi=mode=motion_adaptive:rate=field"}, []string{"bwdif", "pullup", "fps="}},
+		{"1080i libx264", Source{VideoCodec: "MPEG2"}, "libx264", []string{"bwdif=mode=send_field", "fps=60000/1001"}, []string{"deinterlace_vaapi", "pullup"}},
+		{"1080i videotoolbox", Source{VideoCodec: "MPEG2"}, "h264_videotoolbox", []string{"bwdif=mode=send_field", "fps=60000/1001", "-a53cc 0"}, []string{"pullup"}},
+		{"480i libx264", Source{VideoCodec: "MPEG2"}, "libx264", []string{"bwdif=mode=send_field", "fps=60000/1001", "min(1920,iw)"}, []string{"pullup"}},
+		{"720p vaapi", Source{VideoCodec: "MPEG2", Progressive: true}, "h264_vaapi", []string{"scale_vaapi=w='min(1920,iw)'"}, []string{"deinterlace_vaapi", "bwdif", "fps=", "pullup"}},
+		{"720p libx264", Source{VideoCodec: "MPEG2", Progressive: true}, "libx264", []string{"scale='min(1920,iw)'"}, []string{"bwdif", "fps=", "pullup"}},
 		{"720p videotoolbox", Source{VideoCodec: "MPEG2", Progressive: true}, "h264_videotoolbox", []string{"scale='min(1920,iw)'", "-a53cc 0"}, []string{"bwdif", "fps="}},
-		{"h264 paff vaapi", Source{VideoCodec: "H264"}, "h264_vaapi", []string{"deinterlace_vaapi=mode=motion_adaptive:rate=field"}, []string{"bwdif", "fieldmatch"}},
-		{"h264 mbaff libx264", Source{VideoCodec: "H264"}, "libx264", []string{"bwdif=mode=send_field", "fps=60000/1001"}, []string{"fieldmatch"}},
-		{"h264 mbaff videotoolbox", Source{VideoCodec: "H264"}, "h264_videotoolbox", []string{"bwdif=mode=send_field", "-a53cc 0"}, []string{"fieldmatch"}},
-		{"film vaapi", Source{VideoCodec: "MPEG2", Film: true}, "h264_vaapi", []string{"fieldmatch,decimate,fps=24000/1001,format=nv12,hwupload,scale_vaapi"}, []string{"bwdif", "deinterlace_vaapi"}},
-		{"film libx264", Source{VideoCodec: "MPEG2", Film: true}, "libx264", []string{"fieldmatch,decimate", "fps=24000/1001"}, []string{"bwdif", "hwupload"}},
-		{"film videotoolbox", Source{VideoCodec: "MPEG2", Film: true}, "h264_videotoolbox", []string{"fieldmatch,decimate", "fps=24000/1001", "-a53cc 0"}, []string{"bwdif"}},
+		{"h264 paff vaapi", Source{VideoCodec: "H264"}, "h264_vaapi", []string{"deinterlace_vaapi=mode=motion_adaptive:rate=field"}, []string{"bwdif", "pullup"}},
+		{"h264 mbaff libx264", Source{VideoCodec: "H264"}, "libx264", []string{"bwdif=mode=send_field", "fps=60000/1001"}, []string{"pullup"}},
+		{"h264 mbaff videotoolbox", Source{VideoCodec: "H264"}, "h264_videotoolbox", []string{"bwdif=mode=send_field", "-a53cc 0"}, []string{"pullup"}},
+		{"film vaapi", Source{VideoCodec: "MPEG2", Film: true}, "h264_vaapi", []string{"pullup,fps=24000/1001,format=nv12,hwupload,scale_vaapi"}, []string{"bwdif", "deinterlace_vaapi"}},
+		{"film libx264", Source{VideoCodec: "MPEG2", Film: true}, "libx264", []string{"pullup", "fps=24000/1001"}, []string{"bwdif", "hwupload"}},
+		{"film videotoolbox", Source{VideoCodec: "MPEG2", Film: true}, "h264_videotoolbox", []string{"pullup", "fps=24000/1001", "-a53cc 0"}, []string{"bwdif"}},
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
@@ -138,7 +138,7 @@ func TestScanTypeMatrix(t *testing.T) {
 
 func TestFilmRecovers24p(t *testing.T) {
 	line := strings.Join(PictureArgs(Graph{VideoCodec: "MPEG2", Encoder: "libx264", Mode: "film", Live: false}), " ")
-	if !strings.Contains(line, "fieldmatch,decimate") || !strings.Contains(line, "fps=24000/1001") {
+	if !strings.Contains(line, "pullup") || !strings.Contains(line, "fps=24000/1001") {
 		t.Fatalf("film: %s", line)
 	}
 	if strings.Contains(line, "bwdif") {
