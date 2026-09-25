@@ -130,7 +130,9 @@ struct RootView: View {
                         return store.channels.first { $0.id == id }
                     }
                     if !channels.isEmpty {
-                        nowPlaying.watchTogether(channels)
+                        // -BroadwaveMultiviewLayout picks pip or 1+3. fitting() never does.
+                        let layout = UserDefaults.standard.string(forKey: "BroadwaveMultiviewLayout")
+                        nowPlaying.watchTogether(channels, layout: layout)
                     }
                     return
                 }
