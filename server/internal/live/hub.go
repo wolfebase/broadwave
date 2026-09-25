@@ -242,7 +242,7 @@ func sourceOf(ch store.SourceChannel) Source {
 	if order == "film" {
 		order = ""
 	}
-	return Source{VideoCodec: ch.VideoCodec, AudioCodec: ch.AudioCodec, Progressive: order == "progressive", Film: false, UserAgent: ch.UserAgent, Referrer: ch.Referrer}
+	return Source{VideoCodec: ch.VideoCodec, AudioCodec: ch.AudioCodec, Progressive: order == "progressive", Film: false, UserAgent: ch.UserAgent, Referrer: ch.Referrer, Lace: interlacedOrder(order)}
 }
 
 // Watch starts or joins one rendition of a channel.
@@ -476,6 +476,9 @@ func (h *Hub) addFeedLocked(m *mux, ch store.SourceChannel) *feed {
 	m.noteProgram(f.program)
 	if m.input == "" && (ch.FieldOrder == "" || len(f.tracks) == 0) {
 		h.learnScanLocked(m, f)
+	}
+	if m.input != "" && ch.FieldOrder == "" {
+		h.probeInputLocked(m, f)
 	}
 	return f
 }
