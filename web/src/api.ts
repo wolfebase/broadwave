@@ -395,7 +395,7 @@ export function getSchedule() {
   return request<{ tunerCount: number; items: PlannedAiring[] }>("/api/v1/schedule");
 }
 
-export function fixSchedule(body: { passId: number; channelId: number; start: string; suggestionChannelId: number; suggestionStart: string }) {
+export function fixSchedule(body: { passId: number; channelId: number; start: string; suggestionChannelId: number; suggestionStart: string; acknowledgeMisses?: boolean }) {
   return request<{ tunerCount: number; items: PlannedAiring[] }>("/api/v1/schedule/fix", {
     method: "POST",
     body: JSON.stringify(body),

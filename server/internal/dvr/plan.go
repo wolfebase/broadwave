@@ -25,6 +25,8 @@ type Planned struct {
 
 // Plan matches passes to airings and marks any span where more channels overlap than the tuner count.
 // Two shows on the same channel count as one tuner. A show that ends as the next begins does not overlap.
+// Plan does not move a pass onto another channel. A skipped airing stays skipped.
+// A later airing is named by AttachSuggestions, and only a title pass whose channel pin is the only mismatch moves that pin.
 func Plan(passes []store.Pass, airings []store.Airing, tunerCount int, from, to time.Time) []Planned {
 	if tunerCount < 1 {
 		tunerCount = 1

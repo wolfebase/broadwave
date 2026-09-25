@@ -144,6 +144,13 @@ export type Marker = {
   end: number;
 };
 
+export type MissedShowing = {
+  channelId: number;
+  guideNumber?: string;
+  title: string;
+  start: string;
+};
+
 export type MultiviewPlanBlocked = {
   channelId: number;
   holders: string[];
@@ -404,6 +411,7 @@ export type Suggestion = {
   title: string;
   start: string;
   end: string;
+  misses?: MissedShowing[];
 };
 
 export type TeamFollow = {
