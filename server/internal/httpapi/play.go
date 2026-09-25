@@ -54,7 +54,7 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 			caps, prefs = *body.Caps, body.Prefs
 		}
 		if prefs.Picture == "" {
-			_, prefs.Picture = s.playbackChoice(r.Context(), 0, "")
+			_, prefs.Picture, _ = s.playbackChoice(r.Context(), 0, "")
 		}
 		decision = live.Decide(src, caps, prefs)
 	}

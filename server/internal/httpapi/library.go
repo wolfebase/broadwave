@@ -33,15 +33,15 @@ func (s *Server) playRecording(w http.ResponseWriter, r *http.Request) {
 		Picture string `json:"pictureMode"`
 	}
 	_ = decodeJSON(r, &body)
-	codec, mode := s.playbackChoice(r.Context(), rec.ChannelID, body.Picture)
+	codec, mode, order := s.playbackChoice(r.Context(), rec.ChannelID, body.Picture)
 	var playlist string
 	if rec.Status == "recording" {
-		playlist, err = s.Hub.PlayFollow(id, rec.Path, codec, mode, func() bool {
+		playlist, err = s.Hub.PlayFollow(id, rec.Path, codec, mode, order, func() bool {
 			cur, curErr := s.Store.Recording(context.Background(), id)
 			return curErr == nil && cur.Status == "recording"
 		})
 	} else {
-		playlist, err = s.Hub.PlayFile(id, rec.Path, codec, mode)
+		playlist, err = s.Hub.PlayFile(id, rec.Path, codec, mode, order)
 	}
 	if err != nil {
 		writeError(w, err)
@@ -238,8 +238,8 @@ func (s *Server) playVirtual(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
-	codec, mode := s.playbackChoice(r.Context(), rec.ChannelID, body.Picture)
-	playlist, err := s.Hub.PlayFile(rec.ID, rec.Path, codec, mode)
+	codec, mode, order := s.playbackChoice(r.Context(), rec.ChannelID, body.Picture)
+	playlist, err := s.Hub.PlayFile(rec.ID, rec.Path, codec, mode, order)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -334,7 +334,7 @@ func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) playbackChoice(ctx context.Context, channelID int64, requested string) (codec, mode string) {
+func (s *Server) playbackChoice(ctx context.Context, channelID int64, requested string) (codec, mode, order string) {
 	mode = live.NormalizeMode(requested)
 	if strings.TrimSpace(requested) == "" {
 		if values, err := s.Store.Settings(ctx); err == nil {
@@ -344,9 +344,10 @@ func (s *Server) playbackChoice(ctx context.Context, channelID int64, requested 
 	if channelID != 0 {
 		if ch, err := s.Store.SourceChannel(ctx, channelID); err == nil {
 			codec = ch.VideoCodec
+			order = ch.FieldOrder
 		}
 	}
-	return codec, mode
+	return codec, mode, order
 }
 
 func (s *Server) poster(w http.ResponseWriter, r *http.Request) {
