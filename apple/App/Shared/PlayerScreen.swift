@@ -20,6 +20,9 @@ final class LivePlayer {
     private(set) var session: WatchSession?
     private(set) var sync: SyncEngine?
     var error: String?
+    private(set) var needsConfirm = false
+    private(set) var attempt = 0
+    private var confirmNext = false
     private var channelID: Int64?
     private var api: APIClient?
     private var started = Date()
@@ -40,9 +43,12 @@ final class LivePlayer {
         guard let api = store.api else { return }
         self.api = api
         channelID = channel.id
+        let allow = confirmNext
+        confirmNext = false
+        needsConfirm = false
         error = nil
         do {
-            let session = try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: store.prefs)
+            let session = try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: store.prefs, confirmLive: allow)
             guard channelID == channel.id else {
                 await api.stopWatching(channelID: channel.id, rendition: session.rendition)
                 return
@@ -61,9 +67,20 @@ final class LivePlayer {
                 engine.start()
                 sync = engine
             }
+        } catch let error as APIError where error.code == "recording_soon" {
+            needsConfirm = true
+            self.error = error.message
         } catch {
+            needsConfirm = false
             self.error = error.localizedDescription
         }
+    }
+
+    func confirmWatch() {
+        confirmNext = true
+        needsConfirm = false
+        error = nil
+        attempt += 1
     }
 
     func stop() async {
@@ -247,13 +264,22 @@ struct PlayerScreen: View {
                     .padding(24)
             }
             if let error = live.error {
-                Text(error)
-                    .padding()
-                    .glassEffect(in: .rect(cornerRadius: Tokens.Radius.md))
-                    .padding(.top, 80)
+                VStack(spacing: 12) {
+                    Text(error)
+                        .multilineTextAlignment(.center)
+                    if live.needsConfirm {
+                        Button("Watch anyway") {
+                            live.confirmWatch()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+                .padding()
+                .glassEffect(in: .rect(cornerRadius: Tokens.Radius.md))
+                .padding(.top, 80)
             }
         }
-        .task(id: "\(nowPlaying.channel?.id ?? 0) \(store.prefs.track ?? "") \(store.prefs.even)") {
+        .task(id: "\(nowPlaying.channel?.id ?? 0) \(store.prefs.track ?? "") \(store.prefs.even) \(live.attempt)") {
             #if DEBUG
                 // Layout checks must not take a tuner. -BroadwaveChrome YES skips the session.
                 if UserDefaults.standard.bool(forKey: "BroadwaveChrome") {

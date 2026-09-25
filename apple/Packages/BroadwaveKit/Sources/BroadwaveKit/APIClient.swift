@@ -127,9 +127,9 @@ public struct APIClient: Sendable {
 
     // MARK: Live
 
-    public func watch(channelID: Int64, caps: Caps, prefs: Prefs) async throws -> WatchSession {
-        struct B: Encodable { var channelId: Int64; var caps: Caps; var prefs: Prefs }
-        return try await send("POST", "/watch", body: B(channelId: channelID, caps: caps, prefs: prefs))
+    public func watch(channelID: Int64, caps: Caps, prefs: Prefs, confirmLive: Bool = false) async throws -> WatchSession {
+        struct B: Encodable { var channelId: Int64; var caps: Caps; var prefs: Prefs; var confirmLive: Bool }
+        return try await send("POST", "/watch", body: B(channelId: channelID, caps: caps, prefs: prefs, confirmLive: confirmLive))
     }
 
     public func planMultiview(_ channelIDs: [Int64]) async throws -> MultiviewPlan {

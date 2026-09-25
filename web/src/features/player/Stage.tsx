@@ -19,6 +19,7 @@ export function Stage({
   markers,
   onJump,
   error,
+  errorAction,
   tools,
   more,
   children,
@@ -45,6 +46,7 @@ export function Stage({
   markers?: { id: number; start: number; end: number }[];
   onJump: (delta: number) => void;
   error?: string;
+  errorAction?: ReactNode;
   tools?: ReactNode;
   more?: ReactNode;
   children?: ReactNode;
@@ -79,7 +81,7 @@ export function Stage({
     };
   }, [videoRef]);
 
-  const showChrome = paused || open || mode === "mini";
+  const showChrome = paused || open || mode === "mini" || Boolean(error);
   const idle = !showChrome && timedIdle;
   const [seenShow, setSeenShow] = useState(showChrome);
   if (seenShow !== showChrome) {
@@ -181,7 +183,12 @@ export function Stage({
           </div>
         </header>
         {children}
-        {error ? <p className="player-error" role="alert">{error}</p> : null}
+        {error ? (
+          <div className="player-error">
+            <p role="alert">{error}</p>
+            {errorAction}
+          </div>
+        ) : null}
         <footer className="stage-dock glass">
           <div className="scrub-wrap">
             <div className="scrub-marks" aria-hidden="true">

@@ -254,6 +254,13 @@ export function LivePlayer({
       onJump={jump}
       onTogglePlay={togglePlay}
       error={error}
+      errorAction={
+        stream.needsConfirm ? (
+          <button type="button" className="btn small" onClick={stream.confirm}>
+            Watch anyway
+          </button>
+        ) : null
+      }
       badge={syncBadge}
       tools={
         <>

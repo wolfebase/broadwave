@@ -181,8 +181,18 @@
   inset: 0;
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 10px;
   padding: 16px;
   text-align: center;
+}
+
+.mv-error p {
+  margin: 0;
+}
+
+.mv-error .btn {
+  color: var(--color-text);
 }
 
 .mv-menu {

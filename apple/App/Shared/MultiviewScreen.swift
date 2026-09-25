@@ -245,6 +245,9 @@ final class TilePlayer {
     /// True only after this tile's own item has been told to play. Unmuting the
     /// previous item is not sound yet.
     private(set) var canHear = false
+    private(set) var needsConfirm = false
+    private(set) var attempt = 0
+    private var confirmNext = false
     private var audible = false
     private var attempts = 0
     private var channelID: Int64?
@@ -271,9 +274,12 @@ final class TilePlayer {
         self.api = api
         channelID = channel.id
         audible = request.audible
+        let allow = confirmNext
+        confirmNext = false
+        needsConfirm = false
         error = nil
         do {
-            let session = try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: prefs)
+            let session = try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: prefs, confirmLive: allow)
             guard channelID == channel.id else {
                 await api.stopWatching(channelID: channel.id, rendition: session.rendition)
                 return
@@ -295,6 +301,9 @@ final class TilePlayer {
                 bind { engine.command($0) }
             }
             attempts = 0
+        } catch let error as APIError where error.code == "recording_soon" {
+            needsConfirm = true
+            self.error = error.message
         } catch {
             attempts += 1
             if attempts == 1, error.localizedDescription.localizedStandardContains("tuner") {
@@ -305,6 +314,13 @@ final class TilePlayer {
             }
             self.error = error.localizedDescription
         }
+    }
+
+    func confirmWatch() {
+        confirmNext = true
+        needsConfirm = false
+        error = nil
+        attempt += 1
     }
 
     func setAudible(_ on: Bool) {
@@ -859,13 +875,6 @@ struct MultiviewTile: View {
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.black.opacity(0.45))
-                if let error = live.error {
-                    Text(error)
-                        .font(.footnote)
-                        .padding(8)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(.black.opacity(0.55))
-                }
             }
             .clipShape(.rect(cornerRadius: Tokens.Radius.md))
             .overlay {
@@ -874,48 +883,66 @@ struct MultiviewTile: View {
             }
         }
         .buttonStyle(.plain)
+        .overlay {
+            if let error = live.error {
+                VStack(spacing: 8) {
+                    Text(error)
+                        .font(.footnote)
+                        .multilineTextAlignment(.center)
+                    if live.needsConfirm {
+                        Button("Watch anyway") {
+                            live.confirmWatch()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.black.opacity(0.55))
+            }
+        }
         #if os(iOS)
-            .focusEffectDisabled()
+        .focusEffectDisabled()
         #endif
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityIdentifier("tile-\(channel.id)")
-            .accessibilityLabel("\(channel.displayNumber) \(channel.displayName), \(title)")
-            .accessibilityValue(tileValue)
-            .accessibilityAddTraits(focused ? .isSelected : [])
-            .task(id: "\(channel.id)-\(prefs.quality.rawValue)-\(prefs.audio.rawValue)") {
-                #if DEBUG
-                    if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
-                        return
-                    }
-                #endif
-                await live.start(TilePlayer.Request(channel: channel, prefs: prefs, audible: focused), room: room, store: store, bind: bind)
-            }
-            .onChange(of: focused) { _, on in
-                live.setAudible(on)
-            }
-            .task(id: focused) {
-                guard focused else { return }
-                while !Task.isCancelled {
-                    if live.canHear, live.player.timeControlStatus == .playing, !live.player.isMuted {
-                        onSound()
-                        return
-                    }
-                    try? await Task.sleep(for: .milliseconds(400))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier("tile-\(channel.id)")
+        .accessibilityLabel("\(channel.displayNumber) \(channel.displayName), \(title)")
+        .accessibilityValue(tileValue)
+        .accessibilityAddTraits(focused ? .isSelected : [])
+        .task(id: "\(channel.id)-\(prefs.quality.rawValue)-\(prefs.audio.rawValue)-\(live.attempt)") {
+            #if DEBUG
+                if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
+                    return
                 }
-            }
-            .task(id: tileStats) {
-                guard tileStats else { return }
-                while !Task.isCancelled {
-                    if let event = live.player.currentItem?.accessLog()?.events.last {
-                        live.noteDrops(event.numberOfDroppedVideoFrames)
-                    }
-                    live.noteDrift()
-                    try? await Task.sleep(for: .seconds(1))
+            #endif
+            await live.start(TilePlayer.Request(channel: channel, prefs: prefs, audible: focused), room: room, store: store, bind: bind)
+        }
+        .onChange(of: focused) { _, on in
+            live.setAudible(on)
+        }
+        .task(id: focused) {
+            guard focused else { return }
+            while !Task.isCancelled {
+                if live.canHear, live.player.timeControlStatus == .playing, !live.player.isMuted {
+                    onSound()
+                    return
                 }
+                try? await Task.sleep(for: .milliseconds(400))
             }
-            .onDisappear {
-                Task { await live.stop() }
+        }
+        .task(id: tileStats) {
+            guard tileStats else { return }
+            while !Task.isCancelled {
+                if let event = live.player.currentItem?.accessLog()?.events.last {
+                    live.noteDrops(event.numberOfDroppedVideoFrames)
+                }
+                live.noteDrift()
+                try? await Task.sleep(for: .seconds(1))
             }
+        }
+        .onDisappear {
+            Task { await live.stop() }
+        }
     }
 
     private var tileValue: String {

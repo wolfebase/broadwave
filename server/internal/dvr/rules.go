@@ -2,7 +2,6 @@ package dvr
 
 import (
 	"strings"
-	"time"
 
 	"broadwave/internal/store"
 )
@@ -14,17 +13,20 @@ func ApplyLibrary(items []Planned, passes []store.Pass, recs []store.Recording, 
 		byID[pass.ID] = pass
 	}
 	for i := range items {
+		airing := items[i].Airing
+		key, starts := SkipParts(airing)
+		if key != "" && skips[key+"|"+starts] {
+			items[i].Skipped = true
+			items[i].Reason = "Skipped once"
+			// The viewer already chose another airing, so don't offer this one again.
+			items[i].Conflict = false
+			items[i].Suggestion = nil
+			continue
+		}
 		if items[i].Skipped {
 			continue
 		}
 		pass := byID[items[i].PassID]
-		airing := items[i].Airing
-		key := store.EpisodeKey(airing.ProgramID, airing.Title, airing.Subtitle, airing.ChannelID)
-		if key != "" && skips[key+"|"+airing.Start.UTC().Format(time.RFC3339)] {
-			items[i].Skipped = true
-			items[i].Reason = "Skipped once"
-			continue
-		}
 		if key != "" && haveEpisode(pass, recs, seen, key) {
 			items[i].Skipped = true
 			items[i].Reason = "Already recorded"

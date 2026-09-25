@@ -3,18 +3,14 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **AS2** demo mode, after the in-flight lanes. App Review unchanged at 2026-09-25 20:54Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply.
-- Lanes (sprint until 17:30 CDT). Each lane was told to `git reset --hard HEAD && git clean -fd` before editing. Strip inherited HomeView, APIClient, SupportURL, PROGRESS, and pb7b log deletions if they are still in the diff.
-  - E2 `~/.grok/worktrees/active-broadwave/subagent-01a0da64-9b3a-7ae2-902f-4d71bcd6db60` running since 21:07Z.
-  - D7 landed in the game-switcher commit. Its worktree can be removed. tvOS screenshots are D7b.
-  - I1 `~/.grok/worktrees/active-broadwave/subagent-01a0da7b-e02d-7863-b83c-956b652af9b4` running. It may xcodebuild. It must not use the Broadwave Staging simulators.
-  - G8 `~/.grok/worktrees/active-broadwave/subagent-01a0da7b-e02d-7863-b83c-9579d056af5f` running. It must not edit hub.go, pool.go, play.go, dvr, or sports. slog-everywhere is explicitly unfinished.
-  - K6 and HW3 paper worktrees were removed after their commits.
-  - HW2 draft `~/.grok/worktrees/active-broadwave/subagent-01a0da13-ca55-7ef2-a4e1-b521ce177ab1` (server patch applies on main; drop pb7b deletions, PROGRESS, Apple, and CSS). Review and re-test before merging. `server/internal/live/handoff_test.go` is untracked in that worktree and is part of the patch.
-- Staging channel 1 was tuned at 21:22Z for AP3 and stopped. Both servers `ours:false` after. Next recording is Jeopardy on 2026-09-27.
-- Disk: checked 2026-09-25 20:54Z. `df -h ~` is 51 GB free. Above 15 GB.
+- Current task: **AS2** demo mode. App Review unchanged at 2026-09-25 21:43Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply.
+- E2 landed on main from the lane copy. The lane worktree `~/.grok/worktrees/active-broadwave/subagent-01a0da64-9b3a-7ae2-902f-4d71bcd6db60` still has the inherited HomeView, APIClient, SupportURL, PROGRESS, and pb7b deletions. Do not merge those. The worktree can be removed.
+- I1 `~/.grok/worktrees/active-broadwave/subagent-01a0da7b-e02d-7863-b83c-956b652af9b4` is clean and the agent is gone. Remove it.
+- G8 `~/.grok/worktrees/active-broadwave/subagent-01a0da7b-e02d-7863-b83c-9579d056af5f` has a metrics and diagnostics diff (not hub.go, pool.go, play.go, dvr, or sports). slog-everywhere is unfinished. Review before merging. It will conflict with E2 on `openapi.yaml` and `server.go`.
+- HW2 draft `~/.grok/worktrees/active-broadwave/subagent-01a0da13-ca55-7ef2-a4e1-b521ce177ab1` (server patch applies on main; drop pb7b deletions, PROGRESS, Apple, and CSS). Review and re-test before merging. `server/internal/live/handoff_test.go` is untracked in that worktree and is part of the patch.
+- No tuner was taken this round. Both servers `ours:false` at 22:02Z. Next recording is Jeopardy on 2026-09-27.
+- Disk: checked 2026-09-25 21:43Z. `df -h ~` is 50 GB free. Above 15 GB.
 - Production `Broadwave` `:8477` is `v0.8.0`. Staging `:8490` is `v0.8.0-33-g8ccb3e1-dirty` (encoder h264_vaapi).
-- CI at 21:10Z: `0d3f286` in progress, `8fb3461` and `40b4306` succeeded.
 - The repo is `~/Projects/active/broadwave`.
 
 ## Read first (reviews 2–4; details in MASTER_PLAN 0.1a–0.1d)
@@ -204,7 +200,8 @@ Tick items as they are verified and committed, in the same commit as the work (`
 
 ## Phase E — DVR
 - [ ] E1 Passes UI overhaul
-- [ ] E2 Conflict resolver
+- [x] E2 Conflict resolver. A skipped showing names a later airing that fits, and one click records that one. `TestSkippedShowSuggestsALaterAiring`, `TestLaterAiringThatStillConflictsIsNotSuggested`, `TestSuggestionCanMoveAChannelPin`, `TestOneShotWhenThePassCannotNameOneAiring`, `TestScheduleSuggestsALaterAiringAndFixSkipsTheConflict`. The replacement is saved before the skip. Live watch returns 409 `recording_soon` and does not tune until the viewer confirms (`TestLiveWatchTunerPad`, `TestLiveWatchDoesNotStarveARecording`). Lab catalog on 127.0.0.1:8477 (`-hdhr 127.0.0.1:9`, not the house tuner). Chrome: the later-airing button at 390×844, 1440×900, and 1920×1080, overflow 0, phone button ends at y 431 and the tab bar starts at 776 (`.evidence/e2/web-phone-schedule.png`, `web-desktop-schedule.png`, `web-tv-schedule.png`). The row says "Lower priority · 1 tuner". Clicking it leaves "Skipped once" and "News will record at 7:58 PM instead." (`.evidence/e2/web-desktop-fixed.png`). Watch on 9.1 says "Game starts at 5:06 PM and needs the last tuner." with Watch anyway at all three sizes (`.evidence/e2/web-phone-watch.png`, `web-desktop-watch.png`, `web-tv-watch.png`). Confirm then gets "the tuner did not answer" from the closed lab tuner. Console errors are those 409s and that 500. iOS and tvOS simulator builds succeeded. Apple has no Schedule screen, so the later-airing row is web; Watch anyway is in the Apple player and on a multiview tile (E2b). `make check` green. Both house tuners stayed `ours:false`.
+- [ ] E2b Apple Schedule shows the skipped airing and Record the later airing, and Watch anyway is screenshotted on iPhone and Apple TV. The controls are in the player and on a multiview tile; there is no Apple schedule screen yet.
 - [ ] E3 Recording library redesign
 - [ ] E4 Commercial detection v2
 - [ ] E5 Intro/credits detection

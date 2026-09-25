@@ -415,8 +415,9 @@ public struct PlannedAiring: Codable, Sendable, Hashable {
     public var conflict: Bool
     public var skipped: Bool
     public var reason: String?
+    public var suggestion: Suggestion?
 
-    public init(passId: Int64, airing: Airing, priority: Int, padBefore: Int, padAfter: Int, conflict: Bool, skipped: Bool, reason: String? = nil) {
+    public init(passId: Int64, airing: Airing, priority: Int, padBefore: Int, padAfter: Int, conflict: Bool, skipped: Bool, reason: String? = nil, suggestion: Suggestion? = nil) {
         self.passId = passId
         self.airing = airing
         self.priority = priority
@@ -425,6 +426,7 @@ public struct PlannedAiring: Codable, Sendable, Hashable {
         self.conflict = conflict
         self.skipped = skipped
         self.reason = reason
+        self.suggestion = suggestion
     }
 }
 
@@ -731,6 +733,22 @@ public struct StreamInfo: Codable, Sendable, Hashable {
         self.outputFps = outputFps
         self.bitrate = bitrate
         self.decode = decode
+    }
+}
+
+public struct Suggestion: Codable, Sendable, Hashable {
+    public var channelId: Int64
+    public var guideNumber: String?
+    public var title: String
+    public var start: Date
+    public var end: Date
+
+    public init(channelId: Int64, guideNumber: String? = nil, title: String, start: Date, end: Date) {
+        self.channelId = channelId
+        self.guideNumber = guideNumber
+        self.title = title
+        self.start = start
+        self.end = end
     }
 }
 

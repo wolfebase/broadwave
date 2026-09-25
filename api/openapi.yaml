@@ -631,6 +631,7 @@ paths:
                 profile: { type: string, enum: [transparent, balanced, saver], deprecated: true }
                 audio: { type: string, enum: [stereo, surround], deprecated: true }
                 pictureMode: { $ref: "#/components/schemas/PictureMode" }
+                confirmLive: { type: boolean, description: "Set when the viewer chooses to watch even though a recording needs the last tuner." }
       responses:
         "200":
           description: Live session
@@ -944,7 +945,7 @@ paths:
     get:
       tags: [dvr]
       operationId: getSchedule
-      description: Upcoming recordings from passes for the next 14 days, with conflicts marked.
+      description: Upcoming recordings from passes for the next 14 days, with conflicts marked and a later airing when one fits.
       responses:
         "200":
           description: Planned recordings
@@ -976,6 +977,39 @@ paths:
                 start: { type: string, format: date-time }
       responses:
         "200": { $ref: "#/components/responses/Ok" }
+  /schedule/fix:
+    post:
+      tags: [dvr]
+      operationId: fixSchedule
+      description: Record the suggested later airing instead of a skipped one. Does not raise priority.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [passId, channelId, start, suggestionChannelId, suggestionStart]
+              properties:
+                passId: { type: integer, format: int64 }
+                channelId: { type: integer, format: int64, description: "Channel of the skipped airing." }
+                start: { type: string, format: date-time, description: "Start of the skipped airing." }
+                suggestionChannelId: { type: integer, format: int64 }
+                suggestionStart: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Schedule after the change
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tunerCount, items]
+                properties:
+                  tunerCount: { type: integer }
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/PlannedAiring" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /passes:
     get:
       tags: [dvr]
@@ -1810,6 +1844,16 @@ components:
         passes:
           type: array
           items: { $ref: "#/components/schemas/Pass" }
+    Suggestion:
+      type: object
+      required: [channelId, title, start, end]
+      description: A later airing that fits without bumping another recording.
+      properties:
+        channelId: { type: integer, format: int64 }
+        guideNumber: { type: string }
+        title: { type: string }
+        start: { type: string, format: date-time }
+        end: { type: string, format: date-time }
     PlannedAiring:
       type: object
       required: [passId, airing, priority, padBefore, padAfter, conflict, skipped]
@@ -1822,6 +1866,7 @@ components:
         conflict: { type: boolean }
         skipped: { type: boolean }
         reason: { type: string }
+        suggestion: { $ref: "#/components/schemas/Suggestion" }
     Event:
       type: object
       required: [id, at, kind, message]
