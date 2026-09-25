@@ -3,8 +3,8 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **AS1** tvOS rejection walk. tvOS 1.0 is REJECTED (submission `7946ed56`, checked 2026-09-25); iOS 1.0 is still WAITING_FOR_REVIEW. The Resolution Center text needs a web sign-in (BLOCKERS); the owner was notified once. While that message is outstanding, fresh-install the tvOS app on "Broadwave Staging TV" with no server reachable and screenshot every screen (STEERING 23:30). Production is `ghcr.io/wolfebase/broadwave:0.6.0`. Staging on `:8490` is the PB5c binary. Next recording Jeopardy 2026-09-25 20:00 UTC. Tuners released.
-- App Review: tvOS 1.0 REJECTED, iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-25 (AS1). Check it at the start of every round.
+- Current task: **AS2** in-app demo mode. tvOS 1.0 is REJECTED under Guideline 2.1 (information needed, not a defect). The reply and shot list are in `docs/appstore/review-2.1-reply.md`; the owner sends the reply and records the videos. Review notes updated on tvOS and iOS (2196 characters). iOS 1.0 is still WAITING_FOR_REVIEW. Production is `ghcr.io/wolfebase/broadwave:0.6.0`. Staging on `:8490` is the PB5c binary. Next recording Jeopardy 2026-09-25 20:00 UTC. Tuners released.
+- App Review: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-25 (AS1). Check it at the start of every round.
 - Production `Broadwave` on TUS `:8477` is v0.6.0. Staging `Broadwave-Staging` is on `:8490`. Next recording: Jeopardy, 2026-09-25 20:00 UTC.
 - The repo is `~/Projects/active/broadwave`.
 
@@ -17,7 +17,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - **Next migration is 0020.** Never edit an old one.
 
 ## Phase AS — App Store life
-- [ ] AS1 Review follow-through every round (continuous; record state changes; handle rejections first)
+- [ ] AS1 Review follow-through every round (continuous; record state changes; handle rejections first). 2026-09-25: tvOS 1.0 is Guideline 2.1 Information Needed. Reply and shot list in `docs/appstore/review-2.1-reply.md`. Notes updated on both versions. The owner sends the reply and the recordings.
 - [ ] AS2 "Try Broadwave" demo mode in the apps (DemoServer on loopback, bundled CC BY clips, attribution, airplane-mode test)
 - [ ] AS3 `scripts/demo-lineup.sh` + `scripts/appstore-shots.sh` regenerate and upload every screenshot set (JPEG)
 - [ ] AS4 App Store update 1.1 (demo mode, Apple art, multiview fixes, iPad multiview screenshots) submitted on both platforms
