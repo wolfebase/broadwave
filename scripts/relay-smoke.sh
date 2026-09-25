@@ -79,9 +79,11 @@ check "the plan can play the channel" "echo '$PLAN' | grep -q '\"channelId\":$ID
 sleep 6
 for k in "$DIRECT" 540.aac2.broadcast 540.none.broadcast 360.none.broadcast; do
   PL=$(curl -s "http://127.0.0.1:$PORT/media/live/$ID/$k/index.m3u8")
-  check "$k playlist has program date-times" "echo '$PL' | grep -q PROGRAM-DATE-TIME"
-  check "$k is CMAF with init segment" "echo '$PL' | grep -q 'EXT-X-MAP'"
-  check "$k withholds segment 0" "! echo '$PL' | grep -q 'seg00000'"
+  # grep -q under pipefail exits before echo finishes on a long playlist,
+  # and the resulting SIGPIPE fails a check that already matched.
+  check "$k playlist has program date-times" '[[ "$PL" == *PROGRAM-DATE-TIME* ]]'
+  check "$k is CMAF with init segment" '[[ "$PL" == *EXT-X-MAP* ]]'
+  check "$k withholds segment 0" '[[ "$PL" != *seg00000* ]]'
 done
 curl -s -m 10 "http://127.0.0.1:$PORT/export/stream/$ID" -o "$T/export.ts"
 SZ=$(stat -f%z "$T/export.ts" 2>/dev/null || stat -c%s "$T/export.ts")
