@@ -6,6 +6,10 @@
 
 You are continuing **Broadwave** in `/Users/tyler/Projects/active/broadwave` (git repo, branch `main`). Broadwave is live TV and DVR for antenna users. It has a Go server (Docker, Unraid, or a Mac), a web app, and native iPhone, iPad, and Apple TV apps. Strangers install it and version 1.0 is in App Review, so the bar is category-best and public-grade.
 
+## 0. Note from the overseer (2026-09-24 21:40, remove once handled)
+
+PB7b's hour-long stall run was started about 20:55 on staging: web through Playwright Chrome, plus the "Broadwave Staging iPhone" and "Broadwave Staging TV" simulators, all on 4.1, with logs in `docs/lab/pb7b/`. It ends about 21:55. Collect the results from those logs; don't restart the hour. Then stop all three viewers (the Playwright Chrome session and the app on both simulators), confirm `http://192.168.1.2:8490/api/v1/tuners` shows no tuner in use, and commit PB7b with the numbers. The uncommitted `PlayerScreen.swift` stall heartbeat is part of that task.
+
 ## 1. Start of every round (in this order)
 
 1. Read `AGENTS.md`, then `docs/plan/PROGRESS.md` from the top ("Resume here" and "Read first"). Then read `docs/plan/MASTER_PLAN.md` sections 0.1 through 0.1d, the section 3 text for your current task, and section 4 (the order). Also read `docs/plan/BLOCKERS.md`.
@@ -24,6 +28,7 @@ You are continuing **Broadwave** in `/Users/tyler/Projects/active/broadwave` (gi
   - `code-reviewer` runs before committing any task over about 200 lines. `security-review` runs on anything touching auth, network exposure, secrets, or file paths.
   - `best-of-n-runner` (its own git worktree) takes independent tasks in parallel. Only you commit to `main`.
   - Give each subagent a self-contained prompt: paths, commands, acceptance criteria, and exactly what to return.
+- **Never block in one wait for more than 10 minutes.** Cursor ends a round that sits in a single long await ("Agent turn stopped after repeated resume attempts made no progress"); round 10 died that way 40 minutes into an hour-long wait. Start long measurements detached (logs to files), keep working or poll in waits of at most 10 minutes, and if a measurement outlives the round, write in "Resume here" where its logs are and when it ends, so the next round collects it.
 - **Run things in parallel and in the background.** Batch independent reads. Run `make check`, `gh run watch`, Docker pulls, uploads, and lab runs in the background, and keep working meanwhile.
 - **Verify like a person on staging** (MASTER_PLAN 0.1b). Deploy the branch binary to `Broadwave-Staging` (`:8490`, iGPU), click through it in Chrome and the simulators, measure the output, and read the console.
   - Production `Broadwave` (`:8477`) changes only in a phase deploy.
