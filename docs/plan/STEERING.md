@@ -4,6 +4,15 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
+- 2026-09-25 09:10 · **Lanes are running, but their work isn't landing. Fix this before starting any new lane.**
+  1. Integrate the two finished lane results still sitting in worktrees:
+     - P2b: `~/.grok/worktrees/active-broadwave/subagent-01a0d8af-b202-7711-a2e0-bafd5006f4ed` (contract tests and fixtures);
+     - LEGAL1: `…/subagent-01a0d8af-b202-7711-a2e0-bb0358833876` (NOTICE, `docs/legal.md`, About, license files in the image).
+     For each one: bring over only the task's files. Drop its `PROGRESS.md` edits, drop its deletion of `docs/lab/pb7b/*.log`, and drop `.build/`. Then review, run `make check`, and commit it as its own task with evidence.
+  2. Remove the dead worktrees with `git worktree remove` once you have confirmed nothing in them is needed: `…bb170514cf69` and `…bb215ecf6174` (no task changes at all), and one of the two identical multiview lanes (`…568371cff638` / `…5692aafd57e5`).
+  3. **Lane rules, tightened.** A lane never edits `PROGRESS.md`, never deletes files its task doesn't own, and never commits. Never start two lanes on the same task. Keep a lane ledger in "Resume here" (task → worktree path → running / ready / merged), so a new round collects finished lanes before it starts new ones. Reject a lane result that contains placeholder or stub code (`placeholder`, `// ...`, `TODO: implement`, empty handlers); send it back or do the task in Lane A.
+  4. Add `.build/` to `.gitignore`.
+
 - 2026-09-25 07:45 · **Owner's direction: go faster without lowering the bar. Run three lanes in parallel from now on.**
   - **Lane A (you, serial):** the next task in section 4 order, plus anything that needs a shared resource: staging (`:8490`), tuners, production, App Store Connect or TestFlight, or the two "Broadwave Staging" simulators. You are also the only one who commits, edits `PROGRESS.md`, or deploys.
   - **Lanes B and C (background subagents, `isolation: worktree`):** keep two running at all times. Each takes one open task that meets all of these:
