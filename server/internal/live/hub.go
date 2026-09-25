@@ -111,6 +111,11 @@ type Hub struct {
 	// so flipping back to a channel is instant.
 	RenditionIdle time.Duration
 
+	// FallbackWindow is how long a GPU encode has to fail before a death is a
+	// late failure (rebuild once) instead of an immediate software fallback.
+	// Zero means 8 seconds.
+	FallbackWindow time.Duration
+
 	mu         sync.Mutex
 	muxes      map[int]*mux
 	channels   map[int64]*feed
@@ -165,17 +170,18 @@ type feed struct {
 
 // rendition is one ffmpeg process producing HLS for one delivery form.
 type rendition struct {
-	spec     Rendition
-	dir      string
-	cmd      *exec.Cmd
-	stdin    io.WriteCloser
-	sub      *pipeSub
-	viewers  int
-	seen     time.Time
-	idle     *time.Timer
-	stamper  playlistStamper
-	fallback bool
-	args     []string
+	spec      Rendition
+	dir       string
+	cmd       *exec.Cmd
+	stdin     io.WriteCloser
+	sub       *pipeSub
+	viewers   int
+	seen      time.Time
+	idle      *time.Timer
+	stamper   playlistStamper
+	fallback  bool
+	restarted bool
+	args      []string
 }
 
 type recording struct {
@@ -569,57 +575,104 @@ func encoderOf(base string, want Rendition) string {
 	return OutputEncoder(base, want.Codec)
 }
 
-// watchRendition restarts a GPU rendition on software decode when ffmpeg dies immediately.
+// watchRendition restarts an encode that dies, then releases the tuner if a
+// second start also dies. A restart wipes the directory so a software fallback
+// never serves the init.mp4 the GPU encode left behind.
 func (h *Hub) watchRendition(f *feed, r *rendition, pid int, encoder string) {
 	started := time.Now()
 	err := r.cmd.Wait()
 	ForgetPID(h.Dir, pid)
-	if err == nil || time.Since(started) > 8*time.Second || !vaapiFamily(encoder) || r.fallback {
-		return
-	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if f.renditions[r.spec.Key()] != r {
 		return
 	}
-	r.fallback = true
+	software := err != nil && time.Since(started) <= h.fallbackWindow() && vaapiFamily(encoder) && !r.fallback
+	if err != nil && !r.restarted && h.restartRenditionLocked(f, r, software) {
+		log.Printf("rendition %s on %s restarted after %s", r.spec.Key(), f.channel.GuideNumber, time.Since(started).Round(time.Millisecond))
+		return
+	}
+	// The process has been waited. Don't signal a pid the OS may have reused.
+	r.cmd = nil
+	r.stdin = nil
+	log.Printf("rendition %s on %s released after %s: %v", r.spec.Key(), f.channel.GuideNumber, time.Since(started).Round(time.Millisecond), err)
+	h.stopRenditionLocked(f, r.spec.Key())
+	h.dropIfUnusedLocked(f)
+}
+
+func (h *Hub) fallbackWindow() time.Duration {
+	if h.FallbackWindow > 0 {
+		return h.FallbackWindow
+	}
+	return 8 * time.Second
+}
+
+// restartRenditionLocked starts the encode again in an empty directory.
+// software forces the CPU encoder; otherwise the same command line runs once more.
+func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool {
+	// detach closes the pipe. Closing stdin here too races that goroutine.
 	if m := muxOf(h, f); m != nil {
 		m.detach(r.sub)
 	} else if r.sub != nil {
 		r.sub.stop()
 	}
 	r.sub = nil
-	input := "pipe:0"
-	if m := muxOf(h, f); m != nil && m.input != "" {
-		input = m.input
+	r.stdin = nil
+	if err := os.RemoveAll(r.dir); err != nil {
+		return false
 	}
-	args := renditionArgs(f.program, f.sourceFor(r.spec), r.spec, "libx264", "", input)
+	if err := os.MkdirAll(r.dir, 0o755); err != nil {
+		return false
+	}
+	encoder := encoderOf(h.Encoder, r.spec)
+	args := r.args
+	if software || len(args) == 0 {
+		encoder = "libx264"
+		input := "pipe:0"
+		if m := muxOf(h, f); m != nil && m.input != "" {
+			input = m.input
+		}
+		args = renditionArgs(f.program, f.sourceFor(r.spec), r.spec, encoder, "", input)
+		r.fallback = true
+		encoder = OutputEncoder(encoder, r.spec.Codec)
+	}
 	cmd := exec.Command(h.FFmpeg, args...)
 	cmd.Dir = r.dir
 	var stdin io.WriteCloser
-	if input == "pipe:0" {
+	if usesPipe(args) {
 		var pipeErr error
 		stdin, pipeErr = cmd.StdinPipe()
 		if pipeErr != nil {
-			return
+			return false
 		}
 	}
 	cmd.Stderr = os.Stderr
-	if cmd.Start() != nil {
-		return
+	if err := cmd.Start(); err != nil {
+		if stdin != nil {
+			_ = stdin.Close()
+		}
+		return false
 	}
 	next := cmd.Process.Pid
 	NotePID(h.Dir, next)
 	r.cmd = cmd
 	r.stdin = stdin
 	r.args = args
+	r.restarted = true
 	if stdin != nil {
 		r.sub = h.attachPipeLocked(muxOf(h, f), stdin)
 	}
-	go func() {
-		_ = cmd.Wait()
-		ForgetPID(h.Dir, next)
-	}()
+	go h.watchRendition(f, r, next, encoder)
+	return true
+}
+
+func usesPipe(args []string) bool {
+	for i, arg := range args {
+		if arg == "-i" && i+1 < len(args) && args[i+1] == "pipe:0" {
+			return true
+		}
+	}
+	return false
 }
 
 // Playlist returns a rendition's live playlist stamped with the channel timeline.
