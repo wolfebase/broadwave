@@ -1,0 +1,23 @@
+{
+  "growing": false,
+  "markers": [
+    {
+      "end": 40,
+      "id": 1,
+      "recordingId": 1,
+      "start": 12
+    }
+  ],
+  "playlist": "/media/file/1/index.m3u8",
+  "position": 12.5,
+  "recording": {
+    "channelId": 1,
+    "durationSec": -1,
+    "guideNumber": "4.1",
+    "id": 1,
+    "startedAt": "2026-09-24T15:00:00Z",
+    "status": "complete",
+    "title": "Jeopardy!",
+    "watched": 1
+  }
+}

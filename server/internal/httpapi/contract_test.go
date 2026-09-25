@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -139,13 +140,17 @@ func TestContractFixtures(t *testing.T) {
 		SetupSignal: func(context.Context) (int, int, int, int, error) {
 			return 2, 0, 0, 0, nil
 		},
+		// Four is the stand-in count. The real pull talks to the public guide host.
+		GuidePull: func(context.Context) (int, error) { return 4, nil },
 	}
 	h := api.Handler()
 	root := fixtureDir(t)
 
 	// GET /channels/{id}/frame is a JPEG preview. matchFrame checks it.
-	// GET /backup is a SQLite file, not JSON.
+	// GET /backup is a SQLite file, not JSON. matchBackup checks status and content-type.
+	// GET /recordings/{id}/file is MPEG-TS, not JSON. The case checks status, content-type, and bytes.
 	// POST /watch records the error: the fake tuner serves no MPEG-TS, so ffmpeg never builds a playlist.
+	// DELETE /virtuals does not exist.
 	cases := []struct {
 		name, method, path, body string
 		status                   int
@@ -188,8 +193,33 @@ func TestContractFixtures(t *testing.T) {
 		{"watch", "POST", "/api/v1/watch", `{"channelId":1}`, http.StatusInternalServerError},
 		{"watch-stop", "POST", "/api/v1/watch/1/stop", "{}", 0},
 		{"setup-finish", "GET", "/api/v1/setup/finish", "", 0},
+		{"server-rename", "PATCH", "/api/v1/server", `{"name":"Living Room"}`, 0},
+		{"settings-save", "PUT", "/api/v1/settings", `{"hideScores":"1"}`, 0},
+		{"guide-refresh", "POST", "/api/v1/guide/refresh", "", 0},
+		{"schedule-skip", "POST", "/api/v1/schedule/skip", `{"programId":"EP1","title":"Jeopardy!","subtitle":"Semifinals","channelId":1,"start":"2026-09-24T15:00:00Z"}`, 0},
+		{"recording-progress", "PUT", "/api/v1/recordings/1/progress", `{"position":12.5}`, 0},
+		{"recording-watched", "PUT", "/api/v1/recordings/1/watched", `{"watched":true}`, 0},
+		{"recording-play", "POST", "/api/v1/recordings/1/play", `{}`, 0},
+		{"recording-file", "GET", "/api/v1/recordings/1/file", "", 0},
+		{"marker-create", "POST", "/api/v1/recordings/1/markers", `{"start":90,"end":120}`, 0},
+		{"marker-delete", "DELETE", "/api/v1/markers/2", "", 0},
+		{"recording-detect", "POST", "/api/v1/recordings/1/detect", "", 0},
+		{"recording-create", "POST", "/api/v1/recordings", `{"channelId":1,"minutes":30,"title":"Jeopardy!"}`, http.StatusInternalServerError},
+		{"recording-stop", "POST", "/api/v1/recordings/1/stop", "", 0},
+		{"pass-create", "POST", "/api/v1/passes", `{"title":"Wheel of Fortune","channelId":1,"padBefore":0,"padAfter":5}`, 0},
+		{"pass-delete", "DELETE", "/api/v1/passes/3", "", 0},
+		{"team-unfollow", "DELETE", "/api/v1/teams/1", "", 0},
+		{"virtual-create", "POST", "/api/v1/virtuals", `{"number":"9001","name":"News","recordings":[1]}`, 0},
 	}
+	sample := filepath.Join(dir, "jeopardy.ts")
 	for _, tc := range cases {
+		if tc.name == "recording-play" || tc.name == "recording-file" || tc.name == "recording-detect" {
+			contractSample(t, sample)
+		}
+		// PlayFile uses this binary. Set it after the recordings list so that fixture stays as it was.
+		if tc.name == "recording-play" {
+			api.Hub.FFmpeg = "ffmpeg"
+		}
 		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
 		if tc.name == "home" {
 			req.Host = "broadwave.local"
@@ -202,6 +232,19 @@ func TestContractFixtures(t *testing.T) {
 		}
 		if rec.Code != want {
 			t.Fatalf("%s %s %d %s", tc.method, tc.path, rec.Code, rec.Body.String())
+		}
+		if tc.name == "recording-file" {
+			if ct := rec.Header().Get("Content-Type"); ct != "video/mp2t" {
+				t.Fatalf("recording file type %s", ct)
+			}
+			wantFile, err := os.ReadFile(sample)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(rec.Body.Bytes(), wantFile) {
+				t.Fatal("recording file bytes drifted")
+			}
+			continue
 		}
 		matchFixture(t, root, tc.name, rec.Body.Bytes())
 	}
@@ -219,7 +262,63 @@ func TestContractFixtures(t *testing.T) {
 	matchFixture(t, root, "signals-check", rec.Body.Bytes())
 	waitSignal(t, api)
 	matchSocket(t, h, bus, st, root)
+	// Delete adds an activity row. It runs after the socket fixture, which records the next id.
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/recordings/1", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete recording %d %s", rec.Code, rec.Body.String())
+	}
+	matchFixture(t, root, "recording-delete", rec.Body.Bytes())
 	matchFrame(t, h, dir, root)
+	matchBackup(t, h, root)
+}
+
+// contractSample is a short recording so play and commercial detection have a file.
+// The bytes are not a fixture. The file route compares them in memory.
+func contractSample(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); err == nil {
+		return
+	}
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc2=size=320x180:rate=30:duration=3",
+		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3",
+		"-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "30",
+		"-c:a", "aac", "-shortest", "-f", "mpegts", path)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("sample: %v %s", err, out)
+	}
+}
+
+// matchBackup checks the catalog download. The body is a SQLite file, so it is
+// not written under api/fixtures. Restore's JSON is the golden response.
+func matchBackup(t *testing.T, h http.Handler, root string) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/backup", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("backup %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/octet-stream" {
+		t.Fatalf("backup type %s", ct)
+	}
+	if !bytes.HasPrefix(rec.Body.Bytes(), []byte("SQLite format 3")) {
+		t.Fatal("backup is not a sqlite file")
+	}
+	body := append([]byte(nil), rec.Body.Bytes()...)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/backup", bytes.NewReader(body))
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("restore %d %s", rec.Code, rec.Body.String())
+	}
+	matchFixture(t, root, "backup-restore", rec.Body.Bytes())
 }
 
 // matchFrame checks the preview route. With no file it is a 404. With a file

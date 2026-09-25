@@ -128,6 +128,52 @@ private func fixture(_ name: String) throws -> Data {
     let activity = try APIClient.decoder.decode(Activity.self, from: fixture("ws-activity"))
     #expect(activity.type == "activity")
     #expect(activity.data.kind == "source")
+
+    let renamed = try APIClient.decoder.decode(ServerInfo.self, from: fixture("server-rename"))
+    #expect(renamed.name == "Living Room")
+    let saved = try APIClient.decoder.decode(Settings.self, from: fixture("settings-save"))
+    #expect(saved.hideScores == "1")
+    struct Count: Decodable { var airings: Int }
+    let refreshed = try APIClient.decoder.decode(Count.self, from: fixture("guide-refresh"))
+    #expect(refreshed.airings == 4)
+    struct Ok: Decodable { var ok: Bool }
+    struct Watched: Decodable { var ok: Bool; var watched: Bool }
+    struct Position: Decodable { var position: Double }
+    struct LibraryPlay: Decodable {
+        var playlist: String
+        var recording: Recording
+        var markers: [Marker]
+        var position: Double
+        var growing: Bool
+    }
+    #expect(try APIClient.decoder.decode(Ok.self, from: fixture("schedule-skip")).ok)
+    let progressed = try APIClient.decoder.decode(Position.self, from: fixture("recording-progress"))
+    #expect(progressed.position == 12.5)
+    let watched = try APIClient.decoder.decode(Watched.self, from: fixture("recording-watched"))
+    #expect(watched.watched)
+    let played = try APIClient.decoder.decode(LibraryPlay.self, from: fixture("recording-play"))
+    #expect(played.playlist == "/media/file/1/index.m3u8")
+    #expect(played.recording.title == "Jeopardy!")
+    #expect(played.markers.count == 1)
+    #expect(!played.growing)
+    let detected = try APIClient.decoder.decode(Markers.self, from: fixture("recording-detect"))
+    #expect(detected.markers.isEmpty)
+    let createdMarker = try APIClient.decoder.decode(Marker.self, from: fixture("marker-create"))
+    #expect(createdMarker.recordingId == 1)
+    #expect(try APIClient.decoder.decode(Ok.self, from: fixture("marker-delete")).ok)
+    let recordError = try APIClient.decoder.decode(APIErrorBody.self, from: fixture("recording-create"))
+    #expect(recordError.code == "internal")
+    #expect(try APIClient.decoder.decode(Ok.self, from: fixture("recording-stop")).ok)
+    #expect(try APIClient.decoder.decode(Ok.self, from: fixture("recording-delete")).ok)
+    let createdPasses = try APIClient.decoder.decode(Passes.self, from: fixture("pass-create"))
+    #expect(createdPasses.passes.contains { $0.title == "Wheel of Fortune" })
+    let remainingPasses = try APIClient.decoder.decode(Passes.self, from: fixture("pass-delete"))
+    #expect(!remainingPasses.passes.contains { $0.title == "Wheel of Fortune" })
+    let unfollowed = try APIClient.decoder.decode(Teams.self, from: fixture("team-unfollow"))
+    #expect(unfollowed.teams.isEmpty)
+    let createdVirtual = try APIClient.decoder.decode(VirtualChannel.self, from: fixture("virtual-create"))
+    #expect(createdVirtual.number == "9001")
+    #expect(try APIClient.decoder.decode(Ok.self, from: fixture("backup-restore")).ok)
 }
 
 @Test func airingProgress() {

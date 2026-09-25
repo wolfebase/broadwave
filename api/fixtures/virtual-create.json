@@ -1,0 +1,9 @@
+{
+  "id": 2,
+  "name": "News",
+  "number": "9001",
+  "orderMode": "custom",
+  "recordings": [
+    1
+  ]
+}
