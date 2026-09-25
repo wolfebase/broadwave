@@ -9,6 +9,12 @@ Staging: `Broadwave-Staging` on `:8490` (`-staging`, iGPU), appdata `/mnt/cache/
 ## Entries
 <!-- Append: date, commit, what was deployed, checks run, results, issues. -->
 
+## 2026-09-25 00:52 CDT — v0.7.1, captions stay on the graphics chip
+
+- Image `ghcr.io/wolfebase/broadwave:0.7.1` (tag `v0.7.1`). Catalog backed up to `backups/broadwave-20260925-003303.db` before 0.7.0 and `backups/broadwave-20260925-005221.db` before 0.7.1. Container `Broadwave`, host network, `/dev/dri`, `TZ=America/Chicago`. `/api/v1/server` reports `v0.7.1`, encoder `h264_vaapi`, ffmpeg `7.1.4-Jellyfin`. Five recordings still listed. Tuners were free. Next recording is Jeopardy at 2026-09-25 20:00 UTC.
+- `v0.7.0` (the same image family) played channel 1 only after `h264_vaapi` quit with "Access unit too large" and the rendition fell back to software. `v0.7.1` passes `-sei 0`. On production, channel 1 for 20 s: `1280x720 59.94`, segment 2.002 s, 240 frames, 0 decode errors, and the ffmpeg command was `h264_vaapi -sei 0`. Tuner released. Staging had the same numbers on the fix before the image was published.
+- TestFlight build 147 (iOS and tvOS) uploaded from the 0.7.0 tree, which includes the iPad guide column. The server-only caption fix did not need another upload.
+
 ## 2026-09-24 16:06 CDT — v0.6.0, renamed to Broadwave
 
 - Image `ghcr.io/wolfebase/broadwave:0.6.0` (tag `v0.6.0`). Catalog backed up to `backups/broadwave-20260924-160627-pre060.db`, then moved by hand: appdata to `/mnt/cache/appdata/broadwave`, catalog file to `broadwave.db`, server name to "Broadwave on TUS", template to `my-Broadwave.xml`, container to `Broadwave`. 27 channels, 5 recordings, and 1 pass carried over. Old images removed.
