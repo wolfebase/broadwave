@@ -4,6 +4,14 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
+- 2026-09-25 15:10 · **Clean up lanes at the start of every round, before starting new ones.** At 15:09 there were 8 lane worktrees: three were 1–2 hours old (created 13:26, 14:04, 14:14), and two pairs were duplicates (13:26 ×2, 15:04 ×2, with near-identical diffs). For each worktree in `~/.grok/worktrees/active-broadwave/`:
+  - Match it to a ledger line in "Resume here".
+  - If it's merged, rejected, or a duplicate, remove it.
+  - If it's finished but unmerged, merge it now (with review and your own test run) or reject it.
+  - Keep at most 2 running at once.
+  - Before spawning a lane, check the ledger and the existing worktrees so a task never gets two lanes.
+  - Lane prompts must say "don't ask questions, you're working in a git worktree off `main`; if something is unclear, make the safe choice and note it in your summary".
+
 - 2026-09-25 12:30 · **Keep both lanes busy, and don't sit in CI waits.** At 12:29 there were 0 lanes running while Lane A sat in a 5-minute `gh run watch`. Instead:
   - Start a CI watch in the background, and meanwhile start or collect lanes or begin the next Lane A task.
   - Only block on CI when you are about to tag or deploy.
