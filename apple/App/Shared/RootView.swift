@@ -88,6 +88,14 @@ struct RootView: View {
                     }
                 }
                 // Simulator testing: -BroadwaveWatch <channel id>, or -BroadwaveMultiview 1,3.
+                #if os(iOS)
+                    if UserDefaults.standard.bool(forKey: "BroadwaveLandscape") {
+                        try? await Task.sleep(for: .milliseconds(600))
+                        if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
+                            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight)) { _ in }
+                        }
+                    }
+                #endif
                 if let raw = UserDefaults.standard.string(forKey: "BroadwaveMultiview"), !raw.isEmpty {
                     if store.channels.isEmpty {
                         await store.refresh()

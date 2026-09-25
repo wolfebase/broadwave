@@ -174,6 +174,7 @@ export function Multiview() {
       </header>
       {hint ? <p className="mv-note">Select a tile to hear it.</p> : null}
       {notice ? <p className="mv-note" role="status">{notice}</p> : null}
+      <div className="mv-fit">
       <div className={`mv-grid${layoutMode === "phone" && layout === "2up" ? " stacked" : ""}`} data-layout={layout}>
         {waiting ? null : ordered.length === 0 ? <p className="mv-empty">Pick two channels.</p> : null}
         {ordered.map((channel) => (
@@ -191,6 +192,7 @@ export function Multiview() {
             onRecord={() => void record(channel, airingAt(index, channel.id, now)?.title || channel.displayName)}
           />
         ))}
+      </div>
       </div>
       <div className="mv-bottom" role="toolbar" aria-label="Layout">
         {layoutLabels.map((item) => (
@@ -254,7 +256,8 @@ function Tile({
     audible: focused && (equal || big),
   });
   return (
-    <div className={focused ? "mv-tile focused" : "mv-tile"} onClick={onFocus} role="group" aria-label={`${channel.displayNumber} ${channel.displayName}${focused ? ", sound on" : ""}`}>
+    <div className="mv-cell" onClick={onFocus}>
+    <div className={focused ? "mv-tile focused" : "mv-tile"} role="group" aria-label={`${channel.displayNumber} ${channel.displayName}${focused ? ", sound on" : ""}`}>
       <video ref={videoRef} className="mv-video" autoPlay playsInline data-channel={channel.id} />
       <div className="mv-meta">
         <span>{channel.displayNumber}</span>
@@ -277,7 +280,7 @@ function Tile({
             className="btn"
             onClick={(e) => {
               e.stopPropagation();
-              const el = (e.currentTarget.parentElement?.parentElement as HTMLElement | null);
+              const el = e.currentTarget.closest(".mv-tile");
               void el?.requestFullscreen?.().catch(() => undefined);
             }}
           >
@@ -285,6 +288,7 @@ function Tile({
           </button>
         </div>
       ) : null}
+    </div>
     </div>
   );
 }

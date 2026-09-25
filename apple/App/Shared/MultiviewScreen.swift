@@ -39,7 +39,115 @@ enum TileLayout: String, CaseIterable, Identifiable {
     }
 
     static var saved: TileLayout {
-        TileLayout(rawValue: UserDefaults.standard.string(forKey: "broadwave-mv-layout") ?? "") ?? .side
+        #if DEBUG
+            if let raw = UserDefaults.standard.string(forKey: "BroadwaveMultiviewLayout"), let layout = TileLayout(rawValue: raw) {
+                return layout
+            }
+        #endif
+        return TileLayout(rawValue: UserDefaults.standard.string(forKey: "broadwave-mv-layout") ?? "") ?? .side
+    }
+}
+
+/// Each tile is the largest 16:9 box that fits its slot. The black around a tile is the screen, not a bar inside the picture.
+enum TileGeometry {
+    private static let wide: CGFloat = 16.0 / 9.0
+    private static let gap: CGFloat = 8
+    private static let stackedGap: CGFloat = 28
+
+    static func frames(layout: TileLayout, count: Int, in box: CGSize, stacked: Bool, split: CGFloat) -> [CGRect] {
+        guard box.width > 1, box.height > 1, count > 0 else { return [] }
+        if layout == .side, stacked {
+            return stackedFrames(count: min(count, 2), in: box, split: split)
+        }
+        switch layout {
+        case .side:
+            return splitGrid(columns: min(count, 2), rows: 1, count: min(count, 2), in: box, gap: gap)
+        case .quad:
+            return splitGrid(columns: 2, rows: 2, count: min(count, 4), in: box, gap: gap)
+        case .oneTwo:
+            return feature(count: min(count, 3), rows: 2, sideShare: 0.34, in: box)
+        case .oneThree:
+            return feature(count: min(count, 4), rows: 3, sideShare: 0.30, in: box)
+        case .pip:
+            return pip(count: min(count, 2), in: box)
+        }
+    }
+
+    static func stackedDivider(in box: CGSize, split: CGFloat) -> CGRect {
+        let clamped = min(0.75, max(0.25, split))
+        let top = (box.height - stackedGap) * clamped
+        return CGRect(x: 0, y: top, width: box.width, height: stackedGap)
+    }
+
+    private static func fit(_ region: CGRect) -> CGRect {
+        guard region.width > 1, region.height > 1 else { return .zero }
+        let byWidth = CGSize(width: region.width, height: region.width / wide)
+        let size = byWidth.height <= region.height
+            ? byWidth
+            : CGSize(width: region.height * wide, height: region.height)
+        return CGRect(
+            x: region.minX + (region.width - size.width) / 2,
+            y: region.minY + (region.height - size.height) / 2,
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    private static func splitGrid(columns: Int, rows: Int, count: Int, in box: CGSize, gap: CGFloat) -> [CGRect] {
+        let cellW = (box.width - gap * CGFloat(columns - 1)) / CGFloat(columns)
+        let cellH = (box.height - gap * CGFloat(rows - 1)) / CGFloat(rows)
+        return (0 ..< count).map { index in
+            let col = index % columns
+            let row = index / columns
+            let region = CGRect(
+                x: CGFloat(col) * (cellW + gap),
+                y: CGFloat(row) * (cellH + gap),
+                width: cellW,
+                height: cellH
+            )
+            return fit(region)
+        }
+    }
+
+    private static func feature(count: Int, rows: Int, sideShare: CGFloat, in box: CGSize) -> [CGRect] {
+        let sideW = box.width * sideShare
+        let mainW = box.width - sideW - gap
+        var out = [fit(CGRect(x: 0, y: 0, width: mainW, height: box.height))]
+        let smalls = max(0, count - 1)
+        guard smalls > 0 else { return out }
+        let cellH = (box.height - gap * CGFloat(rows - 1)) / CGFloat(rows)
+        for index in 0 ..< smalls {
+            let region = CGRect(
+                x: mainW + gap,
+                y: CGFloat(index) * (cellH + gap),
+                width: sideW,
+                height: cellH
+            )
+            out.append(fit(region))
+        }
+        return out
+    }
+
+    private static func pip(count: Int, in box: CGSize) -> [CGRect] {
+        let main = fit(CGRect(origin: .zero, size: box))
+        guard count > 1 else { return [main] }
+        let pipW = min(min(box.width, main.width) * 0.32, 420)
+        let pipH = pipW / wide
+        var small = CGRect(x: main.maxX - pipW - 16, y: main.maxY - pipH - 16, width: pipW, height: pipH)
+        small.origin.x = min(max(8, small.origin.x), box.width - pipW - 8)
+        small.origin.y = min(max(8, small.origin.y), box.height - pipH - 8)
+        return [main, small]
+    }
+
+    private static func stackedFrames(count: Int, in box: CGSize, split: CGFloat) -> [CGRect] {
+        let clamped = min(0.75, max(0.25, split))
+        let topH = (box.height - stackedGap) * clamped
+        let bottomH = box.height - stackedGap - topH
+        var out = [fit(CGRect(x: 0, y: 0, width: box.width, height: topH))]
+        if count > 1 {
+            out.append(fit(CGRect(x: 0, y: topH + stackedGap, width: box.width, height: bottomH)))
+        }
+        return out
     }
 }
 
@@ -299,10 +407,14 @@ struct MultiviewScreen: View {
                 } else {
                     grid(tiles)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                layoutBar
-                if session.guide {
-                    channelStrip
+                        .safeAreaInset(edge: .bottom, spacing: 8) {
+                            VStack(spacing: 8) {
+                                layoutBar
+                                if session.guide {
+                                    channelStrip
+                                }
+                            }
+                        }
                 }
             }
             .padding(12)
@@ -408,97 +520,50 @@ struct MultiviewScreen: View {
         if tiles.isEmpty {
             Text("Pick two channels.")
                 .foregroundStyle(.secondary)
-        } else if stacked, tiles.count >= 2 {
-            stackedPair(tiles[0], tiles[1])
         } else {
             GeometryReader { geo in
-                let gap: CGFloat = 8
-                switch session.layout {
-                case .side:
-                    HStack(spacing: gap) { tileRow(tiles) }
-                case .quad:
-                    let row = (geo.size.height - gap) / 2
-                    VStack(spacing: gap) {
-                        HStack(spacing: gap) {
-                            slot(tiles, 0, height: row)
-                            slot(tiles, 1, height: row)
-                        }
-                        HStack(spacing: gap) {
-                            slot(tiles, 2, height: row)
-                            slot(tiles, 3, height: row)
+                let frames = TileGeometry.frames(
+                    layout: session.layout,
+                    count: tiles.count,
+                    in: geo.size,
+                    stacked: stacked,
+                    split: session.split
+                )
+                ZStack(alignment: .topLeading) {
+                    ForEach(Array(tiles.enumerated()), id: \.element.id) { index, channel in
+                        if frames.indices.contains(index) {
+                            tile(channel)
+                                .frame(width: frames[index].width, height: frames[index].height)
+                                .offset(x: frames[index].minX, y: frames[index].minY)
                         }
                     }
-                case .oneTwo, .oneThree:
-                    let smalls = Array(tiles.dropFirst())
-                    let count = CGFloat(max(smalls.count, 1))
-                    let row = (geo.size.height - gap * (count - 1)) / count
-                    HStack(spacing: gap) {
-                        if let first = tiles.first {
-                            tile(first)
-                        }
-                        VStack(spacing: gap) {
-                            ForEach(smalls) { channel in
-                                tile(channel).frame(height: row)
-                            }
-                        }
-                        .frame(width: geo.size.width * (session.layout == .oneThree ? 0.32 : 0.38))
-                    }
-                case .pip:
-                    ZStack(alignment: .bottomTrailing) {
-                        if let first = tiles.first {
-                            tile(first)
-                        }
-                        if tiles.count > 1 {
-                            tile(tiles[1])
-                                .frame(width: min(360, geo.size.width * 0.32), height: min(202, geo.size.height * 0.32))
-                                .padding(16)
-                        }
+                    if stacked, tiles.count >= 2 {
+                        let handle = TileGeometry.stackedDivider(in: geo.size, split: session.split)
+                        Rectangle()
+                            .fill(.white.opacity(0.35))
+                            .frame(width: handle.width, height: handle.height)
+                            .offset(x: handle.minX, y: handle.minY)
+                            .accessibilityLabel("Divider")
+                        #if os(iOS)
+                            .gesture(
+                                DragGesture()
+                                    .onChanged { value in
+                                        if session.dragOrigin == nil {
+                                            session.dragOrigin = session.split
+                                        }
+                                        let base = session.dragOrigin ?? session.split
+                                        let span = max(geo.size.height - handle.height, 1)
+                                        session.split = min(0.75, max(0.25, base + value.translation.height / span))
+                                    }
+                                    .onEnded { _ in session.dragOrigin = nil }
+                            )
+                        #endif
                     }
                 }
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+                .clipped()
             }
         }
-    }
-
-    private func stackedPair(_ a: Channel, _ b: Channel) -> some View {
-        GeometryReader { geo in
-            let gap: CGFloat = 28
-            let top = max(80, (geo.size.height - gap) * session.split)
-            VStack(spacing: 0) {
-                tile(a).frame(height: top)
-                Rectangle()
-                    .fill(.white.opacity(0.35))
-                    .frame(height: gap)
-                    .accessibilityLabel("Divider")
-                #if os(iOS)
-                    .gesture(
-                        DragGesture()
-                            .onChanged { value in
-                                if session.dragOrigin == nil {
-                                    session.dragOrigin = session.split
-                                }
-                                let base = session.dragOrigin ?? session.split
-                                let span = max(geo.size.height - gap, 1)
-                                session.split = min(0.75, max(0.25, base + value.translation.height / span))
-                            }
-                            .onEnded { _ in session.dragOrigin = nil }
-                    )
-                #endif
-                tile(b).frame(height: max(80, geo.size.height - gap - top))
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func slot(_ tiles: [Channel], _ index: Int, height: CGFloat) -> some View {
-        if tiles.indices.contains(index) {
-            tile(tiles[index]).frame(maxWidth: .infinity).frame(height: height)
-        } else {
-            Color.clear.frame(maxWidth: .infinity).frame(height: height)
-        }
-    }
-
-    private func tileRow(_ tiles: [Channel]) -> some View {
-        ForEach(tiles) { tile($0) }
     }
 
     private func tile(_ channel: Channel) -> some View {
@@ -645,7 +710,7 @@ struct PlayerLayerBox: UIViewRepresentable {
     func makeUIView(context _: Context) -> PlayerHost {
         let view = PlayerHost()
         view.playerLayer?.player = player
-        view.playerLayer?.videoGravity = .resizeAspect
+        view.playerLayer?.videoGravity = .resizeAspectFill
         return view
     }
 
