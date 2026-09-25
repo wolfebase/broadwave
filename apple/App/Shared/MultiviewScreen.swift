@@ -230,6 +230,9 @@ final class TilePlayer {
     private(set) var error: String?
     private(set) var detail = ""
     private(set) var dropped = 0
+    /// True only after this tile's own item has been told to play. Unmuting the
+    /// previous item is not sound yet.
+    private(set) var canHear = false
     private var audible = false
     private var attempts = 0
     private var channelID: Int64?
@@ -250,6 +253,7 @@ final class TilePlayer {
     func start(_ request: Request, room: String, store: AppStore, bind: @escaping (@escaping (String) -> Void) -> Void) async {
         let channel = request.channel
         let prefs = request.prefs
+        canHear = false
         await stop()
         guard let api = store.api else { return }
         self.api = api
@@ -271,6 +275,7 @@ final class TilePlayer {
             player.automaticallyWaitsToMinimizeStalling = true
             applyAudible()
             player.play()
+            canHear = request.audible
             if let socket = store.socket {
                 let engine = SyncEngine(player: player, socket: socket, room: room, channelID: channel.id)
                 engine.start()
@@ -292,7 +297,12 @@ final class TilePlayer {
 
     func setAudible(_ on: Bool) {
         audible = on
-        applyAudible()
+        // Muting is immediate. Unmuting waits until start() has replaced the item,
+        // so the previous silent rendition is not counted as sound.
+        if !on {
+            canHear = false
+            applyAudible()
+        }
     }
 
     func stop() async {
@@ -306,6 +316,7 @@ final class TilePlayer {
         }
         session = nil
         channelID = nil
+        canHear = false
     }
 
     private func applyAudible() {
@@ -838,7 +849,7 @@ struct MultiviewTile: View {
             .task(id: focused) {
                 guard focused else { return }
                 while !Task.isCancelled {
-                    if live.player.timeControlStatus == .playing, !live.player.isMuted {
+                    if live.canHear, live.player.timeControlStatus == .playing, !live.player.isMuted {
                         onSound()
                         return
                     }
