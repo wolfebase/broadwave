@@ -106,11 +106,11 @@ func TestScanTypeMatrix(t *testing.T) {
 		forbid  []string
 	}
 	rows := []row{
-		{"1080i vaapi", Source{VideoCodec: "MPEG2"}, "h264_vaapi", []string{"-hwaccel_output_format vaapi", "deinterlace_vaapi=mode=motion_adaptive:rate=field", "-rc_mode VBR", "-profile:v high", "-bf 2"}, []string{"bwdif", "pullup", "fps=", "hwupload"}},
+		{"1080i vaapi", Source{VideoCodec: "MPEG2"}, "h264_vaapi", []string{"-hwaccel_output_format vaapi", "deinterlace_vaapi=mode=motion_adaptive:rate=field", "-sei 0", "-rc_mode VBR", "-profile:v high", "-bf 2"}, []string{"bwdif", "pullup", "fps=", "hwupload"}},
 		{"1080i libx264", Source{VideoCodec: "MPEG2"}, "libx264", []string{"bwdif=mode=send_field", "fps=60000/1001"}, []string{"deinterlace_vaapi", "pullup"}},
 		{"1080i videotoolbox", Source{VideoCodec: "MPEG2"}, "h264_videotoolbox", []string{"bwdif=mode=send_field", "fps=60000/1001", "-a53cc 0"}, []string{"pullup"}},
 		{"480i libx264", Source{VideoCodec: "MPEG2"}, "libx264", []string{"bwdif=mode=send_field", "fps=60000/1001", "min(1920,iw)"}, []string{"pullup"}},
-		{"720p vaapi", Source{VideoCodec: "MPEG2", Progressive: true}, "h264_vaapi", []string{"-hwaccel_output_format vaapi", "scale_vaapi=w='min(1920,iw)'"}, []string{"deinterlace_vaapi", "bwdif", "fps=", "pullup", "hwupload"}},
+		{"720p vaapi", Source{VideoCodec: "MPEG2", Progressive: true}, "h264_vaapi", []string{"-hwaccel_output_format vaapi", "scale_vaapi=w='min(1920,iw)'", "-sei 0"}, []string{"deinterlace_vaapi", "bwdif", "fps=", "pullup", "hwupload"}},
 		{"720p libx264", Source{VideoCodec: "MPEG2", Progressive: true}, "libx264", []string{"scale='min(1920,iw)'"}, []string{"bwdif", "fps=", "pullup"}},
 		{"720p videotoolbox", Source{VideoCodec: "MPEG2", Progressive: true}, "h264_videotoolbox", []string{"scale='min(1920,iw)'", "-a53cc 0"}, []string{"bwdif", "fps="}},
 		{"h264 paff vaapi", Source{VideoCodec: "H264"}, "h264_vaapi", []string{"-hwaccel_output_format vaapi", "deinterlace_vaapi=mode=motion_adaptive:rate=field"}, []string{"bwdif", "pullup", "hwupload"}},

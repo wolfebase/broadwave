@@ -261,7 +261,9 @@ func videoCodec(encoder, rate string, gop int) []string {
 		return []string{"-c:v", "h264_qsv", "-preset", "veryfast", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
 	case "h264_vaapi":
 		// UHD 770 keeps B-frames with the normal encoder. Low-power rejects them.
-		return []string{"-c:v", "h264_vaapi", "-rc_mode", "VBR", "-profile:v", "high", "-bf", "2", "-low_power", "0", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
+		// The packed-header buffer is 1024 bytes. An OTA caption SEI overflows it
+		// ("Access unit too large", errno 28) and the encoder exits. Same as HEVC.
+		return []string{"-c:v", "h264_vaapi", "-sei", "0", "-rc_mode", "VBR", "-profile:v", "high", "-bf", "2", "-low_power", "0", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
 	case "hevc_vaapi":
 		// The packed-header buffer is 1024 bytes. An OTA caption SEI overflows it
 		// ("Access unit too large: 8192 < N", errno 28) and the encoder exits.
