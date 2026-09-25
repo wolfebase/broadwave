@@ -107,6 +107,8 @@ def check_docker(text):
             if skip:
                 skip = False
                 continue
+            if re.match(r"^\d*[<>]", w) or w in ("|", "&&", "||"):
+                break
             if w.startswith("-"):
                 if w in ("-t", "--time", "-s", "--signal", "-u", "--user", "-w", "--workdir", "-e", "--env",
                          "--cpus", "--memory", "-m", "--restart"):
