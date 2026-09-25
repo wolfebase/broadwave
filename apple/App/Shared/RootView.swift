@@ -47,8 +47,11 @@ struct RootView: View {
         Group {
             if !store.connected {
                 ConnectView()
-            } else if showSetup {
-                SetupWizard { showSetup = false }
+            } else if showSetup || store.presentSetup {
+                SetupWizard {
+                    showSetup = false
+                    store.presentSetup = false
+                }
             } else {
                 tabs
             }

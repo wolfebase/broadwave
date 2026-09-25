@@ -193,6 +193,124 @@ public struct APIClient: Sendable {
     public func artURL(kind: String, id: Int64, width: Int) -> URL {
         url("/media/art/\(kind)/\(id)?w=\(width)")
     }
+
+    // MARK: Setup
+
+    public struct FoundHit: Decodable, Sendable, Hashable, Identifiable {
+        public var kind: String
+        public var name: String
+        public var addr: String
+        public var deviceID: String?
+        public var id: String {
+            kind + "-" + addr
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case kind, name, addr
+            case deviceID = "id"
+        }
+    }
+
+    public struct FreeFeed: Decodable, Sendable, Hashable, Identifiable {
+        public var kind: String
+        public var name: String
+        public var addr: String
+        public var playlist: String
+        public var guide: String
+        public var id: String {
+            playlist.isEmpty ? kind + "-" + addr : playlist
+        }
+    }
+
+    public struct ScanProgress: Decodable, Sendable {
+        public var scanning: Bool
+        public var found: Int
+    }
+
+    public struct StorageInfo: Decodable, Sendable {
+        public var freeBytes: Int64
+        public var totalBytes: Int64
+        public var watermarkGB: Int
+    }
+
+    public struct StarredChannel: Decodable, Sendable {
+        public var id: Int64
+        public var guideName: String?
+        public var displayNumber: String?
+        public var network: String
+    }
+
+    public func devices() async throws -> [Device] {
+        struct R: Decodable { var devices: [Device] }
+        return try await send("GET", "/devices", as: R.self).devices
+    }
+
+    public func discover(ip: String) async throws -> [Device] {
+        struct B: Encodable { var ip: String }
+        struct R: Decodable { var devices: [Device] }
+        return try await send("POST", "/sources/discover", body: B(ip: ip), as: R.self).devices
+    }
+
+    public func lookHarder() async throws -> [FoundHit] {
+        struct R: Decodable { var found: [FoundHit] }
+        return try await send("POST", "/sources/look", body: [String: String](), as: R.self).found
+    }
+
+    public func freeSources() async throws -> (found: [FreeFeed], guide: String) {
+        struct R: Decodable { var found: [FreeFeed]; var guide: String }
+        let res = try await send("GET", "/sources/free", as: R.self)
+        return (res.found, res.guide)
+    }
+
+    public func addFree(kind: String, addr: String, playlist: String, guide: String, name: String) async throws -> String {
+        struct B: Encodable { var kind, addr, playlist, guide, name: String }
+        struct R: Decodable { var message: String? }
+        let res = try await send("POST", "/sources/free", body: B(kind: kind, addr: addr, playlist: playlist, guide: guide, name: name), as: R.self)
+        return res.message ?? ""
+    }
+
+    public struct SourceAdd: Decodable, Sendable {
+        public var pick: Bool?
+        public var message: String?
+    }
+
+    public func addPlaylist(kind: String, url: String, username: String, password: String) async throws -> SourceAdd {
+        struct B: Encodable {
+            var kind, name, url, username, password: String
+        }
+        return try await send("POST", "/sources", body: B(kind: kind, name: "", url: url, username: username, password: password))
+    }
+
+    public func startScan(deviceID: String) async throws {
+        struct R: Decodable { var scanning: Bool }
+        let id = deviceID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? deviceID
+        _ = try await send("POST", "/devices/\(id)/scan", body: [String: String](), as: R.self)
+    }
+
+    public func scanStatus(deviceID: String) async throws -> ScanProgress {
+        let id = deviceID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? deviceID
+        return try await send("GET", "/devices/\(id)/scan")
+    }
+
+    public func storage() async throws -> StorageInfo {
+        try await send("GET", "/storage")
+    }
+
+    public func guideAirings() async throws -> Int {
+        struct G: Decodable { var airings: Int? }
+        struct R: Decodable { var guide: G? }
+        return try await send("GET", "/diagnostics", as: R.self).guide?.airings ?? 0
+    }
+
+    public func refreshGuide() async throws -> Int {
+        struct R: Decodable { var airings: Int }
+        return try await send("POST", "/guide/refresh", body: [String: String](), as: R.self).airings
+    }
+
+    public func starNetworks() async throws -> [StarredChannel] {
+        struct R: Decodable { var starred: [StarredChannel] }
+        return try await send("POST", "/channels/star", body: [String: String](), as: R.self).starred
+    }
 }
 
 extension ISO8601DateFormatter {

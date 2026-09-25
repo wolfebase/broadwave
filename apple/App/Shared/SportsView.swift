@@ -129,6 +129,7 @@ struct SettingsView: View {
                         LabeledContent("Encoding", value: enc.replacingOccurrences(of: "h264_", with: "").uppercased())
                     }
                 }
+                Button("Run setup again") { store.presentSetup = true }
                 Button("Use a different server", role: .destructive) { store.forget() }
             }
             Section {

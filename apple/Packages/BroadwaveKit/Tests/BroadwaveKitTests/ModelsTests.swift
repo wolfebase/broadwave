@@ -18,6 +18,8 @@ private func fixture(_ name: String) throws -> Data {
     let channels = try APIClient.decoder.decode(Channels.self, from: fixture("channels")).channels
     #expect(!channels.isEmpty)
     #expect(channels.allSatisfy { !$0.displayNumber.isEmpty })
+    #expect(channels.first { $0.guideName == "WDAF" }?.network == "FOX")
+    #expect(channels.first { $0.guideName == "WDAF2" }?.network == nil)
 
     let airings = try APIClient.decoder.decode(Airings.self, from: fixture("airings")).airings
     #expect(!airings.isEmpty)

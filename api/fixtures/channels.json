@@ -12,6 +12,7 @@
       "hd": true,
       "hidden": false,
       "id": 1,
+      "network": "FOX",
       "present": true,
       "videoCodec": "MPEG2"
     },
@@ -42,6 +43,7 @@
       "hd": true,
       "hidden": false,
       "id": 3,
+      "network": "CBS",
       "present": true,
       "videoCodec": "MPEG2"
     }

@@ -16,6 +16,8 @@ public final class AppStore {
     public private(set) var loading = false
     public var error: String?
     public var now = Date()
+    /// Settings asks the shell to show setup again. A used catalog never sets needsSetup.
+    public var presentSetup = false
 
     public var prefs: Prefs {
         didSet { save(prefs, "prefs") }

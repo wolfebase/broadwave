@@ -1,6 +1,6 @@
 import qrcode from "qrcode-generator";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { addFree, addPlaylistFile, addSource, findFree, lookHarder, refreshGuide, startScan, type FreeFeed } from "../../api";
+import { addFree, addPlaylistFile, addSource, findFree, lookHarder, refreshGuide, scanStatus, starNetworks, startScan, type FreeFeed } from "../../api";
 import { useData } from "../../app/data";
 import { navigate } from "../../app/router";
 import { ChevronIcon } from "../../ui/icons";
@@ -44,23 +44,35 @@ export function Setup() {
     const tuner = devices.find((d) => d.tunerCount > 0);
     if (!tuner || channels.length > 0) return;
     scanned.current = true;
-    queueMicrotask(() => setBusy(true));
-    void startScan(tuner.deviceId)
-      .then(() => refresh(["channels", "devices"]))
-      .catch((e: unknown) => setNote(e instanceof Error ? e.message : "The scan did not start."))
-      .finally(() => setBusy(false));
+    queueMicrotask(() => {
+      setBusy(true);
+      setNote("Scanning for channels.");
+    });
+    void (async () => {
+      try {
+        await startScan(tuner.deviceId);
+        for (let i = 0; i < 40; i++) {
+          const prog = await scanStatus(tuner.deviceId);
+          setNote(prog.scanning ? `Scanning for channels. ${prog.found} found.` : "");
+          if (!prog.scanning) break;
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+        await refresh(["channels", "devices"]);
+      } catch (e: unknown) {
+        setNote(e instanceof Error ? e.message : "The scan did not start.");
+      } finally {
+        setBusy(false);
+      }
+    })();
   }, [step, devices, channels.length, refresh]);
 
   useEffect(() => {
     if (step !== "channels" || starred.current || channels.length === 0) return;
-    const picks = channels.filter((ch) => bigFour(ch) && !ch.favorite && !ch.hidden);
-    if (picks.length === 0) {
-      starred.current = true;
-      return;
-    }
     starred.current = true;
-    void Promise.all(picks.map((ch) => editChannel(ch, { favorite: true }))).then(() => refresh(["channels"]));
-  }, [step, channels, editChannel, refresh]);
+    void starNetworks()
+      .then(() => refresh(["channels"]))
+      .catch(() => undefined);
+  }, [step, channels.length, refresh]);
 
   useEffect(() => {
     if (step !== "guide" || devices.length === 0 || pulledGuide.current) return;
@@ -72,11 +84,14 @@ export function Setup() {
     pulledGuide.current = true;
     queueMicrotask(() => setBusy(true));
     void refreshGuide()
-      .then((r) => setNote(`Loaded ${r.airings} listings.`))
+      .then((r) => {
+        setNote(`Loaded ${r.airings} listings.`);
+        return starNetworks();
+      })
       .catch((e: unknown) => setNote(e instanceof Error ? e.message : "Listings did not load."))
       .finally(() => {
         setBusy(false);
-        void refresh(["airings"]);
+        void refresh(["airings", "channels"]);
       });
   }, [step, devices.length, diag, refresh]);
 
@@ -269,6 +284,7 @@ export function Setup() {
               <li key={ch.id}>
                 {ch.artUrl ? <img src={ch.artUrl} alt="" /> : <span className="ch-fallback">{ch.displayNumber || ch.guideNumber}</span>}
                 <span>{ch.displayName || ch.guideName}</span>
+                {ch.network ? <span className="dim">{ch.network}</span> : null}
                 <button type="button" className="btn" aria-pressed={ch.favorite} onClick={() => void editChannel(ch, { favorite: !ch.favorite })}>
                   {ch.favorite ? "Favorite" : "Add favorite"}
                 </button>
@@ -385,11 +401,6 @@ function Stat({ value, label }: { value: number | string; label: string }) {
 
 function formatTB(bytes: number) {
   return bytes >= 1e12 ? `${(bytes / 1e12).toFixed(1)} TB` : `${Math.round(bytes / 1e9)} GB`;
-}
-
-function bigFour(ch: Channel) {
-  const name = `${ch.guideName} ${ch.displayName}`.toUpperCase();
-  return /\b(ABC|CBS|FOX|NBC)\b/.test(name);
 }
 
 function shopping(ch: Channel) {

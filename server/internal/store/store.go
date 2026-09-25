@@ -48,6 +48,8 @@ type Channel struct {
 	ArtURL        string `json:"artUrl,omitempty"`
 	ArtWidth      int    `json:"artWidth,omitempty"`
 	ArtHeight     int    `json:"artHeight,omitempty"`
+	// Network is ABC, CBS, FOX, or NBC when a guide said so. Empty means the caller fills it from the call sign.
+	Network string `json:"network,omitempty"`
 }
 
 type ChannelPatch struct {
@@ -238,7 +240,7 @@ FROM devices ORDER BY priority, friendly_name`)
 
 func (s *Store) Channels(ctx context.Context, guideOnly bool) ([]Channel, error) {
 	q := `SELECT id, device_id, guide_number, guide_name, custom_number, custom_name,
-		video_codec, audio_codec, hd, favorite, enabled, hidden, present, guide_key, art_url, art_width, art_height FROM channels`
+		video_codec, audio_codec, hd, favorite, enabled, hidden, present, guide_key, art_url, art_width, art_height, network FROM channels`
 	if guideOnly {
 		q += ` WHERE present=1 AND enabled=1 AND hidden=0`
 	}
@@ -253,7 +255,7 @@ func (s *Store) Channels(ctx context.Context, guideOnly bool) ([]Channel, error)
 		var customNumber, customName string
 		var hd, fav, en, hidden, present int
 		if err := rows.Scan(&ch.ID, &ch.DeviceID, &ch.GuideNumber, &ch.GuideName, &customNumber, &customName,
-			&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present, &ch.GuideKey, &ch.ArtURL, &ch.ArtWidth, &ch.ArtHeight); err != nil {
+			&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present, &ch.GuideKey, &ch.ArtURL, &ch.ArtWidth, &ch.ArtHeight, &ch.Network); err != nil {
 			return nil, err
 		}
 		ch.HD = hd != 0
@@ -282,6 +284,20 @@ func (s *Store) Channels(ctx context.Context, guideOnly bool) ([]Channel, error)
 		return cmp < 0
 	})
 	return out, nil
+}
+
+// SetNetworks stores a guide's network decision. Blank values are left alone.
+func (s *Store) SetNetworks(ctx context.Context, nets map[int64]string) error {
+	for id, net := range nets {
+		net = strings.TrimSpace(net)
+		if net == "" {
+			continue
+		}
+		if _, err := s.db.ExecContext(ctx, `UPDATE channels SET network = ? WHERE id = ?`, net, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) PatchChannel(ctx context.Context, id int64, patch ChannelPatch) (Channel, error) {

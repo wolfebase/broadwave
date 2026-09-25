@@ -56,6 +56,7 @@ export type Channel = {
   artUrl?: string;
   artWidth?: number;
   artHeight?: number;
+  network?: string;
 };
 
 export type ChannelPatch = {

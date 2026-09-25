@@ -96,8 +96,9 @@ public struct Channel: Codable, Sendable, Hashable, Identifiable {
     public var artUrl: String?
     public var artWidth: Int?
     public var artHeight: Int?
+    public var network: String?
 
-    public init(id: Int64, deviceId: String, guideNumber: String, guideName: String, displayNumber: String, displayName: String, videoCodec: String? = nil, audioCodec: String? = nil, hd: Bool, favorite: Bool, enabled: Bool, hidden: Bool, present: Bool, guideKey: String? = nil, artUrl: String? = nil, artWidth: Int? = nil, artHeight: Int? = nil) {
+    public init(id: Int64, deviceId: String, guideNumber: String, guideName: String, displayNumber: String, displayName: String, videoCodec: String? = nil, audioCodec: String? = nil, hd: Bool, favorite: Bool, enabled: Bool, hidden: Bool, present: Bool, guideKey: String? = nil, artUrl: String? = nil, artWidth: Int? = nil, artHeight: Int? = nil, network: String? = nil) {
         self.id = id
         self.deviceId = deviceId
         self.guideNumber = guideNumber
@@ -115,6 +116,7 @@ public struct Channel: Codable, Sendable, Hashable, Identifiable {
         self.artUrl = artUrl
         self.artWidth = artWidth
         self.artHeight = artHeight
+        self.network = network
     }
 }
 
