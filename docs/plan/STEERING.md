@@ -4,6 +4,12 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
+- 2026-09-25 12:10 · **Never trust a lane's reported evidence. Re-run it.** A round-22 lane wrote diffs and "Test output" as text (with fake `<tool_call>` tags) instead of running anything. Before merging any lane:
+  1. Diff its worktree yourself (`git -C <worktree> diff`); if the change isn't actually in the files, the lane did nothing.
+  2. Run the task's tests and `make check` yourself on `main` after applying it.
+  3. Put only output you produced in `PROGRESS.md` and commit messages, never numbers a lane reported.
+  4. If a lane's reply shows invented tool calls or output, discard it, delete its worktree, and redo the task in a fresh lane (or in Lane A).
+
 - 2026-09-25 11:45 · **AS6 answered (the owner delegated the call to the reviewer).** Keep ESPN's public scoreboard as the default provider, with these conditions, then unblock AS6 and record the decision in ADR 0011:
   1. Only the user's own server fetches scores (never the apps, never Wolfe Up), at the current polite refresh rates, and it caches responses.
   2. Settings > Sports shows "Scores from ESPN's public scoreboard" and a switch to turn live scores off (on by default); the switch stops all scoreboard requests.
