@@ -138,6 +138,7 @@ type feed struct {
 	renditions map[string]*rendition
 	recording  *recording
 	timeline   *Timeline
+	tracks     []AudioTrack
 	probing    bool
 	// exports counts raw MPEG-TS readers such as Plex or Jellyfin using the emulated tuner.
 	exports int
@@ -431,7 +432,7 @@ func (h *Hub) addFeedLocked(m *mux, ch store.SourceChannel) *feed {
 	}
 	m.feeds[ch.GuideNumber] = f
 	h.channels[ch.ID] = f
-	if ch.FieldOrder == "" && m.input == "" {
+	if m.input == "" && (ch.FieldOrder == "" || len(f.tracks) == 0) {
 		h.learnScanLocked(m, f)
 	}
 	return f
@@ -456,7 +457,7 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	if m := muxOf(h, f); m != nil && m.input != "" {
 		input = m.input
 	}
-	args := renditionArgs(f.program, f.source, want, h.Encoder, h.deintFor(want.Mode, f.source.VideoCodec), h.Blend, input)
+	args := renditionArgs(f.program, f.sourceFor(want), want, h.Encoder, h.deintFor(want.Mode, f.source.VideoCodec), h.Blend, input)
 	cmd := exec.Command(h.FFmpeg, args...)
 	cmd.Dir = dir
 	var stdin io.WriteCloser
@@ -513,7 +514,7 @@ func (h *Hub) watchRendition(f *feed, r *rendition, pid int, encoder string) {
 	if m := muxOf(h, f); m != nil && m.input != "" {
 		input = m.input
 	}
-	args := renditionArgs(f.program, f.source, r.spec, "libx264", "", h.Blend, input)
+	args := renditionArgs(f.program, f.sourceFor(r.spec), r.spec, "libx264", "", h.Blend, input)
 	cmd := exec.Command(h.FFmpeg, args...)
 	cmd.Dir = r.dir
 	var stdin io.WriteCloser

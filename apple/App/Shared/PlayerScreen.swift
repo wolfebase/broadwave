@@ -80,7 +80,7 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack(alignment: .top) {
             Color.black.ignoresSafeArea()
-            SystemPlayer(player: live.player, menu: channelMenu) {
+            SystemPlayer(player: live.player, menu: channelMenu, audio: audioMenu) {
                 if let channel = nowPlaying.channel {
                     nowPlaying.watchTogether([channel])
                 }
@@ -96,7 +96,7 @@ struct PlayerScreen: View {
                     .padding(.top, 80)
             }
         }
-        .task(id: nowPlaying.channel?.id) {
+        .task(id: "\(nowPlaying.channel?.id ?? 0) \(store.prefs.track ?? "") \(store.prefs.even)") {
             if let channel = nowPlaying.channel {
                 await live.start(channel, store: store)
             }
@@ -110,6 +110,24 @@ struct PlayerScreen: View {
         guard let current = nowPlaying.channel, let i = store.channels.firstIndex(of: current) else { return }
         let next = store.channels[(i + dir + store.channels.count) % store.channels.count]
         nowPlaying.channel = next
+    }
+
+    private var audioMenu: [ChannelMenuEntry] {
+        let current = store.prefs.track ?? "main"
+        func choice(_ num: Int64, _ id: String, _ title: String) -> ChannelMenuEntry {
+            ChannelMenuEntry(id: num, title: title, current: current == id) {
+                var prefs = store.prefs
+                prefs.track = id == "main" ? nil : id
+                store.prefs = prefs
+            }
+        }
+        var items = [choice(1, "main", "Main"), choice(2, "language", "Second language"), choice(3, "described", "Described video")]
+        items.append(ChannelMenuEntry(id: -1, title: store.prefs.even ? "Even volume on" : "Even volume", current: store.prefs.even) {
+            var prefs = store.prefs
+            prefs.even.toggle()
+            store.prefs = prefs
+        })
+        return items
     }
 
     /// tvOS: a Channels menu in the transport bar lets you surf without leaving the player.
@@ -149,6 +167,19 @@ struct PlayerScreen: View {
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.glass)
+                Menu("Audio", systemImage: "speaker.wave.2") {
+                    ForEach(audioMenu) { entry in
+                        Button(action: entry.action) {
+                            if entry.current {
+                                Label(entry.title, systemImage: "checkmark")
+                            } else {
+                                Text(entry.title)
+                            }
+                        }
+                    }
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.glass)
                 GlassEffectContainer {
                     HStack(spacing: 6) {
                         Button("Previous channel", systemImage: "chevron.up") { step(-1) }
@@ -184,6 +215,7 @@ struct ChannelMenuEntry: Identifiable {
 struct SystemPlayer: UIViewControllerRepresentable {
     let player: AVPlayer
     var menu: [ChannelMenuEntry] = []
+    var audio: [ChannelMenuEntry] = []
     var onTogether: () -> Void = {}
 
     func makeUIViewController(context _: Context) -> AVPlayerViewController {
@@ -207,8 +239,12 @@ struct SystemPlayer: UIViewControllerRepresentable {
             let actions = menu.map { entry in
                 UIAction(title: entry.title, state: entry.current ? .on : .off) { _ in entry.action() }
             }
+            let audioActions = audio.map { entry in
+                UIAction(title: entry.title, state: entry.current ? .on : .off) { _ in entry.action() }
+            }
             let together = UIAction(title: "Side by side", image: UIImage(systemName: "rectangle.split.2x1")) { _ in onTogether() }
-            vc.transportBarCustomMenuItems = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions), together]
+            let audioMenu = UIMenu(title: "Audio", image: UIImage(systemName: "speaker.wave.2"), children: audioActions)
+            vc.transportBarCustomMenuItems = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions), audioMenu, together]
         #endif
     }
 }

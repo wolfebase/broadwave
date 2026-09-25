@@ -51,11 +51,39 @@ public struct Prefs: Codable, Sendable, Hashable {
     public var quality: Quality
     public var audio: Sound
     public var picture: String?
+    /// main, language, or described. Empty plays the main mix.
+    public var track: String?
+    /// Levels the volume. Off keeps the original mix.
+    public var even: Bool
 
-    public init(quality: Quality = .auto, audio: Sound = .auto, picture: String? = nil) {
+    public init(quality: Quality = .auto, audio: Sound = .auto, picture: String? = nil, track: String? = nil, even: Bool = false) {
         self.quality = quality
         self.audio = audio
         self.picture = picture
+        self.track = track
+        self.even = even
+    }
+
+    private enum CodingKeys: String, CodingKey { case quality, audio, picture, track, even }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        quality = try c.decodeIfPresent(Quality.self, forKey: .quality) ?? .auto
+        audio = try c.decodeIfPresent(Sound.self, forKey: .audio) ?? .auto
+        picture = try c.decodeIfPresent(String.self, forKey: .picture)
+        track = try c.decodeIfPresent(String.self, forKey: .track)
+        even = try c.decodeIfPresent(Bool.self, forKey: .even) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(quality, forKey: .quality)
+        try c.encode(audio, forKey: .audio)
+        try c.encodeIfPresent(picture, forKey: .picture)
+        try c.encodeIfPresent(track, forKey: .track)
+        if even {
+            try c.encode(true, forKey: .even)
+        }
     }
 }
 

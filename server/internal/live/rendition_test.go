@@ -19,18 +19,21 @@ func TestDecide(t *testing.T) {
 		p    Prefs
 		want string
 	}{
-		{"apple tv gets the original h264 with dolby", Source{"H264", "AC3", true, false, "", ""}, apple, Prefs{}, "copy.copy"},
-		{"mpeg-2 is converted but keeps dolby on apple tv", Source{"MPEG2", "AC3", false, false, "", ""}, apple, Prefs{}, "1080.copy.broadcast.hevc"},
-		{"browser keeps h264 picture, converts sound", Source{"H264", "AC3", true, false, "", ""}, web, Prefs{}, "copy.aac2"},
-		{"unprobed h264 is deinterlaced, not copied", Source{"H264", "AC3", false, false, "", ""}, web, Prefs{}, "1080.aac2.broadcast"},
-		{"cellular drops to 720", Source{"MPEG2", "AC3", false, false, "", ""}, Caps{Platform: "ios", Video: []string{"h264"}, Audio: []string{"ac3", "aac"}, Network: "cellular"}, Prefs{}, "720.copy.broadcast"},
-		{"saver is small and stereo", Source{"MPEG2", "AC3", false, false, "", ""}, apple, Prefs{Quality: "saver"}, "540.aac2.broadcast.hevc"},
-		{"a tile is 540 and silent", Source{"MPEG2", "AC3", false, false, "", ""}, apple, Prefs{Quality: "tile"}, "540.none.broadcast.hevc"},
-		{"the smaller tile is 360", Source{"MPEG2", "AC3", false, false, "", ""}, apple, Prefs{Quality: "360", Audio: "none"}, "360.none.broadcast.hevc"},
-		{"a tile can keep sound when asked", Source{"MPEG2", "AC3", false, false, "", ""}, apple, Prefs{Quality: "tile", Audio: "stereo"}, "540.aac2.broadcast.hevc"},
-		{"surround without dolby decode is 5.1 aac", Source{"MPEG2", "AC3", false, false, "", ""}, web, Prefs{Audio: "surround"}, "1080.aac6.broadcast"},
-		{"film mode is part of the key", Source{"MPEG2", "AC3", false, false, "", ""}, web, Prefs{Picture: "film"}, "1080.aac2.film"},
-		{"small screens cap the height", Source{"MPEG2", "AC3", false, false, "", ""}, Caps{Video: []string{"h264"}, Audio: []string{"aac"}, MaxHeight: 720}, Prefs{}, "720.aac2.broadcast"},
+		{"apple tv gets the original h264 with dolby", Source{"H264", "AC3", true, false, "", "", 0}, apple, Prefs{}, "copy.copy"},
+		{"mpeg-2 is converted but keeps dolby on apple tv", Source{"MPEG2", "AC3", false, false, "", "", 0}, apple, Prefs{}, "1080.copy.broadcast.hevc"},
+		{"browser keeps h264 picture, converts sound", Source{"H264", "AC3", true, false, "", "", 0}, web, Prefs{}, "copy.aac2"},
+		{"unprobed h264 is deinterlaced, not copied", Source{"H264", "AC3", false, false, "", "", 0}, web, Prefs{}, "1080.aac2.broadcast"},
+		{"cellular drops to 720", Source{"MPEG2", "AC3", false, false, "", "", 0}, Caps{Platform: "ios", Video: []string{"h264"}, Audio: []string{"ac3", "aac"}, Network: "cellular"}, Prefs{}, "720.copy.broadcast"},
+		{"saver is small and stereo", Source{"MPEG2", "AC3", false, false, "", "", 0}, apple, Prefs{Quality: "saver"}, "540.aac2.broadcast.hevc"},
+		{"a tile is 540 and silent", Source{"MPEG2", "AC3", false, false, "", "", 0}, apple, Prefs{Quality: "tile"}, "540.none.broadcast.hevc"},
+		{"the smaller tile is 360", Source{"MPEG2", "AC3", false, false, "", "", 0}, apple, Prefs{Quality: "360", Audio: "none"}, "360.none.broadcast.hevc"},
+		{"a tile can keep sound when asked", Source{"MPEG2", "AC3", false, false, "", "", 0}, apple, Prefs{Quality: "tile", Audio: "stereo"}, "540.aac2.broadcast.hevc"},
+		{"surround without dolby decode is 5.1 aac", Source{"MPEG2", "AC3", false, false, "", "", 0}, web, Prefs{Audio: "surround"}, "1080.aac6.broadcast"},
+		{"film mode is part of the key", Source{"MPEG2", "AC3", false, false, "", "", 0}, web, Prefs{Picture: "film"}, "1080.aac2.film"},
+		{"small screens cap the height", Source{"MPEG2", "AC3", false, false, "", "", 0}, Caps{Video: []string{"h264"}, Audio: []string{"aac"}, MaxHeight: 720}, Prefs{}, "720.aac2.broadcast"},
+		{"second language is its own rendition", Source{"MPEG2", "AC3", false, false, "", "", 0}, apple, Prefs{Track: "language"}, "1080.copy.broadcast.lang.hevc"},
+		{"even volume re-encodes passthrough", Source{"MPEG2", "AC3", false, false, "", "", 0}, apple, Prefs{Even: true}, "1080.aac6.broadcast.even.hevc"},
+		{"described video on the web", Source{"H264", "AC3", true, false, "", "", 0}, web, Prefs{Track: "described"}, "copy.aac2.vi"},
 	}
 	for _, c := range cases {
 		got := Decide(c.src, c.caps, c.p)
@@ -44,7 +47,7 @@ func TestDecide(t *testing.T) {
 }
 
 func TestRenditionKeyRoundTrip(t *testing.T) {
-	for _, key := range []string{"copy.copy", "copy.aac2", "1080.copy.broadcast", "1080.copy.broadcast.hevc", "540.aac6.film", "540.none.broadcast", "360.none.broadcast"} {
+	for _, key := range []string{"copy.copy", "copy.aac2", "1080.copy.broadcast", "1080.copy.broadcast.hevc", "540.aac6.film", "540.none.broadcast", "360.none.broadcast", "1080.aac2.broadcast.lang.even.hevc", "copy.aac2.vi"} {
 		r, ok := ParseRenditionKey(key)
 		if !ok || r.Key() != key {
 			t.Errorf("%s did not round trip: %+v %v", key, r, ok)
@@ -85,6 +88,18 @@ func TestTileRenditionIsSilentAndSmall(t *testing.T) {
 	}
 	if strings.Contains(line, "-c:a") || strings.Contains(line, "0:a:0") {
 		t.Errorf("a silent tile must not encode audio: %s", line)
+	}
+}
+
+func TestRenditionMapsChosenPID(t *testing.T) {
+	src := Source{VideoCodec: "MPEG2", AudioCodec: "AC3", AudioPID: 0x102}
+	line := strings.Join(RenditionArgs(3, src, Rendition{Video: "1080", Audio: "copy"}, "libx264", "", false), " ")
+	if !strings.Contains(line, "-map 0:i:258") || strings.Contains(line, "a:0") {
+		t.Fatalf("sap pid: %s", line)
+	}
+	even := strings.Join(RenditionArgs(0, src, Rendition{Video: "1080", Audio: "aac2", Even: true, Mode: "broadcast"}, "libx264", "", false), " ")
+	if !strings.Contains(even, "loudnorm=I=-16:LRA=11:TP=-1.5") {
+		t.Fatalf("even volume: %s", even)
 	}
 }
 

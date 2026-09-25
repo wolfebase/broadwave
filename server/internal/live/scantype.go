@@ -477,7 +477,9 @@ func skipScaling(r *bitReader, chroma uint) bool {
 // elapses, stores it, and sets the feed source before a rendition starts.
 // A miss falls through to the background probe, which only helps the next tune.
 func (h *Hub) learnScanLocked(m *mux, f *feed) {
-	if f.channel.FieldOrder != "" || m == nil || m.input != "" {
+	needScan := f.channel.FieldOrder == ""
+	needAudio := len(f.tracks) == 0
+	if (!needScan && !needAudio) || m == nil || m.input != "" {
 		return
 	}
 	buf := &scanBuf{wake: make(chan struct{}, 1)}
@@ -489,8 +491,18 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 		buf.mu.Lock()
 		data := append([]byte(nil), buf.b...)
 		buf.mu.Unlock()
-		if got, ok := scanType(data, f.program); ok {
-			order = got
+		if needScan && order == "" {
+			if got, ok := scanType(data, f.program); ok {
+				order = got
+			}
+		}
+		if needAudio {
+			if tracks := AudioTracks(data, f.program); len(tracks) > 0 {
+				f.tracks = tracks
+				needAudio = false
+			}
+		}
+		if (!needScan || order != "") && !needAudio {
 			break
 		}
 		wait := time.Until(deadline)
@@ -505,21 +517,24 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 		timer.Stop()
 	}
 	m.detach(sub)
-	if order == "" {
+	if needScan && order == "" {
 		buf.mu.Lock()
 		n := len(buf.b)
 		buf.mu.Unlock()
 		log.Printf("scan type for %s program %d not in %s (%d bytes)", f.channel.GuideNumber, f.program, time.Since(started).Round(time.Millisecond), n)
 		h.probeFieldOrderLocked(m, f)
-		return
+	} else if order != "" {
+		log.Printf("scan type %s for %s in %s", order, f.channel.GuideNumber, time.Since(started).Round(time.Millisecond))
+		f.channel.FieldOrder = order
+		f.source.Progressive = order == "progressive"
+		f.source.Film = order == "film"
+		if h.Store != nil {
+			id := f.channel.ID
+			go func() { _ = h.Store.SetFieldOrder(context.Background(), id, order) }()
+		}
 	}
-	log.Printf("scan type %s for %s in %s", order, f.channel.GuideNumber, time.Since(started).Round(time.Millisecond))
-	f.channel.FieldOrder = order
-	f.source.Progressive = order == "progressive"
-	f.source.Film = order == "film"
-	if h.Store != nil {
-		id := f.channel.ID
-		go func() { _ = h.Store.SetFieldOrder(context.Background(), id, order) }()
+	if len(f.tracks) > 0 {
+		log.Printf("audio tracks for %s: %s", f.channel.GuideNumber, trackLog(f.tracks))
 	}
 }
 
