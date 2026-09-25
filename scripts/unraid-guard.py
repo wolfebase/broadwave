@@ -169,7 +169,13 @@ def check_http(cmd):
     return None
 
 
+DESKTOP = re.compile(r"\bcliclick\b|\b(keystroke|key code)\b|\bclick\s+(at|menu|button|UI element)\b|\bclick\b[^\n]*\bof\s+(process|window|menu)", re.I)
+
+
 def decide(cmd):
+    # This Mac is the owner's workstation: synthetic input lands in whatever app is in front.
+    if DESKTOP.search(cmd):
+        return "synthetic keystrokes or clicks on the Mac desktop (drive simulators with xcrun simctl only)"
     if not targets_tus(cmd):
         return check_http(cmd)
     text = remote_text(cmd)
@@ -194,7 +200,7 @@ def main():
     why = decide(cmd)
     if not why:
         return
-    reason = (f"Blocked by scripts/unraid-guard.py: {why}. On TUS you may only manage Broadwave-Staging, "
+    reason = (f"Blocked by scripts/unraid-guard.py: {why}. On the Mac, never send keystrokes or clicks; on TUS you may only manage Broadwave-Staging, "
               "wg-lab-* containers, and Broadwave in a phase deploy, under /mnt/cache/appdata/broadwave*. "
               "Leave every other container, share, plugin, and host setting alone. If this is truly needed, "
               "write it in docs/plan/BLOCKERS.md for the owner and move on.")
