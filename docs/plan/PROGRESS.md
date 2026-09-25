@@ -3,7 +3,7 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **Phase PB close**. Tag `v0.7.0` (includes the film-cadence fix and the iPad guide column), deploy it to TUS, then TestFlight. App Review unchanged at 2026-09-24 23:55 CDT: tvOS 1.0 REJECTED (Guideline 2.1, information needed), iOS 1.0 WAITING_FOR_REVIEW. The reply is in `docs/appstore/review-2.1-reply.md`; the owner sends it and records the videos. Production is still `ghcr.io/wolfebase/broadwave:0.6.0` (Debian ffmpeg 5.1). Staging on `:8490` is jellyfin-ffmpeg 7.1.4. Next recording Jeopardy 2026-09-25 20:00 UTC. Tuners released.
+- Current task: **Phase PB close**. `v0.7.0` is on production (jellyfin-ffmpeg 7.1.4). H.264 VAAPI hit "Access unit too large" on channel 1 and fell back to software. The fix is `-sei 0`, verified on staging: 1280x720 59.94, 240 frames, 0 decode errors, 0 "Access unit", tuner released. Tag `v0.7.1` and deploy it. TestFlight build 147 is uploaded for iOS and tvOS. App Review unchanged: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. Next recording Jeopardy 2026-09-25 20:00 UTC. Tuners released.
 - App Review: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-24 23:55 CDT (AS1). Check it at the start of every round.
 - Production `Broadwave` on TUS `:8477` is v0.6.0. Staging `Broadwave-Staging` is on `:8490`. Next recording: Jeopardy, 2026-09-25 20:00 UTC.
 - The repo is `~/Projects/active/broadwave`.

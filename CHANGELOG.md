@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.1 — 2026-09-25
+
+### Fixed
+
+- Captions no longer knock an H.264 stream off the graphics chip. The picture stays there instead of being rebuilt in software.
+
 ## 0.7.0 — 2026-09-24
 
 Live TV keeps the motion the station sent, and Apple devices get the surround mix.
