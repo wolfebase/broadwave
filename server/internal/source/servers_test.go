@@ -158,11 +158,14 @@ func TestEmulatorImportCases(t *testing.T) {
 			})
 			t.Run("auth", func(t *testing.T) {
 				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					http.Error(w, "no", http.StatusUnauthorized)
+					// A playlist body must not hide a refusal.
+					w.WriteHeader(http.StatusUnauthorized)
+					_, _ = w.Write([]byte(playlist))
 				}))
 				defer srv.Close()
-				if _, _, _, err := EmulatorM3U(t.Context(), tc.kind, srv.URL); err == nil || !strings.Contains(err.Error(), "channel list") {
-					t.Fatalf("rejected login: %v", err)
+				_, _, _, err := EmulatorM3U(t.Context(), tc.kind, srv.URL)
+				if err == nil || !strings.Contains(err.Error(), "refused") || strings.Contains(err.Error(), "channel list") {
+					t.Fatalf("rejected: %v", err)
 				}
 			})
 		})
