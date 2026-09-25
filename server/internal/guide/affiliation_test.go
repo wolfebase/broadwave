@@ -39,6 +39,23 @@ func TestAffiliationCallSign(t *testing.T) {
 	}
 }
 
+func TestAffiliationNumberedDTSubchannels(t *testing.T) {
+	if got := Affiliation(nil, "WDAF-DT"); got != "FOX" {
+		t.Fatalf("WDAF-DT: %q", got)
+	}
+	if got := Affiliation(nil, "WDAF-DT1"); got != "FOX" {
+		t.Fatalf("WDAF-DT1: %q", got)
+	}
+	for _, name := range []string{"WDAF-DT2", "WDAF-DT3", "WDAF-DT4", "KCTV-DT2"} {
+		if got := Affiliation(nil, name); got != "" {
+			t.Fatalf("%s matched %q", name, got)
+		}
+	}
+	if got := Affiliation([]string{"WDAFDT2"}); got != "" {
+		t.Fatalf("guide name WDAFDT2 matched %q", got)
+	}
+}
+
 func TestAffiliationDoesNotGuess(t *testing.T) {
 	for _, name := range []string{"FOX NEWS", "SHOPNBC", "WDAF2", "WFOX", "NOTNBC", "Jewelry"} {
 		if got := Affiliation([]string{name}); got != "" {

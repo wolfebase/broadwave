@@ -133,7 +133,8 @@ func normCall(s string) string {
 	s = strings.ToUpper(strings.TrimSpace(s))
 	s = strings.ReplaceAll(s, "-", "")
 	s = strings.ReplaceAll(s, " ", "")
-	for _, suf := range []string{"DT1", "DT2", "DT3", "DT4", "HD", "DT", "TV", "LD"} {
+	// DT2 and higher are subchannels (WDAF-DT2). Only a bare DT or DT1 is the primary.
+	for _, suf := range []string{"DT1", "HD", "DT", "TV", "LD"} {
 		if strings.HasSuffix(s, suf) && len(s)-len(suf) >= 3 {
 			s = strings.TrimSuffix(s, suf)
 		}
