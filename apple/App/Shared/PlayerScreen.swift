@@ -30,8 +30,8 @@ final class LivePlayer {
     private(set) var stallMs = 0
     private var stallStarted: Date?
     private var lastBeat = Date()
-    /// Nominal frame rate once the asset reports it. 59.94 until then.
-    private(set) var refreshRate: Float = 59.94
+    /// Nominal frame rate once the asset reports it. Zero until then.
+    private(set) var refreshRate: Float = 0
     private(set) var picture = PictureStats()
     private var statsTask: Task<Void, Never>?
 
@@ -55,7 +55,6 @@ final class LivePlayer {
             player.automaticallyWaitsToMinimizeStalling = true
             watchStartup(item)
             player.play()
-            await matchRate(item)
             watchPicture()
             if store.syncEnabled, let socket = store.socket {
                 let engine = SyncEngine(player: player, socket: socket, room: "channel:\(channel.id)", channelID: channel.id)
@@ -90,25 +89,22 @@ final class LivePlayer {
         channelID = nil
     }
 
-    private func matchRate(_ item: AVPlayerItem) async {
-        let tracks = await (try? item.asset.loadTracks(withMediaType: .video)) ?? []
-        let rate = await (try? tracks.first?.load(.nominalFrameRate)) ?? 0
-        if rate > 1 {
-            refreshRate = rate
-        }
-    }
-
     private func watchPicture() {
         statsTask?.cancel()
         statsTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
-                self?.samplePicture()
+                guard let self else { return }
+                var rate: Float = 0
+                if let item = player.currentItem {
+                    rate = await videoPicture(item).rate
+                }
+                samplePicture(rate: rate)
             }
         }
     }
 
-    private func samplePicture() {
+    private func samplePicture(rate: Float) {
         guard let item = player.currentItem else { return }
         var next = PictureStats()
         let size = item.presentationSize
@@ -129,6 +125,15 @@ final class LivePlayer {
         }
         if let event = item.accessLog()?.events.last {
             next.dropped = event.numberOfDroppedVideoFrames
+        }
+        let match = PlayerTuning.matchingDisplay(
+            width: next.width,
+            height: next.height,
+            rate: rate,
+            previous: DisplayMatch(refreshRate: refreshRate)
+        )
+        if match.refreshRate > 1 {
+            refreshRate = match.refreshRate
         }
         next.fps = refreshRate
         picture = next
@@ -205,7 +210,7 @@ struct PlayerScreen: View {
             Color.black.ignoresSafeArea()
             SystemPlayer(
                 player: live.player,
-                refreshRate: live.refreshRate,
+                hint: displayHint(live.session?.stream),
                 menu: channelMenu,
                 audio: audioMenu,
                 streamOn: showStream,
@@ -362,14 +367,18 @@ struct ChannelMenuEntry: Identifiable {
 /// AVPlayerViewController: system PiP, AirPlay, captions, audio tracks, and Now Playing.
 struct SystemPlayer: UIViewControllerRepresentable {
     let player: AVPlayer
-    var refreshRate: Float = 59.94
+    var hint = DisplayMatch()
     var menu: [ChannelMenuEntry] = []
     var audio: [ChannelMenuEntry] = []
     var streamOn = false
     var onStream: () -> Void = {}
     var onTogether: () -> Void = {}
 
-    func makeUIViewController(context _: Context) -> AVPlayerViewController {
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
         let vc = AVPlayerViewController()
         vc.player = player
         vc.allowsPictureInPicturePlayback = true
@@ -378,39 +387,48 @@ struct SystemPlayer: UIViewControllerRepresentable {
         #endif
         #if os(tvOS)
             vc.appliesPreferredDisplayCriteriaAutomatically = false
+            context.coordinator.start(vc)
         #endif
         return vc
     }
 
     #if os(tvOS)
-        static func dismantleUIViewController(_ vc: AVPlayerViewController, coordinator _: ()) {
+        static func dismantleUIViewController(_ vc: AVPlayerViewController, coordinator: Coordinator) {
+            coordinator.stop()
             vc.view.window?.avDisplayManager.preferredDisplayCriteria = nil
         }
 
-        /// SDR 8-bit. Broadcasts are not HDR; the refresh rate is what Match Frame Rate follows.
-        private func displayCriteria(refreshRate: Float) -> AVDisplayCriteria? {
+        /// SDR 8-bit at the asset's size. Broadcasts are not HDR.
+        private static func displayCriteria(_ match: DisplayMatch, format: CMFormatDescription?) -> AVDisplayCriteria? {
+            guard PlayerTuning.displayReady(match) else { return nil }
+            if let format {
+                let dims = CMVideoFormatDescriptionGetDimensions(format)
+                if Int(dims.width) == match.width, Int(dims.height) == match.height {
+                    return AVDisplayCriteria(refreshRate: match.refreshRate, formatDescription: format)
+                }
+            }
             var desc: CMFormatDescription?
             let status = CMVideoFormatDescriptionCreate(
                 allocator: kCFAllocatorDefault,
                 codecType: kCMVideoCodecType_H264,
-                width: 1920,
-                height: 1080,
+                width: Int32(match.width),
+                height: Int32(match.height),
                 extensions: nil,
                 formatDescriptionOut: &desc
             )
             guard status == noErr, let desc else { return nil }
-            return AVDisplayCriteria(refreshRate: refreshRate, formatDescription: desc)
+            return AVDisplayCriteria(refreshRate: match.refreshRate, formatDescription: desc)
         }
     #endif
 
-    func updateUIViewController(_ vc: AVPlayerViewController, context _: Context) {
+    func updateUIViewController(_ vc: AVPlayerViewController, context: Context) {
         if vc.player !== player {
             vc.player = player
         }
         #if os(tvOS)
-            if let criteria = displayCriteria(refreshRate: refreshRate) {
-                vc.view.window?.avDisplayManager.preferredDisplayCriteria = criteria
-            }
+            context.coordinator.start(vc)
+            context.coordinator.noteHint(hint, on: vc)
+            context.coordinator.sample(vc)
             let actions = menu.map { entry in
                 UIAction(title: entry.title, state: entry.current ? .on : .off) { _ in entry.action() }
             }
@@ -423,6 +441,147 @@ struct SystemPlayer: UIViewControllerRepresentable {
             vc.transportBarCustomMenuItems = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions), audioMenu, stream, together]
         #endif
     }
+
+    /// Reads the current item until its size and rate show up, then sets
+    /// Match Frame Rate. An early 59.94 is not applied, and a closed player
+    /// clears the mode while the window still exists.
+    @MainActor
+    final class Coordinator {
+        #if os(tvOS)
+            private var task: Task<Void, Never>?
+            private var match = DisplayMatch()
+            private var applied: DisplayMatch?
+            private var format: CMFormatDescription?
+            private var logged = ""
+
+            func start(_ vc: AVPlayerViewController) {
+                guard task == nil else { return }
+                task = Task { @MainActor in
+                    while !Task.isCancelled {
+                        await refresh(vc)
+                        try? await Task.sleep(for: .milliseconds(500))
+                    }
+                }
+            }
+
+            func stop() {
+                task?.cancel()
+                task = nil
+                match = DisplayMatch()
+                applied = nil
+                format = nil
+            }
+
+            func sample(_ vc: AVPlayerViewController) {
+                guard vc.player?.currentItem == nil else { return }
+                match = DisplayMatch()
+                format = nil
+                apply(vc)
+            }
+
+            private func refresh(_ vc: AVPlayerViewController) async {
+                guard let item = vc.player?.currentItem else {
+                    match = DisplayMatch()
+                    format = nil
+                    apply(vc)
+                    return
+                }
+                let picture = await videoPicture(item)
+                format = picture.format
+                match = PlayerTuning.matchingDisplay(
+                    width: picture.width,
+                    height: picture.height,
+                    rate: picture.rate,
+                    previous: match
+                )
+                apply(vc)
+            }
+
+            func noteHint(_ hint: DisplayMatch, on vc: AVPlayerViewController) {
+                let next = PlayerTuning.hintedDisplay(hint, current: match)
+                guard next != match else { return }
+                match = next
+                apply(vc)
+            }
+
+            private func apply(_ vc: AVPlayerViewController) {
+                guard let manager = vc.view.window?.avDisplayManager else {
+                    applied = nil
+                    return
+                }
+                guard let criteria = SystemPlayer.displayCriteria(match, format: format) else {
+                    if applied != nil {
+                        manager.preferredDisplayCriteria = nil
+                        applied = nil
+                        logDisplay("clear")
+                    }
+                    return
+                }
+                if applied == match {
+                    return
+                }
+                manager.preferredDisplayCriteria = criteria
+                applied = match
+                logDisplay("\(match.width)x\(match.height) \(match.refreshRate)")
+            }
+
+            private func logDisplay(_ message: String) {
+                guard message != logged else { return }
+                logged = message
+                print("broadwave display \(message)")
+                fflush(stdout)
+            }
+        #endif
+    }
+}
+
+private func displayHint(_ stream: StreamInfo?) -> DisplayMatch {
+    DisplayMatch(
+        width: stream?.outputWidth ?? 0,
+        height: stream?.outputHeight ?? 0,
+        refreshRate: fpsValue(stream?.outputFps)
+    )
+}
+
+private func fpsValue(_ text: String?) -> Float {
+    guard let text, let value = Float(text), value > 1 else { return 0 }
+    return value
+}
+
+private struct VideoPicture {
+    var width = 0
+    var height = 0
+    var rate: Float = 0
+    var format: CMFormatDescription?
+}
+
+@MainActor
+private func videoPicture(_ item: AVPlayerItem) async -> VideoPicture {
+    var picture = VideoPicture()
+    let tracks = await (try? item.asset.loadTracks(withMediaType: .video)) ?? []
+    if let asset = tracks.first {
+        let rate = await (try? asset.load(.nominalFrameRate)) ?? 0
+        if rate > 1 {
+            picture.rate = rate
+        }
+        let formats = await (try? asset.load(.formatDescriptions)) ?? []
+        if let format = formats.first {
+            let dims = CMVideoFormatDescriptionGetDimensions(format)
+            if dims.width > 1, dims.height > 1 {
+                picture.width = Int(dims.width)
+                picture.height = Int(dims.height)
+                picture.format = format
+            }
+        }
+    }
+    if picture.width <= 1 {
+        let size = item.presentationSize
+        if size.width > 1, size.height > 1 {
+            picture.width = Int(size.width.rounded())
+            picture.height = Int(size.height.rounded())
+        }
+    }
+    return picture
 }
 
 struct StreamPanel: View {
