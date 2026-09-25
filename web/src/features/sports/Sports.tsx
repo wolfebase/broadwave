@@ -6,6 +6,7 @@ import { navigate } from "../../app/router";
 import { categoryOf, dayLabel, isRecording, minutesLeft, progress, recordingKeys, spanLabel } from "../../lib/guide";
 import type { Airing, Channel, TeamFollow } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
+import { ArtFrame } from "../../ui/ArtFrame";
 import { ChannelBadge, Chip, Empty, LiveDot, Progress, RecDot } from "../../ui/primitives";
 import { layoutForCount, multiviewPath } from "../multiview/storage";
 import { scoreLine, useScoreboard, type ScoreGame, type ScoreTeam } from "./scores";
@@ -137,6 +138,11 @@ export function Sports() {
               const passed = passes.some((p) => p.title.toLowerCase() === airing.title.toLowerCase());
               return (
                 <article key={airing.id} className={liveNow ? "game-card live" : "game-card"}>
+                  {airing.imageUrl ? (
+                    <div className="gc-art">
+                      <ArtFrame src={`/media/art/airing/${airing.id}?w=640`} width={airing.imageWidth} height={airing.imageHeight} />
+                    </div>
+                  ) : null}
                   <div className="gc-head">
                     <span className="gc-league">{league(airing)}</span>
                     {liveNow ? <LiveDot /> : <span className="gc-time">{spanLabel(airing)}</span>}

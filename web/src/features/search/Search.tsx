@@ -2,10 +2,51 @@ import { useEffect, useState, type FormEvent } from "react";
 import { addPass, search } from "../../api";
 import { useData } from "../../app/data";
 import { navigate, useRoute } from "../../app/router";
+import { cappedCss } from "../../lib/art";
 import { spanLabel } from "../../lib/guide";
 import type { Recording, SearchAiring } from "../../types";
 import { SearchIcon } from "../../ui/icons";
 import "./search.css";
+
+function SearchArt({
+  src,
+  width,
+  height,
+  boxW,
+  boxH,
+  fallback,
+}: {
+  src: string;
+  width?: number;
+  height?: number;
+  boxW: number;
+  boxH: number;
+  fallback?: string;
+}) {
+  const [gone, setGone] = useState(false);
+  const [url, setUrl] = useState(src);
+  if (gone) return null;
+  const scale = window.devicePixelRatio || 1;
+  const maxW = cappedCss(width ?? 0, boxW, scale);
+  const maxH = cappedCss(height ?? 0, boxH, scale);
+  return (
+    <span className="search-thumb" style={{ width: boxW, height: boxH }}>
+      <img
+        alt=""
+        loading="lazy"
+        src={url}
+        style={maxW > 0 || maxH > 0 ? { maxWidth: maxW || undefined, maxHeight: maxH || undefined } : undefined}
+        onError={() => {
+          if (fallback && url !== fallback) {
+            setUrl(fallback);
+            return;
+          }
+          setGone(true);
+        }}
+      />
+    </span>
+  );
+}
 
 export function SearchPage() {
   const { params } = useRoute();
@@ -64,11 +105,22 @@ export function SearchPage() {
           <ul className="search-list">
             {airings.map((airing) => (
               <li key={airing.id}>
-                <div>
-                  <strong>{airing.title}</strong>
-                  <span>
-                    {airing.guideNumber} {airing.channelName} · {spanLabel(airing)}
-                  </span>
+                <div className="search-main">
+                  {airing.imageUrl ? (
+                    <SearchArt
+                      src={`/media/art/airing/${airing.id}?w=160`}
+                      width={airing.imageWidth}
+                      height={airing.imageHeight}
+                      boxW={84}
+                      boxH={56}
+                    />
+                  ) : null}
+                  <div className="search-copy">
+                    <strong>{airing.title}</strong>
+                    <span>
+                      {airing.guideNumber} {airing.channelName} · {spanLabel(airing)}
+                    </span>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -94,8 +146,11 @@ export function SearchPage() {
             {recordings.map((rec) => (
               <li key={rec.id}>
                 <button type="button" className="search-rec" onClick={() => navigate(`/play?recording=${rec.id}`)}>
-                  <strong>{rec.title}</strong>
-                  <span>{rec.guideNumber}</span>
+                  <SearchArt src={`/media/poster/${rec.id}`} boxW={84} boxH={48} fallback={`/media/art/channel/${rec.channelId}?w=320`} />
+                  <span>
+                    <strong>{rec.title}</strong>
+                    <span>{rec.guideNumber}</span>
+                  </span>
                 </button>
               </li>
             ))}
