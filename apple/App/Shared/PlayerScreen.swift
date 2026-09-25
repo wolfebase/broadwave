@@ -202,8 +202,24 @@ final class LivePlayer {
 struct PlayerScreen: View {
     @Environment(AppStore.self) private var store
     @Environment(NowPlaying.self) private var nowPlaying
+    #if os(iOS)
+        @Environment(\.verticalSizeClass) private var verticalSize
+    #endif
     @State private var live = LivePlayer()
     @State private var showStream = false
+    #if os(iOS)
+        @State private var showGuide = false
+    #endif
+
+    /// Portrait keeps the channel, the program, and labeled controls on screen.
+    /// A short landscape phone keeps the icon bar so the picture stays clear.
+    private var portraitChrome: Bool {
+        #if os(iOS)
+            verticalSize != .compact
+        #else
+            false
+        #endif
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -225,7 +241,7 @@ struct PlayerScreen: View {
             #if os(iOS)
                 overlay
             #endif
-            if showStream {
+            if showStream, !portraitChrome {
                 StreamPanel(stream: live.session?.stream, stats: live.picture, sync: live.sync)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .padding(24)
@@ -238,6 +254,12 @@ struct PlayerScreen: View {
             }
         }
         .task(id: "\(nowPlaying.channel?.id ?? 0) \(store.prefs.track ?? "") \(store.prefs.even)") {
+            #if DEBUG
+                // Layout checks must not take a tuner. -BroadwaveChrome YES skips the session.
+                if UserDefaults.standard.bool(forKey: "BroadwaveChrome") {
+                    return
+                }
+            #endif
             if let channel = nowPlaying.channel {
                 await live.start(channel, store: store)
             }
@@ -248,6 +270,11 @@ struct PlayerScreen: View {
             if UserDefaults.standard.bool(forKey: "BroadwaveStream") {
                 showStream = true
             }
+            #if os(iOS)
+                if UserDefaults.standard.bool(forKey: "BroadwaveChannels") {
+                    showGuide = true
+                }
+            #endif
         }
         #endif
         .onDisappear {
@@ -289,26 +316,179 @@ struct PlayerScreen: View {
     }
 
     #if os(iOS)
+        @ViewBuilder
         private var overlay: some View {
+            if portraitChrome {
+                portraitOverlay
+            } else {
+                landscapeBar
+            }
+        }
+
+        private var portraitOverlay: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Button("Minimize", systemImage: "chevron.down") { nowPlaying.expanded = false }
+                        .labelStyle(.titleAndIcon)
+                        .buttonStyle(.glass)
+                        .accessibilityLabel("Minimize")
+                    Spacer()
+                    syncPill
+                }
+                HStack(alignment: .top, spacing: 12) {
+                    programBlock
+                    VStack(spacing: 8) {
+                        controlButton("Previous", systemImage: "chevron.up", id: "portrait-previous") { step(-1) }
+                            .accessibilityLabel("Previous channel")
+                        controlButton("Next", systemImage: "chevron.down", id: "portrait-next") { step(1) }
+                            .accessibilityLabel("Next channel")
+                    }
+                    .frame(width: 88)
+                }
+                Spacer(minLength: 0)
+                if showStream {
+                    StreamPanel(stream: live.session?.stream, stats: live.picture, sync: live.sync)
+                }
+                if showGuide {
+                    miniGuide
+                }
+                controlGrid
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+
+        private var programBlock: some View {
+            VStack(alignment: .leading, spacing: 2) {
+                if let channel = nowPlaying.channel {
+                    let airing = store.index.on(channel.id, at: store.now)
+                    Text("\(channel.displayNumber)  \(channel.displayName)")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.86))
+                    Text(airing?.title ?? "No listing")
+                        .font(.title2.weight(.bold))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let airing {
+                        Text(airing.minutesLeft(at: store.now))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("portrait-program")
+        }
+
+        private var miniGuide: some View {
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(store.channels) { channel in
+                        let airing = store.index.on(channel.id, at: store.now)
+                        let title = airing?.title ?? "No listing"
+                        Button {
+                            nowPlaying.channel = channel
+                            showGuide = false
+                        } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Text(channel.displayNumber)
+                                    .font(.headline.monospacedDigit())
+                                    .frame(width: 52, alignment: .leading)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(channel.displayName).font(.subheadline.weight(.semibold)).lineLimit(1)
+                                    Text(title).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                                Spacer(minLength: 0)
+                                if channel.id == nowPlaying.channel?.id {
+                                    Image(systemName: "checkmark").foregroundStyle(Tokens.ColorToken.tally)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(channel.displayNumber) \(channel.displayName), \(title)")
+                    }
+                }
+            }
+            .frame(maxHeight: 280)
+            .glassEffect(in: .rect(cornerRadius: Tokens.Radius.lg))
+            .accessibilityLabel("Channels")
+            .accessibilityIdentifier("portrait-guide")
+        }
+
+        private var controlGrid: some View {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                controlButton(showGuide ? "Close guide" : "Channels", systemImage: "list.bullet", id: "portrait-channels") {
+                    showGuide.toggle()
+                }
+                .accessibilityAddTraits(showGuide ? .isSelected : [])
+                controlButton("Side by side", systemImage: "rectangle.split.2x1", id: "portrait-together") {
+                    if let channel = nowPlaying.channel {
+                        nowPlaying.watchTogether([channel])
+                    }
+                }
+                recordControl
+                audioControl
+                controlButton(showStream ? "Hide stream" : "Stream", systemImage: "info.circle", id: "portrait-stream") {
+                    showStream.toggle()
+                }
+            }
+        }
+
+        private var recordControl: some View {
+            let recording = nowPlaying.channel.flatMap { store.activeRecording(on: $0) } != nil
+            return controlButton(recording ? "Recording" : "Record", systemImage: recording ? "record.circle.fill" : "record.circle", id: "portrait-record") {
+                if let channel = nowPlaying.channel {
+                    Task { await store.toggleRecord(channel) }
+                }
+            }
+            .foregroundStyle(Tokens.ColorToken.tally)
+            .accessibilityLabel(recording ? "Stop recording" : "Record")
+        }
+
+        private var audioControl: some View {
+            Menu {
+                ForEach(audioMenu) { entry in
+                    Button(action: entry.action) {
+                        if entry.current {
+                            Label(entry.title, systemImage: "checkmark")
+                        } else {
+                            Text(entry.title)
+                        }
+                    }
+                }
+            } label: {
+                Label("Audio", systemImage: "speaker.wave.2")
+                    .labelStyle(StackedControlLabel())
+            }
+            .buttonStyle(.glass)
+            .accessibilityLabel("Audio")
+            .accessibilityIdentifier("portrait-audio")
+        }
+
+        private func controlButton(_ title: String, systemImage: String, id: String, action: @escaping () -> Void) -> some View {
+            Button(action: action) {
+                Label(title, systemImage: systemImage)
+                    .labelStyle(StackedControlLabel())
+            }
+            .buttonStyle(.glass)
+            .accessibilityLabel(title)
+            .accessibilityIdentifier(id)
+        }
+
+        private var landscapeBar: some View {
             HStack(spacing: 10) {
                 Button("Minimize", systemImage: "chevron.down") { nowPlaying.expanded = false }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.glass)
+                    .accessibilityLabel("Minimize")
                 Spacer()
-                if let sync = live.sync, sync.state != .off {
-                    HStack(spacing: 5) {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                        if sync.members > 1 {
-                            Text("\(sync.members)").monospacedDigit()
-                        }
-                    }
-                    .font(.footnote.weight(.bold))
-                    .fixedSize()
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
-                    .glassEffect(.regular.tint(sync.state == .locked ? Tokens.ColorToken.success.opacity(0.4) : nil))
-                    .accessibilityLabel(sync.members > 1 ? "Synced with \(sync.members) screens" : "Synced")
-                }
+                syncPill
                 Button(showStream ? "Hide stream" : "Stream", systemImage: "info.circle") { showStream.toggle() }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.glass)
@@ -320,6 +500,7 @@ struct PlayerScreen: View {
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.glass)
+                .accessibilityLabel("Side by side")
                 Menu("Audio", systemImage: "speaker.wave.2") {
                     ForEach(audioMenu) { entry in
                         Button(action: entry.action) {
@@ -333,6 +514,7 @@ struct PlayerScreen: View {
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.glass)
+                .accessibilityLabel("Audio")
                 GlassEffectContainer {
                     HStack(spacing: 6) {
                         Button("Previous channel", systemImage: "chevron.up") { step(-1) }
@@ -349,13 +531,48 @@ struct PlayerScreen: View {
                     .labelStyle(.iconOnly)
                     .buttonStyle(.glass)
                     .foregroundStyle(Tokens.ColorToken.tally)
+                    .accessibilityLabel(recording ? "Stop recording" : "Record")
                 }
             }
             .padding(.horizontal)
             .padding(.top, 8)
         }
+
+        @ViewBuilder private var syncPill: some View {
+            if let sync = live.sync, sync.state != .off {
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                    if sync.members > 1 {
+                        Text("\(sync.members)").monospacedDigit()
+                    }
+                }
+                .font(.footnote.weight(.bold))
+                .fixedSize()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .glassEffect(.regular.tint(sync.state == .locked ? Tokens.ColorToken.success.opacity(0.4) : nil))
+                .accessibilityLabel(sync.members > 1 ? "Synced with \(sync.members) screens" : "Synced")
+            }
+        }
     #endif
 }
+
+#if os(iOS)
+    /// Icon over a short name. Portrait controls have to be readable without VoiceOver.
+    private struct StackedControlLabel: LabelStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            VStack(spacing: 4) {
+                configuration.icon
+                configuration.title
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+        }
+    }
+#endif
 
 struct ChannelMenuEntry: Identifiable {
     let id: Int64
