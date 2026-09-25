@@ -8,7 +8,7 @@ help:
 	@echo "make dev      run the server with -dev; pair with 'npm run dev' in web/"
 	@echo "make test     go test + web typecheck"
 	@echo "make lint     gofmt, go vet, eslint, swiftlint, and swiftformat"
-	@echo "make check    everything CI runs before a push: test + lint + API drift + fake-tuner relay smoke"
+	@echo "make check    everything CI runs before a push: test + lint + web budgets + API drift + fake-tuner relay smoke"
 	@echo "make build    web + server binary in bin/"
 	@echo "make docker   build the container image"
 	@echo "make apple    generate the Xcode project and build the iOS and tvOS apps"
@@ -46,7 +46,9 @@ lint: web/node_modules
 	swiftlint lint --strict
 	swiftformat --lint .
 
-check: test lint
+check: test lint web
+	scripts/bundle-budget.sh
+	scripts/home-paint.sh
 	cd apple/Packages/BroadwaveKit && swift test
 	go run ./server/cmd/apigen -check
 	FAKE=1 scripts/relay-smoke.sh

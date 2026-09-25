@@ -37,6 +37,8 @@ jobs:
         working-directory: web
       - run: npm run build
         working-directory: web
+      - run: scripts/bundle-budget.sh
+      - run: scripts/home-paint.sh
 
   apple:
     runs-on: macos-26
