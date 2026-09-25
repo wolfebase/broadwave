@@ -107,7 +107,7 @@ func main() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		n, err := source.Sync(ctx, st, nil, *hdhrHost)
+		n, err := source.Auto(ctx, st, nil, *hdhrHost)
 		if err != nil {
 			log.Printf("discovery: %v", err)
 			return
@@ -145,7 +145,7 @@ func main() {
 		defer tick.Stop()
 		for range tick.C {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			n, err := source.Sync(ctx, st, nil, *hdhrHost)
+			n, err := source.Auto(ctx, st, nil, *hdhrHost)
 			cancel()
 			if err != nil {
 				log.Printf("discovery: %v", err)

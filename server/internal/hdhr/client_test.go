@@ -64,6 +64,60 @@ func TestFetchDropsDeviceAuth(t *testing.T) {
 	}
 }
 
+func TestSameOriginTreatsPort80AsTheDefault(t *testing.T) {
+	if !sameOrigin("http://192.168.1.252", "http://192.168.1.252:80") {
+		t.Fatal("port 80")
+	}
+	if sameOrigin("http://192.168.1.252", "http://169.254.169.254") {
+		t.Fatal("other host")
+	}
+}
+
+func TestFetchStaysOnTheRequestedOrigin(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/discover.json":
+			_, _ = w.Write([]byte(`{"FriendlyName":"Duo","DeviceID":"ABCDEF01","BaseURL":"http://169.254.169.254","LineupURL":"http://169.254.169.254/latest","TunerCount":2}`))
+		case "/lineup.json":
+			_, _ = w.Write([]byte(`[{"GuideNumber":"4.1","GuideName":"WDAF"}]`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	dev, err := (&Client{}).FetchDevice(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dev.BaseURL != srv.URL || dev.LineupURL != srv.URL+"/lineup.json" {
+		t.Fatalf("followed the document: %+v", dev)
+	}
+	channels, err := (&Client{}).FetchLineup(context.Background(), dev.LineupURL)
+	if err != nil || len(channels) != 1 || channels[0].GuideName != "WDAF" {
+		t.Fatalf("%+v %v", channels, err)
+	}
+}
+
+func TestFetchDoesNotFollowARedirect(t *testing.T) {
+	hit := false
+	evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		_, _ = w.Write([]byte(`{"DeviceID":"EEEEEEEE","BaseURL":"http://127.0.0.1","TunerCount":1}`))
+	}))
+	defer evil.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, evil.URL+"/discover.json", http.StatusFound)
+	}))
+	defer srv.Close()
+	if _, err := (&Client{}).FetchDevice(context.Background(), srv.URL); err == nil {
+		t.Fatal("redirect was treated as the tuner")
+	}
+	if hit {
+		t.Fatal("redirect target was fetched")
+	}
+}
+
 func TestLineupMarksCopyProtection(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`[

@@ -19,6 +19,14 @@ func TestParseSSDPReadsAnHDHomeRun(t *testing.T) {
 	}
 }
 
+func TestParseSSDPKeepsTheSender(t *testing.T) {
+	raw := "HTTP/1.1 200 OK\r\nSERVER: HDHomeRun/1.0\r\nLOCATION: http://127.0.0.1/device.xml\r\nUSN: uuid:x\r\n\r\n"
+	got, ok := parseSSDP(raw, "192.168.1.50:1900")
+	if !ok || got.Kind != "hdhomerun" || got.Addr != "192.168.1.50" {
+		t.Fatalf("%+v ok=%v", got, ok)
+	}
+}
+
 func TestSearchSSDPReadsALoopbackReply(t *testing.T) {
 	conn, err := net.ListenPacket("udp4", "127.0.0.1:0")
 	if err != nil {

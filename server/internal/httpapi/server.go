@@ -230,6 +230,10 @@ func (s *Server) scanStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) discover(w http.ResponseWriter, r *http.Request) {
+	if !jsonRequest(r) {
+		httpError(w, "Send the address as JSON.", http.StatusUnsupportedMediaType)
+		return
+	}
 	var body struct {
 		IP string `json:"ip"`
 	}

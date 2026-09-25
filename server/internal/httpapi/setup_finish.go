@@ -52,6 +52,10 @@ func newFinishStatus() finishStatus {
 }
 
 func (s *Server) postSetupFinish(w http.ResponseWriter, r *http.Request) {
+	if !jsonRequest(r) {
+		httpError(w, "Send setup as JSON.", http.StatusUnsupportedMediaType)
+		return
+	}
 	s.finishMu.Lock()
 	if s.finishOn {
 		snap := s.finishRun.clone()
@@ -174,6 +178,10 @@ func (s *Server) stepScan(ctx context.Context) {
 		s.setFinish("scan", "done", "This tuner has no address to scan.")
 		return
 	}
+	if s.Staging {
+		s.setFinish("scan", "done", "A test server does not scan the antenna.")
+		return
+	}
 	client := s.HDHR
 	if client == nil {
 		client = &hdhr.Client{}
@@ -220,6 +228,10 @@ func (s *Server) stepScan(ctx context.Context) {
 func (s *Server) stepGuide(ctx context.Context) {
 	s.setFinish("guide", "running", "Loading listings.")
 	listed := s.listedChannels(ctx)
+	if listed == 0 && s.Staging {
+		s.setFinish("guide", "done", "A test server does not pull the guide.")
+		return
+	}
 	if listed == 0 {
 		pullCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 		n, err := s.RefreshGuide(pullCtx)
@@ -293,6 +305,10 @@ func (s *Server) stepEncoder(ctx context.Context) {
 
 func (s *Server) stepSignal(ctx context.Context) {
 	s.setFinish("signal", "running", "Checking the antenna.")
+	if s.Staging {
+		s.setFinish("signal", "done", s.storedSignalSummary(ctx))
+		return
+	}
 	if s.SetupSignal != nil {
 		great, ok, weak, lost, err := s.SetupSignal(ctx)
 		if err != nil {

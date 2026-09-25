@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.8.0 — 2026-09-25
+
+Setup finds the house and finishes itself.
+
+### Added
+
+- Your home lists the tuners, servers, and screens on the network. Nothing is added until you tap, except the first HDHomeRun on a new install.
+- After that tuner is in, setup scans the channels, fills the guide, checks the recordings folder, stars ABC, CBS, FOX, and NBC, and tests the picture. It ends on a Ready line.
+- A tuner or screen that shows up later raises one banner.
+- A station title that arrives compressed still shows in the guide.
+
+### Fixed
+
+- A progressive recording plays at its own 60 frames instead of being doubled.
+- A scan that arrives late corrects the picture already on screen, including a movie that should play at 24 frames.
+- An H.264 channel that has not been scanned keeps the frame rate it was sent at.
+- A program map that spans packets keeps every audio track.
+- Apple TV matches the size and frame rate of the picture on screen.
+- If the graphics encode dies, it starts once more. A second death frees the tuner.
+- A second full English mix stays the main track, and surround sound is passed through.
+- A second tuner waits for you to add it. The server uses the address that answered, not a link the device sends.
+
 ## 0.7.1 — 2026-09-25
 
 ### Fixed

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,6 +15,55 @@ import (
 	"broadwave/internal/live"
 	"broadwave/internal/store"
 )
+
+func TestStagingSetupDoesNotTune(t *testing.T) {
+	hit := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		t.Errorf("staging called %s", r.URL.Path)
+	}))
+	defer srv.Close()
+	ctx := context.Background()
+	st := testStore(t)
+	if err := st.UpsertDevice(ctx, hdhr.Device{
+		DeviceID: "STAGE", FriendlyName: "Fake", BaseURL: srv.URL, TunerCount: 2,
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	api := &Server{Store: st, Staging: true, HDHR: &hdhr.Client{}}
+	run := newFinishStatus()
+	api.finishRun = &run
+	api.stepScan(ctx)
+	api.stepGuide(ctx)
+	api.stepSignal(ctx)
+	if hit {
+		t.Fatal("staging setup contacted the tuner")
+	}
+	got := map[string]string{}
+	for _, step := range api.finishRun.Steps {
+		got[step.ID] = step.Detail
+	}
+	if got["scan"] != "A test server does not scan the antenna." || got["guide"] != "A test server does not pull the guide." || got["signal"] != "No signal reading." {
+		t.Fatalf("%v", got)
+	}
+}
+
+func TestFormPostDoesNotStartSetupOrDiscovery(t *testing.T) {
+	api := &Server{Store: testStore(t)}
+	h := api.Handler()
+	for _, path := range []string{"/api/v1/setup/finish", "/api/v1/sources/discover"} {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader("ip=127.0.0.1"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnsupportedMediaType {
+			t.Fatalf("%s %d %s", path, rec.Code, rec.Body.String())
+		}
+	}
+	if api.finishOn {
+		t.Fatal("a form post started setup")
+	}
+}
 
 func TestSignalSummaryAndReadyLine(t *testing.T) {
 	if got := signalSummary(6, 0, 1, 0); got != "6 channels great, 1 weak." {

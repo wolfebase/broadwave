@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strings"
 
 	"broadwave/internal/disk"
 	"broadwave/internal/live"
@@ -16,6 +17,13 @@ func apiError(w http.ResponseWriter, status int, code, message string, details m
 		body[k] = v
 	}
 	writeJSON(w, status, body)
+}
+
+// jsonRequest rejects a browser form post. An empty type is still accepted
+// so a client that sends no header keeps working. The apps send JSON.
+func jsonRequest(r *http.Request) bool {
+	ct := strings.ToLower(r.Header.Get("Content-Type"))
+	return ct == "" || strings.Contains(ct, "application/json")
 }
 
 func httpError(w http.ResponseWriter, message string, status int) {

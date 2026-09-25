@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -106,11 +105,7 @@ func parseSSDP(raw, from string) (Found, bool) {
 	if host, _, err := net.SplitHostPort(from); err == nil {
 		addr = host
 	}
-	if location != "" {
-		if u, err := url.Parse(location); err == nil && u.Hostname() != "" {
-			addr = u.Hostname()
-		}
-	}
+	// LOCATION is not the address. A reply can name any host. The UDP sender is the device.
 	name := server
 	if name == "" {
 		name = kind
