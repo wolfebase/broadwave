@@ -64,7 +64,16 @@ def remote_text(cmd):
     return text
 
 
+def expand_vars(text):
+    """Substitute simple NAME=value assignments so docker checks see real names."""
+    values = dict(re.findall(r"(?:^|[\s;&])([A-Za-z_][A-Za-z0-9_]*)=([A-Za-z0-9_.:/-]+)(?=\s|;|&|$)", text, re.M))
+    for k, v in values.items():
+        text = re.sub(r"\$\{" + k + r"\}|\$" + k + r"\b", v, text)
+    return text
+
+
 def check_docker(text):
+    text = expand_vars(text)
     for m in re.finditer(rf"\bdocker\s+(?:container\s+)?({CONTAINER_VERBS})\b([^;&|\n]*)", text):
         verb, rest = m.group(1), m.group(2)
         if "$(" in rest or "`" in rest:
