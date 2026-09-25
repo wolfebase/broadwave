@@ -44,6 +44,17 @@ export function starNetworks() {
   });
 }
 
+export type SetupStep = { id: string; title: string; state: string; detail?: string };
+export type SetupFinish = { running: boolean; ready?: string; channelId?: number; steps: SetupStep[] };
+
+export function startSetupFinish() {
+  return request<SetupFinish>("/api/v1/setup/finish", { method: "POST", body: "{}" });
+}
+
+export function setupFinish() {
+  return request<SetupFinish>("/api/v1/setup/finish");
+}
+
 export type FreeFeed = { kind: string; name: string; addr: string; playlist: string; guide: string };
 
 export function findFree() {

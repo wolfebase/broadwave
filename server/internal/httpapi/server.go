@@ -44,8 +44,14 @@ type Server struct {
 	Staging bool
 	// HomeScan replaces the network scan in tests.
 	HomeScan func(ctx context.Context) []discovery.Found
+	// SetupBench and SetupSignal replace the encoder test and the antenna check in tests.
+	SetupBench  func(ctx context.Context, ffmpeg, encoder string) (float64, error)
+	SetupSignal func(ctx context.Context) (great, ok, weak, lost int, err error)
 
 	homeMu    sync.Mutex
+	finishMu  sync.Mutex
+	finishRun *finishStatus
+	finishOn  bool
 	homeAt    time.Time
 	homeFound []discovery.Found
 
@@ -84,6 +90,8 @@ func (s *Server) Handler() http.Handler {
 	api("GET /channels/{id}/frame", s.frame)
 	api("GET /settings", s.getSettings)
 	api("PUT /settings", s.putSettings)
+	api("POST /setup/finish", s.postSetupFinish)
+	api("GET /setup/finish", s.getSetupFinish)
 	api("POST /watch", s.watch)
 	api("POST /multiview/plan", s.multiviewPlan)
 	api("POST /watch/{id}/stop", s.release)
@@ -287,29 +295,10 @@ func (s *Server) affiliations(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) starNetworks(w http.ResponseWriter, r *http.Request) {
-	channels, err := s.Store.Channels(r.Context(), false)
+	starred, err := s.starBigFour(r.Context())
 	if err != nil {
 		writeError(w, err)
 		return
-	}
-	var starred []map[string]any
-	for _, ch := range withNetworks(channels) {
-		if ch.Hidden || !bigFour(ch.Network) {
-			continue
-		}
-		if !ch.Favorite {
-			on := true
-			if _, err := s.Store.PatchChannel(r.Context(), ch.ID, store.ChannelPatch{Favorite: &on}); err != nil {
-				writeError(w, err)
-				return
-			}
-		}
-		starred = append(starred, map[string]any{
-			"id": ch.ID, "guideName": ch.GuideName, "displayNumber": ch.DisplayNumber, "network": ch.Network,
-		})
-	}
-	if starred == nil {
-		starred = []map[string]any{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"starred": starred})
 }
