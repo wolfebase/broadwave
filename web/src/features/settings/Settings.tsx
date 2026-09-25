@@ -130,6 +130,30 @@ export function SettingsScreen({
         <span className="hint">{copy.settings.movieArtHint}</span>
       </label>
       <h3 className="section-title">Sports</h3>
+      <p className="hint">{settings.sportsdbKeySet === "1" ? copy.settings.scoresFromSportsDB : copy.settings.scoresFrom}</p>
+      <label className="field">
+        {copy.settings.liveScores}
+        <select value={settings.liveScores || "1"} onChange={(event) => onChange({ liveScores: event.target.value })}>
+          <option value="1">On</option>
+          <option value="0">Off</option>
+        </select>
+        <span className="hint">{copy.settings.liveScoresHint}</span>
+      </label>
+      <label className="field">
+        {copy.settings.sportsdbKey}
+        <input
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={settings.sportsdbKeySet === "1" ? "Saved" : ""}
+          onBlur={(event) => {
+            const value = event.target.value;
+            if (value) onChange({ sportsdbKey: value });
+            event.target.value = "";
+          }}
+        />
+        <span className="hint">{copy.settings.sportsdbKeyHint}</span>
+      </label>
       <label className="field">
         {copy.settings.hideScores}
         <select value={settings.hideScores || "0"} onChange={(event) => onChange({ hideScores: event.target.value })}>

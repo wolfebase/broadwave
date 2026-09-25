@@ -16,6 +16,8 @@ var (
 
 func init() {
 	Register("espn", func() Provider { return NewESPN() })
+	// An empty key never dials. The server builds another with the user's key.
+	Register("thesportsdb", func() Provider { return NewTheSportsDB("") })
 }
 
 // Register makes name select factory. A later call for the same name replaces the earlier one.

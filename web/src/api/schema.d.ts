@@ -1446,6 +1446,11 @@ export interface components {
             /** @enum {string} */
             hideScores?: "0" | "1";
             /**
+             * @description 1 asks the scoreboard. 0 stops every scoreboard request. Missing means on.
+             * @enum {string}
+             */
+            liveScores?: "0" | "1";
+            /**
              * @description 1 checks for a newer release once a day. 0 turns the check off. Missing means on.
              * @enum {string}
              */
@@ -1459,6 +1464,13 @@ export interface components {
             tmdbKey?: string;
             /** @enum {string} */
             tmdbKeySet?: "0" | "1";
+            /** @description The user's TheSportsDB key. Never returned. Empty clears it. */
+            sportsdbKey?: string;
+            /**
+             * @description 1 when a TheSportsDB key is saved. Set by the server.
+             * @enum {string}
+             */
+            sportsdbKeySet?: "0" | "1";
         };
     };
     responses: {

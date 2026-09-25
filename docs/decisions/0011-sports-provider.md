@@ -24,10 +24,16 @@ Sportradar and Stats Perform sell licensed feeds under a contract. No such contr
 
 ## Decision
 
-`server/internal/sports` has a registry. `Open("")` and `Open("espn")` return the ESPN provider. Any other name returns an error until something registers it. `NewESPN` and `NewCache` are unchanged. The process still starts with `NewCache(NewESPN())`, so ESPN stays the default and no setting is required.
+`server/internal/sports` has a registry. `Open("")` and `Open("espn")` return the ESPN provider. `Open("thesportsdb")` returns a client that does not dial until it has a key. `NewESPN` and `NewCache` are unchanged. The process still starts with `NewCache(NewESPN())`.
 
-A paid TheSportsDB client is allowed by their paid terms for the subscriber's own app, inside the rate limit, with attribution, and without third-party artwork. It is not registered. The free key is forbidden for an App Store app, the published livescore list is five sports at two minutes, and there is no key to call. A client for that would be a stub.
+The owner delegated the default to the reviewer on 2026-09-25. ESPN stays. These conditions are part of the decision:
+
+1. Only the user's server fetches scores. The apps do not. The cache still waits 30 seconds while a game is on and two hours when the board is quiet.
+2. Settings > Sports says where the scores come from. Live scores are on until the user turns them off, and off makes no scoreboard request.
+3. TheSportsDB is optional. It runs only with a key the user types. No key is in the binary, and nothing is bought. The settings line names TheSportsDB while that key is in use.
+4. Team marks in the apps are names and colors. A logo URL from another site is dropped before it is stored or sent. A logo this server hosts (a path with no host) can stay.
+5. PRIVACY.md says the request is the server's, and that turning live scores off stops it. The apps still collect nothing for Wolfe Up.
 
 ## Consequences
 
-Scores stay on the unofficial ESPN board until the owner picks a default. A later change can `Register` a provider whose terms allow this app, then select that name. Logos on the ESPN board are still ESPN's URLs. TheSportsDB's paid terms do not clear those, or any other third-party marks.
+Scores stay on the ESPN board the server already caches. A saved TheSportsDB key selects that provider instead, and clearing the key returns to ESPN. Remote team logos are not shown.

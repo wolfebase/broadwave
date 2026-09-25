@@ -380,6 +380,7 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		"autoplay":       true,
 		"hdhrEmulate":    true,
 		"hideScores":     true,
+		"liveScores":     true,
 		"checkUpdates":   true,
 		"setupComplete":  true,
 		"sdUser":         true,
@@ -389,6 +390,8 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		"sdPasswordSet":  true,
 		"tmdbKey":        true,
 		"tmdbKeySet":     true,
+		"sportsdbKey":    true,
+		"sportsdbKeySet": true,
 	}
 	cleaned := map[string]string{}
 	for k, v := range values {
@@ -410,6 +413,9 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		if k == "hideScores" && v != "0" && v != "1" {
 			return fmt.Errorf("hideScores must be 0 or 1")
 		}
+		if k == "liveScores" && v != "0" && v != "1" {
+			return fmt.Errorf("liveScores must be 0 or 1")
+		}
 		if k == "checkUpdates" && v != "0" && v != "1" {
 			return fmt.Errorf("checkUpdates must be 0 or 1")
 		}
@@ -422,11 +428,14 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		if k == "sdPassword" && strings.TrimSpace(v) == "" {
 			continue
 		}
-		if k == "sdPasswordSet" || k == "tmdbKeySet" {
+		if k == "sdPasswordSet" || k == "tmdbKeySet" || k == "sportsdbKeySet" {
 			continue
 		}
 		if k == "tmdbKey" && strings.TrimSpace(v) == "" {
 			continue
+		}
+		if k == "sportsdbKey" {
+			v = strings.TrimSpace(v)
 		}
 		cleaned[k] = v
 	}

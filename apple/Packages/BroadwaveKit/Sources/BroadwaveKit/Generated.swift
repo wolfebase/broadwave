@@ -496,6 +496,7 @@ public struct Settings: Codable, Sendable, Hashable {
     public var nextGuidePull: Date?
     public var lastManualGuidePull: Date?
     public var hideScores: String?
+    public var liveScores: String?
     public var checkUpdates: String?
     public var sdUser: String?
     public var sdPassword: String?
@@ -504,8 +505,10 @@ public struct Settings: Codable, Sendable, Hashable {
     public var guideUrl: String?
     public var tmdbKey: String?
     public var tmdbKeySet: String?
+    public var sportsdbKey: String?
+    public var sportsdbKeySet: String?
 
-    public init(layout: String? = nil, recordingsPath: String? = nil, profile: String? = nil, audio: String? = nil, encoder: String? = nil, watermarkGB: String? = nil, pictureMode: PictureMode? = nil, autoplay: String? = nil, hdhrEmulate: String? = nil, setupComplete: String? = nil, needsSetup: String? = nil, lastGuidePull: Date? = nil, nextGuidePull: Date? = nil, lastManualGuidePull: Date? = nil, hideScores: String? = nil, checkUpdates: String? = nil, sdUser: String? = nil, sdPassword: String? = nil, sdLineup: String? = nil, sdPasswordSet: String? = nil, guideUrl: String? = nil, tmdbKey: String? = nil, tmdbKeySet: String? = nil) {
+    public init(layout: String? = nil, recordingsPath: String? = nil, profile: String? = nil, audio: String? = nil, encoder: String? = nil, watermarkGB: String? = nil, pictureMode: PictureMode? = nil, autoplay: String? = nil, hdhrEmulate: String? = nil, setupComplete: String? = nil, needsSetup: String? = nil, lastGuidePull: Date? = nil, nextGuidePull: Date? = nil, lastManualGuidePull: Date? = nil, hideScores: String? = nil, liveScores: String? = nil, checkUpdates: String? = nil, sdUser: String? = nil, sdPassword: String? = nil, sdLineup: String? = nil, sdPasswordSet: String? = nil, guideUrl: String? = nil, tmdbKey: String? = nil, tmdbKeySet: String? = nil, sportsdbKey: String? = nil, sportsdbKeySet: String? = nil) {
         self.layout = layout
         self.recordingsPath = recordingsPath
         self.profile = profile
@@ -521,6 +524,7 @@ public struct Settings: Codable, Sendable, Hashable {
         self.nextGuidePull = nextGuidePull
         self.lastManualGuidePull = lastManualGuidePull
         self.hideScores = hideScores
+        self.liveScores = liveScores
         self.checkUpdates = checkUpdates
         self.sdUser = sdUser
         self.sdPassword = sdPassword
@@ -529,6 +533,8 @@ public struct Settings: Codable, Sendable, Hashable {
         self.guideUrl = guideUrl
         self.tmdbKey = tmdbKey
         self.tmdbKeySet = tmdbKeySet
+        self.sportsdbKey = sportsdbKey
+        self.sportsdbKeySet = sportsdbKeySet
     }
 }
 

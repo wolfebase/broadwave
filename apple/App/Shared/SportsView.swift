@@ -119,6 +119,10 @@ struct SettingsView: View {
     @State private var showAbout = false
     @State private var checkUpdates = true
     @State private var updatesKnown = false
+    @State private var liveScores = true
+    @State private var scoresKnown = false
+    @State private var sportsDB = false
+    @State private var sportsKey = ""
 
     var body: some View {
         @Bindable var store = store
@@ -162,6 +166,34 @@ struct SettingsView: View {
                 Text("Every screen on the same channel shows the same moment, so nobody hears the next room cheer first.")
             }
             Section {
+                Toggle("Live scores", isOn: Binding(
+                    get: { liveScores },
+                    set: { on in
+                        guard scoresKnown else { return }
+                        liveScores = on
+                        Task {
+                            try? await store.api?.saveSettings(["liveScores": on ? "1" : "0"])
+                            await store.refresh(lineup: false)
+                        }
+                    }
+                ))
+                .disabled(!scoresKnown)
+                SecureField("TheSportsDB key", text: $sportsKey)
+                    .onSubmit {
+                        let key = sportsKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                        sportsKey = ""
+                        guard !key.isEmpty else { return }
+                        Task {
+                            try? await store.api?.saveSettings(["sportsdbKey": key])
+                            sportsDB = true
+                        }
+                    }
+            } header: {
+                Text(sportsDB ? "Scores from TheSportsDB" : "Scores from ESPN's public scoreboard")
+            } footer: {
+                Text("On asks your server for the scoreboard. Off sends nothing. A key is optional and never included.")
+            }
+            Section {
                 Toggle("Check for updates", isOn: Binding(
                     get: { checkUpdates },
                     set: { on in
@@ -187,6 +219,9 @@ struct SettingsView: View {
             if let values = try? await store.api?.settings() {
                 checkUpdates = values["checkUpdates"] != "0"
                 updatesKnown = true
+                liveScores = values["liveScores"] != "0"
+                scoresKnown = true
+                sportsDB = values["sportsdbKeySet"] == "1"
             }
         }
         .navigationDestination(isPresented: $showAbout) {

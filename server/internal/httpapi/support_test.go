@@ -22,9 +22,10 @@ func TestSupportBundleLeavesOutSecrets(t *testing.T) {
 	ctx := context.Background()
 	st := testStore(t)
 	const (
-		password = "ops3-fixture-password"
-		auth     = "ops3-device-auth-token"
-		tmdbKey  = "ops3-tmdb-key-value"
+		password  = "ops3-fixture-password"
+		auth      = "ops3-device-auth-token"
+		tmdbKey   = "ops3-tmdb-key-value"
+		sportsKey = "ops3-sportsdb-key-value"
 	)
 	playlist := "http://ops3user:" + password + "@playlist.example/pl.m3u?password=" + password
 	guide := "http://playlist.example/xmltv.php?username=ops3user&password=" + password
@@ -34,10 +35,11 @@ func TestSupportBundleLeavesOutSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := st.PutSettings(ctx, map[string]string{
-		"layout":     "tv",
-		"sdPassword": password,
-		"tmdbKey":    tmdbKey,
-		"guideUrl":   guidePage,
+		"layout":      "tv",
+		"sdPassword":  password,
+		"tmdbKey":     tmdbKey,
+		"sportsdbKey": sportsKey,
+		"guideUrl":    guidePage,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +78,7 @@ func TestSupportBundleLeavesOutSecrets(t *testing.T) {
 		t.Fatal(rec.Header().Get("Content-Disposition"))
 	}
 	body := rec.Body.Bytes()
-	if bytes.Contains(body, []byte(password)) || bytes.Contains(body, []byte(auth)) || bytes.Contains(body, []byte(tmdbKey)) || bytes.Contains(body, []byte("DeviceAuth")) {
+	if bytes.Contains(body, []byte(password)) || bytes.Contains(body, []byte(auth)) || bytes.Contains(body, []byte(tmdbKey)) || bytes.Contains(body, []byte(sportsKey)) || bytes.Contains(body, []byte("DeviceAuth")) {
 		t.Fatal("bundle bytes contain a secret")
 	}
 	if text := logbuf.Text(); strings.Contains(text, password) || strings.Contains(text, auth) || strings.Contains(text, "DeviceAuth") {
@@ -101,7 +103,7 @@ func TestSupportBundleLeavesOutSecrets(t *testing.T) {
 		}
 		entries[f.Name] = string(data)
 		names = append(names, f.Name)
-		if bytes.Contains(data, []byte(password)) || bytes.Contains(data, []byte(auth)) || bytes.Contains(data, []byte(tmdbKey)) || bytes.Contains(data, []byte("DeviceAuth")) {
+		if bytes.Contains(data, []byte(password)) || bytes.Contains(data, []byte(auth)) || bytes.Contains(data, []byte(tmdbKey)) || bytes.Contains(data, []byte(sportsKey)) || bytes.Contains(data, []byte("DeviceAuth")) {
 			t.Fatalf("%s contains a secret", f.Name)
 		}
 	}
@@ -130,7 +132,7 @@ func TestSupportBundleLeavesOutSecrets(t *testing.T) {
 	if err := json.Unmarshal([]byte(entries["config.json"]), &cfg); err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Settings["layout"] != "tv" || cfg.Settings["sdPasswordSet"] != "1" || cfg.Settings["tmdbKeySet"] != "1" {
+	if cfg.Settings["layout"] != "tv" || cfg.Settings["sdPasswordSet"] != "1" || cfg.Settings["tmdbKeySet"] != "1" || cfg.Settings["sportsdbKeySet"] != "1" {
 		t.Fatalf("settings %+v", cfg.Settings)
 	}
 	if _, ok := cfg.Settings["sdPassword"]; ok {
@@ -138,6 +140,9 @@ func TestSupportBundleLeavesOutSecrets(t *testing.T) {
 	}
 	if _, ok := cfg.Settings["tmdbKey"]; ok {
 		t.Fatal("settings included tmdbKey")
+	}
+	if _, ok := cfg.Settings["sportsdbKey"]; ok {
+		t.Fatal("settings included sportsdbKey")
 	}
 	if !strings.Contains(cfg.Settings["guideUrl"], "guides.example") || strings.Contains(cfg.Settings["guideUrl"], password) || strings.Contains(cfg.Settings["guideUrl"], auth) {
 		t.Fatalf("guide url %s", cfg.Settings["guideUrl"])

@@ -18,7 +18,7 @@ The Broadwave server runs on hardware you own. Your channels, guide, recordings,
 
 - your tuner (for example an HDHomeRun) on your network;
 - guide providers you enable, such as the SiliconDust guide for HDHomeRun owners, Schedules Direct, or an XMLTV address you add;
-- public sports scoreboards, to show scores and extend recordings of games;
+- public sports scoreboards, to show scores and extend recordings of games. The apps never ask for those scores. The server does, and it caches the answer. Settings, Live scores, stops every scoreboard request. A TheSportsDB key, if you add one, stays on your server. Nothing is sent to Wolfe Up;
 - GitHub, once a day, to see if a newer Broadwave release exists. That request carries no account, no id, and nothing about what you watch. Turn it off under Settings, Check for updates;
 - any playlist or channel sources you add.
 

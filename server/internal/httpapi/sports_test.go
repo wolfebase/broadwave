@@ -72,6 +72,57 @@ func TestHidingAScoreLeavesTheCacheAlone(t *testing.T) {
 	}
 }
 
+type countingSports struct {
+	calls int
+}
+
+func (c *countingSports) Scoreboard(context.Context, string, time.Time) ([]sports.Game, error) {
+	c.calls++
+	return []sports.Game{{
+		ID: "1", League: "nfl", Name: "Chiefs at Bills", State: "pre",
+		Teams: []sports.Team{{Name: "Bills", Color: "#00338d", Logo: "https://a.espncdn.com/buf.png", Home: true}},
+	}}, nil
+}
+
+func TestLiveScoresOffDoesNotFetch(t *testing.T) {
+	st := testStore(t)
+	if err := st.PutSettings(t.Context(), map[string]string{"liveScores": "0"}); err != nil {
+		t.Fatal(err)
+	}
+	counter := &countingSports{}
+	h := (&Server{Store: st, Sports: counter}).Handler()
+	res := get(t, h, "/api/v1/sports/scoreboard?league=nfl")
+	if counter.calls != 0 || strings.Contains(res.Body.String(), "Chiefs") {
+		t.Fatalf("calls %d body %s", counter.calls, res.Body.String())
+	}
+}
+
+func TestScoreboardDropsARemoteLogo(t *testing.T) {
+	counter := &countingSports{}
+	h := (&Server{Store: testStore(t), Sports: counter}).Handler()
+	res := get(t, h, "/api/v1/sports/scoreboard?league=nfl")
+	body := res.Body.String()
+	if strings.Contains(body, "espncdn.com") || strings.Contains(body, "buf.png") || !strings.Contains(body, "#00338d") {
+		t.Fatalf("%s", body)
+	}
+	if counter.calls != 1 {
+		t.Fatalf("calls %d", counter.calls)
+	}
+}
+
+func TestSportsDBKeyStaysOffTheList(t *testing.T) {
+	st := testStore(t)
+	const key = "user-typed-sportsdb-key"
+	if err := st.PutSettings(t.Context(), map[string]string{"sportsdbKey": key, "liveScores": "1"}); err != nil {
+		t.Fatal(err)
+	}
+	res := get(t, (&Server{Store: st}).Handler(), "/api/v1/settings")
+	body := res.Body.String()
+	if strings.Contains(body, key) || !strings.Contains(body, `"sportsdbKeySet":"1"`) || !strings.Contains(body, `"liveScores":"1"`) {
+		t.Fatalf("%s", body)
+	}
+}
+
 func TestScoreboardReturnsGames(t *testing.T) {
 	h := (&Server{Store: testStore(t), Sports: stubSports{}}).Handler()
 	res := get(t, h, "/api/v1/sports/scoreboard?league=nfl")
