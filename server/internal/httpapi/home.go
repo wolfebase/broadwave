@@ -14,29 +14,10 @@ import (
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	found := s.cachedHome(ctx, r.URL.Query().Get("fresh") == "1")
-	var known []discovery.Known
-	if s.Store != nil {
-		devices, err := s.Store.Devices(ctx)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		for _, device := range devices {
-			known = append(known, discovery.Known{
-				ID: device.DeviceID, Name: device.FriendlyName, Addr: hostOf(device.BaseURL), Tuners: device.TunerCount,
-			})
-		}
-	}
-	var screens []discovery.Screen
-	if s.Bus != nil {
-		for _, screen := range s.Bus.Screens() {
-			screens = append(screens, discovery.Screen{Name: screen.Name, Kind: screen.Kind, Addr: screen.Addr})
-		}
-	}
-	places := discovery.Assemble(found, known, screens, discovery.LocalNets())
-	if places == nil {
-		places = []discovery.Place{}
+	places, err := s.homePlaces(ctx, r.URL.Query().Get("fresh") == "1")
+	if err != nil {
+		writeError(w, err)
+		return
 	}
 	sharing := false
 	if !s.Staging && s.Store != nil {
@@ -53,6 +34,37 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		"tunerAddress": host + ":8478",
 		"sharing":      sharing,
 	})
+}
+
+func (s *Server) homePlaces(ctx context.Context, fresh bool) ([]discovery.Place, error) {
+	found := s.cachedHome(ctx, fresh)
+	var known []discovery.Known
+	if s.Store != nil {
+		devices, err := s.Store.Devices(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, device := range devices {
+			known = append(known, discovery.Known{
+				ID: device.DeviceID, Name: device.FriendlyName, Addr: hostOf(device.BaseURL), Tuners: device.TunerCount,
+			})
+		}
+	}
+	var screens []discovery.Screen
+	if s.Bus != nil {
+		for _, screen := range s.Bus.Screens() {
+			screens = append(screens, discovery.Screen{Name: screen.Name, Kind: screen.Kind, Addr: screen.Addr})
+		}
+	}
+	nets := discovery.LocalNets()
+	if s.HomeNets != nil {
+		nets = s.HomeNets()
+	}
+	places := discovery.Assemble(found, known, screens, nets)
+	if places == nil {
+		places = []discovery.Place{}
+	}
+	return places, nil
 }
 
 func (s *Server) cachedHome(ctx context.Context, fresh bool) []discovery.Found {

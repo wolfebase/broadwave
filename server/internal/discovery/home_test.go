@@ -99,7 +99,7 @@ func TestAssembleOneActionEach(t *testing.T) {
 	if byID["tuner|NEWDEVICE"].Action != "add" {
 		t.Fatal("a new tuner waits for a tap")
 	}
-	if byID["plex|192.168.1.2"].Action != "use" || byID["channels|192.168.1.2"].Action != "use" {
+	if byID["plex|tus"].Action != "use" || byID["channels|tus"].Action != "use" {
 		t.Fatalf("%+v", places)
 	}
 	for _, place := range places {
@@ -116,8 +116,8 @@ func TestAssembleOneActionEach(t *testing.T) {
 	if byID["here|appletv|Broadwave Staging TV"].Action != "here" {
 		t.Fatal("simulator screen")
 	}
-	if byID["plex|192.168.1.2"].Detail != "Plex" || byID["channels|192.168.1.2"].Detail != "Channels" {
-		t.Fatalf("server kind %+v %+v", byID["plex|192.168.1.2"], byID["channels|192.168.1.2"])
+	if byID["plex|tus"].Detail != "Plex" || byID["channels|tus"].Detail != "Channels" {
+		t.Fatalf("server kind %+v %+v", byID["plex|tus"], byID["channels|tus"])
 	}
 	if places[0].Group != "tuner" {
 		t.Fatalf("tuners first, got %+v", places[0])
