@@ -2,12 +2,23 @@ export type Zoom = "fit" | "fill" | "zoom";
 export type SkipMode = "auto" | "button" | "manual";
 export type PictureMode = "broadcast" | "smooth" | "film";
 
-export function liveHlsConfig() {
+export type BufferProfile = "phone" | "desktop" | "tv" | "tile";
+
+/** Forward buffer stays past the 10s live latency. Tiles and phones keep less behind the playhead. */
+export function liveHlsConfig(profile: BufferProfile = "desktop") {
+  const buffers = {
+    phone: { liveSyncDurationCount: 3, maxBufferLength: 16, maxMaxBufferLength: 24, backBufferLength: 30 },
+    desktop: { liveSyncDurationCount: 3, maxBufferLength: 24, maxMaxBufferLength: 40, backBufferLength: 90 },
+    tv: { liveSyncDurationCount: 4, maxBufferLength: 30, maxMaxBufferLength: 60, backBufferLength: 120 },
+    tile: { liveSyncDurationCount: 3, maxBufferLength: 16, maxMaxBufferLength: 24, backBufferLength: 20 },
+  }[profile];
   return {
-    liveSyncDurationCount: 4,
+    ...buffers,
+    liveMaxLatencyDurationCount: 100000,
     maxLiveSyncPlaybackRate: 1,
     maxBufferHole: 0.5,
     stretchShortVideoTrack: true,
+    capLevelToPlayerSize: profile === "phone" || profile === "tile",
   };
 }
 

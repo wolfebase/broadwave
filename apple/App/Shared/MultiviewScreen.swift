@@ -152,8 +152,10 @@ final class TilePlayer {
             self.session = session
             detail = session.stream.reason
             let item = AVPlayerItem(url: api.url(session.playlist))
-            item.preferredForwardBufferDuration = prefs.quality == .auto ? 6 : 2
+            let tile = prefs.quality == .tile || prefs.quality == .tile360
+            PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: tile)
             player.replaceCurrentItem(with: item)
+            player.automaticallyWaitsToMinimizeStalling = true
             applyAudible()
             player.play()
             if let socket = store.socket {

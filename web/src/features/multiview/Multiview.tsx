@@ -250,7 +250,7 @@ function Tile({
     picture: "broadcast",
     room,
     sync: true,
-    small: !big,
+    profile: big ? "desktop" : "tile",
     audible: focused && (equal || big),
   });
   return (

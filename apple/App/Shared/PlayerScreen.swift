@@ -2,6 +2,7 @@ import AVFoundation
 import AVKit
 import BroadwaveKit
 import BroadwaveUI
+import CoreMedia
 import SwiftUI
 
 @MainActor
@@ -13,6 +14,13 @@ final class LivePlayer {
     var error: String?
     private var channelID: Int64?
     private var api: APIClient?
+    private var started = Date()
+    private var tick: Any?
+    private var stallObserver: NSObjectProtocol?
+    private(set) var firstFrameMs: Int?
+    private(set) var stalls = 0
+    /// Nominal frame rate once the asset reports it. 59.94 until then.
+    private(set) var refreshRate: Float = 59.94
 
     func start(_ channel: Channel, store: AppStore) async {
         await stop()
@@ -29,10 +37,14 @@ final class LivePlayer {
             self.session = session
             let item = AVPlayerItem(url: api.url(session.playlist))
             item.externalMetadata = metadata(channel: channel, airing: store.index.on(channel.id, at: Date()))
-            item.preferredForwardBufferDuration = 6
+            PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
             player.replaceCurrentItem(with: item)
             player.automaticallyWaitsToMinimizeStalling = true
+            watchStartup(item)
             player.play()
+            #if os(tvOS)
+                await matchRate(item)
+            #endif
             if store.syncEnabled, let socket = store.socket {
                 let engine = SyncEngine(player: player, socket: socket, room: "channel:\(channel.id)", channelID: channel.id)
                 engine.start()
@@ -46,6 +58,14 @@ final class LivePlayer {
     func stop() async {
         sync?.stop()
         sync = nil
+        if let tick {
+            player.removeTimeObserver(tick)
+        }
+        tick = nil
+        if let stallObserver {
+            NotificationCenter.default.removeObserver(stallObserver)
+        }
+        stallObserver = nil
         player.pause()
         player.replaceCurrentItem(with: nil)
         if let api, let id = channelID, let session {
@@ -53,6 +73,41 @@ final class LivePlayer {
         }
         session = nil
         channelID = nil
+    }
+
+    #if os(tvOS)
+        private func matchRate(_ item: AVPlayerItem) async {
+            let tracks = await (try? item.asset.loadTracks(withMediaType: .video)) ?? []
+            let rate = await (try? tracks.first?.load(.nominalFrameRate)) ?? 0
+            if rate > 1 {
+                refreshRate = rate
+            }
+        }
+    #endif
+
+    private func watchStartup(_ item: AVPlayerItem) {
+        if let tick {
+            player.removeTimeObserver(tick)
+        }
+        if let stallObserver {
+            NotificationCenter.default.removeObserver(stallObserver)
+        }
+        started = Date()
+        firstFrameMs = nil
+        stalls = 0
+        stallObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.playbackStalledNotification, object: item, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.stalls += 1
+                print("broadwave stall \(self?.stalls ?? 0)")
+            }
+        }
+        tick = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.firstFrameMs == nil, self.player.timeControlStatus == .playing else { return }
+                self.firstFrameMs = Int(Date().timeIntervalSince(self.started) * 1000)
+                print("broadwave ttff \(self.firstFrameMs ?? 0)ms")
+            }
+        }
     }
 
     private func metadata(channel: Channel, airing: Airing?) -> [AVMetadataItem] {
@@ -80,7 +135,7 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack(alignment: .top) {
             Color.black.ignoresSafeArea()
-            SystemPlayer(player: live.player, menu: channelMenu, audio: audioMenu) {
+            SystemPlayer(player: live.player, refreshRate: live.refreshRate, menu: channelMenu, audio: audioMenu) {
                 if let channel = nowPlaying.channel {
                     nowPlaying.watchTogether([channel])
                 }
@@ -214,6 +269,7 @@ struct ChannelMenuEntry: Identifiable {
 /// AVPlayerViewController: system PiP, AirPlay, captions, audio tracks, and Now Playing.
 struct SystemPlayer: UIViewControllerRepresentable {
     let player: AVPlayer
+    var refreshRate: Float = 59.94
     var menu: [ChannelMenuEntry] = []
     var audio: [ChannelMenuEntry] = []
     var onTogether: () -> Void = {}
@@ -226,16 +282,40 @@ struct SystemPlayer: UIViewControllerRepresentable {
             vc.canStartPictureInPictureAutomaticallyFromInline = true
         #endif
         #if os(tvOS)
-            vc.appliesPreferredDisplayCriteriaAutomatically = true
+            vc.appliesPreferredDisplayCriteriaAutomatically = false
         #endif
         return vc
     }
+
+    #if os(tvOS)
+        static func dismantleUIViewController(_ vc: AVPlayerViewController, coordinator _: ()) {
+            vc.view.window?.avDisplayManager.preferredDisplayCriteria = nil
+        }
+
+        /// SDR 8-bit. Broadcasts are not HDR; the refresh rate is what Match Frame Rate follows.
+        private func displayCriteria(refreshRate: Float) -> AVDisplayCriteria? {
+            var desc: CMFormatDescription?
+            let status = CMVideoFormatDescriptionCreate(
+                allocator: kCFAllocatorDefault,
+                codecType: kCMVideoCodecType_H264,
+                width: 1920,
+                height: 1080,
+                extensions: nil,
+                formatDescriptionOut: &desc
+            )
+            guard status == noErr, let desc else { return nil }
+            return AVDisplayCriteria(refreshRate: refreshRate, formatDescription: desc)
+        }
+    #endif
 
     func updateUIViewController(_ vc: AVPlayerViewController, context _: Context) {
         if vc.player !== player {
             vc.player = player
         }
         #if os(tvOS)
+            if let criteria = displayCriteria(refreshRate: refreshRate) {
+                vc.view.window?.avDisplayManager.preferredDisplayCriteria = criteria
+            }
             let actions = menu.map { entry in
                 UIAction(title: entry.title, state: entry.current ? .on : .off) { _ in entry.action() }
             }
@@ -268,6 +348,7 @@ struct RecordingPlayerScreen: View {
                 do {
                     let start = try await api.play(recordingID: recording.id)
                     let item = AVPlayerItem(url: api.url(start.playlist))
+                    PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
                     player.replaceCurrentItem(with: item)
                     if start.position > 5 {
                         await player.seek(to: CMTime(seconds: start.position, preferredTimescale: 600))

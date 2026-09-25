@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { stopWatch, watchChannel } from "../../api";
 import { SyncEngine, type SyncStatus } from "../../lib/sync";
 import type { Caps, Channel, Prefs, WatchSession } from "../../types";
+import { liveHlsConfig, type BufferProfile } from "../../picture";
 import { rememberChannel } from "../../recent";
 
 function webCaps(): Caps {
@@ -25,7 +26,7 @@ export function useLiveStream(
     picture,
     room,
     sync,
-    small,
+    profile,
     audible,
     remember,
   }: {
@@ -37,7 +38,7 @@ export function useLiveStream(
     picture?: Prefs["picture"];
     room: string | null;
     sync: boolean;
-    small: boolean;
+    profile: BufferProfile;
     audible: boolean;
     remember?: Channel | null;
   },
@@ -57,6 +58,28 @@ export function useLiveStream(
     let joined = "";
     const id = channelId;
     if (remember) rememberChannel(remember);
+    const started = performance.now();
+    let primed = false;
+    let stallAt = 0;
+    const onPlaying = () => {
+      if (!primed) {
+        primed = true;
+        video.dataset.ttff = String(Math.round(performance.now() - started));
+        return;
+      }
+      if (stallAt) {
+        const soFar = Number(video.dataset.stallMs || 0);
+        video.dataset.stallMs = String(Math.round(soFar + performance.now() - stallAt));
+        stallAt = 0;
+      }
+    };
+    const onWaiting = () => {
+      if (!primed) return;
+      stallAt = performance.now();
+      video.dataset.stalls = String(Number(video.dataset.stalls || 0) + 1);
+    };
+    video.addEventListener("playing", onPlaying);
+    video.addEventListener("waiting", onWaiting);
     void (async () => {
       try {
         const next = await watchChannel(id, webCaps(), { quality, audio, picture, track, even });
@@ -68,16 +91,7 @@ export function useLiveStream(
         setError("");
         setSession(next);
         if (Hls.isSupported()) {
-          hls = new Hls({
-            liveSyncDurationCount: small ? 2 : 3,
-            liveMaxLatencyDurationCount: 100000,
-            maxLiveSyncPlaybackRate: 1,
-            backBufferLength: small ? 20 : 120,
-            maxBufferLength: small ? 10 : 30,
-            capLevelToPlayerSize: small,
-            maxBufferHole: 0.5,
-            stretchShortVideoTrack: true,
-          });
+          hls = new Hls(liveHlsConfig(profile));
           hlsRef.current = hls;
           (video as HTMLVideoElement & { hls?: Hls }).hls = hls;
           hls.loadSource(next.playlist);
@@ -107,11 +121,13 @@ export function useLiveStream(
       syncRef.current = null;
       hls?.destroy();
       hlsRef.current = null;
+      video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("waiting", onWaiting);
       void stopWatch(id, joined);
     };
     // remember is the channel record; its identity changes on every guide poll.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, quality, audio, track, even, picture, small]);
+  }, [channelId, quality, audio, track, even, picture, profile]);
 
   useEffect(() => {
     const video = videoRef.current;

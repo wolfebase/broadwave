@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useData } from "../../app/data";
+import { useLayout } from "../../app/layout";
 import { navigate } from "../../app/router";
 import { airingAt, categoryOf, minutesLeft, progress } from "../../lib/guide";
 import type { SyncStatus } from "../../lib/sync";
@@ -42,6 +43,7 @@ export function LivePlayer({
   onExpand: () => void;
 }) {
   const { channels, index, now, recordings, settings, saveSettings, record, stopRecord } = useData();
+  const layout = useLayout();
   const videoRef = useRef<HTMLVideoElement>(null);
   const rootRef = useRef<HTMLElement>(null);
   const [opts, setOpts] = useState<Options>(readOptions);
@@ -56,7 +58,7 @@ export function LivePlayer({
     picture,
     room,
     sync: opts.sync,
-    small: false,
+    profile: mode === "mini" ? "tile" : layout,
     audible: true,
     remember: channel,
   });

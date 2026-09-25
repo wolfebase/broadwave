@@ -250,6 +250,7 @@ PB4. **Honest "30 to 60".** Measure `minterpolate` (mci and blend), `framerate`,
 PB5. **GPU end to end.** Decode on the GPU: `-hwaccel vaapi -hwaccel_output_format vaapi`, dropping `format=nv12,hwupload` when frames are already on the GPU (the lab run failed with "Impossible to convert between the formats"), with a software-decode fallback on error. Move the image to jellyfin-ffmpeg 7 (pulls G5 forward; the image's Debian ffmpeg 5.1 misbehaves with VAAPI deinterlace when fed faster than real time). Encoder tuning on VAAPI: `-rc_mode`, `-profile:v high`, B-frames, low-power. Choose bitrates by VMAF (libvmaf in the lab; ≥ 95 at 1080p60 on the LAN, ≥ 90 at 720p on cellular). Add HEVC renditions (`hvc1`) for Apple TV/iPhone (G4 pulled forward). **Accept:** CPU per 1080p60 rendition on TUS before/after (baseline about 18% of a core), VMAF table, and decode errors = 0 over a 10-minute live run.
 PB6. **Sound.** AC-3 5.1 passthrough to Apple TV and AVPlayer (AC-3 in fMP4 HLS) when the route supports it; E-AC-3. Pick audio by PMT, not stream order: ISO-639 language plus AC-3 descriptor `bsmod`. Here, 4.1 carries Spanish SAP on PID 0x102 and 41.1 a second English stereo track (probably described video). Add an audio picker in every player (main / second language / described video) and an optional "Even volume" (light `loudnorm`), off by default. **Accept:** fixtures for PMT parsing; Apple TV sim plays 5.1 passthrough; the web picker switches without a stall (F2).
 PB7. **Player tuning.** hls.js buffer and back-buffer settings per device; AVPlayer `preferredForwardBufferDuration`, no peak-bitrate cap on the LAN, `AVDisplayCriteria` frame-rate and range matching on tvOS. Measure time to first frame and stalls per hour on web, iPhone, and Apple TV (staging).
+PB7b. **Stall soak.** Watch one channel on staging for an hour on web, iPhone, and Apple TV. Record stalls and stall time. Tuner etiquette applies.
 PB8. **Show the truth.** A Stream panel in the web and Apple players (pulls F3's stats forward): source codec, WxH, scan type, and fps; output WxH, fps, encoder, bitrate, and whether decode ran on the GPU; client dropped frames and buffer; and the sync offset. **Accept:** screenshots on all three platforms at staging.
 PB9. **Picture lab in the repo.** `scripts/picture-lab.sh` captures samples (etiquette rules), runs candidate args in `bw-lab-*` containers on TUS at real time (`-re`), and outputs a table (fps, frames, WxH, decode errors, speed, CPU, VMAF) plus stills. Every PB task attaches its table. Do this first in Phase PB.
 
@@ -519,7 +520,7 @@ R1 → R2 → R3 → R4 → R5 → R6 → R7 →
 S0 → S1 → S2 → S3 → S4 → S5 → S6 → S7 → S8 → S9 → S10 → (tag + deploy) →
 C7 → C8 → C9 → (tag + deploy) →
 K1 → P1 → P2 → R8 → **U1** →
-PB9 → PB2 → PB3 → PB3b → PB5 → PB6 → PB4 → PB7 → PB8 → (tag + deploy + TestFlight) →
+PB9 → PB2 → PB3 → PB3b → PB5 → PB6 → PB4 → PB7 → PB7b → PB8 → (tag + deploy + TestFlight) →
 C7b → S8b → HOME1 → HOME2 → HOME3 → (tag + deploy + TestFlight) →
 MV1 → MV2 → MV3 → MV4 → MV5 → MV6 → AP1 → AP2 → AP3 → AS2 → AS3 → (tag + deploy + TestFlight + **App Store update 1.1 = AS4**) →
 OPS1 → OPS2 → OPS3 → LEGAL1 → AS6 → (tag + deploy) →
