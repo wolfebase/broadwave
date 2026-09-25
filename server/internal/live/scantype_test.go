@@ -4,6 +4,8 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+
+	"broadwave/internal/store"
 )
 
 func TestPictureFacts(t *testing.T) {
@@ -59,6 +61,23 @@ func TestPictureFactsFFmpeg(t *testing.T) {
 	got, ok = pictureFacts(raw, 1)
 	if !ok || got.Width != 1920 || got.Height != 1080 {
 		t.Fatalf("cropped h264 picture: %+v ok=%v", got, ok)
+	}
+}
+
+func TestFilmDoesNotStick(t *testing.T) {
+	if storedFieldOrder("film") != "tt" {
+		t.Fatal("film must be stored as interlaced")
+	}
+	if storedFieldOrder("progressive") != "progressive" || storedFieldOrder("bb") != "bb" {
+		t.Fatal("a stable scan type is stored as itself")
+	}
+	src := sourceOf(store.SourceChannel{FieldOrder: "film"})
+	if src.Film || src.Progressive {
+		t.Fatalf("a stored film flag must not lock the channel: %+v", src)
+	}
+	prog := sourceOf(store.SourceChannel{FieldOrder: "progressive"})
+	if !prog.Progressive || prog.Film {
+		t.Fatalf("progressive stays progressive: %+v", prog)
 	}
 }
 

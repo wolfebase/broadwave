@@ -473,11 +473,23 @@ func skipScaling(r *bitReader, chroma uint) bool {
 	return true
 }
 
+// storedFieldOrder is what the station is, not what this program is.
+// Soft 3:2 is film for the tune in hand. Saving that would play the next
+// game on the same 1080i channel at 24p.
+func storedFieldOrder(order string) string {
+	if order == "film" {
+		return "tt"
+	}
+	return order
+}
+
 // learnScanLocked reads the mux until the scan type is known or scanWait
 // elapses, stores it, and sets the feed source before a rendition starts.
-// A miss falls through to the background probe, which only helps the next tune.
+// A progressive channel is remembered. An interlaced channel is read again
+// each tune, because a movie and a game share it. A miss falls through to
+// the background probe, which only helps the next tune.
 func (h *Hub) learnScanLocked(m *mux, f *feed) {
-	needScan := f.channel.FieldOrder == ""
+	needScan := f.channel.FieldOrder != "progressive"
 	needAudio := len(f.tracks) == 0
 	if (!needScan && !needAudio) || m == nil || m.input != "" {
 		return
@@ -525,12 +537,13 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 		h.probeFieldOrderLocked(m, f)
 	} else if order != "" {
 		log.Printf("scan type %s for %s in %s", order, f.channel.GuideNumber, time.Since(started).Round(time.Millisecond))
-		f.channel.FieldOrder = order
-		f.source.Progressive = order == "progressive"
+		stored := storedFieldOrder(order)
+		f.channel.FieldOrder = stored
+		f.source.Progressive = stored == "progressive"
 		f.source.Film = order == "film"
-		if h.Store != nil {
+		if h.Store != nil && stored != "" {
 			id := f.channel.ID
-			go func() { _ = h.Store.SetFieldOrder(context.Background(), id, order) }()
+			go func() { _ = h.Store.SetFieldOrder(context.Background(), id, stored) }()
 		}
 	}
 	if len(f.tracks) > 0 {

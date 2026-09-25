@@ -76,7 +76,7 @@ func (h *Hub) probeFieldOrderLocked(m *mux, f *feed) {
 	go func() {
 		defer cancel()
 		_ = cmd.Wait()
-		order := fieldOrderFrom([]byte(out.String()), program)
+		order := storedFieldOrder(fieldOrderFrom([]byte(out.String()), program))
 		if order != "" {
 			_ = h.Store.SetFieldOrder(context.Background(), channelID, order)
 		}
