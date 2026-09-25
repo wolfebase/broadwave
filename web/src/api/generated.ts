@@ -282,6 +282,7 @@ export type ServerInfo = {
   encoder?: string;
   tunerCount?: number;
   features: string[];
+  minAppVersion?: string;
   update?: ServerUpdate;
 };
 

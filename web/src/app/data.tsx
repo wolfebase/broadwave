@@ -66,6 +66,8 @@ type Data = {
   dismissNotice: () => void;
   /** Set when a newer release is available. */
   update?: ServerInfo["update"];
+  /** Latest GET /api/v1/server, once it has answered. */
+  server: ServerInfo | null;
 };
 
 const Ctx = createContext<Data | null>(null);
@@ -114,6 +116,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(defaults);
   const [storage, setStorage] = useState<StorageInfo | null>(null);
   const [update, setUpdate] = useState<ServerInfo["update"]>();
+  const [server, setServer] = useState<ServerInfo | null>(null);
   const loading = useRef(false);
 
   const refresh = useCallback<Data["refresh"]>(async (what) => {
@@ -138,7 +141,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (all || want.has("virtuals")) jobs.push(getVirtuals().then((r) => setVirtuals(r.virtuals)));
     if (all) {
       jobs.push(getSettings().then(setSettings));
-      jobs.push(getServer().then((info) => setUpdate(info.update)).catch(() => undefined));
+      jobs.push(
+        getServer()
+          .then((info) => {
+            setServer(info);
+            setUpdate(info.update);
+          })
+          .catch(() => undefined),
+      );
       jobs.push(getStorage().then(setStorage).catch(() => undefined));
     }
     await Promise.all(jobs);
@@ -161,7 +171,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
         const [nextSettings, info] = await Promise.all([getSettings(), getServer().catch(() => null)]);
         setSettings(nextSettings);
-        if (info) setUpdate(info.update);
+        if (info) {
+          setServer(info);
+          setUpdate(info.update);
+        }
         if (nextSettings.needsSetup === "1") {
           setReady(true);
           setSettled(true);
@@ -289,7 +302,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setStorage(await getStorage().catch(() => null));
         if ("checkUpdates" in values) {
           const info = await getServer().catch(() => null);
-          if (info) setUpdate(info.update);
+          if (info) {
+            setServer(info);
+            setUpdate(info.update);
+          }
         }
       },
       record: async (channel, title) => {
@@ -312,6 +328,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       notices,
       dismissNotice,
       update,
+      server,
       rediscover: async (ip) => {
         try {
           const res = await discover(ip);
@@ -323,7 +340,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh(["channels"]);
       },
     }),
-    [ready, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, storage, refresh, notices, dismissNotice, update],
+    [ready, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, storage, refresh, notices, dismissNotice, update, server],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

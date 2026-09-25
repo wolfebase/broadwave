@@ -81,6 +81,8 @@ struct RootView: View {
         Group {
             if !store.connected {
                 ConnectView()
+            } else if let message = Compatibility.gateApp(store.info, app: installedVersion) {
+                IncompatibleServer(message: message)
             } else if showSetup || store.presentSetup {
                 SetupWizard {
                     showSetup = false
@@ -179,6 +181,13 @@ struct RootView: View {
     #endif
 
     /// broadwave://watch/<channel id>, broadwave://guide, broadwave://sports — for widgets, Top Shelf, and Siri.
+    private var installedVersion: String {
+        if let raw = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, !raw.isEmpty {
+            return raw
+        }
+        return Compatibility.appVersion
+    }
+
     private func open(_ url: URL) {
         guard url.scheme == "broadwave" else { return }
         switch url.host() {
@@ -318,6 +327,24 @@ struct RootView: View {
 }
 
 /// One line when a tuner, screen, or server shows up after the house is already known.
+/// This app is older than the server's minAppVersion.
+struct IncompatibleServer: View {
+    var message: String
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Circle().fill(Tokens.ColorToken.tally).frame(width: 12, height: 12)
+            Text("Broadwave").font(.title2.weight(.heavy))
+            Text(message)
+                .font(.title3.weight(.semibold))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(32)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct HomeArrivalBanner: View {
     var notice: String
     var onOpen: () -> Void

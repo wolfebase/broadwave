@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Guide } from "../features/guide/Guide";
 import { Home } from "../features/home/Home";
+import { gateApp } from "../lib/compat";
 import { events } from "../lib/events";
 import { GuideIcon, HomeIcon, RecordingsIcon, ScheduleIcon, SearchIcon, SettingsIcon, SportsIcon } from "../ui/icons";
 import { DataProvider, useData } from "./data";
@@ -55,7 +56,7 @@ export function App() {
 function Shell() {
   const { path, params } = useRoute();
   const layout = useLayout();
-  const { ready, booting, error, recordings, settings, notices, dismissNotice, update } = useData();
+  const { ready, booting, error, recordings, settings, notices, dismissNotice, update, server } = useData();
   const [hiddenUpdate, setHiddenUpdate] = useState("");
   const notice = update && update.message && hiddenUpdate !== update.message ? update : undefined;
   const player = usePlayer();
@@ -71,6 +72,20 @@ function Shell() {
       off();
     };
   }, []);
+
+  const incompatible = gateApp(server);
+  if (incompatible) {
+    return (
+      <div className="shell">
+        <main className="content">
+          <div className="version-block" role="alert">
+            <span className="brand-tally" aria-hidden="true" />
+            <p>{incompatible}</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   const active = (p: string) => (p === "/" ? path === "/" : path.startsWith(p));
   let page: React.ReactNode;

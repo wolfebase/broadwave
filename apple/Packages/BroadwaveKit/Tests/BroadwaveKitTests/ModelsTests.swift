@@ -29,11 +29,13 @@ private func fixture(_ name: String) throws -> Data {
     let server = try APIClient.decoder.decode(ServerInfo.self, from: fixture("server"))
     #expect(server.apiVersion == 1)
     #expect(server.features.contains("wholeHomeSync"))
+    #expect(server.minAppVersion == "1.0")
     #expect(server.update == nil)
 
     let release = try APIClient.decoder.decode(ServerInfo.self, from: Data("""
     {"id":"s","name":"Home","version":"0.6.0","apiVersion":1,"features":["live"],"update":{"version":"0.7","notesUrl":"https://github.com/wolfebase/broadwave/releases/tag/v0.7","message":"Broadwave 0.7 is available"}}
     """.utf8))
+    #expect(release.minAppVersion == nil)
     #expect(release.update?.message == "Broadwave 0.7 is available")
     #expect(release.update?.version == "0.7")
     #expect(release.update?.notesUrl == "https://github.com/wolfebase/broadwave/releases/tag/v0.7")

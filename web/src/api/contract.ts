@@ -153,6 +153,7 @@ export function contractFixtures(): number {
     signals.length +
     tuners.length +
     server.apiVersion +
+    (server.minAppVersion === "1.0" ? 1 : 0) +
     plan.tunersNeeded +
     (settings.layout ? 1 : 0) +
     discover.devices.length +

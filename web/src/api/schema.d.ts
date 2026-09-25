@@ -27,7 +27,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Identity and capabilities. Clients use `id` to recognize a paired server at a new address. */
+        /** @description Identity and capabilities. Clients use `id` to recognize a paired server at a new address. `features` lists what this build can do. `minAppVersion` is the oldest app that should talk to it. An older app is still served. */
         get: operations["getServer"];
         put?: never;
         post?: never;
@@ -1029,6 +1029,8 @@ export interface components {
             encoder?: string;
             tunerCount?: number;
             features: string[];
+            /** @description Oldest app version this server supports, for example 1.0. Omitted by the previous release. The app compares its own version. An older app is still served. */
+            minAppVersion?: string;
             /** @description Present when a newer release is available. Omitted when this build is current or the check is off. */
             update?: components["schemas"]["ServerUpdate"];
         };

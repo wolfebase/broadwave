@@ -157,9 +157,16 @@ struct SettingsView: View {
                 Text("Auto plays the original broadcast with Dolby Digital whenever this device can.")
             }
             Section {
-                Toggle("Whole-Home Sync", isOn: $store.syncEnabled)
+                if let message = Compatibility.gateFeature(store.info, "wholeHomeSync") {
+                    Text(message)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Toggle("Whole-Home Sync", isOn: $store.syncEnabled)
+                }
             } footer: {
-                Text("Every screen on the same channel shows the same moment, so nobody hears the next room cheer first.")
+                if Compatibility.gateFeature(store.info, "wholeHomeSync") == nil {
+                    Text("Every screen on the same channel shows the same moment, so nobody hears the next room cheer first.")
+                }
             }
             Section {
                 Toggle("Live scores", isOn: Binding(

@@ -56,7 +56,7 @@ final class LivePlayer {
             watchStartup(item)
             player.play()
             watchPicture()
-            if store.syncEnabled, let socket = store.socket {
+            if store.syncEnabled, Compatibility.gateFeature(store.info, "wholeHomeSync") == nil, let socket = store.socket {
                 let engine = SyncEngine(player: player, socket: socket, room: "channel:\(channel.id)", channelID: channel.id)
                 engine.start()
                 sync = engine
