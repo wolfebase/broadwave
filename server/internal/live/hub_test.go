@@ -92,6 +92,37 @@ func TestRecordingWarnsBeforeTheTileStops(t *testing.T) {
 	}
 }
 
+func TestSecondDropLeavesTheReplacementTune(t *testing.T) {
+	h, oldMux := testHub(t)
+	old := addTestFeed(h, oldMux, 1, "4.1")
+	cancelled := false
+	freq := oldMux.freq
+	replacement := &mux{
+		freq: freq, tuner: 0, host: "127.0.0.1:1",
+		feeds:  map[string]*feed{},
+		cancel: func() { cancelled = true },
+		body:   fakeBody{},
+	}
+	h.muxes[freq] = replacement
+	recorded := addTestFeed(h, replacement, 1, "4.1")
+	recorded.recording = &recording{id: 4}
+
+	h.stopFeedLocked(old)
+
+	if h.muxes[freq] != replacement {
+		t.Fatal("the replacement tune was released")
+	}
+	if replacement.feeds["4.1"] != recorded || recorded.recording == nil {
+		t.Fatal("the recording feed was removed from the mux")
+	}
+	if h.channels[1] != recorded {
+		t.Fatal("the channel no longer points at the recording")
+	}
+	if cancelled {
+		t.Fatal("the replacement mux was cancelled")
+	}
+}
+
 func TestPlaylistStreamCountIsPerSource(t *testing.T) {
 	h, _ := testHub(t)
 	h.channels[1] = &feed{channel: store.SourceChannel{Channel: store.Channel{DeviceID: "src-1"}}}
