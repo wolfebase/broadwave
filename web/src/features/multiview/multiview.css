@@ -194,7 +194,7 @@
 
 .mv-ch {
   flex: 0 0 auto;
-  min-width: 7.5rem;
+  min-width: 9.5rem;
   text-align: left;
   border-radius: 10px;
   padding: 8px 10px;
@@ -213,7 +213,9 @@
 }
 
 .mv-ch.on { background: #fff; color: #111; }
+.mv-ch:disabled { cursor: not-allowed; }
 .mv-ch small { display: block; opacity: 0.7; }
+.mv-cost { font-size: 0.75rem; white-space: nowrap; }
 
 .layout-tv .mv-ch,
 .layout-tv .mv-top .btn,

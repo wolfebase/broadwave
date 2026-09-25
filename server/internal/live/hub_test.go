@@ -40,6 +40,58 @@ func addTestRendition(h *Hub, f *feed, key string, viewers int, seen time.Time) 
 	return r
 }
 
+func TestRecordingWarnsBeforeTheTileStops(t *testing.T) {
+	h, m1 := testHub(t)
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	h.Store = st
+	m1.tuner = 0
+	m1.host = "127.0.0.1:1"
+	addTestFeed(h, m1, 1, "4.1")
+	m2 := &mux{freq: 575000001, tuner: 1, host: "127.0.0.1:1", feeds: map[string]*feed{}, cancel: func() {}, body: fakeBody{}}
+	h.muxes[m2.freq] = m2
+	addTestFeed(h, m2, 5, "9.1")
+	m3 := &mux{freq: 533000000, tuner: 2, host: "127.0.0.1:1", feeds: map[string]*feed{}, cancel: func() {}, body: fakeBody{}}
+	h.muxes[m3.freq] = m3
+	recorded := addTestFeed(h, m3, 3, "5.1")
+	recorded.recording = &recording{id: 9}
+
+	at := time.Date(2026, 9, 25, 15, 0, 0, 0, time.Local)
+	labels, feeds := h.viewerFeedsToPreemptLocked(599000000, 8)
+	if _, ok := h.channels[5]; !ok {
+		t.Fatal("the warning ran after the tile was already gone")
+	}
+	if len(labels) != 1 || labels[0] != "9.1" || len(feeds) != 1 || feeds[0].channel.ID != 5 {
+		t.Fatalf("labels %v feeds %d", labels, len(feeds))
+	}
+	warning := StopWarning(labels, at, "Jeopardy", at)
+	if warning != "9.1 stops at 3:00 PM. Jeopardy is recording." {
+		t.Fatal(warning)
+	}
+	if err := h.Store.AddEvent(context.Background(), "recording", warning); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range feeds {
+		h.stopFeedLocked(f)
+	}
+	if _, ok := h.channels[5]; ok {
+		t.Fatal("9.1 should stop after the warning")
+	}
+	if _, ok := h.channels[1]; !ok {
+		t.Fatal("4.1 stays on")
+	}
+	if _, ok := h.channels[3]; !ok || recorded.recording == nil {
+		t.Fatal("the recording keeps its tuner")
+	}
+	events, err := st.Events(context.Background(), 5)
+	if err != nil || len(events) != 1 || events[0].Message != warning {
+		t.Fatalf("%+v %v", events, err)
+	}
+}
+
 func TestPlaylistStreamCountIsPerSource(t *testing.T) {
 	h, _ := testHub(t)
 	h.channels[1] = &feed{channel: store.SourceChannel{Channel: store.Channel{DeviceID: "src-1"}}}

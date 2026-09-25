@@ -465,6 +465,69 @@ func planMultiview(t *testing.T, tuners int) {
 	if len(share.Playable) != 2 || !share.Playable[0].Shared || !share.Playable[1].Shared {
 		t.Fatalf("%+v", share)
 	}
+	assertPicker(t, tuners)
+}
+
+func assertPicker(t *testing.T, tuners int) {
+	t.Helper()
+	if tuners < 1 {
+		return
+	}
+	now := time.Date(2026, 9, 25, 14, 40, 0, 0, time.Local)
+	current := []live.PlanChannel{{ID: 1, FrequencyHz: 593000000, Number: "4.1"}}
+	offers, stops := live.Picker(current, []live.PlanChannel{
+		{ID: 2, FrequencyHz: 593000000, Number: "4.2"},
+		{ID: 3, FrequencyHz: 533000000, Number: "5.1"},
+	}, tuners, nil, nil, nil, now)
+	if len(stops) != 0 || offers[0].Label != "Same tune as 4.1" {
+		t.Fatalf("%d %+v %+v", tuners, offers, stops)
+	}
+	if tuners == 1 {
+		if offers[1].Label != "No tuner free" {
+			t.Fatalf("1 %+v", offers[1])
+		}
+		return
+	}
+	if offers[1].Label != "Uses a tuner" {
+		t.Fatalf("%d %+v", tuners, offers[1])
+	}
+	full := make([]live.PlanChannel, tuners)
+	for i := range full {
+		full[i] = live.PlanChannel{ID: int64(i + 1), FrequencyHz: 1000 + i, Number: strconv.Itoa(i)}
+	}
+	offers, _ = live.Picker(full, []live.PlanChannel{{ID: 99, FrequencyHz: 9000, Number: "99.1"}}, tuners, nil, nil, nil, now)
+	if offers[0].Label != "No tuner free" {
+		t.Fatalf("full %d %+v", tuners, offers[0])
+	}
+}
+
+func TestPickerUsesEveryDevice(t *testing.T) {
+	_, baseA, _ := startProfile(t, ProfileConnectDuo, 0)
+	_, baseB, _ := startProfile(t, ProfileConnectQuatro, 0)
+	a := fetchDevice(t, baseA)
+	b := fetchDevice(t, baseB)
+	if a.TunerCount != 2 || b.TunerCount != 4 {
+		t.Fatalf("duo %d quatro %d", a.TunerCount, b.TunerCount)
+	}
+	pool := a.TunerCount + b.TunerCount
+	now := time.Now()
+	var watching []live.PlanChannel
+	for i := 0; i < pool-1; i++ {
+		watching = append(watching, live.PlanChannel{ID: int64(i + 1), FrequencyHz: 100 + i, Number: strconv.Itoa(i + 1)})
+	}
+	offers, _ := live.Picker(watching, []live.PlanChannel{{ID: 50, FrequencyHz: 500, Number: "50.1"}}, pool, nil, nil, nil, now)
+	if offers[0].Label != "Uses a tuner" {
+		t.Fatalf("last free tuner of %d %+v", pool, offers[0])
+	}
+	watching = append(watching, live.PlanChannel{ID: 50, FrequencyHz: 500, Number: "50.1"})
+	offers, _ = live.Picker(watching, []live.PlanChannel{{ID: 51, FrequencyHz: 501, Number: "51.1"}}, pool, nil, nil, nil, now)
+	if offers[0].Label != "No tuner free" {
+		t.Fatalf("pool full %+v", offers[0])
+	}
+	offers, _ = live.Picker(watching, []live.PlanChannel{{ID: 8, FrequencyHz: 100, Number: "1.2"}}, pool, nil, nil, nil, now)
+	if offers[0].Label != "Same tune as 1" {
+		t.Fatalf("share across the pool %+v", offers[0])
+	}
 }
 
 func planRecording(t *testing.T, tuners int) {

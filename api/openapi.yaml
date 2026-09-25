@@ -672,6 +672,9 @@ paths:
                 channelIds:
                   type: array
                   items: { type: integer, format: int64 }
+                picker:
+                  type: boolean
+                  description: Include a cost for every channel in the lineup.
       responses:
         "200":
           description: Tuner budget for the requested channels
@@ -1610,6 +1613,26 @@ components:
         tunersNeeded: { type: integer }
         tunersFree: { type: integer }
         note: { type: string }
+        offers:
+          type: array
+          description: What the add-a-channel picker says about each lineup channel. Present when the request sets picker.
+          items:
+            type: object
+            required: [channelId, cost, label]
+            properties:
+              channelId: { type: integer, format: int64 }
+              cost: { type: string, enum: [same, tuner, none, on] }
+              label: { type: string, description: "Same tune as 9.1, Uses a tuner, or No tuner free." }
+        stops:
+          type: array
+          description: Tiles a scheduled recording will take. Each tile keeps playing until at.
+          items:
+            type: object
+            required: [channelId, reason, at]
+            properties:
+              channelId: { type: integer, format: int64 }
+              reason: { type: string }
+              at: { type: string, format: date-time }
     StreamInfo:
       type: object
       required: [rendition, video, audio, reason]
