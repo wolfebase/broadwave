@@ -1345,6 +1345,12 @@ func (h *Hub) stopFeedLocked(f *feed) {
 	if m == nil {
 		return
 	}
+	// muxOf is whatever is stored for this frequency now. A signal read and a
+	// field-order probe can both drop the feed this tune replaced; releasing
+	// that mux would set the tuner to none under the recording that took it.
+	if m.feeds[f.channel.GuideNumber] != f {
+		return
+	}
 	delete(m.feeds, f.channel.GuideNumber)
 	if len(m.feeds) == 0 {
 		m.cancel()
