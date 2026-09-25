@@ -87,7 +87,7 @@ func main() {
 	hub.OnSaved = func(rec store.Recording) {
 		dvr.OnSaved(context.Background(), st, hub, rec)
 	}
-	log.Printf("encoder: %s deint: %s smooth: %s blend: %v", encoder, hub.DeintBroadcast, hub.DeintSmooth, hub.Blend)
+	log.Printf("encoder: %s deint: %s smooth: %s", encoder, hub.DeintBroadcast, hub.DeintSmooth)
 	bus := realtime.NewBus()
 	st.OnEvent = func(ev store.Event) { bus.Publish("activity", ev) }
 	hub.OnChange = debounce(500*time.Millisecond, func() { bus.Publish("live.changed", nil) })

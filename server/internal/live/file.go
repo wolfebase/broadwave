@@ -14,12 +14,12 @@ import (
 func (h *Hub) fileGraph(codec, mode string) Graph {
 	return Graph{
 		VideoCodec: codec, Profile: "transparent", Audio: "stereo",
-		Encoder: h.Encoder, Mode: mode, Deint: h.deintFor(mode, codec), Blend: h.Blend,
+		Encoder: h.Encoder, Mode: mode, Deint: h.deintFor(mode, codec),
 	}
 }
 
 func graphStamp(g Graph) string {
-	return strings.Join([]string{NormalizeMode(g.Mode), g.VideoCodec, g.Encoder, g.Deint, fmt.Sprint(g.Blend), g.Profile}, "|")
+	return strings.Join([]string{NormalizeMode(g.Mode), g.VideoCodec, g.Encoder, g.Deint, g.Profile}, "|")
 }
 
 func playlistFresh(dir, stamp string) bool {

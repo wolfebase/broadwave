@@ -88,7 +88,6 @@ type Hub struct {
 	HEVC           bool
 	DeintBroadcast string
 	DeintSmooth    string
-	Blend          bool
 	OnSaved        func(store.Recording)
 
 	// OnChange is called, outside the hub lock, when viewers, renditions,
@@ -187,7 +186,7 @@ func New(st *store.Store, dir, ffmpeg, encoder string) *Hub {
 	broadcast, smooth := ProbeDeint(ffmpeg, encoder)
 	return &Hub{
 		Store: st, Dir: dir, FFmpeg: ffmpeg, Encoder: encoder, HEVC: ProbeHEVC(ffmpeg, encoder),
-		DeintBroadcast: broadcast, DeintSmooth: smooth, Blend: ProbeBlend(ffmpeg),
+		DeintBroadcast: broadcast, DeintSmooth: smooth,
 		RenditionIdle: 20 * time.Second,
 		muxes:         map[int]*mux{}, channels: map[int64]*feed{}, reserved: map[int]bool{},
 	}
@@ -457,7 +456,7 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	if m := muxOf(h, f); m != nil && m.input != "" {
 		input = m.input
 	}
-	args := renditionArgs(f.program, f.sourceFor(want), want, h.Encoder, h.deintFor(want.Mode, f.source.VideoCodec), h.Blend, input)
+	args := renditionArgs(f.program, f.sourceFor(want), want, h.Encoder, h.deintFor(want.Mode, f.source.VideoCodec), input)
 	cmd := exec.Command(h.FFmpeg, args...)
 	cmd.Dir = dir
 	var stdin io.WriteCloser
@@ -514,7 +513,7 @@ func (h *Hub) watchRendition(f *feed, r *rendition, pid int, encoder string) {
 	if m := muxOf(h, f); m != nil && m.input != "" {
 		input = m.input
 	}
-	args := renditionArgs(f.program, f.sourceFor(r.spec), r.spec, "libx264", "", h.Blend, input)
+	args := renditionArgs(f.program, f.sourceFor(r.spec), r.spec, "libx264", "", input)
 	cmd := exec.Command(h.FFmpeg, args...)
 	cmd.Dir = r.dir
 	var stdin io.WriteCloser

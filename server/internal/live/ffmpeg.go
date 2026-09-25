@@ -85,24 +85,6 @@ func deintWorks(ffmpeg, mode string) bool {
 	return cmd.Run() == nil
 }
 
-// ProbeBlend reports whether a light 30p-to-60p blend holds realtime at 1080p.
-// A failed probe leaves Smooth on the broadcast picture instead of dropping frames.
-func ProbeBlend(ffmpeg string) bool {
-	if ffmpeg == "" {
-		return false
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-	start := time.Now()
-	cmd := exec.CommandContext(ctx, ffmpeg, "-hide_banner", "-loglevel", "error",
-		"-f", "lavfi", "-i", "testsrc=size=1920x1080:rate=30:duration=1",
-		"-vf", "minterpolate=fps=60:mi_mode=blend", "-f", "null", "-")
-	if cmd.Run() != nil {
-		return false
-	}
-	return time.Since(start) <= 2500*time.Millisecond
-}
-
 func copyArgs(program int, input, userAgent, referrer, path string) []string {
 	if input == "" {
 		input = "pipe:0"

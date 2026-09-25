@@ -43,7 +43,7 @@ func TestProgressiveSkipsDeinterlace(t *testing.T) {
 func TestProgressive720pKeepsEveryFrame(t *testing.T) {
 	src := Source{VideoCodec: "MPEG2", AudioCodec: "AC3", Progressive: true}
 	for _, enc := range []string{"h264_vaapi", "libx264", "h264_videotoolbox"} {
-		line := strings.Join(RenditionArgs(0, src, Rendition{Video: "1080", Audio: "aac2"}, enc, "motion_adaptive", false), " ")
+		line := strings.Join(RenditionArgs(0, src, Rendition{Video: "1080", Audio: "aac2"}, enc, "motion_adaptive"), " ")
 		if strings.Contains(line, "deinterlace_vaapi") || strings.Contains(line, "bwdif") {
 			t.Fatalf("%s: progressive broadcast was deinterlaced: %s", enc, line)
 		}
@@ -51,7 +51,7 @@ func TestProgressive720pKeepsEveryFrame(t *testing.T) {
 			t.Fatalf("%s: progressive broadcast lost its frame rate: %s", enc, line)
 		}
 	}
-	line := strings.Join(RenditionArgs(0, src, Rendition{Video: "1080", Audio: "aac2"}, "h264_vaapi", "motion_adaptive", false), " ")
+	line := strings.Join(RenditionArgs(0, src, Rendition{Video: "1080", Audio: "aac2"}, "h264_vaapi", "motion_adaptive"), " ")
 	if !strings.Contains(line, "-hwaccel_output_format vaapi") || !strings.Contains(line, "scale_vaapi=w='min(1920,iw)'") || strings.Contains(line, "hwupload") {
 		t.Fatalf("vaapi should decode and scale on the GPU and never upscale 720p: %s", line)
 	}
@@ -59,11 +59,11 @@ func TestProgressive720pKeepsEveryFrame(t *testing.T) {
 
 func TestInterlacedStaysFieldRateOnTheGPU(t *testing.T) {
 	src := Source{VideoCodec: "MPEG2", AudioCodec: "AC3"}
-	line := strings.Join(RenditionArgs(0, src, Rendition{Video: "1080", Audio: "aac2"}, "h264_vaapi", "motion_adaptive", false), " ")
+	line := strings.Join(RenditionArgs(0, src, Rendition{Video: "1080", Audio: "aac2"}, "h264_vaapi", "motion_adaptive"), " ")
 	if !strings.Contains(line, "deinterlace_vaapi=mode=motion_adaptive:rate=field,scale_vaapi") {
 		t.Fatalf("1080i should be bobbed to 59.94 on the GPU: %s", line)
 	}
-	tile := strings.Join(RenditionArgs(0, src, Rendition{Video: "360", Audio: "none"}, "h264_vaapi", "motion_adaptive", false), " ")
+	tile := strings.Join(RenditionArgs(0, src, Rendition{Video: "360", Audio: "none"}, "h264_vaapi", "motion_adaptive"), " ")
 	if !strings.Contains(tile, "fps=30000/1001,format=nv12,hwupload,deinterlace_vaapi=mode=motion_adaptive:rate=frame") {
 		t.Fatalf("tiles stay at frame rate: %s", tile)
 	}
@@ -121,7 +121,7 @@ func TestScanTypeMatrix(t *testing.T) {
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
-			line := strings.Join(RenditionArgs(0, row.src, Rendition{Video: "1080", Audio: "aac2"}, row.encoder, "motion_adaptive", false), " ")
+			line := strings.Join(RenditionArgs(0, row.src, Rendition{Video: "1080", Audio: "aac2"}, row.encoder, "motion_adaptive"), " ")
 			for _, want := range row.want {
 				if !strings.Contains(line, want) {
 					t.Fatalf("missing %q in %s", want, line)
@@ -149,19 +149,19 @@ func TestFilmRecovers24p(t *testing.T) {
 	}
 }
 
-func TestSmoothBlendOnlyWhenProbePassed(t *testing.T) {
-	off := strings.Join(PictureArgs(Graph{VideoCodec: "H264", Mode: "smooth", Encoder: "libx264"}), " ")
-	if strings.Contains(off, "minterpolate") {
-		t.Fatalf("blend stays off until a realtime probe passes: %s", off)
+func TestSmoothDoesNotInventFrames(t *testing.T) {
+	line := strings.Join(PictureArgs(Graph{VideoCodec: "H264", Mode: "smooth", Encoder: "libx264"}), " ")
+	if strings.Contains(line, "minterpolate") || strings.Contains(line, "framerate=") {
+		t.Fatalf("smooth must not interpolate: %s", line)
 	}
-	on := strings.Join(PictureArgs(Graph{VideoCodec: "H264", Mode: "smooth", Blend: true, Encoder: "libx264"}), " ")
-	if !strings.Contains(on, "minterpolate=fps=60000/1001:mi_mode=blend") {
-		t.Fatalf("blend: %s", on)
+	live := strings.Join(RenditionArgs(0, Source{VideoCodec: "H264", Progressive: true}, Rendition{Video: "1080", Audio: "aac2", Mode: "smooth"}, "h264_vaapi", ""), " ")
+	if strings.Contains(live, "minterpolate") || strings.Contains(live, "fps=") {
+		t.Fatalf("progressive smooth stays at the source rate: %s", live)
 	}
 }
 
 func TestHEVCRenditionUsesHVC1(t *testing.T) {
-	line := strings.Join(RenditionArgs(0, Source{VideoCodec: "MPEG2"}, Rendition{Video: "1080", Audio: "aac2", Codec: "hevc"}, "h264_vaapi", "motion_adaptive", false), " ")
+	line := strings.Join(RenditionArgs(0, Source{VideoCodec: "MPEG2"}, Rendition{Video: "1080", Audio: "aac2", Codec: "hevc"}, "h264_vaapi", "motion_adaptive"), " ")
 	for _, want := range []string{"-hwaccel_output_format vaapi", "-c:v hevc_vaapi", "-tag:v hvc1", "-profile:v main", "deinterlace_vaapi"} {
 		if !strings.Contains(line, want) {
 			t.Fatalf("missing %q in %s", want, line)
