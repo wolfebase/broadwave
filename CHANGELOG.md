@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.7.0 — 2026-09-24
+
+Live TV keeps the motion the station sent, and Apple devices get the surround mix.
+
+### Added
+
+- A 720p channel is recognized before the picture starts, so the first tune is already 60 frames.
+- A movie shot on film plays at 24 frames, including when the station wove it into 60.
+- iPhone and Apple TV play the station's surround sound. The player can pick the main mix, another language, or described video. Even volume stays off unless you turn it on.
+- Apple TV matches the station's frame rate.
+- The player can show what the stream is doing: the picture coming in, the picture going out, and how far this screen is from the others.
+
+### Fixed
+
+- The graphics chip decodes the broadcast, so a live channel uses less of the server.
+- Invented frames on a 30-frame show looked ghosted, so that path is gone. A 30-frame show stays 30.
+- Closed captions no longer knock an Apple stream off the graphics chip.
+
 ## 0.6.0 — 2026-09-24
 
 The product is now Broadwave, and 720p channels play at a true 60 frames.

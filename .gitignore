@@ -35,3 +35,7 @@ __pycache__/
 docs/lab/samples/
 docs/lab/stills/
 docs/lab/runs/
+
+# Local evidence and browser sessions. Cite the path in PROGRESS; do not commit them.
+.evidence/
+.playwright-cli/
