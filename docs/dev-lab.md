@@ -26,7 +26,7 @@ Channel 14.1 through 14.16 is the mux-sharing candidate. That test waits for a f
 
 ## Scan-type matrix (PB3)
 
-Each row is the live rendition graph (`RenditionArgs`) for a 1080p delivery. 480i uses the same field-rate graph as 1080i; `scale` never upscales (`min(1920,iw)`). Soft 3:2 (MPEG-2 `repeat_first_field` on progressive pictures inside an interlaced sequence) is stored as field order `film` and plays at 24p: `fieldmatch,decimate` on the CPU, then `scale_vaapi` when the encoder is VAAPI.
+Each row is the live rendition graph (`RenditionArgs`) for a 1080p delivery. 480i uses the same field-rate graph as 1080i; `scale` never upscales (`min(1920,iw)`). Soft 3:2 (MPEG-2 `repeat_first_field` on progressive pictures inside an interlaced sequence) is stored as field order `film` and plays at 24p. Hard telecine has no flags; the film picture mode runs `pullup` on the CPU, then `scale_vaapi` when the encoder is VAAPI.
 
 Measured on this Mac with `TestScanMatrixPicture` (1s moving bars, libx264 and VideoToolbox). `idet` is multi-frame TFF+BFF vs progressive. `mpdecimate` kept every 59.94 frame (drop of 4 or fewer).
 
@@ -42,10 +42,10 @@ Measured on this Mac with `TestScanMatrixPicture` (1s moving bars, libx264 and V
 | H.264 PAFF | VideoToolbox | 59.940 | 60 | 0 | 60 |
 | H.264 MBAFF | libx264 | 59.940 | 60 | 0 | 60 |
 | H.264 MBAFF | VideoToolbox | 59.940 | 60 | 0 | 60 |
-| Hard telecine (`telecine=pattern=23`) | libx264 | 23.976 | 23 | 23 | 0 |
-| Hard telecine | VideoToolbox | 23.976 | 23 | 23 | 0 |
+| Hard telecine (`telecine=pattern=23`, top field) | libx264 | 23.976 | 23 | 0 | 23 |
+| Hard telecine | VideoToolbox | 23.976 | 23 | 0 | 23 |
 
-Hard telecine has no `repeat_first_field`, so the header scan leaves it on the field-rate path unless the viewer picks film. Forcing film recovers 23.976 fps, and `idet` still sees comb on this 1s fixture (PB3b). Soft 3:2 is `TestScanTypeCapturedHeaders` (`filmTS`).
+Hard telecine has no `repeat_first_field`, so the header scan leaves it on the field-rate path until the picture mode is film. Film mode runs `pullup` (`TestScanMatrixPicture` telecine: 23.976 fps, 23 frames, idet 0/23). The old `fieldmatch,decimate` graph left this fixture at idet 23/0. Soft 3:2 is `TestScanTypeCapturedHeaders` (`filmTS`).
 
 VAAPI on TUS (`scripts/picture-lab.sh run`, `deinterlace_vaapi=mode=motion_adaptive:rate=field`):
 

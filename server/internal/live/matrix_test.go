@@ -34,7 +34,7 @@ func TestScanMatrixPicture(t *testing.T) {
 		{"720p", "p720.ts", []string{"-f", "lavfi", "-i", bars("640x360", "60000/1001", "1"), "-c:v", "mpeg2video", "-b:v", "2M", "-f", "mpegts"}, Source{VideoCodec: "MPEG2", Progressive: true}, 59.94, 60},
 		{"1080i", "i1080.ts", []string{"-f", "lavfi", "-i", bars("640x360", "60000/1001", "1"), "-vf", "tinterlace=mode=interleave_top", "-c:v", "mpeg2video", "-b:v", "2M", "-flags", "+ildct+ilme", "-top", "1", "-f", "mpegts"}, Source{VideoCodec: "MPEG2"}, 59.94, 60},
 		{"480i", "i480.ts", []string{"-f", "lavfi", "-i", bars("320x240", "60000/1001", "1"), "-vf", "tinterlace=mode=interleave_top", "-c:v", "mpeg2video", "-b:v", "1M", "-flags", "+ildct+ilme", "-top", "1", "-f", "mpegts"}, Source{VideoCodec: "MPEG2"}, 59.94, 60},
-		{"telecine", "film.ts", []string{"-f", "lavfi", "-i", bars("640x360", "24000/1001", "1"), "-vf", "telecine=pattern=23", "-c:v", "mpeg2video", "-b:v", "2M", "-flags", "+ildct+ilme", "-f", "mpegts"}, Source{VideoCodec: "MPEG2", Film: true}, 23.976, 24},
+		{"telecine", "film.ts", []string{"-f", "lavfi", "-i", "nullsrc=s=640x360:r=24000/1001:d=1,format=yuv420p,geq=r='if(lt(abs(X-mod(N*12\\,640)),30),240,20)':g=128:b=40", "-vf", "telecine=pattern=23", "-c:v", "mpeg2video", "-b:v", "4M", "-flags", "+ildct+ilme", "-top", "1", "-f", "mpegts"}, Source{VideoCodec: "MPEG2", Film: true}, 23.976, 24},
 		{"paff", "paff.ts", []string{"-f", "lavfi", "-i", bars("640x360", "60000/1001", "1"), "-vf", "tinterlace=mode=interleave_top", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-x264-params", "tff=1", "-flags", "+ildct+ilme", "-f", "mpegts"}, Source{VideoCodec: "H264"}, 59.94, 60},
 		{"mbaff", "mbaff.ts", []string{"-f", "lavfi", "-i", bars("640x360", "60000/1001", "1"), "-vf", "tinterlace=mode=interleave_top", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-x264-params", "tff=1:interlaced=1", "-flags", "+ildct+ilme", "-f", "mpegts"}, Source{VideoCodec: "H264"}, 59.94, 60},
 	}
@@ -65,7 +65,7 @@ func TestScanMatrixPicture(t *testing.T) {
 				}
 				interlaced, progressive := idet(t, out)
 				t.Logf("fps=%.3f frames=%d idet interlaced=%d progressive=%d", fps, frames, interlaced, progressive)
-				if !tc.source.Film && interlaced > 2 && interlaced*4 > progressive {
+				if interlaced > 2 && interlaced*4 > progressive {
 					t.Fatalf("idet interlaced=%d progressive=%d", interlaced, progressive)
 				}
 				if tc.fps > 50 {

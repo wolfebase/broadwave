@@ -79,8 +79,8 @@ type Source struct {
 	AudioCodec string
 	// Progressive is true only once a probe has shown the picture is not interlaced.
 	Progressive bool
-	// Film is soft 3:2 pulldown (repeat_first_field). The broadcast mode then
-	// recovers 24p instead of bobbing the flags into duplicate frames.
+	// Film is 3:2 pulldown. Soft telecine is repeat_first_field; hard telecine
+	// has no flags and is recovered with pullup when the viewer picks film.
 	Film      bool
 	UserAgent string
 	Referrer  string
