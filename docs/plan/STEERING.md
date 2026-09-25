@@ -4,6 +4,14 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
+- 2026-09-25 17:10 · **E2 was ticked before its review, and the review found gaps.** Add an `E2c` line right under E2b and do it next:
+  - the web's one-shot skip must show what will be permanently missed before the user confirms (an E2 Accept bullet);
+  - add tests for the "Watch anyway" success path and the 20-second preempt window;
+  - fix the outdated channel-move comment in `dvr/plan.go`;
+  - make the tuner warning say the recording will be missed.
+  Reminder: the review runs **before** the commit, not after.
+  - The sprint ends at 17:30: go back to 2 lanes then. Effort stays at xhigh.
+
 - 2026-09-25 16:10 · **Lane copies inherit your uncommitted work. Start every lane clean.** The four lanes spawned at 16:07 all began with Lane A's unfinished HomeView, APIClient, and `PROGRESS.md` edits. They also "delete" `docs/lab/pb7b/*.log`, because `*.log` is gitignored and the copy skips those files. From now on:
   1. Every lane prompt's first command is `git reset --hard HEAD && git clean -fd` inside its own worktree (a throwaway copy, so this is safe). That drops the inherited edits and restores the logs.
   2. When integrating any lane, take only the files its task owns, never HomeView, APIClient, or `PROGRESS.md` changes that came from Lane A, and never the pb7b log deletions.
