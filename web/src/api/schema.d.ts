@@ -1222,6 +1222,23 @@ export interface components {
             tunersNeeded: number;
             tunersFree: number;
             note?: string;
+            /** @description What the add-a-channel picker says about each lineup channel. Present when the request sets picker. */
+            offers?: {
+                /** Format: int64 */
+                channelId: number;
+                /** @enum {string} */
+                cost: "same" | "tuner" | "none" | "on";
+                /** @description Same tune as 9.1, Uses a tuner, or No tuner free. */
+                label: string;
+            }[];
+            /** @description Tiles a scheduled recording will take. Each tile keeps playing until at. */
+            stops?: {
+                /** Format: int64 */
+                channelId: number;
+                reason: string;
+                /** Format: date-time */
+                at: string;
+            }[];
         };
         StreamInfo: {
             rendition: string;
@@ -2324,6 +2341,8 @@ export interface operations {
             content: {
                 "application/json": {
                     channelIds: number[];
+                    /** @description Include a cost for every channel in the lineup. */
+                    picker?: boolean;
                 };
             };
         };

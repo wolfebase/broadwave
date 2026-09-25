@@ -282,6 +282,18 @@ public struct MultiviewPlanBlocked: Codable, Sendable, Hashable {
     }
 }
 
+public struct MultiviewPlanOffers: Codable, Sendable, Hashable {
+    public var channelId: Int64
+    public var cost: String
+    public var label: String
+
+    public init(channelId: Int64, cost: String, label: String) {
+        self.channelId = channelId
+        self.cost = cost
+        self.label = label
+    }
+}
+
 public struct MultiviewPlanPlayable: Codable, Sendable, Hashable {
     public var channelId: Int64
     public var frequencyHz: Int
@@ -294,19 +306,35 @@ public struct MultiviewPlanPlayable: Codable, Sendable, Hashable {
     }
 }
 
+public struct MultiviewPlanStops: Codable, Sendable, Hashable {
+    public var at: Date
+    public var channelId: Int64
+    public var reason: String
+
+    public init(at: Date, channelId: Int64, reason: String) {
+        self.at = at
+        self.channelId = channelId
+        self.reason = reason
+    }
+}
+
 public struct MultiviewPlan: Codable, Sendable, Hashable {
     public var playable: [MultiviewPlanPlayable]
     public var blocked: [MultiviewPlanBlocked]
     public var tunersNeeded: Int
     public var tunersFree: Int
     public var note: String?
+    public var offers: [MultiviewPlanOffers]?
+    public var stops: [MultiviewPlanStops]?
 
-    public init(playable: [MultiviewPlanPlayable], blocked: [MultiviewPlanBlocked], tunersNeeded: Int, tunersFree: Int, note: String? = nil) {
+    public init(playable: [MultiviewPlanPlayable], blocked: [MultiviewPlanBlocked], tunersNeeded: Int, tunersFree: Int, note: String? = nil, offers: [MultiviewPlanOffers]? = nil, stops: [MultiviewPlanStops]? = nil) {
         self.playable = playable
         self.blocked = blocked
         self.tunersNeeded = tunersNeeded
         self.tunersFree = tunersFree
         self.note = note
+        self.offers = offers
+        self.stops = stops
     }
 }
 

@@ -155,7 +155,7 @@ export function stopWatch(channelId: number, rendition = "") {
 export function planMultiview(channelIds: number[]) {
   return request<MultiviewPlan>("/api/v1/multiview/plan", {
     method: "POST",
-    body: JSON.stringify({ channelIds }),
+    body: JSON.stringify({ channelIds, picker: true }),
   });
 }
 

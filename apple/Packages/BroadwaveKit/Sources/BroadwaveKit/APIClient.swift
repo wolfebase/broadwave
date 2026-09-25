@@ -133,8 +133,8 @@ public struct APIClient: Sendable {
     }
 
     public func planMultiview(_ channelIDs: [Int64]) async throws -> MultiviewPlan {
-        struct B: Encodable { var channelIds: [Int64] }
-        return try await send("POST", "/multiview/plan", body: B(channelIds: channelIDs))
+        struct B: Encodable { var channelIds: [Int64]; var picker: Bool }
+        return try await send("POST", "/multiview/plan", body: B(channelIds: channelIDs, picker: true))
     }
 
     public func stopWatching(channelID: Int64, rendition: String) async {

@@ -29,6 +29,21 @@ function parseIds(raw: string | null) {
     .filter((n) => Number.isFinite(n) && n > 0);
 }
 
+function scheduleStop(stops: { at: string; channelId: number }[], selected: number[], focus: number, drop: (next: number[], focus: number) => void) {
+  const due = stops.filter((stop) => Number.isFinite(Date.parse(stop.at)));
+  if (due.length === 0) return 0;
+  const now = Date.now();
+  const soonest = Math.min(...due.map((stop) => Date.parse(stop.at)));
+  const wait = Math.max(0, soonest - now);
+  return window.setTimeout(() => {
+    const tick = Date.now();
+    const gone = new Set(due.filter((stop) => Date.parse(stop.at) <= tick + 1000).map((stop) => stop.channelId));
+    const next = selected.filter((id) => !gone.has(id));
+    if (next.length === selected.length) return;
+    drop(next, next.includes(focus) ? focus : (next[0] ?? 0));
+  }, wait === 0 ? 4000 : wait);
+}
+
 export function Multiview() {
   const { channels, index, now, record } = useData();
   const { params } = useRoute();
@@ -47,9 +62,11 @@ export function Multiview() {
   const waiting = ids.length > 1 && planFor !== chKey;
   const known = ids.map((id) => channels.find((c) => c.id === id)).filter((c): c is Channel => !!c);
   const blocked = new Set(plan?.blocked.map((b) => b.channelId) ?? []);
+  const costs = new Map(plan?.offers?.map((offer) => [offer.channelId, offer]) ?? []);
+  const warning = [...new Set((plan?.stops ?? []).map((stop) => stop.reason).filter(Boolean))].join(" ");
   const visible = waiting ? [] : known.filter((c) => !blocked.has(c.id)).slice(0, slotsFor(layout));
   const ordered = layout === "2up" || layout === "quad" ? visible : [visible.find((c) => c.id === focus) ?? visible[0], ...visible.filter((c) => c.id !== focus)].filter((c): c is Channel => !!c);
-  const notice = plan?.blocked[0]?.reason || plan?.note || "";
+  const notice = warning || plan?.blocked[0]?.reason || plan?.note || "";
   const scores = useScoreMap();
 
   useEffect(() => {
@@ -62,22 +79,38 @@ export function Multiview() {
 
   useEffect(() => {
     const list = parseIds(chKey);
-    if (list.length < 2) return;
     let dead = false;
-    void planMultiview(list)
-      .then((next) => {
-        if (!dead) setPlan(next);
-      })
-      .catch(() => {
-        if (!dead) setPlan(null);
-      })
-      .finally(() => {
-        if (!dead) setPlanFor(chKey);
-      });
+    const load = () => {
+      void planMultiview(list)
+        .then((next) => {
+          if (!dead) setPlan(next);
+        })
+        .catch(() => {
+          if (!dead) setPlan(null);
+        })
+        .finally(() => {
+          if (!dead) setPlanFor(chKey);
+        });
+    };
+    load();
+    const timer = window.setInterval(load, 20000);
     return () => {
       dead = true;
+      window.clearInterval(timer);
     };
   }, [chKey]);
+
+  useEffect(() => {
+    const selected = parseIds(chKey);
+    const timer = scheduleStop(plan?.stops ?? [], selected, focus, (next, nextFocus) => {
+      const q = new URLSearchParams();
+      q.set("ch", next.join(","));
+      q.set("layout", layout);
+      q.set("focus", String(nextFocus));
+      navigate(`/multiview?${q}`);
+    });
+    return () => window.clearTimeout(timer);
+  }, [plan, chKey, layout, focus]);
 
   function go(next: { ch?: number[]; layout?: MvLayout; focus?: number; add?: boolean }, replace = true) {
     const q = new URLSearchParams();
@@ -90,6 +123,7 @@ export function Multiview() {
   }
 
   function addChannel(id: number) {
+    if (costs.get(id)?.cost === "none") return;
     if (ids.includes(id)) {
       go({ focus: id, add: false });
       return;
@@ -206,13 +240,18 @@ export function Multiview() {
       </div>
       {guide ? (
         <div className="mv-guide" role="listbox" aria-label="Add a channel">
-          {channels.map((c) => (
-            <button key={c.id} type="button" role="option" aria-selected={ids.includes(c.id)} className={ids.includes(c.id) ? "mv-ch on" : "mv-ch"} onClick={() => addChannel(c.id)}>
-              <LiveFrame id={c.id} className="mv-frame" />
-              {c.displayNumber}
-              <small>{c.displayName}</small>
-            </button>
-          ))}
+          {channels.map((c) => {
+            const cost = costs.get(c.id);
+            const full = cost?.cost === "none";
+            return (
+              <button key={c.id} type="button" role="option" aria-selected={ids.includes(c.id)} aria-disabled={full || undefined} disabled={full} className={ids.includes(c.id) ? "mv-ch on" : "mv-ch"} onClick={() => addChannel(c.id)}>
+                <LiveFrame id={c.id} className="mv-frame" />
+                {c.displayNumber}
+                <small>{c.displayName}</small>
+                {cost?.label ? <small className="mv-cost">{cost.label}</small> : null}
+              </button>
+            );
+          })}
         </div>
       ) : null}
     </section>

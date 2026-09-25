@@ -1,8 +1,11 @@
 package live
 
 import (
+	"fmt"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // PlanChannel is one channel a multiview might show.
@@ -45,6 +48,28 @@ type Blocked struct {
 	Holders   []string `json:"holders"`
 }
 
+// Offer is one row in the add-a-channel picker.
+// Cost is "same", "tuner", "none", or "on".
+type Offer struct {
+	ChannelID int64  `json:"channelId"`
+	Cost      string `json:"cost"`
+	Label     string `json:"label"`
+}
+
+// Stop is a tile a scheduled recording will take. The tile keeps playing until At.
+type Stop struct {
+	ChannelID int64     `json:"channelId"`
+	Reason    string    `json:"reason"`
+	At        time.Time `json:"at"`
+}
+
+// Reservation is a recording that needs a tuner at At. It wins over a live tile.
+type Reservation struct {
+	Channel PlanChannel
+	Title   string
+	At      time.Time
+}
+
 // MultiviewPlan says which of the requested channels can play together.
 type MultiviewPlan struct {
 	Playable     []Playable `json:"playable"`
@@ -52,6 +77,8 @@ type MultiviewPlan struct {
 	TunersNeeded int        `json:"tunersNeeded"`
 	TunersFree   int        `json:"tunersFree"`
 	Note         string     `json:"note,omitempty"`
+	Offers       []Offer    `json:"offers,omitempty"`
+	Stops        []Stop     `json:"stops,omitempty"`
 }
 
 type group struct {
@@ -197,6 +224,251 @@ func busyReason(tunerCount int, holders []string) string {
 		verb = "are"
 	}
 	return lead + " " + englishList(holders) + " " + verb + " on."
+}
+
+type channelSlot struct {
+	freq     int
+	known    bool
+	direct   bool
+	channels []PlanChannel
+	maxID    int64
+}
+
+// Picker prices every candidate against the channels already chosen.
+// A reservation keeps its tuner: a later recording drops the highest-id tile that is not on that station.
+// now is the clock for "3:00 PM" versus "Friday at 3:00 PM".
+func Picker(current, candidates []PlanChannel, tunerCount int, ours []TunedFreq, foreign []string, reserved []Reservation, now time.Time) ([]Offer, []Stop) {
+	current = dedupePlans(current)
+	base := PlanMultiview(current, tunerCount, ours, foreign)
+	on := map[int64]bool{}
+	for _, p := range base.Playable {
+		on[p.ChannelID] = true
+	}
+	var onAir []PlanChannel
+	for _, c := range current {
+		if on[c.ID] {
+			onAir = append(onAir, c)
+		}
+	}
+	slots := slotsOf(onAir)
+	heldFreq := map[int]bool{}
+	heldID := map[int64]bool{}
+	for _, slot := range slots {
+		if slot.known {
+			heldFreq[slot.freq] = true
+		}
+		for _, c := range slot.channels {
+			heldID[c.ID] = true
+		}
+	}
+	for _, t := range ours {
+		if t.FrequencyHz > 0 {
+			heldFreq[t.FrequencyHz] = true
+		}
+	}
+	free := base.TunersFree
+	reserved = append([]Reservation(nil), reserved...)
+	sort.SliceStable(reserved, func(i, j int) bool { return reserved[i].At.Before(reserved[j].At) })
+	var stops []Stop
+	for _, r := range reserved {
+		if r.Channel.Direct || heldID[r.Channel.ID] || (r.Channel.FrequencyHz > 0 && heldFreq[r.Channel.FrequencyHz]) {
+			if r.Channel.FrequencyHz > 0 {
+				heldFreq[r.Channel.FrequencyHz] = true
+			}
+			heldID[r.Channel.ID] = true
+			continue
+		}
+		if free > 0 {
+			free--
+		} else if idx := victimSlot(slots, r); idx >= 0 {
+			slot := slots[idx]
+			slots = append(slots[:idx], slots[idx+1:]...)
+			for _, c := range slot.channels {
+				delete(heldID, c.ID)
+			}
+			if slot.known {
+				delete(heldFreq, slot.freq)
+			}
+			reason := StopWarning(labelsOf(slot.channels), r.At, r.Title, now)
+			for _, c := range slot.channels {
+				stops = append(stops, Stop{ChannelID: c.ID, Reason: reason, At: r.At})
+			}
+		} else {
+			continue
+		}
+		if r.Channel.FrequencyHz > 0 {
+			heldFreq[r.Channel.FrequencyHz] = true
+		}
+		heldID[r.Channel.ID] = true
+	}
+	if len(candidates) == 0 {
+		if len(stops) == 0 {
+			return nil, nil
+		}
+		return nil, stops
+	}
+	offers := make([]Offer, 0, len(candidates))
+	for _, c := range candidates {
+		offers = append(offers, offerFor(c, onAir, ours, reserved, free))
+	}
+	if len(stops) == 0 {
+		return offers, nil
+	}
+	return offers, stops
+}
+
+// StopWarning is the line shown before a recording takes a tile.
+func StopWarning(numbers []string, at time.Time, title string, now time.Time) string {
+	if strings.TrimSpace(title) == "" {
+		title = "A show"
+	}
+	verb := "stops"
+	if len(numbers) != 1 {
+		verb = "stop"
+	}
+	return englishList(numbers) + " " + verb + " at " + clockLabel(at, now) + ". " + title + " is recording."
+}
+
+func clockLabel(at, now time.Time) string {
+	local := at.In(time.Local)
+	today := now.In(time.Local)
+	hour := local.Hour()
+	suffix := "AM"
+	if hour >= 12 {
+		suffix = "PM"
+	}
+	hour %= 12
+	if hour == 0 {
+		hour = 12
+	}
+	tod := fmt.Sprintf("%d:%02d %s", hour, local.Minute(), suffix)
+	if local.Year() == today.Year() && local.YearDay() == today.YearDay() {
+		return tod
+	}
+	return local.Weekday().String() + " at " + tod
+}
+
+func dedupePlans(want []PlanChannel) []PlanChannel {
+	seen := map[int64]bool{}
+	var out []PlanChannel
+	for _, c := range want {
+		if c.ID == 0 || seen[c.ID] {
+			continue
+		}
+		seen[c.ID] = true
+		out = append(out, c)
+	}
+	return out
+}
+
+func slotsOf(channels []PlanChannel) []channelSlot {
+	index := map[string]int{}
+	var slots []channelSlot
+	for _, c := range channels {
+		key := "id:" + strconv.FormatInt(c.ID, 10)
+		known := c.FrequencyHz > 0
+		if c.Direct {
+			key = "direct:" + strconv.FormatInt(c.ID, 10)
+		} else if known {
+			key = "hz:" + strconv.Itoa(c.FrequencyHz)
+		}
+		i, ok := index[key]
+		if !ok {
+			index[key] = len(slots)
+			slots = append(slots, channelSlot{freq: c.FrequencyHz, known: known && !c.Direct, direct: c.Direct, maxID: c.ID})
+			i = len(slots) - 1
+		}
+		slots[i].channels = append(slots[i].channels, c)
+		if c.ID > slots[i].maxID {
+			slots[i].maxID = c.ID
+		}
+	}
+	return slots
+}
+
+func victimSlot(slots []channelSlot, r Reservation) int {
+	best := -1
+	for i, slot := range slots {
+		if slot.direct || slotClaims(slot, r) {
+			continue
+		}
+		if best < 0 || slot.maxID > slots[best].maxID {
+			best = i
+		}
+	}
+	return best
+}
+
+func slotClaims(slot channelSlot, r Reservation) bool {
+	if r.Channel.FrequencyHz > 0 && slot.known && slot.freq == r.Channel.FrequencyHz {
+		return true
+	}
+	for _, c := range slot.channels {
+		if c.ID == r.Channel.ID {
+			return true
+		}
+	}
+	return false
+}
+
+func offerFor(c PlanChannel, onAir []PlanChannel, ours []TunedFreq, reserved []Reservation, free int) Offer {
+	if c.Direct {
+		return Offer{ChannelID: c.ID, Cost: "on"}
+	}
+	if label, ok := partnerLabel(c, onAir, ours, reserved); ok {
+		return Offer{ChannelID: c.ID, Cost: "same", Label: "Same tune as " + label}
+	}
+	for _, cur := range onAir {
+		if cur.ID == c.ID {
+			return Offer{ChannelID: c.ID, Cost: "on"}
+		}
+	}
+	if matchesReservation(c, reserved) || free > 0 {
+		return Offer{ChannelID: c.ID, Cost: "tuner", Label: "Uses a tuner"}
+	}
+	return Offer{ChannelID: c.ID, Cost: "none", Label: "No tuner free"}
+}
+
+func partnerLabel(c PlanChannel, onAir []PlanChannel, ours []TunedFreq, reserved []Reservation) (string, bool) {
+	if c.FrequencyHz <= 0 {
+		return "", false
+	}
+	for _, other := range onAir {
+		if other.ID != c.ID && other.FrequencyHz == c.FrequencyHz {
+			return other.label(), true
+		}
+	}
+	for _, t := range ours {
+		if t.FrequencyHz != c.FrequencyHz {
+			continue
+		}
+		for _, label := range t.Labels {
+			if label != "" && label != c.label() {
+				return label, true
+			}
+		}
+	}
+	for _, r := range reserved {
+		if r.Channel.ID != c.ID && r.Channel.FrequencyHz == c.FrequencyHz {
+			return r.Channel.label(), true
+		}
+	}
+	return "", false
+}
+
+func matchesReservation(c PlanChannel, reserved []Reservation) bool {
+	for _, r := range reserved {
+		if r.Channel.Direct {
+			continue
+		}
+		if r.Channel.ID == c.ID {
+			return true
+		}
+		if c.FrequencyHz > 0 && r.Channel.FrequencyHz == c.FrequencyHz {
+			return true
+		}
+	}
+	return false
 }
 
 func englishList(items []string) string {

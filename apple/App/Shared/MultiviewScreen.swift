@@ -333,6 +333,8 @@ struct MultiviewScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var session: MultiviewSession
     @State private var blocked: Set<Int64> = []
+    @State private var offers: [Int64: MultiviewPlanOffers] = [:]
+    @State private var stops: [MultiviewPlanStops] = []
     @State private var planReady = {
         #if DEBUG
             UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest")
@@ -434,7 +436,7 @@ struct MultiviewScreen: View {
             if session.focusID == 0 {
                 session.focusID = nowPlaying.together.first ?? 0
             }
-            if nowPlaying.together.count < 2 {
+            if nowPlaying.together.count < 2 || UserDefaults.standard.bool(forKey: "BroadwaveMultiviewAdd") {
                 session.guide = true
             }
         }
@@ -450,6 +452,28 @@ struct MultiviewScreen: View {
             }
             await refreshPlan()
             planReady = true
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(20))
+                if Task.isCancelled {
+                    return
+                }
+                await refreshPlan()
+            }
+        }
+        .task(id: stopKey) {
+            guard let soonest = stops.map(\.at).min() else { return }
+            let wait = soonest.timeIntervalSinceNow
+            if wait > 0 {
+                try? await Task.sleep(for: .seconds(wait))
+            } else {
+                try? await Task.sleep(for: .seconds(4))
+            }
+            if Task.isCancelled {
+                return
+            }
+            let due = Set(stops.filter { $0.at.timeIntervalSinceNow <= 1 }.map(\.channelId))
+            guard !due.isEmpty else { return }
+            nowPlaying.together.removeAll { due.contains($0) }
         }
         #if os(tvOS)
         .defaultFocus($remoteFocus, nowPlaying.together.first ?? 0)
@@ -532,17 +556,24 @@ struct MultiviewScreen: View {
             HStack(spacing: 8) {
                 ForEach(store.channels) { channel in
                     let on = nowPlaying.together.contains(channel.id)
+                    let offer = offers[channel.id]
+                    let full = offer?.cost == "none"
                     Button {
                         add(channel)
                     } label: {
                         VStack(spacing: 2) {
                             Text(channel.displayNumber).font(.headline.weight(.bold))
                             Text(channel.displayName).font(.caption2).lineLimit(1)
+                            if let label = offer?.label, !label.isEmpty {
+                                Text(label).font(.caption2).lineLimit(1)
+                            }
                         }
-                        .frame(minWidth: 72, minHeight: 48)
+                        .frame(minWidth: 88, minHeight: 48)
                     }
                     .buttonStyle(.bordered)
                     .tint(on ? Color.accentColor : nil)
+                    .disabled(full)
+                    .accessibilityLabel(offerLabel(channel, offer))
                     .accessibilityAddTraits(on ? .isSelected : [])
                 }
             }
@@ -650,7 +681,20 @@ struct MultiviewScreen: View {
         }
     }
 
+    private var stopKey: String {
+        stops.map { "\($0.channelId)-\($0.at.timeIntervalSince1970)" }.joined(separator: ",")
+    }
+
+    private func offerLabel(_ channel: Channel, _ offer: MultiviewPlanOffers?) -> String {
+        let name = "\(channel.displayNumber), \(channel.displayName)"
+        guard let offer, !offer.label.isEmpty else { return name }
+        return name + ". " + offer.label
+    }
+
     private func add(_ channel: Channel) {
+        if offers[channel.id]?.cost == "none" {
+            return
+        }
         if nowPlaying.together.contains(channel.id) {
             session.focusID = channel.id
             session.guide = false
@@ -680,10 +724,13 @@ struct MultiviewScreen: View {
 
     private func refreshPlan() async {
         let ids = nowPlaying.together
-        guard ids.count >= 1, let api = store.api else { return }
+        guard let api = store.api else { return }
         guard let plan = try? await api.planMultiview(ids) else { return }
         blocked = Set(plan.blocked.map(\.channelId))
-        session.notice = plan.blocked.first?.reason ?? plan.note ?? ""
+        offers = Dictionary(uniqueKeysWithValues: (plan.offers ?? []).map { ($0.channelId, $0) })
+        stops = plan.stops ?? []
+        let warning = Array(Set((plan.stops ?? []).map(\.reason))).filter { !$0.isEmpty }.joined(separator: " ")
+        session.notice = warning.isEmpty ? (plan.blocked.first?.reason ?? plan.note ?? "") : warning
     }
 }
 

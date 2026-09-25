@@ -140,10 +140,22 @@ export type MultiviewPlanBlocked = {
   reason: string;
 };
 
+export type MultiviewPlanOffers = {
+  channelId: number;
+  cost: string;
+  label: string;
+};
+
 export type MultiviewPlanPlayable = {
   channelId: number;
   frequencyHz: number;
   shared: boolean;
+};
+
+export type MultiviewPlanStops = {
+  at: string;
+  channelId: number;
+  reason: string;
 };
 
 export type MultiviewPlan = {
@@ -152,6 +164,8 @@ export type MultiviewPlan = {
   tunersNeeded: number;
   tunersFree: number;
   note?: string;
+  offers?: MultiviewPlanOffers[];
+  stops?: MultiviewPlanStops[];
 };
 
 export type Pass = {

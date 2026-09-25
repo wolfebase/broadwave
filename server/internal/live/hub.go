@@ -819,6 +819,18 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	f, err := h.ensureFeedLocked(ctx, ch, res)
+	if _, busy := err.(*BusyError); busy {
+		labels, feeds := h.viewerFeedsToPreemptLocked(ch.FrequencyHz, channelID)
+		if len(feeds) > 0 {
+			if h.Store != nil {
+				_ = h.Store.AddEvent(ctx, "recording", StopWarning(labels, time.Now(), title, time.Now()))
+			}
+			for _, feed := range feeds {
+				h.stopFeedLocked(feed)
+			}
+			f, err = h.ensureFeedLocked(ctx, ch, res)
+		}
+	}
 	if err != nil {
 		return store.Recording{}, err
 	}
@@ -937,6 +949,73 @@ func (h *Hub) ExtendRecording(ctx context.Context, id int64, until time.Time) er
 		return h.Store.SetRecordingEnd(ctx, id, until)
 	}
 	return fmt.Errorf("recording %d is not in progress", id)
+}
+
+// viewerFeedsToPreemptLocked chooses one viewer-only frequency a recording may take.
+// It does not stop anything. The caller warns, then stops the returned feeds.
+// The mux with the highest channel id loses, unless that mux is the recording's station.
+func (h *Hub) viewerFeedsToPreemptLocked(keepHz int, keepID int64) (labels []string, feeds []*feed) {
+	type group struct {
+		feeds []*feed
+		maxID int64
+	}
+	var groups []group
+	for _, m := range h.muxes {
+		if m == nil || m.tuner < 0 {
+			continue
+		}
+		if keepHz > 0 && m.freq == keepHz {
+			continue
+		}
+		var one []*feed
+		maxID := int64(0)
+		recording := false
+		same := false
+		for _, f := range m.feeds {
+			if f == nil {
+				continue
+			}
+			if f.recording != nil {
+				recording = true
+			}
+			if keepID > 0 && f.channel.ID == keepID {
+				same = true
+			}
+			if f.channel.ID > maxID {
+				maxID = f.channel.ID
+			}
+			one = append(one, f)
+		}
+		if recording || same || len(one) == 0 {
+			continue
+		}
+		groups = append(groups, group{feeds: one, maxID: maxID})
+	}
+	if len(groups) == 0 {
+		return nil, nil
+	}
+	best := 0
+	for i := range groups {
+		if groups[i].maxID > groups[best].maxID {
+			best = i
+		}
+	}
+	feeds = append([]*feed(nil), groups[best].feeds...)
+	sort.Slice(feeds, func(i, j int) bool { return feeds[i].channel.ID < feeds[j].channel.ID })
+	for _, f := range feeds {
+		labels = append(labels, feedLabel(f))
+	}
+	return labels, feeds
+}
+
+func feedLabel(f *feed) string {
+	if f.channel.DisplayNumber != "" {
+		return f.channel.DisplayNumber
+	}
+	if f.channel.GuideNumber != "" {
+		return f.channel.GuideNumber
+	}
+	return fmt.Sprintf("%d", f.channel.ID)
 }
 
 // SetHold keeps that many tuners free for recordings that are about to start.
