@@ -56,3 +56,17 @@ VAAPI on TUS (`scripts/picture-lab.sh run`, `deinterlace_vaapi=mode=motion_adapt
 | Real 4.1 progressive scale (1280×720, 60000/1001) | 59.94 | 306 | 1280×720 | 0 | 1× | 16.84% | kept 59.94, not doubled |
 
 480i and the H.264 subchannels (14.x) are the fixtures above. Those channels are not in the current scan, so they were not tuned.
+
+## GPU decode (PB5)
+
+Live renditions on VAAPI decode with `-hwaccel vaapi -hwaccel_output_format vaapi` and do not upload. Film still decodes in software because `pullup` is a CPU filter. The image ffmpeg is jellyfin-ffmpeg 7.1.4 (`/usr/lib/jellyfin-ffmpeg/ffmpeg`). It has `h264_vaapi` and `hevc_vaapi` and no `libvmaf`.
+
+Staging `broadwave-staging:pb5`, channel 5.1 (1080i), 2026-09-25:
+
+| Rendition | Output | Decode errors | CPU |
+| --- | --- | ---: | ---: |
+| `1080.aac2.broadcast` (25 s) | 1920×1080 59.94, segment 2.002 s, 240 frames | 0 | 10.83% |
+| `1080.aac2.broadcast` (10 min, 30 playlist polls, 292 segments) | 1920×1080 59.94, last 3 segments 360 frames | 0 | 10.51% |
+| `1080.copy.broadcast.hevc` | HEVC `hvc1`, 1920×1080 60000/1001 | 0 | 10.87% |
+
+Encoder flags: `-rc_mode VBR -profile:v high -bf 2 -low_power 0` for H.264, `-profile:v main -tag:v hvc1` for HEVC. Bitrates stay 14M at 1080p60 and 8M at 720p60 until a libvmaf run can score them (PB5b).

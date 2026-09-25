@@ -52,8 +52,8 @@ func TestProgressive720pKeepsEveryFrame(t *testing.T) {
 		}
 	}
 	line := strings.Join(RenditionArgs(0, src, Rendition{Video: "1080", Audio: "aac2"}, "h264_vaapi", "motion_adaptive", false), " ")
-	if !strings.Contains(line, "format=nv12,hwupload,scale_vaapi=w='min(1920,iw)'") {
-		t.Fatalf("vaapi should scale on the GPU and never upscale 720p: %s", line)
+	if !strings.Contains(line, "-hwaccel_output_format vaapi") || !strings.Contains(line, "scale_vaapi=w='min(1920,iw)'") || strings.Contains(line, "hwupload") {
+		t.Fatalf("vaapi should decode and scale on the GPU and never upscale 720p: %s", line)
 	}
 }
 
@@ -105,17 +105,17 @@ func TestScanTypeMatrix(t *testing.T) {
 		forbid  []string
 	}
 	rows := []row{
-		{"1080i vaapi", Source{VideoCodec: "MPEG2"}, "h264_vaapi", []string{"deinterlace_vaapi=mode=motion_adaptive:rate=field"}, []string{"bwdif", "pullup", "fps="}},
+		{"1080i vaapi", Source{VideoCodec: "MPEG2"}, "h264_vaapi", []string{"-hwaccel_output_format vaapi", "deinterlace_vaapi=mode=motion_adaptive:rate=field", "-rc_mode VBR", "-profile:v high", "-bf 2"}, []string{"bwdif", "pullup", "fps=", "hwupload"}},
 		{"1080i libx264", Source{VideoCodec: "MPEG2"}, "libx264", []string{"bwdif=mode=send_field", "fps=60000/1001"}, []string{"deinterlace_vaapi", "pullup"}},
 		{"1080i videotoolbox", Source{VideoCodec: "MPEG2"}, "h264_videotoolbox", []string{"bwdif=mode=send_field", "fps=60000/1001", "-a53cc 0"}, []string{"pullup"}},
 		{"480i libx264", Source{VideoCodec: "MPEG2"}, "libx264", []string{"bwdif=mode=send_field", "fps=60000/1001", "min(1920,iw)"}, []string{"pullup"}},
-		{"720p vaapi", Source{VideoCodec: "MPEG2", Progressive: true}, "h264_vaapi", []string{"scale_vaapi=w='min(1920,iw)'"}, []string{"deinterlace_vaapi", "bwdif", "fps=", "pullup"}},
+		{"720p vaapi", Source{VideoCodec: "MPEG2", Progressive: true}, "h264_vaapi", []string{"-hwaccel_output_format vaapi", "scale_vaapi=w='min(1920,iw)'"}, []string{"deinterlace_vaapi", "bwdif", "fps=", "pullup", "hwupload"}},
 		{"720p libx264", Source{VideoCodec: "MPEG2", Progressive: true}, "libx264", []string{"scale='min(1920,iw)'"}, []string{"bwdif", "fps=", "pullup"}},
 		{"720p videotoolbox", Source{VideoCodec: "MPEG2", Progressive: true}, "h264_videotoolbox", []string{"scale='min(1920,iw)'", "-a53cc 0"}, []string{"bwdif", "fps="}},
-		{"h264 paff vaapi", Source{VideoCodec: "H264"}, "h264_vaapi", []string{"deinterlace_vaapi=mode=motion_adaptive:rate=field"}, []string{"bwdif", "pullup"}},
+		{"h264 paff vaapi", Source{VideoCodec: "H264"}, "h264_vaapi", []string{"-hwaccel_output_format vaapi", "deinterlace_vaapi=mode=motion_adaptive:rate=field"}, []string{"bwdif", "pullup", "hwupload"}},
 		{"h264 mbaff libx264", Source{VideoCodec: "H264"}, "libx264", []string{"bwdif=mode=send_field", "fps=60000/1001"}, []string{"pullup"}},
 		{"h264 mbaff videotoolbox", Source{VideoCodec: "H264"}, "h264_videotoolbox", []string{"bwdif=mode=send_field", "-a53cc 0"}, []string{"pullup"}},
-		{"film vaapi", Source{VideoCodec: "MPEG2", Film: true}, "h264_vaapi", []string{"pullup,fps=24000/1001,format=nv12,hwupload,scale_vaapi"}, []string{"bwdif", "deinterlace_vaapi"}},
+		{"film vaapi", Source{VideoCodec: "MPEG2", Film: true}, "h264_vaapi", []string{"pullup,fps=24000/1001,format=nv12,hwupload,scale_vaapi"}, []string{"bwdif", "deinterlace_vaapi", "-hwaccel_output_format"}},
 		{"film libx264", Source{VideoCodec: "MPEG2", Film: true}, "libx264", []string{"pullup", "fps=24000/1001"}, []string{"bwdif", "hwupload"}},
 		{"film videotoolbox", Source{VideoCodec: "MPEG2", Film: true}, "h264_videotoolbox", []string{"pullup", "fps=24000/1001", "-a53cc 0"}, []string{"bwdif"}},
 	}
@@ -157,6 +157,18 @@ func TestSmoothBlendOnlyWhenProbePassed(t *testing.T) {
 	on := strings.Join(PictureArgs(Graph{VideoCodec: "H264", Mode: "smooth", Blend: true, Encoder: "libx264"}), " ")
 	if !strings.Contains(on, "minterpolate=fps=60000/1001:mi_mode=blend") {
 		t.Fatalf("blend: %s", on)
+	}
+}
+
+func TestHEVCRenditionUsesHVC1(t *testing.T) {
+	line := strings.Join(RenditionArgs(0, Source{VideoCodec: "MPEG2"}, Rendition{Video: "1080", Audio: "aac2", Codec: "hevc"}, "h264_vaapi", "motion_adaptive", false), " ")
+	for _, want := range []string{"-hwaccel_output_format vaapi", "-c:v hevc_vaapi", "-tag:v hvc1", "-profile:v main", "deinterlace_vaapi"} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("missing %q in %s", want, line)
+		}
+	}
+	if strings.Contains(line, "hwupload") || strings.Contains(line, "h264_vaapi") {
+		t.Fatalf("hevc gpu path: %s", line)
 	}
 }
 

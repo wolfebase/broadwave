@@ -12,6 +12,7 @@ type Rendition struct {
 	Video string `json:"video"` // copy, 1080, 720, 540
 	Audio string `json:"audio"` // copy, aac2, aac6
 	Mode  string `json:"mode,omitempty"`
+	Codec string `json:"codec,omitempty"` // hevc, or empty for H.264
 }
 
 func (r Rendition) normalized() Rendition {
@@ -27,8 +28,12 @@ func (r Rendition) normalized() Rendition {
 	}
 	if r.Video == "copy" {
 		r.Mode = ""
+		r.Codec = ""
 	} else {
 		r.Mode = NormalizeMode(r.Mode)
+		if r.Codec != "hevc" {
+			r.Codec = ""
+		}
 	}
 	return r
 }
@@ -36,20 +41,32 @@ func (r Rendition) normalized() Rendition {
 // Key names the rendition on disk and in URLs.
 func (r Rendition) Key() string {
 	r = r.normalized()
-	if r.Mode == "" {
-		return r.Video + "." + r.Audio
+	key := r.Video + "." + r.Audio
+	if r.Mode != "" {
+		key += "." + r.Mode
 	}
-	return r.Video + "." + r.Audio + "." + r.Mode
+	if r.Codec == "hevc" {
+		key += ".hevc"
+	}
+	return key
 }
 
 func ParseRenditionKey(key string) (Rendition, bool) {
 	parts := strings.Split(key, ".")
-	if len(parts) < 2 || len(parts) > 3 {
+	if len(parts) < 2 || len(parts) > 4 {
 		return Rendition{}, false
 	}
 	r := Rendition{Video: parts[0], Audio: parts[1]}
+	if len(parts) >= 3 {
+		if parts[len(parts)-1] == "hevc" {
+			r.Codec = "hevc"
+			parts = parts[:len(parts)-1]
+		}
+	}
 	if len(parts) == 3 {
 		r.Mode = parts[2]
+	} else if len(parts) != 2 {
+		return Rendition{}, false
 	}
 	if r.normalized().Key() != key {
 		return Rendition{}, false
@@ -203,6 +220,10 @@ func Decide(src Source, caps Caps, p Prefs) Decision {
 		}
 	}
 	r.Mode = p.Picture
+	if r.Video != "copy" && has(caps.Video, "hevc") {
+		r.Codec = "hevc"
+		why = append(why, "HEVC")
+	}
 	r = r.normalized()
 	return Decision{Rendition: r, Reason: strings.Join(why, ", ")}
 }
@@ -251,8 +272,25 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 	r = r.normalized()
 	args := []string{"-hide_banner", "-loglevel", "warning", "-fflags", "+genpts+discardcorrupt", "-copyts"}
 	transcode := r.Video != "copy"
-	if transcode && encoder == "h264_vaapi" {
+	outEnc := encoder
+	if transcode {
+		outEnc = OutputEncoder(encoder, r.Codec)
+	}
+	gpu := false
+	if transcode {
+		mode := r.Mode
+		if src.Film && NormalizeMode(mode) == "broadcast" {
+			mode = "film"
+		}
+		probe := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Blend: blend, Progressive: src.Progressive}
+		inter := !src.Progressive && (InterlacedCodec(src.VideoCodec) || codecName(src.VideoCodec) == "h264") && probe.Mode != "film"
+		gpu = gpuDecode(probe, inter, vaapiDeintMode(probe, inter))
+	}
+	if transcode && vaapiFamily(outEnc) {
 		args = append(args, "-init_hw_device", "vaapi=va:/dev/dri/renderD128", "-filter_hw_device", "va")
+		if gpu {
+			args = append(args, "-hwaccel", "vaapi", "-hwaccel_output_format", "vaapi", "-hwaccel_device", "va")
+		}
 	}
 	if input == "" {
 		input = "pipe:0"
@@ -278,13 +316,13 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		if src.Film && NormalizeMode(mode) == "broadcast" {
 			mode = "film"
 		}
-		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: encoder, Mode: mode, Deint: deint, Blend: blend, Progressive: src.Progressive}
+		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Blend: blend, Progressive: src.Progressive}
 		interlaced := !src.Progressive && (InterlacedCodec(src.VideoCodec) || codecName(src.VideoCodec) == "h264") && g.Mode != "film"
 		field := interlaced && !smallPicture(g.Profile)
 		width, height, rate := pictureSize(g.Profile, field)
 		fps, gop := pictureRate(g, field)
 		args = append(args, "-vf", videoFilter(g, vaapiDeintMode(g, interlaced), interlaced, field, width, height, fps))
-		args = append(args, videoCodec(encoder, rate, gop)...)
+		args = append(args, videoCodec(outEnc, rate, gop)...)
 		args = append(args, "-force_key_frames", "expr:if(isnan(prev_forced_t),1,gte(t,prev_forced_t+2))")
 	} else {
 		args = append(args, "-c:v", "copy")

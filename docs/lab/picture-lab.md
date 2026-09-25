@@ -2,7 +2,7 @@
 
 `scripts/picture-lab.sh` captures a sample from staging and encodes each `scripts/picture-lab/*.args` file in a `bw-lab-*` container on TUS at `-re`. Stills and the sample stay out of git.
 
-The 0.6.0 image ffmpeg has no `libvmaf` (only `vmafmotion`), so the VMAF column is `n/a` until PB5.
+jellyfin-ffmpeg 7.1.4, like the 0.6.0 Debian ffmpeg, is built without `libvmaf`. The VMAF column stays `n/a` until a binary that has the filter scores a capture (PB5b).
 
 Channel 1 (4.1), 12 s capture, 8 s encode, 2026-09-24:
 

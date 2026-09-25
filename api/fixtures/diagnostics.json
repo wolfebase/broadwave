@@ -19,7 +19,9 @@
   "encoder": {
     "deinterlace": "",
     "ffmpeg": "test",
+    "gpuDecode": false,
     "hardware": false,
+    "hevc": false,
     "name": "libx264"
   },
   "features": [

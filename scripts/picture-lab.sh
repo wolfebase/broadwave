@@ -141,7 +141,10 @@ docker rm -f "\$cname" >/dev/null 2>&1 || true
 docker run -d --name "\$cname" --cpus 4 --device /dev/dri \
   -v "\$remote":/in.ts:ro -v /tmp/\$cname:/out \
   --entrypoint ffmpeg "\$image" \
-  -hide_banner -nostats -progress /out/progress.txt -re -i /in.ts \
+  -hide_banner -nostats -progress /out/progress.txt \
+  -init_hw_device vaapi=va:/dev/dri/renderD128 -filter_hw_device va \
+  -hwaccel vaapi -hwaccel_output_format vaapi -hwaccel_device va \
+  -re -i /in.ts \
   \$args -t 8 -f mp4 -movflags +faststart /out/out.mp4 >/dev/null
 cpu="n/a"
 maxcpu=0

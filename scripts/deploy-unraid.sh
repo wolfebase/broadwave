@@ -80,7 +80,7 @@ fi
 sqlite3 "\$APPDATA/config/broadwave.db" "DELETE FROM passes; UPDATE server_identity SET name='Broadwave Staging' WHERE id=1;"
 mv "\$APPDATA/broadwave.new" "\$APPDATA/broadwave"
 chmod +x "\$APPDATA/broadwave"
-IMAGE=\$(docker inspect -f '{{.Config.Image}}' "\$NAME" 2>/dev/null || docker inspect -f '{{.Config.Image}}' Broadwave 2>/dev/null || echo ghcr.io/wolfebase/broadwave:0.6.0)
+IMAGE="${STAGING_IMAGE:-\$(docker inspect -f '{{.Config.Image}}' "\$NAME" 2>/dev/null || docker inspect -f '{{.Config.Image}}' Broadwave 2>/dev/null || echo ghcr.io/wolfebase/broadwave:0.6.0)}"
 docker rm -f "\$NAME" >/dev/null 2>&1 || true
 docker run -d --name "\$NAME" --restart no --network host --device /dev/dri \\
   --cpus 6 --memory 3g --no-healthcheck -e TZ="\$TZ_NAME" \\

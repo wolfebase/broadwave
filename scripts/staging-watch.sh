@@ -91,7 +91,11 @@ pts = subprocess.check_output([
     "ffprobe", "-v", "error", "-select_streams", "v:0",
     "-show_entries", "frame=pts_time", "-of", "csv=p=0", clip,
 ], text=True).split()
-times = [float(x) for x in pts if x.strip()]
+times = []
+for raw in pts:
+    raw = raw.strip().rstrip(",")
+    if raw:
+        times.append(float(raw))
 if len(times) < 2:
     sys.exit(f"only {len(times)} frames")
 fps = (len(times) - 1) / (times[-1] - times[0])

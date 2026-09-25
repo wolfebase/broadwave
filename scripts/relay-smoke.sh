@@ -33,7 +33,7 @@ if [ "${FAKE:-}" = 1 ]; then
   export HDHR_CONTROL_PORT="$CONTROL_PORT"
   HDHR=${BASE#http://}
   NAME="WDAF"
-  DIRECT="1080.copy.broadcast"
+  DIRECT="1080.copy.broadcast.hevc"
   "$BIN" -config "$T" -addr "127.0.0.1:$PORT" -hdhr "$HDHR" -bonjour=false >"$T/log.txt" 2>&1 &
 else
   ffmpeg -hide_banner -loglevel error -re \
