@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -45,6 +46,114 @@ func TestStagingSetupDoesNotTune(t *testing.T) {
 	}
 	if got["scan"] != "A test server does not scan the antenna." || got["guide"] != "A test server does not pull the guide." || got["signal"] != "No signal reading." {
 		t.Fatalf("%v", got)
+	}
+}
+
+type closeFunc struct {
+	io.ReadCloser
+	fn func()
+}
+
+func (c closeFunc) Close() error {
+	err := c.ReadCloser.Close()
+	c.fn()
+	return err
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestSetupScanAbortsOnlyWhileTheTunerIsScanning(t *testing.T) {
+	cases := []struct {
+		name    string
+		status  string
+		code    int
+		cancel  bool
+		wait    time.Duration
+		aborts  int32
+		detail  string
+		syncing bool
+	}{
+		{name: "still scanning", status: `{"Scan":1,"Found":3}`, wait: 40 * time.Millisecond, aborts: 1, detail: "No channels yet.", syncing: true},
+		{name: "finished", status: `{"Scan":0,"Found":4}`, wait: 40 * time.Millisecond, aborts: 0, detail: "No channels yet.", syncing: true},
+		{name: "progress error", code: http.StatusInternalServerError, wait: 40 * time.Millisecond, aborts: 1, detail: "No channels yet.", syncing: true},
+		{name: "cancelled", status: `{"Scan":1,"Found":1}`, cancel: true, wait: time.Second, aborts: 1, detail: "The scan stopped."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var starts, aborts, discovers atomic.Int32
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.URL.Path == "/lineup.post" && r.Method == http.MethodPost && r.URL.Query().Get("scan") == "start":
+					starts.Add(1)
+					w.WriteHeader(http.StatusOK)
+				case r.URL.Path == "/lineup.post" && r.Method == http.MethodPost && r.URL.Query().Get("scan") == "abort":
+					aborts.Add(1)
+					w.WriteHeader(http.StatusOK)
+				case r.URL.Path == "/lineup_status.json":
+					if tc.code != 0 {
+						http.Error(w, "no status", tc.code)
+						return
+					}
+					_, _ = w.Write([]byte(tc.status))
+				default:
+					discovers.Add(1)
+					http.NotFound(w, r)
+				}
+			}))
+			defer srv.Close()
+			client := srv.Client()
+			if tc.cancel {
+				base := client.Transport
+				if base == nil {
+					base = http.DefaultTransport
+				}
+				client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					res, err := base.RoundTrip(req)
+					if err != nil || res == nil || res.Body == nil || req.URL.Path != "/lineup_status.json" {
+						return res, err
+					}
+					res.Body = closeFunc{ReadCloser: res.Body, fn: cancel}
+					return res, nil
+				})
+			}
+			st := testStore(t)
+			if err := st.UpsertDevice(ctx, hdhr.Device{
+				DeviceID: "SCAN", FriendlyName: "Fake", BaseURL: srv.URL, TunerCount: 2,
+			}, nil); err != nil {
+				t.Fatal(err)
+			}
+			api := &Server{
+				Store:    st,
+				HDHR:     &hdhr.Client{HTTP: client},
+				ScanWait: tc.wait,
+			}
+			run := newFinishStatus()
+			api.finishRun = &run
+			started := time.Now()
+			api.stepScan(ctx)
+			if starts.Load() != 1 || aborts.Load() != tc.aborts {
+				t.Fatalf("start %d abort %d, want abort %d", starts.Load(), aborts.Load(), tc.aborts)
+			}
+			if tc.syncing != (discovers.Load() > 0) {
+				t.Fatalf("lineup sync requests %d", discovers.Load())
+			}
+			if tc.cancel && time.Since(started) > 500*time.Millisecond {
+				t.Fatalf("cancel waited %s", time.Since(started))
+			}
+			var detail string
+			for _, step := range api.finishRun.Steps {
+				if step.ID == "scan" {
+					detail = step.Detail
+				}
+			}
+			if detail != tc.detail {
+				t.Fatalf("detail %q", detail)
+			}
+		})
 	}
 }
 

@@ -178,10 +178,20 @@ func (c *Client) FetchLibrary(ctx context.Context, baseURL string) ([]LibraryFil
 	return out, nil
 }
 
-// StartScan asks the tuner to rescan. It uses a tuner until the scan finishes.
+// StartScan asks the tuner to rescan. It uses a tuner until the scan finishes
+// or AbortScan runs.
 func (c *Client) StartScan(ctx context.Context, baseURL string) error {
+	return c.postScan(ctx, baseURL, "start")
+}
+
+// AbortScan stops a scan StartScan began so the tuner is released.
+func (c *Client) AbortScan(ctx context.Context, baseURL string) error {
+	return c.postScan(ctx, baseURL, "abort")
+}
+
+func (c *Client) postScan(ctx context.Context, baseURL, action string) error {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/lineup.post?scan=start", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/lineup.post?scan="+url.QueryEscape(action), nil)
 	if err != nil {
 		return err
 	}
