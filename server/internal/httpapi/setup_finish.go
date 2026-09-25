@@ -305,10 +305,6 @@ func (s *Server) stepEncoder(ctx context.Context) {
 
 func (s *Server) stepSignal(ctx context.Context) {
 	s.setFinish("signal", "running", "Checking the antenna.")
-	if s.Staging {
-		s.setFinish("signal", "done", s.storedSignalSummary(ctx))
-		return
-	}
 	if s.SetupSignal != nil {
 		great, ok, weak, lost, err := s.SetupSignal(ctx)
 		if err != nil {
@@ -316,6 +312,10 @@ func (s *Server) stepSignal(ctx context.Context) {
 			return
 		}
 		s.setFinish("signal", "done", signalSummary(great, ok, weak, lost))
+		return
+	}
+	if s.Staging {
+		s.setFinish("signal", "done", s.storedSignalSummary(ctx))
 		return
 	}
 	s.setFinish("signal", "done", s.measureSetupSignals(ctx))
