@@ -17,6 +17,7 @@ Live TV keeps the motion the station sent, and Apple devices get the surround mi
 - The graphics chip decodes the broadcast, so a live channel uses less of the server.
 - Invented frames on a 30-frame show looked ghosted, so that path is gone. A 30-frame show stays 30.
 - Closed captions no longer knock an Apple stream off the graphics chip.
+- A movie no longer leaves the channel at 24 frames. The next show is judged on its own.
 
 ## 0.6.0 — 2026-09-24
 

@@ -21,7 +21,8 @@ type SourceChannel struct {
 	Referrer     string `json:"-"`
 	FrequencyHz  int    `json:"frequencyHz"`
 	ProgramNum   int    `json:"programNum"`
-	// FieldOrder is what a probe saw: progressive, film (soft 3:2), tt, bb, tb, bt, or empty when unknown.
+	// FieldOrder is the station scan: progressive, tt, bb, tb, bt, or empty.
+	// Film cadence is decided per tune and is not stored.
 	FieldOrder string `json:"fieldOrder,omitempty"`
 }
 

@@ -230,7 +230,13 @@ func (h *Hub) SourceOf(ctx context.Context, channelID int64) (Source, error) {
 }
 
 func sourceOf(ch store.SourceChannel) Source {
-	return Source{VideoCodec: ch.VideoCodec, AudioCodec: ch.AudioCodec, Progressive: ch.FieldOrder == "progressive", Film: ch.FieldOrder == "film", UserAgent: ch.UserAgent, Referrer: ch.Referrer}
+	// Film is decided from the packets of this tune. A stored "film" value is
+	// from before that rule and must not keep the channel at 24p.
+	order := ch.FieldOrder
+	if order == "film" {
+		order = ""
+	}
+	return Source{VideoCodec: ch.VideoCodec, AudioCodec: ch.AudioCodec, Progressive: order == "progressive", Film: false, UserAgent: ch.UserAgent, Referrer: ch.Referrer}
 }
 
 // Watch starts or joins one rendition of a channel.
