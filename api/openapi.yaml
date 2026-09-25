@@ -1561,6 +1561,9 @@ components:
         teams:
           type: array
           items: { $ref: "#/components/schemas/SportsTeam" }
+        redZone: { type: boolean, description: "The football is inside the opponent's 20." }
+        powerPlay: { type: boolean, description: "A hockey team has a power play." }
+        situation: { type: string, description: "Short live situation, such as Red zone or 1st and 10." }
     SportsTeam:
       type: object
       required: [name]

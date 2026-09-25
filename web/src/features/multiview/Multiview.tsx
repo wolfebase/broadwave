@@ -10,9 +10,23 @@ import type { Channel, MultiviewPlan } from "../../types";
 import { CloseIcon, VolumeIcon } from "../../ui/icons";
 import { LiveFrame } from "../../ui/LiveFrame";
 import { useLiveStream } from "../player/useLiveStream";
-import { useScoreMap } from "../sports/scores";
-import { layoutChoices, layoutFromParam, layoutLabel, rememberLayout, roomId, saveSet, savedLayout, slotsFor, type MvLayout } from "./storage";
+import { refreshScores, scoreLine, useScoreMap, type ScoreGame } from "../sports/scores";
+import { layoutChoices, layoutFromParam, layoutLabel, rememberAuto, rememberLayout, roomId, saveSet, savedAuto, savedLayout, slotsFor, type MvLayout } from "./storage";
+import { pickFocus } from "./switcher";
 import "./multiview.css";
+
+function pressedAt() {
+  return Date.now();
+}
+
+function linesFrom(games: ScoreGame[]) {
+  const next = new Map<string, string>();
+  for (const game of games) {
+    const line = scoreLine(game);
+    if (game.id && line) next.set(game.id, line);
+  }
+  return next;
+}
 
 function parseIds(raw: string | null) {
   return (raw ?? "")
@@ -66,7 +80,29 @@ export function Multiview() {
   const visible = waiting ? [] : known.filter((c) => !blocked.has(c.id)).slice(0, slotsFor(layout));
   const ordered = layout === "2up" || layout === "quad" ? visible : [visible.find((c) => c.id === focus) ?? visible[0], ...visible.filter((c) => c.id !== focus)].filter((c): c is Channel => !!c);
   const notice = warning || plan?.blocked[0]?.reason || plan?.note || "";
-  const scores = useScoreMap();
+  const cachedScores = useScoreMap();
+  const [auto, setAuto] = useState(() => savedAuto());
+  const [holdUntil, setHoldUntil] = useState(0);
+  const [board, setBoard] = useState<ScoreGame[]>([]);
+  const [prior, setPrior] = useState<ScoreGame[]>([]);
+  const holdRef = useRef(0);
+  const boardRef = useRef<ScoreGame[]>([]);
+  const scores = board.length > 0 ? linesFrom(board) : cachedScores;
+  const live: { channelId: number; game: ScoreGame }[] = [];
+  if (auto && holdUntil === 0) {
+    const seen = new Set<string>();
+    for (const channel of visible) {
+      const gameId = airingAt(index, channel.id, now)?.gameId ?? "";
+      if (!gameId || seen.has(gameId)) continue;
+      const game = board.find((item) => item.id === gameId && item.state === "in");
+      if (!game) continue;
+      seen.add(gameId);
+      live.push({ channelId: channel.id, game });
+    }
+  }
+  const choice = live.length >= 2 ? pickFocus(now, 0, live.map((item) => item.game), prior) : null;
+  const banner = choice?.banner ?? "";
+  const autoChannel = choice ? (live.find((item) => item.game.id === choice.gameId)?.channelId ?? 0) : 0;
 
   useEffect(() => {
     rememberLayout(layout);
@@ -107,6 +143,46 @@ export function Multiview() {
     return () => window.clearTimeout(timer);
   }, [plan, chKey, layout, focus]);
 
+  useEffect(() => {
+    if (!auto) return;
+    let cancel = false;
+    const pull = () => {
+      void refreshScores().then((games) => {
+        if (cancel) return;
+        setPrior(boardRef.current);
+        boardRef.current = games;
+        setBoard(games);
+      });
+    };
+    pull();
+    const timer = window.setInterval(pull, 20000);
+    return () => {
+      cancel = true;
+      window.clearInterval(timer);
+    };
+  }, [auto]);
+
+  useEffect(() => {
+    if (holdUntil === 0) return;
+    const left = holdUntil + 120_000 - Date.now();
+    const timer = window.setTimeout(() => {
+      holdRef.current = 0;
+      setHoldUntil(0);
+    }, Math.max(0, left));
+    return () => window.clearTimeout(timer);
+  }, [holdUntil]);
+
+  useEffect(() => {
+    if (holdRef.current !== 0 && Date.now() - holdRef.current < 120_000) return;
+    if (!autoChannel || autoChannel === focus) return;
+    const q = new URLSearchParams();
+    q.set("ch", chKey);
+    q.set("layout", layout);
+    q.set("focus", String(autoChannel));
+    if (guide) q.set("add", "1");
+    navigate(`/multiview?${q}`, true);
+  }, [autoChannel, focus, chKey, layout, guide]);
+
   function go(next: { ch?: number[]; layout?: MvLayout; focus?: number; add?: boolean }, replace = true) {
     const q = new URLSearchParams();
     const ch = next.ch ?? ids;
@@ -117,10 +193,17 @@ export function Multiview() {
     navigate(`/multiview?${q}`, replace);
   }
 
+  function focusManual(id: number, extra?: { ch?: number[]; add?: boolean }) {
+    const at = pressedAt();
+    holdRef.current = at;
+    setHoldUntil(at);
+    go({ focus: id, ...extra });
+  }
+
   function addChannel(id: number) {
     if (costs.get(id)?.cost === "none") return;
     if (ids.includes(id)) {
-      go({ focus: id, add: false });
+      focusManual(id, { add: false });
       return;
     }
     const cap = slotsFor(layout);
@@ -129,12 +212,12 @@ export function Multiview() {
       const drop = [...ids].reverse().find((n) => n !== focus) ?? ids[ids.length - 1];
       next = [...ids.filter((n) => n !== drop), id];
     }
-    go({ ch: next, focus: id, add: false });
+    focusManual(id, { ch: next, add: false });
   }
 
   function remove(id: number) {
     const next = ids.filter((n) => n !== id);
-    go({ ch: next, focus: next[0] ?? 0, add: false });
+    focusManual(next[0] ?? 0, { ch: next, add: false });
     setMenu(false);
   }
 
@@ -162,7 +245,7 @@ export function Multiview() {
     }
     if (k === "Enter") {
       event.preventDefault();
-      if (layout === "1+2" || layout === "1+3" || layout === "pip") go({ focus });
+      if (layout === "1+2" || layout === "1+3" || layout === "pip") focusManual(focus);
       return;
     }
     if (k === " ") {
@@ -176,7 +259,7 @@ export function Multiview() {
     if (!step) return;
     const dest = Math.max(0, Math.min(ordered.length - 1, i + step));
     event.preventDefault();
-    if (ordered[dest]) go({ focus: ordered[dest].id });
+    if (ordered[dest]) focusManual(ordered[dest].id);
   }
 
   const focused = ordered.find((c) => c.id === focus) ?? ordered[0];
@@ -191,6 +274,19 @@ export function Multiview() {
         <span className="mv-spacer" />
         <button
           type="button"
+          className={auto ? "btn primary" : "btn"}
+          aria-pressed={auto}
+          title="Follow the game that matters"
+          onClick={() => {
+            const next = !auto;
+            setAuto(next);
+            rememberAuto(next);
+          }}
+        >
+          Auto
+        </button>
+        <button
+          type="button"
           className="btn"
           disabled={ordered.length < 2}
           onClick={() => {
@@ -201,6 +297,7 @@ export function Multiview() {
           Save
         </button>
       </header>
+      {banner ? <p className="mv-banner" role="status">{banner}</p> : null}
       {hint ? <p className="mv-note">Select a tile to hear it.</p> : null}
       {notice ? <p className="mv-note" role="status">{notice}</p> : null}
       <div className="mv-fit">
@@ -216,7 +313,7 @@ export function Multiview() {
             layout={layout}
             room={room}
             menu={menu && channel.id === (focused?.id ?? 0)}
-            onFocus={() => go({ focus: channel.id })}
+            onFocus={() => focusManual(channel.id)}
             onHeard={heard}
             onRemove={() => remove(channel.id)}
             onRecord={() => void record(channel, airingAt(index, channel.id, now)?.title || channel.displayName)}

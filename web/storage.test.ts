@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { layoutForCount, layoutFromParam, layoutLabel, multiviewPath, saveSet, savedSets } from "./src/features/multiview/storage.ts";
+import { layoutForCount, layoutFromParam, layoutLabel, multiviewPath, rememberAuto, saveSet, savedAuto, savedSets } from "./src/features/multiview/storage.ts";
 
 test("watch together picks a layout that fits the games", () => {
   assert.equal(layoutForCount(1), "2up");
@@ -38,6 +38,29 @@ test("a saved set keeps the layout it was saved with", () => {
   saveSet("Early games", [4, 9, 12], "quad");
   assert.equal(savedSets()[0].layout, "quad");
   assert.equal(savedSets().length, 1);
+});
+
+test("auto stays off until this browser turns it on", () => {
+  const store = new Map<string, string>();
+  globalThis.localStorage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    clear: () => {
+      store.clear();
+    },
+    key: () => null,
+    length: 0,
+  };
+  assert.equal(savedAuto(), false);
+  rememberAuto(true);
+  assert.equal(savedAuto(), true);
+  rememberAuto(false);
+  assert.equal(savedAuto(), false);
 });
 
 test("one big and two survives the query string", () => {

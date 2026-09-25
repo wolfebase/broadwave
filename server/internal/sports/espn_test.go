@@ -40,6 +40,24 @@ func TestParseScoreboardReadsTeamsAndBroadcast(t *testing.T) {
 	if game.State != "pre" || len(game.Broadcasts) != 1 || game.Broadcasts[0] != "Prime Video" || game.Live() {
 		t.Fatalf("%+v", game)
 	}
+	if game.RedZone || game.PowerPlay || game.Situation != "" {
+		t.Fatalf("no situation: %+v", game)
+	}
+	for _, team := range game.Teams {
+		if team.Logo != "" {
+			t.Fatalf("remote logo kept: %q", team.Logo)
+		}
+	}
+	local := strings.Replace(chiefsAtBills, "https://a.espncdn.com/buf.png", "/art/buf.png", 1)
+	kept, err := ParseScoreboard("nfl", []byte(local))
+	if err != nil || len(kept) != 1 {
+		t.Fatal(err, kept)
+	}
+	home, _ = kept[0].Home()
+	away, _ = kept[0].Away()
+	if home.Logo != "/art/buf.png" || away.Logo != "" {
+		t.Fatalf("home %q away %q", home.Logo, away.Logo)
+	}
 	if game.Start.Format(time.RFC3339) != "2026-09-25T00:15:00Z" {
 		t.Fatal(game.Start)
 	}
@@ -68,5 +86,18 @@ func TestESPNAsksForTheLeagueAndDay(t *testing.T) {
 	}
 	if _, err := client.Scoreboard(t.Context(), "quidditch", day); err == nil {
 		t.Fatal("expected an unknown league to fail")
+	}
+}
+
+func TestPowerPlayObjectAndDownDistance(t *testing.T) {
+	const power = `{"events":[{"id":"1","name":"Boston Bruins at New York Rangers","shortName":"BOS @ NYR","date":"2026-09-25T23:00:00Z","competitions":[{"status":{"period":2,"displayClock":"12:04","type":{"state":"in","shortDetail":"2nd 12:04"}},"situation":{"powerPlay":{"text":"BOS"}},"competitors":[{"homeAway":"home","score":"1","team":{"displayName":"New York Rangers","abbreviation":"NYR"}},{"homeAway":"away","score":"1","team":{"displayName":"Boston Bruins","abbreviation":"BOS"}}]}]}]}`
+	games, err := ParseScoreboard("nhl", []byte(power))
+	if err != nil || len(games) != 1 || !games[0].PowerPlay || games[0].Situation != "Power play" {
+		t.Fatal(err, games)
+	}
+	const down = `{"events":[{"id":"2","name":"Kansas City Chiefs at Las Vegas Raiders","date":"2026-09-25T20:00:00Z","competitions":[{"status":{"period":2,"displayClock":"8:00","type":{"state":"in","shortDetail":"2nd 8:00"}},"situation":{"downDistanceText":"1st & 10 at LV 25"},"competitors":[{"homeAway":"home","score":"7","team":{"displayName":"Las Vegas Raiders","abbreviation":"LV"}},{"homeAway":"away","score":"7","team":{"displayName":"Kansas City Chiefs","abbreviation":"KC"}}]}]}]}`
+	games, err = ParseScoreboard("nfl", []byte(down))
+	if err != nil || len(games) != 1 || games[0].RedZone || games[0].Situation != "1st & 10 at LV 25" {
+		t.Fatal(err, games)
 	}
 }

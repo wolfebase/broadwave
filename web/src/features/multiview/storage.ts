@@ -23,14 +23,18 @@ export function layoutLabel(layout: MvLayout): string {
 
 const KEY = "broadwave-multiview";
 
-type Store = { layout: MvLayout; sets: SavedSet[] };
+type Store = { layout: MvLayout; sets: SavedSet[]; auto: boolean };
 
 function read(): Store {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) || "{}") as Partial<Store>;
-    return { layout: isLayout(raw.layout) ? raw.layout : "2up", sets: Array.isArray(raw.sets) ? raw.sets : [] };
+    return {
+      layout: isLayout(raw.layout) ? raw.layout : "2up",
+      sets: Array.isArray(raw.sets) ? raw.sets : [],
+      auto: raw.auto === true,
+    };
   } catch {
-    return { layout: "2up", sets: [] };
+    return { layout: "2up", sets: [], auto: false };
   }
 }
 
@@ -45,6 +49,14 @@ export function isLayout(value: unknown): value is MvLayout {
 
 export function savedLayout(): MvLayout {
   return read().layout;
+}
+
+export function savedAuto(): boolean {
+  return read().auto;
+}
+
+export function rememberAuto(on: boolean) {
+  write({ ...read(), auto: on });
 }
 
 export function rememberLayout(layout: MvLayout) {

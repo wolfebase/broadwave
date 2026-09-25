@@ -67,6 +67,9 @@ type Game struct {
 	Period     int       `json:"period,omitempty"`
 	Broadcasts []string  `json:"broadcasts,omitempty"`
 	Teams      []Team    `json:"teams,omitempty"`
+	RedZone    bool      `json:"redZone,omitempty"`
+	PowerPlay  bool      `json:"powerPlay,omitempty"`
+	Situation  string    `json:"situation,omitempty"`
 }
 
 // Home is the home side, when the feed labeled one.

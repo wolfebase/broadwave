@@ -6,7 +6,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - Current task: **AS2** demo mode, after the in-flight lanes. App Review unchanged at 2026-09-25 20:54Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply.
 - Lanes (sprint until 17:30 CDT). Each lane was told to `git reset --hard HEAD && git clean -fd` before editing. Strip inherited HomeView, APIClient, SupportURL, PROGRESS, and pb7b log deletions if they are still in the diff.
   - E2 `~/.grok/worktrees/active-broadwave/subagent-01a0da64-9b3a-7ae2-902f-4d71bcd6db60` running since 21:07Z.
-  - D7 `~/.grok/worktrees/active-broadwave/subagent-01a0da64-9b3b-7340-af26-f23c5f8e7366` running since 21:07Z. tvOS screenshots were out of scope.
+  - D7 landed in the game-switcher commit. Its worktree can be removed. tvOS screenshots are D7b.
   - I1 `~/.grok/worktrees/active-broadwave/subagent-01a0da7b-e02d-7863-b83c-956b652af9b4` running. It may xcodebuild. It must not use the Broadwave Staging simulators.
   - G8 `~/.grok/worktrees/active-broadwave/subagent-01a0da7b-e02d-7863-b83c-9579d056af5f` running. It must not edit hub.go, pool.go, play.go, dvr, or sports. slog-everywhere is explicitly unfinished.
   - K6 and HW3 paper worktrees were removed after their commits.
@@ -198,7 +198,8 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] D4 Team follows + team passes (commit 2a6777a). Follow a team from Sports. Home shows Your teams. Record every game is a pass that matches the team on any channel. The activity log announces the next game once.
 - [x] D5 Spoiler-safe score bugs (commit ee8f7a4). Scores show on the guide, sports cards, the player, and multiview. Hide scores in Settings blanks every result. A recorded game stays blank until it is watched.
 - [x] D6 Sports hub redesign (commit 9db0294). Sports shows what is on now, with the score and how long is left when the game is linked. A matched game uses its logo and color. Watch together plays the games that are on at once.
-- [ ] D7 Game Switcher (auto focus on the game that matters in multiview)
+- [x] D7 Game Switcher. `PickFocus` and the web `pickFocus` use an injected clock. Red zone and power play beat a lead change, which beats the final minutes of a close game. A manual choice holds for under 2 minutes. Banners are "Red zone: KC at LV", "Power play: BOS at NYR", "Lead change: DAL at PHI", and "Final minutes: BUF at MIA". Exactly 5:00 does not count. A tie becoming a lead does not count. `TestSituationFixtureNeedsNoLogos` reads `testdata/scoreboard-situation.json` (no logo URL) and keeps no logo. Remote ESPN logos are dropped. `go test ./server/internal/sports/ -count=1` passed. Web tests passed, including the five switcher cases and "auto stays off until this browser turns it on". Auto is off until this browser turns it on. It only moves the focused tile. `go run ./server/cmd/apigen -check` passed. tvOS screenshots are D7b. The web banner was not opened on staging, because that page tunes.
+- [ ] D7b Web and tvOS screenshots of the game-switcher banner with a live situation on screen.
 - [ ] D8 Game alerts (followed teams, close games; spoiler-safe)
 
 ## Phase E — DVR
