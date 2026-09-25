@@ -118,28 +118,37 @@ func sectionEnd(sec []byte) int {
 func sections(data []byte, pid int) [][]byte {
 	var out [][]byte
 	var cur []byte
-	eachPacket(data, pid, func(start bool, payload []byte) {
-		if start {
-			if len(cur) > 0 {
-				out = append(out, cur)
-			}
-			if len(payload) == 0 {
-				cur = nil
-				return
-			}
-			pointer := int(payload[0])
-			if 1+pointer > len(payload) {
-				cur = nil
-				return
-			}
-			cur = append([]byte(nil), payload[1+pointer:]...)
+	flush := func() {
+		if len(cur) == 0 {
 			return
 		}
-		cur = append(cur, payload...)
-	})
-	if len(cur) > 0 {
 		out = append(out, cur)
+		cur = nil
 	}
+	eachPacket(data, pid, func(start bool, payload []byte) {
+		if !start {
+			cur = append(cur, payload...)
+			return
+		}
+		// Pointer-field bytes finish the section already open. A packer
+		// puts that tail in the same packet that starts the next section
+		// (ISO/IEC 13818-1). Dropping it loses the last audio stream.
+		if len(payload) == 0 {
+			flush()
+			return
+		}
+		pointer := int(payload[0])
+		if 1+pointer > len(payload) {
+			flush()
+			return
+		}
+		if pointer > 0 && len(cur) > 0 {
+			cur = append(cur, payload[1:1+pointer]...)
+		}
+		flush()
+		cur = append([]byte(nil), payload[1+pointer:]...)
+	})
+	flush()
 	return out
 }
 
