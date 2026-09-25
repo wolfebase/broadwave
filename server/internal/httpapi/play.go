@@ -28,13 +28,14 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		ChannelID int64      `json:"channelId"`
-		Caps      *live.Caps `json:"caps"`
-		Prefs     live.Prefs `json:"prefs"`
-		Rendition string     `json:"rendition"`
-		Profile   string     `json:"profile"`
-		Audio     string     `json:"audio"`
-		Picture   string     `json:"pictureMode"`
+		ChannelID   int64      `json:"channelId"`
+		Caps        *live.Caps `json:"caps"`
+		Prefs       live.Prefs `json:"prefs"`
+		Rendition   string     `json:"rendition"`
+		Profile     string     `json:"profile"`
+		Audio       string     `json:"audio"`
+		Picture     string     `json:"pictureMode"`
+		ConfirmLive bool       `json:"confirmLive"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		httpError(w, "invalid json", http.StatusBadRequest)
@@ -57,6 +58,12 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 			_, prefs.Picture, _ = s.playbackChoice(r.Context(), 0, "")
 		}
 		decision = live.DecideOn(src, caps, prefs, s.Hub.Encoder)
+	}
+	if !body.ConfirmLive {
+		if msg := s.liveWarning(r.Context(), body.ChannelID); msg != "" {
+			apiError(w, http.StatusConflict, "recording_soon", msg, nil)
+			return
+		}
 	}
 	session, err := s.Hub.Watch(r.Context(), body.ChannelID, decision.Rendition)
 	if err != nil {
@@ -469,27 +476,355 @@ func (s *Server) fillUnlisted(ctx context.Context, rows, extra []store.Airing) [
 }
 
 func (s *Server) schedule(w http.ResponseWriter, r *http.Request) {
+	snap, err := s.loadSchedule(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tunerCount": snap.count, "items": snap.items})
+}
+
+type scheduleSnap struct {
+	items   []dvr.Planned
+	passes  []store.Pass
+	airings []store.Airing
+	count   int
+}
+
+func (s *Server) loadSchedule(ctx context.Context) (scheduleSnap, error) {
 	now := time.Now()
 	end := now.Add(14 * 24 * time.Hour)
-	passes, err := s.Store.Passes(r.Context())
+	passes, err := s.Store.Passes(ctx)
 	if err != nil {
-		writeError(w, err)
-		return
+		return scheduleSnap{}, err
 	}
-	airings, err := s.Store.Airings(r.Context(), now.Add(-time.Minute), end)
+	airings, err := s.Store.Airings(ctx, now.Add(-time.Minute), end)
 	if err != nil {
-		writeError(w, err)
-		return
+		return scheduleSnap{}, err
 	}
-	items := dvr.Plan(passes, airings, s.tunerCount(r.Context()), now, end)
-	recs, _ := s.Store.Recordings(r.Context())
-	seen, _ := s.Store.SeenDeleted(r.Context())
-	skips, _ := s.Store.Skips(r.Context())
+	count := s.tunerCount(ctx)
+	items := dvr.Plan(passes, airings, count, now, end)
+	recs, _ := s.Store.Recordings(ctx)
+	seen, _ := s.Store.SeenDeleted(ctx)
+	skips, _ := s.Store.Skips(ctx)
 	items = dvr.ApplyLibrary(items, passes, recs, seen, skips)
+	items = dvr.AttachSuggestions(items, passes, airings, count, now, end, s.guideNumbers(ctx))
 	if items == nil {
 		items = []dvr.Planned{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"tunerCount": s.tunerCount(r.Context()), "items": items})
+	return scheduleSnap{items: items, passes: passes, airings: airings, count: count}, nil
+}
+
+func (s *Server) fixSchedule(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		PassID              int64     `json:"passId"`
+		ChannelID           int64     `json:"channelId"`
+		Start               time.Time `json:"start"`
+		SuggestionChannelID int64     `json:"suggestionChannelId"`
+		SuggestionStart     time.Time `json:"suggestionStart"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		httpError(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if body.PassID == 0 || body.ChannelID == 0 || body.Start.IsZero() || body.SuggestionChannelID == 0 || body.SuggestionStart.IsZero() {
+		httpError(w, "A pass and an airing are required.", http.StatusBadRequest)
+		return
+	}
+	snap, err := s.loadSchedule(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var item *dvr.Planned
+	for i := range snap.items {
+		if snap.items[i].PassID == body.PassID && snap.items[i].Airing.ChannelID == body.ChannelID && snap.items[i].Airing.Start.Equal(body.Start) {
+			item = &snap.items[i]
+			break
+		}
+	}
+	if item == nil || !item.Skipped || item.Suggestion == nil {
+		httpError(w, "That showing is not waiting on a tuner.", http.StatusConflict)
+		return
+	}
+	if item.Suggestion.ChannelID != body.SuggestionChannelID || !item.Suggestion.Start.Equal(body.SuggestionStart) {
+		httpError(w, "That later airing no longer fits.", http.StatusConflict)
+		return
+	}
+	pass, ok := passIn(snap.passes, body.PassID)
+	suggestion, sugOK := airingAt(snap.airings, body.SuggestionChannelID, body.SuggestionStart)
+	if !ok || !sugOK {
+		httpError(w, "That showing is not waiting on a tuner.", http.StatusConflict)
+		return
+	}
+	fix := dvr.PlanFix(pass, item.Airing, suggestion)
+	// Save the replacement before skipping. A failed save must leave the original airing in place.
+	if fix.SetChannel != 0 && pass.ChannelID != fix.SetChannel {
+		pass.ChannelID = fix.SetChannel
+		if err := s.Store.UpdatePassRules(r.Context(), pass); err != nil {
+			httpError(w, "pass not found", http.StatusNotFound)
+			return
+		}
+	}
+	if fix.OneShot != nil && !dvr.HaveOneShot(snap.passes, suggestion) {
+		recs, _ := s.Store.Recordings(r.Context())
+		shot := *fix.OneShot
+		shot.LimitCount = dvr.OneShotLimit(shot, recs)
+		if err := s.addOneShot(r.Context(), shot); err != nil {
+			writeError(w, err)
+			return
+		}
+		for _, other := range dvr.OneShotSkips(snap.airings, shot, suggestion) {
+			if err := s.skipShowing(r.Context(), other); err != nil {
+				writeError(w, err)
+				return
+			}
+		}
+	}
+	if err := s.skipShowing(r.Context(), fix.Skip); err != nil {
+		writeError(w, err)
+		return
+	}
+	title := strings.TrimSpace(suggestion.Title)
+	if title == "" {
+		title = "The show"
+	}
+	_ = s.Store.AddEvent(r.Context(), "recording", fmt.Sprintf("%s will record at %s instead.", title, suggestion.Start.In(time.Local).Format("3:04 PM")))
+	s.schedule(w, r)
+}
+
+func passIn(passes []store.Pass, id int64) (store.Pass, bool) {
+	for _, pass := range passes {
+		if pass.ID == id {
+			return pass, true
+		}
+	}
+	return store.Pass{}, false
+}
+
+func airingAt(airings []store.Airing, channelID int64, start time.Time) (store.Airing, bool) {
+	for _, air := range airings {
+		if air.ChannelID == channelID && air.Start.Equal(start) {
+			return air, true
+		}
+	}
+	return store.Airing{}, false
+}
+
+func (s *Server) skipShowing(ctx context.Context, air store.Airing) error {
+	key, starts := dvr.SkipParts(air)
+	if key == "" {
+		return nil
+	}
+	return s.Store.SkipAiring(ctx, key, starts)
+}
+
+func (s *Server) addOneShot(ctx context.Context, shot store.Pass) error {
+	before, err := s.Store.Passes(ctx)
+	if err != nil {
+		return err
+	}
+	if err := s.Store.AddPass(ctx, shot.Title, shot.ChannelID, shot.PadBefore, shot.PadAfter); err != nil {
+		return err
+	}
+	after, err := s.Store.Passes(ctx)
+	if err != nil {
+		return err
+	}
+	id := newPassID(before, after)
+	if id == 0 {
+		return fmt.Errorf("the pass was not saved")
+	}
+	shot.ID = id
+	return s.Store.UpdatePassRules(ctx, shot)
+}
+
+func newPassID(before, after []store.Pass) int64 {
+	have := map[int64]struct{}{}
+	for _, pass := range before {
+		have[pass.ID] = struct{}{}
+	}
+	var id int64
+	for _, pass := range after {
+		if _, ok := have[pass.ID]; ok {
+			continue
+		}
+		if pass.ID > id {
+			id = pass.ID
+		}
+	}
+	return id
+}
+
+func (s *Server) guideNumbers(ctx context.Context) map[int64]string {
+	channels, err := s.Store.Channels(ctx, false)
+	if err != nil {
+		return nil
+	}
+	out := make(map[int64]string, len(channels))
+	for _, ch := range channels {
+		number := ch.DisplayNumber
+		if number == "" {
+			number = ch.GuideNumber
+		}
+		if number != "" {
+			out[ch.ID] = number
+		}
+	}
+	return out
+}
+
+// liveWarning is empty when this channel can take a tuner without leaving a
+// recording short. A channel already on a tuned mux shares that tuner.
+func (s *Server) liveWarning(ctx context.Context, channelID int64) string {
+	ch, err := s.Store.SourceChannel(ctx, channelID)
+	if err != nil {
+		return ""
+	}
+	tuned, busy := s.tunersInUse(ctx, channelID)
+	if s.onTunedMux(ctx, ch, tuned) {
+		return ""
+	}
+	allow, warning := dvr.LiveWatch(s.tunerCount(ctx), busy, s.upcomingSoon(ctx, ch, tuned), s.now())
+	if allow {
+		return ""
+	}
+	return warning
+}
+
+func (s *Server) tunersInUse(ctx context.Context, channelID int64) (map[string]struct{}, int) {
+	tuned := map[string]struct{}{}
+	busy := 0
+	if s.Hub != nil {
+		// Status is also read when the tune starts. Don't make a quiet tuner add another long wait.
+		statusCtx, cancel := context.WithTimeout(ctx, time.Second)
+		list, err := s.Hub.Tuners(statusCtx)
+		cancel()
+		if err == nil {
+			for _, tuner := range list {
+				if tuner.Guide == "" && tuner.Target == "" && !tuner.Ours {
+					continue
+				}
+				busy++
+				if tuner.Guide != "" {
+					tuned[tuner.Guide] = struct{}{}
+				}
+			}
+		}
+	}
+	return tuned, busy + s.recordingBusy(ctx, channelID, tuned)
+}
+
+func (s *Server) recordingBusy(ctx context.Context, except int64, tuned map[string]struct{}) int {
+	recs, err := s.Store.Recordings(ctx)
+	if err != nil {
+		return 0
+	}
+	seen := map[int64]struct{}{}
+	n := 0
+	for _, rec := range recs {
+		if rec.Status != "recording" || rec.ChannelID == 0 || rec.ChannelID == except {
+			continue
+		}
+		if rec.GuideNumber != "" {
+			if _, ok := tuned[rec.GuideNumber]; ok {
+				continue
+			}
+		}
+		if _, ok := seen[rec.ChannelID]; ok {
+			continue
+		}
+		seen[rec.ChannelID] = struct{}{}
+		n++
+	}
+	return n
+}
+
+func (s *Server) onTunedMux(ctx context.Context, ch store.SourceChannel, tuned map[string]struct{}) bool {
+	if ch.GuideNumber != "" {
+		if _, ok := tuned[ch.GuideNumber]; ok {
+			return true
+		}
+	}
+	if ch.DisplayNumber != "" {
+		if _, ok := tuned[ch.DisplayNumber]; ok {
+			return true
+		}
+	}
+	if ch.FrequencyHz <= 0 {
+		return false
+	}
+	channels, err := s.Store.Channels(ctx, false)
+	if err != nil {
+		return false
+	}
+	for _, other := range channels {
+		if other.ID == ch.ID {
+			continue
+		}
+		if _, ok := tuned[other.GuideNumber]; !ok {
+			continue
+		}
+		src, err := s.Store.SourceChannel(ctx, other.ID)
+		if err != nil || src.FrequencyHz == 0 {
+			continue
+		}
+		if src.FrequencyHz == ch.FrequencyHz {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) upcomingSoon(ctx context.Context, watch store.SourceChannel, tuned map[string]struct{}) []dvr.Soon {
+	now := s.now()
+	passes, err := s.Store.Passes(ctx)
+	if err != nil || len(passes) == 0 {
+		return nil
+	}
+	from := now.Add(-time.Minute)
+	to := now.Add(31 * time.Minute)
+	airings, err := s.Store.Airings(ctx, from, to)
+	if err != nil {
+		return nil
+	}
+	items := dvr.Plan(passes, airings, s.tunerCount(ctx), from, to)
+	recs, _ := s.Store.Recordings(ctx)
+	seen, _ := s.Store.SeenDeleted(ctx)
+	skips, _ := s.Store.Skips(ctx)
+	items = dvr.ApplyLibrary(items, passes, recs, seen, skips)
+	var out []dvr.Soon
+	for _, item := range items {
+		if item.Skipped || s.sameMux(ctx, watch, item.Airing.ChannelID, tuned) {
+			continue
+		}
+		out = append(out, dvr.Soon{
+			Title:     item.Airing.Title,
+			ChannelID: item.Airing.ChannelID,
+			Start:     item.Airing.Start,
+			Pad:       time.Duration(item.PadBefore) * time.Minute,
+		})
+	}
+	return out
+}
+
+func (s *Server) sameMux(ctx context.Context, watch store.SourceChannel, channelID int64, tuned map[string]struct{}) bool {
+	if channelID == watch.ID {
+		return true
+	}
+	other, err := s.Store.SourceChannel(ctx, channelID)
+	if err != nil {
+		return false
+	}
+	if watch.FrequencyHz > 0 && other.FrequencyHz == watch.FrequencyHz {
+		return true
+	}
+	if other.GuideNumber != "" {
+		if _, ok := tuned[other.GuideNumber]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) tunerCount(ctx context.Context) int {

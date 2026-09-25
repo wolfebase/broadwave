@@ -321,10 +321,23 @@
 
 .player-error {
   align-self: center;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  max-width: min(440px, calc(100% - 32px));
   padding: 12px 18px;
   border-radius: var(--radius-md);
   background: rgba(0, 0, 0, 0.7);
   color: #ffb3ad;
+  text-align: center;
+}
+
+.player-error p {
+  margin: 0;
+}
+
+.player-error .btn {
+  color: var(--color-text);
 }
 
 .mini-guide {

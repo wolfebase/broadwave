@@ -1,5 +1,23 @@
 import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, Device, DeviceHealth, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
 
+export type ApiFailure = Error & { status: number; code?: string };
+
+function apiFailure(status: number, statusText: string, text: string): ApiFailure {
+  let message = text;
+  let code: string | undefined;
+  try {
+    const body = JSON.parse(text) as { message?: string; code?: string };
+    if (body.message) message = body.message;
+    if (body.code) code = body.code;
+  } catch {
+    message = text;
+  }
+  const err = new Error(message || statusText) as ApiFailure;
+  err.status = status;
+  err.code = code;
+  return err;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
@@ -9,15 +27,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!res.ok) {
-    const text = await res.text();
-    let message = text;
-    try {
-      const body = JSON.parse(text) as { message?: string };
-      if (body.message) message = body.message;
-    } catch {
-      message = text;
-    }
-    throw new Error(message || res.statusText);
+    throw apiFailure(res.status, res.statusText, await res.text());
   }
   return res.json() as Promise<T>;
 }
@@ -152,10 +162,10 @@ export function putSettings(values: Partial<Settings>) {
   });
 }
 
-export function watchChannel(channelId: number, caps: Caps, prefs: Prefs, rendition = "") {
+export function watchChannel(channelId: number, caps: Caps, prefs: Prefs, rendition = "", confirmLive = false) {
   return request<WatchSession>("/api/v1/watch", {
     method: "POST",
-    body: JSON.stringify({ channelId, caps, prefs, rendition }),
+    body: JSON.stringify({ channelId, caps, prefs, rendition, ...(confirmLive ? { confirmLive: true } : {}) }),
   });
 }
 
@@ -383,6 +393,13 @@ export function checkSignals() {
 
 export function getSchedule() {
   return request<{ tunerCount: number; items: PlannedAiring[] }>("/api/v1/schedule");
+}
+
+export function fixSchedule(body: { passId: number; channelId: number; start: string; suggestionChannelId: number; suggestionStart: string }) {
+  return request<{ tunerCount: number; items: PlannedAiring[] }>("/api/v1/schedule/fix", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export function getEvents() {

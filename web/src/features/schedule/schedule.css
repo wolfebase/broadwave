@@ -1,0 +1,27 @@
+.schedule-suggest {
+  flex: 1 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+}
+
+.schedule-suggest > span {
+  min-width: 0;
+}
+
+.schedule-fix {
+  white-space: normal;
+  text-align: center;
+}
+
+.layout-phone .schedule-suggest {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.layout-phone .schedule-fix {
+  width: 100%;
+  justify-content: center;
+}

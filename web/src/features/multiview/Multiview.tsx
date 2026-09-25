@@ -413,7 +413,16 @@ function Tile({
         ) : null}
         {focused && stream.session?.stream.reason ? <span className="mv-detail">{stream.session.stream.reason}</span> : null}
       </div>
-      {stream.error ? <p className="mv-error" role="alert">{stream.error}</p> : null}
+      {stream.error ? (
+        <div className="mv-error" role="alert">
+          <p>{stream.error}</p>
+          {stream.needsConfirm ? (
+            <button type="button" className="btn small" onClick={(event) => { event.stopPropagation(); stream.confirm(); }}>
+              Watch anyway
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {menu ? (
         <div className="mv-menu" role="menu">
           <button type="button" className="btn" onClick={(e) => { e.stopPropagation(); onFocus(); }}>Make big</button>

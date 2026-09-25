@@ -1,6 +1,6 @@
 import Hls from "hls.js";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { stopWatch, watchChannel } from "../../api";
+import { stopWatch, watchChannel, type ApiFailure } from "../../api";
 import { SyncEngine, type SyncStatus } from "../../lib/sync";
 import type { Caps, Channel, Prefs, WatchSession } from "../../types";
 import { liveHlsConfig, type BufferProfile } from "../../picture";
@@ -48,6 +48,9 @@ export function useLiveStream(
   const audibleRef = useRef(audible);
   const [session, setSession] = useState<WatchSession | null>(null);
   const [error, setError] = useState("");
+  const [needsConfirm, setNeedsConfirm] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const confirmLive = useRef(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ state: "off", drift: 0, members: 0 });
 
   useEffect(() => {
@@ -82,7 +85,10 @@ export function useLiveStream(
     video.addEventListener("waiting", onWaiting);
     void (async () => {
       try {
-        const next = await watchChannel(id, webCaps(), { quality, audio, picture, track, even });
+        const allow = confirmLive.current;
+        confirmLive.current = false;
+        setNeedsConfirm(false);
+        const next = await watchChannel(id, webCaps(), { quality, audio, picture, track, even }, "", allow);
         joined = next.rendition;
         if (dead) {
           await stopWatch(id, joined);
@@ -109,7 +115,15 @@ export function useLiveStream(
           await video.play().catch(() => undefined);
         });
       } catch (err) {
-        if (!dead) setError(err instanceof Error ? err.message : "This channel did not start.");
+        if (dead) return;
+        const failed = err as ApiFailure;
+        if (failed.status === 409 && failed.code === "recording_soon") {
+          setNeedsConfirm(true);
+          setError(failed.message);
+          return;
+        }
+        setNeedsConfirm(false);
+        setError(err instanceof Error ? err.message : "This channel did not start.");
       }
     })();
     const beacon = () => navigator.sendBeacon?.(`/api/v1/watch/${id}/stop`, new Blob([JSON.stringify({ rendition: joined })], { type: "application/json" }));
@@ -127,7 +141,7 @@ export function useLiveStream(
     };
     // remember is the channel record; its identity changes on every guide poll.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, quality, audio, track, even, picture, profile]);
+  }, [channelId, quality, audio, track, even, picture, profile, attempt]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -152,6 +166,12 @@ export function useLiveStream(
   return {
     session: session?.channelId === channelId ? session : null,
     error,
+    needsConfirm,
+    confirm: () => {
+      confirmLive.current = true;
+      setNeedsConfirm(false);
+      setAttempt((n) => n + 1);
+    },
     syncStatus,
     command: (action: "play" | "pause" | "seek" | "live", mediaTime?: number) => syncRef.current?.command(action, mediaTime),
     mediaNow: () => syncRef.current?.mediaNow() ?? null,

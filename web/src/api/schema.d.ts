@@ -678,7 +678,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Upcoming recordings from passes for the next 14 days, with conflicts marked. */
+        /** @description Upcoming recordings from passes for the next 14 days, with conflicts marked and a later airing when one fits. */
         get: operations["getSchedule"];
         put?: never;
         post?: never;
@@ -698,6 +698,23 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["skipAiring"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/schedule/fix": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Record the suggested later airing instead of a skipped one. Does not raise priority. */
+        post: operations["fixSchedule"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1426,6 +1443,17 @@ export interface components {
         PassList: {
             passes: components["schemas"]["Pass"][];
         };
+        /** @description A later airing that fits without bumping another recording. */
+        Suggestion: {
+            /** Format: int64 */
+            channelId: number;
+            guideNumber?: string;
+            title: string;
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+        };
         PlannedAiring: {
             /** Format: int64 */
             passId: number;
@@ -1436,6 +1464,7 @@ export interface components {
             conflict: boolean;
             skipped: boolean;
             reason?: string;
+            suggestion?: components["schemas"]["Suggestion"];
         };
         Event: {
             /** Format: int64 */
@@ -2361,6 +2390,8 @@ export interface operations {
                      */
                     audio?: "stereo" | "surround";
                     pictureMode?: components["schemas"]["PictureMode"];
+                    /** @description Set when the viewer chooses to watch even though a recording needs the last tuner. */
+                    confirmLive?: boolean;
                 };
             };
         };
@@ -2823,6 +2854,52 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["Ok"];
+        };
+    };
+    fixSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: int64 */
+                    passId: number;
+                    /**
+                     * Format: int64
+                     * @description Channel of the skipped airing.
+                     */
+                    channelId: number;
+                    /**
+                     * Format: date-time
+                     * @description Start of the skipped airing.
+                     */
+                    start: string;
+                    /** Format: int64 */
+                    suggestionChannelId: number;
+                    /** Format: date-time */
+                    suggestionStart: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Schedule after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        tunerCount: number;
+                        items: components["schemas"]["PlannedAiring"][];
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     listPasses: {

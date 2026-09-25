@@ -12,14 +12,15 @@ import (
 
 // Planned is one airing a series pass will record inside the window.
 type Planned struct {
-	PassID    int64        `json:"passId"`
-	Airing    store.Airing `json:"airing"`
-	Priority  int          `json:"priority"`
-	PadBefore int          `json:"padBefore"`
-	PadAfter  int          `json:"padAfter"`
-	Conflict  bool         `json:"conflict"`
-	Skipped   bool         `json:"skipped"`
-	Reason    string       `json:"reason,omitempty"`
+	PassID     int64        `json:"passId"`
+	Airing     store.Airing `json:"airing"`
+	Priority   int          `json:"priority"`
+	PadBefore  int          `json:"padBefore"`
+	PadAfter   int          `json:"padAfter"`
+	Conflict   bool         `json:"conflict"`
+	Skipped    bool         `json:"skipped"`
+	Reason     string       `json:"reason,omitempty"`
+	Suggestion *Suggestion  `json:"suggestion,omitempty"`
 }
 
 // Plan matches passes to airings and marks any span where more channels overlap than the tuner count.

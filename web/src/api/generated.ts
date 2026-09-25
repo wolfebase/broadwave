@@ -212,6 +212,7 @@ export type PlannedAiring = {
   conflict: boolean;
   skipped: boolean;
   reason?: string;
+  suggestion?: Suggestion;
 };
 
 export type Recording = {
@@ -395,6 +396,14 @@ export type StreamInfo = {
   outputFps?: string;
   bitrate?: string;
   decode?: string;
+};
+
+export type Suggestion = {
+  channelId: number;
+  guideNumber?: string;
+  title: string;
+  start: string;
+  end: string;
 };
 
 export type TeamFollow = {
