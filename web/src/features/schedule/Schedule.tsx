@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Pass, PlannedAiring, Recording } from "../../types";
-import { deletePass, fixSchedule, getEvents, getSchedule, stopRecording, updatePass } from "../../api";
+import { deletePass, fixSchedule, getEvents, getSchedule, stopRecording, updatePass, type ApiFailure } from "../../api";
 import { copy } from "../../strings";
 import { formatClock } from "../../time";
 import { missedLine } from "./missed";
@@ -53,6 +53,7 @@ export function Schedule({
     const key = `${item.passId}-${item.airing.channelId}-${item.airing.start}`;
     setFixing(key);
     setNote("");
+    const misses = alt.misses ?? [];
     try {
       const res = await fixSchedule({
         passId: item.passId,
@@ -60,12 +61,20 @@ export function Schedule({
         start: item.airing.start,
         suggestionChannelId: alt.channelId,
         suggestionStart: alt.start,
-        ...(alt.misses && alt.misses.length > 0 ? { acknowledgeMisses: true } : {}),
+        ...(misses.length > 0 ? { acknowledgeMisses: true, acknowledgedStarts: misses.map((miss) => miss.start) } : {}),
       });
       setItems(res.items);
       setTunerCount(res.tunerCount);
       onPasses();
     } catch (err) {
+      const failed = err as ApiFailure;
+      if (failed.code === "missed_showings") {
+        const fresh = await getSchedule().catch(() => undefined);
+        if (fresh) {
+          setItems(fresh.items);
+          setTunerCount(fresh.tunerCount);
+        }
+      }
       setNote(err instanceof Error ? err.message : "That airing could not be scheduled.");
     } finally {
       setFixing("");
@@ -85,13 +94,13 @@ export function Schedule({
             const fixKey = `${item.passId}-${item.airing.channelId}-${item.airing.start}`;
             return (
               <li key={`${item.passId}-${item.airing.id}`} className="source-row">
-                <span className="ch-num">{formatClock(new Date(item.airing.start))}</span>
+                <span className="ch-num">{formatDay(new Date(item.airing.start))}</span>
                 <span>{item.airing.title}</span>
                 <span className="codec">{item.skipped ? item.reason || (tunerCount === 1 ? "Lower priority · 1 tuner" : `Lower priority · ${tunerCount} tuners`) : `Will record ${formatClock(recordWindow(item).start)}–${formatClock(recordWindow(item).end)}`}</span>
                 {item.suggestion ? (
                   <span className="schedule-suggest">
                     <span>
-                      Later at {formatClock(new Date(item.suggestion.start))}
+                      Later on {formatDay(new Date(item.suggestion.start))}
                       {item.suggestion.guideNumber ? ` on ${item.suggestion.guideNumber}` : ""}.
                     </span>
                     {item.suggestion.misses && item.suggestion.misses.length > 0 ? (
@@ -174,6 +183,11 @@ export function Schedule({
       )}
     </section>
   );
+}
+
+function formatDay(date: Date) {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${months[date.getMonth()]} ${date.getDate()}, ${formatClock(date)}`;
 }
 
 function recordWindow(item: PlannedAiring) {

@@ -125,7 +125,7 @@ func TestLiveWatchTunerPad(t *testing.T) {
 	other := Soon{Title: "Game", ChannelID: 8, Start: now.Add(time.Minute), Pad: 2 * time.Minute}
 
 	allow, warning := LiveWatch(1, 0, []Soon{soon}, now)
-	if allow || !strings.Contains(warning, "News") || !strings.Contains(warning, "will miss that recording") {
+	if allow || !strings.Contains(warning, "News") || !strings.Contains(warning, "Watching stops when that recording starts.") {
 		t.Fatalf("allow=%v %q", allow, warning)
 	}
 	if allow, warning = LiveWatch(1, 0, []Soon{outside}, now); !allow || warning != "" {
@@ -178,9 +178,14 @@ func TestOneShotNamesTheShowingsItWillMiss(t *testing.T) {
 		t.Fatalf("%+v", miss)
 	}
 	line := MissedLine(skipped.Suggestion.Misses)
-	want := "News at " + again.Format("3:04 PM") + " on 9.1 will not record."
+	want := "News on " + again.Format("Jan 2 at 3:04 PM") + " on 9.1 will not record."
 	if line != want {
 		t.Fatalf("%q", line)
+	}
+	sameClock := missedPart(MissedShowing{Title: "News", Start: later, GuideNumber: "9.1"})
+	nextDay := missedPart(MissedShowing{Title: "News", Start: again, GuideNumber: "9.1"})
+	if sameClock == nextDay {
+		t.Fatalf("same clock on the next day: %q", sameClock)
 	}
 	two := MissedLine([]MissedShowing{
 		{Title: "News", Start: later, GuideNumber: "9.1"},
@@ -192,24 +197,74 @@ func TestOneShotNamesTheShowingsItWillMiss(t *testing.T) {
 	}
 }
 
+func TestExistingOneShotDoesNotListMisses(t *testing.T) {
+	start := time.Date(2026, 6, 15, 20, 0, 0, 0, time.Local)
+	later := start.Add(2 * time.Hour)
+	again := later.Add(24 * time.Hour)
+	suggestion := store.Airing{ID: 3, ChannelID: 3, Title: "News", Category: "Sports", Start: later, End: later.Add(time.Hour)}
+	passes := []store.Pass{
+		{ID: 4, Title: "Sports", ChannelID: 1, MatchKind: "category", Priority: 1},
+		{ID: 2, Title: "Game", ChannelID: 2, Priority: 5},
+		oneShotPass(store.Pass{Priority: 1}, suggestion),
+	}
+	airings := []store.Airing{
+		{ID: 1, ChannelID: 1, Title: "News", Category: "Sports", Start: start, End: start.Add(time.Hour)},
+		{ID: 2, ChannelID: 2, Title: "Game", Start: start, End: start.Add(time.Hour)},
+		suggestion,
+		{ID: 4, ChannelID: 3, Title: "News", Category: "Sports", Start: again, End: again.Add(time.Hour)},
+	}
+	from := start.Add(-time.Minute)
+	to := again.Add(time.Hour)
+	items := AttachSuggestions(Plan(passes, airings, 1, from, to), passes, airings, 1, from, to, map[int64]string{3: "9.1"})
+	for _, item := range items {
+		if item.Airing.ID != 1 {
+			continue
+		}
+		if item.Suggestion == nil || len(item.Suggestion.Misses) != 0 {
+			t.Fatalf("%+v", item.Suggestion)
+		}
+		return
+	}
+	t.Fatal("missing skipped news")
+}
+
 func TestLiveWatchPreemptWindow(t *testing.T) {
 	now := time.Date(2026, 9, 25, 18, 0, 0, 0, time.UTC)
-	inside := Soon{Title: "News", ChannelID: 5, Start: now.Add(preemptWindow), Pad: 0}
-	outside := Soon{Title: "News", ChannelID: 5, Start: now.Add(preemptWindow + time.Millisecond), Pad: 0}
+	inside := Soon{Title: "News", ChannelID: 5, Start: now.Add(recordLead), Pad: 0}
+	outside := Soon{Title: "News", ChannelID: 5, Start: now.Add(recordLead + time.Millisecond), Pad: 0}
+	early := Soon{Title: "News", ChannelID: 5, Start: now.Add(20 * time.Second), Pad: 0}
 	padded := Soon{Title: "News", ChannelID: 5, Start: now.Add(90 * time.Second), Pad: 2 * time.Minute}
 
 	allow, warning := LiveWatch(1, 0, []Soon{inside}, now)
-	if allow || !strings.Contains(warning, "will miss that recording") {
-		t.Fatalf("20s window: allow=%v %q", allow, warning)
+	if allow || !strings.Contains(warning, "Watching stops when that recording starts.") {
+		t.Fatalf("at the lead: allow=%v %q", allow, warning)
 	}
 	if allow, warning = LiveWatch(1, 0, []Soon{outside}, now); !allow || warning != "" {
-		t.Fatalf("just outside the window: allow=%v %q", allow, warning)
+		t.Fatalf("just outside the lead: allow=%v %q", allow, warning)
+	}
+	if allow, warning = LiveWatch(1, 0, []Soon{early}, now); allow || !strings.Contains(warning, "Watching stops when that recording starts.") {
+		t.Fatalf("20s is inside the lead: allow=%v %q", allow, warning)
 	}
 	if allow, warning = LiveWatch(1, 0, []Soon{padded}, now); allow || !strings.Contains(warning, "News") {
-		t.Fatalf("pad still wins outside 20s: allow=%v %q", allow, warning)
+		t.Fatalf("a longer pad still warns: allow=%v %q", allow, warning)
 	}
 	_, warning = LiveWatch(1, 0, []Soon{inside, {Title: "Game", ChannelID: 8, Start: now.Add(15 * time.Second), Pad: 0}}, now)
-	if !strings.Contains(warning, "will miss 2 recordings") {
+	if !strings.Contains(warning, "Watching stops when 2 recordings start.") {
 		t.Fatalf("%q", warning)
+	}
+}
+
+func TestSameMissesIgnoresOrder(t *testing.T) {
+	a := time.Date(2026, 6, 16, 1, 0, 0, 0, time.UTC)
+	b := a.Add(24 * time.Hour)
+	missed := []MissedShowing{{Start: b}, {Start: a}}
+	if !SameMisses([]time.Time{a, b}, missed) {
+		t.Fatal("order")
+	}
+	if SameMisses([]time.Time{a}, missed) || SameMisses([]time.Time{a, a}, missed) || SameMisses(nil, missed) {
+		t.Fatal("a different list matched")
+	}
+	if !SameMisses(nil, nil) {
+		t.Fatal("empty")
 	}
 }

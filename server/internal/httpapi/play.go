@@ -517,12 +517,13 @@ func (s *Server) loadSchedule(ctx context.Context) (scheduleSnap, error) {
 
 func (s *Server) fixSchedule(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		PassID              int64     `json:"passId"`
-		ChannelID           int64     `json:"channelId"`
-		Start               time.Time `json:"start"`
-		SuggestionChannelID int64     `json:"suggestionChannelId"`
-		SuggestionStart     time.Time `json:"suggestionStart"`
-		AcknowledgeMisses   bool      `json:"acknowledgeMisses"`
+		PassID              int64       `json:"passId"`
+		ChannelID           int64       `json:"channelId"`
+		Start               time.Time   `json:"start"`
+		SuggestionChannelID int64       `json:"suggestionChannelId"`
+		SuggestionStart     time.Time   `json:"suggestionStart"`
+		AcknowledgeMisses   bool        `json:"acknowledgeMisses"`
+		AcknowledgedStarts  []time.Time `json:"acknowledgedStarts"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		httpError(w, "invalid json", http.StatusBadRequest)
@@ -561,7 +562,7 @@ func (s *Server) fixSchedule(w http.ResponseWriter, r *http.Request) {
 	fix := dvr.PlanFix(pass, item.Airing, suggestion)
 	if fix.OneShot != nil && !dvr.HaveOneShot(snap.passes, suggestion) {
 		missed := dvr.MissedFrom(snap.airings, *fix.OneShot, suggestion, s.guideNumbers(r.Context()))
-		if len(missed) > 0 && !body.AcknowledgeMisses {
+		if len(missed) > 0 && (!body.AcknowledgeMisses || !dvr.SameMisses(body.AcknowledgedStarts, missed)) {
 			apiError(w, http.StatusConflict, "missed_showings", dvr.MissedLine(missed), nil)
 			return
 		}
@@ -597,7 +598,7 @@ func (s *Server) fixSchedule(w http.ResponseWriter, r *http.Request) {
 	if title == "" {
 		title = "The show"
 	}
-	_ = s.Store.AddEvent(r.Context(), "recording", fmt.Sprintf("%s will record at %s instead.", title, suggestion.Start.In(time.Local).Format("3:04 PM")))
+	_ = s.Store.AddEvent(r.Context(), "recording", fmt.Sprintf("%s will record on %s instead.", title, suggestion.Start.In(time.Local).Format("Jan 2 at 3:04 PM")))
 	s.schedule(w, r)
 }
 
