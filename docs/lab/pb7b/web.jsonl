@@ -1,0 +1,249 @@
+start 2026-09-25T01:55:53Z
+### Result
+"{\"t\":\"2026-09-25T01:56:53.415Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":60.914021,\"rs\":4,\"paused\":false,\"dropped\":145,\"total\":3650,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T01:57:55.575Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":123.095609,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":7378,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T01:58:56.669Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":184.189491,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":11040,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T01:59:58.751Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":246.271322,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":14761,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:01:00.841Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":308.360798,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":18483,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:02:03.026Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":370.545539,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":22211,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:03:05.186Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":432.705904,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":25937,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:04:07.262Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":494.781565,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":29657,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:05:09.327Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":556.846207,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":33377,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:06:11.392Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":618.91095,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":37097,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:07:13.459Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":680.97779,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":40818,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:08:15.522Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":743.040053,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":44537,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:09:16.582Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":804.100054,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":48197,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:10:18.649Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":866.167025,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":51918,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:11:20.719Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":928.237095,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":55639,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:12:22.811Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":990.328546,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":59360,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:13:23.884Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1051.40147,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":63021,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:14:25.954Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1113.470596,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":66741,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:15:28.023Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1175.539481,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":70462,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:16:30.087Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1237.603902,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":74182,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:17:32.154Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1299.670664,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":77903,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:18:34.240Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1361.755489,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":81624,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:19:36.309Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1423.824369,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":85344,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:20:38.400Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1485.91522,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":89066,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:21:40.480Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1547.994857,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":92787,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:22:42.553Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1610.068039,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":96507,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:23:43.622Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1671.136169,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":100168,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:24:45.724Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1733.237334,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":103890,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:25:47.800Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1795.313063,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":107612,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:26:49.968Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1857.481617,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":111338,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:27:52.058Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1919.570816,\"rs\":4,\"paused\":false,\"dropped\":149,\"total\":115059,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:28:54.137Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":1981.638495,\"rs\":4,\"paused\":false,\"dropped\":188,\"total\":118779,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:29:55.194Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":2042.694416,\"rs\":4,\"paused\":false,\"dropped\":328,\"total\":122438,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:30:57.252Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":2104.748935,\"rs\":4,\"paused\":false,\"dropped\":481,\"total\":126157,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:31:59.323Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":2166.843437,\"rs\":4,\"paused\":false,\"dropped\":563,\"total\":129881,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:33:01.393Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":2228.91323,\"rs\":4,\"paused\":false,\"dropped\":563,\"total\":133601,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:34:03.463Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":2290.982696,\"rs\":4,\"paused\":false,\"dropped\":563,\"total\":137321,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:35:05.531Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":2353.050402,\"rs\":4,\"paused\":false,\"dropped\":563,\"total\":141042,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:36:06.618Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":2414.137457,\"rs\":4,\"paused\":false,\"dropped\":563,\"total\":144703,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:37:08.687Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":2476.205878,\"rs\":4,\"paused\":false,\"dropped\":563,\"total\":148424,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:38:10.758Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":2538.276219,\"rs\":4,\"paused\":false,\"dropped\":563,\"total\":152145,\"hls\":\"mediaError:bufferSeekOverHole\"}"
+### Ran Playwright code
+```js
+await page.evaluate('() => { const v = document.querySelector(\'video\'); const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {}; return JSON.stringify({ t: new Date().toISOString(), stalls: v && v.dataset.stalls, stallMs: v && v.dataset.stallMs, ttff: v && v.dataset.ttff, w: v && v.videoWidth, h: v && v.videoHeight, ct: v && v.currentTime, rs: v && v.readyState, paused: v && v.paused, dropped: q.droppedVideoFrames, total: q.totalVideoFrames, hls: v && v.dataset.hlsError }); }');
+```
+### Result
+"{\"t\":\"2026-09-25T02:55:59.217Z\",\"ttff\":\"8535\",\"w\":1280,\"h\":720,\"ct\":3596.024109,\"rs\":4,\"paused\":true,\"dropped\":684,\"total\":215546,\"hls\":\"mediaError:bufferSeekOverHole\"}"

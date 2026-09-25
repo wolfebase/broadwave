@@ -19,6 +19,9 @@ final class LivePlayer {
     private var stallObserver: NSObjectProtocol?
     private(set) var firstFrameMs: Int?
     private(set) var stalls = 0
+    private(set) var stallMs = 0
+    private var stallStarted: Date?
+    private var lastBeat = Date()
     /// Nominal frame rate once the asset reports it. 59.94 until then.
     private(set) var refreshRate: Float = 59.94
 
@@ -95,17 +98,35 @@ final class LivePlayer {
         started = Date()
         firstFrameMs = nil
         stalls = 0
+        stallMs = 0
+        stallStarted = nil
+        lastBeat = Date()
         stallObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.playbackStalledNotification, object: item, queue: .main) { [weak self] _ in
             Task { @MainActor in
-                self?.stalls += 1
-                print("broadwave stall \(self?.stalls ?? 0)")
+                guard let self else { return }
+                if self.stallStarted == nil {
+                    self.stallStarted = Date()
+                }
+                self.stalls += 1
+                print("broadwave stall \(self.stalls)")
             }
         }
         tick = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { [weak self] _ in
             Task { @MainActor in
-                guard let self, self.firstFrameMs == nil, self.player.timeControlStatus == .playing else { return }
-                self.firstFrameMs = Int(Date().timeIntervalSince(self.started) * 1000)
-                print("broadwave ttff \(self.firstFrameMs ?? 0)ms")
+                guard let self else { return }
+                if self.firstFrameMs == nil, self.player.timeControlStatus == .playing {
+                    self.firstFrameMs = Int(Date().timeIntervalSince(self.started) * 1000)
+                    print("broadwave ttff \(self.firstFrameMs ?? 0)ms")
+                }
+                if let start = self.stallStarted, self.player.timeControlStatus == .playing {
+                    self.stallMs += Int(Date().timeIntervalSince(start) * 1000)
+                    self.stallStarted = nil
+                    print("broadwave stall-ms \(self.stallMs)")
+                }
+                if self.firstFrameMs != nil, Date().timeIntervalSince(self.lastBeat) >= 60 {
+                    self.lastBeat = Date()
+                    print("broadwave beat stalls=\(self.stalls) stallMs=\(self.stallMs)")
+                }
             }
         }
     }
