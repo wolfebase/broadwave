@@ -206,6 +206,28 @@ func TestRenditionsShareOneTimeline(t *testing.T) {
 	}
 }
 
+func TestSeparateRenditionClocksAnchorToNow(t *testing.T) {
+	fixed := time.Date(2026, 9, 25, 18, 0, 0, 0, time.UTC)
+	longRunning := NewTimeline()
+	justStarted := NewTimeline()
+	longRunning.now = func() time.Time { return fixed }
+	justStarted.now = func() time.Time { return fixed }
+	// fMP4 timestamps start at zero for each encode, so the newer one is not
+	// 170s behind the one that has been running.
+	if got := longRunning.Wall(90000 * 200); !got.Equal(fixed.Add(-4 * time.Second)) {
+		t.Fatal(got)
+	}
+	if got := justStarted.Wall(90000 * 30); !got.Equal(fixed.Add(-4 * time.Second)) {
+		t.Fatal(got)
+	}
+	shared := NewTimeline()
+	shared.now = func() time.Time { return fixed }
+	shared.Wall(90000 * 200)
+	if got := shared.Wall(90000 * 30); !got.Equal(fixed.Add(-4*time.Second - 170*time.Second)) {
+		t.Fatal(got)
+	}
+}
+
 func TestPTSDiffWraps(t *testing.T) {
 	if d := ptsDiff(5, ptsWrap-5); d != 10 {
 		t.Fatalf("wrap forward: %d", d)

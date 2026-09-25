@@ -11,16 +11,8 @@ import { CloseIcon, VolumeIcon } from "../../ui/icons";
 import { LiveFrame } from "../../ui/LiveFrame";
 import { useLiveStream } from "../player/useLiveStream";
 import { useScoreMap } from "../sports/scores";
-import { isLayout, rememberLayout, roomId, saveSet, savedLayout, slotsFor, type MvLayout } from "./storage";
+import { layoutChoices, layoutFromParam, layoutLabel, rememberLayout, roomId, saveSet, savedLayout, slotsFor, type MvLayout } from "./storage";
 import "./multiview.css";
-
-const layoutLabels: { id: MvLayout; label: string }[] = [
-  { id: "2up", label: "Side by side" },
-  { id: "1+2", label: "One big and two" },
-  { id: "1+3", label: "One big and three" },
-  { id: "quad", label: "Quad" },
-  { id: "pip", label: "Small over big" },
-];
 
 function parseIds(raw: string | null) {
   return (raw ?? "")
@@ -50,7 +42,7 @@ export function Multiview() {
   const layoutMode = useLayout();
   const player = usePlayer();
   const ids = parseIds(params.get("ch"));
-  const layout: MvLayout = isLayout(params.get("layout")) ? (params.get("layout") as MvLayout) : savedLayout();
+  const layout: MvLayout = layoutFromParam(params.get("layout")) ?? savedLayout();
   const focus = Number(params.get("focus")) || ids[0] || 0;
   const guide = params.get("add") === "1";
   const [plan, setPlan] = useState<MultiviewPlan | null>(null);
@@ -190,12 +182,12 @@ export function Multiview() {
   const focused = ordered.find((c) => c.id === focus) ?? ordered[0];
 
   return (
-    <section className="mv" tabIndex={0} onKeyDown={onKey} aria-label={layoutLabels.find((item) => item.id === layout)?.label ?? "Side by side"}>
+    <section className="mv" tabIndex={0} onKeyDown={onKey} aria-label={layoutLabel(layout)}>
       <header className="mv-top">
         <button type="button" className="glass-icon" aria-label="Back to one channel" onClick={() => (focused ? player.open(focused) : navigate("/guide"))}>
           <CloseIcon />
         </button>
-        <h1>{layoutLabels.find((item) => item.id === layout)?.label ?? "Side by side"}</h1>
+        <h1>{layoutLabel(layout)}</h1>
         <span className="mv-spacer" />
         <button
           type="button"
@@ -203,7 +195,7 @@ export function Multiview() {
           disabled={ordered.length < 2}
           onClick={() => {
             const name = ordered.map((c) => c.displayNumber).join(" and ");
-            saveSet(name, ordered.map((c) => c.id));
+            saveSet(name, ordered.map((c) => c.id), layout);
           }}
         >
           Save
@@ -233,7 +225,7 @@ export function Multiview() {
       </div>
       </div>
       <div className="mv-bottom" role="toolbar" aria-label="Layout">
-        {layoutLabels.map((item) => (
+        {layoutChoices.map((item) => (
           <button key={item.id} type="button" className={layout === item.id ? "btn primary" : "btn"} aria-pressed={layout === item.id} onClick={() => go({ layout: item.id })}>
             {item.label}
           </button>

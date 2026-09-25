@@ -8,6 +8,7 @@ import { readZoom, saveZoom, type PictureMode, type Zoom } from "../../picture";
 import type { Channel } from "../../types";
 import { InfoIcon, ListIcon, RecordIcon, SideBySideIcon, SyncIcon } from "../../ui/icons";
 import { Progress } from "../../ui/primitives";
+import { isLayout, multiviewPath } from "../multiview/storage";
 import { useScoreMap } from "../sports/scores";
 import { Stage } from "./Stage";
 import { useLiveStream } from "./useLiveStream";
@@ -191,7 +192,10 @@ export function LivePlayer({
       ArrowUp: () => step(-1),
       ArrowDown: () => step(1),
       g: () => setPanel("guide"),
-      m: () => navigate(`/multiview?ch=${channel.id}&layout=${localStorage.getItem("broadwave-mv-layout") || "2up"}&focus=${channel.id}&add=1`),
+      m: () => {
+        const stored = localStorage.getItem("broadwave-mv-layout");
+        navigate(multiviewPath([channel.id], isLayout(stored) ? stored : "2up", channel.id, true));
+      },
       i: () => setPanel((p) => (p === "info" ? "none" : "info")),
       r: () => void toggleRecord(),
       l: goLive,
@@ -260,7 +264,10 @@ export function LivePlayer({
             type="button"
             className="glass-icon"
             aria-label="Side by side"
-            onClick={() => navigate(`/multiview?ch=${channel.id}&layout=${localStorage.getItem("broadwave-mv-layout") || "2up"}&focus=${channel.id}&add=1`)}
+            onClick={() => {
+              const stored = localStorage.getItem("broadwave-mv-layout");
+              navigate(multiviewPath([channel.id], isLayout(stored) ? stored : "2up", channel.id, true));
+            }}
           >
             <SideBySideIcon />
           </button>

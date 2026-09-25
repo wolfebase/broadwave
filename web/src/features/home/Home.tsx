@@ -6,7 +6,7 @@ import { navigate } from "../../app/router";
 import { airingAt, categoryLabel, categoryOf, dayLabel, minutesLeft, nextAfter, progress, timeLabel, type Category } from "../../lib/guide";
 import type { Airing, Channel, Recording, TeamFollow } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
-import { savedSets } from "../multiview/storage";
+import { isLayout, layoutForCount, layoutLabel, multiviewPath, savedSets } from "../multiview/storage";
 import { ArtFrame } from "../../ui/ArtFrame";
 import { LiveFrame } from "../../ui/LiveFrame";
 import { ChannelBadge, Empty, LiveDot, Progress, SectionHeader } from "../../ui/primitives";
@@ -219,8 +219,8 @@ export function Home() {
                   className="text-btn"
                   onClick={() => {
                     const ids = sports.filter((s) => Date.parse(s.airing.start) <= now).slice(0, 4).map((s) => s.channel.id);
-                    const layout = ids.length >= 4 ? "quad" : ids.length === 3 ? "1+2" : "2up";
-                    navigate(`/multiview?ch=${ids.join(",")}&layout=${layout}&focus=${ids[0]}`);
+                    const layout = layoutForCount(ids.length);
+                    navigate(multiviewPath(ids, layout, ids[0]));
                   }}
                 >
                   Watch together
@@ -246,12 +246,15 @@ export function Home() {
 
       {savedSets().length > 0 ? (
         <Shelf title="Saved sets">
-          {savedSets().map((set) => (
-            <button key={set.channels.join(",")} type="button" className="now-card" onClick={() => navigate(`/multiview?ch=${set.channels.join(",")}&layout=${set.channels.length >= 4 ? "quad" : set.channels.length === 3 ? "1+2" : "2up"}&focus=${set.channels[0]}`)}>
-              <span className="nc-title">{set.name}</span>
-              <span className="nc-foot dim">Side by side</span>
-            </button>
-          ))}
+          {savedSets().map((set) => {
+            const layout = set.layout && isLayout(set.layout) ? set.layout : layoutForCount(set.channels.length);
+            return (
+              <button key={set.channels.join(",")} type="button" className="now-card" onClick={() => navigate(multiviewPath(set.channels, layout, set.channels[0]))}>
+                <span className="nc-title">{set.name}</span>
+                <span className="nc-foot dim">{layoutLabel(layout)}</span>
+              </button>
+            );
+          })}
         </Shelf>
       ) : null}
 

@@ -354,7 +354,8 @@ func renditionProfile(video string) string {
 }
 
 // RenditionArgs builds ffmpeg for one live rendition. Timestamps are kept from
-// the broadcast (-copyts) so every rendition of a channel shares one timeline.
+// the broadcast (-copyts). fMP4 still starts each encode at zero, so each
+// rendition keeps its own wall clock (see rendition.clock).
 func RenditionArgs(program int, src Source, r Rendition, encoder, deint string) []string {
 	return renditionArgs(program, src, r, encoder, deint, "pipe:0")
 }
