@@ -65,6 +65,9 @@ struct RootView: View {
             guard store.connected else { return }
             store.socket?.announce(name: ScreenIdentity.name, kind: ScreenIdentity.kind)
             #if DEBUG
+                if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
+                    return
+                }
                 if UserDefaults.standard.string(forKey: "BroadwaveSetup") != nil {
                     showSetup = true
                     return
@@ -77,6 +80,15 @@ struct RootView: View {
         .onOpenURL(perform: open)
         #if DEBUG
             .task {
+                if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
+                    UserDefaults.standard.set("2up", forKey: "BroadwaveMultiviewLayout")
+                    store.previewLineup([
+                        previewChannel(id: 1, number: "4.1", name: "One"),
+                        previewChannel(id: 3, number: "9.1", name: "Two"),
+                    ])
+                    nowPlaying.watchTogether(store.channels)
+                    return
+                }
                 if let name = UserDefaults.standard.string(forKey: "BroadwaveTab") {
                     switch name {
                     case "guide": tab = .guide
@@ -116,6 +128,16 @@ struct RootView: View {
             }
         #endif
     }
+
+    #if DEBUG
+        private func previewChannel(id: Int64, number: String, name: String) -> Channel {
+            Channel(
+                id: id, deviceId: "preview", guideNumber: number, guideName: name,
+                displayNumber: number, displayName: name,
+                hd: true, favorite: false, enabled: true, hidden: false, present: true
+            )
+        }
+    #endif
 
     /// broadwave://watch/<channel id>, broadwave://guide, broadwave://sports — for widgets, Top Shelf, and Siri.
     private func open(_ url: URL) {

@@ -103,7 +103,22 @@ public final class AppStore {
         UserDefaults.standard.removeObject(forKey: "server")
     }
 
+    #if DEBUG
+        /// Offline tiles for the tvOS remote test. It does not open a socket or a tuner.
+        public func previewLineup(_ channels: [Channel]) {
+            self.channels = channels
+            let url = URL(string: "http://127.0.0.1:9")!
+            server = FoundServer(id: "preview", name: "Preview", url: url)
+            api = APIClient(base: url)
+        }
+    #endif
+
     public func refresh(lineup: Bool = true) async {
+        #if DEBUG
+            if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
+                return
+            }
+        #endif
         guard let api else { return }
         loading = true
         defer { loading = false }

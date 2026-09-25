@@ -333,8 +333,19 @@ struct MultiviewScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var session: MultiviewSession
     @State private var blocked: Set<Int64> = []
-    @State private var planReady = false
+    @State private var planReady = {
+        #if DEBUG
+            UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest")
+        #else
+            false
+        #endif
+    }()
+
     @State private var hint = !UserDefaults.standard.bool(forKey: "broadwave-mv-hint-seen")
+    @State private var menuChannel: Int64?
+    #if os(tvOS)
+        @FocusState private var remoteFocus: Int64?
+    #endif
 
     init() {
         _session = State(initialValue: MultiviewSession(focusID: 0))
@@ -428,6 +439,12 @@ struct MultiviewScreen: View {
             }
         }
         .task(id: nowPlaying.together) {
+            #if DEBUG
+                if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
+                    planReady = true
+                    return
+                }
+            #endif
             if nowPlaying.together.count > 1 {
                 planReady = false
             }
@@ -435,14 +452,27 @@ struct MultiviewScreen: View {
             planReady = true
         }
         #if os(tvOS)
+        .defaultFocus($remoteFocus, nowPlaying.together.first ?? 0)
         .onPlayPauseCommand {
             session.togglePause()
         }
         .onExitCommand {
-            if session.guide {
+            if menuChannel != nil {
+                menuChannel = nil
+            } else if session.guide {
                 session.guide = false
             } else {
                 leave()
+            }
+        }
+        .onAppear {
+            if remoteFocus == nil {
+                remoteFocus = nowPlaying.together.first
+            }
+        }
+        .onChange(of: planReady) { _, ready in
+            if ready, remoteFocus == nil {
+                remoteFocus = nowPlaying.together.first
             }
         }
         #endif
@@ -458,6 +488,12 @@ struct MultiviewScreen: View {
             Spacer()
             Button(session.paused ? "Play" : "Pause") { session.togglePause() }
                 .buttonStyle(.glass)
+                .accessibilityIdentifier("multiview-pause")
+            if session.paused {
+                Text("Paused")
+                    .font(.headline)
+                    .accessibilityIdentifier("multiview-paused")
+            }
             Button("Save") {
                 let name = tiles.map(\.displayNumber).joined(separator: " and ")
                 SavedMultiview.save(name: name, channels: tiles.map(\.id))
@@ -568,31 +604,50 @@ struct MultiviewScreen: View {
 
     private func tile(_ channel: Channel) -> some View {
         let focused = channel.id == (ordered.first { $0.id == session.focusID }?.id ?? ordered.first?.id)
+        #if os(tvOS)
+            let remoteFocused = remoteFocus == channel.id
+        #else
+            let remoteFocused = false
+        #endif
         return MultiviewTile(
             channel: channel,
             title: store.index.on(channel.id, at: store.now)?.title ?? channel.displayName,
             prefs: session.prefs(for: channel.id),
             room: session.room,
             focused: focused,
+            remoteFocused: remoteFocused,
             pip: focused
         ) {
             session.focusID = channel.id
         } bind: { session.bind($0) }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        #if os(tvOS)
+            .focused($remoteFocus, equals: channel.id)
+        #endif
             .contextMenu {
-                Button("Make big") {
-                    session.focusID = channel.id
-                }
-                Button("Record") {
-                    Task { await store.toggleRecord(channel) }
-                }
-                Button("Remove") {
-                    nowPlaying.together.removeAll { $0 == channel.id }
-                }
-                Button("Full screen") {
-                    nowPlaying.play(channel)
-                }
+                tileMenu(channel)
             }
+    }
+
+    @ViewBuilder
+    private func tileMenu(_ channel: Channel) -> some View {
+        Button("Make big") {
+            session.focusID = channel.id
+            menuChannel = nil
+        }
+        Button("Record") {
+            Task { await store.toggleRecord(channel) }
+            menuChannel = nil
+        }
+        Button("Remove") {
+            nowPlaying.together.removeAll { $0 == channel.id }
+            menuChannel = nil
+        }
+        .accessibilityIdentifier("tile-menu-remove")
+        Button("Full screen") {
+            nowPlaying.play(channel)
+            menuChannel = nil
+        }
     }
 
     private func add(_ channel: Channel) {
@@ -639,6 +694,8 @@ struct MultiviewTile: View {
     let prefs: Prefs
     let room: String
     let focused: Bool
+    /// The Siri Remote is on this tile. Sound is separate: click moves that.
+    let remoteFocused: Bool
     let pip: Bool
     let onFocus: () -> Void
     let bind: (@escaping (String) -> Void) -> Void
@@ -654,6 +711,10 @@ struct MultiviewTile: View {
                     HStack(spacing: 8) {
                         Text(channel.displayNumber).font(.caption.weight(.bold))
                         Text(title).font(.caption).lineLimit(1)
+                        if remoteFocused {
+                            Text("Focused")
+                                .font(.caption.weight(.bold))
+                        }
                         Spacer(minLength: 0)
                         if focused {
                             Label("Sound", systemImage: "speaker.wave.2.fill")
@@ -686,20 +747,28 @@ struct MultiviewTile: View {
             }
         }
         .buttonStyle(.plain)
-        .focusEffectDisabled()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityLabel("\(channel.displayNumber) \(channel.displayName), \(title)")
-        .accessibilityValue(focused ? "Sound on" : "Sound off")
-        .accessibilityAddTraits(focused ? .isSelected : [])
-        .task(id: "\(channel.id)-\(prefs.quality.rawValue)-\(prefs.audio.rawValue)") {
-            await live.start(TilePlayer.Request(channel: channel, prefs: prefs, audible: focused), room: room, store: store, bind: bind)
-        }
-        .onChange(of: focused) { _, on in
-            live.setAudible(on)
-        }
-        .onDisappear {
-            Task { await live.stop() }
-        }
+        #if os(iOS)
+            .focusEffectDisabled()
+        #endif
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityIdentifier("tile-\(channel.id)")
+            .accessibilityLabel("\(channel.displayNumber) \(channel.displayName), \(title)")
+            .accessibilityValue([remoteFocused ? "Focused" : nil, focused ? "Sound on" : "Sound off"].compactMap(\.self).joined(separator: ", "))
+            .accessibilityAddTraits(focused ? .isSelected : [])
+            .task(id: "\(channel.id)-\(prefs.quality.rawValue)-\(prefs.audio.rawValue)") {
+                #if DEBUG
+                    if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
+                        return
+                    }
+                #endif
+                await live.start(TilePlayer.Request(channel: channel, prefs: prefs, audible: focused), room: room, store: store, bind: bind)
+            }
+            .onChange(of: focused) { _, on in
+                live.setAudible(on)
+            }
+            .onDisappear {
+                Task { await live.stop() }
+            }
     }
 }
 
