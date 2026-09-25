@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"broadwave/internal/disk"
@@ -181,7 +182,10 @@ type rendition struct {
 	stamper   playlistStamper
 	fallback  bool
 	restarted bool
-	args      []string
+	// waited is set after cmd.Wait returns, before the hub lock. A stop that
+	// arrives in that window must not signal the pid: Wait has reaped it.
+	waited atomic.Bool
+	args   []string
 }
 
 type recording struct {
@@ -581,6 +585,7 @@ func encoderOf(base string, want Rendition) string {
 func (h *Hub) watchRendition(f *feed, r *rendition, pid int, encoder string) {
 	started := time.Now()
 	err := r.cmd.Wait()
+	r.waited.Store(true)
 	ForgetPID(h.Dir, pid)
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -618,6 +623,7 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 	}
 	r.sub = nil
 	r.stdin = nil
+	r.stamper.reset()
 	if err := os.RemoveAll(r.dir); err != nil {
 		return false
 	}
@@ -659,6 +665,7 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 	r.stdin = stdin
 	r.args = args
 	r.restarted = true
+	r.waited.Store(false)
 	if stdin != nil {
 		r.sub = h.attachPipeLocked(muxOf(h, f), stdin)
 	}
@@ -1201,7 +1208,7 @@ func (h *Hub) stopRenditionLocked(f *feed, key string) {
 	}
 	stopTimer(&r.idle)
 	muxOf(h, f).detach(r.sub)
-	if r.cmd != nil && r.cmd.Process != nil {
+	if r.cmd != nil && r.cmd.Process != nil && !r.waited.Load() {
 		ForgetPID(h.Dir, r.cmd.Process.Pid)
 		if r.stdin != nil {
 			_ = r.stdin.Close()

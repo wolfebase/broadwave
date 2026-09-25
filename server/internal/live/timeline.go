@@ -123,6 +123,14 @@ type playlistStamper struct {
 	cache map[string]int64
 }
 
+// reset forgets segment times. A restarted encode reuses seg00001.m4s for a
+// new file, and the cached time would stamp that file with the old one.
+func (p *playlistStamper) reset() {
+	p.mu.Lock()
+	p.cache = nil
+	p.mu.Unlock()
+}
+
 func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 	p.mu.Lock()
 	defer p.mu.Unlock()
