@@ -4,6 +4,6 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
-- 2026-09-24 22:55 · The run moved from Cursor to Grok Build at high effort. Round 1 inherited Cursor's uncommitted PB8 (Stream panel) work: finish it, verify it on staging (web, iPhone, Apple TV), and commit it with evidence before starting PB9.
-- The iPhone Stream panel showed sync around −49 s. Find out whether that is real drift or a display bug before you tick PB8; the Accept bullets need real numbers.
-- Staging had 5 stale viewers on tuner 0 when Cursor was stopped. Check `/api/v1/tuners` on `:8490` and let them expire, or stop them, before you tune.
+- 2026-09-24 23:10 · **Stop driving the Simulator UI with cliclick, menu-bar shortcuts, and OCR.** Round 1 spent 10+ minutes trying to open Simulator windows through the menu bar. Use what `.cursor/skills/broadwave-apple/SKILL.md` documents: `xcrun simctl launch <udid> com.wolfeup.broadwave -BroadwaveWatch <id>`, deep links (`xcrun simctl openurl <udid> broadwave://watch/<id>`), and `xcrun simctl io <udid> screenshot` (needs no window). If the Stream panel needs a tap to open, add a DEBUG-only launch argument (for example `-BroadwaveStreamPanel`) that opens it, then screenshot. Budget 10 minutes for Apple screenshots; if they still fail, commit PB8 with the web evidence and file the Apple screenshots as a follow-up task line.
+- 2026-09-24 23:10 · PB8 has ~900 uncommitted lines. Get it to `make check` green and committed this round; a round that ends with it still uncommitted wastes the work.
+- 2026-09-24 22:55 · The iPhone Stream panel showed sync around −49 s. Find out whether that is real drift or a display bug before you tick PB8; the Accept bullets need real numbers.
