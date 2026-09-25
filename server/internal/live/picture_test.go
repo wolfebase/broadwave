@@ -163,7 +163,7 @@ func TestSmoothDoesNotInventFrames(t *testing.T) {
 
 func TestHEVCRenditionUsesHVC1(t *testing.T) {
 	line := strings.Join(RenditionArgs(0, Source{VideoCodec: "MPEG2"}, Rendition{Video: "1080", Audio: "aac2", Codec: "hevc"}, "h264_vaapi", "motion_adaptive"), " ")
-	for _, want := range []string{"-hwaccel_output_format vaapi", "-c:v hevc_vaapi", "-tag:v hvc1", "-profile:v main", "deinterlace_vaapi"} {
+	for _, want := range []string{"-hwaccel_output_format vaapi", "-c:v hevc_vaapi -sei 0", "-tag:v hvc1", "-profile:v main", "deinterlace_vaapi"} {
 		if !strings.Contains(line, want) {
 			t.Fatalf("missing %q in %s", want, line)
 		}

@@ -69,4 +69,4 @@ Staging `broadwave-staging:pb5`, channel 5.1 (1080i), 2026-09-25:
 | `1080.aac2.broadcast` (10 min, 30 playlist polls, 292 segments) | 1920×1080 59.94, last 3 segments 360 frames | 0 | 10.51% |
 | `1080.copy.broadcast.hevc` | HEVC `hvc1`, 1920×1080 60000/1001 | 0 | 10.87% |
 
-Encoder flags: `-rc_mode VBR -profile:v high -bf 2 -low_power 0` for H.264, `-profile:v main -tag:v hvc1` for HEVC. Bitrates stay 14M at 1080p60 and 8M at 720p60 until a libvmaf run can score them (PB5b).
+Encoder flags: `-rc_mode VBR -profile:v high -bf 2 -low_power 0` for H.264, `-sei 0 -profile:v main -tag:v hvc1` for HEVC. `-sei 0` keeps an OTA caption out of the 1024-byte VAAPI packed header; without it `hevc_vaapi` exits with "Access unit too large: 8192 < N" (errno 28) and the rendition restarts on libx265 (PB5c). Bitrates stay 14M at 1080p60 and 8M at 720p60 until a libvmaf run can score them (PB5b).
