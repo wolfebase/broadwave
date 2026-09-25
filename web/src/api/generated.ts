@@ -132,6 +132,9 @@ export type Game = {
   period?: number;
   broadcasts?: string[];
   teams?: SportsTeam[];
+  redZone?: boolean;
+  powerPlay?: boolean;
+  situation?: string;
 };
 
 export type Marker = {

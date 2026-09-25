@@ -253,8 +253,11 @@ public struct Game: Codable, Sendable, Hashable, Identifiable {
     public var period: Int?
     public var broadcasts: [String]?
     public var teams: [SportsTeam]?
+    public var redZone: Bool?
+    public var powerPlay: Bool?
+    public var situation: String?
 
-    public init(id: String, league: String, name: String, shortName: String? = nil, start: Date, state: String, completed: Bool? = nil, detail: String? = nil, clock: String? = nil, period: Int? = nil, broadcasts: [String]? = nil, teams: [SportsTeam]? = nil) {
+    public init(id: String, league: String, name: String, shortName: String? = nil, start: Date, state: String, completed: Bool? = nil, detail: String? = nil, clock: String? = nil, period: Int? = nil, broadcasts: [String]? = nil, teams: [SportsTeam]? = nil, redZone: Bool? = nil, powerPlay: Bool? = nil, situation: String? = nil) {
         self.id = id
         self.league = league
         self.name = name
@@ -267,6 +270,9 @@ public struct Game: Codable, Sendable, Hashable, Identifiable {
         self.period = period
         self.broadcasts = broadcasts
         self.teams = teams
+        self.redZone = redZone
+        self.powerPlay = powerPlay
+        self.situation = situation
     }
 }
 

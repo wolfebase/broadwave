@@ -1,6 +1,7 @@
 package sports
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -84,6 +85,7 @@ func parseEvent(league string, raw json.RawMessage) (Game, bool) {
 			Broadcasts []struct {
 				Names []string `json:"names"`
 			} `json:"broadcasts"`
+			Situation   situationDoc `json:"situation"`
 			Competitors []struct {
 				HomeAway string `json:"homeAway"`
 				Score    string `json:"score"`
@@ -123,9 +125,10 @@ func parseEvent(league string, raw json.RawMessage) (Game, bool) {
 			game.Teams = append(game.Teams, Team{
 				Name: c.Team.DisplayName, Short: c.Team.ShortDisplayName, Abbr: c.Team.Abbreviation,
 				Score: strings.TrimSpace(c.Score), Home: c.HomeAway == "home",
-				Color: hexColor(c.Team.Color), AltColor: hexColor(c.Team.AlternateColor), Logo: c.Team.Logo,
+				Color: hexColor(c.Team.Color), AltColor: hexColor(c.Team.AlternateColor), Logo: localLogo(c.Team.Logo),
 			})
 		}
+		game.RedZone, game.PowerPlay, game.Situation = readSituation(comp.Situation)
 	}
 	game.State = status.Type.State
 	game.Completed = status.Type.Completed
@@ -147,6 +150,72 @@ type statusDoc struct {
 		Completed   bool   `json:"completed"`
 		ShortDetail string `json:"shortDetail"`
 	} `json:"type"`
+}
+
+type situationDoc struct {
+	IsRedZone             bool            `json:"isRedZone"`
+	PowerPlay             json.RawMessage `json:"powerPlay"`
+	PossessionText        string          `json:"possessionText"`
+	ShortDownDistanceText string          `json:"shortDownDistanceText"`
+	DownDistanceText      string          `json:"downDistanceText"`
+}
+
+func readSituation(s situationDoc) (red bool, power bool, text string) {
+	red = s.IsRedZone
+	power = powerPlayOn(s.PowerPlay)
+	switch {
+	case red:
+		text = "Red zone"
+	case power:
+		text = "Power play"
+	default:
+		down := strings.TrimSpace(s.ShortDownDistanceText)
+		if down == "" {
+			down = strings.TrimSpace(s.DownDistanceText)
+		}
+		poss := strings.TrimSpace(s.PossessionText)
+		switch {
+		case down != "" && poss != "":
+			text = poss + ", " + down
+		case down != "":
+			text = down
+		default:
+			text = poss
+		}
+	}
+	if len(text) > 60 {
+		text = strings.TrimSpace(text[:60])
+	}
+	return red, power, text
+}
+
+func powerPlayOn(raw json.RawMessage) bool {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) || bytes.Equal(raw, []byte("false")) || bytes.Equal(raw, []byte("0")) {
+		return false
+	}
+	var flag bool
+	if json.Unmarshal(raw, &flag) == nil {
+		return flag
+	}
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		text = strings.TrimSpace(text)
+		return text != "" && !strings.EqualFold(text, "false") && text != "0"
+	}
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(raw, &obj) == nil {
+		return len(obj) > 0
+	}
+	return false
+}
+
+func localLogo(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if strings.Contains(raw, "://") {
+		return ""
+	}
+	return raw
 }
 
 func parseStart(raw string) (time.Time, error) {

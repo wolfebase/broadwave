@@ -33,7 +33,7 @@ dev:
 test: web/node_modules
 	go test ./server/...
 	cd web && npx tsc --noEmit
-	cd web && node --experimental-strip-types --test storage.test.ts art.test.ts compat.test.ts
+	cd web && node --experimental-strip-types --test storage.test.ts art.test.ts compat.test.ts switcher.test.ts
 
 vet:
 	go vet ./server/...

@@ -13,14 +13,32 @@ export type ScoreTeam = {
 
 export type ScoreGame = {
   id: string;
+  league?: string;
+  name?: string;
+  shortName?: string;
   state?: string;
   detail?: string;
   clock?: string;
+  period?: number;
+  redZone?: boolean;
+  powerPlay?: boolean;
+  situation?: string;
   teams?: ScoreTeam[];
 };
 
 const cache: { at: number; games: ScoreGame[] } = { at: 0, games: [] };
 let pending: Promise<ScoreGame[]> | null = null;
+
+export function refreshScores(): Promise<ScoreGame[]> {
+  return fetch("/api/v1/sports/scoreboard")
+    .then((res) => (res.ok ? res.json() : { games: [] }))
+    .then((body: { games?: ScoreGame[] }) => {
+      cache.games = body.games ?? [];
+      cache.at = Date.now();
+      return cache.games;
+    })
+    .catch(() => cache.games);
+}
 
 export function loadScores(): Promise<ScoreGame[]> {
   if (Date.now() - cache.at < 30_000) return Promise.resolve(cache.games);

@@ -1186,6 +1186,12 @@ export interface components {
             period?: number;
             broadcasts?: string[];
             teams?: components["schemas"]["SportsTeam"][];
+            /** @description The football is inside the opponent's 20. */
+            redZone?: boolean;
+            /** @description A hockey team has a power play. */
+            powerPlay?: boolean;
+            /** @description Short live situation, such as Red zone or 1st and 10. */
+            situation?: string;
         };
         SportsTeam: {
             name: string;

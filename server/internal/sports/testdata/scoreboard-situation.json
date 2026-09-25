@@ -1,0 +1,105 @@
+{
+  "events": [
+    {
+      "id": "nfl-redzone",
+      "name": "Kansas City Chiefs at Las Vegas Raiders",
+      "shortName": "KC @ LV",
+      "date": "2026-09-25T20:00:00Z",
+      "status": {"type": {"state": "in", "completed": false, "shortDetail": "3rd 8:12"}},
+      "competitions": [{
+        "status": {"period": 3, "displayClock": "8:12", "type": {"state": "in", "completed": false, "shortDetail": "3rd 8:12"}},
+        "broadcasts": [{"names": ["CBS"]}],
+        "situation": {
+          "down": 1,
+          "distance": 8,
+          "yardLine": 12,
+          "downDistanceText": "1st & 8 at LV 12",
+          "shortDownDistanceText": "1st & 8",
+          "possessionText": "KC",
+          "isRedZone": true,
+          "homeTimeouts": 3,
+          "awayTimeouts": 2
+        },
+        "competitors": [
+          {"homeAway": "home", "score": "14", "team": {"displayName": "Las Vegas Raiders", "shortDisplayName": "Raiders", "abbreviation": "LV", "color": "000000", "alternateColor": "A5ACAF"}},
+          {"homeAway": "away", "score": "17", "team": {"displayName": "Kansas City Chiefs", "shortDisplayName": "Chiefs", "abbreviation": "KC", "color": "E31837", "alternateColor": "FFB81C"}}
+        ]
+      }]
+    },
+    {
+      "id": "nhl-pp",
+      "name": "Boston Bruins at New York Rangers",
+      "shortName": "BOS @ NYR",
+      "date": "2026-09-25T23:00:00Z",
+      "status": {"type": {"state": "in", "completed": false, "shortDetail": "2nd 12:04"}},
+      "competitions": [{
+        "status": {"period": 2, "displayClock": "12:04", "type": {"state": "in", "completed": false, "shortDetail": "2nd 12:04"}},
+        "situation": {"powerPlay": true, "possessionText": "BOS"},
+        "competitors": [
+          {"homeAway": "home", "score": "1", "team": {"displayName": "New York Rangers", "shortDisplayName": "Rangers", "abbreviation": "NYR"}},
+          {"homeAway": "away", "score": "1", "team": {"displayName": "Boston Bruins", "shortDisplayName": "Bruins", "abbreviation": "BOS"}}
+        ]
+      }]
+    },
+    {
+      "id": "nfl-close",
+      "name": "Buffalo Bills at Miami Dolphins",
+      "shortName": "BUF @ MIA",
+      "date": "2026-09-25T17:00:00Z",
+      "status": {"type": {"state": "in", "completed": false, "shortDetail": "4th 3:20"}},
+      "competitions": [{
+        "status": {"period": 4, "displayClock": "3:20", "type": {"state": "in", "completed": false, "shortDetail": "4th 3:20"}},
+        "situation": {"isRedZone": false, "possessionText": "BUF", "shortDownDistanceText": "2nd & 7"},
+        "competitors": [
+          {"homeAway": "home", "score": "24", "team": {"displayName": "Miami Dolphins", "shortDisplayName": "Dolphins", "abbreviation": "MIA"}},
+          {"homeAway": "away", "score": "21", "team": {"displayName": "Buffalo Bills", "shortDisplayName": "Bills", "abbreviation": "BUF"}}
+        ]
+      }]
+    },
+    {
+      "id": "nfl-lead",
+      "name": "Dallas Cowboys at Philadelphia Eagles",
+      "shortName": "DAL @ PHI",
+      "date": "2026-09-25T20:25:00Z",
+      "status": {"type": {"state": "in", "completed": false, "shortDetail": "2nd 10:00"}},
+      "competitions": [{
+        "status": {"period": 2, "displayClock": "10:00", "type": {"state": "in", "completed": false, "shortDetail": "2nd 10:00"}},
+        "situation": {"isRedZone": false, "possessionText": "DAL", "shortDownDistanceText": "1st & 10"},
+        "competitors": [
+          {"homeAway": "home", "score": "10", "team": {"displayName": "Philadelphia Eagles", "shortDisplayName": "Eagles", "abbreviation": "PHI"}},
+          {"homeAway": "away", "score": "14", "team": {"displayName": "Dallas Cowboys", "shortDisplayName": "Cowboys", "abbreviation": "DAL"}}
+        ]
+      }]
+    },
+    {
+      "id": "nfl-quiet",
+      "name": "Green Bay Packers at Chicago Bears",
+      "shortName": "GB @ CHI",
+      "date": "2026-09-25T17:00:00Z",
+      "status": {"type": {"state": "in", "completed": false, "shortDetail": "2nd 9:00"}},
+      "competitions": [{
+        "status": {"period": 2, "displayClock": "9:00", "type": {"state": "in", "completed": false, "shortDetail": "2nd 9:00"}},
+        "situation": {"isRedZone": false, "possessionText": "GB", "shortDownDistanceText": "2nd & 5", "downDistanceText": "2nd & 5 at CHI 40"},
+        "competitors": [
+          {"homeAway": "home", "score": "7", "team": {"displayName": "Chicago Bears", "shortDisplayName": "Bears", "abbreviation": "CHI"}},
+          {"homeAway": "away", "score": "28", "team": {"displayName": "Green Bay Packers", "shortDisplayName": "Packers", "abbreviation": "GB"}}
+        ]
+      }]
+    },
+    {
+      "id": "mls-late",
+      "name": "Los Angeles FC at Seattle Sounders",
+      "shortName": "LAFC @ SEA",
+      "date": "2026-09-25T02:30:00Z",
+      "status": {"type": {"state": "in", "completed": false, "shortDetail": "88'"}},
+      "competitions": [{
+        "status": {"period": 2, "displayClock": "88'", "type": {"state": "in", "completed": false, "shortDetail": "88'"}},
+        "situation": {},
+        "competitors": [
+          {"homeAway": "home", "score": "2", "team": {"displayName": "Seattle Sounders", "shortDisplayName": "Sounders", "abbreviation": "SEA"}},
+          {"homeAway": "away", "score": "1", "team": {"displayName": "Los Angeles FC", "shortDisplayName": "LAFC", "abbreviation": "LAFC"}}
+        ]
+      }]
+    }
+  ]
+}
