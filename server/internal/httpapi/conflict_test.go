@@ -171,7 +171,7 @@ func TestLiveWatchDoesNotStarveARecording(t *testing.T) {
 	if err := json.Unmarshal(warn.Body.Bytes(), &problem); err != nil {
 		t.Fatal(err)
 	}
-	if problem.Code != "recording_soon" || !strings.Contains(problem.Message, "News") || !strings.Contains(problem.Message, "will miss that recording") {
+	if problem.Code != "recording_soon" || !strings.Contains(problem.Message, "News") || !strings.Contains(problem.Message, "Watching stops when that recording starts.") {
 		t.Fatalf("%+v", problem)
 	}
 	for _, path := range tuner.Requests() {
@@ -303,7 +303,21 @@ func TestOneShotFixWaitsUntilTheMissedShowingsAreSeen(t *testing.T) {
 			t.Fatal("the fix ran before the missed showing was acknowledged")
 		}
 	}
-	acked := postJSON(t, h, "/api/v1/schedule/fix", strings.TrimSuffix(payload, "}")+`,"acknowledgeMisses":true}`)
+	stale := postJSON(t, h, "/api/v1/schedule/fix", strings.TrimSuffix(payload, "}")+`,"acknowledgeMisses":true,"acknowledgedStarts":["2000-01-01T00:00:00Z"]}`)
+	if stale.Code != http.StatusConflict || !strings.Contains(stale.Body.String(), "missed_showings") {
+		t.Fatalf("stale list %d %s", stale.Code, stale.Body.String())
+	}
+	body.Items = nil
+	if err := json.Unmarshal(get(t, h, "/api/v1/schedule").Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range body.Items {
+		if item.Airing.Start.Equal(start) && item.Reason == "Skipped once" {
+			t.Fatal("a stale list skipped the showing")
+		}
+	}
+	missAt := skipped.Suggestion.Misses[0].Start.UTC().Format(time.RFC3339Nano)
+	acked := postJSON(t, h, "/api/v1/schedule/fix", strings.TrimSuffix(payload, "}")+fmt.Sprintf(`,"acknowledgeMisses":true,"acknowledgedStarts":[%q]}`, missAt))
 	if acked.Code != http.StatusOK {
 		t.Fatalf("ack %d %s", acked.Code, acked.Body.String())
 	}

@@ -77,7 +77,7 @@ func AttachSuggestions(items []Planned, passes []store.Pass, airings []store.Air
 		if !ok {
 			continue
 		}
-		alt, ok := laterAiring(items, items[i], pass, airings, tunerCount, from, to, guides)
+		alt, ok := laterAiring(items, items[i], pass, passes, airings, tunerCount, from, to, guides)
 		if !ok {
 			continue
 		}
@@ -86,7 +86,7 @@ func AttachSuggestions(items []Planned, passes []store.Pass, airings []store.Air
 	return items
 }
 
-func laterAiring(items []Planned, skipped Planned, pass store.Pass, airings []store.Airing, tunerCount int, from, to time.Time, guides map[int64]string) (Suggestion, bool) {
+func laterAiring(items []Planned, skipped Planned, pass store.Pass, passes []store.Pass, airings []store.Airing, tunerCount int, from, to time.Time, guides map[int64]string) (Suggestion, bool) {
 	var best store.Airing
 	found := false
 	for _, air := range airings {
@@ -118,7 +118,7 @@ func laterAiring(items []Planned, skipped Planned, pass store.Pass, airings []st
 		End:         best.End,
 	}
 	fix := PlanFix(pass, skipped.Airing, best)
-	if fix.OneShot != nil {
+	if fix.OneShot != nil && !HaveOneShot(passes, best) {
 		sug.Misses = MissedFrom(airings, *fix.OneShot, best, guides)
 	}
 	return sug, true
@@ -329,11 +329,12 @@ func missedPart(item MissedShowing) string {
 	if title == "" {
 		title = "A show"
 	}
-	when := item.Start.In(time.Local).Format("3:04 PM")
+	// The window is 14 days, so the clock alone can name two showings.
+	when := item.Start.In(time.Local).Format("Jan 2 at 3:04 PM")
 	if number := strings.TrimSpace(item.GuideNumber); number != "" {
-		return fmt.Sprintf("%s at %s on %s", title, when, number)
+		return fmt.Sprintf("%s on %s on %s", title, when, number)
 	}
-	return fmt.Sprintf("%s at %s", title, when)
+	return fmt.Sprintf("%s on %s", title, when)
 }
 
 func joinList(parts []string) string {
@@ -349,15 +350,12 @@ func joinList(parts []string) string {
 	}
 }
 
-// preemptWindow is how early a recording keeps the last tuner when the pass
-// has no padding. The scheduler checks on that same interval.
-const preemptWindow = 20 * time.Second
-
-// LiveWatch reports whether a live tune that needs its own tuner would leave a
-// recording without one. busyOthers is how many tuners are already in use on
+// LiveWatch reports whether a live tune that needs its own tuner would be
+// stopped for a recording. busyOthers is how many tuners are already in use on
 // other channels. A recording counts while now is inside its start pad, or
-// inside preemptWindow, and the recording has not started. allow is false when
-// the viewer should confirm.
+// inside recordLead, and the recording has not started. allow is false when
+// the viewer should confirm. Confirming does not drop the recording: the
+// recording takes the tuner back when it starts.
 func LiveWatch(tunerCount, busyOthers int, upcoming []Soon, now time.Time) (allow bool, warning string) {
 	if tunerCount < 1 {
 		tunerCount = 1
@@ -389,8 +387,8 @@ func inPad(item Soon, now time.Time) bool {
 		return false
 	}
 	pad := item.Pad
-	if pad < preemptWindow {
-		pad = preemptWindow
+	if pad < recordLead {
+		pad = recordLead
 	}
 	return !now.Before(item.Start.Add(-pad))
 }
@@ -416,7 +414,31 @@ func liveWarningText(soon Soon, needed int) string {
 	}
 	when := soon.Start.In(time.Local).Format("3:04 PM")
 	if needed > 1 {
-		return fmt.Sprintf("%s starts at %s. Watching now will miss %d recordings.", title, when, needed)
+		return fmt.Sprintf("%s starts at %s. Watching stops when %d recordings start.", title, when, needed)
 	}
-	return fmt.Sprintf("%s starts at %s. Watching now will miss that recording.", title, when)
+	return fmt.Sprintf("%s starts at %s. Watching stops when that recording starts.", title, when)
+}
+
+// SameMisses reports whether the starts the viewer was shown are the showings
+// this fix would skip. Order does not matter.
+func SameMisses(got []time.Time, missed []MissedShowing) bool {
+	if len(got) != len(missed) {
+		return false
+	}
+	used := make([]bool, len(got))
+	for _, item := range missed {
+		hit := false
+		for i, ts := range got {
+			if used[i] || !ts.Equal(item.Start) {
+				continue
+			}
+			used[i] = true
+			hit = true
+			break
+		}
+		if !hit {
+			return false
+		}
+	}
+	return true
 }

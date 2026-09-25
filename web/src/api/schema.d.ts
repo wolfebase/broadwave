@@ -2894,6 +2894,8 @@ export interface operations {
                     suggestionStart: string;
                     /** @description Set after the viewer has seen the showings this fix will not record. */
                     acknowledgeMisses?: boolean;
+                    /** @description Starts of the showings the viewer was shown. The fix runs only when this list matches. */
+                    acknowledgedStarts?: string[];
                 };
             };
         };

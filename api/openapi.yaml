@@ -996,6 +996,10 @@ paths:
                 suggestionChannelId: { type: integer, format: int64 }
                 suggestionStart: { type: string, format: date-time }
                 acknowledgeMisses: { type: boolean, description: "Set after the viewer has seen the showings this fix will not record." }
+                acknowledgedStarts:
+                  type: array
+                  description: "Starts of the showings the viewer was shown. The fix runs only when this list matches."
+                  items: { type: string, format: date-time }
       responses:
         "200":
           description: Schedule after the change
