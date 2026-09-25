@@ -1,0 +1,46 @@
+unrecognised property keybroadwave ttff 550ms
+2026-09-24 20:57:39.495 BroadwaveTV[99064:25984474] Attachment range (-397.000000,-0.612530) must include 0 for sliding attachment type <UIAttachmentBehavior: 0x6000039ecd00> <UIView: 0x103133e80; frame = (397 0; 2 14); layer = <CALayer: 0x600000c8b5d0>> <- D -> {398, 7}
+2026-09-24 20:57:39.496 BroadwaveTV[99064:25984474] Attachment range (-404.000000,-5.000000) must include 0 for sliding attachment type <UIAttachmentBehavior: 0x6000039ecd00> <UIView: 0x103133e80; frame = (404 0; 2 14); layer = <CALayer: 0x600000c8b5d0>> <- D -> {404.99996948242188, 7}
+2026-09-24 20:57:39.544 BroadwaveTV[99064:25984474] Attachment range (-404.000000,-5.000000) must include 0 for sliding attachment type <UIAttachmentBehavior: 0x6000039ecd00> <UIView: 0x103133e80; frame = (404 0; 2 14); layer = <CALayer: 0x600000c8b5d0>> <- D -> {404.99996948242188, 7}
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+broadwave beat stalls=0 stallMs=0
+com.wolfeup.broadwave: 99064
