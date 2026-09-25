@@ -146,7 +146,7 @@ Then go to **Docker › Add Container**, pick **Broadwave** from the template li
 - One tune shared by everyone on a channel
 - True 60 fps motion, film back at 24p
 - GPU decode and encode (Intel/AMD VAAPI)
-- 5.1 AC-3 passthrough, broadcast audio picked right
+- 5.1 surround passthrough, plus a picker for languages and described video
 - Buffers tuned for phone, desktop, and TV
 - Stream panel: resolution, frame rate, encoder, dropped frames, sync
 
