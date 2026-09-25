@@ -50,6 +50,36 @@ func TestProfileFleet(t *testing.T) {
 	})
 }
 
+func TestControlTuneStreamsOnThatTuner(t *testing.T) {
+	_, base, ctrl := startProfile(t, ProfileConnectDuo, 0)
+	if _, err := ctrl.Set("/tuner0/vchannel", "4.1"); err != nil {
+		t.Fatal(err)
+	}
+	res := openStream(t, base+"/tuner0/ch593000000")
+	defer res.Body.Close()
+	if !bytes.Contains(readSync(t, res.Body), []byte("MPEG2")) {
+		t.Fatal("control tune did not stream")
+	}
+}
+
+func TestNoneStopsTheStreamAndTheNextTuneStays(t *testing.T) {
+	_, base, ctrl := startProfile(t, ProfileConnectDuo, 0)
+	res := openStream(t, base+"/auto/v4.1")
+	_ = readSync(t, res.Body)
+	if _, err := ctrl.Set("/tuner0/vchannel", "none"); err != nil {
+		t.Fatal(err)
+	}
+	waitClosed(t, res.Body)
+	res.Body.Close()
+	res = openStream(t, base+"/auto/v5.1")
+	defer res.Body.Close()
+	_ = readSync(t, res.Body)
+	rows := fetchStatus(t, base)
+	if len(rows) < 1 || rows[0].VctNumber != "5.1" {
+		t.Fatalf("next tune was dropped %+v", rows)
+	}
+}
+
 func testDefaultServer(t *testing.T) {
 	srv, base, ctrl := startProfile(t, "", 0)
 	body := httpGet(t, base+"/discover.json")
