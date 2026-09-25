@@ -398,7 +398,8 @@ export function Guide() {
                   const focused = r === focus.row && Date.parse(a.start) <= focus.at && Date.parse(a.end) > focus.at;
                   const dim = filter !== "all" && filter !== "favorites" && filter !== "recording" && cat !== filter;
                   const hidden = view.left + channelW - left;
-                  const inset = hidden > 0 ? Math.min(hidden, Math.max(0, w - 120)) : 0;
+                  // The title starts at the visible edge. Capping the inset let it slide back under the channel name.
+                  const inset = hidden > 0 ? hidden : 0;
                   return (
                     <button
                       key={a.id}
