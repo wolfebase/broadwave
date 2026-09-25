@@ -107,6 +107,8 @@ fi
 
 if [[ "$MODE" == "ghcr" ]]; then
   IMAGE="${GHCR_IMAGE:-ghcr.io/wolfebase/broadwave:latest}"
+  echo "==> backing up catalog on $UNRAID_HOST"
+  "${SSH[@]}" "$UNRAID_HOST" "mkdir -p $APPDATA/backups && [ -f $APPDATA/config/broadwave.db ] && cp $APPDATA/config/broadwave.db $APPDATA/backups/broadwave-\$(date +%Y%m%d-%H%M%S).db; true"
   echo "==> pulling $IMAGE on $UNRAID_HOST (detached) and recreating $NAME"
   # The pull runs on the server. A marker file is the signal that the new
   # container was started; /health stays up on the old container during the pull.
