@@ -11,15 +11,61 @@ import (
 	"time"
 )
 
-func (h *Hub) fileGraph(codec, mode string) Graph {
+// fileGraph builds the library picture. order is the recording's scan type:
+// "progressive", "film", a field order, or empty. Progressive 720p keeps its
+// size and rate. Soft telecine plays at 24 when the picture mode is broadcast.
+// An empty order stays interlaced, which is what a 1080i recording needs.
+func (h *Hub) fileGraph(codec, mode, order string) Graph {
+	mode = NormalizeMode(mode)
+	if order == "film" && mode == "broadcast" {
+		mode = "film"
+	}
 	return Graph{
 		VideoCodec: codec, Profile: "transparent", Audio: "stereo",
 		Encoder: h.Encoder, Mode: mode, Deint: h.deintFor(mode, codec),
+		Progressive: order == "progressive",
 	}
 }
 
+// recordingOrder prefers the file's own headers. The channel's stored scan is
+// only a fallback for a file that has not written a sequence header yet, and a
+// stored "film" is the station, not this recording.
+func recordingOrder(fileOrder string, fileOK bool, channelOrder string) string {
+	if fileOK && fileOrder != "" {
+		return fileOrder
+	}
+	if storedFieldOrder(channelOrder) == "progressive" {
+		return "progressive"
+	}
+	return ""
+}
+
+// fileScanBytes covers a GOP. A 720p sequence header can sit a few hundred
+// milliseconds into the recording, and soft telecine needs several pictures.
+const fileScanBytes = 4 << 20
+
+func fileScanOrder(path string) (string, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+	buf := make([]byte, fileScanBytes)
+	n, err := io.ReadFull(f, buf)
+	if n < 188 || (err != nil && err != io.ErrUnexpectedEOF && err != io.EOF) {
+		return "", false
+	}
+	return scanType(buf[:n], 0)
+}
+
 func graphStamp(g Graph) string {
-	return strings.Join([]string{NormalizeMode(g.Mode), g.VideoCodec, g.Encoder, g.Deint, g.Profile}, "|")
+	scan := "interlaced"
+	if g.Progressive {
+		scan = "progressive"
+	} else if NormalizeMode(g.Mode) == "film" {
+		scan = "film"
+	}
+	return strings.Join([]string{NormalizeMode(g.Mode), g.VideoCodec, g.Encoder, g.Deint, g.Profile, scan}, "|")
 }
 
 func playlistFresh(dir, stamp string) bool {
@@ -32,9 +78,10 @@ func playlistFresh(dir, stamp string) bool {
 }
 
 // PlayFile transcodes a finished recording into an HLS playlist and returns when the first segment exists.
-func (h *Hub) PlayFile(id int64, path, videoCodec, mode string) (string, error) {
+func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string) (string, error) {
 	dir := filepath.Join(h.Dir, "file", fmt.Sprintf("%d", id))
-	g := h.fileGraph(videoCodec, mode)
+	scanned, ok := fileScanOrder(path)
+	g := h.fileGraph(videoCodec, mode, recordingOrder(scanned, ok, fieldOrder))
 	g.Live = false
 	stamp := graphStamp(g)
 	playlist := filepath.Join(dir, "index.m3u8")
@@ -72,9 +119,10 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode string) (string, error) 
 }
 
 // PlayFollow transcodes a recording that is still being written. Playback starts at the beginning of the file.
-func (h *Hub) PlayFollow(id int64, path, videoCodec, mode string, still func() bool) (string, error) {
+func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, still func() bool) (string, error) {
 	dir := filepath.Join(h.Dir, "file", fmt.Sprintf("%d", id))
-	g := h.fileGraph(videoCodec, mode)
+	scanned, ok := fileScanOrder(path)
+	g := h.fileGraph(videoCodec, mode, recordingOrder(scanned, ok, fieldOrder))
 	g.Input = "pipe:0"
 	g.Live = false
 	stamp := graphStamp(g)
