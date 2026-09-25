@@ -67,6 +67,7 @@ type Server struct {
 	streams  int
 	scanning bool
 	scanOnce bool
+	paths    []string
 }
 
 type tuner struct {
@@ -240,7 +241,26 @@ func (s *Server) serveHTTP() {
 	// No firmware is installed from here. These routes never write a file.
 	mux.HandleFunc("/upgrade", refuseUpgrade)
 	mux.HandleFunc("/firmware", refuseUpgrade)
-	_ = http.Serve(s.httpLn, mux)
+	_ = http.Serve(s.httpLn, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.note(r.URL.Path)
+		mux.ServeHTTP(w, r)
+	}))
+}
+
+// Requests lists HTTP paths and control names seen since Start.
+func (s *Server) Requests() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.paths...)
+}
+
+func (s *Server) note(path string) {
+	if path == "" {
+		return
+	}
+	s.mu.Lock()
+	s.paths = append(s.paths, path)
+	s.mu.Unlock()
 }
 
 func refuseUpgrade(w http.ResponseWriter, r *http.Request) {
@@ -707,6 +727,7 @@ func (s *Server) control(conn net.Conn) {
 			set = true
 		}
 	}
+	s.note(name)
 	reply, errMsg := s.command(name, value, set)
 	payload := tlv(tagGetSetValue, reply)
 	if errMsg != "" {

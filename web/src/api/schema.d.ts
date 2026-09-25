@@ -133,6 +133,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/devices/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Model, firmware version, and signal lock for each tuner. Read only. This server does not install firmware. */
+        get: operations["getDeviceHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/devices/{id}/scan": {
         parameters: {
             query?: never;
@@ -987,6 +1004,20 @@ export interface components {
             lastSeen?: string;
             note?: string;
         };
+        /** @description Live model, firmware version, and signal lock. Empty error means the tuner answered. */
+        DeviceHealth: {
+            deviceId: string;
+            model: string;
+            firmwareVersion: string;
+            tuners: components["schemas"]["TunerLock"][];
+            /** @description Set when the tuner did not answer. */
+            error?: string;
+        };
+        /** @description Signal lock for one tuner. Locked is false when the device reports no lock. */
+        TunerLock: {
+            index: number;
+            locked: boolean;
+        };
         Source: {
             /** Format: int64 */
             id: number;
@@ -1636,6 +1667,28 @@ export interface operations {
                 content: {
                     "application/json": {
                         devices: components["schemas"]["Device"][];
+                    };
+                };
+            };
+        };
+    };
+    getDeviceHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tuner health */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        devices: components["schemas"]["DeviceHealth"][];
                     };
                 };
             };

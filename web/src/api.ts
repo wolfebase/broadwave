@@ -1,4 +1,4 @@
-import type { Airing, Caps, Channel, ChannelPatch, Device, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
+import type { Airing, Caps, Channel, ChannelPatch, Device, DeviceHealth, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -24,6 +24,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getDevices() {
   return request<{ devices: Device[] }>("/api/v1/devices");
+}
+
+export function getDeviceHealth() {
+  return request<{ devices: DeviceHealth[] }>("/api/v1/devices/health");
 }
 
 export function startScan(deviceId: string) {
