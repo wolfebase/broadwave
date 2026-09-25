@@ -1,0 +1,10 @@
+{
+  "found": [
+    {
+      "addr": "127.0.0.1",
+      "id": "FAKEHDHR",
+      "kind": "hdhomerun",
+      "name": "Fake HDHomeRun"
+    }
+  ]
+}

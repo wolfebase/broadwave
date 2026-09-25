@@ -4,18 +4,22 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/coder/websocket"
 
+	"broadwave/internal/discovery"
 	"broadwave/internal/hdhr"
 	"broadwave/internal/hdhr/fake"
 	"broadwave/internal/live"
@@ -32,11 +36,13 @@ func TestContractFixtures(t *testing.T) {
 	dir := t.TempDir()
 	st := testStore(t)
 	fakeTuner := &fake.Server{}
-	base, _, err := fakeTuner.Start()
+	base, control, err := fakeTuner.Start()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(fakeTuner.Close)
+	// Probe the fake control port, not a tuner that might be on 65001.
+	t.Setenv("HDHR_CONTROL_PORT", control)
 	client := &hdhr.Client{}
 	dev, err := client.FetchDevice(ctx, base)
 	if err != nil {
@@ -91,6 +97,17 @@ func TestContractFixtures(t *testing.T) {
 
 	bus := realtime.NewBus()
 	bus.SetClock(func() time.Time { return contractNow })
+	st.OnEvent = func(ev store.Event) { bus.Publish("activity", ev) }
+	host, portText, err := net.SplitHostPort(strings.TrimPrefix(base, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	feeds := httptest.NewServer(contractFeeds())
+	t.Cleanup(feeds.Close)
 	api := &Server{
 		Store:   st,
 		HDHR:    client,
@@ -99,52 +116,211 @@ func TestContractFixtures(t *testing.T) {
 		Sports:  contractSports{},
 		Version: "dev",
 		Clock:   func() time.Time { return contractNow },
+		// Setup must not start a broadcast dwell after it finishes.
+		Staging: true,
+		HomeScan: func(context.Context) []discovery.Found {
+			return nil
+		},
+		LookAt: func(ctx context.Context) []discovery.Found {
+			item, ok := discovery.ProbeHost(ctx, host, []discovery.ProbePort{{
+				Port: port, Path: "/discover.json", Kind: "hdhomerun",
+			}})
+			if !ok {
+				t.Errorf("fake tuner did not answer look")
+				return nil
+			}
+			return []discovery.Found{item}
+		},
+		// No hosts, so this fixture does not probe the machine it runs on.
+		FreeHosts: func() []string { return nil },
+		SetupBench: func(context.Context, string, string) (float64, error) {
+			return 4, nil
+		},
+		SetupSignal: func(context.Context) (int, int, int, int, error) {
+			return 2, 0, 0, 0, nil
+		},
 	}
 	h := api.Handler()
 	root := fixtureDir(t)
 
+	// GET /channels/{id}/frame is a JPEG preview. matchFrame checks it.
+	// GET /backup is a SQLite file, not JSON.
+	// POST /watch records the error: the fake tuner serves no MPEG-TS, so ffmpeg never builds a playlist.
 	cases := []struct {
 		name, method, path, body string
+		status                   int
 	}{
-		{"health", "GET", "/api/v1/health", ""},
-		{"server", "GET", "/api/v1/server", ""},
-		{"clock", "GET", "/api/v1/clock", ""},
-		{"profile", "GET", "/api/v1/profile", ""},
-		{"devices", "GET", "/api/v1/devices", ""},
-		{"sources", "GET", "/api/v1/sources", ""},
-		{"channels", "GET", "/api/v1/channels?guide=1", ""},
-		{"airings", "GET", "/api/v1/airings?from=2026-09-24T14:00:00Z&to=2026-09-24T18:00:00Z", ""},
-		{"schedule", "GET", "/api/v1/schedule", ""},
-		{"search", "GET", "/api/v1/search?q=Jeopardy", ""},
-		{"scoreboard", "GET", "/api/v1/sports/scoreboard?date=2026-09-24", ""},
-		{"signals", "GET", "/api/v1/signals", ""},
-		{"tuners", "GET", "/api/v1/tuners", ""},
-		{"recordings", "GET", "/api/v1/recordings", ""},
-		{"markers", "GET", "/api/v1/recordings/1/markers", ""},
-		{"passes", "GET", "/api/v1/passes", ""},
-		{"teams", "GET", "/api/v1/teams", ""},
-		{"events", "GET", "/api/v1/events", ""},
-		{"virtuals", "GET", "/api/v1/virtuals", ""},
-		{"virtual-schedule", "GET", "/api/v1/virtuals/schedule", ""},
-		{"settings", "GET", "/api/v1/settings", ""},
-		{"storage", "GET", "/api/v1/storage", ""},
-		{"diagnostics", "GET", "/api/v1/diagnostics", ""},
-		{"multiview", "POST", "/api/v1/multiview/plan", `{"channelIds":[1,2]}`},
-		{"channel", "PATCH", "/api/v1/channels/1", `{"favorite":true,"customName":"Fox 4"}`},
+		{"health", "GET", "/api/v1/health", "", 0},
+		{"server", "GET", "/api/v1/server", "", 0},
+		{"clock", "GET", "/api/v1/clock", "", 0},
+		{"profile", "GET", "/api/v1/profile", "", 0},
+		{"devices", "GET", "/api/v1/devices", "", 0},
+		{"sources", "GET", "/api/v1/sources", "", 0},
+		{"channels", "GET", "/api/v1/channels?guide=1", "", 0},
+		{"airings", "GET", "/api/v1/airings?from=2026-09-24T14:00:00Z&to=2026-09-24T18:00:00Z", "", 0},
+		{"schedule", "GET", "/api/v1/schedule", "", 0},
+		{"search", "GET", "/api/v1/search?q=Jeopardy", "", 0},
+		{"scoreboard", "GET", "/api/v1/sports/scoreboard?date=2026-09-24", "", 0},
+		{"signals", "GET", "/api/v1/signals", "", 0},
+		{"tuners", "GET", "/api/v1/tuners", "", 0},
+		{"recordings", "GET", "/api/v1/recordings", "", 0},
+		{"markers", "GET", "/api/v1/recordings/1/markers", "", 0},
+		{"passes", "GET", "/api/v1/passes", "", 0},
+		{"teams", "GET", "/api/v1/teams", "", 0},
+		{"events", "GET", "/api/v1/events", "", 0},
+		{"virtuals", "GET", "/api/v1/virtuals", "", 0},
+		{"virtual-schedule", "GET", "/api/v1/virtuals/schedule", "", 0},
+		{"settings", "GET", "/api/v1/settings", "", 0},
+		{"storage", "GET", "/api/v1/storage", "", 0},
+		{"diagnostics", "GET", "/api/v1/diagnostics", "", 0},
+		{"multiview", "POST", "/api/v1/multiview/plan", `{"channelIds":[1,2]}`, 0},
+		{"channel", "PATCH", "/api/v1/channels/1", `{"favorite":true,"customName":"Fox 4"}`, 0},
+		{"scan", "POST", "/api/v1/devices/FAKEHDHR/scan", "", 0},
+		{"scan-status", "GET", "/api/v1/devices/FAKEHDHR/scan", "", 0},
+		{"discover", "POST", "/api/v1/sources/discover", `{"ip":"` + host + ":" + portText + `"}`, 0},
+		{"look", "POST", "/api/v1/sources/look", "", 0},
+		{"home", "GET", "/api/v1/home?fresh=1", "", 0},
+		{"affiliations", "GET", "/api/v1/affiliations", "", 0},
+		{"star", "POST", "/api/v1/channels/star", "{}", 0},
+		{"free", "GET", "/api/v1/sources/free", "", 0},
+		{"free-add", "POST", "/api/v1/sources/free", `{"name":"FastChannels","playlist":"` + feeds.URL + `/free.m3u"}`, 0},
+		{"xtream", "POST", "/api/v1/sources", `{"kind":"xtream","name":"Lab","url":"` + feeds.URL + `","username":"lab","password":"secret"}`, 0},
+		{"watch", "POST", "/api/v1/watch", `{"channelId":1}`, http.StatusInternalServerError},
+		{"watch-stop", "POST", "/api/v1/watch/1/stop", "{}", 0},
+		{"setup-finish", "GET", "/api/v1/setup/finish", "", 0},
 	}
 	for _, tc := range cases {
 		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+		if tc.name == "home" {
+			req.Host = "broadwave.local"
+		}
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
-		if rec.Code != http.StatusOK {
+		want := tc.status
+		if want == 0 {
+			want = http.StatusOK
+		}
+		if rec.Code != want {
 			t.Fatalf("%s %s %d %s", tc.method, tc.path, rec.Code, rec.Body.String())
 		}
 		matchFixture(t, root, tc.name, rec.Body.Bytes())
 	}
-	matchSocket(t, h, root)
+	matchSetup(t, h, root)
+	// A pass that would record in the next half hour depends on the wall clock.
+	if err := st.DeletePass(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/signals/check", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("signals check %d %s", rec.Code, rec.Body.String())
+	}
+	matchFixture(t, root, "signals-check", rec.Body.Bytes())
+	waitSignal(t, api)
+	matchSocket(t, h, bus, st, root)
+	matchFrame(t, h, dir, root)
 }
 
-func matchSocket(t *testing.T, h http.Handler, root string) {
+// matchFrame checks the preview route. With no file it is a 404. With a file
+// it returns that JPEG unchanged.
+func matchFrame(t *testing.T, h http.Handler, dir, root string) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/1/frame", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("frame before a preview %d", rec.Code)
+	}
+	body, err := os.ReadFile(filepath.Join(root, "frame.jpg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := live.FramePath(dir, 1, 480)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("frame %d %s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "image/jpeg" {
+		t.Fatalf("frame type %s", ct)
+	}
+	if !bytes.Equal(rec.Body.Bytes(), body) {
+		t.Fatal("frame bytes drifted")
+	}
+}
+
+func contractFeeds() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/player_api.php", func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("action") {
+		case "get_live_categories":
+			fmt.Fprint(w, `[{"category_id":1,"category_name":"News"}]`)
+		case "get_live_streams":
+			fmt.Fprint(w, `[{"name":"Local News","stream_id":7,"category_id":1,"num":1,"epg_channel_id":"news"}]`)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	mux.HandleFunc("/xmltv.php", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<?xml version="1.0" encoding="UTF-8"?><tv></tv>`)
+	})
+	mux.HandleFunc("/free.m3u", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "#EXTM3U\n#EXTINF:-1 tvg-id=\"news\",Local News\nhttp://%s/news.ts\n", r.Host)
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("x"))
+	})
+	return mux
+}
+
+func matchSetup(t *testing.T, h http.Handler, root string) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/setup/finish", strings.NewReader("{}"))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("setup post %d %s", rec.Code, rec.Body.String())
+	}
+	matchFixture(t, root, "setup-finish-post", rec.Body.Bytes())
+	deadline := time.Now().Add(5 * time.Second)
+	var body []byte
+	for time.Now().Before(deadline) {
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/setup/finish", nil)
+		rec = httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("setup get %d %s", rec.Code, rec.Body.String())
+		}
+		body = append([]byte(nil), rec.Body.Bytes()...)
+		if strings.Contains(rec.Body.String(), `"ready"`) && strings.Contains(rec.Body.String(), `"running":false`) {
+			matchFixture(t, root, "setup-finish-done", body)
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("setup did not finish: %s", body)
+}
+
+func waitSignal(t *testing.T, api *Server) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for api.signalRunning() && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if api.signalRunning() {
+		t.Fatal("signal check did not finish")
+	}
+}
+
+func matchSocket(t *testing.T, h http.Handler, bus *realtime.Bus, st *store.Store, root string) {
 	t.Helper()
 	srv := httptest.NewServer(h)
 	defer srv.Close()
@@ -179,6 +355,14 @@ func matchSocket(t *testing.T, h http.Handler, root string) {
 		}
 	}
 	matchFixture(t, root, "ws-hello", read("hello"))
+	bus.Publish("sources.found", map[string]int{"found": 1})
+	matchFixture(t, root, "ws-sources", read("sources.found"))
+	bus.Publish("live.changed", nil)
+	matchFixture(t, root, "ws-live", read("live.changed"))
+	if err := st.AddEventAt(context.Background(), contractNow, "source", "Tuner found."); err != nil {
+		t.Fatal(err)
+	}
+	matchFixture(t, root, "ws-activity", read("activity"))
 	send("clock", map[string]float64{"t0": 1000})
 	matchFixture(t, root, "ws-clock", read("clock"))
 	send("sync.join", map[string]any{"room": "channel:1", "channelId": 1})
@@ -223,12 +407,28 @@ func canonical(t *testing.T, raw []byte) []byte {
 
 var loopbackPort = regexp.MustCompile(`127\.0\.0\.1:\d+`)
 
+func diskDetail(s string) bool {
+	if strings.HasSuffix(s, " GB free.") || strings.HasSuffix(s, " TB free.") {
+		return true
+	}
+	switch s {
+	case "Less than 20 GB is free. Free some space before a long recording.",
+		"Recordings are on the container disk. Map a folder for them so they survive a rebuild.",
+		"Recordings save in the folder mapped for this server.":
+		return true
+	default:
+		return false
+	}
+}
+
 func scrub(v any) {
 	switch t := v.(type) {
 	case map[string]any:
 		for k, val := range t {
 			switch k {
 			case "lastSeen":
+				t[k] = "2026-09-24T15:00:00Z"
+			case "refresh", "lastRefresh":
 				t[k] = "2026-09-24T15:00:00Z"
 			case "doctor":
 				t[k] = []any{}
@@ -238,6 +438,11 @@ func scrub(v any) {
 				t[k] = float64(0)
 			case "ffmpeg":
 				t[k] = "test"
+			case "detail":
+				// Free space and the low-disk notes depend on the machine.
+				if s, ok := val.(string); ok && diskDetail(s) {
+					t[k] = "0 GB free."
+				}
 			default:
 				if s, ok := val.(string); ok {
 					t[k] = loopbackPort.ReplaceAllString(s, "127.0.0.1:9")

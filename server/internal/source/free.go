@@ -54,10 +54,11 @@ var freePorts = []freePort{
 
 // FindFree probes hosts for FastChannels, Pluto, and Samsung generators.
 // It only reads playlists those servers already publish.
+// The caller includes 127.0.0.1 when a generator on this machine should count.
 func FindFree(ctx context.Context, hosts []string) []Feed {
 	seen := map[string]bool{}
 	var list []string
-	for _, host := range append([]string{"127.0.0.1"}, hosts...) {
+	for _, host := range hosts {
 		host = strings.TrimSpace(host)
 		if host == "" || seen[host] {
 			continue

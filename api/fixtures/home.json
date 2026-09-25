@@ -1,0 +1,15 @@
+{
+  "places": [
+    {
+      "action": "added",
+      "addr": "127.0.0.1",
+      "detail": "2 tuners",
+      "group": "tuner",
+      "id": "tuner|FAKEHDHR",
+      "kind": "hdhomerun",
+      "name": "Fake HDHomeRun"
+    }
+  ],
+  "sharing": false,
+  "tunerAddress": "broadwave.local:8478"
+}

@@ -1,0 +1,41 @@
+{
+  "running": false,
+  "steps": [
+    {
+      "detail": "",
+      "id": "scan",
+      "state": "waiting",
+      "title": "Channels"
+    },
+    {
+      "detail": "",
+      "id": "guide",
+      "state": "waiting",
+      "title": "Guide"
+    },
+    {
+      "detail": "",
+      "id": "folder",
+      "state": "waiting",
+      "title": "Recordings"
+    },
+    {
+      "detail": "",
+      "id": "favorites",
+      "state": "waiting",
+      "title": "Favorites"
+    },
+    {
+      "detail": "",
+      "id": "encoder",
+      "state": "waiting",
+      "title": "Picture"
+    },
+    {
+      "detail": "",
+      "id": "signal",
+      "state": "waiting",
+      "title": "Signal"
+    }
+  ]
+}

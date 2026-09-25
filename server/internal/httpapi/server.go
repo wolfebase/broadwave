@@ -47,6 +47,10 @@ type Server struct {
 	HomeScan func(ctx context.Context) []discovery.Found
 	// HomeNets replaces the local subnets in tests.
 	HomeNets func() []*net.IPNet
+	// LookAt replaces the LAN probe in tests.
+	LookAt func(ctx context.Context) []discovery.Found
+	// FreeHosts replaces the LAN host list in tests. Nil uses the local subnets.
+	FreeHosts func() []string
 	// SetupBench and SetupSignal replace the encoder test and the antenna check in tests.
 	SetupBench  func(ctx context.Context, ffmpeg, encoder string) (float64, error)
 	SetupSignal func(ctx context.Context) (great, ok, weak, lost int, err error)
@@ -265,15 +269,20 @@ func (s *Server) discover(w http.ResponseWriter, r *http.Request) {
 func (s *Server) look(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	found := discovery.Look(ctx, discovery.LocalHosts())
-	browseCtx, stopBrowse := context.WithTimeout(ctx, 2*time.Second)
-	for _, service := range []string{"_channels_dvr._tcp", "_htsp._tcp"} {
-		extra, _ := discovery.Browse(browseCtx, service)
-		found = append(found, extra...)
-	}
-	stopBrowse()
-	if len(found) == 0 {
-		found = discovery.ConfirmCloud(ctx)
+	var found []discovery.Found
+	if s.LookAt != nil {
+		found = s.LookAt(ctx)
+	} else {
+		found = discovery.Look(ctx, discovery.LocalHosts())
+		browseCtx, stopBrowse := context.WithTimeout(ctx, 2*time.Second)
+		for _, service := range []string{"_channels_dvr._tcp", "_htsp._tcp"} {
+			extra, _ := discovery.Browse(browseCtx, service)
+			found = append(found, extra...)
+		}
+		stopBrowse()
+		if len(found) == 0 {
+			found = discovery.ConfirmCloud(ctx)
+		}
 	}
 	if found == nil {
 		found = []discovery.Found{}

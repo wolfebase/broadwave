@@ -52,6 +52,81 @@ private func fixture(_ name: String) throws -> Data {
     #expect(hello.type == "hello")
     let sync = try APIClient.decoder.decode(SyncFrame.self, from: fixture("ws-sync"))
     #expect(sync.data.room == "channel:1")
+
+    struct FoundDevices: Decodable { var devices: [Device]; var found: Int }
+    struct Look: Decodable {
+        struct Item: Decodable { var kind: String; var name: String; var addr: String; var id: String? }
+        var found: [Item]
+    }
+    struct Home: Decodable {
+        struct Place: Decodable { var id: String; var group: String; var kind: String; var name: String; var action: String }
+        var places: [Place]
+        var tunerAddress: String
+        var sharing: Bool
+    }
+    struct Calls: Decodable { var calls: [String: String] }
+    struct Starred: Decodable {
+        struct Item: Decodable { var id: Int64; var network: String }
+        var starred: [Item]
+    }
+    struct FreeList: Decodable {
+        struct Feed: Decodable { var kind: String; var name: String; var addr: String; var playlist: String; var guide: String }
+        var found: [Feed]
+        var guide: String
+    }
+    struct FreeAdd: Decodable { var id: Int64; var kind: String; var name: String }
+    struct Scan: Decodable { var scanning: Bool; var found: Int? }
+    struct SignalCheck: Decodable { var running: Bool; var message: String? }
+    struct Activity: Decodable { var type: String; var data: Event }
+    struct SourcesFound: Decodable {
+        struct Body: Decodable { var found: Int }
+        var type: String
+        var data: Body
+    }
+    struct LiveChanged: Decodable { var type: String }
+    let discovered = try APIClient.decoder.decode(FoundDevices.self, from: fixture("discover"))
+    #expect(discovered.found == 1)
+    let looked = try APIClient.decoder.decode(Look.self, from: fixture("look"))
+    #expect(looked.found.first?.id == "FAKEHDHR")
+    let home = try APIClient.decoder.decode(Home.self, from: fixture("home"))
+    #expect(home.places.first?.action == "added")
+    #expect(home.tunerAddress.hasSuffix(":8478"))
+    #expect(!home.sharing)
+    let calls = try APIClient.decoder.decode(Calls.self, from: fixture("affiliations"))
+    #expect(calls.calls["KSHB"] == "NBC")
+    let starred = try APIClient.decoder.decode(Starred.self, from: fixture("star"))
+    #expect(starred.starred.contains { $0.network == "FOX" })
+    _ = try APIClient.decoder.decode(FreeList.self, from: fixture("free"))
+    let added = try APIClient.decoder.decode(FreeAdd.self, from: fixture("free-add"))
+    #expect(added.kind == "free")
+    let xtream = try APIClient.decoder.decode(Source.self, from: fixture("xtream"))
+    #expect(xtream.kind == "xtream")
+    let watch = try APIClient.decoder.decode(APIErrorBody.self, from: fixture("watch"))
+    #expect(watch.code == "internal")
+    struct Stopped: Decodable { var ok: Bool }
+    let stopped = try APIClient.decoder.decode(Stopped.self, from: fixture("watch-stop"))
+    #expect(stopped.ok)
+    let scan = try APIClient.decoder.decode(Scan.self, from: fixture("scan"))
+    #expect(scan.scanning)
+    let scanStatus = try APIClient.decoder.decode(Scan.self, from: fixture("scan-status"))
+    #expect(scanStatus.found == 3)
+    let checking = try APIClient.decoder.decode(SignalCheck.self, from: fixture("signals-check"))
+    #expect(checking.running)
+    let idle = try APIClient.decoder.decode(SetupFinish.self, from: fixture("setup-finish"))
+    #expect(!idle.running)
+    let started = try APIClient.decoder.decode(SetupFinish.self, from: fixture("setup-finish-post"))
+    #expect(started.running)
+    let done = try APIClient.decoder.decode(SetupFinish.self, from: fixture("setup-finish-done"))
+    #expect(done.channelId == 1)
+    #expect(done.ready?.hasPrefix("Ready:") == true)
+    let sources = try APIClient.decoder.decode(SourcesFound.self, from: fixture("ws-sources"))
+    #expect(sources.type == "sources.found")
+    #expect(sources.data.found == 1)
+    let live = try APIClient.decoder.decode(LiveChanged.self, from: fixture("ws-live"))
+    #expect(live.type == "live.changed")
+    let activity = try APIClient.decoder.decode(Activity.self, from: fixture("ws-activity"))
+    #expect(activity.type == "activity")
+    #expect(activity.data.kind == "source")
 }
 
 @Test func airingProgress() {

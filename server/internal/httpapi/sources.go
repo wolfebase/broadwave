@@ -224,7 +224,11 @@ func (s *Server) freeSources(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 	if r.Method == http.MethodGet {
-		found := source.FindFree(ctx, discovery.LocalHosts())
+		hosts := append([]string{"127.0.0.1"}, discovery.LocalHosts()...)
+		if s.FreeHosts != nil {
+			hosts = s.FreeHosts()
+		}
+		found := source.FindFree(ctx, hosts)
 		if found == nil {
 			found = []source.Feed{}
 		}
