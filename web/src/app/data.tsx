@@ -60,6 +60,9 @@ type Data = {
   recordSeries: (title: string, channel: Channel) => Promise<void>;
   rediscover: (ip?: string) => Promise<void>;
   setError: (message: string) => void;
+  /** Devices that showed up after the house was already known. One line each. */
+  notices: string[];
+  dismissNotice: () => void;
 };
 
 const Ctx = createContext<Data | null>(null);
@@ -92,6 +95,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [settled, setSettled] = useState(false);
   const [booting, setBooting] = useState(() => !hasSnapshotFlag());
   const [error, setError] = useState("");
+  const [notices, setNotices] = useState<string[]>([]);
+  const dismissNotice = useCallback(() => {
+    setNotices((cur) => cur.slice(1));
+  }, []);
   const [now, setNow] = useState(() => Date.now());
   const [channels, setChannels] = useState<Channel[]>([]);
   const [allChannels, setAllChannels] = useState<Channel[]>([]);
@@ -229,6 +236,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const message = (data as { message?: string }).message;
         if (message) setError(message);
       }
+      if (kind === "home") {
+        const message = (data as { message?: string }).message?.trim();
+        if (message) setNotices((cur) => [...cur, message]);
+      }
     });
     const offLive = bus.on("live.changed", () => void refresh(["recordings"]));
     const offFound = bus.on("sources.found", () => void refresh(["devices", "channels"]));
@@ -288,6 +299,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await addPass(title, channel.id);
         await refresh(["passes"]);
       },
+      notices,
+      dismissNotice,
       rediscover: async (ip) => {
         try {
           const res = await discover(ip);
@@ -299,7 +312,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh(["channels"]);
       },
     }),
-    [ready, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, storage, refresh],
+    [ready, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, storage, refresh, notices, dismissNotice],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

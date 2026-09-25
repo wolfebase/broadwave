@@ -16,6 +16,9 @@ public final class AppStore {
     public private(set) var loading = false
     public var error: String?
     public var now = Date()
+    /// A device that showed up after the house was already known. Nil when nothing is waiting.
+    public private(set) var homeNotice: String?
+    private var homeQueue: [String] = []
     /// Settings asks the shell to show setup again. A used catalog never sets needsSetup.
     public var presentSetup = false
 
@@ -55,12 +58,36 @@ public final class AppStore {
         let api = APIClient(base: server.url)
         self.api = api
         let socket = EventSocket(base: server.url)
-        socket.on("activity") { [weak self] _ in Task { await self?.refresh(lineup: false) } }
+        socket.on("activity") { [weak self] data in
+            if let note = try? JSONDecoder().decode(HomeNote.self, from: data), note.kind == "home" {
+                self?.noteHome(note.message)
+            }
+            Task { await self?.refresh(lineup: false) }
+        }
         socket.on("live.changed") { [weak self] _ in Task { await self?.refreshRecordings() } }
         socket.connect()
         self.socket = socket
         save(server, "server")
         Task { await refresh() }
+    }
+
+    /// Shows the next arrival. One line stays up until it is dismissed.
+    public func dismissHome() {
+        if homeQueue.isEmpty {
+            homeNotice = nil
+            return
+        }
+        homeNotice = homeQueue.removeFirst()
+    }
+
+    func noteHome(_ message: String) {
+        let message = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty else { return }
+        if homeNotice == nil {
+            homeNotice = message
+        } else {
+            homeQueue.append(message)
+        }
     }
 
     public func forget() {
@@ -71,6 +98,8 @@ public final class AppStore {
         info = nil
         channels = []
         recordings = []
+        homeNotice = nil
+        homeQueue = []
         UserDefaults.standard.removeObject(forKey: "server")
     }
 
@@ -202,5 +231,10 @@ public final class AppStore {
     private static func load<T: Decodable>(_ key: String) -> T? {
         guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(T.self, from: data)
+    }
+
+    private struct HomeNote: Decodable {
+        var kind: String
+        var message: String
     }
 }

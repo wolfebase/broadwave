@@ -154,6 +154,7 @@ func main() {
 			bus.Publish("sources.found", map[string]int{"found": n})
 		}
 	}()
+	go api.WatchHome(context.Background())
 	go func() {
 		time.Sleep(20 * time.Second)
 		tick := time.NewTicker(10 * time.Minute)

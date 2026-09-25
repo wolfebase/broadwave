@@ -42,7 +42,7 @@ export function App() {
 function Shell() {
   const { path, params } = useRoute();
   const layout = useLayout();
-  const { ready, booting, error, recordings, settings } = useData();
+  const { ready, booting, error, recordings, settings, notices, dismissNotice } = useData();
   const player = usePlayer();
   const [online, setOnline] = useState(true);
   const recordingCount = recordings.filter((r) => r.status === "recording").length;
@@ -100,6 +100,13 @@ function Shell() {
       <main className="content" aria-busy={booting} data-ready={ready ? "1" : "0"}>
         {booting ? <div className="boot"><span className="brand-tally" /> Finding your tuner…</div> : null}
         {!booting && error ? <p className="banner-error" role="alert">{error}</p> : null}
+        {!booting && notices[0] ? (
+          <div className="banner-home" role="status">
+            <p>{notices[0]}</p>
+            <button type="button" className="btn small" onClick={() => navigate("/settings")}>Your home</button>
+            <button type="button" className="btn small ghost" onClick={dismissNotice}>Not now</button>
+          </div>
+        ) : null}
         {!booting ? <Suspense fallback={null}>{page}</Suspense> : null}
       </main>
     </div>

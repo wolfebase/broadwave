@@ -58,6 +58,9 @@ struct RootView: View {
         }
         .environment(nowPlaying)
         .background(Tokens.ColorToken.canvas.ignoresSafeArea())
+        .safeAreaInset(edge: .top, spacing: 0) {
+            arrivalBanner
+        }
         .task(id: store.connected) {
             guard store.connected else { return }
             store.socket?.announce(name: ScreenIdentity.name, kind: ScreenIdentity.kind)
@@ -189,6 +192,49 @@ struct RootView: View {
         }
         .environment(store)
         .environment(nowPlaying)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            arrivalBanner
+        }
+    }
+
+    @ViewBuilder
+    private var arrivalBanner: some View {
+        if store.connected, let notice = store.homeNotice, !notice.isEmpty {
+            HomeArrivalBanner(notice: notice) {
+                #if os(tvOS)
+                    nowPlaying.stop()
+                #else
+                    nowPlaying.expanded = false
+                #endif
+                tab = .settings
+            } onDismiss: {
+                store.dismissHome()
+            }
+        }
+    }
+}
+
+/// One line when a tuner, screen, or server shows up after the house is already known.
+struct HomeArrivalBanner: View {
+    var notice: String
+    var onOpen: () -> Void
+    var onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(notice)
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.updatesFrequently)
+            Button("Your home", action: onOpen)
+                .buttonStyle(.glass)
+            Button("Not now", action: onDismiss)
+                .buttonStyle(.glass)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.regularMaterial)
+        .accessibilityElement(children: .contain)
     }
 }
 

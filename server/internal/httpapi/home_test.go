@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -93,5 +94,47 @@ func TestHomeListsTunersServersAndScreens(t *testing.T) {
 	after, _ := st.Devices(context.Background())
 	if len(after) != len(before) {
 		t.Fatal("the scan added a device")
+	}
+}
+
+func TestLaterArrivalBannersOnce(t *testing.T) {
+	st := testStore(t)
+	flex := false
+	_, n, err := net.ParseCIDR("192.168.1.0/24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{
+		Store: st,
+		HomeNets: func() []*net.IPNet {
+			return []*net.IPNet{n}
+		},
+		HomeScan: func(context.Context) []discovery.Found {
+			found := []discovery.Found{{Kind: "hdhomerun", Name: "HDHomeRun CONNECT DUO", Addr: "192.168.1.252", ID: "10611B4C"}}
+			if flex {
+				found = append(found, discovery.Found{Kind: "hdhomerun", Name: "HDHomeRun FLEX 4K", Addr: "192.168.1.60", ID: "FLEX4K"})
+			}
+			return found
+		},
+	}
+	ctx := context.Background()
+	s.noteArrivals(ctx)
+	s.noteArrivals(ctx)
+	flex = true
+	s.noteArrivals(ctx)
+	events, err := st.Events(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].Kind != "home" || events[0].Message != "New tuner found: HDHomeRun FLEX 4K. Add it?" {
+		t.Fatalf("%+v", events)
+	}
+	s.noteArrivals(ctx)
+	events, err = st.Events(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("a second look raised another banner: %+v", events)
 	}
 }

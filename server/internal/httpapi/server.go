@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -44,6 +45,8 @@ type Server struct {
 	Staging bool
 	// HomeScan replaces the network scan in tests.
 	HomeScan func(ctx context.Context) []discovery.Found
+	// HomeNets replaces the local subnets in tests.
+	HomeNets func() []*net.IPNet
 	// SetupBench and SetupSignal replace the encoder test and the antenna check in tests.
 	SetupBench  func(ctx context.Context, ffmpeg, encoder string) (float64, error)
 	SetupSignal func(ctx context.Context) (great, ok, weak, lost int, err error)
@@ -54,6 +57,7 @@ type Server struct {
 	finishOn  bool
 	homeAt    time.Time
 	homeFound []discovery.Found
+	arrivals  *discovery.Arrivals
 
 	routes []string
 }

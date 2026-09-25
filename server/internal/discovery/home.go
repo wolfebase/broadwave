@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
@@ -106,6 +107,20 @@ func ScanHome(ctx context.Context) []Found {
 	return found
 }
 
+// tunerLabel reads the name the tuner calls itself. A miss stays "HDHomeRun".
+// Device auth in discover.json is not mapped, so it is not returned.
+func tunerLabel(ctx context.Context, base string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return "HDHomeRun"
+	}
+	dev, err := (&hdhr.Client{HTTP: &http.Client{Timeout: 400 * time.Millisecond}}).FetchDevice(ctx, base)
+	if err != nil {
+		return "HDHomeRun"
+	}
+	return fallbackName(dev.FriendlyName, "hdhomerun")
+}
+
 func discoverTuners(ctx context.Context) []Found {
 	timeout := 2 * time.Second
 	if dl, ok := ctx.Deadline(); ok {
@@ -127,8 +142,10 @@ func discoverTuners(ctx context.Context) []Found {
 			continue
 		}
 		name := "HDHomeRun"
-		if reply.TunerCount > 0 {
-			name = "HDHomeRun"
+		if reply.BaseURL != "" {
+			nameCtx, cancel := context.WithTimeout(ctx, 400*time.Millisecond)
+			name = tunerLabel(nameCtx, reply.BaseURL)
+			cancel()
 		}
 		out = append(out, Found{Kind: "hdhomerun", Name: name, Addr: addr, ID: reply.DeviceID})
 	}
@@ -456,11 +473,16 @@ func Assemble(found []Found, known []Known, screens []Screen, nets []*net.IPNet)
 			places = append(places, place)
 		case "server":
 			addr := hostOnly(item.Addr)
+			name := fallbackName(item.Name, item.Kind)
+			// The same server can answer on the LAN and on a bridge address.
+			// A distinctive name is one device; a generic name stays per address.
 			id := item.Kind + "|" + addr
 			if addr == "" {
 				id = item.Kind + "|" + item.ID
 			}
-			name := fallbackName(item.Name, item.Kind)
+			if !strings.EqualFold(name, kindLabel(item.Kind)) {
+				id = item.Kind + "|" + strings.ToLower(name)
+			}
 			detail := ""
 			if !strings.Contains(strings.ToLower(name), strings.ToLower(kindLabel(item.Kind))) {
 				detail = kindLabel(item.Kind)
