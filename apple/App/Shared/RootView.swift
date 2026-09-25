@@ -10,16 +10,24 @@ final class NowPlaying {
     var expanded = false
     /// Channel ids playing side by side. Empty means one channel.
     var together: [Int64] = []
+    /// Layout Watch together or a saved set asked for. The multiview screen applies it once.
+    var openedLayout: String?
 
     func play(_ channel: Channel) {
         together = []
+        openedLayout = nil
         self.channel = channel
         expanded = true
     }
 
-    func watchTogether(_ channels: [Channel]) {
+    func watchTogether(_ channels: [Channel], layout: String? = nil) {
         var seen = Set<Int64>()
         together = channels.map(\.id).filter { seen.insert($0).inserted }
+        if let layout, TileLayout(rawValue: layout) != nil {
+            openedLayout = layout
+        } else {
+            openedLayout = TileLayout.fitting(together.count).rawValue
+        }
         if channel == nil {
             channel = channels.first
         }
@@ -29,6 +37,7 @@ final class NowPlaying {
     func stop() {
         channel = nil
         together = []
+        openedLayout = nil
         expanded = false
     }
 }

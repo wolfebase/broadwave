@@ -38,6 +38,17 @@ enum TileLayout: String, CaseIterable, Identifiable {
         self == .side || self == .quad
     }
 
+    /// Two games sit side by side, three use one big and two, four use quad.
+    static func fitting(_ count: Int) -> TileLayout {
+        if count >= 4 {
+            return .quad
+        }
+        if count == 3 {
+            return .oneTwo
+        }
+        return .side
+    }
+
     static var saved: TileLayout {
         #if DEBUG
             if let raw = UserDefaults.standard.string(forKey: "BroadwaveMultiviewLayout"), let layout = TileLayout(rawValue: raw) {
@@ -154,6 +165,7 @@ enum TileGeometry {
 struct SavedSet: Codable, Identifiable, Hashable {
     var name: String
     var channels: [Int64]
+    var layout: String?
     var id: String {
         channels.map(String.init).joined(separator: ",")
     }
@@ -168,9 +180,9 @@ enum SavedMultiview {
         return sets
     }
 
-    static func save(name: String, channels: [Int64]) {
+    static func save(name: String, channels: [Int64], layout: String) {
         var sets = load().filter { $0.channels != channels }
-        sets.insert(SavedSet(name: name, channels: channels), at: 0)
+        sets.insert(SavedSet(name: name, channels: channels, layout: layout), at: 0)
         if let data = try? JSONEncoder().encode(Array(sets.prefix(8))) {
             UserDefaults.standard.set(data, forKey: key)
         }
@@ -302,7 +314,18 @@ final class TilePlayer {
         if !on {
             canHear = false
             applyAudible()
+            clearRoute()
         }
+    }
+
+    /// Drift from the broadcast timeline, in milliseconds. Nil until sync has a target.
+    private(set) var driftMS: Int?
+    func noteDrift() {
+        guard let sync, sync.state == .locked || sync.state == .syncing else {
+            driftMS = nil
+            return
+        }
+        driftMS = Int(sync.drift.rounded())
     }
 
     func stop() async {
@@ -338,6 +361,14 @@ final class TilePlayer {
         if arbiter.preferredParticipantForExternalPlayback === player {
             arbiter.preferredParticipantForExternalPlayback = nil
         }
+        // HomePod and other non-mixable routes use the same focused player.
+        #if os(tvOS) || compiler(>=6.4)
+            if #available(iOS 27, tvOS 26, *) {
+                if arbiter.preferredParticipantForNonMixableAudioRoutes === player {
+                    arbiter.preferredParticipantForNonMixableAudioRoutes = nil
+                }
+            }
+        #endif
     }
 }
 
@@ -449,12 +480,16 @@ struct MultiviewScreen: View {
             .padding(12)
         }
         .onAppear {
+            applyOpenedLayout()
             if session.focusID == 0 {
                 session.focusID = nowPlaying.together.first ?? 0
             }
             if nowPlaying.together.count < 2 || UserDefaults.standard.bool(forKey: "BroadwaveMultiviewAdd") {
                 session.guide = true
             }
+        }
+        .onChange(of: nowPlaying.openedLayout) { _, _ in
+            applyOpenedLayout()
         }
         .task(id: nowPlaying.together) {
             #if DEBUG
@@ -536,7 +571,7 @@ struct MultiviewScreen: View {
             }
             Button("Save") {
                 let name = tiles.map(\.displayNumber).joined(separator: " and ")
-                SavedMultiview.save(name: name, channels: tiles.map(\.id))
+                SavedMultiview.save(name: name, channels: tiles.map(\.id), layout: session.layout.rawValue)
             }
             .buttonStyle(.glass)
             .disabled(tiles.count < 2)
@@ -715,6 +750,13 @@ struct MultiviewScreen: View {
         return name + ". " + offer.label
     }
 
+    /// Watch together and a saved set name the layout. The phone only has two tiles, so a quad opens side by side there.
+    private func applyOpenedLayout() {
+        guard let raw = nowPlaying.openedLayout, let picked = TileLayout(rawValue: raw) else { return }
+        session.layout = layouts.contains(picked) ? picked : .side
+        nowPlaying.openedLayout = nil
+    }
+
     private func add(_ channel: Channel) {
         if offers[channel.id]?.cost == "none" {
             return
@@ -807,6 +849,11 @@ struct MultiviewTile: View {
                         Text("\(live.dropped) dropped")
                             .font(.caption2)
                             .accessibilityIdentifier("tile-drops-\(channel.id)")
+                        if let drift = live.driftMS {
+                            Text("\(drift) ms")
+                                .font(.caption2)
+                                .accessibilityIdentifier("tile-drift-\(channel.id)")
+                        }
                     }
                 }
                 .padding(8)
@@ -862,6 +909,7 @@ struct MultiviewTile: View {
                     if let event = live.player.currentItem?.accessLog()?.events.last {
                         live.noteDrops(event.numberOfDroppedVideoFrames)
                     }
+                    live.noteDrift()
                     try? await Task.sleep(for: .seconds(1))
                 }
             }
@@ -874,6 +922,9 @@ struct MultiviewTile: View {
         var parts = [remoteFocused ? "Focused" : nil, focused ? "Sound on" : "Sound off"].compactMap(\.self)
         if tileStats {
             parts.append("\(live.dropped) dropped")
+            if let drift = live.driftMS {
+                parts.append("\(drift) ms")
+            }
         }
         return parts.joined(separator: ", ")
     }

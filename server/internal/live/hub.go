@@ -171,15 +171,18 @@ type feed struct {
 
 // rendition is one ffmpeg process producing HLS for one delivery form.
 type rendition struct {
-	spec      Rendition
-	dir       string
-	cmd       *exec.Cmd
-	stdin     io.WriteCloser
-	sub       *pipeSub
-	viewers   int
-	seen      time.Time
-	idle      *time.Timer
-	stamper   playlistStamper
+	spec    Rendition
+	dir     string
+	cmd     *exec.Cmd
+	stdin   io.WriteCloser
+	sub     *pipeSub
+	viewers int
+	seen    time.Time
+	idle    *time.Timer
+	stamper playlistStamper
+	// clock maps this encode onto wall time. A transcode's fMP4 timestamps
+	// start at zero, so a second rendition of the channel cannot share the first.
+	clock     *Timeline
 	fallback  bool
 	restarted bool
 	// waited is set after cmd.Wait returns, before the hub lock. A stop that
@@ -634,6 +637,7 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 	r.sub = nil
 	r.stdin = nil
 	r.stamper.reset()
+	r.clock = nil
 	if err := os.RemoveAll(r.dir); err != nil {
 		return false
 	}
@@ -692,7 +696,7 @@ func usesPipe(args []string) bool {
 	return false
 }
 
-// Playlist returns a rendition's live playlist stamped with the channel timeline.
+// Playlist returns a rendition's live playlist stamped with that encode's clock.
 func (h *Hub) Playlist(channelID int64, key string) ([]byte, error) {
 	h.mu.Lock()
 	f := h.channels[channelID]
@@ -701,7 +705,14 @@ func (h *Hub) Playlist(channelID int64, key string) ([]byte, error) {
 		r = f.renditions[key]
 		if r != nil {
 			r.seen = time.Now()
+			if r.clock == nil {
+				r.clock = NewTimeline()
+			}
 		}
+	}
+	clock := (*Timeline)(nil)
+	if r != nil {
+		clock = r.clock
 	}
 	h.mu.Unlock()
 	if r == nil {
@@ -711,7 +722,7 @@ func (h *Hub) Playlist(channelID int64, key string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return r.stamper.stamp(r.dir, raw, f.timeline), nil
+	return r.stamper.stamp(r.dir, raw, clock), nil
 }
 
 // Touch records that a viewer of a rendition is still fetching video.

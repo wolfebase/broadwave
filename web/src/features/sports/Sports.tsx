@@ -7,6 +7,7 @@ import { categoryOf, dayLabel, isRecording, minutesLeft, progress, recordingKeys
 import type { Airing, Channel, TeamFollow } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
 import { ChannelBadge, Chip, Empty, LiveDot, Progress, RecDot } from "../../ui/primitives";
+import { layoutForCount, multiviewPath } from "../multiview/storage";
 import { scoreLine, useScoreboard, type ScoreGame, type ScoreTeam } from "./scores";
 import "./sports.css";
 
@@ -108,8 +109,8 @@ export function Sports() {
             className="btn primary"
             onClick={() => {
               const ids = liveGames.slice(0, 4).map((g) => g.channel.id);
-              const layout = ids.length >= 4 ? "quad" : ids.length === 3 ? "1+2" : "2up";
-              navigate(`/multiview?ch=${ids.join(",")}&layout=${layout}&focus=${ids[0]}`);
+              const layout = layoutForCount(ids.length);
+              navigate(multiviewPath(ids, layout, ids[0]));
             }}
           >
             Watch together

@@ -96,7 +96,7 @@ struct HomeView: View {
                             Button {
                                 let channels = set.channels.compactMap { id in store.channels.first { $0.id == id } }
                                 if !channels.isEmpty {
-                                    nowPlaying.watchTogether(channels)
+                                    nowPlaying.watchTogether(channels, layout: set.layout)
                                 }
                             } label: {
                                 Text(set.name)
