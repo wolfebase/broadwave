@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"broadwave/internal/discovery"
+	"broadwave/internal/guide"
 	"broadwave/internal/hdhr"
 	"broadwave/internal/live"
 	"broadwave/internal/realtime"
@@ -67,6 +68,8 @@ func (s *Server) Handler() http.Handler {
 	api("GET /sources", s.listSources)
 	api("POST /sources", s.addSource)
 	api("GET /channels", s.channels)
+	api("POST /channels/star", s.starNetworks)
+	api("GET /affiliations", s.affiliations)
 	api("PATCH /channels/{id}", s.patchChannel)
 	api("GET /channels/{id}/frame", s.frame)
 	api("GET /settings", s.getSettings)
@@ -263,10 +266,67 @@ func (s *Server) channels(w http.ResponseWriter, r *http.Request) {
 		channels = []store.Channel{}
 	}
 	writeCachedJSON(w, r, http.StatusOK, map[string]any{
-		"channels": channels,
+		"channels": withNetworks(channels),
 		"listings": "empty",
 		"message":  "Listings turn on when you add an XMLTV file. Live picture arrives with the player.",
 	})
+}
+
+func (s *Server) affiliations(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"calls": guide.Calls()})
+}
+
+func (s *Server) starNetworks(w http.ResponseWriter, r *http.Request) {
+	channels, err := s.Store.Channels(r.Context(), false)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	var starred []map[string]any
+	for _, ch := range withNetworks(channels) {
+		if ch.Hidden || !bigFour(ch.Network) {
+			continue
+		}
+		if !ch.Favorite {
+			on := true
+			if _, err := s.Store.PatchChannel(r.Context(), ch.ID, store.ChannelPatch{Favorite: &on}); err != nil {
+				writeError(w, err)
+				return
+			}
+		}
+		starred = append(starred, map[string]any{
+			"id": ch.ID, "guideName": ch.GuideName, "displayNumber": ch.DisplayNumber, "network": ch.Network,
+		})
+	}
+	if starred == nil {
+		starred = []map[string]any{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"starred": starred})
+}
+
+// withNetworks fills a blank network from the station name, then the call-sign table.
+// A value already stored from a guide is kept.
+func withNetworks(channels []store.Channel) []store.Channel {
+	for i := range channels {
+		if channels[i].Network != "" {
+			continue
+		}
+		names := []string{channels[i].GuideName}
+		if channels[i].DisplayName != "" && channels[i].DisplayName != channels[i].GuideName {
+			names = append(names, channels[i].DisplayName)
+		}
+		channels[i].Network = guide.Affiliation(names)
+	}
+	return channels
+}
+
+func bigFour(network string) bool {
+	switch network {
+	case "ABC", "CBS", "FOX", "NBC":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) patchChannel(w http.ResponseWriter, r *http.Request) {
@@ -299,7 +359,7 @@ func (s *Server) patchChannel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, ch)
+	writeJSON(w, http.StatusOK, withNetworks([]store.Channel{ch})[0])
 }
 
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {

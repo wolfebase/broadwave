@@ -3,7 +3,7 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **S8b**. C7b is done: Huffman title and description tables, UTF-16, Unicode-range modes, and locale-then-eng. No station on the DUO sent a compressed string (6 muxes, 8 s each, 0 blank). App Review unchanged: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-25. The owner sends the reply. Production is `v0.7.1`. Staging on `:8490` is the PB16 tree until the next staging deploy. Next recording Jeopardy 2026-09-25 20:00 UTC (pad 1 min). Tuners released (`ch=none` on both, `ours:false` on `:8477` and `:8490`).
+- Current task: **HOME1**. S8b is done. App Review unchanged: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-25. The owner sends the reply. Production is `v0.7.1`. Staging on `:8490` is the PB16 tree until the next staging deploy. Next recording Jeopardy 2026-09-25 20:00 UTC (pad 1 min). Tuners released (`ch=none` on both, `ours:false` on `:8477` and `:8490`).
 - App Review: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-25 (AS1). Check it at the start of every round.
 - Production `Broadwave` on TUS `:8477` is v0.7.1. Staging `Broadwave-Staging` on `:8490` is the PB16 tree (encoder h264_vaapi). Next recording: Jeopardy, 2026-09-25 20:00 UTC.
 - The repo is `~/Projects/active/broadwave`.
@@ -108,7 +108,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] S6 tvheadend, Threadfin/xTeVe/ErsatzTV/Dispatcharr/Antennas, Channels DVR server, HDHomeRun-compatible by address; unsupported devices documented (commit e464ec9)
 - [x] S7 Free channels: detect FastChannels / Pluto / Samsung generator containers, or guide the user to run FastChannels (commit 1eababe)
 - [x] S8 Setup wizard v2 on web, Apple TV, and iPhone (< 90 s, no typing for HDHomeRun) (commit 0991df2)
-- [ ] S8b Apple setup at web depth: live discovery, scan, playlist/Xtream, free channels, server-chosen big-four favorites by affiliation, volume check (the S8 Apple wizard is a placeholder)
+- [x] S8b Apple setup at web depth. The server decides ABC/CBS/FOX/NBC: a guide name that is the network, "FOX 4", or "(NBC)" wins, then a call sign with DT/HD stripped (`TestAffiliationGuideNameWins`, `TestAffiliationCallSign`, `TestAffiliationDoesNotGuess`, `TestNetworksFromGuide`, `TestStarBigFour`). WDAF-DT is FOX and KCTV is CBS; WDAF2 and "FOX NEWS" are not starred. `GET /affiliations` exposes the table (KSHB is NBC). The table is the primary affiliates in the large markets, Kansas City included. Web and Apple both call `POST /channels/star`. Fresh fake tuner, empty catalog, zero typing: iPhone walk 12.7s and Apple TV walk 12.6s, both under 90s, to a playing 4.1 (color bars, Live). Shots `.evidence/s8b/iphone-sources.jpg`, `iphone-channels.jpg`, `iphone-guide.jpg`, `iphone-recordings.jpg`, `iphone-apps.jpg`, `iphone-playing.jpg`, and the same `tv-*`. Settings has "Run setup again". Doctor showed the low-disk note. `make check` green.
 - [x] S9 Setup doctor: bridge network, /dev/dri, volumes, disk, TZ, clock, PUID/PGID/UMASK (commit 9f70a73)
 - [x] S10 Source health and limits (commit 56451fc)
 - [x] Phase S deploy: tag v0.4.0, Unraid smoke, two-screen sync (commit 6442a79, log in UNRAID_LOG)

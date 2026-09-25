@@ -33,6 +33,17 @@ export function startScan(deviceId: string) {
   });
 }
 
+export function scanStatus(deviceId: string) {
+  return request<{ scanning: boolean; found: number }>(`/api/v1/devices/${encodeURIComponent(deviceId)}/scan`);
+}
+
+export function starNetworks() {
+  return request<{ starred: { id: number; guideName?: string; displayNumber?: string; network: string }[] }>("/api/v1/channels/star", {
+    method: "POST",
+    body: "{}",
+  });
+}
+
 export type FreeFeed = { kind: string; name: string; addr: string; playlist: string; guide: string };
 
 export function findFree() {

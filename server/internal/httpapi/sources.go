@@ -396,6 +396,7 @@ func (s *Server) attachXMLTV(ctx context.Context, sourceID int64, rawURL string)
 	if err := s.Store.SetChannelArt(ctx, art); err != nil {
 		return err
 	}
+	_ = s.Store.SetNetworks(ctx, guide.Networks(body, mine))
 	return s.Store.ReplaceAiringsFor(ctx, ids, tagGuideSource(rows, "playlist"))
 }
 

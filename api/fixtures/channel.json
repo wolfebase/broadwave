@@ -10,6 +10,7 @@
   "hd": true,
   "hidden": false,
   "id": 1,
+  "network": "FOX",
   "present": true,
   "videoCodec": "MPEG2"
 }

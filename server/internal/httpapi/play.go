@@ -381,6 +381,7 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	_ = s.Store.SetChannelArt(ctx, art)
+	_ = s.Store.SetNetworks(ctx, guide.Networks(raw, antenna))
 	settings, _ := s.Store.Settings(ctx)
 	if settings == nil {
 		settings = map[string]string{}
@@ -413,6 +414,7 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 		if body, err := guide.PullURL(ctx, rawURL); err == nil {
 			if extra, extraArt, err := guide.Parse(body, antenna); err == nil && len(extra) > 0 {
 				_ = s.Store.SetChannelArt(ctx, extraArt)
+				_ = s.Store.SetNetworks(ctx, guide.Networks(body, antenna))
 				extra = guide.FillImages(ctx, tmdbKey, extra)
 				rows = s.fillUnlisted(ctx, rows, tagGuideSource(extra, "xmltv"))
 			}

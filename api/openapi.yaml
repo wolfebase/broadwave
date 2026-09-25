@@ -366,6 +366,47 @@ paths:
                   channels:
                     type: array
                     items: { $ref: "#/components/schemas/Channel" }
+  /channels/star:
+    post:
+      tags: [channels]
+      operationId: starNetworkFavorites
+      description: Favorite ABC, CBS, FOX, and NBC. The server picks the network from the guide, then from its call-sign table.
+      responses:
+        "200":
+          description: Channels it marked favorite
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [starred]
+                properties:
+                  starred:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, network]
+                      properties:
+                        id: { type: integer, format: int64 }
+                        guideName: { type: string }
+                        displayNumber: { type: string }
+                        network: { type: string }
+  /affiliations:
+    get:
+      tags: [channels]
+      operationId: listAffiliations
+      description: Call sign to network. The value is ABC, CBS, FOX, or NBC.
+      responses:
+        "200":
+          description: The call-sign table
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [calls]
+                properties:
+                  calls:
+                    type: object
+                    additionalProperties: { type: string }
   /channels/{id}:
     patch:
       tags: [channels]
@@ -1289,6 +1330,7 @@ components:
         artUrl: { type: string, description: "Channel logo from the guide. Empty when the source has none." }
         artWidth: { type: integer, description: "Native logo width in pixels. Omitted until the picture has been measured." }
         artHeight: { type: integer, description: "Native logo height in pixels. Omitted until the picture has been measured." }
+        network: { type: string, description: "ABC, CBS, FOX, or NBC when the server can tell. Empty otherwise." }
     ChannelPatch:
       type: object
       properties:
