@@ -1,6 +1,6 @@
 # Broadwave agent prompt (read every round)
 
-`scripts/agent-loop.sh` (or `scripts/agent-tmux.sh`, which runs it with a live view) passes this file to the Cursor agent at the start of every round. Edit it to steer the next round; changes take effect when the current round ends.
+`scripts/agent-loop.sh` (or `scripts/agent-tmux.sh`, which runs it with a live view) passes this file to the coding agent (Grok Build with `AGENT=grok`, otherwise Cursor) at the start of every round. Edit it to steer the next round; changes take effect when the current round ends.
 
 ---
 
@@ -16,7 +16,7 @@ You are continuing **Broadwave** in `/Users/tyler/Projects/active/broadwave` (gi
 ## 2. How to work
 
 - **Every message you send must include a tool call.** A text-only message ends the round. The previous run stopped nine times after writing "I'll check X next." Status goes in `PROGRESS.md` and commit messages, which the owner watches live in the status pane.
-- **Delegate.** The previous run made about 3,300 tool calls and used subagents twice. For every task:
+- **Delegate.** The previous run made about 3,300 tool calls and used subagents twice. For every task (the names below are Cursor's; in Grok Build use `explore` for mapping and research, `plan` for planning, and `general-purpose` for everything else, including browser and simulator verification, code review, and parallel tasks in their own worktree):
   - `explore` subagents map the code you're about to change, in parallel for separate areas.
   - `docs-researcher` handles anything version-sensitive (ffmpeg, AVKit, hls.js, jellyfin-ffmpeg, HDHomeRun, Unraid, App Store Connect).
   - A `generalPurpose` subagent does browser verification with `playwright-cli open --browser=chrome` against staging at 390×844, 1440×900, and 1920×1080. It returns screenshots, `getVideoPlaybackQuality()` numbers, and console errors.
@@ -29,7 +29,7 @@ You are continuing **Broadwave** in `/Users/tyler/Projects/active/broadwave` (gi
 - **Verify like a person on staging** (MASTER_PLAN 0.1b). Deploy the branch binary to `Broadwave-Staging` (`:8490`, iGPU), click through it in Chrome and the simulators, measure the output, and read the console.
   - Production `Broadwave` (`:8477`) changes only in a phase deploy.
   - Before tuning, check both servers' `/api/v1/tuners` and production's `/api/v1/schedule`. Never tune within 20 minutes of a recording, and stop what you watch.
-  - Never touch other containers on TUS (`channelsdvr_intel`, Plex, and the rest). TUS has no Python, so run checks on the Mac.
+  - **TUS scope (hard rule).** On TUS you may touch only `Broadwave-Staging`, `wg-lab-*` lab containers, `Broadwave` in a phase deploy, the `/mnt/cache/appdata/broadwave*` folders, and the `my-Broadwave*.xml` template. Read-only checks (`docker ps`, `docker logs`, `docker stats`, `free`, `/api/v1/*` on `:8477` and `:8490`) are fine. Never stop, restart, remove, update, or exec into any other container (`channelsdvr_intel`, Plex, and the rest); never prune images, volumes, or networks; never change the array, shares, plugins, VMs, `/boot`, Unraid settings, or other apps' APIs; never delete recordings; never reboot. `scripts/unraid-guard.py` runs as a hook and denies such commands. Don't work around a denial: if the task truly needs it, write it in `BLOCKERS.md` and move on. TUS has no Python, so run checks on the Mac.
 - **One task, one commit, with evidence.** `make check` must be green. The commit includes the `PROGRESS.md` tick, and the tick lists the proof for every Accept bullet. Anything not met becomes a new task line. Push, then watch CI; red CI stops everything until it's fixed.
 - **Phase end** (MASTER_PLAN 0.3 and 0.1d):
   - tag, CHANGELOG, TUS deploy with an UNRAID_LOG entry, and `scripts/testflight.sh`;
