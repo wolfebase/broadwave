@@ -4,6 +4,11 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
+- 2026-09-25 18:10 · **Close out the conflict resolver and move on.**
+  - Finish E2d (the miss-time comparison) this round and commit it, then leave E2 alone. E2b (the Apple Schedule screen) stays open for the Apple work.
+  - From now on, a review nit on finished work becomes one line in a single `J1 polish` list, not a new E2x task. Only a real bug (wrong data, a missed recording, a crash) earns its own task.
+  - Keep 2 lanes on fresh tasks from the section 4 order, and first clear the 6 worktrees on disk per the cleanup rule.
+
 - 2026-09-25 17:10 · **E2 was ticked before its review, and the review found gaps.** Add an `E2c` line right under E2b and do it next:
   - the web's one-shot skip must show what will be permanently missed before the user confirms (an E2 Accept bullet);
   - add tests for the "Watch anyway" success path and the 20-second preempt window;
