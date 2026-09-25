@@ -40,6 +40,19 @@ func InterlacedCodec(codec string) bool {
 	return c == "mpeg2" || c == "mpeg2video"
 }
 
+// fieldDoubled is field-rate deinterlace. MPEG-2 stays interlaced until a scan
+// says otherwise. H.264 is interlaced only after a scan stored a field order,
+// so an empty order (HLS, a fresh channel) is not doubled for the life of it.
+func fieldDoubled(codec, mode string, progressive, lace bool) bool {
+	if NormalizeMode(mode) == "film" {
+		return false
+	}
+	if InterlacedCodec(codec) && !progressive {
+		return true
+	}
+	return codecName(codec) == "h264" && lace
+}
+
 // PictureArgs builds the ffmpeg argv for Graph. Recordings on disk stay the original MPEG-TS.
 func PictureArgs(g Graph) []string {
 	g.Mode = NormalizeMode(g.Mode)
@@ -330,7 +343,7 @@ func streamFacts(src Source, fieldOrder string, spec Rendition, encoder, deint s
 	}
 	out.Encoder = enc
 	g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(spec.Video), Encoder: enc, Mode: mode, Deint: deint, Progressive: src.Progressive}
-	interlaced := !src.Progressive && (InterlacedCodec(src.VideoCodec) || codecName(src.VideoCodec) == "h264") && g.Mode != "film"
+	interlaced := fieldDoubled(src.VideoCodec, g.Mode, src.Progressive, src.Lace)
 	field := interlaced && !smallPicture(g.Profile)
 	capW, capH, rate := pictureSize(g.Profile, field)
 	fps, _ := pictureRate(g, field)

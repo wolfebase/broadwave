@@ -35,8 +35,8 @@ func TestScanMatrixPicture(t *testing.T) {
 		{"1080i", "i1080.ts", []string{"-f", "lavfi", "-i", bars("640x360", "60000/1001", "1"), "-vf", "tinterlace=mode=interleave_top", "-c:v", "mpeg2video", "-b:v", "2M", "-flags", "+ildct+ilme", "-top", "1", "-f", "mpegts"}, Source{VideoCodec: "MPEG2"}, 59.94, 60},
 		{"480i", "i480.ts", []string{"-f", "lavfi", "-i", bars("320x240", "60000/1001", "1"), "-vf", "tinterlace=mode=interleave_top", "-c:v", "mpeg2video", "-b:v", "1M", "-flags", "+ildct+ilme", "-top", "1", "-f", "mpegts"}, Source{VideoCodec: "MPEG2"}, 59.94, 60},
 		{"telecine", "film.ts", []string{"-f", "lavfi", "-i", "nullsrc=s=640x360:r=24000/1001:d=1,format=yuv420p,geq=r='if(lt(abs(X-mod(N*12\\,640)),30),240,20)':g=128:b=40", "-vf", "telecine=pattern=23", "-c:v", "mpeg2video", "-b:v", "4M", "-flags", "+ildct+ilme", "-top", "1", "-f", "mpegts"}, Source{VideoCodec: "MPEG2", Film: true}, 23.976, 24},
-		{"paff", "paff.ts", []string{"-f", "lavfi", "-i", bars("640x360", "60000/1001", "1"), "-vf", "tinterlace=mode=interleave_top", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-x264-params", "tff=1", "-flags", "+ildct+ilme", "-f", "mpegts"}, Source{VideoCodec: "H264"}, 59.94, 60},
-		{"mbaff", "mbaff.ts", []string{"-f", "lavfi", "-i", bars("640x360", "60000/1001", "1"), "-vf", "tinterlace=mode=interleave_top", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-x264-params", "tff=1:interlaced=1", "-flags", "+ildct+ilme", "-f", "mpegts"}, Source{VideoCodec: "H264"}, 59.94, 60},
+		{"paff", "paff.ts", []string{"-f", "lavfi", "-i", bars("640x360", "60000/1001", "1"), "-vf", "tinterlace=mode=interleave_top", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-x264-params", "tff=1", "-flags", "+ildct+ilme", "-f", "mpegts"}, Source{VideoCodec: "H264", Lace: true}, 59.94, 60},
+		{"mbaff", "mbaff.ts", []string{"-f", "lavfi", "-i", bars("640x360", "60000/1001", "1"), "-vf", "tinterlace=mode=interleave_top", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-x264-params", "tff=1:interlaced=1", "-flags", "+ildct+ilme", "-f", "mpegts"}, Source{VideoCodec: "H264", Lace: true}, 59.94, 60},
 	}
 	for _, tc := range cases {
 		in := filepath.Join(dir, tc.src)
@@ -76,6 +76,52 @@ func TestScanMatrixPicture(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// A progressive H.264 playlist has an empty field order. Field bob would
+// turn 30p into 60 and 60p into 120, and an HLS source never sees the packet scan.
+func TestUnscannedH264KeepsItsRate(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not on PATH")
+	}
+	dir := t.TempDir()
+	src := Source{VideoCodec: "H264"}
+	vf := filterOf(RenditionArgs(0, src, Rendition{Video: "1080", Audio: "none"}, "libx264", "motion_adaptive"))
+	if strings.Contains(vf, "bwdif") || strings.Contains(vf, "fps=") {
+		t.Fatalf("unscanned h264 filter doubles: %s", vf)
+	}
+	for _, tc := range []struct {
+		name   string
+		rate   string
+		want   float64
+		frames int
+	}{
+		{"30p", "30", 30, 30},
+		{"60p", "60", 60, 60},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := filepath.Join(dir, tc.name+".ts")
+			build := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error",
+				"-f", "lavfi", "-i", "nullsrc=s=320x180:r="+tc.rate+":d=1,format=yuv420p",
+				"-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "30", "-f", "mpegts", in)
+			if out, err := build.CombinedOutput(); err != nil {
+				t.Fatalf("fixture: %v %s", err, out)
+			}
+			outPath := filepath.Join(dir, tc.name+"-out.mp4")
+			cmd := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error", "-i", in, "-an", "-vf", vf, "-c:v", "libx264", "-t", "1", outPath)
+			if msg, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("encode: %v %s", err, msg)
+			}
+			fps, frames := measure(t, outPath)
+			t.Logf("%s %.3f fps %d frames", tc.name, fps, frames)
+			if frames < tc.frames-5 || frames > tc.frames+8 {
+				t.Fatalf("frames %d, want about %d (doubled would be %d)", frames, tc.frames, tc.frames*2)
+			}
+			if fps < tc.want-2 || fps > tc.want+2 {
+				t.Fatalf("fps %.3f, want about %.3f", fps, tc.want)
+			}
+		})
 	}
 }
 

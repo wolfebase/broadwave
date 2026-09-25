@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -76,12 +77,20 @@ func TestFilmDoesNotStick(t *testing.T) {
 		t.Fatal("a stable scan type is stored as itself")
 	}
 	src := sourceOf(store.SourceChannel{FieldOrder: "film"})
-	if src.Film || src.Progressive {
+	if src.Film || src.Progressive || src.Lace {
 		t.Fatalf("a stored film flag must not lock the channel: %+v", src)
 	}
 	prog := sourceOf(store.SourceChannel{FieldOrder: "progressive"})
-	if !prog.Progressive || prog.Film {
+	if !prog.Progressive || prog.Film || prog.Lace {
 		t.Fatalf("progressive stays progressive: %+v", prog)
+	}
+	plain := sourceOf(store.SourceChannel{Channel: store.Channel{VideoCodec: "H264"}})
+	if plain.Lace || plain.Progressive {
+		t.Fatalf("unscanned h264 must keep its rate: %+v", plain)
+	}
+	laced := sourceOf(store.SourceChannel{Channel: store.Channel{VideoCodec: "H264"}, FieldOrder: "tt"})
+	if !laced.Lace || laced.Progressive {
+		t.Fatalf("stored tt laces h264: %+v", laced)
 	}
 }
 
@@ -300,6 +309,158 @@ func TestProbeRebuildsTheRunningGraph(t *testing.T) {
 	}
 	if !f.source.Film || f.source.Progressive || f.channel.FieldOrder != "tt" {
 		t.Fatalf("film stored %+v %q", f.source, f.channel.FieldOrder)
+	}
+}
+
+func TestUnscannedH264ProbeRebuilds(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not on PATH")
+	}
+	h, m := testHub(t)
+	h.FFmpeg = "ffmpeg"
+	h.Encoder = "libx264"
+	ch := store.SourceChannel{Channel: store.Channel{ID: 14, GuideNumber: "14.1", VideoCodec: "H264"}, FrequencyHz: m.freq}
+	f := &feed{
+		channel:    ch,
+		source:     sourceOf(ch),
+		program:    1,
+		renditions: map[string]*rendition{},
+		timeline:   NewTimeline(),
+	}
+	m.feeds["14.1"] = f
+	h.channels[14] = f
+	t.Cleanup(func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		h.stopFeedLocked(f)
+	})
+	spec, ok := ParseRenditionKey("1080.aac2.broadcast")
+	if !ok {
+		t.Fatal("rendition key")
+	}
+	r, err := h.ensureRenditionLocked(f, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := strings.Join(r.args, " ")
+	if strings.Contains(started, "bwdif") || strings.Contains(started, "60000/1001") || strings.Contains(started, "deinterlace_vaapi") {
+		t.Fatalf("unscanned h264 started doubled: %s", started)
+	}
+	seen := time.Now().Add(-time.Second)
+	r.viewers = 2
+	r.seen = seen
+
+	h.applyProbeLocked(f, "progressive")
+	kept := f.renditions[spec.Key()]
+	if kept == nil {
+		t.Fatal("progressive probe dropped the rendition")
+	}
+	line := strings.Join(kept.args, " ")
+	if strings.Contains(line, "bwdif") || strings.Contains(line, "60000/1001") {
+		t.Fatalf("progressive probe doubled the graph: %s", line)
+	}
+	if !f.source.Progressive || f.source.Lace || f.channel.FieldOrder != "progressive" {
+		t.Fatalf("stored %+v %q", f.source, f.channel.FieldOrder)
+	}
+	if kept.viewers != 2 {
+		t.Fatalf("viewers %d", kept.viewers)
+	}
+
+	h.applyProbeLocked(f, "tt")
+	nr := f.renditions[spec.Key()]
+	if nr == nil || nr == kept {
+		t.Fatal("interlaced probe did not rebuild the rendition")
+	}
+	if nr.viewers != 2 || !nr.seen.Equal(seen) {
+		t.Fatalf("viewers %d", nr.viewers)
+	}
+	laced := strings.Join(nr.args, " ")
+	if !strings.Contains(laced, "bwdif=mode=send_field") || !strings.Contains(laced, "fps=60000/1001") {
+		t.Fatalf("known interlaced h264: %s", laced)
+	}
+	if !f.source.Lace || f.source.Progressive || f.channel.FieldOrder != "tt" {
+		t.Fatalf("lace stored %+v %q", f.source, f.channel.FieldOrder)
+	}
+}
+
+func TestHLSProbeTargetFindsTheSegment(t *testing.T) {
+	dir := t.TempDir()
+	media := filepath.Join(dir, "live.m3u8")
+	master := filepath.Join(dir, "master.m3u8")
+	if err := os.WriteFile(media, []byte("#EXTM3U\n#EXTINF:1.0,\nseg.ts\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(master, []byte("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000000\nlive.m3u8\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := hlsProbeTarget(master, "", "")
+	want := filepath.Join(dir, "seg.ts")
+	if got != want {
+		t.Fatalf("master: got %q want %q", got, want)
+	}
+	fmp4 := filepath.Join(dir, "fmp4.m3u8")
+	body := "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:1.0,\nseg.m4s\n"
+	if err := os.WriteFile(fmp4, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = hlsProbeTarget(fmp4, "", "")
+	want = "concat:" + filepath.Join(dir, "init.mp4") + "|" + filepath.Join(dir, "seg.m4s")
+	if got != want {
+		t.Fatalf("fmp4: got %q want %q", got, want)
+	}
+	if resolveMedia("http://example/a/live.m3u8", "seg.ts") != "http://example/a/seg.ts" {
+		t.Fatal("remote segment was not resolved")
+	}
+}
+
+func TestInputProbeStoresProgressive(t *testing.T) {
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe not on PATH")
+	}
+	dir := t.TempDir()
+	seg := filepath.Join(dir, "seg.ts")
+	build := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "nullsrc=s=320x180:r=60:d=1,format=yuv420p",
+		"-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "30", "-f", "mpegts", seg)
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("fixture: %v %s", err, out)
+	}
+	playlist := filepath.Join(dir, "live.m3u8")
+	body := "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXTINF:1.0,\nseg.ts\n#EXT-X-ENDLIST\n"
+	if err := os.WriteFile(playlist, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h, m := testHub(t)
+	h.FFmpeg = "ffmpeg"
+	m.input = playlist
+	ch := store.SourceChannel{Channel: store.Channel{ID: 30, GuideNumber: "30.1", VideoCodec: "H264"}}
+	f := &feed{
+		channel:    ch,
+		source:     sourceOf(ch),
+		renditions: map[string]*rendition{},
+	}
+	m.feeds["30.1"] = f
+	h.channels[30] = f
+	h.probeInputLocked(m, f)
+	deadline := time.Now().Add(8 * time.Second)
+	var order string
+	for time.Now().Before(deadline) {
+		h.mu.Lock()
+		order = f.channel.FieldOrder
+		h.mu.Unlock()
+		if order != "" {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if order != "progressive" || !f.source.Progressive || f.source.Lace {
+		t.Fatalf("playlist probe %+v stored %q", f.source, order)
+	}
+	line := strings.Join(RenditionArgs(0, f.source, Rendition{Video: "1080", Audio: "aac2"}, "libx264", "motion_adaptive"), " ")
+	if strings.Contains(line, "bwdif") || strings.Contains(line, "60000/1001") || strings.Contains(line, "fps=") {
+		t.Fatalf("60p playlist doubled: %s", line)
 	}
 }
 

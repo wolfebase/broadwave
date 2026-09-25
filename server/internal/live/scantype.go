@@ -483,6 +483,16 @@ func storedFieldOrder(order string) string {
 	return order
 }
 
+// interlacedOrder is a scan that showed real fields. Empty is unscanned.
+func interlacedOrder(order string) bool {
+	switch order {
+	case "tt", "bb", "tb", "bt":
+		return true
+	default:
+		return false
+	}
+}
+
 // learnScanLocked reads the mux until the scan type is known or scanWait
 // elapses, stores it, and sets the feed source before a rendition starts.
 // A stored "progressive" is still read. ffprobe reports soft 3:2 as
@@ -605,9 +615,13 @@ func (h *Hub) applyScanLocked(f *feed, order string) {
 	stored := storedFieldOrder(order)
 	progressive := stored == "progressive"
 	film := order == "film"
-	changed := f.source.Progressive != progressive || f.source.Film != film
+	// Film plays at 24p for this tune. The stored order stays interlaced so
+	// the next program is scanned again, and that tune laces from "tt".
+	lace := interlacedOrder(stored) && !film
+	changed := f.source.Progressive != progressive || f.source.Film != film || f.source.Lace != lace
 	f.source.Progressive = progressive
 	f.source.Film = film
+	f.source.Lace = lace
 	if stored != "" && stored != f.channel.FieldOrder {
 		f.channel.FieldOrder = stored
 		if h.Store != nil {

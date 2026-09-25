@@ -19,21 +19,21 @@ func TestDecide(t *testing.T) {
 		p    Prefs
 		want string
 	}{
-		{"apple tv gets the original h264 with dolby", Source{"H264", "AC3", true, false, "", "", 0}, apple, Prefs{}, "copy.copy"},
-		{"mpeg-2 is converted but keeps dolby on apple tv", Source{"MPEG2", "AC3", false, false, "", "", 0}, apple, Prefs{}, "1080.copy.broadcast.hevc"},
-		{"browser keeps h264 picture, converts sound", Source{"H264", "AC3", true, false, "", "", 0}, web, Prefs{}, "copy.aac2"},
-		{"unprobed h264 is deinterlaced, not copied", Source{"H264", "AC3", false, false, "", "", 0}, web, Prefs{}, "1080.aac2.broadcast"},
-		{"cellular drops to 720", Source{"MPEG2", "AC3", false, false, "", "", 0}, Caps{Platform: "ios", Video: []string{"h264"}, Audio: []string{"ac3", "aac"}, Network: "cellular"}, Prefs{}, "720.copy.broadcast"},
-		{"saver is small and stereo", Source{"MPEG2", "AC3", false, false, "", "", 0}, apple, Prefs{Quality: "saver"}, "540.aac2.broadcast.hevc"},
-		{"a tile is 540 and silent", Source{"MPEG2", "AC3", false, false, "", "", 0}, apple, Prefs{Quality: "tile"}, "540.none.broadcast.hevc"},
-		{"the smaller tile is 360", Source{"MPEG2", "AC3", false, false, "", "", 0}, apple, Prefs{Quality: "360", Audio: "none"}, "360.none.broadcast.hevc"},
-		{"a tile can keep sound when asked", Source{"MPEG2", "AC3", false, false, "", "", 0}, apple, Prefs{Quality: "tile", Audio: "stereo"}, "540.aac2.broadcast.hevc"},
-		{"surround without dolby decode is 5.1 aac", Source{"MPEG2", "AC3", false, false, "", "", 0}, web, Prefs{Audio: "surround"}, "1080.aac6.broadcast"},
-		{"film mode is part of the key", Source{"MPEG2", "AC3", false, false, "", "", 0}, web, Prefs{Picture: "film"}, "1080.aac2.film"},
-		{"small screens cap the height", Source{"MPEG2", "AC3", false, false, "", "", 0}, Caps{Video: []string{"h264"}, Audio: []string{"aac"}, MaxHeight: 720}, Prefs{}, "720.aac2.broadcast"},
-		{"second language is its own rendition", Source{"MPEG2", "AC3", false, false, "", "", 0}, apple, Prefs{Track: "language"}, "1080.copy.broadcast.lang.hevc"},
-		{"even volume re-encodes passthrough", Source{"MPEG2", "AC3", false, false, "", "", 0}, apple, Prefs{Even: true}, "1080.aac6.broadcast.even.hevc"},
-		{"described video on the web", Source{"H264", "AC3", true, false, "", "", 0}, web, Prefs{Track: "described"}, "copy.aac2.vi"},
+		{"apple tv gets the original h264 with dolby", Source{"H264", "AC3", true, false, "", "", 0, false}, apple, Prefs{}, "copy.copy"},
+		{"mpeg-2 is converted but keeps dolby on apple tv", Source{"MPEG2", "AC3", false, false, "", "", 0, false}, apple, Prefs{}, "1080.copy.broadcast.hevc"},
+		{"browser keeps h264 picture, converts sound", Source{"H264", "AC3", true, false, "", "", 0, false}, web, Prefs{}, "copy.aac2"},
+		{"unprobed h264 is converted, not copied or doubled", Source{"H264", "AC3", false, false, "", "", 0, false}, web, Prefs{}, "1080.aac2.broadcast"},
+		{"cellular drops to 720", Source{"MPEG2", "AC3", false, false, "", "", 0, false}, Caps{Platform: "ios", Video: []string{"h264"}, Audio: []string{"ac3", "aac"}, Network: "cellular"}, Prefs{}, "720.copy.broadcast"},
+		{"saver is small and stereo", Source{"MPEG2", "AC3", false, false, "", "", 0, false}, apple, Prefs{Quality: "saver"}, "540.aac2.broadcast.hevc"},
+		{"a tile is 540 and silent", Source{"MPEG2", "AC3", false, false, "", "", 0, false}, apple, Prefs{Quality: "tile"}, "540.none.broadcast.hevc"},
+		{"the smaller tile is 360", Source{"MPEG2", "AC3", false, false, "", "", 0, false}, apple, Prefs{Quality: "360", Audio: "none"}, "360.none.broadcast.hevc"},
+		{"a tile can keep sound when asked", Source{"MPEG2", "AC3", false, false, "", "", 0, false}, apple, Prefs{Quality: "tile", Audio: "stereo"}, "540.aac2.broadcast.hevc"},
+		{"surround without dolby decode is 5.1 aac", Source{"MPEG2", "AC3", false, false, "", "", 0, false}, web, Prefs{Audio: "surround"}, "1080.aac6.broadcast"},
+		{"film mode is part of the key", Source{"MPEG2", "AC3", false, false, "", "", 0, false}, web, Prefs{Picture: "film"}, "1080.aac2.film"},
+		{"small screens cap the height", Source{"MPEG2", "AC3", false, false, "", "", 0, false}, Caps{Video: []string{"h264"}, Audio: []string{"aac"}, MaxHeight: 720}, Prefs{}, "720.aac2.broadcast"},
+		{"second language is its own rendition", Source{"MPEG2", "AC3", false, false, "", "", 0, false}, apple, Prefs{Track: "language"}, "1080.copy.broadcast.lang.hevc"},
+		{"even volume re-encodes passthrough", Source{"MPEG2", "AC3", false, false, "", "", 0, false}, apple, Prefs{Even: true}, "1080.aac6.broadcast.even.hevc"},
+		{"described video on the web", Source{"H264", "AC3", true, false, "", "", 0, false}, web, Prefs{Track: "described"}, "copy.aac2.vi"},
 	}
 	for _, c := range cases {
 		got := Decide(c.src, c.caps, c.p)

@@ -125,6 +125,9 @@ type Source struct {
 	Referrer  string
 	// AudioPID is the PMT elementary stream to map. Zero keeps the first audio.
 	AudioPID int
+	// Lace is true once a scan has shown interlaced H.264. An empty scan does
+	// not lace it: a progressive playlist keeps its own rate.
+	Lace bool
 }
 
 type Decision struct {
@@ -198,7 +201,7 @@ func Decide(src Source, caps Caps, p Prefs) Decision {
 			switch {
 			case v == "mpeg2":
 				why = append(why, "Converted from MPEG-2")
-			case !src.Progressive && v == "h264":
+			case src.Lace && v == "h264":
 				why = append(why, "Deinterlaced for smooth motion")
 			default:
 				why = append(why, "Converted for this device")
@@ -326,7 +329,7 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 			mode = "film"
 		}
 		probe := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive}
-		inter := !src.Progressive && (InterlacedCodec(src.VideoCodec) || codecName(src.VideoCodec) == "h264") && probe.Mode != "film"
+		inter := fieldDoubled(src.VideoCodec, probe.Mode, src.Progressive, src.Lace)
 		gpu = gpuDecode(probe, inter, vaapiDeintMode(probe, inter))
 	}
 	if transcode && vaapiFamily(outEnc) {
@@ -364,7 +367,7 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 			mode = "film"
 		}
 		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive}
-		interlaced := !src.Progressive && (InterlacedCodec(src.VideoCodec) || codecName(src.VideoCodec) == "h264") && g.Mode != "film"
+		interlaced := fieldDoubled(src.VideoCodec, g.Mode, src.Progressive, src.Lace)
 		field := interlaced && !smallPicture(g.Profile)
 		width, height, rate := pictureSize(g.Profile, field)
 		fps, gop := pictureRate(g, field)
