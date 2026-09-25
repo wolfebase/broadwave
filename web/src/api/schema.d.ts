@@ -151,6 +151,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Tuners, screens, and servers on this network. Nothing is added. */
+        get: operations["listHome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sources/discover": {
         parameters: {
             query?: never;
@@ -185,6 +202,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sources/free": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Look for FastChannels, Pluto, and Samsung generators already on this network. */
+        get: operations["findFreeChannels"];
+        put?: never;
+        /** @description Add one generator feed as a tuner-free playlist. DRM streams are skipped. */
+        post: operations["addFreeChannels"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sources": {
         parameters: {
             query?: never;
@@ -209,6 +244,40 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listChannels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/channels/star": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Favorite ABC, CBS, FOX, and NBC. The server picks the network from the guide, then from its call-sign table. */
+        post: operations["starNetworkFavorites"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/affiliations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Call sign to network. The value is ABC, CBS, FOX, or NBC. */
+        get: operations["listAffiliations"];
         put?: never;
         post?: never;
         delete?: never;
@@ -366,6 +435,40 @@ export interface paths {
          *     A channel with no known frequency needs a tuner of its own.
          */
         post: operations["planMultiview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/signals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Last antenna reading for each channel, plus a live reading when that frequency is already tuned. */
+        get: operations["listSignals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/signals/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Tune each frequency on an idle tuner, read signal strength, and stop if someone starts watching. */
+        post: operations["checkSignals"];
         delete?: never;
         options?: never;
         head?: never;
@@ -744,6 +847,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/setup/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Progress for the setup that is finishing itself. */
+        get: operations["setupFinishStatus"];
+        put?: never;
+        /**
+         * @description After a tuner is in the lineup, finish setup on the server.
+         *     Scan when the lineup is empty, load listings, check the recordings folder,
+         *     star ABC, CBS, FOX, and NBC, time the encoder, and summarize the antenna.
+         *     Poll GET until running is false. The ready line is the summary.
+         */
+        post: operations["startSetupFinish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/storage": {
         parameters: {
             query?: never;
@@ -783,6 +909,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description Zip of recent logs, versions, doctor results, and redacted settings. Passwords and tuner DeviceAuth are left out. */
         get: operations["downloadSupport"];
         put?: never;
         post?: never;
@@ -834,6 +961,17 @@ export interface components {
             encoder?: string;
             tunerCount?: number;
             features: string[];
+            /** @description Present when a newer release is available. Omitted when this build is current or the check is off. */
+            update?: components["schemas"]["ServerUpdate"];
+        };
+        /** @description A newer Broadwave release. The message is the banner. */
+        ServerUpdate: {
+            /** @description Release tag without a leading v. */
+            version: string;
+            /** @description Release notes page. */
+            notesUrl: string;
+            /** @description Banner text, for example Broadwave 0.7 is available. */
+            message: string;
         };
         Device: {
             deviceId: string;
@@ -847,6 +985,7 @@ export interface components {
             tunerCount: number;
             priority?: number;
             lastSeen?: string;
+            note?: string;
         };
         Source: {
             /** Format: int64 */
@@ -865,8 +1004,12 @@ export interface components {
             streamFormat?: string;
             hasGuide?: boolean;
             needsTuner?: boolean;
+            /** @description When this source will be fetched again. */
             refresh?: string;
+            lastRefresh?: string;
+            /** @description Empty when the source is online. Otherwise the last error. */
             health?: string;
+            streamsInUse?: number;
             deviceId?: string;
         };
         Channel: {
@@ -892,6 +1035,8 @@ export interface components {
             artWidth?: number;
             /** @description Native logo height in pixels. Omitted until the picture has been measured. */
             artHeight?: number;
+            /** @description ABC, CBS, FOX, or NBC when the server can tell. Empty otherwise. */
+            network?: string;
         };
         ChannelPatch: {
             favorite?: boolean;
@@ -933,6 +1078,10 @@ export interface components {
             cast?: string;
             /** @description Scoreboard game this listing is. Empty when it is not a matched game. */
             gameId?: string;
+            /** @description Where this listing came from: silicondust, schedules-direct, xmltv, playlist, or broadcast. */
+            guideSource?: string;
+            guideNumber?: string;
+            channelName?: string;
             /** Format: date-time */
             start: string;
             /** Format: date-time */
@@ -984,12 +1133,28 @@ export interface components {
             symbol?: number;
             viewers?: number;
         };
+        ChannelSignal: {
+            /** Format: int64 */
+            channelId: number;
+            number: string;
+            name: string;
+            frequencyHz?: number;
+            strength?: number;
+            quality?: number;
+            symbol?: number;
+            /** @enum {string} */
+            verdict?: "Great" | "OK" | "Weak" | "Lost";
+            tip?: string;
+            live?: boolean;
+            /** Format: date-time */
+            checkedAt?: string;
+        };
         /** @description What the client can decode and display. */
         Caps: {
             /** @enum {string} */
-            platform?: "tvos" | "ios" | "ipados" | "macos" | "visionos" | "web";
-            video?: ("h264" | "hevc" | "mpeg2")[];
-            audio?: ("aac" | "ac3" | "eac3")[];
+            platform: "tvos" | "ios" | "ipados" | "macos" | "visionos" | "web";
+            video: ("h264" | "hevc" | "mpeg2")[];
+            audio: ("aac" | "ac3" | "eac3")[];
             maxHeight?: number;
             /** @enum {string} */
             network?: "lan" | "wifi" | "cellular" | "remote";
@@ -1001,6 +1166,13 @@ export interface components {
             /** @enum {string} */
             audio?: "auto" | "surround" | "stereo" | "none";
             picture?: components["schemas"]["PictureMode"];
+            /**
+             * @description Which broadcast audio mix to play. Empty is main.
+             * @enum {string}
+             */
+            track?: "main" | "language" | "described";
+            /** @description Level the volume. Off keeps the original mix. */
+            even?: boolean;
         };
         MultiviewPlan: {
             playable: {
@@ -1032,6 +1204,19 @@ export interface components {
             sourceVideo?: string;
             sourceAudio?: string;
             encoder?: string;
+            /** @description progressive, interlaced, or film */
+            scan?: string;
+            sourceWidth?: number;
+            sourceHeight?: number;
+            /** @description Broadcast frame rate, such as 59.94 */
+            sourceFps?: string;
+            outputWidth?: number;
+            outputHeight?: number;
+            outputFps?: string;
+            /** @description Encoder target, such as 14M */
+            bitrate?: string;
+            /** @description gpu or cpu when this rendition is transcoded */
+            decode?: string;
         };
         WatchSession: {
             /** Format: int64 */
@@ -1093,8 +1278,8 @@ export interface components {
         };
         Pass: {
             /** Format: int64 */
-            id?: number;
-            title?: string;
+            id: number;
+            title: string;
             /** Format: int64 */
             channelId?: number;
             kind?: string;
@@ -1171,6 +1356,24 @@ export interface components {
             /** Format: date-time */
             end: string;
         };
+        SetupStep: {
+            id: string;
+            title: string;
+            /** @enum {string} */
+            state: "waiting" | "running" | "done" | "skipped";
+            detail?: string;
+        };
+        SetupFinish: {
+            running: boolean;
+            /** @description Summary once setup has finished, such as Ready: 27 channels, guide for 21, 2 tuners, Intel GPU. */
+            ready?: string;
+            /**
+             * Format: int64
+             * @description First channel to watch. A favorite when one was starred.
+             */
+            channelId?: number;
+            steps: components["schemas"]["SetupStep"][];
+        };
         Settings: {
             /** @enum {string} */
             layout?: "auto" | "desktop" | "tv" | "phone";
@@ -1209,6 +1412,22 @@ export interface components {
              * @description When listings were last reloaded by hand. Set by the server.
              */
             lastManualGuidePull?: string;
+            /** @enum {string} */
+            hideScores?: "0" | "1";
+            /**
+             * @description 1 checks for a newer release once a day. 0 turns the check off. Missing means on.
+             * @enum {string}
+             */
+            checkUpdates?: "0" | "1";
+            sdUser?: string;
+            sdPassword?: string;
+            sdLineup?: string;
+            /** @enum {string} */
+            sdPasswordSet?: "0" | "1";
+            guideUrl?: string;
+            tmdbKey?: string;
+            /** @enum {string} */
+            tmdbKeySet?: "0" | "1";
         };
     };
     responses: {
@@ -1473,6 +1692,45 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    listHome: {
+        parameters: {
+            query?: {
+                /** @description When 1, scan again instead of using the last few seconds. */
+                fresh?: "1";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What this scan found, with one action each */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        places: {
+                            id: string;
+                            /** @enum {string} */
+                            group: "tuner" | "screen" | "server";
+                            kind: string;
+                            name: string;
+                            addr?: string;
+                            /** @enum {string} */
+                            action: "add" | "added" | "use" | "here" | "found";
+                            detail?: string;
+                        }[];
+                        /** @description Host and port other apps add as an HDHomeRun. */
+                        tunerAddress: string;
+                        /** @description True when this server is acting as an HDHomeRun. */
+                        sharing: boolean;
+                    };
+                };
+            };
+        };
+    };
     discoverSources: {
         parameters: {
             query?: never;
@@ -1532,6 +1790,64 @@ export interface operations {
             500: components["responses"]["Error"];
         };
     };
+    findFreeChannels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Feeds that answered, or a short guide when none did */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        found: {
+                            kind: string;
+                            name: string;
+                            addr: string;
+                            playlist: string;
+                            guide: string;
+                        }[];
+                        guide: string;
+                    };
+                };
+            };
+        };
+    };
+    addFreeChannels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    kind?: string;
+                    addr?: string;
+                    playlist?: string;
+                    guide?: string;
+                    name?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The source, plus a note when DRM channels were skipped */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Error"];
+        };
+    };
     listSources: {
         parameters: {
             query?: never;
@@ -1565,11 +1881,30 @@ export interface operations {
             content: {
                 "application/json": {
                     /** @enum {string} */
-                    kind: "m3u" | "link" | "folder";
+                    kind: "m3u" | "xtream" | "tvheadend" | "channels" | "threadfin" | "xteve" | "ersatztv" | "dispatcharr" | "link" | "folder";
                     name?: string;
-                    /** @description Playlist URL, stream URL, or folder path */
+                    /** @description Playlist URL, Xtream server, stream URL, or folder path */
                     url?: string;
+                    username?: string;
+                    password?: string;
                     xmltvUrl?: string;
+                    /** @description Comma-separated group names. Prefix one with - to leave it out. */
+                    groups?: string;
+                    /** @description Comma-separated channel names or tvg-ids to keep from a large playlist. */
+                    keep?: string;
+                    /** @description First channel number. 0 keeps the numbers in the playlist. */
+                    start?: number;
+                };
+                "multipart/form-data": {
+                    name?: string;
+                    groups?: string;
+                    keep?: string;
+                    xmltvUrl?: string;
+                    /**
+                     * Format: binary
+                     * @description An M3U playlist. Gzip is unpacked.
+                     */
+                    file: string;
                 };
             };
         };
@@ -1609,6 +1944,58 @@ export interface operations {
                 content: {
                     "application/json": {
                         channels: components["schemas"]["Channel"][];
+                    };
+                };
+            };
+        };
+    };
+    starNetworkFavorites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Channels it marked favorite */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        starred: {
+                            /** Format: int64 */
+                            id: number;
+                            guideName?: string;
+                            displayNumber?: string;
+                            network: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    listAffiliations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The call-sign table */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        calls: {
+                            [key: string]: string;
+                        };
                     };
                 };
             };
@@ -1886,6 +2273,53 @@ export interface operations {
                 };
             };
             400: components["responses"]["Error"];
+        };
+    };
+    listSignals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Channel signals */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        running: boolean;
+                        channels: components["schemas"]["ChannelSignal"][];
+                    };
+                };
+            };
+        };
+    };
+    checkSignals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Check started */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        running: boolean;
+                        message?: string;
+                    };
+                };
+            };
+            409: components["responses"]["Error"];
         };
     };
     listTuners: {
@@ -2612,6 +3046,46 @@ export interface operations {
                 };
             };
             400: components["responses"]["Error"];
+        };
+    };
+    setupFinishStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Setup progress */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupFinish"];
+                };
+            };
+        };
+    };
+    startSetupFinish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Setup progress */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupFinish"];
+                };
+            };
         };
     };
     getStorage: {

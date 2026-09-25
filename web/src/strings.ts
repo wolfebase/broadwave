@@ -58,6 +58,8 @@ export const copy = {
     movieArtHint: "Fills posters the guide does not include.",
     hideScores: "Hide scores",
     hideScoresHint: "A recorded game stays hidden until you watch it.",
+    updates: "Check for updates",
+    updatesHint: "Once a day. Nothing else is sent.",
     passwordTitle: "This server is for the home network",
     passwordBody: "A password is required before remote access.",
     profile: "Profile",

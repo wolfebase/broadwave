@@ -38,7 +38,7 @@ func (s *Server) serverInfo(w http.ResponseWriter, r *http.Request) {
 	if version == "" {
 		version = "dev"
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	body := map[string]any{
 		"id":         id.ID,
 		"name":       id.Name,
 		"version":    version,
@@ -46,7 +46,13 @@ func (s *Server) serverInfo(w http.ResponseWriter, r *http.Request) {
 		"encoder":    encoder,
 		"tunerCount": tuners,
 		"features":   s.features(),
-	})
+	}
+	if s.Updates != nil {
+		if notice := s.Updates.Visible(r.Context()); notice != nil {
+			body["update"] = notice
+		}
+	}
+	writeJSON(w, http.StatusOK, body)
 }
 
 func (s *Server) renameServer(w http.ResponseWriter, r *http.Request) {

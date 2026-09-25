@@ -117,6 +117,8 @@ struct RecordingsView: View {
 struct SettingsView: View {
     @Environment(AppStore.self) private var store
     @State private var showAbout = false
+    @State private var checkUpdates = true
+    @State private var updatesKnown = false
 
     var body: some View {
         @Bindable var store = store
@@ -160,11 +162,33 @@ struct SettingsView: View {
                 Text("Every screen on the same channel shows the same moment, so nobody hears the next room cheer first.")
             }
             Section {
+                Toggle("Check for updates", isOn: Binding(
+                    get: { checkUpdates },
+                    set: { on in
+                        guard updatesKnown else { return }
+                        checkUpdates = on
+                        Task {
+                            try? await store.api?.saveSettings(["checkUpdates": on ? "1" : "0"])
+                            await store.refresh(lineup: false)
+                        }
+                    }
+                ))
+                .disabled(!updatesKnown)
+            } footer: {
+                Text("Once a day. Nothing else is sent.")
+            }
+            Section {
                 Button("About") { showAbout = true }
                     .accessibilityLabel("About Broadwave")
             }
         }
         .navigationTitle("Settings")
+        .task {
+            if let values = try? await store.api?.settings() {
+                checkUpdates = values["checkUpdates"] != "0"
+                updatesKnown = true
+            }
+        }
         .navigationDestination(isPresented: $showAbout) {
             AboutView()
         }

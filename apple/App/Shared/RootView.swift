@@ -42,6 +42,7 @@ struct RootView: View {
     @State private var nowPlaying = NowPlaying()
     @State private var tab: AppTab = .home
     @State private var showSetup = false
+    @State private var dismissedUpdate = ""
 
     var body: some View {
         Group {
@@ -59,7 +60,10 @@ struct RootView: View {
         .environment(nowPlaying)
         .background(Tokens.ColorToken.canvas.ignoresSafeArea())
         .safeAreaInset(edge: .top, spacing: 0) {
-            arrivalBanner
+            VStack(spacing: 0) {
+                updateBanner
+                arrivalBanner
+            }
         }
         .task(id: store.connected) {
             guard store.connected else { return }
@@ -223,8 +227,42 @@ struct RootView: View {
         .environment(store)
         .environment(nowPlaying)
         .safeAreaInset(edge: .top, spacing: 0) {
-            arrivalBanner
+            VStack(spacing: 0) {
+                updateBanner
+                arrivalBanner
+            }
         }
+    }
+
+    @ViewBuilder
+    private var updateBanner: some View {
+        if store.connected, let update = store.info?.update, !update.message.isEmpty, dismissedUpdate != update.message {
+            HStack(alignment: .center, spacing: 12) {
+                Text(update.message)
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let url = releasePage(update.notesUrl) {
+                    Link("Release notes", destination: url)
+                        .buttonStyle(.glass)
+                }
+                Button("Not now") { dismissedUpdate = update.message }
+                    .buttonStyle(.glass)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.regularMaterial)
+            .accessibilityElement(children: .contain)
+        }
+    }
+
+    private func releasePage(_ raw: String) -> URL? {
+        guard let url = URL(string: raw) else { return nil }
+        let host = url.host?.lowercased()
+        guard url.scheme == "https", host == "github.com", url.user == nil else { return nil }
+        guard (url.query ?? "").isEmpty, (url.fragment ?? "").isEmpty else { return nil }
+        guard url.path.hasPrefix("/wolfebase/broadwave/") else { return nil }
+        guard !url.path.contains("..") else { return nil }
+        return url
     }
 
     @ViewBuilder

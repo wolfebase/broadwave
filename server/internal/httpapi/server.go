@@ -27,6 +27,7 @@ import (
 	"broadwave/internal/source"
 	"broadwave/internal/sports"
 	"broadwave/internal/store"
+	"broadwave/internal/update"
 )
 
 type Server struct {
@@ -57,6 +58,8 @@ type Server struct {
 	// GuidePull replaces the listings pull in tests. Nil calls RefreshGuide.
 	// The public XMLTV host is not deterministic, and a failed pull can echo DeviceAuth.
 	GuidePull func(ctx context.Context) (int, error)
+	// Updates is the daily release check. Nil leaves the server info without an update field.
+	Updates *update.Checker
 
 	homeMu    sync.Mutex
 	finishMu  sync.Mutex
@@ -427,6 +430,10 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		values["tmdbKeySet"] = "0"
 	}
 	delete(values, "tmdbKey")
+	delete(values, store.SettingUpdateVersion)
+	delete(values, store.SettingUpdateNotesURL)
+	delete(values, store.SettingUpdateMessage)
+	delete(values, store.SettingUpdateChecked)
 	needs, err := s.Store.ApplySetupDefault(r.Context(), s.now())
 	if err != nil {
 		writeError(w, err)
@@ -450,6 +457,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if err := s.Store.PutSettings(r.Context(), body); err != nil {
 		httpError(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	// Turning the check back on looks now. A check that already ran today is reused.
+	if body["checkUpdates"] == "1" && s.Updates != nil {
+		_, _ = s.Updates.Check(r.Context())
 	}
 	s.getSettings(w, r)
 }

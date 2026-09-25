@@ -380,6 +380,7 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		"autoplay":       true,
 		"hdhrEmulate":    true,
 		"hideScores":     true,
+		"checkUpdates":   true,
 		"setupComplete":  true,
 		"sdUser":         true,
 		"sdPassword":     true,
@@ -408,6 +409,9 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		}
 		if k == "hideScores" && v != "0" && v != "1" {
 			return fmt.Errorf("hideScores must be 0 or 1")
+		}
+		if k == "checkUpdates" && v != "0" && v != "1" {
+			return fmt.Errorf("checkUpdates must be 0 or 1")
 		}
 		if k == "guideUrl" {
 			v = strings.TrimSpace(v)

@@ -253,6 +253,13 @@ export type ServerInfo = {
   encoder?: string;
   tunerCount?: number;
   features: string[];
+  update?: ServerUpdate;
+};
+
+export type ServerUpdate = {
+  version: string;
+  notesUrl: string;
+  message: string;
 };
 
 export type Settings = {
@@ -271,6 +278,7 @@ export type Settings = {
   nextGuidePull?: string;
   lastManualGuidePull?: string;
   hideScores?: string;
+  checkUpdates?: string;
   sdUser?: string;
   sdPassword?: string;
   sdLineup?: string;
