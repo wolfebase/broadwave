@@ -3,12 +3,11 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: land **K6**, then **AS2**. HW3 paper is in this commit. App Review unchanged at 2026-09-25 20:54Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply.
+- Current task: **AS2** demo mode, after the in-flight lanes. App Review unchanged at 2026-09-25 20:54Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply.
 - Lanes (sprint until 17:30 CDT):
-  - E2 `~/.grok/worktrees/active-broadwave/subagent-01a0da64-9b3a-7ae2-902f-4d71bcd6db60` running
-  - D7 `~/.grok/worktrees/active-broadwave/subagent-01a0da64-9b3b-7340-af26-f23c5f8e7366` running
-  - K6 `~/.grok/worktrees/active-broadwave/subagent-01a0da64-9b3b-7340-af26-f24829a0c37d` ready to review. Strip inherited HomeView, APIClient, SupportURL, PROGRESS, and pb7b log deletions.
-  - HW3 paper `~/.grok/worktrees/active-broadwave/subagent-01a0da64-9b3b-7340-af26-f253b0b87091` ready to review. Same strip. Real containers stay unticked.
+  - E2 `~/.grok/worktrees/active-broadwave/subagent-01a0da64-9b3a-7ae2-902f-4d71bcd6db60` running. Strip inherited HomeView, APIClient, SupportURL, PROGRESS, and pb7b log deletions.
+  - D7 `~/.grok/worktrees/active-broadwave/subagent-01a0da64-9b3b-7340-af26-f23c5f8e7366` running. Same strip. tvOS screenshots were out of scope for the lane.
+  - K6 and HW3 paper worktrees can be removed after this commit. Their task files are on main.
   - HW2 draft `~/.grok/worktrees/active-broadwave/subagent-01a0da13-ca55-7ef2-a4e1-b521ce177ab1` (server patch applies on main; drop pb7b deletions, PROGRESS, Apple, and CSS). Review and re-test before merging.
 - Staging channel 1 was tuned at 21:22Z for AP3 and stopped. Both servers `ours:false` after. Next recording is Jeopardy on 2026-09-27.
 - Disk: checked 2026-09-25 20:54Z. `df -h ~` is 51 GB free. Above 15 GB.
@@ -283,7 +282,8 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] K3 Apple tests (Swift Testing + XCUITest)
 - [ ] K4 24 h Unraid soak
 - [ ] K5 CI expansion
-- [ ] K6 Performance budgets in CI
+- [x] K6 Performance budgets in CI. Re-ran on main: JS gzip 87300 bytes (ceiling 96419), CSS gzip 7523 bytes (ceiling 8400), `scripts/bundle-budget.sh`. Home entry `/assets/index-B6XvVAhl.js` is 279091 bytes, `scripts/home-paint.sh`. `TestPerfBudget` p95 113.584µs over 150 in-process GETs (`/api/v1/server`, `/channels`, `/schedule`), ceiling 200ms. `make check` runs both scripts after the web build. The web CI job runs them after `npm run build`. The Go CI job runs `TestPerfBudget` via `go test`. A Playwright trace of Home first paint is K6b.
+- [ ] K6b Home first paint as a Playwright trace. CI only checks that the built JS entry exists. Playwright is not a dependency.
 
 ## Phase L — Release
 - [ ] L1 Versioning + changelog
