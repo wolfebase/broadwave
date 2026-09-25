@@ -54,6 +54,9 @@ type Server struct {
 	// SetupBench and SetupSignal replace the encoder test and the antenna check in tests.
 	SetupBench  func(ctx context.Context, ffmpeg, encoder string) (float64, error)
 	SetupSignal func(ctx context.Context) (great, ok, weak, lost int, err error)
+	// GuidePull replaces the listings pull in tests. Nil calls RefreshGuide.
+	// The public XMLTV host is not deterministic, and a failed pull can echo DeviceAuth.
+	GuidePull func(ctx context.Context) (int, error)
 
 	homeMu    sync.Mutex
 	finishMu  sync.Mutex

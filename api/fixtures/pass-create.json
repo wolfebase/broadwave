@@ -1,0 +1,42 @@
+{
+  "passes": [
+    {
+      "commercials": true,
+      "episodes": "all",
+      "id": 2,
+      "keepMode": "all",
+      "kind": "team",
+      "matchKind": "team",
+      "padAfter": 2,
+      "padBefore": 1,
+      "priority": 0,
+      "title": "Chiefs"
+    },
+    {
+      "channelId": 1,
+      "commercials": true,
+      "episodes": "all",
+      "id": 1,
+      "keepMode": "all",
+      "kind": "series",
+      "matchKind": "title",
+      "padAfter": 2,
+      "padBefore": 1,
+      "priority": 0,
+      "title": "Jeopardy!"
+    },
+    {
+      "channelId": 1,
+      "commercials": true,
+      "episodes": "all",
+      "id": 3,
+      "keepMode": "all",
+      "kind": "series",
+      "matchKind": "title",
+      "padAfter": 5,
+      "padBefore": 0,
+      "priority": 0,
+      "title": "Wheel of Fortune"
+    }
+  ]
+}

@@ -329,7 +329,11 @@ func (s *Server) refreshGuide(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	n, err := s.RefreshGuide(r.Context())
+	pull := s.RefreshGuide
+	if s.GuidePull != nil {
+		pull = s.GuidePull
+	}
+	n, err := pull(r.Context())
 	if err != nil {
 		writeError(w, err)
 		return
