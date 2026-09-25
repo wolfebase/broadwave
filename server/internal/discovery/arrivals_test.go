@@ -159,3 +159,19 @@ func TestTunerLabelUsesTheFriendlyName(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+func TestTunerLabelDoesNotFollowARedirect(t *testing.T) {
+	hit := false
+	evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		_, _ = w.Write([]byte(`{"FriendlyName":"Elsewhere","DeviceID":"EEEEEEEE","BaseURL":"http://127.0.0.1","TunerCount":1}`))
+	}))
+	defer evil.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, evil.URL+"/discover.json", http.StatusFound)
+	}))
+	defer srv.Close()
+	if got := tunerLabel(context.Background(), srv.URL); got != "HDHomeRun" || hit {
+		t.Fatalf("label %q hit %v", got, hit)
+	}
+}

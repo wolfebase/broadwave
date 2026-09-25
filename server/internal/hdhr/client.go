@@ -70,11 +70,16 @@ type Client struct {
 	HTTP *http.Client
 }
 
+func refuseRedirect(*http.Request, []*http.Request) error {
+	return http.ErrUseLastResponse
+}
+
 func (c *Client) httpClient() *http.Client {
 	if c != nil && c.HTTP != nil {
 		return c.HTTP
 	}
-	return &http.Client{Timeout: 20 * time.Second}
+	// Discovery documents are on the tuner. A redirect would leave that host.
+	return &http.Client{Timeout: 20 * time.Second, CheckRedirect: refuseRedirect}
 }
 
 func (c *Client) FetchDevice(ctx context.Context, baseURL string) (Device, error) {
@@ -83,11 +88,18 @@ func (c *Client) FetchDevice(ctx context.Context, baseURL string) (Device, error
 	if err := c.getJSON(ctx, baseURL+"/discover.json", &raw); err != nil {
 		return Device{}, err
 	}
-	if raw.DeviceID == "" || raw.BaseURL == "" {
-		return Device{}, fmt.Errorf("discover.json from %s is missing a device id or base url", baseURL)
+	if raw.DeviceID == "" {
+		return Device{}, fmt.Errorf("discover.json from %s is missing a device id", baseURL)
 	}
-	if raw.LineupURL == "" {
-		raw.LineupURL = strings.TrimRight(raw.BaseURL, "/") + "/lineup.json"
+	// The document's own BaseURL and LineupURL are used only when they name
+	// the host we asked. Anything else is ignored, including a redirect target.
+	pinned := baseURL
+	if raw.BaseURL != "" && sameOrigin(raw.BaseURL, baseURL) {
+		pinned = strings.TrimRight(raw.BaseURL, "/")
+	}
+	lineup := pinned + "/lineup.json"
+	if raw.LineupURL != "" && sameOrigin(raw.LineupURL, pinned) {
+		lineup = raw.LineupURL
 	}
 	return Device{
 		FriendlyName:     raw.FriendlyName,
@@ -96,8 +108,8 @@ func (c *Client) FetchDevice(ctx context.Context, baseURL string) (Device, error
 		FirmwareVersion:  raw.FirmwareVersion,
 		UpgradeAvailable: raw.UpgradeAvailable,
 		DeviceID:         strings.ToUpper(raw.DeviceID),
-		BaseURL:          strings.TrimRight(raw.BaseURL, "/"),
-		LineupURL:        raw.LineupURL,
+		BaseURL:          pinned,
+		LineupURL:        lineup,
 		TunerCount:       raw.TunerCount,
 	}, nil
 }
@@ -208,6 +220,32 @@ func (c *Client) ScanProgress(ctx context.Context, baseURL string) (ScanProgress
 		found = raw.Progress
 	}
 	return ScanProgress{Scan: on, Found: found}, nil
+}
+
+func sameOrigin(a, b string) bool {
+	as, ah, ap, okA := originParts(a)
+	bs, bh, bp, okB := originParts(b)
+	return okA && okB && as == bs && ah == bh && ap == bp
+}
+
+func originParts(raw string) (scheme, host, port string, ok bool) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Hostname() == "" {
+		return "", "", "", false
+	}
+	scheme = strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", "", "", false
+	}
+	port = u.Port()
+	if port == "" {
+		if scheme == "https" {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+	return scheme, strings.ToLower(u.Hostname()), port, true
 }
 
 func (c *Client) getJSON(ctx context.Context, rawURL string, dest any) error {

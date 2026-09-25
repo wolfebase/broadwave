@@ -107,6 +107,10 @@ func ScanHome(ctx context.Context) []Found {
 	return found
 }
 
+func refuseHomeRedirect(*http.Request, []*http.Request) error {
+	return http.ErrUseLastResponse
+}
+
 // tunerLabel reads the name the tuner calls itself. A miss stays "HDHomeRun".
 // Device auth in discover.json is not mapped, so it is not returned.
 func tunerLabel(ctx context.Context, base string) string {
@@ -114,7 +118,7 @@ func tunerLabel(ctx context.Context, base string) string {
 	if base == "" {
 		return "HDHomeRun"
 	}
-	dev, err := (&hdhr.Client{HTTP: &http.Client{Timeout: 400 * time.Millisecond}}).FetchDevice(ctx, base)
+	dev, err := (&hdhr.Client{HTTP: &http.Client{Timeout: 400 * time.Millisecond, CheckRedirect: refuseHomeRedirect}}).FetchDevice(ctx, base)
 	if err != nil {
 		return "HDHomeRun"
 	}
@@ -133,18 +137,18 @@ func discoverTuners(ctx context.Context) []Found {
 		return nil
 	}
 	var out []Found
+	nets := LocalNets()
 	for _, reply := range replies {
 		addr := hostOnly(reply.Addr)
-		if base := hostOnly(reply.BaseURL); base != "" {
-			addr = base
-		}
+		ip := net.ParseIP(addr)
 		if reply.DeviceID == "" && addr == "" {
 			continue
 		}
 		name := "HDHomeRun"
-		if reply.BaseURL != "" {
+		// The packet's BaseURL is not fetched. Only the sender, and only on this LAN.
+		if ip != nil && ip.To4() != nil && (ip.IsLoopback() || OnLAN(addr, nets)) {
 			nameCtx, cancel := context.WithTimeout(ctx, 400*time.Millisecond)
-			name = tunerLabel(nameCtx, reply.BaseURL)
+			name = tunerLabel(nameCtx, "http://"+addr)
 			cancel()
 		}
 		out = append(out, Found{Kind: "hdhomerun", Name: name, Addr: addr, ID: reply.DeviceID})

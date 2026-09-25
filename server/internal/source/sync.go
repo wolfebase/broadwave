@@ -31,20 +31,80 @@ func Sync(ctx context.Context, st *store.Store, client *hdhr.Client, ip string) 
 		}
 		return 0, nil
 	}
+	return writeDevices(ctx, st, client, bases, true)
+}
+
+// Maintain is the unattended pass. A catalog with a tuner only refreshes
+// those tuners. An empty catalog adopts the first one that answers.
+func Maintain(ctx context.Context, st *store.Store, client *hdhr.Client, ip string) (int, error) {
+	if client == nil {
+		client = &hdhr.Client{}
+	}
+	bases, err := basesFor(ctx, ip)
+	if err != nil {
+		return 0, err
+	}
+	if len(bases) == 0 {
+		return 0, nil
+	}
+	return writeDevices(ctx, st, client, bases, false)
+}
+
+// Auto is what the process runs on its own. A configured address is added.
+// A broadcast adopts a tuner only when the catalog has none.
+func Auto(ctx context.Context, st *store.Store, client *hdhr.Client, ip string) (int, error) {
+	if strings.TrimSpace(ip) != "" {
+		return Sync(ctx, st, client, ip)
+	}
+	return Maintain(ctx, st, client, ip)
+}
+
+func writeDevices(ctx context.Context, st *store.Store, client *hdhr.Client, bases []string, addAll bool) (int, error) {
+	devices, err := st.Devices(ctx)
+	if err != nil {
+		return 0, err
+	}
+	known := map[string]bool{}
+	tuners := 0
+	for _, device := range devices {
+		known[strings.ToUpper(device.DeviceID)] = true
+		if device.TunerCount > 0 {
+			tuners++
+		}
+	}
+	tookFirst := false
 	for _, base := range bases {
 		dev, err := client.FetchDevice(ctx, base)
 		if err != nil {
-			return 0, err
+			if addAll {
+				return 0, err
+			}
+			continue
+		}
+		id := strings.ToUpper(dev.DeviceID)
+		// A box with no tuner is not the one a new install adopts.
+		if !known[id] && !addAll && (dev.TunerCount <= 0 || tuners > 0 || tookFirst) {
+			continue
 		}
 		channels, err := client.FetchLineup(ctx, dev.LineupURL)
 		if err != nil {
-			return 0, err
+			if addAll {
+				return 0, err
+			}
+			continue
 		}
 		if err := st.UpsertDevice(ctx, dev, channels); err != nil {
 			return 0, err
 		}
+		if !known[id] {
+			tookFirst = true
+			if dev.TunerCount > 0 {
+				tuners++
+			}
+		}
+		known[id] = true
 	}
-	devices, err := st.Devices(ctx)
+	devices, err = st.Devices(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -87,11 +147,7 @@ func basesFor(ctx context.Context, ip string) ([]string, error) {
 		seen[base] = true
 		bases = append(bases, base)
 	}
-	for _, reply := range found {
-		base := reply.BaseURL
-		if base == "" && reply.Addr != "" {
-			base = "http://" + reply.Addr
-		}
+	for _, base := range broadcastBases(found, discovery.LocalNets()) {
 		add(base)
 	}
 	var extra []discovery.Found
@@ -101,19 +157,54 @@ func basesFor(ctx context.Context, ip string) ([]string, error) {
 		cancel()
 		extra = <-ssdpCh
 	}
+	nets := discovery.LocalNets()
 	for _, item := range extra {
-		if item.Kind == "hdhomerun" && item.Addr != "" {
-			add("http://" + item.Addr)
+		if item.Kind != "hdhomerun" || !lanLiteral(item.Addr, nets) {
+			continue
 		}
+		add("http://" + item.Addr)
 	}
 	if len(bases) == 0 {
 		if hosts, err := net.LookupHost("hdhomerun.local"); err == nil {
 			for _, host := range hosts {
-				add("http://" + host)
+				if lanLiteral(host, nets) {
+					add("http://" + host)
+				}
 			}
 		}
 	}
 	return bases, nil
+}
+
+// broadcastBases returns http://<sender> for replies on this LAN.
+// The BaseURL inside the packet is not used.
+func broadcastBases(replies []hdhr.Reply, nets []*net.IPNet) []string {
+	var bases []string
+	seen := map[string]bool{}
+	for _, reply := range replies {
+		host := reply.Addr
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+		if !lanLiteral(host, nets) {
+			continue
+		}
+		base := "http://" + host
+		if seen[base] {
+			continue
+		}
+		seen[base] = true
+		bases = append(bases, base)
+	}
+	return bases
+}
+
+func lanLiteral(host string, nets []*net.IPNet) bool {
+	ip := net.ParseIP(host)
+	if ip == nil || ip.To4() == nil {
+		return false
+	}
+	return ip.IsLoopback() || discovery.OnLAN(host, nets)
 }
 
 func probeCompatible(ctx context.Context, host string) ([]string, error) {
