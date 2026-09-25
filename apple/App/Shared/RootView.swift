@@ -1,6 +1,9 @@
 import BroadwaveKit
 import BroadwaveUI
 import SwiftUI
+#if os(iOS)
+    import UIKit
+#endif
 
 /// Which channel is playing, and whether the player is full screen or docked.
 @MainActor
@@ -45,6 +48,27 @@ final class NowPlaying {
 enum AppTab: Hashable {
     case home, guide, search, sports, recordings, settings
 }
+
+#if os(iOS)
+    /// The iPhone tab bar floats over the page. Pull the page up so a row is not sliced behind it.
+    private extension View {
+        func phoneTabClearance() -> some View {
+            modifier(PhoneTabClearance())
+        }
+    }
+
+    private struct PhoneTabClearance: ViewModifier {
+        func body(content: Content) -> some View {
+            content.padding(.bottom, UIDevice.current.userInterfaceIdiom == .phone ? 88 : 0)
+        }
+    }
+#else
+    private extension View {
+        func phoneTabClearance() -> some View {
+            self
+        }
+    }
+#endif
 
 struct RootView: View {
     @Environment(AppStore.self) private var store
@@ -188,22 +212,22 @@ struct RootView: View {
     private var tabs: some View {
         TabView(selection: $tab) {
             Tab("Home", systemImage: "house.fill", value: AppTab.home) {
-                NavigationStack { HomeView() }
+                NavigationStack { HomeView() }.phoneTabClearance()
             }
             Tab("Guide", systemImage: "square.grid.3x3.topleft.filled", value: AppTab.guide) {
-                NavigationStack { GuideView() }
+                NavigationStack { GuideView() }.phoneTabClearance()
             }
             Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) {
-                NavigationStack { SearchView() }
+                NavigationStack { SearchView() }.phoneTabClearance()
             }
             Tab("Sports", systemImage: "sportscourt.fill", value: AppTab.sports) {
-                NavigationStack { SportsView() }
+                NavigationStack { SportsView() }.phoneTabClearance()
             }
             Tab("Recordings", systemImage: "play.rectangle.on.rectangle.fill", value: AppTab.recordings) {
-                NavigationStack { RecordingsView() }
+                NavigationStack { RecordingsView() }.phoneTabClearance()
             }
             Tab("Settings", systemImage: "gearshape.fill", value: AppTab.settings) {
-                NavigationStack { SettingsView() }
+                NavigationStack { SettingsView() }.phoneTabClearance()
             }
         }
         .tabViewStyle(.sidebarAdaptable)

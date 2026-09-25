@@ -270,12 +270,26 @@
   font-size: 22px;
 }
 
-.layout-phone .content {
-  padding-bottom: 96px;
+.shell.layout-phone:not(.immersive) {
+  height: 100%;
+  padding-bottom: calc(max(10px, env(safe-area-inset-bottom)) + 66px);
 }
 
-.layout-phone.has-mini .content {
-  padding-bottom: 180px;
+.shell.layout-phone.has-mini:not(.immersive) {
+  padding-bottom: calc(max(10px, env(safe-area-inset-bottom)) + 76px + 64px);
+}
+
+.shell.layout-phone:not(.immersive) .content {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
+
+/* The phone guide is a list. A 100vh box clips the rows that fall past it, and those rows draw under the tab bar. */
+.layout-phone .guide-page.phone {
+  height: auto;
+  flex: none;
 }
 
 /* TV: larger targets for 10-foot viewing. */

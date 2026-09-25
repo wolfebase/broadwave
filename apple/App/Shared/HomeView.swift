@@ -121,7 +121,6 @@ struct HomeView: View {
             }
             .padding(.vertical, 20)
         }
-        .scrollClipDisabled()
         .task {
             if let api = store.api {
                 teams = await (try? api.teams()) ?? []

@@ -37,11 +37,12 @@
 .hero-glow {
   position: absolute;
   inset: 0;
-  z-index: -2;
+  z-index: 1;
+  pointer-events: none;
   background:
-    radial-gradient(70% 90% at 85% 10%, color-mix(in srgb, var(--cat-color) 55%, transparent), transparent 60%),
-    radial-gradient(60% 80% at 0% 100%, color-mix(in srgb, var(--cat-color) 30%, transparent), transparent 70%),
-    linear-gradient(180deg, transparent 40%, rgba(0, 0, 0, 0.55));
+    radial-gradient(70% 90% at 85% 10%, color-mix(in srgb, var(--cat-color, var(--cat-other)) 55%, transparent), transparent 60%),
+    radial-gradient(60% 80% at 0% 100%, color-mix(in srgb, var(--cat-color, var(--cat-other)) 30%, transparent), transparent 70%),
+    linear-gradient(180deg, transparent 22%, rgba(0, 0, 0, 0.2) 48%, rgba(0, 0, 0, 0.55) 72%, rgba(0, 0, 0, 0.78) 100%);
   animation: breathe 14s ease-in-out infinite alternate;
 }
 
@@ -66,7 +67,7 @@
 
 .hero-body {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: grid;
   gap: var(--space-4);
   max-width: 760px;
