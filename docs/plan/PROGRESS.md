@@ -3,13 +3,13 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **PB review**, then **C7b**. Screenshot every screen on web (phone, desktop, TV), iPhone, iPad, and Apple TV against staging on v0.7.1. File defects as J1. Then PSIP Huffman text. App Review unchanged: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply. Production `ghcr.io/wolfebase/broadwave:0.7.1`. Next recording Jeopardy 2026-09-25 20:00 UTC. Tuners released.
-- App Review: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-24 23:55 CDT (AS1). Check it at the start of every round.
-- Production `Broadwave` on TUS `:8477` is v0.6.0. Staging `Broadwave-Staging` is on `:8490`. Next recording: Jeopardy, 2026-09-25 20:00 UTC.
+- Current task: **PB10**. The PB screenshot review is done. Playback follow-ups from that review come before C7b: recordings still bob 720p, a missed sequence header never rebuilds the graph, unscanned H.264 is treated as interlaced, a split PMT can drop the last audio track, and Apple TV display matching is a fixed 1080p59.94. App Review unchanged: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-25 05:58 UTC. The owner sends the reply. Production and staging are both `v0.7.1`. Next recording Jeopardy 2026-09-25 20:00 UTC (pad 1 min). Tuners released.
+- App Review: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-25 05:58 UTC (AS1). Check it at the start of every round.
+- Production `Broadwave` on TUS `:8477` is v0.7.1. Staging `Broadwave-Staging` is v0.7.1 on `:8490`. Next recording: Jeopardy, 2026-09-25 20:00 UTC.
 - The repo is `~/Projects/active/broadwave`.
 
 ## Read first (reviews 2–4; details in MASTER_PLAN 0.1a–0.1d)
-- **Order:** U1 → PB → C7b, S8b, HOME → MV, AP, AS2, AS3 → **App Store update 1.1** → OPS, LEGAL1, AS6 → HW → P2b–P8 … (MASTER_PLAN section 4).
+- **Order:** U1 → PB → PB10–PB16 → C7b, S8b, HOME → MV, AP, AS2, AS3 → **App Store update 1.1** → OPS, LEGAL1, AS6 → HW → P2b–P8 … (MASTER_PLAN section 4).
 - **Evidence:** every tick lists the proof for each Accept bullet (numbers, test names, screenshot paths). A shortfall becomes a new task line.
 - **Verify like a person on staging:** Chrome through `playwright-cli --browser=chrome` at three sizes, plus the "Broadwave Staging iPhone" and "Broadwave Staging TV" simulators. Measure the output. Production changes only in phase deploys.
 - **Checks:** `make check` mirrors CI (gofmt, vet, tests, lint, API drift, relay smoke, retired-name guard). CI also builds the image. Run `docker build --target web` when web imports change.
@@ -58,6 +58,14 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] PB5c Keep Apple HEVC on the iGPU. The VAAPI packed-header buffer is 1024 bytes. An OTA A/53 caption SEI overflows it (`Access unit too large: 8192 < N`, errno 28) and `hevc_vaapi` exits, so the rendition restarted on libx265. `-sei 0` skips that header. The software fallback is unchanged (`TestStreamFacts` still expects libx265). `TestHEVCRenditionUsesHVC1`. Staging, three `1080.copy.broadcast.hevc` starts, no libx265: channel 1 (4.1) panel `hevc_vaapi` GPU 1280×720 59.94, and at 30s `hvc1` 360 frames, 0 decode errors, process still `-sei 0`; a second channel 1 start the same; channel 2 (5.1) panel `hevc_vaapi` GPU 1920×1080 59.94 interlaced, still `-sei 0` at 12s. Logs: 0 "Access unit too large", 0 libx265, 0 "Encode failed". Tuners released. Note in `docs/dev-lab.md`.
 - [x] Phase PB deploy: tag v0.7.1, Unraid smoke on jellyfin-ffmpeg 7.1.4, TestFlight build 147. Production `/api/v1/server` is `v0.7.1`, encoder `h264_vaapi`. Channel 1: 1280x720 59.94, segment 2.002s, 240 frames, 0 decode errors, ffmpeg command `h264_vaapi -sei 0`, tuner released. `v0.7.0` had fallen back to software after "Access unit too large". Catalog backups `broadwave-20260925-003303.db` (before 0.7.0) and `broadwave-20260925-005221.db` (before 0.7.1). Five recordings kept. Log in UNRAID_LOG. TestFlight 147 uploaded for iOS and tvOS (`Uploaded Broadwave`, `Uploaded BroadwaveTV`). GitHub releases exist for v0.1.0 through v0.7.1.
 - [x] PB9 `scripts/picture-lab.sh` on TUS at real time. Staging capture of channel 1 (12 s, tuner released, no recording within 20 min). `bw-lab-field-deint` 1280x720 119.88 fps, 959 frames, 0 decode errors, 0.993x, CPU 21.34%. `bw-lab-progressive-scale` 1280x720 59.94 fps, 479 frames, 0 decode errors, 0.993x, CPU 19.96%. VMAF n/a: image ffmpeg has no libvmaf (PB5). Table `docs/lab/picture-lab.md`. Stills `docs/lab/runs/latest/stills/`.
+- [x] PB review (2026-09-25). Every screen on staging v0.7.1: web at 390×844, 1440×900, and 1920×1080, plus iPhone, iPad, and Apple TV. Shots in `.evidence/pb-review/` (not committed). Channel 1 played on all three web sizes (1280×720, readyState 4, Synced/Live; phone dropped 9/1463, desktop 20/1768, TV 446/1313) and on the three simulators with a real picture. Desktop 2-up of channels 1 and 3 showed both pictures at 960×540. Tuners `ours:false` after. `make check` green. Fixes in this commit: tvOS guide channel column (4.1 WDAF-DT, 5.1 KCTVDT1, 9.1 KMBC-HD visible in `.evidence/pb-review/fix-tv-guide-left.jpg`), favicon (Vite `GET /favicon.ico` 200), phone recordings title and buttons (`.evidence/pb-review/fix-web-phone-recordings.jpg`), sports chips and card actions (`.evidence/pb-review/fix-web-phone-sports.jpg`), tuner rows read "1 Free Idle", phone player title "The Goldbergs" on its own line (`.evidence/pb-review/fix-web-phone-watch.jpg`). Web fixes were checked with Vite against the staging API; the staging binary is still v0.7.1 until the next staging deploy.
+- [ ] PB10 Recordings and library playback use the real scan type. `fileGraph` never sets Progressive or Film, so a 720p60 recording is field-bobbed. Accept: a progressive recording stays 1280×720 at its native rate, with a regression test.
+- [ ] PB11 A sequence header that misses the 800 ms window still corrects the running graph. Today the probe result is stored and the ffmpeg graph keeps field-deinterlacing, and a stored "progressive" skips the scan that would have found film.
+- [ ] PB12 Unscanned H.264, including HLS sources, is not assumed interlaced. A progressive 30p or 60p playlist must not be doubled for the life of the channel.
+- [ ] PB13 A PMT that spans TS packets keeps every audio elementary stream. The pointer-field tail is dropped today, so SAP or described video can fall off.
+- [ ] PB14 Apple TV display criteria follow the asset's frame size and rate, and clear when the player closes. `matchRate` currently runs once as 1920×1080 and can stick a 24p film at 59.94.
+- [ ] PB15 A VAAPI encode that dies after 8 seconds restarts cleanly. The tuner must not stay held, and a software fallback must not reuse a broken `init.mp4`.
+- [ ] PB16 A second same-language complete main is not labeled Described video. Passthrough should keep the real 5.1 as Main.
 
 ## Phase HOME — The house sets itself up
 - [ ] HOME1 Your home: tuners, servers (Plex, Jellyfin, Emby, Channels), and screens (Apple TV, Chromecast, Fire TV, smart TVs, AirPlay), one action each
@@ -223,8 +231,17 @@ Tick items as they are verified and committed, in the same commit as the work (`
   - 2026-09-24 web Home: only the tuned channel's "On now" card has a picture; the others are mostly empty space. A faint oversized channel-number outline sits over the hero image.
   - 2026-09-24 web: no favicon (404). Home asks for `/channels/{id}/frame` on untuned channels and logs a 404 for each; the API should say which channels have a frame.
   - 2026-09-24 iPhone portrait player: a small band of video under unlabeled buttons, with no channel or program info.
-- 2026-09-25 iPad guide: the channel column was off screen on open, and four channels left the rest of the iPad empty. The column stays pinned, and a short lineup grows its rows (`.evidence/ipad-guide-before-small.jpg`, `.evidence/ipad-guide-after-small.jpg`). The store shot is regenerated in AS3.
-- PB phase screenshot pass still due: every screen on web at phone, desktop, and TV, plus iPhone, iPad, and Apple TV, against staging on v0.7.1.
+- 2026-09-25 iPad guide: the channel column was off screen on open, and four channels left the rest of the iPad empty. The column stays pinned, and a short lineup grows its rows (`.evidence/ipad-guide-before-small.jpg`, `.evidence/ipad-guide-after-small.jpg`). Confirmed again on staging (`.evidence/pb-review/apple-ipad-guide.jpg`). The store shot is regenerated in AS3.
+- 2026-09-25 tvOS guide: same class of bug, fixed in the PB review. The channel column is pinned beside the scroller. `.evidence/pb-review/fix-tv-guide-left.jpg` shows 4.1 WDAF-DT, 5.1 KCTVDT1, 9.1 KMBC-HD.
+- 2026-09-25 PB review leftovers (shots in `.evidence/pb-review/`):
+  - iPhone settings: the floating tab bar covers the Whole-Home Sync explanation (`apple-iphone-settings.jpg`).
+  - iPad player: picture is up, with no channel number or program title, and the leftmost control is clipped (`apple-ipad-player.jpg`). iPhone portrait player is still the thin band already listed (AP2).
+  - A program only a few minutes wide stacks its title into a column of letters on the iPad guide (5.1 and 9.1).
+  - Web settings on a phone clips the playlist address and the group field (`web-phone-settings-bottom.jpg`). The Layout control sits under the Storage heading.
+  - Schedule prints two "Schedule" headings, and an activity line has no space ("4:24 PMSporting is on at 6:30 PM.").
+  - Diagnostics says the guide refreshes at a time that has already passed, and "9/8 channels listed".
+  - Phone watch failed once with a playlist 404 (`1080.aac2.broadcast`), then played on retry. TV layout dropped 446/1313 frames in one ~21 s sample.
+  - Complete recordings on staging show "0 B", and `/media/poster/{id}` is 404, so library art is a blank rectangle. Favicon 404 is fixed in this commit; staging serves it on the next deploy.
 - [ ] J2 Legacy web screens redesigned
 - [ ] J3 Motion system
 - [ ] J4 Accessibility audit

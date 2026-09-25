@@ -81,6 +81,21 @@
   text-overflow: ellipsis;
 }
 
+.layout-phone .stage-top {
+  flex-wrap: wrap;
+}
+
+.layout-phone .stage-title {
+  flex: 1 1 100%;
+  order: 3;
+}
+
+.layout-phone .stage-title h2 {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+}
+
 .stage-score {
   margin: 2px 0 0;
   font-variant-numeric: tabular-nums;

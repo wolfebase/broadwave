@@ -546,6 +546,13 @@ html[data-layout="tv"] :focus-visible {
   padding: var(--space-4) var(--space-5);
 }
 
+.source-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+}
+
 .show-grid,
 .device-grid,
 .source-list {
@@ -562,6 +569,34 @@ html[data-layout="tv"] :focus-visible {
   grid-template-columns: 160px minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
+}
+
+.media-card > div {
+  min-width: 0;
+}
+
+.media-card strong {
+  display: block;
+}
+
+.ch-tags {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote-size);
+}
+
+.layout-phone .media-card {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.layout-phone .poster-wrap {
+  width: 100%;
+}
+
+.page-header .guide-chips {
+  flex-wrap: wrap;
+  overflow: visible;
 }
 
 .poster-wrap {
