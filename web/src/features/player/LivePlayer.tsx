@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { useData } from "../../app/data";
 import { useLayout } from "../../app/layout";
 import { navigate } from "../../app/router";
@@ -65,9 +65,10 @@ export function LivePlayer({
   const session = stream.session;
   const error = stream.error;
   const sync: SyncStatus = stream.syncStatus;
+  const [panel, setPanel] = useState<"none" | "guide" | "info" | "sync">("none");
+  const playback = usePlaybackStats(videoRef, panel === "info");
   const [behind, setBehind] = useState(0);
   const [span, setSpan] = useState({ at: 0, len: 1 });
-  const [panel, setPanel] = useState<"none" | "guide" | "info" | "sync">("none");
   const matchedRow = Math.max(0, channels.findIndex((c) => c.id === channel.id));
   const [guideRow, setGuideRow] = useState(matchedRow);
   const [rowFor, setRowFor] = useState(`${channel.id}:${channels.map((c) => c.id).join(",")}`);
@@ -343,22 +344,22 @@ export function LivePlayer({
             <dl>
               <dt>Playing</dt>
               <dd>{session.stream.reason}</dd>
-              <dt>Picture</dt>
-              <dd>{session.stream.video === "copy" ? `Original ${session.stream.sourceVideo ?? ""}` : `${session.stream.video}p ${session.stream.mode ?? ""} from ${session.stream.sourceVideo ?? "broadcast"}`}</dd>
+              <dt>Source</dt>
+              <dd>{sourceLine(session.stream)}</dd>
+              <dt>Output</dt>
+              <dd>{outputLine(session.stream, playback)}</dd>
+              <dt>Dropped frames</dt>
+              <dd>{playback.total > 0 ? `${playback.dropped} of ${playback.total}` : "0"}</dd>
+              <dt>Buffer</dt>
+              <dd>{`${playback.buffer.toFixed(1)}s`}</dd>
               <dt>Sound</dt>
               <dd>{session.stream.audio === "copy" ? `Original ${session.stream.sourceAudio ?? ""}` : session.stream.audio === "aac6" ? "5.1 AAC" : "Stereo AAC"}</dd>
-              {session.stream.encoder ? (
-                <>
-                  <dt>Encoder</dt>
-                  <dd>{session.stream.encoder}</dd>
-                </>
-              ) : null}
               <dt>Tuner</dt>
               <dd>{session.shared ? `Shared · ${session.viewers} watching` : "This screen only"}</dd>
               <dt>Behind live</dt>
               <dd>{formatBehind(behind)}</dd>
               <dt>Sync</dt>
-              <dd>{sync.state === "off" ? "Off" : `${sync.state} · ${Math.round(sync.drift)} ms`}</dd>
+              <dd>{syncLine(sync)}</dd>
             </dl>
           ) : (
             <p>Tuning…</p>
@@ -396,6 +397,87 @@ function OptionRow<T extends string>({ label, value, options, labels, onChange }
       </div>
     </div>
   );
+}
+
+type PictureStats = { width: number; height: number; dropped: number; total: number; buffer: number; fps: number };
+
+function usePlaybackStats(videoRef: RefObject<HTMLVideoElement | null>, on: boolean): PictureStats {
+  const [stats, setStats] = useState<PictureStats>({ width: 0, height: 0, dropped: 0, total: 0, buffer: 0, fps: 0 });
+  const prev = useRef({ frames: 0, at: 0 });
+  useEffect(() => {
+    if (!on) return;
+    const id = window.setInterval(() => {
+      const video = videoRef.current;
+      if (!video) return;
+      const quality = video.getVideoPlaybackQuality?.();
+      const dropped = quality?.droppedVideoFrames ?? 0;
+      const total = quality?.totalVideoFrames ?? 0;
+      const buffer = bufferedAhead(video);
+      const now = performance.now();
+      let fps = 0;
+      if (prev.current.at > 0 && now - prev.current.at > 400 && total >= prev.current.frames) {
+        fps = ((total - prev.current.frames) * 1000) / (now - prev.current.at);
+      }
+      prev.current = { frames: total, at: now };
+      setStats({ width: video.videoWidth, height: video.videoHeight, dropped, total, buffer, fps });
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [videoRef, on]);
+  return stats;
+}
+
+function sourceLine(stream: { sourceVideo?: string; sourceWidth?: number; sourceHeight?: number; scan?: string; sourceFps?: string }) {
+  return joinFacts([stream.sourceVideo, sizeText(stream.sourceWidth, stream.sourceHeight), scanWord(stream.scan), stream.sourceFps]);
+}
+
+function outputLine(stream: { encoder?: string; outputWidth?: number; outputHeight?: number; outputFps?: string; bitrate?: string; decode?: string; video?: string }, picture: PictureStats) {
+  const width = picture.width || stream.outputWidth;
+  const height = picture.height || stream.outputHeight;
+  const fps = stream.outputFps || (picture.fps > 1 ? picture.fps.toFixed(2) : "");
+  const decode = stream.decode === "gpu" ? "GPU" : stream.decode === "cpu" ? "CPU" : stream.video === "copy" ? "Direct" : "";
+  return joinFacts([sizeText(width, height), fps, stream.encoder, bitrateText(stream.bitrate), decode]);
+}
+
+function sizeText(width?: number, height?: number) {
+  return width && height ? `${width}×${height}` : "";
+}
+
+function scanWord(scan?: string) {
+  if (scan === "progressive") return "Progressive";
+  if (scan === "interlaced") return "Interlaced";
+  if (scan === "film") return "Film";
+  return "";
+}
+
+function bitrateText(rate?: string) {
+  if (!rate) return "";
+  if (rate.endsWith("M")) return `${rate.slice(0, -1)} Mb/s`;
+  if (rate.endsWith("k")) return `${rate.slice(0, -1)} kb/s`;
+  return rate;
+}
+
+function joinFacts(parts: Array<string | undefined>) {
+  const line = parts.filter(Boolean).join(" · ");
+  return line || "Waiting";
+}
+
+function bufferedAhead(video: HTMLVideoElement) {
+  const t = video.currentTime;
+  let ahead = 0;
+  for (let i = 0; i < video.buffered.length; i++) {
+    const start = video.buffered.start(i);
+    const end = video.buffered.end(i);
+    if (start <= t + 0.05 && end >= t) {
+      ahead = Math.max(ahead, end - t);
+    }
+  }
+  return Math.max(0, ahead);
+}
+
+function syncLine(sync: SyncStatus) {
+  if (sync.state === "off") return "Off";
+  const word = sync.state.charAt(0).toUpperCase() + sync.state.slice(1);
+  return `${word} · ${Math.round(sync.drift)} ms`;
 }
 
 function formatBehind(seconds: number) {

@@ -45,6 +45,17 @@
   opacity: 0;
 }
 
+/* An open guide or stream panel is why the chrome is up. The rest still fades. */
+.stage.idle .stage-hud:has(.info-panel, .mini-guide) {
+  opacity: 1;
+  background: none;
+}
+
+.stage.idle .stage-hud:has(.info-panel, .mini-guide) > :not(.info-panel, .mini-guide) {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .stage.idle {
   cursor: none;
 }

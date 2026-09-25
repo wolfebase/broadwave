@@ -38,14 +38,23 @@ type Tuner struct {
 
 // StreamInfo explains what a viewer is getting and why.
 type StreamInfo struct {
-	Rendition   string `json:"rendition"`
-	Video       string `json:"video"`
-	Audio       string `json:"audio"`
-	Mode        string `json:"mode,omitempty"`
-	Reason      string `json:"reason"`
-	SourceVideo string `json:"sourceVideo,omitempty"`
-	SourceAudio string `json:"sourceAudio,omitempty"`
-	Encoder     string `json:"encoder,omitempty"`
+	Rendition    string `json:"rendition"`
+	Video        string `json:"video"`
+	Audio        string `json:"audio"`
+	Mode         string `json:"mode,omitempty"`
+	Reason       string `json:"reason"`
+	SourceVideo  string `json:"sourceVideo,omitempty"`
+	SourceAudio  string `json:"sourceAudio,omitempty"`
+	Encoder      string `json:"encoder,omitempty"`
+	Scan         string `json:"scan,omitempty"`
+	SourceWidth  int    `json:"sourceWidth,omitempty"`
+	SourceHeight int    `json:"sourceHeight,omitempty"`
+	SourceFPS    string `json:"sourceFps,omitempty"`
+	OutputWidth  int    `json:"outputWidth,omitempty"`
+	OutputHeight int    `json:"outputHeight,omitempty"`
+	OutputFPS    string `json:"outputFps,omitempty"`
+	Bitrate      string `json:"bitrate,omitempty"`
+	Decode       string `json:"decode,omitempty"`
 }
 
 type Session struct {
@@ -114,19 +123,25 @@ type Hub struct {
 }
 
 type mux struct {
-	freq     int
-	tuner    int
-	host     string
-	device   string
-	body     io.ReadCloser
-	input    string
-	cancel   context.CancelFunc
-	feeds    map[string]*feed
-	pipes    []*pipeSub
-	programs []hdhr.Program
-	pipeMu   sync.Mutex
-	frames   sync.Once
-	psip     psip.Harvester
+	freq        int
+	tuner       int
+	host        string
+	device      string
+	body        io.ReadCloser
+	input       string
+	cancel      context.CancelFunc
+	feeds       map[string]*feed
+	pipes       []*pipeSub
+	programs    []hdhr.Program
+	pipeMu      sync.Mutex
+	frames      sync.Once
+	psip        psip.Harvester
+	picMu       sync.Mutex
+	picBuf      []byte
+	picDone     bool
+	picDirty    bool
+	picPrograms []int
+	pictures    map[int]notedPicture
 }
 
 // feed is one channel on a tuned frequency.
@@ -283,6 +298,21 @@ func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition) (Sessi
 	return h.sessionLocked(f, r), nil
 }
 
+// Session returns the live session for a channel that is already playing.
+func (h *Hub) Session(channelID int64, rendition string) (Session, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	f := h.channels[channelID]
+	if f == nil {
+		return Session{}, false
+	}
+	r := f.renditions[rendition]
+	if r == nil {
+		return Session{}, false
+	}
+	return h.sessionLocked(f, r), true
+}
+
 // ensureFeedLocked returns the tuned feed for a channel, tuning if needed. It does
 // not start ffmpeg; renditions and recordings attach to the feed on demand.
 func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stream *http.Response) (*feed, error) {
@@ -431,6 +461,7 @@ func (h *Hub) addFeedLocked(m *mux, ch store.SourceChannel) *feed {
 	}
 	m.feeds[ch.GuideNumber] = f
 	h.channels[ch.ID] = f
+	m.noteProgram(f.program)
 	if m.input == "" && (ch.FieldOrder == "" || len(f.tracks) == 0) {
 		h.learnScanLocked(m, f)
 	}
@@ -865,6 +896,85 @@ func (h *Hub) attachPipeLocked(m *mux, w io.WriteCloser) *pipeSub {
 // readLoop is the only reader of the tuner. A slow subscriber loses chunks
 // rather than stalling the tuner for everyone else. When the tuner itself
 // ends, the mux is released so the tuner does not stay busy.
+//
+// observeMuxPicture must not take h.mu. learnScanLocked holds that lock while
+// it waits for these same packets to reach its subscriber.
+func (h *Hub) observeMuxPicture(m *mux, chunk []byte) {
+	m.observePicture(chunk)
+}
+
+// noteProgram remembers a program whose picture size the panel should learn.
+// program 0 is the single program in a filtered stream.
+func (m *mux) noteProgram(program int) {
+	if program < 0 {
+		return
+	}
+	m.picMu.Lock()
+	defer m.picMu.Unlock()
+	for _, have := range m.picPrograms {
+		if have == program {
+			return
+		}
+	}
+	m.picPrograms = append(m.picPrograms, program)
+	m.picDirty = true
+	m.parseLocked(program)
+}
+
+func (m *mux) observePicture(chunk []byte) {
+	m.picMu.Lock()
+	defer m.picMu.Unlock()
+	if m.picDone {
+		return
+	}
+	// A sequence header rides the GOP, which can sit half a second into the mux.
+	if len(m.picBuf) < 4<<20 {
+		m.picBuf = append(m.picBuf, chunk...)
+	}
+	full := len(m.picBuf) >= 4<<20
+	if !m.picDirty && !full && !m.picturePendingLocked() {
+		return
+	}
+	m.picDirty = false
+	for _, program := range m.picPrograms {
+		m.parseLocked(program)
+	}
+	// The window stays open after the first program so a later subchannel on
+	// this frequency can still be measured. It closes once the capture is full.
+	if full {
+		m.picDone = true
+	}
+}
+
+func (m *mux) picturePendingLocked() bool {
+	for _, program := range m.picPrograms {
+		if _, ok := m.pictures[program]; !ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *mux) parseLocked(program int) {
+	if m.pictures == nil {
+		m.pictures = map[int]notedPicture{}
+	}
+	if _, ok := m.pictures[program]; ok {
+		return
+	}
+	facts, ok := pictureFacts(m.picBuf, program)
+	if ok {
+		m.pictures[program] = facts
+	}
+}
+
+func (m *mux) picture(program int) (notedPicture, bool) {
+	m.picMu.Lock()
+	defer m.picMu.Unlock()
+	p, ok := m.pictures[program]
+	return p, ok && p.Width > 0
+}
+
 func (h *Hub) readLoop(ctx context.Context, m *mux) {
 	buf := make([]byte, 188*49)
 	for {
@@ -878,6 +988,7 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 				freq, guide := m.freq, g
 				go h.OnPSIP(freq, guide)
 			}
+			h.observeMuxPicture(m, chunk)
 			for _, sub := range m.snapshot() {
 				select {
 				case sub.ch <- chunk:
@@ -935,10 +1046,24 @@ func (h *Hub) sessionLocked(f *feed, r *rendition) Session {
 	}
 	if spec.Video != "copy" {
 		info.Encoder = encoderOf(h.Encoder, spec)
-		if r.fallback {
-			info.Encoder = "libx264"
-		}
 	}
+	var noted notedPicture
+	if m != nil {
+		noted, _ = m.picture(f.program)
+	}
+	facts := streamFacts(f.source, f.channel.FieldOrder, spec, info.Encoder, h.deintFor(spec.Mode, f.source.VideoCodec), r.fallback, noted)
+	if facts.Encoder != "" {
+		info.Encoder = facts.Encoder
+	}
+	info.Scan = facts.Scan
+	info.SourceWidth = facts.SourceWidth
+	info.SourceHeight = facts.SourceHeight
+	info.SourceFPS = facts.SourceFPS
+	info.OutputWidth = facts.OutputWidth
+	info.OutputHeight = facts.OutputHeight
+	info.OutputFPS = facts.OutputFPS
+	info.Bitrate = facts.Bitrate
+	info.Decode = facts.Decode
 	legacyAudio := "stereo"
 	if spec.Audio == "aac6" || spec.Audio == "copy" {
 		legacyAudio = "surround"

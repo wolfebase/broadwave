@@ -546,6 +546,225 @@ type scanBuf struct {
 	wake chan struct{}
 }
 
+// pictureFacts reads the broadcast width, height, and frame rate from a
+// sequence header or an H.264 SPS. ok is false until that header is present.
+func pictureFacts(data []byte, program int) (notedPicture, bool) {
+	if i := bytes.IndexByte(data, 0x47); i > 0 && i < 188 {
+		data = data[i:]
+	}
+	_, videoPID, kind := programVideo(data, program)
+	if videoPID == 0 {
+		return notedPicture{}, false
+	}
+	es := elementary(data, videoPID)
+	switch kind {
+	case streamMPEG2:
+		return mpeg2Picture(es)
+	case streamH264:
+		return h264Picture(es)
+	default:
+		return notedPicture{}, false
+	}
+}
+
+func mpeg2Picture(es []byte) (notedPicture, bool) {
+	for i := 0; i+7 < len(es); i++ {
+		if es[i] != 0 || es[i+1] != 0 || es[i+2] != 1 || es[i+3] != 0xB3 {
+			continue
+		}
+		w := int(es[i+4])<<4 | int(es[i+5]>>4)
+		h := int(es[i+5]&0x0f)<<8 | int(es[i+6])
+		// aspect_ratio is the high nibble; frame_rate_code is the low nibble.
+		fps := mpeg2Rate(es[i+7] & 0x0f)
+		if w >= 16 && h >= 16 && w <= 7680 && h <= 4320 {
+			return notedPicture{Width: w, Height: h, FPS: fps}, true
+		}
+	}
+	return notedPicture{}, false
+}
+
+func mpeg2Rate(code byte) string {
+	switch code {
+	case 1:
+		return "23.976"
+	case 2:
+		return "24"
+	case 3:
+		return "25"
+	case 4:
+		return "29.97"
+	case 5:
+		return "30"
+	case 6:
+		return "50"
+	case 7:
+		return "59.94"
+	case 8:
+		return "60"
+	default:
+		return ""
+	}
+}
+
+func h264Picture(es []byte) (notedPicture, bool) {
+	for i := 0; i+5 < len(es); i++ {
+		if es[i] != 0 || es[i+1] != 0 || es[i+2] != 1 {
+			continue
+		}
+		if es[i+3]&0x1f != 7 {
+			continue
+		}
+		w, h, ok := spsSize(unescape(es[i+4:]))
+		if ok && w >= 16 && h >= 16 && w <= 7680 && h <= 4320 {
+			return notedPicture{Width: w, Height: h}, true
+		}
+	}
+	return notedPicture{}, false
+}
+
+// spsSize walks an H.264 SPS to the cropped display size. A crop that does not
+// parse returns nothing: 1080-line video is stored as 1088 and then cropped.
+func spsSize(rbsp []byte) (int, int, bool) {
+	r := &bitReader{b: rbsp}
+	profile, ok := r.u(8)
+	if !ok {
+		return 0, 0, false
+	}
+	if _, ok = r.u(8); !ok {
+		return 0, 0, false
+	}
+	if _, ok = r.u(8); !ok {
+		return 0, 0, false
+	}
+	if _, ok = r.ue(); !ok {
+		return 0, 0, false
+	}
+	chroma := uint(1)
+	if highProfile(profile) {
+		chroma, ok = r.ue()
+		if !ok {
+			return 0, 0, false
+		}
+		if chroma == 3 {
+			if _, ok = r.u(1); !ok {
+				return 0, 0, false
+			}
+		}
+		if _, ok = r.ue(); !ok {
+			return 0, 0, false
+		}
+		if _, ok = r.ue(); !ok {
+			return 0, 0, false
+		}
+		if _, ok = r.u(1); !ok {
+			return 0, 0, false
+		}
+		present, ok := r.u(1)
+		if !ok {
+			return 0, 0, false
+		}
+		if present == 1 && !skipScaling(r, chroma) {
+			return 0, 0, false
+		}
+	}
+	if _, ok = r.ue(); !ok {
+		return 0, 0, false
+	}
+	poc, ok := r.ue()
+	if !ok {
+		return 0, 0, false
+	}
+	switch poc {
+	case 0:
+		if _, ok = r.ue(); !ok {
+			return 0, 0, false
+		}
+	case 1:
+		if _, ok = r.u(1); !ok {
+			return 0, 0, false
+		}
+		if _, ok = r.se(); !ok {
+			return 0, 0, false
+		}
+		if _, ok = r.se(); !ok {
+			return 0, 0, false
+		}
+		n, ok := r.ue()
+		if !ok {
+			return 0, 0, false
+		}
+		for i := uint(0); i < n; i++ {
+			if _, ok = r.se(); !ok {
+				return 0, 0, false
+			}
+		}
+	}
+	if _, ok = r.ue(); !ok {
+		return 0, 0, false
+	}
+	if _, ok = r.u(1); !ok {
+		return 0, 0, false
+	}
+	mbW, ok := r.ue()
+	if !ok {
+		return 0, 0, false
+	}
+	mbH, ok := r.ue()
+	if !ok {
+		return 0, 0, false
+	}
+	frame, ok := r.u(1)
+	if !ok {
+		return 0, 0, false
+	}
+	w := int(mbW+1) * 16
+	h := int(mbH+1) * 16
+	if frame == 0 {
+		h *= 2
+		if _, ok = r.u(1); !ok { // mb_adaptive_frame_field_flag
+			return 0, 0, false
+		}
+	}
+	if _, ok = r.u(1); !ok { // direct_8x8_inference_flag
+		return 0, 0, false
+	}
+	crop, ok := r.u(1)
+	if !ok {
+		return 0, 0, false
+	}
+	if crop == 1 {
+		left, ok1 := r.ue()
+		right, ok2 := r.ue()
+		top, ok3 := r.ue()
+		bottom, ok4 := r.ue()
+		if !ok1 || !ok2 || !ok3 || !ok4 {
+			return 0, 0, false
+		}
+		ux, uy := cropUnits(chroma, frame)
+		w -= int(left+right) * ux
+		h -= int(top+bottom) * uy
+	}
+	if w < 16 || h < 16 {
+		return 0, 0, false
+	}
+	return w, h, true
+}
+
+// cropUnits is the H.264 frame-crop sample size for a chroma format.
+func cropUnits(chroma, frame uint) (int, int) {
+	if chroma == 0 {
+		return 1, 2 - int(frame)
+	}
+	subW, subH := 1, 1
+	switch chroma {
+	case 1:
+		subW, subH = 2, 2
+	case 2:
+		subW, subH = 2, 1
+	}
+	return subW, subH * (2 - int(frame))
+}
+
 func (s *scanBuf) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	s.b = append(s.b, p...)

@@ -1,6 +1,7 @@
 package live
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -169,6 +170,72 @@ func TestHEVCRenditionUsesHVC1(t *testing.T) {
 	}
 	if strings.Contains(line, "hwupload") || strings.Contains(line, "h264_vaapi") {
 		t.Fatalf("hevc gpu path: %s", line)
+	}
+}
+
+func TestStreamFacts(t *testing.T) {
+	noted := notedPicture{Width: 1280, Height: 720, FPS: "59.94"}
+	prog := streamFacts(Source{VideoCodec: "MPEG2", Progressive: true}, "progressive", Rendition{Video: "1080", Audio: "aac2"}, "h264_vaapi", "motion_adaptive", false, noted)
+	if prog.Scan != "progressive" || prog.OutputWidth != 1280 || prog.OutputHeight != 720 || prog.OutputFPS != "59.94" || prog.Bitrate != "10M" || prog.Decode != "gpu" {
+		t.Fatalf("720p: %+v", prog)
+	}
+	lace := streamFacts(Source{VideoCodec: "MPEG2"}, "tt", Rendition{Video: "1080", Audio: "aac2"}, "h264_vaapi", "motion_adaptive", false, notedPicture{Width: 1920, Height: 1080, FPS: "29.97"})
+	if lace.Scan != "interlaced" || lace.OutputFPS != "59.94" || lace.Bitrate != "14M" || lace.Decode != "gpu" || lace.OutputWidth != 1920 {
+		t.Fatalf("1080i: %+v", lace)
+	}
+	soft := streamFacts(Source{VideoCodec: "MPEG2"}, "tt", Rendition{Video: "1080", Audio: "aac2"}, "libx264", "", false, notedPicture{Width: 1920, Height: 1080, FPS: "29.97"})
+	if soft.Decode != "cpu" || soft.OutputFPS != "59.94" {
+		t.Fatalf("software: %+v", soft)
+	}
+	fell := streamFacts(Source{VideoCodec: "MPEG2"}, "tt", Rendition{Video: "1080", Audio: "aac2"}, "h264_vaapi", "motion_adaptive", true, notedPicture{Width: 1920, Height: 1080, FPS: "29.97"})
+	if fell.Decode != "cpu" || fell.Encoder != "libx264" {
+		t.Fatalf("fallback stays on the CPU: %+v", fell)
+	}
+	hevcFell := streamFacts(Source{VideoCodec: "MPEG2"}, "tt", Rendition{Video: "1080", Audio: "aac2", Codec: "hevc"}, "h264_vaapi", "motion_adaptive", true, notedPicture{Width: 1920, Height: 1080, FPS: "29.97"})
+	if hevcFell.Decode != "cpu" || hevcFell.Encoder != "libx265" {
+		t.Fatalf("hevc fallback is libx265: %+v", hevcFell)
+	}
+	direct := streamFacts(Source{VideoCodec: "MPEG2", Progressive: true}, "progressive", Rendition{Video: "copy", Audio: "copy"}, "h264_vaapi", "", false, noted)
+	if direct.Decode != "" || direct.Bitrate != "" || direct.OutputWidth != 1280 || direct.OutputFPS != "59.94" {
+		t.Fatalf("copy: %+v", direct)
+	}
+	unknown := streamFacts(Source{VideoCodec: "MPEG2", Progressive: true}, "progressive", Rendition{Video: "1080", Audio: "aac2"}, "h264_vaapi", "", false, notedPicture{})
+	if unknown.OutputWidth != 0 || unknown.SourceWidth != 0 || unknown.Decode != "gpu" {
+		t.Fatalf("unknown size must stay blank: %+v", unknown)
+	}
+}
+
+func TestMuxPictureKeepsTheWindowOpen(t *testing.T) {
+	seq := []byte{0x00, 0x00, 0x01, 0xB3, 0x50, 0x02, 0xD0, 0x37}
+	ts := programTS(1, streamMPEG2, 0x100, seq)
+	m := &mux{}
+	m.observePicture(ts)
+	if _, ok := m.picture(1); ok {
+		t.Fatal("a picture waits until its program is on the mux")
+	}
+	m.noteProgram(1)
+	got, ok := m.picture(1)
+	if !ok || got.Width != 1280 || got.Height != 720 || got.FPS != "59.94" {
+		t.Fatalf("picture: %+v ok=%v", got, ok)
+	}
+	if m.picDone {
+		t.Fatal("one program must not close the window; a later subchannel still needs it")
+	}
+	// program 0 is the only program in a filtered stream.
+	m.noteProgram(0)
+	zero, ok := m.picture(0)
+	if !ok || zero.Width != 1280 || zero.Height != 720 {
+		t.Fatalf("program 0: %+v ok=%v", zero, ok)
+	}
+
+	blank := &mux{}
+	blank.noteProgram(1)
+	blank.observePicture(bytes.Repeat([]byte{0x47}, 4<<20))
+	if !blank.picDone {
+		t.Fatal("a full capture window must stop the scan")
+	}
+	if _, ok := blank.picture(1); ok {
+		t.Fatal("padding is not a picture")
 	}
 }
 

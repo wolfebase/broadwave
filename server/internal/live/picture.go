@@ -291,3 +291,99 @@ func twice(rate string) string {
 	}
 	return rate
 }
+
+// notedPicture is the broadcast size read from a sequence header or SPS.
+type notedPicture struct {
+	Width  int
+	Height int
+	FPS    string
+}
+
+// streamFacts is what the stream panel can say without inventing a number.
+// Output size is the source fitted inside the encoder cap. When the source
+// size is still unknown, width and height stay zero.
+func streamFacts(src Source, fieldOrder string, spec Rendition, encoder, deint string, fallback bool, noted notedPicture) StreamInfo {
+	spec = spec.normalized()
+	out := StreamInfo{Scan: scanLabel(src, fieldOrder)}
+	out.SourceWidth = noted.Width
+	out.SourceHeight = noted.Height
+	out.SourceFPS = noted.FPS
+	if spec.Video == "copy" {
+		out.OutputWidth = noted.Width
+		out.OutputHeight = noted.Height
+		out.OutputFPS = noted.FPS
+		return out
+	}
+	mode := spec.Mode
+	if src.Film && NormalizeMode(mode) == "broadcast" {
+		mode = "film"
+	}
+	enc := encoder
+	if fallback {
+		// A GPU HEVC rendition restarts with a software base. That base still
+		// follows the delivery codec, so HEVC lands on libx265 rather than libx264.
+		enc = OutputEncoder("libx264", spec.Codec)
+	}
+	out.Encoder = enc
+	g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(spec.Video), Encoder: enc, Mode: mode, Deint: deint, Progressive: src.Progressive}
+	interlaced := !src.Progressive && (InterlacedCodec(src.VideoCodec) || codecName(src.VideoCodec) == "h264") && g.Mode != "film"
+	field := interlaced && !smallPicture(g.Profile)
+	capW, capH, rate := pictureSize(g.Profile, field)
+	fps, _ := pictureRate(g, field)
+	out.Bitrate = rate
+	out.OutputFPS = fpsLabel(fps)
+	if out.OutputFPS == "" {
+		out.OutputFPS = noted.FPS
+	}
+	out.OutputWidth, out.OutputHeight = fitSize(noted.Width, noted.Height, capW, capH)
+	if gpuDecode(g, interlaced, vaapiDeintMode(g, interlaced)) && !fallback {
+		out.Decode = "gpu"
+	} else {
+		out.Decode = "cpu"
+	}
+	return out
+}
+
+func scanLabel(src Source, fieldOrder string) string {
+	if src.Film || fieldOrder == "film" {
+		return "film"
+	}
+	if src.Progressive || fieldOrder == "progressive" {
+		return "progressive"
+	}
+	switch fieldOrder {
+	case "tt", "bb", "tb", "bt":
+		return "interlaced"
+	}
+	if InterlacedCodec(src.VideoCodec) && !src.Progressive {
+		return "interlaced"
+	}
+	return ""
+}
+
+func fpsLabel(rational string) string {
+	switch rational {
+	case "60000/1001":
+		return "59.94"
+	case "30000/1001":
+		return "29.97"
+	case "24000/1001":
+		return "23.976"
+	default:
+		return ""
+	}
+}
+
+func fitSize(srcW, srcH, capW, capH int) (int, int) {
+	if srcW <= 0 || srcH <= 0 || capW <= 0 || capH <= 0 {
+		return 0, 0
+	}
+	if srcW <= capW && srcH <= capH {
+		return srcW, srcH
+	}
+	scale := float64(capW) / float64(srcW)
+	if byH := float64(capH) / float64(srcH); byH < scale {
+		scale = byH
+	}
+	return int(float64(srcW)*scale + 0.5), int(float64(srcH)*scale + 0.5)
+}

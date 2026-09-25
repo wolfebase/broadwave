@@ -1,9 +1,66 @@
 package live
 
 import (
+	"os"
 	"os/exec"
 	"testing"
 )
+
+func TestPictureFacts(t *testing.T) {
+	// 1280×720, 16:9, frame_rate_code 7 (59.94).
+	seq := []byte{0x00, 0x00, 0x01, 0xB3, 0x50, 0x02, 0xD0, 0x37}
+	got, ok := pictureFacts(programTS(1, streamMPEG2, 0x100, seq), 1)
+	if !ok || got.Width != 1280 || got.Height != 720 || got.FPS != "59.94" {
+		t.Fatalf("mpeg2 picture: %+v ok=%v", got, ok)
+	}
+	if _, ok := pictureFacts(programTS(1, streamMPEG2, 0x100, seq), 2); ok {
+		t.Fatal("wrong program")
+	}
+}
+
+func TestPictureFactsFFmpeg(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not on PATH")
+	}
+	path := t.TempDir() + "/s.ts"
+	args := []string{
+		"-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30",
+		"-t", "0.4", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+		"-f", "mpegts", path,
+	}
+	if out, err := exec.Command("ffmpeg", args...).CombinedOutput(); err != nil {
+		t.Fatalf("ffmpeg: %v %s", err, out)
+	}
+	raw, err := exec.Command("cat", path).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := pictureFacts(raw, 1)
+	if !ok || got.Width != 320 || got.Height != 240 {
+		t.Fatalf("h264 picture: %+v ok=%v", got, ok)
+	}
+
+	// 1080 lines are stored as 1088 and cropped. The panel must show 1080.
+	hd := t.TempDir() + "/hd.ts"
+	args = []string{
+		"-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=30",
+		"-t", "0.2", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+		"-f", "mpegts", hd,
+	}
+	if out, err := exec.Command("ffmpeg", args...).CombinedOutput(); err != nil {
+		t.Fatalf("ffmpeg: %v %s", err, out)
+	}
+	raw, err = os.ReadFile(hd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok = pictureFacts(raw, 1)
+	if !ok || got.Width != 1920 || got.Height != 1080 {
+		t.Fatalf("cropped h264 picture: %+v ok=%v", got, ok)
+	}
+}
 
 func TestScanTypeCapturedHeaders(t *testing.T) {
 	prog := mpeg2TS(1, true)
