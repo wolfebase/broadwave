@@ -116,6 +116,7 @@ struct RecordingsView: View {
 
 struct SettingsView: View {
     @Environment(AppStore.self) private var store
+    @State private var showAbout = false
 
     var body: some View {
         @Bindable var store = store
@@ -158,7 +159,40 @@ struct SettingsView: View {
             } footer: {
                 Text("Every screen on the same channel shows the same moment, so nobody hears the next room cheer first.")
             }
+            Section {
+                Button("About") { showAbout = true }
+                    .accessibilityLabel("About Broadwave")
+            }
         }
         .navigationTitle("Settings")
+        .navigationDestination(isPresented: $showAbout) {
+            AboutView()
+        }
+        #if DEBUG
+        .onAppear {
+            if UserDefaults.standard.bool(forKey: "BroadwaveAbout") {
+                showAbout = true
+            }
+        }
+        #endif
+    }
+}
+
+/// Keep this sentence in step with `blenderCredit` in web/src/legal.ts.
+struct AboutView: View {
+    @FocusState private var creditFocused: Bool
+
+    var body: some View {
+        Form {
+            Section {
+                Text("Store art and the demo use Big Buck Bunny, Sintel, Tears of Steel, and Elephants Dream. They are Blender Foundation films under CC BY.")
+                    .focusable()
+                    .focused($creditFocused)
+            }
+        }
+        .navigationTitle("About")
+        #if os(tvOS)
+            .onAppear { creditFocused = true }
+        #endif
     }
 }

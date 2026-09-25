@@ -13,6 +13,7 @@ const Sports = lazy(() => import("../features/sports/Sports").then((m) => ({ def
 const RecordingsPage = lazy(() => import("../features/pages").then((m) => ({ default: m.RecordingsPage })));
 const SchedulePage = lazy(() => import("../features/pages").then((m) => ({ default: m.SchedulePage })));
 const SettingsPage = lazy(() => import("../features/pages").then((m) => ({ default: m.SettingsPage })));
+const AboutPage = lazy(() => import("../features/settings/About").then((m) => ({ default: m.AboutPage })));
 const PlayPage = lazy(() => import("../features/pages").then((m) => ({ default: m.PlayPage })));
 const Setup = lazy(() => import("../features/setup/Setup").then((m) => ({ default: m.Setup })));
 const DiagnosticsPage = lazy(() => import("../features/setup/Diagnostics").then((m) => ({ default: m.DiagnosticsPage })));
@@ -67,6 +68,7 @@ function Shell() {
   else if (path === "/recordings" || path === "/library") page = <RecordingsPage />;
   else if (path === "/schedule") page = <SchedulePage />;
   else if (path === "/settings" || path === "/sources") page = <SettingsPage />;
+  else if (path === "/about") page = <AboutPage />;
   else if (path === "/play") page = <PlayPage />;
   else if (path === "/watch" && params.has("virtual")) page = <VirtualPage />;
   else if (path === "/watch" || path === "/multiview") page = path === "/multiview" ? <Multiview /> : null;

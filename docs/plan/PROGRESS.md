@@ -3,10 +3,10 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **Integrate LEGAL1** next (P2b is in this commit). App Review unchanged at 2026-09-25 14:33Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply.
-- Lane ledger: P2b `…/bafd5006f4ed` merged (fixtures matched current main; frame.jpg added here). LEGAL1 `…/bb0358833876` ready, needs an About screenshot after merge. OPS3 `…/568371cff638` ready (drop PROGRESS.md, lab logs, multiview). HW1 `…/5692aafd57e5` ready (drop PROGRESS.md, lab logs, multiview). Dead clones removed: `…/bb170514cf69`, `…/bb215ecf6174`.
+- Current task: **OPS3** next (LEGAL1 is in this commit). App Review unchanged at 2026-09-25 14:33Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply. P2b `4a411d3` CI green.
+- Lane ledger: P2b `…/bafd5006f4ed` merged. LEGAL1 `…/bb0358833876` merged (full Apache LICENSE; About shots in `.evidence/legal1/`). OPS3 `…/568371cff638` reviewed, ready to land (drop PROGRESS.md, lab logs, multiview; Apple Settings was not in the lane). HW1 `…/5692aafd57e5` reviewed, ready (keep its `lineup.post`, fix the EXTEND sentence in `docs/hardware.md`; drop PROGRESS.md, lab logs, multiview). Dead clones removed: `…/bb170514cf69`, `…/bb215ecf6174`.
 - Production `Broadwave` `:8477` is `v0.8.0`. Staging has the MV1 web bundle. Next recording Jeopardy 2026-09-25 20:00 UTC. After the lanes land, Lane A is **MV2**.
-- App Review: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-25 13:51Z (AS1). Check it at the start of every round.
+- App Review: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-25 14:33Z (AS1). Check it at the start of every round.
 - Production `Broadwave` on TUS `:8477` is v0.8.0. Staging `Broadwave-Staging` on `:8490` is `v0.8.0-4-g6545f65` (encoder h264_vaapi). Next recording: Jeopardy, 2026-09-25 20:00 UTC.
 - The repo is `~/Projects/active/broadwave`.
 
@@ -39,7 +39,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] OPS5 README with screenshots and installs; GitHub Pages site at wolfebase.github.io/broadwave
 
 ## Phase LEGAL — Licenses, notices, security
-- [ ] LEGAL1 NOTICE, ffmpeg GPL/LGPL obligations in the image, CC BY credit in About and README, trademark-safe copy, `docs/legal.md`
+- [x] LEGAL1 NOTICE, ffmpeg obligations, CC BY credit, trademark-safe copy, `docs/legal.md`. `LICENSE` is the full Apache-2.0 text (the old file was the appendix only, so GitHub reported NOASSERTION). NOTICE lists the direct Go, npm, and Swift dependencies. Both Dockerfiles and `.github/workflows/release.yml` set `org.opencontainers.image.licenses=Apache-2.0 AND GPL-3.0-or-later`. The image source offer names jellyfin-ffmpeg7 7.1.4-3 and tag `v7.1.4-3` (`--enable-gpl`, `--enable-version3`). The GHCR Dockerfile copies LICENSE, NOTICE, and `docs/legal.md`. About shows "Blender Foundation films under CC BY" on web at 390×844, 1440×900, and 1920×1080 (Chrome, 0 console errors, `.evidence/legal1/web-phone.jpg`, `web-desktop.jpg`, `web-tv.jpg`), iPhone (`.evidence/legal1/iphone-about.jpg`), and Apple TV (`.evidence/legal1/tv-about.jpg`, sidebar collapsed, full sentence). README credit waits on `readme-launch` (do not edit README). `make check` green.
 - [ ] LEGAL2 Threat model and security review before H2/H3; every finding fixed with tests
 
 ## Phase U — Staging and hotfix

@@ -116,6 +116,9 @@ export function SettingsPage() {
         <button type="button" className="btn" onClick={() => navigate("/setup")}>
           Run setup again
         </button>
+        <button type="button" className="btn" onClick={() => navigate("/about")} aria-label="About Broadwave">
+          About
+        </button>
       </div>
       <section className="settings-section">
         <HomeList />
