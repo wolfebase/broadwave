@@ -1,6 +1,10 @@
 package live
 
-import "testing"
+import (
+	"bytes"
+	"strings"
+	"testing"
+)
 
 func TestAudioTracksPMT(t *testing.T) {
 	// 4.1 shape: English complete main, Spanish SAP on 0x102, described English.
@@ -40,6 +44,121 @@ func TestAudioTracksSameLanguageAlternate(t *testing.T) {
 	tracks := AudioTracks(raw, 1)
 	if len(tracks) != 2 || tracks[1].Role != "described" || tracks[1].PID != 0x104 {
 		t.Fatalf("alternate: %+v", tracks)
+	}
+}
+
+func TestSecondCompleteMainStaysMain(t *testing.T) {
+	// Stereo complete main first, 5.1 complete main second. The 5.1 is a full
+	// mix, so it is not Described video, and passthrough keeps it as Main.
+	raw := audioTS(1, []esAudio{
+		{pid: 0x101, lang: "eng", audioType: 0, bsmod: 0, channels: 2},
+		{pid: 0x110, lang: "eng", audioType: 0, bsmod: 0, channels: 13},
+	})
+	tracks := AudioTracks(raw, 1)
+	if len(tracks) != 2 {
+		t.Fatalf("tracks: %+v", tracks)
+	}
+	if tracks[0].Role != "main" || tracks[0].Label != "English" {
+		t.Fatalf("stereo: %+v", tracks[0])
+	}
+	if tracks[1].Role != "main" || tracks[1].Label == "Described video" || tracks[1].Channels != 6 {
+		t.Fatalf("5.1: %+v", tracks[1])
+	}
+	main, ok := PickTrack(tracks, "main")
+	if !ok || main.PID != 0x110 || main.Channels != 6 {
+		t.Fatalf("passthrough main: %+v %v", main, ok)
+	}
+	f := &feed{tracks: tracks}
+	src := f.sourceFor(Rendition{Video: "1080", Audio: "copy"})
+	if src.AudioPID != 0x110 || src.AudioCodec != "AC3" {
+		t.Fatalf("source: %+v", src)
+	}
+	line := strings.Join(RenditionArgs(0, src, Rendition{Video: "1080", Audio: "copy"}, "libx264", ""), " ")
+	if !strings.Contains(line, "-map 0:i:272") {
+		t.Fatalf("map: %s", line)
+	}
+}
+
+func TestSurroundCompleteMainStaysAheadOfStereo(t *testing.T) {
+	raw := audioTS(1, []esAudio{
+		{pid: 0x101, lang: "eng", audioType: 0, bsmod: 0, channels: 13},
+		{pid: 0x110, lang: "eng", audioType: 0, bsmod: 0, channels: 2},
+	})
+	tracks := AudioTracks(raw, 1)
+	if tracks[1].Role != "main" || tracks[1].Label == "Described video" {
+		t.Fatalf("second mix: %+v", tracks[1])
+	}
+	main, ok := PickTrack(tracks, "main")
+	if !ok || main.PID != 0x101 {
+		t.Fatalf("passthrough main: %+v %v", main, ok)
+	}
+}
+
+func TestMeasuredSurroundBeatsAnEarlierStereo(t *testing.T) {
+	// Both descriptors claim a 6-channel complete main. The frames say the
+	// first is stereo and the second is 5.1. Passthrough keeps the 5.1,
+	// and the stereo complete main stays Main.
+	raw := audioTS(1, []esAudio{
+		{pid: 0x101, lang: "eng", audioType: 0, bsmod: 0, channels: 13},
+		{pid: 0x110, lang: "eng", audioType: 0, bsmod: 0, channels: 13},
+	})
+	raw = append(raw, ac3Packets(0x101, ac3Header(8, 0, 2, 0), 4)...)
+	raw = append(raw, ac3Packets(0x110, ac3Header(8, 0, 7, 1), 4)...)
+	tracks := AudioTracks(raw, 1)
+	if tracks[0].Role != "main" || tracks[0].Channels != 2 || !tracks[0].Measured {
+		t.Fatalf("stereo: %+v", tracks[0])
+	}
+	if tracks[1].Role != "main" || tracks[1].Label == "Described video" || tracks[1].Channels != 6 {
+		t.Fatalf("5.1: %+v", tracks[1])
+	}
+	main, ok := PickTrack(tracks, "main")
+	if !ok || main.PID != 0x110 {
+		t.Fatalf("passthrough: %+v %v", main, ok)
+	}
+	if !audioReady(tracks) {
+		t.Fatal("both mains were measured")
+	}
+	src := (&feed{tracks: tracks}).sourceFor(Rendition{Video: "1080", Audio: "copy"})
+	if src.AudioPID != 0x110 {
+		t.Fatalf("source pid %d", src.AudioPID)
+	}
+}
+
+func TestFrameMarksDescribedVideo(t *testing.T) {
+	// A copied descriptor says both are complete mains. The second frame is
+	// visually impaired, so that track is Described video.
+	raw := audioTS(1, []esAudio{
+		{pid: 0x101, lang: "eng", audioType: 0, bsmod: 0, channels: 13},
+		{pid: 0x110, lang: "eng", audioType: 0, bsmod: 0, channels: 2},
+	})
+	raw = append(raw, ac3Packets(0x101, ac3Header(8, 0, 7, 1), 4)...)
+	raw = append(raw, ac3Packets(0x110, ac3Header(8, 2, 2, 0), 4)...)
+	tracks := AudioTracks(raw, 1)
+	if tracks[1].Role != "described" || tracks[1].Label != "Described video" {
+		t.Fatalf("vi: %+v", tracks[1])
+	}
+	main, ok := PickTrack(tracks, "main")
+	if !ok || main.PID != 0x101 || main.Channels != 6 {
+		t.Fatalf("main: %+v %v", main, ok)
+	}
+}
+
+func TestOneFalseAC3SyncDoesNotCount(t *testing.T) {
+	raw := audioTS(1, []esAudio{
+		{pid: 0x101, lang: "eng", audioType: 0, bsmod: 0, channels: 2},
+		{pid: 0x110, lang: "eng", audioType: 0, bsmod: 0, channels: 13},
+	})
+	raw = append(raw, ac3Packets(0x101, ac3Header(8, 0, 7, 1), 1)...)
+	tracks := AudioTracks(raw, 1)
+	if tracks[0].Measured || tracks[0].Channels != 2 {
+		t.Fatalf("false sync applied: %+v", tracks[0])
+	}
+	main, ok := PickTrack(tracks, "main")
+	if !ok || main.PID != 0x110 {
+		t.Fatalf("descriptor 5.1: %+v %v", main, ok)
+	}
+	if audioReady(tracks) {
+		t.Fatal("unmeasured pair should keep the scan open")
 	}
 }
 
@@ -102,6 +221,30 @@ type esAudio struct {
 	lang      string
 	audioType int
 	bsmod     int
+	channels  int // A/52 num_channels code; 0 leaves the fixture byte zeroed
+}
+
+func ac3Header(bsid, bsmod, acmod, lfe int) []byte {
+	p := []byte{0x0b, 0x77, 0x00, 0x00, 0x00, byte((bsid << 3) | bsmod), 0}
+	bit := 3
+	if acmod&0x01 != 0 && acmod != 0x01 {
+		bit += 2
+	}
+	if acmod&0x04 != 0 {
+		bit += 2
+	}
+	if acmod == 0x02 {
+		bit += 2
+	}
+	p[6] = byte(acmod << 5)
+	if lfe != 0 && bit <= 7 {
+		p[6] |= 1 << (7 - bit)
+	}
+	return p
+}
+
+func ac3Packets(pid int, header []byte, n int) []byte {
+	return tsPacket(pid, true, bytes.Repeat(header, n))
 }
 
 func audioTS(program int, audios []esAudio) []byte {
@@ -204,8 +347,9 @@ func audioDesc(a esAudio) []byte {
 		d = append(d, descISO639, 4, a.lang[0], a.lang[1], a.lang[2], byte(a.audioType))
 	}
 	if a.bsmod >= 0 {
-		// sample_rate_code 0, bsid 8, bit_rate 0, surround 0, bsmod in the top 3 bits.
-		d = append(d, descAC3, 3, 0x08, 0x00, byte(a.bsmod<<5))
+		// sample_rate_code 0, bsid 8, bit_rate 0, surround 0.
+		// Byte 2 is bsmod (top 3) then num_channels.
+		d = append(d, descAC3, 3, 0x08, 0x00, byte(a.bsmod<<5)|byte((a.channels&0x0f)<<1))
 	}
 	return d
 }
