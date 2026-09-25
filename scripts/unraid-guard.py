@@ -44,8 +44,12 @@ HOST_BLOCK = [
 ]
 
 
+REMOTE = re.compile(r"\b(ssh|scp|rsync|sftp)\b[^\n;|&]*?(192\.168\.1\.2(?![0-9])|@tus\b|\btus:)", re.I)
+
+
 def targets_tus(cmd):
-    return bool(TUS.search(cmd)) and bool(re.search(r"\b(ssh|scp|rsync|sftp|curl|wget|http|nc)\b", cmd))
+    """A shell session or file copy on TUS (not just a URL that mentions it)."""
+    return bool(REMOTE.search(cmd))
 
 
 def remote_text(cmd):
@@ -158,7 +162,7 @@ def check_http(cmd):
 
 def decide(cmd):
     if not targets_tus(cmd):
-        return None
+        return check_http(cmd)
     text = remote_text(cmd)
     for pattern, why in HOST_BLOCK:
         if re.search(pattern, text, re.I):
