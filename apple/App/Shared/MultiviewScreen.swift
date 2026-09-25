@@ -410,6 +410,7 @@ struct MultiviewScreen: View {
     @State private var menuChannel: Int64?
     #if os(tvOS)
         @FocusState private var remoteFocus: Int64?
+        @FocusState private var channelsFocused: Bool
     #endif
 
     init() {
@@ -594,6 +595,18 @@ struct MultiviewScreen: View {
         }
     }
 
+    private var channelsControl: some View {
+        Button("Channels") { session.guide.toggle() }
+        #if os(tvOS)
+            .buttonStyle(ChannelsPillStyle(focused: channelsFocused))
+            .focused($channelsFocused)
+            .focusEffectDisabled()
+        #else
+            .buttonStyle(.bordered)
+        #endif
+            .accessibilityAddTraits(session.guide ? .isSelected : [])
+    }
+
     private var layoutBar: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
@@ -610,9 +623,7 @@ struct MultiviewScreen: View {
                     .tint(session.layout == item ? Color.accentColor : nil)
                     .accessibilityAddTraits(session.layout == item ? .isSelected : [])
                 }
-                Button("Channels") { session.guide.toggle() }
-                    .buttonStyle(.bordered)
-                    .accessibilityAddTraits(session.guide ? .isSelected : [])
+                channelsControl
             }
         }
         .scrollIndicators(.hidden)
@@ -956,6 +967,24 @@ struct MultiviewTile: View {
         return parts.joined(separator: ", ")
     }
 }
+
+#if os(tvOS)
+    /// A focused bordered button fills with the accent and paints its title the same color.
+    private struct ChannelsPillStyle: ButtonStyle {
+        var focused: Bool
+
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .foregroundStyle(Tokens.ColorToken.onAccent)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .background(focused ? Tokens.ColorToken.accent : Color.white.opacity(0.10), in: Capsule())
+                .opacity(configuration.isPressed ? 0.85 : 1)
+        }
+    }
+#endif
 
 struct PlayerLayerBox: UIViewRepresentable {
     let player: AVPlayer
