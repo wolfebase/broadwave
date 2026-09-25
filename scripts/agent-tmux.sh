@@ -8,6 +8,7 @@ if tmux has-session -t broadwave 2>/dev/null; then
 fi
 tmux new-session -d -s broadwave -n agent -c "$REPO" "zsh -c 'AGENT=${AGENT:-agent} $REPO/scripts/agent-loop.sh; echo; echo Loop finished. Press Enter to close.; read'"
 tmux split-window -v -l 18 -t broadwave:agent -c "$REPO" "$REPO/scripts/agent-status.sh"
+tmux new-window -d -t broadwave -n watchdog -c "$REPO" "$REPO/scripts/agent-watchdog.sh"
 tmux select-pane -t broadwave:agent.0
 tmux set-option -t broadwave mouse on >/dev/null
 exec tmux attach -t broadwave
