@@ -4,6 +4,11 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
+- 2026-09-25 16:10 · **Lane copies inherit your uncommitted work. Start every lane clean.** The four lanes spawned at 16:07 all began with Lane A's unfinished HomeView, APIClient, and `PROGRESS.md` edits. They also "delete" `docs/lab/pb7b/*.log`, because `*.log` is gitignored and the copy skips those files. From now on:
+  1. Every lane prompt's first command is `git reset --hard HEAD && git clean -fd` inside its own worktree (a throwaway copy, so this is safe). That drops the inherited edits and restores the logs.
+  2. When integrating any lane, take only the files its task owns, never HomeView, APIClient, or `PROGRESS.md` changes that came from Lane A, and never the pb7b log deletions.
+  3. For the four lanes already running: if their diffs still contain Lane A's HomeView/APIClient/SupportURL edits, strip those files when you merge.
+
 - 2026-09-25 15:55 · **Sprint until 17:30 at `xhigh` effort: run 4 lanes instead of 2.** The owner wants maximum throughput for the next 90 minutes.
   - Keep **4 background lanes** busy at all times, plus Lane A. At most **one** lane may run `xcodebuild` at a time; the other three take server, web, or docs tasks.
   - Good picks now: OPS5's Pages part (only if PR #1 is merged), P4, P6, K2, K5, K6, J4, J6, N3, E1, E2, E3, E8, G8, F3, I1, I2, D7, D8, HW2, HW3's paper work.
