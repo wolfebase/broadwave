@@ -3,10 +3,10 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **HW1** next (OPS3 is in this commit). App Review unchanged at 2026-09-25 14:33Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply.
-- Lane ledger: P2b merged `4a411d3` (CI green). LEGAL1 merged `0743bc6`. OPS3 merged in this commit. HW1 `…/5692aafd57e5` reviewed, ready (keep its `lineup.post`, fix the EXTEND sentence in `docs/hardware.md`; drop PROGRESS.md, lab logs, multiview). Dead clones removed. After HW1, Lane A is **MV2**. No background lanes are running.
-- Production `Broadwave` `:8477` is `v0.8.0`. Staging has the MV1 web bundle. Next recording Jeopardy 2026-09-25 20:00 UTC. After the lanes land, Lane A is **MV2**.
-- App Review: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-25 14:33Z (AS1). Check it at the start of every round.
+- Current task: **MV2** after this HW1 commit is pushed. App Review unchanged at 2026-09-25 15:02Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply.
+- Lane ledger: P2b merged `4a411d3`. LEGAL1 merged `0743bc6`. OPS3 merged `02554ea`. HW1 applied from `…/5692aafd57e5` (its `lineup.post` kept; EXTEND sentence fixed; its PROGRESS.md, lab logs, and multiview edits dropped). Lane B OPS1 running (`01a0d917-ac40-77c3-b0e6-da4e761b3ec7`, worktree). Lane C P2c running (`01a0d917-ac40-77c3-b0e6-da55e10982eb`, worktree). No other lanes.
+- Production `Broadwave` `:8477` is `v0.8.0`. Staging has the MV1 web bundle. Next recording Jeopardy 2026-09-25 20:00 UTC. Lane A after HW1 is **MV2**.
+- App Review: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-25 15:02Z (AS1). Check it at the start of every round.
 - Production `Broadwave` on TUS `:8477` is v0.8.0. Staging `Broadwave-Staging` on `:8490` is `v0.8.0-4-g6545f65` (encoder h264_vaapi). Next recording: Jeopardy, 2026-09-25 20:00 UTC.
 - The repo is `~/Projects/active/broadwave`.
 
@@ -96,7 +96,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] MV6 Screenshot + 10 s recording per layout × platform; parity rows complete
 
 ## Phase HW — Every device, not just this DUO
-- [ ] HW1 Fake fleet (HDHR3, DUO/QUATRO, FLEX, FLEX 4K ATSC 3.0, PRIME, EXTEND, SCRIBE, 1–8 tuners) with a table test; `docs/hardware.md`
+- [x] HW1 Fake fleet (HDHR3, DUO/QUATRO, FLEX, FLEX 4K ATSC 3.0, PRIME, EXTEND, SCRIBE, SERVIO, old firmware, 1–8 tuners) with a table test; `docs/hardware.md`. `TestProfileFleet` runs discovery, scan, tune, multiview plan, recording plan, and failover for every named profile. SERVIO has no tuners: scan is refused, status is empty, failover is not run, and `recorded_files.json` returns News / At 6 / news.ts. FLEX 4K: 104.1 is HEVC+AC-4 and tuner 2 returns 806; 105.1 returns 811. PRIME copy-once and copy-never return 811 and the client marks both protected. EXTEND `transcode=mobile` is an AVC+AAC marker; `transcode=nope` returns 802. Old firmware has no DeviceAuth and no VideoCodec. Tuner counts 1–8 are capped at 8. `TestTuneStatusAndBusy` still locks 8vsb on the original fake. `go test -race ./server/internal/hdhr/fake/` is clean. The first `lineup_status.json` after `lineup.post` is still scanning (`api/fixtures/scan-status.json` found 0); the original fake stays tunable while that scan is open, so `TestContractFixtures` watch is still `tuner returned 404 Not Found: no sample`. Table in `docs/hardware.md`: each row is verified on a fake, and the models this house has not read are listed as untested. CONNECT DUO discover, lineup, and status were already read on the real device (`docs/dev-lab.md`); this task did not retune it. `make check` green.
 - [ ] HW2 Multi-device pools, 3.0 tuner reservation, mid-stream failover < 5 s
 - [ ] HW3 tvheadend, Threadfin, ErsatzTV, Dispatcharr, Channels DVR, and Plex verified for real
 - [ ] HW4 Server hardware matrix (Intel, AMD, NVIDIA, Apple, software/arm64) with a startup self-benchmark
