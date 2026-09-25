@@ -4,11 +4,13 @@ Tick items as they are verified and committed, in the same commit as the work (`
 
 ## Resume here
 - Current task: **AS2** demo mode, after the in-flight lanes. App Review unchanged at 2026-09-25 20:54Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply.
-- Lanes (sprint until 17:30 CDT):
-  - E2 `~/.grok/worktrees/active-broadwave/subagent-01a0da64-9b3a-7ae2-902f-4d71bcd6db60` running. Strip inherited HomeView, APIClient, SupportURL, PROGRESS, and pb7b log deletions.
-  - D7 `~/.grok/worktrees/active-broadwave/subagent-01a0da64-9b3b-7340-af26-f23c5f8e7366` running. Same strip. tvOS screenshots were out of scope for the lane.
-  - K6 and HW3 paper worktrees can be removed after this commit. Their task files are on main.
-  - HW2 draft `~/.grok/worktrees/active-broadwave/subagent-01a0da13-ca55-7ef2-a4e1-b521ce177ab1` (server patch applies on main; drop pb7b deletions, PROGRESS, Apple, and CSS). Review and re-test before merging.
+- Lanes (sprint until 17:30 CDT). Each lane was told to `git reset --hard HEAD && git clean -fd` before editing. Strip inherited HomeView, APIClient, SupportURL, PROGRESS, and pb7b log deletions if they are still in the diff.
+  - E2 `~/.grok/worktrees/active-broadwave/subagent-01a0da64-9b3a-7ae2-902f-4d71bcd6db60` running since 21:07Z.
+  - D7 `~/.grok/worktrees/active-broadwave/subagent-01a0da64-9b3b-7340-af26-f23c5f8e7366` running since 21:07Z. tvOS screenshots were out of scope.
+  - I1 `~/.grok/worktrees/active-broadwave/subagent-01a0da7b-e02d-7863-b83c-956b652af9b4` running. It may xcodebuild. It must not use the Broadwave Staging simulators.
+  - G8 `~/.grok/worktrees/active-broadwave/subagent-01a0da7b-e02d-7863-b83c-9579d056af5f` running. It must not edit hub.go, pool.go, play.go, dvr, or sports. slog-everywhere is explicitly unfinished.
+  - K6 and HW3 paper worktrees were removed after their commits.
+  - HW2 draft `~/.grok/worktrees/active-broadwave/subagent-01a0da13-ca55-7ef2-a4e1-b521ce177ab1` (server patch applies on main; drop pb7b deletions, PROGRESS, Apple, and CSS). Review and re-test before merging. `server/internal/live/handoff_test.go` is untracked in that worktree and is part of the patch.
 - Staging channel 1 was tuned at 21:22Z for AP3 and stopped. Both servers `ours:false` after. Next recording is Jeopardy on 2026-09-27.
 - Disk: checked 2026-09-25 20:54Z. `df -h ~` is 51 GB free. Above 15 GB.
 - Production `Broadwave` `:8477` is `v0.8.0`. Staging `:8490` is `v0.8.0-33-g8ccb3e1-dirty` (encoder h264_vaapi).
