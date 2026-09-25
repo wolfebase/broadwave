@@ -5,6 +5,7 @@ import { useData } from "../../app/data";
 import { navigate } from "../../app/router";
 import { ChevronIcon } from "../../ui/icons";
 import type { Channel, Device } from "../../types";
+import { HomeList } from "./HomeList";
 import { useDiagnostics } from "./useDiagnostics";
 import "./setup.css";
 
@@ -271,6 +272,7 @@ export function Setup() {
             </button>
           </div>
           {note ? <p className="dim">{note}</p> : null}
+          <HomeList hideAdded />
           <Footer onNext={next} canNext={devices.length > 0 || channels.length > 0} />
         </section>
       ) : null}

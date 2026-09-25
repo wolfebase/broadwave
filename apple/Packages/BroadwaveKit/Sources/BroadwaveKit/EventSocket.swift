@@ -16,6 +16,8 @@ public final class EventSocket {
     private var bestRTT = Double.infinity
     private var retry = 0
     private var clockTimer: Timer?
+    private var screenName = ""
+    private var screenKind = ""
 
     public init(base: URL) {
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
@@ -49,6 +51,17 @@ public final class EventSocket {
         for (room, channel) in rooms {
             send("sync.join", ["room": room, "channelId": channel])
         }
+        if !screenName.isEmpty, !screenKind.isEmpty {
+            send("here", ["name": screenName, "kind": screenKind])
+        }
+    }
+
+    /// Tells the server which screen this app is. Sent again after each reconnect.
+    public func announce(name: String, kind: String) {
+        screenName = name
+        screenKind = kind
+        guard !name.isEmpty, !kind.isEmpty else { return }
+        send("here", ["name": name, "kind": kind])
     }
 
     public func disconnect() {

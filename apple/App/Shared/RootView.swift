@@ -60,6 +60,7 @@ struct RootView: View {
         .background(Tokens.ColorToken.canvas.ignoresSafeArea())
         .task(id: store.connected) {
             guard store.connected else { return }
+            store.socket?.announce(name: ScreenIdentity.name, kind: ScreenIdentity.kind)
             #if DEBUG
                 if UserDefaults.standard.string(forKey: "BroadwaveSetup") != nil {
                     showSetup = true

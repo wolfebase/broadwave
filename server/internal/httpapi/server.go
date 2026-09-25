@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"broadwave/internal/discovery"
@@ -39,6 +40,14 @@ type Server struct {
 	// Clock is the server's idea of now. Tests set it; production leaves it nil.
 	Clock    func() time.Time
 	signalOn bool
+	// Staging forces the tuner emulator off, so Your home must not offer a dead address.
+	Staging bool
+	// HomeScan replaces the network scan in tests.
+	HomeScan func(ctx context.Context) []discovery.Found
+
+	homeMu    sync.Mutex
+	homeAt    time.Time
+	homeFound []discovery.Found
 
 	routes []string
 }
@@ -61,6 +70,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /devices", s.devices)
 	api("POST /devices/{id}/scan", s.startScan)
 	api("GET /devices/{id}/scan", s.scanStatus)
+	api("GET /home", s.home)
 	api("POST /sources/discover", s.discover)
 	api("POST /sources/look", s.look)
 	api("GET /sources/free", s.freeSources)

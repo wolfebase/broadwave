@@ -73,6 +73,15 @@
   font-size: var(--type-title2-size);
 }
 
+.home-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.home-list h3 {
+  margin: 0;
+}
+
 .setup-list {
   list-style: none;
   margin: 0;

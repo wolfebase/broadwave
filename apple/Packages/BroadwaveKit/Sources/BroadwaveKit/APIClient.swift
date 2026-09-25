@@ -251,6 +251,26 @@ public struct APIClient: Sendable {
         return try await send("POST", "/sources/discover", body: B(ip: ip), as: R.self).devices
     }
 
+    public struct HomePlace: Decodable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var group: String
+        public var kind: String
+        public var name: String
+        public var addr: String?
+        public var action: String
+        public var detail: String?
+    }
+
+    public struct HomeScan: Decodable, Sendable {
+        public var places: [HomePlace]
+        public var tunerAddress: String
+        public var sharing: Bool
+    }
+
+    public func home(fresh: Bool = false) async throws -> HomeScan {
+        try await send("GET", fresh ? "/home?fresh=1" : "/home", as: HomeScan.self)
+    }
+
     public func lookHarder() async throws -> [FoundHit] {
         struct R: Decodable { var found: [FoundHit] }
         return try await send("POST", "/sources/look", body: [String: String](), as: R.self).found

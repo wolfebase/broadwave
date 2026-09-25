@@ -156,6 +156,7 @@ struct SetupWizard: View {
             if !freeGuide.isEmpty {
                 Text(freeGuide).font(.caption).foregroundStyle(.secondary)
             }
+            HomeListView(hideAdded: true)
             field("Playlist or Xtream server", text: $playlistURL)
             field("Username", text: $xtreamUser)
             field("Password", text: $xtreamPass, secure: true)

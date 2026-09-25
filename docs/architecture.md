@@ -34,6 +34,7 @@ One Go binary. It embeds the web app, keeps its catalog in SQLite under `-config
 ### Tuning and the relay (`internal/hdhr`, `internal/live`)
 
 - `hdhr` speaks the HDHomeRun protocols: UDP discovery on 65001, the TCP control channel (`/tunerN/vchannel`, `/tunerN/status`, `/tunerN/streaminfo`), and HTTP `discover.json`, `lineup.json`, `status.json`.
+- `GET /api/v1/home` lists tuners, screens, and servers on the local subnet and does not add them. Apps announce themselves with a `here` message on the event socket. Plex, Jellyfin, Emby, and Channels get one action: copy this server's HDHomeRun address.
 - `live.Hub.Watch` tunes a whole RF **frequency** (`/tunerN/ch<freq>` on port 5004), not a single subchannel. A `mux` reads that transport stream once and fans the bytes out to subscribers. Each subchannel on the frequency becomes a `feed` with its own ffmpeg process, so 14.1 through 14.16 can all play from one tuner.
 - Viewers of the same channel share the same feed and HLS playlist. Recordings attach another subscriber that copies the original MPEG-TS to disk.
 - Tuners are released 20 seconds after the last viewer leaves, or after 45 seconds without segment requests (a closed tab or a sleeping phone).

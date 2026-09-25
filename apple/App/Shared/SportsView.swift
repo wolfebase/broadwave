@@ -120,6 +120,9 @@ struct SettingsView: View {
     var body: some View {
         @Bindable var store = store
         Form {
+            Section {
+                HomeListView()
+            }
             Section("Server") {
                 LabeledContent("Name", value: store.info?.name ?? store.server?.name ?? "")
                 LabeledContent("Address", value: store.server?.url.absoluteString ?? "")
