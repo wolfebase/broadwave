@@ -18,6 +18,7 @@ Live TV keeps the motion the station sent, and Apple devices get the surround mi
 - Invented frames on a 30-frame show looked ghosted, so that path is gone. A 30-frame show stays 30.
 - Closed captions no longer knock an Apple stream off the graphics chip.
 - A movie no longer leaves the channel at 24 frames. The next show is judged on its own.
+- The iPad guide shows the channel number and name beside each row. A short lineup fills the screen.
 
 ## 0.6.0 — 2026-09-24
 

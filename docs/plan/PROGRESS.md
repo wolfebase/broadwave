@@ -3,7 +3,7 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **Phase PB close**. Tag `v0.7.0`, deploy it to TUS, then TestFlight. App Review unchanged at 2026-09-24 23:55 CDT: tvOS 1.0 REJECTED (Guideline 2.1, information needed), iOS 1.0 WAITING_FOR_REVIEW. The reply is in `docs/appstore/review-2.1-reply.md`; the owner sends it and records the videos. Production is still `ghcr.io/wolfebase/broadwave:0.6.0` (Debian ffmpeg 5.1). Staging on `:8490` is jellyfin-ffmpeg 7.1.4. Next recording Jeopardy 2026-09-25 20:00 UTC. Tuners released.
+- Current task: **Phase PB close**. Tag `v0.7.0` (includes the film-cadence fix and the iPad guide column), deploy it to TUS, then TestFlight. App Review unchanged at 2026-09-24 23:55 CDT: tvOS 1.0 REJECTED (Guideline 2.1, information needed), iOS 1.0 WAITING_FOR_REVIEW. The reply is in `docs/appstore/review-2.1-reply.md`; the owner sends it and records the videos. Production is still `ghcr.io/wolfebase/broadwave:0.6.0` (Debian ffmpeg 5.1). Staging on `:8490` is jellyfin-ffmpeg 7.1.4. Next recording Jeopardy 2026-09-25 20:00 UTC. Tuners released.
 - App Review: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-24 23:55 CDT (AS1). Check it at the start of every round.
 - Production `Broadwave` on TUS `:8477` is v0.6.0. Staging `Broadwave-Staging` is on `:8490`. Next recording: Jeopardy, 2026-09-25 20:00 UTC.
 - The repo is `~/Projects/active/broadwave`.
@@ -223,6 +223,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
   - 2026-09-24 web Home: only the tuned channel's "On now" card has a picture; the others are mostly empty space. A faint oversized channel-number outline sits over the hero image.
   - 2026-09-24 web: no favicon (404). Home asks for `/channels/{id}/frame` on untuned channels and logs a 404 for each; the API should say which channels have a frame.
   - 2026-09-24 iPhone portrait player: a small band of video under unlabeled buttons, with no channel or program info.
+- 2026-09-25 iPad guide: the channel column was off screen on open, and four channels left the rest of the iPad empty. The column stays pinned, and a short lineup grows its rows (`.evidence/ipad-guide-before-small.jpg`, `.evidence/ipad-guide-after-small.jpg`). The store shot is regenerated in AS3.
 - [ ] J2 Legacy web screens redesigned
 - [ ] J3 Motion system
 - [ ] J4 Accessibility audit

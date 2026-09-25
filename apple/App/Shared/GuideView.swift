@@ -211,19 +211,35 @@ struct GuideGrid: View {
     }
 
     var body: some View {
+        GeometryReader { geo in
+            let row = fittedRowHeight(geo.size.height)
+            scrollGrid(rowHeight: row, viewportHeight: geo.size.height)
+        }
+    }
+
+    /// A short lineup grows its rows so the guide fills the screen. A long one keeps the base height and scrolls.
+    private func fittedRowHeight(_ viewport: CGFloat) -> CGFloat {
+        let count = CGFloat(max(channels.count, 1))
+        let room = viewport - headH
+        guard room > count * rowH else { return rowH }
+        return min(room / count, 280)
+    }
+
+    private func scrollGrid(rowHeight: CGFloat, viewportHeight: CGFloat) -> some View {
         let width = CGFloat(hours * 60) * perMinute
         let end = origin.addingTimeInterval(hours * 3600)
-        ScrollViewReader { proxy in
+        return ScrollViewReader { proxy in
             ScrollView([.horizontal, .vertical]) {
                 ZStack(alignment: .topLeading) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         Color.clear.frame(height: headH)
                         ForEach(channels) { channel in
-                            row(channel, end: end)
-                                .frame(width: width, height: rowH, alignment: .leading)
+                            row(channel, end: end, rowHeight: rowHeight)
+                                .frame(width: width, height: rowHeight, alignment: .leading)
                                 .padding(.leading, channelW)
                         }
                     }
+                    .frame(height: headH + CGFloat(channels.count) * rowHeight, alignment: .top)
                     ForEach(0 ..< Int(hours), id: \.self) { hour in
                         Color.clear
                             .frame(width: 1, height: 1)
@@ -233,42 +249,10 @@ struct GuideGrid: View {
                     // Now line
                     Rectangle()
                         .fill(Tokens.ColorToken.tally)
-                        .frame(width: 2, height: CGFloat(channels.count) * rowH)
+                        .frame(width: 2, height: CGFloat(channels.count) * rowHeight)
                         .shadow(color: Tokens.ColorToken.tally.opacity(0.7), radius: 6)
                         .offset(x: channelW + x(store.now) - 1, y: headH)
                         .allowsHitTesting(false)
-                    // Pinned channel column
-                    VStack(spacing: 0) {
-                        Color.clear.frame(height: headH)
-                        ForEach(channels) { channel in
-                            Button { onSelect(channel, store.index.on(channel.id, at: store.now)) } label: {
-                                HStack(spacing: 10) {
-                                    Text(channel.displayNumber).font(.title3.weight(.heavy)).monospacedDigit()
-                                    if let api = store.api, channel.artUrl?.isEmpty == false {
-                                        AsyncImage(url: api.artURL(kind: "channel", id: channel.id, width: 72)) { phase in
-                                            if let image = phase.image {
-                                                image.resizable().scaledToFit()
-                                            }
-                                        }
-                                        .frame(width: 36, height: 22)
-                                        .accessibilityHidden(true)
-                                    }
-                                    Text(channel.displayName).font(.caption.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
-                                    Spacer(minLength: 0)
-                                    if channel.favorite {
-                                        Image(systemName: "star.fill").font(.caption2).foregroundStyle(Tokens.ColorToken.warning)
-                                    }
-                                }
-                                .padding(.horizontal, 14)
-                                .frame(width: channelW, height: rowH)
-                                .background(Tokens.ColorToken.surface1)
-                                .overlay(alignment: .bottom) { Rectangle().fill(Tokens.ColorToken.line).frame(height: 1) }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .offset(x: offset.x)
-                    .zIndex(2)
                     // Pinned time header
                     ZStack(alignment: .topLeading) {
                         Rectangle().fill(.ultraThinMaterial).frame(width: width + channelW, height: headH)
@@ -299,6 +283,14 @@ struct GuideGrid: View {
             }
             .defaultScrollAnchor(UnitPoint(x: max(0, x(store.now.addingTimeInterval(-900)) / (width + channelW)), y: 0))
             .background(Tokens.ColorToken.surface1)
+            .overlay(alignment: .topLeading) {
+                // The column lives on the scroll view, not in the content. Offsetting
+                // it by contentOffset left it at x=0 on the first frame, which is
+                // off screen once the grid opens on "now".
+                channelRail(rowHeight: rowHeight)
+                    .frame(width: channelW, height: viewportHeight, alignment: .top)
+                    .clipped()
+            }
             .onChange(of: jump) { _, date in
                 guard let date else { return }
                 let hour = max(0, min(Int(hours) - 1, Int(date.timeIntervalSince(origin) / 3600)))
@@ -307,7 +299,46 @@ struct GuideGrid: View {
         }
     }
 
-    private func row(_ channel: Channel, end: Date) -> some View {
+    private func channelRail(rowHeight: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(Tokens.ColorToken.surface1)
+                .frame(height: headH)
+                .overlay(alignment: .bottom) { Rectangle().fill(Tokens.ColorToken.line).frame(height: 1) }
+            VStack(spacing: 0) {
+                ForEach(channels) { channel in
+                    Button { onSelect(channel, store.index.on(channel.id, at: store.now)) } label: {
+                        HStack(spacing: 10) {
+                            Text(channel.displayNumber).font(.title3.weight(.heavy)).monospacedDigit()
+                            if let api = store.api, channel.artUrl?.isEmpty == false {
+                                AsyncImage(url: api.artURL(kind: "channel", id: channel.id, width: 72)) { phase in
+                                    if let image = phase.image {
+                                        image.resizable().scaledToFit()
+                                    }
+                                }
+                                .frame(width: 36, height: 22)
+                                .accessibilityHidden(true)
+                            }
+                            Text(channel.displayName).font(.caption.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
+                            Spacer(minLength: 0)
+                            if channel.favorite {
+                                Image(systemName: "star.fill").font(.caption2).foregroundStyle(Tokens.ColorToken.warning)
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .frame(width: channelW, height: rowHeight)
+                        .background(Tokens.ColorToken.surface1)
+                        .overlay(alignment: .bottom) { Rectangle().fill(Tokens.ColorToken.line).frame(height: 1) }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(channel.displayNumber) \(channel.displayName)")
+                }
+            }
+            .offset(y: -offset.y)
+        }
+    }
+
+    private func row(_ channel: Channel, end: Date, rowHeight: CGFloat) -> some View {
         let list = store.index.airings(channel.id).filter { $0.end > origin && $0.start < end }
         return ZStack(alignment: .leading) {
             ForEach(list) { airing in
@@ -316,7 +347,7 @@ struct GuideGrid: View {
                 let w = max(24, x(e) - x(s) - 4)
                 Button { onSelect(channel, airing) } label: {
                     GuideCell(airing: airing, now: store.now, dim: highlight != nil && airing.kind != highlight, recording: store.activeRecording(on: channel) != nil && airing.isOn(at: store.now), score: airing.gameId.flatMap { scores[$0] })
-                        .frame(width: w, height: rowH - 10)
+                        .frame(width: w, height: rowHeight - 10)
                 }
                 .buttonStyle(GuideCellStyle())
                 #if os(tvOS)
