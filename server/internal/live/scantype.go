@@ -531,7 +531,12 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 		if needAudio {
 			if tracks := AudioTracks(data, f.program); len(tracks) > 0 {
 				f.tracks = tracks
-				needAudio = false
+				// Two complete mains share one copied descriptor on some
+				// stations. Wait for a frame from each before the rendition
+				// locks the passthrough pid.
+				if audioReady(tracks) {
+					needAudio = false
+				}
 			}
 		}
 		if order != "" && !needAudio {
