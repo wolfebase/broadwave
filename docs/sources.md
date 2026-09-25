@@ -26,3 +26,19 @@ Your home is a separate read-only scan in setup and in Settings. It lists tuners
 | Pluto and other free apps as themselves | — | Pluto's stitcher wants a session from `boot.pluto.tv` | — | Unsupported as a built-in source. A generated M3U can still be added as a playlist. |
 
 The public `i.mjh.nz` playlists were removed in August 2024. They are not a source.
+
+## Real containers
+
+The import asks for these paths. A container was not run for any of them. Channels DVR and Plex were not run either.
+
+| App | Playlist path requested | Guide URL stored | Real container |
+| --- | --- | --- | --- |
+| tvheadend | `/playlist/channels` | `/xmltv/channels`, with the login in the URL | not run |
+| Threadfin | `/m3u/threadfin.m3u` | `/xmltv/threadfin.xml` | not run |
+| xTeVe | `/m3u/xteve.m3u` | `/xmltv/xteve.xml` | not run |
+| ErsatzTV | `/iptv/channels.m3u` | `/iptv/xmltv.xml` | not run |
+| Dispatcharr | `/output/m3u` | `/output/epg` | not run |
+| Channels DVR | `/devices/ANY/channels.m3u?format=ts&codec=copy` | `/devices/ANY/guide/xmltv` | not run |
+| Plex Live TV | none from this client; Plex reads Broadwave | — | not run |
+
+Tvheadend also serves `/playlist/channels.m3u`. This client requests `/playlist/channels`.
