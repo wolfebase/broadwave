@@ -9,6 +9,16 @@ Staging: `Broadwave-Staging` on `:8490` (`-staging`, iGPU), appdata `/mnt/cache/
 ## Entries
 <!-- Append: date, commit, what was deployed, checks run, results, issues. -->
 
+## 2026-09-25 08:41 CDT — v0.8.0, the house sets itself up
+
+- Image `ghcr.io/wolfebase/broadwave:0.8.0` (tag `v0.8.0`, commit `d92b021`), amd64 and arm64. The release workflow then failed writing a GitHub Actions cache layer (`error writing layer blob: not_found`) after the manifests for `0.8.0`, `0.8`, and `latest` were pushed. Catalog backed up to `backups/broadwave-20260925-084110.db`. Container `Broadwave`, host network, `/dev/dri`, `TZ=America/Chicago`. `/api/v1/server` is `v0.8.0`, encoder `h264_vaapi`. Five recordings still listed, with their sizes. Tuners were free. Next recording is Jeopardy at 2026-09-25 20:00 UTC.
+- Channel 1 for 20 s: `1280x720 59.94`, segment 2.002 s, 240 frames, 0 decode errors, tuner released. Staging and production both `ours:false` after.
+- Staging `:8490` had already run `POST /setup/finish` on `v0.7.1-23-gd92b021`: ready line "Ready: 8 channels, guide for 8, 2 tuners, Intel GPU", signal "7 channels great, 1 ok" from stored readings, tuners `ours:false` the whole time.
+- TestFlight build 171 uploaded for iOS and tvOS (`Uploaded Broadwave`, `Uploaded BroadwaveTV`).
+- Two fixes landed on main after the tag and are not in this image: guide titles no longer slide into the channel column (`4c2a6a1`), and diagnostics does not call a tuner gone while a channel is on (`a09c084`).
+
+
+
 ## 2026-09-25 00:52 CDT — v0.7.1, captions stay on the graphics chip
 
 - Image `ghcr.io/wolfebase/broadwave:0.7.1` (tag `v0.7.1`). Catalog backed up to `backups/broadwave-20260925-003303.db` before 0.7.0 and `backups/broadwave-20260925-005221.db` before 0.7.1. Container `Broadwave`, host network, `/dev/dri`, `TZ=America/Chicago`. `/api/v1/server` reports `v0.7.1`, encoder `h264_vaapi`, ffmpeg `7.1.4-Jellyfin`. Five recordings still listed. Tuners were free. Next recording is Jeopardy at 2026-09-25 20:00 UTC.
