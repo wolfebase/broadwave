@@ -141,9 +141,13 @@ func (h *Hub) probeInputLocked(m *mux, f *feed) {
 		_ = cmd.Wait()
 		order := fieldOrderFrom([]byte(out.String()), program)
 		// The HLS demuxer leaves field_order off the playlist. The segment has it.
+		// The playlist read often uses its whole timeout, so the segment gets
+		// its own. A child of ctx is already cancelled by then.
 		if order == "" && hlsURL(input) {
 			if alt := hlsProbeTarget(input, ua, ref); alt != "" {
-				order = ffprobeFieldOrder(ctx, tool, alt, ua, ref, 0)
+				segCtx, segCancel := hlsSegmentProbeContext()
+				order = ffprobeFieldOrder(segCtx, tool, alt, ua, ref, 0)
+				segCancel()
 			}
 		}
 		h.mu.Lock()
@@ -164,6 +168,12 @@ func (h *Hub) probeInputLocked(m *mux, f *feed) {
 		h.applyProbeLocked(f, order)
 		h.dropIfUnusedLocked(f)
 	}()
+}
+
+// hlsSegmentProbeContext is a fresh 8s budget for the segment read. It is
+// not a child of the playlist probe: that context is often already done.
+func hlsSegmentProbeContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 8*time.Second)
 }
 
 func ffprobeFieldOrder(ctx context.Context, tool, input, userAgent, referrer string, program int) string {

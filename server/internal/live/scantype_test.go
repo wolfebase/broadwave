@@ -383,6 +383,35 @@ func TestUnscannedH264ProbeRebuilds(t *testing.T) {
 	}
 }
 
+func TestHLSSegmentProbeContextSurvivesPlaylistCancel(t *testing.T) {
+	playlist, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	cancel()
+	if playlist.Err() == nil {
+		t.Fatal("playlist context was not cancelled")
+	}
+	child, stopChild := context.WithTimeout(playlist, 8*time.Second)
+	defer stopChild()
+	if child.Err() == nil {
+		t.Fatal("a child of the cancelled playlist context should be done")
+	}
+
+	seg, stop := hlsSegmentProbeContext()
+	defer stop()
+	select {
+	case <-seg.Done():
+		t.Fatal("cancelled playlist context cancelled the segment probe")
+	default:
+	}
+	deadline, ok := seg.Deadline()
+	if !ok {
+		t.Fatal("segment probe context has no deadline")
+	}
+	remain := time.Until(deadline)
+	if remain < 7*time.Second || remain > 8*time.Second+time.Second {
+		t.Fatalf("segment probe budget %s, want 8s", remain)
+	}
+}
+
 func TestHLSProbeTargetFindsTheSegment(t *testing.T) {
 	dir := t.TempDir()
 	media := filepath.Join(dir, "live.m3u8")
