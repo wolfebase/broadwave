@@ -1,15 +1,19 @@
 import { useEffect, useState } from "react";
 import type { CatalogBackup, Settings, StorageInfo } from "../../types";
 import { getEvents, getTuners, listBackups, restoreBackup } from "../../api";
+import { gateFeature } from "../../lib/compat";
 import { copy } from "../../strings";
 import { formatBytes } from "../../lib/format";
 export function SettingsScreen({
   settings,
   storage,
+  features,
   onChange,
 }: {
   settings: Settings;
   storage: StorageInfo | null;
+  /** Omitted until GET /api/v1/server has answered. */
+  features?: string[];
   onChange: (values: Partial<Settings>) => void;
 }) {
   const [encoder, setEncoder] = useState("");
@@ -39,6 +43,7 @@ export function SettingsScreen({
       stop = true;
     };
   }, []);
+  const hdhrNote = gateFeature(features ? { features } : null, "hdhrEmulation");
   return (
     <section className="page">
       <div className="page-head">
@@ -171,14 +176,18 @@ export function SettingsScreen({
         </select>
       </label>
       <h3 className="section-title">Sources</h3>
-      <label className="field">
-        Offer this server as an HDHomeRun on port 8478
-        <select value={settings.hdhrEmulate || "0"} onChange={(event) => onChange({ hdhrEmulate: event.target.value })}>
-          <option value="0">Off</option>
-          <option value="1">On</option>
-        </select>
-        <span className="hint">Other apps can add this machine on port 8478. Discovery stays quiet so the real tuner is unchanged. The change applies within a minute.</span>
-      </label>
+      {hdhrNote ? (
+        <p className="hint" role="status">{hdhrNote}</p>
+      ) : (
+        <label className="field">
+          Offer this server as an HDHomeRun on port 8478
+          <select value={settings.hdhrEmulate || "0"} onChange={(event) => onChange({ hdhrEmulate: event.target.value })}>
+            <option value="0">Off</option>
+            <option value="1">On</option>
+          </select>
+          <span className="hint">Other apps can add this machine on port 8478. Discovery stays quiet so the real tuner is unchanged. The change applies within a minute.</span>
+        </label>
+      )}
       <h3 className="section-title">Storage</h3>
       <label className="field">
         {copy.settings.layout}

@@ -9,6 +9,10 @@ import (
 
 const apiVersion = 1
 
+// minAppVersion is the oldest app this server supports. Clients compare their
+// own version. A missing or older client is still served; this is not a 426.
+const minAppVersion = "1.0"
+
 func DefaultServerName() string {
 	host, err := os.Hostname()
 	if err != nil || host == "" {
@@ -39,13 +43,14 @@ func (s *Server) serverInfo(w http.ResponseWriter, r *http.Request) {
 		version = "dev"
 	}
 	body := map[string]any{
-		"id":         id.ID,
-		"name":       id.Name,
-		"version":    version,
-		"apiVersion": apiVersion,
-		"encoder":    encoder,
-		"tunerCount": tuners,
-		"features":   s.features(),
+		"id":            id.ID,
+		"name":          id.Name,
+		"version":       version,
+		"apiVersion":    apiVersion,
+		"encoder":       encoder,
+		"tunerCount":    tuners,
+		"features":      s.features(),
+		"minAppVersion": minAppVersion,
 	}
 	if s.Updates != nil {
 		if notice := s.Updates.Visible(r.Context()); notice != nil {

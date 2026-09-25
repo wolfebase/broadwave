@@ -14,6 +14,7 @@
     "export"
   ],
   "id": "contract-server",
+  "minAppVersion": "1.0",
   "name": "Living Room",
   "tunerCount": 2,
   "version": "dev"

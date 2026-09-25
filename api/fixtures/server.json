@@ -14,6 +14,7 @@
     "export"
   ],
   "id": "contract-server",
+  "minAppVersion": "1.0",
   "name": "Home",
   "tunerCount": 2,
   "version": "dev"

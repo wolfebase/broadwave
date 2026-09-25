@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createVirtual, deleteRecording, getServer, setWatched } from "../api";
 import { useData } from "../app/data";
+import { gateFeature } from "../lib/compat";
 import { navigate, useRoute } from "../app/router";
 import type { ServerInfo } from "../types";
 import { Library } from "./library/Library";
@@ -90,14 +91,16 @@ export function VirtualPage() {
 }
 
 export function SettingsPage() {
-  const { settings, storage, saveSettings, devices, allChannels, error, rediscover, editChannel } = useData();
+  const { settings, storage, saveSettings, devices, allChannels, error, rediscover, editChannel, server: known } = useData();
   const [busy, setBusy] = useState(false);
-  const [server, setServer] = useState<ServerInfo | null>(null);
+  const [fetched, setFetched] = useState<ServerInfo | null>(null);
+  const server = fetched ?? known;
   useEffect(() => {
-    void getServer().then(setServer).catch(() => undefined);
+    void getServer().then(setFetched).catch(() => undefined);
   }, []);
   const origin = window.location.origin;
   const host = window.location.hostname;
+  const hdhrNote = gateFeature(server, "hdhrEmulation");
   return (
     <div className="page-wrap settings-page">
       <header className="page-header">
@@ -143,15 +146,19 @@ export function SettingsPage() {
       </section>
       <section className="settings-section">
         <h2>Playback and recording</h2>
-        <SettingsScreen settings={settings} storage={storage} onChange={(v) => void saveSettings(v)} />
+        <SettingsScreen settings={settings} storage={storage} features={server?.features} onChange={(v) => void saveSettings(v)} />
       </section>
       <section className="settings-section">
         <h2>Share with other apps</h2>
         <p className="dim">Plex, Jellyfin, and Channels can watch through this server. They share its tuners, so they never fight over one.</p>
-        <label className="switch-row">
-          <input type="checkbox" checked={settings.hdhrEmulate === "1"} onChange={(e) => void saveSettings({ hdhrEmulate: e.target.checked ? "1" : "0" })} />
-          <span>Act as an HDHomeRun at {host}:8478</span>
-        </label>
+        {hdhrNote ? (
+          <p className="hint" role="status">{hdhrNote}</p>
+        ) : (
+          <label className="switch-row">
+            <input type="checkbox" checked={settings.hdhrEmulate === "1"} onChange={(e) => void saveSettings({ hdhrEmulate: e.target.checked ? "1" : "0" })} />
+            <span>Act as an HDHomeRun at {host}:8478</span>
+          </label>
+        )}
         <dl className="share-urls">
           <dt>M3U playlist</dt>
           <dd>
