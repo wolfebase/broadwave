@@ -49,6 +49,20 @@ enum AppTab: Hashable {
     case home, guide, search, sports, recordings, settings
 }
 
+#if os(tvOS)
+    private struct TVSelectedTabKey: EnvironmentKey {
+        static let defaultValue: AppTab = .home
+    }
+
+    extension EnvironmentValues {
+        /// Which tab is selected. The tvOS sidebar stays open over a tab until that tab's content is focused.
+        var tvSelectedTab: AppTab {
+            get { self[TVSelectedTabKey.self] }
+            set { self[TVSelectedTabKey.self] = newValue }
+        }
+    }
+#endif
+
 #if os(iOS)
     /// The iPhone tab bar floats over the page. Pull the page up so a row is not sliced behind it.
     private extension View {
@@ -240,24 +254,27 @@ struct RootView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
-        #if os(iOS)
-            .tabBarMinimizeBehavior(.onScrollDown)
-            .tabViewBottomAccessory(isEnabled: nowPlaying.channel != nil && !nowPlaying.expanded) {
-                MiniPlayerBar()
-            }
-            .fullScreenCover(isPresented: Binding(get: { nowPlaying.expanded && nowPlaying.channel != nil }, set: { nowPlaying.expanded = $0 })) {
-                playingCover
-            }
-        #else
-            .fullScreenCover(isPresented: Binding(get: { nowPlaying.channel != nil }, set: {
-                if !$0 {
-                    nowPlaying.stop()
-                }
-            })) {
-                playingCover
-            }
+        #if os(tvOS)
+            .environment(\.tvSelectedTab, tab)
         #endif
-            .refreshable { await store.refresh() }
+        #if os(iOS)
+        .tabBarMinimizeBehavior(.onScrollDown)
+        .tabViewBottomAccessory(isEnabled: nowPlaying.channel != nil && !nowPlaying.expanded) {
+            MiniPlayerBar()
+        }
+        .fullScreenCover(isPresented: Binding(get: { nowPlaying.expanded && nowPlaying.channel != nil }, set: { nowPlaying.expanded = $0 })) {
+            playingCover
+        }
+        #else
+        .fullScreenCover(isPresented: Binding(get: { nowPlaying.channel != nil }, set: {
+            if !$0 {
+                nowPlaying.stop()
+            }
+        })) {
+            playingCover
+        }
+        #endif
+        .refreshable { await store.refresh() }
     }
 
     private var playingCover: some View {

@@ -7,6 +7,11 @@ struct HomeView: View {
     @Environment(NowPlaying.self) private var nowPlaying
     @State private var saved = SavedMultiview.load()
     @State private var teams: [TeamFollow] = []
+    #if os(tvOS)
+        @Environment(\.tvSelectedTab) private var tvSelectedTab
+        @FocusState private var watch: Bool
+        @FocusState private var emptyHome: Bool
+    #endif
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -19,7 +24,11 @@ struct HomeView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 36) {
                 if let (channel, airing) = store.featured() {
-                    Hero(channel: channel, airing: airing)
+                    #if os(tvOS)
+                        Hero(channel: channel, airing: airing, watchFocused: $watch)
+                    #else
+                        Hero(channel: channel, airing: airing)
+                    #endif
                 }
                 let live = store.channels.compactMap { c -> (Channel, Airing)? in
                     guard let a = store.index.on(c.id, at: store.now) else { return nil }
@@ -143,8 +152,34 @@ struct HomeView: View {
                     ProgressView()
                 }
             }
+        #if os(tvOS)
+            .background {
+                if store.featured() == nil {
+                    Color.clear
+                        .frame(width: 20, height: 20)
+                        .focusable()
+                        .focused($emptyHome)
+                        .accessibilityHidden(true)
+                }
+            }
+            .onAppear { claimHomeFocus() }
+            .onChange(of: tvSelectedTab) { _, _ in claimHomeFocus() }
+            .onChange(of: store.channels.isEmpty) { _, _ in claimHomeFocus() }
+        #endif
             .onAppear { saved = SavedMultiview.load() }
     }
+
+    #if os(tvOS)
+        /// Guide and Settings put focus in the page, which collapses the sidebar. Home does not, unless asked.
+        private func claimHomeFocus() {
+            guard tvSelectedTab == .home else { return }
+            if store.featured() == nil {
+                emptyHome = true
+            } else {
+                watch = true
+            }
+        }
+    #endif
 
     /// `-BroadwaveScroll teams` on a debug launch. Off-screen shelves cannot be reached with a click while another simulator window is in front.
     private func scrollForScreenshot(_ proxy: ScrollViewProxy) async {
@@ -161,6 +196,9 @@ struct Hero: View {
     @Environment(NowPlaying.self) private var nowPlaying
     let channel: Channel
     let airing: Airing?
+    #if os(tvOS)
+        var watchFocused: FocusState<Bool>.Binding
+    #endif
 
     var body: some View {
         let kind = airing?.kind ?? .other
@@ -205,6 +243,9 @@ struct Hero: View {
                     Button("Watch", systemImage: "play.fill") { nowPlaying.play(channel) }
                         .buttonStyle(.glassProminent)
                         .controlSize(.large)
+                    #if os(tvOS)
+                        .focused(watchFocused)
+                    #endif
                     Button(store.activeRecording(on: channel) == nil ? "Record" : "Recording", systemImage: "record.circle") {
                         Task { await store.toggleRecord(channel) }
                     }

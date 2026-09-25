@@ -9,6 +9,11 @@ struct SportsView: View {
     @Environment(AppStore.self) private var store
     @Environment(NowPlaying.self) private var nowPlaying
     @State private var scores: [String: String] = [:]
+    #if os(tvOS)
+        @Environment(\.tvSelectedTab) private var tvSelectedTab
+        @FocusState private var focusedGame: Int64?
+        @FocusState private var emptySports: Bool
+    #endif
 
     var body: some View {
         let games = store.sports(hours: 7 * 24)
@@ -20,6 +25,10 @@ struct SportsView: View {
                 if games.isEmpty {
                     ContentUnavailableView("No games in the guide", systemImage: "sportscourt", description: Text("Sports on your channels show up here as soon as they're listed."))
                         .padding(.top, 60)
+                    #if os(tvOS)
+                        .focusable()
+                        .focused($emptySports)
+                    #endif
                 }
                 if !live.isEmpty {
                     section("Live now", live)
@@ -31,25 +40,42 @@ struct SportsView: View {
             .padding(.vertical)
         }
         .navigationTitle("Sports")
-        .task {
-            guard let api = store.api else { return }
-            let games = await (try? api.scoreboard()) ?? []
-            var map: [String: String] = [:]
-            for game in games {
-                if let line = game.line {
-                    map[game.id] = line
+        #if os(tvOS)
+            .onAppear { claimSportsFocus() }
+            .onChange(of: tvSelectedTab) { _, _ in claimSportsFocus() }
+            .onChange(of: games.isEmpty) { _, _ in claimSportsFocus() }
+        #endif
+            .task {
+                guard let api = store.api else { return }
+                let games = await (try? api.scoreboard()) ?? []
+                var map: [String: String] = [:]
+                for game in games {
+                    if let line = game.line {
+                        map[game.id] = line
+                    }
+                }
+                scores = map
+            }
+            .toolbar {
+                if live.count >= 2 {
+                    Button("Watch together") {
+                        nowPlaying.watchTogether(live.prefix(4).map(\.0))
+                    }
                 }
             }
-            scores = map
-        }
-        .toolbar {
-            if live.count >= 2 {
-                Button("Watch together") {
-                    nowPlaying.watchTogether(live.prefix(4).map(\.0))
-                }
-            }
-        }
     }
+
+    #if os(tvOS)
+        /// Same as Home: focus in the page collapses the sidebar. An empty board has no button, so the message takes focus.
+        private func claimSportsFocus() {
+            guard tvSelectedTab == .sports else { return }
+            if let id = store.sports(hours: 7 * 24).first?.1.id {
+                focusedGame = id
+            } else {
+                emptySports = true
+            }
+        }
+    #endif
 
     private func section(_ title: String, _ list: [(Channel, Airing)]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -64,7 +90,10 @@ struct SportsView: View {
                         GameCard(channel: channel, airing: airing, now: store.now, score: airing.gameId.flatMap { scores[$0] })
                     }
                     .cardButton()
-                    .contextMenu { ChannelActions(channel: channel, airing: airing) }
+                    #if os(tvOS)
+                        .focused($focusedGame, equals: airing.id)
+                    #endif
+                        .contextMenu { ChannelActions(channel: channel, airing: airing) }
                 }
             }
             .padding(.horizontal)
@@ -74,12 +103,21 @@ struct SportsView: View {
 
 struct RecordingsView: View {
     @Environment(AppStore.self) private var store
+    #if os(tvOS)
+        @Environment(\.tvSelectedTab) private var tvSelectedTab
+        @FocusState private var focusedRec: Int64?
+        @FocusState private var emptyRecordings: Bool
+    #endif
 
     var body: some View {
         let groups = Dictionary(grouping: store.recordings) { $0.title }
         List {
             if store.recordings.isEmpty {
                 ContentUnavailableView("No recordings yet", systemImage: "record.circle", description: Text("Record from the guide, or set a series to record every episode."))
+                #if os(tvOS)
+                    .focusable()
+                    .focused($emptyRecordings)
+                #endif
             }
             ForEach(groups.keys.sorted(), id: \.self) { title in
                 Section(title) {
@@ -103,14 +141,40 @@ struct RecordingsView: View {
                                 }
                             }
                         }
+                        #if os(tvOS)
+                        .focused($focusedRec, equals: rec.id)
+                        #endif
                     }
                 }
             }
         }
         .navigationTitle("Recordings")
         .navigationDestination(for: Recording.self) { RecordingPlayerScreen(recording: $0) }
-        .task { await store.refreshRecordings() }
+        #if os(tvOS)
+            .onAppear { claimRecordingFocus() }
+            .onChange(of: tvSelectedTab) { _, _ in claimRecordingFocus() }
+            .onChange(of: store.recordings.isEmpty) { _, _ in claimRecordingFocus() }
+        #endif
+            .task { await store.refreshRecordings() }
     }
+
+    #if os(tvOS)
+        private var firstRecordingID: Int64? {
+            let groups = Dictionary(grouping: store.recordings) { $0.title }
+            guard let title = groups.keys.sorted().first else { return nil }
+            return (groups[title] ?? []).first?.id
+        }
+
+        /// A list does not take focus from the sidebar the way Settings' form does.
+        private func claimRecordingFocus() {
+            guard tvSelectedTab == .recordings else { return }
+            if let id = firstRecordingID {
+                focusedRec = id
+            } else {
+                emptyRecordings = true
+            }
+        }
+    #endif
 }
 
 struct SettingsView: View {
