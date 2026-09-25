@@ -485,15 +485,16 @@ func storedFieldOrder(order string) string {
 
 // learnScanLocked reads the mux until the scan type is known or scanWait
 // elapses, stores it, and sets the feed source before a rendition starts.
-// A progressive channel is remembered. An interlaced channel is read again
-// each tune, because a movie and a game share it. A miss falls through to
-// the background probe, which only helps the next tune.
+// A stored "progressive" is still read. ffprobe reports soft 3:2 as
+// progressive, and skipping that scan plays the movie at 60. An interlaced
+// channel is read again each tune, because a movie and a game share it.
+// A header that misses the window keeps being read, and the stored probe
+// rebuilds a rendition that already started on the wrong graph.
 func (h *Hub) learnScanLocked(m *mux, f *feed) {
-	needScan := f.channel.FieldOrder != "progressive"
-	needAudio := len(f.tracks) == 0
-	if (!needScan && !needAudio) || m == nil || m.input != "" {
+	if m == nil || m.input != "" {
 		return
 	}
+	needAudio := len(f.tracks) == 0
 	buf := &scanBuf{wake: make(chan struct{}, 1)}
 	sub := h.attachPipeLocked(m, buf)
 	started := time.Now()
@@ -503,7 +504,7 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 		buf.mu.Lock()
 		data := append([]byte(nil), buf.b...)
 		buf.mu.Unlock()
-		if needScan && order == "" {
+		if order == "" {
 			if got, ok := scanType(data, f.program); ok {
 				order = got
 			}
@@ -514,7 +515,7 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 				needAudio = false
 			}
 		}
-		if (!needScan || order != "") && !needAudio {
+		if order != "" && !needAudio {
 			break
 		}
 		wait := time.Until(deadline)
@@ -528,27 +529,105 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 		}
 		timer.Stop()
 	}
-	m.detach(sub)
-	if needScan && order == "" {
-		buf.mu.Lock()
-		n := len(buf.b)
-		buf.mu.Unlock()
-		log.Printf("scan type for %s program %d not in %s (%d bytes)", f.channel.GuideNumber, f.program, time.Since(started).Round(time.Millisecond), n)
-		h.probeFieldOrderLocked(m, f)
-	} else if order != "" {
+	if len(f.tracks) > 0 {
+		log.Printf("audio tracks for %s: %s", f.channel.GuideNumber, trackLog(f.tracks))
+	}
+	if order != "" {
+		m.detach(sub)
 		log.Printf("scan type %s for %s in %s", order, f.channel.GuideNumber, time.Since(started).Round(time.Millisecond))
-		stored := storedFieldOrder(order)
+		f.headerOrder = order
+		h.applyScanLocked(f, order)
+		return
+	}
+	buf.mu.Lock()
+	n := len(buf.b)
+	buf.mu.Unlock()
+	log.Printf("scan type for %s program %d not in %s (%d bytes)", f.channel.GuideNumber, f.program, time.Since(started).Round(time.Millisecond), n)
+	// No bytes means the tuner has not delivered a GOP yet. Bytes without a
+	// header are a late sequence start: keep reading them. ffprobe runs only
+	// when nothing is stored yet. It cannot see soft 3:2, and leaving it
+	// running holds the tuner.
+	if n > 0 {
+		go h.finishScan(m, f, buf, sub)
+	} else {
+		m.detach(sub)
+	}
+	if f.channel.FieldOrder == "" {
+		h.probeFieldOrderLocked(m, f)
+	}
+}
+
+// finishScan keeps reading after scanWait. The rendition may already be
+// field-deinterlacing; a header that shows up rebuilds it.
+func (h *Hub) finishScan(m *mux, f *feed, buf *scanBuf, sub *pipeSub) {
+	deadline := time.Now().Add(8 * time.Second)
+	program := f.program
+	id := f.channel.ID
+	guide := f.channel.GuideNumber
+	var order string
+	for time.Now().Before(deadline) {
+		buf.mu.Lock()
+		data := append([]byte(nil), buf.b...)
+		buf.mu.Unlock()
+		if got, ok := scanType(data, program); ok {
+			order = got
+			break
+		}
+		wait := time.Until(deadline)
+		if wait <= 0 {
+			break
+		}
+		timer := time.NewTimer(wait)
+		select {
+		case <-buf.wake:
+		case <-timer.C:
+		}
+		timer.Stop()
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	m.detach(sub)
+	if order == "" || f.headerOrder != "" || h.channels[id] != f {
+		return
+	}
+	log.Printf("scan type %s for %s after the window", order, guide)
+	f.headerOrder = order
+	h.applyScanLocked(f, order)
+}
+
+// applyScanLocked stores the station scan and sets this tune's picture.
+// Film stays on the tune and is stored as interlaced, so the next program
+// is scanned again. A running rendition whose graph changed is rebuilt.
+func (h *Hub) applyScanLocked(f *feed, order string) {
+	if order == "" {
+		return
+	}
+	stored := storedFieldOrder(order)
+	progressive := stored == "progressive"
+	film := order == "film"
+	changed := f.source.Progressive != progressive || f.source.Film != film
+	f.source.Progressive = progressive
+	f.source.Film = film
+	if stored != "" && stored != f.channel.FieldOrder {
 		f.channel.FieldOrder = stored
-		f.source.Progressive = stored == "progressive"
-		f.source.Film = order == "film"
-		if h.Store != nil && stored != "" {
+		if h.Store != nil {
 			id := f.channel.ID
 			go func() { _ = h.Store.SetFieldOrder(context.Background(), id, stored) }()
 		}
 	}
-	if len(f.tracks) > 0 {
-		log.Printf("audio tracks for %s: %s", f.channel.GuideNumber, trackLog(f.tracks))
+	if changed {
+		h.rebuildRenditionsLocked(f)
 	}
+}
+
+// applyProbeLocked is the ffprobe result. It rebuilds a rendition that
+// started before the header arrived. A packet scan already on the feed wins:
+// ffprobe cannot see soft 3:2.
+func (h *Hub) applyProbeLocked(f *feed, order string) {
+	if f.headerOrder != "" {
+		return
+	}
+	h.applyScanLocked(f, order)
 }
 
 // scanBuf collects mux bytes for the scan-type read. Write must not block:
@@ -781,6 +860,16 @@ func cropUnits(chroma, frame uint) (int, int) {
 func (s *scanBuf) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	s.b = append(s.b, p...)
+	// A late header only needs the recent GOP. Keep the capture aligned so
+	// the packet walker still sees 188-byte cells.
+	const capBytes = 4 << 20
+	if len(s.b) > capBytes {
+		drop := len(s.b) - capBytes
+		drop -= drop % 188
+		if drop > 0 {
+			s.b = append([]byte(nil), s.b[drop:]...)
+		}
+	}
 	s.mu.Unlock()
 	select {
 	case s.wake <- struct{}{}:
