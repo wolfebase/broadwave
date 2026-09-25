@@ -85,6 +85,7 @@ type Hub struct {
 	Dir            string
 	FFmpeg         string
 	Encoder        string
+	HEVC           bool
 	DeintBroadcast string
 	DeintSmooth    string
 	Blend          bool
@@ -144,15 +145,16 @@ type feed struct {
 
 // rendition is one ffmpeg process producing HLS for one delivery form.
 type rendition struct {
-	spec    Rendition
-	dir     string
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	sub     *pipeSub
-	viewers int
-	seen    time.Time
-	idle    *time.Timer
-	stamper playlistStamper
+	spec     Rendition
+	dir      string
+	cmd      *exec.Cmd
+	stdin    io.WriteCloser
+	sub      *pipeSub
+	viewers  int
+	seen     time.Time
+	idle     *time.Timer
+	stamper  playlistStamper
+	fallback bool
 }
 
 type recording struct {
@@ -183,7 +185,7 @@ func New(st *store.Store, dir, ffmpeg, encoder string) *Hub {
 	}
 	broadcast, smooth := ProbeDeint(ffmpeg, encoder)
 	return &Hub{
-		Store: st, Dir: dir, FFmpeg: ffmpeg, Encoder: encoder,
+		Store: st, Dir: dir, FFmpeg: ffmpeg, Encoder: encoder, HEVC: ProbeHEVC(ffmpeg, encoder),
 		DeintBroadcast: broadcast, DeintSmooth: smooth, Blend: ProbeBlend(ffmpeg),
 		RenditionIdle: 20 * time.Second,
 		muxes:         map[int]*mux{}, channels: map[int64]*feed{}, reserved: map[int]bool{},
@@ -436,6 +438,9 @@ func (h *Hub) addFeedLocked(m *mux, ch store.SourceChannel) *feed {
 }
 
 func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error) {
+	if want.Codec == "hevc" && !h.HEVC {
+		want.Codec = ""
+	}
 	key := want.Key()
 	if r := f.renditions[key]; r != nil {
 		return r, nil
@@ -473,11 +478,67 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 		r.sub = h.attachPipeLocked(muxOf(h, f), stdin)
 	}
 	f.renditions[key] = r
+	go h.watchRendition(f, r, pid, encoderOf(h.Encoder, want))
+	return r, nil
+}
+
+func encoderOf(base string, want Rendition) string {
+	if want.Video == "copy" {
+		return ""
+	}
+	return OutputEncoder(base, want.Codec)
+}
+
+// watchRendition restarts a GPU rendition on software decode when ffmpeg dies immediately.
+func (h *Hub) watchRendition(f *feed, r *rendition, pid int, encoder string) {
+	started := time.Now()
+	err := r.cmd.Wait()
+	ForgetPID(h.Dir, pid)
+	if err == nil || time.Since(started) > 8*time.Second || !vaapiFamily(encoder) || r.fallback {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if f.renditions[r.spec.Key()] != r {
+		return
+	}
+	r.fallback = true
+	if m := muxOf(h, f); m != nil {
+		m.detach(r.sub)
+	} else if r.sub != nil {
+		r.sub.stop()
+	}
+	r.sub = nil
+	input := "pipe:0"
+	if m := muxOf(h, f); m != nil && m.input != "" {
+		input = m.input
+	}
+	args := renditionArgs(f.program, f.source, r.spec, "libx264", "", h.Blend, input)
+	cmd := exec.Command(h.FFmpeg, args...)
+	cmd.Dir = r.dir
+	var stdin io.WriteCloser
+	if input == "pipe:0" {
+		var pipeErr error
+		stdin, pipeErr = cmd.StdinPipe()
+		if pipeErr != nil {
+			return
+		}
+	}
+	cmd.Stderr = os.Stderr
+	if cmd.Start() != nil {
+		return
+	}
+	next := cmd.Process.Pid
+	NotePID(h.Dir, next)
+	r.cmd = cmd
+	r.stdin = stdin
+	if stdin != nil {
+		r.sub = h.attachPipeLocked(muxOf(h, f), stdin)
+	}
 	go func() {
 		_ = cmd.Wait()
-		ForgetPID(h.Dir, pid)
+		ForgetPID(h.Dir, next)
 	}()
-	return r, nil
 }
 
 // Playlist returns a rendition's live playlist stamped with the channel timeline.
@@ -873,7 +934,10 @@ func (h *Hub) sessionLocked(f *feed, r *rendition) Session {
 		SourceVideo: f.source.VideoCodec, SourceAudio: f.source.AudioCodec,
 	}
 	if spec.Video != "copy" {
-		info.Encoder = h.Encoder
+		info.Encoder = encoderOf(h.Encoder, spec)
+		if r.fallback {
+			info.Encoder = "libx264"
+		}
 	}
 	legacyAudio := "stereo"
 	if spec.Audio == "aac6" || spec.Audio == "copy" {

@@ -1,6 +1,6 @@
-# Field-rate VAAPI deinterlace. Wrong for 720p; kept so the lab can show the difference.
--init_hw_device vaapi=va:/dev/dri/renderD128 -filter_hw_device va
+# gpu-decode
+# Field-rate VAAPI deinterlace. Decode stays on the GPU.
 -map 0:v:0 -map 0:a:0?
--vf format=nv12,hwupload,deinterlace_vaapi=mode=motion_adaptive:rate=field,scale_vaapi=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease
--c:v h264_vaapi -b:v 14M -maxrate 14M -bufsize 28M -g 120
+-vf deinterlace_vaapi=mode=motion_adaptive:rate=field,scale_vaapi=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease
+-c:v h264_vaapi -rc_mode VBR -profile:v high -bf 2 -low_power 0 -b:v 14M -maxrate 14M -bufsize 28M -g 120
 -c:a aac -ac 2 -b:a 160k

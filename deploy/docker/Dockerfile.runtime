@@ -1,6 +1,13 @@
 FROM debian:bookworm-slim
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg xz-utils ca-certificates intel-media-va-driver \
+  && apt-get install -y --no-install-recommends curl ca-certificates gnupg xz-utils intel-media-va-driver \
+  && mkdir -p /etc/apt/keyrings \
+  && curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key | gpg --dearmor -o /etc/apt/keyrings/jellyfin.gpg \
+  && printf '%s\n' 'Types: deb' 'URIs: https://repo.jellyfin.org/debian' 'Suites: bookworm' 'Components: main' 'Architectures: amd64' 'Signed-By: /etc/apt/keyrings/jellyfin.gpg' > /etc/apt/sources.list.d/jellyfin.sources \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends jellyfin-ffmpeg7 \
+  && ln -sf /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/local/bin/ffmpeg \
+  && ln -sf /usr/lib/jellyfin-ffmpeg/ffprobe /usr/local/bin/ffprobe \
   && rm -rf /var/lib/apt/lists/*
 COPY broadwave /usr/local/bin/broadwave
 RUN chmod 755 /usr/local/bin/broadwave

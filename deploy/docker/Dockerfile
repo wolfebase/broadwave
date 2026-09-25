@@ -19,8 +19,15 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}"
 FROM debian:bookworm-slim
 ARG TARGETARCH
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg xz-utils ca-certificates mesa-va-drivers \
+  && apt-get install -y --no-install-recommends curl ca-certificates gnupg xz-utils mesa-va-drivers \
      $(if [ "$TARGETARCH" = "amd64" ]; then echo intel-media-va-driver; fi) \
+  && mkdir -p /etc/apt/keyrings \
+  && curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key | gpg --dearmor -o /etc/apt/keyrings/jellyfin.gpg \
+  && printf '%s\n' 'Types: deb' 'URIs: https://repo.jellyfin.org/debian' 'Suites: bookworm' 'Components: main' "Architectures: ${TARGETARCH}" 'Signed-By: /etc/apt/keyrings/jellyfin.gpg' > /etc/apt/sources.list.d/jellyfin.sources \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends jellyfin-ffmpeg7 \
+  && ln -sf /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/local/bin/ffmpeg \
+  && ln -sf /usr/lib/jellyfin-ffmpeg/ffprobe /usr/local/bin/ffprobe \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/broadwave /usr/local/bin/broadwave
 EXPOSE 8477

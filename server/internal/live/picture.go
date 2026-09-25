@@ -60,8 +60,11 @@ func PictureArgs(g Graph) []string {
 
 	args := []string{"-hide_banner", "-loglevel", "warning", "-fflags", "+genpts+discardcorrupt"}
 	vaapiDeint := vaapiDeintMode(g, interlaced)
-	if g.Encoder == "h264_vaapi" {
+	if vaapiFamily(g.Encoder) {
 		args = append(args, "-init_hw_device", "vaapi=va:/dev/dri/renderD128", "-filter_hw_device", "va")
+		if gpuDecode(g, interlaced, vaapiDeint) {
+			args = append(args, "-hwaccel", "vaapi", "-hwaccel_output_format", "vaapi", "-hwaccel_device", "va")
+		}
 	}
 	if g.Input == "pipe:0" {
 		args = append(args, "-probesize", "2000000", "-analyzeduration", "1500000")
@@ -137,8 +140,46 @@ func pictureRate(g Graph, field bool) (string, int) {
 	return "", 120
 }
 
+func vaapiFamily(encoder string) bool {
+	return encoder == "h264_vaapi" || encoder == "hevc_vaapi"
+}
+
+// OutputEncoder is the ffmpeg encoder for a delivery codec. Empty codec is H.264.
+func OutputEncoder(base, codec string) string {
+	if codec != "hevc" {
+		return base
+	}
+	switch base {
+	case "h264_vaapi":
+		return "hevc_vaapi"
+	case "h264_qsv":
+		return "hevc_qsv"
+	case "h264_nvenc":
+		return "hevc_nvenc"
+	case "h264_videotoolbox":
+		return "hevc_videotoolbox"
+	default:
+		return "libx265"
+	}
+}
+
+// gpuDecode keeps frames on the GPU. Software filters (pullup, fps, blend, bwdif)
+// need system memory, so those graphs stay on the upload path.
+func gpuDecode(g Graph, interlaced bool, vaapiDeint string) bool {
+	if !vaapiFamily(g.Encoder) || g.Mode == "film" || smallPicture(g.Profile) {
+		return false
+	}
+	if g.Mode == "smooth" && g.Blend && !interlaced {
+		return false
+	}
+	if interlaced && vaapiDeint == "" {
+		return false
+	}
+	return true
+}
+
 func vaapiDeintMode(g Graph, interlaced bool) string {
-	if !interlaced || g.Encoder != "h264_vaapi" || g.Deint == "" {
+	if !interlaced || !vaapiFamily(g.Encoder) || g.Deint == "" {
 		return ""
 	}
 	switch g.Deint {
@@ -154,7 +195,7 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 	if fps != "" {
 		rate = ",fps=" + fps
 	}
-	if g.Mode == "film" && g.Encoder == "h264_vaapi" {
+	if g.Mode == "film" && vaapiFamily(g.Encoder) {
 		// pullup recovers hard telecine (no repeat_first_field). Scale and encode stay on the GPU.
 		rate = fps
 		if rate == "" {
@@ -162,19 +203,32 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 		}
 		return fmt.Sprintf("pullup,fps=%s,format=nv12,hwupload,scale_vaapi=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease", rate, width, height)
 	}
-	if g.Encoder == "h264_vaapi" && g.Mode != "film" && (vaapiDeint != "" || !interlaced) && !(g.Mode == "smooth" && g.Blend && !interlaced && !smallPicture(g.Profile)) {
-		// Stay on the GPU: upload once, deinterlace and scale there, never upscale.
-		vf := "format=nv12,hwupload"
+	if vaapiFamily(g.Encoder) && g.Mode != "film" && (vaapiDeint != "" || !interlaced) && !(g.Mode == "smooth" && g.Blend && !interlaced && !smallPicture(g.Profile)) {
+		// Frames already on the GPU skip the upload. A software fps cap still uploads once.
+		vf := ""
+		if !gpuDecode(g, interlaced, vaapiDeint) {
+			vf = "format=nv12,hwupload"
+		}
 		if vaapiDeint != "" {
 			fieldRate := "frame"
 			if field {
 				fieldRate = "field"
 			}
-			vf += fmt.Sprintf(",deinterlace_vaapi=mode=%s:rate=%s", vaapiDeint, fieldRate)
+			piece := fmt.Sprintf("deinterlace_vaapi=mode=%s:rate=%s", vaapiDeint, fieldRate)
+			if vf == "" {
+				vf = piece
+			} else {
+				vf += "," + piece
+			}
 		}
-		vf += fmt.Sprintf(",scale_vaapi=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease", width, height)
+		scale := fmt.Sprintf("scale_vaapi=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease", width, height)
+		if vf == "" {
+			vf = scale
+		} else {
+			vf += "," + scale
+		}
 		if smallPicture(g.Profile) && fps != "" {
-			vf = strings.Replace(vf, "format=nv12,hwupload", "fps="+fps+",format=nv12,hwupload", 1)
+			vf = "fps=" + fps + "," + vf
 		}
 		return vf
 	}
@@ -194,10 +248,10 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 	}
 	pre = append(pre, scale)
 	vf := strings.Join(pre, ",")
-	if g.Encoder == "h264_vaapi" || g.Encoder == "h264_qsv" {
+	if vaapiFamily(g.Encoder) || g.Encoder == "h264_qsv" || g.Encoder == "hevc_qsv" {
 		vf += ",format=nv12"
 	}
-	if g.Encoder == "h264_vaapi" {
+	if vaapiFamily(g.Encoder) {
 		vf += ",hwupload"
 	}
 	return vf
@@ -212,7 +266,14 @@ func videoCodec(encoder, rate string, gop int) []string {
 	case "h264_qsv":
 		return []string{"-c:v", "h264_qsv", "-preset", "veryfast", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
 	case "h264_vaapi":
-		return []string{"-c:v", "h264_vaapi", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
+		// UHD 770 keeps B-frames with the normal encoder. Low-power rejects them.
+		return []string{"-c:v", "h264_vaapi", "-rc_mode", "VBR", "-profile:v", "high", "-bf", "2", "-low_power", "0", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
+	case "hevc_vaapi":
+		return []string{"-c:v", "hevc_vaapi", "-rc_mode", "VBR", "-profile:v", "main", "-bf", "2", "-low_power", "0", "-tag:v", "hvc1", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
+	case "hevc_videotoolbox":
+		return []string{"-c:v", "hevc_videotoolbox", "-realtime", "1", "-tag:v", "hvc1", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g, "-profile:v", "main"}
+	case "libx265":
+		return []string{"-c:v", "libx265", "-preset", "veryfast", "-tag:v", "hvc1", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
 	case "h264_videotoolbox":
 		// VideoToolbox writes broken SEI when it embeds A/53 captions; every segment then fails to decode.
 		return []string{"-c:v", "h264_videotoolbox", "-realtime", "1", "-a53cc", "0", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g, "-profile:v", "high"}

@@ -9,7 +9,9 @@ import (
 )
 
 func DetectEncoder(ffmpeg string) string {
-	for _, name := range []string{"h264_nvenc", "h264_qsv", "h264_videotoolbox"} {
+	// VAAPI is probed before QSV. jellyfin-ffmpeg's QSV check succeeds on
+	// UHD 770, and the measured picture path is VAAPI.
+	for _, name := range []string{"h264_nvenc", "h264_videotoolbox"} {
 		cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
 			"-f", "lavfi", "-i", "testsrc=size=160x120:rate=30:duration=0.2",
 			"-pix_fmt", "yuv420p", "-c:v", name, "-f", "null", "-")
@@ -24,7 +26,36 @@ func DetectEncoder(ffmpeg string) string {
 	if vaapi.Run() == nil {
 		return "h264_vaapi"
 	}
+	qsv := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc=size=160x120:rate=30:duration=0.2",
+		"-pix_fmt", "yuv420p", "-c:v", "h264_qsv", "-f", "null", "-")
+	if qsv.Run() == nil {
+		return "h264_qsv"
+	}
 	return "libx264"
+}
+
+// ProbeHEVC reports whether this machine can encode HEVC with the same hardware family.
+func ProbeHEVC(ffmpeg, encoder string) bool {
+	if ffmpeg == "" {
+		return false
+	}
+	name := OutputEncoder(encoder, "hevc")
+	if name == "libx265" {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	args := []string{"-hide_banner", "-loglevel", "error"}
+	if vaapiFamily(name) {
+		args = append(args, "-init_hw_device", "vaapi=va:/dev/dri/renderD128", "-filter_hw_device", "va")
+	}
+	args = append(args, "-f", "lavfi", "-i", "testsrc=size=160x120:rate=30:duration=0.2", "-pix_fmt", "yuv420p")
+	if vaapiFamily(name) {
+		args = append(args, "-vf", "format=nv12,hwupload")
+	}
+	args = append(args, "-c:v", name, "-f", "null", "-")
+	return exec.CommandContext(ctx, ffmpeg, args...).Run() == nil
 }
 
 // ProbeDeint reports which VAAPI deinterlacers this machine can run.
