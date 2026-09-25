@@ -1,6 +1,6 @@
 # Broadwave privacy policy
 
-Effective September 24, 2026. Broadwave is made by Wolfe Up LLC.
+Effective September 25, 2026. Broadwave is made by Wolfe Up LLC.
 
 ## The short version
 
@@ -19,6 +19,7 @@ The Broadwave server runs on hardware you own. Your channels, guide, recordings,
 - your tuner (for example an HDHomeRun) on your network;
 - guide providers you enable, such as the SiliconDust guide for HDHomeRun owners, Schedules Direct, or an XMLTV address you add;
 - public sports scoreboards, to show scores and extend recordings of games;
+- GitHub, once a day, to see if a newer Broadwave release exists. That request carries no account, no id, and nothing about what you watch. Turn it off under Settings, Check for updates;
 - any playlist or channel sources you add.
 
 Those requests come from your server, not from Wolfe Up LLC, and we receive none of the data.

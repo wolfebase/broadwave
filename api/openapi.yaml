@@ -1341,6 +1341,17 @@ components:
         features:
           type: array
           items: { type: string }
+        update:
+          $ref: "#/components/schemas/ServerUpdate"
+          description: "Present when a newer release is available. Omitted when this build is current or the check is off."
+    ServerUpdate:
+      type: object
+      required: [version, notesUrl, message]
+      description: "A newer Broadwave release. The message is the banner."
+      properties:
+        version: { type: string, description: "Release tag without a leading v." }
+        notesUrl: { type: string, description: "Release notes page." }
+        message: { type: string, description: "Banner text, for example Broadwave 0.7 is available." }
     Device:
       type: object
       required: [deviceId, friendlyName, baseUrl, tunerCount]
@@ -1763,6 +1774,7 @@ components:
         nextGuidePull: { type: string, format: date-time, description: "When the next automatic listing refresh is due. Set by the server." }
         lastManualGuidePull: { type: string, format: date-time, description: "When listings were last reloaded by hand. Set by the server." }
         hideScores: { type: string, enum: ["0", "1"] }
+        checkUpdates: { type: string, enum: ["0", "1"], description: "1 checks for a newer release once a day. 0 turns the check off. Missing means on." }
         sdUser: { type: string }
         sdPassword: { type: string }
         sdLineup: { type: string }

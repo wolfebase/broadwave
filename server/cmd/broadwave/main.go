@@ -30,6 +30,7 @@ import (
 	"broadwave/internal/source"
 	"broadwave/internal/sports"
 	"broadwave/internal/store"
+	"broadwave/internal/update"
 )
 
 //go:embed all:assets
@@ -94,6 +95,7 @@ func main() {
 	st.OnEvent = func(ev store.Event) { bus.Publish("activity", ev) }
 	hub.OnChange = debounce(500*time.Millisecond, func() { bus.Publish("live.changed", nil) })
 	api := &httpapi.Server{Store: st, Assets: assets, Dev: *dev, Hub: hub, Version: version, Bus: bus, Sports: sports.NewCache(sports.NewESPN()), Staging: *staging}
+	api.Updates = releaseCheck(st, version)
 	hub.OnPSIP = func(_ int, g psip.Guide) {
 		n, err := api.ApplyBroadcast(context.Background(), g)
 		if err != nil {
@@ -208,6 +210,9 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	if api.Updates != nil {
+		go api.Updates.Run(ctx)
+	}
 	go func() {
 		<-ctx.Done()
 		hub.Shutdown()
@@ -218,6 +223,39 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+}
+
+func releaseCheck(st *store.Store, version string) *update.Checker {
+	c := update.New(version)
+	c.Enabled = func(ctx context.Context) bool {
+		on, err := st.UpdatesEnabled(ctx)
+		if err != nil {
+			log.Printf("update: %v", err)
+			return false
+		}
+		return on
+	}
+	c.Load = func(ctx context.Context) (*update.Notice, time.Time) {
+		ver, notes, message, at, err := st.SavedUpdate(ctx)
+		if err != nil {
+			log.Printf("update: %v", err)
+			return nil, time.Time{}
+		}
+		if ver == "" || message == "" {
+			return nil, at
+		}
+		return &update.Notice{Version: ver, NotesURL: notes, Message: message}, at
+	}
+	c.Save = func(ctx context.Context, n *update.Notice, at time.Time) {
+		ver, notes, message := "", "", ""
+		if n != nil {
+			ver, notes, message = n.Version, n.NotesURL, n.Message
+		}
+		if err := st.SaveUpdate(ctx, ver, notes, message, at); err != nil {
+			log.Printf("update: %v", err)
+		}
+	}
+	return c
 }
 
 func refreshGuide(api *httpapi.Server) {

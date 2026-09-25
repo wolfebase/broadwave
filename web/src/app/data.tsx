@@ -8,6 +8,7 @@ import {
   getPasses,
   getRecordings,
   getSchedule,
+  getServer,
   getSettings,
   getStorage,
   getVirtuals,
@@ -19,7 +20,7 @@ import {
 import { events } from "../lib/events";
 import { indexAirings, sortChannels, type AiringIndex } from "../lib/guide";
 import { hasSnapshotFlag, loadSnapshot, saveSnapshot } from "../lib/snapshot";
-import type { Airing, Channel, ChannelPatch, Device, Pass, PlannedAiring, Recording, Settings, StorageInfo, VirtualChannel } from "../types";
+import type { Airing, Channel, ChannelPatch, Device, Pass, PlannedAiring, Recording, ServerInfo, Settings, StorageInfo, VirtualChannel } from "../types";
 
 const defaults: Settings = {
   layout: "auto",
@@ -63,6 +64,8 @@ type Data = {
   /** Devices that showed up after the house was already known. One line each. */
   notices: string[];
   dismissNotice: () => void;
+  /** Set when a newer release is available. */
+  update?: ServerInfo["update"];
 };
 
 const Ctx = createContext<Data | null>(null);
@@ -110,6 +113,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [virtuals, setVirtuals] = useState<VirtualChannel[]>([]);
   const [settings, setSettings] = useState<Settings>(defaults);
   const [storage, setStorage] = useState<StorageInfo | null>(null);
+  const [update, setUpdate] = useState<ServerInfo["update"]>();
   const loading = useRef(false);
 
   const refresh = useCallback<Data["refresh"]>(async (what) => {
@@ -134,6 +138,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (all || want.has("virtuals")) jobs.push(getVirtuals().then((r) => setVirtuals(r.virtuals)));
     if (all) {
       jobs.push(getSettings().then(setSettings));
+      jobs.push(getServer().then((info) => setUpdate(info.update)).catch(() => undefined));
       jobs.push(getStorage().then(setStorage).catch(() => undefined));
     }
     await Promise.all(jobs);
@@ -154,8 +159,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setBooting(false);
           setReady(true);
         }
-        const nextSettings = await getSettings();
+        const [nextSettings, info] = await Promise.all([getSettings(), getServer().catch(() => null)]);
         setSettings(nextSettings);
+        if (info) setUpdate(info.update);
         if (nextSettings.needsSetup === "1") {
           setReady(true);
           setSettled(true);
@@ -281,6 +287,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       saveSettings: async (values) => {
         setSettings(await putSettings(values));
         setStorage(await getStorage().catch(() => null));
+        if ("checkUpdates" in values) {
+          const info = await getServer().catch(() => null);
+          if (info) setUpdate(info.update);
+        }
       },
       record: async (channel, title) => {
         try {
@@ -301,6 +311,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
       notices,
       dismissNotice,
+      update,
       rediscover: async (ip) => {
         try {
           const res = await discover(ip);
@@ -312,7 +323,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh(["channels"]);
       },
     }),
-    [ready, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, storage, refresh, notices, dismissNotice],
+    [ready, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, storage, refresh, notices, dismissNotice, update],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

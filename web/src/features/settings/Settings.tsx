@@ -202,6 +202,18 @@ export function SettingsScreen({
         <button type="submit" className="btn">Restore</button>
       </form>
       <p className="hint">{copy.settings.backupHint}</p>
+      <h3 className="section-title">Updates</h3>
+      <label className="field">
+        {copy.settings.updates}
+        <select
+          value={settings.checkUpdates === "0" ? "0" : "1"}
+          onChange={(event) => onChange({ checkUpdates: event.target.value })}
+        >
+          <option value="1">On</option>
+          <option value="0">Off</option>
+        </select>
+        <span className="hint">{copy.settings.updatesHint}</span>
+      </label>
       <h3 className="section-title">Support</h3>
       <a className="btn" href="/api/v1/support">
         {copy.settings.support}

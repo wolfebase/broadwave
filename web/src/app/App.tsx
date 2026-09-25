@@ -30,6 +30,18 @@ const tabs = [
   { path: "/schedule", label: "Schedule", Icon: ScheduleIcon },
 ];
 
+function notesHref(url: string | undefined): string {
+  if (!url) return "";
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" || parsed.hostname !== "github.com" || parsed.username || parsed.password) return "";
+    if (parsed.search || parsed.hash || !parsed.pathname.startsWith("/wolfebase/broadwave/")) return "";
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
 export function App() {
   return (
     <DataProvider>
@@ -43,7 +55,9 @@ export function App() {
 function Shell() {
   const { path, params } = useRoute();
   const layout = useLayout();
-  const { ready, booting, error, recordings, settings, notices, dismissNotice } = useData();
+  const { ready, booting, error, recordings, settings, notices, dismissNotice, update } = useData();
+  const [hiddenUpdate, setHiddenUpdate] = useState("");
+  const notice = update && update.message && hiddenUpdate !== update.message ? update : undefined;
   const player = usePlayer();
   const [online, setOnline] = useState(true);
   const recordingCount = recordings.filter((r) => r.status === "recording").length;
@@ -102,6 +116,15 @@ function Shell() {
       <main className="content" aria-busy={booting} data-ready={ready ? "1" : "0"}>
         {booting ? <div className="boot"><span className="brand-tally" /> Finding your tuner…</div> : null}
         {!booting && error ? <p className="banner-error" role="alert">{error}</p> : null}
+        {!booting && notice?.message ? (
+          <div className="banner-update" role="status">
+            <p>{notice.message}</p>
+            {notesHref(notice.notesUrl) ? (
+              <a className="btn small" href={notesHref(notice.notesUrl)} target="_blank" rel="noreferrer">Release notes</a>
+            ) : null}
+            <button type="button" className="btn small ghost" onClick={() => setHiddenUpdate(notice.message)}>Not now</button>
+          </div>
+        ) : null}
         {!booting && notices[0] ? (
           <div className="banner-home" role="status">
             <p>{notices[0]}</p>
