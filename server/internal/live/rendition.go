@@ -13,6 +13,8 @@ type Rendition struct {
 	Audio string `json:"audio"` // copy, aac2, aac6
 	Mode  string `json:"mode,omitempty"`
 	Codec string `json:"codec,omitempty"` // hevc, or empty for H.264
+	Track string `json:"track,omitempty"` // lang, vi; empty is the main mix
+	Even  bool   `json:"even,omitempty"`
 }
 
 func (r Rendition) normalized() Rendition {
@@ -35,6 +37,15 @@ func (r Rendition) normalized() Rendition {
 			r.Codec = ""
 		}
 	}
+	switch r.Track {
+	case "lang", "vi":
+	default:
+		r.Track = ""
+	}
+	if r.Audio == "none" {
+		r.Track = ""
+		r.Even = false
+	}
 	return r
 }
 
@@ -45,6 +56,12 @@ func (r Rendition) Key() string {
 	if r.Mode != "" {
 		key += "." + r.Mode
 	}
+	if r.Track != "" {
+		key += "." + r.Track
+	}
+	if r.Even {
+		key += ".even"
+	}
 	if r.Codec == "hevc" {
 		key += ".hevc"
 	}
@@ -53,20 +70,23 @@ func (r Rendition) Key() string {
 
 func ParseRenditionKey(key string) (Rendition, bool) {
 	parts := strings.Split(key, ".")
-	if len(parts) < 2 || len(parts) > 4 {
+	if len(parts) < 2 || len(parts) > 6 {
 		return Rendition{}, false
 	}
 	r := Rendition{Video: parts[0], Audio: parts[1]}
-	if len(parts) >= 3 {
-		if parts[len(parts)-1] == "hevc" {
+	for _, p := range parts[2:] {
+		switch p {
+		case "hevc":
 			r.Codec = "hevc"
-			parts = parts[:len(parts)-1]
+		case "even":
+			r.Even = true
+		case "lang", "vi":
+			r.Track = p
+		case "broadcast", "smooth", "film":
+			r.Mode = p
+		default:
+			return Rendition{}, false
 		}
-	}
-	if len(parts) == 3 {
-		r.Mode = parts[2]
-	} else if len(parts) != 2 {
-		return Rendition{}, false
 	}
 	if r.normalized().Key() != key {
 		return Rendition{}, false
@@ -88,6 +108,8 @@ type Prefs struct {
 	Quality string `json:"quality,omitempty"` // auto, original, high, medium, saver, tile, 360
 	Audio   string `json:"audio,omitempty"`   // auto, surround, stereo, none
 	Picture string `json:"picture,omitempty"` // broadcast, smooth, film
+	Track   string `json:"track,omitempty"`   // main, language, described
+	Even    bool   `json:"even,omitempty"`
 }
 
 // Source describes the broadcast as far as the server knows it.
@@ -101,6 +123,8 @@ type Source struct {
 	Film      bool
 	UserAgent string
 	Referrer  string
+	// AudioPID is the PMT elementary stream to map. Zero keeps the first audio.
+	AudioPID int
 }
 
 type Decision struct {
@@ -219,6 +243,25 @@ func Decide(src Source, caps Caps, p Prefs) Decision {
 			why = append(why, "stereo")
 		}
 	}
+	switch strings.ToLower(p.Track) {
+	case "language", "lang", "sap":
+		r.Track = "lang"
+		why = append(why, "second language")
+	case "described", "vi":
+		r.Track = "vi"
+		why = append(why, "described video")
+	}
+	if p.Even && r.Audio != "none" {
+		r.Even = true
+		if r.Audio == "copy" {
+			if audio == "stereo" || quality == "saver" {
+				r.Audio = "aac2"
+			} else {
+				r.Audio = "aac6"
+			}
+		}
+		why = append(why, "even volume")
+	}
 	r.Mode = p.Picture
 	if r.Video != "copy" && has(caps.Video, "hevc") {
 		r.Codec = "hevc"
@@ -300,16 +343,20 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 	}
 	args = append(args, headerArgs(src.UserAgent, src.Referrer)...)
 	args = append(args, "-probesize", "2000000", "-analyzeduration", "1500000", "-i", input)
+	audioMap := "0:a:0"
+	if program > 0 {
+		audioMap = fmt.Sprintf("0:p:%d:a:0", program)
+	}
+	if src.AudioPID > 0 {
+		audioMap = fmt.Sprintf("0:i:%d", src.AudioPID)
+	}
 	if program > 0 {
 		args = append(args, "-map", fmt.Sprintf("0:p:%d:v:0", program))
-		if r.Audio != "none" {
-			args = append(args, "-map", fmt.Sprintf("0:p:%d:a:0", program))
-		}
 	} else {
 		args = append(args, "-map", "0:v:0")
-		if r.Audio != "none" {
-			args = append(args, "-map", "0:a:0")
-		}
+	}
+	if r.Audio != "none" {
+		args = append(args, "-map", audioMap)
 	}
 	if transcode {
 		mode := r.Mode
@@ -336,9 +383,9 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 			args = append(args, "-bsf:a", "aac_adtstoasc")
 		}
 	case "aac6":
-		args = append(args, "-af", "aresample=async=1000", "-c:a", "aac", "-ac", "6", "-b:a", "384k")
+		args = append(args, "-af", audioFilter(r), "-c:a", "aac", "-ac", "6", "-b:a", "384k")
 	default:
-		args = append(args, "-af", "aresample=async=1000", "-c:a", "aac", "-ac", "2", "-b:a", "160k")
+		args = append(args, "-af", audioFilter(r), "-c:a", "aac", "-ac", "2", "-b:a", "160k")
 	}
 	// CMAF (fMP4) segments: players read timing straight from the boxes with no
 	// transmuxing, Apple devices need it for HEVC, and it is the base for LL-HLS.
@@ -351,4 +398,14 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		"-hls_flags", "delete_segments+independent_segments+omit_endlist",
 		"index.m3u8",
 	)
+}
+
+// audioFilter keeps broadcast timestamps and, when asked, levels the mix.
+// loudnorm without measured values is one pass, so it can run live.
+func audioFilter(r Rendition) string {
+	af := "aresample=async=1000"
+	if r.Even {
+		af += ",loudnorm=I=-16:LRA=11:TP=-1.5"
+	}
+	return af
 }

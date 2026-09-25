@@ -20,6 +20,8 @@ export function useLiveStream(
     channelId,
     quality,
     audio,
+    track,
+    even,
     picture,
     room,
     sync,
@@ -30,6 +32,8 @@ export function useLiveStream(
     channelId: number;
     quality?: Prefs["quality"];
     audio?: Prefs["audio"];
+    track?: Prefs["track"];
+    even?: boolean;
     picture?: Prefs["picture"];
     room: string | null;
     sync: boolean;
@@ -55,7 +59,7 @@ export function useLiveStream(
     if (remember) rememberChannel(remember);
     void (async () => {
       try {
-        const next = await watchChannel(id, webCaps(), { quality, audio, picture });
+        const next = await watchChannel(id, webCaps(), { quality, audio, picture, track, even });
         joined = next.rendition;
         if (dead) {
           await stopWatch(id, joined);
@@ -107,7 +111,7 @@ export function useLiveStream(
     };
     // remember is the channel record; its identity changes on every guide poll.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, quality, audio, picture, small]);
+  }, [channelId, quality, audio, track, even, picture, small]);
 
   useEffect(() => {
     const video = videoRef.current;

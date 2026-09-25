@@ -13,13 +13,14 @@ import { useLiveStream } from "./useLiveStream";
 
 type Quality = "auto" | "original" | "high" | "medium" | "saver";
 type Sound = "auto" | "surround" | "stereo";
-type Options = { quality: Quality; audio: Sound; sync: boolean; shared: boolean };
+type Track = "main" | "language" | "described";
+type Options = { quality: Quality; audio: Sound; track: Track; even: boolean; sync: boolean; shared: boolean };
 
 function readOptions(): Options {
   try {
-    return { quality: "auto", audio: "auto", sync: true, shared: false, ...JSON.parse(localStorage.getItem("ota-live") || "{}") };
+    return { quality: "auto", audio: "auto", track: "main", even: false, sync: true, shared: false, ...JSON.parse(localStorage.getItem("ota-live") || "{}") };
   } catch {
-    return { quality: "auto", audio: "auto", sync: true, shared: false };
+    return { quality: "auto", audio: "auto", track: "main", even: false, sync: true, shared: false };
   }
 }
 
@@ -50,6 +51,8 @@ export function LivePlayer({
     channelId: channel.id,
     quality: opts.quality,
     audio: opts.audio,
+    track: opts.track,
+    even: opts.even,
     picture,
     room,
     sync: opts.sync,
@@ -271,6 +274,8 @@ export function LivePlayer({
         <div className="options-grid">
           <OptionRow label="Quality" value={opts.quality} options={Object.keys(qualityLabels) as Options["quality"][]} labels={qualityLabels} onChange={(quality) => setOpts((o) => ({ ...o, quality }))} />
           <OptionRow label="Sound" value={opts.audio} options={["auto", "surround", "stereo"]} labels={{ auto: "Auto", surround: "Surround", stereo: "Stereo" }} onChange={(audio) => setOpts((o) => ({ ...o, audio }))} />
+          <OptionRow label="Audio" value={opts.track} options={["main", "language", "described"]} labels={{ main: "Main", language: "Second language", described: "Described video" }} onChange={(track) => setOpts((o) => ({ ...o, track }))} />
+          <OptionRow label="Even volume" value={opts.even ? "on" : "off"} options={["off", "on"]} labels={{ off: "Off", on: "On" }} onChange={(v) => setOpts((o) => ({ ...o, even: v === "on" }))} />
           <OptionRow
             label="Motion"
             value={picture}

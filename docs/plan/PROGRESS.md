@@ -3,7 +3,7 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **PB5** done this round. Next is **PB6** (AC-3 passthrough and the audio picker). App Review unchanged (WAITING_FOR_REVIEW, iOS and tvOS, checked 2026-09-25 00:06 UTC). Production is `ghcr.io/wolfebase/broadwave:0.6.0` (`h264_vaapi`) after a mistaken full deploy was restored. Staging image `broadwave-staging:pb5` has jellyfin-ffmpeg 7.1.4-3.
+- Current task: **PB6** done. Next is **PB4** (honest 30→60, ADR 0010). App Review unchanged (WAITING_FOR_REVIEW, iOS and tvOS, checked 2026-09-25 00:53 UTC). Production is `ghcr.io/wolfebase/broadwave:0.6.0`. Staging is the PB6 binary (`v0.6.0-13-ge38f0e5-dirty`) on `:8490`.
 - App Review: Broadwave 1.0 (iOS and tvOS, app 6815795649, build 2) was WAITING_FOR_REVIEW at 2026-09-24 22:55 UTC. Check it at the start of every round (AS1).
 - Production `Broadwave` on TUS `:8477` is v0.6.0. Staging `Broadwave-Staging` is on `:8490`. Next recording: Jeopardy, 2026-09-25 20:00 UTC.
 - The tree is clean at the last commit. The repo is `~/Projects/active/broadwave`.
@@ -51,7 +51,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] PB4 Honest 30→60: measure interpolation methods on TUS; keep only what is real time and looks better (ADR 0010)
 - [x] PB5 GPU decode on VAAPI (`-hwaccel vaapi -hwaccel_output_format vaapi`, no `hwupload` except film/`pullup`). jellyfin-ffmpeg 7.1.4-3 in the image (`ffmpeg version 7.1.4-Jellyfin` on staging). Encoder `-rc_mode VBR -profile:v high -bf 2 -low_power 0`. Apple transcodes are `hevc_vaapi` with `-tag:v hvc1` (`1080.copy.broadcast.hevc`). Staging 5.1: 1920×1080 59.94, 0 decode errors over 30 polls / 292 segments (~10 min), CPU 10.51% (25 s sample 10.83%; baseline was ~18%). HEVC `hvc1` 60000/1001, 0 decode errors, CPU 10.87%. Software fallback restarts the rendition on `libx264` if VAAPI ffmpeg exits within 8 s. VMAF bitrates are PB5b (no libvmaf in this ffmpeg). `TestHEVCRenditionUsesHVC1`, `TestScanTypeMatrix`, `TestProgressive720pKeepsEveryFrame`. Table in `docs/dev-lab.md`.
 - [ ] PB5b Score the 14M 1080p60 and 8M 720p60 bitrates with libvmaf (≥ 95 LAN, ≥ 90 cellular). jellyfin-ffmpeg 7.1.4 has no libvmaf.
-- [ ] PB6 AC-3 5.1 passthrough to Apple; audio picked by PMT language/bsmod; SAP and described-video picker; Even volume
+- [x] PB6 AC-3 passthrough and PMT audio pick. Staging channel 2 (5.1) with tvOS caps: `1080.copy.broadcast.hevc`, ffprobe `ac3` 6ch `5.1(side)`, tuner released. PMT on the full mux: 5.1 main pid 52 English, Spanish pid 53; 4.1 main pid 52 English, second track pid 53 described (no separate language tag, so it is not the filtered-stream pid 0x102). Web and Apple players pick Main, Second language, or Described video, plus Even volume off by default (`loudnorm` only when on, which re-encodes). Switching joins that rendition, so the picture reloads; gapless alternates stay on F2. `TestAudioTracksPMT`, `TestAudioTracksSameLanguageAlternate`, `TestAudioTracksISOAudioType`, `TestSourceForPicksSAP`, `TestRenditionMapsChosenPID`.
 - [ ] PB7 Player tuning (hls.js buffers, AVPlayer buffer, tvOS frame-rate/range matching); time to first frame and stalls measured
 - [ ] PB8 Stream panel (source, output, GPU decode, dropped frames, sync) on web, iPhone, Apple TV
 - [x] PB9 `scripts/picture-lab.sh` on TUS at real time. Staging capture of channel 1 (12 s, tuner released, no recording within 20 min). `bw-lab-field-deint` 1280x720 119.88 fps, 959 frames, 0 decode errors, 0.993x, CPU 21.34%. `bw-lab-progressive-scale` 1280x720 59.94 fps, 479 frames, 0 decode errors, 0.993x, CPU 19.96%. VMAF n/a: image ffmpeg has no libvmaf (PB5). Table `docs/lab/picture-lab.md`. Stills `docs/lab/runs/latest/stills/`.
@@ -174,7 +174,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 
 ## Phase F — Player
 - [ ] F1 Captions (WebVTT rendition, pickers)
-- [ ] F2 Master playlists with alternates
+- [ ] F2 Master playlists with alternates (PB6's audio picker reloads the rendition; a gapless switch belongs here)
 - [ ] F3 Web player extras (audio picker, stats, shortcuts, last channel, theater)
 - [ ] F4 Instant channel switching
 - [ ] F5 Apple player (info panels, contextual actions, remote gestures, PiP, AirPlay)
