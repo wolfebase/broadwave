@@ -1,15 +1,33 @@
+import { useEffect, useState } from "react";
+import { getDeviceHealth } from "../../api";
+import type { DeviceHealth } from "../../types";
+import { copy } from "../../strings";
 import { useDiagnostics } from "./useDiagnostics";
 import "./setup.css";
 
 export function DiagnosticsPage() {
   const d = useDiagnostics(undefined, 3000);
+  const [health, setHealth] = useState<DeviceHealth[] | null>(null);
+  useEffect(() => {
+    let dead = false;
+    getDeviceHealth()
+      .then((body) => {
+        if (!dead) setHealth(body.devices);
+      })
+      .catch(() => {
+        if (!dead) setHealth([]);
+      });
+    return () => {
+      dead = true;
+    };
+  }, []);
   if (!d) return <div className="page-wrap">Checking…</div>;
   return (
     <div className="page-wrap diag">
       <header className="page-header">
         <h1>Diagnostics</h1>
         <p className="page-sub">
-          {d.server?.name} · version {d.version || "dev"} · {d.os} · {d.connectedApps ?? 0} apps connected
+          {d.server?.name} · version {d.version || "dev"} · {d.os} · {(d.connectedApps ?? 0) === 1 ? "1 app connected" : `${d.connectedApps ?? 0} apps connected`}
         </p>
       </header>
 
@@ -28,6 +46,30 @@ export function DiagnosticsPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="settings-section">
+        <h2>Tuner health</h2>
+        <p className="dim">Model, firmware, and lock. This app does not install firmware.</p>
+        {health === null ? <p className="dim">Checking tuners.</p> : null}
+        {health !== null && health.length === 0 ? <p className="dim">No tuner answered.</p> : null}
+        {(health ?? []).map((device) => (
+          <dl key={device.deviceId} className="share-urls">
+            <dt>Model</dt>
+            <dd>{device.model || "Unknown"}</dd>
+            <dt>{copy.sources.firmware}</dt>
+            <dd>{device.firmwareVersion || "Unknown"}</dd>
+            {(device.tuners ?? []).map((tuner) => (
+              <LockLine key={tuner.index} index={tuner.index} locked={tuner.locked} />
+            ))}
+            {device.error ? (
+              <>
+                <dt>Status</dt>
+                <dd>{device.error}</dd>
+              </>
+            ) : null}
+          </dl>
+        ))}
       </section>
 
       <section className="settings-section">
@@ -93,5 +135,14 @@ export function DiagnosticsPage() {
         </ul>
       </section>
     </div>
+  );
+}
+
+function LockLine({ index, locked }: { index: number; locked: boolean }) {
+  return (
+    <>
+      <dt>Tuner {index + 1}</dt>
+      <dd>{locked ? "Locked" : "Not locked"}</dd>
+    </>
   );
 }

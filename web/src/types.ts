@@ -4,6 +4,7 @@ export type {
   Channel,
   ChannelPatch,
   Device,
+  DeviceHealth,
   MultiviewPlan,
   Pass,
   PlannedAiring,

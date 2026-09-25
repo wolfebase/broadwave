@@ -97,6 +97,14 @@ export type Device = {
   note?: string;
 };
 
+export type DeviceHealth = {
+  deviceId: string;
+  model: string;
+  firmwareVersion: string;
+  tuners: TunerLock[];
+  error?: string;
+};
+
 export type Event = {
   id: number;
   at: string;
@@ -386,6 +394,11 @@ export type Tuner = {
   quality?: number;
   symbol?: number;
   viewers?: number;
+};
+
+export type TunerLock = {
+  index: number;
+  locked: boolean;
 };
 
 export type VirtualChannel = {

@@ -148,6 +148,23 @@ paths:
                   devices:
                     type: array
                     items: { $ref: "#/components/schemas/Device" }
+  /devices/health:
+    get:
+      tags: [sources]
+      operationId: getDeviceHealth
+      description: Model, firmware version, and signal lock for each tuner. Read only. This server does not install firmware.
+      responses:
+        "200":
+          description: Tuner health
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [devices]
+                properties:
+                  devices:
+                    type: array
+                    items: { $ref: "#/components/schemas/DeviceHealth" }
   /devices/{id}/scan:
     post:
       tags: [sources]
@@ -1368,6 +1385,25 @@ components:
         priority: { type: integer }
         lastSeen: { type: string }
         note: { type: string }
+    DeviceHealth:
+      type: object
+      required: [deviceId, model, firmwareVersion, tuners]
+      description: Live model, firmware version, and signal lock. Empty error means the tuner answered.
+      properties:
+        deviceId: { type: string }
+        model: { type: string }
+        firmwareVersion: { type: string }
+        tuners:
+          type: array
+          items: { $ref: "#/components/schemas/TunerLock" }
+        error: { type: string, description: "Set when the tuner did not answer." }
+    TunerLock:
+      type: object
+      required: [index, locked]
+      description: Signal lock for one tuner. Locked is false when the device reports no lock.
+      properties:
+        index: { type: integer }
+        locked: { type: boolean }
     Source:
       type: object
       required: [id, kind, name, enabled]

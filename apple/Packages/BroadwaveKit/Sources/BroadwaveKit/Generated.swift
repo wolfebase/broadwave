@@ -196,6 +196,22 @@ public struct Device: Codable, Sendable, Hashable {
     }
 }
 
+public struct DeviceHealth: Codable, Sendable, Hashable {
+    public var deviceId: String
+    public var model: String
+    public var firmwareVersion: String
+    public var tuners: [TunerLock]
+    public var error: String?
+
+    public init(deviceId: String, model: String, firmwareVersion: String, tuners: [TunerLock], error: String? = nil) {
+        self.deviceId = deviceId
+        self.model = model
+        self.firmwareVersion = firmwareVersion
+        self.tuners = tuners
+        self.error = error
+    }
+}
+
 public struct Event: Codable, Sendable, Hashable, Identifiable {
     public var id: Int64
     public var at: Date
@@ -713,6 +729,16 @@ public struct Tuner: Codable, Sendable, Hashable {
         self.quality = quality
         self.symbol = symbol
         self.viewers = viewers
+    }
+}
+
+public struct TunerLock: Codable, Sendable, Hashable {
+    public var index: Int
+    public var locked: Bool
+
+    public init(index: Int, locked: Bool) {
+        self.index = index
+        self.locked = locked
     }
 }
 

@@ -88,6 +88,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /ws", s.socket)
 	api("GET /profile", s.profile)
 	api("GET /devices", s.devices)
+	api("GET /devices/health", s.deviceHealth)
 	api("POST /devices/{id}/scan", s.startScan)
 	api("GET /devices/{id}/scan", s.scanStatus)
 	api("GET /home", s.home)

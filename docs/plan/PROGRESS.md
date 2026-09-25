@@ -3,9 +3,9 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **G10** tuner health (integrate the finished lane, then MV3). App Review unchanged at 2026-09-25 16:19Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply.
-- Lane ledger: P2b merged `4a411d3`. LEGAL1 merged `0743bc6`. OPS3 merged `02554ea`. HW1 merged `8a815e8`, review fix `4c04373`. MV2 merged `cc726eb`. P2c merged `086265d`. OPS1 merged `a9abe62`. AS6 merged this commit (registry and ADR 0011 only; the lane's update-notifier copy was dropped). G10 is ready in `…/707af1c4a73f` (`GET /api/v1/devices/health`, Diagnostics row, fake-tuner test). Take only the health files. Drop its copy of the update notifier, lab logs, and any PROGRESS edit. No lanes are running.
-- Disk: steering 11:10, checked 2026-09-25 16:19Z. `df -h ~` is 12 GB free after `go clean -cache`, `apple/build`, and `DerivedData/Broadwave-*` (those were already empty). Above 5 GB, so lanes can continue. AS6 and G10 copies kept until G10 is merged. No cloned simulators to delete.
+- Current task: **MV3** tuner-aware add-channel picker. App Review unchanged at 2026-09-25 16:19Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply.
+- Lane ledger: P2b merged `4a411d3`. LEGAL1 merged `0743bc6`. OPS3 merged `02554ea`. HW1 merged `8a815e8`, review fix `4c04373`. MV2 merged `cc726eb`. P2c merged `086265d`. OPS1 merged `a9abe62`. AS6 merged `f7d7bcf` (CI green). G10 merged this commit (health files only; the lane's update-notifier copy was dropped). No lanes are running. Next lanes should avoid `server/internal/live/plan.go`, `httpapi/multiview.go`, `web/src/features/multiview/`, and `MultiviewScreen.swift`.
+- Disk: steering 11:10, checked 2026-09-25 16:19Z. `df -h ~` is 12 GB free after `go clean -cache`, `apple/build`, and `DerivedData/Broadwave-*` (those were already empty). Above 5 GB, so lanes can continue. AS6 and G10 copies removed after this commit. No cloned simulators to delete.
 - Production `Broadwave` `:8477` is `v0.8.0`. Staging has the MV1 web bundle. Next recording Jeopardy 2026-09-25 20:00 UTC. Lane A is **MV3**.
 - App Review: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW, checked 2026-09-25 16:19Z (AS1). Check it at the start of every round.
 - Production `Broadwave` on TUS `:8477` is v0.8.0. Staging `Broadwave-Staging` on `:8490` is `v0.8.0-4-g6545f65` (encoder h264_vaapi). Next recording: Jeopardy, 2026-09-25 20:00 UTC.
@@ -220,7 +220,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] G7 moved to S3 (tracked there)
 - [ ] G8 Metrics and structured logging
 - [ ] G9 Performance profiling on Unraid
-- [ ] G10 HDHomeRun health surface (read-only)
+- [x] G10 HDHomeRun health surface (read-only). `GET /api/v1/devices/health` returns model, firmware, and lock. It does not install firmware. `TestHealthReadReportsVersionAndLock`: fake HDHR4-2US, firmware 20260101, tuner 0 locked, tuner 1 not, requests exactly `/discover.json,/sys/version,/tuner0/status,/tuner1/status`. `TestDeviceHealthRoute`, `TestDeviceHealthEmpty`, `TestDeviceHealthSkipsAPlaylist` (a playlist `BaseURL` of `source` is left out). Staging `:8490` returned device `10611B4C`, model HDHR5-2US, firmware 20250815, both tuners not locked. Chrome at 390×844, 1440×900, and 1920×1080 showed that row and "This app does not install firmware." Console 0 errors on the first pass. A later load read "1 app connected" (the old line said "1 apps"). Shots `.evidence/g10/web-phone.jpg`, `web-desktop.jpg`, `web-tv.jpg`. Tuners `ours:false` on `:8477` and `:8490`. Production stayed `v0.8.0`. `make check` green.
 - [x] G11 moved to N1 (tracked there)
 
 ## Phase H — Accounts and remote
