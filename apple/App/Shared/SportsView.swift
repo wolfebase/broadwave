@@ -83,13 +83,9 @@ struct RecordingsView: View {
                     ForEach(groups[title] ?? []) { rec in
                         NavigationLink(value: rec) {
                             HStack(spacing: 14) {
-                                AsyncImage(url: store.api?.posterURL(recordingID: rec.id)) { img in
-                                    img.resizable().aspectRatio(16 / 9, contentMode: .fill)
-                                } placeholder: {
-                                    Rectangle().fill(Tokens.ColorToken.surface2)
-                                }
-                                .frame(width: 120, height: 68)
-                                .clipShape(.rect(cornerRadius: Tokens.Radius.sm))
+                                RecordingPoster(recording: rec)
+                                    .frame(width: 120, height: 68)
+                                    .clipShape(.rect(cornerRadius: Tokens.Radius.sm))
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack(spacing: 6) {
                                         if rec.isRecording {

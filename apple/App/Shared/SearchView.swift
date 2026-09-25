@@ -22,15 +22,22 @@ struct SearchView: View {
             if !result.airings.isEmpty {
                 Section("Guide") {
                     ForEach(result.airings) { airing in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(airing.title).font(.headline)
-                            Text(meta(airing))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Button("Record every airing") {
-                                Task { await record(airing) }
+                        HStack(alignment: .top, spacing: 12) {
+                            if let art = store.artURL(airing, width: 160) {
+                                ProgramPicture(url: art, width: airing.imageWidth ?? 0, height: airing.imageHeight ?? 0, hero: false)
+                                    .frame(width: 84, height: 56)
+                                    .clipShape(.rect(cornerRadius: Tokens.Radius.sm))
                             }
-                            .buttonStyle(.glass)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(airing.title).font(.headline)
+                                Text(meta(airing))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Button("Record every airing") {
+                                    Task { await record(airing) }
+                                }
+                                .buttonStyle(.glass)
+                            }
                         }
                         .padding(.vertical, 4)
                     }
@@ -39,9 +46,14 @@ struct SearchView: View {
             if !result.recordings.isEmpty {
                 Section("Recordings") {
                     ForEach(result.recordings) { rec in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(rec.title).font(.headline)
-                            Text(rec.guideNumber).font(.caption).foregroundStyle(.secondary)
+                        HStack(spacing: 12) {
+                            RecordingPoster(recording: rec)
+                                .frame(width: 84, height: 48)
+                                .clipShape(.rect(cornerRadius: Tokens.Radius.sm))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(rec.title).font(.headline)
+                                Text(rec.guideNumber).font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }

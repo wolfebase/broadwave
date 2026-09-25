@@ -346,8 +346,15 @@ struct GuideGrid: View {
                 let e = min(airing.end, end)
                 let w = max(24, x(e) - x(s) - 4)
                 Button { onSelect(channel, airing) } label: {
-                    GuideCell(airing: airing, now: store.now, dim: highlight != nil && airing.kind != highlight, recording: store.activeRecording(on: channel) != nil && airing.isOn(at: store.now), score: airing.gameId.flatMap { scores[$0] })
-                        .frame(width: w, height: rowHeight - 10)
+                    GuideCell(
+                        airing: airing,
+                        now: store.now,
+                        dim: highlight != nil && airing.kind != highlight,
+                        recording: store.activeRecording(on: channel) != nil && airing.isOn(at: store.now),
+                        score: airing.gameId.flatMap { scores[$0] },
+                        art: ArtLayout.showsCellArt(slot: Int(w.rounded())) ? store.artURL(airing, width: 160) : nil
+                    )
+                    .frame(width: w, height: rowHeight - 10)
                 }
                 .buttonStyle(GuideCellStyle())
                 #if os(tvOS)
@@ -374,6 +381,7 @@ struct GuideCell: View {
     let dim: Bool
     let recording: Bool
     var score: String?
+    var art: URL?
 
     var body: some View {
         let kind = airing.kind
@@ -388,23 +396,32 @@ struct GuideCell: View {
                 }
             }
             RoundedRectangle(cornerRadius: 2).fill(kind.color).frame(width: 3).padding(.vertical, 10)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 5) {
-                    if recording {
-                        Circle().fill(Tokens.ColorToken.tally).frame(width: 7, height: 7)
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 5) {
+                        if recording {
+                            Circle().fill(Tokens.ColorToken.tally).frame(width: 7, height: 7)
+                        }
+                        Text(airing.title).font(.footnote.weight(.semibold)).lineLimit(1)
+                        if let score, !score.isEmpty {
+                            Text(score).font(.caption2.weight(.semibold)).monospacedDigit().lineLimit(1)
+                        }
+                        if airing.new == true {
+                            Text("NEW").font(.caption2.weight(.heavy)).foregroundStyle(Tokens.ColorToken.accent)
+                        }
                     }
-                    Text(airing.title).font(.footnote.weight(.semibold)).lineLimit(1)
-                    if let score, !score.isEmpty {
-                        Text(score).font(.caption2.weight(.semibold)).monospacedDigit().lineLimit(1)
-                    }
-                    if airing.new == true {
-                        Text("NEW").font(.caption2.weight(.heavy)).foregroundStyle(Tokens.ColorToken.accent)
-                    }
+                    Text(airing.subtitle ?? airing.start.formatted(date: .omitted, time: .shortened))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                Text(airing.subtitle ?? airing.start.formatted(date: .omitted, time: .shortened))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if let art {
+                    ProgramPicture(url: art, width: airing.imageWidth ?? 0, height: airing.imageHeight ?? 0, hero: false)
+                        .frame(width: 52)
+                        .padding(.vertical, 6)
+                        .clipShape(.rect(cornerRadius: 4))
+                }
             }
             .padding(.leading, 12)
             .padding(.trailing, 8)
@@ -468,18 +485,29 @@ struct ProgramSheet: View {
         let on = airing?.isOn(at: store.now) ?? true
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if let airing, let api = store.api, airing.imageUrl?.isEmpty == false {
-                    ProgramArt(url: api.artURL(kind: "airing", id: airing.id, width: 640), width: airing.imageWidth ?? 0, height: airing.imageHeight ?? 0)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 180)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .accessibilityHidden(true)
-                }
-                HStack {
-                    ChannelBadge(channel, large: true)
-                    Spacer()
-                    if on, airing != nil {
-                        LiveDot()
+                if let airing, let art = store.artURL(airing, width: 960) {
+                    ZStack(alignment: .bottomLeading) {
+                        ProgramPicture(url: art, width: airing.imageWidth ?? 0, height: airing.imageHeight ?? 0)
+                        LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .center, endPoint: .bottom)
+                        HStack {
+                            ChannelBadge(channel, large: true)
+                            Spacer()
+                            if on {
+                                LiveDot()
+                            }
+                        }
+                        .padding(16)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 220)
+                    .clipShape(.rect(cornerRadius: Tokens.Radius.lg))
+                } else {
+                    HStack {
+                        ChannelBadge(channel, large: true)
+                        Spacer()
+                        if on, airing != nil {
+                            LiveDot()
+                        }
                     }
                 }
                 if let airing {
@@ -557,34 +585,6 @@ struct ProgramSheet: View {
         .background {
             RadialGradient(colors: [kind.color.opacity(0.35), .clear], center: .topLeading, startRadius: 0, endRadius: 400)
                 .ignoresSafeArea()
-        }
-    }
-}
-
-/// Crisp poster over a blurred copy, unless the art is wide enough to fill the slot.
-private struct ProgramArt: View {
-    let url: URL
-    let width: Int
-    let height: Int
-
-    var body: some View {
-        GeometryReader { geo in
-            let bleed = ArtLayout.choose(width: width, height: height, slot: Int(geo.size.width)) == "bleed"
-            let cap = CGFloat(ArtLayout.displayEdge(native: max(width, 1), slot: Int(geo.size.width)))
-            AsyncImage(url: url) { phase in
-                if let image = phase.image {
-                    ZStack {
-                        image.resizable().scaledToFill().blur(radius: bleed ? 0 : 22).opacity(bleed ? 0.85 : 0.45)
-                        if !bleed {
-                            image.resizable().scaledToFit()
-                                .frame(maxWidth: width > 0 ? min(geo.size.width * 0.72, cap) : min(geo.size.width * 0.55, 320),
-                                       maxHeight: geo.size.height * 0.82)
-                        }
-                    }
-                }
-            }
-            .frame(width: geo.size.width, height: geo.size.height)
-            .clipped()
         }
     }
 }

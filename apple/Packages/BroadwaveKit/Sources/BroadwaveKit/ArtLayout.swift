@@ -16,4 +16,20 @@ public enum ArtLayout {
         let limit = native + native / 4
         return slot < limit ? slot : limit
     }
+
+    /// Wide guide cells keep a thumbnail beside the title. 220 matches the web grid.
+    public static func showsCellArt(slot: Int) -> Bool {
+        slot > 220
+    }
+
+    /// Points to draw so this side stays within 1.25× its native pixels.
+    /// Zero when the size is unknown: the caller draws at the slot.
+    public static func cappedPoints(native: Int, slotPoints: Double, scale: Double) -> Double {
+        guard native > 0, slotPoints > 0 else { return 0 }
+        let scale = max(scale, 1)
+        let slot = Int((slotPoints * scale).rounded())
+        let edge = displayEdge(native: native, slot: slot)
+        guard edge > 0 else { return 0 }
+        return Double(edge) / scale
+    }
 }

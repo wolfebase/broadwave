@@ -93,6 +93,28 @@ public struct GuideIndex: Sendable {
     public func next(_ channel: Int64, after date: Date) -> Airing? {
         airings(channel).first { $0.start >= date }
     }
+
+    /// Program art for a recording: the same program when it has a picture, otherwise the closest listing with the same title.
+    public func artAiring(for recording: Recording) -> Airing? {
+        let list = airings(recording.channelId)
+        if let pid = recording.programId, !pid.isEmpty {
+            let matched = list.filter { $0.programId == pid && hasArt($0) }
+            if let hit = closest(matched, to: recording.startedAt) {
+                return hit
+            }
+        }
+        let titled = list.filter { $0.title == recording.title && hasArt($0) }
+        return closest(titled, to: recording.startedAt)
+    }
+}
+
+private func hasArt(_ airing: Airing) -> Bool {
+    guard let image = airing.imageUrl else { return false }
+    return !image.isEmpty
+}
+
+private func closest(_ list: [Airing], to date: Date) -> Airing? {
+    list.min { abs($0.start.timeIntervalSince(date)) < abs($1.start.timeIntervalSince(date)) }
 }
 
 public extension Channel {

@@ -72,7 +72,7 @@ struct HomeView: View {
                         }
                         .padding(.horizontal)
                         ScrollView(.horizontal) {
-                            LazyHStack(spacing: 14) {
+                            LazyHStack(alignment: .top, spacing: 14) {
                                 ForEach(games.prefix(16), id: \.1.id) { channel, airing in
                                     Button {
                                         if airing.isOn(at: store.now) {
@@ -260,7 +260,7 @@ struct Shelf<Content: View>: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.title2.weight(.bold)).padding(.horizontal)
             ScrollView(.horizontal) {
-                LazyHStack(spacing: 14) { content }
+                LazyHStack(alignment: .top, spacing: 14) { content }
                     .padding(.horizontal)
             }
             .scrollIndicators(.hidden)
@@ -270,59 +270,64 @@ struct Shelf<Content: View>: View {
 }
 
 struct GameCard: View {
+    @Environment(AppStore.self) private var store
     let channel: Channel
     let airing: Airing
     let now: Date
     var score: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if airing.isOn(at: now) {
-                LiveDot()
-            } else {
-                Text(airing.start.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
+        let art = store.artURL(airing, width: 640)
+        VStack(alignment: .leading, spacing: 0) {
+            if let art {
+                ProgramPicture(url: art, width: airing.imageWidth ?? 0, height: airing.imageHeight ?? 0)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 112)
+                    .clipped()
             }
-            if let (a, b) = airing.matchup {
-                Text(a).font(.headline.weight(.heavy)).lineLimit(1)
-                Text("AT").font(.caption2.weight(.bold)).foregroundStyle(.tertiary)
-                Text(b).font(.headline.weight(.heavy)).lineLimit(1)
-            } else {
-                Text(airing.subtitle ?? airing.title).font(.headline.weight(.heavy)).lineLimit(3)
+            VStack(alignment: .leading, spacing: 8) {
+                if airing.isOn(at: now) {
+                    LiveDot()
+                } else {
+                    Text(airing.start.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+                if let (a, b) = airing.matchup {
+                    Text(a).font(.headline.weight(.heavy)).lineLimit(1)
+                    Text("AT").font(.caption2.weight(.bold)).foregroundStyle(.tertiary)
+                    Text(b).font(.headline.weight(.heavy)).lineLimit(1)
+                } else {
+                    Text(airing.subtitle ?? airing.title).font(.headline.weight(.heavy)).lineLimit(3)
+                }
+                Spacer(minLength: 0)
+                if let score, !score.isEmpty {
+                    Text(score).font(.subheadline.weight(.semibold)).monospacedDigit()
+                }
+                ChannelBadge(channel)
             }
-            Spacer(minLength: 0)
-            if let score, !score.isEmpty {
-                Text(score).font(.subheadline.weight(.semibold)).monospacedDigit()
-            }
-            ChannelBadge(channel)
+            .padding(16)
+            .frame(maxWidth: .infinity, minHeight: art == nil ? 190 : 0, alignment: .topLeading)
         }
-        .padding(16)
-        .frame(width: cardWidth, height: 190, alignment: .topLeading)
+        .frame(width: cardWidth, alignment: .topLeading)
         .background(
             LinearGradient(colors: [Tokens.Category.sports.opacity(0.3), .clear], startPoint: .topLeading, endPoint: .bottomTrailing),
             in: .rect(cornerRadius: Tokens.Radius.lg)
         )
         .background(Tokens.ColorToken.surface1, in: .rect(cornerRadius: Tokens.Radius.lg))
+        .clipShape(.rect(cornerRadius: Tokens.Radius.lg))
     }
 }
 
 struct RecordingCard: View {
-    @Environment(AppStore.self) private var store
-    @Environment(\.displayScale) private var displayScale
     let recording: Recording
 
     var body: some View {
-        let cap = min(cardWidth, 480 * 1.25 / max(displayScale, 1))
         VStack(alignment: .leading, spacing: 8) {
-            AsyncImage(url: store.api?.posterURL(recordingID: recording.id)) { image in
-                image.resizable().scaledToFit().frame(maxWidth: cap, maxHeight: cap * 9 / 16)
-            } placeholder: {
-                Rectangle().fill(Tokens.ColorToken.surface2)
-            }
-            .frame(width: cardWidth, height: cardWidth * 9 / 16)
-            .background(Tokens.ColorToken.surface2)
-            .clipShape(.rect(cornerRadius: Tokens.Radius.md))
+            RecordingPoster(recording: recording)
+                .frame(width: cardWidth, height: cardWidth * 9 / 16)
+                .background(Tokens.ColorToken.surface2)
+                .clipShape(.rect(cornerRadius: Tokens.Radius.md))
             Text(recording.title).font(.subheadline.weight(.semibold)).lineLimit(1)
             Text(recording.subtitle ?? recording.startedAt.formatted(date: .abbreviated, time: .omitted))
                 .font(.caption)
