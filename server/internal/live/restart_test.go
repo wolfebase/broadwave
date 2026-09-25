@@ -102,12 +102,19 @@ func waitMark(t *testing.T, mark, name string) string {
 	t.Helper()
 	path := mark + name
 	deadline := time.Now().Add(3 * time.Second)
+	var prev string
 	for time.Now().Before(deadline) {
 		body, err := os.ReadFile(path)
+		// printf creates the file before it finishes writing. Two identical
+		// reads mean the args are complete.
 		if err == nil && len(body) > 0 {
-			return string(body)
+			got := string(body)
+			if got == prev {
+				return got
+			}
+			prev = got
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(15 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %s", path)
 	return ""
