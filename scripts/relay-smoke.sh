@@ -33,7 +33,7 @@ if [ "${FAKE:-}" = 1 ]; then
   export HDHR_CONTROL_PORT="$CONTROL_PORT"
   HDHR=${BASE#http://}
   NAME="WDAF"
-  DIRECT="1080.copy.broadcast.hevc"
+  DIRECT="1080.copy.broadcast"
   "$BIN" -config "$T" -addr "127.0.0.1:$PORT" -hdhr "$HDHR" -bonjour=false >"$T/log.txt" 2>&1 &
 else
   ffmpeg -hide_banner -loglevel error -re \
@@ -60,6 +60,12 @@ check "apple tv session" "echo '$TV' | grep -q rendition"
 sleep 6
 FO=$(sqlite3 "$T/broadwave.db" "select field_order from channels where id=$ID")
 check "field-order probe recorded ($FO)" "[ -n '$FO' ]"
+if [ "$DIRECT" = "1080.copy.broadcast" ]; then
+  HEVC=$(curl -s "$API/diagnostics" | python3 -c "import json,sys; print(json.load(sys.stdin).get('encoder',{}).get('hevc'))")
+  if [ "$HEVC" = "True" ]; then
+    DIRECT="1080.copy.broadcast.hevc"
+  fi
+fi
 TV2=$(curl -s -XPOST "$API/watch" -d "{\"channelId\":$ID,\"caps\":{\"platform\":\"tvos\",\"video\":[\"h264\",\"hevc\"],\"audio\":[\"aac\",\"ac3\"]}}" | python3 -c "import sys,json;print(json.load(sys.stdin)['rendition'])")
 check "progressive h264 goes direct ($DIRECT, got $TV2)" "[ '$TV2' = '$DIRECT' ]"
 PH=$(curl -s -XPOST "$API/watch" -d "{\"channelId\":$ID,\"caps\":{\"platform\":\"ios\",\"video\":[\"h264\"],\"audio\":[\"aac\"]},\"prefs\":{\"quality\":\"saver\"}}" | python3 -c "import sys,json;print(json.load(sys.stdin)['rendition'])")
