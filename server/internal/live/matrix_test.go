@@ -48,7 +48,7 @@ func TestScanMatrixPicture(t *testing.T) {
 		for _, enc := range encoders {
 			t.Run(tc.name+"/"+enc, func(t *testing.T) {
 				out := filepath.Join(dir, tc.name+"-"+enc+".mp4")
-				vf := filterOf(RenditionArgs(0, tc.source, Rendition{Video: "1080", Audio: "none"}, enc, "motion_adaptive", false))
+				vf := filterOf(RenditionArgs(0, tc.source, Rendition{Video: "1080", Audio: "none"}, enc, "motion_adaptive"))
 				cmd := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error", "-i", in, "-an", "-vf", vf, "-c:v", enc, "-t", "1", out)
 				if enc == "h264_videotoolbox" {
 					cmd = exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error", "-i", in, "-an", "-vf", vf, "-c:v", enc, "-a53cc", "0", "-t", "1", out)

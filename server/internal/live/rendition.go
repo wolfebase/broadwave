@@ -307,11 +307,11 @@ func renditionProfile(video string) string {
 
 // RenditionArgs builds ffmpeg for one live rendition. Timestamps are kept from
 // the broadcast (-copyts) so every rendition of a channel shares one timeline.
-func RenditionArgs(program int, src Source, r Rendition, encoder, deint string, blend bool) []string {
-	return renditionArgs(program, src, r, encoder, deint, blend, "pipe:0")
+func RenditionArgs(program int, src Source, r Rendition, encoder, deint string) []string {
+	return renditionArgs(program, src, r, encoder, deint, "pipe:0")
 }
 
-func renditionArgs(program int, src Source, r Rendition, encoder, deint string, blend bool, input string) []string {
+func renditionArgs(program int, src Source, r Rendition, encoder, deint string, input string) []string {
 	r = r.normalized()
 	args := []string{"-hide_banner", "-loglevel", "warning", "-fflags", "+genpts+discardcorrupt", "-copyts"}
 	transcode := r.Video != "copy"
@@ -325,7 +325,7 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		if src.Film && NormalizeMode(mode) == "broadcast" {
 			mode = "film"
 		}
-		probe := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Blend: blend, Progressive: src.Progressive}
+		probe := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive}
 		inter := !src.Progressive && (InterlacedCodec(src.VideoCodec) || codecName(src.VideoCodec) == "h264") && probe.Mode != "film"
 		gpu = gpuDecode(probe, inter, vaapiDeintMode(probe, inter))
 	}
@@ -363,7 +363,7 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		if src.Film && NormalizeMode(mode) == "broadcast" {
 			mode = "film"
 		}
-		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Blend: blend, Progressive: src.Progressive}
+		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive}
 		interlaced := !src.Progressive && (InterlacedCodec(src.VideoCodec) || codecName(src.VideoCodec) == "h264") && g.Mode != "film"
 		field := interlaced && !smallPicture(g.Profile)
 		width, height, rate := pictureSize(g.Profile, field)

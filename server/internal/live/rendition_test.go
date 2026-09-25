@@ -61,14 +61,14 @@ func TestRenditionKeyRoundTrip(t *testing.T) {
 }
 
 func TestHLSInputReconnects(t *testing.T) {
-	line := strings.Join(renditionArgs(0, Source{VideoCodec: "H264", AudioCodec: "AAC", Progressive: true, UserAgent: "Broadwave", Referrer: "http://example/"}, Rendition{Video: "copy", Audio: "copy"}, "libx264", "", false, "http://example/live.m3u8"), " ")
+	line := strings.Join(renditionArgs(0, Source{VideoCodec: "H264", AudioCodec: "AAC", Progressive: true, UserAgent: "Broadwave", Referrer: "http://example/"}, Rendition{Video: "copy", Audio: "copy"}, "libx264", "", "http://example/live.m3u8"), " ")
 	if !strings.Contains(line, "-reconnect 1") || !strings.Contains(line, "-i http://example/live.m3u8") || !strings.Contains(line, "aac_adtstoasc") || !strings.Contains(line, "User-Agent: Broadwave") {
 		t.Fatal(line)
 	}
 }
 
 func TestCopyRenditionKeepsBroadcastTimestamps(t *testing.T) {
-	line := strings.Join(RenditionArgs(3, Source{VideoCodec: "H264", AudioCodec: "AC3", Progressive: true}, Rendition{Video: "copy", Audio: "copy"}, "libx264", "", false), " ")
+	line := strings.Join(RenditionArgs(3, Source{VideoCodec: "H264", AudioCodec: "AC3", Progressive: true}, Rendition{Video: "copy", Audio: "copy"}, "libx264", ""), " ")
 	for _, want := range []string{"-copyts", "-map 0:p:3:v:0", "-c:v copy", "-c:a copy", "-hls_list_size 2700"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("missing %q in %s", want, line)
@@ -80,7 +80,7 @@ func TestCopyRenditionKeepsBroadcastTimestamps(t *testing.T) {
 }
 
 func TestTileRenditionIsSilentAndSmall(t *testing.T) {
-	line := strings.Join(RenditionArgs(0, Source{VideoCodec: "MPEG2", AudioCodec: "AC3"}, Rendition{Video: "360", Audio: "none", Mode: "broadcast"}, "libx264", "", false), " ")
+	line := strings.Join(RenditionArgs(0, Source{VideoCodec: "MPEG2", AudioCodec: "AC3"}, Rendition{Video: "360", Audio: "none", Mode: "broadcast"}, "libx264", ""), " ")
 	for _, want := range []string{"-copyts", "-an", "min(640,iw)", "min(360,ih)", "prev_forced_t+2", "-hls_segment_type fmp4"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("missing %q in %s", want, line)
@@ -93,11 +93,11 @@ func TestTileRenditionIsSilentAndSmall(t *testing.T) {
 
 func TestRenditionMapsChosenPID(t *testing.T) {
 	src := Source{VideoCodec: "MPEG2", AudioCodec: "AC3", AudioPID: 0x102}
-	line := strings.Join(RenditionArgs(3, src, Rendition{Video: "1080", Audio: "copy"}, "libx264", "", false), " ")
+	line := strings.Join(RenditionArgs(3, src, Rendition{Video: "1080", Audio: "copy"}, "libx264", ""), " ")
 	if !strings.Contains(line, "-map 0:i:258") || strings.Contains(line, "a:0") {
 		t.Fatalf("sap pid: %s", line)
 	}
-	even := strings.Join(RenditionArgs(0, src, Rendition{Video: "1080", Audio: "aac2", Even: true, Mode: "broadcast"}, "libx264", "", false), " ")
+	even := strings.Join(RenditionArgs(0, src, Rendition{Video: "1080", Audio: "aac2", Even: true, Mode: "broadcast"}, "libx264", ""), " ")
 	if !strings.Contains(even, "loudnorm=I=-16:LRA=11:TP=-1.5") {
 		t.Fatalf("even volume: %s", even)
 	}
@@ -128,7 +128,7 @@ func TestRenditionsShareOneTimeline(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer in.Close()
-		cmd := exec.Command(ffmpeg, RenditionArgs(0, source, r, "libx264", "", false)...)
+		cmd := exec.Command(ffmpeg, RenditionArgs(0, source, r, "libx264", "")...)
 		cmd.Dir = out
 		cmd.Stdin = in
 		if b, err := cmd.CombinedOutput(); err != nil {

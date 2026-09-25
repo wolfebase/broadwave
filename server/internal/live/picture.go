@@ -17,7 +17,6 @@ type Graph struct {
 	Encoder    string
 	Mode       string
 	Deint      string
-	Blend      bool
 	Input      string
 	Live       bool
 	// Progressive is set once a probe has seen the picture is not interlaced.
@@ -131,7 +130,7 @@ func pictureRate(g Graph, field bool) (string, int) {
 	if g.Mode == "film" {
 		return "24000/1001", 48
 	}
-	if field || (g.Mode == "smooth" && g.Blend && !smallPicture(g.Profile)) {
+	if field {
 		return "60000/1001", 120
 	}
 	if smallPicture(g.Profile) {
@@ -163,13 +162,10 @@ func OutputEncoder(base, codec string) string {
 	}
 }
 
-// gpuDecode keeps frames on the GPU. Software filters (pullup, fps, blend, bwdif)
-// need system memory, so those graphs stay on the upload path.
+// gpuDecode keeps frames on the GPU. Software filters (pullup, bwdif) need
+// system memory, so those graphs stay on the upload path.
 func gpuDecode(g Graph, interlaced bool, vaapiDeint string) bool {
 	if !vaapiFamily(g.Encoder) || g.Mode == "film" || smallPicture(g.Profile) {
-		return false
-	}
-	if g.Mode == "smooth" && g.Blend && !interlaced {
 		return false
 	}
 	if interlaced && vaapiDeint == "" {
@@ -203,7 +199,7 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 		}
 		return fmt.Sprintf("pullup,fps=%s,format=nv12,hwupload,scale_vaapi=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease", rate, width, height)
 	}
-	if vaapiFamily(g.Encoder) && g.Mode != "film" && (vaapiDeint != "" || !interlaced) && !(g.Mode == "smooth" && g.Blend && !interlaced && !smallPicture(g.Profile)) {
+	if vaapiFamily(g.Encoder) && g.Mode != "film" && (vaapiDeint != "" || !interlaced) {
 		// Frames already on the GPU skip the upload. A software fps cap still uploads once.
 		vf := ""
 		if !gpuDecode(g, interlaced, vaapiDeint) {
@@ -243,8 +239,6 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 			mode = "send_field"
 		}
 		pre = append(pre, "bwdif=mode="+mode+":parity=auto:deint=interlaced")
-	case g.Mode == "smooth" && g.Blend && !smallPicture(g.Profile):
-		pre = append(pre, "minterpolate=fps=60000/1001:mi_mode=blend")
 	}
 	pre = append(pre, scale)
 	vf := strings.Join(pre, ",")
