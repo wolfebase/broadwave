@@ -32,6 +32,29 @@
   border-radius: var(--radius-lg);
   background: var(--color-surface1);
   border: 1px solid var(--color-line);
+  overflow: hidden;
+}
+
+.gc-art {
+  position: relative;
+  height: 112px;
+  margin: calc(var(--space-5) * -1) calc(var(--space-5) * -1) 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  overflow: hidden;
+  background: var(--color-surface2);
+}
+
+.gc-art .art-sharp {
+  right: auto;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: min(78%, var(--art-edge, 420px));
+  max-height: min(88%, var(--art-edge, 100px));
+}
+
+.gc-art .art-stage.bleed .art-sharp {
+  opacity: 1;
 }
 
 .game-card.live {
