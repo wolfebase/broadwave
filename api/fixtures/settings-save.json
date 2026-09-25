@@ -4,12 +4,14 @@
   "hdhrEmulate": "0",
   "hideScores": "1",
   "layout": "auto",
+  "liveScores": "1",
   "needsSetup": "0",
   "pictureMode": "broadcast",
   "profile": "transparent",
   "recordingsPath": "",
   "sdPasswordSet": "0",
   "setupComplete": "1",
+  "sportsdbKeySet": "0",
   "tmdbKeySet": "0",
   "watermarkGB": "10"
 }

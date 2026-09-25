@@ -1810,6 +1810,7 @@ components:
         nextGuidePull: { type: string, format: date-time, description: "When the next automatic listing refresh is due. Set by the server." }
         lastManualGuidePull: { type: string, format: date-time, description: "When listings were last reloaded by hand. Set by the server." }
         hideScores: { type: string, enum: ["0", "1"] }
+        liveScores: { type: string, enum: ["0", "1"], description: "1 asks the scoreboard. 0 stops every scoreboard request. Missing means on." }
         checkUpdates: { type: string, enum: ["0", "1"], description: "1 checks for a newer release once a day. 0 turns the check off. Missing means on." }
         sdUser: { type: string }
         sdPassword: { type: string }
@@ -1818,3 +1819,5 @@ components:
         guideUrl: { type: string }
         tmdbKey: { type: string }
         tmdbKeySet: { type: string, enum: ["0", "1"] }
+        sportsdbKey: { type: string, description: "The user's TheSportsDB key. Never returned. Empty clears it." }
+        sportsdbKeySet: { type: string, enum: ["0", "1"], description: "1 when a TheSportsDB key is saved. Set by the server." }

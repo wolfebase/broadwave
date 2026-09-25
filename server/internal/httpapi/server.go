@@ -61,6 +61,10 @@ type Server struct {
 	// Updates is the daily release check. Nil leaves the server info without an update field.
 	Updates *update.Checker
 
+	sportsMu  sync.Mutex
+	sportsKey string
+	sportsDB  *sports.Cache
+
 	homeMu    sync.Mutex
 	finishMu  sync.Mutex
 	finishRun *finishStatus
@@ -419,6 +423,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	if values["hideScores"] == "" {
 		values["hideScores"] = "0"
 	}
+	if values["liveScores"] == "" {
+		values["liveScores"] = "1"
+	}
 	if strings.TrimSpace(values["sdPassword"]) != "" {
 		values["sdPasswordSet"] = "1"
 	} else {
@@ -431,6 +438,12 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		values["tmdbKeySet"] = "0"
 	}
 	delete(values, "tmdbKey")
+	if strings.TrimSpace(values["sportsdbKey"]) != "" {
+		values["sportsdbKeySet"] = "1"
+	} else {
+		values["sportsdbKeySet"] = "0"
+	}
+	delete(values, "sportsdbKey")
 	delete(values, store.SettingUpdateVersion)
 	delete(values, store.SettingUpdateNotesURL)
 	delete(values, store.SettingUpdateMessage)

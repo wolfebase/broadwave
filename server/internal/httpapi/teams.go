@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"broadwave/internal/dvr"
@@ -17,6 +18,9 @@ func (s *Server) teams(w http.ResponseWriter, r *http.Request) {
 			httpError(w, "a team needs a name", http.StatusBadRequest)
 			return
 		}
+		if strings.Contains(team.Logo, "://") {
+			team.Logo = ""
+		}
 		if err := s.Store.FollowTeam(r.Context(), team); err != nil {
 			writeError(w, err)
 			return
@@ -26,6 +30,11 @@ func (s *Server) teams(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	for i := range list {
+		if strings.Contains(list[i].Logo, "://") {
+			list[i].Logo = ""
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"teams": list})
 }

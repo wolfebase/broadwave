@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"broadwave/internal/dvr"
@@ -12,7 +13,7 @@ import (
 )
 
 func (s *Server) scoreboard(w http.ResponseWriter, r *http.Request) {
-	provider := s.Sports
+	provider := s.activeSports(r.Context())
 	if provider == nil {
 		httpError(w, "scores are unavailable", http.StatusServiceUnavailable)
 		return
@@ -56,7 +57,33 @@ func (s *Server) scoreboard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"games": s.withoutSpoilers(r.Context(), games)})
 }
 
+// activeSports is the ESPN cache, a TheSportsDB cache for a key the user
+// typed, or Off when live scores are turned off. Off does not dial.
+func (s *Server) activeSports(ctx context.Context) sports.Provider {
+	if s != nil && s.Store != nil {
+		if settings, err := s.Store.Settings(ctx); err == nil {
+			if settings["liveScores"] == "0" {
+				return sports.Off{}
+			}
+			if key := strings.TrimSpace(settings["sportsdbKey"]); key != "" {
+				s.sportsMu.Lock()
+				defer s.sportsMu.Unlock()
+				if s.sportsDB == nil || s.sportsKey != key {
+					s.sportsKey = key
+					s.sportsDB = sports.NewCache(sports.NewTheSportsDB(key))
+				}
+				return s.sportsDB
+			}
+		}
+	}
+	if s == nil {
+		return nil
+	}
+	return s.Sports
+}
+
 func (s *Server) withoutSpoilers(ctx context.Context, games []sports.Game) []sports.Game {
+	games = withoutRemoteLogos(games)
 	if s.Store == nil || len(games) == 0 {
 		return games
 	}
@@ -85,8 +112,29 @@ func (s *Server) withoutSpoilers(ctx context.Context, games []sports.Game) []spo
 	return games
 }
 
+func withoutRemoteLogos(games []sports.Game) []sports.Game {
+	if len(games) == 0 {
+		return games
+	}
+	out := append([]sports.Game(nil), games...)
+	for i := range out {
+		if len(out[i].Teams) == 0 {
+			continue
+		}
+		teams := append([]sports.Team(nil), out[i].Teams...)
+		for t := range teams {
+			if strings.Contains(teams[t].Logo, "://") {
+				teams[t].Logo = ""
+			}
+		}
+		out[i].Teams = teams
+	}
+	return out
+}
+
 func (s *Server) boardsAround(ctx context.Context, now time.Time) []sports.Game {
-	board, ok := s.Sports.(interface {
+	provider := s.activeSports(ctx)
+	board, ok := provider.(interface {
 		Boards(ctx context.Context, day time.Time) ([]sports.Game, error)
 	})
 	if !ok {

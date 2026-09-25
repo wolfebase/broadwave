@@ -286,6 +286,7 @@ export type Settings = {
   nextGuidePull?: string;
   lastManualGuidePull?: string;
   hideScores?: string;
+  liveScores?: string;
   checkUpdates?: string;
   sdUser?: string;
   sdPassword?: string;
@@ -294,6 +295,8 @@ export type Settings = {
   guideUrl?: string;
   tmdbKey?: string;
   tmdbKeySet?: string;
+  sportsdbKey?: string;
+  sportsdbKeySet?: string;
 };
 
 export type SetupFinish = {

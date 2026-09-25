@@ -173,7 +173,7 @@ func redactSettings(values map[string]string) map[string]string {
 	out := map[string]string{}
 	for k, v := range values {
 		switch k {
-		case "sdPassword", "tmdbKey", "sdPasswordSet", "tmdbKeySet":
+		case "sdPassword", "tmdbKey", "sdPasswordSet", "tmdbKeySet", "sportsdbKey", "sportsdbKeySet":
 			continue
 		default:
 			out[k] = redactURL(v)
@@ -188,6 +188,11 @@ func redactSettings(values map[string]string) map[string]string {
 		out["tmdbKeySet"] = "1"
 	} else {
 		out["tmdbKeySet"] = "0"
+	}
+	if strings.TrimSpace(values["sportsdbKey"]) != "" {
+		out["sportsdbKeySet"] = "1"
+	} else {
+		out["sportsdbKeySet"] = "0"
 	}
 	return out
 }
