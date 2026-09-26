@@ -74,7 +74,7 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	if session.Rendition != decision.Rendition.Key() && session.Stream.Video != "" && session.Stream.Video != "copy" {
 		session.Stream.Reason = "Playing the " + session.Stream.Video + "p picture already running."
 	}
-	waitPlaylist(session.File, 12*time.Second)
+	waitServable(s.Hub, session.ChannelID, session.Rendition, 12*time.Second)
 	if fresh, ok := s.Hub.Session(session.ChannelID, session.Rendition); ok {
 		reason := session.Stream.Reason
 		fresh.Tuners = session.Tuners
@@ -1086,14 +1086,19 @@ func decodeJSON(r *http.Request, dest any) error {
 	return json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(dest)
 }
 
-// waitPlaylist returns once a live playlist has three segments; the first is
-// withheld, so players still get two to start from.
-func waitPlaylist(path string, d time.Duration) {
+// waitServable returns once the stamped playlist has a segment a player can
+// fetch. Segment 0 stays withheld, so this is the second segment the encoder
+// writes, not the third.
+func waitServable(h *live.Hub, channelID int64, key string, d time.Duration) {
+	if h == nil || key == "" {
+		return
+	}
 	deadline := time.Now().Add(d)
 	for time.Now().Before(deadline) {
-		if body, err := os.ReadFile(path); err == nil && strings.Count(string(body), "#EXTINF") >= 3 {
+		body, err := h.Playlist(channelID, key)
+		if err == nil && strings.Count(string(body), "#EXTINF") >= 1 {
 			return
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }

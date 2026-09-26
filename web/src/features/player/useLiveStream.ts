@@ -64,6 +64,10 @@ export function useLiveStream(
     const started = performance.now();
     let primed = false;
     let stallAt = 0;
+    delete video.dataset.ttff;
+    delete video.dataset.moving;
+    delete video.dataset.stalls;
+    delete video.dataset.stallMs;
     const onPlaying = () => {
       if (!primed) {
         primed = true;
@@ -81,8 +85,15 @@ export function useLiveStream(
       stallAt = performance.now();
       video.dataset.stalls = String(Number(video.dataset.stalls || 0) + 1);
     };
+    // moving is the first time the picture advances and stays in play.
+    // The first playing event can be the frame sync then holds.
+    const onTime = () => {
+      if (video.dataset.moving || video.paused || !primed) return;
+      if (video.currentTime > 0.2) video.dataset.moving = String(Math.round(performance.now() - started));
+    };
     video.addEventListener("playing", onPlaying);
     video.addEventListener("waiting", onWaiting);
+    video.addEventListener("timeupdate", onTime);
     void (async () => {
       try {
         const allow = confirmLive.current;
@@ -137,6 +148,7 @@ export function useLiveStream(
       hlsRef.current = null;
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("timeupdate", onTime);
       void stopWatch(id, joined);
     };
     // remember is the channel record; its identity changes on every guide poll.

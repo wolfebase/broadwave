@@ -1,6 +1,7 @@
 package live
 
 import (
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -92,6 +93,68 @@ func TestHLSInputReconnects(t *testing.T) {
 	}
 }
 
+func TestOpeningSegmentsAreShort(t *testing.T) {
+	live := strings.Join(RenditionArgs(0, Source{VideoCodec: "MPEG2"}, Rendition{Video: "720", Audio: "aac2"}, "libx264", ""), " ")
+	for _, want := range []string{"-probesize 8000000", "-analyzeduration 1000000", "-hls_time 2", "-muxdelay 0", openingKeyframes} {
+		if !strings.Contains(live, want) {
+			t.Errorf("missing %q in %s", want, live)
+		}
+	}
+	if strings.Contains(live, "hls_init_time") || strings.Contains(live, "hls_time 0.5") {
+		t.Fatalf("a live transcode stays on the two-second cut: %s", live)
+	}
+	remote := strings.Join(renditionArgs(0, Source{VideoCodec: "H264"}, Rendition{Video: "copy", Audio: "copy"}, "libx264", "", "http://example/live.m3u8"), " ")
+	if !strings.Contains(remote, "-analyzeduration 1500000") || !strings.Contains(remote, "-hls_time 2") || strings.Contains(remote, "force_key_frames") || strings.Contains(remote, "hls_init_time") {
+		t.Fatalf("a remote copy keeps the longer probe and the two-second cut: %s", remote)
+	}
+}
+
+func TestTimelineEarliestIsTheFirstAnchor(t *testing.T) {
+	fixed := time.Date(2026, 9, 26, 3, 0, 0, 0, time.UTC)
+	tl := NewTimeline()
+	tl.now = func() time.Time { return fixed }
+	if _, ok := tl.Earliest(); ok {
+		t.Fatal("an unset timeline has no first frame")
+	}
+	tl.Wall(90000 * 10)
+	got, ok := tl.Earliest()
+	if !ok || !got.Equal(fixed.Add(-4*time.Second)) {
+		t.Fatalf("first frame: %v %v", got, ok)
+	}
+	tl.Wall(90000 * 12)
+	got, _ = tl.Earliest()
+	if !got.Equal(fixed.Add(-4 * time.Second)) {
+		t.Fatalf("a later segment moved the first frame to %v", got)
+	}
+}
+
+func TestEarliestMediaUsesTheNewestRendition(t *testing.T) {
+	fixed := time.Date(2026, 9, 26, 3, 0, 0, 0, time.UTC)
+	older := NewTimeline()
+	older.now = func() time.Time { return fixed }
+	older.Wall(1)
+	newer := NewTimeline()
+	newer.now = func() time.Time { return fixed.Add(time.Minute) }
+	newer.Wall(1)
+	h := &Hub{channels: map[int64]*feed{
+		4: {renditions: map[string]*rendition{
+			"a": {clock: older},
+			"b": {clock: newer},
+		}},
+	}}
+	ms, ok := h.EarliestMedia(4)
+	if !ok {
+		t.Fatal("expected a first frame")
+	}
+	want := float64(fixed.Add(time.Minute).Add(-4*time.Second).UnixNano()) / 1e6
+	if math.Abs(ms-want) > 0.5 {
+		t.Fatalf("newest first frame: got %v want %v", ms, want)
+	}
+	if _, ok := h.EarliestMedia(9); ok {
+		t.Fatal("a quiet channel has no first frame")
+	}
+}
+
 func TestCopyRenditionKeepsBroadcastTimestamps(t *testing.T) {
 	line := strings.Join(RenditionArgs(3, Source{VideoCodec: "H264", AudioCodec: "AC3", Progressive: true}, Rendition{Video: "copy", Audio: "copy"}, "libx264", ""), " ")
 	for _, want := range []string{"-copyts", "-map 0:p:3:v:0", "-c:v copy", "-c:a copy", "-hls_list_size 2700"} {
@@ -106,7 +169,7 @@ func TestCopyRenditionKeepsBroadcastTimestamps(t *testing.T) {
 
 func TestTileRenditionIsSilentAndSmall(t *testing.T) {
 	line := strings.Join(RenditionArgs(0, Source{VideoCodec: "MPEG2", AudioCodec: "AC3"}, Rendition{Video: "360", Audio: "none", Mode: "broadcast"}, "libx264", ""), " ")
-	for _, want := range []string{"-copyts", "-an", "min(640,iw)", "min(360,ih)", "prev_forced_t+2", "-hls_segment_type fmp4"} {
+	for _, want := range []string{"-copyts", "-an", "min(640,iw)", "min(360,ih)", "prev_forced_t+2", "-hls_time 2", "-hls_segment_type fmp4"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("missing %q in %s", want, line)
 		}
