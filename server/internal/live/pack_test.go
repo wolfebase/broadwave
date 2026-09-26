@@ -621,6 +621,71 @@ func headTail(s string) string {
 	return s[:200] + "\n...\n" + s[len(s)-200:]
 }
 
+func TestPartLongerThanASegmentRaisesTargetDuration(t *testing.T) {
+	dir := t.TempDir()
+	// 0.633s segment and a 1.001s open part. Ceil of the segment alone is 1,
+	// and a part target of 1.001 against that is a playlist parse error.
+	err := writePacked(dir, []byte("init"),
+		[]packedSeg{{name: "seg00000.m4s", dur: 56970}},
+		[]packedPart{{name: "part00001.m4s", dur: 90090, sync: true}},
+		0, true, false, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(b)
+	if !strings.Contains(text, "#EXT-X-VERSION:9\n") {
+		t.Fatalf("parts require version 9:\n%s", text)
+	}
+	if !strings.Contains(text, "#EXT-X-TARGETDURATION:2\n") || !strings.Contains(text, "PART-TARGET=1.999") {
+		t.Fatalf("target duration must cover the part:\n%s", text)
+	}
+	if !strings.Contains(text, "HOLD-BACK=6.000") || !strings.Contains(text, "PART-HOLD-BACK=5.997") {
+		t.Fatalf("hold-back must clear one target duration:\n%s", text)
+	}
+	if !strings.Contains(text, "DURATION=1.001") {
+		t.Fatalf("the part keeps its own duration:\n%s", text)
+	}
+}
+
+func TestTargetDurationDoesNotShrink(t *testing.T) {
+	dir := t.TempDir()
+	var hold playlistCeiling
+	write := func(seg, part int64) string {
+		t.Helper()
+		if err := writePacked(dir, []byte("init"),
+			[]packedSeg{{name: "seg00000.m4s", dur: seg}},
+			[]packedPart{{name: "part00001.m4s", dur: part, sync: true}},
+			0, true, false, &hold, nil); err != nil {
+			t.Fatal(err)
+		}
+		b, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	short := write(45000, 45000)
+	if !strings.Contains(short, "#EXT-X-TARGETDURATION:2\n") || !strings.Contains(short, "PART-TARGET=1.999") || !strings.Contains(short, "PART-HOLD-BACK=5.997") || !strings.Contains(short, "HOLD-BACK=6.000") {
+		t.Fatalf("short segments still advertise 2s:\n%s", short)
+	}
+	grown := write(45000, 90090)
+	for _, tag := range []string{"#EXT-X-TARGETDURATION:2\n", "PART-TARGET=1.999", "PART-HOLD-BACK=5.997", "HOLD-BACK=6.000", "DURATION=1.001"} {
+		if !strings.Contains(grown, tag) {
+			t.Fatalf("a longer part under the pin changed %s:\n%s", tag, grown)
+		}
+	}
+	if text := write(45000, 200000); !strings.Contains(text, "#EXT-X-TARGETDURATION:3\n") || !strings.Contains(text, "PART-TARGET=2.222") {
+		t.Fatalf("a longer part raises it:\n%s", text)
+	}
+	if text := write(45000, 45000); !strings.Contains(text, "#EXT-X-TARGETDURATION:3\n") || !strings.Contains(text, "PART-TARGET=2.222") {
+		t.Fatalf("it must not shrink:\n%s", text)
+	}
+}
+
 func TestDeltaPlaylistSkipsTheHead(t *testing.T) {
 	var b strings.Builder
 	b.WriteString("#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:1\n")
