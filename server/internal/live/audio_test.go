@@ -35,23 +35,40 @@ func TestAudioTracksPMT(t *testing.T) {
 	}
 }
 
-func TestAudioMapDisagreesWhenTheMainIsNotFirst(t *testing.T) {
-	wide := []AudioTrack{
+func TestFirstAudioKeepsTheProgramMap(t *testing.T) {
+	f := &feed{
+		program: 1,
+		source:  Source{VideoCodec: "MPEG2", AudioCodec: "AC3"},
+		tracks: []AudioTrack{
+			{PID: 0x110, Role: "main", Codec: "ac3", Channels: 6},
+			{PID: 0x111, Role: "language", Codec: "ac3", Channels: 2},
+			{PID: 0x112, Role: "described", Codec: "ac3", Channels: 2},
+		},
+	}
+	spec := Rendition{Video: "1080", Audio: "copy"}
+	before := RenditionArgs(f.program, f.source, spec, "libx264", "")
+	mainSrc := f.sourceFor(spec)
+	if mainSrc.AudioPID != 0 {
+		t.Fatalf("main pid %d", mainSrc.AudioPID)
+	}
+	after := RenditionArgs(f.program, mainSrc, spec, "libx264", "")
+	if strings.Join(before, " ") != strings.Join(after, " ") {
+		t.Fatalf("main map changed\n%s\n%s", strings.Join(before, " "), strings.Join(after, " "))
+	}
+	lang := f.sourceFor(Rendition{Video: "1080", Audio: "copy", Track: "lang"})
+	if lang.AudioPID != 0x111 {
+		t.Fatalf("language pid %d", lang.AudioPID)
+	}
+	vi := f.sourceFor(Rendition{Video: "1080", Audio: "copy", Track: "vi"})
+	if vi.AudioPID != 0x112 {
+		t.Fatalf("described pid %d", vi.AudioPID)
+	}
+	wide := &feed{tracks: []AudioTrack{
 		{PID: 0x101, Role: "main", Channels: 2},
 		{PID: 0x102, Role: "main", Channels: 6},
-	}
-	if !audioMapDisagrees(wide) {
-		t.Fatal("the 5.1 main is not the first audio stream")
-	}
-	first := []AudioTrack{
-		{PID: 0x110, Role: "main", Channels: 6},
-		{PID: 0x111, Role: "language", Channels: 2},
-	}
-	if audioMapDisagrees(first) {
-		t.Fatal("the first stream is the main")
-	}
-	if audioMapDisagrees(nil) {
-		t.Fatal("no tracks")
+	}}
+	if got := wide.sourceFor(spec).AudioPID; got != 0x102 {
+		t.Fatalf("wider main pid %d", got)
 	}
 }
 

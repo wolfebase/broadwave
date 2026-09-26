@@ -150,15 +150,40 @@ func TestRenditionReadsBytesFromBeforeItAttached(t *testing.T) {
 	for time.Now().Before(deadline) && !strings.Contains(w.String(), "HELLO") {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if !strings.Contains(w.String(), "HELLO") {
-		t.Fatalf("rendition missed the opening bytes, saw %q", w.String())
+	if strings.Count(w.String(), "HELLO") != 1 {
+		t.Fatalf("rendition saw %q", w.String())
 	}
-	late := &safeBuf{}
-	sub2 := h.attachPipe(m, late, true)
+	// A restart in this window is a new process. It needs the same opening.
+	again := &safeBuf{}
+	sub2 := h.attachPipe(m, again, true)
 	defer sub2.stop()
+	deadline = time.Now().Add(time.Second)
+	for time.Now().Before(deadline) && strings.Count(again.String(), "HELLO") < 1 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if strings.Count(again.String(), "HELLO") != 1 {
+		t.Fatalf("restart saw %q", again.String())
+	}
+	m.pipeMu.Lock()
+	m.leadSince = time.Now().Add(-3 * time.Second)
+	m.pipeMu.Unlock()
+	m.rememberLead([]byte("x"))
+	late := &safeBuf{}
+	sub3 := h.attachPipe(m, late, true)
+	defer sub3.stop()
 	time.Sleep(30 * time.Millisecond)
 	if late.String() != "" {
-		t.Fatalf("a second subscriber replayed %q", late.String())
+		t.Fatalf("a late subscriber replayed %q", late.String())
+	}
+}
+
+func TestLeadClosesWhenItIsFull(t *testing.T) {
+	m := &mux{}
+	m.leadSince = time.Now()
+	m.lead = make([]byte, leadCap)
+	m.rememberLead([]byte("x"))
+	if !m.leadDone || m.lead != nil {
+		t.Fatalf("full lead done=%v kept=%d", m.leadDone, len(m.lead))
 	}
 }
 

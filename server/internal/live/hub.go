@@ -170,9 +170,10 @@ type mux struct {
 	pipes    []*pipeSub
 	programs []hdhr.Program
 	pipeMu   sync.Mutex
-	// lead is the opening of the tune, kept until the first rendition or
-	// recording attaches. The scan reads those bytes before ffmpeg exists,
-	// and dropping them makes the encoder wait for the next group of pictures.
+	// lead is the opening of the tune. An encode that attaches while it is
+	// current reads a copy, including one restarted for film or a later
+	// audio stream. Dropping those bytes makes the encoder wait for the
+	// next group of pictures.
 	lead        []byte
 	leadSince   time.Time
 	leadDone    bool
@@ -1352,42 +1353,65 @@ const (
 	leadFor = 2 * time.Second
 )
 
-// rememberLead keeps bytes that arrived before the first encode or recording.
-// A late subscriber must not replay them, so the buffer closes once it is
-// taken or once leadFor has passed.
+// rememberLead keeps bytes that arrived before an encode or recording attached.
+// The buffer stays until leadFor, so a film or audio restart in that window
+// can read the same opening. A caller holds no lock.
 func (m *mux) rememberLead(chunk []byte) {
 	if m == nil || len(chunk) == 0 {
 		return
 	}
 	m.pipeMu.Lock()
 	defer m.pipeMu.Unlock()
-	if m.leadDone {
+	m.rememberLeadLocked(chunk)
+}
+
+// rememberLeadLocked appends chunk. The caller holds pipeMu. A full or stale
+// buffer is dropped rather than spliced onto a later live edge.
+func (m *mux) rememberLeadLocked(chunk []byte) {
+	if m.leadDone || len(chunk) == 0 {
 		return
 	}
 	if m.leadSince.IsZero() {
 		m.leadSince = time.Now()
 	}
-	if time.Since(m.leadSince) > leadFor {
+	if time.Since(m.leadSince) > leadFor || len(m.lead) >= leadCap {
 		m.leadDone = true
 		m.lead = nil
 		return
 	}
-	if len(m.lead) >= leadCap {
-		return
-	}
 	room := leadCap - len(m.lead)
 	if len(chunk) > room {
-		chunk = chunk[:room]
+		m.leadDone = true
+		m.lead = nil
+		return
 	}
 	m.lead = append(m.lead, chunk...)
 }
 
-// takeLead hands the opening bytes to one subscriber. The caller holds pipeMu.
-func (m *mux) takeLead() []byte {
-	m.leadDone = true
-	b := m.lead
-	m.lead = nil
-	return b
+// copyLeadLocked copies the opening for one new subscriber. The caller holds
+// pipeMu. The buffer stays for the next encode that attaches in this window.
+func (m *mux) copyLeadLocked() []byte {
+	if m.leadDone {
+		return nil
+	}
+	if !m.leadSince.IsZero() && time.Since(m.leadSince) > leadFor {
+		m.leadDone = true
+		m.lead = nil
+		return nil
+	}
+	return append([]byte(nil), m.lead...)
+}
+
+// noteLead stores chunk and returns the subscribers that should also see it.
+// One lock keeps a new subscriber from receiving that chunk twice.
+func (m *mux) noteLead(chunk []byte) []*pipeSub {
+	if m == nil {
+		return nil
+	}
+	m.pipeMu.Lock()
+	defer m.pipeMu.Unlock()
+	m.rememberLeadLocked(chunk)
+	return append([]*pipeSub(nil), m.pipes...)
 }
 
 func (h *Hub) attachPipe(m *mux, w io.WriteCloser, lead bool) *pipeSub {
@@ -1402,7 +1426,7 @@ func (h *Hub) attachPipe(m *mux, w io.WriteCloser, lead bool) *pipeSub {
 	}
 	m.pipeMu.Lock()
 	if lead {
-		if head := m.takeLead(); len(head) > 0 {
+		if head := m.copyLeadLocked(); len(head) > 0 {
 			sub.ch <- head
 		}
 	}
@@ -1529,8 +1553,7 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 				go h.OnPSIP(freq, guide)
 			}
 			h.observeMuxPicture(m, chunk)
-			m.rememberLead(chunk)
-			for _, sub := range m.snapshot() {
+			for _, sub := range m.noteLead(chunk) {
 				select {
 				case sub.ch <- chunk:
 				default:
