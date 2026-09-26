@@ -147,8 +147,9 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 	var haveLast bool
 	allSync := true
 
+	var hold playlistCeiling
 	flush := func() error {
-		return writePacked(dir, init, closed, open, msn-len(closed), allSync, segGap, gate)
+		return writePacked(dir, init, closed, open, msn-len(closed), allSync, segGap, &hold, gate)
 	}
 	closeSeg := func(end int64) error {
 		if len(open) == 0 {
@@ -354,7 +355,15 @@ func openBytes(open []packedPart) int {
 	return n
 }
 
-func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart, origin int, allSync, segGap bool, gate *playlistGate) error {
+// playlistCeiling is the longest target this rendition has advertised.
+// AVPlayer rejects a reload that changes TARGETDURATION or PART-TARGET
+// (CoreMedia -12642), so both stick.
+type playlistCeiling struct {
+	target int
+	part   int
+}
+
+func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart, origin int, allSync, segGap bool, hold *playlistCeiling, gate *playlistGate) error {
 	if len(init) == 0 {
 		return nil
 	}
@@ -366,20 +375,64 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 		}
 	}
 	for _, p := range open {
+		if p.dur > int64(target) {
+			target = int(p.dur)
+		}
 		if p.dur > int64(partTarget) {
 			partTarget = int(p.dur)
 		}
 	}
+	// A part can outlast every closed segment. Two seconds covers the
+	// one-second segments this packager writes; a longer one sticks.
+	const floor = 2 * 90000
+	if target < floor {
+		target = floor
+	}
+	if hold != nil && hold.target > target {
+		target = hold.target
+	}
+	// One millisecond under the segment target, unless the open part is
+	// already longer. A value copied from the open part grows and shrinks
+	// on every reload.
+	pinned := target - 90
+	if pinned < partTicks {
+		pinned = partTicks
+	}
+	if partTarget < pinned {
+		partTarget = pinned
+	}
+	if partTarget > target {
+		partTarget = target
+	}
+	if hold != nil {
+		if hold.target < target {
+			hold.target = target
+		}
+		if hold.part > partTarget && hold.part <= target {
+			partTarget = hold.part
+		} else if partTarget > hold.part {
+			hold.part = partTarget
+		}
+	}
 	var b []byte
-	b = append(b, "#EXTM3U\n#EXT-X-VERSION:6\n"...)
+	// Parts, part-inf, and server-control require version 9.
+	b = append(b, "#EXTM3U\n#EXT-X-VERSION:9\n"...)
 	targetSec := (target + 89999) / 90000
 	if targetSec < 1 {
 		targetSec = 1
 	}
 	b = append(b, "#EXT-X-TARGETDURATION:"+strconv.Itoa(targetSec)+"\n"...)
-	// Hold-back is three part targets, the shortest the playlist spec allows.
-	hold := 3 * float64(partTarget) / 90000
-	b = append(b, fmt.Sprintf("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=%.3f,CAN-SKIP-UNTIL=%d.000\n", hold, targetSec*6)...)
+	// Part hold-back is three part targets. Full hold-back is three target
+	// durations; the part value has to stay under it.
+	partHold := 3 * float64(partTarget) / 90000
+	if minHold := float64(targetSec); partHold < minHold {
+		partHold = minHold
+	}
+	fullHold := float64(targetSec * 3)
+	if partHold >= fullHold {
+		partHold = fullHold - 0.001
+	}
+	b = append(b, fmt.Sprintf("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,HOLD-BACK=%.3f,PART-HOLD-BACK=%.3f,CAN-SKIP-UNTIL=%d.000\n", fullHold, partHold, targetSec*6)...)
 	b = append(b, "#EXT-X-PART-INF:PART-TARGET="+fmtDur(int64(partTarget))+"\n"...)
 	if allSync {
 		b = append(b, "#EXT-X-INDEPENDENT-SEGMENTS\n"...)

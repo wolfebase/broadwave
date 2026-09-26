@@ -254,6 +254,8 @@ final class TilePlayer {
     private var session: WatchSession?
     private var sync: SyncEngine?
     private var api: APIClient?
+    /// Written by the player layer when a picture is actually on screen.
+    let frameOnScreen = FrameOnScreen()
 
     struct Request {
         var channel: Channel
@@ -269,6 +271,7 @@ final class TilePlayer {
         let channel = request.channel
         let prefs = request.prefs
         canHear = false
+        frameOnScreen.ready = false
         await stop()
         guard let api = store.api else { return }
         self.api = api
@@ -290,6 +293,7 @@ final class TilePlayer {
             let tile = prefs.quality == .tile || prefs.quality == .tile360
             PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: tile)
             player.replaceCurrentItem(with: item)
+            frameOnScreen.ready = false
             // The first segment has to paint. Waiting for an 8s buffer, then
             // pausing until the room's older anchor, leaves this layer black.
             player.automaticallyWaitsToMinimizeStalling = false
@@ -298,6 +302,9 @@ final class TilePlayer {
             canHear = request.audible
             if let socket = store.socket {
                 let engine = SyncEngine(player: player, socket: socket, room: room, channelID: channel.id)
+                engine.displayedFrame = { [weak self] in
+                    self?.frameOnScreen.ready == true
+                }
                 engine.start()
                 sync = engine
                 bind { engine.command($0) }
@@ -958,7 +965,7 @@ struct MultiviewTile: View {
     var body: some View {
         Button(action: onFocus) {
             ZStack(alignment: .bottomLeading) {
-                PlayerLayerBox(player: live.player, pip: pip)
+                PlayerLayerBox(player: live.player, pip: pip, readyFlag: live.frameOnScreen)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(.black)
                 VStack(alignment: .leading, spacing: 2) {
@@ -1138,19 +1145,33 @@ struct MultiviewTile: View {
     }
 #endif
 
+/// The layer's ready flag. KVO writes it off the main actor.
+final class FrameOnScreen: @unchecked Sendable {
+    var ready = false
+}
+
 struct PlayerLayerBox: UIViewRepresentable {
     let player: AVPlayer
     var pip = false
+    var readyFlag: FrameOnScreen?
 
-    func makeUIView(context _: Context) -> PlayerHost {
+    func makeCoordinator() -> Coordinator {
+        Coordinator(flag: readyFlag)
+    }
+
+    func makeUIView(context: Context) -> PlayerHost {
         let view = PlayerHost()
         view.playerLayer?.player = player
         view.playerLayer?.videoGravity = .resizeAspectFill
+        context.coordinator.flag = readyFlag
+        context.coordinator.watch(view.playerLayer)
         return view
     }
 
-    func updateUIView(_ view: PlayerHost, context _: Context) {
+    func updateUIView(_ view: PlayerHost, context: Context) {
         view.playerLayer?.player = player
+        context.coordinator.flag = readyFlag
+        context.coordinator.watch(view.playerLayer)
         #if os(iOS)
             if pip, view.pip == nil, let layer = view.playerLayer, AVPictureInPictureController.isPictureInPictureSupported() {
                 view.pip = AVPictureInPictureController(playerLayer: layer)
@@ -1160,6 +1181,31 @@ struct PlayerLayerBox: UIViewRepresentable {
                 view.pip = nil
             }
         #endif
+    }
+
+    final class Coordinator: NSObject {
+        var flag: FrameOnScreen?
+        private var observed: AVPlayerLayer?
+        private var token: NSKeyValueObservation?
+
+        init(flag: FrameOnScreen?) {
+            self.flag = flag
+        }
+
+        /// Re-subscribes only when the layer object changes.
+        func watch(_ layer: AVPlayerLayer?) {
+            guard let layer else { return }
+            if observed === layer {
+                return
+            }
+            token?.invalidate()
+            observed = layer
+            let flag = flag
+            flag?.ready = layer.isReadyForDisplay
+            token = layer.observe(\.isReadyForDisplay, options: [.new]) { layer, _ in
+                flag?.ready = layer.isReadyForDisplay
+            }
+        }
     }
 }
 

@@ -245,6 +245,22 @@ private func fixture(_ name: String) throws -> Data {
     #expect(move == .rate(1, locked: true))
 }
 
+@Test @MainActor func aPlayingStatusWithNoRateStillRestarts() {
+    #expect(SyncEngine.shouldKeepPlaying(roomRate: 1, paused: false, rate: 0))
+}
+
+@Test @MainActor func aPausedTileRestartsWhileTheRoomPlays() {
+    #expect(SyncEngine.shouldKeepPlaying(roomRate: 1, paused: true, rate: 0))
+}
+
+@Test @MainActor func aMovingTileIsLeftAlone() {
+    #expect(!SyncEngine.shouldKeepPlaying(roomRate: 1, paused: false, rate: 1))
+}
+
+@Test @MainActor func aPausedRoomDoesNotRestart() {
+    #expect(!SyncEngine.shouldKeepPlaying(roomRate: 0, paused: true, rate: 0))
+}
+
 @Test func roomTargetAdvancesOnlyWhilePlaying() {
     var room = RoomState(room: "channel:1", channelId: 1, mode: "follow", anchorServer: 10000, anchorMedia: 5000, rate: 1, latency: "balanced", version: 1, members: 2)
     #expect(room.target(atServer: 12000) == 7000)

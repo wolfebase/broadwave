@@ -17,6 +17,10 @@ public final class SyncEngine {
     public private(set) var drift: Double = 0
     public private(set) var members = 0
 
+    /// When set, a frame counts only after the layer is showing it.
+    /// Presentation size arrives first, and pausing then freezes the tile.
+    public var displayedFrame: (@MainActor () -> Bool)?
+
     private let player: AVPlayer
     private let socket: EventSocket
     private let room: String
@@ -57,6 +61,12 @@ public final class SyncEngine {
             return .rate(trimmed, locked: false)
         }
         return .rate(1, locked: true)
+    }
+
+    /// The room is moving and this player is not. AVPlayer can report
+    /// `.playing` with rate 0, and that state never paints the next frame.
+    static func shouldKeepPlaying(roomRate: Double, paused: Bool, rate: Float) -> Bool {
+        roomRate != 0 && (paused || rate == 0)
     }
 
     public init(player: AVPlayer, socket: EventSocket, room: String, channelID: Int64) {
@@ -114,7 +124,15 @@ public final class SyncEngine {
         let target = st.rate == 0 ? st.anchorMedia : st.target(atServer: socket.serverNow())
         let d = local - target
         drift = d
-        let hasFrame = item.presentationSize.width > 0 && item.presentationSize.height > 0
+        let sized = item.presentationSize.width > 0 && item.presentationSize.height > 0
+        let hasFrame = displayedFrame?() ?? sized
+        // Pausing again on the tick that restarts a stuck player puts rate
+        // straight back to 0, and the tile stays on one frame.
+        if Self.shouldKeepPlaying(roomRate: st.rate, paused: player.timeControlStatus == .paused, rate: player.rate) {
+            player.play()
+            state = hasFrame ? .syncing : .waiting
+            return
+        }
         switch Self.decide(hasFrame: hasFrame, driftMS: d, roomRate: st.rate, canSeek: canSeek(to: target, item: item)) {
         case .wait:
             state = .waiting
@@ -136,9 +154,6 @@ public final class SyncEngine {
             seek(to: target)
             state = .syncing
         case let .rate(rate, locked):
-            if player.timeControlStatus == .paused {
-                player.play()
-            }
             if player.rate != rate {
                 player.rate = rate
             }
