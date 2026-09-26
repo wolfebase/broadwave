@@ -4,6 +4,12 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
+- 2026-09-25 20:10 · **AS3 screenshots: generate them, but upload only to a 1.1 version.**
+  - Don't change any screenshot or metadata on the 1.0 versions while iOS 1.0 is in review and tvOS 1.0 awaits the owner's 2.1 reply: the reviewer is looking at those.
+  - Create the 1.1 versions for AS4 first (`asc`), then upload the new sets there.
+  - Before uploading, open every JPEG yourself and confirm it shows only the Blender demo lineup or demo mode: no broadcast network, station, or team logos.
+  - Art above 960 px is capped by the handler, so request 640 and 960, not 1600.
+
 - 2026-09-25 18:10 · **Close out the conflict resolver and move on.**
   - Finish E2d (the miss-time comparison) this round and commit it, then leave E2 alone. E2b (the Apple Schedule screen) stays open for the Apple work.
   - From now on, a review nit on finished work becomes one line in a single `J1 polish` list, not a new E2x task. Only a real bug (wrong data, a missed recording, a crash) earns its own task.
