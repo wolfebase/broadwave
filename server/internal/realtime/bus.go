@@ -23,6 +23,9 @@ type Message struct {
 // Bus fans server events out to connected clients and hosts sync rooms.
 type Bus struct {
 	Rooms *Rooms
+	// MediaStart is the earliest program time (Unix ms) a channel can play.
+	// The hub sets it. A miss leaves the room on the latency target.
+	MediaStart func(channelID int64) (float64, bool)
 
 	mu      sync.Mutex
 	clients map[*client]struct{}
@@ -221,7 +224,13 @@ func (b *Bus) handle(c *client, m Message) {
 		if json.Unmarshal(m.Data, &req) != nil || !validRoom(req.Room) || !b.setMember(c, req.Room, true) {
 			return
 		}
-		st := b.Rooms.Join(req.Room, req.ChannelID)
+		var earliest float64
+		if b.MediaStart != nil {
+			if v, ok := b.MediaStart(req.ChannelID); ok {
+				earliest = v
+			}
+		}
+		st := b.Rooms.Join(req.Room, req.ChannelID, earliest)
 		b.publishRoom(st)
 	case "sync.leave":
 		var req struct {

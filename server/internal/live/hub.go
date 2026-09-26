@@ -821,6 +821,37 @@ func usesPipe(args []string) bool {
 	return false
 }
 
+// EarliestMedia is the newest first-frame program time (Unix ms) among the
+// channel's encodes. A fresh tune is a few seconds old. One that has been
+// running keeps its original first frame, which is older than the latency target.
+func (h *Hub) EarliestMedia(channelID int64) (float64, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	f := h.channels[channelID]
+	if f == nil {
+		return 0, false
+	}
+	var best time.Time
+	var ok bool
+	for _, r := range f.renditions {
+		if r == nil || r.clock == nil {
+			continue
+		}
+		at, has := r.clock.Earliest()
+		if !has {
+			continue
+		}
+		if !ok || at.After(best) {
+			best = at
+			ok = true
+		}
+	}
+	if !ok {
+		return 0, false
+	}
+	return float64(best.UnixNano()) / 1e6, true
+}
+
 // Playlist returns a rendition's live playlist stamped with that encode's clock.
 func (h *Hub) Playlist(channelID int64, key string) ([]byte, error) {
 	h.mu.Lock()

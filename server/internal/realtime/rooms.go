@@ -68,7 +68,12 @@ func liveAnchor(now time.Time, latency string) float64 {
 // Join adds a member, creating the room at the live target if it is new.
 // Channel rooms ("channel:ID") follow live. Group rooms ("group:CODE") and
 // multiview rooms ("multiview:ID") share controls, so pause hits every tile.
-func (r *Rooms) Join(room string, channelID int64) RoomState {
+// earliest is the first program time the channel can play, in Unix ms. Zero
+// means unknown. A fresh tune's first frame is newer than the latency target,
+// and aiming past it makes the player pause until the wall clock catches up.
+// The next member keeps that anchor. lowest, balanced, and stable still apply
+// once the buffer is deep enough to hold them.
+func (r *Rooms) Join(room string, channelID int64, earliest float64) RoomState {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	st := r.rooms[room]
@@ -78,9 +83,13 @@ func (r *Rooms) Join(room string, channelID int64) RoomState {
 		if strings.HasPrefix(room, "group:") || strings.HasPrefix(room, "multiview:") {
 			mode = "group"
 		}
+		media := liveAnchor(now, "balanced")
+		if earliest > media {
+			media = earliest
+		}
 		st = &RoomState{
 			Room: room, ChannelID: channelID, Mode: mode, Latency: "balanced", Rate: 1,
-			AnchorServer: unixMS(now), AnchorMedia: liveAnchor(now, "balanced"), Version: 1,
+			AnchorServer: unixMS(now), AnchorMedia: media, Version: 1,
 		}
 		r.rooms[room] = st
 	}

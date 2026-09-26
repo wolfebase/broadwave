@@ -87,12 +87,13 @@ func ptsDiff(a, b int64) int64 {
 // channel keeps broadcast timestamps, so they all share one Timeline and every
 // client computes the same wall time for the same frame.
 type Timeline struct {
-	mu     sync.Mutex
-	pts    int64
-	wall   time.Time
-	set    bool
-	now    func() time.Time
-	behind time.Duration
+	mu       sync.Mutex
+	pts      int64
+	wall     time.Time
+	earliest time.Time
+	set      bool
+	now      func() time.Time
+	behind   time.Duration
 }
 
 func NewTimeline() *Timeline {
@@ -112,8 +113,21 @@ func (t *Timeline) Wall(pts int64) time.Time {
 	}
 	t.pts = pts
 	t.wall = t.now().Add(-t.behind)
+	t.earliest = t.wall
 	t.set = true
 	return t.wall
+}
+
+// Earliest is the program time of the first segment this encode stamped.
+// A fresh tune's first frame is only a few seconds old; a long-running one
+// keeps the original anchor so a deep buffer can still sit at the latency target.
+func (t *Timeline) Earliest() (time.Time, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.set {
+		return time.Time{}, false
+	}
+	return t.earliest, true
 }
 
 // playlistStamper rewrites an ffmpeg live playlist with program date-times from

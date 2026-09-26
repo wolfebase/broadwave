@@ -393,6 +393,14 @@ func renditionProfile(video string) string {
 	}
 }
 
+// openingKeyframes forces a keyframe on the first frame and then every two
+// seconds, the same grid a copy uses when it groups a short GOP into
+// two-second segments. A half-second opening is not used: on ffmpeg 8,
+// -hls_init_time keeps cutting at that length until the playlist window
+// fills, and a 2700-segment list does not fill during a show. Counting
+// n_forced*2 drifts off the broadcast clock.
+const openingKeyframes = "expr:if(isnan(prev_forced_t),1,gte(t,prev_forced_t+2))"
+
 // RenditionArgs builds ffmpeg for one live rendition. Timestamps are kept from
 // the broadcast (-copyts). fMP4 still starts each encode at zero, so each
 // rendition keeps its own wall clock (see rendition.clock).
@@ -431,7 +439,14 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		args = append(args, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5")
 	}
 	args = append(args, headerArgs(src.UserAgent, src.Referrer)...)
-	args = append(args, "-probesize", "2000000", "-analyzeduration", "1500000", "-i", input)
+	// Ceilings, not waits: ffmpeg returns once it has the parameters. A tuner
+	// multiplex is tens of megabits, so a 2 MB cap ends before the sequence
+	// header. A remote playlist is slower to start and is not a fat mux.
+	probeSize, probeFor := "8000000", "1000000"
+	if strings.Contains(input, "://") {
+		probeSize, probeFor = "2000000", "1500000"
+	}
+	args = append(args, "-probesize", probeSize, "-analyzeduration", probeFor, "-i", input)
 	audioMap := "0:a:0"
 	if program > 0 {
 		audioMap = fmt.Sprintf("0:p:%d:a:0", program)
@@ -459,7 +474,7 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		fps, gop := pictureRate(g, field)
 		args = append(args, "-vf", videoFilter(g, vaapiDeintMode(g, interlaced), interlaced, field, width, height, fps))
 		args = append(args, videoCodec(outEnc, rate, gop)...)
-		args = append(args, "-force_key_frames", "expr:if(isnan(prev_forced_t),1,gte(t,prev_forced_t+2))")
+		args = append(args, "-force_key_frames", openingKeyframes)
 	} else {
 		args = append(args, "-c:v", "copy")
 	}
@@ -478,8 +493,12 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 	}
 	// CMAF (fMP4) segments: players read timing straight from the boxes with no
 	// transmuxing, Apple devices need it for HEVC, and it is the base for LL-HLS.
+	// Copy and transcode both target two seconds, so the same segment name is
+	// the same frame. -hls_init_time is not used; see openingKeyframes.
 	return append(args,
 		"-video_track_timescale", "90000",
+		// The defaults hold the first packet for most of a second.
+		"-muxdelay", "0", "-muxpreload", "0",
 		"-f", "hls", "-hls_time", "2",
 		"-hls_segment_type", "fmp4", "-hls_fmp4_init_filename", "init.mp4",
 		"-hls_segment_filename", "seg%05d.m4s",

@@ -22,7 +22,7 @@ func fixedRooms(at time.Time) (*Rooms, *time.Time) {
 func TestFollowRoomTracksLiveAndRefusesControls(t *testing.T) {
 	start := time.Date(2026, 9, 22, 20, 0, 0, 0, time.UTC)
 	r, now := fixedRooms(start)
-	st := r.Join("channel:4", 4)
+	st := r.Join("channel:4", 4, 0)
 	if st.Mode != "follow" || st.Members != 1 {
 		t.Fatalf("channel rooms follow live: %+v", st)
 	}
@@ -40,11 +40,30 @@ func TestFollowRoomTracksLiveAndRefusesControls(t *testing.T) {
 	}
 }
 
+func TestFreshRoomStartsOnTheFirstFrame(t *testing.T) {
+	start := time.Date(2026, 9, 26, 3, 0, 0, 0, time.UTC)
+	r, _ := fixedRooms(start)
+	first := unixMS(start.Add(-3500 * time.Millisecond))
+	st := r.Join("channel:4", 4, first)
+	if st.AnchorMedia != first || st.Members != 1 {
+		t.Fatalf("a fresh room starts on the first frame: %+v", st)
+	}
+	next := r.Join("channel:4", 4, unixMS(start))
+	if next.AnchorMedia != first || next.Members != 2 {
+		t.Fatalf("the next screen keeps that frame: %+v", next)
+	}
+	deep := r.Join("channel:9", 9, unixMS(start.Add(-30*time.Second)))
+	want := unixMS(start.Add(-10 * time.Second))
+	if deep.AnchorMedia != want {
+		t.Fatalf("a deep buffer stays at the latency target, got %v want %v", deep.AnchorMedia, want)
+	}
+}
+
 func TestMultiviewRoomSharesOneTarget(t *testing.T) {
 	start := time.Date(2026, 9, 22, 20, 0, 0, 0, time.UTC)
 	r, _ := fixedRooms(start)
-	a := r.Join("multiview:games", 0)
-	b := r.Join("multiview:games", 0)
+	a := r.Join("multiview:games", 0, 0)
+	b := r.Join("multiview:games", 0, 0)
 	if a.Mode != "group" || b.Members != 2 || a.AnchorMedia != b.AnchorMedia {
 		t.Fatalf("tiles share one live target: %+v %+v", a, b)
 	}
@@ -57,8 +76,8 @@ func TestMultiviewRoomSharesOneTarget(t *testing.T) {
 func TestGroupRoomPauseSeekLive(t *testing.T) {
 	start := time.Date(2026, 9, 22, 20, 0, 0, 0, time.UTC)
 	r, now := fixedRooms(start)
-	r.Join("group:den", 9)
-	r.Join("group:den", 9)
+	r.Join("group:den", 9, 0)
+	r.Join("group:den", 9, 0)
 	*now = start.Add(30 * time.Second)
 	st, err := r.Apply("group:den", Command{Action: "pause"})
 	if err != nil || st.Rate != 0 || st.Members != 2 {
@@ -156,6 +175,52 @@ func TestSocketClockAndRoomBroadcast(t *testing.T) {
 	if !strings.Contains(string(read(phone, "recording.started")), `"id":5`) {
 		t.Fatal("events reach every client")
 	}
+}
+
+func TestFreshJoinUsesTheFirstFrame(t *testing.T) {
+	bus := NewBus()
+	start := time.Date(2026, 9, 26, 3, 0, 0, 0, time.UTC)
+	bus.SetClock(func() time.Time { return start })
+	first := unixMS(start.Add(-3500 * time.Millisecond))
+	bus.MediaStart = func(channelID int64) (float64, bool) {
+		if channelID == 4 {
+			return first, true
+		}
+		return 0, false
+	}
+	srv := httptest.NewServer(bus)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+	data, _ := json.Marshal(map[string]any{"room": "channel:4", "channelId": 4})
+	raw, _ := json.Marshal(Message{Type: "sync.join", Data: data})
+	if err := conn.Write(ctx, websocket.MessageText, raw); err != nil {
+		t.Fatal(err)
+	}
+	var st RoomState
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		_, msg, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m Message
+		_ = json.Unmarshal(msg, &m)
+		if m.Type != "sync.state" {
+			continue
+		}
+		_ = json.Unmarshal(m.Data, &st)
+		if st.AnchorMedia != first {
+			t.Fatalf("join should anchor on the first frame, got %v", st.AnchorMedia)
+		}
+		return
+	}
+	t.Fatal("no room state")
 }
 
 func TestHereAnnouncesAScreen(t *testing.T) {
