@@ -1,10 +1,18 @@
 package discovery
 
 import (
+	"context"
 	"net"
 	"strings"
 	"testing"
 )
+
+func TestScanHomeStaysQuietDuringE2E(t *testing.T) {
+	t.Setenv("BROADWAVE_E2E", "1")
+	if got := ScanHome(context.Background()); len(got) != 0 {
+		t.Fatalf("scan ran: %+v", got)
+	}
+}
 
 func lan() []*net.IPNet {
 	_, n, err := net.ParseCIDR("192.168.1.0/24")

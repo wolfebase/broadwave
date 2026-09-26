@@ -15,7 +15,7 @@ help:
 	@echo "make tokens   regenerate CSS and Swift from design/tokens.json"
 
 web/node_modules: web/package-lock.json
-	cd web && npm ci
+	cd web && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci
 	@touch web/node_modules
 
 web: web/node_modules

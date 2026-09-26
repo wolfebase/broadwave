@@ -1,6 +1,8 @@
 FROM node:22-bookworm-slim AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
+# Browser tests use the machine's Chrome. The image only builds the site.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN npm ci
 COPY web/ ./
 # The typecheck decodes the golden API responses (web/src/api/contract.ts).
