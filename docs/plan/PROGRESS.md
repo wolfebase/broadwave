@@ -3,8 +3,8 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **HW5** client matrix (`/tmp/broadwave-hw5-client_matrix_test.go` is the draft; run it on main before ticking). Then **AS3**. App Review unchanged: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply. Do not reply in the Resolution Center. Review notes on both versions now say Try the demo.
-- Lanes: the tvOS chip worktree and the empty D8 worktree are removed with this commit. D8 stays open (logic only, copies in `/tmp/broadwave-d8`). HW2 is `6aa3531`, CI run 36205378954.
+- Current task: **AS3** after this commit. App Review unchanged: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply. Do not reply in the Resolution Center. Review notes on both versions now say Try the demo.
+- Lanes running: D8 game alerts `~/.grok/worktrees/active-broadwave/subagent-01a0db31-f84a-7692-bbd4-2a7b47d5c0bb`. N7 Roku notes `…2a82a35a1984`. Do not take PROGRESS edits from either. The chip and empty D8 worktrees are removed. D8 stays open until that lane is reviewed. Chip CI `36205966509` is green.
 - Cleared this round: G8 and D8 clones removed. G8 was unfinished (no slog everywhere). D8 was logic only, no toast.
 - No tuner left held. Both servers `ours:false` after the demo shots. Next recording is Jeopardy on 2026-09-27.
 - Disk: 43 GB free at the start of this round. Above 15 GB.
@@ -108,7 +108,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [x] HW3 paper: httptest coverage for the emulator playlist paths. `go test ./server/internal/source/ -count=1` passed. tvheadend stores `http://user:pass@host/playlist/channels` and the same host's `/xmltv/channels`; a wrong password fails, and a 200 that is not an M3U fails. threadfin `/m3u/threadfin.m3u`, xteve `/m3u/xteve.m3u`, ersatztv `/iptv/channels.m3u`, and dispatcharr `/output/m3u` each check the path, the stored guide URL, a non-M3U body, and a 401. A 401 whose body is a playlist says the server refused the playlist, which is not the channel-list error. The table in `docs/sources.md` marks every real container "not run", including Channels DVR and Plex.
 - [ ] HW3 tvheadend, Threadfin, ErsatzTV, Dispatcharr, Channels DVR, and Plex verified for real
 - [ ] HW4 Server hardware matrix (Intel, AMD, NVIDIA, Apple, software/arm64) with a startup self-benchmark
-- [ ] HW5 Client matrix table tests (Apple TV HD, Apple TV 4K, older iPhones, Safari, Chrome, Firefox)
+- [x] HW5 Client matrix table tests (Apple TV HD, Apple TV 4K, older iPhones, Safari, Chrome, Firefox). `TestClientMatrix` (`go test ./server/internal/live/ -count=1 -run 'TestClientMatrix|TestDecide$'`): Apple TV HD is `1080.copy.broadcast`; each Apple TV 4K generation, iPhone SE (2nd), iPhone 11, and iPad are `1080.copy.broadcast.hevc`; iPhone 6s and Safari (when it reports AC-3) are `1080.copy.broadcast`; Chrome, Edge, and Firefox are `1080.aac2.broadcast`. Progressive 720p H.264 is `copy.copy` on every row. `clientMatrixCapsMatchTheDevice`: `AppleTV5,3` is H.264 and max height 1080; `AppleTV6,2`, `AppleTV11,1`, and `AppleTV14,1` are HEVC and 2160; `iPhone8,1` and `iPad6,11` are H.264; `iPhone12,8`, `iPhone12,1`, and `iPad13,18` are HEVC. `appleDevicesAskForTheOriginalBroadcast` still asks for H.264, HEVC, and AC-3 on this Mac. Table in `docs/hardware.md`. The web app adds AC-3 only when `MediaSource.isTypeSupported` says so. `make check` green.
 
 ## Phase R — Repair and consolidate
 - [x] R1 CI green on all four jobs at 0984064 (lint fixes e411da1, Xcode 26 guard 0984064); `make check`; CI section in the dev-loop skill
