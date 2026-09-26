@@ -73,6 +73,12 @@ a {
   color: color-mix(in srgb, var(--color-accent) 72%, #fff);
 }
 
+/* A link styled as a button reads as a button, not as link text in a pill. */
+a.btn {
+  color: inherit;
+  text-decoration: none;
+}
+
 code {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 0.9em;
