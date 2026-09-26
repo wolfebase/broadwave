@@ -2,6 +2,8 @@ package logbuf
 
 import (
 	"bytes"
+	"log"
+	"log/slog"
 	"strings"
 	"testing"
 )
@@ -48,5 +50,46 @@ func TestRingDropsTheOldestLine(t *testing.T) {
 	r.add("c")
 	if r.text() != "b\nc" {
 		t.Fatalf("%q", r.text())
+	}
+}
+
+func TestTailKeepsTheNewestLines(t *testing.T) {
+	prev := shared
+	shared = &ring{max: 8}
+	t.Cleanup(func() { shared = prev })
+	shared.add("a")
+	shared.add("b")
+	shared.add("c")
+	if strings.Join(Tail(2), ",") != "b,c" {
+		t.Fatalf("%v", Tail(2))
+	}
+	if len(Tail(0)) != 3 {
+		t.Fatalf("%v", Tail(0))
+	}
+}
+
+func TestSlogDropsPasswordAndDeviceAuth(t *testing.T) {
+	prev := shared
+	shared = &ring{max: 20}
+	prevLog := log.Writer()
+	prevSlog := slog.Default()
+	t.Cleanup(func() {
+		shared = prev
+		log.SetOutput(prevLog)
+		slog.SetDefault(prevSlog)
+	})
+	var dst bytes.Buffer
+	Install(&dst)
+	const password = "ops3-fixture-password"
+	const auth = "ops3-device-auth-token"
+	slog.Info("source http://ops3user:" + password + "@playlist.example/pl.m3u?password=" + password + " DeviceAuth=" + auth)
+	slog.Info("login", "password", password, "DeviceAuth", auth)
+	slog.Info("password=" + password)
+	got := dst.String() + "\n" + Text()
+	if strings.Contains(got, password) || strings.Contains(got, auth) || strings.Contains(got, "DeviceAuth") {
+		t.Fatalf("%s", got)
+	}
+	if !strings.Contains(Text(), "playlist.example") || !strings.Contains(Text(), "level=INFO") {
+		t.Fatalf("%s", Text())
 	}
 }

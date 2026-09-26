@@ -3,7 +3,7 @@ package httpapi
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -99,7 +99,7 @@ func (s *Server) SignalScan(ctx context.Context) {
 		}
 		lock, err := s.Hub.Measure(ctx, int64(id))
 		if err != nil {
-			log.Printf("signal: channel %d: %v", id, err)
+			slog.Error(fmt.Sprintf("signal: channel %d: %v", id, err))
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -110,10 +110,10 @@ func (s *Server) SignalScan(ctx context.Context) {
 			return nil
 		}
 		if err := s.Store.SaveFrequencySignal(ctx, full.FrequencyHz, lock.Locked, lock.Strength, lock.Quality, lock.Symbol, time.Now()); err != nil {
-			log.Printf("signal: save %d: %v", full.FrequencyHz, err)
+			slog.Error(fmt.Sprintf("signal: save %d: %v", full.FrequencyHz, err))
 		}
 		verdict, _ := lock.Verdict()
-		log.Printf("signal: %s %s strength %d quality %d symbols %d", full.GuideNumber, verdict, lock.Strength, lock.Quality, lock.Symbol)
+		slog.Info(fmt.Sprintf("signal: %s %s strength %d quality %d symbols %d", full.GuideNumber, verdict, lock.Strength, lock.Quality, lock.Symbol))
 		return nil
 	})
 }

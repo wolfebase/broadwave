@@ -2,7 +2,8 @@ package httpapi
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -47,7 +48,7 @@ func (s *Server) scoreboard(w http.ResponseWriter, r *http.Request) {
 		games, err = provider.Scoreboard(r.Context(), league, day)
 	}
 	if err != nil {
-		log.Printf("sports: %v", err)
+		slog.Error(fmt.Sprintf("sports: %v", err))
 		httpError(w, "Scores are unavailable right now.", http.StatusBadGateway)
 		return
 	}
@@ -145,7 +146,7 @@ func (s *Server) boardsAround(ctx context.Context, now time.Time) []sports.Game 
 	for _, day := range []time.Time{now, now.Add(24 * time.Hour), now.Add(48 * time.Hour)} {
 		part, err := board.Boards(ctx, day)
 		if err != nil {
-			log.Printf("sports: %v", err)
+			slog.Error(fmt.Sprintf("sports: %v", err))
 			continue
 		}
 		for _, game := range part {
@@ -173,7 +174,7 @@ func (s *Server) LinkGames(ctx context.Context) {
 	}
 	airings, err := s.Store.Airings(ctx, from, to)
 	if err != nil {
-		log.Printf("sports: %v", err)
+		slog.Error(fmt.Sprintf("sports: %v", err))
 		return
 	}
 	listings := make([]sports.Listing, 0, len(airings))
@@ -185,11 +186,11 @@ func (s *Server) LinkGames(ctx context.Context) {
 	}
 	links := sports.Link(listings, games)
 	if err := s.Store.SetAiringGames(ctx, from, to, links); err != nil {
-		log.Printf("sports: %v", err)
+		slog.Error(fmt.Sprintf("sports: %v", err))
 		return
 	}
 	if len(links) > 0 {
-		log.Printf("sports: matched %d listings", len(links))
+		slog.Info(fmt.Sprintf("sports: matched %d listings", len(links)))
 	}
 	s.NoteTeams(ctx)
 }
@@ -224,7 +225,7 @@ func (s *Server) ExtendRecordings(ctx context.Context) {
 			continue
 		}
 		if err := s.Hub.ExtendRecording(ctx, ext.ID, ext.Until); err != nil {
-			log.Printf("recording: %v", err)
+			slog.Error(fmt.Sprintf("recording: %v", err))
 			continue
 		}
 		_ = s.Store.AddEvent(ctx, "recording", ext.Note)

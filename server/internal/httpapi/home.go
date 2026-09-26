@@ -2,7 +2,8 @@ package httpapi
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -87,9 +88,9 @@ func (s *Server) cachedHome(ctx context.Context, fresh bool) []discovery.Found {
 		parts = append(parts, item.Kind+" "+item.Name+" "+item.Addr)
 	}
 	if len(parts) == 0 {
-		log.Printf("home scan: nothing")
+		slog.Info("home scan: nothing")
 	} else {
-		log.Printf("home scan: %s", strings.Join(parts, "; "))
+		slog.Info(fmt.Sprintf("home scan: %s", strings.Join(parts, "; ")))
 	}
 	s.homeFound = found
 	s.homeAt = time.Now()

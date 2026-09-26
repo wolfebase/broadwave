@@ -2,7 +2,8 @@ package httpapi
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"log/slog"
 	"time"
 
 	"broadwave/internal/discovery"
@@ -36,11 +37,11 @@ func (s *Server) noteArrivals(ctx context.Context) {
 	s.homeMu.Unlock()
 	places, err := s.homePlaces(ctx, true)
 	if err != nil {
-		log.Printf("home: %v", err)
+		slog.Error(fmt.Sprintf("home: %v", err))
 		return
 	}
 	for _, msg := range arrivals.Observe(places, time.Now()) {
-		log.Printf("home: %s", msg)
+		slog.Info(fmt.Sprintf("home: %s", msg))
 		if s.Store != nil {
 			_ = s.Store.AddEvent(ctx, "home", msg)
 		}

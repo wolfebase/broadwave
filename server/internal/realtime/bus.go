@@ -3,7 +3,8 @@ package realtime
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -248,7 +249,7 @@ func (b *Bus) handle(c *client, m Message) {
 		}
 		b.publishRoom(st)
 	default:
-		log.Printf("realtime: unknown message %q", m.Type)
+		slog.Info(fmt.Sprintf("realtime: unknown message %q", m.Type))
 	}
 }
 

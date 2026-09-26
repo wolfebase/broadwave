@@ -6,7 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -56,18 +56,20 @@ func main() {
 	doctor.ApplyIdentity(filepath.Join(*configDir, "work", "recordings"))
 	// Copy the catalog before Open migrates it, when this build is a new version.
 	if err := backup.SnapshotIfVersionChanged(context.Background(), *configDir, version, time.Now()); err != nil {
-		log.Printf("backup: %v", err)
+		slog.Error(fmt.Sprintf("backup: %v", err))
 	}
 
 	st, err := store.Open(*configDir)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error(err.Error())
+		os.Exit(1)
 	}
 	defer st.Close()
 
 	assets, err := fs.Sub(embedded, "assets/web")
 	if err != nil {
-		log.Fatal(err)
+		slog.Error(err.Error())
+		os.Exit(1)
 	}
 	work := filepath.Join(*configDir, "work")
 	ffmpegPath, _ := execLook("ffmpeg")
@@ -75,7 +77,7 @@ func main() {
 	live.Reap(work)
 	hub := live.New(st, work, ffmpegPath, encoder)
 	if *staging {
-		log.Printf("staging: recordings, guide pulls, background tunes, and the tuner emulator are off")
+		slog.Info("staging: recordings, guide pulls, background tunes, and the tuner emulator are off")
 	} else if err := dvr.Recover(context.Background(), st, time.Now(), func(rec store.Recording, left time.Duration) error {
 		minutes := int(left / time.Minute)
 		if minutes < 1 {
@@ -86,16 +88,16 @@ func main() {
 			Description: rec.Description, Category: rec.Category, ProgramID: rec.ProgramID, GameID: rec.GameID,
 		})
 		if err != nil {
-			log.Printf("recording: resume %s: %v", rec.Title, err)
+			slog.Error(fmt.Sprintf("recording: resume %s: %v", rec.Title, err))
 		}
 		return nil
 	}); err != nil {
-		log.Printf("recording: %v", err)
+		slog.Error(fmt.Sprintf("recording: %v", err))
 	}
 	hub.OnSaved = func(rec store.Recording) {
 		dvr.OnSaved(context.Background(), st, hub, rec)
 	}
-	log.Printf("encoder: %s deint: %s smooth: %s", encoder, hub.DeintBroadcast, hub.DeintSmooth)
+	slog.Info(fmt.Sprintf("encoder: %s deint: %s smooth: %s", encoder, hub.DeintBroadcast, hub.DeintSmooth))
 	bus := realtime.NewBus()
 	st.OnEvent = func(ev store.Event) { bus.Publish("activity", ev) }
 	hub.OnChange = debounce(500*time.Millisecond, func() { bus.Publish("live.changed", nil) })
@@ -104,11 +106,11 @@ func main() {
 	hub.OnPSIP = func(_ int, g psip.Guide) {
 		n, err := api.ApplyBroadcast(context.Background(), g)
 		if err != nil {
-			log.Printf("guide: broadcast: %v", err)
+			slog.Error(fmt.Sprintf("guide: broadcast: %v", err))
 			return
 		}
 		if n > 0 {
-			log.Printf("guide: broadcast filled %d listings", n)
+			slog.Info(fmt.Sprintf("guide: broadcast filled %d listings", n))
 		}
 	}
 	handler := api.Handler()
@@ -118,10 +120,10 @@ func main() {
 		defer cancel()
 		n, err := source.Auto(ctx, st, nil, *hdhrHost)
 		if err != nil {
-			log.Printf("discovery: %v", err)
+			slog.Error(fmt.Sprintf("discovery: %v", err))
 			return
 		}
-		log.Printf("discovery: %d device(s)", n)
+		slog.Info(fmt.Sprintf("discovery: %d device(s)", n))
 		bus.Publish("sources.found", map[string]int{"found": n})
 		// SiliconDust asks for a random 20-28 h gap after each successful pull.
 		// A restart waits out whatever nextGuidePull was already stored.
@@ -141,11 +143,11 @@ func main() {
 			n, err := api.RefreshSources(ctx, time.Now())
 			cancel()
 			if err != nil {
-				log.Printf("playlist refresh: %v", err)
+				slog.Error(fmt.Sprintf("playlist refresh: %v", err))
 				continue
 			}
 			if n > 0 {
-				log.Printf("playlist refresh: %d", n)
+				slog.Info(fmt.Sprintf("playlist refresh: %d", n))
 			}
 		}
 	}()
@@ -157,7 +159,7 @@ func main() {
 			n, err := source.Auto(ctx, st, nil, *hdhrHost)
 			cancel()
 			if err != nil {
-				log.Printf("discovery: %v", err)
+				slog.Error(fmt.Sprintf("discovery: %v", err))
 				continue
 			}
 			bus.Publish("sources.found", map[string]int{"found": n})
@@ -201,13 +203,13 @@ func main() {
 	if *bonjour {
 		if id, err := st.Identity(context.Background(), httpapi.DefaultServerName()); err == nil {
 			if advert, err := discovery.Announce(discovery.Advert{ID: id.ID, Name: id.Name, Version: version, Port: portOf(*addr)}); err != nil {
-				log.Printf("bonjour: %v", err)
+				slog.Error(fmt.Sprintf("bonjour: %v", err))
 			} else {
 				defer advert.Shutdown()
 			}
 		}
 	}
-	log.Printf("Broadwave listening on %s", *addr)
+	slog.Info(fmt.Sprintf("Broadwave listening on %s", *addr))
 	server := &http.Server{
 		Addr:              *addr,
 		Handler:           handler,
@@ -227,7 +229,8 @@ func main() {
 		_ = server.Shutdown(shut)
 	}()
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatal(err)
+		slog.Error(err.Error())
+		os.Exit(1)
 	}
 }
 
@@ -236,7 +239,7 @@ func releaseCheck(st *store.Store, version string) *update.Checker {
 	c.Enabled = func(ctx context.Context) bool {
 		on, err := st.UpdatesEnabled(ctx)
 		if err != nil {
-			log.Printf("update: %v", err)
+			slog.Error(fmt.Sprintf("update: %v", err))
 			return false
 		}
 		return on
@@ -244,7 +247,7 @@ func releaseCheck(st *store.Store, version string) *update.Checker {
 	c.Load = func(ctx context.Context) (*update.Notice, time.Time) {
 		ver, notes, message, at, err := st.SavedUpdate(ctx)
 		if err != nil {
-			log.Printf("update: %v", err)
+			slog.Error(fmt.Sprintf("update: %v", err))
 			return nil, time.Time{}
 		}
 		if ver == "" || message == "" {
@@ -258,7 +261,7 @@ func releaseCheck(st *store.Store, version string) *update.Checker {
 			ver, notes, message = n.Version, n.NotesURL, n.Message
 		}
 		if err := st.SaveUpdate(ctx, ver, notes, message, at); err != nil {
-			log.Printf("update: %v", err)
+			slog.Error(fmt.Sprintf("update: %v", err))
 		}
 	}
 	return c
@@ -268,7 +271,7 @@ func refreshGuide(api *httpapi.Server) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	if _, err := api.RefreshGuide(ctx); err != nil {
-		log.Printf("guide: %v", err)
+		slog.Error(fmt.Sprintf("guide: %v", err))
 		api.DeferGuide(ctx, guide.RetryAfterError)
 	}
 }

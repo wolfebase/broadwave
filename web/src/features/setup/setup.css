@@ -291,3 +291,34 @@
   place-items: center;
   font-weight: 800;
 }
+
+.diag {
+  min-width: 0;
+}
+
+.feed-line {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.log-view {
+  margin: 0;
+  max-width: 100%;
+  max-height: 18rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--type-caption-size);
+  line-height: 1.45;
+}
+
+.layout-phone .log-view,
+.layout-tv .log-view {
+  max-width: 100%;
+}
+
+.layout-tv .log-view {
+  max-height: 24rem;
+  font-size: var(--type-footnote-size);
+}

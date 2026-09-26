@@ -4,7 +4,8 @@ package discovery
 
 import (
 	"errors"
-	"log"
+	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"strconv"
@@ -78,6 +79,6 @@ func Announce(a Advert) (*zeroconf.Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("bonjour: %s on port %d", Service, a.Port)
+	slog.Info(fmt.Sprintf("bonjour: %s on port %d", Service, a.Port))
 	return srv, nil
 }
