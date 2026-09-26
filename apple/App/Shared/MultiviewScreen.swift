@@ -409,8 +409,46 @@ struct MultiviewScreen: View {
     @State private var hint = !UserDefaults.standard.bool(forKey: "broadwave-mv-hint-seen")
     @State private var menuChannel: Int64?
     #if os(tvOS)
+        private enum BarFocus: Hashable {
+            case layout(TileLayout)
+            case channels
+            case channel(Int64)
+        }
+
         @FocusState private var remoteFocus: Int64?
-        @FocusState private var channelsFocused: Bool
+        @FocusState private var barFocus: BarFocus?
+
+        /// Debug screenshots: `-BroadwaveFocusChip` is `2up`, `1+2`, `1+3`, `quad`, `pip`, `channels`, or a channel id.
+        private var pinnedBarFocus: BarFocus? {
+            #if DEBUG
+                let raw = UserDefaults.standard.string(forKey: "BroadwaveFocusChip") ?? ""
+                if let layout = TileLayout(rawValue: raw) {
+                    return .layout(layout)
+                }
+                if raw == "channels" {
+                    return .channels
+                }
+                if let id = Int64(raw), id > 0 {
+                    return .channel(id)
+                }
+            #endif
+            return nil
+        }
+
+        #if DEBUG
+            private struct PinnedChipFocus: ViewModifier {
+                var barFocus: FocusState<BarFocus?>.Binding
+                var target: BarFocus?
+
+                func body(content: Content) -> some View {
+                    if let target {
+                        content.defaultFocus(barFocus, target, priority: .userInitiated)
+                    } else {
+                        content
+                    }
+                }
+            }
+        #endif
     #endif
 
     init() {
@@ -504,6 +542,9 @@ struct MultiviewScreen: View {
             if nowPlaying.together.count < 2 || UserDefaults.standard.bool(forKey: "BroadwaveMultiviewAdd") {
                 session.guide = true
             }
+            #if DEBUG
+                applyChipFixture()
+            #endif
         }
         .onChange(of: nowPlaying.openedLayout) { _, _ in
             applyOpenedLayout()
@@ -558,15 +599,37 @@ struct MultiviewScreen: View {
             }
         }
         .onAppear {
+            #if DEBUG
+                if pinnedBarFocus != nil {
+                    return
+                }
+            #endif
             if remoteFocus == nil {
                 remoteFocus = nowPlaying.together.first
             }
         }
         .onChange(of: planReady) { _, ready in
+            #if DEBUG
+                if pinnedBarFocus != nil {
+                    return
+                }
+            #endif
             if ready, remoteFocus == nil {
                 remoteFocus = nowPlaying.together.first
             }
         }
+            #if DEBUG
+        .modifier(PinnedChipFocus(barFocus: $barFocus, target: pinnedBarFocus))
+        .task {
+            guard UserDefaults.standard.bool(forKey: "BroadwaveChipFixture") || pinnedBarFocus != nil else { return }
+            applyChipFixture()
+            try? await Task.sleep(for: .milliseconds(1000))
+            applyChipFixture()
+            if let target = pinnedBarFocus {
+                barFocus = target
+            }
+        }
+            #endif
         #endif
     }
 
@@ -598,8 +661,8 @@ struct MultiviewScreen: View {
     private var channelsControl: some View {
         Button("Channels") { session.guide.toggle() }
         #if os(tvOS)
-            .buttonStyle(ChannelsPillStyle(focused: channelsFocused))
-            .focused($channelsFocused)
+            .buttonStyle(ChannelsPillStyle(focused: barFocus == .channels))
+            .focused($barFocus, equals: .channels)
             .focusEffectDisabled()
         #else
             .buttonStyle(.bordered)
@@ -611,22 +674,32 @@ struct MultiviewScreen: View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 ForEach(layouts) { item in
-                    Button(item.label) {
-                        let change = { session.layout = item; session.rememberLayout() }
-                        if reduceMotion {
-                            change()
-                        } else {
-                            withAnimation(.snappy) { change() }
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(session.layout == item ? Color.accentColor : nil)
-                    .accessibilityAddTraits(session.layout == item ? .isSelected : [])
+                    layoutChip(item)
                 }
                 channelsControl
             }
         }
         .scrollIndicators(.hidden)
+    }
+
+    private func layoutChip(_ item: TileLayout) -> some View {
+        Button(item.label) {
+            let change = { session.layout = item; session.rememberLayout() }
+            if reduceMotion {
+                change()
+            } else {
+                withAnimation(.snappy) { change() }
+            }
+        }
+        #if os(tvOS)
+        .buttonStyle(ChannelsPillStyle(focused: barFocus == .layout(item), selected: session.layout == item))
+        .focused($barFocus, equals: .layout(item))
+        .focusEffectDisabled()
+        #else
+        .buttonStyle(.bordered)
+        .tint(session.layout == item ? Color.accentColor : nil)
+        #endif
+        .accessibilityAddTraits(session.layout == item ? .isSelected : [])
     }
 
     private var channelStrip: some View {
@@ -648,8 +721,18 @@ struct MultiviewScreen: View {
                         }
                         .frame(minWidth: 88, minHeight: 48)
                     }
+                    #if os(tvOS)
+                    .buttonStyle(ChannelsPillStyle(
+                        focused: barFocus == .channel(channel.id),
+                        selected: on && !full,
+                        singleLine: false
+                    ))
+                    .focused($barFocus, equals: .channel(channel.id))
+                    .focusEffectDisabled()
+                    #else
                     .buttonStyle(.bordered)
                     .tint(on ? Color.accentColor : nil)
+                    #endif
                     .disabled(full)
                     .accessibilityLabel(offerLabel(channel, offer))
                     .accessibilityAddTraits(on ? .isSelected : [])
@@ -805,6 +888,31 @@ struct MultiviewScreen: View {
         session.focusID = channel.id
         session.guide = false
     }
+
+    #if DEBUG
+        /// `-BroadwaveChipFixture` adds one channel the plan refuses, so the strip can show a disabled chip without a tuner.
+        private func applyChipFixture() {
+            guard UserDefaults.standard.bool(forKey: "BroadwaveChipFixture") else { return }
+            session.guide = true
+            let extras = [
+                Channel(
+                    id: 7, deviceId: "preview", guideNumber: "12.1", guideName: "Three",
+                    displayNumber: "12.1", displayName: "Three",
+                    hd: true, favorite: false, enabled: true, hidden: false, present: true
+                ),
+                Channel(
+                    id: 8, deviceId: "preview", guideNumber: "38.1", guideName: "Four",
+                    displayNumber: "38.1", displayName: "Four",
+                    hd: true, favorite: false, enabled: true, hidden: false, present: true
+                ),
+            ]
+            let missing = extras.filter { extra in !store.channels.contains { $0.id == extra.id } }
+            if !missing.isEmpty, !store.channels.isEmpty {
+                store.previewLineup(store.channels + missing)
+            }
+            offers[7] = MultiviewPlanOffers(channelId: 7, cost: "none", label: "No tuner free")
+        }
+    #endif
 
     private func leave() {
         let id = session.focusID
@@ -970,18 +1078,60 @@ struct MultiviewTile: View {
 
 #if os(tvOS)
     /// A focused bordered button fills with the accent and paints its title the same color.
+    /// Capsules keep a light title: accent fill when focused, dark fill otherwise.
+    /// The layout already on screen keeps an accent ring when focus is on something else.
     private struct ChannelsPillStyle: ButtonStyle {
         var focused: Bool
+        var selected: Bool = false
+        var singleLine: Bool = true
 
         func makeBody(configuration: Configuration) -> some View {
-            configuration.label
-                .foregroundStyle(Tokens.ColorToken.onAccent)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 14)
-                .background(focused ? Tokens.ColorToken.accent : Color.white.opacity(0.10), in: Capsule())
-                .opacity(configuration.isPressed ? 0.85 : 1)
+            PillBody(configuration: configuration, focused: focused, selected: selected, singleLine: singleLine)
+        }
+
+        private struct PillBody: View {
+            let configuration: ButtonStyleConfiguration
+            var focused: Bool
+            var selected: Bool
+            var singleLine: Bool
+            @Environment(\.isEnabled) private var isEnabled
+
+            var body: some View {
+                configuration.label
+                    .foregroundStyle(isEnabled ? Tokens.ColorToken.onAccent : Tokens.ColorToken.textTertiary)
+                    .modifier(LineHug(on: singleLine))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                    .background(fill, in: Capsule())
+                    .overlay {
+                        if selected, !focused, isEnabled {
+                            Capsule().strokeBorder(Tokens.ColorToken.accent, lineWidth: 4)
+                        }
+                    }
+                    .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.72)
+            }
+
+            private var fill: Color {
+                if !isEnabled {
+                    return Color.white.opacity(0.06)
+                }
+                if focused {
+                    return Tokens.ColorToken.accent
+                }
+                return Color.white.opacity(0.10)
+            }
+        }
+
+        private struct LineHug: ViewModifier {
+            var on: Bool
+
+            func body(content: Content) -> some View {
+                if on {
+                    content.lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                } else {
+                    content
+                }
+            }
         }
     }
 #endif
