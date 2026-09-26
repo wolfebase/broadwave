@@ -35,6 +35,26 @@ func TestAudioTracksPMT(t *testing.T) {
 	}
 }
 
+func TestAudioMapDisagreesWhenTheMainIsNotFirst(t *testing.T) {
+	wide := []AudioTrack{
+		{PID: 0x101, Role: "main", Channels: 2},
+		{PID: 0x102, Role: "main", Channels: 6},
+	}
+	if !audioMapDisagrees(wide) {
+		t.Fatal("the 5.1 main is not the first audio stream")
+	}
+	first := []AudioTrack{
+		{PID: 0x110, Role: "main", Channels: 6},
+		{PID: 0x111, Role: "language", Channels: 2},
+	}
+	if audioMapDisagrees(first) {
+		t.Fatal("the first stream is the main")
+	}
+	if audioMapDisagrees(nil) {
+		t.Fatal("no tracks")
+	}
+}
+
 func TestAudioTracksSameLanguageAlternate(t *testing.T) {
 	// 41.1 shape: a second English track with no bsmod is described video.
 	raw := audioTS(1, []esAudio{

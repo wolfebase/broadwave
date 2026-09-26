@@ -3,11 +3,33 @@ package live
 import (
 	"context"
 	"io"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"broadwave/internal/store"
 )
+
+type safeBuf struct {
+	mu sync.Mutex
+	b  []byte
+}
+
+func (w *safeBuf) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	w.b = append(w.b, p...)
+	w.mu.Unlock()
+	return len(p), nil
+}
+
+func (w *safeBuf) Close() error { return nil }
+
+func (w *safeBuf) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return string(w.b)
+}
 
 type nopWriter struct{ closed bool }
 
@@ -38,6 +60,120 @@ func addTestRendition(h *Hub, f *feed, key string, viewers int, seen time.Time) 
 	r.sub = h.attachPipeLocked(muxOf(h, f), w)
 	f.renditions[key] = r
 	return r
+}
+
+func TestStoredOrderDoesNotWaitToStart(t *testing.T) {
+	h, m := testHub(t)
+	started := time.Now()
+	f := h.addFeedLocked(m, store.SourceChannel{
+		Channel:    store.Channel{ID: 1, GuideNumber: "5.1", VideoCodec: "MPEG2"},
+		FieldOrder: "tt",
+	})
+	if waited := time.Since(started); waited > 150*time.Millisecond {
+		t.Fatalf("stored scan held the picture for %s", waited)
+	}
+	if !f.source.Lace || f.source.Progressive {
+		t.Fatalf("graph %+v", f.source)
+	}
+	if len(m.snapshot()) != 0 {
+		t.Fatal("the deferred scan must not take a pipe")
+	}
+}
+
+func TestDeferredScanLearnsTheMainAudio(t *testing.T) {
+	h, m := testHub(t)
+	m.tuner = 0
+	ctx, cancel := context.WithCancel(context.Background())
+	pr, pw := io.Pipe()
+	m.body = pr
+	go h.readLoop(ctx, m)
+	defer func() {
+		cancel()
+		_ = pw.Close()
+	}()
+	started := time.Now()
+	f := h.addFeedLocked(m, store.SourceChannel{
+		Channel:     store.Channel{ID: 1, GuideNumber: "5.1", VideoCodec: "MPEG2"},
+		FieldOrder:  "tt",
+		ProgramNum:  1,
+		FrequencyHz: m.freq,
+	})
+	if waited := time.Since(started); waited > 150*time.Millisecond {
+		t.Fatalf("stored scan held the picture for %s", waited)
+	}
+	go writeUntil(ctx, pw, audioTS(1, []esAudio{{pid: 0x101, lang: "eng", audioType: 0, bsmod: 0}}))
+	deadline := time.Now().Add(3 * time.Second)
+	var pid int
+	for time.Now().Before(deadline) {
+		h.mu.Lock()
+		if len(f.tracks) > 0 {
+			pid = f.tracks[0].PID
+		}
+		h.mu.Unlock()
+		if pid != 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if pid != 0x101 {
+		t.Fatalf("main pid %d", pid)
+	}
+}
+
+func TestRenditionReadsBytesFromBeforeItAttached(t *testing.T) {
+	h, m := testHub(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	pr, pw := io.Pipe()
+	m.body = pr
+	go h.readLoop(ctx, m)
+	defer func() {
+		cancel()
+		_ = pw.Close()
+	}()
+	if _, err := pw.Write([]byte("HELLO")); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		m.pipeMu.Lock()
+		n := len(m.lead)
+		m.pipeMu.Unlock()
+		if n >= len("HELLO") {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	w := &safeBuf{}
+	sub := h.attachPipe(m, w, true)
+	defer sub.stop()
+	deadline = time.Now().Add(time.Second)
+	for time.Now().Before(deadline) && !strings.Contains(w.String(), "HELLO") {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !strings.Contains(w.String(), "HELLO") {
+		t.Fatalf("rendition missed the opening bytes, saw %q", w.String())
+	}
+	late := &safeBuf{}
+	sub2 := h.attachPipe(m, late, true)
+	defer sub2.stop()
+	time.Sleep(30 * time.Millisecond)
+	if late.String() != "" {
+		t.Fatalf("a second subscriber replayed %q", late.String())
+	}
+}
+
+func TestLeadClosesWhenItIsStale(t *testing.T) {
+	m := &mux{}
+	m.leadSince = time.Now().Add(-3 * time.Second)
+	m.lead = []byte("old")
+	m.rememberLead([]byte("new"))
+	if !m.leadDone || m.lead != nil {
+		t.Fatalf("stale lead done=%v bytes=%q", m.leadDone, m.lead)
+	}
+	m.rememberLead([]byte("later"))
+	if m.lead != nil {
+		t.Fatalf("closed lead kept %q", m.lead)
+	}
 }
 
 func TestRecordingWarnsBeforeTheTileStops(t *testing.T) {

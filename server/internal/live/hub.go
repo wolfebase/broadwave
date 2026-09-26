@@ -163,13 +163,19 @@ type mux struct {
 	body   io.ReadCloser
 	// moved is set once a dead device has tried to hand the stream off.
 	// The budget can walk every other device. A second read error does not.
-	moved       bool
-	input       string
-	cancel      context.CancelFunc
-	feeds       map[string]*feed
-	pipes       []*pipeSub
-	programs    []hdhr.Program
-	pipeMu      sync.Mutex
+	moved    bool
+	input    string
+	cancel   context.CancelFunc
+	feeds    map[string]*feed
+	pipes    []*pipeSub
+	programs []hdhr.Program
+	pipeMu   sync.Mutex
+	// lead is the opening of the tune, kept until the first rendition or
+	// recording attaches. The scan reads those bytes before ffmpeg exists,
+	// and dropping them makes the encoder wait for the next group of pictures.
+	lead        []byte
+	leadSince   time.Time
+	leadDone    bool
 	frames      sync.Once
 	psip        psip.Harvester
 	picMu       sync.Mutex
@@ -592,8 +598,13 @@ func (h *Hub) addFeedLocked(m *mux, ch store.SourceChannel) *feed {
 	m.feeds[ch.GuideNumber] = f
 	h.channels[ch.ID] = f
 	m.noteProgram(f.program)
-	if m.input == "" && (ch.FieldOrder == "" || len(f.tracks) == 0) {
+	// A stored scan already chose the graph. Waiting here for the PMT holds
+	// the first picture, and the bytes read during that wait never reach
+	// ffmpeg. Audio and a late film header are learned beside the encode.
+	if m.input == "" && ch.FieldOrder == "" {
 		h.learnScanLocked(m, f)
+	} else if m.input == "" {
+		h.deferScanLocked(m, f)
 	}
 	if m.input != "" && ch.FieldOrder == "" {
 		h.probeInputLocked(m, f)
@@ -696,7 +707,7 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	NotePID(h.Dir, pid)
 	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: time.Now(), args: args, gate: gate, packDone: done}
 	if stdin != nil {
-		r.sub = h.attachPipeLocked(muxOf(h, f), stdin)
+		r.sub = h.attachPipe(muxOf(h, f), stdin, true)
 	}
 	f.renditions[key] = r
 	go h.watchRendition(f, r, pid, encoderOf(h.Encoder, want))
@@ -1155,7 +1166,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	NotePID(h.Dir, cmd.Process.Pid)
 	rec := &recording{id: id, cmd: cmd, stdin: stdin}
 	if stdin != nil {
-		rec.sub = h.attachPipeLocked(muxOf(h, f), stdin)
+		rec.sub = h.attachPipe(muxOf(h, f), stdin, true)
 	}
 	f.recording = rec
 	rec.timer = time.AfterFunc(time.Duration(minutes)*time.Minute, func() { h.StopRecord(id) })
@@ -1331,6 +1342,55 @@ func (h *Hub) Tuners(ctx context.Context) ([]Tuner, error) {
 }
 
 func (h *Hub) attachPipeLocked(m *mux, w io.WriteCloser) *pipeSub {
+	return h.attachPipe(m, w, false)
+}
+
+// leadCap matches the tuner probe. leadFor is how long those opening bytes
+// stay useful: the rendition attaches during the scan, which is under a second.
+const (
+	leadCap = 8 << 20
+	leadFor = 2 * time.Second
+)
+
+// rememberLead keeps bytes that arrived before the first encode or recording.
+// A late subscriber must not replay them, so the buffer closes once it is
+// taken or once leadFor has passed.
+func (m *mux) rememberLead(chunk []byte) {
+	if m == nil || len(chunk) == 0 {
+		return
+	}
+	m.pipeMu.Lock()
+	defer m.pipeMu.Unlock()
+	if m.leadDone {
+		return
+	}
+	if m.leadSince.IsZero() {
+		m.leadSince = time.Now()
+	}
+	if time.Since(m.leadSince) > leadFor {
+		m.leadDone = true
+		m.lead = nil
+		return
+	}
+	if len(m.lead) >= leadCap {
+		return
+	}
+	room := leadCap - len(m.lead)
+	if len(chunk) > room {
+		chunk = chunk[:room]
+	}
+	m.lead = append(m.lead, chunk...)
+}
+
+// takeLead hands the opening bytes to one subscriber. The caller holds pipeMu.
+func (m *mux) takeLead() []byte {
+	m.leadDone = true
+	b := m.lead
+	m.lead = nil
+	return b
+}
+
+func (h *Hub) attachPipe(m *mux, w io.WriteCloser, lead bool) *pipeSub {
 	// A few seconds of the mux have to fit. The rendition does not read during
 	// VAAPI startup, and a gap at the start leaves the deinterlacer with no
 	// picture, so the playlist stays an empty file.
@@ -1341,6 +1401,11 @@ func (h *Hub) attachPipeLocked(m *mux, w io.WriteCloser) *pipeSub {
 		return sub
 	}
 	m.pipeMu.Lock()
+	if lead {
+		if head := m.takeLead(); len(head) > 0 {
+			sub.ch <- head
+		}
+	}
 	m.pipes = append(m.pipes, sub)
 	m.pipeMu.Unlock()
 	go func() {
@@ -1464,6 +1529,7 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 				go h.OnPSIP(freq, guide)
 			}
 			h.observeMuxPicture(m, chunk)
+			m.rememberLead(chunk)
 			for _, sub := range m.snapshot() {
 				select {
 				case sub.ch <- chunk:

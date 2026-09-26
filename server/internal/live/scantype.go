@@ -628,6 +628,80 @@ func (h *Hub) finishScanFromPicture(m *mux, f *feed) {
 	h.applyScanLocked(f, order)
 }
 
+// deferScanLocked learns audio and a late film header without holding the
+// first picture. The stored field order is enough to start the encode.
+func (h *Hub) deferScanLocked(m *mux, f *feed) {
+	if m == nil || f == nil {
+		return
+	}
+	go h.finishDeferred(m, f)
+}
+
+// finishDeferred reads the mux picture buffer. It does not subscribe, so a
+// test feed that never tunes does not gain a pipe. Each fact is applied as
+// soon as it is known: a film header rebuilds the graph, and a main that is
+// not the program's first audio stream restarts the encode.
+func (h *Hub) finishDeferred(m *mux, f *feed) {
+	deadline := time.Now().Add(8 * time.Second)
+	program := f.program
+	id := f.channel.ID
+	guide := f.channel.GuideNumber
+	headerDone := false
+	audioDone := false
+	var seen []AudioTrack
+	for time.Now().Before(deadline) {
+		h.mu.Lock()
+		gone := h.channels[id] != f
+		h.mu.Unlock()
+		if gone {
+			return
+		}
+		data := m.pictureBytes()
+		if !headerDone {
+			if order, ok := scanType(data, program); ok {
+				h.mu.Lock()
+				if h.channels[id] == f && f.headerOrder == "" {
+					slog.Info(fmt.Sprintf("scan type %s for %s after the picture starts", order, guide))
+					f.headerOrder = order
+					h.applyScanLocked(f, order)
+				}
+				h.mu.Unlock()
+				headerDone = true
+			}
+		}
+		if !audioDone {
+			if tracks := AudioTracks(data, program); len(tracks) > 0 {
+				seen = tracks
+				if audioReady(tracks) {
+					h.applyDeferredAudio(f, id, tracks)
+					audioDone = true
+				}
+			}
+		}
+		if headerDone && audioDone {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	// Two complete mains are measured before the choice is trusted. If that
+	// frame never shows up, publish the PMT anyway so the picker is not empty.
+	if !audioDone && len(seen) > 0 {
+		h.applyDeferredAudio(f, id, seen)
+	}
+}
+
+func (h *Hub) applyDeferredAudio(f *feed, id int64, tracks []AudioTrack) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.channels[id] != f || len(f.tracks) != 0 {
+		return
+	}
+	f.tracks = tracks
+	if audioMapDisagrees(tracks) {
+		h.rebuildRenditionsLocked(f)
+	}
+}
+
 // finishScan keeps reading after scanWait. The rendition may already be
 // field-deinterlacing; a header that shows up rebuilds it.
 func (h *Hub) finishScan(m *mux, f *feed, buf *scanBuf, sub *pipeSub) {
