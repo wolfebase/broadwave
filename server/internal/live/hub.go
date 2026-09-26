@@ -453,6 +453,18 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 		}
 	}
 	root := h.streamRootFor(ctx, base, ch.GuideNumber)
+	// A channel that has already been tuned knows its frequency and program.
+	// Opening the mux is the lock. A vchannel probe would lock again, then
+	// wait for streaminfo, before this same request.
+	if ch.FrequencyHz > 0 && ch.ProgramNum > 0 {
+		if body, err := openMux(root, tuner, ch.FrequencyHz); err == nil {
+			feed := h.beginMuxLocked(ch, host, base, tuner, ch.FrequencyHz, nil, body)
+			// streaminfo on a tuner that is already locked records the other
+			// subchannels. A vchannel probe would lock the same frequency again.
+			go h.rememberSiblings(host, tuner, ch.FrequencyHz)
+			return feed, nil
+		}
+	}
 	freq, programs, err := probe(host, tuner, ch.GuideNumber)
 	if err != nil {
 		streamURL := strings.TrimRight(root, "/") + "/auto/v" + ch.GuideNumber
@@ -477,13 +489,51 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 		_, _ = hdhr.Control{Addr: controlAddr(host)}.Set(fmt.Sprintf("/tuner%d/channel", tuner), "none")
 		return nil, err
 	}
+	return h.beginMuxLocked(ch, host, base, tuner, freq, programs, body), nil
+}
+
+// beginMuxLocked owns the tuner stream and starts the feed. The caller holds h.mu.
+func (h *Hub) beginMuxLocked(ch store.SourceChannel, host, base string, tuner, freq int, programs []hdhr.Program, body io.ReadCloser) *feed {
 	m := &mux{freq: freq, tuner: tuner, host: host, base: base, device: ch.DeviceID, body: body, feeds: map[string]*feed{}, programs: programs}
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 	h.muxes[freq] = m
 	go h.readLoop(runCtx, m)
 	h.startFrames(runCtx, m)
-	return h.addFeedLocked(m, ch), nil
+	return h.addFeedLocked(m, ch)
+}
+
+// rememberSiblings reads streaminfo without changing the channel. The caller
+// does not hold h.mu. A sibling that joins before this returns still has its
+// own stored program, when it has one.
+func (h *Hub) rememberSiblings(host string, tuner, freq int) {
+	if h == nil || h.Store == nil || freq == 0 {
+		return
+	}
+	info, err := (hdhr.Control{Addr: controlAddr(host)}).Get(fmt.Sprintf("/tuner%d/streaminfo", tuner))
+	if err != nil || strings.TrimSpace(info) == "" {
+		return
+	}
+	programs := hdhr.ParseStreamInfo(info)
+	if len(programs) == 0 {
+		return
+	}
+	h.mu.Lock()
+	m := h.muxes[freq]
+	device := ""
+	if m != nil && m.tuner == tuner {
+		m.programs = programs
+		device = m.device
+	}
+	h.mu.Unlock()
+	if device == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	for _, p := range programs {
+		_ = h.Store.RememberProgram(ctx, device, p.GuideNumber, freq, p.Number)
+	}
 }
 
 // streamMuxLocked wraps a single-program stream (IPTV, or the tuner's /auto URL).
@@ -1385,6 +1435,12 @@ func (m *mux) parseLocked(program int) {
 	if ok {
 		m.pictures[program] = facts
 	}
+}
+
+func (m *mux) pictureBytes() []byte {
+	m.picMu.Lock()
+	defer m.picMu.Unlock()
+	return append([]byte(nil), m.picBuf...)
 }
 
 func (m *mux) picture(program int) (notedPicture, bool) {

@@ -156,6 +156,85 @@ func TestScanTypeFFmpegHeaders(t *testing.T) {
 	}
 }
 
+func TestStoredScanStartsBeforeTheHeader(t *testing.T) {
+	h, m := testHub(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	pr, pw := io.Pipe()
+	m.body = pr
+	go h.readLoop(ctx, m)
+	defer func() {
+		cancel()
+		_ = pw.Close()
+	}()
+	f := &feed{
+		channel:    store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "4.1", VideoCodec: "MPEG2"}, FrequencyHz: m.freq, FieldOrder: "progressive"},
+		source:     Source{VideoCodec: "MPEG2", Progressive: true},
+		program:    1,
+		renditions: map[string]*rendition{},
+	}
+	m.feeds["4.1"] = f
+	h.channels[1] = f
+	// Keep writing. One payload can pass through before the scan subscribes,
+	// and then the window ends with an empty buffer.
+	go writeUntil(ctx, pw, audioTS(1, []esAudio{{pid: 0x101, lang: "eng", audioType: 0, bsmod: 0}}))
+	started := time.Now()
+	h.learnScanLocked(m, f)
+	if waited := time.Since(started); waited > 400*time.Millisecond {
+		t.Fatalf("stored scan waited %s for a header that was not in the buffer", waited)
+	}
+	if !f.source.Progressive || f.source.Film {
+		t.Fatalf("graph %+v", f.source)
+	}
+	if len(f.tracks) != 1 || f.tracks[0].PID != 0x101 || f.tracks[0].Role != "main" {
+		t.Fatalf("tracks %+v", f.tracks)
+	}
+}
+
+func TestQuietTunerStillScansForFilm(t *testing.T) {
+	h, m := testHub(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	pr, pw := io.Pipe()
+	m.body = pr
+	go h.readLoop(ctx, m)
+	defer func() {
+		cancel()
+		_ = pw.Close()
+	}()
+	f := &feed{
+		channel:    store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "5.1", VideoCodec: "MPEG2"}, FrequencyHz: m.freq, FieldOrder: "progressive"},
+		source:     Source{VideoCodec: "MPEG2", Progressive: true},
+		program:    1,
+		tracks:     []AudioTrack{{PID: 0x101, Role: "main", Codec: "ac3"}},
+		renditions: map[string]*rendition{},
+	}
+	m.feeds["5.1"] = f
+	h.channels[1] = f
+	started := time.Now()
+	h.learnScanLocked(m, f)
+	if waited := time.Since(started); waited < 500*time.Millisecond {
+		t.Fatalf("empty buffer returned in %s", waited)
+	}
+	if f.headerOrder != "" || f.source.Film {
+		t.Fatalf("decided with no bytes: %+v %q", f.source, f.headerOrder)
+	}
+	go writeUntil(ctx, pw, filmTS(1))
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		h.mu.Lock()
+		film := f.source.Film
+		h.mu.Unlock()
+		if film {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !f.source.Film || f.source.Progressive || f.headerOrder != "film" {
+		t.Fatalf("quiet tuner dropped the film header: %+v %q", f.source, f.headerOrder)
+	}
+}
+
 func TestStoredProgressiveStillScansForFilm(t *testing.T) {
 	h, m := testHub(t)
 	ctx, cancel := context.WithCancel(context.Background())

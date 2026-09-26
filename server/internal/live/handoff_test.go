@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -302,6 +303,105 @@ func deadMux(t *testing.T, guide, video, audio string) *mux {
 			}}},
 		},
 		cancel: func() {},
+	}
+}
+
+func TestKnownFrequencySkipsTheControlTune(t *testing.T) {
+	st := openStore(t)
+	srv := &fake.Server{Profile: fake.ProfileConnectDuo}
+	base, control, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(srv.Close)
+	t.Setenv("HDHR_CONTROL_PORT", control)
+	ctx := context.Background()
+	dev, err := (&hdhr.Client{}).FetchDevice(ctx, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channels, err := (&hdhr.Client{}).FetchLineup(ctx, dev.LineupURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertDevice(ctx, dev, channels); err != nil {
+		t.Fatal(err)
+	}
+	id := idOf(t, st, "4.1")
+	if err := st.RememberProgram(ctx, dev.DeviceID, "4.1", 593000000, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetFieldOrder(ctx, id, "progressive"); err != nil {
+		t.Fatal(err)
+	}
+	ch, err := st.SourceChannel(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	h.mu.Lock()
+	feed, err := h.ensureFeedLocked(ctx, ch, nil)
+	h.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		h.mu.Lock()
+		h.stopFeedLocked(feed)
+		h.mu.Unlock()
+	})
+	if !requested(srv, "/tuner0/ch593000000") {
+		t.Fatalf("mux was not opened: %v", srv.Requests())
+	}
+	for _, path := range srv.Requests() {
+		if strings.Contains(path, "vchannel") {
+			t.Fatalf("stored frequency still probed the tuner: %v", srv.Requests())
+		}
+	}
+	sib := idOf(t, st, "4.2")
+	deadline := time.Now().Add(2 * time.Second)
+	var stored store.SourceChannel
+	for {
+		stored, err = st.SourceChannel(ctx, sib)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stored.FrequencyHz == 593000000 && stored.ProgramNum > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("4.2 was not recorded from streaminfo: freq %d program %d requests %v", stored.FrequencyHz, stored.ProgramNum, srv.Requests())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	for _, path := range srv.Requests() {
+		if strings.Contains(path, "vchannel") {
+			t.Fatalf("sibling discovery probed: %v", srv.Requests())
+		}
+	}
+
+	fresh := idOf(t, st, "5.1")
+	other, err := st.SourceChannel(ctx, fresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other.FrequencyHz != 0 || other.ProgramNum != 0 {
+		t.Fatalf("5.1 should still be undiscovered: %+v", other.FrequencyHz)
+	}
+	before := len(srv.Requests())
+	h.mu.Lock()
+	second, err := h.ensureFeedLocked(ctx, other, nil)
+	h.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		h.mu.Lock()
+		h.stopFeedLocked(second)
+		h.mu.Unlock()
+	})
+	if !requestedSince(srv, before, "/tuner1/vchannel") && !requestedSince(srv, before, "/tuner0/vchannel") {
+		t.Fatalf("an unknown frequency did not probe: %v", srv.Requests()[before:])
 	}
 }
 
