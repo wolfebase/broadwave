@@ -307,6 +307,7 @@ export function Guide() {
 
   return (
     <div className="guide-page">
+      <h1 className="sr-only">Guide</h1>
       <GuideControls
         filter={filter}
         setFilter={setFilter}
@@ -347,6 +348,7 @@ export function Guide() {
             const list = (index.get(c.id) ?? []).filter((a) => Date.parse(a.end) > leftT && Date.parse(a.start) < rightT);
             return (
               <div key={c.id} className="guide-row" role="row" aria-rowindex={r + 1} style={{ top: headH + r * rowH, width: channelW + width }}>
+                <div role="rowheader" className="guide-rowhead">
                 <button
                   type="button"
                   className="guide-channel"
@@ -375,14 +377,15 @@ export function Guide() {
                   </span>
                   {c.favorite ? <StarIcon filled className="gc-star" /> : null}
                 </button>
+                </div>
                 {list.length === 0 ? (
-                  <div className="guide-cell empty" style={{ left: channelW + view.left + 4, width: Math.max(200, view.width - channelW - 8) }}>
+                  <div role="gridcell" className="guide-cell empty" style={{ left: channelW + view.left + 4, width: Math.max(200, view.width - channelW - 8) }}>
                     <LiveFrame id={c.id} className="cell-frame" />
                     <span className="cell-title">{emptyGuideLabel(index.get(c.id) ?? [], leftT)}</span>
                   </div>
                 ) : null}
                 {(index.get(c.id) ?? []).length > 0 && Date.parse((index.get(c.id) ?? []).at(-1)!.end) < end - 60_000 ? (
-                  <div className="guide-cell empty" style={{ left: channelW + ((Math.max(origin, Date.parse((index.get(c.id) ?? []).at(-1)!.end)) - origin) / MIN) * pxPerMin + 4, width: 280 }}>
+                  <div role="gridcell" className="guide-cell empty" style={{ left: channelW + ((Math.max(origin, Date.parse((index.get(c.id) ?? []).at(-1)!.end)) - origin) / MIN) * pxPerMin + 4, width: 280 }}>
                     <span className="cell-title">{emptyGuideLabel(index.get(c.id) ?? [], end)}</span>
                   </div>
                 ) : null}

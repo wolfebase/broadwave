@@ -44,7 +44,7 @@ export function Chip({ on, onClick, children, count }: { on?: boolean; onClick?:
 export function Empty({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
   return (
     <div className="empty-state">
-      <h3>{title}</h3>
+      <h2>{title}</h2>
       {children ? <p>{children}</p> : null}
       {action}
     </div>

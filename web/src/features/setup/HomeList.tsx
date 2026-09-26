@@ -4,7 +4,7 @@ import { useData } from "../../app/data";
 import "./setup.css";
 
 /** Tuners, screens, and servers on this network. One action each. Nothing is added until a tap. */
-export function HomeList({ hideAdded = false }: { hideAdded?: boolean }) {
+export function HomeList({ hideAdded = false, heading: Heading = "h3" }: { hideAdded?: boolean; heading?: "h2" | "h3" }) {
   const { refresh } = useData();
   const [places, setPlaces] = useState<HomePlace[]>([]);
   const [tunerAddress, setTunerAddress] = useState("");
@@ -32,7 +32,7 @@ export function HomeList({ hideAdded = false }: { hideAdded?: boolean }) {
 
   return (
     <div className="home-list">
-      <h3>Your home</h3>
+      <Heading>Your home</Heading>
       <p className="dim">Tuners, screens, and servers on this network. Nothing is added until you tap.</p>
       {shown.length === 0 ? <p className="dim">{ready ? "Nothing else answered yet." : "Searching…"}</p> : null}
       <ul className="setup-list">

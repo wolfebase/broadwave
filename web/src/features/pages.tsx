@@ -124,7 +124,7 @@ export function SettingsPage() {
         </button>
       </div>
       <section className="settings-section">
-        <HomeList />
+        <HomeList heading="h2" />
       </section>
       <section id="sources" className="settings-section">
         <h2>Tuners and channels</h2>
