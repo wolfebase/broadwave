@@ -1,5 +1,5 @@
 .sports-page {
-  max-width: 1280px;
+  max-width: calc(var(--content-max) + 2 * var(--space-6));
   margin: 0 auto;
   padding: var(--space-6) var(--space-6) var(--space-16);
 }
