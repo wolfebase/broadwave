@@ -1,6 +1,7 @@
 package source
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -66,13 +67,91 @@ func TestTVHeadendContainer(t *testing.T) {
 	if base == "" {
 		t.Skip("set WG_TVH to a local tvheadend")
 	}
-	body, _, _, err := TVHeadend(t.Context(), base, "", "")
+	body, _, guide, err := TVHeadend(t.Context(), base, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytesHasM3U(body) {
-		t.Fatalf("container playlist: %s", body)
+		t.Fatalf("container playlist: %s", clip(body))
 	}
+	guideOK(t, guide, "<tv")
+}
+
+func TestEmulatorContainer(t *testing.T) {
+	cases := []struct {
+		env, kind string
+		wantInf   bool
+	}{
+		{"WG_THREADFIN", "threadfin", false},
+		{"WG_ERSATZTV", "ersatztv", true},
+		{"WG_DISPATCHARR", "dispatcharr", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.kind, func(t *testing.T) {
+			base := os.Getenv(tc.env)
+			if base == "" {
+				t.Skip("set " + tc.env + " to a local " + tc.kind)
+			}
+			body, loc, guide, err := EmulatorM3U(t.Context(), tc.kind, base)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytesHasM3U(body) || (tc.wantInf && !strings.Contains(string(body), "#EXTINF")) {
+				t.Fatalf("container playlist: %s", clip(body))
+			}
+			if !strings.Contains(loc, "://") || !strings.Contains(guide, "://") {
+				t.Fatalf("loc %s guide %s", loc, guide)
+			}
+			if tc.kind != "threadfin" {
+				guideOK(t, guide, "<tv")
+			}
+		})
+	}
+}
+
+func TestChannelsDVRContainer(t *testing.T) {
+	base := os.Getenv("WG_CHANNELS")
+	if base == "" {
+		t.Skip("set WG_CHANNELS to a local Channels DVR")
+	}
+	body, loc, guide, err := ChannelsDVR(t.Context(), base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytesHasM3U(body) || !strings.Contains(string(body), "#EXTINF") {
+		t.Fatalf("container playlist: %s", clip(body))
+	}
+	if !strings.Contains(loc, "format=ts") || !strings.Contains(loc, "codec=copy") || !strings.Contains(guide, "/guide/xmltv") {
+		t.Fatalf("loc %s guide %s", loc, guide)
+	}
+	guideOK(t, guide, "<channel")
+}
+
+func guideOK(t *testing.T, guide, want string) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, guide, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(body), want) {
+		t.Fatalf("guide status %d: %s", res.StatusCode, clip(body))
+	}
+}
+
+func clip(body []byte) string {
+	if len(body) > 180 {
+		body = body[:180]
+	}
+	return string(body)
 }
 
 func TestChannelsDVRImport(t *testing.T) {
