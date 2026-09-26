@@ -7,6 +7,10 @@
 #   scripts/relay-smoke.sh
 #   FAKE=1 scripts/relay-smoke.sh   # tune a local HDHomeRun fake instead of a link
 set -uo pipefail
+# This check opens a direct picture, a data-saver picture, and two tiles at
+# once. The startup benchmark would refuse the extra pictures on a small host,
+# so the check does not apply it. The budget has its own tests.
+export BROADWAVE_BENCH=0
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PORT=18499
 SRC_PORT=18500

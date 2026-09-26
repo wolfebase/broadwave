@@ -100,6 +100,12 @@ export function DiagnosticsPage() {
           <dd>
             {d.encoder?.name} {d.encoder?.hardware ? "(hardware)" : "(software)"}
           </dd>
+          {d.encoder?.line ? (
+            <>
+              <dt>Picture</dt>
+              <dd>{d.encoder.line}</dd>
+            </>
+          ) : null}
           <dt>ffmpeg</dt>
           <dd>{d.encoder?.ffmpeg}</dd>
           <dt>Free space</dt>

@@ -32,10 +32,13 @@ func httpError(w http.ResponseWriter, message string, status int) {
 
 func writeError(w http.ResponseWriter, err error) {
 	var busy *live.BusyError
+	var full *live.PictureError
 	var low *disk.LowError
 	switch {
 	case errors.As(err, &busy):
 		apiError(w, http.StatusConflict, "tuners_busy", "Every tuner is busy. Stop a recording or watch something already on.", map[string]any{"tuners": busy.Tuners})
+	case errors.As(err, &full):
+		apiError(w, http.StatusConflict, "pictures_full", full.Error(), map[string]any{"tiles": full.Tiles})
 	case errors.As(err, &low):
 		apiError(w, http.StatusInsufficientStorage, "disk_low", err.Error(), map[string]any{"freeBytes": low.Free, "needBytes": low.Need})
 	case errors.Is(err, sql.ErrNoRows):
