@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,6 +17,12 @@ import (
 
 	"broadwave/internal/hdhr"
 )
+
+// Quiet is set by the browser harness (BROADWAVE_E2E=1). Discovery must not
+// broadcast, or a test would talk to a tuner on the LAN.
+func Quiet() bool {
+	return os.Getenv("BROADWAVE_E2E") == "1"
+}
 
 // Place is one tuner, screen, or server on the local network.
 // Action is the single thing a person can do with it: add, added, use, here, or found.
@@ -47,6 +54,9 @@ type Screen struct {
 // ScanHome asks the local network for tuners, screens, and servers.
 // It does not open a stream and it does not add anything.
 func ScanHome(ctx context.Context) []Found {
+	if Quiet() {
+		return []Found{}
+	}
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, 3*time.Second)
