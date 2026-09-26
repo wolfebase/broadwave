@@ -481,7 +481,8 @@ html[data-layout="tv"] :focus-visible {
 
 /* Management screens (library, schedule, sources, settings) share these. */
 .page-wrap {
-  max-width: 1180px;
+  max-width: calc(var(--content-max) + 2 * var(--space-6));
+  min-width: 0;
   margin: 0 auto;
   padding: var(--space-6) var(--space-6) var(--space-16);
 }
@@ -740,4 +741,93 @@ th {
 
 .share-urls dd {
   margin: 0;
+}
+
+/* ---- UI polish (reviewer-owned) ---- */
+
+/* Guide: time labels sit low in the header and the "now" pill sits high,
+   joined to the red line by a stem, so the pill never covers a time. */
+:root .guide-slot {
+  align-items: flex-end;
+  padding-bottom: 7px;
+}
+
+:root .now-flag {
+  top: 5px;
+  padding: 2px 8px;
+  line-height: 1.25;
+}
+
+:root .now-flag::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 2px;
+  height: 26px;
+  margin-left: -1px;
+  background: var(--color-tally);
+}
+
+/* Management pages: a page title is enough; drop the repeated one inside. */
+:root .page-wrap .page-head:has(> h2:only-child) {
+  display: none;
+}
+
+/* Section titles sit close to what they label. */
+:root .page > .section-title {
+  margin: var(--space-4) 0 calc(var(--space-3) * -1);
+}
+
+:root .page > .section-title:first-of-type {
+  margin-top: 0;
+}
+
+/* Empty states read as a quiet card, not a stray line far below its title. */
+:root .page .empty {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface1);
+  border: 1px solid var(--color-line);
+  color: var(--color-text-secondary);
+}
+
+/* Long URLs and addresses wrap instead of widening the page. */
+:root dl.share-urls {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+:root dl.share-urls dd,
+:root dl.share-urls code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.layout-phone dl.share-urls {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+:root .settings-section,
+:root .setup-list li {
+  min-width: 0;
+}
+
+/* Search fills its column on every screen. */
+:root .search-form {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Phone: header chips get their own row under the title. */
+.layout-phone .page-header > .guide-chips {
+  flex-basis: 100%;
+}
+
+/* Pages fill their column (the content area is a flex container, so a sparse
+   page would otherwise shrink to its content and drift off the shared edge). */
+:root .page-wrap,
+:root .sports-page {
+  width: 100%;
+  box-sizing: border-box;
 }
