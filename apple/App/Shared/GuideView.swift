@@ -45,7 +45,10 @@ struct GuideView: View {
                 }
             #endif
         }
+        // On Apple TV the tab pill already says Guide; a large title only pushes the grid down.
+        #if !os(tvOS)
         .navigationTitle("Guide")
+        #endif
         .task {
             guard let api = store.api else { return }
             let games = await (try? api.scoreboard()) ?? []
@@ -186,6 +189,11 @@ struct GuideGrid: View {
         private let channelW: CGFloat = 170
     #endif
     private let headH: CGFloat = 44
+    #if os(tvOS)
+        private let nowPillW: CGFloat = 130
+    #else
+        private let nowPillW: CGFloat = 80
+    #endif
 
     private var hours: Double {
         var latest = origin.addingTimeInterval(6 * 3600)
@@ -199,12 +207,7 @@ struct GuideGrid: View {
     }
 
     private var origin: Date {
-        let cal = Calendar.current
-        let now = store.now
-        let minute = cal.component(.minute, from: now)
-        let floored = cal.date(bySetting: .minute, value: minute < 30 ? 0 : 30, of: now) ?? now
-        let clean = cal.date(bySetting: .second, value: 0, of: floored) ?? floored
-        return clean.addingTimeInterval(-30 * 60)
+        guideOrigin(for: store.now)
     }
 
     private func x(_ date: Date) -> CGFloat {
@@ -276,7 +279,9 @@ struct GuideGrid: View {
                             ForEach(0 ..< Int(hours * 2), id: \.self) { i in
                                 let t = origin.addingTimeInterval(Double(i) * 1800)
                                 let markX = x(t) + 8
-                                if markX >= scrollX {
+                                // The now pill sits over this row; a mark under it would show through.
+                                let underPill = markX > x(store.now) - 40 && markX < x(store.now) + nowPillW
+                                if markX >= scrollX, !underPill {
                                     Text(t.formatted(date: .omitted, time: .shortened))
                                         .font(.footnote.weight(.semibold))
                                         .monospacedDigit()
@@ -329,27 +334,38 @@ struct GuideGrid: View {
             VStack(spacing: 0) {
                 ForEach(channels) { channel in
                     Button { onSelect(channel, store.index.on(channel.id, at: store.now)) } label: {
-                        HStack(spacing: 10) {
-                            Text(channel.displayNumber)
-                                .font(.title3.weight(.heavy))
-                                .monospacedDigit()
-                                .lineLimit(1)
-                                .fixedSize(horizontal: true, vertical: false)
-                            if let api = store.api, channel.artUrl?.isEmpty == false {
-                                AsyncImage(url: api.artURL(kind: "channel", id: channel.id, width: 72)) { phase in
-                                    if let image = phase.image {
-                                        image.resizable().scaledToFit()
-                                    }
+                        // Number on top, logo and name below, so the name gets the column's
+                        // full width instead of what the number and logo leave over.
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 6) {
+                                Text(channel.displayNumber)
+                                    .font(.title3.weight(.heavy))
+                                    .monospacedDigit()
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+                                Spacer(minLength: 0)
+                                if channel.favorite {
+                                    Image(systemName: "star.fill").font(.caption2).foregroundStyle(Tokens.ColorToken.warning)
                                 }
-                                .frame(width: 36, height: 22)
-                                .accessibilityHidden(true)
                             }
-                            Text(channel.displayName).font(.caption.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
-                            Spacer(minLength: 0)
-                            if channel.favorite {
-                                Image(systemName: "star.fill").font(.caption2).foregroundStyle(Tokens.ColorToken.warning)
+                            HStack(spacing: 6) {
+                                if let api = store.api, channel.artUrl?.isEmpty == false {
+                                    AsyncImage(url: api.artURL(kind: "channel", id: channel.id, width: 72)) { phase in
+                                        if let image = phase.image {
+                                            image.resizable().scaledToFit()
+                                        }
+                                    }
+                                    .frame(width: 30, height: 18)
+                                    .accessibilityHidden(true)
+                                }
+                                Text(channel.displayName)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 14)
                         .frame(width: channelW, height: rowHeight)
                         .background(Tokens.ColorToken.surface1)
@@ -377,7 +393,10 @@ struct GuideGrid: View {
                         dim: highlight != nil && airing.kind != highlight,
                         recording: store.activeRecording(on: channel) != nil && airing.isOn(at: store.now),
                         score: airing.gameId.flatMap { scores[$0] },
-                        art: ArtLayout.showsCellArt(slot: Int(w.rounded())) ? store.artURL(airing, width: 160) : nil
+                        art: ArtLayout.showsCellArt(slot: Int(w.rounded())) ? store.artURL(airing, width: 160) : nil,
+                        showsText: w >= 44,
+                        // A program that started off screen keeps its title at the visible edge.
+                        inset: max(0, min(offset.x - x(s), w - 120))
                     )
                     .frame(width: w, height: rowHeight - 10)
                 }
@@ -407,6 +426,9 @@ struct GuideCell: View {
     let recording: Bool
     var score: String?
     var art: URL?
+    /// A sliver of a program (its last few minutes) keeps its color bar but not a lone ellipsis.
+    var showsText = true
+    var inset: CGFloat = 0
 
     var body: some View {
         let kind = airing.kind
@@ -421,35 +443,37 @@ struct GuideCell: View {
                 }
             }
             RoundedRectangle(cornerRadius: 2).fill(kind.color).frame(width: 3).padding(.vertical, 10)
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 5) {
-                        if recording {
-                            Circle().fill(Tokens.ColorToken.tally).frame(width: 7, height: 7)
+            if showsText {
+                HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 5) {
+                            if recording {
+                                Circle().fill(Tokens.ColorToken.tally).frame(width: 7, height: 7)
+                            }
+                            Text(airing.title).font(.footnote.weight(.semibold)).lineLimit(1)
+                            if let score, !score.isEmpty {
+                                Text(score).font(.caption2.weight(.semibold)).monospacedDigit().lineLimit(1)
+                            }
+                            if airing.new == true {
+                                Text("NEW").font(.caption2.weight(.heavy)).foregroundStyle(Tokens.ColorToken.accent)
+                            }
                         }
-                        Text(airing.title).font(.footnote.weight(.semibold)).lineLimit(1)
-                        if let score, !score.isEmpty {
-                            Text(score).font(.caption2.weight(.semibold)).monospacedDigit().lineLimit(1)
-                        }
-                        if airing.new == true {
-                            Text("NEW").font(.caption2.weight(.heavy)).foregroundStyle(Tokens.ColorToken.accent)
-                        }
+                        Text(airing.subtitle ?? airing.start.formatted(date: .omitted, time: .shortened))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    Text(airing.subtitle ?? airing.start.formatted(date: .omitted, time: .shortened))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if let art {
+                        ProgramPicture(url: art, width: airing.imageWidth ?? 0, height: airing.imageHeight ?? 0, hero: false)
+                            .frame(width: 52)
+                            .padding(.vertical, 6)
+                            .clipShape(.rect(cornerRadius: 4))
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                if let art {
-                    ProgramPicture(url: art, width: airing.imageWidth ?? 0, height: airing.imageHeight ?? 0, hero: false)
-                        .frame(width: 52)
-                        .padding(.vertical, 6)
-                        .clipShape(.rect(cornerRadius: 4))
-                }
+                .padding(.leading, 12 + inset)
+                .padding(.trailing, 8)
             }
-            .padding(.leading, 12)
-            .padding(.trailing, 8)
         }
         .opacity(airing.end <= now ? 0.45 : dim ? 0.3 : 1)
         .accessibilityElement(children: .combine)

@@ -132,3 +132,13 @@ public extension Channel {
         return a.displayName < b.displayName
     }
 }
+
+/// Where the guide grid starts: the half hour before the one `now` is in, so the
+/// program on the air and the now line are always on screen.
+/// `Calendar.date(bySetting:)` searches forward, so it would pick the next half hour.
+public func guideOrigin(for now: Date, calendar: Calendar = .current) -> Date {
+    var parts = calendar.dateComponents([.era, .year, .month, .day, .hour, .minute], from: now)
+    parts.minute = (parts.minute ?? 0) < 30 ? 0 : 30
+    let floored = calendar.date(from: parts) ?? now
+    return floored.addingTimeInterval(-30 * 60)
+}
