@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.10.0 — 2026-09-26
+
+The server times its own picture and sizes the stream to match. The apps can still find it when Bonjour is quiet.
+
+### Added
+
+- At startup the server times a short 1080p60 encode. Diagnostics reports that speed and what this machine will send: the tallest picture, whether the selected tile stays at 60, and how many tiles fit. A slow machine gets a smaller picture. A copied broadcast is unchanged.
+- The iPhone and Apple TV look for the server on the local network when Bonjour finds nothing. They follow a move to a new address only when the reply proves it is the same server.
+- Diagnostics lists the channels that are on, and the recent log with passwords left out.
+- The web home leads with program artwork.
+
+### Fixed
+
+- A startup encode that runs past its deadline is stopped, including when a script keeps running under it.
+
 ## 0.9.1 — 2026-09-25
 
 ### Fixed
