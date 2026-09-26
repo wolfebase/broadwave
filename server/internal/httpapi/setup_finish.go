@@ -158,12 +158,12 @@ func (s *Server) stepScan(ctx context.Context) {
 	s.setFinish("scan", "running", "Looking at the lineup.")
 	devices, err := s.Store.Devices(ctx)
 	if err != nil {
-		s.setFinish("scan", "done", "The lineup could not be read.")
+		s.setFinish("scan", "check", "The lineup could not be read.")
 		return
 	}
 	channels, err := s.Store.Channels(ctx, false)
 	if err != nil {
-		s.setFinish("scan", "done", "The lineup could not be read.")
+		s.setFinish("scan", "check", "The lineup could not be read.")
 		return
 	}
 	var tuner *store.Device
@@ -193,11 +193,11 @@ func (s *Server) stepScan(ctx context.Context) {
 		return
 	}
 	if strings.TrimSpace(tuner.BaseURL) == "" {
-		s.setFinish("scan", "done", "This tuner has no address to scan.")
+		s.setFinish("scan", "check", "This tuner has no address to scan.")
 		return
 	}
 	if s.Staging {
-		s.setFinish("scan", "done", "A test server does not scan the antenna.")
+		s.setFinish("scan", "skipped", "A test server does not scan the antenna.")
 		return
 	}
 	client := s.HDHR
@@ -205,7 +205,7 @@ func (s *Server) stepScan(ctx context.Context) {
 		client = &hdhr.Client{}
 	}
 	if err := client.StartScan(ctx, tuner.BaseURL); err != nil {
-		s.setFinish("scan", "done", "The scan did not start.")
+		s.setFinish("scan", "check", "The scan did not start.")
 		return
 	}
 	// scanning stays true until a status read says the tuner is done. A progress
@@ -217,7 +217,7 @@ func (s *Server) stepScan(ctx context.Context) {
 		if err != nil {
 			if ctx.Err() != nil {
 				s.stopSetupScan(client, tuner.BaseURL)
-				s.setFinish("scan", "done", "The scan stopped.")
+				s.setFinish("scan", "check", "The scan stopped.")
 				return
 			}
 			break
@@ -239,7 +239,7 @@ func (s *Server) stepScan(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			s.stopSetupScan(client, tuner.BaseURL)
-			s.setFinish("scan", "done", "The scan stopped.")
+			s.setFinish("scan", "check", "The scan stopped.")
 			return
 		case <-time.After(wait):
 		}
@@ -257,7 +257,7 @@ func (s *Server) stepScan(ctx context.Context) {
 	channels, _ = s.Store.Channels(ctx, false)
 	n := len(visibleChannels(channels))
 	if n == 0 {
-		s.setFinish("scan", "done", "No channels yet.")
+		s.setFinish("scan", "check", "No channels yet. Check the antenna cable, then scan again in Settings.")
 		return
 	}
 	s.setFinish("scan", "done", countLine(n, "channel", "channels")+".")
@@ -267,7 +267,7 @@ func (s *Server) stepGuide(ctx context.Context) {
 	s.setFinish("guide", "running", "Loading listings.")
 	listed := s.listedChannels(ctx)
 	if listed == 0 && s.Staging {
-		s.setFinish("guide", "done", "A test server does not pull the guide.")
+		s.setFinish("guide", "skipped", "A test server does not pull the guide.")
 		return
 	}
 	if listed == 0 {
@@ -276,12 +276,12 @@ func (s *Server) stepGuide(ctx context.Context) {
 		cancel()
 		if err != nil {
 			slog.Error(fmt.Sprintf("setup: guide: %v", err))
-			s.setFinish("guide", "done", "Listings did not load. More listings arrive from the broadcast.")
+			s.setFinish("guide", "check", "Listings did not load. More listings arrive from the broadcast.")
 			return
 		}
 		listed = s.listedChannels(ctx)
 		if listed == 0 {
-			s.setFinish("guide", "done", fmt.Sprintf("Loaded %d listings. More listings arrive from the broadcast.", n))
+			s.setFinish("guide", "check", fmt.Sprintf("Loaded %d listings. More listings arrive from the broadcast.", n))
 			return
 		}
 	}
@@ -293,7 +293,7 @@ func (s *Server) stepFolder(ctx context.Context) {
 	devices, _ := s.Store.Devices(ctx)
 	for _, note := range s.doctorNotes(devices) {
 		if note.ID == "disk" || note.ID == "volume" {
-			s.setFinish("folder", "done", note.Message)
+			s.setFinish("folder", "check", note.Message)
 			return
 		}
 	}
@@ -311,10 +311,14 @@ func (s *Server) stepFavorites(ctx context.Context) {
 	s.setFinish("favorites", "running", "Picking ABC, CBS, FOX, and NBC.")
 	starred, err := s.starBigFour(ctx)
 	if err != nil {
-		s.setFinish("favorites", "done", "Favorites could not be saved.")
+		s.setFinish("favorites", "check", "Favorites could not be saved.")
 		return
 	}
-	s.setFinish("favorites", "done", favoriteLine(starred))
+	state := "done"
+	if len(starred) == 0 {
+		state = "skipped"
+	}
+	s.setFinish("favorites", state, favoriteLine(starred))
 }
 
 func (s *Server) stepEncoder(ctx context.Context) {
@@ -338,7 +342,11 @@ func (s *Server) stepEncoder(ctx context.Context) {
 	if err != nil {
 		slog.Error(fmt.Sprintf("setup: encoder: %v", err))
 	}
-	s.setFinish("encoder", "done", live.FormatEncoderLine(encoder, speed, err == nil))
+	state := "done"
+	if err != nil {
+		state = "check"
+	}
+	s.setFinish("encoder", state, live.FormatEncoderLine(encoder, speed, err == nil))
 }
 
 func (s *Server) stepSignal(ctx context.Context) {
@@ -346,31 +354,34 @@ func (s *Server) stepSignal(ctx context.Context) {
 	if s.SetupSignal != nil {
 		great, ok, weak, lost, err := s.SetupSignal(ctx)
 		if err != nil {
-			s.setFinish("signal", "done", err.Error())
+			s.setFinish("signal", "check", err.Error())
 			return
 		}
-		s.setFinish("signal", "done", signalSummary(great, ok, weak, lost))
+		s.setFinish("signal", signalState(great, ok, weak, lost), signalSummary(great, ok, weak, lost))
 		return
 	}
+	var state, detail string
 	if s.Staging {
-		s.setFinish("signal", "done", s.storedSignalSummary(ctx))
-		return
+		state, detail = s.storedSignalSummary(ctx)
+	} else {
+		state, detail = s.measureSetupSignals(ctx)
 	}
-	s.setFinish("signal", "done", s.measureSetupSignals(ctx))
+	s.setFinish("signal", state, detail)
 }
 
-func (s *Server) measureSetupSignals(ctx context.Context) string {
+// measureSetupSignals returns the step state and its detail line.
+func (s *Server) measureSetupSignals(ctx context.Context) (string, string) {
 	if s.Hub == nil {
-		return "No tuner to check."
+		return "skipped", "No tuner to check."
 	}
 	if s.recordingSoon(ctx) {
-		return "A recording is coming up, so the signal check can wait."
+		return "skipped", "A recording is coming up, so the signal check can wait."
 	}
 	if !s.Hub.Idle() {
-		return "Tuners are busy, so the signal check can wait."
+		return "skipped", "Tuners are busy, so the signal check can wait."
 	}
 	if !s.startSignalScan() {
-		return "Already checking channels."
+		return "skipped", "Already checking channels."
 	}
 	defer s.finishSignalScan()
 	// A fresh lineup has no stored frequency. Tuning one channel learns the
@@ -385,12 +396,12 @@ func (s *Server) measureSetupSignals(ctx context.Context) string {
 		}
 		rows, err := s.Store.ChannelSignals(scanCtx)
 		if err != nil {
-			return "The signal check did not start."
+			return "check", "The signal check did not start."
 		}
 		next, ok := nextSignalChannel(rows, tried, seen)
 		if !ok {
 			if len(rows) == 0 {
-				return "No antenna channels to check."
+				return "skipped", "No antenna channels to check."
 			}
 			break
 		}
@@ -431,10 +442,10 @@ func nextSignalChannel(rows []store.ChannelSignal, tried map[int64]bool, seen ma
 	return 0, false
 }
 
-func (s *Server) storedSignalSummary(ctx context.Context) string {
+func (s *Server) storedSignalSummary(ctx context.Context) (string, string) {
 	rows, err := s.Store.ChannelSignals(ctx)
 	if err != nil {
-		return "No signal reading."
+		return "check", "No signal reading."
 	}
 	var great, ok, weak, lost int
 	for _, row := range rows {
@@ -453,7 +464,16 @@ func (s *Server) storedSignalSummary(ctx context.Context) string {
 			lost++
 		}
 	}
-	return signalSummary(great, ok, weak, lost)
+	return signalState(great, ok, weak, lost), signalSummary(great, ok, weak, lost)
+}
+
+// signalState is done when most read channels come in, and check when none
+// were read or more are weak or lost than not.
+func signalState(great, ok, weak, lost int) string {
+	if great+ok == 0 || weak+lost > great+ok {
+		return "check"
+	}
+	return "done"
 }
 
 func (s *Server) readyLine(ctx context.Context) (string, int64) {
@@ -563,8 +583,18 @@ func countLine(n int, one, many string) string {
 	return fmt.Sprintf("%d %s", n, many)
 }
 
+// readyLine leaves the guide out while nothing is listed. The Guide step says why.
 func readyLine(channels, listed, tuners int, gpu string) string {
-	return fmt.Sprintf("Ready: %s, guide for %d, %s, %s", countLine(channels, "channel", "channels"), listed, countLine(tuners, "tuner", "tuners"), gpu)
+	parts := []string{countLine(channels, "channel", "channels")}
+	switch {
+	case listed == 0:
+	case listed >= channels:
+		parts = append(parts, "full guide")
+	default:
+		parts = append(parts, fmt.Sprintf("guide for %d", listed))
+	}
+	parts = append(parts, countLine(tuners, "tuner", "tuners"), gpu)
+	return "Ready: " + strings.Join(parts, ", ")
 }
 
 func signalSummary(great, ok, weak, lost int) string {

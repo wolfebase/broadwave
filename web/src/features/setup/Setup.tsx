@@ -262,6 +262,7 @@ export function Setup() {
 function FinishStep({ progress, note, onWatch }: { progress: SetupFinish | null; note: string; onWatch: () => void }) {
   const ready = progress?.ready ?? "";
   const url = window.location.origin;
+  const loopback = /^(localhost|127\.|\[::1\]$)/.test(window.location.hostname);
   const svg = useMemo(() => {
     const qr = qrcode(0, "M");
     qr.addData(`broadwave://connect?url=${encodeURIComponent(url)}`);
@@ -275,7 +276,7 @@ function FinishStep({ progress, note, onWatch }: { progress: SetupFinish | null;
         {(progress?.steps ?? []).map((item) => (
           <li key={item.id}>
             <strong>{item.title}</strong>
-            <span className={item.state === "done" ? "ok" : "dim"}>{stateWord(item.state)}</span>
+            <span className={`ok${item.state === "check" ? " warn" : item.state === "done" ? "" : " quiet"}`}>{stateWord(item.state)}</span>
             {item.detail ? <span className="dim">{item.detail}</span> : null}
           </li>
         ))}
@@ -288,11 +289,19 @@ function FinishStep({ progress, note, onWatch }: { progress: SetupFinish | null;
               Watch <ChevronIcon />
             </button>
           </div>
-          <p className="dim">Scan this with your iPhone. On Apple TV, open Broadwave. It finds this server on its own.</p>
-          <div className="apps-row">
-            <div className="qr" dangerouslySetInnerHTML={{ __html: svg }} aria-label="QR code to connect the app" />
-            <p className="big-url">{url}</p>
-          </div>
+          {loopback ? (
+            <p className="dim">
+              To connect your phone or TV, open this page from another device at this computer's network address, or open Broadwave there. It finds this server on its own.
+            </p>
+          ) : (
+            <>
+              <p className="dim">Scan this with your iPhone. On Apple TV, open Broadwave. It finds this server on its own.</p>
+              <div className="apps-row">
+                <div className="qr" dangerouslySetInnerHTML={{ __html: svg }} role="img" aria-label="QR code to connect the app" />
+                <p className="big-url">{url}</p>
+              </div>
+            </>
+          )}
         </>
       ) : null}
     </section>
@@ -302,6 +311,7 @@ function FinishStep({ progress, note, onWatch }: { progress: SetupFinish | null;
 function stateWord(state: string) {
   if (state === "running") return "Working";
   if (state === "done") return "Done";
+  if (state === "check") return "Needs a look";
   if (state === "skipped") return "Skipped";
   return "";
 }

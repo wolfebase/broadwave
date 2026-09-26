@@ -75,9 +75,9 @@ func TestSetupScanAbortsOnlyWhileTheTunerIsScanning(t *testing.T) {
 		detail  string
 		syncing bool
 	}{
-		{name: "still scanning", status: `{"Scan":1,"Found":3}`, wait: 40 * time.Millisecond, aborts: 1, detail: "No channels yet.", syncing: true},
-		{name: "finished", status: `{"Scan":0,"Found":4}`, wait: 40 * time.Millisecond, aborts: 0, detail: "No channels yet.", syncing: true},
-		{name: "progress error", code: http.StatusInternalServerError, wait: 40 * time.Millisecond, aborts: 1, detail: "No channels yet.", syncing: true},
+		{name: "still scanning", status: `{"Scan":1,"Found":3}`, wait: 40 * time.Millisecond, aborts: 1, detail: "No channels yet. Check the antenna cable, then scan again in Settings.", syncing: true},
+		{name: "finished", status: `{"Scan":0,"Found":4}`, wait: 40 * time.Millisecond, aborts: 0, detail: "No channels yet. Check the antenna cable, then scan again in Settings.", syncing: true},
+		{name: "progress error", code: http.StatusInternalServerError, wait: 40 * time.Millisecond, aborts: 1, detail: "No channels yet. Check the antenna cable, then scan again in Settings.", syncing: true},
 		{name: "cancelled", status: `{"Scan":1,"Found":1}`, cancel: true, wait: time.Second, aborts: 1, detail: "The scan stopped."},
 	}
 	for _, tc := range cases {
@@ -187,8 +187,24 @@ func TestSignalSummaryAndReadyLine(t *testing.T) {
 	if got := readyLine(27, 21, 2, "Intel GPU"); got != "Ready: 27 channels, guide for 21, 2 tuners, Intel GPU" {
 		t.Fatalf("ready %q", got)
 	}
-	if got := readyLine(1, 0, 1, "Software"); got != "Ready: 1 channel, guide for 0, 1 tuner, Software" {
+	if got := readyLine(1, 0, 1, "Software"); got != "Ready: 1 channel, 1 tuner, Software" {
 		t.Fatalf("one ready %q", got)
+	}
+	if got := readyLine(3, 3, 2, "Apple GPU"); got != "Ready: 3 channels, full guide, 2 tuners, Apple GPU" {
+		t.Fatalf("full ready %q", got)
+	}
+	for _, tc := range []struct {
+		great, ok, weak, lost int
+		want                  string
+	}{
+		{0, 0, 0, 0, "check"},
+		{3, 1, 1, 0, "done"},
+		{1, 0, 2, 1, "check"},
+		{0, 0, 0, 4, "check"},
+	} {
+		if got := signalState(tc.great, tc.ok, tc.weak, tc.lost); got != tc.want {
+			t.Fatalf("signalState(%d,%d,%d,%d) = %q, want %q", tc.great, tc.ok, tc.weak, tc.lost, got, tc.want)
+		}
 	}
 	if got := favoriteLine([]map[string]any{{"network": "FOX"}, {"network": "ABC"}, {"network": "CBS"}}); got != "ABC, CBS, and FOX." {
 		t.Fatalf("favorites %q", got)

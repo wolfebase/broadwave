@@ -168,7 +168,7 @@ struct SetupWizard: View {
                             Text(item.title).font(.headline)
                             Spacer()
                             Text(stateWord(item.state))
-                                .foregroundStyle(item.state == "done" ? Tokens.ColorToken.success : .secondary)
+                                .foregroundStyle(stateColor(item.state))
                         }
                         if let detail = item.detail, !detail.isEmpty {
                             Text(detail).foregroundStyle(.secondary)
@@ -198,8 +198,17 @@ struct SetupWizard: View {
         switch state {
         case "running": "Working"
         case "done": "Done"
+        case "check": "Needs a look"
         case "skipped": "Skipped"
         default: ""
+        }
+    }
+
+    private func stateColor(_ state: String) -> Color {
+        switch state {
+        case "done": Tokens.ColorToken.success
+        case "check": Tokens.ColorToken.warning
+        default: .secondary
         }
     }
 
