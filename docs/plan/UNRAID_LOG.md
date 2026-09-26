@@ -9,6 +9,13 @@ Staging: `Broadwave-Staging` on `:8490` (`-staging`, iGPU), appdata `/mnt/cache/
 ## Entries
 <!-- Append: date, commit, what was deployed, checks run, results, issues. -->
 
+## 2026-09-25 21:45 CDT — v0.9.1, multiview and the house that keeps running
+
+- Image `ghcr.io/wolfebase/broadwave:0.9.1` (tag `v0.9.1`, commit `e0dd401`), amd64 and arm64. `v0.9.0` (`690cdb8`) was tagged and its image published, and it was not deployed: a restore dropped playlist passwords, and a failed TheSportsDB request put the key in the log. Both are fixed in 0.9.1. Catalog copied to `backups/broadwave-20260925-214536.db` before recreate. The new process also wrote `broadwave-20260926-024544-version.db`, the daily, and the weekly. Container `Broadwave`, host network, `/dev/dri`, `TZ=America/Chicago`. `/api/v1/server` is `v0.9.1`, encoder `h264_vaapi`. Six recordings still listed. Tuners were free. Next recording is Jeopardy at 2026-09-27 07:00 UTC.
+- Channel 1 for 20 s: `1280x720 59.94`, segment 2.002 s, 240 frames, 0 decode errors, tuner released. Production and the watch target both `ours:false` after.
+- Staging `:8490` had already been running the `v0.9.0` binary. Its channel 1 smoke was the same picture: `1280x720 59.94`, segment 2.002 s, 0 decode errors, 240 frames. It does not yet have the 0.9.1 password and key fixes.
+- TestFlight build 249 uploaded for iOS and tvOS (`Uploaded Broadwave`, `Uploaded BroadwaveTV`). iOS 1.0 stayed `WAITING_FOR_REVIEW`, so 1.1 was not created.
+
 ## 2026-09-25 08:41 CDT — v0.8.0, the house sets itself up
 
 - Image `ghcr.io/wolfebase/broadwave:0.8.0` (tag `v0.8.0`, commit `d92b021`), amd64 and arm64. The release workflow then failed writing a GitHub Actions cache layer (`error writing layer blob: not_found`) after the manifests for `0.8.0`, `0.8`, and `latest` were pushed. Catalog backed up to `backups/broadwave-20260925-084110.db`. Container `Broadwave`, host network, `/dev/dri`, `TZ=America/Chicago`. `/api/v1/server` is `v0.8.0`, encoder `h264_vaapi`. Five recordings still listed, with their sizes. Tuners were free. Next recording is Jeopardy at 2026-09-25 20:00 UTC.
