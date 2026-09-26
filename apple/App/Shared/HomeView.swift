@@ -223,7 +223,9 @@ struct Hero: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
                     LiveDot("Live now")
-                    Text(kind.label.uppercased()).font(.caption.weight(.bold)).tracking(1).foregroundStyle(.secondary)
+                    if kind != .other {
+                        Text(kind.label.uppercased()).font(.caption.weight(.bold)).tracking(1).foregroundStyle(.secondary)
+                    }
                 }
                 Text(airing?.title ?? channel.displayName)
                     .font(.system(.largeTitle, weight: .heavy))

@@ -190,7 +190,7 @@ public struct OnNowRow: View {
                 }
                 AiringProgress(airing?.progress(at: now) ?? 0, color: kind.color)
                 if let next {
-                    Text("\(next.start.formatted(date: .omitted, time: .shortened))  \(next.title)")
+                    Text("Next \(next.start.formatted(date: .omitted, time: .shortened)) · \(next.title)")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
