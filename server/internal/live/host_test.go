@@ -352,13 +352,18 @@ func TestMeasureHostKeepsASpeedFromAFailedEncode(t *testing.T) {
 func TestMeasureHostTreatsATimedOutBenchAsSlow(t *testing.T) {
 	dir := t.TempDir()
 	script := filepath.Join(dir, "ffmpeg")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\necho 'speed=9.0x' >&2\n"), 0o755); err != nil {
+	// The shell's child is what has to die. Killing only the shell leaves
+	// sleep running and Wait blocked for the full 30 seconds.
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Already past the deadline, so the encode never starts.
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
+	start := time.Now()
 	got := MeasureHost(ctx, script, "h264_vaapi")
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("deadline took %s", elapsed)
+	}
 	if got.Class != "vaapi" || got.Height != 540 || got.Tiles != 1 || got.Speed != 0 || got.FullRate {
 		t.Fatalf("%+v", got)
 	}
