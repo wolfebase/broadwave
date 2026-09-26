@@ -513,8 +513,11 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 
 // audioFilter keeps broadcast timestamps and, when asked, levels the mix.
 // loudnorm without measured values is one pass, so it can run live.
+// min_hard_comp is in seconds and sits above a 33-bit wrap (about 95443s).
+// A smaller value makes the resampler allocate the whole gap. async=1000
+// still stretches a small drift.
 func audioFilter(r Rendition) string {
-	af := "aresample=async=1000"
+	af := "aresample=async=1000:min_hard_comp=1000000"
 	if r.Even {
 		af += ",loudnorm=I=-16:LRA=11:TP=-1.5"
 	}

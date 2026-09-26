@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -113,6 +114,16 @@ func (t *Timeline) Wall(pts int64) time.Time {
 	return t.wall
 }
 
+// Reanchor keeps the program date-time on the wall clock across a timestamp
+// jump. The next presentation time maps to wall, and Earliest stays put.
+func (t *Timeline) Reanchor(pts int64, wall time.Time) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.pts = pts
+	t.wall = wall
+	t.set = true
+}
+
 // Earliest is the program time of the first part or segment this encode stamped.
 // A fresh tune's first frame is only a few seconds old; a long-running one
 // keeps the original anchor so a deep buffer can still sit at the latency target.
@@ -126,10 +137,13 @@ func (t *Timeline) Earliest() (time.Time, bool) {
 }
 
 // playlistStamper rewrites an ffmpeg live playlist with program date-times from
-// the shared Timeline. Segment timestamps are cached; a segment never changes.
+// the shared Timeline. A segment's timestamp and date-time are cached: a
+// discontinuity moves the anchor, and a later stamp must not measure the
+// segments from before that move against it.
 type playlistStamper struct {
 	mu    sync.Mutex
 	cache map[string]int64
+	walls map[string]time.Time
 }
 
 // reset forgets segment times. A restarted encode reuses seg00001.m4s for a
@@ -137,6 +151,7 @@ type playlistStamper struct {
 func (p *playlistStamper) reset() {
 	p.mu.Lock()
 	p.cache = nil
+	p.walls = nil
 	p.mu.Unlock()
 }
 
@@ -146,10 +161,22 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 	if p.cache == nil {
 		p.cache = map[string]int64{}
 	}
+	if p.walls == nil {
+		p.walls = map[string]time.Time{}
+	}
 	lines := strings.Split(string(src), "\n")
 	var out bytes.Buffer
 	seen := map[string]bool{}
 	pending := []string{}
+	var lastEnd time.Time
+	var haveEnd bool
+	var breakNext bool
+	noteBreak := func(pts int64) {
+		if breakNext && haveEnd && tl != nil {
+			tl.Reanchor(pts, lastEnd)
+			breakNext = false
+		}
+	}
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		switch {
@@ -172,6 +199,7 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 				// The part anchors the clock. A date on every part is not written:
 				// the tag belongs to the next media segment.
 				if ok && tl != nil {
+					noteBreak(pts)
 					tl.Wall(pts)
 				}
 			}
@@ -190,8 +218,24 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 					p.cache[name] = v
 				}
 			}
-			if ok && tl != nil {
-				out.WriteString("#EXT-X-PROGRAM-DATE-TIME:" + tl.Wall(pts).UTC().Format("2006-01-02T15:04:05.000Z") + "\n")
+			if wall, cached := p.walls[name]; cached {
+				// Already assigned. Wall would measure this segment from the
+				// anchor a discontinuity moved, and shift every date-time.
+				out.WriteString("#EXT-X-PROGRAM-DATE-TIME:" + wall.UTC().Format("2006-01-02T15:04:05.000Z") + "\n")
+				if d := pendingDur(pending); d > 0 {
+					lastEnd = wall.Add(d)
+					haveEnd = true
+				}
+				breakNext = false
+			} else if ok && tl != nil {
+				noteBreak(pts)
+				wall := tl.Wall(pts)
+				p.walls[name] = wall
+				out.WriteString("#EXT-X-PROGRAM-DATE-TIME:" + wall.UTC().Format("2006-01-02T15:04:05.000Z") + "\n")
+				if d := pendingDur(pending); d > 0 {
+					lastEnd = wall.Add(d)
+					haveEnd = true
+				}
 			}
 			for _, l := range pending {
 				out.WriteString(l + "\n")
@@ -204,6 +248,9 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 			out.WriteString(l + "\n")
 		}
 		pending = pending[:0]
+		if strings.HasPrefix(trimmed, "#EXT-X-DISCONTINUITY") {
+			breakNext = true
+		}
 		if line != "" {
 			out.WriteString(line + "\n")
 		}
@@ -211,9 +258,29 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 	for name := range p.cache {
 		if !seen[name] {
 			delete(p.cache, name)
+			delete(p.walls, name)
 		}
 	}
 	return out.Bytes()
+}
+
+func pendingDur(lines []string) time.Duration {
+	for _, l := range lines {
+		v, ok := strings.CutPrefix(strings.TrimSpace(l), "#EXTINF:")
+		if !ok {
+			continue
+		}
+		v = strings.TrimSuffix(v, ",")
+		if i := strings.IndexByte(v, ','); i >= 0 {
+			v = v[:i]
+		}
+		f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+		if err != nil || f <= 0 {
+			continue
+		}
+		return time.Duration(f * float64(time.Second))
+	}
+	return 0
 }
 
 func partName(line string) string {

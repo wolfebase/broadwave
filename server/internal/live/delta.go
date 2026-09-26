@@ -36,7 +36,8 @@ func DeltaPlaylist(body []byte) []byte {
 			var pdt []string
 			var head []string
 			for _, l := range cur {
-				if strings.HasPrefix(strings.TrimSpace(l), "#EXT-X-PROGRAM-DATE-TIME:") {
+				trimL := strings.TrimSpace(l)
+				if strings.HasPrefix(trimL, "#EXT-X-PROGRAM-DATE-TIME:") || strings.HasPrefix(trimL, "#EXT-X-DISCONTINUITY") {
 					pdt = append(pdt, l)
 				} else {
 					head = append(head, pdt...)
