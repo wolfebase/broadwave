@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.9.0 — 2026-09-25
+
+Multiview fills the tile, and the apps can be tried with no server.
+
+### Added
+
+- Tiles on the web, iPhone, iPad, and Apple TV are 16:9. The one you are listening to stays at 60 frames. The others stay at 30.
+- Adding a channel says whether it shares a tuner, takes one, or has to wait.
+- The iPhone portrait player shows the channel, the program, and labeled controls.
+- Program pictures show on the Apple guide, search, sports, and recordings, and on web search and sports.
+- Apple Home shows a live frame when the listing has no picture and that channel is already on.
+- Try the demo plays four short films on the phone or Apple TV when no server is set up. About credits the Blender Foundation.
+- The server checks once a day for a newer Broadwave. You can turn that off.
+- Settings keeps nightly catalog backups and can restore one. Recordings stay where they are.
+- Settings can download a support bundle. Passwords are left out.
+- Sports scores come from ESPN's public scoreboard, and only from your own server. A switch turns them off.
+- Diagnostics shows the tuner model, firmware, and whether it is locked. This app does not install firmware.
+- When a recording loses the tuner, the schedule names a later airing and says what a one-time skip will miss.
+- In multiview, the focused tile can move to the game that matters.
+
+### Fixed
+
+- Apple TV keeps the channel name visible when a button is focused, and the sidebar steps aside on Home, Sports, and Recordings.
+- A guide title no longer slides under the channel name, and the time labels stay clear of that column.
+- The phone tab bar no longer covers the next row.
+- A numbered subchannel is not starred as the main network.
+- A tuner that is playing a channel is not reported as gone.
+- A second picture stays on the same clock as the first.
+- An older app is told when the server has moved on.
+
 ## 0.8.0 — 2026-09-25
 
 Setup finds the house and finishes itself.
