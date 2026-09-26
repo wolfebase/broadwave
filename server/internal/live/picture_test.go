@@ -29,6 +29,16 @@ func TestBroadcastMPEG2IsFieldRate(t *testing.T) {
 	}
 }
 
+func TestRecordingPlaybackStaysMPEGTS(t *testing.T) {
+	line := strings.Join(PictureArgs(Graph{VideoCodec: "H264", Encoder: "libx264", Live: false}), " ")
+	if !strings.Contains(line, "-hls_segment_filename seg%05d.ts") || !strings.Contains(line, "-hls_list_size 0") || !strings.Contains(line, "-hls_playlist_type event") {
+		t.Fatalf("a recording keeps the whole MPEG-TS event playlist: %s", line)
+	}
+	if strings.Contains(line, "pipe:1") || strings.Contains(line, ".m4s") {
+		t.Fatalf("recording playback does not use the live packager: %s", line)
+	}
+}
+
 func TestProgressiveSkipsDeinterlace(t *testing.T) {
 	line := strings.Join(PictureArgs(Graph{VideoCodec: "H264", Encoder: "libx264", Mode: "broadcast"}), " ")
 	if strings.Contains(line, "bwdif") || strings.Contains(line, "deinterlace_vaapi") {

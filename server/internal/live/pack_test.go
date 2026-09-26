@@ -1,6 +1,7 @@
 package live
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -238,6 +239,130 @@ func assertSegmentCuts(t *testing.T, playlist string) {
 			t.Errorf("segment duration %.3f is not one fragment (%v)", d, durs)
 		}
 	}
+}
+
+// mp4Box is a short ISO-BMFF box. The body does not include the size or type.
+func mp4Box(kind string, body []byte) []byte {
+	b := make([]byte, 8+len(body))
+	binary.BigEndian.PutUint32(b[:4], uint32(len(b)))
+	copy(b[4:8], kind)
+	copy(b[8:], body)
+	return b
+}
+
+// keyframeFragment is one video fragment at pts, lasting dur ticks at 90 kHz.
+func keyframeFragment(pts int64, dur uint32) []byte {
+	tfhd := make([]byte, 8)
+	binary.BigEndian.PutUint32(tfhd[4:8], 1)
+	tfdt := make([]byte, 12)
+	tfdt[0] = 1
+	binary.BigEndian.PutUint64(tfdt[4:12], uint64(pts))
+	const trFlags = 0x104 // sample duration and first-sample flags
+	trun := make([]byte, 16)
+	trun[1] = byte(trFlags >> 16)
+	trun[2] = byte(trFlags >> 8)
+	trun[3] = byte(trFlags & 0xff)
+	binary.BigEndian.PutUint32(trun[4:8], 1)
+	binary.BigEndian.PutUint32(trun[12:16], dur)
+	traf := append(append(mp4Box("tfhd", tfhd), mp4Box("tfdt", tfdt)...), mp4Box("trun", trun)...)
+	moof := mp4Box("moof", append(mp4Box("mfhd", make([]byte, 8)), mp4Box("traf", traf)...))
+	return append(moof, mp4Box("mdat", []byte{0})...)
+}
+
+func videoInit() []byte {
+	tkhd := make([]byte, 24)
+	binary.BigEndian.PutUint32(tkhd[12:16], 1)
+	mdhd := make([]byte, 24)
+	binary.BigEndian.PutUint32(mdhd[12:16], 90000)
+	hdlr := make([]byte, 12)
+	copy(hdlr[8:12], "vide")
+	mdia := append(mp4Box("mdhd", mdhd), mp4Box("hdlr", hdlr)...)
+	trak := append(mp4Box("tkhd", tkhd), mp4Box("mdia", mdia)...)
+	return append(mp4Box("ftyp", []byte("isom")), mp4Box("moov", mp4Box("trak", trak))...)
+}
+
+func packKeyframes(t *testing.T, dir string, pts []int64, dur uint32) string {
+	t.Helper()
+	var raw []byte
+	raw = append(raw, videoInit()...)
+	for _, p := range pts {
+		raw = append(raw, keyframeFragment(p, dur)...)
+	}
+	if err := Pack(dir, bytes.NewReader(raw), nil); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func extinfSum(playlist string) (n int, seconds float64) {
+	for _, line := range strings.Split(playlist, "\n") {
+		v, ok := strings.CutPrefix(line, "#EXTINF:")
+		if !ok {
+			continue
+		}
+		v = strings.TrimSuffix(v, ",")
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return n, seconds
+		}
+		n++
+		seconds += f
+	}
+	return n, seconds
+}
+
+// Half-second segments must not bring the rewind window down to a count of
+// 2700 (that was 90 minutes only while every segment was 2 seconds).
+func TestLiveWindowKeepsNinetyMinutes(t *testing.T) {
+	dir := t.TempDir()
+	const half = 45000
+	pts := make([]int64, 2702)
+	for i := range pts {
+		pts[i] = int64(i) * half
+	}
+	short := packKeyframes(t, dir, pts, half)
+	n, seconds := extinfSum(short)
+	if n != 2702 || seconds < 1350 || seconds > 1352 {
+		t.Fatalf("short playlist kept %d segments, %.3fs:\n%s", n, seconds, headTail(short))
+	}
+	if _, err := os.Stat(filepath.Join(dir, "seg00000.m4s")); err != nil {
+		t.Fatal("the oldest short segment was dropped before 90 minutes")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "seg02701.m4s")); err != nil {
+		t.Fatal(err)
+	}
+
+	longDir := t.TempDir()
+	const halfHour = 30 * 60 * 90000
+	longPTS := make([]int64, 6)
+	for i := range longPTS {
+		longPTS[i] = int64(i) * halfHour
+	}
+	long := packKeyframes(t, longDir, longPTS, halfHour)
+	n, seconds = extinfSum(long)
+	if n != 3 || seconds < 5399 || seconds > 5401 {
+		t.Fatalf("90 minute window kept %d segments, %.3fs:\n%s", n, seconds, long)
+	}
+	if !strings.Contains(long, "#EXT-X-MEDIA-SEQUENCE:3\n") {
+		t.Fatalf("sequence:\n%s", long)
+	}
+	if _, err := os.Stat(filepath.Join(longDir, "seg00000.m4s")); !os.IsNotExist(err) {
+		t.Fatalf("segment past 90 minutes still on disk: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(longDir, "seg00003.m4s")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func headTail(s string) string {
+	if len(s) < 400 {
+		return s
+	}
+	return s[:200] + "\n...\n" + s[len(s)-200:]
 }
 
 func TestDeltaPlaylistSkipsTheHead(t *testing.T) {
