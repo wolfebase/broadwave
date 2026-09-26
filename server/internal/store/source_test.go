@@ -92,6 +92,10 @@ func TestOtherDeviceIsTheFailover(t *testing.T) {
 	if err != nil || len(got) != 1 || got[0] != "http://192.168.1.30" {
 		t.Fatalf("%v %v", got, err)
 	}
+	stream, err := st.ChannelStreamURL(ctx, "http://192.168.1.30", "4.1")
+	if err != nil || stream != "http://b/4.1" {
+		t.Fatalf("stream %q %v", stream, err)
+	}
 	locked := []hdhr.Channel{{GuideNumber: "702", GuideName: "HBO", StreamURL: "http://a/702", Protected: true}}
 	if err := st.UpsertDevice(ctx, a, append([]hdhr.Channel{{GuideNumber: "4.1", GuideName: "ABC", StreamURL: "http://a/4.1"}}, locked...)); err != nil {
 		t.Fatal(err)

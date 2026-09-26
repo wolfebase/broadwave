@@ -24,6 +24,9 @@ type SourceChannel struct {
 	// FieldOrder is the station scan: progressive, tt, bb, tb, bt, or empty.
 	// Film cadence is decided per tune and is not stored.
 	FieldOrder string `json:"fieldOrder,omitempty"`
+	// ATSC3 is set when this channel cannot use a 1.0 tuner.
+	// The lineup's codecs are the other way a row is marked. A guide number is not.
+	ATSC3 bool `json:"-"`
 }
 
 type Airing struct {

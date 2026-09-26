@@ -407,7 +407,7 @@ func failover(t *testing.T, srv *Server, base string, tuners int, number, other 
 		if rows[0].TargetIP != "closed" {
 			t.Fatalf("dead tuner %+v", rows[0])
 		}
-		_, n, ok := live.PickTuner([]live.DeviceTuners{{Host: "device", Tuners: asTuners(rows)}}, nil, nil)
+		_, n, ok := live.PickTuner([]live.DeviceTuners{{Host: "device", Tuners: asTuners(rows)}}, nil, nil, live.Need{})
 		if !ok || n == 0 {
 			t.Fatalf("picker %d %v", n, ok)
 		}
@@ -426,7 +426,7 @@ func failover(t *testing.T, srv *Server, base string, tuners int, number, other 
 		srv.KillTuner(0)
 		waitClosed(t, res.Body)
 		res.Body.Close()
-		_, _, ok := live.PickTuner([]live.DeviceTuners{{Host: "device", Tuners: asTuners(fetchStatus(t, base))}}, nil, nil)
+		_, _, ok := live.PickTuner([]live.DeviceTuners{{Host: "device", Tuners: asTuners(fetchStatus(t, base))}}, nil, nil, live.Need{})
 		if ok {
 			t.Fatal("picker used the closed tuner")
 		}
