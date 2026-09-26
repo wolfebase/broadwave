@@ -34,15 +34,7 @@ func (h *Hub) Export(ctx context.Context, channelID int64, w io.Writer) error {
 		h.mu.Unlock()
 		return err
 	}
-	args := []string{"-hide_banner", "-loglevel", "error", "-fflags", "+genpts+discardcorrupt", "-copyts",
-		"-probesize", "1000000", "-analyzeduration", "1000000", "-i", "pipe:0"}
-	if f.program > 0 {
-		args = append(args, "-map", fmt.Sprintf("0:p:%d", f.program))
-	} else {
-		args = append(args, "-map", "0")
-	}
-	args = append(args, "-c", "copy", "-f", "mpegts", "pipe:1")
-	cmd := exec.CommandContext(ctx, h.FFmpeg, args...)
+	cmd := exec.CommandContext(ctx, h.FFmpeg, exportCopyArgs(f.program)...)
 	cmd.Stdout = w
 	cmd.Stderr = os.Stderr
 	stdin, err := cmd.StdinPipe()
@@ -73,4 +65,18 @@ func (h *Hub) Export(ctx context.Context, channelID int64, w io.Writer) error {
 		return nil
 	}
 	return err
+}
+
+// exportCopyArgs copies one program out of the shared tune. The probe ceiling
+// matches a live rendition: a one- or two-megabyte cap ends before the
+// sequence header on a full multiplex, and the copy then has no video.
+func exportCopyArgs(program int) []string {
+	args := []string{"-hide_banner", "-loglevel", "error", "-fflags", "+genpts+discardcorrupt", "-copyts",
+		"-probesize", "8000000", "-analyzeduration", "1000000", "-i", "pipe:0"}
+	if program > 0 {
+		args = append(args, "-map", fmt.Sprintf("0:p:%d", program))
+	} else {
+		args = append(args, "-map", "0")
+	}
+	return append(args, "-c", "copy", "-f", "mpegts", "pipe:1")
 }
