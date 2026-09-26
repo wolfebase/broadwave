@@ -85,11 +85,63 @@ PY
 cd "$APPLE"
 xcodegen generate
 
+# Command-line PROVISIONING_PROFILE_SPECIFIER reaches Swift packages, and
+# Xcode 27 refuses to archive them. Write the profile onto the app targets only.
+python3 - "$APPLE/Broadwave.xcodeproj/project.pbxproj" << 'PY'
+import re, sys
+path = sys.argv[1]
+text = open(path).read()
+identity = "Apple Distribution: Tyler Wolfe (D4MC63SS36)"
+profiles = {
+    "iphoneos": "Broadwave iOS App Store",
+    "appletvos": "Broadwave tvOS App Store",
+}
+
+patched = 0
+
+def patch(m):
+    global patched
+    body = m.group(0)
+    if "INFOPLIST_FILE" not in body or "CODE_SIGNING_ALLOWED = NO" in body:
+        return body
+    sdk = re.search(r"SDKROOT = (\w+);", body)
+    bundle = re.search(r"PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);", body)
+    if not sdk or not bundle or bundle.group(1).strip() != "com.wolfeup.broadwave":
+        return body
+    profile = profiles.get(sdk.group(1))
+    if not profile:
+        return body
+
+    def set_key(body, key, value):
+        line = f"\t\t\t\t{key} = {value};\n"
+        found = re.search(rf"\t*{key} = [^;]*;\n", body)
+        if found:
+            return body[:found.start()] + line + body[found.end():]
+        return body.replace("buildSettings = {\n", "buildSettings = {\n" + line, 1)
+
+    body = set_key(body, "CODE_SIGN_IDENTITY", '"%s"' % identity)
+    body = set_key(body, "CODE_SIGN_STYLE", "Manual")
+    body = set_key(body, "PROVISIONING_PROFILE_SPECIFIER", '"%s"' % profile)
+    patched += 1
+    return body
+
+updated = re.sub(
+    r"[A-F0-9]{24} /\* (?:Debug|Release) \*/ = \{\n\t\t\tisa = XCBuildConfiguration;\n\t\t\tbuildSettings = \{.*?\n\t\t\t\};",
+    patch,
+    text,
+    flags=re.S,
+)
+if patched != 4:
+    raise SystemExit(f"expected 4 app configurations, patched {patched}")
+open(path, "w").write(updated)
+print("provisioning profiles set on the app targets")
+PY
+
 EXPORT="$(mktemp -d)"
 trap 'rm -rf "$EXPORT"' EXIT
 archive_one() {
   local scheme="$1" platform="$2" name="$3" profile="$4"
-  echo "==> archive $scheme ($platform) build $BUILD"
+  echo "==> archive $scheme ($platform) build $BUILD ($profile)"
   cat > "$EXPORT/ExportOptions.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -115,16 +167,15 @@ archive_one() {
 </dict>
 </plist>
 EOF
+  # The profile lives on the app target only. A command-line override would
+  # also land on BroadwaveKit, which Xcode 27 will not sign that way.
   xcodebuild archive \
     -project Broadwave.xcodeproj \
     -scheme "$scheme" \
     -destination "generic/platform=$platform" \
     -archivePath "$APPLE/build/${name}.xcarchive" \
     DEVELOPMENT_TEAM="$TEAM" \
-    CURRENT_PROJECT_VERSION="$BUILD" \
-    CODE_SIGN_STYLE=Manual \
-    CODE_SIGN_IDENTITY="Apple Distribution: Tyler Wolfe (D4MC63SS36)" \
-    PROVISIONING_PROFILE_SPECIFIER="$profile"
+    CURRENT_PROJECT_VERSION="$BUILD"
   if [[ "${SKIP_UPLOAD:-}" == "1" ]]; then
     echo "==> skipped upload (SKIP_UPLOAD=1)"
     return 0
