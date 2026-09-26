@@ -628,11 +628,17 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	}
 	stdout, gate, done, err := packOutput(cmd)
 	if err != nil {
+		if stdin != nil {
+			_ = stdin.Close()
+		}
 		return nil, err
 	}
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
 		_ = stdout.Close()
+		if stdin != nil {
+			_ = stdin.Close()
+		}
 		return nil, err
 	}
 	startPack(dir, stdout, gate, done)

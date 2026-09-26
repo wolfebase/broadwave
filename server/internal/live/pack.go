@@ -149,7 +149,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
 			return err
 		}
-		dur := end - open[0].pts
+		dur := ptsDiff(end, open[0].pts)
 		if dur <= 0 {
 			dur = partTicks
 		}
@@ -184,6 +184,10 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		if !ok {
 			return nil
 		}
+		dur := int64(0)
+		if d, known := fragmentDuration(frag, track, scale); known {
+			dur = d
+		}
 		sync := fragmentIndependent(frag, track)
 		if len(open) > 0 {
 			if open[len(open)-1].dur == 0 {
@@ -207,7 +211,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		if err := os.WriteFile(filepath.Join(dir, name), frag, 0o644); err != nil {
 			return err
 		}
-		open = append(open, packedPart{name: name, pts: pts, dur: 0, body: frag, sync: sync})
+		open = append(open, packedPart{name: name, pts: pts, dur: dur, body: frag, sync: sync})
 		return flush()
 	}
 
@@ -313,8 +317,9 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 		targetSec = 1
 	}
 	b = append(b, "#EXT-X-TARGETDURATION:"+strconv.Itoa(targetSec)+"\n"...)
-	// Six target durations is the shortest skip boundary the playlist spec allows.
-	b = append(b, "#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=1.000,CAN-SKIP-UNTIL="+strconv.Itoa(targetSec*6)+".000\n"...)
+	// Hold-back is three part targets, the shortest the playlist spec allows.
+	hold := 3 * float64(partTarget) / 90000
+	b = append(b, fmt.Sprintf("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=%.3f,CAN-SKIP-UNTIL=%d.000\n", hold, targetSec*6)...)
 	b = append(b, "#EXT-X-PART-INF:PART-TARGET="+fmtDur(int64(partTarget))+"\n"...)
 	if allSync {
 		b = append(b, "#EXT-X-INDEPENDENT-SEGMENTS\n"...)
@@ -324,13 +329,13 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 	for _, s := range closed {
 		b = append(b, "#EXTINF:"+fmtDur(s.dur)+",\n"+s.name+"\n"...)
 	}
-	for i, p := range open {
+	for _, p := range open {
 		dur := p.dur
 		if dur <= 0 {
 			dur = partTicks
 		}
 		line := "#EXT-X-PART:DURATION=" + fmtDur(dur)
-		if p.sync && (i == 0) {
+		if p.sync {
 			line += ",INDEPENDENT=YES"
 		}
 		line += ",URI=\"" + p.name + "\"\n"
@@ -357,8 +362,8 @@ func fmtDur(ticks int64) string {
 }
 
 // fragmentIndependent reports whether the fragment's first video sample is a
-// keyframe. Unknown flags count as independent so a segment still closes on
-// the two-second grid.
+// keyframe. Missing flags are not treated as one: closing on a guess would
+// cut a copy and a transcode at different frames.
 func fragmentIndependent(seg []byte, track uint32) bool {
 	moof := child(seg, "moof")
 	for _, t := range boxes(moof) {
@@ -371,11 +376,11 @@ func fragmentIndependent(seg []byte, track uint32) bool {
 		}
 		flags, ok := firstSampleFlags(tfhd, child(t.body, "trun"))
 		if !ok {
-			return true
+			return false
 		}
 		return flags&0x10000 == 0
 	}
-	return true
+	return false
 }
 
 func firstSampleFlags(tfhd, trun []byte) (uint32, bool) {

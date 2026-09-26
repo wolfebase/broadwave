@@ -2,6 +2,7 @@ package live
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -118,8 +119,29 @@ func TestPackListsAPartBeforeTheSegmentCloses(t *testing.T) {
 	if strings.Contains(playlist, "#EXTINF") {
 		t.Fatalf("the first fragment closed a segment:\n%s", playlist)
 	}
-	if !strings.Contains(playlist, "CAN-BLOCK-RELOAD=YES") || !strings.Contains(playlist, "PART-HOLD-BACK=1.000") {
-		t.Fatalf("playlist control:\n%s", playlist)
+	partDur := 0.0
+	for _, line := range strings.Split(playlist, "\n") {
+		v, ok := strings.CutPrefix(line, "#EXT-X-PART:DURATION=")
+		if !ok {
+			continue
+		}
+		if i := strings.IndexByte(v, ','); i >= 0 {
+			v = v[:i]
+		}
+		partDur, err = strconv.ParseFloat(v, 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		break
+	}
+	// This source's group of pictures is two seconds. Advertising 0.500 would
+	// make the player treat the whole fragment as half a second.
+	hold := 0.0
+	if i := strings.Index(playlist, "PART-HOLD-BACK="); i >= 0 {
+		_, _ = fmt.Sscanf(playlist[i+len("PART-HOLD-BACK="):], "%f", &hold)
+	}
+	if partDur < 1.5 || hold+0.001 < partDur*3 || !strings.Contains(playlist, "CAN-BLOCK-RELOAD=YES") {
+		t.Fatalf("part %.3f hold %.3f, playlist:\n%s", partDur, hold, playlist)
 	}
 	fixed := time.Date(2026, 9, 26, 4, 0, 0, 0, time.UTC)
 	tl := NewTimeline()
