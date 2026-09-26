@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.1 — 2026-09-25
+
+### Fixed
+
+- Restoring a backup keeps playlist passwords.
+- A sports key stays out of the log when a score request fails.
+
 ## 0.9.0 — 2026-09-25
 
 Multiview fills the tile, and the apps can be tried with no server.

@@ -99,6 +99,28 @@ func TestSettingsRejectUnknown(t *testing.T) {
 	}
 }
 
+func TestCredentialValuesIncludesTheSportsKey(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	const key = "user-typed-sports-key"
+	if err := s.PutSettings(context.Background(), map[string]string{"sportsdbKey": key}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.CredentialValues(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range got {
+		if v == key {
+			return
+		}
+	}
+	t.Fatalf("sports key missing from %v", got)
+}
+
 func numbers(channels []Channel) []string {
 	out := make([]string, len(channels))
 	for i, ch := range channels {
