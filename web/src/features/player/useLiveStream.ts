@@ -148,8 +148,8 @@ export function useLiveStream(
     })();
     const beacon = () => {
       if (released || !joined) return;
-      released = true;
-      navigator.sendBeacon?.(`/api/v1/watch/${id}/stop`, new Blob([JSON.stringify({ rendition: joined })], { type: "application/json" }));
+      const body = new Blob([JSON.stringify({ rendition: joined })], { type: "application/json" });
+      if (navigator.sendBeacon?.(`/api/v1/watch/${id}/stop`, body)) released = true;
     };
     window.addEventListener("pagehide", beacon);
     return () => {

@@ -97,7 +97,7 @@ func TestHLSInputReconnects(t *testing.T) {
 
 func TestOpeningSegmentsAreShort(t *testing.T) {
 	live := strings.Join(RenditionArgs(0, Source{VideoCodec: "MPEG2"}, Rendition{Video: "720", Audio: "aac2"}, "libx264", ""), " ")
-	for _, want := range []string{"-probesize 8000000", "-analyzeduration 1000000", "frag_keyframe", "delay_moov", "pipe:1", "-muxdelay 0", "-force_key_frames source"} {
+	for _, want := range []string{"-probesize 8000000", "-analyzeduration 1000000", "frag_keyframe", "delay_moov", "pipe:1", "-muxdelay 0", "-force_key_frames source", "-g 600", "-sc_threshold 0"} {
 		if !strings.Contains(live, want) {
 			t.Errorf("missing %q in %s", want, live)
 		}
@@ -322,6 +322,90 @@ func TestRenditionsShareOneTimeline(t *testing.T) {
 			if s.dur > 1200*time.Millisecond {
 				t.Errorf("%s is %s; this fixture's groups of pictures are half a second", s.name, s.dur)
 			}
+		}
+	}
+}
+
+// A source group longer than the old two-second interval must still close
+// copy and transcode on the same frame. -g used to insert the extra cut.
+func TestLongGroupOfPicturesCutsTogether(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.ts")
+	gen := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc=size=640x360:rate=30000/1001", "-f", "lavfi", "-i", "sine=frequency=440",
+		"-t", "7", "-c:v", "libx264", "-preset", "ultrafast", "-g", "90", "-sc_threshold", "0",
+		"-c:a", "ac3", "-output_ts_offset", "95000", "-f", "mpegts", src)
+	if out, err := gen.CombinedOutput(); err != nil {
+		t.Fatalf("source: %v %s", err, out)
+	}
+	source := Source{VideoCodec: "H264", AudioCodec: "AC3", Progressive: true}
+	run := func(r Rendition) []float64 {
+		out := filepath.Join(dir, r.Key())
+		if err := os.MkdirAll(out, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		in, err := os.Open(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer in.Close()
+		cmd := exec.Command(ffmpeg, RenditionArgs(0, source, r, "libx264", "")...)
+		cmd.Dir = out
+		cmd.Stdin = in
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		packErr := Pack(out, stdout, nil)
+		waitErr := cmd.Wait()
+		if packErr != nil || waitErr != nil {
+			t.Fatalf("%s: pack %v wait %v %s", r.Key(), packErr, waitErr, stderr.String())
+		}
+		raw, err := os.ReadFile(filepath.Join(out, "index.m3u8"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var durs []float64
+		for _, line := range strings.Split(string(raw), "\n") {
+			v, ok := strings.CutPrefix(line, "#EXTINF:")
+			if !ok {
+				continue
+			}
+			f, err := strconv.ParseFloat(strings.TrimSuffix(v, ","), 64)
+			if err != nil {
+				t.Fatal(err)
+			}
+			durs = append(durs, f)
+		}
+		return durs
+	}
+	copyDurs := run(Rendition{Video: "copy", Audio: "copy"})
+	transDurs := run(Rendition{Video: "540", Audio: "aac2", Mode: "broadcast"})
+	if len(copyDurs) < 2 || len(transDurs) < 2 {
+		t.Fatalf("cuts: copy %v transcode %v", copyDurs, transDurs)
+	}
+	n := len(copyDurs)
+	if len(transDurs) < n {
+		n = len(transDurs)
+	}
+	if d := len(copyDurs) - len(transDurs); d > 1 || d < -1 {
+		t.Fatalf("cuts differ: copy %v transcode %v", copyDurs, transDurs)
+	}
+	for i := 0; i < n-1; i++ {
+		if copyDurs[i] < 2.5 {
+			t.Errorf("copy segment %d is %.3fs; the source group is 3s", i, copyDurs[i])
+		}
+		if d := copyDurs[i] - transDurs[i]; d > 0.08 || d < -0.08 {
+			t.Errorf("segment %d: copy %.3f transcode %.3f", i, copyDurs[i], transDurs[i])
 		}
 	}
 }

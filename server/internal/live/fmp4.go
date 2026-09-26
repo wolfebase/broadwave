@@ -107,6 +107,88 @@ func fragmentPTS(seg []byte, track, scale uint32) (int64, bool) {
 	return 0, false
 }
 
+// fragmentDuration is the video samples in one fragment, in 90 kHz ticks.
+// The playlist can name that length before the next fragment arrives.
+func fragmentDuration(seg []byte, track, scale uint32) (int64, bool) {
+	moof := child(seg, "moof")
+	for _, t := range boxes(moof) {
+		if t.kind != "traf" {
+			continue
+		}
+		tfhd := child(t.body, "tfhd")
+		if len(tfhd) < 8 || binary.BigEndian.Uint32(tfhd[4:8]) != track {
+			continue
+		}
+		def, hasDef := defaultSampleDuration(tfhd)
+		sum, ok := trunDuration(child(t.body, "trun"), def, hasDef)
+		if !ok || sum <= 0 || scale == 0 {
+			return 0, false
+		}
+		return sum * 90000 / int64(scale), true
+	}
+	return 0, false
+}
+
+func defaultSampleDuration(tfhd []byte) (uint32, bool) {
+	if len(tfhd) < 8 {
+		return 0, false
+	}
+	flags := uint32(tfhd[1])<<16 | uint32(tfhd[2])<<8 | uint32(tfhd[3])
+	if flags&0x8 == 0 {
+		return 0, false
+	}
+	off := 8
+	if flags&0x1 != 0 {
+		off += 8
+	}
+	if flags&0x2 != 0 {
+		off += 4
+	}
+	if off+4 > len(tfhd) {
+		return 0, false
+	}
+	return binary.BigEndian.Uint32(tfhd[off : off+4]), true
+}
+
+func trunDuration(trun []byte, def uint32, hasDef bool) (int64, bool) {
+	if len(trun) < 8 {
+		return 0, false
+	}
+	flags := uint32(trun[1])<<16 | uint32(trun[2])<<8 | uint32(trun[3])
+	count := int(binary.BigEndian.Uint32(trun[4:8]))
+	if count <= 0 {
+		return 0, false
+	}
+	if flags&0x100 == 0 {
+		if !hasDef {
+			return 0, false
+		}
+		return int64(def) * int64(count), true
+	}
+	off := 8
+	if flags&0x1 != 0 {
+		off += 4
+	}
+	if flags&0x4 != 0 {
+		off += 4
+	}
+	per := 4
+	for _, f := range []uint32{0x200, 0x400, 0x800} {
+		if flags&f != 0 {
+			per += 4
+		}
+	}
+	var sum int64
+	for i := 0; i < count; i++ {
+		if off+4 > len(trun) {
+			return 0, false
+		}
+		sum += int64(binary.BigEndian.Uint32(trun[off : off+4]))
+		off += per
+	}
+	return sum, sum > 0
+}
+
 func firstCompositionOffset(trun []byte) int64 {
 	if len(trun) < 8 {
 		return 0

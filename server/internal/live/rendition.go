@@ -399,6 +399,11 @@ func renditionProfile(video string) string {
 // n_forced*2 drifts off the broadcast clock the same way.
 const openingKeyframes = "source"
 
+// sourceKeyint is only a ceiling. -g still inserts an IDR when it is shorter
+// than the source group of pictures, and the copy of that broadcast does not
+// have that frame. Ten seconds at 60 fps is past a broadcast group.
+const sourceKeyint = 600
+
 // RenditionArgs builds ffmpeg for one live rendition. Timestamps are kept from
 // the broadcast (-copyts). fMP4 still starts each encode at zero, so each
 // rendition keeps its own wall clock (see rendition.clock).
@@ -469,9 +474,9 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		interlaced := fieldDoubled(src.VideoCodec, g.Mode, src.Progressive, src.Lace)
 		field := interlaced && !smallPicture(g)
 		width, height, rate := outputSize(g, field)
-		fps, gop := pictureRate(g, field)
+		fps, _ := pictureRate(g, field)
 		args = append(args, "-vf", videoFilter(g, vaapiDeintMode(g, interlaced), interlaced, field, width, height, fps))
-		args = append(args, videoCodec(outEnc, rate, gop)...)
+		args = append(args, videoCodec(outEnc, rate, sourceKeyint)...)
 		args = append(args, "-force_key_frames", openingKeyframes)
 	} else {
 		args = append(args, "-c:v", "copy")

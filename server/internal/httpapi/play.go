@@ -1084,7 +1084,9 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Cache-Control", "max-age=3600")
+	// A restarted rendition reuses seg00000 and part00000. An hour-long cache
+	// would play the previous file under that name.
+	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFile(w, r, path)
 }
 
