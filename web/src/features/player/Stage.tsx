@@ -29,6 +29,7 @@ export function Stage({
   onClose,
   badge,
   onTogglePlay,
+  loading,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   rootRef?: RefObject<HTMLElement | null>;
@@ -56,6 +57,8 @@ export function Stage({
   onClose?: () => void;
   badge?: ReactNode;
   onTogglePlay?: () => void;
+  /** Shown over the picture until the first frame. The chrome stays up meanwhile. */
+  loading?: ReactNode;
 }) {
   const [paused, setPaused] = useState(false);
   const [timedIdle, setTimedIdle] = useState(false);
@@ -81,7 +84,7 @@ export function Stage({
     };
   }, [videoRef]);
 
-  const showChrome = paused || open || mode === "mini" || Boolean(error);
+  const showChrome = paused || open || mode === "mini" || Boolean(error) || Boolean(loading);
   const idle = !showChrome && timedIdle;
   const [seenShow, setSeenShow] = useState(showChrome);
   if (seenShow !== showChrome) {
@@ -142,6 +145,7 @@ export function Stage({
       aria-label={mode === "mini" ? `Now playing: ${title}` : "Player"}
     >
       <video ref={videoRef} className={videoClass} autoPlay playsInline onClick={mode === "mini" ? onExpand : toggle} onDoubleClick={fullscreen} />
+      {loading && !error ? loading : null}
       {mode === "mini" ? (
         <div className="mini-bar">
           <button type="button" className="mini-title" onClick={onExpand} aria-label="Open player">
@@ -156,7 +160,7 @@ export function Stage({
           </button>
         </div>
       ) : null}
-      {mode === "full" && paused ? (
+      {mode === "full" && paused && !loading ? (
         <button type="button" className="stage-fab" onClick={toggle} aria-label="Play">
           <PlayIcon />
         </button>

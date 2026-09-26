@@ -84,6 +84,7 @@ export function LivePlayer({
   const typedTimer = useRef(0);
 
   const airing = airingAt(index, channel.id, now);
+  const tuning = useFirstFrame(videoRef, `${channel.id}:${opts.quality}:${opts.audio}:${opts.track}:${opts.even}:${picture}`);
   const scores = useScoreMap();
   const active = recordings.find((r) => r.status === "recording" && r.channelId === channel.id);
 
@@ -262,6 +263,7 @@ export function LivePlayer({
         ) : null
       }
       badge={syncBadge}
+      loading={tuning ? <TuningCard channel={channel} show={airing?.title} art={airing?.imageUrl ? `/media/art/airing/${airing.id}?w=960` : ""} mini={mode === "mini"} /> : null}
       tools={
         <>
           <button type="button" className={panel === "guide" ? "glass-icon on" : "glass-icon"} onClick={() => setPanel((p) => (p === "guide" ? "none" : "guide"))} aria-label="Channels">
@@ -499,4 +501,59 @@ function formatBehind(seconds: number) {
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
   return `${m}m ${s % 60}s`;
+}
+
+/**
+ * True from a channel or setting change until the picture is moving. The first
+ * frame alone is not enough: sync can hold it while the room catches up.
+ */
+function useFirstFrame(videoRef: RefObject<HTMLVideoElement | null>, key: string) {
+  const [readyKey, setReadyKey] = useState("");
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    let from = -1;
+    const onTime = () => {
+      if (video.paused || video.readyState < 3) return;
+      if (from < 0) from = video.currentTime;
+      else if (video.currentTime - from >= 0.3) setReadyKey(key);
+    };
+    video.addEventListener("timeupdate", onTime);
+    return () => video.removeEventListener("timeupdate", onTime);
+  }, [videoRef, key]);
+  return readyKey !== key;
+}
+
+const tuneSteps = [
+  { at: 0, text: "Tuning the antenna" },
+  { at: 3000, text: "Starting the picture" },
+  { at: 7000, text: "Lining up with live" },
+  { at: 18000, text: "Still tuning. A weak signal can take longer" },
+];
+
+function TuningCard({ channel, show, art, mini }: { channel: Channel; show?: string; art: string; mini: boolean }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const started = performance.now();
+    const id = window.setInterval(() => setElapsed(performance.now() - started), 500);
+    return () => window.clearInterval(id);
+  }, [channel.id]);
+  const step = [...tuneSteps].reverse().find((s) => elapsed >= s.at) ?? tuneSteps[0];
+  return (
+    <div className={mini ? "tuning mini" : "tuning"} role="status" aria-live="polite">
+      {art ? <span className="tuning-art" aria-hidden="true" style={{ backgroundImage: `url(${art})` }} /> : null}
+      <div className="tuning-card">
+        <p className="tuning-num">
+          {channel.displayNumber} <span>{channel.displayName}</span>
+        </p>
+        {show && show !== channel.displayName ? <p className="tuning-show">{show}</p> : null}
+        {mini ? null : (
+          <>
+            <span className="tuning-bar" aria-hidden="true" />
+            <p className="tuning-step">{step.text}…</p>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
