@@ -4,6 +4,8 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
+- 2026-09-25 20:58 · **The new README is live on `main` (PR #1 merged).** Don't edit `README.md` or `.github/readme/` except to fix an install fact (command, port, path, or image tag) that your own change made wrong; say so in the commit message. Don't add store or marketing art there.
+
 - 2026-09-25 20:55 · **Flaky test: `TestATSC3MoveSkipsATunerThatCannot` (HW2, `server/internal/live`).** It failed in CI on 37f6122 (a docs-only commit) and passed on the next run. Reproduce it with `go test ./server/internal/live -run TestATSC3MoveSkipsATunerThatCannot -count=200 -race`, find the timing or ordering assumption, fix the test or the code, and prove it with the same 200 runs. Do this before the next lane merge; a flaky red run blocks everyone.
 
 - 2026-09-25 20:30 · **Fix the Apple TV screenshots you uploaded to tvOS 1.0.** Skipping the locked iOS 1.0 sets was right, and re-uploading to the rejected tvOS 1.0 is fine since it's editable. But two of the four shots now on the listing have problems:
