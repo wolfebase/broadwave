@@ -3,13 +3,16 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **v0.9.0 phase close**. Changelog is in this commit. Next: tag `v0.9.0`, push, wait for the GHCR image, deploy production with `GHCR_IMAGE=ghcr.io/wolfebase/broadwave:0.9.0 MODE=ghcr`, smoke one channel, TestFlight, then record the evidence here and in `UNRAID_LOG.md`. **AS4 stays open.** iOS 1.0 is `WAITING_FOR_REVIEW`. Submitting 1.1 would take it out of review. Do not create or submit 1.1.
+- Current task: **v0.9.0 phase close, in flight.** Tag `v0.9.0` is `690cdb8`, pushed, GitHub release notes are up. CI `36210944109` is green. Release image run `36210944418` is still building (`docker/build-push-action`). When it succeeds, deploy with `GHCR_IMAGE=ghcr.io/wolfebase/broadwave:0.9.0 MODE=ghcr UNRAID_HOST=root@192.168.1.2 scripts/deploy-unraid.sh`, smoke channel 1, and write `UNRAID_LOG.md`. **AS4 stays open.** Do not create or submit 1.1 while iOS 1.0 is `WAITING_FOR_REVIEW`.
+- Staging `:8490` is already the `v0.9.0` binary (image base still `ghcr.io/wolfebase/broadwave:0.7.1`). Channel 1 smoke: `1280x720 59.94`, segment 2.002s, 0 decode errors, 240 frames, tuner released. Both servers `ours:false` after.
+- TestFlight build 249: iOS archive succeeded and the upload is in progress. tvOS archive follows. `scripts/testflight.sh` is modified and not committed. Xcode 27 applies a command-line provisioning profile to Swift packages, so the script now writes the distribution profile onto the two app targets only. Log: the background `scripts/testflight.sh` started after that fix. Do not start a second upload.
+- Product review screenshots are landing in `.evidence/v090-review/` (not committed). Lanes still running, not in the tag: G8 metrics and K2 Playwright (worktrees under `~/.grok/worktrees/active-broadwave/`, started this round). E8, N3, and D8 worktrees from the previous round are still unmerged. Do not start a second of any of those.
 - App Review unchanged at 21:08 CDT: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply. Do not reply in the Resolution Center, and do not remove iOS from review.
 - CI on `693f77f` is green (`36210419846`, web, apple, server, docker).
 - Lanes finished, not in this tag: E8 storage `~/.grok/worktrees/active-broadwave/subagent-01a0db46-1013-74f0-a6e5-07562ad739f6` (base `f7f838c`, migration 0021, needs our review and `make check`). N3 PWA `~/.grok/worktrees/active-broadwave/subagent-01a0db46-1013-74f0-a6e5-07676a1e9bab` (base `f7f838c`, manifest, service worker, TV focus; no browser walkthrough). D8 `~/.grok/worktrees/active-broadwave/subagent-01a0db31-f84a-7692-bbd4-2a7b47d5c0bb` is stopped and behind main (base `422dd6f`): server alerts plus a web toast, no Apple notification, no screenshots. Do not take lane PROGRESS edits. Do not start a second D8, E8, or N3 lane.
 - Disk: 34 GB free. Above 15 GB.
 - No tuner left held. Next recording was Jeopardy on 2026-09-27. Confirm `/api/v1/schedule` before tuning.
-- Production `Broadwave` `:8477` is still `v0.8.0` until the GHCR deploy. Staging `:8490` was not redeployed with this tag yet.
+- Production `Broadwave` `:8477` is still `v0.8.0` until the GHCR deploy. Staging `:8490` is the `v0.9.0` binary, as the smoke line above says.
 - The repo is `~/Projects/active/broadwave`.
 
 ## Read first (reviews 2–4; details in MASTER_PLAN 0.1a–0.1d)
