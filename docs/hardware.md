@@ -20,7 +20,7 @@ A closed tuner reports `TargetIP` `closed` so the next tune skips it. Codec byte
 | DUAL, old firmware (HDHR3-US, version 20140301) | 2 | No `DeviceAuth`, lineup without codecs, upgrade route is 404. Tune, scan, and failover still run. | verified on fake |
 | Tuner counts 1–8 | override on CONNECT DUO | Discover count, status length, busy at the cap. Failover when the count is 2 or more. One tuner fails the next tune after it is closed. | verified on fake |
 
-CONNECT DUO is the only model this project has already read on a real device: discover, lineup, and tuner status are in `docs/dev-lab.md`. This table does not add a real-hardware run.
+CONNECT DUO is the only model this project has already read on a real device (discover, lineup, and tuner status). This table does not add a real-hardware run.
 
 A pool keeps ATSC 3.0 tuners for HEVC + AC-4 (a guide number alone does not count). A 1.0 channel uses a tuner that cannot do 3.0 when one is free. The picker test covers two DUOs plus a FLEX 4K, eight tuners in all. A device that disappears mid-stream opens that same frequency on the next device. This house has one CONNECT DUO, so that path is verified on fakes only.
 

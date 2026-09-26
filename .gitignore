@@ -40,3 +40,29 @@ docs/lab/runs/
 # Local evidence and browser sessions. Cite the path in PROGRESS; do not commit them.
 .evidence/
 .playwright-cli/
+
+# Private: agent setup, internal plans and logs, home-server ops, dev evidence.
+# These stay on the maintainer's disk and are never published.
+.claude/
+.cursor/
+AGENTS.md
+CLAUDE.md
+docs/plan/
+docs/lab/
+docs/dev-lab.md
+docs/appstore/
+docs/brand.md
+docs/screenshots/*
+!docs/screenshots/appstore/
+scripts/agent-*.sh
+scripts/agent-view.py
+scripts/unraid-guard.py
+scripts/deploy-unraid.sh
+scripts/staging-watch.sh
+scripts/testflight.sh
+scripts/picture-lab.sh
+scripts/picture-lab/
+web/tsconfig.tsbuildinfo
+.playwright-cli/
+.evidence/
+.build/

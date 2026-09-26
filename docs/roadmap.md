@@ -1,13 +1,13 @@
 # Roadmap
 
-> Superseded for execution by `docs/plan/MASTER_PLAN.md` (phases A-L) and its checklist `docs/plan/PROGRESS.md`. This file keeps the high-level history.
+> This file keeps the high-level history. Current work is tracked in the release notes (CHANGELOG.md).
 
 Phases run roughly in order. Later phases can start when their dependencies are in place.
 
 ## 1. Foundation
 
 - [x] Git, CI, monorepo layout (`server/`, `web/`, `apple/`, `design/`), Makefile
-- [x] Agent guidance: `AGENTS.md`, scoped rules, architecture and decisions
+- [x] Architecture notes and decision records
 - [x] Fix-first bugs: macOS disk stats, periodic guide refresh, fan-out subscriber leak
 - [x] Numbered SQL migrations
 - [x] `/api/v1` contract in OpenAPI with generated TypeScript types (Swift models are hand-mirrored in BroadwaveKit for now)
