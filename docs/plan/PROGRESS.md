@@ -3,8 +3,8 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **AS3** after this commit. App Review unchanged: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply. Do not reply in the Resolution Center. Review notes on both versions now say Try the demo.
-- Lanes running: D8 game alerts `~/.grok/worktrees/active-broadwave/subagent-01a0db31-f84a-7692-bbd4-2a7b47d5c0bb`. N7 Roku notes `…2a82a35a1984`. Do not take PROGRESS edits from either. The chip and empty D8 worktrees are removed. D8 stays open until that lane is reviewed. Chip CI `36205966509` is green.
+- Current task: **AS3**. App Review unchanged: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply. Do not reply in the Resolution Center. Review notes on both versions now say Try the demo.
+- Lanes: D8 game alerts still running at `~/.grok/worktrees/active-broadwave/subagent-01a0db31-f84a-7692-bbd4-2a7b47d5c0bb`. Do not take its PROGRESS edits. N7's notes were checked against developer.roku.com and the rendition bitrates, then committed from here. D8 stays open until that lane is reviewed. HW5 CI run `36206595790` was in progress at this commit.
 - Cleared this round: G8 and D8 clones removed. G8 was unfinished (no slog everywhere). D8 was logic only, no toast.
 - No tuner left held. Both servers `ours:false` after the demo shots. Next recording is Jeopardy on 2026-09-27.
 - Disk: 43 GB free at the start of this round. Above 15 GB.
@@ -155,7 +155,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 - [ ] N4 Google Cast with a synced custom receiver
 - [ ] N5 DLNA/UPnP media server (optional)
 - [ ] N6 Android / Android TV / Fire TV app (or `docs/android.md` design)
-- [ ] N7 Roku design notes
+- [x] N7 Roku design notes. `docs/roku.md` (80 lines). A future channel is SceneGraph and the platform Video node, not hls.js. The first slice is one full-screen live player on the shared fMP4 playlist. Checked on 2026-09-25 against `https://developer.roku.com/dev/docs/media`: CMAF must not mux audio and video; AVC is up to 10 Mbps with a 1.5× peak; live playback must stay 30 seconds off the live edge; an AC-3 track still needs AAC stereo; chunks are recommended at 4–6 seconds and live segments under 5 seconds, constant, starting on an IDR; not every device plays 1080p60. Our numbers, from `picture.go` and `rooms.go`: 1080i is 14 Mbps, 1080p is 10 Mbps, 720p field-rate is 8 Mbps and progressive is 5 Mbps, AAC stereo is 160 kbps, room targets are 6, 10, and 20 seconds, and the rate trim is 3 percent. The note leaves muxed fMP4 playback, 59.94, the 30-second line, position versus program date-time, rate control, and `roWebSocket` on plain `ws` as unknown. No code, no tuner. `make check` green.
 
 ## Phase A — Stabilize and ship
 - [x] A1 Setup wizard verified at desktop/phone; robust first-run detection (commit d6bd17f)
