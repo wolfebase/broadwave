@@ -33,6 +33,8 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
         working-directory: web
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - run: npm run lint
         working-directory: web
       - run: npm run build

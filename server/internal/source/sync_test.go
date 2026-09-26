@@ -1,6 +1,7 @@
 package source
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,24 @@ import (
 	"broadwave/internal/hdhr"
 	"broadwave/internal/store"
 )
+
+func TestBasesForSkipsBroadcastWhenE2E(t *testing.T) {
+	t.Setenv("BROADWAVE_E2E", "1")
+	bases, err := basesFor(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bases) != 0 {
+		t.Fatalf("broadcast bases %v", bases)
+	}
+	if _, err := basesFor(context.Background(), "203.0.113.10"); err == nil {
+		t.Fatal("a LAN address was allowed")
+	}
+	// userinfo would make url.Parse dial the host after the @.
+	if _, err := basesFor(context.Background(), "127.0.0.1:9@203.0.113.10"); err == nil {
+		t.Fatal("a userinfo address was allowed")
+	}
+}
 
 func TestSyncAddsACompatibleDeviceByAddress(t *testing.T) {
 	var srv *httptest.Server

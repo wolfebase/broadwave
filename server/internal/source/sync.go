@@ -113,11 +113,19 @@ func writeDevices(ctx context.Context, st *store.Store, client *hdhr.Client, bas
 
 func basesFor(ctx context.Context, ip string) ([]string, error) {
 	ip = strings.TrimSpace(ip)
+	if discovery.Quiet() {
+		if ip == "" {
+			return nil, nil
+		}
+		if !loopbackHost(ip) {
+			return nil, fmt.Errorf("this test server only uses the local fake tuner")
+		}
+	}
 	if ip != "" {
 		ip = strings.TrimPrefix(ip, "http://")
 		ip = strings.TrimPrefix(ip, "https://")
 		ip = strings.TrimRight(ip, "/")
-		if strings.Contains(ip, "/") || strings.Contains(ip, " ") {
+		if strings.ContainsAny(ip, "/ @") {
 			return nil, fmt.Errorf("enter a host or host:port")
 		}
 		if _, _, err := net.SplitHostPort(ip); err == nil {
@@ -174,6 +182,29 @@ func basesFor(ctx context.Context, ip string) ([]string, error) {
 		}
 	}
 	return bases, nil
+}
+
+func loopbackHost(ip string) bool {
+	ip = strings.TrimPrefix(ip, "http://")
+	ip = strings.TrimPrefix(ip, "https://")
+	ip = strings.TrimRight(ip, "/")
+	if ip == "" || strings.ContainsAny(ip, "/ @") {
+		return false
+	}
+	host := ip
+	if h, port, err := net.SplitHostPort(ip); err == nil {
+		if port == "" {
+			return false
+		}
+		for _, c := range port {
+			if c < '0' || c > '9' {
+				return false
+			}
+		}
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	return host == "127.0.0.1" || host == "localhost" || host == "::1"
 }
 
 // broadcastBases returns http://<sender> for replies on this LAN.
