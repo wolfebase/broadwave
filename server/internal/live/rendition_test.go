@@ -178,40 +178,32 @@ func TestCopyRenditionKeepsBroadcastTimestamps(t *testing.T) {
 
 // A multi-thousand-second timestamp step must not make the resampler
 // allocate the missing audio. Hard compensation injects one sample per
-// missing tick; 3000s of that is about half a gigabyte.
+// missing tick; 9000s of that is over a gigabyte.
+//
+// The step is applied in the filter graph. Two MPEG-TS clips run together
+// are rewritten by the demuxer into a 33-bit wrap, and that wrap does not
+// reach the resampler on every ffmpeg build.
 func TestAudioJumpDoesNotFillTheGap(t *testing.T) {
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		t.Skip("ffmpeg not installed")
 	}
 	dir := t.TempDir()
-	makeClip := func(name, offset string) {
-		t.Helper()
-		cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
-			"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
-			"-t", "0.4", "-c:a", "ac3", "-output_ts_offset", offset, "-f", "mpegts", filepath.Join(dir, name))
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("clip %s: %v %s", name, err, out)
-		}
-	}
-	makeClip("a.ts", "3000")
-	makeClip("b.ts", "0")
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
+	graph := "[1:a]asetpts=PTS+9000/TB[b];[0:a][b]concat=n=2:v=0:a=1," + audioFilter(Rendition{Audio: "aac2"}) + "[a]"
 	cmd := exec.CommandContext(ctx, ffmpeg, "-hide_banner", "-loglevel", "warning",
-		"-fflags", "+genpts+discardcorrupt", "-copyts",
-		"-i", "concat:"+filepath.Join(dir, "a.ts")+"|"+filepath.Join(dir, "b.ts"),
-		"-af", audioFilter(Rendition{Audio: "aac2"}),
-		"-c:a", "aac", "-t", "2", filepath.Join(dir, "out.m4a"))
+		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=0.4",
+		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=0.4",
+		"-filter_complex", graph,
+		"-map", "[a]", "-c:a", "aac", "-t", "3", filepath.Join(dir, "out.m4a"))
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	err = cmd.Run()
 	if ctx.Err() != nil {
 		t.Fatalf("audio jump did not finish: %s", stderr.String())
 	}
-	if err != nil && !strings.Contains(stderr.String(), "Failed to compensate") {
-		// A short concat can exit after the inputs end. Only a real failure
-		// that is not the compensation error is unexpected when no file exists.
+	if err != nil {
 		if _, statErr := os.Stat(filepath.Join(dir, "out.m4a")); statErr != nil {
 			t.Fatalf("encode: %v %s", err, stderr.String())
 		}
