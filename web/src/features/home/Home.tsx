@@ -125,7 +125,7 @@ export function Home() {
           <div className="hero-body">
             <div className="hero-meta">
               <LiveDot label="Live now" />
-              <span className="hero-cat">{categoryLabel[hero.cat]}</span>
+              {hero.cat !== "other" ? <span className="hero-cat">{categoryLabel[hero.cat]}</span> : null}
             </div>
             <h1 className="hero-title">{hero.airing?.title ?? hero.channel.displayName}</h1>
             {hero.airing?.subtitle ? <p className="hero-sub">{hero.airing.subtitle}</p> : null}

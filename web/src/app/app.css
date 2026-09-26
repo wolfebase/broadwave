@@ -9,7 +9,7 @@
   top: 10px;
   z-index: 40;
   margin: 10px auto 0;
-  width: min(1180px, calc(100% - 24px));
+  width: min(var(--content-max), calc(100% - 24px));
   display: flex;
   align-items: center;
   gap: var(--space-4);
@@ -131,13 +131,13 @@
 .hero-skel {
   min-height: 280px;
   margin: 24px auto;
-  max-width: 1180px;
+  max-width: var(--content-max);
 }
 
 .skel-row {
   display: flex;
   gap: 12px;
-  max-width: 1180px;
+  max-width: var(--content-max);
   margin: 0 auto;
   padding: 0 24px;
 }
@@ -157,7 +157,7 @@
 }
 
 .banner-error {
-  max-width: 1180px;
+  max-width: var(--content-max);
   margin: 12px auto 0;
   padding: 10px 16px;
   border-radius: var(--radius-md);
@@ -202,9 +202,9 @@
 }
 
 .banner-update {
-  max-width: 1180px;
+  max-width: var(--content-max);
   margin: 12px auto 0;
-  width: min(1180px, calc(100% - 32px));
+  width: min(var(--content-max), calc(100% - 24px));
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -226,7 +226,6 @@
 }
 
 .layout-tv .banner-update {
-  max-width: 1680px;
   font-size: var(--type-headline-size);
 }
 
