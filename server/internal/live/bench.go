@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 )
 
 var speedPattern = regexp.MustCompile(`speed=\s*([0-9]+(?:\.[0-9]+)?)x`)
@@ -82,6 +84,16 @@ func BenchEncoder(ctx context.Context, ffmpeg, encoder string) (float64, error) 
 		encoder = "libx264"
 	}
 	cmd := exec.CommandContext(ctx, ffmpeg, benchArgs(encoder)...)
+	// CommandContext kills the direct child only. A shell that started the
+	// encode keeps the pipes open, and Wait then sits until that child exits.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	cmd.WaitDelay = time.Second
 	out, err := cmd.CombinedOutput()
 	speed := ParseSpeed(string(out))
 	if err != nil {
