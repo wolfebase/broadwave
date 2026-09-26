@@ -307,7 +307,10 @@ func videoCodec(encoder, rate string, gop int) []string {
 	default:
 		// scenecut would insert a keyframe the source does not have, and the
 		// copy rendition of the same broadcast would cut somewhere else.
-		return []string{"-c:v", "libx264", "-preset", "veryfast", "-sc_threshold", "0", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
+		// Frame threads hold each picture until one frame per core is in
+		// hand, about a second on a large machine, so the first fragment
+		// waits out that queue. Slice threads use the cores without it.
+		return []string{"-c:v", "libx264", "-preset", "veryfast", "-sc_threshold", "0", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g, "-x264-params", "sliced-threads=1"}
 	}
 }
 

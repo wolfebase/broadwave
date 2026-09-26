@@ -100,10 +100,14 @@ func TestHLSInputReconnects(t *testing.T) {
 
 func TestOpeningSegmentsAreShort(t *testing.T) {
 	live := strings.Join(RenditionArgs(0, Source{VideoCodec: "MPEG2"}, Rendition{Video: "720", Audio: "aac2"}, "libx264", ""), " ")
-	for _, want := range []string{"-probesize 8000000", "-analyzeduration 1000000", "frag_keyframe", "delay_moov", "pipe:1", "-muxdelay 0", "-force_key_frames source", "-g 600", "-sc_threshold 0"} {
+	for _, want := range []string{"-probesize 8000000", "-analyzeduration 1000000", "frag_keyframe", "delay_moov", "pipe:1", "-muxdelay 0", "-force_key_frames source", "-g 600", "-sc_threshold 0", "sliced-threads=1"} {
 		if !strings.Contains(live, want) {
 			t.Errorf("missing %q in %s", want, live)
 		}
+	}
+	gpu := strings.Join(RenditionArgs(0, Source{VideoCodec: "MPEG2"}, Rendition{Video: "720", Audio: "aac2"}, "h264_vaapi", ""), " ")
+	if strings.Contains(gpu, "sliced-threads") || !strings.Contains(gpu, "h264_vaapi") {
+		t.Fatalf("a hardware encode does not take the software thread cap: %s", gpu)
 	}
 	if strings.Contains(live, "hls_init_time") || strings.Contains(live, "hls_time") || strings.Contains(live, "prev_forced_t") || strings.Contains(live, "frag_duration") {
 		t.Fatalf("a live transcode cuts on the source keyframes: %s", live)
