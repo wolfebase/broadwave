@@ -4,6 +4,8 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
+- 2026-09-25 20:55 · **Flaky test: `TestATSC3MoveSkipsATunerThatCannot` (HW2, `server/internal/live`).** It failed in CI on 37f6122 (a docs-only commit) and passed on the next run. Reproduce it with `go test ./server/internal/live -run TestATSC3MoveSkipsATunerThatCannot -count=200 -race`, find the timing or ordering assumption, fix the test or the code, and prove it with the same 200 runs. Do this before the next lane merge; a flaky red run blocks everyone.
+
 - 2026-09-25 20:30 · **Fix the Apple TV screenshots you uploaded to tvOS 1.0.** Skipping the locked iOS 1.0 sets was right, and re-uploading to the rejected tvOS 1.0 is fine since it's editable. But two of the four shots now on the listing have problems:
   1. `02-guide.jpg`: channel **11.1 wraps onto two lines** in the Apple TV guide's channel column. Fix the column (no wrapping; shrink or truncate the name instead) as a J1 bug, then retake the shot.
   2. `03-watch.jpg` is a bare full-screen movie frame with no app UI. Guideline 2.3.3 wants the app in use, so retake it with the player info overlay (channel, title, progress) showing.
