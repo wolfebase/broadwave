@@ -3,16 +3,12 @@
 Tick items as they are verified and committed, in the same commit as the work (`- [x] R3 ... (commit abc1234)`). Keep notes short. Order of work is section 4 of `MASTER_PLAN.md`, not the order of this file.
 
 ## Resume here
-- Current task: **AS2** demo mode. App Review unchanged at 2026-09-25 23:09Z: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply. Steering 18:10: leave E2 alone. E2d is aaef3ac. Sidebar pill is the commit after it.
-- Worktrees still on disk: G8 `subagent-01a0da7b-e02d-7863-b83c-9579d056af5f` (unfinished metrics, do not merge blindly), HW2 `subagent-01a0da13-ca55-7ef2-a4e1-b521ce177ab1` (server patch only, not yet reviewed), D8 `subagent-01a0daac-09a6-7f80-8657-012a128f170c` (alerts logic, no toast). Sidebar checkout and the rejected E8 checkout were removed. Channels-button lane was merged after the shots were read. Next task is AS2.
-- E2 worktree and I1 worktree are already gone.
-- G8 `~/.grok/worktrees/active-broadwave/subagent-01a0da7b-e02d-7863-b83c-9579d056af5f` still has an unmerged metrics diff. slog-everywhere is unfinished. Do not merge until reviewed. It touches `openapi.yaml` and `server.go`.
-- HW2 draft `~/.grok/worktrees/active-broadwave/subagent-01a0da13-ca55-7ef2-a4e1-b521ce177ab1` is still unmerged. Take the server patch only; drop pb7b deletions, PROGRESS, Apple, and CSS. `server/internal/live/handoff_test.go` is part of that patch.
-- D8 logic only, not merged: `~/.grok/worktrees/active-broadwave/subagent-01a0daac-09a6-7f80-8657-012a128f170c` (`alerts.go`, `alerts_test.go`). `go test ./server/internal/sports/ -run TestGameAlerts` passed here. No toast and no screenshots, so D8 stays open. Do not take a PROGRESS edit from that worktree.
-- Sidebar lane `subagent-01a0daac-09a5-7553-a348-fe83a2407fcb` was still running at commit time. Collect it before starting another Apple lane.
-- No tuner was taken. Next recording is Jeopardy on 2026-09-27. Both servers `ours:false` at 22:31Z.
-- Disk: checked 2026-09-25 22:10Z. `df -h ~` is 48 GB free. Above 15 GB.
-- Production `Broadwave` `:8477` is `v0.8.0`. Staging `:8490` is `v0.8.0-33-g8ccb3e1-dirty` (encoder h264_vaapi).
+- Current task: **AS3** screenshot scripts. AS2 is this commit. App Review unchanged: tvOS 1.0 REJECTED (Guideline 2.1), iOS 1.0 WAITING_FOR_REVIEW. The owner sends the reply. Do not reply in the Resolution Center. Review notes on both versions now say Try the demo.
+- HW5 is ready to review in `~/.grok/worktrees/active-broadwave/subagent-01a0daed-1194-7890-b21e-64a74d4a88a9` (`server/internal/live/client_matrix_test.go` only). HW2 port is ready to review in `~/.grok/worktrees/active-broadwave/subagent-01a0daed-1194-7890-b21e-649029f69f68` (server files only). The old HW2 clone `subagent-01a0da13-ca55-7ef2-a4e1-b521ce177ab1` can be removed after that port is merged or rejected. Do not take PROGRESS edits from either lane.
+- Cleared this round: G8 and D8 clones removed. G8 was unfinished (no slog everywhere). D8 was logic only, no toast; copies in `/tmp/broadwave-d8`. D8 stays open.
+- No tuner left held. Both servers `ours:false` after the demo shots. Next recording is Jeopardy on 2026-09-27.
+- Disk: 43 GB free at the start of this round. Above 15 GB.
+- Production `Broadwave` `:8477` is `v0.8.0`. Staging `:8490` was `v0.8.0-33-g8ccb3e1-dirty` and was not redeployed.
 - The repo is `~/Projects/active/broadwave`.
 
 ## Read first (reviews 2–4; details in MASTER_PLAN 0.1a–0.1d)
@@ -25,7 +21,7 @@ Tick items as they are verified and committed, in the same commit as the work (`
 
 ## Phase AS — App Store life
 - [ ] AS1 Review follow-through every round (continuous; record state changes; handle rejections first). 2026-09-25: tvOS 1.0 is Guideline 2.1 Information Needed. Reply and shot list in `docs/appstore/review-2.1-reply.md`. Notes updated on both versions. The owner sends the reply and the recordings.
-- [ ] AS2 "Try Broadwave" demo mode in the apps (DemoServer on loopback, bundled CC BY clips, attribution, airplane-mode test)
+- [x] AS2 "Try Broadwave" demo mode. `DemoServer` listens on 127.0.0.1:18649 only (Network.framework, no Bonjour). A second screen joins that port. `demoServerAnswersOnLoopback` (server id demo, four channels, a current airing, watch playlist with program date-time and no ENDLIST, multiview plan, and a LAN address is refused). `demoRoomCountsBothScreens` (two sockets, members 2). `demoFilmsStayUnder25MB`. Films are 12-second 720p CMAF loops, 5510630 bytes: Big Buck Bunny, Sintel, Tears of Steel, Elephants Dream, CC BY, already credited in About. Fresh simulators with no saved server. Connect shows "Try the demo" (`.evidence/as2/iphone-connect.jpg`). Home, Guide, and side-by-side on iPhone (`.evidence/as2/iphone-home.jpg`, `iphone-guide.jpg`, `iphone-mv.jpg`) and Apple TV (`.evidence/as2/tv-home.jpg`, `tv-guide.jpg`, `tv-mv.jpg`). Playback is 1280×720, 0 dropped, buffer 8.5s on iPhone and 8.4s on Apple TV (`.evidence/as2/iphone-watch.jpg`, `tv-watch.jpg`). Both screens on channel 1 at once: Syncing −233 ms and −220 ms, 13 ms apart (`.evidence/as2/iphone-sync.jpg`, `tv-sync.jpg`). Settings says Demo at `http://127.0.0.1:18649` and "Leave the demo" (`.evidence/as2/iphone-settings.jpg`). Tuners `ours:false` on `:8477` and `:8490` the whole demo pass. Review notes in `docs/appstore/review-notes.txt` (2404 characters) say Try the demo, and those notes were written to both version review details. The simulator airplane switch was not toggled (no synthetic clicks); the listener refuses a non-loopback address and the apps had no saved server. `make check` green.
 - [ ] AS3 `scripts/demo-lineup.sh` + `scripts/appstore-shots.sh` regenerate and upload every screenshot set (JPEG)
 - [ ] AS4 App Store update 1.1 (demo mode, Apple art, multiview fixes, iPad multiview screenshots) submitted on both platforms
 - [ ] AS5 Public TestFlight group with a public link on both platforms

@@ -4,13 +4,14 @@ Effective September 25, 2026. Broadwave is made by Wolfe Up LLC.
 
 ## The short version
 
-Broadwave doesn't collect, sell, or share your data. The apps talk only to the Broadwave server you run at home, and nothing about what you watch leaves that server.
+Broadwave doesn't collect, sell, or share your data. The apps talk only to the Broadwave server you run at home, or, if you choose Try the demo, to a player on the device itself. Nothing about what you watch is sent to Wolfe Up.
 
 ## What the apps do
 
 - **Find your server.** The iPhone, iPad, and Apple TV apps look for a Broadwave server on your local network (Bonjour) or connect to an address you enter. That's why they ask for Local Network access.
 - **Store settings on the device.** The server you chose, your playback preferences, and a cached copy of the guide stay on your device so the app opens quickly. Deleting the app deletes them.
 - **No accounts, ads, analytics, or tracking.** The apps contain no advertising or analytics SDKs, and they don't use the advertising identifier.
+- **Try the demo.** Sample films bundled in the app play on the device. That choice does not contact a server, Wolfe Up, or the internet.
 
 ## What your server does
 

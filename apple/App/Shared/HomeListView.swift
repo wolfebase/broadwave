@@ -76,7 +76,18 @@ struct HomeListView: View {
             places = scan.places
             tunerAddress = scan.tunerAddress
             sharing = scan.sharing
+            note = ""
+        } catch is CancellationError {
+            return
         } catch {
+            try? await Task.sleep(for: .milliseconds(400))
+            if let scan = try? await api.home(fresh: true) {
+                places = scan.places
+                tunerAddress = scan.tunerAddress
+                sharing = scan.sharing
+                note = ""
+                return
+            }
             note = "This network did not answer."
         }
     }

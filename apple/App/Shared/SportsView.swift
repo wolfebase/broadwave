@@ -198,6 +198,11 @@ struct SettingsView: View {
                 HomeListView()
             }
             Section("Server") {
+                if store.server?.id == "demo" {
+                    Text("Sample films on this device. Your server is unchanged.")
+                        .foregroundStyle(.secondary)
+                    Button("Leave the demo", role: .destructive) { store.forget() }
+                }
                 LabeledContent("Name", value: store.info?.name ?? store.server?.name ?? "")
                 LabeledContent("Address", value: store.server?.url.absoluteString ?? "")
                 if let info = store.info {
@@ -206,8 +211,10 @@ struct SettingsView: View {
                         LabeledContent("Encoding", value: enc.replacingOccurrences(of: "h264_", with: "").uppercased())
                     }
                 }
-                Button("Run setup again") { store.presentSetup = true }
-                Button("Use a different server", role: .destructive) { store.forget() }
+                if store.server?.id != "demo" {
+                    Button("Run setup again") { store.presentSetup = true }
+                    Button("Use a different server", role: .destructive) { store.forget() }
+                }
             }
             Section {
                 Picker("Quality", selection: $store.prefs.quality) {

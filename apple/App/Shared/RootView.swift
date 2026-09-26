@@ -133,6 +133,9 @@ struct RootView: View {
         .onOpenURL(perform: open)
         #if DEBUG
             .task {
+                if UserDefaults.standard.bool(forKey: "BroadwaveDemo"), store.server?.id != "demo" {
+                    await store.startDemo()
+                }
                 if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
                     UserDefaults.standard.set("2up", forKey: "BroadwaveMultiviewLayout")
                     store.previewLineup([

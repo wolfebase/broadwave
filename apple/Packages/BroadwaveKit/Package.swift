@@ -8,7 +8,7 @@ let package = Package(
         .library(name: "BroadwaveKit", targets: ["BroadwaveKit"]),
     ],
     targets: [
-        .target(name: "BroadwaveKit"),
+        .target(name: "BroadwaveKit", resources: [.copy("DemoMedia")]),
         .testTarget(name: "BroadwaveKitTests", dependencies: ["BroadwaveKit"]),
     ]
 )

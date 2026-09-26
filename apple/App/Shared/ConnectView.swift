@@ -27,6 +27,16 @@ struct ConnectView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
+                        Button("Try the demo") {
+                            Task { await tryDemo() }
+                        }
+                        .buttonStyle(.glassProminent)
+                        .disabled(checking)
+                        Text("Sample films on this device.")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text("On your network").font(.headline)
                             if discovery.searching, discovery.servers.isEmpty {
@@ -99,6 +109,15 @@ struct ConnectView: View {
             comps.port = 8477
         }
         return comps.url
+    }
+
+    private func tryDemo() async {
+        checking = true
+        defer { checking = false }
+        await store.startDemo()
+        if store.server?.id != "demo" {
+            problem = store.error ?? "The demo did not start."
+        }
     }
 
     private func check(_ url: URL?, name: String?, id: String?) async {

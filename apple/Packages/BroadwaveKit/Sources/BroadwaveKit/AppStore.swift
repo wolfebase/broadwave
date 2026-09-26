@@ -35,21 +35,53 @@ public final class AppStore {
     public init() {
         prefs = Self.load("prefs") ?? Prefs()
         syncEnabled = UserDefaults.standard.object(forKey: "sync") as? Bool ?? true
+        var resumeDemo: FoundServer?
         if let saved: FoundServer = Self.load("server") {
             if let snap = CatalogCache.load(serverID: saved.id) {
                 channels = snap.channels
                 index = GuideIndex(snap.airings)
                 recordings = snap.recordings
             }
-            connect(saved)
+            if saved.id == "demo" {
+                server = saved
+                api = APIClient(base: saved.url)
+                resumeDemo = saved
+            } else {
+                connect(saved)
+            }
         }
         clock = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.now = Date() }
+        }
+        if let resumeDemo {
+            Task { @MainActor in
+                guard await DemoServer.shared.prepare() != nil else {
+                    self.error = "The demo did not start."
+                    self.forget()
+                    return
+                }
+                self.connect(resumeDemo)
+            }
         }
     }
 
     public var connected: Bool {
         api != nil
+    }
+
+    /// True while this screen is playing the bundled films.
+    public var demo: Bool {
+        server?.id == "demo"
+    }
+
+    /// Starts the loopback demo, or joins one already running on this Mac.
+    public func startDemo() async {
+        guard let url = await DemoServer.shared.prepare() else {
+            error = "The demo did not start."
+            return
+        }
+        error = nil
+        connect(FoundServer(id: "demo", name: "Demo", url: url))
     }
 
     public func connect(_ server: FoundServer) {
@@ -120,27 +152,33 @@ public final class AppStore {
             }
         #endif
         guard let api else { return }
+        let base = api.base
         loading = true
         defer { loading = false }
         do {
             let moment = Date()
-            async let info = api.server()
-            async let channels = api.channels()
-            async let airings = api.airings(from: moment.addingTimeInterval(-30 * 60), to: moment.addingTimeInterval(4 * 3600))
-            async let recordings = api.recordings()
-            self.info = try await info
-            if lineup || self.channels.isEmpty {
-                self.channels = try await channels.sorted(by: Channel.guideOrder)
+            async let fetchedInfo = api.server()
+            async let fetchedChannels = api.channels()
+            async let fetchedAirings = api.airings(from: moment.addingTimeInterval(-30 * 60), to: moment.addingTimeInterval(4 * 3600))
+            async let fetchedRecordings = api.recordings()
+            let info = try await fetchedInfo
+            guard self.api?.base == base else { return }
+            self.info = info
+            if lineup || channels.isEmpty {
+                channels = try await fetchedChannels.sorted(by: Channel.guideOrder)
             }
-            let window = try await airings
+            guard self.api?.base == base else { return }
+            let window = try await fetchedAirings
             index = GuideIndex(window)
-            self.recordings = try await recordings
+            recordings = try await fetchedRecordings
+            guard self.api?.base == base else { return }
             now = Date()
             error = nil
             if let id = server?.id {
-                CatalogCache.save(CatalogSnapshot(channels: self.channels, airings: window, recordings: self.recordings), serverID: id)
+                CatalogCache.save(CatalogSnapshot(channels: channels, airings: window, recordings: recordings), serverID: id)
             }
             if let rest = try? await api.airings(from: moment.addingTimeInterval(4 * 3600), to: moment.addingTimeInterval(14 * 24 * 3600)) {
+                guard self.api?.base == base else { return }
                 var seen = Set(window.map(\.id))
                 var merged = window
                 for airing in rest where !seen.contains(airing.id) {
@@ -149,10 +187,11 @@ public final class AppStore {
                 }
                 index = GuideIndex(merged)
                 if let id = server?.id {
-                    CatalogCache.save(CatalogSnapshot(channels: self.channels, airings: merged, recordings: self.recordings), serverID: id)
+                    CatalogCache.save(CatalogSnapshot(channels: channels, airings: merged, recordings: recordings), serverID: id)
                 }
             }
         } catch {
+            guard self.api?.base == base else { return }
             self.error = error.localizedDescription
         }
     }
