@@ -87,3 +87,12 @@ html[data-layout="tv"] {
   --type-display-size: 90px;
   --type-channel-size: 35px;
 }
+
+/* One content width, so the nav, banners, and every page share the same edges. */
+:root {
+  --content-max: 1280px;
+}
+
+.layout-tv {
+  --content-max: 1640px;
+}

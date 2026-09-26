@@ -1,5 +1,5 @@
 .home {
-  max-width: 1400px;
+  max-width: calc(var(--content-max) + 2 * var(--space-6));
   margin: 0 auto;
   padding: var(--space-5) var(--space-6) var(--space-16);
   display: grid;
@@ -8,8 +8,7 @@
 }
 
 .layout-tv .home {
-  max-width: 1760px;
-  padding: var(--space-10) var(--space-16);
+  padding: var(--space-10) var(--space-6);
 }
 
 .layout-phone .home {
