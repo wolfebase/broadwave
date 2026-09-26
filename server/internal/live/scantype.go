@@ -697,9 +697,10 @@ func (h *Hub) applyDeferredAudio(f *feed, id int64, tracks []AudioTrack) {
 		return
 	}
 	f.tracks = tracks
-	if audioMapDisagrees(tracks) {
-		h.rebuildRenditionsLocked(f)
-	}
+	// Unchanged args stay up. A described or second-language choice, or a
+	// main that is not the first audio stream, builds a different map and
+	// restarts. The replacement reads the opening bytes still in the lead.
+	h.rebuildRenditionsLocked(f)
 }
 
 // finishScan keeps reading after scanWait. The rendition may already be
