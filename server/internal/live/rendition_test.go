@@ -178,43 +178,53 @@ func TestCopyRenditionKeepsBroadcastTimestamps(t *testing.T) {
 
 // A multi-thousand-second timestamp step must not make the resampler
 // allocate the missing audio. Hard compensation injects one sample per
-// missing tick; 9000s of that is over a gigabyte.
+// missing tick; 9000s of that is about two gigabytes.
 //
 // The step is applied in the filter graph. Two MPEG-TS clips run together
 // are rewritten by the demuxer into a 33-bit wrap, and that wrap does not
-// reach the resampler on every ffmpeg build.
+// reach the resampler on every ffmpeg build. The ceiling is the same graph
+// with a one-second step: a host that maps every hardware library already
+// sits in the hundreds of megabytes, and an absolute floor below that fails
+// when the resampler did nothing.
 func TestAudioJumpDoesNotFillTheGap(t *testing.T) {
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		t.Skip("ffmpeg not installed")
 	}
+	small, _ := audioStepRSS(t, ffmpeg, "1")
+	big, stderr := audioStepRSS(t, ffmpeg, "9000")
+	if strings.Contains(stderr, "Failed to compensate") {
+		t.Fatalf("resampler tried to fill the jump: %s", stderr)
+	}
+	if big > 1<<30 || (small > 0 && big > small+(128<<20) && big > small*2) {
+		t.Fatalf("audio jump used %d bytes, short step %d: %s", big, small, stderr)
+	}
+}
+
+func audioStepRSS(t *testing.T, ffmpeg, step string) (uint64, string) {
+	t.Helper()
 	dir := t.TempDir()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	graph := "[1:a]asetpts=PTS+9000/TB[b];[0:a][b]concat=n=2:v=0:a=1," + audioFilter(Rendition{Audio: "aac2"}) + "[a]"
+	graph := "[1:a]asetpts=PTS+" + step + "/TB[b];[0:a][b]concat=n=2:v=0:a=1," + audioFilter(Rendition{Audio: "aac2"}) + "[a]"
+	out := filepath.Join(dir, "out.m4a")
 	cmd := exec.CommandContext(ctx, ffmpeg, "-hide_banner", "-loglevel", "warning",
 		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=0.4",
 		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=0.4",
 		"-filter_complex", graph,
-		"-map", "[a]", "-c:a", "aac", "-t", "3", filepath.Join(dir, "out.m4a"))
+		"-map", "[a]", "-c:a", "aac", "-t", "3", out)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	err = cmd.Run()
+	err := cmd.Run()
 	if ctx.Err() != nil {
-		t.Fatalf("audio jump did not finish: %s", stderr.String())
+		t.Fatalf("audio step %s did not finish: %s", step, stderr.String())
 	}
 	if err != nil {
-		if _, statErr := os.Stat(filepath.Join(dir, "out.m4a")); statErr != nil {
-			t.Fatalf("encode: %v %s", err, stderr.String())
+		if _, statErr := os.Stat(out); statErr != nil {
+			t.Fatalf("encode step %s: %v %s", step, err, stderr.String())
 		}
 	}
-	if strings.Contains(stderr.String(), "Failed to compensate") {
-		t.Fatalf("resampler tried to fill the jump: %s", stderr.String())
-	}
-	rss := maxRSS(cmd)
-	if rss > 120<<20 {
-		t.Fatalf("audio jump used %d bytes: %s", rss, stderr.String())
-	}
+	return maxRSS(cmd), stderr.String()
 }
 
 func maxRSS(cmd *exec.Cmd) uint64 {
