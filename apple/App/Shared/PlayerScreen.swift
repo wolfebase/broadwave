@@ -258,6 +258,12 @@ struct PlayerScreen: View {
             #if os(iOS)
                 overlay
             #endif
+            #if os(tvOS) && DEBUG
+                // Store shots need the title on screen. The system bar hides itself.
+                if UserDefaults.standard.bool(forKey: "BroadwaveInfo") {
+                    tvInfo
+                }
+            #endif
             if showStream, !portraitChrome {
                 StreamPanel(stream: live.session?.stream, stats: live.picture, sync: live.sync)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
@@ -331,6 +337,41 @@ struct PlayerScreen: View {
         })
         return items
     }
+
+    #if os(tvOS) && DEBUG
+        /// Channel, title, and how far the show has run. Stays up for a screenshot.
+        private var tvInfo: some View {
+            VStack(alignment: .leading, spacing: 10) {
+                if let channel = nowPlaying.channel {
+                    let airing = store.index.on(channel.id, at: store.now)
+                    Text("\(channel.displayNumber)  \(channel.displayName)")
+                        .font(.headline)
+                    Text(airing?.title ?? "No listing")
+                        .font(.title2.weight(.bold))
+                        .lineLimit(1)
+                    if let airing {
+                        Text(airing.minutesLeft(at: store.now))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        let done = airing.progress(at: store.now)
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(.white.opacity(0.28))
+                                Capsule().fill(.white).frame(width: max(4, geo.size.width * done))
+                            }
+                        }
+                        .frame(height: 8)
+                        .accessibilityLabel("Progress")
+                    }
+                }
+            }
+            .padding(28)
+            .frame(width: 640, alignment: .leading)
+            .background(.black.opacity(0.62), in: .rect(cornerRadius: 24))
+            .padding(56)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        }
+    #endif
 
     /// tvOS: a Channels menu in the transport bar lets you surf without leaving the player.
     private var channelMenu: [ChannelMenuEntry] {

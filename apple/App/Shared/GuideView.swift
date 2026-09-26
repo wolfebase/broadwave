@@ -330,7 +330,11 @@ struct GuideGrid: View {
                 ForEach(channels) { channel in
                     Button { onSelect(channel, store.index.on(channel.id, at: store.now)) } label: {
                         HStack(spacing: 10) {
-                            Text(channel.displayNumber).font(.title3.weight(.heavy)).monospacedDigit()
+                            Text(channel.displayNumber)
+                                .font(.title3.weight(.heavy))
+                                .monospacedDigit()
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                             if let api = store.api, channel.artUrl?.isEmpty == false {
                                 AsyncImage(url: api.artURL(kind: "channel", id: channel.id, width: 72)) { phase in
                                     if let image = phase.image {
