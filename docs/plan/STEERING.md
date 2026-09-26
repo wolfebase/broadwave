@@ -4,11 +4,11 @@ A reviewer (Claude, for the owner) checks the run about every 25 minutes and wri
 
 ## Now
 
-- 2026-09-25 20:10 · **AS3 screenshots: generate them, but upload only to a 1.1 version.**
-  - Don't change any screenshot or metadata on the 1.0 versions while iOS 1.0 is in review and tvOS 1.0 awaits the owner's 2.1 reply: the reviewer is looking at those.
-  - Create the 1.1 versions for AS4 first (`asc`), then upload the new sets there.
-  - Before uploading, open every JPEG yourself and confirm it shows only the Blender demo lineup or demo mode: no broadcast network, station, or team logos.
-  - Art above 960 px is capped by the handler, so request 640 and 960, not 1600.
+- 2026-09-25 20:30 · **Fix the Apple TV screenshots you uploaded to tvOS 1.0.** Skipping the locked iOS 1.0 sets was right, and re-uploading to the rejected tvOS 1.0 is fine since it's editable. But two of the four shots now on the listing have problems:
+  1. `02-guide.jpg`: channel **11.1 wraps onto two lines** in the Apple TV guide's channel column. Fix the column (no wrapping; shrink or truncate the name instead) as a J1 bug, then retake the shot.
+  2. `03-watch.jpg` is a bare full-screen movie frame with no app UI. Guideline 2.3.3 wants the app in use, so retake it with the player info overlay (channel, title, progress) showing.
+  - Then re-upload the Apple TV set with `--replace` and look at every JPEG before uploading.
+  - The iPhone and iPad sets go to a 1.1 version (AS4) once there is one; don't touch iOS 1.0 while it's in review.
 
 - 2026-09-25 18:10 · **Close out the conflict resolver and move on.**
   - Finish E2d (the miss-time comparison) this round and commit it, then leave E2 alone. E2b (the Apple Schedule screen) stays open for the Apple work.
