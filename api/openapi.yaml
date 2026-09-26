@@ -108,7 +108,7 @@ paths:
     get:
       tags: [server]
       operationId: getDiagnostics
-      description: Tuners and signal, encoder and ffmpeg, storage, guide freshness, what the relay is carrying, feed counts, recent logs, connected apps, and recent activity.
+      description: Tuners and signal, encoder and ffmpeg, the startup picture benchmark (class, speed, transcode height, selected tile, and how many tiles fit), storage, guide freshness, what the relay is carrying, feed counts, recent logs, connected apps, and recent activity.
       responses:
         "200":
           description: Diagnostics
@@ -1425,7 +1425,7 @@ components:
       properties:
         code:
           type: string
-          description: Stable machine code, for example tuners_busy, disk_low, not_found, bad_request.
+          description: Stable machine code, for example tuners_busy, disk_low, not_found, bad_request, pictures_full.
         message: { type: string, description: Short text safe to show a user. }
         tuners:
           type: array

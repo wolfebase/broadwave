@@ -93,6 +93,22 @@ func (e *BusyError) Error() string {
 	return "every tuner is busy"
 }
 
+// PictureError is a transcode the startup budget does not have room for.
+type PictureError struct {
+	Tiles int
+}
+
+func (e *PictureError) Error() string {
+	if e.Tiles == 1 {
+		return "This server can play 1 picture at once. Stop it to watch another."
+	}
+	n := e.Tiles
+	if n < 1 {
+		n = 1
+	}
+	return fmt.Sprintf("This server can play %d pictures at once. Stop one.", n)
+}
+
 // Hub owns the tuners. It tunes a whole frequency once, and every subchannel,
 // rendition, and recording on that frequency reads from the same stream.
 type Hub struct {
@@ -100,6 +116,7 @@ type Hub struct {
 	Dir            string
 	FFmpeg         string
 	Encoder        string
+	Host           Host
 	HEVC           bool
 	DeintBroadcast string
 	DeintSmooth    string
@@ -576,6 +593,17 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	if r := f.renditions[key]; r != nil {
 		return r, nil
 	}
+	if want.Video != "copy" && h.Host.Tiles > 0 && h.transcodesLocked() >= h.Host.Tiles {
+		// A picture nobody is watching still holds its encode for a few seconds.
+		// That slot is free for the picture someone is asking for now.
+		h.releaseIdleTranscodesLocked()
+	}
+	if want.Video != "copy" && h.Host.Tiles > 0 && h.transcodesLocked() >= h.Host.Tiles {
+		if r := joinTranscode(f, want); r != nil {
+			return r, nil
+		}
+		return nil, &PictureError{Tiles: h.Host.Tiles}
+	}
 	dir := filepath.Join(h.Dir, "live", fmt.Sprintf("%d", f.channel.ID), key)
 	if err := os.RemoveAll(dir); err != nil {
 		return nil, err
@@ -607,6 +635,79 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	f.renditions[key] = r
 	go h.watchRendition(f, r, pid, encoderOf(h.Encoder, want))
 	return r, nil
+}
+
+// joinTranscode picks the encode already running on this channel that is
+// closest to the size asked for. A smaller one wins a tie, so a tile does not
+// jump up to the full picture. A silent tile is not a stand-in for a watch
+// with sound, and HEVC is not a stand-in for H.264. Map order is not a choice.
+func joinTranscode(f *feed, want Rendition) *rendition {
+	rank := map[string]int{"360": 1, "540": 2, "720": 3, "1080": 4}
+	wantRank := rank[want.Video]
+	var best *rendition
+	bestDist, bestRank := 0, 0
+	for _, r := range f.renditions {
+		if r.spec.Video == "copy" || r.spec.Codec != want.Codec {
+			continue
+		}
+		if want.Audio != "none" && r.spec.Audio == "none" {
+			continue
+		}
+		have := rank[r.spec.Video]
+		dist := wantRank - have
+		if dist < 0 {
+			dist = -dist
+		}
+		if best == nil || dist < bestDist || (dist == bestDist && have < bestRank) {
+			best = r
+			bestDist = dist
+			bestRank = have
+		}
+	}
+	return best
+}
+
+// releaseIdleTranscodesLocked stops transcodes with no viewers so a new
+// picture can use the slot. The caller holds h.mu.
+func (h *Hub) releaseIdleTranscodesLocked() {
+	type idle struct {
+		f   *feed
+		key string
+	}
+	var list []idle
+	seen := map[*feed]bool{}
+	for _, f := range h.channels {
+		if seen[f] {
+			continue
+		}
+		seen[f] = true
+		for key, r := range f.renditions {
+			if r.spec.Video != "copy" && r.viewers == 0 {
+				list = append(list, idle{f, key})
+			}
+		}
+	}
+	for _, item := range list {
+		h.stopRenditionLocked(item.f, item.key)
+	}
+}
+
+func (h *Hub) transcodesLocked() int {
+	// Two channel ids can share one feed. Count that picture once.
+	seen := map[*feed]bool{}
+	n := 0
+	for _, f := range h.channels {
+		if seen[f] {
+			continue
+		}
+		seen[f] = true
+		for _, r := range f.renditions {
+			if r.spec.Video != "copy" {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 func encoderOf(base string, want Rendition) string {

@@ -173,8 +173,9 @@ func has(list []string, codec string) bool {
 	return codec != "" && slices.ContainsFunc(list, func(s string) bool { return codecName(s) == codec })
 }
 
-// hardwareEncoder is the stand-in for HW4's startup benchmark. These encoders
-// hold a 720p60 focused tile beside 30 fps tiles. Anything else stays at 540p60.
+// hardwareEncoder is the fallback when startup has not measured this host.
+// A measured host uses Host.Focus instead. These encoders hold a 720p60
+// focused tile. Anything else stays at 540p60.
 func hardwareEncoder(encoder string) bool {
 	switch encoder {
 	case "h264_vaapi", "hevc_vaapi", "h264_qsv", "hevc_qsv", "h264_nvenc", "hevc_nvenc", "h264_videotoolbox", "hevc_videotoolbox":
@@ -191,8 +192,14 @@ func Decide(src Source, caps Caps, p Prefs) Decision {
 }
 
 // DecideOn is Decide with the server encoder, so a focused tile can be 720p60
-// on a GPU and 540p60 in software.
+// on a GPU and 540p60 in software. A zero Host means startup has not measured.
 func DecideOn(src Source, caps Caps, p Prefs, encoder string) Decision {
+	return DecideFor(src, caps, p, encoder, Host{})
+}
+
+// DecideFor is DecideOn with the startup measurement. The host caps the
+// transcode and picks the selected tile.
+func DecideFor(src Source, caps Caps, p Prefs, encoder string, host Host) Decision {
 	v := codecName(src.VideoCodec)
 	a := codecName(src.AudioCodec)
 	canCopyVideo := has(caps.Video, v) && (src.Progressive || v == "hevc")
@@ -213,13 +220,22 @@ func DecideOn(src Source, caps Caps, p Prefs, encoder string) Decision {
 		r.Video = "540"
 		why = append(why, "Data saver")
 	case "tile":
-		r.Video = "540"
-		why = append(why, "540p tile")
-	case "focus":
-		// Height is chosen after the screen cap below.
-		r.Video = "720"
-		if !hardwareEncoder(encoder) {
+		if host.Focus == "360" {
+			r.Video = "360"
+			why = append(why, "360p tile")
+		} else {
 			r.Video = "540"
+			why = append(why, "540p tile")
+		}
+	case "focus":
+		// A measured host picks the tile. The screen cap below can still lower it.
+		switch {
+		case host.Focus != "":
+			r.Video = host.Focus
+		case !hardwareEncoder(encoder):
+			r.Video = "540"
+		default:
+			r.Video = "720"
 		}
 	case "360":
 		r.Video = "360"
@@ -240,6 +256,7 @@ func DecideOn(src Source, caps Caps, p Prefs, encoder string) Decision {
 			}
 		}
 	}
+	r.Video, why = capToHost(r.Video, host, why)
 	if caps.MaxHeight > 0 && r.Video != "copy" {
 		switch {
 		case caps.MaxHeight < 480:
@@ -251,16 +268,20 @@ func DecideOn(src Source, caps Caps, p Prefs, encoder string) Decision {
 		}
 	}
 	if quality == "focus" && r.Video != "720" {
-		r.FullRate = true
+		r.FullRate = host.Focus == "" || host.FullRate
 	}
 	if quality == "focus" {
-		switch r.Video {
-		case "720":
+		switch {
+		case r.Video == "720":
 			why = append(why, "720p60 tile")
-		case "360":
+		case r.Video == "360" && r.FullRate:
 			why = append(why, "360p60 tile")
-		default:
+		case r.Video == "360":
+			why = append(why, "360p tile")
+		case r.FullRate:
 			why = append(why, "540p60 tile")
+		default:
+			why = append(why, "540p tile")
 		}
 	}
 	audio := strings.ToLower(p.Audio)
@@ -338,6 +359,25 @@ func LegacyCaps(profile, audio, picture string) (Caps, Prefs) {
 		p.Audio = "stereo"
 	}
 	return caps, p
+}
+
+// capToHost lowers a transcode the bench cannot keep up with.
+// A copied broadcast is left alone.
+func capToHost(video string, host Host, why []string) (string, []string) {
+	if host.Height <= 0 || host.Height >= 1080 || video == "copy" {
+		return video, why
+	}
+	rank := map[string]int{"360": 1, "540": 2, "720": 3, "1080": 4}
+	limit := "720"
+	if host.Height <= 360 {
+		limit = "360"
+	} else if host.Height <= 540 {
+		limit = "540"
+	}
+	if rank[video] <= rank[limit] {
+		return video, why
+	}
+	return limit, append(why, limit+"p on this server")
 }
 
 func renditionProfile(video string) string {

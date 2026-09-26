@@ -7,7 +7,7 @@ export type Diagnostics = {
   server?: { id: string; name: string };
   tuners?: TunerStatus[];
   tunerError?: string;
-  encoder?: { name: string; hardware: boolean; deinterlace?: string; ffmpeg: string };
+  encoder?: { name: string; hardware: boolean; deinterlace?: string; ffmpeg: string; line?: string; height?: number; focus?: string; tiles?: number };
   storage?: { Free: number; Total: number };
   guide?: { channels: number; channelsWithListings: number; airings: number; listingsUntil?: string; nextRefresh?: string; lastRefresh?: string };
   relay?: { channelId: number; guideNumber: string; name: string; tuner: number; recording: boolean; exports: number; fieldOrder?: string; renditions: { key: string; viewers: number }[] }[];

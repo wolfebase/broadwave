@@ -74,8 +74,18 @@ func main() {
 	work := filepath.Join(*configDir, "work")
 	ffmpegPath, _ := execLook("ffmpeg")
 	encoder := live.DetectEncoder(ffmpegPath)
+	// BROADWAVE_BENCH=0 skips the startup encode. The relay check opens several
+	// renditions at once, and a measured tile budget would refuse the extra ones.
+	var host live.Host
+	if os.Getenv("BROADWAVE_BENCH") != "0" {
+		measureCtx, measureCancel := context.WithTimeout(context.Background(), 20*time.Second)
+		host = live.MeasureHost(measureCtx, ffmpegPath, encoder)
+		measureCancel()
+		slog.Info("encoder: " + host.Line())
+	}
 	live.Reap(work)
 	hub := live.New(st, work, ffmpegPath, encoder)
+	hub.Host = host
 	if *staging {
 		slog.Info("staging: recordings, guide pulls, background tunes, and the tuner emulator are off")
 	} else if err := dvr.Recover(context.Background(), st, time.Now(), func(rec store.Recording, left time.Duration) error {

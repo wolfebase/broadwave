@@ -3,9 +3,7 @@ package live
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -30,26 +28,17 @@ func EncoderName(encoder string) string {
 }
 
 func vaapiName() string {
-	matches, _ := filepath.Glob("/sys/class/drm/renderD*/device/vendor")
-	if len(matches) == 0 {
-		matches, _ = filepath.Glob("/sys/class/drm/card*/device/vendor")
+	switch GPUVendor() {
+	case "0x8086":
+		return "Intel GPU"
+	case "0x1002", "0x1022":
+		return "AMD GPU"
+	default:
+		return "GPU"
 	}
-	for _, path := range matches {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		switch strings.TrimSpace(string(raw)) {
-		case "0x8086":
-			return "Intel GPU"
-		case "0x1002", "0x1022":
-			return "AMD GPU"
-		}
-	}
-	return "GPU"
 }
 
-// FormatEncoderLine is the setup sentence for a one-second 1080p60 encode.
+// FormatEncoderLine is the setup sentence for the 1080p60 encode.
 func FormatEncoderLine(encoder string, speed float64, ok bool) string {
 	name := EncoderName(encoder)
 	if !ok || speed <= 0 {
@@ -81,8 +70,10 @@ func ParseSpeed(log string) float64 {
 	return v
 }
 
-// BenchEncoder encodes one second of 1080p60 and reports how fast it ran.
-// The graph is a test picture, not a broadcast, and it does not deinterlace.
+// BenchEncoder encodes three seconds of 1080p60 and reports how fast it ran.
+// One second is mostly process startup, so a fast GPU looks too slow and the
+// budget drops a picture it can hold. The graph is a test picture, not a
+// broadcast, and it does not deinterlace.
 func BenchEncoder(ctx context.Context, ffmpeg, encoder string) (float64, error) {
 	if ffmpeg == "" {
 		ffmpeg = "ffmpeg"
@@ -103,13 +94,15 @@ func BenchEncoder(ctx context.Context, ffmpeg, encoder string) (float64, error) 
 }
 
 func benchArgs(encoder string) []string {
-	input := []string{"-hide_banner", "-nostdin", "-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=60:duration=1"}
+	// Three seconds. See BenchEncoder.
+	src := "testsrc2=size=1920x1080:rate=60:duration=3"
+	input := []string{"-hide_banner", "-nostdin", "-f", "lavfi", "-i", src}
 	switch {
 	case vaapiFamily(encoder):
 		return []string{
 			"-hide_banner", "-nostdin",
 			"-init_hw_device", "vaapi=va:/dev/dri/renderD128", "-filter_hw_device", "va",
-			"-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=60:duration=1",
+			"-f", "lavfi", "-i", src,
 			"-vf", "format=nv12,hwupload", "-c:v", encoder, "-f", "null", "-",
 		}
 	case strings.Contains(encoder, "videotoolbox"), encoder == "h264_nvenc", encoder == "h264_qsv", encoder == "hevc_qsv":

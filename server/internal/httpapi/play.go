@@ -57,7 +57,7 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		if prefs.Picture == "" {
 			_, prefs.Picture, _ = s.playbackChoice(r.Context(), 0, "")
 		}
-		decision = live.DecideOn(src, caps, prefs, s.Hub.Encoder)
+		decision = live.DecideFor(src, caps, prefs, s.Hub.Encoder, s.Hub.Host)
 	}
 	if !body.ConfirmLive {
 		if msg := s.liveWarning(r.Context(), body.ChannelID); msg != "" {
@@ -71,6 +71,9 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session.Stream.Reason = decision.Reason
+	if session.Rendition != decision.Rendition.Key() && session.Stream.Video != "" && session.Stream.Video != "copy" {
+		session.Stream.Reason = "Playing the " + session.Stream.Video + "p picture already running."
+	}
 	waitPlaylist(session.File, 12*time.Second)
 	if fresh, ok := s.Hub.Session(session.ChannelID, session.Rendition); ok {
 		reason := session.Stream.Reason

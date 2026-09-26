@@ -41,7 +41,7 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 			tuners = []live.Tuner{}
 		}
 		out["tuners"] = tuners
-		out["encoder"] = map[string]any{
+		encoder := map[string]any{
 			"name":        s.Hub.Encoder,
 			"hardware":    s.Hub.Encoder != "libx264",
 			"hevc":        s.Hub.HEVC,
@@ -49,6 +49,16 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 			"deinterlace": s.Hub.DeintBroadcast,
 			"ffmpeg":      s.Hub.FFmpegVersion(),
 		}
+		if s.Hub.Host.Class != "" {
+			encoder["class"] = s.Hub.Host.Class
+			encoder["speed"] = s.Hub.Host.Speed
+			encoder["height"] = s.Hub.Host.Height
+			encoder["focus"] = s.Hub.Host.Focus
+			encoder["tiles"] = s.Hub.Host.Tiles
+			encoder["fullRate"] = s.Hub.Host.FullRate
+			encoder["line"] = s.Hub.Host.Line()
+		}
+		out["encoder"] = encoder
 		out["relay"] = s.Hub.Status()
 		if space, err := disk.Stat(filepath.Join(s.Hub.Dir, "recordings")); err == nil {
 			out["storage"] = space

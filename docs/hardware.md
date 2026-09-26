@@ -40,3 +40,21 @@ Untested, on a fake and on real hardware: first-generation HDHR-US, DVB and ISDB
 | Chrome, Edge, Firefox | H.264, AAC, no HEVC, no AC-3 | `1080.aac2.broadcast` |
 
 The Apple app builds that row from the machine id (`Capabilities.forMachine`). A machine it does not recognize still asks for HEVC. The web app sends H.264 and adds AC-3 only when `MediaSource.isTypeSupported` says the browser can play it. The server's HEVC is 8-bit Main, not 10-bit.
+
+## Servers
+
+Startup probes the encoder in this order: NVENC, VideoToolbox, VAAPI, Quick Sync, then libx264. VAAPI is preferred over Quick Sync when both answer, because Quick Sync can open on a chip whose measured path is VAAPI. The PCI vendor distinguishes Intel VAAPI (`0x8086`) from AMD VAAPI (`0x1002`, `0x1022`). A VAAPI device with no vendor id stays unlabeled.
+
+The same startup encodes three seconds of 1080p60. One second is mostly process startup, so a fast GPU looks too slow. The speed is how many times faster than real time that encode finished. It chooses the tallest transcode and how many new pictures can start. A broadcast the device can already play is still copied. A channel that is already being converted keeps a compatible picture instead of starting another: the same codec, and a watch with sound does not take a silent tile. A picture nobody is watching does not hold a slot. One more channel than the table allows is refused. A bench that does not finish within 20 seconds uses the under 0.5× row and does not invent a speed. A probe that fails before it encodes stays on the unmeasured row.
+
+| 1080p60 speed | Tallest transcode | Selected tile | Tiles at once |
+| --- | --- | --- | --- |
+| 4× and up | 1080p | 720p60 | 4 |
+| 2× to 4× | 1080p | 720p60 | 2 |
+| 1× to 2× | 720p | 540p60 | 2 |
+| 0.5× to 1× | 540p | 360p60 | 1 |
+| under 0.5× | 540p | 360p | 1 |
+| not measured, GPU | 1080p | 720p60 | 2 |
+| not measured, software | 540p | 360p | 1 |
+
+Intel VAAPI, Intel Quick Sync, AMD VAAPI, NVIDIA NVENC, and Apple VideoToolbox are the GPU rows. Software is libx264, which is what a Raspberry Pi 5 runs (it has no H.264 encoder in this image) and what a J4125-class board runs when it has no GPU device. Those two boards were not in the room. The 0.7× row is the Pi 5 class and the 0.4× row is the J4125 class: the rule, applied to a speed in that range. Diagnostics shows the sentence for the machine that actually ran.
