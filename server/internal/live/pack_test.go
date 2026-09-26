@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -239,6 +240,9 @@ func assertSegmentCuts(t *testing.T, playlist string) {
 			t.Errorf("segment duration %.3f is not one fragment (%v)", d, durs)
 		}
 	}
+	if strings.Contains(playlist, "DISCONTINUITY") {
+		t.Errorf("a steady encode was marked as a jump:\n%s", playlist)
+	}
 }
 
 // mp4Box is a short ISO-BMFF box. The body does not include the size or type.
@@ -350,12 +354,264 @@ func TestLiveWindowKeepsNinetyMinutes(t *testing.T) {
 	if !strings.Contains(long, "#EXT-X-MEDIA-SEQUENCE:3\n") {
 		t.Fatalf("sequence:\n%s", long)
 	}
+	if strings.Contains(long, "DISCONTINUITY") {
+		t.Fatalf("a 30 minute segment is one group, not a jump:\n%s", long)
+	}
 	if _, err := os.Stat(filepath.Join(longDir, "seg00000.m4s")); !os.IsNotExist(err) {
 		t.Fatalf("segment past 90 minutes still on disk: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(longDir, "seg00003.m4s")); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// fragmentAt is one video fragment. flags is the first sample's trun flags
+// (0x10000 means it is not a keyframe). pad is extra mdat bytes.
+func fragmentAt(pts int64, dur uint32, flags uint32, pad int) []byte {
+	tfhd := make([]byte, 8)
+	binary.BigEndian.PutUint32(tfhd[4:8], 1)
+	tfdt := make([]byte, 12)
+	tfdt[0] = 1
+	binary.BigEndian.PutUint64(tfdt[4:12], uint64(pts))
+	const trFlags = 0x104 // sample duration and first-sample flags
+	trun := make([]byte, 16)
+	trun[1] = byte(trFlags >> 16)
+	trun[2] = byte(trFlags >> 8)
+	trun[3] = byte(trFlags & 0xff)
+	binary.BigEndian.PutUint32(trun[4:8], 1)
+	binary.BigEndian.PutUint32(trun[8:12], flags)
+	binary.BigEndian.PutUint32(trun[12:16], dur)
+	traf := append(append(mp4Box("tfhd", tfhd), mp4Box("tfdt", tfdt)...), mp4Box("trun", trun)...)
+	moof := mp4Box("moof", append(mp4Box("mfhd", make([]byte, 8)), mp4Box("traf", traf)...))
+	return append(moof, mp4Box("mdat", make([]byte, pad))...)
+}
+
+// A backwards presentation time must close the open segment and mark a
+// discontinuity. A second stamp must keep those date-times and the earliest
+// anchor: the discontinuity moved the clock the first stamp uses.
+func TestTimestampJumpClosesTheSegment(t *testing.T) {
+	dir := t.TempDir()
+	const step = int64(45000)
+	base := int64(2868510171)
+	pts := []int64{base, base + step}
+	jumped := base + step - 9011*90000
+	for i := 0; i < 24; i++ {
+		pts = append(pts, jumped+int64(i)*step)
+	}
+	pr, pw := io.Pipe()
+	packErr := make(chan error, 1)
+	go func() { packErr <- Pack(dir, pr, nil) }()
+	if _, err := pw.Write(videoInit()); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range pts {
+		if _, err := pw.Write(fragmentAt(p, uint32(step), 0, 32<<10)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var playlist string
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		b, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+		if err == nil && strings.Count(string(b), "#EXTINF") >= 20 && strings.Contains(string(b), "#EXT-X-DISCONTINUITY\n") {
+			playlist = string(b)
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if playlist == "" {
+		b, _ := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+		t.Fatalf("the jump did not close segments:\n%s", b)
+	}
+	if n := strings.Count(playlist, "#EXT-X-DISCONTINUITY"); n != 1 {
+		t.Fatalf("discontinuity count %d:\n%s", n, playlist)
+	}
+	for _, line := range strings.Split(playlist, "\n") {
+		v, ok := strings.CutPrefix(line, "#EXTINF:")
+		if !ok {
+			continue
+		}
+		f, err := strconv.ParseFloat(strings.TrimSuffix(v, ","), 64)
+		if err != nil || f > 2 || f < 0.4 {
+			t.Fatalf("segment %.3f would stall:\n%s", f, playlist)
+		}
+	}
+	parts, _ := filepath.Glob(filepath.Join(dir, "part*.m4s"))
+	if len(parts) > 4 {
+		t.Fatalf("open segment kept %d parts", len(parts))
+	}
+	_ = pw.Close()
+	if err := <-packErr; err != nil {
+		t.Fatal(err)
+	}
+	final, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixed := time.Date(2026, 9, 26, 14, 16, 0, 0, time.UTC)
+	tl := NewTimeline()
+	tl.now = func() time.Time { return fixed }
+	var stamper playlistStamper
+	stamped := string(stamper.stamp(dir, final, tl))
+	var walls []time.Time
+	var afterGap bool
+	var gapAt int
+	for _, line := range strings.Split(stamped, "\n") {
+		if strings.HasPrefix(line, "#EXT-X-DISCONTINUITY") {
+			afterGap = true
+			continue
+		}
+		v, ok := strings.CutPrefix(line, "#EXT-X-PROGRAM-DATE-TIME:")
+		if !ok {
+			continue
+		}
+		wall, err := time.Parse("2006-01-02T15:04:05.000Z", v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if afterGap && gapAt == 0 {
+			gapAt = len(walls)
+		}
+		afterGap = false
+		walls = append(walls, wall)
+	}
+	if gapAt < 1 || gapAt >= len(walls) {
+		t.Fatalf("program times %d, gap at %d:\n%s", len(walls), gapAt, stamped)
+	}
+	stepWall := walls[gapAt].Sub(walls[gapAt-1])
+	if stepWall < 400*time.Millisecond || stepWall > 600*time.Millisecond {
+		t.Fatalf("date-time jumped by %s across the discontinuity, want about 0.5s", stepWall)
+	}
+	earliest, ok := tl.Earliest()
+	if !ok || !earliest.Equal(fixed.Add(-4*time.Second)) {
+		t.Fatalf("earliest moved to %v", earliest)
+	}
+	tl.now = func() time.Time { return fixed.Add(30 * time.Second) }
+	again := string(stamper.stamp(dir, final, tl))
+	if strings.Join(programDates(again), "\n") != strings.Join(programDates(stamped), "\n") {
+		t.Fatalf("a later playlist moved date-times:\n%s", again)
+	}
+	earliest, ok = tl.Earliest()
+	if !ok || !earliest.Equal(fixed.Add(-4*time.Second)) {
+		t.Fatalf("earliest moved on the second stamp to %v", earliest)
+	}
+}
+
+func programDates(playlist string) []string {
+	var out []string
+	for _, line := range strings.Split(playlist, "\n") {
+		if strings.HasPrefix(line, "#EXT-X-PROGRAM-DATE-TIME:") {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+func TestForwardJumpAndWrap(t *testing.T) {
+	forward := t.TempDir()
+	const step = int64(45000)
+	pts := []int64{0, step, step + step + 11*90000, step + step + 11*90000 + step}
+	pl := packFragments(t, forward, pts, 0, 1)
+	if strings.Count(pl, "#EXT-X-DISCONTINUITY") != 1 {
+		t.Fatalf("an 11s step is a discontinuity:\n%s", pl)
+	}
+	fixed := time.Date(2026, 9, 26, 14, 16, 0, 0, time.UTC)
+	tl := NewTimeline()
+	tl.now = func() time.Time { return fixed }
+	var stamper playlistStamper
+	first := string(stamper.stamp(forward, []byte(pl), tl))
+	second := string(stamper.stamp(forward, []byte(pl), tl))
+	if strings.Join(programDates(first), "\n") != strings.Join(programDates(second), "\n") {
+		t.Fatalf("an 11s jump moved date-times on the next playlist:\n%s\n---\n%s", first, second)
+	}
+	wrapped := t.TempDir()
+	start := ptsWrap - 2*step
+	wrapPTS := []int64{start, start + step, 0}
+	if pl := packFragments(t, wrapped, wrapPTS, 0, 1); strings.Contains(pl, "DISCONTINUITY") {
+		t.Fatalf("a 33-bit wrap of one group is not a jump:\n%s", pl)
+	}
+}
+
+func TestOpenRunStaysBounded(t *testing.T) {
+	dir := t.TempDir()
+	const step = int64(45000)
+	// No keyframe, so the half-second cut never fires. The byte cap must.
+	pts := make([]int64, 9)
+	for i := range pts {
+		pts[i] = int64(i) * step
+	}
+	pl := packFragments(t, dir, pts, 0x10000, 8<<20)
+	n, _ := extinfSum(pl)
+	if n < 2 {
+		t.Fatalf("a run with no keyframe stayed one segment:\n%s", pl)
+	}
+	parts, _ := filepath.Glob(filepath.Join(dir, "part*.m4s"))
+	if len(parts) > 6 {
+		t.Fatalf("kept %d parts", len(parts))
+	}
+}
+
+func TestPackRejectsAHugeBox(t *testing.T) {
+	dir := t.TempDir()
+	pr, pw := io.Pipe()
+	packErr := make(chan error, 1)
+	go func() {
+		err := Pack(dir, pr, nil)
+		_ = pr.Close()
+		packErr <- err
+	}()
+	var read atomic.Int64
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer pw.Close()
+		if _, err := pw.Write(videoInit()); err != nil {
+			return
+		}
+		hdr := make([]byte, 8)
+		binary.BigEndian.PutUint32(hdr[:4], 64<<20)
+		copy(hdr[4:], "mdat")
+		if _, err := pw.Write(hdr); err != nil {
+			return
+		}
+		buf := make([]byte, 1<<20)
+		for read.Load() < 48<<20 {
+			n, err := pw.Write(buf)
+			read.Add(int64(n))
+			if err != nil {
+				return
+			}
+		}
+	}()
+	select {
+	case err := <-packErr:
+		if err == nil || !strings.Contains(err.Error(), "fragment larger") {
+			t.Fatalf("got %v after reading %d", err, read.Load())
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a huge box was still being buffered")
+	}
+	<-done
+	if read.Load() > 40<<20 {
+		t.Fatalf("buffered %d bytes", read.Load())
+	}
+}
+
+func packFragments(t *testing.T, dir string, pts []int64, flags uint32, pad int) string {
+	t.Helper()
+	var raw []byte
+	raw = append(raw, videoInit()...)
+	for _, p := range pts {
+		raw = append(raw, fragmentAt(p, 45000, flags, pad)...)
+	}
+	if err := Pack(dir, bytes.NewReader(raw), nil); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }
 
 func headTail(s string) string {
@@ -387,6 +643,14 @@ func TestDeltaPlaylistSkipsTheHead(t *testing.T) {
 	}
 	if strings.Count(out, "#EXTINF") != 12 {
 		t.Fatalf("kept %d segments:\n%s", strings.Count(out, "#EXTINF"), out)
+	}
+	// A jump rides with its segment. Skipping that segment drops the tag.
+	// A jump on a segment that is still in the delta stays.
+	withGap := strings.Replace(b.String(), "#EXTINF:0.500,\nseg8.m4s\n", "#EXT-X-DISCONTINUITY\n#EXTINF:0.500,\nseg8.m4s\n", 1)
+	withGap = strings.Replace(withGap, "#EXTINF:0.500,\nseg1.m4s\n", "#EXT-X-DISCONTINUITY\n#EXTINF:0.500,\nseg1.m4s\n", 1)
+	delta := string(DeltaPlaylist([]byte(withGap)))
+	if strings.Contains(delta, "seg1.m4s") || strings.Count(delta, "DISCONTINUITY") != 1 || !strings.Contains(delta, "seg8.m4s") {
+		t.Fatalf("delta discontinuity:\n%s", delta)
 	}
 	short := "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:0.500,\nseg00000.m4s\n"
 	if got := string(DeltaPlaylist([]byte(short))); got != short {

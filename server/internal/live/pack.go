@@ -20,6 +20,17 @@ const (
 	partTicks = 45000 // 0.5s at 90 kHz
 	// windowTicks is how much media a live playlist keeps, about 90 minutes.
 	windowTicks = 90 * 60 * 90000
+	// jumpTicks is a presentation-time step that is not one more group of
+	// pictures. Backwards past half a second, or forwards past this, starts
+	// a new timeline. ptsDiff already folds a 33-bit wrap of one group into
+	// a normal step, so that wrap is not a jump.
+	jumpTicks = 10 * 90000
+	// maxOpenBytes bounds the fragments held for the segment that is still
+	// open. A backwards timestamp never meets the keyframe close.
+	maxOpenBytes = 32 << 20
+	// maxBox is the largest incomplete fMP4 box kept in the read buffer.
+	// A size field that asks for more is corrupt.
+	maxBox = 32 << 20
 )
 
 // playlistGate is how a playlist request waits for the next part.
@@ -96,6 +107,7 @@ type packedSeg struct {
 	pts   int64
 	dur   int64
 	parts []string
+	gap   bool
 }
 
 // packOutput is called before cmd.Start. startPack runs after Start succeeds.
@@ -130,10 +142,13 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 	var closed []packedSeg
 	var partN int
 	var msn int
+	var segGap bool
+	var lastPTS, lastDur int64
+	var haveLast bool
 	allSync := true
 
 	flush := func() error {
-		return writePacked(dir, init, closed, open, msn-len(closed), allSync, gate)
+		return writePacked(dir, init, closed, open, msn-len(closed), allSync, segGap, gate)
 	}
 	closeSeg := func(end int64) error {
 		if len(open) == 0 {
@@ -153,7 +168,8 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		if dur <= 0 {
 			dur = partTicks
 		}
-		closed = append(closed, packedSeg{name: name, pts: open[0].pts, dur: dur, parts: names})
+		closed = append(closed, packedSeg{name: name, pts: open[0].pts, dur: dur, parts: names, gap: segGap})
+		segGap = false
 		msn++
 		open = nil
 		var kept int64
@@ -189,9 +205,30 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 			dur = d
 		}
 		sync := fragmentIndependent(frag, track)
-		if len(open) > 0 {
+		jumped := false
+		if haveLast {
+			expected := lastPTS
+			if lastDur > 0 {
+				expected = lastPTS + lastDur
+			}
+			d := ptsDiff(pts, expected)
+			if d < -int64(partTicks) || d > int64(jumpTicks) {
+				jumped = true
+				slog.Warn(fmt.Sprintf("pack %s: timestamp jump %.3fs", dir, float64(d)/90000))
+				if len(open) > 0 {
+					if err := closeSeg(expected); err != nil {
+						return err
+					}
+				}
+				segGap = true
+			}
+		}
+		if !jumped && len(open) > 0 {
 			if open[len(open)-1].dur == 0 {
-				open[len(open)-1].dur = ptsDiff(pts, open[len(open)-1].pts)
+				step := ptsDiff(pts, open[len(open)-1].pts)
+				if step > 0 {
+					open[len(open)-1].dur = step
+				}
 			}
 			// Hold a short run of frames until the next keyframe, once the
 			// open segment has at least half a second. Closing on a frame
@@ -203,9 +240,21 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 				}
 			}
 		}
+		// A run with no keyframe, or a jump the step check missed, must not
+		// keep every fragment. Close on the previous fragment's own end.
+		if len(open) > 0 && openBytes(open)+len(frag) > maxOpenBytes {
+			end := open[len(open)-1].pts + int64(partTicks)
+			if open[len(open)-1].dur > 0 {
+				end = open[len(open)-1].pts + open[len(open)-1].dur
+			}
+			if err := closeSeg(end); err != nil {
+				return err
+			}
+		}
 		if len(open) == 0 && !sync {
 			allSync = false
 		}
+		lastPTS, lastDur, haveLast = pts, dur, true
 		name := fmt.Sprintf("part%05d.m4s", partN)
 		partN++
 		if err := os.WriteFile(filepath.Join(dir, name), frag, 0o644); err != nil {
@@ -256,6 +305,9 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 				}
 			}
 		}
+		if len(buf) > maxBox {
+			return fmt.Errorf("pack: fragment larger than %d bytes", maxBox)
+		}
 		if err != nil {
 			if err == io.EOF {
 				if len(open) > 0 {
@@ -294,7 +346,15 @@ func peelBox(b []byte) (box, rest []byte, ok bool) {
 	return b[:size], b[size:], true
 }
 
-func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart, origin int, allSync bool, gate *playlistGate) error {
+func openBytes(open []packedPart) int {
+	n := 0
+	for _, p := range open {
+		n += len(p.body)
+	}
+	return n
+}
+
+func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart, origin int, allSync, segGap bool, gate *playlistGate) error {
 	if len(init) == 0 {
 		return nil
 	}
@@ -327,7 +387,13 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 	b = append(b, "#EXT-X-MEDIA-SEQUENCE:"+strconv.Itoa(origin)+"\n"...)
 	b = append(b, "#EXT-X-MAP:URI=\"init.mp4\"\n"...)
 	for _, s := range closed {
+		if s.gap {
+			b = append(b, "#EXT-X-DISCONTINUITY\n"...)
+		}
 		b = append(b, "#EXTINF:"+fmtDur(s.dur)+",\n"+s.name+"\n"...)
+	}
+	if segGap && len(open) > 0 {
+		b = append(b, "#EXT-X-DISCONTINUITY\n"...)
 	}
 	for _, p := range open {
 		dur := p.dur
