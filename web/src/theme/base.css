@@ -68,8 +68,9 @@ button:disabled {
   opacity: 0.45;
 }
 
+/* Lifted from the accent so text links pass 4.5:1 on cards (the raw accent is 3.9:1). */
 a {
-  color: var(--color-accent);
+  color: color-mix(in srgb, var(--color-accent) 72%, #fff);
 }
 
 code {
@@ -379,7 +380,7 @@ html[data-layout="tv"] :focus-visible {
   color: var(--color-text-secondary);
 }
 
-.empty-state h3 {
+.empty-state h2 {
   color: var(--color-text);
   font-size: var(--type-title2-size);
   margin: 0;
@@ -753,6 +754,7 @@ th {
 }
 
 :root .now-flag {
+  background: color-mix(in srgb, var(--color-tally) 78%, #000);
   top: 5px;
   padding: 2px 8px;
   line-height: 1.25;
@@ -769,9 +771,24 @@ th {
   background: var(--color-tally);
 }
 
-/* Management pages: a page title is enough; drop the repeated one inside. */
+/* Management pages: a page title is enough; hide the repeated one inside from
+   sight but keep it in the outline, so the h3 sections under it stay in order. */
 :root .page-wrap .page-head:has(> h2:only-child) {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* Section titles sit close to what they label. */

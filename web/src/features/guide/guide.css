@@ -325,6 +325,25 @@
   display: none;
 }
 
+/* No listings yet: the live frame sits beside the label, centered in the row. */
+.guide-cell.empty {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.guide-cell.empty .cell-frame {
+  flex: none;
+  width: auto;
+  height: min(40px, 100%);
+  max-height: none;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08);
+}
+
 .cell-title {
   font-weight: 650;
   font-size: var(--type-footnote-size);
@@ -570,4 +589,9 @@
   flex-wrap: wrap;
   gap: 8px;
   padding-top: var(--space-2);
+}
+
+/* Row header for screen readers only; the channel button inside lays out as before. */
+.guide-rowhead {
+  display: contents;
 }

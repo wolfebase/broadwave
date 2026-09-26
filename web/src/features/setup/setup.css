@@ -78,7 +78,7 @@
   gap: var(--space-3);
 }
 
-.home-list h3 {
+.home-list > :is(h2, h3) {
   margin: 0;
 }
 
