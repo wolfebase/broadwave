@@ -31,6 +31,34 @@ public final class SyncEngine {
     static let seekMS = 400.0
     static let maxTrim = 0.03
 
+    /// What one sync tick should do. A pause before the first decoded frame
+    /// leaves the layer black, and a seek into a date the playlist does not
+    /// hold stalls the same way.
+    enum SyncMove: Equatable {
+        case wait
+        case pause(resumeAfter: Double?, seekToTarget: Bool)
+        case seek
+        case rate(Float, locked: Bool)
+    }
+
+    static func decide(hasFrame: Bool, driftMS: Double, roomRate: Double, canSeek: Bool) -> SyncMove {
+        guard hasFrame else { return .wait }
+        if roomRate == 0 {
+            return .pause(resumeAfter: nil, seekToTarget: canSeek && abs(driftMS) > trimMS * 2)
+        }
+        if abs(driftMS) > seekMS {
+            if driftMS > 0 {
+                return .pause(resumeAfter: driftMS / 1000, seekToTarget: false)
+            }
+            return canSeek ? .seek : .wait
+        }
+        if abs(driftMS) > trimMS {
+            let trimmed = Float(1 + max(-maxTrim, min(maxTrim, -driftMS / 2000)))
+            return .rate(trimmed, locked: false)
+        }
+        return .rate(1, locked: true)
+    }
+
     public init(player: AVPlayer, socket: EventSocket, room: String, channelID: Int64) {
         self.player = player
         self.socket = socket
@@ -86,41 +114,50 @@ public final class SyncEngine {
         let target = st.rate == 0 ? st.anchorMedia : st.target(atServer: socket.serverNow())
         let d = local - target
         drift = d
-        if st.rate == 0 {
+        let hasFrame = item.presentationSize.width > 0 && item.presentationSize.height > 0
+        switch Self.decide(hasFrame: hasFrame, driftMS: d, roomRate: st.rate, canSeek: canSeek(to: target, item: item)) {
+        case .wait:
+            state = .waiting
+        case let .pause(resumeAfter, seekToTarget):
             player.pause()
-            if abs(d) > Self.trimMS * 2 {
+            if seekToTarget {
                 seek(to: target)
             }
-            state = .locked
-            return
-        }
-        if abs(d) > Self.seekMS {
-            if d > 0 {
-                holdUntil = Date().addingTimeInterval(d / 1000)
-                player.pause()
-                DispatchQueue.main.asyncAfter(deadline: .now() + d / 1000) { [weak self] in self?.player.play() }
+            if let resumeAfter {
+                holdUntil = Date().addingTimeInterval(resumeAfter)
+                DispatchQueue.main.asyncAfter(deadline: .now() + resumeAfter) { [weak self] in
+                    self?.player.play()
+                }
+                state = .syncing
             } else {
-                seek(to: target)
+                state = .locked
             }
+        case .seek:
+            seek(to: target)
             state = .syncing
-            return
-        }
-        if player.timeControlStatus == .paused {
-            player.play()
-        }
-        if abs(d) > Self.trimMS {
-            player.rate = Float(1 + max(-Self.maxTrim, min(Self.maxTrim, -d / 2000)))
-            state = .syncing
-        } else {
-            if player.rate != 1 {
-                player.rate = 1
+        case let .rate(rate, locked):
+            if player.timeControlStatus == .paused {
+                player.play()
             }
-            state = .locked
+            if player.rate != rate {
+                player.rate = rate
+            }
+            state = locked ? .locked : .syncing
         }
+    }
+
+    /// The target date has to fall in a range the item can already play.
+    /// Seeking earlier than the first segment, or past the live edge, stalls.
+    private func canSeek(to mediaMS: Double, item: AVPlayerItem) -> Bool {
+        guard let current = item.currentDate() else { return false }
+        let delta = mediaMS / 1000 - current.timeIntervalSince1970
+        let target = CMTimeAdd(item.currentTime(), CMTime(seconds: delta, preferredTimescale: 90000))
+        return item.seekableTimeRanges.contains { CMTimeRangeContainsTime($0.timeRangeValue, time: target) }
     }
 
     private func seek(to media: Double) {
         guard Date().timeIntervalSince(lastSeek) > 2, let item = player.currentItem else { return }
+        guard canSeek(to: media, item: item) else { return }
         lastSeek = Date()
         item.seek(to: Date(timeIntervalSince1970: media / 1000)) { _ in }
     }

@@ -290,9 +290,11 @@ final class TilePlayer {
             let tile = prefs.quality == .tile || prefs.quality == .tile360
             PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: tile)
             player.replaceCurrentItem(with: item)
-            player.automaticallyWaitsToMinimizeStalling = true
+            // The first segment has to paint. Waiting for an 8s buffer, then
+            // pausing until the room's older anchor, leaves this layer black.
+            player.automaticallyWaitsToMinimizeStalling = false
             applyAudible()
-            player.play()
+            player.playImmediately(atRate: 1)
             canHear = request.audible
             if let socket = store.socket {
                 let engine = SyncEngine(player: player, socket: socket, room: room, channelID: channel.id)

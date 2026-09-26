@@ -215,6 +215,36 @@ private func fixture(_ name: String) throws -> Data {
     #expect(socket.membership(of: "multiview:abc") == 0)
 }
 
+@Test @MainActor func noFrameWaitsInsteadOfPausing() {
+    let move = SyncEngine.decide(hasFrame: false, driftMS: 10000, roomRate: 1, canSeek: true)
+    #expect(move == .wait)
+}
+
+@Test @MainActor func aheadWithAFramePausesForTheDrift() {
+    let move = SyncEngine.decide(hasFrame: true, driftMS: 10000, roomRate: 1, canSeek: true)
+    #expect(move == .pause(resumeAfter: 10, seekToTarget: false))
+}
+
+@Test @MainActor func behindWithoutThatDateWaits() {
+    let move = SyncEngine.decide(hasFrame: true, driftMS: -10000, roomRate: 1, canSeek: false)
+    #expect(move == .wait)
+}
+
+@Test @MainActor func behindInsideTheWindowSeeks() {
+    let move = SyncEngine.decide(hasFrame: true, driftMS: -800, roomRate: 1, canSeek: true)
+    #expect(move == .seek)
+}
+
+@Test @MainActor func aPausedRoomHoldsWithoutASeekItCannotMake() {
+    let move = SyncEngine.decide(hasFrame: true, driftMS: 100, roomRate: 0, canSeek: false)
+    #expect(move == .pause(resumeAfter: nil, seekToTarget: false))
+}
+
+@Test @MainActor func aSmallDriftLocksAtRateOne() {
+    let move = SyncEngine.decide(hasFrame: true, driftMS: -11, roomRate: 1, canSeek: true)
+    #expect(move == .rate(1, locked: true))
+}
+
 @Test func roomTargetAdvancesOnlyWhilePlaying() {
     var room = RoomState(room: "channel:1", channelId: 1, mode: "follow", anchorServer: 10000, anchorMedia: 5000, rate: 1, latency: "balanced", version: 1, members: 2)
     #expect(room.target(atServer: 12000) == 7000)
