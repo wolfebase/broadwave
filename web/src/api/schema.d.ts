@@ -1065,6 +1065,8 @@ export interface components {
             features: string[];
             /** @description Oldest app version this server supports, for example 1.0. Omitted by the previous release. The app compares its own version. An older app is still served. */
             minAppVersion?: string;
+            /** @description Base64 Ed25519 public key. The app stores it from this response and later requires a matching signature before it follows the server to a new address. Omitted when this build has no key. */
+            discoveryKey?: string;
             /** @description Present when a newer release is available. Omitted when this build is current or the check is off. */
             update?: components["schemas"]["ServerUpdate"];
         };

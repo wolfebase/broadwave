@@ -200,8 +200,22 @@ func main() {
 		}
 	}()
 
-	if *bonjour {
-		if id, err := st.Identity(context.Background(), httpapi.DefaultServerName()); err == nil {
+	discKey, keyErr := discovery.LoadKey(filepath.Join(*configDir, "discovery.key"))
+	if keyErr != nil {
+		slog.Error(fmt.Sprintf("discovery key: %v", keyErr))
+		discKey = nil
+	} else {
+		api.DiscoveryKey = discovery.PublicKeyString(discKey)
+	}
+	if id, err := st.Identity(context.Background(), httpapi.DefaultServerName()); err != nil {
+		slog.Error(fmt.Sprintf("identity: %v", err))
+	} else {
+		if finder, err := discovery.ListenFinder(portOf(*addr), id.ID, id.Name, discKey); err != nil {
+			slog.Error(fmt.Sprintf("discovery: %v", err))
+		} else {
+			defer finder.Close()
+		}
+		if *bonjour {
 			if advert, err := discovery.Announce(discovery.Advert{ID: id.ID, Name: id.Name, Version: version, Port: portOf(*addr)}); err != nil {
 				slog.Error(fmt.Sprintf("bonjour: %v", err))
 			} else {

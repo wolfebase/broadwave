@@ -11,7 +11,7 @@ flowchart LR
       Sync[Sync clock and rooms]
       DVR[DVR]
       Guide[Guide and metadata]
-      API[API v1, events, Bonjour]
+      API[API v1, events, Bonjour, UDP 8479]
       Export[HDHR emulation, M3U, XMLTV]
     end
   end
@@ -79,6 +79,8 @@ React and Vite, built into `server/cmd/broadwave/assets/web` and embedded with `
 ## Apple apps (`apple/`)
 
 SwiftUI apps for iOS and tvOS on shared packages: `BroadwaveKit` (API client, discovery, pairing, sync engine) and `BroadwaveUI` (theme and components). One channel plays in `AVPlayerViewController`. Side by side uses one `AVPlayer` layer per tile, sound and AirPlay follow the focused tile, and the tiles share a multiview sync room.
+
+The apps browse Bonjour `_broadwave._tcp` (TXT `id`, `name`, `version`, `api`, `port`). After 3 seconds they also send a UDP probe `BWDP?` plus a 16-byte nonce to port 8479, as a broadcast and as a unicast to each address on the local subnet, so a server with Bonjour turned off is still found when another server already answered. The server answers only on local private interfaces, with `BWDP!` plus JSON `{"id","name","url","pub","sig"}`. The signature covers the nonce, the URL, and the id. The app stores the server's public key from `GET /api/v1/server`. It follows a new address only when that stored key verifies the reply and `GET /server` at the new address returns the same id and key. A matching id alone is not enough. Setup shows a QR code for `broadwave://connect?url=…`. Typing an address on Apple TV is the last step.
 
 ## Design tokens (`design/`)
 
