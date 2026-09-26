@@ -78,11 +78,9 @@ func TestDeviceVanishHandsTheStreamOff(t *testing.T) {
 func TestATSC3MoveSkipsATunerThatCannot(t *testing.T) {
 	st := openStore(t)
 	base, _, srv := saveProfile(t, st, fake.ProfileFlex4K)
-	hold, err := http.Get(base + "/tuner0/v4.1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { hold.Body.Close() })
+	// Tuner 0 stays on a 1.0 channel for the whole test. A non-200 body is not a hold.
+	mustTune(t, base+"/tuner0/v4.1")
+	waitGuide(t, base, 0, "4.1")
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
 	h.MoveBudget = time.Second
 	m := deadMux(t, "104.1", "HEVC", "AC-4")
@@ -90,22 +88,21 @@ func TestATSC3MoveSkipsATunerThatCannot(t *testing.T) {
 	if !h.handOff(context.Background(), m) {
 		t.Fatal("3.0 channel did not move")
 	}
-	if guideOn(t, base, 1) != "104.1" {
-		t.Fatalf("landed on %+v", fetchGuides(t, base))
-	}
+	waitGuide(t, base, 1, "104.1")
 	if guideOn(t, base, 2) != "" || requested(srv, "/tuner2/v104.1") {
 		t.Fatalf("3.0 used a 1.0 tuner: %+v %v", fetchGuides(t, base), srv.Requests())
 	}
-	_ = m.body.Close()
-
-	hold1, err := http.Get(base + "/tuner1/v4.2")
-	if err != nil {
+	// The 104.1 stream has to finish releasing before 4.2 can take tuner 1.
+	// Closing the body returns before that release, and a 804 response does not hold the tuner.
+	if err := m.body.Close(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { hold1.Body.Close() })
-	// The first move took tuner 1. Hold it by leaving that body open, and also
-	// occupy tuner 1's sibling by the stream we just opened once the first
-	// body is still the 104.1 tune. Close it so tuner 1 can be held as 4.2.
+	waitGuide(t, base, 1, "")
+	mustTune(t, base+"/tuner1/v4.2")
+	waitGuide(t, base, 1, "4.2")
+	if guideOn(t, base, 0) != "4.1" {
+		t.Fatalf("tuner 0 was released: %+v", fetchGuides(t, base))
+	}
 	h2 := New(st, t.TempDir(), "ffmpeg", "libx264")
 	h2.MoveBudget = time.Second
 	again := deadMux(t, "104.1", "HEVC", "AC-4")
@@ -348,6 +345,38 @@ func saveDevice(t *testing.T, st *store.Store, dev hdhr.Device, guide string) {
 	}})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func mustTune(t *testing.T, rawURL string) {
+	t.Helper()
+	res, err := http.Get(rawURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = res.Body.Close() })
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("%s: %s", rawURL, res.Status)
+	}
+}
+
+func waitGuide(t *testing.T, base string, tuner int, want string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var last []string
+	for {
+		last = fetchGuides(t, base)
+		if tuner >= 0 && tuner < len(last) && last[tuner] == want {
+			return
+		}
+		if !time.Now().Before(deadline) {
+			got := ""
+			if tuner >= 0 && tuner < len(last) {
+				got = last[tuner]
+			}
+			t.Fatalf("tuner %d is %q, want %q (%v)", tuner, got, want, last)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
