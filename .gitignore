@@ -66,3 +66,8 @@ web/tsconfig.tsbuildinfo
 .playwright-cli/
 .evidence/
 .build/
+web/e2e/.run/
+web/e2e/test-results/
+web/e2e/playwright-report/
+web/playwright-report/
+web/test-results/

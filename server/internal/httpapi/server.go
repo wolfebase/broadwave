@@ -292,6 +292,10 @@ func (s *Server) discover(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) look(w http.ResponseWriter, r *http.Request) {
+	if discovery.Quiet() {
+		writeJSON(w, http.StatusOK, map[string]any{"found": []discovery.Found{}})
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 	var found []discovery.Found
