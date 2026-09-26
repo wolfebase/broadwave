@@ -326,3 +326,12 @@
   position: static;
   overflow: auto;
 }
+
+/* Diagnostics is a long settings page. A fixed immersive box clips Feeds and Logs. */
+.shell:has(.diag) {
+  height: 100%;
+}
+
+.shell .content:has(.diag) {
+  overflow-y: auto;
+}

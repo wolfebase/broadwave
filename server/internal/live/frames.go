@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -98,7 +98,7 @@ func (h *Hub) watchFrames(ctx context.Context, m *mux) {
 		case now := <-timer.C:
 			if FrameDue(last, now) {
 				if err := h.grabFrames(ctx, m); err != nil {
-					log.Printf("frames freq %d: %v", m.freq, err)
+					slog.Error(fmt.Sprintf("frames freq %d: %v", m.freq, err))
 				} else {
 					last = now
 				}

@@ -3,7 +3,7 @@ package httpapi
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -112,7 +112,7 @@ func (s *Server) runSetupFinish() {
 		s.finishRun.Running = false
 	}
 	s.finishMu.Unlock()
-	log.Printf("setup: %s", ready)
+	slog.Info(fmt.Sprintf("setup: %s", ready))
 	// The boot harvest is a single pass. If setup was using the tuner then,
 	// that pass returned. Start it again now that the signal check is done.
 	// Playback still wins: the harvest stops when a tuner is no longer idle.
@@ -150,7 +150,7 @@ func (s *Server) stopSetupScan(client *hdhr.Client, baseURL string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := client.AbortScan(ctx, baseURL); err != nil {
-		log.Printf("setup: scan abort: %v", err)
+		slog.Error(fmt.Sprintf("setup: scan abort: %v", err))
 	}
 }
 
@@ -252,7 +252,7 @@ func (s *Server) stepScan(ctx context.Context) {
 		host = u.Host
 	}
 	if _, err := source.Sync(ctx, s.Store, client, host); err != nil {
-		log.Printf("setup: lineup: %v", err)
+		slog.Error(fmt.Sprintf("setup: lineup: %v", err))
 	}
 	channels, _ = s.Store.Channels(ctx, false)
 	n := len(visibleChannels(channels))
@@ -275,7 +275,7 @@ func (s *Server) stepGuide(ctx context.Context) {
 		n, err := s.RefreshGuide(pullCtx)
 		cancel()
 		if err != nil {
-			log.Printf("setup: guide: %v", err)
+			slog.Error(fmt.Sprintf("setup: guide: %v", err))
 			s.setFinish("guide", "done", "Listings did not load. More listings arrive from the broadcast.")
 			return
 		}
@@ -336,7 +336,7 @@ func (s *Server) stepEncoder(ctx context.Context) {
 	speed, err := bench(benchCtx, ffmpeg, encoder)
 	cancel()
 	if err != nil {
-		log.Printf("setup: encoder: %v", err)
+		slog.Error(fmt.Sprintf("setup: encoder: %v", err))
 	}
 	s.setFinish("encoder", "done", live.FormatEncoderLine(encoder, speed, err == nil))
 }
@@ -397,7 +397,7 @@ func (s *Server) measureSetupSignals(ctx context.Context) string {
 		tried[next] = true
 		lock, err := s.Hub.Measure(scanCtx, next)
 		if err != nil {
-			log.Printf("setup: signal %d: %v", next, err)
+			slog.Error(fmt.Sprintf("setup: signal %d: %v", next, err))
 			if scanCtx.Err() != nil {
 				break
 			}
@@ -409,7 +409,7 @@ func (s *Server) measureSetupSignals(ctx context.Context) string {
 		}
 		seen[full.FrequencyHz] = true
 		if err := s.Store.SaveFrequencySignal(scanCtx, full.FrequencyHz, lock.Locked, lock.Strength, lock.Quality, lock.Symbol, time.Now()); err != nil {
-			log.Printf("setup: signal save %d: %v", full.FrequencyHz, err)
+			slog.Error(fmt.Sprintf("setup: signal save %d: %v", full.FrequencyHz, err))
 		}
 	}
 	return s.storedSignalSummary(ctx)

@@ -529,7 +529,8 @@ func scrub(v any) {
 				t[k] = "2026-09-24T15:00:00Z"
 			case "refresh", "lastRefresh":
 				t[k] = "2026-09-24T15:00:00Z"
-			case "doctor":
+			case "doctor", "logs":
+				// Logs are the process ring, so a fixture cannot pin them.
 				t[k] = []any{}
 			case "os":
 				t[k] = "test"

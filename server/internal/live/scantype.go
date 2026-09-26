@@ -3,7 +3,8 @@ package live
 import (
 	"bytes"
 	"context"
-	"log"
+	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -554,11 +555,11 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 		timer.Stop()
 	}
 	if len(f.tracks) > 0 {
-		log.Printf("audio tracks for %s: %s", f.channel.GuideNumber, trackLog(f.tracks))
+		slog.Info(fmt.Sprintf("audio tracks for %s: %s", f.channel.GuideNumber, trackLog(f.tracks)))
 	}
 	if order != "" {
 		m.detach(sub)
-		log.Printf("scan type %s for %s in %s", order, f.channel.GuideNumber, time.Since(started).Round(time.Millisecond))
+		slog.Info(fmt.Sprintf("scan type %s for %s in %s", order, f.channel.GuideNumber, time.Since(started).Round(time.Millisecond)))
 		f.headerOrder = order
 		h.applyScanLocked(f, order)
 		return
@@ -566,7 +567,7 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 	buf.mu.Lock()
 	n := len(buf.b)
 	buf.mu.Unlock()
-	log.Printf("scan type for %s program %d not in %s (%d bytes)", f.channel.GuideNumber, f.program, time.Since(started).Round(time.Millisecond), n)
+	slog.Info(fmt.Sprintf("scan type for %s program %d not in %s (%d bytes)", f.channel.GuideNumber, f.program, time.Since(started).Round(time.Millisecond), n))
 	// No bytes means the tuner has not delivered a GOP yet. Bytes without a
 	// header are a late sequence start: keep reading them. ffprobe runs only
 	// when nothing is stored yet. It cannot see soft 3:2, and leaving it
@@ -614,7 +615,7 @@ func (h *Hub) finishScan(m *mux, f *feed, buf *scanBuf, sub *pipeSub) {
 	if order == "" || f.headerOrder != "" || h.channels[id] != f {
 		return
 	}
-	log.Printf("scan type %s for %s after the window", order, guide)
+	slog.Info(fmt.Sprintf("scan type %s for %s after the window", order, guide))
 	f.headerOrder = order
 	h.applyScanLocked(f, order)
 }

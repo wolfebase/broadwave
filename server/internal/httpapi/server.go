@@ -61,6 +61,8 @@ type Server struct {
 	// GuidePull replaces the listings pull in tests. Nil calls RefreshGuide.
 	// The public XMLTV host is not deterministic, and a failed pull can echo DeviceAuth.
 	GuidePull func(ctx context.Context) (int, error)
+	// CountFeeds replaces the hub's feed stats in tests. Nil reads the hub.
+	CountFeeds func() []live.FeedStat
 	// Updates is the daily release check. Nil leaves the server info without an update field.
 	Updates *update.Checker
 	// BackupDir is the catalog copy folder under the config directory.
@@ -95,6 +97,7 @@ func (s *Server) Handler() http.Handler {
 	api("PATCH /server", s.renameServer)
 	api("GET /clock", s.clock)
 	api("GET /diagnostics", s.diagnostics)
+	api("GET /metrics", s.metrics)
 	api("GET /ws", s.socket)
 	api("GET /profile", s.profile)
 	api("GET /devices", s.devices)

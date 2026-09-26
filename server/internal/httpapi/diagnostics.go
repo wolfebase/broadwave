@@ -12,8 +12,11 @@ import (
 	"broadwave/internal/disk"
 	"broadwave/internal/doctor"
 	"broadwave/internal/live"
+	"broadwave/internal/logbuf"
 	"broadwave/internal/store"
 )
+
+const diagLogLines = 80
 
 // diagnostics is everything a support conversation needs, in one call.
 func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
@@ -105,6 +108,14 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 	events, _ := s.Store.Events(ctx, 20)
 	out["recentActivity"] = events
 	out["doctor"] = s.doctorNotes(devices)
+	secrets := s.hiddenSecrets(ctx)
+	feeds := s.feedStats()
+	for i := range feeds {
+		feeds[i].GuideNumber = scrubBody(feeds[i].GuideNumber, secrets)
+		feeds[i].Name = scrubBody(feeds[i].Name, secrets)
+	}
+	out["feeds"] = feeds
+	out["logs"] = scrubLogs(logbuf.Tail(diagLogLines), secrets)
 	writeJSON(w, http.StatusOK, out)
 }
 

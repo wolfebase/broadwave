@@ -2,7 +2,8 @@ package httpapi
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"log/slog"
 	"time"
 
 	"broadwave/internal/dvr"
@@ -35,13 +36,13 @@ func (s *Server) scanMissing(ctx context.Context) {
 		tried[ch.ID] = true
 		freq, err := s.Hub.Dwell(ctx, ch.ID, 40*time.Second)
 		if err != nil {
-			log.Printf("guide: scan %s: %v", ch.GuideNumber, err)
+			slog.Error(fmt.Sprintf("guide: scan %s: %v", ch.GuideNumber, err))
 			continue
 		}
 		if freq > 0 {
 			seen[freq] = true
 			_ = s.Store.NoteGuideScan(ctx, freq, time.Now())
-			log.Printf("guide: scanned %s at %d Hz", ch.GuideNumber, freq)
+			slog.Info(fmt.Sprintf("guide: scanned %s at %d Hz", ch.GuideNumber, freq))
 		}
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -175,7 +175,7 @@ func Nightly(ctx context.Context, st *store.Store, dir string, now time.Time) er
 	if err != nil {
 		return err
 	}
-	log.Printf("backup: saved %s", daily.Name)
+	slog.Info(fmt.Sprintf("backup: saved %s", daily.Name))
 	if !weeklyDue(dir, now) {
 		return nil
 	}
@@ -184,7 +184,7 @@ func Nightly(ctx context.Context, st *store.Store, dir string, now time.Time) er
 	if err := copyFile(src, dst); err != nil {
 		return err
 	}
-	log.Printf("backup: saved %s", filepath.Base(dst))
+	slog.Info(fmt.Sprintf("backup: saved %s", filepath.Base(dst)))
 	return Prune(dir)
 }
 
@@ -233,7 +233,7 @@ func SnapshotIfVersionChanged(ctx context.Context, configDir, version string, no
 	if err := Prune(dir); err != nil {
 		return err
 	}
-	log.Printf("backup: saved %s", name)
+	slog.Info(fmt.Sprintf("backup: saved %s", name))
 	return writeVersion(dir, version)
 }
 
@@ -262,7 +262,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 			continue
 		}
 		if err := Nightly(ctx, s.Store, s.Dir, s.now()); err != nil {
-			log.Printf("backup: %v", err)
+			slog.Error(fmt.Sprintf("backup: %v", err))
 			timer.Reset(retryBackup)
 			continue
 		}

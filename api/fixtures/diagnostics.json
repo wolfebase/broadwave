@@ -36,6 +36,7 @@
     "hdhrEmulation",
     "export"
   ],
+  "feeds": [],
   "guide": {
     "airings": 1,
     "channels": 3,
@@ -58,6 +59,7 @@
     ],
     "listingsUntil": "2026-09-24T16:00:00Z"
   },
+  "logs": [],
   "os": "test",
   "recentActivity": [
     {

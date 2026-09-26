@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -560,7 +560,7 @@ func (h *Hub) rebuildRenditionsLocked(f *feed) {
 	for _, k := range list {
 		r, err := h.ensureRenditionLocked(f, k.spec)
 		if err != nil {
-			log.Printf("rebuild %s on %s: %v", k.spec.Key(), f.channel.GuideNumber, err)
+			slog.Error(fmt.Sprintf("rebuild %s on %s: %v", k.spec.Key(), f.channel.GuideNumber, err))
 			continue
 		}
 		r.viewers = k.viewers
@@ -631,13 +631,13 @@ func (h *Hub) watchRendition(f *feed, r *rendition, pid int, encoder string) {
 	}
 	software := err != nil && time.Since(started) <= h.fallbackWindow() && vaapiFamily(encoder) && !r.fallback
 	if err != nil && !r.restarted && h.restartRenditionLocked(f, r, software) {
-		log.Printf("rendition %s on %s restarted after %s", r.spec.Key(), f.channel.GuideNumber, time.Since(started).Round(time.Millisecond))
+		slog.Info(fmt.Sprintf("rendition %s on %s restarted after %s", r.spec.Key(), f.channel.GuideNumber, time.Since(started).Round(time.Millisecond)))
 		return
 	}
 	// The process has been waited. Don't signal a pid the OS may have reused.
 	r.cmd = nil
 	r.stdin = nil
-	log.Printf("rendition %s on %s released after %s: %v", r.spec.Key(), f.channel.GuideNumber, time.Since(started).Round(time.Millisecond), err)
+	slog.Error(fmt.Sprintf("rendition %s on %s released after %s: %v", r.spec.Key(), f.channel.GuideNumber, time.Since(started).Round(time.Millisecond), err))
 	h.stopRenditionLocked(f, r.spec.Key())
 	h.dropIfUnusedLocked(f)
 }
@@ -1237,7 +1237,7 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 			if h.handOff(ctx, m) {
 				continue
 			}
-			log.Printf("mux %d ended: %v", m.freq, err)
+			slog.Error(fmt.Sprintf("mux %d ended: %v", m.freq, err))
 			h.releaseMux(m)
 			return
 		}
@@ -1692,7 +1692,7 @@ func (h *Hub) commitMove(ctx context.Context, m *mux, base string, tuner int, bo
 		_ = oldBody.Close()
 	}
 	releaseTuner(oldHost, oldTuner)
-	log.Printf("mux %d moved to %s tuner %d", m.freq, m.host, tuner)
+	slog.Info(fmt.Sprintf("mux %d moved to %s tuner %d", m.freq, m.host, tuner))
 	return true
 }
 

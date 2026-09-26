@@ -108,7 +108,7 @@ paths:
     get:
       tags: [server]
       operationId: getDiagnostics
-      description: Tuners and signal, encoder and ffmpeg, storage, guide freshness, what the relay is carrying, connected apps, and recent activity.
+      description: Tuners and signal, encoder and ffmpeg, storage, guide freshness, what the relay is carrying, feed counts, recent logs, connected apps, and recent activity.
       responses:
         "200":
           description: Diagnostics
@@ -117,6 +117,17 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+  /metrics:
+    get:
+      tags: [server]
+      operationId: getMetrics
+      description: Prometheus text for tuned channels, viewers, and ffmpeg processes. Passwords and tuner DeviceAuth are left out.
+      responses:
+        "200":
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema: { type: string }
   /profile:
     get:
       tags: [server]

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"math/rand/v2"
 	"net/http"
 	"os"
@@ -442,7 +442,7 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 	for _, row := range rows {
 		listed[row.ChannelID] = struct{}{}
 	}
-	log.Printf("guide: source=silicondust-xmltv airings=%d channels=%d next=%s", len(rows), len(listed), next.Format(time.RFC3339))
+	slog.Info(fmt.Sprintf("guide: source=silicondust-xmltv airings=%d channels=%d next=%s", len(rows), len(listed), next.Format(time.RFC3339)))
 	_ = s.Store.AddEvent(ctx, "guide", fmt.Sprintf("Guide updated, %d airings", len(rows)))
 	s.LinkGames(ctx)
 	return len(rows), nil

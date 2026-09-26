@@ -24,6 +24,56 @@ type FeedStatus struct {
 	FieldOrder  string            `json:"fieldOrder,omitempty"`
 }
 
+// FeedStat is one tuned channel: viewers and the ffmpeg processes on it.
+type FeedStat struct {
+	ChannelID   int64  `json:"channelId"`
+	GuideNumber string `json:"guideNumber"`
+	Name        string `json:"name"`
+	Viewers     int    `json:"viewers"`
+	FFmpeg      int    `json:"ffmpeg"`
+	Recording   bool   `json:"recording"`
+	Exports     int    `json:"exports"`
+}
+
+// FeedStats counts viewers and ffmpeg processes the hub already has.
+// It does not tune.
+func (h *Hub) FeedStats() []FeedStat {
+	if h == nil {
+		return []FeedStat{}
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := []FeedStat{}
+	for _, f := range h.feedsLocked() {
+		st := FeedStat{
+			ChannelID: f.channel.ID, GuideNumber: f.channel.GuideNumber, Name: f.channel.DisplayName,
+			Recording: f.recording != nil, Exports: f.exports,
+		}
+		for _, r := range f.renditions {
+			if r == nil {
+				continue
+			}
+			st.Viewers += r.viewers
+			if renditionRunning(r) {
+				st.FFmpeg++
+			}
+		}
+		if f.recording != nil && cmdRunning(f.recording.cmd) {
+			st.FFmpeg++
+		}
+		out = append(out, st)
+	}
+	return out
+}
+
+func renditionRunning(r *rendition) bool {
+	return r != nil && !r.waited.Load() && cmdRunning(r.cmd)
+}
+
+func cmdRunning(cmd *exec.Cmd) bool {
+	return cmd != nil && cmd.Process != nil
+}
+
 func (h *Hub) Status() []FeedStatus {
 	h.mu.Lock()
 	defer h.mu.Unlock()

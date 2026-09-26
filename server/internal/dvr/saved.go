@@ -2,7 +2,8 @@ package dvr
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,7 +24,7 @@ func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Reco
 	if commercialsOn(passes, rec) && hub != nil && rec.Path != "" {
 		found, err := live.IndexBreaks(hub.FFmpeg, rec.Path)
 		if err != nil {
-			log.Printf("breaks: %v", err)
+			slog.Error(fmt.Sprintf("breaks: %v", err))
 		} else if len(found) > 0 {
 			markers := make([]store.Marker, 0, len(found))
 			for _, item := range found {

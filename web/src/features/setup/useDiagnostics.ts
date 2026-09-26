@@ -14,6 +14,8 @@ export type Diagnostics = {
   connectedApps?: number;
   recentActivity?: { id: number; at: string; kind: string; message: string }[];
   doctor?: { id: string; message: string }[];
+  feeds?: { channelId: number; guideNumber: string; name: string; viewers: number; ffmpeg: number; recording?: boolean; exports?: number }[];
+  logs?: string[];
 };
 
 /** Diagnostics, refreshed every few seconds while mounted. */

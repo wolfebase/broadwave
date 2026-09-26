@@ -2,7 +2,8 @@ package dvr
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -50,7 +51,7 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 			ChannelID: item.Airing.ChannelID, Title: item.Airing.Title, Subtitle: item.Airing.Subtitle,
 			Description: item.Airing.Description, Category: item.Airing.Category, ProgramID: item.Airing.ProgramID, GameID: item.Airing.GameID,
 		}); err != nil {
-			log.Printf("pass record: %v", err)
+			slog.Error(fmt.Sprintf("pass record: %v", err))
 		}
 	}
 	hub.SetHold(hold)

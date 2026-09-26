@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path"
@@ -78,7 +78,7 @@ func (c *Checker) Run(ctx context.Context) {
 		}
 		if c.enabled(ctx) {
 			if _, err := c.Check(ctx); err != nil {
-				log.Printf("update: %v", err)
+				slog.Error(fmt.Sprintf("update: %v", err))
 			}
 		}
 		next := c.interval()

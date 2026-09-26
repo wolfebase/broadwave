@@ -91,8 +91,25 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Tuners and signal, encoder and ffmpeg, storage, guide freshness, what the relay is carrying, connected apps, and recent activity. */
+        /** @description Tuners and signal, encoder and ffmpeg, storage, guide freshness, what the relay is carrying, feed counts, recent logs, connected apps, and recent activity. */
         get: operations["getDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Prometheus text for tuned channels, viewers, and ffmpeg processes. Passwords and tuner DeviceAuth are left out. */
+        get: operations["getMetrics"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1757,6 +1774,26 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    getMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Prometheus metrics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
                 };
             };
         };
