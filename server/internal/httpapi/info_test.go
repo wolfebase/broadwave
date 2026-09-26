@@ -65,3 +65,18 @@ func TestServerInfoReportsMinAppVersion(t *testing.T) {
 		t.Fatalf("%s", rec.Body.String())
 	}
 }
+
+func TestServerInfoDiscoveryKey(t *testing.T) {
+	st := testStore(t)
+	plain := (&Server{Store: st, Version: "dev"}).Handler()
+	res := get(t, plain, "/api/v1/server")
+	if bytes.Contains(res.Body.Bytes(), []byte("discoveryKey")) {
+		t.Fatalf("empty key was published: %s", res.Body.String())
+	}
+	const key = "q83vEjRWeJ4q4q4q4q4q4q4q4q4q4q4q4q4q4q4="
+	with := (&Server{Store: st, Version: "dev", DiscoveryKey: key}).Handler()
+	res = get(t, with, "/api/v1/server")
+	if !bytes.Contains(res.Body.Bytes(), []byte(`"discoveryKey":"`+key+`"`)) {
+		t.Fatalf("%s", res.Body.String())
+	}
+}

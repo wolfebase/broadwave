@@ -52,6 +52,9 @@ func (s *Server) serverInfo(w http.ResponseWriter, r *http.Request) {
 		"features":      s.features(),
 		"minAppVersion": minAppVersion,
 	}
+	if s.DiscoveryKey != "" {
+		body["discoveryKey"] = s.DiscoveryKey
+	}
 	if s.Updates != nil {
 		if notice := s.Updates.Visible(r.Context()); notice != nil {
 			body["update"] = notice

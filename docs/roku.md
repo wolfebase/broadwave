@@ -8,7 +8,7 @@ Checked against Roku's streaming specifications and Video node reference as publ
 
 A Roku channel is a SceneGraph app. The package is a manifest, a BrightScript `main` that shows one scene, and XML components with BrightScript attached. The scene draws the screens. Video plays in the platform Video node. The app does not ship a decoder, and it does not run hls.js. Pointing that node at an HLS URL is the whole playback stack.
 
-The first thing worth building, later, is one full-screen player for one live channel. Home, the guide, recordings, and settings wait until that player holds a picture. How the channel finds a Broadwave server is unknown. The other clients use Bonjour (`_broadwave._tcp`). Whether a SceneGraph app can browse that, or use the UDP probe the plan describes for networks that filter mDNS, is not established here.
+The first thing worth building, later, is one full-screen player for one live channel. Home, the guide, recordings, and settings wait until that player holds a picture. How the channel finds a Broadwave server is unknown. The other clients use Bonjour (`_broadwave._tcp`) and, after a few seconds, a UDP probe `BWDP?` plus a 16-byte nonce on port 8479. The server answers `BWDP!` plus its id, name, URL, and a signature. Whether a SceneGraph app can browse Bonjour, or send that probe, is not established here.
 
 ## What the player would be handed
 

@@ -519,9 +519,10 @@ public struct ServerInfo: Codable, Sendable, Hashable, Identifiable {
     public var tunerCount: Int?
     public var features: [String]
     public var minAppVersion: String?
+    public var discoveryKey: String?
     public var update: ServerUpdate?
 
-    public init(id: String, name: String, version: String, apiVersion: Int, encoder: String? = nil, tunerCount: Int? = nil, features: [String], minAppVersion: String? = nil, update: ServerUpdate? = nil) {
+    public init(id: String, name: String, version: String, apiVersion: Int, encoder: String? = nil, tunerCount: Int? = nil, features: [String], minAppVersion: String? = nil, discoveryKey: String? = nil, update: ServerUpdate? = nil) {
         self.id = id
         self.name = name
         self.version = version
@@ -530,6 +531,7 @@ public struct ServerInfo: Codable, Sendable, Hashable, Identifiable {
         self.tunerCount = tunerCount
         self.features = features
         self.minAppVersion = minAppVersion
+        self.discoveryKey = discoveryKey
         self.update = update
     }
 }

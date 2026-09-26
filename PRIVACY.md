@@ -8,8 +8,8 @@ Broadwave doesn't collect, sell, or share your data. The apps talk only to the B
 
 ## What the apps do
 
-- **Find your server.** The iPhone, iPad, and Apple TV apps look for a Broadwave server on your local network (Bonjour) or connect to an address you enter. That's why they ask for Local Network access.
-- **Store settings on the device.** The server you chose, your playback preferences, and a cached copy of the guide stay on your device so the app opens quickly. Deleting the app deletes them.
+- **Find your server.** The iPhone, iPad, and Apple TV apps look for a Broadwave server on your local network. They try Bonjour, then send a short UDP probe on the local network. A dropped connection looks again the same way. Before the app follows a server to a new address, it checks a signature only that server can make, using a key it learned from that server. The check stays on your network. They also connect to an address you enter or a link you open. That's why they ask for Local Network access.
+- **Store settings on the device.** The servers you have used, your playback preferences, and a cached copy of the guide stay on your device so the app opens quickly and can follow a server that moves. Deleting the app deletes them.
 - **No accounts, ads, analytics, or tracking.** The apps contain no advertising or analytics SDKs, and they don't use the advertising identifier.
 - **Try the demo.** Sample films bundled in the app play on the device. That choice does not contact a server, Wolfe Up, or the internet.
 

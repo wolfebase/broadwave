@@ -197,7 +197,7 @@ struct RootView: View {
         }
     #endif
 
-    /// broadwave://watch/<channel id>, broadwave://guide, broadwave://sports — for widgets, Top Shelf, and Siri.
+    /// broadwave://connect?url=, broadwave://watch/<channel id>, broadwave://guide, broadwave://sports.
     private var installedVersion: String {
         if let raw = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, !raw.isEmpty {
             return raw
@@ -209,8 +209,7 @@ struct RootView: View {
         guard url.scheme == "broadwave" else { return }
         switch url.host() {
         case "connect":
-            let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
-            if let raw = q?.first(where: { $0.name == "url" })?.value, let server = URL(string: raw) {
+            if let server = ConnectLink.serverURL(from: url) {
                 Task {
                     if let info = try? await APIClient(base: server).server() {
                         store.connect(FoundServer(id: info.id, name: info.name, url: server))

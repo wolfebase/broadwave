@@ -18,6 +18,9 @@ public final class EventSocket {
     private var clockTimer: Timer?
     private var screenName = ""
     private var screenKind = ""
+    private var stopped = false
+    /// First drop of the socket. The app looks for the same server at a new address.
+    public var onFailure: (() -> Void)?
 
     public init(base: URL) {
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
@@ -35,7 +38,7 @@ public final class EventSocket {
     }
 
     public func connect() {
-        guard task == nil else { return }
+        guard !stopped, task == nil else { return }
         let task = URLSession.shared.webSocketTask(with: url)
         self.task = task
         task.resume()
@@ -65,6 +68,7 @@ public final class EventSocket {
     }
 
     public func disconnect() {
+        stopped = true
         clockTimer?.invalidate()
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
@@ -147,9 +151,14 @@ public final class EventSocket {
                 case .failure:
                     self.connected = false
                     self.task = nil
+                    guard !self.stopped else { return }
+                    self.onFailure?()
                     let wait = min(15.0, 0.5 * pow(2, Double(self.retry)))
                     self.retry += 1
-                    DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in self?.connect() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+                        guard self?.stopped == false else { return }
+                        self?.connect()
+                    }
                 }
             }
         }

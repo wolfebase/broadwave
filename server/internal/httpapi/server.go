@@ -37,8 +37,10 @@ type Server struct {
 	Assets  fs.FS
 	Dev     bool
 	Version string
-	Bus     *realtime.Bus
-	Sports  sports.Provider
+	// DiscoveryKey is the base64 Ed25519 public key for address follow. Empty omits it.
+	DiscoveryKey string
+	Bus          *realtime.Bus
+	Sports       sports.Provider
 	// Clock is the server's idea of now. Tests set it; production leaves it nil.
 	Clock    func() time.Time
 	signalOn bool

@@ -7,11 +7,43 @@ public struct FoundServer: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var name: String
     public var url: URL
+    /// Base64 Ed25519 public key learned from GET /server. A UDP packet does not set this.
+    public var key: String?
+    /// Signature from the latest probe. Not stored.
+    public var signature: String?
+    /// Nonce sent with the probe that produced signature. Not stored.
+    public var nonce: Data?
+    /// Exact URL string the signature covers. Not stored.
+    public var signedURL: String?
 
-    public init(id: String, name: String, url: URL) {
+    public init(id: String, name: String, url: URL, key: String? = nil, signature: String? = nil, nonce: Data? = nil, signedURL: String? = nil) {
         self.id = id
         self.name = name
         self.url = url
+        self.key = key
+        self.signature = signature
+        self.nonce = nonce
+        self.signedURL = signedURL
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, url, key
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(url, forKey: .url)
+        try c.encodeIfPresent(key, forKey: .key)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        url = try c.decode(URL.self, forKey: .url)
+        key = try c.decodeIfPresent(String.self, forKey: .key)
     }
 }
 
@@ -21,8 +53,14 @@ public struct FoundServer: Codable, Sendable, Hashable, Identifiable {
 public final class Discovery {
     public private(set) var servers: [FoundServer] = []
     public private(set) var searching = false
+    /// True after the UDP probe has run, or Bonjour already found a server.
+    public private(set) var looked = false
 
     private var browser: NWBrowser?
+    private var probeTask: Task<Void, Never>?
+    private var probed: Set<String> = []
+    /// The first probe ran before Local Network permission and found nothing.
+    private var probeMissed = false
 
     public init() {}
 
@@ -37,7 +75,9 @@ public final class Discovery {
         browser.stateUpdateHandler = { [weak self] state in
             Task { @MainActor in
                 switch state {
-                case .ready: self?.searching = true
+                case .ready:
+                    self?.searching = true
+                    self?.probeIfTheFirstMissed()
                 case .failed, .cancelled: self?.searching = false
                 default: break
                 }
@@ -45,9 +85,35 @@ public final class Discovery {
         }
         browser.start(queue: .main)
         self.browser = browser
+        // Bonjour goes first. The probe still runs after 3s so a server with
+        // Bonjour turned off is found even when another server answered mDNS.
+        probeTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled, let self, self.browser != nil else { return }
+            runProbe()
+        }
+    }
+
+    private func probeIfTheFirstMissed() {
+        guard probeMissed, browser != nil else { return }
+        probeMissed = false
+        runProbe()
+    }
+
+    private func runProbe() {
+        probeTask = Task { @MainActor [weak self] in
+            let found = await Task.detached { LANProbe.collect(timeout: 1.5) }.value
+            guard !Task.isCancelled, let self, browser != nil else { return }
+            merge(found)
+            if servers.isEmpty, !searching {
+                probeMissed = true
+            }
+        }
     }
 
     public func stop() {
+        probeTask?.cancel()
+        probeTask = nil
         browser?.cancel()
         browser = nil
         searching = false
@@ -73,6 +139,12 @@ public final class Discovery {
                 guard let url = await Self.resolve(result.endpoint, port: port) else { return }
                 let server = FoundServer(id: id, name: display, url: url)
                 guard let self else { return }
+                NSLog("broadwave discovery: %@ %@", server.name, server.url.absoluteString)
+                // A probe already named this server. A later Bonjour resolve can
+                // replace that address with a link-local host, so leave it.
+                if probed.contains(id), servers.contains(where: { $0.id == id }) {
+                    return
+                }
                 if let i = servers.firstIndex(where: { $0.id == id }) {
                     servers[i] = server
                 } else {
@@ -81,8 +153,21 @@ public final class Discovery {
             }
         }
         let gone = serviceNames.filter { !live.contains($0.key) }.map(\.value)
-        servers.removeAll { gone.contains($0.id) }
+        servers.removeAll { gone.contains($0.id) && !probed.contains($0.id) }
         serviceNames = serviceNames.filter { live.contains($0.key) }
+    }
+
+    private func merge(_ found: [FoundServer]) {
+        for server in found {
+            probed.insert(server.id)
+            NSLog("broadwave discovery: %@ %@", server.name, server.url.absoluteString)
+            if let i = servers.firstIndex(where: { $0.id == server.id }) {
+                servers[i] = server
+            } else {
+                servers.append(server)
+            }
+        }
+        looked = true
     }
 
     /// Opens a connection to learn the address the service lives at.

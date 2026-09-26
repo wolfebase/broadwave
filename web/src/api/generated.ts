@@ -294,6 +294,7 @@ export type ServerInfo = {
   tunerCount?: number;
   features: string[];
   minAppVersion?: string;
+  discoveryKey?: string;
   update?: ServerUpdate;
 };
 
