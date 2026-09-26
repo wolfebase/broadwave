@@ -1,0 +1,248 @@
+package live
+
+import (
+	"encoding/binary"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestPlaylistGateWakesForTheNextPart(t *testing.T) {
+	g := newPlaylistGate()
+	g.publish(0, 0, 0)
+	if g.ready(0, 0) {
+		t.Fatal("an empty open segment is not ready")
+	}
+	done := make(chan struct{})
+	go func() {
+		g.wait(0, 0, time.Second)
+		close(done)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	g.publish(0, 0, 1)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("the gate did not wake for part 0")
+	}
+	if !g.ready(0, 0) || g.ready(0, 1) {
+		t.Fatal("only the published part is ready")
+	}
+	start := time.Now()
+	g.wait(3, 0, 80*time.Millisecond)
+	if time.Since(start) > 500*time.Millisecond {
+		t.Fatal("a missing part waited past the timeout")
+	}
+	start = time.Now()
+	g.wait(-1, 0, time.Second)
+	if time.Since(start) > 200*time.Millisecond {
+		t.Fatal("a negative sequence should not wait")
+	}
+}
+
+func TestPackListsAPartBeforeTheSegmentCloses(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.ts")
+	gen := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc=size=320x180:rate=30", "-f", "lavfi", "-i", "sine=frequency=440",
+		"-t", "5", "-c:v", "libx264", "-preset", "ultrafast", "-g", "60", "-pix_fmt", "yuv420p", "-c:a", "aac",
+		"-output_ts_offset", "95000", "-f", "mpegts", src)
+	if out, err := gen.CombinedOutput(); err != nil {
+		t.Fatalf("source: %v %s", err, out)
+	}
+	out := filepath.Join(dir, "rendition")
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer in.Close()
+	cmd := exec.Command(ffmpeg, RenditionArgs(0, Source{VideoCodec: "H264", AudioCodec: "AAC", Progressive: true}, Rendition{Video: "copy", Audio: "copy"}, "libx264", "")...)
+	cmd.Dir = out
+	cmd.Stdin = in
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	// Capture the fragment stream, then feed it one fragment at a time.
+	raw, err := io.ReadAll(stdout)
+	waitErr := cmd.Wait()
+	if err != nil || waitErr != nil {
+		t.Fatalf("encode: %v %v", err, waitErr)
+	}
+	boxes := topBoxes(raw)
+	pr, pw := io.Pipe()
+	packErr := make(chan error, 1)
+	go func() { packErr <- Pack(out, pr, nil) }()
+
+	wroteFragment := false
+	for _, box := range boxes {
+		if _, err := pw.Write(box); err != nil {
+			t.Fatal(err)
+		}
+		if string(box[4:8]) == "mdat" {
+			wroteFragment = true
+			break
+		}
+	}
+	if !wroteFragment {
+		t.Fatal("the encode produced no fragment")
+	}
+	var playlist string
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		b, err := os.ReadFile(filepath.Join(out, "index.m3u8"))
+		if err == nil && strings.Contains(string(b), "#EXT-X-PART:") {
+			playlist = string(b)
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if playlist == "" {
+		t.Fatal("no part was listed before the rest of the stream")
+	}
+	if strings.Contains(playlist, "#EXTINF") {
+		t.Fatalf("the first fragment closed a segment:\n%s", playlist)
+	}
+	if !strings.Contains(playlist, "CAN-BLOCK-RELOAD=YES") || !strings.Contains(playlist, "PART-HOLD-BACK=1.000") {
+		t.Fatalf("playlist control:\n%s", playlist)
+	}
+	fixed := time.Date(2026, 9, 26, 4, 0, 0, 0, time.UTC)
+	tl := NewTimeline()
+	tl.now = func() time.Time { return fixed }
+	var stamper playlistStamper
+	stamped := string(stamper.stamp(out, []byte(playlist), tl))
+	if !strings.Contains(stamped, "#EXT-X-PART:") {
+		t.Fatalf("stamping dropped the part:\n%s", stamped)
+	}
+	earliest, ok := tl.Earliest()
+	if !ok || !earliest.Equal(fixed.Add(-4*time.Second)) {
+		t.Fatalf("the first part should anchor the clock, got %v %v", earliest, ok)
+	}
+
+	if _, err := pw.Write(restAfter(boxes)); err != nil {
+		t.Fatal(err)
+	}
+	_ = pw.Close()
+	if err := <-packErr; err != nil {
+		t.Fatal(err)
+	}
+	final, err := os.ReadFile(filepath.Join(out, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(final), "seg00000.m4s") {
+		t.Fatalf("segment 0 missing:\n%s", final)
+	}
+	assertSegmentCuts(t, string(final))
+}
+
+func restAfter(boxes [][]byte) []byte {
+	seen := false
+	var b []byte
+	for _, box := range boxes {
+		if !seen {
+			if string(box[4:8]) == "mdat" {
+				seen = true
+			}
+			continue
+		}
+		b = append(b, box...)
+	}
+	return b
+}
+
+func topBoxes(b []byte) [][]byte {
+	var out [][]byte
+	for len(b) >= 8 {
+		size := int(binary.BigEndian.Uint32(b[:4]))
+		head := 8
+		if size == 1 {
+			if len(b) < 16 {
+				break
+			}
+			size = int(binary.BigEndian.Uint64(b[8:16]))
+			head = 16
+		}
+		if size < head || size > len(b) {
+			break
+		}
+		out = append(out, append([]byte(nil), b[:size]...))
+		b = b[size:]
+	}
+	return out
+}
+
+func assertSegmentCuts(t *testing.T, playlist string) {
+	t.Helper()
+	var durs []float64
+	for _, line := range strings.Split(playlist, "\n") {
+		v, ok := strings.CutPrefix(line, "#EXTINF:")
+		if !ok {
+			continue
+		}
+		v = strings.TrimSuffix(v, ",")
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		durs = append(durs, f)
+	}
+	if len(durs) < 3 {
+		t.Fatalf("expected at least three segments, got %v", durs)
+	}
+	// A segment is one fragment: a half-second transcode or one source GOP.
+	// The tail can be short because the encode ended mid-fragment.
+	body := durs
+	if body[len(body)-1] < 0.3 {
+		body = body[:len(body)-1]
+	}
+	for _, d := range body {
+		if d < 0.3 || d > 2.6 {
+			t.Errorf("segment duration %.3f is not one fragment (%v)", d, durs)
+		}
+	}
+}
+
+func TestDeltaPlaylistSkipsTheHead(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:1\n")
+	b.WriteString("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,CAN-SKIP-UNTIL=6.000\n")
+	b.WriteString("#EXT-X-MEDIA-SEQUENCE:4\n#EXT-X-MAP:URI=\"init.mp4\"\n")
+	for i := 0; i < 20; i++ {
+		b.WriteString("#EXT-X-PROGRAM-DATE-TIME:2026-09-26T04:00:0" + strconv.Itoa(i%10) + ".000Z\n")
+		b.WriteString("#EXTINF:0.500,\nseg" + strconv.Itoa(i) + ".m4s\n")
+	}
+	b.WriteString("#EXT-X-PART:DURATION=0.500,URI=\"part00020.m4s\"\n")
+	out := string(DeltaPlaylist([]byte(b.String())))
+	if !strings.Contains(out, "#EXT-X-SKIP:SKIPPED-SEGMENTS=8\n") {
+		t.Fatalf("skip count:\n%s", out)
+	}
+	if !strings.Contains(out, "#EXT-X-VERSION:9\n") || strings.Contains(out, "seg0.m4s") || !strings.Contains(out, "seg8.m4s") {
+		t.Fatalf("delta shape:\n%s", out)
+	}
+	if !strings.Contains(out, "#EXT-X-MEDIA-SEQUENCE:4\n") || !strings.Contains(out, "part00020.m4s") {
+		t.Fatalf("sequence and the open part stay:\n%s", out)
+	}
+	if strings.Count(out, "#EXTINF") != 12 {
+		t.Fatalf("kept %d segments:\n%s", strings.Count(out, "#EXTINF"), out)
+	}
+	short := "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:0.500,\nseg00000.m4s\n"
+	if got := string(DeltaPlaylist([]byte(short))); got != short {
+		t.Fatalf("a short playlist is unchanged:\n%s", got)
+	}
+}

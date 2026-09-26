@@ -305,7 +305,9 @@ func videoCodec(encoder, rate string, gop int) []string {
 		// VideoToolbox writes broken SEI when it embeds A/53 captions; every segment then fails to decode.
 		return []string{"-c:v", "h264_videotoolbox", "-realtime", "1", "-a53cc", "0", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g, "-profile:v", "high"}
 	default:
-		return []string{"-c:v", "libx264", "-preset", "veryfast", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
+		// scenecut would insert a keyframe the source does not have, and the
+		// copy rendition of the same broadcast would cut somewhere else.
+		return []string{"-c:v", "libx264", "-preset", "veryfast", "-sc_threshold", "0", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
 	}
 }
 

@@ -14,6 +14,9 @@ export function liveHlsConfig(profile: BufferProfile = "desktop") {
   }[profile];
   return {
     ...buffers,
+    // Parts of the open segment are playable. liveSyncDuration is not also set:
+    // hls.js rejects both, and the count keeps a long-running stream off the edge.
+    lowLatencyMode: true,
     liveMaxLatencyDurationCount: 100000,
     maxLiveSyncPlaybackRate: 1,
     maxBufferHole: 0.5,

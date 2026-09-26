@@ -218,6 +218,10 @@ type rendition struct {
 	// arrives in that window must not signal the pid: Wait has reaped it.
 	waited atomic.Bool
 	args   []string
+	// gate blocks a playlist reload until the requested part exists.
+	// packDone closes when the packager has finished writing that directory.
+	gate     *playlistGate
+	packDone chan struct{}
 }
 
 type recording struct {
@@ -622,13 +626,19 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 			return nil, err
 		}
 	}
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
+	stdout, gate, done, err := packOutput(cmd)
+	if err != nil {
 		return nil, err
 	}
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		_ = stdout.Close()
+		return nil, err
+	}
+	startPack(dir, stdout, gate, done)
 	pid := cmd.Process.Pid
 	NotePID(h.Dir, pid)
-	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: time.Now(), args: args}
+	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: time.Now(), args: args, gate: gate, packDone: done}
 	if stdin != nil {
 		r.sub = h.attachPipeLocked(muxOf(h, f), stdin)
 	}
@@ -722,9 +732,18 @@ func encoderOf(base string, want Rendition) string {
 // never serves the init.mp4 the GPU encode left behind.
 func (h *Hub) watchRendition(f *feed, r *rendition, pid int, encoder string) {
 	started := time.Now()
+	done := r.packDone
 	err := r.cmd.Wait()
 	r.waited.Store(true)
 	ForgetPID(h.Dir, pid)
+	// The packager can still be writing the last fragment after ffmpeg exits.
+	// A restart wipes the directory, so it waits for those writes first.
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+		}
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if f.renditions[r.spec.Key()] != r {
@@ -791,18 +810,29 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 			return false
 		}
 	}
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
+	stdout, gate, done, pipeErr := packOutput(cmd)
+	if pipeErr != nil {
 		if stdin != nil {
 			_ = stdin.Close()
 		}
 		return false
 	}
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		_ = stdout.Close()
+		if stdin != nil {
+			_ = stdin.Close()
+		}
+		return false
+	}
+	startPack(r.dir, stdout, gate, done)
 	next := cmd.Process.Pid
 	NotePID(h.Dir, next)
 	r.cmd = cmd
 	r.stdin = stdin
 	r.args = args
+	r.gate = gate
+	r.packDone = done
 	r.restarted = true
 	r.waited.Store(false)
 	if stdin != nil {
@@ -879,6 +909,23 @@ func (h *Hub) Playlist(channelID int64, key string) ([]byte, error) {
 		return nil, err
 	}
 	return r.stamper.stamp(r.dir, raw, clock), nil
+}
+
+// WaitMedia blocks until the rendition's playlist contains that segment or
+// part, or the timeout. The hub lock is not held while waiting.
+func (h *Hub) WaitMedia(channelID int64, key string, msn, part int, d time.Duration) {
+	h.mu.Lock()
+	var gate *playlistGate
+	if f := h.channels[channelID]; f != nil {
+		if r := f.renditions[key]; r != nil {
+			gate = r.gate
+			r.seen = time.Now()
+		}
+	}
+	h.mu.Unlock()
+	if gate != nil {
+		gate.wait(msn, part, d)
+	}
 }
 
 // Touch records that a viewer of a rendition is still fetching video.

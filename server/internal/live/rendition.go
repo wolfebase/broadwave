@@ -393,13 +393,11 @@ func renditionProfile(video string) string {
 	}
 }
 
-// openingKeyframes forces a keyframe on the first frame and then every two
-// seconds, the same grid a copy uses when it groups a short GOP into
-// two-second segments. A half-second opening is not used: on ffmpeg 8,
-// -hls_init_time keeps cutting at that length until the playlist window
-// fills, and a 2700-segment list does not fill during a show. Counting
-// n_forced*2 drifts off the broadcast clock.
-const openingKeyframes = "expr:if(isnan(prev_forced_t),1,gte(t,prev_forced_t+2))"
+// openingKeyframes puts a transcode keyframe wherever the source has one.
+// A fixed interval drifts off that group of pictures, so a copy and a
+// transcode would close their segments at different frames. Counting
+// n_forced*2 drifts off the broadcast clock the same way.
+const openingKeyframes = "source"
 
 // RenditionArgs builds ffmpeg for one live rendition. Timestamps are kept from
 // the broadcast (-copyts). fMP4 still starts each encode at zero, so each
@@ -491,20 +489,20 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 	default:
 		args = append(args, "-af", audioFilter(r), "-c:a", "aac", "-ac", "2", "-b:a", "160k")
 	}
-	// CMAF (fMP4) segments: players read timing straight from the boxes with no
-	// transmuxing, Apple devices need it for HEVC, and it is the base for LL-HLS.
-	// Copy and transcode both target two seconds, so the same segment name is
-	// the same frame. -hls_init_time is not used; see openingKeyframes.
+	// Fragmented MP4 on stdout, one fragment per keyframe. The packager groups
+	// those into segments that start on a keyframe. Copy and transcode share
+	// the cut because the transcode's keyframes are the source's.
+	// -hls_init_time is not used: on ffmpeg 8 it keeps cutting at the init
+	// length until the playlist window fills.
 	return append(args,
 		"-video_track_timescale", "90000",
 		// The defaults hold the first packet for most of a second.
 		"-muxdelay", "0", "-muxpreload", "0",
-		"-f", "hls", "-hls_time", "2",
-		"-hls_segment_type", "fmp4", "-hls_fmp4_init_filename", "init.mp4",
-		"-hls_segment_filename", "seg%05d.m4s",
-		"-hls_list_size", "2700",
-		"-hls_flags", "delete_segments+independent_segments+omit_endlist",
-		"index.m3u8",
+		"-f", "mp4",
+		// delay_moov: AC-3 has no frame size until the first packet, and an
+		// empty moov written before that packet is rejected.
+		"-movflags", "frag_keyframe+empty_moov+default_base_moof+delay_moov",
+		"pipe:1",
 	)
 }
 
