@@ -1,0 +1,272 @@
+/* Broadwave brand layer (reviewer-owned). Loads after tokens and base, and
+   layers the brand on the design system: an aurora backdrop, the Broadwave
+   gradient, glowing focus, lifted cards, and calm motion. Everything here
+   respects reduced motion and reduced transparency. */
+
+:root {
+  --content-max: 1280px;
+  --brand-cyan: #22d3ee;
+  --brand-blue: #3d7bff;
+  --brand-violet: #8b5cf6;
+  --brand-pink: #f472b6;
+  --brand-gradient: linear-gradient(120deg, var(--brand-cyan), var(--brand-blue) 40%, var(--brand-violet) 75%, var(--brand-pink));
+  --brand-glow: 0 0 0 1px rgba(143, 178, 255, 0.28), 0 18px 48px rgba(61, 123, 255, 0.22);
+  --focus-ring: 0 0 0 2px var(--color-canvas), 0 0 0 4px var(--brand-blue), 0 0 24px 4px rgba(61, 123, 255, 0.45);
+}
+
+.layout-tv {
+  --content-max: 1640px;
+  --focus-ring: 0 0 0 3px var(--color-canvas), 0 0 0 7px var(--brand-blue), 0 0 40px 8px rgba(61, 123, 255, 0.5);
+}
+
+/* ---- Canvas: a quiet aurora behind everything ---- */
+body {
+  background:
+    radial-gradient(1100px 700px at 8% -10%, rgba(61, 123, 255, 0.16), transparent 60%),
+    radial-gradient(900px 600px at 100% 0%, rgba(139, 92, 246, 0.13), transparent 60%),
+    radial-gradient(900px 700px at 50% 110%, rgba(34, 211, 238, 0.07), transparent 60%),
+    var(--color-canvas);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: rgba(61, 123, 255, 0.45);
+  color: #fff;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+/* ---- Focus: a glowing ring that reads across a room ---- */
+:root :focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- Page titles carry the brand ---- */
+:root .page-header h1,
+:root .page-wrap > h1,
+:root .sports-page h1 {
+  background: linear-gradient(180deg, #ffffff 30%, #bfd2ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: -0.03em;
+}
+
+/* ---- Navigation ---- */
+:root .topbar.glass,
+:root .topbar {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+:root .brand-tally {
+  box-shadow: 0 0 12px 2px rgba(255, 59, 48, 0.55);
+}
+
+:root .tab:hover:not(.on) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+:root .tab.on {
+  background: linear-gradient(180deg, #ffffff, #e3ebff);
+  box-shadow: 0 6px 20px rgba(143, 178, 255, 0.28);
+}
+
+/* ---- Buttons and chips ---- */
+:root .btn {
+  transition:
+    background var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-base) var(--ease-out),
+    transform var(--motion-fast) var(--ease-spring);
+}
+
+:root .btn.primary {
+  background: linear-gradient(180deg, #ffffff, #e6edff);
+  box-shadow: 0 8px 28px rgba(143, 178, 255, 0.25);
+}
+
+:root .btn.primary:hover:not(:disabled) {
+  box-shadow: 0 10px 36px rgba(143, 178, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+:root .chip.on {
+  background: linear-gradient(180deg, #ffffff, #e3ebff);
+  box-shadow: 0 4px 16px rgba(143, 178, 255, 0.22);
+}
+
+:root .chip:hover:not(.on) {
+  background: var(--color-surface2);
+}
+
+/* ---- Progress: the channel's color with a soft glow ---- */
+:root .progress {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+:root .progress-fill {
+  box-shadow: 0 0 10px color-mix(in srgb, var(--cat-color, var(--brand-blue)) 70%, transparent);
+}
+
+/* ---- Home ---- */
+:root .hero {
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 40px 90px rgba(0, 0, 0, 0.55);
+}
+
+:root .hero-title {
+  text-shadow: 0 2px 30px rgba(0, 0, 0, 0.45);
+}
+
+:root .now-card {
+  transition:
+    transform var(--motion-base) var(--ease-spring),
+    box-shadow var(--motion-base) var(--ease-out),
+    border-color var(--motion-fast);
+}
+
+:root .now-card:hover,
+:root .now-card:focus-visible {
+  transform: translateY(-4px);
+  border-color: rgba(143, 178, 255, 0.35);
+  box-shadow: var(--brand-glow);
+}
+
+:root .layout-tv .now-card:focus-visible {
+  transform: translateY(-6px) scale(1.03);
+  box-shadow: var(--focus-ring), var(--brand-glow);
+}
+
+/* ---- Guide: the airing on now glows gently ---- */
+:root .guide-cell.now {
+  box-shadow: inset 0 0 0 1px rgba(143, 178, 255, 0.25), 0 0 24px rgba(61, 123, 255, 0.12);
+}
+
+:root .guide-cell {
+  transition: background var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
+}
+
+:root .guide-cell:hover {
+  background: var(--color-surface3);
+}
+
+/* ---- Empty states: designed, not blank ---- */
+:root .empty-state {
+  position: relative;
+  isolation: isolate;
+}
+
+:root .empty-state::before {
+  content: "";
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.35), transparent 45%),
+    var(--brand-gradient);
+  box-shadow: 0 0 60px 10px rgba(61, 123, 255, 0.25);
+  opacity: 0.9;
+}
+
+:root .page .empty {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent),
+    var(--color-surface1);
+}
+
+/* ---- Motion: pages arrive gently ---- */
+@media (prefers-reduced-motion: no-preference) {
+  :root .content > * {
+    animation: page-in 360ms var(--ease-out) both;
+  }
+
+  :root .live-dot-light {
+    animation-duration: 1.6s;
+  }
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* ---- On now: every card shows what's on ---- */
+:root .now-card.has-art {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  min-height: 176px;
+  background: var(--color-surface1);
+}
+
+:root .nc-art {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-size: cover;
+  background-position: center;
+  transform: scale(1.02);
+  transition: transform var(--motion-slow) var(--ease-out), filter var(--motion-slow) var(--ease-out);
+  filter: saturate(1.05);
+}
+
+:root .now-card.has-art::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgba(7, 10, 16, 0.15) 0%, rgba(7, 10, 16, 0.55) 45%, rgba(7, 10, 16, 0.92) 100%),
+    radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--cat-color, var(--brand-blue)) 30%, transparent), transparent 60%);
+}
+
+:root .now-card.has-art:hover .nc-art,
+:root .now-card.has-art:focus-visible .nc-art {
+  transform: scale(1.08);
+}
+
+:root .now-card.has-art .nc-name,
+:root .now-card.has-art .nc-foot {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+:root .now-card.has-art .nc-num,
+:root .now-card.has-art .nc-title {
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6);
+}
+
+/* A live preview frame, when there is one, sits over the art. */
+:root .now-card.has-art .nc-frame {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  max-width: none;
+  max-height: none;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+}
+
+.layout-phone :root .now-card.has-art,
+.layout-phone .now-card.has-art {
+  min-height: 150px;
+}
+
+:root .now-card.has-art {
+  align-content: end;
+  min-height: 196px;
+}
+
+:root .now-card.has-art .nc-foot {
+  margin-top: 2px;
+}
