@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,6 +37,9 @@ type Tuner struct {
 	Quality  int    `json:"quality,omitempty"`
 	Symbol   int    `json:"symbol,omitempty"`
 	Shared   int    `json:"viewers,omitempty"`
+	// ATSC3 is set when this tuner can lock an ATSC 3.0 channel.
+	// A FLEX 4K sets it on the first two. It is not derived from a guide number.
+	ATSC3 bool `json:"-"`
 }
 
 // StreamInfo explains what a viewer is getting and why.
@@ -117,6 +121,10 @@ type Hub struct {
 	// Zero means 8 seconds.
 	FallbackWindow time.Duration
 
+	// MoveBudget is how long a vanished device has to hand its stream to
+	// another device that can tune the same channel. Zero means 5 seconds.
+	MoveBudget time.Duration
+
 	mu         sync.Mutex
 	muxes      map[int]*mux
 	channels   map[int64]*feed
@@ -130,11 +138,15 @@ type Hub struct {
 }
 
 type mux struct {
-	freq        int
-	tuner       int
-	host        string
-	device      string
-	body        io.ReadCloser
+	freq   int
+	tuner  int
+	host   string
+	base   string
+	device string
+	body   io.ReadCloser
+	// moved is set once a dead device has tried to hand the stream off.
+	// The budget can walk every other device. A second read error does not.
+	moved       bool
 	input       string
 	cancel      context.CancelFunc
 	feeds       map[string]*feed
@@ -387,7 +399,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 			continue
 		}
 		last = tuners
-		devices = append(devices, DeviceTuners{Host: hostOf(candidate), Tuners: tuners})
+		devices = append(devices, DeviceTuners{Host: hostOf(candidate), Base: candidate, Tuners: tuners})
 	}
 	if len(devices) == 0 {
 		return nil, fmt.Errorf("the tuner did not answer")
@@ -402,15 +414,27 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 			held[k] = v
 		}
 	}
-	host, tuner, ok := PickTuner(devices, h.usedTunersLocked(), held)
+	picked, tuner, ok := PickTuner(devices, h.usedTunersLocked(devices[0].Host), held, NeedFor(ch.VideoCodec, ch.AudioCodec, ch.ATSC3))
 	if !ok {
 		return nil, &BusyError{Tuners: last}
 	}
+	host = hostOf(picked)
+	base := ch.BaseURL
+	if strings.Contains(picked, "://") {
+		base = picked
+	}
 	h.reserved[tuner] = true
 	defer delete(h.reserved, tuner)
+	if base != ch.BaseURL {
+		if id := h.deviceID(ctx, base); id != "" {
+			ch.DeviceID = id
+			ch.BaseURL = base
+		}
+	}
+	root := h.streamRootFor(ctx, base, ch.GuideNumber)
 	freq, programs, err := probe(host, tuner, ch.GuideNumber)
 	if err != nil {
-		streamURL := streamRoot(ch) + "/auto/v" + ch.GuideNumber
+		streamURL := strings.TrimRight(root, "/") + "/auto/v" + ch.GuideNumber
 		if h.Encoder == "" || h.Encoder == "libx264" {
 			if q := hdhr.ExtendQuery(ch.ModelNumber); q != "" {
 				streamURL += "?" + q
@@ -427,12 +451,12 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	}
 	ch.ProgramNum = programFor(programs, ch.GuideNumber)
 	ch.FrequencyHz = freq
-	body, err := openMux(streamRoot(ch), tuner, freq)
+	body, err := openMux(root, tuner, freq)
 	if err != nil {
 		_, _ = hdhr.Control{Addr: controlAddr(host)}.Set(fmt.Sprintf("/tuner%d/channel", tuner), "none")
 		return nil, err
 	}
-	m := &mux{freq: freq, tuner: tuner, host: host, device: ch.DeviceID, body: body, feeds: map[string]*feed{}, programs: programs}
+	m := &mux{freq: freq, tuner: tuner, host: host, base: base, device: ch.DeviceID, body: body, feeds: map[string]*feed{}, programs: programs}
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 	h.muxes[freq] = m
@@ -1210,6 +1234,9 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 			if ctx.Err() != nil {
 				return
 			}
+			if h.handOff(ctx, m) {
+				continue
+			}
 			log.Printf("mux %d ended: %v", m.freq, err)
 			h.releaseMux(m)
 			return
@@ -1471,12 +1498,19 @@ func (h *Hub) feedsLocked() []*feed {
 	return out
 }
 
-func (h *Hub) usedTunersLocked() map[int]bool {
+// usedTunersLocked is the tuner indexes already streaming on one host.
+// Two devices both have a tuner 0. A tune on one must not mark the other busy.
+func (h *Hub) usedTunersLocked(host string) map[int]bool {
+	want := hostOf(host)
 	used := map[int]bool{}
 	for _, m := range h.muxes {
-		if m.tuner >= 0 {
-			used[m.tuner] = true
+		if m.tuner < 0 {
+			continue
 		}
+		if want != "" && hostOf(m.host) != want && hostOf(m.base) != want {
+			continue
+		}
+		used[m.tuner] = true
 	}
 	return used
 }
@@ -1523,15 +1557,265 @@ func (h *Hub) viewersOnTunerLocked(tuner int) int {
 }
 
 func (h *Hub) readTuners(ctx context.Context, host string) ([]Tuner, error) {
-	var raw []struct {
-		Resource              string
-		VctNumber             string
-		VctName               string
-		TargetIP              string
-		SignalStrengthPercent int
-		SignalQualityPercent  int
-		SymbolQualityPercent  int
+	raw, err := fetchTunerStatus(ctx, host)
+	if err != nil {
+		return nil, err
 	}
+	ours := h.usedTunersLocked(host)
+	out := make([]Tuner, 0, len(raw))
+	for i, row := range raw {
+		out = append(out, Tuner{
+			Index: i, Guide: row.VctNumber, Name: row.VctName, Target: row.TargetIP,
+			Ours: ours[i], Strength: row.SignalStrengthPercent, Quality: row.SignalQualityPercent, Symbol: row.SymbolQualityPercent,
+			Shared: h.viewersOnTunerLocked(i),
+		})
+	}
+	h.markATSC3(ctx, host, out)
+	return out, nil
+}
+
+// moveBudget is the production limit for handing a live stream to another
+// device after the one serving it disappears.
+const moveBudget = 5 * time.Second
+
+func (h *Hub) moveLimit() time.Duration {
+	if h == nil || h.MoveBudget <= 0 {
+		return moveBudget
+	}
+	return h.MoveBudget
+}
+
+// handOff moves a mux whose device has disappeared onto another device that
+// can tune the same channel. It walks the other devices until one streams
+// or the budget runs out, then a miss releases the dead tuner.
+func (h *Hub) handOff(ctx context.Context, m *mux) bool {
+	if m == nil || m.moved || m.tuner < 0 {
+		return false
+	}
+	m.moved = true
+	ctx, cancel := context.WithTimeout(ctx, h.moveLimit())
+	defer cancel()
+	if h.moveWithin(ctx, m) {
+		return true
+	}
+	releaseTuner(m.host, m.tuner)
+	return false
+}
+
+func (h *Hub) moveWithin(ctx context.Context, m *mux) bool {
+	if h.Store == nil || ctx.Err() != nil {
+		return false
+	}
+	guide, device, need := h.muxChannel(m)
+	if guide == "" {
+		return false
+	}
+	bases, err := h.Store.OtherDevices(ctx, guide, device)
+	if err != nil || len(bases) == 0 {
+		return false
+	}
+	skipped := map[string]bool{}
+	for tries := 0; tries < 16 && ctx.Err() == nil; tries++ {
+		var devices []DeviceTuners
+		for _, base := range bases {
+			if ctx.Err() != nil {
+				return false
+			}
+			tuners, err := h.poolTuners(ctx, base)
+			if err != nil {
+				continue
+			}
+			for i := range tuners {
+				if skipped[skipKey(base, tuners[i].Index)] {
+					tuners[i].Guide = "held"
+				}
+			}
+			devices = append(devices, DeviceTuners{Host: hostOf(base), Base: base, Tuners: tuners})
+		}
+		picked, tuner, ok := PickTuner(devices, nil, nil, need)
+		if !ok {
+			return false
+		}
+		base := picked
+		if !strings.Contains(base, "://") {
+			base = "http://" + picked
+		}
+		skipped[skipKey(base, tuner)] = true
+		root := h.streamRootFor(ctx, base, guide)
+		body, err := openReplacement(ctx, root, tuner, guide, m.freq)
+		if err != nil || body == nil || ctx.Err() != nil {
+			if body != nil {
+				_ = body.Close()
+			}
+			continue
+		}
+		if h.commitMove(ctx, m, base, tuner, body) {
+			return true
+		}
+		_ = body.Close()
+		releaseTuner(hostOf(base), tuner)
+		return false
+	}
+	return false
+}
+
+func skipKey(base string, tuner int) string {
+	return base + "#" + strconv.Itoa(tuner)
+}
+
+// commitMove publishes a replacement stream. The viewer may have left while
+// the new device was locking, and that tuner must not stay held.
+func (h *Hub) commitMove(ctx context.Context, m *mux, base string, tuner int, body io.ReadCloser) bool {
+	id := h.deviceID(ctx, base)
+	h.mu.Lock()
+	if ctx.Err() != nil || h.muxes[m.freq] != m {
+		h.mu.Unlock()
+		return false
+	}
+	oldHost, oldTuner, oldBody := m.host, m.tuner, m.body
+	m.host = hostOf(base)
+	m.base = base
+	m.tuner = tuner
+	m.body = body
+	if id != "" {
+		m.device = id
+		for _, f := range m.feeds {
+			if f == nil {
+				continue
+			}
+			f.channel.DeviceID = id
+			f.channel.BaseURL = base
+		}
+	}
+	h.mu.Unlock()
+	if oldBody != nil && oldBody != body {
+		_ = oldBody.Close()
+	}
+	releaseTuner(oldHost, oldTuner)
+	log.Printf("mux %d moved to %s tuner %d", m.freq, m.host, tuner)
+	return true
+}
+
+func (h *Hub) muxChannel(m *mux) (guide, device string, need Need) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	device = m.device
+	for number, f := range m.feeds {
+		if f == nil {
+			continue
+		}
+		guide = number
+		if guide == "" {
+			guide = f.channel.GuideNumber
+		}
+		if f.channel.DeviceID != "" {
+			device = f.channel.DeviceID
+		}
+		need = NeedFor(f.channel.VideoCodec, f.channel.AudioCodec, f.channel.ATSC3)
+		if guide != "" {
+			return guide, device, need
+		}
+	}
+	return "", device, Need{}
+}
+
+func (h *Hub) poolTuners(ctx context.Context, base string) ([]Tuner, error) {
+	raw, err := fetchTunerStatus(ctx, base)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Tuner, 0, len(raw))
+	for i, row := range raw {
+		out = append(out, Tuner{
+			Index: i, Guide: row.VctNumber, Name: row.VctName, Target: row.TargetIP,
+			Strength: row.SignalStrengthPercent, Quality: row.SignalQualityPercent, Symbol: row.SymbolQualityPercent,
+		})
+	}
+	h.markATSC3(ctx, base, out)
+	return out, nil
+}
+
+func (h *Hub) markATSC3(ctx context.Context, base string, tuners []Tuner) {
+	if h.Store == nil || len(tuners) == 0 {
+		return
+	}
+	devs, err := h.Store.Devices(ctx)
+	if err != nil {
+		return
+	}
+	model := modelFor(devs, base)
+	if model == "" {
+		return
+	}
+	markATSC3(tuners, atsc3Tuners(model))
+}
+
+func (h *Hub) deviceID(ctx context.Context, base string) string {
+	if h.Store == nil {
+		return ""
+	}
+	devs, err := h.Store.Devices(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, d := range devs {
+		if sameBase(d.BaseURL, base) {
+			return d.DeviceID
+		}
+	}
+	return ""
+}
+
+func modelFor(devs []store.Device, base string) string {
+	host := hostOf(base)
+	fuzzy := ""
+	fuzzyN := 0
+	for _, d := range devs {
+		if sameBase(d.BaseURL, base) {
+			return d.ModelNumber
+		}
+		if host != "" && hostOf(d.BaseURL) == host {
+			fuzzy = d.ModelNumber
+			fuzzyN++
+		}
+	}
+	if fuzzyN == 1 {
+		return fuzzy
+	}
+	return ""
+}
+
+func sameBase(a, b string) bool {
+	return canonBase(a) == canonBase(b) && canonBase(a) != ""
+}
+
+func canonBase(s string) string {
+	s = strings.TrimRight(strings.TrimSpace(s), "/")
+	if s == "" {
+		return ""
+	}
+	if !strings.Contains(s, "://") {
+		s = "http://" + s
+	}
+	u, err := url.Parse(s)
+	if err != nil || u.Host == "" {
+		return strings.ToLower(s)
+	}
+	return strings.ToLower(u.Scheme + "://" + u.Host)
+}
+
+type tunerStatus struct {
+	Resource              string
+	VctNumber             string
+	VctName               string
+	TargetIP              string
+	SignalStrengthPercent int
+	SignalQualityPercent  int
+	SymbolQualityPercent  int
+}
+
+func fetchTunerStatus(ctx context.Context, host string) ([]tunerStatus, error) {
+	var raw []tunerStatus
 	base := host
 	if !strings.Contains(base, "://") {
 		base = "http://" + base
@@ -1549,16 +1833,86 @@ func (h *Hub) readTuners(ctx context.Context, host string) ([]Tuner, error) {
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, err
 	}
-	ours := h.usedTunersLocked()
-	out := make([]Tuner, 0, len(raw))
-	for i, row := range raw {
-		out = append(out, Tuner{
-			Index: i, Guide: row.VctNumber, Name: row.VctName, Target: row.TargetIP,
-			Ours: ours[i], Strength: row.SignalStrengthPercent, Quality: row.SignalQualityPercent, Symbol: row.SymbolQualityPercent,
-			Shared: h.viewersOnTunerLocked(i),
-		})
+	return raw, nil
+}
+
+// fullMuxHz is the smallest RF frequency a handoff treats as a whole mux.
+// A test mux below this opens the one channel instead.
+const fullMuxHz = 50_000_000
+
+// openReplacement tunes the chosen tuner. A real frequency opens the full mux
+// (/tunerN/chFREQ). Anything else opens that one channel. The caller releases it.
+func openReplacement(ctx context.Context, root string, tuner int, guide string, freq int) (io.ReadCloser, error) {
+	root = strings.TrimRight(root, "/")
+	if freq >= fullMuxHz {
+		body, err := openKept(ctx, fmt.Sprintf("%s/tuner%d/ch%d", root, tuner, freq))
+		if err == nil {
+			return body, nil
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 	}
-	return out, nil
+	return openKept(ctx, fmt.Sprintf("%s/tuner%d/v%s", root, tuner, url.PathEscape(guide)))
+}
+
+// openKept starts a tuner stream. ctx only bounds the wait for a response.
+// A body that arrives stays open until the caller closes it, so the move
+// budget does not cut the new stream.
+func openKept(ctx context.Context, u string) (io.ReadCloser, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	reqCtx, stop := context.WithCancel(context.WithoutCancel(ctx))
+	halt := context.AfterFunc(ctx, stop)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, u, nil)
+	if err != nil {
+		halt()
+		stop()
+		return nil, err
+	}
+	res, err := http.DefaultClient.Do(req)
+	if !halt() {
+		stop()
+		if res != nil {
+			res.Body.Close()
+		}
+		if err == nil {
+			err = ctx.Err()
+		}
+		return nil, err
+	}
+	if err != nil {
+		stop()
+		return nil, err
+	}
+	if res.StatusCode != http.StatusOK {
+		res.Body.Close()
+		stop()
+		return nil, fmt.Errorf("tuner returned %s", res.Status)
+	}
+	return &keptBody{ReadCloser: res.Body, stop: stop}, nil
+}
+
+// keptBody is a tuner stream whose request context outlives the move budget.
+type keptBody struct {
+	io.ReadCloser
+	stop func()
+	once sync.Once
+}
+
+func (b *keptBody) Close() error {
+	if b.stop != nil {
+		b.once.Do(b.stop)
+	}
+	return b.ReadCloser.Close()
+}
+
+func releaseTuner(host string, tuner int) {
+	if host == "" || tuner < 0 {
+		return
+	}
+	_, _ = hdhr.Control{Addr: controlAddr(host)}.Set(fmt.Sprintf("/tuner%d/channel", tuner), "none")
 }
 
 func firstFree(tuners []Tuner, used, reserved map[int]bool) (int, bool) {
@@ -1650,6 +2004,48 @@ func streamRoot(ch store.SourceChannel) string {
 		return u.Scheme + "://" + u.Host
 	}
 	return "http://" + hostOf(ch.BaseURL) + ":5004"
+}
+
+// streamRootFor is where a device actually streams. The discovery origin is
+// often port 80, and the broadcast is on port 5004. A test fake uses one port.
+func (h *Hub) streamRootFor(ctx context.Context, base, guide string) string {
+	if h != nil && h.Store != nil && guide != "" {
+		if raw, err := h.Store.ChannelStreamURL(ctx, base, guide); err == nil {
+			if origin := originOf(raw); origin != "" {
+				return origin
+			}
+		}
+	}
+	return streamOrigin(base)
+}
+
+func originOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	if u.Scheme == "" {
+		u.Scheme = "http"
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+func streamOrigin(base string) string {
+	u, err := url.Parse(base)
+	if err != nil || u.Hostname() == "" {
+		host := hostOf(base)
+		if host == "" {
+			return strings.TrimRight(base, "/")
+		}
+		return "http://" + host + ":5004"
+	}
+	if u.Scheme == "" {
+		u.Scheme = "http"
+	}
+	if p := u.Port(); p != "" && p != "80" {
+		return u.Scheme + "://" + u.Host
+	}
+	return u.Scheme + "://" + u.Hostname() + ":5004"
 }
 
 func openMux(root string, tuner, freq int) (io.ReadCloser, error) {

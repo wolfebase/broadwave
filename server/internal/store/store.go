@@ -195,6 +195,20 @@ ORDER BY d.priority, d.device_id`, guideNumber, exceptDevice)
 	return out, rows.Err()
 }
 
+// ChannelStreamURL is the stored stream for one guide number on one device origin.
+func (s *Store) ChannelStreamURL(ctx context.Context, base, guide string) (string, error) {
+	var raw string
+	err := s.db.QueryRowContext(ctx, `
+SELECT c.stream_url FROM channels c
+JOIN devices d ON d.device_id = c.device_id
+WHERE d.base_url = ? AND c.guide_number = ? AND c.present = 1 AND c.stream_url != ''
+LIMIT 1`, base, guide).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return raw, err
+}
+
 // AlternateChannels lists other present channels with this guide number, lowest device priority first.
 func (s *Store) AlternateChannels(ctx context.Context, guideNumber string, exceptID int64) ([]int64, error) {
 	rows, err := s.db.QueryContext(ctx, `
