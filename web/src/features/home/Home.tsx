@@ -41,7 +41,11 @@ export function Home() {
     return [...live].sort((a, b) => score(b) - score(a))[0];
   }, [live]);
 
-  const onNow = useMemo(() => [...live].filter((l) => l.airing).sort((a, b) => Number(b.channel.favorite) - Number(a.channel.favorite)), [live]);
+  // Every channel is on the air, listed or not. A fresh antenna install has no guide yet.
+  const onNow = useMemo(
+    () => [...live].sort((a, b) => Number(b.channel.favorite) - Number(a.channel.favorite) || Number(!!b.airing) - Number(!!a.airing)),
+    [live],
+  );
 
   const yours = useMemo(() => {
     const names = teams.flatMap((team) => [team.short, team.name].filter((name): name is string => !!name && name.length >= 4));
@@ -187,11 +191,17 @@ export function Home() {
               <span className="nc-num">{l.channel.displayNumber}</span>
               <span className="nc-name">{l.channel.displayName}</span>
             </span>
-            <span className="nc-title">{l.airing?.title}</span>
-            <span className="nc-foot">
-              <Progress value={progress(l.airing, now)} category={l.cat} />
-              <span>{l.airing ? minutesLeft(l.airing, now) : ""}</span>
-            </span>
+            {l.airing ? (
+              <>
+                <span className="nc-title">{l.airing.title}</span>
+                <span className="nc-foot">
+                  <Progress value={progress(l.airing, now)} category={l.cat} />
+                  <span>{minutesLeft(l.airing, now)}</span>
+                </span>
+              </>
+            ) : (
+              <span className="nc-title nc-unlisted">On the air</span>
+            )}
           </button>
         ))}
       </Shelf>

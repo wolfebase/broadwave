@@ -325,3 +325,8 @@
   font-size: var(--type-footnote-size);
   color: var(--color-text-secondary);
 }
+
+/* A channel with no listing yet reads as live, not as a missing title. */
+.nc-unlisted {
+  color: var(--color-text-secondary);
+}
