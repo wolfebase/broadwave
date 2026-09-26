@@ -1932,7 +1932,7 @@ components:
       properties:
         id: { type: string }
         title: { type: string }
-        state: { type: string, enum: [waiting, running, done, skipped] }
+        state: { type: string, enum: [waiting, running, done, check, skipped], description: "check means the step finished but something needs a look; the detail says what." }
         detail: { type: string }
     SetupFinish:
       type: object

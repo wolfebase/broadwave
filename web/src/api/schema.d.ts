@@ -91,7 +91,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Tuners and signal, encoder and ffmpeg, storage, guide freshness, what the relay is carrying, feed counts, recent logs, connected apps, and recent activity. */
+        /** @description Tuners and signal, encoder and ffmpeg, the startup picture benchmark (class, speed, transcode height, selected tile, and how many tiles fit), storage, guide freshness, what the relay is carrying, feed counts, recent logs, connected apps, and recent activity. */
         get: operations["getDiagnostics"];
         put?: never;
         post?: never;
@@ -1026,7 +1026,7 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         Error: {
-            /** @description Stable machine code, for example tuners_busy, disk_low, not_found, bad_request. */
+            /** @description Stable machine code, for example tuners_busy, disk_low, not_found, bad_request, pictures_full. */
             code: string;
             /** @description Short text safe to show a user. */
             message: string;
@@ -1524,8 +1524,11 @@ export interface components {
         SetupStep: {
             id: string;
             title: string;
-            /** @enum {string} */
-            state: "waiting" | "running" | "done" | "skipped";
+            /**
+             * @description check means the step finished but something needs a look; the detail says what.
+             * @enum {string}
+             */
+            state: "waiting" | "running" | "done" | "check" | "skipped";
             detail?: string;
         };
         SetupFinish: {

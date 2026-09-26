@@ -118,6 +118,10 @@
   color: var(--color-warning);
 }
 
+.ok.quiet {
+  color: var(--color-text-tertiary);
+}
+
 .setup-row {
   display: flex;
   flex-wrap: wrap;
