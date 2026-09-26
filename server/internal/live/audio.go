@@ -467,6 +467,17 @@ func languageName(code string) string {
 	}
 }
 
+// audioMapDisagrees reports that the main mix is not the program's first
+// audio stream. A rendition started before the PMT arrived mapped that first
+// stream, and it has to be rebuilt to follow the main.
+func audioMapDisagrees(tracks []AudioTrack) bool {
+	if len(tracks) == 0 {
+		return false
+	}
+	main, ok := PickTrack(tracks, "main")
+	return ok && main.PID != tracks[0].PID
+}
+
 // PickTrack returns the track with the requested role.
 // role is main, language, or described. An unknown role picks main.
 // Main prefers the widest mix, so passthrough keeps a 5.1 complete main
