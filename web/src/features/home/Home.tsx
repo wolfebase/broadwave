@@ -178,7 +178,10 @@ export function Home() {
           </div>
         ) : null}
         {onNow.map((l) => (
-          <button key={l.channel.id} type="button" className="now-card" data-cat={l.cat} onClick={() => player.open(l.channel)}>
+          <button key={l.channel.id} type="button" className={`now-card${l.airing?.imageUrl ? " has-art" : ""}`} data-cat={l.cat} onClick={() => player.open(l.channel)}>
+            {l.airing?.imageUrl ? (
+              <span className="nc-art" aria-hidden="true" style={{ backgroundImage: `url(/media/art/airing/${l.airing.id}?w=640)` }} />
+            ) : null}
             <LiveFrame id={l.channel.id} className="nc-frame" />
             <span className="nc-top">
               <span className="nc-num">{l.channel.displayNumber}</span>
