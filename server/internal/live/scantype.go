@@ -505,11 +505,12 @@ func interlacedOrder(order string) bool {
 
 // learnScanLocked reads the mux until the scan type is known or scanWait
 // elapses, stores it, and sets the feed source before a rendition starts.
-// A stored "progressive" is still read. ffprobe reports soft 3:2 as
+// A stored scan still reads the header: ffprobe reports soft 3:2 as
 // progressive, and skipping that scan plays the movie at 60. An interlaced
 // channel is read again each tune, because a movie and a game share it.
-// A header that misses the window keeps being read, and the stored probe
-// rebuilds a rendition that already started on the wrong graph.
+// The picture does not wait for that header when the scan is already stored.
+// The PMT is enough to map audio, and a header that arrives later rebuilds
+// a rendition that started on the wrong graph.
 func (h *Hub) learnScanLocked(m *mux, f *feed) {
 	if m == nil || m.input != "" {
 		return
@@ -543,6 +544,12 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 		if order != "" && !needAudio {
 			break
 		}
+		// The stored scan already chose the graph. Waiting out the GOP for a
+		// header that usually agrees holds the first picture for most of a second.
+		// An empty buffer still waits: the header may be in the next read.
+		if f.channel.FieldOrder != "" && !needAudio && len(data) > 0 {
+			break
+		}
 		wait := time.Until(deadline)
 		if wait <= 0 {
 			break
@@ -567,6 +574,20 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 	buf.mu.Lock()
 	n := len(buf.b)
 	buf.mu.Unlock()
+	if f.channel.FieldOrder != "" && n > 0 {
+		slog.Info(fmt.Sprintf("scan type for %s continues after the picture starts (%d bytes)", f.channel.GuideNumber, n))
+		go h.finishScan(m, f, buf, sub)
+		return
+	}
+	// No bytes yet means the tuner has not locked. Dropping the subscriber
+	// keeps the fanout to the renditions, and the picture buffer still
+	// receives the header once the lock arrives.
+	if f.channel.FieldOrder != "" && n == 0 {
+		slog.Info(fmt.Sprintf("scan type for %s continues after the picture starts (tuner quiet)", f.channel.GuideNumber))
+		m.detach(sub)
+		go h.finishScanFromPicture(m, f)
+		return
+	}
 	slog.Info(fmt.Sprintf("scan type for %s program %d not in %s (%d bytes)", f.channel.GuideNumber, f.program, time.Since(started).Round(time.Millisecond), n))
 	// No bytes means the tuner has not delivered a GOP yet. Bytes without a
 	// header are a late sequence start: keep reading them. ffprobe runs only
@@ -580,6 +601,31 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 	if f.channel.FieldOrder == "" {
 		h.probeFieldOrderLocked(m, f)
 	}
+}
+
+// finishScanFromPicture reads the mux picture buffer after a quiet lock.
+// It is not a subscriber, so a stopped rendition does not leave a pipe behind.
+func (h *Hub) finishScanFromPicture(m *mux, f *feed) {
+	deadline := time.Now().Add(8 * time.Second)
+	program := f.program
+	id := f.channel.ID
+	guide := f.channel.GuideNumber
+	var order string
+	for time.Now().Before(deadline) {
+		if got, ok := scanType(m.pictureBytes(), program); ok {
+			order = got
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if order == "" || f.headerOrder != "" || h.channels[id] != f {
+		return
+	}
+	slog.Info(fmt.Sprintf("scan type %s for %s after the window", order, guide))
+	f.headerOrder = order
+	h.applyScanLocked(f, order)
 }
 
 // finishScan keeps reading after scanWait. The rendition may already be
