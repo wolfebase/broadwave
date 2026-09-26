@@ -25,3 +25,18 @@ CONNECT DUO is the only model this project has already read on a real device: di
 A pool keeps ATSC 3.0 tuners for HEVC + AC-4 (a guide number alone does not count). A 1.0 channel uses a tuner that cannot do 3.0 when one is free. The picker test covers two DUOs plus a FLEX 4K, eight tuners in all. A device that disappears mid-stream opens that same frequency on the next device. This house has one CONNECT DUO, so that path is verified on fakes only.
 
 Untested, on a fake and on real hardware: first-generation HDHR-US, DVB and ISDB variants, CONNECT 4K (HDHR5-4K), FLEX 4K development edition, SCRIBE QUATRO, SCRIBE 4K, and the TECH rack models.
+
+## Clients
+
+`TestClientMatrix` asks `Decide` for an interlaced MPEG-2 AC-3 broadcast and for progressive 720p H.264 AAC, with quality left on auto and the network on the LAN. A 720p H.264 stream is copied for every row below. The MPEG-2 stream is converted.
+
+| Client | What it can play | MPEG-2 AC-3 rendition |
+| --- | --- | --- |
+| Apple TV HD (`AppleTV5,3`) | H.264, AC-3, 1080p, no HEVC | `1080.copy.broadcast` |
+| Apple TV 4K, 1st (`AppleTV6,2`), 2nd (`AppleTV11,1`), 3rd (`AppleTV14,1`) | H.264, HEVC, AC-3 | `1080.copy.broadcast.hevc` |
+| iPhone 6s (`iPhone8,1`, `iPhone8,2`) and iPad gen 6 and earlier | H.264, AC-3, no HEVC | `1080.copy.broadcast` |
+| iPhone SE (2nd generation), iPhone 11, later iPhones, iPad gen 7 and later | H.264, HEVC, AC-3 | `1080.copy.broadcast.hevc` |
+| Safari, when it reports AC-3 | H.264, AC-3, no HEVC | `1080.copy.broadcast` |
+| Chrome, Edge, Firefox | H.264, AAC, no HEVC, no AC-3 | `1080.aac2.broadcast` |
+
+The Apple app builds that row from the machine id (`Capabilities.forMachine`). A machine it does not recognize still asks for HEVC. The web app sends H.264 and adds AC-3 only when `MediaSource.isTypeSupported` says the browser can play it. The server's HEVC is 8-bit Main, not 10-bit.

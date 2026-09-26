@@ -225,7 +225,32 @@ private func fixture(_ name: String) throws -> Data {
 @Test func appleDevicesAskForTheOriginalBroadcast() {
     let caps = Capabilities.current()
     #expect(caps.video.contains("h264"))
+    #expect(caps.video.contains("hevc"))
     #expect(caps.audio.contains("ac3"))
+    #expect(caps.platform == "macos")
+}
+
+@Test func clientMatrixCapsMatchTheDevice() {
+    let hd = Capabilities.forMachine("AppleTV5,3")
+    #expect(hd.video == ["h264"])
+    #expect(hd.maxHeight == 1080)
+    #expect(!hd.video.contains("hevc"))
+
+    for id in ["AppleTV6,2", "AppleTV11,1", "AppleTV14,1"] {
+        let caps = Capabilities.forMachine(id)
+        #expect(caps.video.contains("hevc"))
+        #expect(caps.maxHeight == 2160)
+    }
+
+    let six = Capabilities.forMachine("iPhone8,1")
+    #expect(six.video == ["h264"])
+    #expect(six.maxHeight == nil)
+    #expect(Capabilities.forMachine("iPhone8,2").video == ["h264"])
+    #expect(Capabilities.forMachine("iPhone12,8").video.contains("hevc"))
+    #expect(Capabilities.forMachine("iPhone12,1").video.contains("hevc"))
+    #expect(Capabilities.forMachine("iPad13,18").video.contains("hevc"))
+    #expect(Capabilities.forMachine("iPad6,11").video == ["h264"])
+    #expect(Capabilities.forMachine("iPhone8,1").audio.contains("ac3"))
 }
 
 extension Airing {
