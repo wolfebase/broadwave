@@ -523,6 +523,12 @@ func diskDetail(s string) bool {
 func scrub(v any) {
 	switch t := v.(type) {
 	case map[string]any:
+		// A setup step's state follows the same machine-dependent disk check as its detail.
+		if s, ok := t["detail"].(string); ok && diskDetail(s) {
+			if _, ok := t["state"]; ok {
+				t["state"] = "done"
+			}
+		}
 		for k, val := range t {
 			switch k {
 			case "lastSeen":
