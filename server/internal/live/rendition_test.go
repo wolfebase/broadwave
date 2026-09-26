@@ -1,10 +1,12 @@
 package live
 
 import (
+	"bytes"
 	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -95,17 +97,17 @@ func TestHLSInputReconnects(t *testing.T) {
 
 func TestOpeningSegmentsAreShort(t *testing.T) {
 	live := strings.Join(RenditionArgs(0, Source{VideoCodec: "MPEG2"}, Rendition{Video: "720", Audio: "aac2"}, "libx264", ""), " ")
-	for _, want := range []string{"-probesize 8000000", "-analyzeduration 1000000", "-hls_time 2", "-muxdelay 0", openingKeyframes} {
+	for _, want := range []string{"-probesize 8000000", "-analyzeduration 1000000", "frag_keyframe", "delay_moov", "pipe:1", "-muxdelay 0", "-force_key_frames source"} {
 		if !strings.Contains(live, want) {
 			t.Errorf("missing %q in %s", want, live)
 		}
 	}
-	if strings.Contains(live, "hls_init_time") || strings.Contains(live, "hls_time 0.5") {
-		t.Fatalf("a live transcode stays on the two-second cut: %s", live)
+	if strings.Contains(live, "hls_init_time") || strings.Contains(live, "hls_time") || strings.Contains(live, "prev_forced_t") || strings.Contains(live, "frag_duration") {
+		t.Fatalf("a live transcode cuts on the source keyframes: %s", live)
 	}
 	remote := strings.Join(renditionArgs(0, Source{VideoCodec: "H264"}, Rendition{Video: "copy", Audio: "copy"}, "libx264", "", "http://example/live.m3u8"), " ")
-	if !strings.Contains(remote, "-analyzeduration 1500000") || !strings.Contains(remote, "-hls_time 2") || strings.Contains(remote, "force_key_frames") || strings.Contains(remote, "hls_init_time") {
-		t.Fatalf("a remote copy keeps the longer probe and the two-second cut: %s", remote)
+	if !strings.Contains(remote, "-analyzeduration 1500000") || !strings.Contains(remote, "frag_keyframe") || !strings.Contains(remote, "pipe:1") || strings.Contains(remote, "force_key_frames") || strings.Contains(remote, "hls_init_time") || strings.Contains(remote, "hls_time") || strings.Contains(remote, "frag_duration") {
+		t.Fatalf("a remote copy keeps the longer probe and the source cut: %s", remote)
 	}
 }
 
@@ -157,7 +159,7 @@ func TestEarliestMediaUsesTheNewestRendition(t *testing.T) {
 
 func TestCopyRenditionKeepsBroadcastTimestamps(t *testing.T) {
 	line := strings.Join(RenditionArgs(3, Source{VideoCodec: "H264", AudioCodec: "AC3", Progressive: true}, Rendition{Video: "copy", Audio: "copy"}, "libx264", ""), " ")
-	for _, want := range []string{"-copyts", "-map 0:p:3:v:0", "-c:v copy", "-c:a copy", "-hls_list_size 2700"} {
+	for _, want := range []string{"-copyts", "-map 0:p:3:v:0", "-c:v copy", "-c:a copy", "frag_keyframe", "pipe:1"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("missing %q in %s", want, line)
 		}
@@ -169,7 +171,7 @@ func TestCopyRenditionKeepsBroadcastTimestamps(t *testing.T) {
 
 func TestTileRenditionIsSilentAndSmall(t *testing.T) {
 	line := strings.Join(RenditionArgs(0, Source{VideoCodec: "MPEG2", AudioCodec: "AC3"}, Rendition{Video: "360", Audio: "none", Mode: "broadcast"}, "libx264", ""), " ")
-	for _, want := range []string{"-copyts", "-an", "min(640,iw)", "min(360,ih)", "prev_forced_t+2", "-hls_time 2", "-hls_segment_type fmp4"} {
+	for _, want := range []string{"-copyts", "-an", "min(640,iw)", "min(360,ih)", "-force_key_frames source", "frag_keyframe", "pipe:1"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("missing %q in %s", want, line)
 		}
@@ -219,8 +221,19 @@ func TestRenditionsShareOneTimeline(t *testing.T) {
 		cmd := exec.Command(ffmpeg, RenditionArgs(0, source, r, "libx264", "")...)
 		cmd.Dir = out
 		cmd.Stdin = in
-		if b, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%s: %v %s", r.Key(), err, b)
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		packErr := Pack(out, stdout, nil)
+		waitErr := cmd.Wait()
+		if packErr != nil || waitErr != nil {
+			t.Fatalf("%s: pack %v wait %v %s", r.Key(), packErr, waitErr, stderr.String())
 		}
 		return out
 	}
@@ -230,20 +243,36 @@ func TestRenditionsShareOneTimeline(t *testing.T) {
 	tl := NewTimeline()
 	fixed := time.Date(2026, 9, 22, 20, 0, 0, 0, time.UTC)
 	tl.now = func() time.Time { return fixed }
-	times := func(d string) map[string]time.Time {
+	type timedSeg struct {
+		name string
+		at   time.Time
+		dur  time.Duration
+	}
+	times := func(d string) []timedSeg {
 		raw, err := readPlaylist(filepath.Join(d, "index.m3u8"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		var p playlistStamper
 		stamped := string(p.stamp(d, raw, tl))
-		out := map[string]time.Time{}
+		var out []timedSeg
 		var last time.Time
+		var dur time.Duration
+		var haveDur bool
 		for _, line := range strings.Split(stamped, "\n") {
 			if v, ok := strings.CutPrefix(line, "#EXT-X-PROGRAM-DATE-TIME:"); ok {
 				last, _ = time.Parse("2006-01-02T15:04:05.000Z", v)
-			} else if strings.HasSuffix(line, ".m4s") {
-				out[line] = last
+			} else if v, ok := strings.CutPrefix(line, "#EXTINF:"); ok {
+				v = strings.TrimSuffix(v, ",")
+				f, err := strconv.ParseFloat(v, 64)
+				if err != nil {
+					t.Fatal(err)
+				}
+				dur = time.Duration(f * float64(time.Second))
+				haveDur = true
+			} else if haveDur && strings.HasSuffix(line, ".m4s") {
+				out = append(out, timedSeg{name: line, at: last, dur: dur})
+				haveDur = false
 			}
 		}
 		return out
@@ -252,20 +281,48 @@ func TestRenditionsShareOneTimeline(t *testing.T) {
 	if len(a) < 3 || len(b) < 3 {
 		t.Fatalf("expected segments, got %d and %d", len(a), len(b))
 	}
-	for name, ta := range a {
-		tb, ok := b[name]
-		if !ok {
-			continue
+	for _, d := range []string{copyDir, smallDir} {
+		raw, err := os.ReadFile(filepath.Join(d, "index.m3u8"))
+		if err != nil {
+			t.Fatal(err)
 		}
-		if d := ta.Sub(tb); d > 50*time.Millisecond || d < -50*time.Millisecond {
-			t.Errorf("%s: renditions disagree by %v (%v vs %v)", name, d, ta, tb)
+		assertSegmentCuts(t, string(raw))
+	}
+	// The same segment name is the same frame. A trailing partial from EOF
+	// may belong to only one rendition.
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
+	if d := len(a) - len(b); d > 1 || d < -1 {
+		t.Fatalf("cuts differ: %d copy segments and %d transcode segments", len(a), len(b))
+	}
+	if len(a) != len(b) {
+		n--
+	}
+	for i := 0; i < n; i++ {
+		if a[i].name != b[i].name {
+			t.Errorf("segment %d is %s on copy and %s on the transcode", i, a[i].name, b[i].name)
+		}
+		if d := a[i].at.Sub(b[i].at); d > 50*time.Millisecond || d < -50*time.Millisecond {
+			t.Errorf("%s: renditions disagree by %v (%v vs %v)", a[i].name, d, a[i].at, b[i].at)
+		}
+		if d := a[i].dur - b[i].dur; d > 80*time.Millisecond || d < -80*time.Millisecond {
+			t.Errorf("%s: duration %s vs %s", a[i].name, a[i].dur, b[i].dur)
 		}
 	}
-	if first := a["seg00001.m4s"]; !first.Equal(fixed.Add(-4 * time.Second)) {
+	if first := a[0].at; !first.Equal(fixed.Add(-4 * time.Second)) {
 		t.Errorf("the first served segment should anchor the timeline, got %v", first)
 	}
-	if _, served := a["seg00000.m4s"]; served {
-		t.Error("segment 0 must not be served")
+	for _, playlist := range [][]timedSeg{a, b} {
+		if playlist[0].name != "seg00000.m4s" {
+			t.Errorf("segment 0 must be served, got %s", playlist[0].name)
+		}
+		for _, s := range playlist[:len(playlist)-1] {
+			if s.dur > 1200*time.Millisecond {
+				t.Errorf("%s is %s; this fixture's groups of pictures are half a second", s.name, s.dur)
+			}
+		}
 	}
 }
 
@@ -300,19 +357,19 @@ func TestPTSDiffWraps(t *testing.T) {
 	}
 }
 
-func TestFirstSegmentIsWithheld(t *testing.T) {
-	src := "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:2.0,\nseg00000.ts\n#EXTINF:2.0,\nseg00001.ts\n#EXTINF:2.0,\nseg00002.ts\n"
+func TestFirstSegmentIsServed(t *testing.T) {
+	src := "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:2.0,\nseg00000.m4s\n#EXTINF:2.0,\nseg00001.m4s\n#EXT-X-PART:DURATION=0.500,URI=\"part00004.m4s\"\n"
 	var p playlistStamper
 	out := string(p.stamp(t.TempDir(), []byte(src), nil))
-	if strings.Contains(out, "seg00000.ts") {
-		t.Fatalf("first segment must not be served:\n%s", out)
+	if !strings.Contains(out, "seg00000.m4s") || !strings.Contains(out, "#EXT-X-PART:") {
+		t.Fatalf("the first segment and the open part stay in the playlist:\n%s", out)
 	}
-	if !strings.Contains(out, "#EXT-X-MEDIA-SEQUENCE:1\n") || strings.Count(out, "#EXTINF") != 2 {
-		t.Fatalf("sequence and entries should follow the withheld segment:\n%s", out)
+	if !strings.Contains(out, "#EXT-X-MEDIA-SEQUENCE:0\n") || strings.Count(out, "#EXTINF") != 2 {
+		t.Fatalf("the sequence is not bumped for segment 0:\n%s", out)
 	}
-	later := "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:40\n#EXTINF:2.0,\nseg00040.ts\n"
+	later := "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:40\n#EXTINF:2.0,\nseg00040.m4s\n"
 	if got := string(p.stamp(t.TempDir(), []byte(later), nil)); !strings.Contains(got, "#EXT-X-MEDIA-SEQUENCE:40\n") {
-		t.Fatalf("once segment 0 has rolled off, the sequence is untouched:\n%s", got)
+		t.Fatalf("a later sequence is untouched:\n%s", got)
 	}
 }
 

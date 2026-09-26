@@ -6,17 +6,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
 const ptsWrap = int64(1) << 33
-
-// firstSegments are never served. It holds decoder warm-up, and its audio starts
-// before its video; with broadcast timestamps kept, browsers reject it.
-var firstSegments = map[string]bool{"seg00000.ts": true, "seg00000.m4s": true}
 
 // SegmentPTS returns the earliest video presentation time in the start of an
 // MPEG-TS segment, in 90 kHz ticks. It falls back to audio when no video PES
@@ -118,7 +113,7 @@ func (t *Timeline) Wall(pts int64) time.Time {
 	return t.wall
 }
 
-// Earliest is the program time of the first segment this encode stamped.
+// Earliest is the program time of the first part or segment this encode stamped.
 // A fresh tune's first frame is only a few seconds old; a long-running one
 // keeps the original anchor so a deep buffer can still sit at the latency target.
 func (t *Timeline) Earliest() (time.Time, bool) {
@@ -160,13 +155,27 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 		switch {
 		case strings.HasPrefix(trimmed, "#EXT-X-PROGRAM-DATE-TIME"):
 			continue
-		case strings.HasPrefix(trimmed, "#EXT-X-MEDIA-SEQUENCE:") && (strings.Contains(string(src), "\nseg00000.ts") || strings.Contains(string(src), "\nseg00000.m4s")):
-			// The first segment is withheld below, so the sequence starts one later.
-			n, _ := strconv.Atoi(strings.TrimPrefix(trimmed, "#EXT-X-MEDIA-SEQUENCE:"))
-			out.WriteString("#EXT-X-MEDIA-SEQUENCE:" + strconv.Itoa(n+1) + "\n")
-			continue
-		case firstSegments[trimmed]:
+		case strings.HasPrefix(trimmed, "#EXT-X-PART:"):
+			for _, l := range pending {
+				out.WriteString(l + "\n")
+			}
 			pending = pending[:0]
+			if name := partName(trimmed); name != "" {
+				seen[name] = true
+				pts, ok := p.cache[name]
+				if !ok {
+					if v, found := segmentStart(dir, name); found {
+						pts, ok = v, true
+						p.cache[name] = v
+					}
+				}
+				// The part anchors the clock. A date on every part is not written:
+				// the tag belongs to the next media segment.
+				if ok && tl != nil {
+					tl.Wall(pts)
+				}
+			}
+			out.WriteString(line + "\n")
 			continue
 		case strings.HasPrefix(trimmed, "#EXTINF"):
 			pending = append(pending, line)
@@ -205,6 +214,20 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 		}
 	}
 	return out.Bytes()
+}
+
+func partName(line string) string {
+	const key = `URI="`
+	i := strings.Index(line, key)
+	if i < 0 {
+		return ""
+	}
+	rest := line[i+len(key):]
+	j := strings.IndexByte(rest, '"')
+	if j < 0 {
+		return ""
+	}
+	return filepath.Base(rest[:j])
 }
 
 // readPlaylist is split out so tests can stamp a playlist without ffmpeg.

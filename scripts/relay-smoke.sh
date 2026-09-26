@@ -87,7 +87,7 @@ for k in "$DIRECT" 540.aac2.broadcast 540.none.broadcast 360.none.broadcast; do
   # and the resulting SIGPIPE fails a check that already matched.
   check "$k playlist has program date-times" '[[ "$PL" == *PROGRAM-DATE-TIME* ]]'
   check "$k is CMAF with init segment" '[[ "$PL" == *EXT-X-MAP* ]]'
-  check "$k withholds segment 0" '[[ "$PL" != *seg00000* ]]'
+  check "$k serves segment 0" '[[ "$PL" == *seg00000* ]]'
 done
 curl -s -m 10 "http://127.0.0.1:$PORT/export/stream/$ID" -o "$T/export.ts"
 SZ=$(stat -f%z "$T/export.ts" 2>/dev/null || stat -c%s "$T/export.ts")

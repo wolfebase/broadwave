@@ -58,8 +58,17 @@ export function useLiveStream(
     if (!video || !channelId) return;
     let dead = false;
     let hls: Hls | null = null;
-    let joined = "";
     const id = channelId;
+    let joined = "";
+    // The watch request can outlive this effect (Strict Mode runs it twice,
+    // and leaving the page races the response). Both paths must release that
+    // one viewer, and neither may release a viewer the request has not added.
+    let released = false;
+    const release = () => {
+      if (released || !joined) return;
+      released = true;
+      void stopWatch(id, joined);
+    };
     if (remember) rememberChannel(remember);
     const started = performance.now();
     let primed = false;
@@ -102,7 +111,7 @@ export function useLiveStream(
         const next = await watchChannel(id, webCaps(), { quality, audio, picture, track, even }, "", allow);
         joined = next.rendition;
         if (dead) {
-          await stopWatch(id, joined);
+          release();
           return;
         }
         setError("");
@@ -137,7 +146,11 @@ export function useLiveStream(
         setError(err instanceof Error ? err.message : "This channel did not start.");
       }
     })();
-    const beacon = () => navigator.sendBeacon?.(`/api/v1/watch/${id}/stop`, new Blob([JSON.stringify({ rendition: joined })], { type: "application/json" }));
+    const beacon = () => {
+      if (released || !joined) return;
+      released = true;
+      navigator.sendBeacon?.(`/api/v1/watch/${id}/stop`, new Blob([JSON.stringify({ rendition: joined })], { type: "application/json" }));
+    };
     window.addEventListener("pagehide", beacon);
     return () => {
       dead = true;
@@ -149,7 +162,7 @@ export function useLiveStream(
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("timeupdate", onTime);
-      void stopWatch(id, joined);
+      release();
     };
     // remember is the channel record; its identity changes on every guide poll.
     // eslint-disable-next-line react-hooks/exhaustive-deps

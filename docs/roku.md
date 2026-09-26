@@ -12,7 +12,7 @@ The first thing worth building, later, is one full-screen player for one live ch
 
 ## What the player would be handed
 
-Live playback is the rendition `Decide` already picks from the client's capability profile. Each rendition is one HLS media playlist: CMAF fMP4, 2-second segments, an init file, and `EXT-X-PROGRAM-DATE-TIME` from the shared broadcast timeline. Video and audio are both mapped into that playlist, so each media segment carries both. Segment 0 is never served. Apple and the web play this same playlist. A first Roku try uses that URL. It does not get its own packager.
+Live playback is the rendition `Decide` already picks from the client's capability profile. Each rendition is one HLS media playlist: CMAF fMP4, one segment per source group of pictures (at least half a second), the part still being written, an init file, and `EXT-X-PROGRAM-DATE-TIME` from the shared broadcast timeline. Video and audio are both mapped into that playlist, so each media segment carries both. Apple and the web play this same playlist. A first Roku try uses that URL. It does not get its own packager.
 
 A reasonable first profile, until a device says otherwise, is H.264, AAC stereo, and a max height of 720. That asks `Decide` for a transcode rather than original AC-3, and it stays off 1080p60. Put HEVC in the profile only when that device reports it can decode HEVC. The streaming spec's 4K example checks this with `roDeviceInfo.CanDecodeVideo`. This note has not run that check.
 

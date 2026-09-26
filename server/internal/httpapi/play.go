@@ -1048,10 +1048,17 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 	s.Hub.Touch(channelID, key)
 	w.Header().Set("Cache-Control", "no-cache")
 	if name == "index.m3u8" {
+		if msn, part, ok := blockReload(r); ok {
+			s.Hub.WaitMedia(channelID, key, msn, part, 1500*time.Millisecond)
+		}
 		body, err := s.Hub.Playlist(channelID, key)
 		if err != nil {
 			http.NotFound(w, r)
 			return
+		}
+		switch r.URL.Query().Get("_HLS_skip") {
+		case "YES", "v2":
+			body = live.DeltaPlaylist(body)
 		}
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 		_, _ = w.Write(body)
@@ -1062,7 +1069,7 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 	case strings.Contains(name, ".."):
 	case name == "init.mp4":
 		contentType = "video/mp4"
-	case strings.HasPrefix(name, "seg") && strings.HasSuffix(name, ".m4s"):
+	case (strings.HasPrefix(name, "seg") || strings.HasPrefix(name, "part")) && strings.HasSuffix(name, ".m4s"):
 		contentType = "video/iso.segment"
 	case strings.HasPrefix(name, "seg") && strings.HasSuffix(name, ".ts"):
 		contentType = "video/mp2t"
@@ -1086,9 +1093,29 @@ func decodeJSON(r *http.Request, dest any) error {
 	return json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(dest)
 }
 
-// waitServable returns once the stamped playlist has a segment a player can
-// fetch. Segment 0 stays withheld, so this is the second segment the encoder
-// writes, not the third.
+// blockReload reads an LL-HLS blocking playlist request. A missing part waits
+// for the whole segment.
+func blockReload(r *http.Request) (msn, part int, ok bool) {
+	raw := r.URL.Query().Get("_HLS_msn")
+	if raw == "" {
+		return 0, 0, false
+	}
+	msn, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, 0, false
+	}
+	part = -1
+	if p := r.URL.Query().Get("_HLS_part"); p != "" {
+		if n, err := strconv.Atoi(p); err == nil {
+			part = n
+		}
+	}
+	return msn, part, true
+}
+
+// waitServable returns once the playlist has a segment a player can fetch.
+// A playlist that lists only parts is not enough: hls.js treats that as empty
+// and waits out its retry. The first part still anchors the clock while this polls.
 func waitServable(h *live.Hub, channelID int64, key string, d time.Duration) {
 	if h == nil || key == "" {
 		return
