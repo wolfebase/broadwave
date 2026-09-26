@@ -649,7 +649,7 @@ func (s *Store) CredentialValues(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, key := range []string{"sdPassword", "tmdbKey", "guideUrl"} {
+	for _, key := range []string{"sdPassword", "tmdbKey", "guideUrl", "sportsdbKey"} {
 		if v := strings.TrimSpace(settings[key]); v != "" {
 			out = append(out, v)
 		}

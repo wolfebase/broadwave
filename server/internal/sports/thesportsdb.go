@@ -46,7 +46,6 @@ func (p *TheSportsDB) Scoreboard(ctx context.Context, leagueID string, day time.
 	if base == "" {
 		base = "https://www.thesportsdb.com/api/v1/json"
 	}
-	// The key is a path segment. Errors from here do not include it.
 	endpoint := fmt.Sprintf("%s/%s/eventsday.php?d=%s&s=%s",
 		strings.TrimRight(base, "/"), url.PathEscape(p.Key),
 		day.Format("2006-01-02"), url.QueryEscape(sport))
@@ -60,7 +59,10 @@ func (p *TheSportsDB) Scoreboard(ctx context.Context, leagueID string, day time.
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		// net/http includes the request URL, and the key is a path segment.
+		msg := strings.ReplaceAll(err.Error(), url.PathEscape(p.Key), "key")
+		msg = strings.ReplaceAll(msg, p.Key, "key")
+		return nil, fmt.Errorf("scoreboard: %s", msg)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {

@@ -2,6 +2,7 @@ package sports
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -95,6 +96,18 @@ func TestOffDoesNotUseTheNetwork(t *testing.T) {
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestTheSportsDBTransportErrorHidesTheKey(t *testing.T) {
+	const key = "user-typed-key"
+	provider := NewTheSportsDB(key)
+	provider.HTTP = &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return nil, fmt.Errorf("Get %q: connection refused", r.URL.String())
+	})}
+	_, err := provider.Scoreboard(t.Context(), "nfl", time.Now())
+	if err == nil || strings.Contains(err.Error(), key) || !strings.Contains(err.Error(), "connection refused") {
+		t.Fatal(err)
+	}
+}
 
 func TestTheSportsDBUsesItsOwnClient(t *testing.T) {
 	provider := NewTheSportsDB("k")

@@ -145,6 +145,38 @@ func TestRestoreRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRestoreKeepsTheSourcePassword(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	st, err := store.Open(filepath.Join(root, "cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	raw := "http://lab:s3cret-pass@example.com/playlist.m3u"
+	if _, err := st.AddSource(ctx, "m3u", "Lab", raw, ""); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, "backups")
+	item, err := Take(ctx, st, dir, time.Date(2026, 9, 1, 3, 0, 0, 0, time.UTC), KindDaily)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Restore(ctx, st, dir, item.Name); err != nil {
+		t.Fatal(err)
+	}
+	sources, err := st.Sources(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sources) != 1 {
+		t.Fatalf("sources: %+v", sources)
+	}
+	if got := st.FetchURL(ctx, sources[0].ID, sources[0].URL); got != raw {
+		t.Fatalf("fetch url = %q", got)
+	}
+}
+
 func TestNightlyWritesOneWeeklyPerWeek(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()

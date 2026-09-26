@@ -207,8 +207,17 @@ func (s *Store) RestoreFrom(ctx context.Context, path string) error {
 		return err
 	}
 	defer func() { _, _ = s.db.ExecContext(ctx, `DETACH DATABASE incoming`) }()
-	tables := []string{"settings", "passes", "markers", "virtual_channels", "virtual_items", "progress", "seen_programs", "sources", "skipped_airings"}
+	tables := []string{"settings", "passes", "markers", "virtual_channels", "virtual_items", "progress", "seen_programs", "sources", "skipped_airings", "source_secrets"}
 	for _, table := range tables {
+		if table == "source_secrets" {
+			var n int
+			if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM incoming.sqlite_master WHERE type='table' AND name='source_secrets'`).Scan(&n); err != nil {
+				return err
+			}
+			if n == 0 {
+				continue
+			}
+		}
 		if _, err := s.db.ExecContext(ctx, `DELETE FROM `+table); err != nil {
 			return err
 		}
