@@ -3,7 +3,7 @@ import Foundation
 /// What this app can ask of a server, and what the server asks of the app.
 public enum Compatibility {
     /// Matches the App Store version when the bundle does not say.
-    public static let appVersion = "1.0"
+    public static let appVersion = "1.1"
     public static let updateServer = "Update your Broadwave server to use this"
     public static let updateApp = "Update Broadwave to use this server"
 
