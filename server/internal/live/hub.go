@@ -334,7 +334,7 @@ func sourceOf(ch store.SourceChannel) Source {
 	if order == "film" {
 		order = ""
 	}
-	return Source{VideoCodec: ch.VideoCodec, AudioCodec: ch.AudioCodec, Progressive: order == "progressive", Film: false, UserAgent: ch.UserAgent, Referrer: ch.Referrer, Lace: interlacedOrder(order)}
+	return Source{VideoCodec: ch.VideoCodec, AudioCodec: ch.AudioCodec, Progressive: order == "progressive", Film: false, UserAgent: ch.UserAgent, Referrer: ch.Referrer, Lace: interlacedOrder(order), HD: ch.HD}
 }
 
 // Watch starts or joins one rendition of a channel.
