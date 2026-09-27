@@ -226,3 +226,13 @@ private func fineSnap() -> RecoverySnap {
     #expect(!serverDown.signalLost)
     #expect(!serverDown.freeTuner)
 }
+
+@Test func aHomeWithOnlyPlaylistsNeverBlamesATuner() {
+    let facts = RecoveryFacts(health: true, online: true, channelID: 1, assumeLost: false)
+    let snap = PlaybackOutage.snap(facts, lists: RecoveryLists(tuners: [], devices: [], signals: []))
+    #expect(snap.tunerAnswers)
+    #expect(PlaybackOutage.classify(snap).message == PlaybackOutage.pictureStopped)
+    let silent = DeviceHealth(deviceId: "B", model: "HDHR", firmwareVersion: "1", tuners: [], error: PlaybackOutage.tunerStopped)
+    #expect(!PlaybackOutage.aTunerAnswers([silent]))
+    #expect(!PlaybackOutage.snap(facts, lists: RecoveryLists(tuners: [], devices: nil, signals: [])).tunerAnswers)
+}

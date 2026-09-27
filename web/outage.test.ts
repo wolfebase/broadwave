@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { aTunerIsFree, classifySnap, connectionDropped, noSignal, recoveryReady, serverStopped, tunerStopped, viewerFailure } from "./src/features/player/outage.ts";
+import { aTunerAnswers, aTunerIsFree, classifySnap, connectionDropped, noSignal, recoveryReady, serverStopped, tunerStopped, viewerFailure } from "./src/features/player/outage.ts";
 
 test("a busy tuner tells the viewer what to stop, and comes back when one is free", () => {
   const failed = Object.assign(new Error("Every tuner is busy. Stop a recording or watch something already on."), {
@@ -45,4 +45,10 @@ test("a dropped connection, and a channel with no signal, each wait for their ow
   assert.equal(lost.recovery, "signal");
   assert.equal(recoveryReady("signal", { health: true, freeTuner: false, tunerAnswers: true, online: true, signalLost: true }), false);
   assert.equal(recoveryReady("signal", { health: true, freeTuner: false, tunerAnswers: true, online: true, signalLost: false }), true);
+});
+
+test("a home with only playlists never blames a tuner", () => {
+  assert.equal(aTunerAnswers([]), true);
+  assert.equal(aTunerAnswers([{ error: "This tuner did not answer. Check that it is on." }]), false);
+  assert.equal(aTunerAnswers([{ error: "This tuner did not answer. Check that it is on." }, {}]), true);
 });

@@ -89,6 +89,11 @@ public enum PlaybackOutage {
         }
     }
 
+    /// A home with no HDHomeRun (only playlists) has no tuner to blame.
+    public static func aTunerAnswers(_ devices: [DeviceHealth]) -> Bool {
+        devices.isEmpty || devices.contains { ($0.error ?? "").isEmpty }
+    }
+
     /// A nil list means that read failed. A failed read does not count as fixed.
     /// `assumeLost` applies only when the signal read itself failed, so a blip
     /// does not look like the antenna came back.
@@ -97,7 +102,7 @@ public enum PlaybackOutage {
             return RecoverySnap(health: false, freeTuner: false, tunerAnswers: false, online: facts.online, signalLost: false)
         }
         let freeTuner = lists.tuners.map { aTunerIsFree($0) } ?? false
-        let tunerAnswers = lists.devices?.contains { ($0.error ?? "").isEmpty } ?? false
+        let tunerAnswers = lists.devices.map { aTunerAnswers($0) } ?? false
         var signalLost = facts.assumeLost
         if let signals = lists.signals {
             if let row = signals.first(where: { $0.channelId == facts.channelID }) {
