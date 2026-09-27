@@ -227,6 +227,28 @@ test("a channel with no signal plays again when the signal returns", async ({ pa
   }
 });
 
+test("a multiview tile that does not start gives its sound away and can be removed", async ({ page }) => {
+  const { admin } = harness();
+  const wdaf = channel("WDAF");
+  const kctv = channel("KCTV");
+  try {
+    await openChannel(page, wdaf.id);
+    await expectPlaying(page);
+    await post(`${admin}/dark?channel=${encodeURIComponent(kctv.number)}`);
+    await page.goto(`/multiview?ch=${wdaf.id},${kctv.id}&layout=2up&focus=${kctv.id}`);
+    const dark = page.getByRole("group", { name: `${kctv.number} ${kctv.name}`, exact: true });
+    await expect(dark.getByRole("alert")).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("group", { name: `${wdaf.number} ${wdaf.name}, sound on` })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`focus=${wdaf.id}`));
+    await shot(page, "mv-refused-tile.jpg");
+    await dark.getByRole("button", { name: "Remove" }).click();
+    await expect(dark).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`ch=${wdaf.id}(&|$)`));
+  } finally {
+    await post(`${admin}/light?channel=${encodeURIComponent(kctv.number)}`).catch(() => undefined);
+  }
+});
+
 test("a recordings folder that cannot be written works again without a reload", async ({ page }) => {
   const { base, db, config } = harness();
   const dir = path.join(config, "work", "recordings");

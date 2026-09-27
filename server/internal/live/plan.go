@@ -423,10 +423,37 @@ func offerFor(c PlanChannel, onAir []PlanChannel, ours []TunedFreq, reserved []R
 			return Offer{ChannelID: c.ID, Cost: "on"}
 		}
 	}
+	// Another screen tuned this channel. Its frequency holds nothing else, so
+	// partnerLabel has no other channel to name.
+	for _, t := range ours {
+		if c.FrequencyHz > 0 && t.FrequencyHz == c.FrequencyHz {
+			return Offer{ChannelID: c.ID, Cost: "same", Label: "Already tuned"}
+		}
+	}
 	if matchesReservation(c, reserved) || free > 0 {
 		return Offer{ChannelID: c.ID, Cost: "tuner", Label: "Uses a tuner"}
 	}
 	return Offer{ChannelID: c.ID, Cost: "none", Label: "No tuner free"}
+}
+
+// LimitPictures marks the offers that need a picture the server has no room
+// for. used is how many pictures have a viewer, limit the startup budget (0 is
+// no limit), and running the channels with a picture a new tile can share.
+func LimitPictures(offers []Offer, current []PlanChannel, used, limit int, running map[int64]bool) {
+	if limit <= 0 || used < limit {
+		return
+	}
+	in := map[int64]bool{}
+	for _, c := range current {
+		in[c.ID] = true
+	}
+	for i := range offers {
+		o := &offers[i]
+		if o.Cost == "none" || in[o.ChannelID] || running[o.ChannelID] {
+			continue
+		}
+		o.Cost, o.Label = "none", "No picture free"
+	}
 }
 
 func partnerLabel(c PlanChannel, onAir []PlanChannel, ours []TunedFreq, reserved []Reservation) (string, bool) {

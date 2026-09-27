@@ -1026,7 +1026,7 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         Error: {
-            /** @description Stable machine code, for example tuners_busy, disk_low, not_found, bad_request, pictures_full. */
+            /** @description Stable machine code, for example tuners_busy, no_signal, disk_low, not_found, bad_request, pictures_full. */
             code: string;
             /** @description Short text safe to show a user. */
             message: string;
@@ -1325,7 +1325,7 @@ export interface components {
                 channelId: number;
                 /** @enum {string} */
                 cost: "same" | "tuner" | "none" | "on";
-                /** @description Same tune as 9.1, Uses a tuner, or No tuner free. */
+                /** @description Same tune as 9.1, Already tuned, Uses a tuner, No tuner free, or No picture free (the server encodes as many pictures as it can). */
                 label: string;
             }[];
             /** @description Tiles a scheduled recording will take. Each tile keeps playing until at. */
@@ -2463,6 +2463,15 @@ export interface operations {
                 };
             };
             409: components["responses"]["Error"];
+            /** @description `no_signal`: the tuner could not lock the channel and sent nothing. The tuner is already free. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     stopWatching: {

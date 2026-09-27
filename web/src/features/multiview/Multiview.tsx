@@ -71,6 +71,16 @@ export function Multiview() {
     });
   }, []);
   const [room] = useState(roomId);
+  const [failed, setFailed] = useState<ReadonlySet<number>>(() => new Set());
+  const markFailed = useCallback((id: number, on: boolean) => {
+    setFailed((prev) => {
+      if (prev.has(id) === on) return prev;
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
   const chKey = params.get("ch") ?? "";
   const waiting = ids.length > 1 && planFor !== chKey;
   const known = ids.map((id) => channels.find((c) => c.id === id)).filter((c): c is Channel => !!c);
@@ -263,6 +273,14 @@ export function Multiview() {
   }
 
   const focused = ordered.find((c) => c.id === focus) ?? ordered[0];
+  // A tile that did not start has no sound to give. Move it to one that plays.
+  const soundTo = focused && failed.has(focused.id) ? (ordered.find((c) => !failed.has(c.id))?.id ?? 0) : 0;
+  useEffect(() => {
+    if (!soundTo) return;
+    const q = new URLSearchParams(window.location.search);
+    q.set("focus", String(soundTo));
+    navigate(`/multiview?${q}`, true);
+  }, [soundTo]);
 
   return (
     <section className="mv" tabIndex={0} onKeyDown={onKey} aria-label={layoutLabel(layout)}>
@@ -316,6 +334,7 @@ export function Multiview() {
             onFocus={() => focusManual(channel.id)}
             onHeard={heard}
             onRemove={() => remove(channel.id)}
+            onFailed={markFailed}
             onRecord={() => void record(channel, airingAt(index, channel.id, now)?.title || channel.displayName)}
           />
         ))}
@@ -363,6 +382,7 @@ function Tile({
   onHeard,
   onRemove,
   onRecord,
+  onFailed,
 }: {
   channel: Channel;
   title: string;
@@ -375,6 +395,7 @@ function Tile({
   onHeard: () => void;
   onRemove: () => void;
   onRecord: () => void;
+  onFailed: (id: number, failed: boolean) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const layoutMode = useLayout();
@@ -392,6 +413,11 @@ function Tile({
     profile: big ? (layoutMode === "tv" ? "tv" : "desktop") : "tile",
     audible: focused,
   });
+  const failed = stream.error !== "";
+  useEffect(() => {
+    onFailed(channel.id, failed);
+  }, [channel.id, failed, onFailed]);
+  useEffect(() => () => onFailed(channel.id, false), [channel.id, onFailed]);
   useEffect(() => {
     const video = videoRef.current;
     if (!focused || !video) return;
@@ -424,6 +450,9 @@ function Tile({
               Watch anyway
             </button>
           ) : null}
+          <button type="button" className="btn small" onClick={(event) => { event.stopPropagation(); onRemove(); }}>
+            Remove
+          </button>
         </div>
       ) : null}
       {menu ? (

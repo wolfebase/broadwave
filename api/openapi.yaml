@@ -1735,7 +1735,7 @@ components:
             properties:
               channelId: { type: integer, format: int64 }
               cost: { type: string, enum: [same, tuner, none, on] }
-              label: { type: string, description: "Same tune as 9.1, Uses a tuner, or No tuner free." }
+              label: { type: string, description: "Same tune as 9.1, Already tuned, Uses a tuner, No tuner free, or No picture free (the server encodes as many pictures as it can)." }
         stops:
           type: array
           description: Tiles a scheduled recording will take. Each tile keeps playing until at.
