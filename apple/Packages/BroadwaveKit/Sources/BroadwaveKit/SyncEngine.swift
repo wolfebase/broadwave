@@ -38,6 +38,9 @@ public final class SyncEngine {
     /// on one Mac can be lined up against the same wall clock.
     private let logs = UserDefaults.standard.bool(forKey: "BroadwaveSyncLog")
     private var ticks = 0
+    private var reportTicks = 0
+    private var pauses = 0
+    private var seeks = 0
     private var rateSets = 0
     private var trim = Trim.none
     private var trimEnded = Date.distantPast
@@ -62,11 +65,15 @@ public final class SyncEngine {
     /// A trim starts past trimMS and ends inside lockMS, and the next one waits
     /// quietSeconds. Every rate change on AVPlayer holds a frame, and a trim
     /// recomputed from each tick's drift changed it four times a second.
-    static let trimMS = 25.0
-    static let lockMS = 10.0
+    /// `currentDate()` steps by 20-30 ms when AVPlayer moves to the next
+    /// segment's date, so a 25 ms trigger started a trim every few seconds on
+    /// an Apple TV, and voices caught on each one. Two screens 60 ms apart
+    /// still sound like one room.
+    static let trimMS = 60.0
+    static let lockMS = 20.0
     static let seekMS = 400.0
     static let trimStep: Float = 0.02
-    static let quietSeconds = 3.0
+    static let quietSeconds = 8.0
 
     public enum Trim: Sendable { case none, slow, fast }
 
@@ -302,6 +309,10 @@ public final class SyncEngine {
                 Self.log.notice("sync room=\(room, privacy: .public) wall=\(wall) media=\(media) drift=\(Int(d)) rate=\(rate) sets=\(sets) trim=\(trim, privacy: .public) dropped=\(dropped) stalls=\(stalls) buffer=\(ahead) members=\(members) state=\(state, privacy: .public) tc=\(tc) why=\(why, privacy: .public) item=\(itemStatus) err=\(err, privacy: .public)")
             }
         }
+        reportTicks += 1
+        if reportTicks % 40 == 0 {
+            report(item: item, drift: d)
+        }
         let sized = item.presentationSize.width > 0 && item.presentationSize.height > 0
         let hasFrame = displayedFrame?() ?? sized
         if detached {
@@ -347,6 +358,9 @@ public final class SyncEngine {
         case .wait:
             state = .waiting
         case let .pause(resumeAfter, seekToTarget):
+            if roomRate != 0 {
+                pauses += 1
+            }
             setTrim(.none)
             player.pause()
             if seekToTarget {
@@ -362,6 +376,7 @@ public final class SyncEngine {
                 state = .locked
             }
         case .seek:
+            seeks += 1
             setTrim(.none)
             if abs(d) > Self.seekMS {
                 seek(to: target)
@@ -381,6 +396,31 @@ public final class SyncEngine {
             }
             state = locked ? .locked : .syncing
         }
+    }
+
+    /// Every ten seconds the server log gets this screen's playback health:
+    /// how often it paused, seeked, or changed rate to hold the room, and how
+    /// often AVPlayer stalled on its own.
+    private func report(item: AVPlayerItem, drift d: Double) {
+        let events = item.accessLog()?.events ?? []
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        socket.report([
+            "room": room,
+            "build": build,
+            "drift": Int(d),
+            "rate": Double(player.rate),
+            "state": state.rawValue,
+            "pauses": pauses,
+            "seeks": seeks,
+            "rateSets": rateSets,
+            "stalls": events.reduce(0) { $0 + max(0, $1.numberOfStalls) },
+            "dropped": events.reduce(0) { $0 + max(0, $1.numberOfDroppedVideoFrames) },
+            "buffer": (bufferedAhead(item) * 10).rounded() / 10,
+            "waiting": player.reasonForWaitingToPlay?.rawValue ?? "-",
+            "status": player.timeControlStatus.rawValue,
+            "detached": detached,
+            "error": item.errorLog()?.events.last?.errorComment ?? "-",
+        ])
     }
 
     private func setTrim(_ next: Trim, drift: Double = 0) {

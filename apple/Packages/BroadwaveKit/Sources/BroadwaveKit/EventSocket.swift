@@ -51,11 +51,13 @@ public final class EventSocket {
         clockTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.sampleClock() }
         }
-        for (room, channel) in rooms {
-            send("sync.join", ["room": room, "channelId": channel])
-        }
+        // The server starts a room by the kind of screen that joins it, so the
+        // screen says what it is first.
         if !screenName.isEmpty, !screenKind.isEmpty {
             send("here", ["name": screenName, "kind": screenKind])
+        }
+        for (room, channel) in rooms {
+            send("sync.join", ["room": room, "channelId": channel])
         }
     }
 
@@ -123,6 +125,11 @@ public final class EventSocket {
             body["mediaTime"] = mediaTime
         }
         send("sync.command", body)
+    }
+
+    /// A screen's playback health for the server log.
+    public func report(_ fields: [String: Any]) {
+        send("sync.report", fields)
     }
 
     private func sampleClock() {

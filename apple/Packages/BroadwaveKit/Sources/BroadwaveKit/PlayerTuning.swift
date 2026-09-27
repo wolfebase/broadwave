@@ -32,6 +32,10 @@ public enum PlayerTuning {
     public static func apply(_ item: AVPlayerItem, network: String, tile: Bool) {
         item.preferredForwardBufferDuration = forwardBuffer(network: network, tile: tile)
         item.preferredPeakBitRate = peakBitRate(network: network)
+        // A sync trim plays at 0.98x or 1.02x. The time-domain default cuts
+        // and repeats slices of speech to hold pitch, which sounds like the
+        // voice catching; spectral stretches it smoothly.
+        item.audioTimePitchAlgorithm = .spectral
     }
 
     /// Folds one measurement into the display match.

@@ -286,8 +286,8 @@ private func fixture(_ name: String) throws -> Data {
 
 /// Noise around the band must not flip the rate every tick.
 @Test @MainActor func aTrimHoldsUntilItIsInsideTheLockBand() {
-    #expect(SyncEngine.decide(hasFrame: true, driftMS: 22, roomRate: 1, canSeek: true) == .play(.none, locked: true))
-    #expect(SyncEngine.decide(hasFrame: true, driftMS: 30, roomRate: 1, canSeek: true) == .play(.slow, locked: false))
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: 55, roomRate: 1, canSeek: true) == .play(.none, locked: true))
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: 70, roomRate: 1, canSeek: true) == .play(.slow, locked: false))
     #expect(SyncEngine.decide(hasFrame: true, driftMS: 25, roomRate: 1, canSeek: true, trim: .slow) == .play(.slow, locked: false))
     #expect(SyncEngine.decide(hasFrame: true, driftMS: 8, roomRate: 1, canSeek: true, trim: .slow) == .play(.none, locked: true))
     #expect(SyncEngine.decide(hasFrame: true, driftMS: -25, roomRate: 1, canSeek: true, trim: .fast) == .play(.fast, locked: false))
@@ -300,13 +300,13 @@ private func fixture(_ name: String) throws -> Data {
     #expect(big == .pause(resumeAfter: 0.9, seekToTarget: false))
 }
 
-/// A live item that ignores a rate above 1 sat 60 ms behind at "1.03" for minutes.
+/// A live item that ignores a rate above 1 sat 90 ms behind at "1.03" for minutes.
 @Test @MainActor func behindWithoutSpeedUpSeeksOnce() {
-    let move = SyncEngine.decide(hasFrame: true, driftMS: -60, roomRate: 1, canSeek: true, forwardBuffer: 6, canSpeedUp: false)
+    let move = SyncEngine.decide(hasFrame: true, driftMS: -90, roomRate: 1, canSeek: true, forwardBuffer: 6, canSpeedUp: false)
     #expect(move == .seek)
-    let stuck = SyncEngine.decide(hasFrame: true, driftMS: -60, roomRate: 1, canSeek: false, forwardBuffer: 6, canSpeedUp: false)
+    let stuck = SyncEngine.decide(hasFrame: true, driftMS: -90, roomRate: 1, canSeek: false, forwardBuffer: 6, canSpeedUp: false)
     #expect(stuck == .play(.none, locked: false))
-    let ended = SyncEngine.decide(hasFrame: true, driftMS: -60, roomRate: 1, canSeek: true, forwardBuffer: 6, trim: .fast, canSpeedUp: false)
+    let ended = SyncEngine.decide(hasFrame: true, driftMS: -90, roomRate: 1, canSeek: true, forwardBuffer: 6, trim: .fast, canSpeedUp: false)
     #expect(ended == .seek)
 }
 
