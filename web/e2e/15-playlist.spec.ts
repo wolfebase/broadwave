@@ -6,7 +6,7 @@ import { expect, test } from "./fixture";
 import { settle } from "./snap";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const evidence = path.resolve(here, "../../.evidence/lane/l21");
+const evidence = path.resolve(here, "../../.evidence/lane/l25");
 const picture = "The picture stopped. Trying again usually fixes it.";
 const tuner = "This tuner did not answer. Check that it is on.";
 
@@ -68,6 +68,10 @@ function notice(page: Page, text: string) {
 
 test.skip(process.env.E2E_PLAYLIST !== "1", "Set E2E_PLAYLIST=1 to stop a playlist stream and bring it back.");
 
+test.afterEach(async () => {
+  await post(`${harness().origin}/start`).catch(() => undefined);
+});
+
 test("a playlist stream that dies names the picture and plays again without a reload", async ({ page }) => {
   const { base, origin } = harness();
   const news = channel();
@@ -101,34 +105,68 @@ test("a playlist stream that dies names the picture and plays again without a re
   const outageMs = Date.now() - stoppedAt;
 
   await post(`${origin}/start`);
-  // Nothing in health, devices, or signals changes when the stream sends again,
-  // so the player does not start a new watch on its own. Give that a moment,
-  // then press Try again, which is what the message is waiting for.
-  let auto = false;
+  // Nothing in health, devices, or signals changes when the stream sends
+  // again. The player starts the next watch on its own. Try again stays
+  // only after two minutes of that.
   const againAt = Date.now();
-  for (let i = 0; i < 8 && !auto; i++) {
-    auto = await moving(page);
+  let auto = false;
+  let recoverMs = 0;
+  try {
+    await expect
+      .poll(() => moving(page), {
+        timeout: 15_000,
+        intervals: [400],
+        message: "the picture starts a new watch on its own within 15s of the stream returning",
+      })
+      .toBe(true);
+    auto = true;
+    recoverMs = Date.now() - againAt;
+  } finally {
+    if (!auto) recoverMs = Date.now() - againAt;
+    await page.screenshot({ path: path.join(evidence, auto ? "back.jpg" : "stuck.jpg"), animations: "disabled" }).catch(() => undefined);
+    writeFileSync(
+      path.join(evidence, "summary.json"),
+      JSON.stringify(
+        {
+          channel: news,
+          messageMs,
+          outageMs,
+          auto,
+          recoverMs,
+          alert: picture,
+        },
+        null,
+        2,
+      ),
+    );
   }
-  if (!auto) await page.getByRole("button", { name: "Try again" }).click();
-  await expectMoving(page);
   await expect(notice(page, picture)).toHaveCount(0);
   await expect(page.getByText(tuner)).toHaveCount(0);
   await expect(page.locator("html")).toHaveAttribute("data-lane", "stay");
   expect(page.url()).toBe(url);
-  await page.screenshot({ path: path.join(evidence, "back.jpg"), animations: "disabled" });
-  writeFileSync(
-    path.join(evidence, "summary.json"),
-    JSON.stringify(
-      {
-        channel: news,
-        messageMs,
-        outageMs,
-        auto,
-        recoverMs: Date.now() - againAt,
-        alert: picture,
-      },
-      null,
-      2,
-    ),
-  );
+});
+
+test("leaving the player stops a quiet retry", async ({ page }) => {
+  const { origin } = harness();
+  const news = channel();
+  let left = false;
+  let watches = 0;
+  page.on("request", (req) => {
+    if (!left || req.method() !== "POST") return;
+    if (new URL(req.url()).pathname === "/api/v1/watch") watches += 1;
+  });
+  try {
+    await openChannel(page, news.id);
+    await expectMoving(page);
+    await post(`${origin}/stop`);
+    await expect(notice(page, picture)).toBeVisible({ timeout: 50_000 });
+    // Opened from the address, Back leaves the player instead of docking it.
+    left = true;
+    await page.getByRole("button", { name: "Back to browsing" }).click({ timeout: 5_000 });
+    await expect(page.getByRole("region", { name: /Now playing|Player/ })).toHaveCount(0);
+    await page.waitForTimeout(12_000);
+    expect(watches, "a player that has gone does not start another watch").toBe(0);
+  } finally {
+    await post(`${origin}/start`).catch(() => undefined);
+  }
 });
