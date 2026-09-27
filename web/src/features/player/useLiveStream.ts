@@ -10,6 +10,9 @@ import {
   aTunerAnswers,
   aTunerIsFree,
   classifySnap,
+  holdPictureMessage,
+  pictureRetryDelay,
+  pictureStopped,
   recoveryReady,
   viewerFailure,
   type Recovery,
@@ -59,6 +62,9 @@ export function useLiveStream(
   const [session, setSession] = useState<WatchSession | null>(null);
   const [error, setError] = useState("");
   const [recovery, setRecovery] = useState<Recovery>("");
+  const [pictureStopAt, setPictureStopAt] = useState(0);
+  const pictureStopAtRef = useRef(0);
+  const quietRetry = useRef(false);
   const [needsConfirm, setNeedsConfirm] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const confirmLive = useRef(false);
@@ -70,6 +76,14 @@ export function useLiveStream(
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ state: "off", drift: 0, members: 0 });
 
   useEffect(() => {
+    // A channel change, a viewer retry, or leaving this watch ends the quiet
+    // clock. The retry below sets the flag before bumping attempt, and this
+    // effect is the only one that reads it.
+    const quiet = quietRetry.current;
+    if (!quiet && pictureStopAtRef.current) {
+      pictureStopAtRef.current = 0;
+      setPictureStopAt(0);
+    }
     const video = videoRef.current;
     if (!video || !channelId) return;
     let dead = false;
@@ -120,8 +134,22 @@ export function useLiveStream(
     };
     // moving is the first time the picture advances and stays in play.
     // The first playing event can be the frame sync then holds.
+    let attached = false;
+    let mark = Number.NaN;
     const onTime = () => {
-      if (video.dataset.moving || video.paused || !primed) return;
+      if (video.paused || !primed) return;
+      // The message stays through a quiet retry until this watch's picture
+      // actually advances. The previous picture's clock does not count.
+      if (quiet && attached && pictureStopAtRef.current) {
+        if (Number.isNaN(mark)) mark = video.currentTime;
+        else if (video.currentTime > mark + 0.2) {
+          pictureStopAtRef.current = 0;
+          setPictureStopAt(0);
+          setError("");
+          setRecovery("");
+        }
+      }
+      if (video.dataset.moving) return;
       if (video.currentTime > 0.2) video.dataset.moving = String(Math.round(performance.now() - started));
     };
     // hls.js rides through short stalls and single failed loads on its own, and
@@ -134,6 +162,22 @@ export function useLiveStream(
     let recovered = false;
     let heldFatal = false;
     let quietTimer = 0;
+    const rememberOutage = (message: string, kind: Recovery) => {
+      setNeedsConfirm(false);
+      setError(message);
+      setRecovery(kind);
+      if (message === pictureStopped && kind === "") {
+        if (!pictureStopAtRef.current) {
+          pictureStopAtRef.current = performance.now();
+          setPictureStopAt(pictureStopAtRef.current);
+        }
+        return;
+      }
+      if (pictureStopAtRef.current) {
+        pictureStopAtRef.current = 0;
+        setPictureStopAt(0);
+      }
+    };
     const noteOutage = async (fatal: boolean) => {
       if (dead || surfaced || resumeQuiet) return;
       const gen = outageGen;
@@ -141,9 +185,7 @@ export function useLiveStream(
       if (dead || surfaced || resumeQuiet || gen !== outageGen) return;
       if (!fatal && !mapped.recovery) return;
       surfaced = true;
-      setNeedsConfirm(false);
-      setError(mapped.message);
-      setRecovery(mapped.recovery);
+      rememberOutage(mapped.message, mapped.recovery);
       if (mapped.recovery) hls?.destroy();
     };
     video.addEventListener("playing", onPlaying);
@@ -161,8 +203,16 @@ export function useLiveStream(
           release();
           return;
         }
-        setError("");
-        setRecovery("");
+        quietRetry.current = false;
+        // A quiet retry keeps the message up until the new picture moves.
+        if (!quiet) {
+          if (pictureStopAtRef.current) {
+            pictureStopAtRef.current = 0;
+            setPictureStopAt(0);
+          }
+          setError("");
+          setRecovery("");
+        }
         setSession(next);
         if (Hls.isSupported()) {
           hls = new Hls(liveHlsConfig(profile));
@@ -170,6 +220,8 @@ export function useLiveStream(
           (video as HTMLVideoElement & { hls?: Hls }).hls = hls;
           hls.loadSource(next.playlist);
           hls.attachMedia(video);
+          attached = true;
+          mark = Number.NaN;
           hls.on(Hls.Events.ERROR, (_e, data) => {
             video.dataset.hlsError = `${data.type}:${data.details}${data.fatal ? ":fatal" : ""}`;
             if (!data.fatal) return;
@@ -186,6 +238,8 @@ export function useLiveStream(
           });
         } else {
           video.src = next.playlist;
+          attached = true;
+          mark = Number.NaN;
         }
         video.muted = !audibleRef.current;
         await video.play().catch(async () => {
@@ -194,17 +248,21 @@ export function useLiveStream(
         });
       } catch (err) {
         if (dead) return;
+        quietRetry.current = false;
         const failed = err as ApiFailure;
         if (failed.status === 409 && failed.code === "recording_soon") {
+          if (pictureStopAtRef.current) {
+            pictureStopAtRef.current = 0;
+            setPictureStopAt(0);
+          }
           setNeedsConfirm(true);
           setRecovery("");
           setError(failed.message);
           return;
         }
         const mapped = viewerFailure(err);
-        setNeedsConfirm(false);
-        setError(mapped.message);
-        setRecovery(mapped.recovery);
+        if (quiet && holdPictureMessage(mapped)) return;
+        rememberOutage(mapped.message, mapped.recovery);
       } finally {
         if (!dead) retrying.current = false;
       }
@@ -248,6 +306,10 @@ export function useLiveStream(
       setNeedsConfirm(false);
       setError("");
       setRecovery("");
+      if (pictureStopAtRef.current) {
+        pictureStopAtRef.current = 0;
+        setPictureStopAt(0);
+      }
       const began = performance.now();
       kicked = false;
       stopPoll();
@@ -377,6 +439,33 @@ export function useLiveStream(
       window.clearInterval(id);
     };
   }, [recovery, channelId]);
+
+  // The picture message is the outage nothing else can see change. Start a
+  // watch on the clock, and stop when the viewer leaves or the channel changes.
+  useEffect(() => {
+    const started = pictureStopAtRef.current;
+    if (!started || started !== pictureStopAt) return;
+    let dead = false;
+    let timer = 0;
+    const arm = () => {
+      if (dead || pictureStopAtRef.current !== started) return;
+      const wait = pictureRetryDelay(pictureStopped, "", performance.now() - started);
+      if (wait == null) return;
+      timer = window.setTimeout(() => {
+        if (dead || pictureStopAtRef.current !== started) return;
+        if (!retrying.current) {
+          quietRetry.current = true;
+          setAttempt((n) => n + 1);
+        }
+        arm();
+      }, wait);
+    };
+    arm();
+    return () => {
+      dead = true;
+      window.clearTimeout(timer);
+    };
+  }, [pictureStopAt, channelId]);
 
   useEffect(() => {
     audibleRef.current = audible;

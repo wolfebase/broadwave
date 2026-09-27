@@ -71,3 +71,26 @@ export function recoveryReady(kind: Recovery, snap: RecoverySnap): boolean {
   if (kind === "signal") return snap.health && !snap.signalLost;
   return false;
 }
+
+// A stopped picture with no named cause has nothing to wait for: health stays
+// up, an empty device list counts as a tuner answering, and signals have no
+// Lost row. The player starts a new watch on this clock instead.
+export const pictureRetryEveryMs = 10_000;
+export const pictureRetryForMs = 2 * 60_000;
+
+// Delay until the next quiet watch. Null when this outage is not on that
+// clock, or the two minutes are over. The last watch starts at two minutes.
+export function pictureRetryDelay(message: string, recovery: Recovery, elapsedMs: number): number | null {
+  if (message !== pictureStopped || recovery !== "") return null;
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || elapsedMs >= pictureRetryForMs) return null;
+  const into = elapsedMs % pictureRetryEveryMs;
+  const wait = into === 0 ? pictureRetryEveryMs : pictureRetryEveryMs - into;
+  if (elapsedMs + wait > pictureRetryForMs) return null;
+  return wait;
+}
+
+// A quiet retry that fails without a named cause keeps the picture message.
+// No signal stays the viewer's call, including a tune that never locked.
+export function holdPictureMessage(next: { message: string; recovery: Recovery }): boolean {
+  return next.recovery === "" && next.message !== noSignal;
+}

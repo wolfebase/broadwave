@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { aTunerAnswers, aTunerIsFree, classifySnap, connectionDropped, noSignal, pictureStopped, recoveryReady, serverStopped, tunerStopped, viewerFailure } from "./src/features/player/outage.ts";
+import { aTunerAnswers, aTunerIsFree, classifySnap, connectionDropped, holdPictureMessage, noSignal, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, serverStopped, tunerStopped, viewerFailure } from "./src/features/player/outage.ts";
 
 test("a busy tuner tells the viewer what to stop, and comes back when one is free", () => {
   const failed = Object.assign(new Error("Every tuner is busy. Stop a recording or watch something already on."), {
@@ -60,4 +60,37 @@ test("a home with only playlists never blames a tuner", () => {
   assert.equal(stopped.message, pictureStopped);
   assert.equal(stopped.recovery, "");
   assert.equal(recoveryReady("", { health: true, freeTuner: false, tunerAnswers: true, online: true, signalLost: false }), false);
+});
+
+test("a stopped picture with no named cause tries again every 10s for 2 min", () => {
+  const fires: number[] = [];
+  let elapsed = 0;
+  for (let i = 0; i < 20; i++) {
+    const wait = pictureRetryDelay(pictureStopped, "", elapsed);
+    if (wait == null) break;
+    elapsed += wait;
+    fires.push(elapsed);
+  }
+  assert.deepEqual(
+    fires,
+    Array.from({ length: pictureRetryForMs / pictureRetryEveryMs }, (_, i) => (i + 1) * pictureRetryEveryMs),
+  );
+  assert.equal(pictureRetryDelay(pictureStopped, "", elapsed), null);
+  assert.equal(pictureRetryDelay(pictureStopped, "", 10_050), 9_950);
+  assert.equal(pictureRetryDelay(pictureStopped, "", pictureRetryForMs), null);
+  assert.equal(pictureRetryDelay(pictureStopped, "", -1), null);
+
+  assert.equal(pictureRetryDelay(noSignal, "", 0), null);
+  assert.equal(pictureRetryDelay(noSignal, "signal", 0), null);
+  assert.equal(pictureRetryDelay(serverStopped, "server", 0), null);
+  assert.equal(pictureRetryDelay(tunerStopped, "tuner", 0), null);
+  assert.equal(pictureRetryDelay("Every tuner is busy. Stop a recording or watch something already on.", "busy", 0), null);
+  assert.equal(pictureRetryDelay(pictureStopped, "server", 0), null);
+
+  assert.equal(holdPictureMessage({ message: pictureStopped, recovery: "" }), true);
+  assert.equal(holdPictureMessage({ message: "stream returned 503", recovery: "" }), true);
+  assert.equal(holdPictureMessage({ message: noSignal, recovery: "" }), false);
+  assert.equal(holdPictureMessage({ message: noSignal, recovery: "signal" }), false);
+  assert.equal(holdPictureMessage({ message: serverStopped, recovery: "server" }), false);
+  assert.equal(holdPictureMessage({ message: "Every tuner is busy.", recovery: "busy" }), false);
 });
