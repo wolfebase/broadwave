@@ -482,7 +482,7 @@ public final class SyncEngine {
             player.rate = 1
         }
         state = .off
-        Self.log.notice("sync gave up after \(self.misses) missed catch-ups, \(Int(drift)) ms behind")
+        Self.log.notice("sync gave up after \(misses) missed catch-ups, \(Int(drift)) ms behind")
         report(item: item, drift: drift)
     }
 
@@ -491,10 +491,14 @@ public final class SyncEngine {
     private func kickIfAsked(item: AVPlayerItem) {
         let ms = UserDefaults.standard.double(forKey: "BroadwaveSyncKick")
         guard ms > 0, !kicked, state == .locked else {
-            if state != .locked { lockedSince = nil }
+            if state != .locked {
+                lockedSince = nil
+            }
             return
         }
-        if lockedSince == nil { lockedSince = Date() }
+        if lockedSince == nil {
+            lockedSince = Date()
+        }
         guard let since = lockedSince, Date().timeIntervalSince(since) > 5 else { return }
         kicked = true
         Self.log.notice("sync kick \(Int(ms)) ms back")
