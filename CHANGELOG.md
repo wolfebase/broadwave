@@ -6,6 +6,7 @@ Live TV keeps playing when Plex or another app is busy on the same GPU.
 
 ### Fixed
 
+- Apple TVs in one room now land within a few hundredths of a second of each other. Whole-Home Sync plays 16 seconds behind the broadcast instead of 13: at 13 an Apple TV that started behind the room could not catch up and sat a third of a second off the others.
 - On a server where Plex, Jellyfin, or Channels DVR transcodes on the same Intel GPU, a 1080i channel could encode slower than real time. Apple TVs drained their buffer, paused under the progress bar, and the broadcast broke up. Broadwave now measures the CPU at startup and runs live TV on it when it has room to spare (about 2.5 cores for 1080p60), leaving the GPU to the other apps. Set `BROADWAVE_ENCODER=gpu` or `software` to choose yourself.
 - An Apple TV that fell half a second behind the others seeked every two seconds and froze each time. A seek that doesn't land now waits a minute and the TV plays on (with the next app update).
 

@@ -26,7 +26,7 @@ func TestFollowRoomTracksLiveAndRefusesControls(t *testing.T) {
 	if st.Mode != "follow" || st.Members != 1 {
 		t.Fatalf("channel rooms follow live: %+v", st)
 	}
-	want := unixMS(start.Add(-13 * time.Second))
+	want := unixMS(start.Add(-16 * time.Second))
 	if got := st.Target(unixMS(start)); got != want {
 		t.Fatalf("target should sit 10s behind real time, got %v want %v", got, want)
 	}
@@ -53,7 +53,7 @@ func TestFreshRoomStartsOnTheFirstFrame(t *testing.T) {
 		t.Fatalf("the next screen keeps that frame: %+v", next)
 	}
 	deep := r.Join("channel:9", 9, unixMS(start.Add(-30*time.Second)))
-	want := unixMS(start.Add(-13 * time.Second))
+	want := unixMS(start.Add(-16 * time.Second))
 	if deep.AnchorMedia != want {
 		t.Fatalf("a deep buffer stays at the latency target, got %v want %v", deep.AnchorMedia, want)
 	}
@@ -97,7 +97,7 @@ func TestFollowRoomSettlesOnceTheBufferCoversTheLatency(t *testing.T) {
 	// At the end of the ease the room is on its latency target and back at 1x.
 	*now = now.Add(eased[0].Until)
 	st, ok := r.EndEase("channel:4", held)
-	want := unixMS(now.Add(-13 * time.Second))
+	want := unixMS(now.Add(-16 * time.Second))
 	if !ok || st.Rate != 1 || math.Abs(st.Target(unixMS(*now))-want) > 5 {
 		t.Fatalf("after the ease target %v want %v (%+v ok=%v)", st.Target(unixMS(*now)), want, st, ok)
 	}
@@ -109,8 +109,8 @@ func TestFollowRoomSettlesOnceTheBufferCoversTheLatency(t *testing.T) {
 	if _, ok := r.EndEase("channel:4", held); ok {
 		t.Fatal("a stale ease must not change the room again")
 	}
-	if eased[0].Until < 100*time.Second || eased[0].Until > 400*time.Second {
-		t.Fatalf("a ~6.5 s gap at 2.5%% should take a few minutes, got %v", eased[0].Until)
+	if eased[0].Until < 100*time.Second || eased[0].Until > 500*time.Second {
+		t.Fatalf("a ~9.5 s gap at 2.5%% should take a few minutes, got %v", eased[0].Until)
 	}
 	g := r.Join("group:den", 4, first)
 	*now = start.Add(40 * time.Second)
@@ -135,7 +135,7 @@ func TestAppleOnlyRoomJumpsToItsLatency(t *testing.T) {
 	// straight to the latency target instead of waiting out an ease.
 	*now = start.Add(20 * time.Second)
 	moved := r.Settle(4, first, apple)
-	want := unixMS(now.Add(-13 * time.Second))
+	want := unixMS(now.Add(-16 * time.Second))
 	if len(moved) != 1 || moved[0].Until != 0 || moved[0].State.Rate != 1 || math.Abs(moved[0].State.Target(unixMS(*now))-want) > 1 {
 		t.Fatalf("an Apple room must jump to its target at 1x, got %+v", moved)
 	}
@@ -184,7 +184,7 @@ func TestGroupRoomPauseSeekLive(t *testing.T) {
 		t.Fatal("seeking past the live edge is clamped")
 	}
 	st, _ = r.Apply("group:den", Command{Action: "live"})
-	if st.AnchorMedia != unixMS(now.Add(-13*time.Second)) || st.Rate != 1 {
+	if st.AnchorMedia != unixMS(now.Add(-16*time.Second)) || st.Rate != 1 {
 		t.Fatalf("live jumps to the latency target: %+v", st)
 	}
 	r.Leave("group:den")
@@ -403,7 +403,7 @@ func TestAStalledScreenStepsItsRoomBack(t *testing.T) {
 		*now = start.Add(time.Duration(14+4*i) * time.Second)
 		st, _ = r.Apply("channel:24", Command{Action: "stalled"})
 	}
-	if floor := unixMS(now.Add(-13 * time.Second)); st.Target(unixMS(*now)) < floor-1 {
+	if floor := unixMS(now.Add(-16 * time.Second)); st.Target(unixMS(*now)) < floor-1 {
 		t.Fatalf("stepped past the latency target: %v < %v", st.Target(unixMS(*now)), floor)
 	}
 	// Two screens share the room: the other one would pause for the step.
@@ -426,8 +426,8 @@ func TestAStalledScreenStepsItsRoomBack(t *testing.T) {
 
 func TestLatencyChangeCarriesItsMilliseconds(t *testing.T) {
 	r, _ := fixedRooms(time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC))
-	if st := r.Join("channel:4", 4, 0); st.LatencyMS != 13000 {
-		t.Fatalf("balanced is 13 s, got %+v", st)
+	if st := r.Join("channel:4", 4, 0); st.LatencyMS != 16000 {
+		t.Fatalf("balanced is 16 s, got %+v", st)
 	}
 	st, err := r.Apply("channel:4", Command{Action: "latency", Latency: "stable"})
 	if err != nil || st.LatencyMS != 20000 {
