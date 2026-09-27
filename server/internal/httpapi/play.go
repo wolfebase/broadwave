@@ -396,10 +396,6 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 	if len(devices) == 0 {
 		return 0, errors.New("no tuner")
 	}
-	raw, err := guide.Pull(ctx, s.HDHR, devices[0].BaseURL)
-	if err != nil {
-		return 0, err
-	}
 	channels, err := s.Store.Channels(ctx, false)
 	if err != nil {
 		return 0, err
@@ -413,12 +409,6 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 		antenna = append(antenna, ch)
 		ids = append(ids, ch.ID)
 	}
-	rows, art, err := guide.Parse(raw, antenna)
-	if err != nil {
-		return 0, err
-	}
-	_ = s.Store.SetChannelArt(ctx, art)
-	_ = s.Store.SetNetworks(ctx, guide.Networks(raw, antenna))
 	settings, _ := s.Store.Settings(ctx)
 	if settings == nil {
 		settings = map[string]string{}
@@ -427,10 +417,22 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 	if tmdbKey == "" {
 		tmdbKey = strings.TrimSpace(os.Getenv("TMDB_API_KEY"))
 	}
-	rows = guide.FillImages(ctx, tmdbKey, rows)
-	rows = tagGuideSource(rows, "silicondust")
-	if err := s.Store.ReplaceAiringsFor(ctx, ids, rows); err != nil {
-		return 0, err
+	// A failed SiliconDust pull still lets Schedules Direct and a guide
+	// address fill the guide; its own listings stay until the next pull.
+	var rows []store.Airing
+	raw, pullErr := guide.Pull(ctx, s.HDHR, devices[0].BaseURL)
+	if pullErr == nil {
+		var art map[int64]string
+		rows, art, pullErr = guide.Parse(raw, antenna)
+		if pullErr == nil {
+			_ = s.Store.SetChannelArt(ctx, art)
+			_ = s.Store.SetNetworks(ctx, guide.Networks(raw, antenna))
+			rows = guide.FillImages(ctx, tmdbKey, rows)
+			rows = tagGuideSource(rows, "silicondust")
+			if err := s.Store.ReplaceAiringsFor(ctx, ids, rows); err != nil {
+				return 0, err
+			}
+		}
 	}
 	user := strings.TrimSpace(settings["sdUser"])
 	pass := settings["sdPassword"]
@@ -456,6 +458,17 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 				rows = s.fillUnlisted(ctx, rows, tagGuideSource(extra, "xmltv"))
 			}
 		}
+	}
+	if pullErr != nil {
+		if len(rows) == 0 {
+			return 0, pullErr
+		}
+		// The other sources filled the guide. SiliconDust is tried again soon.
+		slog.Warn(fmt.Sprintf("guide: SiliconDust: %v; %d airings from the other sources", pullErr, len(rows)))
+		s.DeferGuide(ctx, guide.RetryAfterError)
+		_ = s.Store.AddEvent(ctx, "guide", fmt.Sprintf("Guide updated, %d airings", len(rows)))
+		s.LinkGames(ctx)
+		return len(rows), nil
 	}
 	now := time.Now().UTC()
 	span := int64(guide.PullMax - guide.PullMin)
