@@ -352,7 +352,9 @@ if (brk) {
 }
 
 let fakeOut = "";
-const fakeArgs = brk ? ["-raw", "-ts", sample] : avsync ? ["-ts", sample, "-source", sample] : ["-realtime", "-ts", sample];
+// E2E_SOURCE streams a broadcast recording on every channel, for a real encode load.
+const source = process.env.E2E_SOURCE;
+const fakeArgs = brk ? ["-raw", "-ts", sample] : avsync ? ["-ts", sample, "-source", sample] : source ? ["-ts", sample, "-source", path.resolve(source)] : ["-realtime", "-ts", sample];
 const fake = start(path.join(run, "fakehdhr"), fakeArgs, { env: { ...process.env, FAKEHDHR_ADMIN: `127.0.0.1:${port + 10}` } }, (chunk) => {
   fakeOut += chunk.toString();
 });
