@@ -135,6 +135,9 @@ func startPack(dir string, stdout io.Reader, gate *playlistGate, done chan struc
 // is that segment. A shorter fragment stays a part until the next keyframe.
 func Pack(dir string, r io.Reader, gate *playlistGate) error {
 	var init []byte
+	var shifts map[uint32]int64
+	var scales map[uint32]uint32
+	leadIn := true
 	var track uint32
 	var scale uint32
 	var haveInit bool
@@ -295,6 +298,11 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 				}
 				frag := append(append([]byte{}, moof...), box...)
 				moof = nil
+				shiftTracks(frag, shifts)
+				if _, ok := fragmentPTS(frag, track, scale); leadIn && ok {
+					frag = trimLeadIn(frag, track, scales)
+					leadIn = false
+				}
 				if err := take(frag); err != nil {
 					return err
 				}
@@ -302,11 +310,13 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 				if moof == nil && !haveInit {
 					init = append(init, box...)
 					if kind == "moov" {
+						init, shifts = flattenEdits(init)
 						id, sc, ok := videoTrack(init)
 						if !ok {
 							return fmt.Errorf("pack: no video track")
 						}
 						track, scale = id, sc
+						scales = trackScales(init)
 						if err := os.WriteFile(filepath.Join(dir, "init.mp4"), init, 0o644); err != nil {
 							return err
 						}

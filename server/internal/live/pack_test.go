@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -886,5 +887,399 @@ func TestDeltaPlaylistSkipsTheHead(t *testing.T) {
 	short := "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:0.500,\nseg00000.m4s\n"
 	if got := string(DeltaPlaylist([]byte(short))); got != short {
 		t.Fatalf("a short playlist is unchanged:\n%s", got)
+	}
+}
+
+// A broadcast join often has sound before the first picture. ffmpeg keeps that
+// lead only in edit lists, which hls.js and Chrome ignore (sound played that
+// much late) and Safari honors (its buffer sat hours from the playhead). The
+// packager moves the lead into the fragments and drops the edits.
+func TestPackLinesUpTracksWithoutEditLists(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	ffprobe, err := exec.LookPath("ffprobe")
+	if err != nil {
+		t.Skip("ffprobe not installed")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.ts")
+	gen := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-itsoffset", "1.3", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=30000/1001",
+		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
+		"-t", "6", "-c:v", "libx264", "-g", "15", "-c:a", "ac3", "-output_ts_offset", "72000", "-f", "mpegts", src)
+	if out, err := gen.CombinedOutput(); err != nil {
+		t.Fatalf("source: %v %s", err, out)
+	}
+	probe, err := exec.Command(ffprobe, "-v", "error", "-show_entries", "stream=codec_type,start_time", "-of", "csv=p=0", src).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	began := map[string]float64{}
+	for _, line := range strings.Fields(string(probe)) {
+		kind, at, _ := strings.Cut(line, ",")
+		began[kind], _ = strconv.ParseFloat(at, 64)
+	}
+	want := began["video"] - began["audio"]
+	if want < 1 {
+		t.Fatalf("source should lead with sound, got %v", began)
+	}
+	source := Source{VideoCodec: "H264", AudioCodec: "AC3", Progressive: true}
+	for _, r := range []Rendition{{Video: "copy", Audio: "copy"}, {Video: "540", Audio: "aac2", Mode: "broadcast"}} {
+		t.Run(r.Key(), func(t *testing.T) {
+			out := filepath.Join(dir, r.Key())
+			if err := os.MkdirAll(out, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			in, err := os.Open(src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer in.Close()
+			cmd := exec.Command(ffmpeg, RenditionArgs(0, source, r, "libx264", "")...)
+			cmd.Stdin = in
+			stdout, err := cmd.StdoutPipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+			packErr := Pack(out, stdout, nil)
+			if err := cmd.Wait(); packErr != nil || err != nil {
+				t.Fatalf("pack %v wait %v %s", packErr, err, stderr.String())
+			}
+			init, err := os.ReadFile(filepath.Join(out, "init.mp4"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			kinds := map[uint32]string{}
+			scales := map[uint32]uint32{}
+			for _, trak := range boxes(child(init, "moov")) {
+				if trak.kind != "trak" {
+					continue
+				}
+				if child(trak.body, "edts") != nil {
+					t.Errorf("init.mp4 still has an edit list")
+				}
+				hdlr := child(child(trak.body, "mdia"), "hdlr")
+				id, scale, ok := trackScale(trak.body)
+				if !ok || len(hdlr) < 12 {
+					t.Fatal("unreadable track")
+				}
+				kinds[id], scales[id] = string(hdlr[8:12]), scale
+			}
+			// Where each track's first sample in a segment is shown, in seconds.
+			starts := func(name string) map[string]float64 {
+				seg, err := os.ReadFile(filepath.Join(out, name))
+				if err != nil {
+					t.Fatal(err)
+				}
+				got := map[string]float64{}
+				for _, traf := range boxes(child(seg, "moof")) {
+					tfhd, tfdt := child(traf.body, "tfhd"), child(traf.body, "tfdt")
+					if traf.kind != "traf" || len(tfhd) < 8 || len(tfdt) < 12 || tfdt[0] != 1 {
+						continue
+					}
+					id := binary.BigEndian.Uint32(tfhd[4:8])
+					base := int64(binary.BigEndian.Uint64(tfdt[4:12])) + firstCompositionOffset(child(traf.body, "trun"))
+					got[kinds[id]] = float64(base) / float64(scales[id])
+				}
+				return got
+			}
+			first := starts("seg00000.m4s")
+			if len(first) != 2 {
+				t.Fatalf("first segment tracks: %v", first)
+			}
+			// Sound starts at 0 and the picture at its lead. The AAC encoder's
+			// first 1024 samples are priming before the sound. Half a picture
+			// of rounding is allowed; missing the priming is not.
+			frame := 1536.0 / 48000
+			priming := 0.0
+			if r.Audio == "aac2" {
+				frame, priming = 1024.0/48000, 1024.0/48000
+			}
+			if math.Abs(first["vide"]-priming-want) > 0.008 {
+				t.Fatalf("picture starts at %.4fs in the fragments, want %.4fs after the sound (%v)", first["vide"], want, first)
+			}
+			// Sound from before the first picture is dropped whole frames at a
+			// time, so what is left keeps its place.
+			if gap := first["soun"] - first["vide"]; gap < 0 || gap >= frame {
+				t.Fatalf("first sound %.4fs after the first picture, want within one audio frame (%v)", gap, first)
+			}
+			if k := first["soun"] / frame; math.Abs(k-math.Round(k)) > 1e-6 {
+				t.Fatalf("first sound at %.4fs is off its frame grid (%v)", first["soun"], first)
+			}
+			playlist, err := os.ReadFile(filepath.Join(out, "index.m3u8"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var names []string
+			for _, line := range strings.Split(string(playlist), "\n") {
+				if strings.HasPrefix(line, "seg") {
+					names = append(names, line)
+				}
+			}
+			// The rewritten first fragment must still decode, sound and picture.
+			whole := append([]byte{}, init...)
+			for _, n := range names {
+				b, err := os.ReadFile(filepath.Join(out, n))
+				if err != nil {
+					t.Fatal(err)
+				}
+				whole = append(whole, b...)
+			}
+			dec := exec.Command(ffmpeg, "-hide_banner", "-v", "error", "-i", "pipe:0", "-f", "null", "-")
+			dec.Stdin = bytes.NewReader(whole)
+			if msg, err := dec.CombinedOutput(); err != nil || len(bytes.TrimSpace(msg)) > 0 {
+				t.Fatalf("segments do not decode cleanly: %v %s", err, msg)
+			}
+			last := starts(names[len(names)-2])
+			// A later segment's tracks start within one audio frame and one
+			// picture of each other, not a second apart.
+			if gap := last["vide"] - last["soun"]; math.Abs(gap) > 0.1 {
+				t.Fatalf("%s: tracks %.3fs apart (%v)", names[len(names)-2], gap, last)
+			}
+		})
+	}
+}
+
+func elstBox(version byte, entries [][2]int64) []byte {
+	b := []byte{version, 0, 0, 0, 0, 0, 0, 0}
+	binary.BigEndian.PutUint32(b[4:8], uint32(len(entries)))
+	for _, e := range entries {
+		if version == 1 {
+			b = binary.BigEndian.AppendUint64(b, uint64(e[0]))
+			b = binary.BigEndian.AppendUint64(b, uint64(e[1]))
+		} else {
+			b = binary.BigEndian.AppendUint32(b, uint32(e[0]))
+			b = binary.BigEndian.AppendUint32(b, uint32(int32(e[1])))
+		}
+		b = append(b, 0, 1, 0, 0)
+	}
+	return mp4Box("elst", b)
+}
+
+// trakBox is a track with a v1 tkhd and mdhd, and an edit list when elst is set.
+func trakBox(id, scale uint32, handler string, elst []byte) []byte {
+	tkhd := make([]byte, 36)
+	tkhd[0] = 1
+	binary.BigEndian.PutUint32(tkhd[20:24], id)
+	mdhd := make([]byte, 36)
+	mdhd[0] = 1
+	binary.BigEndian.PutUint32(mdhd[20:24], scale)
+	hdlr := make([]byte, 12)
+	copy(hdlr[8:12], handler)
+	body := mp4Box("tkhd", tkhd)
+	if elst != nil {
+		body = append(body, mp4Box("edts", elst)...)
+	}
+	return mp4Box("trak", append(body, mp4Box("mdia", append(mp4Box("mdhd", mdhd), mp4Box("hdlr", hdlr)...))...))
+}
+
+func initWith(traks ...[]byte) []byte {
+	mvhd := make([]byte, 100)
+	binary.BigEndian.PutUint32(mvhd[12:16], 1000)
+	moov := mp4Box("mvhd", mvhd)
+	for _, t := range traks {
+		moov = append(moov, t...)
+	}
+	return append(mp4Box("ftyp", []byte("isom")), mp4Box("moov", append(moov, mp4Box("mvex", make([]byte, 8))...))...)
+}
+
+func TestFlattenEditsMovesEachTrackToItsStart(t *testing.T) {
+	video := trakBox(1, 90000, "vide", elstBox(1, [][2]int64{{72448376, -1}, {0, 1501}}))
+	// Two empty edits in a v0 list add up.
+	audio := trakBox(2, 48000, "soun", elstBox(0, [][2]int64{{72447000, -1}, {910, -1}, {0, 1024}}))
+	out, shifts := flattenEdits(initWith(video, audio))
+	if bytes.Contains(out, []byte("edts")) || bytes.Contains(out, []byte("elst")) {
+		t.Fatal("edit lists survived")
+	}
+	for _, kind := range []string{"ftyp", "mvhd", "mvex", "mdhd", "hdlr"} {
+		if !bytes.Contains(out, []byte(kind)) {
+			t.Fatalf("%s was dropped", kind)
+		}
+	}
+	if id, scale, ok := videoTrack(out); !ok || id != 1 || scale != 90000 {
+		t.Fatalf("video track after flattening: %d %d %v", id, scale, ok)
+	}
+	// Video is shown at 72448.376 - 1501/90000; audio at 72447.910 - 1024/48000.
+	videoAt := 72448.376 - 1501.0/90000
+	audioAt := 72447.910 - 1024.0/48000
+	want := map[uint32]int64{1: int64(math.Round((videoAt - audioAt) * 90000)), 2: 0}
+	if len(shifts) != 2 || shifts[1] != want[1] || shifts[2] != want[2] {
+		t.Fatalf("shifts %v, want %v", shifts, want)
+	}
+
+	frag := keyframeFragment(1000, 1501)
+	shiftTracks(frag, shifts)
+	if pts, ok := fragmentPTS(frag, 1, 90000); !ok || pts != 1000+want[1] {
+		t.Fatalf("shifted pts %d, want %d", pts, 1000+want[1])
+	}
+}
+
+func TestFlattenEditsLeavesOddInitsAlone(t *testing.T) {
+	cases := map[string][]byte{
+		"a track without an edit list": initWith(
+			trakBox(1, 90000, "vide", elstBox(1, [][2]int64{{72448376, -1}, {0, 0}})),
+			trakBox(2, 48000, "soun", nil)),
+		"tracks hours apart": initWith(
+			trakBox(1, 90000, "vide", elstBox(1, [][2]int64{{72448376, -1}, {0, 0}})),
+			trakBox(2, 48000, "soun", elstBox(1, [][2]int64{{1000, -1}, {0, 0}}))),
+	}
+	for name, init := range cases {
+		out, shifts := flattenEdits(init)
+		if !bytes.Equal(out, init) || shifts != nil {
+			t.Errorf("%s: changed the init (shifts %v)", name, shifts)
+		}
+	}
+	one := initWith(trakBox(1, 90000, "vide", elstBox(1, [][2]int64{{72448376, -1}, {0, 1501}})))
+	out, shifts := flattenEdits(one)
+	if bytes.Contains(out, []byte("edts")) || shifts[1] != 0 {
+		t.Errorf("a single track: shifts %v", shifts)
+	}
+}
+
+// testRun is one traf of a synthetic fragment: its samples' durations and
+// payloads, and the flags ffmpeg would write.
+type testRun struct {
+	id         uint32
+	tfdt       uint64
+	tfdtV0     bool
+	cts        uint32
+	durs       []uint32
+	data       [][]byte
+	tfhdFlags  uint32
+	noOffset   bool
+	extraChild bool
+}
+
+// testFragment lays the runs' data out in mdat in the order given by order.
+func testFragment(runs []testRun, order []int) []byte {
+	build := func(offsets []int) []byte {
+		body := mp4Box("mfhd", make([]byte, 8))
+		for i, r := range runs {
+			tfhd := []byte{0, byte(r.tfhdFlags >> 16), byte(r.tfhdFlags >> 8), byte(r.tfhdFlags)}
+			tfhd = binary.BigEndian.AppendUint32(tfhd, r.id)
+			var tfdt []byte
+			if r.tfdtV0 {
+				tfdt = binary.BigEndian.AppendUint32([]byte{0, 0, 0, 0}, uint32(r.tfdt))
+			} else {
+				tfdt = binary.BigEndian.AppendUint64([]byte{1, 0, 0, 0}, r.tfdt)
+			}
+			flags := uint32(0x100 | 0x200 | 0x800 | 0x1)
+			if r.noOffset {
+				flags &^= 0x1
+			}
+			trun := []byte{0, byte(flags >> 16), byte(flags >> 8), byte(flags)}
+			trun = binary.BigEndian.AppendUint32(trun, uint32(len(r.durs)))
+			if !r.noOffset {
+				trun = binary.BigEndian.AppendUint32(trun, uint32(offsets[i]))
+			}
+			for j := range r.durs {
+				cts := uint32(0)
+				if j == 0 {
+					cts = r.cts
+				}
+				trun = binary.BigEndian.AppendUint32(trun, r.durs[j])
+				trun = binary.BigEndian.AppendUint32(trun, uint32(len(r.data[j])))
+				trun = binary.BigEndian.AppendUint32(trun, cts)
+			}
+			traf := append(append(mp4Box("tfhd", tfhd), mp4Box("tfdt", tfdt)...), mp4Box("trun", trun)...)
+			if r.extraChild {
+				traf = append(traf, mp4Box("sbgp", make([]byte, 8))...)
+			}
+			body = append(body, mp4Box("traf", traf)...)
+		}
+		return mp4Box("moof", body)
+	}
+	moofLen := len(build(make([]int, len(runs))))
+	offsets := make([]int, len(runs))
+	var mdat []byte
+	for _, i := range order {
+		offsets[i] = moofLen + 8 + len(mdat)
+		for _, d := range runs[i].data {
+			mdat = append(mdat, d...)
+		}
+	}
+	return append(build(offsets), mp4Box("mdat", mdat)...)
+}
+
+// runData reads back each traf's decode time and the bytes its trun points at.
+func runData(t *testing.T, frag []byte) map[uint32][2]any {
+	t.Helper()
+	out := map[uint32][2]any{}
+	for _, b := range boxes(child(frag, "moof")) {
+		if b.kind != "traf" {
+			continue
+		}
+		r, ok := parseRun(b.body)
+		if !ok {
+			t.Fatal("unreadable traf")
+		}
+		var size int64
+		for _, s := range r.samples {
+			size += r.sampleSize(s)
+		}
+		if r.dataOff < 0 || r.dataOff+size > int64(len(frag)) {
+			t.Fatalf("track %d points outside the fragment", r.id)
+		}
+		out[r.id] = [2]any{r.decodeTime(), string(frag[r.dataOff : r.dataOff+size])}
+	}
+	return out
+}
+
+func TestTrimLeadInDropsSoundBeforeThePicture(t *testing.T) {
+	const moofBase = 0x20000 | 0x38
+	scales := map[uint32]uint32{1: 90000, 2: 48000}
+	// The picture is shown at 1 s (sample 48000 at 48 kHz). Sound frames
+	// start at 46464, 48000 and 49536; only the first is before the picture.
+	for name, order := range map[string][]int{"video data first": {0, 1}, "sound data first": {1, 0}} {
+		for _, v0 := range []bool{false, true} {
+			runs := []testRun{
+				{id: 1, tfdt: 87000, cts: 3000, durs: []uint32{1501, 1501}, data: [][]byte{[]byte("VVVV"), []byte("WW")}, tfhdFlags: moofBase},
+				{id: 2, tfdt: 48000 - 1536, tfdtV0: v0, durs: []uint32{1536, 1536, 1536}, data: [][]byte{[]byte("aaa"), []byte("bbbbb"), []byte("c")}, tfhdFlags: moofBase},
+			}
+			in := testFragment(runs, order)
+			out := trimLeadIn(in, 1, scales)
+			got := runData(t, out)
+			if got[1] != [2]any{int64(87000), "VVVVWW"} {
+				t.Errorf("%s v0=%v: picture changed: %v", name, v0, got[1])
+			}
+			if got[2] != [2]any{int64(48000), "bbbbbc"} {
+				t.Errorf("%s v0=%v: sound = %v, want the frames from the picture on", name, v0, got[2])
+			}
+			if len(out) != len(in)-3-12 {
+				t.Errorf("%s v0=%v: fragment is %d bytes, want %d", name, v0, len(out), len(in)-15)
+			}
+		}
+	}
+}
+
+func TestTrimLeadInLeavesOtherLayoutsAlone(t *testing.T) {
+	const moofBase = 0x20000 | 0x38
+	scales := map[uint32]uint32{1: 90000, 2: 48000}
+	base := func() []testRun {
+		return []testRun{
+			{id: 1, tfdt: 90000, durs: []uint32{1501}, data: [][]byte{[]byte("VV")}, tfhdFlags: moofBase},
+			{id: 2, tfdt: 0, durs: []uint32{48000, 1536}, data: [][]byte{[]byte("a"), []byte("b")}, tfhdFlags: moofBase},
+		}
+	}
+	cases := map[string]func(r []testRun){
+		"sound already after the picture": func(r []testRun) { r[1].tfdt = 48000 },
+		"no data offset":                  func(r []testRun) { r[1].noOffset = true },
+		"offsets not from the moof":       func(r []testRun) { r[1].tfhdFlags = 0x38 },
+		"a sample group":                  func(r []testRun) { r[1].extraChild = true },
+	}
+	for name, change := range cases {
+		runs := base()
+		change(runs)
+		in := testFragment(runs, []int{0, 1})
+		if out := trimLeadIn(in, 1, scales); !bytes.Equal(out, in) {
+			t.Errorf("%s: the fragment changed", name)
+		}
 	}
 }
