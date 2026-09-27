@@ -511,6 +511,17 @@ public final class SyncEngine {
         if logs {
             Self.log.notice("sync seek to \(Int(media))")
         }
-        item.seek(to: Date(timeIntervalSince1970: media / 1000)) { _ in }
+        // A seek by date lands on the keyframe before it, up to a second
+        // short, and a real Apple TV then sat half a second behind the room
+        // with nothing left that could close the gap. The room sits 16 s
+        // behind live, well inside what AVPlayer holds, so an exact seek
+        // lands on the frame.
+        if let current = item.currentDate() {
+            let delta = media / 1000 - current.timeIntervalSince1970
+            let to = CMTimeAdd(item.currentTime(), CMTime(seconds: delta, preferredTimescale: 90000))
+            item.seek(to: to, toleranceBefore: .zero, toleranceAfter: .zero) { _ in }
+        } else {
+            item.seek(to: Date(timeIntervalSince1970: media / 1000)) { _ in }
+        }
     }
 }
