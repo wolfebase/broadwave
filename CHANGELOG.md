@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.4 — 2026-09-27
+
+Multiview and single screens stop stalling at the live edge.
+
+### Fixed
+
+- A multiview tile of a 60 frames-a-second channel could freeze for 15-20 seconds at a time. Its segments now stay short.
+- A browser alone on a channel whose picture arrives late or unevenly stalled again and again near live. After a stall, that screen and multiview now step back from live, a little at a time, until the picture holds.
+
 ## 0.11.3 — 2026-09-27
 
 Several screens on one channel stay smooth and in step, on Apple TV and in the browser.
