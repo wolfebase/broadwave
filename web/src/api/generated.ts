@@ -251,6 +251,7 @@ export type RoomState = {
   anchorMedia: number;
   rate: number;
   latency: string;
+  latencyMs?: number;
   version: number;
   members: number;
 };

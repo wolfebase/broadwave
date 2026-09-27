@@ -68,7 +68,7 @@ export interface paths {
          *     `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `error` {code, message}.
          *
          *     Client to server: `clock` {t0}, `sync.join` {room, channelId}, `sync.leave` {room},
-         *     `sync.command` {room, action: play|pause|seek|live|latency, mediaTime, latency}.
+         *     `sync.command` {room, action: play|pause|seek|live|latency|stalled, mediaTime, latency}. `stalled` steps a one-screen room or a multiview 2 s further from live, never past its latency target.
          *
          *     Rooms are `channel:<id>` (everyone on a channel, following live) or `group:<code>`
          *     (shared controls). At server time T a room shows media time
@@ -1048,10 +1048,12 @@ export interface components {
             anchorServer: number;
             /** @description Program date-time (Unix ms) playing at anchorServer */
             anchorMedia: number;
-            /** @enum {number} */
-            rate: 0 | 1;
+            /** @description 1, 0 when paused, or below 1 while a follow room eases back to its latency */
+            rate: number;
             /** @enum {string} */
             latency: "lowest" | "balanced" | "stable";
+            /** @description How far behind server time the room settles. A screen that cannot reach an easing room's frame aims at server time minus this. */
+            latencyMs?: number;
             version: number;
             members: number;
         };

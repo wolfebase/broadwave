@@ -45,6 +45,7 @@ public final class SyncEngine {
     private var canSpeedUp = true
     private var speedUpOff = Date.distantPast
     private var lastMove: SyncMove?
+    private var easeVersion: Int?
     /// The viewer paused this screen. It keeps its own place, time-shifted,
     /// and the engine stops pulling it back to the room.
     public private(set) var detached = false
@@ -159,6 +160,17 @@ public final class SyncEngine {
         seenPlaying && followRoom && roomRate != 0 && paused && forwardBuffer >= 1 && sinceHold > 1 && sinceActive > 3
     }
 
+    /// A follow room eases back from its first frame at a little under 1x, closer
+    /// to live than AVPlayer can seek. Each Apple screen then held wherever it
+    /// started, about 100 ms from the next. Aiming at the room's latency, where
+    /// the ease ends, puts them on one frame now; the room joins them at 1x.
+    /// A screen keeps that aim until the room changes (`aiming`).
+    static func easeTarget(room st: RoomState, serverNow: Double, reachable: Bool, aiming: Bool) -> Double? {
+        guard st.mode == "follow", st.rate > 0, st.rate < 1, let latency = st.latencyMs, latency > 0 else { return nil }
+        guard aiming || !reachable else { return nil }
+        return serverNow - latency
+    }
+
     static func shouldKeepPlaying(roomRate: Double, paused: Bool, rate: Float) -> Bool {
         roomRate != 0 && (paused || rate == 0)
     }
@@ -243,7 +255,16 @@ public final class SyncEngine {
             state = .waiting
             return
         }
-        let target = st.rate == 0 ? st.anchorMedia : st.target(atServer: socket.serverNow())
+        let serverNow = socket.serverNow()
+        var target = st.rate == 0 ? st.anchorMedia : st.target(atServer: serverNow)
+        var roomRate = st.rate
+        if let settled = Self.easeTarget(
+            room: st, serverNow: serverNow, reachable: canSeek(to: target, item: item), aiming: easeVersion == st.version
+        ) {
+            target = settled
+            roomRate = 1
+            easeVersion = st.version
+        }
         let d = local - target
         drift = d
         if logs {
@@ -292,7 +313,7 @@ public final class SyncEngine {
         let quiet = Date().timeIntervalSince(trimEnded) >= Self.quietSeconds
         checkSpeedUp(drift: d)
         let move = Self.decide(
-            hasFrame: hasFrame, driftMS: d, roomRate: st.rate, canSeek: canSeek(to: target, item: item),
+            hasFrame: hasFrame, driftMS: d, roomRate: roomRate, canSeek: canSeek(to: target, item: item),
             forwardBuffer: bufferedAhead(item), trim: trim, quiet: quiet, canSpeedUp: canSpeedUp
         )
         if logs, move != lastMove {
@@ -331,7 +352,7 @@ public final class SyncEngine {
             // tvOS. Trim only a player that is already moving.
             let next = player.timeControlStatus == .playing ? wanted : .none
             setTrim(next, drift: d)
-            let rate = Self.rate(room: st.rate, trim: next)
+            let rate = Self.rate(room: roomRate, trim: next)
             if player.rate != rate {
                 player.rate = rate
                 rateSets += 1

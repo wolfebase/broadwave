@@ -494,10 +494,11 @@ public struct RoomState: Codable, Sendable, Hashable {
     public var anchorMedia: Double
     public var rate: Double
     public var latency: String
+    public var latencyMs: Double?
     public var version: Int
     public var members: Int
 
-    public init(room: String, channelId: Int64? = nil, mode: String, anchorServer: Double, anchorMedia: Double, rate: Double, latency: String, version: Int, members: Int) {
+    public init(room: String, channelId: Int64? = nil, mode: String, anchorServer: Double, anchorMedia: Double, rate: Double, latency: String, latencyMs: Double? = nil, version: Int, members: Int) {
         self.room = room
         self.channelId = channelId
         self.mode = mode
@@ -505,6 +506,7 @@ public struct RoomState: Codable, Sendable, Hashable {
         self.anchorMedia = anchorMedia
         self.rate = rate
         self.latency = latency
+        self.latencyMs = latencyMs
         self.version = version
         self.members = members
     }

@@ -234,6 +234,28 @@ private func fixture(_ name: String) throws -> Data {
     #expect(near == .play(.none, locked: false))
 }
 
+/// An easing room plays closer to live than AVPlayer reaches. Apple screens
+/// aim where the ease ends instead of each holding its own frame.
+@Test @MainActor func anUnreachableEasingRoomAimsAtItsLatency() {
+    let easing = RoomState(
+        room: "channel:4", mode: "follow", anchorServer: 0, anchorMedia: 0, rate: 0.975,
+        latency: "balanced", latencyMs: 13000, version: 7, members: 3
+    )
+    #expect(SyncEngine.easeTarget(room: easing, serverNow: 100_000, reachable: false, aiming: false) == 87000)
+    #expect(SyncEngine.easeTarget(room: easing, serverNow: 100_000, reachable: true, aiming: false) == nil)
+    // Once aimed, a screen stays there even if the room's frame comes into reach.
+    #expect(SyncEngine.easeTarget(room: easing, serverNow: 100_000, reachable: true, aiming: true) == 87000)
+    var settled = easing
+    settled.rate = 1
+    #expect(SyncEngine.easeTarget(room: settled, serverNow: 100_000, reachable: false, aiming: true) == nil)
+    var group = easing
+    group.mode = "group"
+    #expect(SyncEngine.easeTarget(room: group, serverNow: 100_000, reachable: false, aiming: false) == nil)
+    var old = easing
+    old.latencyMs = nil
+    #expect(SyncEngine.easeTarget(room: old, serverNow: 100_000, reachable: false, aiming: false) == nil)
+}
+
 @Test @MainActor func behindInsideTheWindowSeeks() {
     let move = SyncEngine.decide(hasFrame: true, driftMS: -800, roomRate: 1, canSeek: true)
     #expect(move == .seek)

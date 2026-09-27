@@ -101,6 +101,11 @@ func TestFollowRoomSettlesOnceTheBufferCoversTheLatency(t *testing.T) {
 	if !ok || st.Rate != 1 || math.Abs(st.Target(unixMS(*now))-want) > 5 {
 		t.Fatalf("after the ease target %v want %v (%+v ok=%v)", st.Target(unixMS(*now)), want, st, ok)
 	}
+	// A screen that cannot reach the easing frame aims at server time less
+	// latencyMs, which is where the room lands when the ease ends.
+	if math.Abs(unixMS(*now)-moved.LatencyMS-st.Target(unixMS(*now))) > 5 {
+		t.Fatalf("latencyMs %v does not point at the end of the ease", moved.LatencyMS)
+	}
 	if _, ok := r.EndEase("channel:4", held); ok {
 		t.Fatal("a stale ease must not change the room again")
 	}
@@ -394,5 +399,16 @@ func TestAStalledScreenStepsItsRoomBack(t *testing.T) {
 	mv, _ := r.State("multiview:m")
 	if st, _ := r.Apply("multiview:m", Command{Action: "stalled"}); st.Version == mv.Version {
 		t.Fatalf("a multiview did not step back: %+v", st)
+	}
+}
+
+func TestLatencyChangeCarriesItsMilliseconds(t *testing.T) {
+	r, _ := fixedRooms(time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC))
+	if st := r.Join("channel:4", 4, 0); st.LatencyMS != 13000 {
+		t.Fatalf("balanced is 13 s, got %+v", st)
+	}
+	st, err := r.Apply("channel:4", Command{Action: "latency", Latency: "stable"})
+	if err != nil || st.LatencyMS != 20000 {
+		t.Fatalf("stable is 20 s, got %+v %v", st, err)
 	}
 }
