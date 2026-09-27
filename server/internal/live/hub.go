@@ -612,7 +612,7 @@ func (h *Hub) addFeedLocked(m *mux, ch store.SourceChannel) *feed {
 	} else if m.input == "" {
 		h.deferScanLocked(m, f)
 	}
-	if m.input != "" && ch.FieldOrder == "" {
+	if m.input != "" && probeInput(ch) {
 		h.probeInputLocked(m, f)
 	}
 	return f

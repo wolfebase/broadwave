@@ -10,7 +10,55 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"broadwave/internal/store"
 )
+
+func TestInstallLeavesUnnamedCodecsEmpty(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := t.Context()
+	entries := []Entry{
+		{Number: "801", Name: "Link", URL: "http://example/live.ts"},
+		{Number: "802", Name: "Named", URL: "http://example/named.ts", Video: "mpeg2video", Audio: "ac3"},
+	}
+	if err := Install(ctx, st, 1, "Link", "Link", entries); err != nil {
+		t.Fatal(err)
+	}
+	codecs := func() (map[string][2]string, map[string]int64) {
+		channels, err := st.Channels(ctx, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string][2]string{}
+		ids := map[string]int64{}
+		for _, ch := range channels {
+			out[ch.GuideNumber] = [2]string{ch.VideoCodec, ch.AudioCodec}
+			ids[ch.GuideNumber] = ch.ID
+		}
+		return out, ids
+	}
+	got, ids := codecs()
+	if got["801"] != [2]string{"", ""} {
+		t.Fatalf("unnamed codecs %v", got["801"])
+	}
+	if got["802"] != [2]string{"mpeg2video", "ac3"} {
+		t.Fatalf("named codecs %v", got["802"])
+	}
+	// A refresh of the same playlist keeps what a tune learned.
+	if err := st.SetChannelCodecs(ctx, ids["801"], "MPEG2", "AC3"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Install(ctx, st, 1, "Link", "Link", entries); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := codecs(); got["801"] != [2]string{"MPEG2", "AC3"} {
+		t.Fatalf("refresh codecs %v", got["801"])
+	}
+}
 
 func TestParseM3U(t *testing.T) {
 	raw := `#EXTM3U
