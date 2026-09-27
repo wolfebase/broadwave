@@ -122,9 +122,11 @@ func TestProgramFilterPassesThroughWhenTheProgramIsAbsent(t *testing.T) {
 func TestProgramFilterKeepsAudioSplitAcrossTheProgramMap(t *testing.T) {
 	pat := psiPacket(0, psiSection(0x00, append([]byte{0x00, 0x01, 0xc1, 0x00, 0x00}, progPID(1, 0x1000)...)))
 	first, second := splitProgramMap(1, 0x1000, 0x110, 0x111)
-	video := tsPacket(0x110, true, []byte{0x00, 0x00, 0x01, 0xe0})
+	video := tsPacket(0x110, true, pesPacket([]byte{0x00, 0x00, 0x01, 0xb3}))
 	audio := tsPacket(0x111, true, []byte{0x00, 0x00, 0x01, 0xc0})
 	sibling := tsPacket(0x210, true, bytes.Repeat([]byte{0xff}, 20))
+	sibling = append(sibling, tsPacket(0x1fff, false, nil)...)
+	sibling = append(sibling, tsPacket(0x1fff, false, nil)...)
 	var buf bytes.Buffer
 	w := newProgramPipe(&closeBuf{&buf}, 1)
 	if _, err := w.Write(append(pat, first...)); err != nil {
@@ -269,7 +271,7 @@ func twoProgramTS(a, aPMT, aVideo, aAudio, b, bPMT, bVideo int) []byte {
 		progPID(a, aPMT)...), progPID(b, bPMT)...)))
 	pmtA := psiPacket(aPMT, psiSection(0x02, pmtWithAudio(a, aVideo, aAudio)))
 	pmtB := psiPacket(bPMT, psiSection(0x02, pmtBody(b, streamMPEG2, bVideo)))
-	video := tsPacket(aVideo, true, []byte{0x00, 0x00, 0x01, 0xe0})
+	video := tsPacket(aVideo, true, pesPacket([]byte{0x00, 0x00, 0x01, 0xb3, 0x50, 0x02, 0xd0}))
 	audio := tsPacket(aAudio, true, []byte{0x00, 0x00, 0x01, 0xc0})
 	other := tsPacket(bVideo, true, bytes.Repeat([]byte{0xff}, 20))
 	var out []byte
@@ -279,6 +281,9 @@ func twoProgramTS(a, aPMT, aVideo, aAudio, b, bPMT, bVideo int) []byte {
 	out = append(out, video...)
 	out = append(out, audio...)
 	out = append(out, other...)
+	// A live stream keeps going; the filter holds its last two packets.
+	out = append(out, tsPacket(0x1fff, false, nil)...)
+	out = append(out, tsPacket(0x1fff, false, nil)...)
 	return out
 }
 
@@ -406,4 +411,154 @@ func probeShow(t *testing.T, ffprobe string, data []byte) string {
 		t.Fatalf("ffprobe %v %s", err, out)
 	}
 	return string(out)
+}
+
+// busyMux is a two-program multiplex whose payload bytes look like packet
+// headers for the kept video PID, so any packet read at the wrong phase
+// passes the PID check and reaches the decoder as garbage.
+func busyMux(packets int) (raw []byte, sent map[string]bool) {
+	raw = twoProgramTS(1, 0x1000, 0x110, 0x111, 2, 0x1001, 0x210)
+	// Periods of 5 and 7 bytes, so a lookalike header does not repeat at
+	// the packet size the way a real one does.
+	lookalike := bytes.Repeat([]byte{0x47, 0x01, 0x10, 0x10, 0x00}, 37)
+	sibLike := bytes.Repeat([]byte{0x47, 0x01, 0x10, 0x10, 0x00, 0x47, 0x02}, 26)
+	sent = map[string]bool{}
+	for i := range packets {
+		var pkt []byte
+		switch i % 3 {
+		case 0:
+			body := append([]byte{byte(i >> 8), byte(i)}, lookalike...)
+			pkt = tsPacket(0x110, false, body)
+		case 1:
+			pkt = tsPacket(0x111, false, []byte{byte(i >> 8), byte(i)})
+		default:
+			pkt = tsPacket(0x210, false, sibLike)
+		}
+		sent[string(pkt)] = true
+		raw = append(raw, pkt...)
+	}
+	for off := 0; off+188 <= len(raw) && off < 188*6; off += 188 {
+		sent[string(raw[off:off+188])] = true
+	}
+	return raw, sent
+}
+
+func checkPackets(t *testing.T, out []byte, sent map[string]bool) (video int) {
+	t.Helper()
+	if len(out)%188 != 0 {
+		t.Fatalf("output is %d bytes, not whole packets", len(out))
+	}
+	for off := 0; off < len(out); off += 188 {
+		pkt := out[off : off+188]
+		pid := int(pkt[1]&0x1f)<<8 | int(pkt[2])
+		if pid == 0 {
+			continue
+		}
+		if !sent[string(pkt)] {
+			t.Fatalf("packet %d (pid %#x) was never sent: garbage reached the encode", off/188, pid)
+		}
+		if pid == 0x210 {
+			t.Fatalf("sibling packet %d leaked", off/188)
+		}
+		if pid == 0x110 {
+			video++
+		}
+	}
+	return video
+}
+
+func TestProgramFilterRecoversFromALostChunk(t *testing.T) {
+	raw, sent := busyMux(3000)
+	var buf bytes.Buffer
+	w := newProgramPipe(&closeBuf{&buf}, 1)
+	// A slow encode loses whole reads, and reads are not packet sized.
+	for i, off := 0, 0; off < len(raw); i++ {
+		n := min(1000, len(raw)-off)
+		if i != 200 {
+			if _, err := w.Write(raw[off : off+n]); err != nil {
+				t.Fatal(err)
+			}
+		}
+		off += n
+	}
+	video := checkPackets(t, buf.Bytes(), sent)
+	// 1000 packets of video; the lost read holds about 5 packets of it.
+	if video < 990 {
+		t.Fatalf("only %d of 1000 video packets after the gap", video)
+	}
+}
+
+func TestProgramFilterIgnoresASyncByteInsideAPayload(t *testing.T) {
+	raw, sent := busyMux(600)
+	// An encode that attaches mid-stream starts inside a video payload full
+	// of 0x47 bytes.
+	join := raw[188*6+7:]
+	var buf bytes.Buffer
+	w := newProgramPipe(&closeBuf{&buf}, 1)
+	for off := 0; off < len(join); off += 1000 {
+		if _, err := w.Write(join[off:min(off+1000, len(join))]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// No table after the join, so the head of the stream carries none; the
+	// filter must still not lock onto a payload byte. Feed the tables again.
+	if _, err := w.Write(raw); err != nil {
+		t.Fatal(err)
+	}
+	if got := pidsOf(buf.Bytes()); got[0x210] {
+		t.Fatalf("passed the whole multiplex through: %v", got)
+	}
+	if video := checkPackets(t, buf.Bytes(), sent); video < 200 {
+		t.Fatalf("only %d video packets", video)
+	}
+}
+
+func TestProgramFilterFollowsANewProgramMap(t *testing.T) {
+	raw := twoProgramTS(1, 0x1000, 0x110, 0x111, 2, 0x1001, 0x210)
+	// The station moves its audio to a new PID mid-stream.
+	moved := psiPacket(0x1000, psiSection(0x02, pmtWithAudio(1, 0x110, 0x121)))
+	moved[4+1+5] = 0xc3 // version 1
+	raw = append(raw, moved...)
+	raw = append(raw, tsPacket(0x121, true, []byte{0x00, 0x00, 0x01, 0xc0})...)
+	raw = append(raw, tsPacket(0x110, false, nil)...)
+	raw = append(raw, tsPacket(0x1fff, false, nil)...)
+	raw = append(raw, tsPacket(0x1fff, false, nil)...)
+	var buf bytes.Buffer
+	w := newProgramPipe(&closeBuf{&buf}, 1)
+	for off := 0; off < len(raw); off += 188 {
+		if _, err := w.Write(raw[off : off+188]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := pidsOf(buf.Bytes()); !got[0x121] {
+		t.Fatalf("new audio pid dropped: %v", got)
+	}
+}
+
+func TestProgramFilterStartsAtASequenceHeader(t *testing.T) {
+	raw := twoProgramTS(1, 0x1000, 0x110, 0x111, 2, 0x1001, 0x210)
+	// Join mid picture group: a picture without its sequence header first.
+	join := append([]byte(nil), raw[:188*2]...)
+	join = append(join, tsPacket(0x110, true, pesPacket([]byte{0x00, 0x00, 0x01, 0x00, 0x11}))...)
+	join = append(join, tsPacket(0x111, true, []byte{0x00, 0x00, 0x01, 0xc0})...)
+	join = append(join, raw[188*2:]...)
+	var buf bytes.Buffer
+	w := newProgramPipe(&closeBuf{&buf}, 1)
+	if _, err := w.Write(join); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.Bytes()
+	var pids []int
+	for off := 0; off+188 <= len(out); off += 188 {
+		pids = append(pids, int(out[off+1]&0x1f)<<8|int(out[off+2]))
+	}
+	if len(pids) < 3 || pids[0] != 0 || pids[1] != 0x1000 || pids[2] != 0x110 {
+		t.Fatalf("encode must start with the tables and then the sequence header: %v", pids)
+	}
+	if !sequenceStart(tsPayload(out[188*2:188*3]), streamMPEG2) {
+		t.Fatal("first video packet is not the sequence header")
+	}
 }

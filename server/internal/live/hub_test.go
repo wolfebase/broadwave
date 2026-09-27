@@ -453,3 +453,17 @@ func TestFieldOrderFromProbe(t *testing.T) {
 		t.Fatalf("missing program should be unknown: %q", got)
 	}
 }
+
+func TestSlowReaderQueueIsBoundedByBytes(t *testing.T) {
+	sub := &pipeSub{ch: make(chan []byte, 16384), done: make(chan struct{})}
+	chunk := make([]byte, 188*49)
+	for range 8000 {
+		sub.offer(chunk, 1)
+	}
+	if q := sub.queued.Load(); q > pipeQueueCap || q <= pipeQueueCap-int64(len(chunk)) {
+		t.Fatalf("queued %d bytes in %d reads, cap %d", q, len(sub.ch), pipeQueueCap)
+	}
+	if sub.logged.IsZero() {
+		t.Fatal("dropped reads were not logged")
+	}
+}
