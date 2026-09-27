@@ -3,6 +3,7 @@ import { useData } from "../../app/data";
 import { useLayout } from "../../app/layout";
 import { navigate } from "../../app/router";
 import { airingAt, categoryOf, minutesLeft, progress } from "../../lib/guide";
+import { typedChannel } from "../../lib/remote";
 import type { SyncStatus } from "../../lib/sync";
 import { readZoom, saveZoom, type PictureMode, type Zoom } from "../../picture";
 import type { Channel } from "../../types";
@@ -84,6 +85,7 @@ export function LivePlayer({
   const [sleepUntil, setSleepUntil] = useState<number | null>(null);
   const typed = useRef("");
   const typedTimer = useRef(0);
+  const [entry, setEntry] = useState("");
 
   const airing = airingAt(index, channel.id, now);
   const tuning = useFirstFrame(videoRef, `${channel.id}:${opts.quality}:${opts.audio}:${opts.track}:${opts.even}:${picture}`);
@@ -116,6 +118,8 @@ export function LivePlayer({
   useEffect(() => {
     if (mode === "full") rootRef.current?.focus();
   }, [channel.id, mode]);
+
+  useEffect(() => () => window.clearTimeout(typedTimer.current), []);
 
   function detachSync() {
     if (opts.sync && !opts.shared) setOpts((o) => ({ ...o, sync: false }));
@@ -165,15 +169,30 @@ export function LivePlayer({
     else await record(channel, airing?.title || channel.displayName);
   }
 
+  function tuneTyped(number: string) {
+    typed.current = "";
+    setEntry("");
+    const hit = typedChannel(channels, number, true);
+    if (hit && hit.id !== channel.id) onChannel(hit);
+  }
+
   function onKey(event: KeyboardEvent) {
     const k = event.key;
+    // Wait for the whole number: tuning on each digit would take a tuner for 4.1 on the way to 41.1.
     if (/^[0-9.]$/.test(k)) {
       event.preventDefault();
-      typed.current += k;
+      const next = channels.some((c) => c.displayNumber.startsWith(typed.current + k)) ? typed.current + k : k;
       window.clearTimeout(typedTimer.current);
-      typedTimer.current = window.setTimeout(() => (typed.current = ""), 1200);
-      const hit = channels.find((c) => c.displayNumber === typed.current) ?? channels.find((c) => c.displayNumber.startsWith(typed.current));
-      if (hit && hit.id !== channel.id) onChannel(hit);
+      if (typedChannel(channels, next, false)) return tuneTyped(next);
+      typed.current = next;
+      setEntry(next);
+      typedTimer.current = window.setTimeout(() => tuneTyped(typed.current), 1500);
+      return;
+    }
+    if (k === "Enter" && typed.current) {
+      event.preventDefault();
+      window.clearTimeout(typedTimer.current);
+      tuneTyped(typed.current);
       return;
     }
     if (panel === "guide") {
@@ -347,6 +366,11 @@ export function LivePlayer({
         </div>
       }
     >
+      {entry ? (
+        <p className="typed-number glass" role="status" aria-label={`Channel ${entry}`}>
+          {entry}
+        </p>
+      ) : null}
       {panel === "guide" ? (
         <div className="mini-guide glass" role="listbox" aria-label="Channels">
           {channels.map((c, i) => {

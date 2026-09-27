@@ -31,3 +31,15 @@ export function nearest(from: Box, items: Box[], dir: Direction): number | null 
   }
   return best?.id ?? null;
 }
+
+/**
+ * The channel a typed number points to. While another digit could still change the answer
+ * it returns null, unless the viewer is done typing; then an exact number beats the first
+ * one that starts with what was typed.
+ */
+export function typedChannel<T extends { displayNumber: string }>(channels: T[], typed: string, done: boolean): T | null {
+  const matches = channels.filter((c) => c.displayNumber.startsWith(typed));
+  if (matches.length === 1) return matches[0];
+  if (!done) return null;
+  return matches.find((c) => c.displayNumber === typed) ?? matches[0] ?? null;
+}

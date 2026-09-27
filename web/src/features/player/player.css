@@ -413,6 +413,18 @@
   text-overflow: ellipsis;
 }
 
+.typed-number {
+  position: absolute;
+  right: var(--space-6);
+  top: 96px;
+  margin: 0;
+  border-radius: var(--radius-xl);
+  padding: var(--space-3) var(--space-5);
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .info-panel {
   position: absolute;
   right: var(--space-6);
