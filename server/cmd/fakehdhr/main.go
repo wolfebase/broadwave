@@ -12,12 +12,13 @@ import (
 func main() {
 	ts := flag.String("ts", "", "MPEG-TS file to loop")
 	realtime := flag.Bool("realtime", false, "play the file over four seconds, then loop")
+	source := flag.String("source", "", "TS file to stream at its own pace on a loop instead of the test pattern")
 	flag.Parse()
 	if *ts == "" {
 		fmt.Fprintln(os.Stderr, "need -ts")
 		os.Exit(2)
 	}
-	srv := &fake.Server{TS: *ts, Realtime: *realtime}
+	srv := &fake.Server{TS: *ts, Realtime: *realtime, Source: *source}
 	base, port, err := srv.Start()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
