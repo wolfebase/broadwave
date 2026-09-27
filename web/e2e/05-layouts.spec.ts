@@ -46,8 +46,10 @@ test("phone guide shows the filters, now, and tonight", async ({ page }) => {
   });
   sql(`
 PRAGMA busy_timeout=5000;
+-- Channel 2 carries nothing this test checks; clear its slot so Tonight shows the movie at any hour.
+DELETE FROM airings WHERE channel_id = 2 AND starts_at < '${prime.end}' AND ends_at > '${prime.start}';
 INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_live, guide_source)
-VALUES (1, 'Prime Movie', 'Late showing', 'A movie.', 'Movies', '${prime.start}', '${prime.end}', 'e2e-prime', 0, 'e2e');
+VALUES (2, 'Prime Movie', 'Late showing', 'A movie.', 'Movies', '${prime.start}', '${prime.end}', 'e2e-prime', 0, 'e2e');
 `);
   await page.reload();
   await settle(page);
@@ -65,7 +67,8 @@ VALUES (1, 'Prime Movie', 'Late showing', 'A movie.', 'Movies', '${prime.start}'
   await expect(page.getByRole("button", { name: /Prime Movie/ })).toBeVisible();
   await page.getByRole("button", { name: "Now", exact: true }).click();
   await expect(page.getByRole("button", { name: /Chiefs at Bills/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Prime Movie/ })).toHaveCount(0);
+  // It can still show as the channel's next show; it is not what is on.
+  await expect(page.locator(".onnow-title", { hasText: "Prime Movie" })).toHaveCount(0);
 });
 
 test("arrow keys, Enter, and Escape drive the TV layout", async ({ page }) => {
