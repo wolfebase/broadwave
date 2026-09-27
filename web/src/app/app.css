@@ -322,8 +322,11 @@
 }
 
 .shell.immersive .content:has(.setup) {
-  position: static;
-  overflow: auto;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* Diagnostics is a long settings page. A fixed immersive box clips Feeds and Logs. */

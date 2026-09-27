@@ -7,6 +7,7 @@ import { GuideIcon, HomeIcon, RecordingsIcon, ScheduleIcon, SearchIcon, Settings
 import { DataProvider, useData } from "./data";
 import { useLayout } from "./layout";
 import { PlayerProvider, usePlayer } from "./player";
+import { installTvRemote } from "./remote";
 import { navigate, useRoute } from "./router";
 import "./app.css";
 
@@ -57,6 +58,10 @@ function Shell() {
   const { path, params } = useRoute();
   const layout = useLayout();
   const { ready, booting, error, recordings, settings, notices, dismissNotice, update, server } = useData();
+  useEffect(() => {
+    if (layout !== "tv") return;
+    return installTvRemote();
+  }, [layout]);
   const [hiddenUpdate, setHiddenUpdate] = useState("");
   const notice = update && update.message && hiddenUpdate !== update.message ? update : undefined;
   const player = usePlayer();
