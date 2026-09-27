@@ -1,6 +1,8 @@
 package fake
 
 import (
+	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"os"
@@ -65,6 +67,67 @@ func TestTuneStatusAndBusy(t *testing.T) {
 	}
 	defer stream.Body.Close()
 	buf := make([]byte, 188)
+	if _, err := io.ReadFull(stream.Body, buf); err != nil || buf[0] != 0x47 {
+		t.Fatalf("stream %v %x", err, buf[0])
+	}
+}
+
+func TestDarkChannelReportsNoLockAndSendsNothing(t *testing.T) {
+	dir := t.TempDir()
+	sample := filepath.Join(dir, "sample.ts")
+	pkt := make([]byte, 188)
+	pkt[0] = 0x47
+	if err := os.WriteFile(sample, bytes.Repeat(pkt, 64), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := &Server{TS: sample}
+	base, port, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	c := hdhr.Control{Addr: "127.0.0.1:" + port}
+	if _, err := c.Set("/tuner0/vchannel", "5.1"); err != nil {
+		t.Fatal(err)
+	}
+	srv.Dark("5.1")
+	status, err := c.Get("/tuner0/status")
+	if err != nil || !strings.Contains(status, "lock=none") || strings.Contains(status, "lock=8vsb") {
+		t.Fatalf("dark status %q %v", status, err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/tuner0/ch533000000", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status %s", res.Status)
+	}
+	buf := make([]byte, 188)
+	n, _ := res.Body.Read(buf)
+	if n != 0 {
+		t.Fatalf("dark channel sent %d bytes", n)
+	}
+	srv.Light("5.1")
+	// Closing /tunerN/ch clears that tuner. A viewer who stays tuned does not.
+	if _, err := c.Set("/tuner0/vchannel", "5.1"); err != nil {
+		t.Fatal(err)
+	}
+	status, err = c.Get("/tuner0/status")
+	if err != nil || !strings.Contains(status, "lock=8vsb") {
+		t.Fatalf("light status %q %v", status, err)
+	}
+	stream, err := http.Get(base + "/auto/v5.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Body.Close()
 	if _, err := io.ReadFull(stream.Body, buf); err != nil || buf[0] != 0x47 {
 		t.Fatalf("stream %v %x", err, buf[0])
 	}

@@ -73,7 +73,9 @@ type Server struct {
 	paths    []string
 	// silent drops new requests and ends streams. Tests use it for a tuner that stops answering.
 	silent bool
-	procs  []*exec.Cmd
+	// dark guide numbers report no lock and send no packets until Light.
+	dark  map[string]bool
+	procs []*exec.Cmd
 }
 
 type tuner struct {
@@ -225,6 +227,44 @@ func (s *Server) Answer() {
 	s.mu.Lock()
 	s.silent = false
 	s.mu.Unlock()
+}
+
+// Dark makes one channel report no lock and send no packets until Light.
+func (s *Server) Dark(number string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dark == nil {
+		s.dark = map[string]bool{}
+	}
+	s.dark[number] = true
+}
+
+// Light restores a channel Dark took off the air.
+func (s *Server) Light(number string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.dark, number)
+}
+
+// starved is true when this stream's guide number or frequency was Dark.
+// The relay reads /tunerN/ch<frequency>, not the guide number.
+func (s *Server) starved(target string) bool {
+	if target == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dark[target] {
+		return true
+	}
+	for guide := range s.dark {
+		for _, ch := range s.Channels {
+			if ch.Number == guide && strconv.Itoa(ch.Freq) == target {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *Server) silentNow() bool {
@@ -454,9 +494,13 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		case t.held:
 			target = "127.0.0.1"
 		}
+		strength, quality, symbol := 90, 88, 100
+		if s.dark[t.guide] {
+			strength, quality, symbol = 0, 0, 0
+		}
 		rows[i] = row{
 			Resource: "tuner" + strconv.Itoa(i), VctNumber: t.guide, VctName: t.guide, TargetIP: target,
-			SignalStrengthPercent: 90, SignalQualityPercent: 88, SymbolQualityPercent: 100,
+			SignalStrengthPercent: strength, SignalQualityPercent: quality, SymbolQualityPercent: symbol,
 		}
 	}
 	writeJSON(w, rows)
@@ -488,6 +532,7 @@ func (s *Server) legacyStream() bool {
 }
 
 func (s *Server) streamLegacy(w http.ResponseWriter, r *http.Request) {
+	_, number := streamRequest(r.URL.Path)
 	if strings.Contains(r.URL.Path, "/ch") || strings.Contains(r.URL.Path, "/auto/") {
 		s.mu.Lock()
 		limit := len(s.tuners)
@@ -555,10 +600,10 @@ func (s *Server) streamLegacy(w http.ResponseWriter, r *http.Request) {
 		if silent {
 			return
 		}
-		_, _ = io.Copy(w, stdout)
+		s.pump(w, number, stdout, nil, r.Context().Done())
 		return
 	}
-	s.loopFile(w, nil, nil)
+	s.loopFile(w, number, nil, r.Context().Done())
 }
 
 func (s *Server) streamAllocated(w http.ResponseWriter, r *http.Request) {
@@ -614,10 +659,10 @@ func (s *Server) streamAllocated(w http.ResponseWriter, r *http.Request) {
 	}
 	done := r.Context().Done()
 	if pkt != nil {
-		s.loopPacket(w, pkt, stop, done)
+		s.loopPacket(w, ch.Number, pkt, stop, done)
 		return
 	}
-	s.loopFile(w, stop, done)
+	s.loopFile(w, ch.Number, stop, done)
 }
 
 func (s *Server) allocate(forced int, ch Channel) (int, chan struct{}, string) {
@@ -692,15 +737,24 @@ func (s *Server) release(n int, stop chan struct{}) {
 	s.tuners[n] = tuner{dead: dead}
 }
 
-func (s *Server) loopPacket(w http.ResponseWriter, pkt []byte, stop, done <-chan struct{}) {
+func (s *Server) loopPacket(w http.ResponseWriter, number string, pkt []byte, stop, done <-chan struct{}) {
 	w.Header().Set("Content-Type", "video/mp2t")
+	headed := false
 	for {
+		if s.starved(number) {
+			flushTS(w, &headed)
+			if await(stop, done, 200*time.Millisecond) {
+				return
+			}
+			continue
+		}
 		if stopped(stop, done) {
 			return
 		}
 		if _, err := w.Write(pkt); err != nil {
 			return
 		}
+		headed = true
 		if fl, ok := w.(http.Flusher); ok {
 			fl.Flush()
 		}
@@ -714,6 +768,62 @@ func (s *Server) loopPacket(w http.ResponseWriter, pkt []byte, stop, done <-chan
 			return
 		case <-timer.C:
 		}
+	}
+}
+
+// pump copies src until the client leaves. A dark channel keeps the connection
+// open and writes nothing, so the relay does not see the stream end.
+func (s *Server) pump(w http.ResponseWriter, number string, src io.Reader, stop, done <-chan struct{}) {
+	buf := make([]byte, 32*1024)
+	headed := false
+	for {
+		if s.starved(number) {
+			flushTS(w, &headed)
+			if await(stop, done, 200*time.Millisecond) {
+				return
+			}
+			continue
+		}
+		n, err := src.Read(buf)
+		if n > 0 && !s.starved(number) {
+			if _, werr := w.Write(buf[:n]); werr != nil {
+				return
+			}
+			headed = true
+			if fl, ok := w.(http.Flusher); ok {
+				fl.Flush()
+			}
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+func flushTS(w http.ResponseWriter, headed *bool) {
+	if headed != nil && *headed {
+		return
+	}
+	if headed != nil {
+		*headed = true
+	}
+	w.WriteHeader(http.StatusOK)
+	if fl, ok := w.(http.Flusher); ok {
+		fl.Flush()
+	}
+}
+
+// await waits for d or for stop/done. True means the caller should return.
+func await(stop, done <-chan struct{}, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return false
+	case <-stop:
+		return true
+	case <-done:
+		return true
 	}
 }
 
@@ -735,7 +845,7 @@ func stopped(stop, done <-chan struct{}) bool {
 	return false
 }
 
-func (s *Server) loopFile(w http.ResponseWriter, stop, done <-chan struct{}) {
+func (s *Server) loopFile(w http.ResponseWriter, number string, stop, done <-chan struct{}) {
 	f, err := os.Open(s.TS)
 	if err != nil {
 		http.Error(w, "no sample", http.StatusNotFound)
@@ -746,7 +856,15 @@ func (s *Server) loopFile(w http.ResponseWriter, stop, done <-chan struct{}) {
 	buf := make([]byte, 188*16)
 	start := time.Now()
 	var sent int64
+	headed := false
 	for {
+		if s.starved(number) {
+			flushTS(w, &headed)
+			if await(stop, done, 200*time.Millisecond) {
+				return
+			}
+			continue
+		}
 		if stopped(stop, done) {
 			return
 		}
@@ -755,6 +873,7 @@ func (s *Server) loopFile(w http.ResponseWriter, stop, done <-chan struct{}) {
 			if _, werr := w.Write(buf[:n]); werr != nil {
 				return
 			}
+			headed = true
 			if fl, ok := w.(http.Flusher); ok {
 				fl.Flush()
 			}
@@ -923,8 +1042,12 @@ func (s *Server) command(name, value string, set bool) (string, string) {
 		t.guide, t.freq, t.held = ch.Number, ch.Freq, true
 		return fmt.Sprintf("auto:%d", ch.Freq), ""
 	case "status":
-		if t.freq == 0 {
-			return "ch=none lock=none ss=0 snq=0 seq=0", ""
+		if t.freq == 0 || s.dark[t.guide] {
+			if t.freq == 0 {
+				return "ch=none lock=none ss=0 snq=0 seq=0", ""
+			}
+			mod := s.lockMod(*t)
+			return fmt.Sprintf("ch=%s:%d lock=none ss=0 snq=0 seq=0", mod, t.freq), ""
 		}
 		mod := s.lockMod(*t)
 		return fmt.Sprintf("ch=%s:%d lock=%s ss=90 snq=88 seq=100", mod, t.freq, mod), ""

@@ -1,16 +1,14 @@
 import Hls from "hls.js";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { getDeviceHealth, getTuners, stopWatch, watchChannel, type ApiFailure } from "../../api";
+import { getDeviceHealth, getSignals, getTuners, stopWatch, watchChannel, type ApiFailure } from "../../api";
 import { SyncEngine, type SyncStatus } from "../../lib/sync";
 import type { Caps, Channel, Prefs, WatchSession } from "../../types";
 import { liveHlsConfig, type BufferProfile } from "../../picture";
 import { rememberChannel } from "../../recent";
 import {
   aTunerIsFree,
-  pictureStopped,
+  classifySnap,
   recoveryReady,
-  serverStopped,
-  tunerStopped,
   viewerFailure,
   type Recovery,
   type RecoverySnap,
@@ -122,7 +120,7 @@ export function useLiveStream(
     let surfaced = false;
     const noteOutage = async (fatal: boolean) => {
       if (dead || surfaced) return;
-      const mapped = await classifyPlayback();
+      const mapped = await classifyPlayback(id);
       if (dead || surfaced || (!fatal && !mapped.recovery)) return;
       surfaced = true;
       setNeedsConfirm(false);
@@ -227,9 +225,9 @@ export function useLiveStream(
       if (dead || retrying.current || ticking) return;
       ticking = true;
       try {
-        const snap = await readRecoverySnap();
+        const snap = await readRecoverySnap(channelId, recovery === "signal");
         if (dead || retrying.current) return;
-        const key = `${snap.health}:${snap.freeTuner}:${snap.tunerAnswers}`;
+        const key = `${snap.health}:${snap.freeTuner}:${snap.tunerAnswers}:${snap.online}:${snap.signalLost}`;
         if (!recoveryReady(recovery, snap)) {
           seen.key = key;
           return;
@@ -249,7 +247,7 @@ export function useLiveStream(
       window.clearTimeout(first);
       window.clearInterval(id);
     };
-  }, [recovery]);
+  }, [recovery, channelId]);
 
   useEffect(() => {
     audibleRef.current = audible;
@@ -277,21 +275,19 @@ export function useLiveStream(
 
 const stuckMs = 8000;
 
-async function classifyPlayback(): Promise<{ message: string; recovery: Recovery }> {
-  const snap = await readRecoverySnap();
-  if (!snap.health) return { message: serverStopped, recovery: "server" };
-  if (!snap.tunerAnswers) return { message: tunerStopped, recovery: "tuner" };
-  return { message: pictureStopped, recovery: "" };
+async function classifyPlayback(channelId: number): Promise<{ message: string; recovery: Recovery }> {
+  return classifySnap(await readRecoverySnap(channelId, false));
 }
 
-async function readRecoverySnap(): Promise<RecoverySnap> {
+async function readRecoverySnap(channelId: number, assumeLost: boolean): Promise<RecoverySnap> {
+  const online = typeof navigator === "undefined" ? true : navigator.onLine;
   let health: boolean;
   try {
     health = (await fetch("/api/v1/health")).ok;
   } catch {
     health = false;
   }
-  if (!health) return { health: false, freeTuner: false, tunerAnswers: false };
+  if (!health) return { health: false, freeTuner: false, tunerAnswers: false, online, signalLost: false };
   let freeTuner: boolean;
   let tunerAnswers: boolean;
   try {
@@ -307,5 +303,13 @@ async function readRecoverySnap(): Promise<RecoverySnap> {
   } catch {
     tunerAnswers = false;
   }
-  return { health, freeTuner, tunerAnswers };
+  let signalLost: boolean;
+  try {
+    const body = await getSignals();
+    const row = (body.channels ?? []).find((item) => item.channelId === channelId);
+    signalLost = !!row?.live && row.verdict === "Lost";
+  } catch {
+    signalLost = assumeLost;
+  }
+  return { health, freeTuner, tunerAnswers, online, signalLost };
 }

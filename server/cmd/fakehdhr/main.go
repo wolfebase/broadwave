@@ -71,6 +71,23 @@ func serveAdmin(srv *fake.Server) error {
 	post("/free", srv.FreeAll)
 	post("/silence", srv.Silence)
 	post("/answer", srv.Answer)
+	channel := func(path string, fn func(string)) {
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "post", http.StatusMethodNotAllowed)
+				return
+			}
+			number := r.URL.Query().Get("channel")
+			if number == "" {
+				http.Error(w, "channel", http.StatusBadRequest)
+				return
+			}
+			fn(number)
+			w.WriteHeader(http.StatusNoContent)
+		})
+	}
+	channel("/dark", srv.Dark)
+	channel("/light", srv.Light)
 	go func() { _ = http.Serve(ln, mux) }()
 	return nil
 }

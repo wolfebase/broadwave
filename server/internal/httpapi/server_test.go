@@ -220,7 +220,7 @@ func TestDiskReserveBlocksRecording(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/recordings", bytes.NewBufferString(`{"channelId":1,"minutes":5,"title":"Nope"}`))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusInsufficientStorage || !bytes.Contains(rec.Body.Bytes(), []byte("reserve")) {
+	if rec.Code != http.StatusInsufficientStorage || !bytes.Contains(rec.Body.Bytes(), []byte("full")) {
 		t.Fatalf("reserve %d %s", rec.Code, rec.Body.String())
 	}
 
@@ -241,6 +241,33 @@ func TestDiskReserveBlocksRecording(t *testing.T) {
 	res := get(t, h, "/api/storage")
 	if !bytes.Contains(res.Body.Bytes(), []byte(`"watermarkGB":999999`)) {
 		t.Fatalf("storage %s", res.Body.String())
+	}
+}
+
+func TestUnwritableRecordingsAreRefused(t *testing.T) {
+	st := testStore(t)
+	dir := t.TempDir()
+	recDir := filepath.Join(dir, "recordings")
+	if err := os.MkdirAll(recDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(recDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(recDir, 0o755) })
+	if f, err := os.CreateTemp(recDir, ".probe-*"); err == nil {
+		name := f.Name()
+		_ = f.Close()
+		_ = os.Remove(name)
+		t.Skip("this user can still write a mode 0555 directory")
+	}
+	hub := &live.Hub{Store: st, Dir: dir, FFmpeg: filepath.Join(dir, "missing-ffmpeg")}
+	h := (&Server{Store: st, Hub: hub, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Broadwave")}}}).Handler()
+	req := httptest.NewRequest(http.MethodPost, "/api/recordings", bytes.NewBufferString(`{"channelId":1,"minutes":5,"title":"Nope"}`))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusInsufficientStorage || !bytes.Contains(rec.Body.Bytes(), []byte("recordings folder")) {
+		t.Fatalf("unwritable %d %s", rec.Code, rec.Body.String())
 	}
 }
 
