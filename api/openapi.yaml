@@ -651,6 +651,11 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/WatchSession" }
         "409": { $ref: "#/components/responses/Error" }
+        "503":
+          description: "`no_signal`: the tuner could not lock the channel and sent nothing. The tuner is already free."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /watch/{id}/stop:
     post:
       tags: [live]
@@ -1426,7 +1431,7 @@ components:
       properties:
         code:
           type: string
-          description: Stable machine code, for example tuners_busy, disk_low, not_found, bad_request, pictures_full.
+          description: Stable machine code, for example tuners_busy, no_signal, disk_low, not_found, bad_request, pictures_full.
         message: { type: string, description: Short text safe to show a user. }
         tuners:
           type: array

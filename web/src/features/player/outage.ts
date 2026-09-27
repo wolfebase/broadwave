@@ -19,6 +19,11 @@ export function viewerFailure(err: unknown): { message: string; recovery: Recove
   if (failed.code === "tuners_busy") {
     return { message: failed.message || busyFallback, recovery: "busy" };
   }
+  // Tried once and not coming in. Try again is the viewer's call: nothing
+  // here would tell the player the antenna changed.
+  if (failed.code === "no_signal") {
+    return { message: noSignal, recovery: "" };
+  }
   const message = err instanceof Error ? err.message : failed.message || "";
   if (failed.status === 0 || /failed to fetch|networkerror|load failed/i.test(message)) {
     if (typeof navigator !== "undefined" && navigator.onLine === false) {

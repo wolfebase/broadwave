@@ -39,6 +39,10 @@ public enum PlaybackOutage {
             let text = message.isEmpty ? tunersBusy : message
             return OutageDecision(message: text, recovery: .busy)
         }
+        // Tried once and not coming in. Try again is the viewer's call.
+        if code == "no_signal" {
+            return OutageDecision(message: noSignal, recovery: nil)
+        }
         let lowered = message.lowercased()
         let network = status == 0
             || lowered.contains("failed to fetch")

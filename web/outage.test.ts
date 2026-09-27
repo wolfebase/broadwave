@@ -23,6 +23,10 @@ test("a server or tuner that stops answering is named, and waits until it answer
   assert.equal(recoveryReady("server", { health: false, freeTuner: false, tunerAnswers: false, online: true, signalLost: false }), false);
   assert.equal(recoveryReady("server", { health: true, freeTuner: false, tunerAnswers: false, online: true, signalLost: false }), true);
 
+  const dark = viewerFailure(Object.assign(new Error(""), { status: 503, code: "no_signal" }));
+  assert.equal(dark.message, noSignal);
+  assert.equal(dark.recovery, "");
+
   const tuner = viewerFailure(Object.assign(new Error("the tuner did not answer"), { status: 500, code: "internal" }));
   assert.equal(tuner.message, tunerStopped);
   assert.equal(tuner.recovery, "tuner");

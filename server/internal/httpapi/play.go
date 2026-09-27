@@ -81,9 +81,13 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		s.Hub.Release(session.ChannelID, session.Rendition)
 		return
 	}
-	waitServable(r.Context(), s.Hub, session.ChannelID, session.Rendition, 12*time.Second)
-	if r.Context().Err() != nil {
+	dark := waitServable(r.Context(), s.Hub, session.ChannelID, session.Rendition, 12*time.Second)
+	if r.Context().Err() != nil || dark {
 		s.Hub.Release(session.ChannelID, session.Rendition)
+		if dark {
+			s.Hub.DropDark(session.ChannelID)
+			writeError(w, live.ErrNoSignal)
+		}
 		return
 	}
 	if fresh, ok := s.Hub.Session(session.ChannelID, session.Rendition); ok {
@@ -1134,21 +1138,35 @@ func blockReload(r *http.Request) (msn, part int, ok bool) {
 	return msn, part, true
 }
 
+// darkAfter is how long a tune may send nothing before its lock is read.
+// A tuner that locks sends packets within a second or two.
+var darkAfter = 5 * time.Second
+
 // waitServable returns once the playlist has a segment a player can fetch.
 // A playlist that lists only parts is not enough: hls.js treats that as empty
 // and waits out its retry. The first part still anchors the clock while this waits.
 // A cancelled watch returns immediately so the handler can drop that viewer.
-func waitServable(ctx context.Context, h *live.Hub, channelID int64, key string, d time.Duration) {
+// It reports true, and stops waiting, when the tuner has sent nothing for
+// darkAfter and says it has no lock: that channel is not coming in.
+func waitServable(ctx context.Context, h *live.Hub, channelID int64, key string, d time.Duration) bool {
 	if h == nil || key == "" {
-		return
+		return false
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	deadline := time.Now().Add(d)
+	start := time.Now()
+	deadline := start.Add(d)
+	var checked time.Time
 	for time.Now().Before(deadline) {
 		if ctx.Err() != nil {
-			return
+			return false
+		}
+		if time.Since(start) >= darkAfter && time.Since(checked) >= 500*time.Millisecond {
+			checked = time.Now()
+			if h.NoSignal(channelID) {
+				return true
+			}
 		}
 		// A restart replaces the gate. Spending the whole deadline on the
 		// old one hides the playlist the new encode is writing.
@@ -1161,14 +1179,15 @@ func waitServable(ctx context.Context, h *live.Hub, channelID int64, key string,
 		h.WaitMedia(channelID, key, 0, -1, slice)
 		body, err := h.Playlist(channelID, key)
 		if err == nil && strings.Count(string(body), "#EXTINF") >= 1 {
-			return
+			return false
 		}
 		if !time.Now().Before(deadline) {
-			return
+			return false
 		}
 		// No gate yet, or this wake was for a playlist a restart already removed.
 		if time.Since(started) < 50*time.Millisecond {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
+	return false
 }

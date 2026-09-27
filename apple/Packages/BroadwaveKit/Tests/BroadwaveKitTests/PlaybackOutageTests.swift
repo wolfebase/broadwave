@@ -137,6 +137,10 @@ private func fineSnap() -> RecoverySnap {
     #expect(PlaybackOutage.recoveryReady(.server, phoneBackServerUp))
     #expect(!PlaybackOutage.recoveryReady(.server, phoneStillGone))
 
+    let dark = PlaybackOutage.viewerFailure(code: "no_signal", status: 503, message: "", online: true)
+    #expect(dark.message == PlaybackOutage.noSignal)
+    #expect(dark.recovery == nil)
+
     let tuner = PlaybackOutage.viewerFailure(code: "internal", status: 500, message: "the tuner did not answer", online: true)
     #expect(tuner.message == PlaybackOutage.tunerStopped)
     #expect(tuner.recovery == .tuner)
