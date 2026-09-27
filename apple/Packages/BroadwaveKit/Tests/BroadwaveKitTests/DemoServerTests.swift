@@ -75,6 +75,28 @@ import Testing
     }
 }
 
+@Test func demoSettingsRoundTrip() async throws {
+    let server = DemoServer()
+    let port = UInt16.random(in: 20000 ... 45000)
+    let origin = try #require(await server.prepare(port: port))
+    defer { server.stop() }
+    let client = APIClient(base: origin)
+    let before = try await client.settings()
+    #expect(before["pictureMode"] == "broadcast")
+    #expect(before["autoplay"] == "1")
+    #expect(before["hideScores"] == "0")
+    #expect(before["hdhrEmulate"] == "0")
+    try await client.saveSettings(["pictureMode": "film", "hideScores": "1", "autoplay": "0", "hdhrEmulate": "1"])
+    let after = try await client.settings()
+    #expect(after["pictureMode"] == "film")
+    #expect(after["hideScores"] == "1")
+    #expect(after["autoplay"] == "0")
+    #expect(after["hdhrEmulate"] == "1")
+    try await client.saveSettings(["pictureMode": "nope"])
+    let kept = try await client.settings()
+    #expect(kept["pictureMode"] == "film")
+}
+
 @Test func demoRoomCountsBothScreens() async throws {
     let server = DemoServer()
     let port = UInt16.random(in: 45001 ... 65000)

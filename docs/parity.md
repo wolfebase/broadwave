@@ -31,3 +31,16 @@ Apple clips are 9.7–9.9 s. The focused tile reads 720p60 HEVC.
 - Apple TV: `tv-2up.jpg`, `tv-pip.jpg`, `tv-1p2.jpg`, `tv-1p3.jpg`, `tv-quad.jpg`, and the matching `.mp4`.
 
 iPhone landscape is a separate line. The focused Channels button on Apple TV is a separate line.
+
+## Settings
+
+Server choices. The iPhone and Apple TV controls are the shared settings screen, and they save the same fields as the web.
+
+| Choice | Web | iPhone | Apple TV |
+| --- | --- | --- | --- |
+| Picture (Broadcast, Smooth, Film) | yes | yes | yes |
+| Hide scores | yes | yes | yes |
+| Play the next episode | yes | yes | yes |
+| Offer this server as an HDHomeRun | yes | yes | yes |
+
+The demo does not share a tuner, so that row says so instead of offering the switch. Guide account, recordings folder, free-space reserve, and catalog backups are still only on the web.

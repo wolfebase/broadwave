@@ -17,6 +17,7 @@ public final class DemoServer: @unchecked Sendable {
     private var mediaRoot: URL?
     private var favorites: [Int64: Bool] = [:]
     private var hidden: [Int64: Bool] = [:]
+    private var settings: [String: String] = [:]
     private var sockets: [ObjectIdentifier: DemoSocket] = [:]
     private var rooms: [String: DemoRoom] = [:]
 
@@ -309,7 +310,9 @@ public final class DemoServer: @unchecked Sendable {
         case ("GET", "/api/v1/recordings"):
             return Self.ok(Data("{\"recordings\":[]}".utf8))
         case ("GET", "/api/v1/settings"):
-            return Self.ok(Data("{\"needsSetup\":\"0\",\"setupComplete\":\"1\",\"liveScores\":\"0\",\"checkUpdates\":\"0\"}".utf8))
+            return Self.ok(Self.json(currentSettings()))
+        case ("PUT", "/api/v1/settings"):
+            return putSettings(body)
         case ("GET", "/api/v1/teams"):
             return Self.ok(Data("{\"teams\":[]}".utf8))
         case ("GET", "/api/v1/sports/scoreboard"):
@@ -336,6 +339,51 @@ public final class DemoServer: @unchecked Sendable {
             return Self.fail(409, "demo", "The demo plays samples. It does not record.")
         default:
             return Self.fail(404, "missing", "The demo has no \(path).")
+        }
+    }
+
+    private static let settingDefaults: [String: String] = [
+        "needsSetup": "0",
+        "setupComplete": "1",
+        "liveScores": "0",
+        "checkUpdates": "0",
+        "hideScores": "0",
+        "autoplay": "1",
+        "hdhrEmulate": "0",
+        "pictureMode": "broadcast",
+    ]
+
+    private func currentSettings() -> [String: String] {
+        lock.lock()
+        let saved = settings
+        lock.unlock()
+        var out = Self.settingDefaults
+        for (key, value) in saved {
+            out[key] = value
+        }
+        return out
+    }
+
+    private func putSettings(_ body: Data) -> Data {
+        guard let obj = try? JSONSerialization.jsonObject(with: body) as? [String: String] else {
+            return Self.fail(400, "bad", "Settings need text values.")
+        }
+        lock.lock()
+        for (key, value) in obj where Self.accepts(key, value) {
+            settings[key] = value
+        }
+        lock.unlock()
+        return Self.ok(Self.json(currentSettings()))
+    }
+
+    private static func accepts(_ key: String, _ value: String) -> Bool {
+        switch key {
+        case "pictureMode":
+            value == "broadcast" || value == "smooth" || value == "film"
+        case "needsSetup", "setupComplete", "hideScores", "liveScores", "checkUpdates", "autoplay", "hdhrEmulate":
+            value == "0" || value == "1"
+        default:
+            false
         }
     }
 

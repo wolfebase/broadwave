@@ -187,6 +187,14 @@ struct SettingsView: View {
     @State private var sportsDB = false
     @State private var sportsKey = ""
     @State private var supportBusy = false
+    @State private var hideScores = false
+    @State private var hideScoresKnown = false
+    @State private var autoplay = true
+    @State private var autoplayKnown = false
+    @State private var shareTuner = false
+    @State private var shareKnown = false
+    @State private var pictureMode = "broadcast"
+    @State private var pictureKnown = false
     #if os(tvOS)
         @State private var supportSaved = false
     #endif
@@ -235,6 +243,61 @@ struct SettingsView: View {
                 Text("Auto plays the original broadcast with Dolby Digital whenever this device can.")
             }
             Section {
+                Picker("Picture", selection: Binding(
+                    get: { pictureMode },
+                    set: { mode in
+                        guard pictureKnown else { return }
+                        pictureMode = mode
+                        save(["pictureMode": mode])
+                    }
+                )) {
+                    Text("Broadcast").tag("broadcast")
+                    Text("Smooth").tag("smooth")
+                    Text("Film").tag("film")
+                }
+                .disabled(!pictureKnown)
+            } footer: {
+                Text("Broadcast rebuilds interlaced channels at 60 frames a second. Smooth adds motion compensation when this server can hold it. Film is for movies.")
+            }
+            Section {
+                Toggle("Play the next episode", isOn: Binding(
+                    get: { autoplay },
+                    set: { on in
+                        guard autoplayKnown else { return }
+                        autoplay = on
+                        save(["autoplay": on ? "1" : "0"])
+                    }
+                ))
+                .disabled(!autoplayKnown)
+            } header: {
+                Text("DVR")
+            }
+            Section {
+                if store.server?.id == "demo" {
+                    Text("The demo does not share a tuner.")
+                        .foregroundStyle(.secondary)
+                } else if let message = Compatibility.gateFeature(store.info, "hdhrEmulation") {
+                    Text(message)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Toggle("Offer this server as an HDHomeRun on port 8478", isOn: Binding(
+                        get: { shareTuner },
+                        set: { on in
+                            guard shareKnown else { return }
+                            shareTuner = on
+                            save(["hdhrEmulate": on ? "1" : "0"])
+                        }
+                    ))
+                    .disabled(!shareKnown)
+                }
+            } header: {
+                Text("Sources")
+            } footer: {
+                if store.server?.id != "demo", Compatibility.gateFeature(store.info, "hdhrEmulation") == nil {
+                    Text("Other apps can add this machine on port 8478. Discovery stays quiet so the real tuner is unchanged. The change applies within a minute.")
+                }
+            }
+            Section {
                 if let message = Compatibility.gateFeature(store.info, "wholeHomeSync") {
                     Text(message)
                         .foregroundStyle(.secondary)
@@ -259,6 +322,18 @@ struct SettingsView: View {
                     }
                 ))
                 .disabled(!scoresKnown)
+                Toggle("Hide scores", isOn: Binding(
+                    get: { hideScores },
+                    set: { on in
+                        guard hideScoresKnown else { return }
+                        hideScores = on
+                        save(["hideScores": on ? "1" : "0"])
+                    }
+                ))
+                .disabled(!hideScoresKnown)
+                Text("A recorded game stays hidden until you watch it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 SecureField("TheSportsDB key", text: $sportsKey)
                     .onSubmit {
                         let key = sportsKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -316,6 +391,16 @@ struct SettingsView: View {
                 liveScores = values["liveScores"] != "0"
                 scoresKnown = true
                 sportsDB = values["sportsdbKeySet"] == "1"
+                hideScores = values["hideScores"] == "1"
+                hideScoresKnown = true
+                autoplay = values["autoplay"] != "0"
+                autoplayKnown = true
+                shareTuner = values["hdhrEmulate"] == "1"
+                shareKnown = true
+                if let mode = values["pictureMode"], mode == "broadcast" || mode == "smooth" || mode == "film" {
+                    pictureMode = mode
+                }
+                pictureKnown = true
             }
         }
         .navigationDestination(isPresented: $showAbout) {
@@ -328,6 +413,12 @@ struct SettingsView: View {
             }
         }
         #endif
+    }
+
+    private func save(_ values: [String: String]) {
+        Task {
+            try? await store.api?.saveSettings(values)
+        }
     }
 
     @MainActor
