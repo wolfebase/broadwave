@@ -220,7 +220,7 @@ func TestDiskReserveBlocksRecording(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/recordings", bytes.NewBufferString(`{"channelId":1,"minutes":5,"title":"Nope"}`))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusInsufficientStorage || !bytes.Contains(rec.Body.Bytes(), []byte("full")) {
+	if rec.Code != http.StatusInsufficientStorage || !bytes.Contains(rec.Body.Bytes(), []byte("in reserve")) {
 		t.Fatalf("reserve %d %s", rec.Code, rec.Body.String())
 	}
 
@@ -245,6 +245,9 @@ func TestDiskReserveBlocksRecording(t *testing.T) {
 }
 
 func TestUnwritableRecordingsAreRefused(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can write a mode 0555 directory")
+	}
 	st := testStore(t)
 	dir := t.TempDir()
 	recDir := filepath.Join(dir, "recordings")

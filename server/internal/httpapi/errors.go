@@ -4,9 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"os"
 	"strings"
-	"syscall"
 
 	"broadwave/internal/disk"
 	"broadwave/internal/live"
@@ -46,8 +44,6 @@ func writeError(w http.ResponseWriter, err error) {
 		apiError(w, http.StatusInsufficientStorage, "disk_low", err.Error(), map[string]any{"freeBytes": low.Free, "needBytes": low.Need})
 	case errors.As(err, &blocked):
 		apiError(w, http.StatusInsufficientStorage, "disk_low", blocked.Error(), nil)
-	case os.IsPermission(err) || errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EROFS):
-		apiError(w, http.StatusInsufficientStorage, "disk_low", (&disk.WriteError{Full: errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EROFS)}).Error(), nil)
 	case errors.Is(err, sql.ErrNoRows):
 		apiError(w, http.StatusNotFound, "not_found", "Not found.", nil)
 	default:
