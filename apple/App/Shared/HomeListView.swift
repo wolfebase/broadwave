@@ -6,7 +6,13 @@ import UIKit
 /// Tuners, screens, and servers on this network. One action each.
 struct HomeListView: View {
     var hideAdded = false
+    /// Settings asks the scan button to take focus so the Apple TV sidebar closes.
+    var grabsFocus = false
     @Environment(AppStore.self) private var store
+    #if os(tvOS)
+        @Environment(\.tvSelectedTab) private var tvSelectedTab
+        @FocusState private var scanFocused: Bool
+    #endif
     @State private var places: [APIClient.HomePlace] = []
     @State private var tunerAddress = ""
     @State private var sharing = false
@@ -40,9 +46,26 @@ struct HomeListView: View {
             Button("Scan again") { Task { await load() } }
                 .buttonStyle(.glass)
                 .disabled(busy)
+                .accessibilityIdentifier("home-scan")
+            #if os(tvOS)
+                .focused($scanFocused)
+            #endif
         }
         .task { await load() }
+        #if os(tvOS)
+            .onAppear { claimScan() }
+            .onChange(of: tvSelectedTab) { _, _ in claimScan() }
+            .onChange(of: busy) { _, _ in claimScan() }
+        #endif
     }
+
+    #if os(tvOS)
+        /// A disabled button cannot take focus, so this waits until the scan has finished.
+        private func claimScan() {
+            guard grabsFocus, tvSelectedTab == .settings, !busy else { return }
+            scanFocused = true
+        }
+    #endif
 
     private var shown: [APIClient.HomePlace] {
         hideAdded ? places.filter { !($0.group == "tuner" && $0.action == "added") } : places
@@ -68,7 +91,10 @@ struct HomeListView: View {
     }
 
     private func load() async {
-        guard let api = store.api else { return }
+        guard let api = store.api else {
+            busy = false
+            return
+        }
         busy = true
         defer { busy = false }
         do {

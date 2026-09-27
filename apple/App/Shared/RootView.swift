@@ -118,7 +118,7 @@ struct RootView: View {
             guard store.connected else { return }
             store.socket?.announce(name: ScreenIdentity.name, kind: ScreenIdentity.kind)
             #if DEBUG
-                if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
+                if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") || sidebarPageTest != nil {
                     return
                 }
                 if UserDefaults.standard.string(forKey: "BroadwaveSetup") != nil {
@@ -143,6 +143,18 @@ struct RootView: View {
                         previewChannel(id: 3, number: "9.1", name: "Two"),
                     ])
                     nowPlaying.watchTogether(store.channels)
+                    return
+                }
+                if let page = sidebarPageTest {
+                    store.previewLineup([
+                        previewChannel(id: 1, number: "4.1", name: "One"),
+                        previewChannel(id: 3, number: "5.1", name: "Two"),
+                    ])
+                    switch page {
+                    case "settings": tab = .settings
+                    case "search": tab = .search
+                    default: tab = .guide
+                    }
                     return
                 }
                 if let name = UserDefaults.standard.string(forKey: "BroadwaveTab") {
@@ -188,6 +200,17 @@ struct RootView: View {
     }
 
     #if DEBUG
+        /// Offline Guide, Settings, or Search for the sidebar focus tests. -BroadwaveFocus guide.
+        private var sidebarPageTest: String? {
+            let page = UserDefaults.standard.string(forKey: "BroadwaveFocus")
+            switch page {
+            case "guide", "settings", "search":
+                return page
+            default:
+                return nil
+            }
+        }
+
         private func previewChannel(id: Int64, number: String, name: String) -> Channel {
             Channel(
                 id: id, deviceId: "preview", guideNumber: number, guideName: name,

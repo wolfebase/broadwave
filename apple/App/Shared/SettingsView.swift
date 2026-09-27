@@ -74,7 +74,7 @@ struct SettingsView: View {
                 }
             }
             Section {
-                HomeListView()
+                HomeListView(grabsFocus: true)
             }
             serverSection
             playbackSection(store)

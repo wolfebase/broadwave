@@ -8,6 +8,10 @@ struct SearchView: View {
     @State private var query = ""
     @State private var result = SearchResult(airings: [], recordings: [])
     @State private var note = ""
+    #if os(tvOS)
+        @Environment(\.tvSelectedTab) private var tvSelectedTab
+        @FocusState private var fieldFocused: Bool
+    #endif
 
     var body: some View {
         List {
@@ -18,6 +22,10 @@ struct SearchView: View {
                 #endif
                     .submitLabel(.search)
                     .onSubmit { Task { await run() } }
+                    .accessibilityIdentifier("search-field")
+                #if os(tvOS)
+                    .focused($fieldFocused)
+                #endif
             }
             if !result.airings.isEmpty {
                 Section("Guide") {
@@ -65,8 +73,19 @@ struct SearchView: View {
         .navigationTitle("Search")
         #if os(iOS)
             .toolbarTitleDisplayMode(.inline)
+        #else
+            .onAppear { claimSearchFocus() }
+            .onChange(of: tvSelectedTab) { _, _ in claimSearchFocus() }
         #endif
     }
+
+    #if os(tvOS)
+        /// Same as the guide: focus in the page closes the sidebar. The field is what this tab is for.
+        private func claimSearchFocus() {
+            guard tvSelectedTab == .search else { return }
+            fieldFocused = true
+        }
+    #endif
 
     private func meta(_ airing: Airing) -> String {
         let when = airing.start.formatted(.dateTime.weekday(.abbreviated).hour().minute())

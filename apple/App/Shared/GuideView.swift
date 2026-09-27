@@ -11,6 +11,10 @@ struct GuideView: View {
     @State private var selected: Selection?
     @State private var jump: Date?
     @State private var scores: [String: String] = [:]
+    #if os(tvOS)
+        @Environment(\.tvSelectedTab) private var tvSelectedTab
+        @FocusState private var nowFocused: Bool
+    #endif
 
     struct Selection: Identifiable {
         let channel: Channel
@@ -67,13 +71,35 @@ struct GuideView: View {
         .sheet(item: $selected) { sel in
             ProgramSheet(channel: sel.channel, airing: sel.airing)
         }
+        .defaultFocus($nowFocused, true)
+        .onAppear { claimGuideFocus() }
+        .onChange(of: tvSelectedTab) { _, _ in claimGuideFocus() }
+        .task(id: tvSelectedTab) {
+            // The sidebar takes focus on the same turn as onAppear and clears a focus set then.
+            guard tvSelectedTab == .guide else { return }
+            try? await Task.sleep(for: .milliseconds(200))
+            claimGuideFocus()
+        }
         #endif
     }
+
+    #if os(tvOS)
+        /// The sidebar stays open over the grid until something in the page has focus, and it covers the channel column.
+        private func claimGuideFocus() {
+            guard tvSelectedTab == .guide else { return }
+            nowFocused = true
+        }
+    #endif
 
     private var dayJump: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
-                Button("Now") { jump = store.now.addingTimeInterval(-15 * 60) }.buttonStyle(.glass)
+                Button("Now") { jump = store.now.addingTimeInterval(-15 * 60) }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("guide-now")
+                #if os(tvOS)
+                    .focused($nowFocused)
+                #endif
                 Button("Tonight") { jump = primeTime(on: store.now, after: store.now) }.buttonStyle(.glass)
                 ForEach(comingDays, id: \.timeIntervalSince1970) { day in
                     Button(dayLabel(day)) { jump = primeTime(on: day, after: day) }.buttonStyle(.glass)
