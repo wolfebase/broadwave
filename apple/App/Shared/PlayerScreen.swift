@@ -252,7 +252,8 @@ struct PlayerScreen: View {
                     if let channel = nowPlaying.channel {
                         nowPlaying.watchTogether([channel])
                     }
-                }
+                },
+                rejoin: live.sync?.detached == true ? { live.sync?.rejoin() } : nil
             )
             .ignoresSafeArea()
             #if os(iOS)
@@ -262,6 +263,14 @@ struct PlayerScreen: View {
                 // Store shots need the title on screen. The system bar hides itself.
                 if UserDefaults.standard.bool(forKey: "BroadwaveInfo") {
                     tvInfo
+                }
+                // UI tests cannot reach the transport bar's menu; this presses
+                // "Back in sync" 10 s after the viewer leaves sync.
+                if UserDefaults.standard.bool(forKey: "BroadwaveRejoinTest"), live.sync?.detached == true {
+                    Color.clear.task {
+                        try? await Task.sleep(for: .seconds(10))
+                        live.sync?.rejoin()
+                    }
                 }
             #endif
             if showStream, !portraitChrome {
@@ -606,7 +615,12 @@ struct PlayerScreen: View {
         }
 
         @ViewBuilder private var syncPill: some View {
-            if let sync = live.sync, sync.state != .off {
+            if let sync = live.sync, sync.detached {
+                Button("Back in sync", systemImage: "arrow.triangle.2.circlepath") { sync.rejoin() }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                    .accessibilityLabel("Back in sync")
+            } else if let sync = live.sync, sync.state != .off {
                 HStack(spacing: 5) {
                     Image(systemName: "arrow.triangle.2.circlepath")
                     if sync.members > 1 {
@@ -657,6 +671,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
     var streamOn = false
     var onStream: () -> Void = {}
     var onTogether: () -> Void = {}
+    /// Set while this screen has left sync; the menu offers the way back.
+    var rejoin: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -715,7 +731,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
             context.coordinator.sample(vc)
             // Setting the items redraws the transport bar and keeps it on screen,
             // so a view update that changes nothing must leave them alone.
-            let key = (menu + audio).map { "\($0.id) \($0.title) \($0.current)" } + ["\(streamOn)"]
+            let key = (menu + audio).map { "\($0.id) \($0.title) \($0.current)" } + ["\(streamOn)", "\(rejoin != nil)"]
             guard key != context.coordinator.menuKey else { return }
             context.coordinator.menuKey = key
             let actions = menu.map { entry in
@@ -727,7 +743,11 @@ struct SystemPlayer: UIViewControllerRepresentable {
             let together = UIAction(title: "Side by side", image: UIImage(systemName: "rectangle.split.2x1")) { _ in onTogether() }
             let stream = UIAction(title: streamOn ? "Hide stream" : "Stream", image: UIImage(systemName: "info.circle"), state: streamOn ? .on : .off) { _ in onStream() }
             let audioMenu = UIMenu(title: "Audio", image: UIImage(systemName: "speaker.wave.2"), children: audioActions)
-            vc.transportBarCustomMenuItems = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions), audioMenu, stream, together]
+            var items: [UIMenuElement] = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions), audioMenu, stream, together]
+            if let rejoin {
+                items.insert(UIAction(title: "Back in sync", image: UIImage(systemName: "arrow.triangle.2.circlepath")) { _ in rejoin() }, at: 0)
+            }
+            vc.transportBarCustomMenuItems = items
         #endif
     }
 

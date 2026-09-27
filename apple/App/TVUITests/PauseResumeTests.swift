@@ -25,6 +25,26 @@ final class PauseResumeTests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground)
     }
 
+    /// After a pause, "Back in sync" puts the screen back on the room's frame.
+    /// The transport bar's menu is out of reach of UI tests, so a debug flag
+    /// presses it 10 s after the pause.
+    func testBackInSyncAfterAPause() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let server = env["BROADWAVE_SERVER"], !server.isEmpty else {
+            throw XCTSkip("set TEST_RUNNER_BROADWAVE_SERVER to run against a server")
+        }
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-BroadwaveServerURL", server, "-BroadwaveWatch", env["BROADWAVE_CHANNEL"] ?? "1",
+            "-BroadwaveSyncLog", "1", "-BroadwaveRejoinTest", "YES", "-ApplePersistenceIgnoreState", "YES",
+        ]
+        app.launch()
+        wait(40)
+        XCUIRemote.shared.press(.playPause)
+        wait(45)
+        XCTAssertEqual(app.state, .runningForeground)
+    }
+
     /// Leaving for the Home screen pauses the player; that is not the viewer's pause.
     func testHomeAndBackKeepsSync() throws {
         let env = ProcessInfo.processInfo.environment

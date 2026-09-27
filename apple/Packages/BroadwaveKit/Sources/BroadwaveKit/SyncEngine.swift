@@ -217,6 +217,16 @@ public final class SyncEngine {
         state = .off
     }
 
+    /// Puts a screen the viewer paused back on the room's frame.
+    public func rejoin() {
+        guard detached else { return }
+        detached = false
+        seenPlaying = false
+        holdUntil = Date().addingTimeInterval(1)
+        player.play()
+        state = .syncing
+    }
+
     public func command(_ action: String, mediaTime: Double? = nil) {
         socket.command(room: room, action: action, mediaTime: mediaTime)
     }
