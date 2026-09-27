@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.11.5 — 2026-09-27
+
+Optional automatic updates that wait until nobody is watching or recording.
+
+### Added
+
+- An optional updater for Docker Compose and Unraid keeps Broadwave on the newest release. It checks nightly at 03:30 and skips a night while someone is watching, a recording is running, or a recording starts within two hours. See "Automatic updates" in the README.
+- `broadwave -update-check` reports whether the running server is busy, for any updater that can run a check first.
+
+### Changed
+
+- The install section covers Docker Desktop, where the tuner address has to be entered by hand.
+
 ## 0.11.4 — 2026-09-27
 
 Multiview and single screens stop stalling at the live edge.
