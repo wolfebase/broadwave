@@ -4,6 +4,7 @@
     "anchorServer": 1790262000000,
     "channelId": 1,
     "latency": "balanced",
+    "latencyMs": 13000,
     "members": 1,
     "mode": "follow",
     "rate": 1,

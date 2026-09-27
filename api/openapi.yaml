@@ -1442,8 +1442,9 @@ components:
         mode: { type: string, enum: [follow, group] }
         anchorServer: { type: number, description: "Server Unix ms when the anchor was set" }
         anchorMedia: { type: number, description: "Program date-time (Unix ms) playing at anchorServer" }
-        rate: { type: number, enum: [0, 1] }
+        rate: { type: number, description: "1, 0 when paused, or below 1 while a follow room eases back to its latency" }
         latency: { type: string, enum: [lowest, balanced, stable] }
+        latencyMs: { type: number, description: "How far behind server time the room settles. A screen that cannot reach an easing room's frame aims at server time minus this." }
         version: { type: integer }
         members: { type: integer }
     ServerInfo:

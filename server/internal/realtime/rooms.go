@@ -29,8 +29,12 @@ type RoomState struct {
 	AnchorMedia  float64 `json:"anchorMedia"`
 	Rate         float64 `json:"rate"`
 	Latency      string  `json:"latency"`
-	Version      int     `json:"version"`
-	Members      int     `json:"members"`
+	// LatencyMS is how far behind server time the room settles. A follow room
+	// plays below 1x while it eases back to it; screens that cannot reach the
+	// easing frame aim here, where the room will be when the ease ends.
+	LatencyMS float64 `json:"latencyMs"`
+	Version   int     `json:"version"`
+	Members   int     `json:"members"`
 }
 
 // Target is the media time the room shows at server time now (Unix ms).
@@ -71,6 +75,14 @@ func unixMS(t time.Time) float64 {
 	return float64(t.UnixNano()) / 1e6
 }
 
+func latencyMS(latency string) float64 {
+	d, ok := latencies[latency]
+	if !ok {
+		d = latencies["balanced"]
+	}
+	return float64(d / time.Millisecond)
+}
+
 func liveAnchor(now time.Time, latency string) float64 {
 	d, ok := latencies[latency]
 	if !ok {
@@ -106,7 +118,7 @@ func (r *Rooms) Join(room string, channelID int64, earliest float64) RoomState {
 			anchorServer += float64(startCushion / time.Millisecond)
 		}
 		st = &RoomState{
-			Room: room, ChannelID: channelID, Mode: mode, Latency: "balanced", Rate: 1,
+			Room: room, ChannelID: channelID, Mode: mode, Latency: "balanced", LatencyMS: latencyMS("balanced"), Rate: 1,
 			AnchorServer: anchorServer, AnchorMedia: media, Version: 1,
 		}
 		r.rooms[room] = st
@@ -263,7 +275,7 @@ func (r *Rooms) Apply(room string, c Command) (RoomState, error) {
 		if _, ok := latencies[c.Latency]; !ok {
 			return RoomState{}, errors.New("latency is lowest, balanced, or stable")
 		}
-		st.Latency = c.Latency
+		st.Latency, st.LatencyMS = c.Latency, latencyMS(c.Latency)
 		if st.Mode == "follow" {
 			st.AnchorServer, st.AnchorMedia, st.Rate = nowMS, liveAnchor(now, st.Latency), 1
 		}
