@@ -2,6 +2,7 @@ import type Hls from "hls.js";
 import { events, type RoomState } from "./events";
 import { holeEnd } from "./bufferHole";
 import { nextSeekLead } from "./seekLead";
+import { SETTLE_MS, newSettle, settleDue } from "./settle";
 
 export type SyncStatus = {
   state: "off" | "waiting" | "syncing" | "locked";
@@ -21,6 +22,8 @@ const CUSHION_S = 1.5;
 // smaller drift.
 const RATE_STALL_S = 0.12;
 const STALL_SEEK_MS = 120;
+// WebKit resumes about a tenth of a second late after a pause. Learned per screen.
+const MAX_RESUME_LAG_S = 0.5;
 
 type Frag = { start: number; duration: number; programDateTime: number | null };
 
@@ -42,6 +45,12 @@ export class SyncEngine {
   private leadCheck = false;
   private rateProbe: { at: number; t: number; rate: number } | null = null;
   private rateStalls = 0;
+  private settle = newSettle();
+  private resumeLag = 0;
+  private resumeAt = 0;
+  // Drift (ms) the last resume should land on. A step lands behind on purpose.
+  private resumeExpect = 0;
+  private stepped = false;
   private lastStallReport = 0;
 
   constructor(
@@ -158,13 +167,25 @@ export class SyncEngine {
     if (drift > 0) {
       const now = performance.now();
       if (now < this.holdUntil) return;
-      this.holdUntil = now + drift;
+      // The resume costs its own lag, so the pause is that much shorter. A
+      // lead under that lag cannot be paused away: step behind with the resume
+      // alone, then seek forward. A large lead pauses in full, since landing
+      // behind is corrected and staying ahead is not.
+      const lag = this.resumeLag * 1000;
+      let hold = drift - lag;
+      if (hold < TRIM_MS) {
+        hold = drift > STALL_SEEK_MS ? drift : 0;
+        this.stepped = hold === 0;
+      }
+      this.resumeExpect = drift - hold - lag;
+      this.holdUntil = now + hold;
       this.rateProbe = null;
       this.video.pause();
       window.setTimeout(() => {
         this.holdUntil = 0;
+        this.resumeAt = performance.now();
         void this.video.play().catch(() => undefined);
-      }, drift);
+      }, hold);
       return;
     }
     this.seekTo(target, true);
@@ -232,6 +253,25 @@ export class SyncEngine {
     }
     if (video.paused) void video.play().catch(() => undefined);
     const now = performance.now();
+    // A resume has not shown its lag yet.
+    if (this.resumeAt) {
+      if (now - this.resumeAt < 1000) {
+        this.setStatus({ state: "syncing", drift, members: st.members, room: st });
+        return;
+      }
+      this.resumeAt = 0;
+      this.resumeLag = Math.min(MAX_RESUME_LAG_S, nextSeekLead(this.resumeLag, drift - this.resumeExpect));
+      if (this.stepped) {
+        this.stepped = false;
+        const ahead = this.forwardMedia();
+        if (drift < -SETTLE_MS && this.timeFor(target) != null && ahead >= CUSHION_S) {
+          video.dataset.syncFix = `step ${Math.round(drift)} lag ${Math.round(this.resumeLag * 1000)} lead ${Math.round(this.seekLead * 1000)}`;
+          this.correct(drift, target);
+          this.setStatus({ state: "syncing", drift, members: st.members, room: st });
+          return;
+        }
+      }
+    }
     // A seek has not paid its cost yet; correcting now would chase the landing.
     if (this.leadCheck) {
       if (now - this.lastSeek < 1000) {
@@ -278,6 +318,16 @@ export class SyncEngine {
       return;
     }
     this.setRate(base);
+    // No trims: a drift under the seek threshold would stay for good.
+    if (!trims && settleDue(this.settle, drift, now)) {
+      const thin = drift < 0 && (this.timeFor(target) == null || ahead < CUSHION_S);
+      video.dataset.syncFix = `${thin ? "thin" : drift > 0 ? "pause" : "seek"} ${Math.round(drift)} lag ${Math.round(this.resumeLag * 1000)} lead ${Math.round(this.seekLead * 1000)}`;
+      if (!thin) {
+        this.correct(drift, target);
+        this.setStatus({ state: "syncing", drift, members: st.members, room: st });
+        return;
+      }
+    }
     this.setStatus({ state: "locked", drift, members: st.members, room: st });
   }
 }
