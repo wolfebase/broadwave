@@ -137,6 +137,10 @@ type Source struct {
 	// Lace is true once a scan has shown interlaced H.264. An empty scan does
 	// not lace it: a progressive playlist keeps its own rate.
 	Lace bool
+	// HD is the lineup's flag. Broadcasts rarely tag their colors, and a
+	// browser guesses from the picture size, so a 640 wide tile of an HD
+	// channel decodes as SD colors unless the encode says BT.709.
+	HD bool
 }
 
 type Decision struct {
@@ -476,7 +480,13 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		field := interlaced && !smallPicture(g)
 		width, height, rate := outputSize(g, field)
 		fps, gop := pictureRate(g, field)
-		args = append(args, "-vf", videoFilter(g, vaapiDeintMode(g, interlaced), interlaced, field, width, height, fps))
+		vf := videoFilter(g, vaapiDeintMode(g, interlaced), interlaced, field, width, height, fps)
+		if src.HD {
+			// Tagging the frames first keeps ffmpeg from converting an
+			// untagged picture it would assume is BT.601.
+			vf = "setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709," + vf
+		}
+		args = append(args, "-vf", vf)
 		// A graph that drops frames (a film pulldown, a half-rate tile) can drop
 		// the frame that carried the source keyframe, and the segment then runs
 		// until one survives: 20 s on a 60p channel, a 63 s hold-back. Four
@@ -486,6 +496,9 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 			keyint = 2 * gop
 		}
 		args = append(args, videoCodec(outEnc, rate, keyint)...)
+		if src.HD {
+			args = append(args, "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709")
+		}
 		args = append(args, "-force_key_frames", openingKeyframes)
 	} else {
 		args = append(args, "-c:v", "copy")
