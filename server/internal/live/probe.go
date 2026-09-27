@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"broadwave/internal/store"
 )
 
 type probeReport struct {
@@ -24,7 +26,38 @@ type probeReport struct {
 
 type probeStream struct {
 	CodecType  string `json:"codec_type"`
+	CodecName  string `json:"codec_name"`
 	FieldOrder string `json:"field_order"`
+}
+
+const probeEntries = "program=program_num:program_stream=codec_type,codec_name,field_order:stream=codec_type,codec_name,field_order"
+
+// codecsFrom reads one program's first video and audio codec from ffprobe JSON.
+func codecsFrom(raw []byte, program int) (video, audio string) {
+	var rep probeReport
+	if json.Unmarshal(raw, &rep) != nil {
+		return "", ""
+	}
+	pick := func(streams []probeStream) {
+		for _, s := range streams {
+			switch {
+			case s.CodecType == "video" && video == "":
+				video = s.CodecName
+			case s.CodecType == "audio" && audio == "":
+				audio = s.CodecName
+			}
+		}
+	}
+	for _, p := range rep.Programs {
+		if program == 0 || p.ProgramNum == program {
+			pick(p.Streams)
+			break
+		}
+	}
+	if program == 0 {
+		pick(rep.Streams)
+	}
+	return video, audio
 }
 
 // fieldOrderFrom picks the video field order for one program from ffprobe JSON.
@@ -63,7 +96,7 @@ func (h *Hub) probeFieldOrderLocked(m *mux, f *feed) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	cmd := exec.CommandContext(ctx, tool, "-v", "error", "-probesize", "4000000", "-analyzeduration", "3000000",
-		"-show_entries", "program=program_num:program_stream=codec_type,field_order:stream=codec_type,field_order",
+		"-show_entries", probeEntries,
 		"-of", "json", "-i", "pipe:0")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -83,10 +116,22 @@ func (h *Hub) probeFieldOrderLocked(m *mux, f *feed) {
 		defer cancel()
 		_ = cmd.Wait()
 		order := fieldOrderFrom([]byte(out.String()), program)
+		video, audio := codecsFrom([]byte(out.String()), program)
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		m.detach(sub)
 		f.probing = false
+		if h.channels[channelID] == f {
+			if len(f.tracks) > 0 {
+				audio = ""
+			}
+			if h.learnCodecsLocked(f, video, audio) {
+				h.rebuildRenditionsLocked(f)
+			}
+		} else {
+			ch := f.channel
+			go h.saveCodecs(ch, video, audio)
+		}
 		// The packet scan is the one that can see film. A probe that lands
 		// first still corrects a rendition that started on the wrong graph.
 		if f.headerOrder != "" {
@@ -112,7 +157,7 @@ func (h *Hub) probeFieldOrderLocked(m *mux, f *feed) {
 // sees those bytes, so an empty order would otherwise stick for the life of
 // the channel. Unscanned H.264 is not doubled while this runs.
 func (h *Hub) probeInputLocked(m *mux, f *feed) {
-	if m == nil || m.input == "" || f == nil || f.channel.FieldOrder != "" {
+	if m == nil || m.input == "" || f == nil || !probeInput(f.channel) {
 		return
 	}
 	tool := FFProbePath(h.FFmpeg)
@@ -123,7 +168,7 @@ func (h *Hub) probeInputLocked(m *mux, f *feed) {
 	args := []string{"-v", "error", "-probesize", "2000000", "-analyzeduration", "1500000"}
 	args = append(args, headerArgs(f.source.UserAgent, f.source.Referrer)...)
 	args = append(args,
-		"-show_entries", "program=program_num:program_stream=codec_type,field_order:stream=codec_type,field_order",
+		"-show_entries", probeEntries,
 		"-of", "json", "-i", m.input)
 	cmd := exec.CommandContext(ctx, tool, args...)
 	var out strings.Builder
@@ -136,14 +181,16 @@ func (h *Hub) probeInputLocked(m *mux, f *feed) {
 	channelID, program := f.channel.ID, f.program
 	input := m.input
 	ua, ref := f.source.UserAgent, f.source.Referrer
+	scanned := f.channel.FieldOrder != ""
 	go func() {
 		defer cancel()
 		_ = cmd.Wait()
 		order := fieldOrderFrom([]byte(out.String()), program)
+		video, audio := codecsFrom([]byte(out.String()), program)
 		// The HLS demuxer leaves field_order off the playlist. The segment has it.
 		// The playlist read often uses its whole timeout, so the segment gets
 		// its own. A child of ctx is already cancelled by then.
-		if order == "" && hlsURL(input) {
+		if order == "" && !scanned && hlsURL(input) {
 			if alt := hlsProbeTarget(input, ua, ref); alt != "" {
 				segCtx, segCancel := hlsSegmentProbeContext()
 				order = ffprobeFieldOrder(segCtx, tool, alt, ua, ref, 0)
@@ -154,6 +201,12 @@ func (h *Hub) probeInputLocked(m *mux, f *feed) {
 		defer h.mu.Unlock()
 		if cur := h.channels[channelID]; cur == f {
 			f.probing = false
+			if h.learnCodecsLocked(f, video, audio) {
+				h.rebuildRenditionsLocked(f)
+			}
+		} else {
+			ch := f.channel
+			go h.saveCodecs(ch, video, audio)
 		}
 		if f.headerOrder != "" {
 			return
@@ -170,6 +223,12 @@ func (h *Hub) probeInputLocked(m *mux, f *feed) {
 	}()
 }
 
+// probeInput is a URL input whose field order is not stored, or a link whose
+// codecs are not. A link's stream is the only record of its codecs.
+func probeInput(ch store.SourceChannel) bool {
+	return ch.FieldOrder == "" || linkChannel(ch) && (ch.VideoCodec == "" || ch.AudioCodec == "")
+}
+
 // hlsSegmentProbeContext is a fresh 8s budget for the segment read. It is
 // not a child of the playlist probe: that context is often already done.
 func hlsSegmentProbeContext() (context.Context, context.CancelFunc) {
@@ -180,7 +239,7 @@ func ffprobeFieldOrder(ctx context.Context, tool, input, userAgent, referrer str
 	args := []string{"-v", "error", "-probesize", "2000000", "-analyzeduration", "1500000"}
 	args = append(args, headerArgs(userAgent, referrer)...)
 	args = append(args,
-		"-show_entries", "program=program_num:program_stream=codec_type,field_order:stream=codec_type,field_order",
+		"-show_entries", probeEntries,
 		"-of", "json", "-i", input)
 	out, err := exec.CommandContext(ctx, tool, args...).Output()
 	if err != nil {

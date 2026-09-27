@@ -186,6 +186,20 @@ func (s *Store) SetFieldOrder(ctx context.Context, channelID int64, order string
 	return err
 }
 
+// SetChannelCodecs stores codecs a tune read from the stream. An empty value
+// keeps what is stored.
+func (s *Store) SetChannelCodecs(ctx context.Context, channelID int64, video, audio string) error {
+	if video == "" && audio == "" {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `
+UPDATE channels SET
+	video_codec = CASE WHEN ? != '' THEN ? ELSE video_codec END,
+	audio_codec = CASE WHEN ? != '' THEN ? ELSE audio_codec END
+WHERE id = ?`, video, video, audio, audio, channelID)
+	return err
+}
+
 // FrameTarget is a channel sharing a frequency that is already tuned.
 type FrameTarget struct {
 	ID         int64

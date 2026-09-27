@@ -304,19 +304,14 @@ func Install(ctx context.Context, st *store.Store, id int64, name, kind string, 
 		if key == "" {
 			key = entry.Station
 		}
-		video, audio := entry.Video, entry.Audio
-		if video == "" {
-			video = "H264"
-		}
-		if audio == "" {
-			audio = "AAC"
-		}
+		// A playlist rarely names codecs. Empty is unknown: the stream decision
+		// transcodes it, and the first tune stores what the stream carries.
 		channels = append(channels, hdhr.Channel{
 			GuideNumber: entry.Number,
 			GuideName:   entry.Name,
 			StreamURL:   entry.URL,
-			VideoCodec:  video,
-			AudioCodec:  audio,
+			VideoCodec:  entry.Video,
+			AudioCodec:  entry.Audio,
 			GuideKey:    key,
 			ArtURL:      entry.Logo,
 			UserAgent:   entry.UserAgent,

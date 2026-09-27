@@ -520,7 +520,7 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 	sub := h.attachPipeLocked(m, buf)
 	started := time.Now()
 	deadline := started.Add(scanWait)
-	var order string
+	var order, video string
 	for time.Now().Before(deadline) {
 		buf.mu.Lock()
 		data := append([]byte(nil), buf.b...)
@@ -529,6 +529,9 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 			if got, ok := scanType(data, f.program); ok {
 				order = got
 			}
+		}
+		if video == "" {
+			video = VideoCodecOf(data, f.program)
 		}
 		if needAudio {
 			if tracks := AudioTracks(data, f.program); len(tracks) > 0 {
@@ -564,6 +567,8 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 	if len(f.tracks) > 0 {
 		slog.Info(fmt.Sprintf("audio tracks for %s: %s", f.channel.GuideNumber, trackLog(f.tracks)))
 	}
+	// No rendition runs yet, so the encode starts on what the stream carries.
+	h.learnCodecsLocked(f, video, mainCodec(f.tracks))
 	if order != "" {
 		m.detach(sub)
 		slog.Info(fmt.Sprintf("scan type %s for %s in %s", order, f.channel.GuideNumber, time.Since(started).Round(time.Millisecond)))
@@ -611,8 +616,10 @@ func (h *Hub) finishScanFromPicture(m *mux, f *feed) {
 	id := f.channel.ID
 	guide := f.channel.GuideNumber
 	var order string
+	var data []byte
 	for time.Now().Before(deadline) {
-		if got, ok := scanType(m.pictureBytes(), program); ok {
+		data = m.pictureBytes()
+		if got, ok := scanType(data, program); ok {
 			order = got
 			break
 		}
@@ -620,6 +627,9 @@ func (h *Hub) finishScanFromPicture(m *mux, f *feed) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.channels[id] == f && h.learnCodecsLocked(f, VideoCodecOf(data, program), "") {
+		h.rebuildRenditionsLocked(f)
+	}
 	if order == "" || f.headerOrder != "" || h.channels[id] != f {
 		return
 	}
@@ -648,6 +658,7 @@ func (h *Hub) finishDeferred(m *mux, f *feed) {
 	guide := f.channel.GuideNumber
 	headerDone := false
 	audioDone := false
+	videoDone := false
 	var seen []AudioTrack
 	for time.Now().Before(deadline) {
 		h.mu.Lock()
@@ -669,6 +680,16 @@ func (h *Hub) finishDeferred(m *mux, f *feed) {
 				headerDone = true
 			}
 		}
+		if !videoDone {
+			if video := VideoCodecOf(data, program); video != "" {
+				h.mu.Lock()
+				if h.channels[id] == f && h.learnCodecsLocked(f, video, "") {
+					h.rebuildRenditionsLocked(f)
+				}
+				h.mu.Unlock()
+				videoDone = true
+			}
+		}
 		if !audioDone {
 			if tracks := AudioTracks(data, program); len(tracks) > 0 {
 				seen = tracks
@@ -678,7 +699,7 @@ func (h *Hub) finishDeferred(m *mux, f *feed) {
 				}
 			}
 		}
-		if headerDone && audioDone {
+		if headerDone && audioDone && videoDone {
 			return
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -697,6 +718,7 @@ func (h *Hub) applyDeferredAudio(f *feed, id int64, tracks []AudioTrack) {
 		return
 	}
 	f.tracks = tracks
+	h.learnCodecsLocked(f, "", mainCodec(tracks))
 	// Unchanged args stay up. A described or second-language choice, or a
 	// main that is not the first audio stream, builds a different map and
 	// restarts. The replacement reads the opening bytes still in the lead.
@@ -711,9 +733,10 @@ func (h *Hub) finishScan(m *mux, f *feed, buf *scanBuf, sub *pipeSub) {
 	id := f.channel.ID
 	guide := f.channel.GuideNumber
 	var order string
+	var data []byte
 	for time.Now().Before(deadline) {
 		buf.mu.Lock()
-		data := append([]byte(nil), buf.b...)
+		data = append(data[:0], buf.b...)
 		buf.mu.Unlock()
 		if got, ok := scanType(data, program); ok {
 			order = got
@@ -733,6 +756,9 @@ func (h *Hub) finishScan(m *mux, f *feed, buf *scanBuf, sub *pipeSub) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	m.detach(sub)
+	if h.channels[id] == f && h.learnCodecsLocked(f, VideoCodecOf(data, program), "") {
+		h.rebuildRenditionsLocked(f)
+	}
 	if order == "" || f.headerOrder != "" || h.channels[id] != f {
 		return
 	}

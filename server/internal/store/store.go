@@ -114,12 +114,15 @@ ON CONFLICT(device_id) DO UPDATE SET
 		protect := boolInt(ch.Protected)
 		if ch.StreamURL != "" {
 			res, err := tx.ExecContext(ctx, `
-UPDATE channels SET guide_name=?, video_codec=?, audio_codec=?, hd=?, present=1,
+UPDATE channels SET guide_name=?,
+	video_codec=CASE WHEN ?!='' THEN ? ELSE video_codec END,
+	audio_codec=CASE WHEN ?!='' THEN ? ELSE audio_codec END,
+	hd=?, present=1,
 	user_agent=CASE WHEN ?!='' THEN ? ELSE user_agent END,
 	referrer=CASE WHEN ?!='' THEN ? ELSE referrer END,
 	hidden=CASE WHEN ?=1 THEN 1 ELSE hidden END
 WHERE device_id=? AND stream_url=?`,
-				ch.GuideName, ch.VideoCodec, ch.AudioCodec, boolInt(ch.HD),
+				ch.GuideName, ch.VideoCodec, ch.VideoCodec, ch.AudioCodec, ch.AudioCodec, boolInt(ch.HD),
 				ch.UserAgent, ch.UserAgent, ch.Referrer, ch.Referrer,
 				protect, dev.DeviceID, ch.StreamURL)
 			if err != nil {
@@ -131,13 +134,16 @@ WHERE device_id=? AND stream_url=?`,
 		}
 		if ch.GuideKey != "" {
 			res, err := tx.ExecContext(ctx, `
-UPDATE channels SET guide_number=?, guide_name=?, stream_url=?, video_codec=?, audio_codec=?, hd=?, present=1,
+UPDATE channels SET guide_number=?, guide_name=?, stream_url=?,
+	video_codec=CASE WHEN ?!='' THEN ? ELSE video_codec END,
+	audio_codec=CASE WHEN ?!='' THEN ? ELSE audio_codec END,
+	hd=?, present=1,
 	art_url=CASE WHEN ?!='' THEN ? ELSE art_url END,
 	user_agent=CASE WHEN ?!='' THEN ? ELSE user_agent END,
 	referrer=CASE WHEN ?!='' THEN ? ELSE referrer END,
 	hidden=CASE WHEN ?=1 THEN 1 ELSE hidden END
 WHERE device_id=? AND guide_key=?`,
-				ch.GuideNumber, ch.GuideName, ch.StreamURL, ch.VideoCodec, ch.AudioCodec, boolInt(ch.HD),
+				ch.GuideNumber, ch.GuideName, ch.StreamURL, ch.VideoCodec, ch.VideoCodec, ch.AudioCodec, ch.AudioCodec, boolInt(ch.HD),
 				ch.ArtURL, ch.ArtURL, ch.UserAgent, ch.UserAgent, ch.Referrer, ch.Referrer,
 				protect, dev.DeviceID, ch.GuideKey)
 			if err != nil {
@@ -154,8 +160,8 @@ INSERT INTO channels (
 ON CONFLICT(device_id, guide_number) DO UPDATE SET
 	guide_name=excluded.guide_name,
 	stream_url=excluded.stream_url,
-	video_codec=excluded.video_codec,
-	audio_codec=excluded.audio_codec,
+	video_codec=CASE WHEN excluded.video_codec!='' THEN excluded.video_codec ELSE channels.video_codec END,
+	audio_codec=CASE WHEN excluded.audio_codec!='' THEN excluded.audio_codec ELSE channels.audio_codec END,
 	hd=excluded.hd,
 	present=1,
 	hidden=CASE WHEN excluded.hidden=1 THEN 1 ELSE channels.hidden END,
