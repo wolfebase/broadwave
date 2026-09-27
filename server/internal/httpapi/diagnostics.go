@@ -153,14 +153,14 @@ func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {
 	mounts, _ := os.ReadFile("/proc/mounts")
 	busy := s.Hub != nil && !s.Hub.Idle()
 	quiet := tunerWentQuiet(devices, busy, time.Now())
-	heard := false
+	stored := false
 	for _, d := range devices {
 		if d.TunerCount > 0 {
-			heard = true
+			stored = true
 		}
 	}
 	return doctor.Notes(doctor.Facts{
-		IPs: ips, BroadcastOK: heard, HostHasGPU: hostGPU(), DevDri: driPresent(),
+		IPs: ips, TunerStored: stored, HostHasGPU: hostGPU(), DevDri: driPresent(),
 		RecordingsPath: path, Mounts: string(mounts), FreeBytes: free,
 		Timezone: os.Getenv("TZ"), Now: s.now(), UID: os.Getuid(),
 		PUID: os.Getenv("PUID"), PGID: os.Getenv("PGID"), TunerQuiet: quiet,

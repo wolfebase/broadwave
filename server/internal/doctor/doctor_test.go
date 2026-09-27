@@ -7,7 +7,7 @@ import (
 )
 
 func TestEachCheck(t *testing.T) {
-	ok := Facts{IPs: []string{"192.168.1.10"}, BroadcastOK: true, HostHasGPU: true, DevDri: true, RecordingsPath: "/data/recordings", Mounts: "/dev/sda /data ext4 rw 0 0\n", FreeBytes: 40e9, Timezone: "UTC", Now: time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC), UID: 99, PUID: "99", PGID: "100"}
+	ok := Facts{IPs: []string{"192.168.1.10"}, TunerStored: true, HostHasGPU: true, DevDri: true, RecordingsPath: "/data/recordings", Mounts: "/dev/sda /data ext4 rw 0 0\n", FreeBytes: 40e9, Timezone: "UTC", Now: time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC), UID: 99, PUID: "99", PGID: "100"}
 	if n := Notes(ok); len(n) != 0 {
 		t.Fatalf("healthy server: %+v", n)
 	}
@@ -15,12 +15,13 @@ func TestEachCheck(t *testing.T) {
 		id   string
 		edit func(*Facts)
 	}{
-		{"bridge", func(f *Facts) { f.IPs = []string{"172.17.0.2"}; f.BroadcastOK = false }},
+		{"bridge", func(f *Facts) { f.IPs = []string{"172.17.0.2"}; f.TunerStored = false }},
 		{"dri", func(f *Facts) { f.DevDri = false }},
 		{"volume", func(f *Facts) { f.RecordingsPath = "/config/work/recordings" }},
 		{"disk", func(f *Facts) { f.FreeBytes = 5e9 }},
 		{"tz", func(f *Facts) { f.Timezone = "" }},
 		{"clock", func(f *Facts) { f.Now = time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC) }},
+		{"bonjour", func(f *Facts) { f.IPs = []string{"172.17.0.2"} }},
 		{"owner", func(f *Facts) { f.UID = 0; f.PUID = ""; f.PGID = "" }},
 		{"tuner", func(f *Facts) { f.TunerQuiet = true }},
 	}
@@ -35,10 +36,24 @@ func TestEachCheck(t *testing.T) {
 }
 
 func TestHomeLANIsNotDocker(t *testing.T) {
-	f := Facts{IPs: []string{"172.16.1.20"}, BroadcastOK: false, Timezone: "UTC", Now: time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC), UID: 99, PUID: "99", PGID: "100", FreeBytes: 40e9, DevDri: true}
+	f := Facts{IPs: []string{"172.16.1.20"}, TunerStored: false, Timezone: "UTC", Now: time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC), UID: 99, PUID: "99", PGID: "100", FreeBytes: 40e9, DevDri: true}
 	for _, n := range Notes(f) {
 		if n.ID == "bridge" {
 			t.Fatal("172.16 is a home network")
+		}
+	}
+}
+
+// Host networking on Linux shows docker0 beside the home address. That is
+// not a container on the bridge, tuner or not.
+func TestHostNetworkingIsNotTheBridge(t *testing.T) {
+	f := Facts{IPs: []string{"192.168.1.2", "172.17.0.1", "fe80::1"}, Timezone: "UTC", Now: time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC), UID: 99, PUID: "99", PGID: "100", FreeBytes: 40e9, DevDri: true}
+	for _, stored := range []bool{false, true} {
+		f.TunerStored = stored
+		for _, n := range Notes(f) {
+			if n.ID == "bridge" || n.ID == "bonjour" {
+				t.Fatalf("host networking, tuner %v: %+v", stored, n)
+			}
 		}
 	}
 }

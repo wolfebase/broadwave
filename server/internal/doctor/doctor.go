@@ -19,7 +19,7 @@ type Note struct {
 // Facts is what the checks can see. Callers fill it; tests set it directly.
 type Facts struct {
 	IPs            []string
-	BroadcastOK    bool
+	TunerStored    bool
 	HostHasGPU     bool
 	DevDri         bool
 	RecordingsPath string
@@ -36,8 +36,12 @@ type Facts struct {
 // Notes returns every check that failed.
 func Notes(f Facts) []Note {
 	var out []Note
-	if bridged(f) {
-		out = append(out, Note{ID: "bridge", Message: "Broadwave can't see your tuner from inside Docker. Switch the container to host networking."})
+	if inDockerBridge(f.IPs) {
+		if f.TunerStored {
+			out = append(out, Note{ID: "bonjour", Message: "Phones and TVs can't find this server on their own from inside Docker. Switch the container to host networking."})
+		} else {
+			out = append(out, Note{ID: "bridge", Message: "Broadwave can't see your tuner from inside Docker. Switch the container to host networking."})
+		}
 	}
 	if f.HostHasGPU && !f.DevDri {
 		out = append(out, Note{ID: "dri", Message: "This server has graphics, but the container can't use them. Pass /dev/dri through."})
@@ -55,7 +59,7 @@ func Notes(f Facts) []Note {
 		out = append(out, Note{ID: "clock", Message: "This server's clock is off. Whole-home sync needs the right time. Turn on network time."})
 	}
 	if f.UID == 0 && (strings.TrimSpace(f.PUID) == "" || strings.TrimSpace(f.PGID) == "") {
-		out = append(out, Note{ID: "owner", Message: "Recordings are owned by root. On Unraid, set PUID to 99 and PGID to 100."})
+		out = append(out, Note{ID: "owner", Message: "Recordings are owned by root. Set PUID and PGID to the user who should own them (99 and 100 on Unraid)."})
 	}
 	if f.TunerQuiet {
 		out = append(out, Note{ID: "tuner", Message: "Your tuner stopped answering. Check that it is plugged in."})
@@ -66,21 +70,23 @@ func Notes(f Facts) []Note {
 	return out
 }
 
-func bridged(f Facts) bool {
-	if f.BroadcastOK {
-		return false
-	}
-	for _, raw := range f.IPs {
+// inDockerBridge is a container on Docker's bridge network: every IPv4
+// address it has is in 172.17-31. Host networking shows docker0 there too,
+// beside the home network's address.
+func inDockerBridge(ips []string) bool {
+	bridge := false
+	for _, raw := range ips {
 		ip := net.ParseIP(raw)
-		if ip == nil || ip.To4() == nil {
+		if ip == nil || ip.To4() == nil || ip.IsLinkLocalUnicast() {
 			continue
 		}
 		v := ip.To4()
-		if v[0] == 172 && v[1] >= 17 && v[1] <= 31 {
-			return true
+		if v[0] != 172 || v[1] < 17 || v[1] > 31 {
+			return false
 		}
+		bridge = true
 	}
-	return false
+	return bridge
 }
 
 func unmounted(f Facts) bool {
