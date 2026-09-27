@@ -207,6 +207,16 @@ export function LivePlayer({
       event.preventDefault();
       return;
     }
+    // On a TV the arrows walk the chrome. The stage still seeks and changes channel when it has the keys.
+    const target = event.target;
+    if (
+      layout === "tv" &&
+      target instanceof Element &&
+      target.closest(".stage-hud") &&
+      (k === "ArrowLeft" || k === "ArrowRight" || k === "ArrowUp" || k === "ArrowDown")
+    ) {
+      return;
+    }
     const actions: Record<string, () => void> = {
       Escape: () => (panel !== "none" ? setPanel("none") : onMinimize()),
       " ": togglePlay,
