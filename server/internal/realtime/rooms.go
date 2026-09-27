@@ -84,18 +84,27 @@ func (r *Rooms) Join(room string, channelID int64, earliest float64) RoomState {
 			mode = "group"
 		}
 		media := liveAnchor(now, "balanced")
+		anchorServer := unixMS(now)
 		if earliest > media {
+			// A fresh tune: start on the first frame, a moment later, so the
+			// player has a little buffer before Settle eases it back further.
 			media = earliest
+			anchorServer += float64(startCushion / time.Millisecond)
 		}
 		st = &RoomState{
 			Room: room, ChannelID: channelID, Mode: mode, Latency: "balanced", Rate: 1,
-			AnchorServer: unixMS(now), AnchorMedia: media, Version: 1,
+			AnchorServer: anchorServer, AnchorMedia: media, Version: 1,
 		}
 		r.rooms[room] = st
 	}
 	st.Members++
 	return *st
 }
+
+// startCushion is how long a fresh tune waits on its first frame. Playing
+// right at the edge left under a second buffered and stalled a few times in
+// the first minute while the room eased back.
+const startCushion = 1500 * time.Millisecond
 
 // settleRate is how fast a follow room plays while it eases back to its
 // latency target. Players follow a room by trimming their own rate by up to
