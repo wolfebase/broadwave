@@ -460,6 +460,7 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 		}
 	}
 	if pullErr != nil {
+		_ = s.Store.SetGuideError(ctx, pullErr.Error(), time.Now())
 		if len(rows) == 0 {
 			return 0, pullErr
 		}

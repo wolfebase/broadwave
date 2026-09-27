@@ -111,6 +111,12 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 			guideInfo["nextRefresh"] = next
 		}
 	}
+	if msg, at, err := s.Store.GuideError(ctx); err == nil && msg != "" {
+		guideInfo["lastError"] = scrubBody(msg, s.hiddenSecrets(ctx))
+		if !at.IsZero() {
+			guideInfo["lastErrorAt"] = at
+		}
+	}
 	out["guide"] = guideInfo
 	if s.Bus != nil {
 		out["connectedApps"] = s.Bus.Clients()
@@ -162,9 +168,21 @@ func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {
 	return doctor.Notes(doctor.Facts{
 		IPs: ips, TunerStored: stored, HostHasGPU: hostGPU(), DevDri: driPresent(),
 		RecordingsPath: path, Mounts: string(mounts), FreeBytes: free,
-		Timezone: os.Getenv("TZ"), Now: s.now(), UID: os.Getuid(),
+		Timezone: localZone(os.Getenv("TZ"), time.Local), Now: s.now(), UID: os.Getuid(),
 		PUID: os.Getenv("PUID"), PGID: os.Getenv("PGID"), TunerQuiet: quiet,
 	})
+}
+
+// localZone is TZ, or the zone the host clock is set to. A host with neither
+// (a container without zone files) runs on bare UTC, so it reads as unset.
+func localZone(tz string, local *time.Location) string {
+	if tz = strings.TrimSpace(tz); tz != "" {
+		return tz
+	}
+	if name, _ := time.Now().In(local).Zone(); name != "UTC" {
+		return name
+	}
+	return ""
 }
 
 // tunerWentQuiet is a tuner that has not answered in three minutes.
