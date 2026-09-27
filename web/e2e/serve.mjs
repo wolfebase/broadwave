@@ -1,5 +1,5 @@
 // Fake HDHomeRun on 127.0.0.1 plus a staging Broadwave. No LAN discovery.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createWriteStream, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -50,22 +50,58 @@ process.on("SIGINT", () => {
   process.exit(0);
 });
 
-const sample = path.join(run, "sample.ts");
-const encoded = spawn("ffmpeg", [
+const avsync = process.env.E2E_AVSYNC === "1";
+const sample = path.join(run, avsync ? "sync5.ts" : "sample.ts");
+
+function runFfmpeg(args) {
+  return new Promise((resolve) => {
+    const child = spawn("ffmpeg", args, { stdio: ["ignore", "pipe", "pipe"] });
+    let err = "";
+    child.stdout?.on("data", (chunk) => noteLog(chunk));
+    child.stderr?.on("data", (chunk) => {
+      noteLog(chunk);
+      err = (err + chunk.toString()).slice(-2000);
+    });
+    child.on("exit", (code) => resolve({ code, err }));
+  });
+}
+
+// A 5s flash and beep, with the picture held back 1.3s. A 1s period would fold
+// a whole-second lip-sync error back to zero, and a pattern that starts together
+// hides a sound lead. The flash is moved earlier by that lead so the two meet.
+const pattern = avsync
+  ? [
+      "-itsoffset",
+      "1.3",
+      "-f",
+      "lavfi",
+      "-i",
+      "testsrc2=s=1280x720:r=60000/1001,drawbox=x=0:y=0:w=iw:h=ih:color=white:t=fill:enable='lt(mod(t+1.3\\,5)\\,0.05)'",
+      "-f",
+      "lavfi",
+      "-i",
+      "sine=f=1000:sample_rate=48000,volume=0:enable='gte(mod(t\\,5)\\,0.08)'",
+      "-t",
+      "150",
+    ]
+  : [
+      "-f",
+      "lavfi",
+      "-i",
+      "testsrc2=size=1280x720:rate=60000/1001",
+      "-f",
+      "lavfi",
+      "-i",
+      "sine=frequency=500",
+      "-t",
+      "4",
+    ];
+const encoded = await runFfmpeg([
   "-hide_banner",
   "-loglevel",
   "error",
   "-y",
-  "-f",
-  "lavfi",
-  "-i",
-  "testsrc2=size=1280x720:rate=60000/1001",
-  "-f",
-  "lavfi",
-  "-i",
-  "sine=frequency=500",
-  "-t",
-  "4",
+  ...pattern,
   "-c:v",
   "libx264",
   "-preset",
@@ -76,20 +112,40 @@ const encoded = spawn("ffmpeg", [
   "yuv420p",
   "-c:a",
   "ac3",
+  "-ac",
+  "2",
   "-f",
   "mpegts",
   sample,
-], { stdio: ["ignore", "pipe", "pipe"] });
-encoded.stdout?.pipe(log);
-encoded.stderr?.pipe(log);
-const encodedCode = await new Promise((resolve) => encoded.on("exit", resolve));
-if (encodedCode !== 0) {
-  console.error("ffmpeg did not write the sample");
+]);
+if (encoded.code !== 0) {
+  console.error(encoded.err || "ffmpeg did not write the sample");
   process.exit(1);
+}
+if (avsync) {
+  const probed = spawnSync(
+    "ffprobe",
+    ["-v", "error", "-show_entries", "stream=codec_type,start_time", "-of", "csv=p=0", sample],
+    { encoding: "utf8" },
+  );
+  const began = {};
+  for (const line of (probed.stdout || "").split("\n")) {
+    const parts = line.trim().split(",").filter(Boolean);
+    const kind = parts.find((part) => part === "video" || part === "audio");
+    const at = parts.map(Number).find((value) => Number.isFinite(value));
+    if (kind && at != null && began[kind] == null) began[kind] = at;
+  }
+  const lead = began.video - began.audio;
+  if (!(lead > 1.15 && lead < 1.5)) {
+    console.error(`sync pattern lead is ${lead}s, wanted about 1.3\n${probed.stdout}`);
+    process.exit(1);
+  }
+  console.log(`sync pattern lead ${lead.toFixed(3)}s`);
 }
 
 let fakeOut = "";
-const fake = start(path.join(run, "fakehdhr"), ["-realtime", "-ts", sample], { env: { ...process.env, FAKEHDHR_ADMIN: `127.0.0.1:${port + 10}` } }, (chunk) => {
+const fakeArgs = avsync ? ["-ts", sample, "-source", sample] : ["-realtime", "-ts", sample];
+const fake = start(path.join(run, "fakehdhr"), fakeArgs, { env: { ...process.env, FAKEHDHR_ADMIN: `127.0.0.1:${port + 10}` } }, (chunk) => {
   fakeOut += chunk.toString();
 });
 for (let i = 0; i < 50 && !fakeOut.includes("CONTROL_PORT="); i++) await sleep(100);
@@ -117,10 +173,12 @@ const serverEnv = {
   BROADWAVE_E2E: "1",
   HDHR_CONTROL_PORT: control,
 };
-let server = start(path.join(run, "broadwave"), serverArgs, { env: serverEnv });
+// E2E_BROADWAVE runs this same harness against another binary.
+const serverBin = process.env.E2E_BROADWAVE || path.join(run, "broadwave");
+let server = start(serverBin, serverArgs, { env: serverEnv });
 
 function launchServer() {
-  server = start(path.join(run, "broadwave"), serverArgs, { env: serverEnv });
+  server = start(serverBin, serverArgs, { env: serverEnv });
   return server;
 }
 
