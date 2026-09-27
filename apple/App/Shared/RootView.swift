@@ -121,6 +121,7 @@ struct RootView: View {
                 // Setup replaces the tabs, and the player with them, so a launch
                 // straight into a channel skips it.
                 let watching = UserDefaults.standard.integer(forKey: "BroadwaveWatch") > 0
+                    || !(UserDefaults.standard.string(forKey: "BroadwaveMultiview") ?? "").isEmpty
                 if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") || sidebarPageTest != nil || watching {
                     return
                 }

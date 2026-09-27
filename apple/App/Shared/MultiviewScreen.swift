@@ -252,6 +252,9 @@ final class TilePlayer {
     /// True only after this tile's own item has been told to play. Unmuting the
     /// previous item is not sound yet.
     private(set) var canHear = false
+    /// False until the picture has moved 0.3 s: a new room holds its first frame.
+    private(set) var moving = false
+    private var movingFrom: Double?
     private(set) var needsConfirm = false
     private(set) var attempt = 0
     private var confirmNext = false
@@ -393,7 +396,26 @@ final class TilePlayer {
         }
     }
 
+    private func noteMoving() {
+        guard !moving else { return }
+        let now = player.currentTime().seconds
+        guard player.timeControlStatus == .playing, now.isFinite else {
+            movingFrom = nil
+            return
+        }
+        guard let from = movingFrom else {
+            movingFrom = now
+            return
+        }
+        if now - from >= 0.3 {
+            moving = true
+            print("broadwave tile \(channelID ?? 0) moving")
+            fflush(stdout)
+        }
+    }
+
     private func sampleOutage() {
+        noteMoving()
         let item = player.currentItem
         outage.note(
             time: item?.currentTime().seconds,
@@ -457,6 +479,8 @@ final class TilePlayer {
         channelID = nil
         session = nil
         canHear = false
+        moving = false
+        movingFrom = nil
         if let api, let id, let ended {
             await api.stopWatching(channelID: id, rendition: ended.rendition)
         }
@@ -1117,6 +1141,15 @@ struct MultiviewTile: View {
     let bind: (@escaping (String) -> Void) -> Void
     let onSound: () -> Void
     @State private var live = TilePlayer()
+    private var tuning: Bool {
+        #if DEBUG
+            if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") || UserDefaults.standard.bool(forKey: "BroadwaveChrome") {
+                return false
+            }
+        #endif
+        return live.error == nil && !live.moving
+    }
+
     private var tileStats: Bool {
         UserDefaults.standard.bool(forKey: "BroadwaveTileStats")
     }
@@ -1127,6 +1160,12 @@ struct MultiviewTile: View {
                 PlayerLayerBox(player: live.player, pip: pip, readyFlag: live.frameOnScreen)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(.black)
+                if tuning {
+                    // A new room holds its first frame for the start; that is not a picture yet.
+                    Color.black
+                        .overlay { ProgressView() }
+                        .accessibilityHidden(true)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 8) {
                         Text(channel.displayNumber).font(.caption.weight(.bold))
