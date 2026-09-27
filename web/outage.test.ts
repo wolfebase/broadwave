@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { aTunerAnswers, aTunerIsFree, classifySnap, connectionDropped, holdPictureMessage, noSignal, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, serverStopped, tunerStopped, viewerFailure } from "./src/features/player/outage.ts";
+import { aTunerAnswers, aTunerIsFree, classifySnap, connectionDropped, holdPictureMessage, noSignal, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, serverStopped, tunerStopped, viewerFailure } from "./src/features/player/outage.ts";
 
 test("a busy tuner tells the viewer what to stop, and comes back when one is free", () => {
   const failed = Object.assign(new Error("Every tuner is busy. Stop a recording or watch something already on."), {
@@ -93,4 +93,14 @@ test("a stopped picture with no named cause tries again every 10s for 2 min", ()
   assert.equal(holdPictureMessage({ message: noSignal, recovery: "signal" }), false);
   assert.equal(holdPictureMessage({ message: serverStopped, recovery: "server" }), false);
   assert.equal(holdPictureMessage({ message: "Every tuner is busy.", recovery: "busy" }), false);
+});
+
+test("a playlist the server no longer has starts again at once, ahead of tuner and signal", () => {
+  const snap = { health: true, freeTuner: false, tunerAnswers: false, online: true, signalLost: true, watchGone: true };
+  assert.deepEqual(classifySnap(snap), { message: pictureRestarting, recovery: "restart" });
+  assert.equal(recoveryReady("restart", snap), true);
+  assert.equal(recoveryReady("restart", { ...snap, health: false }), false);
+  assert.equal(classifySnap({ ...snap, health: false }).recovery, "server");
+  assert.equal(classifySnap({ ...snap, watchGone: false }).recovery, "tuner");
+  assert.equal(pictureRetryDelay(pictureRestarting, "restart", 0), null);
 });

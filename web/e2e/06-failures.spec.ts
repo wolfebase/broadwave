@@ -151,6 +151,40 @@ test("the server can restart mid-play and the picture comes back", async ({ page
   }
 });
 
+test("a server restart under a playing picture starts it again with no click", async ({ page }) => {
+  const { control } = harness();
+  const wdaf = channel("WDAF");
+  try {
+    await openChannel(page, wdaf.id);
+    await expectPlaying(page);
+    await mark(page);
+    let watchedAt = 0;
+    page.on("request", (req) => {
+      if (req.method() === "POST" && new URL(req.url()).pathname === "/api/v1/watch" && !watchedAt) watchedAt = Date.now();
+    });
+    // /start stops the process and launches it again: every watch it had is gone.
+    await post(`${control}/start`);
+    const back = Date.now();
+    await expect.poll(() => watchedAt, { timeout: 30_000, message: "a new watch starts with no click" }).toBeGreaterThan(0);
+    await expect
+      .poll(
+        () =>
+          page.locator("video.stage-video").evaluate((video: HTMLVideoElement) => {
+            const at = video.currentTime;
+            return new Promise<boolean>((done) => setTimeout(() => done(!video.paused && video.currentTime > at + 0.5), 1000));
+          }),
+        { timeout: 30_000, intervals: [500] },
+      )
+      .toBe(true);
+    console.log(`restart: new watch ${watchedAt - back} ms and picture moving ${Date.now() - back} ms after the server answered`);
+    await shot(page, "j043-web-restart.jpg");
+    await expect(page.locator("html")).toHaveAttribute("data-lane", "stay");
+    await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
+  } finally {
+    await post(`${control}/start`).catch(() => undefined);
+  }
+});
+
 test("a tuner that stops answering can be watched again", async ({ page }) => {
   const { admin } = harness();
   const wdaf = channel("WDAF");

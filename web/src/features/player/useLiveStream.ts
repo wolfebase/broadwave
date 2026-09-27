@@ -12,6 +12,7 @@ import {
   classifySnap,
   holdPictureMessage,
   pictureRetryDelay,
+  pictureRetryEveryMs,
   pictureStopped,
   recoveryReady,
   viewerFailure,
@@ -64,7 +65,7 @@ export function useLiveStream(
   const [recovery, setRecovery] = useState<Recovery>("");
   const [pictureStopAt, setPictureStopAt] = useState(0);
   const pictureStopAtRef = useRef(0);
-  const quietRetry = useRef(false);
+  const quietRetry = useRef<number | null>(null);
   const [needsConfirm, setNeedsConfirm] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const confirmLive = useRef(false);
@@ -77,9 +78,9 @@ export function useLiveStream(
 
   useEffect(() => {
     // A channel change, a viewer retry, or leaving this watch ends the quiet
-    // clock. The retry below sets the flag before bumping attempt, and this
-    // effect is the only one that reads it.
-    const quiet = quietRetry.current;
+    // clock. An automatic retry names its channel before bumping attempt; the
+    // name stays until that watch answers, so a rerun of this effect keeps it.
+    const quiet = quietRetry.current != null && quietRetry.current === channelId;
     if (!quiet && pictureStopAtRef.current) {
       pictureStopAtRef.current = 0;
       setPictureStopAt(0);
@@ -162,6 +163,7 @@ export function useLiveStream(
     let recovered = false;
     let heldFatal = false;
     let quietTimer = 0;
+    let playlist = "";
     const rememberOutage = (message: string, kind: Recovery) => {
       setNeedsConfirm(false);
       setError(message);
@@ -181,7 +183,7 @@ export function useLiveStream(
     const noteOutage = async (fatal: boolean) => {
       if (dead || surfaced || resumeQuiet) return;
       const gen = outageGen;
-      const mapped = await classifyPlayback(id);
+      const mapped = await classifyPlayback(id, playlist);
       if (dead || surfaced || resumeQuiet || gen !== outageGen) return;
       if (!fatal && !mapped.recovery) return;
       surfaced = true;
@@ -203,9 +205,15 @@ export function useLiveStream(
           release();
           return;
         }
-        quietRetry.current = false;
-        // A quiet retry keeps the message up until the new picture moves.
-        if (!quiet) {
+        quietRetry.current = null;
+        // A quiet retry keeps the message up until the new picture moves, and
+        // keeps the clock running in case it never does.
+        if (quiet) {
+          if (!pictureStopAtRef.current) {
+            pictureStopAtRef.current = performance.now();
+            setPictureStopAt(pictureStopAtRef.current);
+          }
+        } else {
           if (pictureStopAtRef.current) {
             pictureStopAtRef.current = 0;
             setPictureStopAt(0);
@@ -214,6 +222,7 @@ export function useLiveStream(
           setRecovery("");
         }
         setSession(next);
+        playlist = next.playlist;
         if (Hls.isSupported()) {
           hls = new Hls(liveHlsConfig(profile));
           hlsRef.current = hls;
@@ -248,7 +257,7 @@ export function useLiveStream(
         });
       } catch (err) {
         if (dead) return;
-        quietRetry.current = false;
+        quietRetry.current = null;
         const failed = err as ApiFailure;
         if (failed.status === 409 && failed.code === "recording_soon") {
           if (pictureStopAtRef.current) {
@@ -261,7 +270,10 @@ export function useLiveStream(
           return;
         }
         const mapped = viewerFailure(err);
-        if (quiet && holdPictureMessage(mapped)) return;
+        if (quiet && holdPictureMessage(mapped)) {
+          rememberOutage(pictureStopped, "");
+          return;
+        }
         rememberOutage(mapped.message, mapped.recovery);
       } finally {
         if (!dead) retrying.current = false;
@@ -426,6 +438,7 @@ export function useLiveStream(
         if (key === seen.key) return;
         seen.key = key;
         retrying.current = true;
+        if (recovery === "restart") quietRetry.current = channelId;
         setAttempt((n) => n + 1);
       } finally {
         ticking = false;
@@ -447,14 +460,18 @@ export function useLiveStream(
     if (!started || started !== pictureStopAt) return;
     let dead = false;
     let timer = 0;
+    let fired = 0;
     const arm = () => {
       if (dead || pictureStopAtRef.current !== started) return;
-      const wait = pictureRetryDelay(pictureStopped, "", performance.now() - started);
+      // A timer can fire a hair early; counting fires keeps it from firing twice.
+      const elapsed = Math.max(performance.now() - started, fired * pictureRetryEveryMs);
+      const wait = pictureRetryDelay(pictureStopped, "", elapsed);
       if (wait == null) return;
       timer = window.setTimeout(() => {
         if (dead || pictureStopAtRef.current !== started) return;
+        fired += 1;
         if (!retrying.current) {
-          quietRetry.current = true;
+          quietRetry.current = channelId;
           setAttempt((n) => n + 1);
         }
         arm();
@@ -484,7 +501,10 @@ export function useLiveStream(
       setNeedsConfirm(false);
       setAttempt((n) => n + 1);
     },
-    retry: () => setAttempt((n) => n + 1),
+    retry: () => {
+      quietRetry.current = null;
+      setAttempt((n) => n + 1);
+    },
     syncStatus,
     command: (action: "play" | "pause" | "seek" | "live", mediaTime?: number) => syncRef.current?.command(action, mediaTime),
     mediaNow: () => syncRef.current?.mediaNow() ?? null,
@@ -493,8 +513,16 @@ export function useLiveStream(
 
 const stuckMs = 8000;
 
-async function classifyPlayback(channelId: number): Promise<{ message: string; recovery: Recovery }> {
-  return classifySnap(await readRecoverySnap(channelId, false));
+async function classifyPlayback(channelId: number, playlist: string): Promise<{ message: string; recovery: Recovery }> {
+  const snap = await readRecoverySnap(channelId, false);
+  if (snap.health && playlist) {
+    try {
+      snap.watchGone = (await fetch(playlist, { cache: "no-store" })).status === 404;
+    } catch {
+      snap.watchGone = false;
+    }
+  }
+  return classifySnap(snap);
 }
 
 async function readRecoverySnap(channelId: number, assumeLost: boolean): Promise<RecoverySnap> {
