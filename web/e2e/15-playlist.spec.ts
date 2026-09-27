@@ -170,3 +170,24 @@ test("leaving the player stops a quiet retry", async ({ page }) => {
     await post(`${origin}/start`).catch(() => undefined);
   }
 });
+
+test("a playlist channel opened while its stream is down starts once it sends", async ({ page }) => {
+  const { origin } = harness();
+  const news = channel();
+  try {
+    await post(`${origin}/stop`);
+    await openChannel(page, news.id);
+    await expect(notice(page, picture)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/stream returned/i)).toHaveCount(0);
+    await page.screenshot({ path: path.join(evidence, "down-at-open.jpg"), animations: "disabled" });
+    await post(`${origin}/start`);
+    const back = Date.now();
+    await expect
+      .poll(() => moving(page), { timeout: 20_000, intervals: [400], message: "the picture starts with no click" })
+      .toBe(true);
+    console.log(`down at open: picture moving ${Date.now() - back} ms after the stream returned`);
+    await expect(notice(page, picture)).toHaveCount(0);
+  } finally {
+    await post(`${origin}/start`).catch(() => undefined);
+  }
+});

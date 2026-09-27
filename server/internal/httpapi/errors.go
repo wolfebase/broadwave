@@ -46,6 +46,8 @@ func writeError(w http.ResponseWriter, err error) {
 		apiError(w, http.StatusInsufficientStorage, "disk_low", blocked.Error(), nil)
 	case errors.Is(err, live.ErrNoSignal):
 		apiError(w, http.StatusServiceUnavailable, "no_signal", live.ErrNoSignal.Error(), nil)
+	case errors.Is(err, live.ErrStreamDown):
+		apiError(w, http.StatusServiceUnavailable, "stream_down", live.ErrStreamDown.Error(), nil)
 	case errors.Is(err, sql.ErrNoRows):
 		apiError(w, http.StatusNotFound, "not_found", "Not found.", nil)
 	default:

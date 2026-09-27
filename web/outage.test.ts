@@ -104,3 +104,10 @@ test("a playlist the server no longer has starts again at once, ahead of tuner a
   assert.equal(classifySnap({ ...snap, watchGone: false }).recovery, "tuner");
   assert.equal(pictureRetryDelay(pictureRestarting, "restart", 0), null);
 });
+
+test("a source that stopped sending goes on the quiet clock", () => {
+  const failed = Object.assign(new Error("This channel's stream isn't answering. Trying again usually fixes it."), { status: 503, code: "stream_down" });
+  const mapped = viewerFailure(failed);
+  assert.deepEqual(mapped, { message: pictureStopped, recovery: "" });
+  assert.notEqual(pictureRetryDelay(mapped.message, mapped.recovery, 0), null);
+});

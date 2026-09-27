@@ -12,6 +12,10 @@ import (
 // ErrNoSignal is a tune the tuner could not lock. The words are the player's.
 var ErrNoSignal = errors.New("This channel isn't coming in. Check the antenna.")
 
+// ErrStreamDown is a source that answered the stream request with an error or
+// not at all, such as a playlist whose upstream stopped. The words are the player's.
+var ErrStreamDown = errors.New("This channel's stream isn't answering. Trying again usually fixes it.")
+
 var errNoLock = errors.New("no lock")
 
 // NoSignal is true when this channel's tuner has sent nothing and reports no

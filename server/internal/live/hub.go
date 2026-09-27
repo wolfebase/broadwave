@@ -2438,11 +2438,12 @@ func openStream(u, userAgent, referrer string) (*http.Response, error) {
 	}
 	res, err := (&http.Client{Timeout: 0}).Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w (%v)", ErrStreamDown, err)
 	}
 	if res.StatusCode != http.StatusOK {
 		res.Body.Close()
-		return nil, fmt.Errorf("stream returned %s %s", res.Status, res.Header.Get("X-HDHomeRun-Error"))
+		// The tuner path reads the HDHomeRun error code (805: all tuners busy) from this text.
+		return nil, fmt.Errorf("%w (stream returned %s %s)", ErrStreamDown, res.Status, res.Header.Get("X-HDHomeRun-Error"))
 	}
 	return res, nil
 }
