@@ -763,18 +763,75 @@ func (s *Store) SetStreamFormat(ctx context.Context, id int64, format string) er
 	return err
 }
 
+// ReplaceAiringsFor swaps the listings of these channels for rows. Listings
+// read from the broadcast stay where rows leave a gap, since they fill slots a
+// guide feed does not cover.
 func (s *Store) ReplaceAiringsFor(ctx context.Context, channelIDs []int64, rows []Airing) error {
+	rows = uniqueAirings(rows)
+	type span struct{ from, to time.Time }
+	spans := map[int64]span{}
+	for _, row := range rows {
+		sp, ok := spans[row.ChannelID]
+		if !ok || row.Start.Before(sp.from) {
+			sp.from = row.Start
+		}
+		if !ok || row.End.After(sp.to) {
+			sp.to = row.End
+		}
+		spans[row.ChannelID] = sp
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	for _, id := range channelIDs {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM airings WHERE channel_id = ? AND guide_source <> 'broadcast'`, id); err != nil {
+			return err
+		}
+		sp, ok := spans[id]
+		if !ok {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM airings WHERE channel_id = ? AND guide_source = 'broadcast' AND starts_at < ? AND ends_at > ?`,
+			id, sp.to.UTC().Format(time.RFC3339), sp.from.UTC().Format(time.RFC3339)); err != nil {
+			return err
+		}
+	}
 	for _, row := range rows {
 		if err := insertAiring(ctx, tx, row); err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
+}
+
+// uniqueAirings keeps one row per channel and start, the one with the most detail.
+func uniqueAirings(rows []Airing) []Airing {
+	at := map[[2]int64]int{}
+	out := make([]Airing, 0, len(rows))
+	for _, row := range rows {
+		key := [2]int64{row.ChannelID, row.Start.Unix()}
+		if i, ok := at[key]; ok {
+			if airingDetail(row) > airingDetail(out[i]) {
+				out[i] = row
+			}
+			continue
+		}
+		at[key] = len(out)
+		out = append(out, row)
+	}
+	return out
+}
+
+func airingDetail(row Airing) int {
+	n := 0
+	for _, v := range []string{row.Subtitle, row.Description, row.ImageURL, row.SeriesID, row.ProgramID, row.EpisodeLabel} {
+		if v != "" {
+			n++
+		}
+	}
+	return n
 }
 
 // InsertAirings adds listings without removing what is already there.
