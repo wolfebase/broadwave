@@ -106,7 +106,8 @@
   margin: 0 auto;
 }
 
-.guide-scroll:focus-visible {
+.guide-scroll:focus-visible,
+.guide-canvas:focus-visible {
   outline: none;
 }
 
@@ -322,13 +323,13 @@
   background: var(--color-surface3);
 }
 
-.guide-scroll:focus .guide-cell.focused {
+.guide-canvas:focus .guide-cell.focused {
   outline: 2px solid var(--color-text);
   outline-offset: -2px;
   z-index: 2;
 }
 
-.layout-tv .guide-scroll:focus .guide-cell.focused {
+.layout-tv .guide-canvas:focus .guide-cell.focused {
   transform: scale(1.03);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
 }

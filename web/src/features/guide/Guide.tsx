@@ -271,6 +271,7 @@ export function Guide() {
   if (layout === "phone" && !landscape) {
     return (
       <div className="guide-page phone">
+        <h1 className="sr-only">Guide</h1>
         <GuideControls
           filter={filter}
           setFilter={setFilter}
@@ -333,15 +334,18 @@ export function Guide() {
       <div
         ref={scrollRef}
         className="guide-scroll"
-        role="grid"
-        aria-label="TV guide"
-        aria-rowcount={rows.length}
-        tabIndex={0}
         onKeyDown={onKey}
         style={{ ["--row" as string]: `${rowH}px`, ["--channel" as string]: `${channelW}px`, ["--head" as string]: `${headH}px` }}
       >
-        <div className="guide-canvas" style={{ width: channelW + width, height: headH + rows.length * rowH }}>
-          <div className="guide-times glass-flat" style={{ width: channelW + width }}>
+        <div
+          className="guide-canvas"
+          role="grid"
+          aria-label="TV guide"
+          aria-rowcount={rows.length}
+          tabIndex={0}
+          style={{ width: channelW + width, height: headH + rows.length * rowH }}
+        >
+          <div className="guide-times glass-flat" aria-hidden="true" style={{ width: channelW + width }}>
             <div className="guide-corner">{new Date(Math.max(leftT, origin)).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}</div>
             {slots.map((t) => (
               <div key={t} className="guide-slot" style={{ left: channelW + ((t - origin) / MIN) * pxPerMin, width: 30 * pxPerMin }}>
