@@ -123,8 +123,11 @@ type Easing struct {
 // room keeps its current frame and plays at settleRate until it is on target;
 // EndEase then puts it back to 1x. Jumping the target instead held every
 // screen on a frozen picture for the whole gap. A fresh tune, a room already
-// on its target or easing, a paused room, and a group room stay put. Each
-// changed state is returned so members can be told; a second call is empty.
+// on its target or easing, a paused room, and a group room stay put. So does
+// a room with one screen: Chrome drops 4-10% of frames at any rate but 1x
+// while sound plays, and one screen has nobody to line up with. A second
+// screen starts the ease on the next segment. Each changed state is returned
+// so members can be told; a second call is empty.
 func (r *Rooms) Settle(channelID int64, earliest float64) []Easing {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -133,7 +136,7 @@ func (r *Rooms) Settle(channelID int64, earliest float64) []Easing {
 	}
 	var changed []Easing
 	for _, st := range r.rooms {
-		if st.ChannelID != channelID || st.Mode != "follow" || st.Rate != 1 {
+		if st.ChannelID != channelID || st.Mode != "follow" || st.Rate != 1 || st.Members < 2 {
 			continue
 		}
 		now := r.now()
