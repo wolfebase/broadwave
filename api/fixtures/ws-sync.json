@@ -1,10 +1,10 @@
 {
   "data": {
-    "anchorMedia": 1790261987000,
+    "anchorMedia": 1790261984000,
     "anchorServer": 1790262000000,
     "channelId": 1,
     "latency": "balanced",
-    "latencyMs": 13000,
+    "latencyMs": 16000,
     "members": 1,
     "mode": "follow",
     "rate": 1,
