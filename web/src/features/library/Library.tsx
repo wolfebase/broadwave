@@ -9,6 +9,7 @@ export function Library({
   onVirtual,
   onDelete,
   onWatched,
+  onStop,
 }: {
   recordings: Recording[];
   note: string;
@@ -16,6 +17,7 @@ export function Library({
   onVirtual: (recording: Recording) => void;
   onDelete: (recording: Recording) => void;
   onWatched: (recording: Recording, watched: boolean) => void;
+  onStop: (recording: Recording) => void;
 }) {
   const [armed, setArmed] = useState<number | null>(null);
   const [libraryFilter, setLibraryFilter] = useState<"all" | "unwatched">("all");
@@ -46,7 +48,7 @@ export function Library({
               <h3 className="show-title">{title}</h3>
               <ul className="source-list">
                 {items.map((rec) => (
-                  <LibraryRow key={rec.id} rec={rec} armed={armed} setArmed={setArmed} onPlay={onPlay} onVirtual={onVirtual} onDelete={onDelete} onWatched={onWatched} />
+                  <LibraryRow key={rec.id} rec={rec} armed={armed} setArmed={setArmed} onPlay={onPlay} onVirtual={onVirtual} onDelete={onDelete} onWatched={onWatched} onStop={onStop} />
                 ))}
               </ul>
             </section>
@@ -56,7 +58,7 @@ export function Library({
               <h3 className="show-title">Movies</h3>
               <ul className="source-list">
                 {grouped.movies.map((rec) => (
-                  <LibraryRow key={rec.id} rec={rec} armed={armed} setArmed={setArmed} onPlay={onPlay} onVirtual={onVirtual} onDelete={onDelete} onWatched={onWatched} />
+                  <LibraryRow key={rec.id} rec={rec} armed={armed} setArmed={setArmed} onPlay={onPlay} onVirtual={onVirtual} onDelete={onDelete} onWatched={onWatched} onStop={onStop} />
                 ))}
               </ul>
             </section>
@@ -75,6 +77,7 @@ function LibraryRow({
   onVirtual,
   onDelete,
   onWatched,
+  onStop,
 }: {
   rec: Recording;
   armed: number | null;
@@ -83,6 +86,7 @@ function LibraryRow({
   onVirtual: (recording: Recording) => void;
   onDelete: (recording: Recording) => void;
   onWatched: (recording: Recording, watched: boolean) => void;
+  onStop: (recording: Recording) => void;
 }) {
   const seen = watched(rec);
   return (
@@ -107,8 +111,7 @@ function LibraryRow({
         <strong>{rec.subtitle || rec.title}</strong>
         <span className="ch-tags">
           {rec.guideNumber}
-          {" · "}
-          {rec.status === "recording" ? "Recording" : rec.status}
+          {statusLabel(rec.status) ? ` · ${statusLabel(rec.status)}` : ""}
           {" · "}
           {formatBytes(rec.bytes ?? 0)}
           {rec.durationSec ? ` · ${formatClockPoint(rec.durationSec)}` : ""}
@@ -121,6 +124,7 @@ function LibraryRow({
       {rec.status !== "recording" ? <button type="button" className="btn" onClick={() => onWatched(rec, !seen)}>{seen ? "Mark unwatched" : "Mark watched"}</button> : null}
       {rec.status !== "recording" ? <button type="button" className="btn" onClick={() => onVirtual(rec)}>Make channel</button> : null}
       <a className="btn" href={`/api/v1/recordings/${rec.id}/file`}>Download</a>
+      {rec.status === "recording" ? <button type="button" className="btn" onClick={() => onStop(rec)}>Stop recording</button> : null}
       {rec.status === "recording" ? null : armed === rec.id ? (
         <button type="button" className="btn primary" onClick={() => onDelete(rec)}>Delete this file</button>
       ) : (
@@ -130,6 +134,22 @@ function LibraryRow({
       </div>
     </li>
   );
+}
+
+/** Nothing for a finished recording; the others say what happened. */
+function statusLabel(status: Recording["status"]) {
+  switch (status) {
+    case "recording":
+      return "Recording";
+    case "failed":
+      return "Failed";
+    case "stopped":
+      return "Stopped early";
+    case "imported":
+      return "Imported";
+    default:
+      return "";
+  }
 }
 
 function groupLibrary(recordings: Recording[]) {

@@ -1,5 +1,5 @@
 import Hls from "hls.js";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
 import { Stage } from "../player/Stage";
@@ -177,7 +177,37 @@ export function Play({
     await saveProgress(recording.id, 0);
   }
 
+  function togglePlay() {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) void video.play().catch(() => undefined);
+    else video.pause();
+  }
+
+  function back(seconds: number) {
+    const video = videoRef.current;
+    if (video) video.currentTime = Math.max(0, video.currentTime - seconds);
+  }
+
+  function onKey(event: KeyboardEvent) {
+    if (event.key === " " && event.target instanceof HTMLButtonElement) return;
+    const actions: Record<string, () => void> = {
+      " ": togglePlay,
+      k: togglePlay,
+      ArrowLeft: () => back(15),
+      ArrowRight: ahead,
+      Escape: onBack,
+    };
+    const fn = actions[event.key];
+    if (!fn) return;
+    event.preventDefault();
+    fn();
+  }
+
   const inside = markers.find((marker) => where >= marker.start && where < marker.end);
+  // A finished recording plays from a playlist that grows while it transcodes,
+  // so the player's own duration starts at a few seconds.
+  const total = growing ? length : Math.max(length, recording.durationSec || 0);
 
   return (
     <Stage
@@ -188,19 +218,18 @@ export function Play({
       onBack={onBack}
       backLabel="Library"
       position={where}
-      duration={length || recording.durationSec || 0}
+      duration={total}
+      onKeyDown={onKey}
       onSeek={(value) => {
         const video = videoRef.current;
         if (!video) return;
-        video.currentTime = value;
+        const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : value;
+        video.currentTime = Math.min(value, end);
       }}
       markers={markers}
       onJump={(delta) => {
         if (delta > 0) ahead();
-        else {
-          const video = videoRef.current;
-          if (video) video.currentTime = Math.max(0, video.currentTime + delta);
-        }
+        else back(-delta);
       }}
       error={error}
       tools={

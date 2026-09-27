@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createVirtual, deleteRecording, getServer, setWatched } from "../api";
+import { createVirtual, deleteRecording, getServer, setWatched, stopRecording } from "../api";
 import { useData } from "../app/data";
 import { gateFeature } from "../lib/compat";
 import { navigate, useRoute } from "../app/router";
@@ -28,6 +28,12 @@ export function RecordingsPage() {
         onDelete={(r) =>
           void deleteRecording(r.id).then(() => {
             setNote(`Deleted ${r.title}.`);
+            return refresh(["recordings"]);
+          })
+        }
+        onStop={(r) =>
+          void stopRecording(r.id).then(() => {
+            setNote(`Stopped ${r.title}. What it recorded is kept.`);
             return refresh(["recordings"]);
           })
         }
