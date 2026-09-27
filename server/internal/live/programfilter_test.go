@@ -562,3 +562,165 @@ func TestProgramFilterStartsAtASequenceHeader(t *testing.T) {
 		t.Fatal("first video packet is not the sequence header")
 	}
 }
+
+func ptsPES(stream byte, pts int64) []byte {
+	return []byte{0x00, 0x00, 0x01, stream, 0x00, 0x00, 0x80, 0x80, 0x05,
+		0x21 | byte(pts>>29)&0x0e, byte(pts >> 22), byte(pts>>14) | 1, byte(pts >> 7), byte(pts<<1) | 1}
+}
+
+// audioRun is one audio PES per step, each a start packet and one more.
+func audioRun(pid int, pts []int64) []byte {
+	var out []byte
+	cc := byte(1)
+	for _, t := range pts {
+		for _, pkt := range [][]byte{tsPacket(pid, true, ptsPES(0xc0, t)), tsPacket(pid, false, bytes.Repeat([]byte{0xaa}, 184))} {
+			pkt[3] = 0x10 | cc&0x0f
+			cc++
+			out = append(out, pkt...)
+		}
+	}
+	return out
+}
+
+func filterRun(t *testing.T, pts []int64) (kept []int64, ccs []byte) {
+	t.Helper()
+	head := twoProgramTS(1, 0x1000, 0x110, 0x111, 2, 0x1001, 0x210)
+	head = head[:len(head)-2*188]
+	var out bytes.Buffer
+	w := newProgramPipe(&closeBuf{&out}, 1)
+	body := audioRun(0x111, pts)
+	// The first audio packet in the header run has no timestamp.
+	if _, err := w.Write(append(append(head, body...), bytes.Repeat(tsPacket(0x1fff, false, nil), 2)...)); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data := out.Bytes()
+	for off := 0; off+188 <= len(data); off += 188 {
+		pkt := data[off : off+188]
+		// The header run's own audio packet has no timestamp and no counter to keep.
+		if int(pkt[1]&0x1f)<<8|int(pkt[2]) != 0x111 || pkt[3]&0x0f == 0 && len(ccs) == 0 {
+			continue
+		}
+		ccs = append(ccs, pkt[3]&0x0f)
+		if ts, ok := pesTime(tsPayload(pkt)); ok && pkt[1]&0x40 != 0 {
+			kept = append(kept, ts)
+		}
+	}
+	return kept, ccs
+}
+
+func TestProgramFilterDropsAFrameOffItsTimeline(t *testing.T) {
+	step := int64(2880)
+	base := int64(301_000_000)
+	var pts []int64
+	for i := range 10 {
+		pts = append(pts, base+int64(i)*step)
+	}
+	pts[5] = base + 9000*90000
+	kept, ccs := filterRun(t, pts)
+	for _, ts := range kept {
+		if ts == pts[5] {
+			t.Fatalf("a frame 9000 s off reached ffmpeg: %v", kept)
+		}
+	}
+	if len(kept) != 9 {
+		t.Fatalf("kept %d frames, want 9: %v", len(kept), kept)
+	}
+	// ffmpeg flags a counter gap as corruption and drops the next good frame too.
+	for i := 1; i < len(ccs); i++ {
+		if ccs[i] != (ccs[i-1]+1)&0x0f {
+			t.Fatalf("continuity gap at %d: %v", i, ccs)
+		}
+	}
+}
+
+func TestProgramFilterFollowsARealTimelineBreak(t *testing.T) {
+	step := int64(2880)
+	var pts []int64
+	for i := range 5 {
+		pts = append(pts, 100_000+int64(i)*step)
+	}
+	// A splice: the station's clock moves 100 s and stays there.
+	for i := range 6 {
+		pts = append(pts, 9_100_000+int64(i)*step)
+	}
+	kept, _ := filterRun(t, pts)
+	if len(kept) != 5+6-(pesAgree-1) {
+		t.Fatalf("kept %d frames: %v", len(kept), kept)
+	}
+	if kept[len(kept)-1] != pts[len(pts)-1] {
+		t.Fatalf("the new timeline was not followed: %v", kept)
+	}
+	// Across the 33-bit wrap is not a jump.
+	wrap := []int64{1<<33 - 2*step, 1<<33 - step, 0, step}
+	if kept, _ := filterRun(t, wrap); len(kept) != 4 {
+		t.Fatalf("wrap dropped frames: %v", kept)
+	}
+}
+
+// The copied track is where one bad header does lasting harm: with -copyts
+// ffmpeg clamps every later audio packet to the bad timestamp plus a tick.
+func TestOneBadTimestampDoesNotClampTheCopiedAudio(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "one.ts")
+	cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+		"-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30:duration=4",
+		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=4",
+		"-c:v", "mpeg2video", "-g", "15", "-b:v", "500k",
+		"-c:a", "ac3", "-b:a", "96k",
+		"-f", "mpegts", src)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Skipf("sample: %v %s", err, out)
+	}
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	program := onlyProgram(t, raw)
+	// Move the timestamp of one audio frame in the middle 9000 s ahead.
+	var starts []int
+	for off := 0; off+188 <= len(raw); off += 188 {
+		pkt := raw[off : off+188]
+		pay := tsPayload(pkt)
+		if pkt[1]&0x40 != 0 && len(pay) > 3 && pay[0] == 0 && pay[1] == 0 && pay[2] == 1 && pay[3] == 0xbd {
+			starts = append(starts, off)
+		}
+	}
+	if len(starts) < 10 {
+		t.Fatalf("only %d audio frames", len(starts))
+	}
+	pkt := raw[starts[len(starts)/2] : starts[len(starts)/2]+188]
+	pay := tsPayload(pkt)
+	ts, _ := pesTime(pay)
+	bad := ts + 9000*90000
+	copy(pay[9:14], ptsPES(0xbd, bad)[9:14])
+	var filtered bytes.Buffer
+	w := newProgramPipe(&closeBuf{&filtered}, program)
+	if _, err := w.Write(raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	copyRun := func(in []byte) string {
+		args := renditionArgs(program, Source{VideoCodec: "mpeg2video", AudioCodec: "AC3"}, Rendition{Video: "copy", Audio: "copy"}, "libx264", "", "pipe:0")
+		c := exec.Command(ffmpeg, args...)
+		c.Stdin = bytes.NewReader(in)
+		var errs bytes.Buffer
+		c.Stderr = &errs
+		_ = c.Run()
+		return errs.String()
+	}
+	if got := copyRun(raw); !strings.Contains(got, "Non-monotonic DTS") {
+		t.Fatalf("the unfiltered sample should show the clamp:\n%s", got)
+	}
+	if got := copyRun(filtered.Bytes()); strings.Contains(got, "Non-monotonic DTS") {
+		t.Fatalf("the filtered stream still clamps:\n%s", got)
+	}
+}
