@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.11.3 — 2026-09-27
+
+Several screens on one channel stay smooth and in step, on Apple TV and in the browser.
+
+### Fixed
+
+- With several screens or a multiview on one broadcast, a live encode could decode damaged data for as long as it ran, so every screen on it stuttered. Each encode now starts on a whole picture, recovers when it falls behind, and the server logs when a reader lags.
+- Apple TV playback hitched several times a second while it kept in step with other screens. It now changes speed rarely and by a fixed amount, and Apple TVs in a room lock together within seconds of joining.
+- Screens now share a delay of 13 seconds instead of 10, the closest Apple TV can reliably play to live.
+- On Apple TV the playback controls hide again, and the notice about a new device no longer covers the picture.
+- The guide no longer lists a show twice.
+- A playlist channel learns its real codecs from the stream and has a preview picture.
+- The web player says when live TV cannot keep going, and setup actions stay on screen on a TV.
+
 ## 0.11.2 — 2026-09-27
 
 Sound and picture line up in every browser, and Safari plays live TV again.
