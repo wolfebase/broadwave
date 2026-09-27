@@ -105,7 +105,7 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
                 </button>
               )
             ) : null}
-            {airing && upcoming ? (
+            {airing && upcoming && !hasPass ? (
               once ? (
                 <button type="button" className="btn" onClick={() => void removePass(once.id)}>
                   <RecordIcon className="tally" /> Don't record

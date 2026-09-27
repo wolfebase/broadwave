@@ -20,7 +20,7 @@ struct PassesView: View {
                 if !loaded {
                     Text("Loading…").foregroundStyle(.secondary)
                 } else if passes.isEmpty {
-                    Text("A series pass records every airing of a title. Set one from the guide.")
+                    Text("A series pass records every airing of a title. Set one, or record a single airing, from the guide.")
                         .foregroundStyle(.secondary)
                 }
                 ForEach(passes) { pass in
@@ -28,7 +28,7 @@ struct PassesView: View {
                         PassEditView(pass: pass) { passes = $0 }
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(pass.title).font(.headline)
+                            Text(pass.label).font(.headline)
                             Text(PassEditView.summary(pass, channel: channelName(pass.channelId)))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -101,17 +101,19 @@ struct PassEditView: View {
                 Text("Timing")
             }
             Section {
-                Picker("Episodes", selection: binding(\.episodes, "all")) {
-                    Text("All").tag("all")
-                    Text("New only").tag("new")
-                }
-                Picker("Keep", selection: binding(\.keepMode, "all")) {
-                    Text("All").tag("all")
-                    Text("Unwatched").tag("unwatched")
-                    Text("Last few").tag("last")
-                }
-                if pass.keepMode == "last" {
-                    picker("How many", \.keepCount, Self.keepCounts) { "\($0)" }
+                if !pass.isOnce {
+                    Picker("Episodes", selection: binding(\.episodes, "all")) {
+                        Text("All").tag("all")
+                        Text("New only").tag("new")
+                    }
+                    Picker("Keep", selection: binding(\.keepMode, "all")) {
+                        Text("All").tag("all")
+                        Text("Unwatched").tag("unwatched")
+                        Text("Last few").tag("last")
+                    }
+                    if pass.keepMode == "last" {
+                        picker("How many", \.keepCount, Self.keepCounts) { "\($0)" }
+                    }
                 }
                 Toggle("Mark commercials", isOn: Binding(
                     get: { pass.commercials != false },
@@ -120,7 +122,7 @@ struct PassEditView: View {
             } header: {
                 Text("Recordings")
             } footer: {
-                Text("Unwatched removes a recording once it is watched. Last few keeps only the newest ones. Marked commercials can be skipped.")
+                Text(pass.isOnce ? "Marked commercials can be skipped." : "Unwatched removes a recording once it is watched. Last few keeps only the newest ones. Marked commercials can be skipped.")
             }
             Section {
                 Button("Delete pass", role: .destructive) { confirmDelete = true }
@@ -137,11 +139,13 @@ struct PassEditView: View {
 
     static func summary(_ pass: Pass, channel: String?) -> String {
         var parts = [channel ?? "Any channel"]
-        parts.append(pass.episodes == "new" ? "New only" : "All episodes")
-        switch pass.keepMode {
-        case "unwatched": parts.append("Keep unwatched")
-        case "last": parts.append("Keep last \(max(pass.keepCount ?? 1, 1))")
-        default: break
+        if !pass.isOnce {
+            parts.append(pass.episodes == "new" ? "New only" : "All episodes")
+            switch pass.keepMode {
+            case "unwatched": parts.append("Keep unwatched")
+            case "last": parts.append("Keep last \(max(pass.keepCount ?? 1, 1))")
+            default: break
+            }
         }
         let early = pass.padBefore ?? 0
         let after = pass.padAfter ?? 0

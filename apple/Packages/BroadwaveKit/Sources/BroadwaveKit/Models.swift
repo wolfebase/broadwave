@@ -110,6 +110,31 @@ public extension Airing {
     }
 }
 
+public extension Pass {
+    var isOnce: Bool {
+        kind == "once"
+    }
+
+    /// The once pass that records exactly this airing. The server keeps its start to the second.
+    static func once(in passes: [Pass], for airing: Airing) -> Pass? {
+        passes.first { p in
+            guard p.isOnce, p.channelId == airing.channelId, let start = p.airingStart else { return false }
+            return abs(start.timeIntervalSince(airing.start)) < 1
+        }
+    }
+
+    /// A series or team pass for the title. A once pass does not count.
+    static func series(in passes: [Pass], for airing: Airing) -> Pass? {
+        passes.first { !$0.isOnce && $0.title.caseInsensitiveCompare(airing.title) == .orderedSame }
+    }
+
+    /// "Title · Mon 11:00 AM only" for a once pass, the title otherwise.
+    var label: String {
+        guard isOnce, let start = airingStart else { return title }
+        return "\(title) · \(start.formatted(.dateTime.weekday(.abbreviated).hour().minute())) only"
+    }
+}
+
 public extension Recording {
     var isRecording: Bool {
         status == "recording"

@@ -15,6 +15,7 @@ public final class AppStore {
     public private(set) var channels: [Channel] = []
     public private(set) var index = GuideIndex([])
     public private(set) var recordings: [Recording] = []
+    public private(set) var passes: [Pass] = []
     public private(set) var loading = false
     public var error: String?
     public var now = Date()
@@ -321,9 +322,24 @@ public final class AppStore {
         return updated
     }
 
-    public func recordSeries(_ airing: Airing) async {
+    public func refreshPasses() async {
+        guard let api, let list = try? await api.passes() else { return }
+        passes = list
+    }
+
+    public func recordSeries(_ airing: Airing) async throws {
         guard let api else { return }
-        try? await api.addPass(title: airing.title, channelID: airing.channelId)
+        passes = try await api.addPass(title: airing.title, channelID: airing.channelId)
+    }
+
+    public func recordOnce(_ airing: Airing) async throws {
+        guard let api else { return }
+        passes = try await api.addPass(title: airing.title, channelID: airing.channelId, airingStart: airing.start)
+    }
+
+    public func removePass(_ id: Int64) async throws {
+        guard let api else { return }
+        passes = try await api.deletePass(id)
     }
 
     /// What most likely deserves the big spot: sports first, then favorites.

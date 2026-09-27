@@ -112,7 +112,7 @@ struct SearchView: View {
 
     private func record(_ airing: Airing) async {
         do {
-            try await store.api?.addPass(title: airing.title, channelID: airing.channelId)
+            try await store.recordSeries(airing)
             note = "Recording every \(airing.title)."
         } catch {
             note = error.localizedDescription

@@ -64,6 +64,22 @@ struct GuideView: View {
             }
             scores = map
         }
+        #if DEBUG
+        // Simulator testing: -BroadwaveProgram <airing id> opens that program's sheet.
+        .task {
+            let id = Int64(UserDefaults.standard.integer(forKey: "BroadwaveProgram"))
+            guard id > 0 else { return }
+            for _ in 0 ..< 40 {
+                for channel in store.channels {
+                    if let airing = store.index.airings(channel.id).first(where: { $0.id == id }) {
+                        selected = Selection(channel: channel, airing: airing)
+                        return
+                    }
+                }
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+        }
+        #endif
         #if os(iOS)
         .toolbarTitleDisplayMode(.inline)
         .modifier(GuideDetail(selected: $selected, wide: sizeClass == .regular))
@@ -552,12 +568,16 @@ struct ProgramSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(NowPlaying.self) private var nowPlaying
     @Environment(\.dismiss) private var dismiss
+    @State private var problem = ""
     let channel: Channel
     let airing: Airing?
 
     var body: some View {
         let kind = airing?.kind ?? .other
         let on = airing?.isOn(at: store.now) ?? true
+        let upcoming = airing.map { $0.start > store.now } ?? false
+        let once = airing.flatMap { Pass.once(in: store.passes, for: $0) }
+        let series = airing.flatMap { Pass.series(in: store.passes, for: $0) }
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if let airing, let art = store.artURL(airing, width: 960) {
@@ -643,23 +663,63 @@ struct ProgramSheet: View {
                         .buttonStyle(.glass)
                         .controlSize(.large)
                     }
+                    if let airing, upcoming, series == nil {
+                        if let once {
+                            Button {
+                                act { try await store.removePass(once.id) }
+                            } label: {
+                                Label("Don't record", systemImage: "xmark.circle").frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.glass)
+                            .controlSize(.large)
+                        } else {
+                            Button {
+                                act { try await store.recordOnce(airing) }
+                            } label: {
+                                Label("Record", systemImage: "record.circle").frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.glass)
+                            .controlSize(.large)
+                        }
+                    }
                     if let airing {
                         Button {
-                            Task { await store.recordSeries(airing) }
+                            if series == nil {
+                                act { try await store.recordSeries(airing) }
+                            }
                         } label: {
-                            Label(kind == .sports ? "Record every airing" : "Record series", systemImage: "repeat").frame(maxWidth: .infinity)
+                            Label(series != nil ? "Series is recording" : kind == .sports ? "Record every airing" : "Record series", systemImage: "repeat")
+                                .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.glass)
                         .controlSize(.large)
+                        #if os(iOS)
+                            .disabled(series != nil)
+                        #endif
+                    }
+                    if !problem.isEmpty {
+                        Text(problem).font(.footnote).foregroundStyle(.red)
                     }
                 }
                 .padding(.top, 8)
             }
             .padding(24)
         }
+        .task(id: airing?.id) { await store.refreshPasses() }
         .background {
             RadialGradient(colors: [kind.color.opacity(0.35), .clear], center: .topLeading, startRadius: 0, endRadius: 400)
                 .ignoresSafeArea()
+        }
+    }
+
+    private func act(_ work: @escaping () async throws -> Void) {
+        Task {
+            do {
+                try await work()
+                problem = ""
+            } catch {
+                problem = error.localizedDescription
+            }
         }
     }
 }

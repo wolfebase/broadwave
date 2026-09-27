@@ -449,7 +449,7 @@ struct ChannelActions: View {
         }
         if let airing {
             Button(airing.kind == .sports ? "Record every airing" : "Record series", systemImage: "repeat") {
-                Task { await store.recordSeries(airing) }
+                Task { try? await store.recordSeries(airing) }
             }
         }
         Button(channel.favorite ? "Remove favorite" : "Add favorite", systemImage: channel.favorite ? "star.slash" : "star") {

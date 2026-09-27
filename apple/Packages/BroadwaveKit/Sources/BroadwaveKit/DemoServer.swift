@@ -339,7 +339,7 @@ public final class DemoServer: @unchecked Sendable {
             return art(path)
         case ("GET", _) where path.hasPrefix("/api/v1/channels/") && path.hasSuffix("/frame"):
             return art(path)
-        case ("POST", "/api/v1/recordings"):
+        case ("POST", "/api/v1/recordings"), ("POST", "/api/v1/passes"):
             return Self.fail(409, "demo", "The demo plays samples. It does not record.")
         default:
             return Self.fail(404, "missing", "The demo has no \(path).")

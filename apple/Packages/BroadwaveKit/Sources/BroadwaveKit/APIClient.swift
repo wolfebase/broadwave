@@ -228,10 +228,12 @@ public struct APIClient: Sendable {
         return try await send("GET", "/teams", as: R.self).teams
     }
 
-    public func addPass(title: String, channelID: Int64) async throws {
-        struct B: Encodable { var title: String; var channelId: Int64 }
-        struct R: Decodable {}
-        _ = try await send("POST", "/passes", body: B(title: title, channelId: channelID), as: R.self)
+    /// With `airingStart`, records only the airing that starts then on the channel.
+    @discardableResult
+    public func addPass(title: String, channelID: Int64, airingStart: Date? = nil) async throws -> [Pass] {
+        struct B: Encodable { var title: String; var channelId: Int64; var airingStart: String? }
+        let start = airingStart.map { ISO8601DateFormatter.plain.string(from: $0) }
+        return try await send("POST", "/passes", body: B(title: title, channelId: channelID, airingStart: start), as: PassList.self).passes
     }
 
     public func passes() async throws -> [Pass] {
