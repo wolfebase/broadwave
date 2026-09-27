@@ -12,6 +12,7 @@ export const copy = {
     add: "Add",
     lookup: "Add by address",
     address: "Address",
+    addressPlaceholder: "IP address or name",
     addressHint: "A tuner, or a server that speaks HDHomeRun. Add the port if it is not 80.",
     none: "No HDHomeRun has answered yet.",
     tuners: "tuners",

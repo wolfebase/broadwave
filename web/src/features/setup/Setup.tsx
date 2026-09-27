@@ -41,7 +41,9 @@ export function Setup() {
   useEffect(() => {
     if (step !== "sources" || hold.current) return;
     if (devices.length === 0 && channels.length === 0) return;
-    const timer = window.setTimeout(() => setStep("finish"), 2000);
+    const timer = window.setTimeout(() => {
+      if (!hold.current) setStep("finish");
+    }, 4000);
     return () => window.clearTimeout(timer);
   }, [step, devices.length, channels.length]);
 
@@ -100,9 +102,13 @@ export function Setup() {
       </header>
 
       {step === "sources" ? (
-        <section className="setup-card glass">
+        <section
+          className="setup-card glass"
+          onPointerDownCapture={() => (hold.current = true)}
+          onKeyDownCapture={() => (hold.current = true)}
+        >
           <h2>{devices.length > 0 ? "Your tuner" : "Looking for your tuner…"}</h2>
-          <p className="dim">An HDHomeRun on this network is added for you. Everything else waits for a tap.</p>
+          <p className="dim">Setup adds an HDHomeRun on this network and moves on by itself. Start adding something else and it waits for you.</p>
           {devices.length > 0 ? (
             <ul className="setup-list">
               {devices.map((d) => (
@@ -136,7 +142,7 @@ export function Setup() {
                 onChange={(e) => setAddress(e.target.value)}
                 autoComplete="off"
                 spellCheck={false}
-                placeholder="192.168.1.252"
+                placeholder={copy.sources.addressPlaceholder}
               />
             </label>
             <p className="hint">{copy.sources.addressHint}</p>

@@ -35,7 +35,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const mode: "full" | "mini" = watchId && playing && playing.id === watchId ? "full" : "mini";
 
   useEffect(() => {
-    if (path !== "/watch" && path !== "/multiview") back.current = path + (params.toString() ? `?${params}` : "");
+    // Setup is done once you watch, so leaving the player never goes back to it.
+    if (path !== "/watch" && path !== "/multiview" && path !== "/setup") back.current = path + (params.toString() ? `?${params}` : "");
   }, [path, params]);
 
   const open = useCallback((c: Channel) => {

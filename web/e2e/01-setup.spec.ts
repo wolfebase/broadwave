@@ -37,4 +37,9 @@ test("setup wizard finds the fake tuner", async ({ page }, info) => {
   await page.getByRole("button", { name: "Watch" }).click();
   await expect(page).toHaveURL(/\/watch\?channel=/);
   await expect(page.getByRole("region", { name: "Player" })).toBeVisible();
+  // Setup is finished: leaving the player goes to browsing, not back into the wizard.
+  await page.getByRole("region", { name: "Player" }).hover();
+  await page.getByRole("button", { name: "Back to browsing" }).click();
+  await expect(page).not.toHaveURL(/\/(setup|watch)/);
+  await expect(page.getByRole("heading", { name: "Let's set up your TV" })).toHaveCount(0);
 });

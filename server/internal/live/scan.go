@@ -50,3 +50,20 @@ func (h *Hub) preemptScan() {
 		cancel()
 	}
 }
+
+// IdleWithoutScan stops a guide scan, which only borrows a tuner, and reports
+// whether every tuner goes idle within wait.
+func (h *Hub) IdleWithoutScan(wait time.Duration) bool {
+	if h.Idle() {
+		return true
+	}
+	h.preemptScan()
+	deadline := time.Now().Add(wait)
+	for time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+		if h.Idle() {
+			return true
+		}
+	}
+	return false
+}
