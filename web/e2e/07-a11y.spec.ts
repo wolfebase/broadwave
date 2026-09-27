@@ -235,11 +235,19 @@ test("player", async ({ page }) => {
     await expect(page.locator(".stage.idle")).toHaveCount(0);
   }, playerRulesOff);
 
+  // The idle chrome, not the room: with sync on, the engine may hold this
+  // screen paused after the pause above, and a paused player keeps its chrome.
   await at(page, sizes[1]);
-  await page.locator("video.stage-video").evaluate((video: HTMLVideoElement) => video.play());
+  await page.evaluate(() => localStorage.setItem("ota-live", JSON.stringify({ ...JSON.parse(localStorage.getItem("ota-live") || "{}"), sync: false })));
+  await page.reload();
+  await settle(page);
+  await expect.poll(async () => page.locator("video.stage-video").evaluate((video: HTMLVideoElement) => !video.paused && video.videoWidth > 0), { timeout: 25_000 }).toBe(true);
   await expect(page.locator(".stage.idle")).toBeVisible({ timeout: 25_000 });
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "Back to browsing" })).toBeFocused();
+  // A focused control must not hold the chrome up; when it fades, the stage takes the keys again.
+  await expect(page.locator(".stage.idle")).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator(".stage").first()).toBeFocused();
   await page.goto("/");
   await settle(page);
   const stop = page.getByRole("button", { name: "Stop watching" });
