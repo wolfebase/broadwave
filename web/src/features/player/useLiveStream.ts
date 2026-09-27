@@ -5,6 +5,7 @@ import { SyncEngine, type SyncStatus } from "../../lib/sync";
 import type { Caps, Channel, Prefs, WatchSession } from "../../types";
 import { liveHlsConfig, type BufferProfile } from "../../picture";
 import { rememberChannel } from "../../recent";
+import { awayBeforeSeekMs, resumePlan } from "./resume";
 import {
   aTunerIsFree,
   classifySnap,
@@ -61,6 +62,10 @@ export function useLiveStream(
   const [attempt, setAttempt] = useState(0);
   const confirmLive = useRef(false);
   const retrying = useRef(false);
+  const syncing = useRef(sync);
+  useEffect(() => {
+    syncing.current = sync;
+  }, [sync]);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ state: "off", drift: 0, members: 0 });
 
   useEffect(() => {
@@ -120,12 +125,20 @@ export function useLiveStream(
     };
     // hls.js rides through short stalls and single failed loads on its own, and
     // naming an outage stops the picture. A long stall is named only when the
-    // server or every tuner is gone; a fatal error always is.
+    // server or every tuner is gone; a fatal error always is. Coming back from
+    // a frozen tab is not an outage: the playlist is old, and the next one fixes it.
     let surfaced = false;
+    let resumeQuiet = false;
+    let outageGen = 0;
+    let recovered = false;
+    let heldFatal = false;
+    let quietTimer = 0;
     const noteOutage = async (fatal: boolean) => {
-      if (dead || surfaced) return;
+      if (dead || surfaced || resumeQuiet) return;
+      const gen = outageGen;
       const mapped = await classifyPlayback(id);
-      if (dead || surfaced || (!fatal && !mapped.recovery)) return;
+      if (dead || surfaced || resumeQuiet || gen !== outageGen) return;
+      if (!fatal && !mapped.recovery) return;
       surfaced = true;
       setNeedsConfirm(false);
       setError(mapped.message);
@@ -158,7 +171,17 @@ export function useLiveStream(
           hls.attachMedia(video);
           hls.on(Hls.Events.ERROR, (_e, data) => {
             video.dataset.hlsError = `${data.type}:${data.details}${data.fatal ? ":fatal" : ""}`;
-            if (data.fatal) void noteOutage(true);
+            if (!data.fatal) return;
+            if (resumeQuiet) {
+              // One media error from the stale buffer is expected; anything
+              // else is named when the quiet window ends.
+              if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !recovered) {
+                recovered = true;
+                hls?.recoverMediaError();
+              } else heldFatal = true;
+              return;
+            }
+            void noteOutage(true);
           });
         } else {
           video.src = next.playlist;
@@ -185,16 +208,116 @@ export function useLiveStream(
         if (!dead) retrying.current = false;
       }
     })();
-    const beacon = () => {
+    // pagehide also fires when the browser keeps the page (back/forward cache).
+    // That tab is still watching; stopping would drop the tuner under it.
+    const beacon = (event: PageTransitionEvent) => {
+      if (event.persisted) return;
       if (released || !joined) return;
       const body = new Blob([JSON.stringify({ rendition: joined })], { type: "application/json" });
       if (navigator.sendBeacon?.(`/api/v1/watch/${id}/stop`, body)) released = true;
     };
+    // A frozen or hidden tab does not move the playhead. The room does. On
+    // return, seek to the edge once the playlist knows it. The sync engine
+    // then trims onto the room.
+    let leftAt = 0;
+    let edgeAtLeave = 0;
+    let poll = 0;
+    let kicked = false;
+    const stopPoll = () => {
+      window.clearInterval(poll);
+      poll = 0;
+    };
+    const comeBack = () => {
+      if (dead || document.visibilityState === "hidden") return;
+      const away = leftAt ? performance.now() - leftAt : 0;
+      leftAt = 0;
+      if (away < awayBeforeSeekMs) {
+        if (video.paused && syncing.current) void video.play().catch(() => undefined);
+        return;
+      }
+      if (!syncing.current && video.paused) return;
+      resumeQuiet = true;
+      recovered = false;
+      heldFatal = false;
+      window.clearTimeout(quietTimer);
+      outageGen++;
+      surfaced = false;
+      window.clearTimeout(stuck);
+      stallAt = 0;
+      setNeedsConfirm(false);
+      setError("");
+      setRecovery("");
+      const began = performance.now();
+      kicked = false;
+      stopPoll();
+      const step = () => {
+        if (dead) return;
+        const rawDrift = video.dataset.syncDrift;
+        const plan = resumePlan({
+          current: video.currentTime,
+          liveSync: hls?.liveSyncPosition ?? null,
+          awayMs: away,
+          held: !syncing.current && video.paused,
+          waitedMs: performance.now() - began,
+          edgeAtLeave,
+          driftMs: rawDrift ? Number(rawDrift) : null,
+        });
+        if (plan.action === "wait") {
+          if (!kicked && hls) {
+            kicked = true;
+            hls.startLoad();
+          }
+          return;
+        }
+        stopPoll();
+        if (plan.action === "seek") video.currentTime = plan.to;
+        if (plan.action !== "ignore") void video.play().catch(() => undefined);
+        quietTimer = window.setTimeout(() => {
+          resumeQuiet = false;
+          if (heldFatal) void noteOutage(true);
+        }, 8000);
+      };
+      poll = window.setInterval(step, 200);
+      step();
+    };
+    const markLeft = () => {
+      if (leftAt) return;
+      leftAt = performance.now();
+      edgeAtLeave = hls?.liveSyncPosition ?? video.currentTime;
+    };
+    const onVis = () => {
+      if (document.visibilityState === "hidden") markLeft();
+      else comeBack();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    document.addEventListener("freeze", markLeft);
+    document.addEventListener("resume", comeBack);
+    // A frozen page does not run timers, so the next tick sees the whole gap
+    // even when the resume event never arrives.
+    let lastTick = performance.now();
+    let edgeAtTick = video.currentTime;
+    const gapTimer = window.setInterval(() => {
+      const now = performance.now();
+      const jumped = now - lastTick;
+      const edgeThen = edgeAtTick;
+      lastTick = now;
+      edgeAtTick = hls?.liveSyncPosition ?? video.currentTime;
+      if (jumped < awayBeforeSeekMs || leftAt || poll) return;
+      leftAt = now - jumped;
+      edgeAtLeave = edgeThen;
+      comeBack();
+    }, 1000);
     window.addEventListener("pagehide", beacon);
     return () => {
       dead = true;
       ctrl.abort();
       window.clearTimeout(stuck);
+      stopPoll();
+      window.clearTimeout(quietTimer);
+      window.clearInterval(gapTimer);
+      document.removeEventListener("visibilitychange", onVis);
+      document.removeEventListener("freeze", markLeft);
+      document.removeEventListener("resume", comeBack);
       window.removeEventListener("pagehide", beacon);
       syncRef.current?.stop();
       syncRef.current = null;
