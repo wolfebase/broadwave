@@ -96,6 +96,17 @@ test.describe("rapid channel changes", () => {
       const freqs = new Set(lineup.map((channel) => channel.number.split(".")[0]));
       expect(freqs.size).toBeGreaterThan(1);
 
+      // The tuner check at the end counts every tuner that is ours.
+      await expect
+        .poll(
+          async () => {
+            const body = (await (await page.request.get("/api/v1/tuners")).json()) as { tuners?: { ours?: boolean }[] };
+            return (body.tuners ?? []).some((tuner) => tuner.ours);
+          },
+          { timeout: 90_000 },
+        )
+        .toBe(false);
+
       await page.setViewportSize({ width: size.width, height: size.height });
       const start = lineup[1];
       await openChannel(page, start.id);
