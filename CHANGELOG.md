@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.11.0 — 2026-09-26
+
+Live playback keeps one timeline across renditions, rewinds about ninety minutes, and continues when the broadcast clock jumps.
+
+### Fixed
+
+- A channel the server already knows opens on the frequency it stored, and playback can start on the first segment that is ready.
+- A copied broadcast and a transcode of it cut on the same pictures.
+- When the broadcast clock jumps, that segment closes and the next one continues. The time the player shows stays on the wall clock.
+- Rewind reaches about ninety minutes of the broadcast.
+- A long live session no longer keeps every earlier playlist in memory.
+- The software encoder no longer holds the first picture for one frame per processor core.
+- Each encode follows one channel, so another channel on the same broadcast cannot delay the start.
+- An export to another app reads the whole channel before it copies, the same way a live tune does.
+- On now lists every channel, and the Apple guide opens on that list.
+- The tuning screen names the channel. A setup step says when it still needs a look.
+
 ## 0.10.0 — 2026-09-26
 
 The server times its own picture and sizes the stream to match. The apps can still find it when Bonjour is quiet.
