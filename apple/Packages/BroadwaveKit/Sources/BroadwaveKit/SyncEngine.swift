@@ -34,6 +34,11 @@ public final class SyncEngine {
     private var timer: Timer?
     private var holdUntil = Date.distantPast
     private var lastSeek = Date.distantPast
+    /// A seek that left the screen more than seekMS behind is not tried again
+    /// until then: AVPlayer lands on a segment or keyframe before the target,
+    /// and a target at its hold-back is out of reach. Trying again every two
+    /// seconds froze the picture under the progress bar each time.
+    private var seekOffUntil = Date.distantPast
     /// `-BroadwaveSyncLog 1` logs the frame on screen once a second so screens
     /// on one Mac can be lined up against the same wall clock.
     private let logs = UserDefaults.standard.bool(forKey: "BroadwaveSyncLog")
@@ -351,7 +356,7 @@ public final class SyncEngine {
         let quiet = Date().timeIntervalSince(trimEnded) >= Self.quietSeconds
         checkSpeedUp(drift: d)
         let move = Self.decide(
-            hasFrame: hasFrame, driftMS: d, roomRate: roomRate, canSeek: canSeek(to: target, item: item),
+            hasFrame: hasFrame, driftMS: d, roomRate: roomRate, canSeek: Date() >= seekOffUntil && canSeek(to: target, item: item),
             forwardBuffer: bufferedAhead(item), trim: trim, quiet: quiet, canSpeedUp: canSpeedUp
         )
         if logs, move != lastMove {
@@ -382,7 +387,15 @@ public final class SyncEngine {
             }
         case .seek:
             setTrim(.none)
-            seek(to: target)
+            if Date().timeIntervalSince(lastSeek) < 10 {
+                // The last seek did not bring this screen within reach.
+                seekOffUntil = Date().addingTimeInterval(60)
+                if logs {
+                    Self.log.notice("sync seek missed; playing on for 60 s")
+                }
+            } else {
+                seek(to: target)
+            }
             state = .syncing
         case let .play(wanted, locked):
             // A live item resumed straight into a trimmed rate stayed frozen on
