@@ -316,6 +316,15 @@ test("a playlist tile beside a tuner comes back on its own", async ({ page }) =>
     expect(still.width, `the tuner picture went black ${JSON.stringify(still)}`).toBeGreaterThan(0);
     expect(still.time, `the tuner picture stopped advancing ${JSON.stringify(still)}`).toBeGreaterThan(advanced);
     await expect(page.getByText(tuner)).toHaveCount(0);
+    // A playing link holds no tuner, and a playing channel keeps the one it has.
+    const plan = (await (
+      await fetch(`${base}/api/v1/multiview/plan`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ channelIds: [news.id, wdaf.id] }),
+      })
+    ).json()) as { blocked?: unknown[] };
+    expect(plan.blocked, `the plan blocked a playing channel ${JSON.stringify(plan)}`).toEqual([]);
     mkdirSync(lane, { recursive: true });
     await page.screenshot({ path: path.join(lane, "playlist-back.jpg"), animations: "disabled" });
     const summaryPath = path.join(lane, "summary.json");

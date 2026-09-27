@@ -1,6 +1,7 @@
 package live
 
 import (
+	"slices"
 	"testing"
 	"time"
 )
@@ -249,5 +250,28 @@ func TestLimitPicturesWhenEveryPictureIsWatched(t *testing.T) {
 	}
 	if offers[3].Label != "No tuner free" {
 		t.Fatalf("the tuner reason stays: %+v", offers[3])
+	}
+}
+
+func TestPlanKeepsAChannelAlreadyPlayingBesideALink(t *testing.T) {
+	link := ch(801, 0, "801")
+	link.Direct = true
+	ours := []TunedFreq{
+		{Labels: []string{"801"}, ChannelIDs: []int64{801}, Direct: true},
+		{Labels: []string{"4.1"}, ChannelIDs: []int64{1}},
+	}
+	plan := PlanMultiview([]PlanChannel{link, ch(1, 0, "4.1")}, 2, ours, nil)
+	if len(plan.Blocked) != 0 || len(plan.Playable) != 2 {
+		t.Fatalf("4.1 is on and the link holds no tuner: %+v", plan)
+	}
+	if plan.TunersFree != 1 {
+		t.Fatalf("one tuner is still free: %+v", plan)
+	}
+	plan = PlanMultiview([]PlanChannel{link, ch(1, 0, "4.1"), ch(2, 0, "9.1"), ch(3, 0, "5.1")}, 2, ours, nil)
+	if len(plan.Blocked) != 1 || plan.Blocked[0].ChannelID != 3 {
+		t.Fatalf("5.1 is the one that does not fit: %+v", plan)
+	}
+	if !slices.Contains(plan.Blocked[0].Holders, "4.1") || !slices.Contains(plan.Blocked[0].Holders, "9.1") {
+		t.Fatalf("holders %v", plan.Blocked[0].Holders)
 	}
 }

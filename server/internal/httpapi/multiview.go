@@ -42,7 +42,11 @@ func (s *Server) multiviewPlan(w http.ResponseWriter, r *http.Request) {
 			if label == "" {
 				label = feed.Name
 			}
-			ours = append(ours, live.TunedFreq{FrequencyHz: feed.FrequencyHz, Labels: []string{label}})
+			direct := false
+			if ch, err := s.Store.SourceChannel(r.Context(), feed.ChannelID); err == nil {
+				direct = planChannel(ch).Direct
+			}
+			ours = append(ours, live.TunedFreq{FrequencyHz: feed.FrequencyHz, Labels: []string{label}, ChannelIDs: []int64{feed.ChannelID}, Direct: direct})
 		}
 		if tuners, err := s.Hub.Tuners(r.Context()); err == nil {
 			tunerCount = len(tuners)

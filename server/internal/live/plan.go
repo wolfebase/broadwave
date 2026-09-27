@@ -29,9 +29,12 @@ func (c PlanChannel) label() string {
 }
 
 // TunedFreq is a frequency this server already holds, with the channels on it.
+// Direct is a link or file that is playing; it holds no tuner.
 type TunedFreq struct {
 	FrequencyHz int
 	Labels      []string
+	ChannelIDs  []int64
+	Direct      bool
 }
 
 // Playable is a channel the plan can start.
@@ -124,9 +127,18 @@ func PlanMultiview(want []PlanChannel, tunerCount int, ours []TunedFreq, foreign
 		g.channels = append(g.channels, c)
 	}
 	oursFreq := map[int][]string{}
+	oursID := map[int64]bool{}
+	var unknown []string
 	occupied := 0
 	for _, t := range ours {
+		if t.Direct {
+			continue
+		}
+		for _, id := range t.ChannelIDs {
+			oursID[id] = true
+		}
 		if t.FrequencyHz <= 0 {
+			unknown = append(unknown, t.Labels...)
 			occupied++
 			continue
 		}
@@ -146,6 +158,7 @@ func PlanMultiview(want []PlanChannel, tunerCount int, ours []TunedFreq, foreign
 	var notes []string
 	var taken []string
 	taken = append(taken, foreign...)
+	taken = append(taken, unknown...)
 	for _, labels := range oursFreq {
 		taken = append(taken, labels...)
 	}
@@ -153,6 +166,10 @@ func PlanMultiview(want []PlanChannel, tunerCount int, ours []TunedFreq, foreign
 	for _, key := range keys {
 		g := groups[key]
 		onAir := g.known && oursFreq[g.freq] != nil
+		for _, c := range g.channels {
+			// A channel already playing holds its tuner, even when its frequency is unknown.
+			onAir = onAir || oursID[c.ID]
+		}
 		shared := len(g.channels) > 1 || onAir
 		if g.direct || onAir || free > 0 {
 			if !g.direct && !onAir {
