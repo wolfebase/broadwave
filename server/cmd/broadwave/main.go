@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -83,11 +84,29 @@ func main() {
 	encoder := live.DetectEncoder(ffmpegPath)
 	// BROADWAVE_BENCH=0 skips the startup encode. The relay check opens several
 	// renditions at once, and a measured tile budget would refuse the extra ones.
+	// BROADWAVE_ENCODER=gpu or software overrides the choice below.
+	choice := strings.ToLower(strings.TrimSpace(os.Getenv("BROADWAVE_ENCODER")))
+	if choice == "software" {
+		encoder = "libx264"
+	}
 	var host live.Host
 	if os.Getenv("BROADWAVE_BENCH") != "0" {
 		measureCtx, measureCancel := context.WithTimeout(context.Background(), 20*time.Second)
 		host = live.MeasureHost(measureCtx, ffmpegPath, encoder)
 		measureCancel()
+		// A home server's GPU is shared: Plex, Jellyfin, and Channels DVR
+		// transcode on the same iGPU, and under their load a 1080i channel
+		// encoded at 0.75x real time and every screen ran dry. A CPU that
+		// holds a live 1080p60 encode with room to spare takes live TV off it.
+		if encoder != "libx264" && choice != "gpu" {
+			swCtx, swCancel := context.WithTimeout(context.Background(), 20*time.Second)
+			sw := live.MeasureHost(swCtx, ffmpegPath, "libx264")
+			swCancel()
+			if live.PreferSoftware(sw) {
+				slog.Info(fmt.Sprintf("encoder: live TV runs on the CPU (1080p60 at %.1fx) so other apps sharing the GPU cannot starve it", sw.Speed))
+				encoder, host = "libx264", sw
+			}
+		}
 		slog.Info("encoder: " + host.Line())
 	}
 	live.Reap(work)
