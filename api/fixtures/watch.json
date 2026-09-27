@@ -1,4 +1,4 @@
 {
-  "code": "internal",
-  "message": "tuner returned 404 Not Found: no sample"
+  "code": "tuner_refused",
+  "message": "The tuner would not start this channel. Try again."
 }

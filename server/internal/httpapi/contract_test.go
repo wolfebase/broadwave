@@ -149,7 +149,7 @@ func TestContractFixtures(t *testing.T) {
 	// GET /channels/{id}/frame is a JPEG preview. matchFrame checks it.
 	// GET /backup is a SQLite file, not JSON. matchBackup checks status and content-type.
 	// GET /recordings/{id}/file is MPEG-TS, not JSON. The case checks status, content-type, and bytes.
-	// POST /watch records the error: the fake tuner serves no MPEG-TS, so ffmpeg never builds a playlist.
+	// POST /watch records the error: the fake tuner has no MPEG-TS sample and turns the tune down.
 	// DELETE /virtuals does not exist.
 	cases := []struct {
 		name, method, path, body string
@@ -190,7 +190,7 @@ func TestContractFixtures(t *testing.T) {
 		{"free", "GET", "/api/v1/sources/free", "", 0},
 		{"free-add", "POST", "/api/v1/sources/free", `{"name":"FastChannels","playlist":"` + feeds.URL + `/free.m3u"}`, 0},
 		{"xtream", "POST", "/api/v1/sources", `{"kind":"xtream","name":"Lab","url":"` + feeds.URL + `","username":"lab","password":"secret"}`, 0},
-		{"watch", "POST", "/api/v1/watch", `{"channelId":1}`, http.StatusInternalServerError},
+		{"watch", "POST", "/api/v1/watch", `{"channelId":1}`, http.StatusServiceUnavailable},
 		{"watch-stop", "POST", "/api/v1/watch/1/stop", "{}", 0},
 		{"setup-finish", "GET", "/api/v1/setup/finish", "", 0},
 		{"server-rename", "PATCH", "/api/v1/server", `{"name":"Living Room"}`, 0},
@@ -204,7 +204,7 @@ func TestContractFixtures(t *testing.T) {
 		{"marker-create", "POST", "/api/v1/recordings/1/markers", `{"start":90,"end":120}`, 0},
 		{"marker-delete", "DELETE", "/api/v1/markers/2", "", 0},
 		{"recording-detect", "POST", "/api/v1/recordings/1/detect", "", 0},
-		{"recording-create", "POST", "/api/v1/recordings", `{"channelId":1,"minutes":30,"title":"Jeopardy!"}`, http.StatusInternalServerError},
+		{"recording-create", "POST", "/api/v1/recordings", `{"channelId":1,"minutes":30,"title":"Jeopardy!"}`, http.StatusServiceUnavailable},
 		{"recording-stop", "POST", "/api/v1/recordings/1/stop", "", 0},
 		{"pass-create", "POST", "/api/v1/passes", `{"title":"Wheel of Fortune","channelId":1,"padBefore":0,"padAfter":5}`, 0},
 		{"pass-delete", "DELETE", "/api/v1/passes/3", "", 0},

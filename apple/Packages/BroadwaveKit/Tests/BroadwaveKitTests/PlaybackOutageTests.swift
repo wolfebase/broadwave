@@ -227,8 +227,9 @@ private func fineSnap() -> RecoverySnap {
     #expect(reason.message == PlaybackOutage.channelDidNotStart)
     let system = PlaybackOutage.viewerMessage("The data couldn’t be read because it is missing.")
     #expect(system == PlaybackOutage.channelDidNotStart)
-    let source = PlaybackOutage.viewerFailure(code: "internal", status: 500, message: "no source has this channel", online: true)
-    #expect(source.message == "no source has this channel")
+    let sentence = "No source has this channel now. Check Sources in Settings."
+    let source = PlaybackOutage.viewerFailure(code: "no_source", status: 404, message: sentence, online: true)
+    #expect(source.message == sentence)
     let full = PlaybackOutage.viewerFailure(
         code: "pictures_full",
         status: 409,

@@ -122,7 +122,8 @@ test("system text does not reach the viewer, and a server sentence does", () => 
   assert.equal(viewerFailure(new Error("Unexpected token < in JSON at position 0")).message, channelDidNotStart);
   assert.equal(viewerFailure(new Error("Internal Server Error")).message, channelDidNotStart);
   assert.equal(viewerMessage("The data couldn’t be read because it is missing."), channelDidNotStart);
-  assert.equal(viewerFailure(new Error("no source has this channel")).message, "no source has this channel");
+  const noSource = "No source has this channel now. Check Sources in Settings.";
+  assert.equal(viewerFailure(Object.assign(new Error(noSource), { status: 404, code: "no_source" })).message, noSource);
   assert.equal(
     viewerFailure({ status: 409, code: "pictures_full", message: "This server can play 4 pictures at once. Stop one." }).message,
     "This server can play 4 pictures at once. Stop one.",

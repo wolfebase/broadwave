@@ -650,9 +650,23 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/WatchSession" }
-        "409": { $ref: "#/components/responses/Error" }
+        "404":
+          description: "`not_found`: the channel is not in the lineup. `no_source`: no enabled source carries the channel now."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: "`tuners_busy`, `pictures_full`, `recording_soon`, or `streams_full` (a playlist has every stream it allows open; `limit` is that number)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500":
+          description: "`internal`: the channel did not start for a reason the viewer cannot fix. The message is plain words; the server log has the detail."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "503":
-          description: "`no_signal`: the tuner could not lock the channel and sent nothing. The tuner is already free. `stream_down`: the channel's source (for example a playlist URL) answered with an error or not at all."
+          description: "`no_signal`: the tuner could not lock the channel and sent nothing. The tuner is already free. `stream_down`: the channel's source (for example a playlist URL) answered with an error or not at all. `tuner_refused`: the tuner answered the stream request with an error, such as another app holding it. `tuner_silent`: no tuner answered at all."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -791,6 +805,11 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Recording" }
         "409": { $ref: "#/components/responses/Error" }
+        "503":
+          description: "`no_signal`, `stream_down`, or `tuner_refused`: the tune for a recording that starts now failed."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "507": { $ref: "#/components/responses/Error" }
   /recordings/{id}:
     delete:
@@ -1429,7 +1448,7 @@ components:
       properties:
         code:
           type: string
-          description: Stable machine code, for example tuners_busy, no_signal, stream_down, disk_low, not_found, bad_request, pictures_full.
+          description: Stable machine code, for example tuners_busy, no_signal, stream_down, tuner_refused, tuner_silent, no_source, streams_full, disk_low, not_found, bad_request, pictures_full.
         message: { type: string, description: Short text safe to show a user. }
         tuners:
           type: array

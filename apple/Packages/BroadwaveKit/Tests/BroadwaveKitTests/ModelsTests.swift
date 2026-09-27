@@ -112,7 +112,7 @@ private func fixture(_ name: String) throws -> Data {
     let xtream = try APIClient.decoder.decode(Source.self, from: fixture("xtream"))
     #expect(xtream.kind == "xtream")
     let watch = try APIClient.decoder.decode(APIErrorBody.self, from: fixture("watch"))
-    #expect(watch.code == "internal")
+    #expect(watch.code == "tuner_refused")
     struct Stopped: Decodable { var ok: Bool }
     let stopped = try APIClient.decoder.decode(Stopped.self, from: fixture("watch-stop"))
     #expect(stopped.ok)
@@ -172,7 +172,7 @@ private func fixture(_ name: String) throws -> Data {
     #expect(createdMarker.recordingId == 1)
     #expect(try APIClient.decoder.decode(Ok.self, from: fixture("marker-delete")).ok)
     let recordError = try APIClient.decoder.decode(APIErrorBody.self, from: fixture("recording-create"))
-    #expect(recordError.code == "internal")
+    #expect(recordError.code == "tuner_refused")
     #expect(try APIClient.decoder.decode(Ok.self, from: fixture("recording-stop")).ok)
     #expect(try APIClient.decoder.decode(Ok.self, from: fixture("recording-delete")).ok)
     let createdPasses = try APIClient.decoder.decode(Passes.self, from: fixture("pass-create"))

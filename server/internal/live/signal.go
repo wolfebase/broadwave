@@ -16,6 +16,17 @@ var ErrNoSignal = errors.New("This channel isn't coming in. Check the antenna.")
 // not at all, such as a playlist whose upstream stopped. The words are the player's.
 var ErrStreamDown = errors.New("This channel's stream isn't answering. Trying again usually fixes it.")
 
+// ErrNoSource is a channel no enabled source carries any more. The words are the player's.
+var ErrNoSource = errors.New("No source has this channel now. Check Sources in Settings.")
+
+// ErrTunerSilent is no tuner that answered at all. The clients key their
+// tuner recovery on "did not answer". The words are the player's.
+var ErrTunerSilent = errors.New("This tuner did not answer. Check that it is on.")
+
+// ErrTunerRefused is a tuner that answered the stream request with an error.
+// The status and body follow it for the log. The words are the player's.
+var ErrTunerRefused = errors.New("The tuner would not start this channel. Try again.")
+
 var errNoLock = errors.New("no lock")
 
 // NoSignal is true when this channel's tuner has sent nothing and reports no
