@@ -1,6 +1,6 @@
 # Parity
 
-What each client can do. A cell that only the web has says why. P5 fills the rest of this table.
+What each client can do. A cell that only the web has says why.
 
 ## Multiview
 
@@ -39,8 +39,14 @@ Server choices. The iPhone and Apple TV controls are the shared settings screen,
 | Choice | Web | iPhone | Apple TV |
 | --- | --- | --- | --- |
 | Picture (Broadcast, Smooth, Film) | yes | yes | yes |
+| Schedules Direct account, lineup, guide address, movie artwork | yes | yes | yes |
 | Hide scores | yes | yes | yes |
 | Play the next episode | yes | yes | yes |
 | Offer this server as an HDHomeRun | yes | yes | yes |
+| Recordings folder and free-space reserve | yes | yes | yes |
+| Catalog backups: list, download, restore a saved copy | yes | yes | yes |
+| Restore a catalog file from this device | yes | yes | Apple TV has no file picker. It restores a copy the server already kept. |
+| Layout (Auto, Desktop, TV, Phone) | yes | The app uses this device's layout. | The app uses this device's layout. |
+| Diagnostics: doctor, tuner health, guide depth, last antenna reading, check the antenna | yes | yes | yes |
 
-The demo does not share a tuner, so that row says so instead of offering the switch. Guide account, recordings folder, free-space reserve, and catalog backups are still only on the web.
+The demo does not share a tuner, and it does not change a guide account, a folder, or a backup. Passwords are sent once and are not shown again. Layout stays on the web because each Apple app already has its own screen.
