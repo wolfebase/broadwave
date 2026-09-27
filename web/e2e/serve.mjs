@@ -1,6 +1,6 @@
 // Fake HDHomeRun on 127.0.0.1 plus a staging Broadwave. No LAN discovery.
 import { spawn, spawnSync } from "node:child_process";
-import { createWriteStream, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, createWriteStream, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,7 +51,8 @@ process.on("SIGINT", () => {
 });
 
 const avsync = process.env.E2E_AVSYNC === "1";
-const sample = path.join(run, avsync ? "sync5.ts" : "sample.ts");
+const brk = process.env.E2E_BREAK === "1";
+const sample = path.join(run, brk ? "loop.ts" : avsync ? "sync5.ts" : "sample.ts");
 
 function runFfmpeg(args) {
   return new Promise((resolve) => {
@@ -64,6 +65,209 @@ function runFfmpeg(args) {
     });
     child.on("exit", (code) => resolve({ code, err }));
   });
+}
+
+// How long one pass of a TS plays, from the first PCR stream. Same rule as the
+// fake tuner: a file with no PCR would be rushed through in four seconds.
+function pcrSpanSeconds(file) {
+  const fd = openSync(file, "r");
+  try {
+    const size = statSync(file).size;
+    const buf = Buffer.alloc(188 * 512);
+    let pos = 0;
+    let pid = -1;
+    let first = 0;
+    let last = 0;
+    let n = 0;
+    while (pos + 188 <= size) {
+      const got = readSync(fd, buf, 0, buf.length, pos);
+      const packets = got - (got % 188);
+      if (packets < 188) break;
+      for (let i = 0; i < packets; i += 188) {
+        if (buf[i] !== 0x47 || (buf[i + 3] & 0x20) === 0 || buf[i + 4] < 7 || (buf[i + 5] & 0x10) === 0) continue;
+        const id = ((buf[i + 1] & 0x1f) << 8) | buf[i + 2];
+        if (pid >= 0 && id !== pid) continue;
+        const base = buf[i + 6] * 2 ** 25 + buf[i + 7] * 2 ** 17 + buf[i + 8] * 2 ** 9 + buf[i + 9] * 2 + (buf[i + 10] >> 7);
+        if (pid < 0) {
+          pid = id;
+          first = base;
+        }
+        last = base;
+        n++;
+      }
+      pos += packets;
+    }
+    if (n < 2) return 0;
+    let span = (last - first) & (2 ** 33 - 1);
+    if (span === 0) return 0;
+    span += span / (n - 1);
+    return span / 90000;
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function videoPackets(file) {
+  const probed = spawnSync(
+    "ffprobe",
+    ["-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time,flags", "-of", "csv=p=0", file],
+    { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
+  );
+  const keys = [];
+  let last = null;
+  let firstFlags = "";
+  for (const line of (probed.stdout || "").trim().split("\n")) {
+    if (!line) continue;
+    const [pts, flags = ""] = line.split(",");
+    const time = Number(pts);
+    if (!Number.isFinite(time)) continue;
+    if (last == null) firstFlags = flags;
+    last = time;
+    if (flags.includes("K")) keys.push(time);
+  }
+  return { keys, last, firstIsKey: firstFlags.includes("K") };
+}
+
+// A flush audio ending does not stop the playhead. The hole a restart leaves
+// shows up when the sound ends a little before the picture, which is what a
+// broadcast cut does. Drop the audio packets in that last stretch.
+function trimTrailingAudio(file, videoLast) {
+  const probed = spawnSync(
+    "ffprobe",
+    ["-v", "error", "-select_streams", "a:0", "-show_entries", "stream=id", "-of", "csv=p=0", file],
+    { encoding: "utf8" },
+  );
+  const raw = (probed.stdout || "").trim().split("\n")[0] || "";
+  const pid = Number.parseInt(raw, raw.startsWith("0x") ? 16 : 10);
+  if (!Number.isFinite(pid) || videoLast == null) return;
+  const cut = videoLast - 0.07;
+  const data = readFileSync(file);
+  const out = [];
+  let drop = false;
+  for (let i = 0; i + 188 <= data.length; i += 188) {
+    const id = ((data[i + 1] & 0x1f) << 8) | data[i + 2];
+    if (id === pid) {
+      const start = (data[i + 1] & 0x40) !== 0;
+      if (start) {
+        let off = i + 4;
+        if ((data[i + 3] & 0x20) !== 0) off += 1 + data[i + 4];
+        const pes = off + 14 <= i + 188 && data[off] === 0 && data[off + 1] === 0 && data[off + 2] === 1 && (data[off + 7] & 0x80) !== 0;
+        if (pes) {
+          const b = off + 9;
+          const pts =
+            ((data[b] & 0x0e) * 2 ** 29) +
+            (data[b + 1] * 2 ** 22) +
+            ((data[b + 2] & 0xfe) * 2 ** 14) +
+            (data[b + 3] * 2 ** 7) +
+            (data[b + 4] >> 1);
+          if (pts / 90000 > cut) drop = true;
+        }
+      }
+      if (drop) continue;
+    }
+    out.push(data.subarray(i, i + 188));
+  }
+  writeFileSync(file, Buffer.concat(out));
+}
+
+// A ~20s loop cut on a keyframe, so each raw pass is a clean timestamp break.
+async function buildBreakLoop(dest) {
+  const src = `${dest}.src.ts`;
+  const encoded = await runFfmpeg([
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    "testsrc2=size=1280x720:rate=60000/1001",
+    "-f",
+    "lavfi",
+    "-i",
+    "sine=frequency=500:sample_rate=48000",
+    "-t",
+    "25",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "ultrafast",
+    "-pix_fmt",
+    "yuv420p",
+    "-g",
+    "30",
+    "-keyint_min",
+    "30",
+    "-x264-params",
+    "scenecut=0:keyint=30:min-keyint=30",
+    "-c:a",
+    "ac3",
+    "-ac",
+    "2",
+    "-b:a",
+    "192k",
+    "-f",
+    "mpegts",
+    src,
+  ]);
+  if (encoded.code !== 0) {
+    console.error(encoded.err || "ffmpeg did not write the break source");
+    process.exit(1);
+  }
+  const srcVideo = videoPackets(src);
+  const seg = `${dest}.seg%d.ts`;
+  // segment_time cuts on the next keyframe, so the file starts and ends on a GOP.
+  const copied = await runFfmpeg([
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-y",
+    "-i",
+    src,
+    "-map",
+    "0",
+    "-c",
+    "copy",
+    "-f",
+    "segment",
+    "-segment_time",
+    "20",
+    "-break_non_keyframes",
+    "0",
+    "-segment_format",
+    "mpegts",
+    seg,
+  ]);
+  if (copied.code !== 0) {
+    console.error(copied.err || "ffmpeg did not cut the break loop");
+    process.exit(1);
+  }
+  const piece = `${dest}.seg0.ts`;
+  renameSync(piece, dest);
+  for (const extra of [`${dest}.seg1.ts`, `${dest}.seg2.ts`, src]) {
+    try {
+      unlinkSync(extra);
+    } catch {
+      // The loop is one segment; a short source has no remainder.
+    }
+  }
+  const out = videoPackets(dest);
+  const next = srcVideo.keys.find((key) => out.keys.length && key > out.keys.at(-1) + 0.001);
+  const gap = next == null || out.last == null ? Infinity : next - out.last;
+  const origin = srcVideo.keys[0];
+  if (!out.firstIsKey || !out.keys.length || origin == null || Math.abs(out.keys[0] - origin) > 0.02 || !(gap > 0.01 && gap < 0.04)) {
+    console.error(`break loop is not GOP aligned (first ${out.keys[0]}, last ${out.last}, next key ${next}, gap ${gap})`);
+    process.exit(1);
+  }
+  const probed = spawnSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", dest], { encoding: "utf8" });
+  const dur = Number((probed.stdout || "").trim());
+  const pcr = pcrSpanSeconds(dest);
+  if (!(dur >= 18 && dur <= 22) || !(pcr >= 15 && pcr <= 25)) {
+    console.error(`break loop duration ${dur}s pcr ${pcr}s, wanted about 20`);
+    process.exit(1);
+  }
+  trimTrailingAudio(dest, out.last);
+  console.log(`break loop ${dur.toFixed(3)}s pcr ${pcr.toFixed(3)}s`);
 }
 
 // A 5s flash and beep, with the picture held back 1.3s. A 1s period would fold
@@ -96,55 +300,59 @@ const pattern = avsync
       "-t",
       "4",
     ];
-const encoded = await runFfmpeg([
-  "-hide_banner",
-  "-loglevel",
-  "error",
-  "-y",
-  ...pattern,
-  "-c:v",
-  "libx264",
-  "-preset",
-  "ultrafast",
-  "-g",
-  "30",
-  "-pix_fmt",
-  "yuv420p",
-  "-c:a",
-  "ac3",
-  "-ac",
-  "2",
-  "-f",
-  "mpegts",
-  sample,
-]);
-if (encoded.code !== 0) {
-  console.error(encoded.err || "ffmpeg did not write the sample");
-  process.exit(1);
-}
-if (avsync) {
-  const probed = spawnSync(
-    "ffprobe",
-    ["-v", "error", "-show_entries", "stream=codec_type,start_time", "-of", "csv=p=0", sample],
-    { encoding: "utf8" },
-  );
-  const began = {};
-  for (const line of (probed.stdout || "").split("\n")) {
-    const parts = line.trim().split(",").filter(Boolean);
-    const kind = parts.find((part) => part === "video" || part === "audio");
-    const at = parts.map(Number).find((value) => Number.isFinite(value));
-    if (kind && at != null && began[kind] == null) began[kind] = at;
-  }
-  const lead = began.video - began.audio;
-  if (!(lead > 1.15 && lead < 1.5)) {
-    console.error(`sync pattern lead is ${lead}s, wanted about 1.3\n${probed.stdout}`);
+if (brk) {
+  await buildBreakLoop(sample);
+} else {
+  const encoded = await runFfmpeg([
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-y",
+    ...pattern,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "ultrafast",
+    "-g",
+    "30",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "ac3",
+    "-ac",
+    "2",
+    "-f",
+    "mpegts",
+    sample,
+  ]);
+  if (encoded.code !== 0) {
+    console.error(encoded.err || "ffmpeg did not write the sample");
     process.exit(1);
   }
-  console.log(`sync pattern lead ${lead.toFixed(3)}s`);
+  if (avsync) {
+    const probed = spawnSync(
+      "ffprobe",
+      ["-v", "error", "-show_entries", "stream=codec_type,start_time", "-of", "csv=p=0", sample],
+      { encoding: "utf8" },
+    );
+    const began = {};
+    for (const line of (probed.stdout || "").split("\n")) {
+      const parts = line.trim().split(",").filter(Boolean);
+      const kind = parts.find((part) => part === "video" || part === "audio");
+      const at = parts.map(Number).find((value) => Number.isFinite(value));
+      if (kind && at != null && began[kind] == null) began[kind] = at;
+    }
+    const lead = began.video - began.audio;
+    if (!(lead > 1.15 && lead < 1.5)) {
+      console.error(`sync pattern lead is ${lead}s, wanted about 1.3\n${probed.stdout}`);
+      process.exit(1);
+    }
+    console.log(`sync pattern lead ${lead.toFixed(3)}s`);
+  }
 }
 
 let fakeOut = "";
-const fakeArgs = avsync ? ["-ts", sample, "-source", sample] : ["-realtime", "-ts", sample];
+const fakeArgs = brk ? ["-raw", "-ts", sample] : avsync ? ["-ts", sample, "-source", sample] : ["-realtime", "-ts", sample];
 const fake = start(path.join(run, "fakehdhr"), fakeArgs, { env: { ...process.env, FAKEHDHR_ADMIN: `127.0.0.1:${port + 10}` } }, (chunk) => {
   fakeOut += chunk.toString();
 });
