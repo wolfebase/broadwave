@@ -59,7 +59,7 @@ func (s *Server) signals(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) checkSignals(w http.ResponseWriter, r *http.Request) {
 	if s.Hub == nil || !s.Hub.Idle() || s.recordingSoon(r.Context()) {
-		httpError(w, "Both tuners are busy. Stop a recording or watch something already on.", http.StatusConflict)
+		httpError(w, "Every tuner is busy. Stop a recording or watch something already on.", http.StatusConflict)
 		return
 	}
 	if !s.startSignalScan() {
