@@ -61,7 +61,7 @@ public struct APIClient: Sendable {
             if let err = try? JSONDecoder().decode(APIErrorBody.self, from: data) {
                 throw APIError(code: err.code, message: err.message, status: status)
             }
-            throw APIError(code: "http_\(status)", message: "The server answered \(status).", status: status)
+            throw Self.unreadable(status)
         }
         return try Self.decoder.decode(T.self, from: data)
     }
@@ -451,7 +451,7 @@ public struct APIClient: Sendable {
             if let err = try? JSONDecoder().decode(APIErrorBody.self, from: reply) {
                 throw APIError(code: err.code, message: err.message, status: status)
             }
-            throw APIError(code: "http_\(status)", message: "The server answered \(status).", status: status)
+            throw Self.unreadable(status)
         }
         return try Self.decoder.decode(SourceAdd.self, from: reply)
     }
@@ -560,8 +560,13 @@ public struct APIClient: Sendable {
             if let err = try? JSONDecoder().decode(APIErrorBody.self, from: body) {
                 throw APIError(code: err.code, message: err.message, status: status)
             }
-            throw APIError(code: "http_\(status)", message: "The server answered \(status).", status: status)
+            throw Self.unreadable(status)
         }
+    }
+
+    /// A body that is not the error envelope. The words match the web client.
+    private static func unreadable(_ status: Int) -> APIError {
+        APIError(code: "http_\(status)", message: PlaybackOutage.requestFailed, status: status)
     }
 
     /// One URL path segment. Backup names are filenames; a slash would address a different route.

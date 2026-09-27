@@ -11,6 +11,27 @@ export const pictureStopped = "The picture stopped. Trying again usually fixes i
 export const pictureRestarting = "The picture stopped. Starting it again.";
 export const noListing = "No listing for this channel.";
 export const noListingChecked = "Still no listing for this channel.";
+export const channelDidNotStart = "This channel did not start. Try again.";
+export const requestFailed = "That did not work. Try again.";
+
+// A response that is not the error envelope, or a system string from the player.
+// The server's own sentences pass through.
+export function viewerMessage(message: string): string {
+  const text = message.trim();
+  if (!text || unreadable(text)) return channelDidNotStart;
+  return text;
+}
+
+function unreadable(text: string): boolean {
+  if (/^The server answered \d+/.test(text)) return true;
+  if (/^(Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)$/i.test(text)) return true;
+  const lower = text.toLowerCase();
+  if (lower.includes("unexpected token") || lower.includes("is not valid json")) return true;
+  if (lower.includes("couldn't be read") || lower.includes("couldn’t be read")) return true;
+  if (lower.includes("couldn't be completed") || lower.includes("couldn’t be completed")) return true;
+  if (lower.includes("nsurlerror")) return true;
+  return false;
+}
 
 /** The note under the player. A check that finds nothing has to change the words, or the status line stays quiet. */
 export function listingNote(checked: boolean): string {
@@ -46,7 +67,7 @@ export function viewerFailure(err: unknown): { message: string; recovery: Recove
   if (/did not answer/i.test(message)) {
     return { message: tunerStopped, recovery: "tuner" };
   }
-  return { message: message || "This channel did not start.", recovery: "" };
+  return { message: viewerMessage(message), recovery: "" };
 }
 
 export type RecoverySnap = {

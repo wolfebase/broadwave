@@ -482,7 +482,11 @@ function Tile({
             <button type="button" className="btn small" onClick={(event) => { event.stopPropagation(); stream.confirm(); }}>
               Watch anyway
             </button>
-          ) : null}
+          ) : (
+            <button type="button" className="btn small" onClick={(event) => { event.stopPropagation(); stream.retry(); }}>
+              Try again
+            </button>
+          )}
           <button type="button" className="btn small" onClick={(event) => { event.stopPropagation(); onRemove(); }}>
             Remove
           </button>

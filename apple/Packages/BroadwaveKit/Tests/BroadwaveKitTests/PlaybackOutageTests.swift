@@ -150,7 +150,7 @@ private func fineSnap() -> RecoverySnap {
         code: "tuners_busy",
         message: "Every tuner is busy. Stop a recording or watch something already on."
     ) == 1)
-    #expect(PlaybackOutage.startAttempts(code: "internal", message: "This channel did not start.") == 1)
+    #expect(PlaybackOutage.startAttempts(code: "internal", message: PlaybackOutage.channelDidNotStart) == 1)
 }
 
 @Test func aBusyTunerTellsTheViewerWhatToStopAndComesBackWhenOneIsFree() {
@@ -212,8 +212,32 @@ private func fineSnap() -> RecoverySnap {
     #expect(PlaybackOutage.recoveryReady(.tuner, answering))
 
     let other = PlaybackOutage.viewerFailure(code: "nope", status: 500, message: "", online: true)
-    #expect(other.message == "This channel did not start.")
+    #expect(other.message == PlaybackOutage.channelDidNotStart)
     #expect(other.recovery == nil)
+}
+
+@Test func systemTextDoesNotReachTheViewerAndAServerSentenceDoes() {
+    #expect(PlaybackOutage.requestFailed == "That did not work. Try again.")
+    #expect(PlaybackOutage.channelDidNotStart == "This channel did not start. Try again.")
+    let answered = PlaybackOutage.viewerFailure(code: "http_500", status: 500, message: "The server answered 500.", online: true)
+    #expect(answered.message == PlaybackOutage.channelDidNotStart)
+    let parser = PlaybackOutage.viewerFailure(code: "", status: 200, message: "Unexpected token < in JSON at position 0", online: true)
+    #expect(parser.message == PlaybackOutage.channelDidNotStart)
+    let reason = PlaybackOutage.viewerFailure(code: "", status: 500, message: "Internal Server Error", online: true)
+    #expect(reason.message == PlaybackOutage.channelDidNotStart)
+    let system = PlaybackOutage.viewerMessage("The data couldn’t be read because it is missing.")
+    #expect(system == PlaybackOutage.channelDidNotStart)
+    let source = PlaybackOutage.viewerFailure(code: "internal", status: 500, message: "no source has this channel", online: true)
+    #expect(source.message == "no source has this channel")
+    let full = PlaybackOutage.viewerFailure(
+        code: "pictures_full",
+        status: 409,
+        message: "This server can play 4 pictures at once. Stop one.",
+        online: true
+    )
+    #expect(full.message == "This server can play 4 pictures at once. Stop one.")
+    let plain = PlaybackOutage.viewerFailure(code: "", status: 500, message: PlaybackOutage.requestFailed, online: true)
+    #expect(plain.message == PlaybackOutage.requestFailed)
 }
 
 @Test func aDroppedConnectionAndALostSignalEachWaitForTheirOwnFix() {

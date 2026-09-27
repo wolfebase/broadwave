@@ -176,7 +176,7 @@ final class LivePlayer {
         } catch {
             guard token == watchToken, channelID == channel.id else { return }
             needsConfirm = false
-            let decision = OutageDecision(message: error.localizedDescription, recovery: nil)
+            let decision = OutageDecision(message: PlaybackOutage.viewerMessage(error.localizedDescription), recovery: nil)
             if quiet, PlaybackOutage.holdPictureMessage(decision) {
                 outage.pictureRetryFailed()
                 return
@@ -187,7 +187,7 @@ final class LivePlayer {
             if retry, PlaybackOutage.holdPictureMessage(decision) {
                 outage.fail(OutageDecision(message: PlaybackOutage.pictureStopped, recovery: nil))
             } else {
-                self.error = error.localizedDescription
+                self.error = decision.message
             }
         }
     }
@@ -1335,7 +1335,7 @@ struct RecordingPlayerScreen: View {
                     }
                     player.play()
                 } catch {
-                    self.error = error.localizedDescription
+                    self.error = PlaybackOutage.viewerMessage(error.localizedDescription)
                 }
             }
             .onDisappear {

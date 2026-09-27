@@ -272,9 +272,11 @@ test("a multiview tile that does not start gives its sound away and can be remov
     await page.goto(`/multiview?ch=${wdaf.id},${kctv.id}&layout=2up&focus=${kctv.id}`);
     const dark = page.getByRole("group", { name: `${kctv.number} ${kctv.name}`, exact: true });
     await expect(dark.getByRole("alert")).toBeVisible({ timeout: 60_000 });
+    await expect(dark.getByRole("button", { name: "Try again" })).toBeVisible();
     await expect(page.getByRole("group", { name: `${wdaf.number} ${wdaf.name}, sound on` })).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`focus=${wdaf.id}`));
-    await shot(page, "mv-refused-tile.jpg");
+    mkdirSync(path.join(evidence, "l28"), { recursive: true });
+    await page.screenshot({ path: path.join(evidence, "l28", "tile-retry.jpg"), animations: "disabled" });
     await dark.getByRole("button", { name: "Remove" }).click();
     await expect(dark).toHaveCount(0);
     await expect(page).toHaveURL(new RegExp(`ch=${wdaf.id}(&|$)`));

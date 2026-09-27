@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { aTunerAnswers, aTunerIsFree, classifySnap, connectionDropped, holdPictureMessage, listingNote, noListing, noListingChecked, noSignal, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, serverStopped, tunerStopped, viewerFailure } from "./src/features/player/outage.ts";
+import { unreadBody } from "./src/api.ts";
+import { aTunerAnswers, aTunerIsFree, channelDidNotStart, classifySnap, connectionDropped, holdPictureMessage, listingNote, noListing, noListingChecked, noSignal, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, requestFailed, serverStopped, tunerStopped, viewerFailure, viewerMessage } from "./src/features/player/outage.ts";
 
 test("checking for listings says so when nothing comes back", () => {
   assert.equal(listingNote(false), noListing);
@@ -111,6 +112,23 @@ test("a playlist the server no longer has starts again at once, ahead of tuner a
   assert.equal(classifySnap({ ...snap, health: false }).recovery, "server");
   assert.equal(classifySnap({ ...snap, watchGone: false }).recovery, "tuner");
   assert.equal(pictureRetryDelay(pictureRestarting, "restart", 0), null);
+});
+
+test("system text does not reach the viewer, and a server sentence does", () => {
+  assert.equal(requestFailed, "That did not work. Try again.");
+  assert.equal(unreadBody, requestFailed);
+  assert.equal(channelDidNotStart, "This channel did not start. Try again.");
+  assert.equal(viewerFailure({ status: 500, code: "http_500", message: "The server answered 500." }).message, channelDidNotStart);
+  assert.equal(viewerFailure(new Error("Unexpected token < in JSON at position 0")).message, channelDidNotStart);
+  assert.equal(viewerFailure(new Error("Internal Server Error")).message, channelDidNotStart);
+  assert.equal(viewerMessage("The data couldn’t be read because it is missing."), channelDidNotStart);
+  assert.equal(viewerFailure(new Error("no source has this channel")).message, "no source has this channel");
+  assert.equal(
+    viewerFailure({ status: 409, code: "pictures_full", message: "This server can play 4 pictures at once. Stop one." }).message,
+    "This server can play 4 pictures at once. Stop one.",
+  );
+  assert.equal(viewerFailure(new Error(requestFailed)).message, requestFailed);
+  assert.equal(viewerFailure({ status: 500, code: "nope" }).message, channelDidNotStart);
 });
 
 test("a source that stopped sending goes on the quiet clock", () => {

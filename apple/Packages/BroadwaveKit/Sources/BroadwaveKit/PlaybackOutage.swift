@@ -11,6 +11,43 @@ public enum PlaybackOutage {
     public static let pictureStopped = "The picture stopped. Trying again usually fixes it."
     public static let pictureRestarting = "The picture stopped. Starting it again."
     public static let tunersBusy = "Every tuner is busy. Stop a recording or watch something already on."
+    public static let channelDidNotStart = "This channel did not start. Try again."
+    /// A response that is not the error envelope. The same words as the web client.
+    public static let requestFailed = "That did not work. Try again."
+
+    /// A message the player can show. System and transport text is replaced.
+    /// The server's own sentences pass through.
+    public static func viewerMessage(_ message: String) -> String {
+        let text = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty || unreadable(text) {
+            return channelDidNotStart
+        }
+        return text
+    }
+
+    private static func unreadable(_ text: String) -> Bool {
+        if text.range(of: #"^The server answered \d+"#, options: .regularExpression) != nil {
+            return true
+        }
+        let lowered = text.lowercased()
+        if ["internal server error", "bad gateway", "service unavailable", "gateway timeout"].contains(lowered) {
+            return true
+        }
+        if lowered.contains("unexpected token") || lowered.contains("is not valid json") {
+            return true
+        }
+        if lowered.contains("couldn't be read") || lowered.contains("couldn’t be read") {
+            return true
+        }
+        if lowered.contains("couldn't be completed") || lowered.contains("couldn’t be completed") {
+            return true
+        }
+        if lowered.contains("nsurlerror") {
+            return true
+        }
+        return false
+    }
+
     /// A stall is named only after this long, and only when something is actually wrong.
     public static let stallSeconds: TimeInterval = 8
     /// A stopped picture with no named cause has nothing to wait for. The player
@@ -66,8 +103,7 @@ public enum PlaybackOutage {
         if lowered.contains("did not answer") {
             return OutageDecision(message: tunerStopped, recovery: .tuner)
         }
-        let text = message.isEmpty ? "This channel did not start." : message
-        return OutageDecision(message: text, recovery: nil)
+        return OutageDecision(message: viewerMessage(message), recovery: nil)
     }
 
     /// How many times to ask before the message stays. A tuner that missed its

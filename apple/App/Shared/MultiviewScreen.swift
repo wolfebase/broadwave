@@ -402,7 +402,7 @@ final class TilePlayer {
             self.error = decision.message
         } catch {
             guard token == startToken, channelID == channel.id else { return }
-            let decision = OutageDecision(message: error.localizedDescription, recovery: nil)
+            let decision = OutageDecision(message: PlaybackOutage.viewerMessage(error.localizedDescription), recovery: nil)
             if quiet, PlaybackOutage.holdPictureMessage(decision) {
                 outage.pictureRetryFailed()
                 return
