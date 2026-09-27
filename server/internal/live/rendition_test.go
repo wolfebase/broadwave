@@ -200,7 +200,9 @@ func TestAudioJumpDoesNotFillTheGap(t *testing.T) {
 	if strings.Contains(stderr, "Failed to compensate") {
 		t.Fatalf("resampler tried to fill the jump: %s", stderr)
 	}
-	if big > 1<<30 || (small > 0 && big > small+(128<<20) && big > small*2) {
+	// A runner can map over a gigabyte for the short step alone; only memory
+	// the jump adds on top of that counts.
+	if big > small+(128<<20) && (big > 1<<30 || big > small*2) {
 		t.Fatalf("audio jump used %d bytes, short step %d: %s", big, small, stderr)
 	}
 }
