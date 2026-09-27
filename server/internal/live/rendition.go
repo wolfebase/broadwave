@@ -475,9 +475,17 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		interlaced := fieldDoubled(src.VideoCodec, g.Mode, src.Progressive, src.Lace)
 		field := interlaced && !smallPicture(g)
 		width, height, rate := outputSize(g, field)
-		fps, _ := pictureRate(g, field)
+		fps, gop := pictureRate(g, field)
 		args = append(args, "-vf", videoFilter(g, vaapiDeintMode(g, interlaced), interlaced, field, width, height, fps))
-		args = append(args, videoCodec(outEnc, rate, sourceKeyint)...)
+		// A graph that drops frames (a film pulldown, a half-rate tile) can drop
+		// the frame that carried the source keyframe, and the segment then runs
+		// until one survives: 20 s on a 60p channel, a 63 s hold-back. Four
+		// seconds still keeps a broadcast group whole where nothing is dropped.
+		keyint := sourceKeyint
+		if fps != "" && !field {
+			keyint = 2 * gop
+		}
+		args = append(args, videoCodec(outEnc, rate, keyint)...)
 		args = append(args, "-force_key_frames", openingKeyframes)
 	} else {
 		args = append(args, "-c:v", "copy")
