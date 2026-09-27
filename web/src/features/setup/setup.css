@@ -1,9 +1,15 @@
 .setup {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   max-width: 820px;
   margin: 0 auto;
-  padding: var(--space-10) var(--space-6) var(--space-16);
+  padding: var(--space-6);
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: var(--space-6);
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .setup-head {
@@ -67,6 +73,9 @@
   padding: var(--space-8);
   display: grid;
   gap: var(--space-4);
+  min-height: 0;
+  overflow: auto;
+  align-content: start;
 }
 
 .setup-card h2 {
@@ -230,7 +239,7 @@
 }
 
 .layout-phone .setup {
-  padding: var(--space-6) var(--space-4) var(--space-12);
+  padding: var(--space-4);
 }
 
 .layout-phone .setup-head h1 {

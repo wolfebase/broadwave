@@ -250,16 +250,26 @@ export function Setup() {
           </div>
           {note ? <p className="dim">{note}</p> : null}
           <HomeList hideAdded />
-          <Footer onNext={() => setStep("finish")} canNext={devices.length > 0 || channels.length > 0} />
         </section>
       ) : null}
 
-      {step === "finish" ? <FinishStep progress={progress} note={note} onWatch={() => void watch()} /> : null}
+      {step === "finish" ? <FinishStep progress={progress} note={note} /> : null}
+      <div className="setup-foot">
+        {step === "sources" ? (
+          <button type="button" className="btn primary" disabled={devices.length === 0 && channels.length === 0} onClick={() => setStep("finish")}>
+            Continue <ChevronIcon />
+          </button>
+        ) : progress?.ready ? (
+          <button type="button" className="btn primary big" onClick={() => void watch()}>
+            Watch <ChevronIcon />
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-function FinishStep({ progress, note, onWatch }: { progress: SetupFinish | null; note: string; onWatch: () => void }) {
+function FinishStep({ progress, note }: { progress: SetupFinish | null; note: string }) {
   const ready = progress?.ready ?? "";
   const url = window.location.origin;
   const loopback = /^(localhost|127\.|\[::1\]$)/.test(window.location.hostname);
@@ -284,11 +294,6 @@ function FinishStep({ progress, note, onWatch }: { progress: SetupFinish | null;
       {note ? <p className="dim">{note}</p> : null}
       {ready ? (
         <>
-          <div className="setup-foot">
-            <button type="button" className="btn primary big" onClick={onWatch}>
-              Watch <ChevronIcon />
-            </button>
-          </div>
           {loopback ? (
             <p className="dim">
               To connect your phone or TV, open this page from another device at this computer's network address, or open Broadwave there. It finds this server on its own.
@@ -314,16 +319,6 @@ function stateWord(state: string) {
   if (state === "check") return "Needs a look";
   if (state === "skipped") return "Skipped";
   return "";
-}
-
-function Footer({ onNext, canNext }: { onNext: () => void; canNext: boolean }) {
-  return (
-    <div className="setup-foot">
-      <button type="button" className="btn primary" disabled={!canNext} onClick={onNext}>
-        Continue <ChevronIcon />
-      </button>
-    </div>
-  );
 }
 
 async function addHit(

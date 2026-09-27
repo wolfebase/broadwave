@@ -10,9 +10,16 @@ window.addEventListener("popstate", () => listeners.forEach((fn) => fn()));
 
 export function navigate(to: string, replace = false) {
   if (to === current()) return;
-  if (replace) window.history.replaceState({}, "", to);
-  else window.history.pushState({}, "", to);
+  const depth = inAppDepth();
+  if (replace) window.history.replaceState({ depth }, "", to);
+  else window.history.pushState({ depth: depth + 1 }, "", to);
   listeners.forEach((fn) => fn());
+}
+
+/** How many entries back the app itself pushed; 0 on the page a viewer opened. */
+export function inAppDepth(): number {
+  const depth = (window.history.state as { depth?: unknown } | null)?.depth;
+  return typeof depth === "number" ? depth : 0;
 }
 
 export function useRoute(): { path: string; params: URLSearchParams } {

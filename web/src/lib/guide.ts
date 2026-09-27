@@ -84,6 +84,14 @@ export function sortChannels(channels: Channel[]): Channel[] {
   });
 }
 
+/** 8:00 PM on the viewer's clock, rolling to the next day once that hour has passed. */
+export function primeTime(now: number): number {
+  const at = new Date(now);
+  at.setHours(20, 0, 0, 0);
+  if (at.getTime() < now) at.setDate(at.getDate() + 1);
+  return at.getTime();
+}
+
 export function timeLabel(iso: string | number): string {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }

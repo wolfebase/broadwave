@@ -48,6 +48,23 @@
   flex: 1;
 }
 
+.pill-btn[aria-pressed="true"] {
+  background: var(--color-text);
+  color: var(--color-canvas);
+}
+
+.layout-phone .guide-page.phone .guide-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.layout-phone .guide-page.phone .guide-jump,
+.layout-phone .guide-page.phone .guide-chips,
+.layout-phone .guide-page.phone .guide-search {
+  width: 100%;
+  min-width: 0;
+}
+
 .guide-chips::-webkit-scrollbar {
   display: none;
 }

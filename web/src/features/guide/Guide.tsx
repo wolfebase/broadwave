@@ -10,6 +10,7 @@ import {
   emptyGuideLabel,
   isRecording,
   nextAfter,
+  primeTime,
   progress,
   recordingKeys,
   spanLabel,
@@ -60,6 +61,7 @@ export function Guide() {
   const layout = useLayout();
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
+  const [when, setWhen] = useState<"now" | "tonight">("now");
   const [sheet, setSheet] = useState<{ channel: Channel; airing?: Airing } | null>(null);
   const [focus, setFocus] = useState<{ row: number; at: number }>({ row: 0, at: now });
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -162,10 +164,7 @@ export function Guide() {
   }
 
   function tonight() {
-    const d = new Date(now);
-    d.setHours(20, 0, 0, 0);
-    if (d.getTime() < now) d.setDate(d.getDate() + 1);
-    scrollToTime(d.getTime() - 30 * MIN);
+    scrollToTime(primeTime(now) - 30 * MIN);
   }
 
   function jumpToDay(midnight: number) {
@@ -272,12 +271,23 @@ export function Guide() {
   if (layout === "phone" && !landscape) {
     return (
       <div className="guide-page phone">
-        <GuideControls filter={filter} setFilter={setFilter} query={query} setQuery={setQuery} counts={counts} onNow={() => undefined} onTonight={() => undefined} compact />
+        <GuideControls
+          filter={filter}
+          setFilter={setFilter}
+          query={query}
+          setQuery={setQuery}
+          counts={counts}
+          pressed={when}
+          onNow={() => setWhen("now")}
+          onTonight={() => setWhen("tonight")}
+          compact
+        />
         {rows.length === 0 ? <Empty title="Nothing matches">Try another filter or search.</Empty> : null}
         <ul className="onnow-list">
           {rows.map((c) => {
-            const a = airingAt(index, c.id, now);
-            const n = nextAfter(index, c.id, a ? Date.parse(a.end) : now);
+            const at = when === "tonight" ? primeTime(now) : now;
+            const a = airingAt(index, c.id, at);
+            const n = nextAfter(index, c.id, a ? Date.parse(a.end) : at);
             const rec = a ? isRecording(keys, a, now) : null;
             return (
               <li key={c.id}>
@@ -286,7 +296,7 @@ export function Guide() {
                   <span className="onnow-body">
                     <span className="onnow-title">
                       {rec ? <RecDot scheduled={rec === "scheduled"} /> : null}
-                      {a?.title ?? emptyGuideLabel(index.get(c.id) ?? [], now)}
+                      {a?.title ?? emptyGuideLabel(index.get(c.id) ?? [], at)}
                     </span>
                     <Progress value={progress(a, now)} category={categoryOf(a)} />
                     {n ? (
@@ -466,6 +476,7 @@ function GuideControls({
   onTonight,
   onDay,
   compact,
+  pressed,
 }: {
   filter: Filter;
   setFilter: (f: Filter) => void;
@@ -478,29 +489,28 @@ function GuideControls({
   onTonight: () => void;
   onDay?: (midnight: number) => void;
   compact?: boolean;
+  pressed?: "now" | "tonight";
 }) {
   const cats: Category[] = ["sports", "news", "movies", "kids"];
   return (
     <div className="guide-controls">
-      {!compact ? (
-        <div className="guide-jump">
-          <button type="button" className="pill-btn" onClick={onNow}>
-            Now
-          </button>
-          <button type="button" className="pill-btn" onClick={onTonight}>
-            Tonight
-          </button>
-          {days && now != null
-            ? days
-                .filter((day) => dayWord(day, now) !== "Today")
-                .map((day) => (
-                  <button key={day} type="button" className="pill-btn" onClick={() => onDay?.(day)}>
-                    {dayWord(day, now)}
-                  </button>
-                ))
-            : null}
-        </div>
-      ) : null}
+      <div className="guide-jump">
+        <button type="button" className="pill-btn" aria-pressed={pressed ? pressed === "now" : undefined} onClick={onNow}>
+          Now
+        </button>
+        <button type="button" className="pill-btn" aria-pressed={pressed ? pressed === "tonight" : undefined} onClick={onTonight}>
+          Tonight
+        </button>
+        {!compact && days && now != null
+          ? days
+              .filter((day) => dayWord(day, now) !== "Today")
+              .map((day) => (
+                <button key={day} type="button" className="pill-btn" onClick={() => onDay?.(day)}>
+                  {dayWord(day, now)}
+                </button>
+              ))
+          : null}
+      </div>
       <div className="guide-chips" role="group" aria-label="Filter">
         <Chip on={filter === "all"} onClick={() => setFilter("all")}>
           All
