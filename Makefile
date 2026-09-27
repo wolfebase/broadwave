@@ -32,6 +32,7 @@ dev:
 
 test: web/node_modules
 	go test ./server/...
+	go test -race ./server/internal/live/ ./server/internal/hdhr/fake/
 	cd web && npx tsc --noEmit
 	cd web && node --experimental-strip-types --test storage.test.ts art.test.ts compat.test.ts switcher.test.ts schedule.test.ts sync.test.ts guide.test.ts remote.test.ts outage.test.ts
 
