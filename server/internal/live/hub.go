@@ -244,11 +244,37 @@ type recording struct {
 	timer *time.Timer
 }
 
+// pipeQueueCap bounds how far one encode or recording can fall behind the
+// tuner. Tuner reads are often a few KB, so a count of reads is no time budget.
+const pipeQueueCap = 32 << 20
+
 type pipeSub struct {
-	w    io.WriteCloser
-	ch   chan []byte
-	done chan struct{}
-	once sync.Once
+	w      io.WriteCloser
+	ch     chan []byte
+	done   chan struct{}
+	once   sync.Once
+	queued atomic.Int64
+	lost   int64 // readLoop only
+	logged time.Time
+}
+
+// offer queues chunk, or drops it when this reader is too far behind, so one
+// slow encode never stalls the tuner for everyone else.
+func (s *pipeSub) offer(chunk []byte, freq int) {
+	if s.queued.Load()+int64(len(chunk)) <= pipeQueueCap {
+		select {
+		case s.ch <- chunk:
+			s.queued.Add(int64(len(chunk)))
+			return
+		default:
+		}
+	}
+	s.lost += int64(len(chunk))
+	if time.Since(s.logged) >= 10*time.Second {
+		slog.Warn(fmt.Sprintf("mux %d: a reader is %d MB behind the tuner; dropped %d KB", freq, s.queued.Load()>>20, s.lost>>10))
+		s.logged = time.Now()
+		s.lost = 0
+	}
 }
 
 func (s *pipeSub) stop() {
@@ -1427,7 +1453,7 @@ func (h *Hub) attachPipe(m *mux, w io.WriteCloser, lead bool) *pipeSub {
 	// A few seconds of the mux have to fit. The rendition does not read during
 	// VAAPI startup, and a gap at the start leaves the deinterlacer with no
 	// picture, so the playlist stays an empty file.
-	sub := &pipeSub{w: w, ch: make(chan []byte, 4096), done: make(chan struct{})}
+	sub := &pipeSub{w: w, ch: make(chan []byte, 16384), done: make(chan struct{})}
 	if m == nil {
 		sub.stop()
 		_ = w.Close()
@@ -1437,6 +1463,7 @@ func (h *Hub) attachPipe(m *mux, w io.WriteCloser, lead bool) *pipeSub {
 	if lead {
 		if head := m.copyLeadLocked(); len(head) > 0 {
 			sub.ch <- head
+			sub.queued.Add(int64(len(head)))
 		}
 	}
 	m.pipes = append(m.pipes, sub)
@@ -1451,6 +1478,7 @@ func (h *Hub) attachPipe(m *mux, w io.WriteCloser, lead bool) *pipeSub {
 				if !ok {
 					return
 				}
+				sub.queued.Add(-int64(len(chunk)))
 				if _, err := w.Write(chunk); err != nil {
 					return
 				}
@@ -1563,10 +1591,7 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 			}
 			h.observeMuxPicture(m, chunk)
 			for _, sub := range m.noteLead(chunk) {
-				select {
-				case sub.ch <- chunk:
-				default:
-				}
+				sub.offer(chunk, m.freq)
 			}
 		}
 		if err != nil {

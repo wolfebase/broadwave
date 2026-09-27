@@ -1,7 +1,6 @@
 package live
 
 import (
-	"bytes"
 	"io"
 )
 
@@ -23,6 +22,13 @@ type programPipe struct {
 	pass    bool
 	synced  bool
 	keep    map[int]bool
+	pmtPID  int
+	pmtVer  int
+	pmtPkts []byte
+	video   int
+	kind    int
+	started bool
+	skipped int
 	pat     [188]byte
 	cc      byte
 	hold    []byte
@@ -33,7 +39,7 @@ func newProgramPipe(w io.WriteCloser, program int) io.WriteCloser {
 	if w == nil || program <= 0 {
 		return w
 	}
-	return &programPipe{w: w, program: program}
+	return &programPipe{w: w, program: program, pmtVer: -1}
 }
 
 func (p *programPipe) Write(chunk []byte) (int, error) {
@@ -42,42 +48,36 @@ func (p *programPipe) Write(chunk []byte) (int, error) {
 		_, err := p.w.Write(chunk)
 		return n, err
 	}
-	if !p.ready {
-		p.hold = append(p.hold, chunk...)
-		if !p.synced {
-			if len(p.hold) < 188 {
+	p.rest = append(p.rest, chunk...)
+	if !p.synced {
+		// An encode that attaches mid-stream starts inside a packet, and a
+		// payload holds 0x47 bytes too. Lock only where three sync bytes line up.
+		i := syncOffset(p.rest, 3)
+		if i < 0 {
+			if len(p.rest) < 188*16 {
 				return n, nil
 			}
-			// A rendition that attaches after the tune has started begins
-			// mid-packet. Lock once, the way the scan does, and then stay there.
-			i := bytes.IndexByte(p.hold[:188], 0x47)
-			if i < 0 {
-				p.pass = true
-				buf := p.hold
-				p.hold = nil
-				_, err := p.w.Write(buf)
-				return n, err
-			}
-			p.synced = true
-			if i > 0 {
-				p.hold = append([]byte(nil), p.hold[i:]...)
-			}
+			return n, p.giveUp()
 		}
+		p.synced = true
+		p.rest = append([]byte(nil), p.rest[i:]...)
+	}
+	pkts := p.packets()
+	if !p.ready {
+		p.hold = append(p.hold, pkts...)
 		if !p.learn(p.hold) {
 			if !p.pass && len(p.hold) < programFilterCap {
 				return n, nil
 			}
-			p.pass = true
-			buf := p.hold
-			p.hold = nil
-			_, err := p.w.Write(buf)
-			return n, err
+			return n, p.giveUp()
 		}
-		chunk = p.hold
+		pkts = p.hold
 		p.hold = nil
 	}
-	out, rest := p.filter(chunk)
-	p.rest = rest
+	out := p.filter(pkts)
+	if !p.started {
+		out = p.start(out)
+	}
 	if len(out) == 0 {
 		return n, nil
 	}
@@ -85,12 +85,129 @@ func (p *programPipe) Write(chunk []byte) (int, error) {
 	return n, err
 }
 
+// giveUp sends everything held, and the rest of the stream, unchanged.
+func (p *programPipe) giveUp() error {
+	p.pass = true
+	buf := append(p.hold, p.rest...)
+	p.hold, p.rest = nil, nil
+	if len(buf) == 0 {
+		return nil
+	}
+	_, err := p.w.Write(buf)
+	return err
+}
+
 func (p *programPipe) Close() error {
-	if !p.pass && !p.ready && len(p.hold) > 0 {
-		_, _ = p.w.Write(p.hold)
-		p.hold = nil
+	if !p.pass && !p.ready {
+		_ = p.giveUp()
 	}
 	return p.w.Close()
+}
+
+// syncOffset is the first offset where n sync bytes sit one packet apart.
+func syncOffset(data []byte, n int) int {
+	for i := 0; i+188*(n-1) < len(data); i++ {
+		ok := true
+		for k := range n {
+			if data[i+188*k] != 0x47 {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return i
+		}
+	}
+	return -1
+}
+
+// packets takes the whole packets out of p.rest. A packet counts only when
+// the next two start where it ends: a slow encode loses whole reads, which
+// are not packet sized, and the packet across that seam is half one packet
+// and half another. The last two packets wait for the next write.
+func (p *programPipe) packets() []byte {
+	data := p.rest
+	var out []byte
+	off := 0
+	for off+376 < len(data) {
+		if data[off] != 0x47 || data[off+188] != 0x47 || data[off+376] != 0x47 {
+			off++
+			continue
+		}
+		out = append(out, data[off:off+188]...)
+		off += 188
+	}
+	// The first write can be the whole lead; keep only what is left.
+	if cap(data) > 64<<10 {
+		p.rest = append([]byte(nil), data[off:]...)
+	} else {
+		p.rest = append(data[:0], data[off:]...)
+	}
+	return out
+}
+
+// start drops the program until its first sequence header and puts the
+// tables in front of it. ffmpeg probes one second of input; an encode that
+// joins mid-picture group can reach that ceiling before a sequence header,
+// and a VAAPI decoder opened without a picture size never recovers.
+func (p *programPipe) start(out []byte) []byte {
+	if p.video == 0 {
+		p.started = true
+		return out
+	}
+	for off := 0; off+188 <= len(out); off += 188 {
+		pkt := out[off : off+188]
+		if int(pkt[1]&0x1f)<<8|int(pkt[2]) != p.video || pkt[1]&0x40 == 0 {
+			continue
+		}
+		if !sequenceStart(tsPayload(pkt), p.kind) {
+			continue
+		}
+		p.started = true
+		pat := p.pat
+		pat[3] = 0x10 | (p.cc & 0x0f)
+		p.cc = (p.cc + 1) & 0x0f
+		head := append(pat[:], p.pmtPkts...)
+		return append(head, out[off:]...)
+	}
+	// A picture group is at most a few seconds; past that, send what comes.
+	p.skipped += len(out)
+	if p.skipped > programFilterCap {
+		p.started = true
+		return out
+	}
+	return nil
+}
+
+func tsPayload(pkt []byte) []byte {
+	switch (pkt[3] >> 4) & 0x3 {
+	case 1:
+		return pkt[4:]
+	case 3:
+		if 5+int(pkt[4]) <= len(pkt) {
+			return pkt[5+int(pkt[4]):]
+		}
+	}
+	return nil
+}
+
+// sequenceStart reports whether a PES start carries a sequence header
+// (MPEG-2) or a sequence parameter set (H.264).
+func sequenceStart(payload []byte, kind int) bool {
+	es := pesPayload(payload)
+	for i := 0; i+3 < len(es); i++ {
+		if es[i] != 0 || es[i+1] != 0 || es[i+2] != 1 {
+			continue
+		}
+		code := es[i+3]
+		if kind == streamMPEG2 && code == 0xb3 {
+			return true
+		}
+		if kind == streamH264 && code&0x1f == 7 {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *programPipe) learn(buf []byte) bool {
@@ -119,53 +236,51 @@ func (p *programPipe) learn(buf []byte) bool {
 		}
 		return false
 	}
-	var pids []int
-	pcr := 0x1FFF
+	p.pmtPID = pmtPID
 	for _, sec := range sections(buf, pmtPID) {
-		if len(sec) < 12 || sec[0] != 0x02 {
-			continue
-		}
-		// A table split across packets is not finished in the first one.
-		// Parsing that prefix freezes the stream list without the rest.
-		if sectionEnd(sec)+4 > len(sec) {
-			continue
-		}
-		pcr = int(sec[8]&0x1f)<<8 | int(sec[9])
-		pids = pmtElementary(sec)
-		if len(pids) > 0 {
-			break
+		if p.useMap(sec) {
+			p.pat = singleProgramPAT(p.program, pmtPID, tsID)
+			p.ready = true
+			return true
 		}
 	}
+	return false
+}
+
+// useMap keeps the streams a complete program map lists for this program.
+func (p *programPipe) useMap(sec []byte) bool {
+	if len(sec) < 12 || sec[0] != 0x02 {
+		return false
+	}
+	// A table split across packets is not finished in the first one.
+	// Parsing that prefix freezes the stream list without the rest.
+	if sectionEnd(sec)+4 > len(sec) {
+		return false
+	}
+	if int(sec[3])<<8|int(sec[4]) != p.program {
+		return false
+	}
+	pids := pmtElementary(sec)
 	if len(pids) == 0 {
 		return false
 	}
-	keep := map[int]bool{0: true, pmtPID: true}
-	if pcr != 0x1FFF {
+	keep := map[int]bool{0: true, p.pmtPID: true}
+	if pcr := int(sec[8]&0x1f)<<8 | int(sec[9]); pcr != 0x1FFF {
 		keep[pcr] = true
 	}
 	for _, pid := range pids {
 		keep[pid] = true
 	}
 	p.keep = keep
-	p.pat = singleProgramPAT(p.program, pmtPID, tsID)
-	p.ready = true
+	p.pmtVer = int(sec[5]>>1) & 0x1f
+	p.video, p.kind = pmtVideo(sec)
 	return true
 }
 
-func (p *programPipe) filter(data []byte) ([]byte, []byte) {
-	if len(p.rest) > 0 {
-		data = append(append([]byte(nil), p.rest...), data...)
-	}
+func (p *programPipe) filter(data []byte) []byte {
 	var out []byte
-	off := 0
-	for off+188 <= len(data) {
-		if data[off] != 0x47 {
-			// One lost sync byte. Stepping by one would slide the phase for good.
-			off += 188
-			continue
-		}
+	for off := 0; off+188 <= len(data); off += 188 {
 		pkt := data[off : off+188]
-		off += 188
 		pid := int(pkt[1]&0x1f)<<8 | int(pkt[2])
 		if pid == 0 {
 			pat := p.pat
@@ -174,11 +289,27 @@ func (p *programPipe) filter(data []byte) ([]byte, []byte) {
 			out = append(out, pat[:]...)
 			continue
 		}
+		if pid == p.pmtPID {
+			if pkt[1]&0x40 != 0 {
+				p.pmtPkts = p.pmtPkts[:0]
+			}
+			if len(p.pmtPkts) < 188*4 {
+				p.pmtPkts = append(p.pmtPkts, pkt...)
+			}
+		}
+		if pid == p.pmtPID && pkt[1]&0x40 != 0 {
+			// A station can move a stream to a new PID; follow its new map.
+			for _, sec := range sections(pkt, pid) {
+				if len(sec) > 5 && sec[0] == 0x02 && int(sec[5]>>1)&0x1f != p.pmtVer {
+					p.useMap(sec)
+				}
+			}
+		}
 		if p.keep[pid] {
 			out = append(out, pkt...)
 		}
 	}
-	return out, append([]byte(nil), data[off:]...)
+	return out
 }
 
 func pmtElementary(sec []byte) []int {
