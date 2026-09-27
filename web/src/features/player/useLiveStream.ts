@@ -66,6 +66,8 @@ export function useLiveStream(
   const [pictureStopAt, setPictureStopAt] = useState(0);
   const pictureStopAtRef = useRef(0);
   const quietRetry = useRef<number | null>(null);
+  // A quiet watch still starting or holding for its first picture.
+  const quietPending = useRef(false);
   const [needsConfirm, setNeedsConfirm] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const confirmLive = useRef(false);
@@ -165,6 +167,7 @@ export function useLiveStream(
     let quietTimer = 0;
     let playlist = "";
     const rememberOutage = (message: string, kind: Recovery) => {
+      quietPending.current = false;
       setNeedsConfirm(false);
       setError(message);
       setRecovery(kind);
@@ -258,6 +261,7 @@ export function useLiveStream(
       } catch (err) {
         if (dead) return;
         quietRetry.current = null;
+        quietPending.current = false;
         const failed = err as ApiFailure;
         if (failed.status === 409 && failed.code === "recording_soon") {
           if (pictureStopAtRef.current) {
@@ -461,6 +465,8 @@ export function useLiveStream(
     let dead = false;
     let timer = 0;
     let fired = 0;
+    let skipped = false;
+    quietPending.current = false;
     const arm = () => {
       if (dead || pictureStopAtRef.current !== started) return;
       // A timer can fire a hair early; counting fires keeps it from firing twice.
@@ -470,7 +476,13 @@ export function useLiveStream(
       timer = window.setTimeout(() => {
         if (dead || pictureStopAtRef.current !== started) return;
         fired += 1;
-        if (!retrying.current) {
+        // A fresh tune can hold its first picture longer than one turn. The
+        // watch still starting gets one more turn instead of starting over.
+        if (quietPending.current && !skipped) {
+          skipped = true;
+        } else if (!retrying.current) {
+          skipped = false;
+          quietPending.current = true;
           quietRetry.current = channelId;
           setAttempt((n) => n + 1);
         }
