@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var showAbout = false
     @State private var showDiagnostics = false
     @State private var showChannels = false
+    @State private var showSources = false
     @State private var showPasses = false
     @State private var checkUpdates = true
     @State private var updatesKnown = false
@@ -118,6 +119,7 @@ struct SettingsView: View {
         .navigationDestination(isPresented: $showAbout) { AboutView() }
         .navigationDestination(isPresented: $showDiagnostics) { DiagnosticsView() }
         .navigationDestination(isPresented: $showChannels) { ChannelsView() }
+        .navigationDestination(isPresented: $showSources) { SourcesView() }
         .navigationDestination(isPresented: $showPasses) { PassesView() }
         .confirmationDialog(
             "Restore this backup? The catalog goes back to that copy. Recordings stay.",
@@ -152,6 +154,9 @@ struct SettingsView: View {
             }
             if UserDefaults.standard.bool(forKey: "BroadwaveDiagnostics") {
                 showDiagnostics = true
+            }
+            if UserDefaults.standard.bool(forKey: "BroadwaveSources") {
+                showSources = true
             }
             if UserDefaults.standard.bool(forKey: "BroadwaveChannels") {
                 showChannels = true
@@ -318,6 +323,9 @@ struct SettingsView: View {
 
     private var sourcesSection: some View {
         Section {
+            if !demo {
+                Button("Tuners and playlists") { showSources = true }
+            }
             Button("Channels") { showChannels = true }
             if demo {
                 Text("The demo does not share a tuner.")

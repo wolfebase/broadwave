@@ -318,3 +318,20 @@ extension Airing {
         self.init(id: id, channelId: channelId, title: title, subtitle: nil, description: nil, category: nil, programId: nil, new: nil, start: start, end: end)
     }
 }
+
+@Test func longPlaylistOffersGroupsThenChannels() throws {
+    let grouped = try APIClient.decoder.decode(APIClient.SourceAdd.self, from: Data("""
+    {"pick":true,"count":1200,"message":"This playlist has 1200 channels.","groups":["News","Sports"]}
+    """.utf8))
+    #expect(grouped.pick == true)
+    #expect(grouped.options == ["News", "Sports"])
+    let flat = try APIClient.decoder.decode(APIClient.SourceAdd.self, from: Data("""
+    {"pick":true,"count":400,"message":"This playlist has 400 channels.","groups":[],"channels":[{"name":"One","id":"a","number":"1"},{"name":"Two","id":"","number":"2"}]}
+    """.utf8))
+    #expect(flat.options == ["One", "Two"])
+    #expect(grouped.chosen([1]) == ("Sports", ""))
+    #expect(flat.chosen([1, 0]) == ("", "a, Two"))
+    let done = try APIClient.decoder.decode(APIClient.SourceAdd.self, from: Data("{\"id\":4,\"kind\":\"m3u\",\"name\":\"Big\",\"enabled\":true}".utf8))
+    #expect(done.pick == nil)
+    #expect(done.options.isEmpty)
+}

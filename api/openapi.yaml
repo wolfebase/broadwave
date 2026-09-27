@@ -216,7 +216,8 @@ paths:
                 required: [scanning, found]
                 properties:
                   scanning: { type: boolean }
-                  found: { type: integer }
+                  found: { type: integer, description: "Channels found so far." }
+                  progress: { type: integer, description: "Percent done, when the tuner reports it." }
         "404": { $ref: "#/components/responses/Error" }
   /home:
     get:

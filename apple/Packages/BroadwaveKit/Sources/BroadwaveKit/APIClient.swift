@@ -257,6 +257,14 @@ public struct APIClient: Sendable {
     public struct ScanProgress: Decodable, Sendable {
         public var scanning: Bool
         public var found: Int
+        public var progress: Int?
+
+        public var line: String {
+            if found == 0, let progress, progress > 0 {
+                return "\(progress)% done."
+            }
+            return found == 1 ? "1 channel found." : "\(found) channels found."
+        }
     }
 
     public struct StorageInfo: Decodable, Sendable {
@@ -324,13 +332,78 @@ public struct APIClient: Sendable {
     public struct SourceAdd: Decodable, Sendable {
         public var pick: Bool?
         public var message: String?
+        public var added: Int?
+        public var groups: [String]?
+        public var channels: [PickChannel]?
+
+        /// What a long playlist offers to keep: its groups, or its channels when it has none.
+        public var options: [String] {
+            if let groups, !groups.isEmpty {
+                return groups
+            }
+            return (channels ?? []).map(\.name)
+        }
+
+        /// The groups or keep value for the chosen option positions. A channel goes by
+        /// its tvg-id when it has one, so two channels with one name stay apart.
+        public func chosen(_ picks: Set<Int>) -> (groups: String, keep: String) {
+            let order = picks.sorted()
+            if let groups, !groups.isEmpty {
+                return (order.filter { $0 < groups.count }.map { groups[$0] }.joined(separator: ", "), "")
+            }
+            let list = channels ?? []
+            let keys = order.filter { $0 < list.count }.map { list[$0].id?.isEmpty == false ? list[$0].id! : list[$0].name }
+            return ("", keys.joined(separator: ", "))
+        }
     }
 
-    public func addPlaylist(kind: String, url: String, username: String, password: String) async throws -> SourceAdd {
+    public struct PickChannel: Decodable, Sendable, Hashable {
+        public var name: String
+        public var id: String?
+        public var number: String?
+    }
+
+    /// `groups` filters by group ("News, -Shopping"). `keep` names the channels to keep when a playlist has no groups.
+    public func addSource(kind: String, name: String = "", url: String, username: String = "", password: String = "", groups: String = "", keep: String = "") async throws -> SourceAdd {
         struct B: Encodable {
-            var kind, name, url, username, password: String
+            var kind, name, url, username, password, groups, keep: String
         }
-        return try await send("POST", "/sources", body: B(kind: kind, name: "", url: url, username: username, password: password))
+        return try await send("POST", "/sources", body: B(kind: kind, name: name, url: url, username: username, password: password, groups: groups, keep: keep))
+    }
+
+    /// Uploads a playlist file from this device.
+    public func addPlaylistFile(name: String, fileName: String, data: Data, groups: String = "", keep: String = "") async throws -> SourceAdd {
+        let boundary = "broadwave-\(UUID().uuidString)"
+        var body = Data()
+        func part(_ field: String, _ value: String) {
+            body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(field)\"\r\n\r\n\(value)\r\n".utf8))
+        }
+        part("name", name)
+        part("groups", groups)
+        part("keep", keep)
+        let safeName = fileName.replacingOccurrences(of: "\"", with: "")
+        body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(safeName)\"\r\nContent-Type: application/octet-stream\r\n\r\n".utf8))
+        body.append(data)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        var req = URLRequest(url: url("/api/v1/sources"))
+        req.httpMethod = "POST"
+        req.timeoutInterval = 60
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.httpBody = body
+        let (reply, res) = try await session.data(for: req)
+        let status = (res as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200 ..< 300).contains(status) else {
+            if let err = try? JSONDecoder().decode(APIErrorBody.self, from: reply) {
+                throw APIError(code: err.code, message: err.message, status: status)
+            }
+            throw APIError(code: "http_\(status)", message: "The server answered \(status).", status: status)
+        }
+        return try Self.decoder.decode(SourceAdd.self, from: reply)
+    }
+
+    public func sources() async throws -> [Source] {
+        struct R: Decodable { var sources: [Source] }
+        return try await send("GET", "/sources", as: R.self).sources
     }
 
     public func startScan(deviceID: String) async throws {

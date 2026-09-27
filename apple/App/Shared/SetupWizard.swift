@@ -11,13 +11,6 @@ struct SetupWizard: View {
     @State private var note = ""
     @State private var busy = false
     @State private var devices: [Device] = []
-    @State private var hits: [APIClient.FoundHit] = []
-    @State private var feeds: [APIClient.FreeFeed] = []
-    @State private var freeGuide = ""
-    @State private var address = ""
-    @State private var playlistURL = ""
-    @State private var xtreamUser = ""
-    @State private var xtreamPass = ""
     @State private var held = false
     @State private var autoWatch = false
     @State private var progress: SetupFinish?
@@ -110,49 +103,13 @@ struct SetupWizard: View {
                     }
                 }
             }
-            HStack {
-                Button("Look harder") { Task { await look() } }
-                    .buttonStyle(.glass)
-                    .disabled(busy)
-                Button("Add free channels") { Task { await findFree() } }
-                    .buttonStyle(.glass)
-                    .disabled(busy)
-            }
-            ForEach(hits) { hit in
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(hit.name).font(.headline)
-                        Text(hit.addr).font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("Add") { Task { await add(hit) } }
-                        .buttonStyle(.glass)
-                }
-            }
-            ForEach(feeds) { feed in
-                HStack {
-                    Text(feed.name)
-                    Spacer()
-                    Button("Add") { Task { await add(feed) } }
-                        .buttonStyle(.glass)
-                }
-            }
-            if !freeGuide.isEmpty {
-                Text(freeGuide).font(.caption).foregroundStyle(.secondary)
+            SourceFinder(disabled: busy) {
+                await loadDevices()
+                await store.refresh()
             }
             HomeListView(hideAdded: true)
-            field("Playlist or Xtream server", text: $playlistURL)
-            field("Username", text: $xtreamUser)
-            field("Password", text: $xtreamPass, secure: true)
-            Button("Add playlist") { Task { await addPlaylist() } }
+            NavigationLink("Add a playlist or server") { AddSourceView() }
                 .buttonStyle(.glass)
-                .disabled(busy || playlistURL.trimmingCharacters(in: .whitespaces).isEmpty)
-            HStack {
-                field("Tuner address", text: $address)
-                Button("Add by address") { Task { await addAddress() } }
-                    .buttonStyle(.glassProminent)
-                    .disabled(busy || address.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
         }
     }
 
@@ -209,27 +166,6 @@ struct SetupWizard: View {
         case "done": Tokens.ColorToken.success
         case "check": Tokens.ColorToken.warning
         default: .secondary
-        }
-    }
-
-    private func field(_ title: String, text: Binding<String>, secure: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
-            Group {
-                if secure {
-                    SecureField(title, text: text)
-                } else {
-                    TextField(title, text: text)
-                        .textContentType(.URL)
-                }
-            }
-            #if os(iOS)
-            .keyboardType(secure ? .default : .URL)
-            .textInputAutocapitalization(.never)
-            #endif
-            .autocorrectionDisabled()
-            .padding(12)
-            .background(Tokens.ColorToken.surface2, in: .rect(cornerRadius: Tokens.Radius.sm))
         }
     }
 
@@ -310,101 +246,6 @@ struct SetupWizard: View {
     private func loadDevices() async {
         if let found = try? await store.api?.devices() {
             devices = found
-        }
-    }
-
-    private func look() async {
-        guard let api = store.api else { return }
-        busy = true
-        defer { busy = false }
-        do {
-            hits = try await api.lookHarder()
-            if hits.isEmpty {
-                note = "Nothing else answered."
-            }
-        } catch {
-            hits = []
-            note = error.localizedDescription
-        }
-    }
-
-    private func findFree() async {
-        guard let api = store.api else { return }
-        busy = true
-        freeGuide = ""
-        defer { busy = false }
-        do {
-            let res = try await api.freeSources()
-            feeds = res.found
-            freeGuide = res.found.isEmpty ? res.guide : ""
-        } catch {
-            note = "No free-channel server answered."
-        }
-    }
-
-    private func add(_ hit: APIClient.FoundHit) async {
-        guard let api = store.api else { return }
-        busy = true
-        defer { busy = false }
-        do {
-            if hit.kind == "fastchannels" || hit.kind == "pluto" || hit.kind == "samsung" {
-                let addr = hit.addr.contains("://") ? hit.addr : "http://\(hit.addr)"
-                let message = try await api.addFree(kind: hit.kind, addr: addr, playlist: "", guide: "", name: hit.name)
-                note = message.isEmpty ? "Source added." : message
-            } else {
-                _ = try await api.discover(ip: hit.addr)
-                note = "Source added."
-            }
-            await loadDevices()
-            await store.refresh()
-        } catch {
-            note = error.localizedDescription
-        }
-    }
-
-    private func add(_ feed: APIClient.FreeFeed) async {
-        guard let api = store.api else { return }
-        busy = true
-        defer { busy = false }
-        do {
-            let message = try await api.addFree(kind: feed.kind, addr: feed.addr, playlist: feed.playlist, guide: feed.guide, name: feed.name)
-            note = message.isEmpty ? "Source added. It shows up with the lineup." : message
-            await loadDevices()
-            await store.refresh()
-        } catch {
-            note = error.localizedDescription
-        }
-    }
-
-    private func addPlaylist() async {
-        guard let api = store.api else { return }
-        busy = true
-        defer { busy = false }
-        let kind = xtreamUser.isEmpty ? "m3u" : "xtream"
-        do {
-            let added = try await api.addPlaylist(kind: kind, url: playlistURL, username: xtreamUser, password: xtreamPass)
-            if added.pick == true {
-                note = added.message ?? "This playlist is too long to add all at once."
-                return
-            }
-            note = "Playlist added."
-            await loadDevices()
-            await store.refresh()
-        } catch {
-            note = error.localizedDescription
-        }
-    }
-
-    private func addAddress() async {
-        guard let api = store.api else { return }
-        busy = true
-        defer { busy = false }
-        do {
-            _ = try await api.discover(ip: address.trimmingCharacters(in: .whitespaces))
-            await loadDevices()
-            await store.refresh()
-        } catch {
-            note = error.localizedDescription
         }
     }
 

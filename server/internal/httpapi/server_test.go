@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -408,6 +410,66 @@ func TestScanUsesTheFakeTuner(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || !started {
 		t.Fatalf("%d %s started=%v", rec.Code, rec.Body.String(), started)
+	}
+}
+
+func TestFinishedScanReadsTheNewLineup(t *testing.T) {
+	var done atomic.Bool
+	var tuner *httptest.Server
+	tuner = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/discover.json":
+			fmt.Fprintf(w, `{"DeviceID":"FAKE","FriendlyName":"Fake","ModelNumber":"HDHR5-2US","TunerCount":2,"BaseURL":%q,"LineupURL":%q}`, tuner.URL, tuner.URL+"/lineup.json")
+		case "/lineup.json":
+			if !done.Load() {
+				_, _ = w.Write([]byte(`[{"GuideNumber":"4.1","GuideName":"WDAF","URL":"http://x/v4.1"}]`))
+				return
+			}
+			_, _ = w.Write([]byte(`[{"GuideNumber":"4.1","GuideName":"WDAF","URL":"http://x/v4.1"},{"GuideNumber":"9.1","GuideName":"KMBC","URL":"http://x/v9.1"}]`))
+		case "/lineup.post":
+			w.WriteHeader(http.StatusOK)
+		case "/lineup_status.json":
+			if !done.Load() {
+				_, _ = w.Write([]byte(`{"ScanInProgress":1,"Progress":40,"Found":0}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"ScanInProgress":0,"Progress":100,"Found":2}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer tuner.Close()
+	st := testStore(t)
+	if err := st.UpsertDevice(context.Background(), hdhr.Device{
+		DeviceID: "FAKE", FriendlyName: "Fake", BaseURL: tuner.URL, TunerCount: 2,
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st, HDHR: &hdhr.Client{HTTP: tuner.Client()}}).Handler()
+	idle := get(t, h, "/api/v1/devices/FAKE/scan")
+	if idle.Code != http.StatusOK {
+		t.Fatalf("status before a scan %d", idle.Code)
+	}
+	if channels, _ := st.Channels(context.Background(), false); len(channels) != 0 {
+		t.Fatalf("a status read before any scan synced %d channels", len(channels))
+	}
+	start := httptest.NewRecorder()
+	h.ServeHTTP(start, httptest.NewRequest(http.MethodPost, "/api/v1/devices/FAKE/scan", nil))
+	if start.Code != http.StatusOK {
+		t.Fatalf("start %d %s", start.Code, start.Body.String())
+	}
+	res := get(t, h, "/api/v1/devices/FAKE/scan")
+	if !strings.Contains(res.Body.String(), `"found":0`) || !strings.Contains(res.Body.String(), `"progress":40`) {
+		t.Fatalf("running %s", res.Body.String())
+	}
+	done.Store(true)
+	res = get(t, h, "/api/v1/devices/FAKE/scan")
+	if !strings.Contains(res.Body.String(), `"scanning":false`) || !strings.Contains(res.Body.String(), `"found":2`) {
+		t.Fatalf("finished %s", res.Body.String())
+	}
+	channels, err := st.Channels(context.Background(), false)
+	if err != nil || len(channels) != 2 {
+		t.Fatalf("lineup after scan %d %v", len(channels), err)
 	}
 }
 
