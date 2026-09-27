@@ -8,6 +8,8 @@ async function passes(page: import("@playwright/test").Page) {
 }
 
 test("a search result opens, and records just that airing", async ({ page }) => {
+  // Run alone, the fresh catalog would open on setup.
+  expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBe(true);
   await page.goto("/search");
   await settle(page);
   const field = page.getByLabel("Search shows, people, and recordings");
@@ -42,6 +44,16 @@ test("a search result opens, and records just that airing", async ({ page }) => 
   await sheet.getByRole("button", { name: "Don't record" }).click();
   await expect(sheet.getByRole("button", { name: "Record", exact: true })).toBeVisible();
   expect((await passes(page)).filter((pass) => pass.kind === "once")).toHaveLength(0);
+
+  // Under a series pass, removing the one airing would change nothing.
+  await sheet.getByRole("button", { name: "Record", exact: true }).click();
+  await sheet.getByRole("button", { name: "Record series" }).click();
+  await expect(sheet.getByRole("button", { name: "Series is recording" })).toBeDisabled();
+  await expect(sheet.getByRole("button", { name: "Don't record" })).toHaveCount(0);
+  await expect(sheet.getByRole("button", { name: "Record", exact: true })).toHaveCount(0);
+  for (const pass of await passes(page)) {
+    if (pass.title === "Late Local News") expect((await page.request.delete(`/api/v1/passes/${pass.id}`)).ok()).toBe(true);
+  }
 
   await page.keyboard.press("Escape");
   await expect(row).toBeFocused();
