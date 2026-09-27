@@ -1,3 +1,4 @@
+import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -188,6 +189,147 @@ test("a playlist channel opened while its stream is down starts once it sends", 
     console.log(`down at open: picture moving ${Date.now() - back} ms after the stream returned`);
     await expect(notice(page, picture)).toHaveCount(0);
   } finally {
+    await post(`${origin}/start`).catch(() => undefined);
+  }
+});
+
+function startFake(sample: string): Promise<{ base: string; child: ChildProcess }> {
+  // -realtime encodes a pattern for as long as the tuner is open. -source loops a
+  // short file, and that seam is what would stop the picture.
+  const child = spawn(path.join(here, ".run/fakehdhr"), ["-realtime", "-ts", sample], { stdio: ["ignore", "pipe", "pipe"] });
+  return new Promise((resolve, reject) => {
+    let out = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error(`fake tuner did not start\n${out}`));
+    }, 10_000);
+    const take = (chunk: Buffer) => {
+      out += chunk.toString();
+      const base = out.match(/^BASE=(.+)$/m)?.[1]?.trim();
+      if (base && out.includes("CONTROL_PORT=")) {
+        clearTimeout(timer);
+        resolve({ base, child });
+      }
+    };
+    child.stdout?.on("data", take);
+    child.stderr?.on("data", take);
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      reject(new Error(`fake tuner exited ${code}\n${out}`));
+    });
+  });
+}
+
+test("a playlist tile beside a tuner comes back on its own", async ({ page }) => {
+  const { base, origin } = harness();
+  const lane = path.resolve(here, "../../.evidence/lane/l27");
+  const fake = await startFake(path.join(here, ".run/sample.ts"));
+  const host = fake.base.replace(/^https?:\/\//, "");
+  try {
+    let devices: Device[] = [];
+    for (let i = 0; i < 20; i++) {
+      const res = await fetch(`${base}/api/v1/sources/discover`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ip: host }),
+      });
+      const body = (await res.json()) as { devices?: Device[]; found?: number };
+      devices = body.devices ?? [];
+      if (res.ok && devices.some((device) => (device.tunerCount ?? 0) > 0)) break;
+      await page.waitForTimeout(500);
+    }
+    expect(devices.some((device) => (device.tunerCount ?? 0) > 0), "the fake tuner joined the playlist").toBe(true);
+
+    const list = (await (await fetch(`${base}/api/v1/channels`)).json()) as { channels?: { id: number; displayNumber: string; displayName: string }[] };
+    const news = (list.channels ?? []).find((item) => item.displayName === "Local News");
+    const wdaf = (list.channels ?? []).find((item) => item.displayName === "WDAF");
+    if (!news || !wdaf) throw new Error(`lineup ${JSON.stringify(list.channels)}`);
+
+    await page.goto(`/multiview?ch=${news.id},${wdaf.id}&layout=2up&focus=${wdaf.id}`);
+    await settle(page);
+    await expect(page.getByRole("region", { name: "Side by side" })).toBeVisible();
+    const tile = (id: number) => page.locator(`video.mv-video[data-channel="${id}"]`);
+    const moving = (id: number) =>
+      tile(id).evaluate(async (video: HTMLVideoElement) => {
+        const from = video.currentTime;
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        return video.videoWidth > 0 && !video.paused && video.currentTime > from + 0.15;
+      });
+    await expect.poll(async () => (await moving(wdaf.id)) && (await moving(news.id)), { timeout: 45_000, intervals: [1_000] }).toBe(true);
+
+    await tile(wdaf.id).evaluate((video: HTMLVideoElement) => {
+      const box = window as unknown as { __tunerPauses: number };
+      box.__tunerPauses = 0;
+      video.addEventListener("pause", () => {
+        box.__tunerPauses += 1;
+      });
+    });
+    const pauses = () => page.evaluate(() => (window as unknown as { __tunerPauses: number }).__tunerPauses ?? 0);
+
+    const began = await tile(wdaf.id).evaluate((video: HTMLVideoElement) => video.currentTime);
+    const stoppedAt = Date.now();
+    await post(`${origin}/stop`);
+    let messageMs = 0;
+    const newsAlert = page.locator(`.mv-tile:has(video[data-channel="${news.id}"])`).getByRole("alert");
+    while (Date.now() - stoppedAt < 30_000) {
+      const state = await tile(wdaf.id).evaluate((video: HTMLVideoElement) => ({ paused: video.paused, width: video.videoWidth, time: video.currentTime }));
+      expect(state.paused, "the tuner picture paused while the playlist was down").toBe(false);
+      expect(state.width, "the tuner picture went black while the playlist was down").toBeGreaterThan(0);
+      expect(await pauses(), "the tuner picture paused while the playlist was down").toBe(0);
+      if (!messageMs && (await newsAlert.isVisible().catch(() => false)) && (await newsAlert.innerText()).includes(picture)) {
+        messageMs = Date.now() - stoppedAt;
+        mkdirSync(lane, { recursive: true });
+        await page.screenshot({ path: path.join(lane, "playlist-stopped.jpg"), animations: "disabled" });
+      }
+      await page.waitForTimeout(1_000);
+    }
+    expect(messageMs, "the playlist tile names the picture").toBeGreaterThan(0);
+    const advanced = await tile(wdaf.id).evaluate((video: HTMLVideoElement) => video.currentTime);
+    expect(advanced, "the tuner picture kept moving").toBeGreaterThan(began + 8);
+    await expect(newsAlert).toContainText(picture);
+    await expect(page.getByText(tuner)).toHaveCount(0);
+    expect(await pauses()).toBe(0);
+
+    await post(`${origin}/start`);
+    const againAt = Date.now();
+    await expect
+      .poll(
+        () =>
+          tile(news.id).evaluate(async (video: HTMLVideoElement) => {
+            const from = video.currentTime;
+            await new Promise((resolve) => setTimeout(resolve, 700));
+            const alert = video.closest(".mv-tile")?.querySelector("[role='alert']")?.textContent || "";
+            return video.videoWidth > 0 && !video.paused && video.currentTime > from + 0.15 && alert === "";
+          }),
+        { timeout: 20_000, intervals: [500], message: "the playlist picture starts again with no click" },
+      )
+      .toBe(true);
+    const recoverMs = Date.now() - againAt;
+    expect(await pauses(), "the tuner picture paused").toBe(0);
+    const still = await tile(wdaf.id).evaluate((video: HTMLVideoElement) => ({
+      paused: video.paused,
+      width: video.videoWidth,
+      time: video.currentTime,
+      error: video.dataset.hlsError || "",
+    }));
+    expect(still.paused, `the tuner picture paused ${JSON.stringify(still)}`).toBe(false);
+    expect(still.width, `the tuner picture went black ${JSON.stringify(still)}`).toBeGreaterThan(0);
+    expect(still.time, `the tuner picture stopped advancing ${JSON.stringify(still)}`).toBeGreaterThan(advanced);
+    await expect(page.getByText(tuner)).toHaveCount(0);
+    mkdirSync(lane, { recursive: true });
+    await page.screenshot({ path: path.join(lane, "playlist-back.jpg"), animations: "disabled" });
+    const summaryPath = path.join(lane, "summary.json");
+    const prior = (() => {
+      try {
+        return JSON.parse(readFileSync(summaryPath, "utf8")) as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    })();
+    writeFileSync(summaryPath, JSON.stringify({ ...prior, playlist: { messageMs, recoverMs, pauses: await pauses() } }, null, 2));
+    console.log(`playlist tile back ${recoverMs} ms after the stream returned; message at ${messageMs} ms`);
+  } finally {
+    fake.child.kill("SIGKILL");
     await post(`${origin}/start`).catch(() => undefined);
   }
 });

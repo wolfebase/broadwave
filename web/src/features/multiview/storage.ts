@@ -96,6 +96,34 @@ export function slotsFor(layout: MvLayout) {
   return 2;
 }
 
+/** A tile that never showed a picture has no sound to give.
+ *  One that did keeps it while that picture comes back. */
+export function yieldsSound(error: string, showedPicture: boolean): boolean {
+  return error !== "" && !showedPicture;
+}
+
+/** Channels to put on screen. A later plan can call one blocked; a channel
+ *  already on screen stays, so that refresh does not stop its picture. */
+export function channelsOnScreen(ids: number[], blocked: ReadonlySet<number>, held: ReadonlySet<number>, limit: number): number[] {
+  const out: number[] = [];
+  for (const id of ids) {
+    if (out.length >= limit) break;
+    if (!blocked.has(id) || held.has(id)) out.push(id);
+  }
+  return out;
+}
+
+/** Remember channels this plan allowed. A later block must not drop them. */
+export function holdShown(held: ReadonlySet<number>, ids: number[], blocked: ReadonlySet<number>): ReadonlySet<number> {
+  let next: Set<number> | null = null;
+  for (const id of ids) {
+    if (blocked.has(id) || held.has(id)) continue;
+    if (!next) next = new Set(held);
+    next.add(id);
+  }
+  return next ?? held;
+}
+
 export function roomId() {
   let id = sessionStorage.getItem("broadwave-mv-room");
   if (!id) {

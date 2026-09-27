@@ -1,6 +1,24 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { layoutForCount, layoutFromParam, layoutLabel, multiviewPath, rememberAuto, saveSet, savedAuto, savedSets } from "./src/features/multiview/storage.ts";
+import { channelsOnScreen, holdShown, layoutForCount, layoutFromParam, layoutLabel, multiviewPath, rememberAuto, saveSet, savedAuto, savedSets, yieldsSound } from "./src/features/multiview/storage.ts";
+
+test("a tile that already showed a picture keeps the sound", () => {
+  assert.equal(yieldsSound("", false), false);
+  assert.equal(yieldsSound("Every tuner is busy. Stop a recording or watch something already on.", false), true);
+  assert.equal(yieldsSound("The picture stopped. Starting it again.", true), false);
+  assert.equal(yieldsSound("The picture stopped. Trying again usually fixes it.", true), false);
+});
+
+test("a channel already on screen stays when a later plan blocks it", () => {
+  const blocked = new Set([2]);
+  assert.deepEqual(channelsOnScreen([1, 2], blocked, new Set(), 2), [1]);
+  assert.deepEqual(channelsOnScreen([1, 2], blocked, new Set([2]), 2), [1, 2]);
+  assert.deepEqual(channelsOnScreen([1, 2, 3], new Set(), new Set(), 2), [1, 2]);
+  const held = holdShown(new Set(), [1, 2], blocked);
+  assert.deepEqual([...held], [1]);
+  assert.equal(holdShown(held, [1, 2], blocked), held);
+  assert.deepEqual([...holdShown(held, [1, 2], new Set())], [1, 2]);
+});
 
 test("watch together picks a layout that fits the games", () => {
   assert.equal(layoutForCount(1), "2up");

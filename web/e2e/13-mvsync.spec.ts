@@ -15,7 +15,7 @@ const playMs = Number(process.env.E2E_MV_MS || 120_000);
 // 2up moves the sound half way; 1+2 keeps it on the big tile, whose small tiles are the half-rate "tile" picture.
 const layout = process.env.E2E_MV_LAYOUT || "2up";
 const equal = layout === "2up" || layout === "quad";
-// A tile that runs dry makes the room step back, and every tile pauses for it.
+// Each tile has its own room, so one tile running dry does not pause the others.
 const stallLimitMs = 500;
 const apartMs = 50;
 

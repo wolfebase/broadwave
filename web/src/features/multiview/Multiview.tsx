@@ -11,7 +11,7 @@ import { CloseIcon, VolumeIcon } from "../../ui/icons";
 import { LiveFrame } from "../../ui/LiveFrame";
 import { useLiveStream } from "../player/useLiveStream";
 import { refreshScores, scoreLine, useScoreMap, type ScoreGame } from "../sports/scores";
-import { layoutChoices, layoutFromParam, layoutLabel, rememberAuto, rememberLayout, roomId, saveSet, savedAuto, savedLayout, slotsFor, type MvLayout } from "./storage";
+import { channelsOnScreen, holdShown, layoutChoices, layoutFromParam, layoutLabel, rememberAuto, rememberLayout, roomId, saveSet, savedAuto, savedLayout, slotsFor, yieldsSound, type MvLayout } from "./storage";
 import { pickFocus } from "./switcher";
 import "./multiview.css";
 
@@ -72,6 +72,9 @@ export function Multiview() {
   }, []);
   const [room] = useState(roomId);
   const [failed, setFailed] = useState<ReadonlySet<number>>(() => new Set());
+  // Channels this lineup has already shown. A plan refresh can call one blocked
+  // for a moment; taking its tile down stops a picture that is fine.
+  const [shown, setShown] = useState<{ key: string; ids: ReadonlySet<number> }>({ key: "", ids: new Set() });
   const markFailed = useCallback((id: number, on: boolean) => {
     setFailed((prev) => {
       if (prev.has(id) === on) return prev;
@@ -85,11 +88,19 @@ export function Multiview() {
   const waiting = ids.length > 1 && planFor !== chKey;
   const known = ids.map((id) => channels.find((c) => c.id === id)).filter((c): c is Channel => !!c);
   const blocked = new Set(plan?.blocked.map((b) => b.channelId) ?? []);
+  const lineupKey = `${chKey}:${layout}`;
+  const held = shown.key === lineupKey ? shown.ids : new Set<number>();
+  if (!waiting) {
+    const next = holdShown(held, known.map((channel) => channel.id), blocked);
+    if (shown.key !== lineupKey || next !== held) setShown({ key: lineupKey, ids: next });
+  }
   const costs = new Map(plan?.offers?.map((offer) => [offer.channelId, offer]) ?? []);
   const warning = [...new Set((plan?.stops ?? []).map((stop) => stop.reason).filter(Boolean))].join(" ");
-  const visible = waiting ? [] : known.filter((c) => !blocked.has(c.id)).slice(0, slotsFor(layout));
+  const onScreen = waiting ? [] : channelsOnScreen(known.map((c) => c.id), blocked, held, slotsFor(layout));
+  const visible = onScreen.map((id) => known.find((c) => c.id === id)).filter((c): c is Channel => !!c);
   const ordered = layout === "2up" || layout === "quad" ? visible : [visible.find((c) => c.id === focus) ?? visible[0], ...visible.filter((c) => c.id !== focus)].filter((c): c is Channel => !!c);
-  const notice = warning || plan?.blocked[0]?.reason || plan?.note || "";
+  const dropped = (plan?.blocked ?? []).filter((item) => !held.has(item.channelId));
+  const notice = warning || dropped[0]?.reason || plan?.note || "";
   const cachedScores = useScoreMap();
   const [auto, setAuto] = useState(() => savedAuto());
   const [holdUntil, setHoldUntil] = useState(0);
@@ -261,7 +272,9 @@ export function Multiview() {
     if (k === " ") {
       event.preventDefault();
       const video = document.querySelector<HTMLVideoElement>(".mv-tile.focused video");
-      events().command(room, video?.paused ? "play" : "pause");
+      const action = video?.paused ? "play" : "pause";
+      // Tiles do not share a room, so a pause has to name each one.
+      for (const id of ordered.map((channel) => channel.id)) events().command(`${room}:${id}`, action);
       return;
     }
     const cols = layout === "2up" || layout === "quad" ? 2 : 1;
@@ -273,7 +286,8 @@ export function Multiview() {
   }
 
   const focused = ordered.find((c) => c.id === focus) ?? ordered[0];
-  // A tile that did not start has no sound to give. Move it to one that plays.
+  // A tile that never started has no sound to give. One that already showed a
+  // picture keeps it while that picture comes back.
   const soundTo = focused && failed.has(focused.id) ? (ordered.find((c) => !failed.has(c.id))?.id ?? 0) : 0;
   useEffect(() => {
     if (!soundTo) return;
@@ -398,6 +412,8 @@ function Tile({
   onFailed: (id: number, failed: boolean) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const showedRef = useRef(false);
+  const [showedPicture, setShowedPicture] = useState(false);
   const layoutMode = useLayout();
   const equal = layout === "2up" || layout === "quad";
   // Equal tiles all get the same picture, so moving the sound only unmutes one.
@@ -408,12 +424,29 @@ function Tile({
     quality: layout === "2up" || big ? "focus" : layout === "quad" || layout === "pip" ? "360" : "tile",
     audio: equal ? "stereo" : focused ? "auto" : "none",
     picture: "broadcast",
-    room,
+    // Each tile has its own room. One shared room steps every tile back when
+    // any of them stalls, so a dead stream pauses the pictures that are fine.
+    room: `${room}:${channel.id}`,
     sync: true,
     profile: big ? (layoutMode === "tv" ? "tv" : "desktop") : "tile",
     audible: focused,
   });
-  const failed = stream.error !== "";
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const mark = () => {
+      if (showedRef.current || video.videoWidth <= 0 || video.currentTime <= 0.2) return;
+      showedRef.current = true;
+      setShowedPicture(true);
+    };
+    video.addEventListener("timeupdate", mark);
+    video.addEventListener("playing", mark);
+    return () => {
+      video.removeEventListener("timeupdate", mark);
+      video.removeEventListener("playing", mark);
+    };
+  }, []);
+  const failed = yieldsSound(stream.error, showedPicture);
   useEffect(() => {
     onFailed(channel.id, failed);
   }, [channel.id, failed, onFailed]);
