@@ -8,6 +8,20 @@ import (
 	"broadwave/internal/hdhr"
 )
 
+func TestQuadLineupSharesTwoFrequencies(t *testing.T) {
+	ch := QuadLineup()
+	if len(ch) != 4 || ch[3].Number != "5.2" {
+		t.Fatalf("%+v", ch)
+	}
+	freq := map[int]int{}
+	for _, row := range ch {
+		freq[row.Freq]++
+	}
+	if freq[593000000] != 2 || freq[533000000] != 2 {
+		t.Fatalf("%+v", ch)
+	}
+}
+
 func TestHealthReadReportsVersionAndLock(t *testing.T) {
 	srv := &Server{}
 	base, port, err := srv.Start()
