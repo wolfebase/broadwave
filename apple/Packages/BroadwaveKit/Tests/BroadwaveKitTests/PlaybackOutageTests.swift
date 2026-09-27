@@ -91,6 +91,18 @@ private func fineSnap() -> RecoverySnap {
     #expect(PlaybackOutage.deviceOnline(URLError(.networkConnectionLost)))
 }
 
+@Test func aFullPictureBudgetIsAskedUntilASlotFrees() {
+    let full = "This server can play 4 pictures at once. Stop one."
+    #expect(PlaybackOutage.startAttempts(code: "pictures_full", message: full) == 4)
+    #expect(PlaybackOutage.startAttempts(code: "internal", message: "tuner 0 did not lock") == 2)
+    #expect(PlaybackOutage.startAttempts(code: "no_signal", message: "This channel isn't coming in. Check the antenna.") == 1)
+    #expect(PlaybackOutage.startAttempts(
+        code: "tuners_busy",
+        message: "Every tuner is busy. Stop a recording or watch something already on."
+    ) == 1)
+    #expect(PlaybackOutage.startAttempts(code: "internal", message: "This channel did not start.") == 1)
+}
+
 @Test func aBusyTunerTellsTheViewerWhatToStopAndComesBackWhenOneIsFree() {
     let got = PlaybackOutage.viewerFailure(
         code: "tuners_busy",

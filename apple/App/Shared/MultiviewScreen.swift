@@ -3,7 +3,11 @@ import AVKit
 import AVRouting
 import BroadwaveKit
 import BroadwaveUI
+import os
 import SwiftUI
+#if os(iOS)
+    import UIKit
+#endif
 
 enum TileLayout: String, CaseIterable, Identifiable {
     case side = "2up"
@@ -254,8 +258,10 @@ final class TilePlayer {
     private var audible = false
     private var attempts = 0
     private var channelID: Int64?
+    private var sampleCount = 0
     private var session: WatchSession?
     private var sync: SyncEngine?
+    private static let tileLog = Logger(subsystem: "com.wolfeup.broadwave", category: "play")
     private var api: APIClient?
     private let outage = ServerWatch()
     private var outageLoop: Task<Void, Never>?
@@ -344,7 +350,7 @@ final class TilePlayer {
                 return
             }
             attempts += 1
-            if attempts == 1, decision.message.localizedStandardContains("tuner") {
+            if attempts < PlaybackOutage.startAttempts(code: error.code, message: decision.message) {
                 try? await Task.sleep(for: .seconds(2))
                 guard channelID == channel.id else { return }
                 await start(request, room: room, store: store, bind: bind)
@@ -355,7 +361,7 @@ final class TilePlayer {
         } catch {
             guard channelID == channel.id else { return }
             attempts += 1
-            if attempts == 1, error.localizedDescription.localizedStandardContains("tuner") {
+            if attempts < PlaybackOutage.startAttempts(code: "", message: error.localizedDescription) {
                 try? await Task.sleep(for: .seconds(2))
                 guard channelID == channel.id else { return }
                 await start(request, room: room, store: store, bind: bind)
@@ -393,6 +399,18 @@ final class TilePlayer {
             waiting: player.timeControlStatus == .waitingToPlayAtSpecifiedRate,
             failed: item?.status == .failed
         )
+        // The shared sync line does not name the tile. One line a second does.
+        guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") else { return }
+        sampleCount += 1
+        guard sampleCount % 2 == 0, let id = channelID else { return }
+        let events = item?.accessLog()?.events ?? []
+        let droppedFrames = events.reduce(0) { $0 + max(0, $1.numberOfDroppedVideoFrames) }
+        let stalls = events.reduce(0) { $0 + max(0, $1.numberOfStalls) }
+        let drift = Int((sync?.drift ?? 0).rounded())
+        let state = sync?.state.rawValue ?? "off"
+        let hear = audible ? 1 : 0
+        let rate = player.rate
+        Self.tileLog.notice("tile channel=\(id) drift=\(drift) dropped=\(droppedFrames) stalls=\(stalls) state=\(state, privacy: .public) audible=\(hear) rate=\(rate)")
     }
 
     func confirmWatch() {
@@ -668,6 +686,14 @@ struct MultiviewScreen: View {
             guard !due.isEmpty else { return }
             nowPlaying.together.removeAll { due.contains($0) }
         }
+        #if DEBUG && os(iOS)
+        // The host writes portrait, landscape, or next. Rotating the Simulator window
+        // would steal the frontmost device, which may not be this one.
+        .task {
+            guard UserDefaults.standard.bool(forKey: "BroadwaveExercise") else { return }
+            await watchExercise()
+        }
+        #endif
         #if os(tvOS)
         .defaultFocus($remoteFocus, nowPlaying.together.first ?? 0)
         .onPlayPauseCommand {
@@ -1006,6 +1032,62 @@ struct MultiviewScreen: View {
             nowPlaying.stop()
         }
     }
+
+    #if DEBUG && os(iOS)
+        /// `-BroadwaveExercise` reads `broadwave-exercise.txt`: `next` moves the sound
+        /// to the following tile, and `landscape` or `portrait` turns the iPad.
+        private func watchExercise() async {
+            let log = Logger(subsystem: "com.wolfeup.broadwave", category: "play")
+            let file = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("broadwave-exercise.txt")
+            log.notice("exercise-file \(file.path, privacy: .public)")
+            var seen = ""
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+                let line = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if line.isEmpty || line == seen {
+                    continue
+                }
+                seen = line
+                let verb = line.split(separator: " ").first.map(String.init) ?? line
+                if verb == "next" {
+                    hearNext(log)
+                    continue
+                }
+                let mask: UIInterfaceOrientationMask
+                if verb == "landscape" {
+                    mask = .landscapeRight
+                } else if verb == "portrait" {
+                    mask = .portrait
+                } else {
+                    continue
+                }
+                guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else {
+                    log.notice("exercise \(verb, privacy: .public) no-scene")
+                    continue
+                }
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in
+                    log.notice("exercise \(verb, privacy: .public) \(error.localizedDescription, privacy: .public)")
+                }
+                try? await Task.sleep(for: .milliseconds(500))
+                let bounds = scene.effectiveGeometry.coordinateSpace.bounds
+                log.notice("exercise \(verb, privacy: .public) \(Int(bounds.width))x\(Int(bounds.height))")
+            }
+        }
+
+        private func hearNext(_ log: Logger) {
+            let tiles = ordered
+            guard !tiles.isEmpty else {
+                log.notice("exercise next none")
+                return
+            }
+            let index = tiles.firstIndex { $0.id == session.focusID } ?? -1
+            let next = tiles[(index + 1) % tiles.count]
+            session.focusID = next.id
+            log.notice("exercise next \(next.displayNumber, privacy: .public)")
+        }
+    #endif
 
     private func refreshPlan() async {
         let ids = nowPlaying.together

@@ -58,6 +58,22 @@ public enum PlaybackOutage {
         return OutageDecision(message: text, recovery: nil)
     }
 
+    /// How many times to ask before the message stays. A tuner that missed its
+    /// first answer gets one more try. A full picture budget often still holds
+    /// the layout just left, and those encodes free one at a time.
+    public static func startAttempts(code: String, message: String) -> Int {
+        if code == "pictures_full" {
+            return 4
+        }
+        if code == "tuners_busy" || code == "no_signal" {
+            return 1
+        }
+        if message.localizedStandardContains("tuner") {
+            return 2
+        }
+        return 1
+    }
+
     public static func classify(_ snap: RecoverySnap) -> OutageDecision {
         if !snap.health {
             if !snap.online {
