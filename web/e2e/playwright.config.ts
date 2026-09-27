@@ -1,14 +1,17 @@
 import { defineConfig } from "@playwright/test";
 
 const baseURL = `http://127.0.0.1:${process.env.E2E_PORT || 18731}`;
+const avsync = process.env.E2E_AVSYNC === "1";
 
 export default defineConfig({
   testDir: ".",
   testMatch: /.*\.spec\.ts/,
+  // The flash-and-beep run is ninety seconds against its own source file.
+  testIgnore: avsync ? /^(?!.*08-avsync\.spec\.ts).*$/ : /08-avsync\.spec\.ts/,
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  timeout: 180_000,
+  timeout: avsync ? 240_000 : 180_000,
   expect: { timeout: 20_000 },
   outputDir: ".run/test-results",
   globalSetup: "./global-setup.ts",
@@ -30,6 +33,6 @@ export default defineConfig({
     command: "node serve.mjs",
     url: `${baseURL}/api/v1/health`,
     reuseExistingServer: false,
-    timeout: 120_000,
+    timeout: avsync ? 180_000 : 120_000,
   },
 });
