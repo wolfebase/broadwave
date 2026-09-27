@@ -2,6 +2,7 @@ package disk
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -21,7 +22,16 @@ type LowError struct {
 }
 
 func (e *LowError) Error() string {
-	return "The recordings disk is full. Free some space, then try again."
+	return fmt.Sprintf("The recordings disk has %s free, and Broadwave keeps %s in reserve. Free some space or lower the reserve in Settings.", gigabytes(e.Free), gigabytes(e.Need))
+}
+
+func gigabytes(n uint64) string {
+	whole := n / 1_000_000_000
+	tenth := (n % 1_000_000_000) / 100_000_000
+	if tenth == 0 {
+		return fmt.Sprintf("%d GB", whole)
+	}
+	return fmt.Sprintf("%d.%d GB", whole, tenth)
 }
 
 // WriteError means the recordings folder cannot take a new file.
@@ -53,9 +63,30 @@ func Writable(dir string) error {
 	return nil
 }
 
-func writeFailure(err error) error {
-	if errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EROFS) {
+// ClassifyWrite turns a recordings-folder failure into a WriteError.
+// A full disk is ENOSPC. A read-only folder stays the folder message.
+// Errors that already name the disk are left as they are.
+func ClassifyWrite(err error) error {
+	if err == nil {
+		return nil
+	}
+	var low *LowError
+	var blocked *WriteError
+	if errors.As(err, &low) || errors.As(err, &blocked) {
+		return err
+	}
+	if errors.Is(err, syscall.ENOSPC) {
 		return &WriteError{Full: true}
+	}
+	if os.IsPermission(err) || errors.Is(err, syscall.EROFS) {
+		return &WriteError{}
+	}
+	return err
+}
+
+func writeFailure(err error) error {
+	if classified := ClassifyWrite(err); classified != err {
+		return classified
 	}
 	return &WriteError{}
 }

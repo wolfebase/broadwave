@@ -152,7 +152,7 @@ func (s *Server) startRecording(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, err := s.Hub.RecordMeta(r.Context(), minutes, meta)
 	if err != nil {
-		writeError(w, err)
+		writeError(w, disk.ClassifyWrite(err))
 		return
 	}
 	writeJSON(w, http.StatusOK, rec)

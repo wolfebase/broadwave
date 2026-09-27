@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -15,7 +16,8 @@ func TestReserve(t *testing.T) {
 		t.Fatal("reserve comparison")
 	}
 	err := &LowError{Free: 4_200_000_000, Need: 10_000_000_000}
-	if !strings.Contains(err.Error(), "full") {
+	want := "The recordings disk has 4.2 GB free, and Broadwave keeps 10 GB in reserve. Free some space or lower the reserve in Settings."
+	if err.Error() != want {
 		t.Fatal(err.Error())
 	}
 	blocked := &WriteError{}
@@ -27,7 +29,28 @@ func TestReserve(t *testing.T) {
 	}
 }
 
+func TestClassifyWriteKeepsAReadOnlyFolderOffTheFullDisk(t *testing.T) {
+	err := ClassifyWrite(syscall.EROFS)
+	var blocked *WriteError
+	if !errors.As(err, &blocked) || blocked.Full {
+		t.Fatal(err)
+	}
+	if !strings.Contains(err.Error(), "recordings folder") {
+		t.Fatal(err.Error())
+	}
+	full := ClassifyWrite(syscall.ENOSPC)
+	if !errors.As(full, &blocked) || !blocked.Full {
+		t.Fatal(full)
+	}
+	if ClassifyWrite(&LowError{Free: 1, Need: 2}) == nil {
+		t.Fatal("reserve")
+	}
+}
+
 func TestWritableRejectsALockedFolder(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can write a mode 0555 directory")
+	}
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0o555); err != nil {
 		t.Fatal(err)
