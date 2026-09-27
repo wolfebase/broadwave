@@ -1,5 +1,6 @@
 import type Hls from "hls.js";
 import { events, type RoomState } from "./events";
+import { holeEnd } from "./bufferHole";
 import { nextSeekLead } from "./seekLead";
 
 export type SyncStatus = {
@@ -71,6 +72,15 @@ export class SyncEngine {
   private onWaiting = () => {
     const video = this.video;
     if (video.seeking || !this.state || this.state.rate === 0 || this.forwardMedia() > 0.5) return;
+    // A hole at a timestamp break is not the edge. Step over it now; hls.js
+    // would too, but only after the room had stepped every screen back.
+    const ranges: [number, number][] = [];
+    for (let i = 0; i < video.buffered.length; i++) ranges.push([video.buffered.start(i), video.buffered.end(i)]);
+    const past = holeEnd(video.currentTime, ranges);
+    if (past != null) {
+      video.currentTime = past;
+      return;
+    }
     const now = performance.now();
     if (now - this.lastStallReport < 3000) return;
     this.lastStallReport = now;
