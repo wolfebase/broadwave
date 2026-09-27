@@ -375,6 +375,7 @@ final class TilePlayer {
             guard token == startToken, channelID == channel.id else { return }
             let decision = PlaybackOutage.viewerFailure(code: error.code, status: error.status, message: error.message, online: true)
             if quiet, PlaybackOutage.holdPictureMessage(decision) {
+                outage.pictureRetryFailed()
                 return
             }
             if quiet {
@@ -385,7 +386,7 @@ final class TilePlayer {
                 outage.fail(decision)
                 return
             }
-            if retry, PlaybackOutage.holdPictureMessage(decision) {
+            if retry || decision.message == PlaybackOutage.pictureStopped, PlaybackOutage.holdPictureMessage(decision) {
                 needsConfirm = false
                 outage.fail(OutageDecision(message: PlaybackOutage.pictureStopped, recovery: nil))
                 return
@@ -403,6 +404,7 @@ final class TilePlayer {
             guard token == startToken, channelID == channel.id else { return }
             let decision = OutageDecision(message: error.localizedDescription, recovery: nil)
             if quiet, PlaybackOutage.holdPictureMessage(decision) {
+                outage.pictureRetryFailed()
                 return
             }
             if quiet {

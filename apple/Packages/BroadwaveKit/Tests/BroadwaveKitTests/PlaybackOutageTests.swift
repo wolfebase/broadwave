@@ -330,6 +330,13 @@ private func fineSnap() -> RecoverySnap {
     #expect(!PlaybackOutage.holdPictureMessage(OutageDecision(message: "Every tuner is busy.", recovery: .busy)))
 }
 
+@Test func aSourceThatStoppedSendingIsTheStoppedPicture() {
+    let decision = PlaybackOutage.viewerFailure(code: "stream_down", status: 503, message: "stream returned 503 Service Unavailable", online: true)
+    #expect(decision.message == PlaybackOutage.pictureStopped)
+    #expect(decision.recovery == nil)
+    #expect(PlaybackOutage.pictureRetryDelay(message: decision.message, recovery: decision.recovery, elapsed: 0) == 10)
+}
+
 @Test func aHomeWithOnlyPlaylistsNeverBlamesATuner() {
     let facts = RecoveryFacts(health: true, online: true, channelID: 1, assumeLost: false)
     let snap = PlaybackOutage.snap(facts, lists: RecoveryLists(tuners: [], devices: [], signals: []))

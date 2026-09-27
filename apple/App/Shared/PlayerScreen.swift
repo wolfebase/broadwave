@@ -159,6 +159,7 @@ final class LivePlayer {
             needsConfirm = false
             let decision = PlaybackOutage.viewerFailure(code: error.code, status: error.status, message: error.message, online: true)
             if quiet, PlaybackOutage.holdPictureMessage(decision) {
+                outage.pictureRetryFailed()
                 return
             }
             if quiet {
@@ -166,7 +167,7 @@ final class LivePlayer {
             }
             if decision.recovery != nil {
                 outage.fail(decision)
-            } else if retry, PlaybackOutage.holdPictureMessage(decision) {
+            } else if retry || decision.message == PlaybackOutage.pictureStopped, PlaybackOutage.holdPictureMessage(decision) {
                 // The stream's own words ("503") are not a cause. Keep asking.
                 outage.fail(OutageDecision(message: PlaybackOutage.pictureStopped, recovery: nil))
             } else {
@@ -177,6 +178,7 @@ final class LivePlayer {
             needsConfirm = false
             let decision = OutageDecision(message: error.localizedDescription, recovery: nil)
             if quiet, PlaybackOutage.holdPictureMessage(decision) {
+                outage.pictureRetryFailed()
                 return
             }
             if quiet {

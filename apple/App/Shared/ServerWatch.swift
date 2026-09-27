@@ -38,6 +38,10 @@ final class ServerWatch {
     /// picture moves, the viewer leaves, or a named cause takes over.
     private var pictureSince: Date?
     private var pictureGen = 0
+    /// A quiet watch that is still starting or holding for its first picture.
+    /// A fresh tune can hold longer than one turn of the clock, so the turn is
+    /// skipped rather than starting that watch over.
+    private var retryPending = false
     private var snap: ((Bool, String?) async -> RecoverySnap)?
     private var onMessage: ((OutageDecision) -> Void)?
     /// `true` is a quiet retry of a stopped picture. The message stays up.
@@ -64,6 +68,12 @@ final class ServerWatch {
     func endPictureRetry() {
         pictureSince = nil
         pictureGen += 1
+        retryPending = false
+    }
+
+    /// The quiet watch failed with nothing named. The next turn may start another.
+    func pictureRetryFailed() {
+        retryPending = false
     }
 
     func bind(
@@ -156,6 +166,8 @@ final class ServerWatch {
             beginRecover()
             return
         }
+        // The quiet watch started and then stopped too.
+        retryPending = false
         armPictureRetry(decision)
     }
 
@@ -179,7 +191,8 @@ final class ServerWatch {
                 elapsed: elapsed
             ) else { return }
             try? await Task.sleep(for: .seconds(wait))
-            guard gen == pictureGen else { return }
+            guard gen == pictureGen, !retryPending else { continue }
+            retryPending = true
             log.info("picture retry")
             print("broadwave picture-retry")
             fflush(stdout)

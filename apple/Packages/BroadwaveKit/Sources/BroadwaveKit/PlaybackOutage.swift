@@ -50,6 +50,11 @@ public enum PlaybackOutage {
         if code == "no_signal" {
             return OutageDecision(message: noSignal, recovery: nil)
         }
+        // A source that stopped sending, like a playlist's upstream. The quiet
+        // clock asks again, since nothing the player can read will change.
+        if code == "stream_down" {
+            return OutageDecision(message: pictureStopped, recovery: nil)
+        }
         let lowered = message.lowercased()
         let network = status == 0
             || lowered.contains("failed to fetch")
