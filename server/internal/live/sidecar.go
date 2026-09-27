@@ -29,8 +29,13 @@ func writeSidecar(rec store.Recording) {
 	_ = os.WriteFile(side, append(body, '\n'), 0o644)
 }
 
+// WriteEDL writes nothing once the recording is gone. Indexing can finish
+// after a delete, and the file it left behind was never cleaned up.
 func WriteEDL(path string, markers []store.Marker) error {
 	if path == "" {
+		return nil
+	}
+	if _, err := os.Stat(path); err != nil {
 		return nil
 	}
 	var b strings.Builder
