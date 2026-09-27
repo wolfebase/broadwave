@@ -5,6 +5,9 @@ import BroadwaveUI
 import CoreMedia
 import os
 import SwiftUI
+#if os(iOS)
+    import UIKit
+#endif
 
 struct PictureStats: Equatable {
     var width = 0
@@ -43,7 +46,11 @@ final class LivePlayer {
     private var watchTask: Task<WatchSession, Error>?
     private var watchToken = 0
     private let outage = ServerWatch()
+    private var outageSampled = Date.distantPast
     private let playLog = Logger(subsystem: "com.wolfeup.broadwave", category: "play")
+    #if os(iOS)
+        private var lifecycle: [NSObjectProtocol] = []
+    #endif
 
     func playLogNote(_ message: String) {
         playLog.info("\(message, privacy: .public)")
@@ -69,6 +76,7 @@ final class LivePlayer {
             onMessage: { [weak self] message in self?.showOutage(message) },
             onRecover: { [weak self] in self?.attempt += 1 }
         )
+        watchLifecycle()
         let caps = Capabilities.current()
         let prefs = store.prefs
         let task = Task { try await api.watch(channelID: channel.id, caps: caps, prefs: prefs, confirmLive: allow) }
@@ -145,6 +153,12 @@ final class LivePlayer {
         statsTask = nil
         picture = PictureStats()
         outage.reset()
+        #if os(iOS)
+            for token in lifecycle {
+                NotificationCenter.default.removeObserver(token)
+            }
+            lifecycle = []
+        #endif
         sync?.stop()
         sync = nil
         if let tick {
@@ -177,6 +191,12 @@ final class LivePlayer {
                     rate = await videoPicture(item).rate
                 }
                 samplePicture(rate: rate)
+                // The playhead observer does not fire while the picture is stuck,
+                // so a dead server would never be named. Two samples a few ms apart
+                // would read as a stuck picture, so only sample when it has gone quiet.
+                if player.currentItem != nil, Date().timeIntervalSince(outageSampled) > 0.9 {
+                    sampleOutage()
+                }
             }
         }
     }
@@ -262,7 +282,30 @@ final class LivePlayer {
         }
     }
 
+    /// Logs resign, background, and the return so a simulator soak can see a
+    /// lock or a home press. Only when `-BroadwaveSyncLog 1` is set.
+    private func watchLifecycle() {
+        #if os(iOS)
+            guard lifecycle.isEmpty, UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") else { return }
+            let center = NotificationCenter.default
+            let names: [(Notification.Name, String)] = [
+                (UIApplication.willResignActiveNotification, "resign"),
+                (UIApplication.didBecomeActiveNotification, "active"),
+                (UIApplication.didEnterBackgroundNotification, "background"),
+                (UIApplication.willEnterForegroundNotification, "foreground"),
+            ]
+            for (name, label) in names {
+                lifecycle.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                    Task { @MainActor in
+                        self?.playLogNote("lifecycle \(label)")
+                    }
+                })
+            }
+        #endif
+    }
+
     private func sampleOutage() {
+        outageSampled = Date()
         let item = player.currentItem
         outage.note(
             time: item?.currentTime().seconds,
@@ -366,6 +409,12 @@ struct PlayerScreen: View {
                 .padding(.top, 80)
             }
         }
+        #if os(iOS)
+        .onChange(of: verticalSize) { _, size in
+            guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") else { return }
+            live.playLogNote("size \(size == .compact ? "landscape" : "portrait")")
+        }
+        #endif
         .task(id: "\(nowPlaying.channel?.id ?? 0) \(store.prefs.track ?? "") \(store.prefs.even) \(live.attempt)") {
             #if DEBUG
                 // Layout checks must not take a tuner. -BroadwaveChrome YES skips the session.
@@ -394,12 +443,46 @@ struct PlayerScreen: View {
             Task { await live.stop() }
         }
         #if DEBUG
-        // Keystrokes go to whichever simulator is in front. A file steps the channel on this one.
-        .task {
-            guard UserDefaults.standard.bool(forKey: "BroadwaveChannelZap") else { return }
+            #if os(iOS)
+                // The host writes portrait or landscape. Rotating the Simulator window would
+                // steal the frontmost device, which may not be this one.
+                .task {
+                    guard UserDefaults.standard.bool(forKey: "BroadwaveExercise") else { return }
+                    await watchExercise()
+                }
+            #endif
+                // Keystrokes go to whichever simulator is in front. A file steps the channel on this one.
+                .task {
+                    guard UserDefaults.standard.bool(forKey: "BroadwaveChannelZap") else { return }
+                    let file = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                        .appendingPathComponent("broadwave-zap.txt")
+                    live.playLogNote("zap-file \(file.path)")
+                    var seen = ""
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .milliseconds(300))
+                        guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+                        let line = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if line.isEmpty || line == seen {
+                            continue
+                        }
+                        seen = line
+                        let verb = line.split(separator: " ").first.map(String.init) ?? line
+                        if verb == "up" {
+                            step(-1)
+                        } else if verb == "down" {
+                            step(1)
+                        }
+                        live.playLogNote("zap \(line) \(nowPlaying.channel?.displayNumber ?? "")")
+                    }
+                }
+        #endif
+    }
+
+    #if os(iOS)
+        private func watchExercise() async {
             let file = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("broadwave-zap.txt")
-            live.playLogNote("zap-file \(file.path)")
+                .appendingPathComponent("broadwave-exercise.txt")
+            live.playLogNote("exercise-file \(file.path)")
             var seen = ""
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(300))
@@ -410,16 +493,25 @@ struct PlayerScreen: View {
                 }
                 seen = line
                 let verb = line.split(separator: " ").first.map(String.init) ?? line
-                if verb == "up" {
-                    step(-1)
-                } else if verb == "down" {
-                    step(1)
+                let mask: UIInterfaceOrientationMask
+                if verb == "landscape" {
+                    mask = .landscapeRight
+                } else if verb == "portrait" {
+                    mask = .portrait
+                } else {
+                    continue
                 }
-                live.playLogNote("zap \(line) \(nowPlaying.channel?.displayNumber ?? "")")
+                guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else {
+                    live.playLogNote("exercise \(verb) no-scene")
+                    continue
+                }
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in
+                    print("broadwave exercise \(verb) \(error.localizedDescription)")
+                }
+                live.playLogNote("exercise \(verb)")
             }
         }
-        #endif
-    }
+    #endif
 
     private func step(_ dir: Int) {
         guard let current = nowPlaying.channel, let i = store.channels.firstIndex(of: current) else { return }
