@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -133,6 +134,16 @@ func inflateXZ(body []byte) ([]byte, error) {
 }
 
 // Pull asks SiliconDust for XMLTV. DeviceAuth is read for this call and not returned.
+// requestError drops the address from a failed request: it carries the DeviceAuth,
+// and the error is logged and stored.
+func requestError(err error) error {
+	var uerr *url.Error
+	if errors.As(err, &uerr) {
+		err = uerr.Err
+	}
+	return fmt.Errorf("guide request: %w", err)
+}
+
 func Pull(ctx context.Context, client *hdhr.Client, baseURL string) ([]byte, error) {
 	if client == nil {
 		client = &hdhr.Client{}
@@ -155,7 +166,7 @@ func Pull(ctx context.Context, client *hdhr.Client, baseURL string) ([]byte, err
 	for attempt := 0; attempt < 2; attempt++ {
 		res, err = http.DefaultClient.Do(req)
 		if err != nil {
-			return nil, err
+			return nil, requestError(err)
 		}
 		if res.StatusCode == http.StatusOK {
 			break

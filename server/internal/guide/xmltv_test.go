@@ -3,8 +3,10 @@ package guide
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os/exec"
 	"strings"
 	"testing"
@@ -94,5 +96,13 @@ func TestPullURLReadsXZ(t *testing.T) {
 	body, err := PullURL(t.Context(), srv.URL+"/guide.xml.xz")
 	if err != nil || !strings.Contains(string(body), "9.1") {
 		t.Fatal(err, string(body))
+	}
+}
+
+func TestRequestErrorDropsTheDeviceAuth(t *testing.T) {
+	err := &url.Error{Op: "Get", URL: "https://api.hdhomerun.com/api/xmltv?DeviceAuth=SECRET", Err: errors.New("connection refused")}
+	got := requestError(err).Error()
+	if strings.Contains(got, "SECRET") || !strings.Contains(got, "connection refused") {
+		t.Fatal(got)
 	}
 }

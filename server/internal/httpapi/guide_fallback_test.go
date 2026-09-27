@@ -70,4 +70,15 @@ func TestGuideAddressFillsTheGuideWhenSiliconDustFails(t *testing.T) {
 	if wait := time.Until(next); wait <= 0 || wait > time.Hour {
 		t.Fatalf("SiliconDust next tried in %v", wait)
 	}
+	// Diagnostics names the failed pull until one succeeds.
+	msg, at, err := st.GuideError(ctx)
+	if err != nil || msg == "" || at.IsZero() {
+		t.Fatalf("guide error %q at %v: %v", msg, at, err)
+	}
+	if err := st.SetGuideSchedule(ctx, time.Now(), time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if msg, _, _ := st.GuideError(ctx); msg != "" {
+		t.Fatalf("a good pull must clear the error, still %q", msg)
+	}
 }

@@ -22,3 +22,19 @@ func TestATuneMeansTheTunerIsAnswering(t *testing.T) {
 		t.Fatal("a recent reply is not quiet")
 	}
 }
+
+func TestLocalZoneReadsTheHostClock(t *testing.T) {
+	chicago, err := time.LoadLocation("America/Chicago")
+	if err != nil {
+		t.Skip("no zone database:", err)
+	}
+	if got := localZone("", chicago); got != "CDT" && got != "CST" {
+		t.Fatalf("a host set to Chicago without TZ read %q", got)
+	}
+	if got := localZone("", time.UTC); got != "" {
+		t.Fatalf("bare UTC must read as unset, got %q", got)
+	}
+	if got := localZone(" Europe/London ", time.UTC); got != "Europe/London" {
+		t.Fatalf("TZ wins, got %q", got)
+	}
+}

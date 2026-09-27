@@ -40,7 +40,7 @@ export function DiagnosticsPage() {
               <span>Tuner {t.index + 1}</span>
               <meter min={0} max={100} value={t.strength ?? 0} title="Signal strength" />
               <span className="dim">
-                {t.target ? `${t.ours ? "This server" : "Another device"} · ${t.guide ?? ""} ${t.name ?? ""} · signal ${t.strength}% · quality ${t.quality}%` : "Free"}
+                {t.target ? `${t.ours ? "This server" : "Another device"} · ${tunedLabel(t.guide, t.name)} · signal ${t.strength}% · quality ${t.quality}%` : "Free"}
                 {t.viewers ? ` · ${t.viewers} watching` : ""}
               </span>
             </div>
@@ -114,8 +114,16 @@ export function DiagnosticsPage() {
           <dd>
             {d.guide?.channelsWithListings}/{d.guide?.channels} channels listed · {d.guide?.airings} shows
             {d.guide?.listingsUntil ? ` · through ${new Date(d.guide.listingsUntil).toLocaleDateString()}` : ""}
-            {d.guide?.nextRefresh ? ` · refreshes ${new Date(d.guide.nextRefresh).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : ""}
+            {d.guide?.nextRefresh ? ` · refreshes ${shortTime(d.guide.nextRefresh)}` : ""}
           </dd>
+          {d.guide?.lastError ? (
+            <>
+              <dt>Last pull</dt>
+              <dd className="warn">
+                Failed{d.guide.lastErrorAt ? ` ${shortTime(d.guide.lastErrorAt)}` : ""}: {d.guide.lastError}
+              </dd>
+            </>
+          ) : null}
         </dl>
       </section>
 
@@ -191,4 +199,15 @@ function LockLine({ index, locked }: { index: number; locked: boolean }) {
       <dd>{locked ? "Locked" : "Not locked"}</dd>
     </>
   );
+}
+
+function shortTime(iso: string) {
+  return new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+/** A tuner can report its channel name as the number; say it once. */
+function tunedLabel(guide?: string, name?: string) {
+  const g = (guide ?? "").trim();
+  const n = (name ?? "").trim();
+  return n && n !== g ? `${g} ${n}`.trim() : g;
 }
