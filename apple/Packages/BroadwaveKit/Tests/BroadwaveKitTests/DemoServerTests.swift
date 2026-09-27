@@ -95,6 +95,29 @@ import Testing
     try await client.saveSettings(["pictureMode": "nope"])
     let kept = try await client.settings()
     #expect(kept["pictureMode"] == "film")
+    let secret = "demo-secret-value"
+    try await client.saveSettings([
+        "sdUser": "guide@example.com",
+        "sdPassword": secret,
+        "tmdbKey": secret,
+        "recordingsPath": "/recordings",
+        "watermarkGB": "12",
+        "guideUrl": "https://example.com/guide.xml",
+    ])
+    let guide = try await client.settings()
+    #expect(guide["sdUser"] == "guide@example.com")
+    #expect(guide["recordingsPath"] == "/recordings")
+    #expect(guide["watermarkGB"] == "12")
+    #expect(guide["guideUrl"] == "https://example.com/guide.xml")
+    #expect(guide["sdPasswordSet"] == "1")
+    #expect(guide["tmdbKeySet"] == "1")
+    #expect(guide["sdPassword"] == nil)
+    #expect(guide["tmdbKey"] == nil)
+    #expect(!guide.values.contains(secret))
+    try await client.saveSettings(["watermarkGB": "nope", "sdPassword": "  "])
+    let rejected = try await client.settings()
+    #expect(rejected["watermarkGB"] == "12")
+    #expect(rejected["sdPassword"] == nil)
 }
 
 @Test func demoRoomCountsBothScreens() async throws {

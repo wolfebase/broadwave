@@ -349,6 +349,77 @@ public struct APIClient: Sendable {
     public func setupFinish() async throws -> SetupFinish {
         try await send("GET", "/setup/finish", as: SetupFinish.self)
     }
+
+    public struct GuideDepth: Decodable, Sendable {
+        public var channels: Int
+        public var channelsWithListings: Int
+        public var airings: Int
+    }
+
+    public func guideDepth() async throws -> GuideDepth? {
+        struct R: Decodable { var guide: GuideDepth? }
+        return try await send("GET", "/diagnostics", as: R.self).guide
+    }
+
+    public func deviceHealth() async throws -> [DeviceHealth] {
+        struct R: Decodable { var devices: [DeviceHealth] }
+        return try await send("GET", "/devices/health", as: R.self).devices
+    }
+
+    public func signals() async throws -> (channels: [ChannelSignal], running: Bool) {
+        struct R: Decodable { var channels: [ChannelSignal]; var running: Bool }
+        let res = try await send("GET", "/signals", as: R.self)
+        return (res.channels, res.running)
+    }
+
+    /// Starts an antenna pass. The server tunes each frequency on an idle tuner and stops if someone watches.
+    public func checkSignals() async throws -> String {
+        struct R: Decodable { var running: Bool; var message: String? }
+        let res = try await send("POST", "/signals/check", body: [String: String](), as: R.self)
+        return res.message ?? ""
+    }
+
+    public func backups() async throws -> [CatalogBackup] {
+        struct R: Decodable { var backups: [CatalogBackup] }
+        return try await send("GET", "/backups", as: R.self).backups
+    }
+
+    public func restoreBackup(name: String) async throws {
+        struct Ok: Decodable {}
+        _ = try await send("POST", "/backups/\(Self.pathSegment(name))/restore", body: [String: String](), as: Ok.self)
+    }
+
+    public func backupURL(name: String) -> URL {
+        url("/api/v1/backups/\(Self.pathSegment(name))")
+    }
+
+    public func catalogBackupURL() -> URL {
+        url("/api/v1/backup")
+    }
+
+    /// Puts a catalog file back. The body is the database, not JSON.
+    public func restoreCatalog(_ data: Data) async throws {
+        var req = URLRequest(url: catalogBackupURL())
+        req.httpMethod = "POST"
+        req.timeoutInterval = 60
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        req.httpBody = data
+        let (body, res) = try await session.data(for: req)
+        let status = (res as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200 ..< 300).contains(status) else {
+            if let err = try? JSONDecoder().decode(APIErrorBody.self, from: body) {
+                throw APIError(code: err.code, message: err.message, status: status)
+            }
+            throw APIError(code: "http_\(status)", message: "The server answered \(status).", status: status)
+        }
+    }
+
+    /// One URL path segment. Backup names are filenames; a slash would address a different route.
+    private static func pathSegment(_ name: String) -> String {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/")
+        return name.addingPercentEncoding(withAllowedCharacters: allowed) ?? name
+    }
 }
 
 extension ISO8601DateFormatter {

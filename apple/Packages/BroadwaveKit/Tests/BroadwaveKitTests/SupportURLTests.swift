@@ -2,6 +2,20 @@
 import Foundation
 import Testing
 
+@Test func backupURLsStayOnTheServerOrigin() throws {
+    let base = try #require(URL(string: "http://127.0.0.1:9/api/v1"))
+    let api = APIClient(base: base)
+    let named = api.backupURL(name: "broadwave-20260926-daily.db")
+    #expect(named.path == "/api/v1/backups/broadwave-20260926-daily.db")
+    #expect(named.host() == "127.0.0.1")
+    let catalog = api.catalogBackupURL()
+    #expect(catalog.path == "/api/v1/backup")
+    #expect(catalog.host() == "127.0.0.1")
+    let escaped = api.backupURL(name: "a/../b.db")
+    #expect(escaped.absoluteString.hasSuffix("/api/v1/backups/a%2F..%2Fb.db"))
+    #expect(!escaped.absoluteString.contains("/../"))
+}
+
 @Test func supportURLIsOnTheServerOrigin() throws {
     let base = try #require(URL(string: "http://127.0.0.1:9/api/v1"))
     let support = APIClient(base: base).supportURL()

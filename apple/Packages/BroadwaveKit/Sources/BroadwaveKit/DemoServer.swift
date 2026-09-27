@@ -369,8 +369,17 @@ public final class DemoServer: @unchecked Sendable {
             return Self.fail(400, "bad", "Settings need text values.")
         }
         lock.lock()
-        for (key, value) in obj where Self.accepts(key, value) {
-            settings[key] = value
+        for (key, value) in obj {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if key == "sdPassword" || key == "tmdbKey" || key == "sportsdbKey" {
+                if !trimmed.isEmpty {
+                    settings[key + "Set"] = "1"
+                }
+                continue
+            }
+            if Self.accepts(key, value) {
+                settings[key] = value
+            }
         }
         lock.unlock()
         return Self.ok(Self.json(currentSettings()))
@@ -382,6 +391,14 @@ public final class DemoServer: @unchecked Sendable {
             value == "broadcast" || value == "smooth" || value == "film"
         case "needsSetup", "setupComplete", "hideScores", "liveScores", "checkUpdates", "autoplay", "hdhrEmulate":
             value == "0" || value == "1"
+        case "sdUser", "sdLineup", "guideUrl", "recordingsPath":
+            true
+        case "watermarkGB":
+            if let n = Int(value), (0 ... 1_000_000).contains(n), String(n) == value {
+                true
+            } else {
+                false
+            }
         default:
             false
         }
