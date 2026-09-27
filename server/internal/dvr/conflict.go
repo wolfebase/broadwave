@@ -266,6 +266,9 @@ func OneShotLimit(pass store.Pass, recs []store.Recording) int {
 // HaveOneShot reports a pass that already records this airing and then stops.
 func HaveOneShot(passes []store.Pass, suggestion store.Airing) bool {
 	for _, pass := range passes {
+		if pass.Kind == "once" && passMatches(pass, suggestion) {
+			return true
+		}
 		if pass.LimitCount < 1 || pass.ChannelID != suggestion.ChannelID || strings.TrimSpace(pass.TimeStart) == "" {
 			continue
 		}

@@ -202,6 +202,7 @@ export type Pass = {
   timeStart?: string;
   timeEnd?: string;
   matchKind?: string;
+  airingStart?: string;
 };
 
 export type PassList = {

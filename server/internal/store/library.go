@@ -201,29 +201,61 @@ func (s *Store) BackupTo(ctx context.Context, path string) error {
 	return err
 }
 
+// RestoreFrom replaces the user's choices with a backup's, all or nothing.
+// A backup from an older version fills the columns it has; new ones take their defaults.
 func (s *Store) RestoreFrom(ctx context.Context, path string) error {
-	escaped := strings.ReplaceAll(path, "'", "''")
-	if _, err := s.db.ExecContext(ctx, fmt.Sprintf(`ATTACH DATABASE '%s' AS incoming`, escaped)); err != nil {
+	// ATTACH holds for one connection, and it cannot run inside a transaction.
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
 		return err
 	}
-	defer func() { _, _ = s.db.ExecContext(ctx, `DETACH DATABASE incoming`) }()
+	defer conn.Close()
+	escaped := strings.ReplaceAll(path, "'", "''")
+	if _, err := conn.ExecContext(ctx, fmt.Sprintf(`ATTACH DATABASE '%s' AS incoming`, escaped)); err != nil {
+		return err
+	}
+	defer func() { _, _ = conn.ExecContext(context.Background(), `DETACH DATABASE incoming`) }()
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
 	tables := []string{"settings", "passes", "markers", "virtual_channels", "virtual_items", "progress", "seen_programs", "sources", "skipped_airings", "source_secrets"}
 	for _, table := range tables {
-		if table == "source_secrets" {
-			var n int
-			if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM incoming.sqlite_master WHERE type='table' AND name='source_secrets'`).Scan(&n); err != nil {
-				return err
-			}
-			if n == 0 {
-				continue
-			}
+		cols, err := sharedColumns(ctx, tx, table)
+		if err != nil {
+			return fmt.Errorf("%s: %w", table, err)
 		}
-		if _, err := s.db.ExecContext(ctx, `DELETE FROM `+table); err != nil {
-			return err
+		if len(cols) == 0 {
+			// The backup predates this table; keep what is here.
+			continue
 		}
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO `+table+` SELECT * FROM incoming.`+table); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table); err != nil {
+			return fmt.Errorf("%s: %w", table, err)
+		}
+		list := strings.Join(cols, ", ")
+		if _, err := tx.ExecContext(ctx, `INSERT INTO `+table+` (`+list+`) SELECT `+list+` FROM incoming.`+table); err != nil {
 			return fmt.Errorf("%s: %w", table, err)
 		}
 	}
-	return nil
+	return tx.Commit()
+}
+
+// sharedColumns lists the columns a table has both here and in the backup, quoted.
+func sharedColumns(ctx context.Context, tx *sql.Tx, table string) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT name FROM pragma_table_info(?, 'main')
+		WHERE name IN (SELECT name FROM pragma_table_info(?, 'incoming')) ORDER BY cid`, table, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var cols []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		cols = append(cols, `"`+strings.ReplaceAll(name, `"`, `""`)+`"`)
+	}
+	return cols, rows.Err()
 }

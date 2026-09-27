@@ -13,6 +13,10 @@ import (
 
 // Tick starts a recording when a series pass matches an airing that is about to start.
 func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
+	// A game can run hours past its listing; a day later the once pass is done.
+	if err := st.DeleteEndedOncePasses(ctx, time.Now().Add(-24*time.Hour)); err != nil {
+		slog.Debug(fmt.Sprintf("once passes: %v", err))
+	}
 	passes, err := st.Passes(ctx)
 	if err != nil || len(passes) == 0 || hub == nil {
 		return

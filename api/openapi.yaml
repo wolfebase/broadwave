@@ -1055,6 +1055,9 @@ paths:
               properties:
                 title: { type: string }
                 channelId: { type: integer, format: int64, description: "0 records on any channel" }
+                padBefore: { type: integer, minimum: 0, maximum: 30 }
+                padAfter: { type: integer, minimum: 0, maximum: 30 }
+                airingStart: { type: string, format: date-time, description: "Record only the airing starting then on channelId (kind once). Needs channelId." }
       responses:
         "200":
           description: Passes after the change
@@ -1831,7 +1834,7 @@ components:
         id: { type: integer, format: int64 }
         title: { type: string }
         channelId: { type: integer, format: int64 }
-        kind: { type: string }
+        kind: { type: string, description: "series, team, or once" }
         padBefore: { type: integer, minimum: 0, maximum: 30 }
         padAfter: { type: integer, minimum: 0, maximum: 30 }
         priority: { type: integer }
@@ -1844,6 +1847,7 @@ components:
         timeStart: { type: string, description: "HH:MM local" }
         timeEnd: { type: string, description: "HH:MM local" }
         matchKind: { type: string, enum: [title, contains, category, team] }
+        airingStart: { type: string, format: date-time, description: "Start of the one airing a once pass records" }
     TeamFollow:
       type: object
       required: [name]

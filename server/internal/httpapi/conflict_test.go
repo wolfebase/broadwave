@@ -368,3 +368,50 @@ func postJSON(t *testing.T, h http.Handler, path, body string) *httptest.Respons
 	h.ServeHTTP(rec, req)
 	return rec
 }
+
+func TestAddPassForOneAiring(t *testing.T) {
+	h := (&Server{Store: testStore(t)}).Handler()
+	if rec := postJSON(t, h, "/api/v1/passes", `{"title":"Jeopardy","airingStart":"2026-09-28T16:00:00Z"}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("no channel: %d %s", rec.Code, rec.Body.String())
+	}
+	rec := postJSON(t, h, "/api/v1/passes", `{"title":"Jeopardy","channelId":3,"airingStart":"2026-09-28T11:00:00-05:00"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Passes []store.Pass `json:"passes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 9, 28, 16, 0, 0, 0, time.UTC)
+	if len(body.Passes) != 1 || body.Passes[0].Kind != "once" || body.Passes[0].ChannelID != 3 || !body.Passes[0].AiringStart.Equal(want) {
+		t.Fatalf("passes %+v", body.Passes)
+	}
+	if !strings.Contains(rec.Body.String(), `"airingStart":"2026-09-28T16:00:00Z"`) {
+		t.Fatal(rec.Body.String())
+	}
+	patch := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/passes/%d", body.Passes[0].ID),
+		strings.NewReader(`{"padAfter":5,"channelId":9,"keepMode":"last","keepCount":1,"timeStart":"10:00","timeEnd":"11:00"}`))
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, patch)
+	body.Passes = nil
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if p := body.Passes[0]; p.PadAfter != 5 || p.ChannelID != 3 || p.KeepMode == "last" || p.TimeStart != "" || !p.AiringStart.Equal(want) {
+		t.Fatalf("a once pass takes only its pads: %+v", p)
+	}
+	var series struct {
+		Passes []map[string]any `json:"passes"`
+	}
+	rec = postJSON(t, h, "/api/v1/passes", `{"title":"News"}`)
+	_ = json.Unmarshal(rec.Body.Bytes(), &series)
+	for _, pass := range series.Passes {
+		if pass["title"] == "News" {
+			if _, ok := pass["airingStart"]; ok {
+				t.Fatalf("a series pass has no airing: %v", pass)
+			}
+		}
+	}
+}

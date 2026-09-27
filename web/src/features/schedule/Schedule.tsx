@@ -133,7 +133,7 @@ export function Schedule({
         <ul className="source-list">
           {passes.map((pass) => (
             <li key={pass.id} className="source-row">
-              <span>{pass.title}</span>
+              <span>{pass.kind === "once" && pass.airingStart ? `${pass.title} · ${formatDay(new Date(pass.airingStart))} only` : pass.title}</span>
               <PadFields
                 key={`${pass.id}:${pass.padBefore}:${pass.padAfter}:${pass.priority}:${pass.episodes}:${pass.keepMode}:${pass.commercials}`}
                 pass={pass}
@@ -251,21 +251,25 @@ function PadFields({ pass, onSave }: { pass: Pass; onSave: (patch: Partial<Pass>
           onBlur={() => commit()}
         />
       </label>
-      <label>
-        Episodes
-        <select aria-label={`${pass.title} episodes`} value={episodes} onChange={(event) => { setEpisodes(event.target.value); commit({ episodes: event.target.value }); }}>
-          <option value="all">All</option>
-          <option value="new">New only</option>
-        </select>
-      </label>
-      <label>
-        Keep
-        <select aria-label={`${pass.title} keep`} value={keepMode} onChange={(event) => { setKeepMode(event.target.value); commit({ keepMode: event.target.value }); }}>
-          <option value="all">All</option>
-          <option value="unwatched">Unwatched</option>
-          <option value="last">Last few</option>
-        </select>
-      </label>
+      {pass.kind === "once" ? null : (
+        <>
+          <label>
+            Episodes
+            <select aria-label={`${pass.title} episodes`} value={episodes} onChange={(event) => { setEpisodes(event.target.value); commit({ episodes: event.target.value }); }}>
+              <option value="all">All</option>
+              <option value="new">New only</option>
+            </select>
+          </label>
+          <label>
+            Keep
+            <select aria-label={`${pass.title} keep`} value={keepMode} onChange={(event) => { setKeepMode(event.target.value); commit({ keepMode: event.target.value }); }}>
+              <option value="all">All</option>
+              <option value="unwatched">Unwatched</option>
+              <option value="last">Last few</option>
+            </select>
+          </label>
+        </>
+      )}
       <label>
         Commercials
         <input type="checkbox" aria-label={`${pass.title} commercials`} checked={commercials} onChange={(event) => { setCommercials(event.target.checked); commit({ commercials: event.target.checked }); }} />

@@ -9,14 +9,18 @@ import { ArtFrame } from "../../ui/ArtFrame";
 import { ChannelBadge, LiveDot, Progress } from "../../ui/primitives";
 
 export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: Channel; airing?: Airing; onClose: () => void; onWatch: (c: Channel) => void }) {
-  const { now, planned, recordings, passes, record, recordSeries, favorite, stopRecord } = useData();
+  const { now, planned, recordings, passes, record, recordSeries, recordOnce, removePass, favorite, stopRecord } = useData();
   const player = usePlayer();
   const ref = useRef<HTMLDivElement>(null);
   const cat = categoryOf(airing);
   const onNow = airing ? Date.parse(airing.start) <= now && Date.parse(airing.end) > now : true;
   const rec = airing ? isRecording(recordingKeys(planned, recordings), airing, now) : null;
   const active = recordings.find((r) => r.status === "recording" && r.channelId === channel.id);
-  const hasPass = airing ? passes.some((p) => p.title.toLowerCase() === airing.title.toLowerCase()) : false;
+  const hasPass = airing ? passes.some((p) => p.kind !== "once" && p.title.toLowerCase() === airing.title.toLowerCase()) : false;
+  const once = airing
+    ? passes.find((p) => p.kind === "once" && p.channelId === channel.id && p.airingStart && Date.parse(p.airingStart) === Date.parse(airing.start))
+    : undefined;
+  const upcoming = airing ? Date.parse(airing.start) > now : false;
 
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
@@ -100,6 +104,17 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
                   <RecordIcon className="tally" /> Record
                 </button>
               )
+            ) : null}
+            {airing && upcoming ? (
+              once ? (
+                <button type="button" className="btn" onClick={() => void removePass(once.id)}>
+                  <RecordIcon className="tally" /> Don't record
+                </button>
+              ) : rec !== "scheduled" ? (
+                <button type="button" className="btn" onClick={() => void recordOnce(airing, channel)}>
+                  <RecordIcon className="tally" /> Record
+                </button>
+              ) : null
             ) : null}
             {airing ? (
               <button type="button" className="btn" disabled={hasPass} onClick={() => void recordSeries(airing.title, channel)}>

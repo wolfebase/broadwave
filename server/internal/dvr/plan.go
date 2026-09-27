@@ -53,11 +53,16 @@ func Plan(passes []store.Pass, airings []store.Airing, tunerCount int, from, to 
 }
 
 func matchPass(passes []store.Pass, airing store.Airing) (store.Pass, bool) {
+	// A once pass names this airing, so its rules win over a series that also matches.
 	for _, pass := range passes {
-		if !passMatches(pass, airing) {
-			continue
+		if pass.Kind == "once" && passMatches(pass, airing) {
+			return pass, true
 		}
-		return pass, true
+	}
+	for _, pass := range passes {
+		if pass.Kind != "once" && passMatches(pass, airing) {
+			return pass, true
+		}
 	}
 	return store.Pass{}, false
 }
@@ -65,6 +70,10 @@ func matchPass(passes []store.Pass, airing store.Airing) (store.Pass, bool) {
 func passMatches(pass store.Pass, airing store.Airing) bool {
 	if pass.ChannelID != 0 && pass.ChannelID != airing.ChannelID {
 		return false
+	}
+	if pass.Kind == "once" {
+		// The guide can retitle an airing before it starts; the channel and start name it.
+		return pass.ChannelID != 0 && airing.Start.Equal(pass.AiringStart)
 	}
 	if !inWindow(pass, airing.Start) {
 		return false

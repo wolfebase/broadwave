@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -60,5 +62,77 @@ func TestReplaceAiringsForKeepsOneRowPerSlot(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Description != rich.Description {
 		t.Fatalf("airings = %+v, want the one with a description", got)
+	}
+}
+
+func TestOncePassIsKeptOnceAndDroppedAfterItAirs(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	start := time.Date(2026, 9, 28, 16, 0, 0, 0, time.UTC)
+	for range 2 {
+		if err := st.AddOncePass(ctx, "Jeopardy", 3, start, 1, 2); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.AddPass(ctx, "News", 0, 1, 2); err != nil {
+		t.Fatal(err)
+	}
+	passes, err := st.Passes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(passes) != 2 || passes[0].Kind != "once" || !passes[0].AiringStart.Equal(start) || !passes[1].AiringStart.IsZero() {
+		t.Fatalf("passes %+v", passes)
+	}
+	if err := st.DeleteEndedOncePasses(ctx, start.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	passes, _ = st.Passes(ctx)
+	if len(passes) != 1 || passes[0].Title != "News" {
+		t.Fatalf("after prune %+v", passes)
+	}
+}
+
+func TestRestoreFromABackupWithoutTheOnceColumn(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	if err := st.AddPass(ctx, "News", 0, 1, 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutSettings(ctx, map[string]string{"layout": "tv"}); err != nil {
+		t.Fatal(err)
+	}
+	backup := filepath.Join(t.TempDir(), "old.db")
+	if err := st.BackupTo(ctx, backup); err != nil {
+		t.Fatal(err)
+	}
+	old, err := sql.Open("sqlite", "file:"+filepath.ToSlash(backup))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.ExecContext(ctx, `ALTER TABLE passes DROP COLUMN airing_start`); err != nil {
+		t.Fatal(err)
+	}
+	old.Close()
+
+	if err := st.AddOncePass(ctx, "Jeopardy", 3, time.Now(), 1, 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutSettings(ctx, map[string]string{"layout": "phone"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RestoreFrom(ctx, backup); err != nil {
+		t.Fatal(err)
+	}
+	passes, err := st.Passes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(passes) != 1 || passes[0].Title != "News" || !passes[0].AiringStart.IsZero() {
+		t.Fatalf("passes after restore %+v", passes)
+	}
+	settings, _ := st.Settings(ctx)
+	if settings["layout"] != "tv" {
+		t.Fatalf("layout %q", settings["layout"])
 	}
 }
