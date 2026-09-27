@@ -56,6 +56,10 @@ func TestFakeTunerSharesFrequencyAndYields(t *testing.T) {
 	if err := st.UpsertDevice(ctx, dev, channels); err != nil {
 		t.Fatal(err)
 	}
+	// The reserve would make the result depend on this machine's free space.
+	if err := st.PutSettings(ctx, map[string]string{"watermarkGB": "0"}); err != nil {
+		t.Fatal(err)
+	}
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
 	defer func() {
 		for _, rec := range mustRecordings(t, st) {
