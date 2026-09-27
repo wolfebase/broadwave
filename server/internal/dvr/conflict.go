@@ -10,22 +10,12 @@ import (
 )
 
 // Suggestion is another airing of a skipped show that fits on the tuners already kept.
-// Misses are other showings a one-shot fix will not record. A channel-pin move leaves this empty.
 type Suggestion struct {
-	ChannelID   int64           `json:"channelId"`
-	GuideNumber string          `json:"guideNumber,omitempty"`
-	Title       string          `json:"title"`
-	Start       time.Time       `json:"start"`
-	End         time.Time       `json:"end"`
-	Misses      []MissedShowing `json:"misses,omitempty"`
-}
-
-// MissedShowing is one airing a one-shot would record and then drop.
-type MissedShowing struct {
 	ChannelID   int64     `json:"channelId"`
 	GuideNumber string    `json:"guideNumber,omitempty"`
 	Title       string    `json:"title"`
 	Start       time.Time `json:"start"`
+	End         time.Time `json:"end"`
 }
 
 // Soon is a recording that has not started. Pad is how early its tuner is reserved.
@@ -39,8 +29,8 @@ type Soon struct {
 // FixPlan records a suggestion instead of a skipped airing.
 // Priority is never raised. When the pass already matches the later airing,
 // only that skipped showing is dropped. A title pass whose channel pin is the
-// only mismatch takes the later channel. Any other pass gets a one-shot, which
-// can skip other showings of that title for good.
+// only mismatch takes the later channel. Any other pass gets a once pass for
+// that airing alone.
 type FixPlan struct {
 	Skip       store.Airing
 	SetChannel int64
@@ -110,18 +100,13 @@ func laterAiring(items []Planned, skipped Planned, pass store.Pass, passes []sto
 	if !found {
 		return Suggestion{}, false
 	}
-	sug := Suggestion{
+	return Suggestion{
 		ChannelID:   best.ChannelID,
 		GuideNumber: guides[best.ChannelID],
 		Title:       best.Title,
 		Start:       best.Start,
 		End:         best.End,
-	}
-	fix := PlanFix(pass, skipped.Airing, best)
-	if fix.OneShot != nil && !HaveOneShot(passes, best) {
-		sug.Misses = MissedFrom(airings, *fix.OneShot, best, guides)
-	}
-	return sug, true
+	}, true
 }
 
 // rulesMatch applies the pass except its channel pin, so a later airing on
@@ -237,120 +222,29 @@ func channelAdjust(pass store.Pass, suggestion store.Airing) bool {
 	return passMatches(relaxed, suggestion)
 }
 
+// oneShotPass names the one airing. A title pass with a one-minute window
+// matched the same slot on other days and came back each time it was watched.
 func oneShotPass(pass store.Pass, suggestion store.Airing) store.Pass {
-	shot := pass
-	shot.ID = 0
-	shot.Kind = "series"
-	shot.Title = strings.TrimSpace(suggestion.Title)
-	shot.ChannelID = suggestion.ChannelID
-	shot.MatchKind = "title"
-	shot.Episodes = "all"
-	shot.LimitCount = 1
-	shot.Priority = pass.Priority
-	local := suggestion.Start.In(time.Local)
-	shot.TimeStart = fmt.Sprintf("%02d:%02d", local.Hour(), local.Minute())
-	end := local.Add(time.Minute)
-	shot.TimeEnd = fmt.Sprintf("%02d:%02d", end.Hour(), end.Minute())
-	return shot
-}
-
-// OneShotLimit leaves room for this airing on top of what is already unwatched.
-func OneShotLimit(pass store.Pass, recs []store.Recording) int {
-	n := unwatchedCount(recs, pass)
-	if n < 0 {
-		n = 0
+	return store.Pass{
+		Kind:        "once",
+		Title:       strings.TrimSpace(suggestion.Title),
+		ChannelID:   suggestion.ChannelID,
+		AiringStart: suggestion.Start,
+		Priority:    pass.Priority,
+		PadBefore:   pass.PadBefore,
+		PadAfter:    pass.PadAfter,
+		Commercials: pass.Commercials,
 	}
-	return n + 1
 }
 
-// HaveOneShot reports a pass that already records this airing and then stops.
+// HaveOneShot reports a once pass that already records this airing.
 func HaveOneShot(passes []store.Pass, suggestion store.Airing) bool {
 	for _, pass := range passes {
 		if pass.Kind == "once" && passMatches(pass, suggestion) {
 			return true
 		}
-		if pass.LimitCount < 1 || pass.ChannelID != suggestion.ChannelID || strings.TrimSpace(pass.TimeStart) == "" {
-			continue
-		}
-		if strings.EqualFold(strings.TrimSpace(pass.Title), strings.TrimSpace(suggestion.Title)) && passMatches(pass, suggestion) {
-			return true
-		}
 	}
 	return false
-}
-
-// OneShotSkips lists other airings the one-shot would grab besides the one the viewer chose.
-func OneShotSkips(airings []store.Airing, shot store.Pass, keep store.Airing) []store.Airing {
-	var out []store.Airing
-	for _, air := range airings {
-		if sameShowing(air, keep) || !passMatches(shot, air) {
-			continue
-		}
-		out = append(out, air)
-	}
-	return out
-}
-
-// MissedFrom is the showings OneShotSkips would drop, in start order.
-func MissedFrom(airings []store.Airing, shot store.Pass, keep store.Airing, guides map[int64]string) []MissedShowing {
-	skipped := OneShotSkips(airings, shot, keep)
-	if len(skipped) == 0 {
-		return nil
-	}
-	out := make([]MissedShowing, 0, len(skipped))
-	for _, other := range skipped {
-		out = append(out, MissedShowing{
-			ChannelID:   other.ChannelID,
-			GuideNumber: guides[other.ChannelID],
-			Title:       other.Title,
-			Start:       other.Start,
-		})
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Start.Equal(out[j].Start) {
-			return out[i].ChannelID < out[j].ChannelID
-		}
-		return out[i].Start.Before(out[j].Start)
-	})
-	return out
-}
-
-// MissedLine is the sentence shown before a one-shot fix is confirmed.
-func MissedLine(items []MissedShowing) string {
-	if len(items) == 0 {
-		return ""
-	}
-	parts := make([]string, len(items))
-	for i, item := range items {
-		parts[i] = missedPart(item)
-	}
-	return joinList(parts) + " will not record."
-}
-
-func missedPart(item MissedShowing) string {
-	title := strings.TrimSpace(item.Title)
-	if title == "" {
-		title = "A show"
-	}
-	// The window is 14 days, so the clock alone can name two showings.
-	when := item.Start.In(time.Local).Format("Jan 2 at 3:04 PM")
-	if number := strings.TrimSpace(item.GuideNumber); number != "" {
-		return fmt.Sprintf("%s on %s on %s", title, when, number)
-	}
-	return fmt.Sprintf("%s on %s", title, when)
-}
-
-func joinList(parts []string) string {
-	switch len(parts) {
-	case 0:
-		return ""
-	case 1:
-		return parts[0]
-	case 2:
-		return parts[0] + " and " + parts[1]
-	default:
-		return strings.Join(parts[:len(parts)-1], ", ") + ", and " + parts[len(parts)-1]
-	}
 }
 
 // LiveWatch reports whether a live tune that needs its own tuner would be
@@ -420,28 +314,4 @@ func liveWarningText(soon Soon, needed int) string {
 		return fmt.Sprintf("%s starts at %s. Watching stops when %d recordings start.", title, when, needed)
 	}
 	return fmt.Sprintf("%s starts at %s. Watching stops when that recording starts.", title, when)
-}
-
-// SameMisses reports whether the starts the viewer was shown are the showings
-// this fix would skip. Order does not matter.
-func SameMisses(got []time.Time, missed []MissedShowing) bool {
-	if len(got) != len(missed) {
-		return false
-	}
-	used := make([]bool, len(got))
-	for _, item := range missed {
-		hit := false
-		for i, ts := range got {
-			if used[i] || !ts.Equal(item.Start) {
-				continue
-			}
-			used[i] = true
-			hit = true
-			break
-		}
-		if !hit {
-			return false
-		}
-	}
-	return true
 }

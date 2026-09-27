@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Pass, PlannedAiring, Recording } from "../../types";
-import { deletePass, fixSchedule, getEvents, getSchedule, stopRecording, updatePass, type ApiFailure } from "../../api";
+import { deletePass, fixSchedule, getEvents, getSchedule, stopRecording, updatePass } from "../../api";
 import { copy } from "../../strings";
 import { formatClock } from "../../time";
-import { missedLine } from "./missed";
 import "./schedule.css";
 export function Schedule({
   recordings,
@@ -53,7 +52,6 @@ export function Schedule({
     const key = `${item.passId}-${item.airing.channelId}-${item.airing.start}`;
     setFixing(key);
     setNote("");
-    const misses = alt.misses ?? [];
     try {
       const res = await fixSchedule({
         passId: item.passId,
@@ -61,19 +59,16 @@ export function Schedule({
         start: item.airing.start,
         suggestionChannelId: alt.channelId,
         suggestionStart: alt.start,
-        ...(misses.length > 0 ? { acknowledgeMisses: true, acknowledgedStarts: misses.map((miss) => miss.start) } : {}),
       });
       setItems(res.items);
       setTunerCount(res.tunerCount);
       onPasses();
     } catch (err) {
-      const failed = err as ApiFailure;
-      if (failed.code === "missed_showings") {
-        const fresh = await getSchedule().catch(() => undefined);
-        if (fresh) {
-          setItems(fresh.items);
-          setTunerCount(fresh.tunerCount);
-        }
+      // The later airing may have stopped fitting; show what fits now.
+      const fresh = await getSchedule().catch(() => undefined);
+      if (fresh) {
+        setItems(fresh.items);
+        setTunerCount(fresh.tunerCount);
       }
       setNote(err instanceof Error ? err.message : "That airing could not be scheduled.");
     } finally {
@@ -103,16 +98,10 @@ export function Schedule({
                       Later on {formatDay(new Date(item.suggestion.start))}
                       {item.suggestion.guideNumber ? ` on ${item.suggestion.guideNumber}` : ""}.
                     </span>
-                    {item.suggestion.misses && item.suggestion.misses.length > 0 ? (
-                      <span className="schedule-miss" id={`miss-${item.passId}-${item.airing.id}`}>
-                        {missedLine(item.suggestion.misses)}
-                      </span>
-                    ) : null}
                     <button
                       type="button"
                       className="btn small schedule-fix"
                       disabled={fixing === fixKey}
-                      aria-describedby={item.suggestion.misses && item.suggestion.misses.length > 0 ? `miss-${item.passId}-${item.airing.id}` : undefined}
                       onClick={() => void recordLater(item)}
                     >
                       Record the later airing

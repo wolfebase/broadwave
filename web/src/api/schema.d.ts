@@ -730,7 +730,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Record the suggested later airing instead of a skipped one. Does not raise priority. */
+        /** @description Record the suggested later airing instead of a skipped one. When the pass cannot name that airing, a once pass records it alone. Does not raise priority. */
         post: operations["fixSchedule"];
         delete?: never;
         options?: never;
@@ -1427,6 +1427,7 @@ export interface components {
             title: string;
             /** Format: int64 */
             channelId?: number;
+            /** @description series, team, or once */
             kind?: string;
             padBefore?: number;
             padAfter?: number;
@@ -1445,6 +1446,11 @@ export interface components {
             timeEnd?: string;
             /** @enum {string} */
             matchKind?: "title" | "contains" | "category" | "team";
+            /**
+             * Format: date-time
+             * @description Start of the one airing a once pass records
+             */
+            airingStart?: string;
         };
         TeamFollow: {
             /** Format: int64 */
@@ -1474,16 +1480,6 @@ export interface components {
             start: string;
             /** Format: date-time */
             end: string;
-            /** @description Showings a one-shot fix will not record. Empty when the later airing needs no extra skip. */
-            misses?: components["schemas"]["MissedShowing"][];
-        };
-        MissedShowing: {
-            /** Format: int64 */
-            channelId: number;
-            guideNumber?: string;
-            title: string;
-            /** Format: date-time */
-            start: string;
         };
         PlannedAiring: {
             /** Format: int64 */
@@ -2948,10 +2944,6 @@ export interface operations {
                     suggestionChannelId: number;
                     /** Format: date-time */
                     suggestionStart: string;
-                    /** @description Set after the viewer has seen the showings this fix will not record. */
-                    acknowledgeMisses?: boolean;
-                    /** @description Starts of the showings the viewer was shown. The fix runs only when this list matches. */
-                    acknowledgedStarts?: string[];
                 };
             };
         };
@@ -3008,6 +3000,13 @@ export interface operations {
                      * @description 0 records on any channel
                      */
                     channelId?: number;
+                    padBefore?: number;
+                    padAfter?: number;
+                    /**
+                     * Format: date-time
+                     * @description Record only the airing starting then on channelId (kind once). Needs channelId.
+                     */
+                    airingStart?: string;
                 };
             };
         };

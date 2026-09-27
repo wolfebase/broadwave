@@ -211,7 +211,7 @@ func TestLiveWatchDoesNotStarveARecording(t *testing.T) {
 	}
 }
 
-func TestOneShotFixWaitsUntilTheMissedShowingsAreSeen(t *testing.T) {
+func TestAConflictFixRecordsOnlyTheLaterAiring(t *testing.T) {
 	ctx := context.Background()
 	st := testStore(t)
 	if err := st.UpsertDevice(ctx, hdhr.Device{
@@ -278,70 +278,68 @@ func TestOneShotFixWaitsUntilTheMissedShowingsAreSeen(t *testing.T) {
 			found = true
 		}
 	}
-	if !found || len(skipped.Suggestion.Misses) != 1 || skipped.Suggestion.Misses[0].Title != "News" || skipped.Suggestion.Misses[0].GuideNumber != "9.1" {
+	if !found {
 		t.Fatalf("%+v", body.Items)
-	}
-	if !strings.Contains(dvr.MissedLine(skipped.Suggestion.Misses), "will not record") {
-		t.Fatal(dvr.MissedLine(skipped.Suggestion.Misses))
 	}
 	payload := fmt.Sprintf(
 		`{"passId":%d,"channelId":%d,"start":%q,"suggestionChannelId":%d,"suggestionStart":%q}`,
 		skipped.PassID, skipped.Airing.ChannelID, skipped.Airing.Start.Format(time.RFC3339),
 		skipped.Suggestion.ChannelID, skipped.Suggestion.Start.Format(time.RFC3339),
 	)
-	blocked := postJSON(t, h, "/api/v1/schedule/fix", payload)
-	if blocked.Code != http.StatusConflict || !strings.Contains(blocked.Body.String(), "will not record") || !strings.Contains(blocked.Body.String(), "missed_showings") {
-		t.Fatalf("blind fix %d %s", blocked.Code, blocked.Body.String())
-	}
-	againRes := get(t, h, "/api/v1/schedule")
-	body.Items = nil
-	if err := json.Unmarshal(againRes.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
-	}
-	for _, item := range body.Items {
-		if item.Airing.Start.Equal(start) && item.Reason == "Skipped once" {
-			t.Fatal("the fix ran before the missed showing was acknowledged")
-		}
-	}
-	stale := postJSON(t, h, "/api/v1/schedule/fix", strings.TrimSuffix(payload, "}")+`,"acknowledgeMisses":true,"acknowledgedStarts":["2000-01-01T00:00:00Z"]}`)
-	if stale.Code != http.StatusConflict || !strings.Contains(stale.Body.String(), "missed_showings") {
-		t.Fatalf("stale list %d %s", stale.Code, stale.Body.String())
+	fixed := postJSON(t, h, "/api/v1/schedule/fix", payload)
+	if fixed.Code != http.StatusOK {
+		t.Fatalf("fix %d %s", fixed.Code, fixed.Body.String())
 	}
 	body.Items = nil
-	if err := json.Unmarshal(get(t, h, "/api/v1/schedule").Body.Bytes(), &body); err != nil {
+	if err := json.Unmarshal(fixed.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	for _, item := range body.Items {
-		if item.Airing.Start.Equal(start) && item.Reason == "Skipped once" {
-			t.Fatal("a stale list skipped the showing")
-		}
-	}
-	missAt := skipped.Suggestion.Misses[0].Start.UTC().Format(time.RFC3339Nano)
-	acked := postJSON(t, h, "/api/v1/schedule/fix", strings.TrimSuffix(payload, "}")+fmt.Sprintf(`,"acknowledgeMisses":true,"acknowledgedStarts":[%q]}`, missAt))
-	if acked.Code != http.StatusOK {
-		t.Fatalf("ack %d %s", acked.Code, acked.Body.String())
-	}
-	body.Items = nil
-	if err := json.Unmarshal(acked.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
-	}
-	var early, kept, dropped bool
+	var early, kept bool
 	for _, item := range body.Items {
 		if item.Airing.Title != "News" {
 			continue
 		}
-		if item.Airing.Start.Equal(start) {
+		switch {
+		case item.Airing.Start.Equal(start):
 			early = item.Skipped && item.Reason == "Skipped once"
-		}
-		if item.Airing.Start.Equal(later) {
+		case item.Airing.Start.Equal(later):
 			kept = !item.Skipped
-		}
-		if item.Airing.Start.Equal(again) {
-			dropped = item.Skipped && item.Reason == "Skipped once"
+		case item.Airing.Start.Equal(again):
+			t.Fatalf("the next day's airing in the same slot is planned: %+v", item)
 		}
 	}
-	if !early || !kept || !dropped {
-		t.Fatalf("early %v kept %v dropped %v items %+v", early, kept, dropped, body.Items)
+	if !early || !kept {
+		t.Fatalf("early %v kept %v items %+v", early, kept, body.Items)
+	}
+	passes, err = st.Passes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var once []store.Pass
+	var sports store.Pass
+	for _, pass := range passes {
+		switch pass.Title {
+		case "News":
+			once = append(once, pass)
+		case "Sports":
+			sports = pass
+		}
+	}
+	if len(once) != 1 || once[0].Kind != "once" || once[0].ChannelID != abc || !once[0].AiringStart.Equal(later) || once[0].Priority != sports.Priority {
+		t.Fatalf("%+v", once)
+	}
+	// A second press of the same fix keeps one pass.
+	if again := postJSON(t, h, "/api/v1/schedule/fix", payload); again.Code == http.StatusOK {
+		passes, _ = st.Passes(ctx)
+		n := 0
+		for _, pass := range passes {
+			if pass.Title == "News" {
+				n++
+			}
+		}
+		if n != 1 {
+			t.Fatalf("%d News passes", n)
+		}
 	}
 }
 

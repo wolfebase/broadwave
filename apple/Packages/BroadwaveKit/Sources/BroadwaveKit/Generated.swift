@@ -290,20 +290,6 @@ public struct Marker: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
-public struct MissedShowing: Codable, Sendable, Hashable {
-    public var channelId: Int64
-    public var guideNumber: String?
-    public var title: String
-    public var start: Date
-
-    public init(channelId: Int64, guideNumber: String? = nil, title: String, start: Date) {
-        self.channelId = channelId
-        self.guideNumber = guideNumber
-        self.title = title
-        self.start = start
-    }
-}
-
 public struct MultiviewPlanBlocked: Codable, Sendable, Hashable {
     public var channelId: Int64
     public var holders: [String]
@@ -762,15 +748,13 @@ public struct Suggestion: Codable, Sendable, Hashable {
     public var title: String
     public var start: Date
     public var end: Date
-    public var misses: [MissedShowing]?
 
-    public init(channelId: Int64, guideNumber: String? = nil, title: String, start: Date, end: Date, misses: [MissedShowing]? = nil) {
+    public init(channelId: Int64, guideNumber: String? = nil, title: String, start: Date, end: Date) {
         self.channelId = channelId
         self.guideNumber = guideNumber
         self.title = title
         self.start = start
         self.end = end
-        self.misses = misses
     }
 }
 

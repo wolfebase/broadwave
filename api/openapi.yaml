@@ -998,7 +998,7 @@ paths:
     post:
       tags: [dvr]
       operationId: fixSchedule
-      description: Record the suggested later airing instead of a skipped one. Does not raise priority.
+      description: Record the suggested later airing instead of a skipped one. When the pass cannot name that airing, a once pass records it alone. Does not raise priority.
       requestBody:
         required: true
         content:
@@ -1012,11 +1012,6 @@ paths:
                 start: { type: string, format: date-time, description: "Start of the skipped airing." }
                 suggestionChannelId: { type: integer, format: int64 }
                 suggestionStart: { type: string, format: date-time }
-                acknowledgeMisses: { type: boolean, description: "Set after the viewer has seen the showings this fix will not record." }
-                acknowledgedStarts:
-                  type: array
-                  description: "Starts of the showings the viewer was shown. The fix runs only when this list matches."
-                  items: { type: string, format: date-time }
       responses:
         "200":
           description: Schedule after the change
@@ -1884,18 +1879,6 @@ components:
         title: { type: string }
         start: { type: string, format: date-time }
         end: { type: string, format: date-time }
-        misses:
-          type: array
-          description: Showings a one-shot fix will not record. Empty when the later airing needs no extra skip.
-          items: { $ref: "#/components/schemas/MissedShowing" }
-    MissedShowing:
-      type: object
-      required: [channelId, title, start]
-      properties:
-        channelId: { type: integer, format: int64 }
-        guideNumber: { type: string }
-        title: { type: string }
-        start: { type: string, format: date-time }
     PlannedAiring:
       type: object
       required: [passId, airing, priority, padBefore, padAfter, conflict, skipped]
