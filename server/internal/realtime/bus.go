@@ -87,8 +87,12 @@ func (b *Bus) Settle(channelID int64, earliest float64) {
 	if b == nil || b.Rooms == nil {
 		return
 	}
-	for _, e := range b.Rooms.Settle(channelID, earliest) {
+	browsers := b.roomsWithBrowsers()
+	for _, e := range b.Rooms.Settle(channelID, earliest, func(room string) bool { return browsers[room] }) {
 		b.publishRoom(e.State)
+		if e.Until <= 0 {
+			continue
+		}
 		room, version := e.State.Room, e.State.Version
 		time.AfterFunc(e.Until, func() {
 			if st, ok := b.Rooms.EndEase(room, version); ok {
@@ -96,6 +100,26 @@ func (b *Bus) Settle(channelID int64, earliest float64) {
 			}
 		})
 	}
+}
+
+// roomsWithBrowsers lists rooms with a member that is not a known Apple app.
+// A screen that has not said what it is counts as a browser.
+func (b *Bus) roomsWithBrowsers() map[string]bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := map[string]bool{}
+	for c := range b.clients {
+		switch c.here.Kind {
+		case "iphone", "ipad", "appletv":
+			continue
+		}
+		for room, in := range c.rooms {
+			if in {
+				out[room] = true
+			}
+		}
+	}
+	return out
 }
 
 func (b *Bus) publishRoom(st RoomState) {

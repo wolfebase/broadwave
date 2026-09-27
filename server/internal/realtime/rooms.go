@@ -9,9 +9,12 @@ import (
 
 // Latency targets: how far behind real time a sync room plays. The shared
 // timeline is broadcast wall time, so the same target works for every rendition.
+// AVPlayer cannot seek closer to live than the playlist's hold-back (three
+// target durations, 9 s once a segment runs past 2 s) behind a live edge that
+// is itself 2-3 s old, so balanced sits past 12 s or Apple screens never catch it.
 var latencies = map[string]time.Duration{
 	"lowest":   6 * time.Second,
-	"balanced": 10 * time.Second,
+	"balanced": 13 * time.Second,
 	"stable":   20 * time.Second,
 }
 
@@ -118,17 +121,21 @@ type Easing struct {
 	Until time.Duration
 }
 
-// Settle eases follow rooms on this channel from a first-frame anchor back to
-// the latency target once earliest (Unix ms) is old enough to play there. The
-// room keeps its current frame and plays at settleRate until it is on target;
-// EndEase then puts it back to 1x. Jumping the target instead held every
-// screen on a frozen picture for the whole gap. A fresh tune, a room already
-// on its target or easing, a paused room, and a group room stay put. So does
-// a room with one screen: Chrome drops 4-10% of frames at any rate but 1x
-// while sound plays, and one screen has nobody to line up with. A second
-// screen starts the ease on the next segment. Each changed state is returned
-// so members can be told; a second call is empty.
-func (r *Rooms) Settle(channelID int64, earliest float64) []Easing {
+// Settle moves follow rooms on this channel from a first-frame anchor back to
+// the latency target once earliest (Unix ms) is old enough to play there.
+// eases reports whether a room has a screen that plays near the first frame
+// (a browser); nil means every room does. Such a room keeps its current frame
+// and plays at settleRate until it is on target; EndEase then puts it back to
+// 1x. Jumping the target instead held every browser on a frozen picture for
+// the whole gap. A room with one browser stays put: Chrome drops 4-10% of
+// frames at any rate but 1x while sound plays, and one screen has nobody to
+// line up with; a second screen starts the ease on the next segment.
+// AVPlayer never plays that close to live, so a room of only Apple screens
+// would sit unsynced for minutes of easing; it jumps instead (Until is 0), and
+// each screen pauses once for its own gap. A fresh tune, a room already on
+// its target or easing, a paused room, and a group room stay put. Each changed
+// state is returned so members can be told; a second call is empty.
+func (r *Rooms) Settle(channelID int64, earliest float64, eases func(room string) bool) []Easing {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if earliest <= 0 {
@@ -136,7 +143,11 @@ func (r *Rooms) Settle(channelID int64, earliest float64) []Easing {
 	}
 	var changed []Easing
 	for _, st := range r.rooms {
-		if st.ChannelID != channelID || st.Mode != "follow" || st.Rate != 1 || st.Members < 2 {
+		if st.ChannelID != channelID || st.Mode != "follow" || st.Rate != 1 {
+			continue
+		}
+		ease := eases == nil || eases(st.Room)
+		if ease && st.Members < 2 {
 			continue
 		}
 		now := r.now()
@@ -148,6 +159,12 @@ func (r *Rooms) Settle(channelID int64, earliest float64) []Easing {
 		// Already at the target, or further behind it. Never pull a room toward live.
 		gap := st.Target(nowMS) - target
 		if gap <= 500 {
+			continue
+		}
+		if !ease {
+			st.AnchorMedia, st.AnchorServer = target, nowMS
+			st.Version++
+			changed = append(changed, Easing{State: *st})
 			continue
 		}
 		st.AnchorMedia, st.AnchorServer, st.Rate = st.Target(nowMS), nowMS, settleRate
