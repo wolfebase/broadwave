@@ -2,6 +2,10 @@ package live
 
 import (
 	"context"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -49,6 +53,56 @@ func TestFrameArgsSampleTheOpenMux(t *testing.T) {
 	}
 	if !strings.Contains(text, "/work/frames/4.jpg.part") || !strings.Contains(text, "/work/frames/5-1280.jpg.part") {
 		t.Fatalf("paths = %s", text)
+	}
+	if strings.Contains(text, "-analyzeduration") {
+		t.Fatal("a tuned mux keeps the full probe so every program is found")
+	}
+}
+
+func TestLinkPreviewLandsInsideTheGrabLimit(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	dir := t.TempDir()
+	sample := filepath.Join(dir, "link.ts")
+	gen := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc2=size=320x180:rate=30000/1001",
+		"-t", "8", "-c:v", "mpeg2video", "-b:v", "3M", "-g", "15", "-f", "mpegts", sample)
+	if out, err := gen.CombinedOutput(); err != nil {
+		t.Fatalf("sample: %v %s", err, out)
+	}
+	body, err := os.ReadFile(sample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), frameGrabLimit)
+	defer cancel()
+	pr, pw := io.Pipe()
+	go func() {
+		// Real time: 8 s of stream over 8 s, the way a link delivers it.
+		step := len(body) / 80 / 188 * 188
+		for off := 0; off < len(body); off += step {
+			if _, err := pw.Write(body[off:min(off+step, len(body))]); err != nil {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				_ = pw.Close()
+				return
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
+		_ = pw.Close()
+	}()
+	cmd := exec.CommandContext(ctx, ffmpeg, FrameArgs([]FrameJob{{ChannelID: 801}}, dir)...)
+	cmd.Stdin = pr
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("grab did not finish inside %s: %v %s", frameGrabLimit, err, out)
+	}
+	publishFrame(dir, 801)
+	if info, err := os.Stat(filepath.Join(dir, "801.jpg")); err != nil || info.Size() == 0 {
+		t.Fatalf("no preview: %v", err)
 	}
 }
 

@@ -57,7 +57,14 @@ func FramePath(dir string, channelID int64, width int) string {
 // FrameArgs builds an ffmpeg command that reads the mux already on stdin and
 // writes one keyframe per program. It never opens a tuner URL.
 func FrameArgs(jobs []FrameJob, dir string) []string {
-	args := []string{"-hide_banner", "-loglevel", "error", "-skip_frame", "nokey", "-i", "pipe:0"}
+	args := []string{"-hide_banner", "-loglevel", "error", "-skip_frame", "nokey"}
+	// A link carries one channel at its own bitrate, often a few Mb/s in real
+	// time, so the default 5 s analysis outlasts frameGrabLimit and every grab
+	// is killed. A tuned mux keeps the default so each program's video is found.
+	if singleProgram(jobs) {
+		args = append(args, "-analyzeduration", "1000000", "-probesize", "8000000")
+	}
+	args = append(args, "-i", "pipe:0")
 	for _, job := range jobs {
 		if job.ChannelID <= 0 {
 			continue
@@ -76,6 +83,15 @@ func FrameArgs(jobs []FrameJob, dir string) []string {
 		)
 	}
 	return args
+}
+
+func singleProgram(jobs []FrameJob) bool {
+	for _, job := range jobs {
+		if job.Program > 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *Hub) startFrames(ctx context.Context, m *mux) {
