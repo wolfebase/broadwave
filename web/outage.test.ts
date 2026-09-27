@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { aTunerAnswers, aTunerIsFree, classifySnap, connectionDropped, holdPictureMessage, noSignal, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, serverStopped, tunerStopped, viewerFailure } from "./src/features/player/outage.ts";
+import { aTunerAnswers, aTunerIsFree, classifySnap, connectionDropped, holdPictureMessage, listingNote, noListing, noListingChecked, noSignal, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, serverStopped, tunerStopped, viewerFailure } from "./src/features/player/outage.ts";
+
+test("checking for listings says so when nothing comes back", () => {
+  assert.equal(listingNote(false), noListing);
+  assert.equal(noListing, "No listing for this channel.");
+  assert.equal(listingNote(true), noListingChecked);
+  assert.equal(noListingChecked, "Still no listing for this channel.");
+  assert.notEqual(listingNote(true), listingNote(false));
+});
 
 test("a busy tuner tells the viewer what to stop, and comes back when one is free", () => {
   const failed = Object.assign(new Error("Every tuner is busy. Stop a recording or watch something already on."), {

@@ -408,8 +408,11 @@ export function useLiveStream(
       release();
     };
     // remember is the channel record; its identity changes on every guide poll.
+    // profile is only the buffer size. The mini player asks for a smaller one,
+    // and rebuilding the watch to apply it freezes the picture. A watch that
+    // is already playing keeps going; the next watch uses the profile it starts with.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, quality, audio, track, even, picture, profile, attempt]);
+  }, [channelId, quality, audio, track, even, picture, attempt]);
 
   useEffect(() => {
     const video = videoRef.current;

@@ -120,6 +120,11 @@ export function guideSourceLine(source?: string): string {
 
 // emptyGuideLabel is what a row says when the time on screen has no program.
 // After the last listing, it names the day the data runs out.
+/** Id of the guide cell the keyboard is on. The grid points at it with aria-activedescendant. */
+export function guideCellId(channelId: number, airingId?: number): string {
+  return airingId ? `guide-cell-${airingId}` : `guide-empty-${channelId}`;
+}
+
 export function emptyGuideLabel(airings: Airing[], windowStart: number): string {
   if (airings.length === 0) return "No listings";
   const end = Date.parse(airings[airings.length - 1].end);

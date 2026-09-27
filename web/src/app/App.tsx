@@ -111,7 +111,7 @@ function Shell() {
   return (
     <div className={`shell layout-${layout}${fullPlayer || immersive ? " immersive" : ""}${player.channel && !fullPlayer && path !== "/multiview" ? " has-mini" : ""}`}>
       {!immersive ? (
-        <nav className="topbar glass" aria-label="Primary">
+        <nav className="topbar glass" aria-label="Primary" inert={fullPlayer ? true : undefined}>
           <button type="button" className="brand" onClick={() => navigate("/")} aria-label="Broadwave home">
             <span className="brand-tally" aria-hidden="true" />
             <span className="brand-word">Broadwave</span>
@@ -133,7 +133,7 @@ function Shell() {
           </div>
         </nav>
       ) : null}
-      <main className="content" aria-busy={booting} data-ready={ready ? "1" : "0"}>
+      <main className="content" aria-busy={booting} data-ready={ready ? "1" : "0"} inert={fullPlayer ? true : undefined}>
         {booting ? <div className="boot"><span className="brand-tally" /> Finding your tuner…</div> : null}
         {!booting && error ? <p className="banner-error" role="alert">{error}</p> : null}
         {!booting && notice?.message ? (
