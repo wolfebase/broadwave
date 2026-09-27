@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { unreadBody } from "./src/api.ts";
-import { aTunerAnswers, aTunerIsFree, channelDidNotStart, classifySnap, connectionDropped, holdPictureMessage, listingNote, noListing, noListingChecked, noSignal, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, requestFailed, serverStopped, tunerStopped, viewerFailure, viewerMessage } from "./src/features/player/outage.ts";
+import { aTunerAnswers, aTunerIsFree, channelDidNotStart, classifySnap, connectionDropped, holdPictureMessage, listingNote, noListing, noListingChecked, noSignal, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, requestFailed, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage } from "./src/features/player/outage.ts";
 
 test("checking for listings says so when nothing comes back", () => {
   assert.equal(listingNote(false), noListing);
@@ -137,4 +137,11 @@ test("a source that stopped sending goes on the quiet clock", () => {
   const mapped = viewerFailure(failed);
   assert.deepEqual(mapped, { message: pictureStopped, recovery: "" });
   assert.notEqual(pictureRetryDelay(mapped.message, mapped.recovery, 0), null);
+});
+
+test("a full picture budget is asked again while the last layout's encodes free up", () => {
+  assert.equal(startAttempts("pictures_full"), 4);
+  assert.equal(startAttempts("tuners_busy"), 1);
+  assert.equal(startAttempts(undefined), 1);
+  assert.equal(startRetryMs, 2000);
 });

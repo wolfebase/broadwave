@@ -108,6 +108,13 @@ export function recoveryReady(kind: Recovery, snap: RecoverySnap): boolean {
   return false;
 }
 
+// A full picture budget often still holds the layout just left, and those
+// encodes free one at a time. Same count and pace as the Apple apps.
+export const startRetryMs = 2000;
+export function startAttempts(code?: string): number {
+  return code === "pictures_full" ? 4 : 1;
+}
+
 // A stopped picture with no named cause has nothing to wait for: health stays
 // up, an empty device list counts as a tuner answering, and signals have no
 // Lost row. The player starts a new watch on this clock instead.

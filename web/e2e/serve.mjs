@@ -53,6 +53,8 @@ process.on("SIGINT", () => {
 const avsync = process.env.E2E_AVSYNC === "1";
 const brk = process.env.E2E_BREAK === "1";
 const playlist = process.env.E2E_PLAYLIST === "1";
+// Four channels on two tuners, and the software budget of four pictures.
+const quad = process.env.E2E_QUAD === "1";
 const sample = path.join(run, brk ? "loop.ts" : avsync ? "sync5.ts" : "sample.ts");
 
 function runFfmpeg(args) {
@@ -472,6 +474,7 @@ if (playlist) {
   // E2E_SOURCE streams a broadcast recording on every channel, for a real encode load.
   const source = process.env.E2E_SOURCE;
   const fakeArgs = brk ? ["-raw", "-ts", sample] : avsync ? ["-ts", sample, "-source", sample] : source ? ["-ts", sample, "-source", path.resolve(source)] : ["-realtime", "-ts", sample];
+  if (quad) fakeArgs.push("-quad");
   start(path.join(run, "fakehdhr"), fakeArgs, { env: { ...process.env, FAKEHDHR_ADMIN: `127.0.0.1:${port + 10}` } }, (chunk) => {
     fakeOut += chunk.toString();
   });
@@ -486,6 +489,7 @@ if (playlist) {
   const hdhr = fakeBase.replace(/^https?:\/\//, "");
   serverArgs = ["-config", config, "-addr", `127.0.0.1:${port}`, "-hdhr", hdhr, "-bonjour=false", "-staging"];
   serverEnv = { ...process.env, BROADWAVE_E2E: "1", HDHR_CONTROL_PORT: control };
+  if (quad) serverEnv.BROADWAVE_ENCODER ||= "software";
 }
 // E2E_BROADWAVE runs this same harness against another binary.
 const serverBin = process.env.E2E_BROADWAVE || path.join(run, "broadwave");

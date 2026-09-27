@@ -162,6 +162,59 @@ test("moving the sound between equal tiles restarts neither", async ({ page }) =
   expect(tiles.find((tile) => tile.channel === "1")?.muted).toBe(true);
 });
 
+// The quad asks for its small pictures while the side-by-side encodes are
+// still being let go. A tile the budget turned away then has to ask again.
+test("side by side to quad plays every picture the server has room for", async ({ page }) => {
+  test.skip(process.env.E2E_QUAD !== "1", "Set E2E_QUAD=1 for four channels and four pictures.");
+  test.setTimeout(150_000);
+  const { base } = harness();
+  const wdaf = channel("WDAF");
+  const kctv = channel("KCTV");
+  const wdaf2 = channel("WDAF2");
+  const kctv2 = channel("KCTV2");
+  await expect
+    .poll(async () => (await ourViewers(base)).length === 0, { timeout: 60_000, intervals: [500], message: "the previous watch let the tuners go" })
+    .toBe(true);
+  await openMultiview(page, [wdaf.id, kctv.id], "2up", wdaf.id);
+  await expect.poll(async () => (await tiles(page)).filter((tile) => tile.moving).length, { timeout: 50_000, intervals: [800] }).toBe(2);
+  const asked: string[] = [];
+  page.on("response", async (res) => {
+    const url = new URL(res.url());
+    if (res.request().method() !== "POST" || !url.pathname.startsWith("/api/v1/watch")) return;
+    const sent = res.request().postData() ?? "";
+    const got = await res.text().catch(() => "");
+    asked.push(`${url.pathname} ${res.status()} ${sent.slice(0, 80)} -> ${got.slice(0, 160)}`);
+  });
+  // A slow network: the old layout's stops land after the new tiles ask.
+  await page.route("**/api/v1/watch/*/stop", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    await route.continue();
+  });
+  await page.evaluate((to) => {
+    window.history.pushState({ depth: 1 }, "", to);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, `/multiview?ch=${wdaf.id},${wdaf2.id},${kctv.id},${kctv2.id}&layout=quad&focus=${wdaf.id}`);
+  await expect(page.getByRole("region", { name: "Quad" })).toBeVisible();
+  let last: Tile[] = [];
+  let saw = 0;
+  await expect
+    .poll(
+      async () => {
+        last = await tiles(page);
+        const moving = last.filter((tile) => tile.moving).length;
+        const budget = last.map((tile) => /can play (\d+) picture/.exec(tile.alert)?.[1]).find(Boolean);
+        const room = Math.min(last.length, budget ? Number(budget) : last.length);
+        saw = moving >= room ? saw + 1 : 0;
+        return saw >= 3;
+      },
+      { timeout: 60_000, intervals: [1000], message: "every picture the budget allows plays" },
+    )
+    .toBe(true);
+  mkdirSync(evidence, { recursive: true });
+  writeFileSync(path.join(evidence, "side-to-quad.json"), JSON.stringify({ tiles: last, asked }, null, 2));
+  await page.screenshot({ path: path.join(evidence, "side-to-quad.jpg"), animations: "disabled" });
+});
+
 test.describe("a restarted server", () => {
   test.setTimeout(180_000);
 

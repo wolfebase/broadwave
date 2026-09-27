@@ -15,6 +15,8 @@ import {
   pictureRetryEveryMs,
   pictureStopped,
   recoveryReady,
+  startAttempts,
+  startRetryMs,
   viewerFailure,
   type Recovery,
   type RecoverySnap,
@@ -70,6 +72,9 @@ export function useLiveStream(
   const quietPending = useRef(false);
   const [needsConfirm, setNeedsConfirm] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  // Starts asked again on their own for this channel. A picture, a channel
+  // change, or the viewer's Try again starts the count over.
+  const autoTries = useRef({ channel: 0, n: 0 });
   const confirmLive = useRef(false);
   const retrying = useRef(false);
   const syncing = useRef(sync);
@@ -166,6 +171,7 @@ export function useLiveStream(
     let heldFatal = false;
     let quietTimer = 0;
     let playlist = "";
+    let startTimer = 0;
     const rememberOutage = (message: string, kind: Recovery) => {
       quietPending.current = false;
       setNeedsConfirm(false);
@@ -204,6 +210,7 @@ export function useLiveStream(
         setNeedsConfirm(false);
         const next = await watchChannel(id, webCaps(), { quality, audio, picture, track, even }, "", allow, ctrl.signal);
         joined = next.rendition;
+        autoTries.current = { channel: id, n: 0 };
         if (dead) {
           release();
           return;
@@ -273,6 +280,13 @@ export function useLiveStream(
           setError(failed.message);
           return;
         }
+        const tries = autoTries.current.channel === id ? autoTries.current.n + 1 : 1;
+        if (tries < startAttempts(failed.code)) {
+          autoTries.current = { channel: id, n: tries };
+          startTimer = window.setTimeout(() => setAttempt((n) => n + 1), startRetryMs);
+          return;
+        }
+        autoTries.current = { channel: id, n: 0 };
         const mapped = viewerFailure(err);
         if (quiet && holdPictureMessage(mapped)) {
           rememberOutage(pictureStopped, "");
@@ -393,6 +407,7 @@ export function useLiveStream(
       window.clearTimeout(stuck);
       stopPoll();
       window.clearTimeout(quietTimer);
+      window.clearTimeout(startTimer);
       window.clearInterval(gapTimer);
       document.removeEventListener("visibilitychange", onVis);
       document.removeEventListener("freeze", markLeft);
@@ -518,6 +533,7 @@ export function useLiveStream(
     },
     retry: () => {
       quietRetry.current = null;
+      autoTries.current = { channel: 0, n: 0 };
       setAttempt((n) => n + 1);
     },
     syncStatus,
