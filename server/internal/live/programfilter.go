@@ -1,7 +1,10 @@
 package live
 
 import (
+	"fmt"
 	"io"
+	"log/slog"
+	"time"
 )
 
 // programFilterCap is how much of a multiplex to hold while looking for one
@@ -33,6 +36,29 @@ type programPipe struct {
 	cc      byte
 	hold    []byte
 	rest    []byte
+	clocks  map[int]*pesClock
+	warned  time.Time
+}
+
+// pesJump is how far one stream's timestamp may move from one PES header to
+// the next. A bit error the tuner did not flag can put a frame hours away.
+// ffmpeg keeps broadcast timestamps (-copyts), so on a copied track every
+// later packet is clamped to that one plus a tick and the Apple rendition
+// never plays again; the transcode's resampler rides through.
+const pesJump = 10 * 90000
+
+// pesAgree is how many headers in a row must agree on a new timeline before
+// it counts as a real break (a splice) rather than a bad header.
+const pesAgree = 3
+
+// pesClock is one stream's timeline. shift renumbers continuity counters
+// after dropped packets, so ffmpeg does not also discard the next good frame.
+type pesClock struct {
+	last     int64
+	cand     int64
+	agree    int
+	dropping bool
+	shift    byte
 }
 
 func newProgramPipe(w io.WriteCloser, program int) io.WriteCloser {
@@ -305,11 +331,111 @@ func (p *programPipe) filter(data []byte) []byte {
 				}
 			}
 		}
-		if p.keep[pid] {
-			out = append(out, pkt...)
+		if !p.keep[pid] || !p.keepPES(pid, pkt) {
+			continue
+		}
+		at := len(out)
+		out = append(out, pkt...)
+		if c := p.clocks[pid]; c != nil && c.shift != 0 && pkt[3]&0x10 != 0 {
+			out[at+3] = out[at+3]&0xf0 | (pkt[3]-c.shift)&0x0f
 		}
 	}
 	return out
+}
+
+// keepPES drops a PES whose timestamp is off its stream's timeline, and the
+// rest of that PES, until pesAgree headers in a row agree on a new one.
+func (p *programPipe) keepPES(pid int, pkt []byte) bool {
+	if pid == p.pmtPID || pkt[3]&0x10 == 0 {
+		return true
+	}
+	c := p.clocks[pid]
+	if pkt[1]&0x40 == 0 {
+		if c != nil && c.dropping {
+			c.shift++
+			return false
+		}
+		return true
+	}
+	ts, ok := pesTime(tsPayload(pkt))
+	if !ok {
+		if c != nil {
+			c.dropping = false
+		}
+		return true
+	}
+	if c == nil {
+		if p.clocks == nil {
+			p.clocks = map[int]*pesClock{}
+		}
+		p.clocks[pid] = &pesClock{last: ts}
+		return true
+	}
+	if ptsGap(ts, c.last) <= pesJump {
+		c.last, c.agree, c.dropping = ts, 0, false
+		return true
+	}
+	if c.agree > 0 && ptsGap(ts, c.cand) <= pesJump {
+		c.agree++
+	} else {
+		c.agree = 1
+		if time.Since(p.warned) > 10*time.Second {
+			p.warned = time.Now()
+			slog.Warn(fmt.Sprintf("program %d: dropped a frame on PID %d whose timestamp is %.0f s off", p.program, pid, float64(ptsDelta(ts, c.last))/90000))
+		}
+	}
+	c.cand = ts
+	if c.agree >= pesAgree {
+		c.last, c.agree, c.dropping = ts, 0, false
+		return true
+	}
+	c.dropping = true
+	c.shift++
+	return false
+}
+
+// pesTime is the decode time of a PES that starts in this payload (the
+// presentation time when there is no separate decode time), in 90 kHz ticks.
+func pesTime(b []byte) (int64, bool) {
+	if len(b) < 14 || b[0] != 0 || b[1] != 0 || b[2] != 1 {
+		return 0, false
+	}
+	switch id := b[3]; {
+	case id == 0xbd, id >= 0xc0 && id <= 0xef:
+	default:
+		return 0, false
+	}
+	switch b[7] >> 6 {
+	case 2:
+		return ptsField(b[9:14]), true
+	case 3:
+		if len(b) < 19 {
+			return 0, false
+		}
+		return ptsField(b[14:19]), true
+	}
+	return 0, false
+}
+
+func ptsField(b []byte) int64 {
+	return int64(b[0]>>1&0x07)<<30 | int64(b[1])<<22 | int64(b[2]>>1)<<15 | int64(b[3])<<7 | int64(b[4]>>1)
+}
+
+// ptsDelta is a - b on the 33-bit clock, across a wrap.
+func ptsDelta(a, b int64) int64 {
+	d := (a - b) & (1<<33 - 1)
+	if d >= 1<<32 {
+		d -= 1 << 33
+	}
+	return d
+}
+
+func ptsGap(a, b int64) int64 {
+	d := ptsDelta(a, b)
+	if d < 0 {
+		return -d
+	}
+	return d
 }
 
 func pmtElementary(sec []byte) []int {
