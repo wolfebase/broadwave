@@ -557,13 +557,11 @@ func (s *Server) loadSchedule(ctx context.Context) (scheduleSnap, error) {
 
 func (s *Server) fixSchedule(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		PassID              int64       `json:"passId"`
-		ChannelID           int64       `json:"channelId"`
-		Start               time.Time   `json:"start"`
-		SuggestionChannelID int64       `json:"suggestionChannelId"`
-		SuggestionStart     time.Time   `json:"suggestionStart"`
-		AcknowledgeMisses   bool        `json:"acknowledgeMisses"`
-		AcknowledgedStarts  []time.Time `json:"acknowledgedStarts"`
+		PassID              int64     `json:"passId"`
+		ChannelID           int64     `json:"channelId"`
+		Start               time.Time `json:"start"`
+		SuggestionChannelID int64     `json:"suggestionChannelId"`
+		SuggestionStart     time.Time `json:"suggestionStart"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
 		httpError(w, "invalid json", http.StatusBadRequest)
@@ -600,13 +598,6 @@ func (s *Server) fixSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fix := dvr.PlanFix(pass, item.Airing, suggestion)
-	if fix.OneShot != nil && !dvr.HaveOneShot(snap.passes, suggestion) {
-		missed := dvr.MissedFrom(snap.airings, *fix.OneShot, suggestion, s.guideNumbers(r.Context()))
-		if len(missed) > 0 && (!body.AcknowledgeMisses || !dvr.SameMisses(body.AcknowledgedStarts, missed)) {
-			apiError(w, http.StatusConflict, "missed_showings", dvr.MissedLine(missed), nil)
-			return
-		}
-	}
 	// Save the replacement before skipping. A failed save must leave the original airing in place.
 	if fix.SetChannel != 0 && pass.ChannelID != fix.SetChannel {
 		pass.ChannelID = fix.SetChannel
@@ -616,18 +607,9 @@ func (s *Server) fixSchedule(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if fix.OneShot != nil && !dvr.HaveOneShot(snap.passes, suggestion) {
-		recs, _ := s.Store.Recordings(r.Context())
-		shot := *fix.OneShot
-		shot.LimitCount = dvr.OneShotLimit(shot, recs)
-		if err := s.addOneShot(r.Context(), shot); err != nil {
+		if err := s.addOneShot(r.Context(), *fix.OneShot); err != nil {
 			writeError(w, err)
 			return
-		}
-		for _, other := range dvr.OneShotSkips(snap.airings, shot, suggestion) {
-			if err := s.skipShowing(r.Context(), other); err != nil {
-				writeError(w, err)
-				return
-			}
 		}
 	}
 	if err := s.skipShowing(r.Context(), fix.Skip); err != nil {
@@ -673,7 +655,7 @@ func (s *Server) addOneShot(ctx context.Context, shot store.Pass) error {
 	if err != nil {
 		return err
 	}
-	if err := s.Store.AddPass(ctx, shot.Title, shot.ChannelID, shot.PadBefore, shot.PadAfter); err != nil {
+	if err := s.Store.AddOncePass(ctx, shot.Title, shot.ChannelID, shot.AiringStart, shot.PadBefore, shot.PadAfter); err != nil {
 		return err
 	}
 	after, err := s.Store.Passes(ctx)
