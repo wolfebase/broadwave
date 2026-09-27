@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.11.6 — 2026-09-27
+
+Apple TVs keep playing through a garbled broadcast, and stay together from the start.
+
+### Fixed
+
+- One damaged frame from the antenna could stop every Apple TV and iPhone on that channel until someone changed channels. The server now drops a frame whose timing is far off and keeps the rest.
+- Apple TVs that joined a channel a browser had just started sat about a tenth of a second apart for the first few minutes. They now line up right away (with the next app update).
+- The player shows a clear message when a channel loses its signal, the recordings folder can't be written, or a phone loses its connection, and plays again on its own when that's fixed.
+- A recording that would cross the free-space reserve says how much space is left and how much Broadwave keeps.
+
 ## 0.11.5 — 2026-09-27
 
 Optional automatic updates that wait until nobody is watching or recording.
