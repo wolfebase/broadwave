@@ -267,13 +267,44 @@ func (b *Bus) handle(c *client, m Message) {
 			return
 		}
 		var earliest float64
-		if b.MediaStart != nil {
+		b.mu.Lock()
+		kind := c.here.Kind
+		b.mu.Unlock()
+		// AVPlayer holds back from the live edge and cannot play a fresh
+		// tune's first frame, so a room an Apple screen starts begins on the
+		// latency target. The screen then waits once on its first picture
+		// instead of playing a few seconds and freezing when Settle moves the
+		// room back.
+		if b.MediaStart != nil && !appleKind(kind) {
 			if v, ok := b.MediaStart(req.ChannelID); ok {
 				earliest = v
 			}
 		}
 		st := b.Rooms.Join(req.Room, req.ChannelID, earliest)
 		b.publishRoom(st)
+	case "sync.report":
+		// A screen's playback health, logged so a stutter on a real TV shows
+		// up in the server log without Xcode attached to it.
+		var req map[string]any
+		if json.Unmarshal(m.Data, &req) != nil || len(req) > 32 {
+			return
+		}
+		b.mu.Lock()
+		name, kind := c.here.Name, c.here.Kind
+		b.mu.Unlock()
+		attrs := []any{"screen", name, "kind", kind}
+		for k, v := range req {
+			if len(k) > 24 {
+				continue
+			}
+			switch v.(type) {
+			case float64, bool:
+				attrs = append(attrs, k, v)
+			case string:
+				attrs = append(attrs, k, cleanLabel(v.(string)))
+			}
+		}
+		slog.Info("sync report", attrs...)
 	case "sync.leave":
 		var req struct {
 			Room string `json:"room"`
@@ -354,4 +385,8 @@ func validRoom(room string) bool {
 		return false
 	}
 	return strings.HasPrefix(room, "channel:") || strings.HasPrefix(room, "group:") || strings.HasPrefix(room, "multiview:")
+}
+
+func appleKind(kind string) bool {
+	return kind == "iphone" || kind == "ipad" || kind == "appletv"
 }

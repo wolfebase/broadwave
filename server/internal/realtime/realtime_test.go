@@ -263,10 +263,28 @@ func TestSocketClockAndRoomBroadcast(t *testing.T) {
 }
 
 func TestFreshJoinUsesTheFirstFrame(t *testing.T) {
-	bus := NewBus()
 	start := time.Date(2026, 9, 26, 3, 0, 0, 0, time.UTC)
-	bus.SetClock(func() time.Time { return start })
 	first := unixMS(start.Add(-3500 * time.Millisecond))
+	if st := freshJoin(t, start, first, ""); st.AnchorMedia != first {
+		t.Fatalf("join should anchor on the first frame, got %v", st.AnchorMedia)
+	}
+}
+
+// AVPlayer cannot play a fresh tune's first frame. An Apple screen that
+// started there froze a few seconds in, when Settle moved the room back.
+func TestAppleFreshJoinStartsOnTheTarget(t *testing.T) {
+	start := time.Date(2026, 9, 26, 3, 0, 0, 0, time.UTC)
+	first := unixMS(start.Add(-3500 * time.Millisecond))
+	st := freshJoin(t, start, first, `{"name":"Living Room","kind":"appletv"}`)
+	if want := liveAnchor(start, "balanced"); st.AnchorMedia != want {
+		t.Fatalf("an Apple room should start on the latency target %v, got %v", want, st.AnchorMedia)
+	}
+}
+
+func freshJoin(t *testing.T, start time.Time, first float64, here string) RoomState {
+	t.Helper()
+	bus := NewBus()
+	bus.SetClock(func() time.Time { return start })
 	bus.MediaStart = func(channelID int64) (float64, bool) {
 		if channelID == 4 {
 			return first, true
@@ -282,12 +300,17 @@ func TestFreshJoinUsesTheFirstFrame(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.CloseNow()
+	if here != "" {
+		raw, _ := json.Marshal(Message{Type: "here", Data: json.RawMessage(here)})
+		if err := conn.Write(ctx, websocket.MessageText, raw); err != nil {
+			t.Fatal(err)
+		}
+	}
 	data, _ := json.Marshal(map[string]any{"room": "channel:4", "channelId": 4})
 	raw, _ := json.Marshal(Message{Type: "sync.join", Data: data})
 	if err := conn.Write(ctx, websocket.MessageText, raw); err != nil {
 		t.Fatal(err)
 	}
-	var st RoomState
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		_, msg, err := conn.Read(ctx)
@@ -299,13 +322,12 @@ func TestFreshJoinUsesTheFirstFrame(t *testing.T) {
 		if m.Type != "sync.state" {
 			continue
 		}
+		var st RoomState
 		_ = json.Unmarshal(m.Data, &st)
-		if st.AnchorMedia != first {
-			t.Fatalf("join should anchor on the first frame, got %v", st.AnchorMedia)
-		}
-		return
+		return st
 	}
 	t.Fatal("no room state")
+	return RoomState{}
 }
 
 func TestHereAnnouncesAScreen(t *testing.T) {
