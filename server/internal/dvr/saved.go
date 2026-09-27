@@ -25,6 +25,8 @@ func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Reco
 		found, err := live.IndexBreaks(hub.FFmpeg, rec.Path)
 		if err != nil {
 			slog.Error(fmt.Sprintf("breaks: %v", err))
+		} else if _, err := st.Recording(ctx, rec.ID); err != nil {
+			// Deleted while its breaks were indexed.
 		} else if len(found) > 0 {
 			markers := make([]store.Marker, 0, len(found))
 			for _, item := range found {
