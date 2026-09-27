@@ -135,7 +135,7 @@ export function Sports() {
               const liveNow = Date.parse(airing.start) <= now;
               const sides = matchup(airing);
               const rec = isRecording(keys, airing, now);
-              const passed = passes.some((p) => p.title.toLowerCase() === airing.title.toLowerCase());
+              const passed = passes.some((p) => p.kind !== "once" && p.title.toLowerCase() === airing.title.toLowerCase());
               return (
                 <article key={airing.id} className={liveNow ? "game-card live" : "game-card"}>
                   {airing.imageUrl ? (

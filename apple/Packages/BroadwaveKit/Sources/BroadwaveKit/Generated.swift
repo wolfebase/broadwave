@@ -389,8 +389,9 @@ public struct Pass: Codable, Sendable, Hashable, Identifiable {
     public var timeStart: String?
     public var timeEnd: String?
     public var matchKind: String?
+    public var airingStart: Date?
 
-    public init(id: Int64, title: String, channelId: Int64? = nil, kind: String? = nil, padBefore: Int? = nil, padAfter: Int? = nil, priority: Int? = nil, episodes: String? = nil, keepMode: String? = nil, keepCount: Int? = nil, limitCount: Int? = nil, rerecord: Bool? = nil, commercials: Bool? = nil, timeStart: String? = nil, timeEnd: String? = nil, matchKind: String? = nil) {
+    public init(id: Int64, title: String, channelId: Int64? = nil, kind: String? = nil, padBefore: Int? = nil, padAfter: Int? = nil, priority: Int? = nil, episodes: String? = nil, keepMode: String? = nil, keepCount: Int? = nil, limitCount: Int? = nil, rerecord: Bool? = nil, commercials: Bool? = nil, timeStart: String? = nil, timeEnd: String? = nil, matchKind: String? = nil, airingStart: Date? = nil) {
         self.id = id
         self.title = title
         self.channelId = channelId
@@ -407,6 +408,7 @@ public struct Pass: Codable, Sendable, Hashable, Identifiable {
         self.timeStart = timeStart
         self.timeEnd = timeEnd
         self.matchKind = matchKind
+        self.airingStart = airingStart
     }
 }
 

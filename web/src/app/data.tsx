@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   addPass,
+  deletePass,
   discover,
   getAirings,
   getChannels,
@@ -59,6 +60,8 @@ type Data = {
   record: (channel: Channel, title: string) => Promise<void>;
   stopRecord: (id: number) => Promise<void>;
   recordSeries: (title: string, channel: Channel) => Promise<void>;
+  recordOnce: (airing: Airing, channel: Channel) => Promise<void>;
+  removePass: (id: number) => Promise<void>;
   rediscover: (ip?: string) => Promise<void>;
   setError: (message: string) => void;
   /** Devices that showed up after the house was already known. One line each. */
@@ -323,6 +326,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
       recordSeries: async (title, channel) => {
         await addPass(title, channel.id);
+        await refresh(["passes"]);
+      },
+      recordOnce: async (airing, channel) => {
+        try {
+          await addPass(airing.title, channel.id, airing.start);
+          setError("");
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "That airing was not scheduled.");
+        }
+        await refresh(["passes"]);
+      },
+      removePass: async (id) => {
+        try {
+          await deletePass(id);
+          setError("");
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "That pass was not removed.");
+        }
         await refresh(["passes"]);
       },
       notices,

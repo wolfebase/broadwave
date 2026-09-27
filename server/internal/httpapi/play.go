@@ -904,13 +904,18 @@ func (s *Server) passes(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) addPass(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Title     string `json:"title"`
-		ChannelID int64  `json:"channelId"`
-		PadBefore *int   `json:"padBefore"`
-		PadAfter  *int   `json:"padAfter"`
+		Title       string     `json:"title"`
+		ChannelID   int64      `json:"channelId"`
+		PadBefore   *int       `json:"padBefore"`
+		PadAfter    *int       `json:"padAfter"`
+		AiringStart *time.Time `json:"airingStart"`
 	}
 	if err := decodeJSON(r, &body); err != nil || strings.TrimSpace(body.Title) == "" {
 		httpError(w, "title required", http.StatusBadRequest)
+		return
+	}
+	if body.AiringStart != nil && body.ChannelID == 0 {
+		httpError(w, "channelId required to record one airing", http.StatusBadRequest)
 		return
 	}
 	before, after := 1, 2
@@ -920,7 +925,13 @@ func (s *Server) addPass(w http.ResponseWriter, r *http.Request) {
 	if body.PadAfter != nil {
 		after = clampPad(*body.PadAfter)
 	}
-	if err := s.Store.AddPass(r.Context(), strings.TrimSpace(body.Title), body.ChannelID, before, after); err != nil {
+	var err error
+	if body.AiringStart != nil {
+		err = s.Store.AddOncePass(r.Context(), strings.TrimSpace(body.Title), body.ChannelID, *body.AiringStart, before, after)
+	} else {
+		err = s.Store.AddPass(r.Context(), strings.TrimSpace(body.Title), body.ChannelID, before, after)
+	}
+	if err != nil {
 		writeError(w, err)
 		return
 	}
@@ -943,6 +954,7 @@ func (s *Server) updatePass(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "pass not found", http.StatusNotFound)
 		return
 	}
+	orig := current
 	if v, ok := body["padBefore"]; ok {
 		current.PadBefore = clampPad(int(num(v)))
 	}
@@ -981,6 +993,13 @@ func (s *Server) updatePass(w http.ResponseWriter, r *http.Request) {
 	}
 	if v, ok := body["channelId"]; ok {
 		current.ChannelID = int64(num(v))
+	}
+	if orig.Kind == "once" {
+		// One airing takes pads, priority, and commercial marking. Keep rules
+		// would delete other recordings of the title, and the rest would move it.
+		edited := current
+		current = orig
+		current.PadBefore, current.PadAfter, current.Priority, current.Commercials = edited.PadBefore, edited.PadAfter, edited.Priority, edited.Commercials
 	}
 	current.ID = id
 	if err := s.Store.UpdatePassRules(r.Context(), current); err != nil {

@@ -232,10 +232,11 @@ export function getPasses() {
   return request<{ passes: Pass[] }>("/api/v1/passes");
 }
 
-export function addPass(title: string, channelId: number) {
+/** With airingStart, records only the airing that starts then on the channel. */
+export function addPass(title: string, channelId: number, airingStart?: string) {
   return request<{ passes: Pass[] }>("/api/v1/passes", {
     method: "POST",
-    body: JSON.stringify({ title, channelId }),
+    body: JSON.stringify({ title, channelId, airingStart }),
   });
 }
 

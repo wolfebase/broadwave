@@ -27,6 +27,10 @@ func ApplyLibrary(items []Planned, passes []store.Pass, recs []store.Recording, 
 			continue
 		}
 		pass := byID[items[i].PassID]
+		if pass.Kind == "once" {
+			// Asked for by name: record it even if this episode was recorded before.
+			continue
+		}
 		if key != "" && haveEpisode(pass, recs, seen, key) {
 			items[i].Skipped = true
 			items[i].Reason = "Already recorded"

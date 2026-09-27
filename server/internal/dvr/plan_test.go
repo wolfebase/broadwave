@@ -83,3 +83,29 @@ func TestPlanKeepsHigherPriority(t *testing.T) {
 		}
 	}
 }
+
+func TestOncePassRecordsOnlyItsAiring(t *testing.T) {
+	start := time.Date(2026, 9, 28, 16, 0, 0, 0, time.UTC)
+	passes := []store.Pass{{ID: 1, Title: "Jeopardy", ChannelID: 3, Kind: "once", AiringStart: start}}
+	airings := []store.Airing{
+		{ID: 1, ChannelID: 3, Title: "Jeopardy!", ProgramID: "EP1", Start: start, End: start.Add(30 * time.Minute)},
+		{ID: 2, ChannelID: 3, Title: "Jeopardy", Start: start.Add(24 * time.Hour), End: start.Add(24*time.Hour + 30*time.Minute)},
+		{ID: 3, ChannelID: 4, Title: "Jeopardy", Start: start, End: start.Add(30 * time.Minute)},
+	}
+	// A series pass for the same show comes first by title and would call it already recorded.
+	passes = append([]store.Pass{{ID: 2, Title: "Jeopardy!", ChannelID: 3}}, passes...)
+	got := Plan(passes, airings, 2, start.Add(-time.Hour), start.Add(48*time.Hour))
+	if len(got) < 1 || got[0].Airing.ID != 1 || got[0].PassID != 1 {
+		t.Fatalf("the once pass owns its airing: %+v", got)
+	}
+	for _, item := range got[1:] {
+		if item.PassID == 1 {
+			t.Fatalf("a once pass records the retitled airing at its start and nothing else: %+v", got)
+		}
+	}
+	seen := map[string]bool{store.EpisodeKey("EP1", "Jeopardy!", "", 3): false}
+	got = ApplyLibrary(got, passes, nil, seen, nil)
+	if got[0].Skipped {
+		t.Fatalf("asked for by name, it records even if seen before: %+v", got[0])
+	}
+}

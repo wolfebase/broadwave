@@ -92,3 +92,18 @@
   justify-content: flex-start;
   gap: 12px;
 }
+
+button.search-main {
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.search-list .search-copy {
+  color: inherit;
+  font-size: inherit;
+}

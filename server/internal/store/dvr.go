@@ -97,6 +97,8 @@ type Pass struct {
 	TimeStart   string `json:"timeStart,omitempty"`
 	TimeEnd     string `json:"timeEnd,omitempty"`
 	MatchKind   string `json:"matchKind,omitempty"`
+	// AiringStart pins a kind "once" pass to the airing starting then on ChannelID.
+	AiringStart time.Time `json:"airingStart,omitzero"`
 }
 
 func (s *Store) SourceChannel(ctx context.Context, id int64) (SourceChannel, error) {
@@ -463,6 +465,22 @@ func (s *Store) AddPass(ctx context.Context, title string, channelID int64, padB
 	return err
 }
 
+// AddOncePass records the one airing starting at start on the channel. Asking
+// twice for the same airing keeps one pass.
+func (s *Store) AddOncePass(ctx context.Context, title string, channelID int64, start time.Time, padBefore, padAfter int) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO passes (title, channel_id, kind, pad_before, pad_after, airing_start)
+		SELECT ?, ?, 'once', ?, ?, ?
+		WHERE NOT EXISTS (SELECT 1 FROM passes WHERE kind = 'once' AND channel_id = ? AND airing_start = ?)`,
+		title, channelID, padBefore, padAfter, start.Unix(), channelID, start.Unix())
+	return err
+}
+
+// DeleteEndedOncePasses drops once passes whose airing started before cutoff.
+func (s *Store) DeleteEndedOncePasses(ctx context.Context, cutoff time.Time) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM passes WHERE kind = 'once' AND airing_start < ?`, cutoff.Unix())
+	return err
+}
+
 func (s *Store) UpdatePass(ctx context.Context, id int64, padBefore, padAfter, priority int) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE passes SET pad_before = ?, pad_after = ?, priority = ? WHERE id = ?`, padBefore, padAfter, priority, id)
 	if err != nil {
@@ -477,7 +495,7 @@ func (s *Store) UpdatePass(ctx context.Context, id int64, padBefore, padAfter, p
 
 func (s *Store) Passes(ctx context.Context) ([]Pass, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, title, channel_id, kind, pad_before, pad_after, priority,
-	episodes, keep_mode, keep_count, limit_count, rerecord, commercials, time_start, time_end, match_kind
+	episodes, keep_mode, keep_count, limit_count, rerecord, commercials, time_start, time_end, match_kind, airing_start
 	FROM passes ORDER BY title`)
 	if err != nil {
 		return nil, err
@@ -487,9 +505,13 @@ func (s *Store) Passes(ctx context.Context) ([]Pass, error) {
 	for rows.Next() {
 		var p Pass
 		var rerecord, commercials int
+		var airingStart int64
 		if err := rows.Scan(&p.ID, &p.Title, &p.ChannelID, &p.Kind, &p.PadBefore, &p.PadAfter, &p.Priority,
-			&p.Episodes, &p.KeepMode, &p.KeepCount, &p.LimitCount, &rerecord, &commercials, &p.TimeStart, &p.TimeEnd, &p.MatchKind); err != nil {
+			&p.Episodes, &p.KeepMode, &p.KeepCount, &p.LimitCount, &rerecord, &commercials, &p.TimeStart, &p.TimeEnd, &p.MatchKind, &airingStart); err != nil {
 			return nil, err
+		}
+		if airingStart > 0 {
+			p.AiringStart = time.Unix(airingStart, 0).UTC()
 		}
 		p.Rerecord = rerecord != 0
 		p.Commercials = commercials != 0

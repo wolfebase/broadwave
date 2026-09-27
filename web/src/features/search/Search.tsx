@@ -1,11 +1,13 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { addPass, search } from "../../api";
 import { useData } from "../../app/data";
+import { usePlayer } from "../../app/player";
 import { navigate, useRoute } from "../../app/router";
 import { cappedCss } from "../../lib/art";
-import { spanLabel } from "../../lib/guide";
+import { dayLabel, spanLabel } from "../../lib/guide";
 import type { Recording, SearchAiring } from "../../types";
 import { SearchIcon } from "../../ui/icons";
+import { ProgramSheet } from "../guide/ProgramSheet";
 import "./search.css";
 
 function SearchArt({
@@ -50,7 +52,10 @@ function SearchArt({
 
 export function SearchPage() {
   const { params } = useRoute();
-  const { refresh } = useData();
+  const { refresh, now, allChannels } = useData();
+  const player = usePlayer();
+  const [open, setOpen] = useState<SearchAiring | null>(null);
+  const openChannel = open ? allChannels.find((channel) => channel.id === open.channelId) : undefined;
   const initial = params.get("q") ?? "";
   const [draft, setDraft] = useState(initial);
   const [airings, setAirings] = useState<SearchAiring[]>([]);
@@ -92,6 +97,7 @@ export function SearchPage() {
         <SearchIcon />
         <input
           type="search"
+          autoFocus={!initial}
           value={draft}
           placeholder="Shows, people, recordings"
           aria-label="Search shows, people, and recordings"
@@ -105,7 +111,12 @@ export function SearchPage() {
           <ul className="search-list">
             {airings.map((airing) => (
               <li key={airing.id}>
-                <div className="search-main">
+                <button
+                  type="button"
+                  className="search-main"
+                  disabled={!allChannels.some((channel) => channel.id === airing.channelId)}
+                  onClick={() => setOpen(airing)}
+                >
                   {airing.imageUrl ? (
                     <SearchArt
                       src={`/media/art/airing/${airing.id}?w=160`}
@@ -115,13 +126,13 @@ export function SearchPage() {
                       boxH={56}
                     />
                   ) : null}
-                  <div className="search-copy">
+                  <span className="search-copy">
                     <strong>{airing.title}</strong>
                     <span>
-                      {airing.guideNumber} {airing.channelName} · {spanLabel(airing)}
+                      {airing.guideNumber} {airing.channelName} · {dayLabel(airing.start, now)} · {spanLabel(airing)}
                     </span>
-                  </div>
-                </div>
+                  </span>
+                </button>
                 <button
                   type="button"
                   className="btn"
@@ -156,6 +167,17 @@ export function SearchPage() {
             ))}
           </ul>
         </section>
+      ) : null}
+      {open && openChannel ? (
+        <ProgramSheet
+          channel={openChannel}
+          airing={open}
+          onClose={() => setOpen(null)}
+          onWatch={(channel) => {
+            setOpen(null);
+            player.open(channel);
+          }}
+        />
       ) : null}
     </div>
   );
