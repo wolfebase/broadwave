@@ -400,4 +400,6 @@ extension Airing {
     #expect(!SyncEngine.viewerPaused(roomRate: 0, paused: true, forwardBuffer: 8, sinceHold: 60, followRoom: true, sinceActive: 60))
     // A player that has not started yet is not paused by anyone.
     #expect(!SyncEngine.viewerPaused(roomRate: 1, paused: true, forwardBuffer: 8, sinceHold: 60, followRoom: true, sinceActive: 60, seenPlaying: false))
+    // AVPlayer stopping itself at a discontinuity: no pause or rate call made it.
+    #expect(!SyncEngine.viewerPaused(roomRate: 1, paused: true, forwardBuffer: 8, sinceHold: 60, followRoom: true, sinceActive: 60, byCall: false))
 }

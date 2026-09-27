@@ -51,8 +51,12 @@ public final class SyncEngine {
     public private(set) var detached = false
     private var inactive = false
     private var seenPlaying = false
+    /// The player went to rate 0 through a pause or rate call. AVPlayer also
+    /// drops to rate 0 on its own, at a discontinuity; that is not the viewer.
+    private var pausedByCall = false
     private var activeSince = Date()
     private var lifecycle: [NSObjectProtocol] = []
+    private var rateObserver: NSObjectProtocol?
     private static let log = Logger(subsystem: "com.wolfeup.broadwave", category: "sync")
 
     /// A trim starts past trimMS and ends inside lockMS, and the next one waits
@@ -155,9 +159,9 @@ public final class SyncEngine {
     /// Before the first frame plays, a paused player has not started yet.
     static func viewerPaused(
         roomRate: Double, paused: Bool, forwardBuffer: Double, sinceHold: Double,
-        followRoom: Bool = true, sinceActive: Double = .infinity, seenPlaying: Bool = true
+        followRoom: Bool = true, sinceActive: Double = .infinity, seenPlaying: Bool = true, byCall: Bool = true
     ) -> Bool {
-        seenPlaying && followRoom && roomRate != 0 && paused && forwardBuffer >= 1 && sinceHold > 1 && sinceActive > 3
+        seenPlaying && byCall && followRoom && roomRate != 0 && paused && forwardBuffer >= 1 && sinceHold > 1 && sinceActive > 3
     }
 
     /// A follow room eases back from its first frame at a little under 1x, closer
@@ -199,6 +203,20 @@ public final class SyncEngine {
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.apply() }
         }
+        // Noted before the next tick, or the tick would play a viewer's pause
+        // again as if AVPlayer had stopped on its own.
+        rateObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayer.rateDidChangeNotification, object: player, queue: .main
+        ) { [weak self] note in
+            let called = (note.userInfo?[AVPlayer.rateDidChangeReasonKey] as? AVPlayer.RateDidChangeReason) == .setRateCalled
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pausedByCall = self.player.rate == 0 && called
+                if self.logs, self.player.rate == 0 {
+                    Self.log.notice("sync rate 0 by \(called ? "a call" : "the player", privacy: .public)")
+                }
+            }
+        }
         #if canImport(UIKit)
             // The system pauses the player when the app leaves the screen. That
             // pause is not the viewer's.
@@ -221,6 +239,10 @@ public final class SyncEngine {
         timer?.invalidate()
         lifecycle.forEach(NotificationCenter.default.removeObserver)
         lifecycle = []
+        if let rateObserver {
+            NotificationCenter.default.removeObserver(rateObserver)
+            self.rateObserver = nil
+        }
         if let handler {
             socket.off("sync.state", handler)
         }
@@ -293,7 +315,7 @@ public final class SyncEngine {
         if Self.viewerPaused(
             roomRate: st.rate, paused: paused, forwardBuffer: bufferedAhead(item), sinceHold: Date().timeIntervalSince(holdUntil),
             followRoom: room.hasPrefix("channel:"), sinceActive: inactive ? 0 : Date().timeIntervalSince(activeSince),
-            seenPlaying: seenPlaying
+            seenPlaying: seenPlaying, byCall: pausedByCall
         ) {
             detached = true
             setTrim(.none)
