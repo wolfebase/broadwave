@@ -22,3 +22,26 @@ services:
     devices:
       - /dev/dri:/dev/dri
     restart: unless-stopped
+    labels:
+      # Read only by the optional updater below.
+      com.centurylinklabs.watchtower.enable: "true"
+      # Exits 75 (skip tonight) while a tuner is in use or a recording starts
+      # within two hours.
+      com.centurylinklabs.watchtower.lifecycle.pre-update: broadwave -update-check
+      com.centurylinklabs.watchtower.lifecycle.pre-update-timeout: "1"
+
+  # Optional: keeps Broadwave on the newest release, checking nightly at 03:30.
+  # Turn it on with `docker compose --profile updater up -d`. It updates only
+  # containers labeled above, and never while Broadwave is busy.
+  updater:
+    image: nickfedor/watchtower:1
+    profiles: [updater]
+    environment:
+      TZ: UTC
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_LIFECYCLE_HOOKS: "true"
+      WATCHTOWER_SCHEDULE: "0 30 3 * * *"
+      WATCHTOWER_CLEANUP: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped

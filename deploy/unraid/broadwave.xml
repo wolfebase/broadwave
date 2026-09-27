@@ -14,7 +14,7 @@
   <WebUI>http://[IP]:[PORT:8477]/</WebUI>
   <TemplateURL/>
   <Icon/>
-  <ExtraParams>--device=/dev/dri</ExtraParams>
+  <ExtraParams>--device=/dev/dri --label=com.centurylinklabs.watchtower.enable=true --label="com.centurylinklabs.watchtower.lifecycle.pre-update=broadwave -update-check"</ExtraParams>
   <PostArgs/>
   <CPUset/>
   <DateInstalled/>

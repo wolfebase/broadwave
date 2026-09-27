@@ -32,6 +32,7 @@ import (
 	"broadwave/internal/sports"
 	"broadwave/internal/store"
 	"broadwave/internal/update"
+	"broadwave/internal/updatecheck"
 )
 
 //go:embed all:assets
@@ -47,10 +48,16 @@ func main() {
 	hdhrHost := flag.String("hdhr", os.Getenv("HDHR_HOST"), "tuner address when the container cannot hear broadcast discovery")
 	bonjour := flag.Bool("bonjour", true, "advertise this server to the apps over Bonjour")
 	healthcheck := flag.Bool("healthcheck", false, "check a running server on -addr and exit (for container health checks)")
+	updateCheck := flag.Bool("update-check", false, "exit 75 when a running server on -addr is busy (a tuner in use, or a recording within 2 h), 0 when it may update")
 	staging := flag.Bool("staging", false, "test copy beside a real server: never record, scan, or pull the guide; tune only when someone watches")
 	flag.Parse()
 	if *healthcheck {
 		os.Exit(checkHealth(*addr))
+	}
+	if *updateCheck {
+		code, why := updatecheck.Run(portOf(*addr), time.Now())
+		fmt.Println(why)
+		os.Exit(code)
 	}
 	logbuf.Install(os.Stderr)
 	doctor.ApplyIdentity(filepath.Join(*configDir, "work", "recordings"))

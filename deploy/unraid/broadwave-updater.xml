@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Broadwave-Updater</Name>
+  <Repository>nickfedor/watchtower:1</Repository>
+  <Registry>https://hub.docker.com/r/nickfedor/watchtower</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/wolfebase/broadwave/issues</Support>
+  <Project>https://github.com/nicholas-fedor/watchtower</Project>
+  <Overview>Optional. Keeps Broadwave on the newest release. Checks nightly at 03:30 and updates only containers that carry the Broadwave template's updater labels. It skips a night while someone is watching, a recording is running, or a recording starts within two hours, and tries again the next night.</Overview>
+  <Category>Tools:</Category>
+  <WebUI/>
+  <TemplateURL/>
+  <Icon/>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>The Broadwave container, installed from the Broadwave template (it carries the labels this updater reads).</Requires>
+  <Config Name="Docker socket" Target="/var/run/docker.sock" Default="/var/run/docker.sock" Mode="rw" Description="Lets the updater pull the new image and recreate Broadwave." Type="Path" Display="always" Required="true" Mask="false">/var/run/docker.sock</Config>
+  <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Time zone for the nightly check, like America/Chicago. Use the same value as Broadwave." Type="Variable" Display="always" Required="false" Mask="false">UTC</Config>
+  <Config Name="Schedule" Target="WATCHTOWER_SCHEDULE" Default="0 30 3 * * *" Mode="" Description="When to check: seconds, minutes, hours, day, month, weekday. The default is 03:30 every night." Type="Variable" Display="always" Required="false" Mask="false">0 30 3 * * *</Config>
+  <Config Name="Only labeled containers" Target="WATCHTOWER_LABEL_ENABLE" Default="true" Mode="" Description="Keep true, so the updater leaves every other container alone." Type="Variable" Display="advanced" Required="true" Mask="false">true</Config>
+  <Config Name="Busy check" Target="WATCHTOWER_LIFECYCLE_HOOKS" Default="true" Mode="" Description="Keep true, so Broadwave can say it is busy and skip a night." Type="Variable" Display="advanced" Required="true" Mask="false">true</Config>
+  <Config Name="Remove old images" Target="WATCHTOWER_CLEANUP" Default="true" Mode="" Description="Delete the previous Broadwave image after an update." Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+</Container>
