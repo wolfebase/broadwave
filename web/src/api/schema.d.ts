@@ -1026,7 +1026,7 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         Error: {
-            /** @description Stable machine code, for example tuners_busy, no_signal, disk_low, not_found, bad_request, pictures_full. */
+            /** @description Stable machine code, for example tuners_busy, no_signal, stream_down, tuner_refused, tuner_silent, no_source, streams_full, disk_low, not_found, bad_request, pictures_full. */
             code: string;
             /** @description Short text safe to show a user. */
             message: string;
@@ -2458,8 +2458,34 @@ export interface operations {
                     "application/json": components["schemas"]["WatchSession"];
                 };
             };
-            409: components["responses"]["Error"];
-            /** @description `no_signal`: the tuner could not lock the channel and sent nothing. The tuner is already free. */
+            /** @description `not_found`: the channel is not in the lineup. `no_source`: no enabled source carries the channel now. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `tuners_busy`, `pictures_full`, `recording_soon`, or `streams_full` (a playlist has every stream it allows open; `limit` is that number). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `internal`: the channel did not start for a reason the viewer cannot fix. The message is plain words; the server log has the detail. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `no_signal`: the tuner could not lock the channel and sent nothing. The tuner is already free. `stream_down`: the channel's source (for example a playlist URL) answered with an error or not at all. `tuner_refused`: the tuner answered the stream request with an error, such as another app holding it. `tuner_silent`: no tuner answered at all. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2640,6 +2666,15 @@ export interface operations {
                 };
             };
             409: components["responses"]["Error"];
+            /** @description `no_signal`, `stream_down`, or `tuner_refused`: the tune for a recording that starts now failed. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             507: components["responses"]["Error"];
         };
     };
