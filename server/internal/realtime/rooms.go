@@ -39,7 +39,7 @@ func (s RoomState) Target(now float64) float64 {
 }
 
 type Command struct {
-	Action    string  `json:"action"` // play, pause, seek, live, latency
+	Action    string  `json:"action"` // play, pause, seek, live, latency, stalled
 	MediaTime float64 `json:"mediaTime,omitempty"`
 	Latency   string  `json:"latency,omitempty"`
 }
@@ -47,14 +47,25 @@ type Command struct {
 var ErrFollowRoom = errors.New("only group rooms take playback commands")
 
 type Rooms struct {
-	mu    sync.Mutex
-	rooms map[string]*RoomState
-	now   func() time.Time
+	mu      sync.Mutex
+	rooms   map[string]*RoomState
+	stepped map[string]time.Time
+	now     func() time.Time
 }
 
 func NewRooms() *Rooms {
-	return &Rooms{rooms: map[string]*RoomState{}, now: time.Now}
+	return &Rooms{rooms: map[string]*RoomState{}, stepped: map[string]time.Time{}, now: time.Now}
 }
+
+// stallStep is how far a room steps back from live when its only screen, or a
+// multiview tile, runs out of picture. A fresh room plays close to its first
+// frame for a fast start; a channel whose segments arrive late or uneven
+// stalls there again and again. The screen is frozen already, so the step
+// costs nothing visible and the room settles where that channel holds.
+const (
+	stallStep  = 2 * time.Second
+	stallQuiet = 3 * time.Second
+)
 
 func unixMS(t time.Time) float64 {
 	return float64(t.UnixNano()) / 1e6
@@ -114,6 +125,30 @@ const startCushion = 1500 * time.Millisecond
 // 3%, so a room that slows by 2.5% moves every screen with it and none of them
 // pauses to make up the gap.
 const settleRate = 0.975
+
+// stepBackLocked moves a room that one screen plays, or a multiview, back by
+// stallStep, never past its latency target. Anyone else in a shared room would
+// pause for the step, so those rooms wait for Settle instead.
+func (r *Rooms) stepBackLocked(room string, st *RoomState, now time.Time) RoomState {
+	solo := st.Mode == "follow" && st.Members == 1
+	if !solo && !strings.HasPrefix(room, "multiview:") || st.Rate == 0 {
+		return *st
+	}
+	if now.Sub(r.stepped[room]) < stallQuiet {
+		return *st
+	}
+	nowMS := unixMS(now)
+	floor := liveAnchor(now, st.Latency)
+	current := st.Target(nowMS)
+	if current <= floor {
+		return *st
+	}
+	st.AnchorMedia = max(current-float64(stallStep/time.Millisecond), floor)
+	st.AnchorServer = nowMS
+	st.Version++
+	r.stepped[room] = now
+	return *st
+}
 
 // Easing is a room that Settle slowed, and how long until it reaches its target.
 type Easing struct {
@@ -234,6 +269,9 @@ func (r *Rooms) Apply(room string, c Command) (RoomState, error) {
 		}
 		st.Version++
 		return *st, nil
+	}
+	if c.Action == "stalled" {
+		return r.stepBackLocked(room, st, now), nil
 	}
 	if st.Mode != "group" {
 		return RoomState{}, ErrFollowRoom

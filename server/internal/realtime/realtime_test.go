@@ -355,3 +355,44 @@ func TestRoomsWithBrowsersSkipsAppleApps(t *testing.T) {
 		t.Fatalf("rooms with browsers: %v", got)
 	}
 }
+
+func TestAStalledScreenStepsItsRoomBack(t *testing.T) {
+	start := time.Date(2026, 9, 27, 9, 0, 0, 0, time.UTC)
+	r, now := fixedRooms(start)
+	first := unixMS(start.Add(-4 * time.Second))
+	r.Join("channel:24", 24, first)
+	before, _ := r.State("channel:24")
+	*now = start.Add(10 * time.Second)
+	onScreen := before.Target(unixMS(*now))
+	st, err := r.Apply("channel:24", Command{Action: "stalled"})
+	if err != nil || math.Abs(st.Target(unixMS(*now))-(onScreen-2000)) > 1 || st.Rate != 1 {
+		t.Fatalf("a lone screen that stalls steps back 2 s: %+v %v", st, err)
+	}
+	if again, _ := r.Apply("channel:24", Command{Action: "stalled"}); again.Version != st.Version {
+		t.Fatalf("a second stall inside the quiet time moved it again: %+v", again)
+	}
+	// Never further back than the latency target.
+	for i := range 20 {
+		*now = start.Add(time.Duration(14+4*i) * time.Second)
+		st, _ = r.Apply("channel:24", Command{Action: "stalled"})
+	}
+	if floor := unixMS(now.Add(-13 * time.Second)); st.Target(unixMS(*now)) < floor-1 {
+		t.Fatalf("stepped past the latency target: %v < %v", st.Target(unixMS(*now)), floor)
+	}
+	// Two screens share the room: the other one would pause for the step.
+	r.Join("channel:5", 5, 0)
+	r.Join("channel:5", 5, 0)
+	shared, _ := r.State("channel:5")
+	if st, _ := r.Apply("channel:5", Command{Action: "stalled"}); st.Version != shared.Version {
+		t.Fatalf("a shared follow room stepped back: %+v", st)
+	}
+	// A multiview is one screen with several tiles.
+	fresh := unixMS(now.Add(-4 * time.Second))
+	r.Join("multiview:m", 24, fresh)
+	r.Join("multiview:m", 22, fresh)
+	*now = now.Add(5 * time.Second)
+	mv, _ := r.State("multiview:m")
+	if st, _ := r.Apply("multiview:m", Command{Action: "stalled"}); st.Version == mv.Version {
+		t.Fatalf("a multiview did not step back: %+v", st)
+	}
+}

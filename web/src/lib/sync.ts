@@ -41,6 +41,7 @@ export class SyncEngine {
   private leadCheck = false;
   private rateProbe: { at: number; t: number; rate: number } | null = null;
   private rateStalls = 0;
+  private lastStallReport = 0;
 
   constructor(
     private video: HTMLVideoElement,
@@ -63,10 +64,22 @@ export class SyncEngine {
     if (cached?.room === this.room) this.state = cached;
     this.setStatus({ state: "waiting", drift: 0, members: this.state?.members ?? 0 });
     this.timer = window.setInterval(() => this.apply(), 250);
+    this.video.addEventListener("waiting", this.onWaiting);
   }
+
+  /** Out of picture while playing: the room sits too close to this channel's live edge. */
+  private onWaiting = () => {
+    const video = this.video;
+    if (video.seeking || !this.state || this.state.rate === 0 || this.forwardMedia() > 0.5) return;
+    const now = performance.now();
+    if (now - this.lastStallReport < 3000) return;
+    this.lastStallReport = now;
+    events().command(this.room, "stalled");
+  };
 
   stop() {
     window.clearInterval(this.timer);
+    this.video.removeEventListener("waiting", this.onWaiting);
     this.unsubscribe?.();
     events().leave(this.room);
     this.video.playbackRate = 1;

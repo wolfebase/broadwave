@@ -95,7 +95,7 @@ paths:
         `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `error` {code, message}.
 
         Client to server: `clock` {t0}, `sync.join` {room, channelId}, `sync.leave` {room},
-        `sync.command` {room, action: play|pause|seek|live|latency, mediaTime, latency}.
+        `sync.command` {room, action: play|pause|seek|live|latency|stalled, mediaTime, latency}. `stalled` steps a one-screen room or a multiview 2 s further from live, never past its latency target.
 
         Rooms are `channel:<id>` (everyone on a channel, following live) or `group:<code>`
         (shared controls). At server time T a room shows media time
