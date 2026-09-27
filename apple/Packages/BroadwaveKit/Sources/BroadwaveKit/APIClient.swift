@@ -277,6 +277,16 @@ public struct APIClient: Sendable {
         return url("/api/v1/channels/\(channelID)/frame?w=\(w)")
     }
 
+    /// Nil when this channel has no fresh preview, so the app does not ask for one.
+    public func frameURL(channelID: Int64, width: Int, listed: Set<Int64>) -> URL? {
+        guard listed.contains(channelID) else { return nil }
+        return frameURL(channelID: channelID, width: width)
+    }
+
+    public func frames() async throws -> FrameList {
+        try await send("GET", "/frames")
+    }
+
     public func supportURL() -> URL {
         url("/api/v1/support")
     }

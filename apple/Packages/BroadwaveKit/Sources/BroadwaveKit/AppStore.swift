@@ -16,6 +16,8 @@ public final class AppStore {
     public private(set) var index = GuideIndex([])
     public private(set) var recordings: [Recording] = []
     public private(set) var passes: [Pass] = []
+    /// Channel ids whose preview JPEG is already on the server.
+    public private(set) var frameIDs: Set<Int64> = []
     public private(set) var loading = false
     public var error: String?
     public var now = Date()
@@ -34,6 +36,7 @@ public final class AppStore {
     }
 
     private var clock: Timer?
+    private var frameTick = 0
     private var announced = false
     private var relocateAfter = Date.distantPast
 
@@ -69,7 +72,15 @@ public final class AppStore {
             remembered = RememberedServers.upsert(remembered, saved)
         }
         clock = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.now = Date() }
+            Task { @MainActor in
+                guard let self else { return }
+                self.now = Date()
+                self.frameTick += 1
+                if self.frameTick >= 4 {
+                    self.frameTick = 0
+                    await self.refreshFrames()
+                }
+            }
         }
         if let resumeDemo {
             Task { @MainActor in
@@ -118,12 +129,18 @@ public final class AppStore {
             }
             Task { await self?.refresh(lineup: false) }
         }
-        socket.on("live.changed") { [weak self] _ in Task { await self?.refreshRecordings() } }
+        socket.on("live.changed") { [weak self] _ in
+            Task {
+                await self?.refreshRecordings()
+                await self?.refreshFrames()
+            }
+        }
         socket.connect()
         self.socket = socket
         save(server, "server")
         remembered = RememberedServers.upsert(remembered, server)
         save(remembered, "servers")
+        frameIDs = []
         Task { await refresh() }
     }
 
@@ -186,6 +203,7 @@ public final class AppStore {
         info = nil
         channels = []
         recordings = []
+        frameIDs = []
         homeNotice = nil
         homeQueue = []
         UserDefaults.standard.removeObject(forKey: "server")
@@ -209,6 +227,7 @@ public final class AppStore {
         #endif
         guard let api else { return }
         let base = api.base
+        await refreshFrames()
         loading = true
         defer { loading = false }
         do {
@@ -284,6 +303,14 @@ public final class AppStore {
     public func refreshRecordings() async {
         guard let api, let list = try? await api.recordings() else { return }
         recordings = list
+    }
+
+    /// Channels with a preview newer than ten minutes. A miss keeps the last list.
+    func refreshFrames() async {
+        guard let api else { return }
+        let base = api.base
+        guard let list = try? await api.frames(), self.api?.base == base else { return }
+        frameIDs = Set(list.channels)
     }
 
     public func activeRecording(on channel: Channel) -> Recording? {

@@ -240,6 +240,14 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
+public struct FrameList: Codable, Sendable, Hashable {
+    public var channels: [Int64]
+
+    public init(channels: [Int64]) {
+        self.channels = channels
+    }
+}
+
 public struct Game: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var league: String

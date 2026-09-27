@@ -488,6 +488,20 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Channel" }
         "404": { $ref: "#/components/responses/Error" }
+  /frames:
+    get:
+      tags: [channels]
+      operationId: listFrames
+      summary: Channels that already have a fresh preview.
+      description: |
+        A channel is listed when its preview JPEG exists and is newer than 10 minutes.
+        Nothing is tuned to make one. Cards ask for `/channels/{id}/frame` only for these ids.
+      responses:
+        "200":
+          description: Channel ids with a preview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FrameList" }
   /channels/{id}/frame:
     get:
       tags: [channels]
@@ -1587,6 +1601,14 @@ components:
         customName: { type: string }
         customNumber: { type: string }
         guideKey: { type: string }
+    FrameList:
+      type: object
+      required: [channels]
+      description: Channel ids whose preview JPEG exists and is newer than 10 minutes.
+      properties:
+        channels:
+          type: array
+          items: { type: integer, format: int64 }
     Airing:
       type: object
       required: [id, channelId, title, start, end]

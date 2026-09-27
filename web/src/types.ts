@@ -6,6 +6,7 @@ export type {
   ChannelPatch,
   Device,
   DeviceHealth,
+  FrameList,
   MultiviewPlan,
   Pass,
   PlannedAiring,

@@ -307,6 +307,8 @@ public final class DemoServer: @unchecked Sendable {
             let all = channels()
             let guide = query.split(separator: "&").contains("guide=1")
             return Self.ok(Self.json(["channels": guide ? all.filter { !$0.hidden } : all]))
+        case ("GET", "/api/v1/frames"):
+            return Self.ok(Self.json(FrameList(channels: channels().map(\.id))))
         case ("GET", "/api/v1/airings"):
             return Self.ok(Self.json(["airings": airings(query: query)]))
         case ("GET", "/api/v1/recordings"):

@@ -286,7 +286,8 @@
   background: color-mix(in srgb, var(--cat-color) 16%, var(--color-surface2));
 }
 
-.guide-cell.has-thumb {
+.guide-cell.has-thumb,
+.guide-cell:has(> .cell-thumb:not([hidden])) {
   padding-right: 64px;
 }
 

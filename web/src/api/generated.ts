@@ -119,6 +119,10 @@ export type Event = {
   message: string;
 };
 
+export type FrameList = {
+  channels: number[];
+};
+
 export type Game = {
   id: string;
   league: string;

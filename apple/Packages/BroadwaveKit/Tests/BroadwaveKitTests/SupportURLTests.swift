@@ -33,3 +33,14 @@ import Testing
     #expect(card.query() == "w=480")
     #expect(hero.host() == "127.0.0.1")
 }
+
+@Test func frameURLIsOmittedUntilTheChannelIsListed() throws {
+    let base = try #require(URL(string: "http://127.0.0.1:9/api/v1"))
+    let api = APIClient(base: base)
+    #expect(api.frameURL(channelID: 4, width: 480, listed: []) == nil)
+    #expect(api.frameURL(channelID: 5, width: 1280, listed: [4]) == nil)
+    let card = try #require(api.frameURL(channelID: 4, width: 640, listed: [4, 9]))
+    #expect(card.query() == "w=480")
+    let hero = try #require(api.frameURL(channelID: 4, width: 1600, listed: [4]))
+    #expect(hero.query() == "w=1280")
+}

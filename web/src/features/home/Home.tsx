@@ -8,6 +8,7 @@ import type { Airing, Channel, Recording, TeamFollow } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
 import { isLayout, layoutForCount, layoutLabel, multiviewPath, savedSets } from "../multiview/storage";
 import { ArtFrame } from "../../ui/ArtFrame";
+import { useHasFrame } from "../../ui/frames";
 import { LiveFrame } from "../../ui/LiveFrame";
 import { ChannelBadge, Empty, LiveDot, Progress, SectionHeader } from "../../ui/primitives";
 import "./home.css";
@@ -40,6 +41,7 @@ export function Home() {
     const score = (l: Live) => (l.cat === "sports" ? 4 : 0) + (l.channel.favorite ? 2 : 0) + (l.airing ? 1 : 0) + (l.channel.hd ? 0.5 : 0);
     return [...live].sort((a, b) => score(b) - score(a))[0];
   }, [live]);
+  const heroFrame = useHasFrame(hero?.channel.id ?? 0);
 
   // Every channel is on the air, listed or not. A fresh antenna install has no guide yet.
   const onNow = useMemo(
@@ -119,9 +121,9 @@ export function Home() {
         <section className="hero" data-cat={hero.cat}>
           {hero.airing?.imageUrl ? (
             <ArtFrame src={`/media/art/airing/${hero.airing.id}?w=960`} width={hero.airing.imageWidth} height={hero.airing.imageHeight} />
-          ) : (
+          ) : heroFrame ? (
             <ArtFrame src={`/api/v1/channels/${hero.channel.id}/frame?w=1280`} width={1280} height={720} />
-          )}
+          ) : null}
           <div className="hero-glow" aria-hidden="true" />
           <div className="hero-num" aria-hidden="true">
             {hero.channel.displayNumber}

@@ -336,6 +336,27 @@ export interface paths {
         patch: operations["patchChannel"];
         trace?: never;
     };
+    "/frames": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Channels that already have a fresh preview.
+         * @description A channel is listed when its preview JPEG exists and is newer than 10 minutes.
+         *     Nothing is tuned to make one. Cards ask for `/channels/{id}/frame` only for these ids.
+         */
+        get: operations["listFrames"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/channels/{id}/frame": {
         parameters: {
             query?: never;
@@ -1167,6 +1188,10 @@ export interface components {
             customName?: string;
             customNumber?: string;
             guideKey?: string;
+        };
+        /** @description Channel ids whose preview JPEG exists and is newer than 10 minutes. */
+        FrameList: {
+            channels: number[];
         };
         Airing: {
             /** Format: int64 */
@@ -2258,6 +2283,26 @@ export interface operations {
                 };
             };
             404: components["responses"]["Error"];
+        };
+    };
+    listFrames: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Channel ids with a preview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrameList"];
+                };
+            };
         };
     };
     channelFrame: {

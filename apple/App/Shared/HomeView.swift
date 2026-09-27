@@ -44,7 +44,7 @@ struct HomeView: View {
                                 airing: airing,
                                 now: store.now,
                                 art: art,
-                                frame: art == nil ? store.api?.frameURL(channelID: channel.id, width: 480) : nil
+                                frame: art == nil ? store.api?.frameURL(channelID: channel.id, width: 480, listed: store.frameIDs) : nil
                             )
                         }
                         .cardButton()
@@ -218,7 +218,7 @@ struct Hero: View {
                     )
                     .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
             } else {
-                HeroBackdrop(frame: store.api?.frameURL(channelID: channel.id, width: 1280), number: channel.displayNumber, tint: kind.color)
+                HeroBackdrop(frame: store.api?.frameURL(channelID: channel.id, width: 1280, listed: store.frameIDs), number: channel.displayNumber, tint: kind.color)
             }
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
