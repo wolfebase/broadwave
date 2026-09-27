@@ -11,7 +11,7 @@ import { InfoIcon, ListIcon, RecordIcon, SideBySideIcon, SyncIcon } from "../../
 import { Progress } from "../../ui/primitives";
 import { isLayout, multiviewPath } from "../multiview/storage";
 import { useScoreMap } from "../sports/scores";
-import { noListing } from "./outage";
+import { listingNote } from "./outage";
 import { Stage } from "./Stage";
 import { useLiveStream } from "./useLiveStream";
 
@@ -69,7 +69,8 @@ export function LivePlayer({
   const error = stream.error;
   const sync: SyncStatus = stream.syncStatus;
   const [panel, setPanel] = useState<"none" | "guide" | "info" | "sync">("none");
-  const [checking, setChecking] = useState(false);
+  const [listing, setListing] = useState({ id: channel.id, checks: 0, checking: false });
+  if (listing.id !== channel.id) setListing({ id: channel.id, checks: 0, checking: false });
   const playback = usePlaybackStats(videoRef, panel === "info");
   const [behind, setBehind] = useState(0);
   const [span, setSpan] = useState({ at: 0, len: 1 });
@@ -287,19 +288,22 @@ export function LivePlayer({
           </button>
         ) : null
       }
-      note={!error && !airing ? noListing : undefined}
+      note={!error && !airing ? listingNote(listing.checks > 0) : undefined}
       noteAction={
         !error && !airing ? (
           <button
             type="button"
             className="btn small"
-            disabled={checking}
+            disabled={listing.checking}
             onClick={() => {
-              setChecking(true);
-              void refresh(["airings"]).finally(() => setChecking(false));
+              const id = channel.id;
+              setListing((row) => ({ ...row, checking: true }));
+              void refresh(["airings"]).finally(() => {
+                setListing((row) => (row.id === id ? { id, checks: row.checks + 1, checking: false } : row));
+              });
             }}
           >
-            Check for listings
+            {listing.checking ? "Checking…" : "Check for listings"}
           </button>
         ) : null
       }

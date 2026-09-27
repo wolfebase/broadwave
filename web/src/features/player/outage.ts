@@ -10,6 +10,12 @@ export const noSignal = "This channel isn't coming in. Check the antenna.";
 export const pictureStopped = "The picture stopped. Trying again usually fixes it.";
 export const pictureRestarting = "The picture stopped. Starting it again.";
 export const noListing = "No listing for this channel.";
+export const noListingChecked = "Still no listing for this channel.";
+
+/** The note under the player. A check that finds nothing has to change the words, or the status line stays quiet. */
+export function listingNote(checked: boolean): string {
+  return checked ? noListingChecked : noListing;
+}
 
 const busyFallback = "Every tuner is busy. Stop a recording or watch something already on.";
 

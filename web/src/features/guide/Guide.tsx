@@ -8,6 +8,7 @@ import {
   categoryLabel,
   categoryOf,
   emptyGuideLabel,
+  guideCellId,
   isRecording,
   nextAfter,
   primeTime,
@@ -267,6 +268,9 @@ export function Guide() {
   const nowX = ((now - origin) / MIN) * pxPerMin;
   const slots = Array.from({ length: hours * 2 }, (_, i) => origin + i * 30 * MIN).filter((t) => t > leftT - 60 * MIN && t < rightT + 60 * MIN);
   const nowInView = nowX - view.left > channelW - 8 && nowX - view.left < view.width - 24;
+  const focusRow = rows[focus.row];
+  const focusAiring = focusRow ? airingAt(index, focusRow.id, focus.at) : undefined;
+  const activeId = focusRow ? guideCellId(focusRow.id, focusAiring?.id) : undefined;
 
   if (layout === "phone" && !landscape) {
     return (
@@ -342,6 +346,7 @@ export function Guide() {
           role="grid"
           aria-label="TV guide"
           aria-rowcount={rows.length}
+          aria-activedescendant={activeId}
           tabIndex={0}
           style={{ width: channelW + width, height: headH + rows.length * rowH }}
         >
@@ -393,13 +398,13 @@ export function Guide() {
                 </button>
                 </div>
                 {list.length === 0 ? (
-                  <div role="gridcell" className="guide-cell empty" style={{ left: channelW + view.left + 4, width: Math.max(200, view.width - channelW - 8) }}>
+                  <div role="gridcell" id={activeId === guideCellId(c.id) ? activeId : undefined} className="guide-cell empty" style={{ left: channelW + view.left + 4, width: Math.max(200, view.width - channelW - 8) }}>
                     <LiveFrame id={c.id} className="cell-frame" />
                     <span className="cell-title">{emptyGuideLabel(index.get(c.id) ?? [], leftT)}</span>
                   </div>
                 ) : null}
                 {(index.get(c.id) ?? []).length > 0 && Date.parse((index.get(c.id) ?? []).at(-1)!.end) < end - 60_000 ? (
-                  <div role="gridcell" className="guide-cell empty" style={{ left: channelW + ((Math.max(origin, Date.parse((index.get(c.id) ?? []).at(-1)!.end)) - origin) / MIN) * pxPerMin + 4, width: 280 }}>
+                  <div role="gridcell" id={list.length > 0 && activeId === guideCellId(c.id) ? activeId : undefined} className="guide-cell empty" style={{ left: channelW + ((Math.max(origin, Date.parse((index.get(c.id) ?? []).at(-1)!.end)) - origin) / MIN) * pxPerMin + 4, width: 280 }}>
                     <span className="cell-title">{emptyGuideLabel(index.get(c.id) ?? [], end)}</span>
                   </div>
                 ) : null}
@@ -422,6 +427,7 @@ export function Guide() {
                       key={a.id}
                       type="button"
                       role="gridcell"
+                      id={guideCellId(c.id, a.id)}
                       tabIndex={-1}
                       className={`guide-cell${onNow ? " now" : ""}${past ? " past" : ""}${focused ? " focused" : ""}${dim ? " dim" : ""}${a.imageUrl && w > 220 ? " has-thumb" : ""}`}
                       data-cat={cat}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { primeTime } from "./src/lib/guide.ts";
+import { guideCellId, primeTime } from "./src/lib/guide.ts";
 
 test("tonight is 8 PM, and the next day after that", () => {
   const afternoon = new Date(2026, 8, 26, 15, 0, 0).getTime();
@@ -18,4 +18,10 @@ test("tonight is 8 PM, and the next day after that", () => {
   const next = new Date(primeTime(later));
   assert.equal(next.getDate(), 27);
   assert.equal(next.getHours(), 20);
+});
+
+test("the guide cell the keyboard is on has an id the grid can name", () => {
+  assert.equal(guideCellId(4, 18), "guide-cell-18");
+  assert.equal(guideCellId(4), "guide-empty-4");
+  assert.notEqual(guideCellId(4, 18), guideCellId(4));
 });
