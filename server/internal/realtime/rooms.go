@@ -13,7 +13,7 @@ import (
 // target durations, 9 s once a segment runs past 2 s) behind a live edge that
 // is itself 2-3 s old, so balanced sits past 12 s or Apple screens never catch it.
 var latencies = map[string]time.Duration{
-	"lowest":   6 * time.Second,
+	"lowest": 6 * time.Second,
 	// AVPlayer holds back about 13.2 s behind the wall clock on a live
 	// channel (six seconds of hold-back plus the encode). At 13 s an Apple TV
 	// that started behind the room could not reach it: 1.02x was ignored at
