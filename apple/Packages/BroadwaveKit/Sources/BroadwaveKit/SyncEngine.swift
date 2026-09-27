@@ -448,7 +448,10 @@ public final class SyncEngine {
     /// A fast trim should gain about trimStep of wall time. A live item that
     /// ignores the rate gains nothing, so behind is then fixed with a seek.
     private func checkSpeedUp(drift: Double) {
-        if !canSpeedUp, Date().timeIntervalSince(speedUpOff) > 300 {
+        // A trim right after a pause can lose ground while AVPlayer restarts,
+        // which held a screen 250 ms off the room for five minutes. A minute
+        // later the edge has usually moved and the next try gains.
+        if !canSpeedUp, Date().timeIntervalSince(speedUpOff) > 60 {
             canSpeedUp = true
         }
         guard trim == .fast, let from = fastFrom else { return }
