@@ -25,6 +25,11 @@ export function viewerFailure(err: unknown): { message: string; recovery: Recove
   if (failed.code === "no_signal") {
     return { message: noSignal, recovery: "" };
   }
+  // A source that stopped sending, like a playlist's upstream. The quiet
+  // clock asks again, since nothing the player can read will change.
+  if (failed.code === "stream_down") {
+    return { message: pictureStopped, recovery: "" };
+  }
   const message = err instanceof Error ? err.message : failed.message || "";
   if (failed.status === 0 || /failed to fetch|networkerror|load failed/i.test(message)) {
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
