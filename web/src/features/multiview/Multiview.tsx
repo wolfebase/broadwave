@@ -379,14 +379,17 @@ function Tile({
   const videoRef = useRef<HTMLVideoElement>(null);
   const layoutMode = useLayout();
   const equal = layout === "2up" || layout === "quad";
+  // Equal tiles all get the same picture, so moving the sound only unmutes one.
+  // A focus-dependent picture restarted both tiles on every swap.
+  const big = focused && !equal;
   const stream = useLiveStream(videoRef, {
     channelId: channel.id,
-    quality: focused ? "focus" : layout === "quad" || layout === "pip" ? "360" : "tile",
-    audio: focused ? (equal ? "stereo" : "auto") : equal ? "stereo" : "none",
+    quality: layout === "2up" || big ? "focus" : layout === "quad" || layout === "pip" ? "360" : "tile",
+    audio: equal ? "stereo" : focused ? "auto" : "none",
     picture: "broadcast",
     room,
     sync: true,
-    profile: focused ? (layoutMode === "tv" ? "tv" : "desktop") : "tile",
+    profile: big ? (layoutMode === "tv" ? "tv" : "desktop") : "tile",
     audible: focused,
   });
   useEffect(() => {

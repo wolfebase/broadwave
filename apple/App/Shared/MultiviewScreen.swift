@@ -225,13 +225,16 @@ final class MultiviewSession {
         paused.toggle()
     }
 
+    /// Equal tiles all get the same picture, so moving the sound only unmutes one.
+    /// A focus-dependent picture restarted both tiles on every swap.
     func prefs(for id: Int64) -> Prefs {
-        if id == focusID {
-            let audio: Prefs.Sound = layout.equal ? .stereo : .auto
-            return Prefs(quality: .focus, audio: audio, picture: "broadcast")
+        if layout.equal {
+            return Prefs(quality: layout == .quad ? .tile360 : .focus, audio: .stereo, picture: "broadcast")
         }
-        let quality: Prefs.Quality = (layout == .quad || layout == .pip) ? .tile360 : .tile
-        return Prefs(quality: quality, audio: layout.equal ? .stereo : .none, picture: "broadcast")
+        if id == focusID {
+            return Prefs(quality: .focus, audio: .auto, picture: "broadcast")
+        }
+        return Prefs(quality: layout == .pip ? .tile360 : .tile, audio: .none, picture: "broadcast")
     }
 }
 
