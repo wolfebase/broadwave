@@ -26,7 +26,7 @@ func TestFollowRoomTracksLiveAndRefusesControls(t *testing.T) {
 	if st.Mode != "follow" || st.Members != 1 {
 		t.Fatalf("channel rooms follow live: %+v", st)
 	}
-	want := unixMS(start.Add(-10 * time.Second))
+	want := unixMS(start.Add(-13 * time.Second))
 	if got := st.Target(unixMS(start)); got != want {
 		t.Fatalf("target should sit 10s behind real time, got %v want %v", got, want)
 	}
@@ -53,7 +53,7 @@ func TestFreshRoomStartsOnTheFirstFrame(t *testing.T) {
 		t.Fatalf("the next screen keeps that frame: %+v", next)
 	}
 	deep := r.Join("channel:9", 9, unixMS(start.Add(-30*time.Second)))
-	want := unixMS(start.Add(-10 * time.Second))
+	want := unixMS(start.Add(-13 * time.Second))
 	if deep.AnchorMedia != want {
 		t.Fatalf("a deep buffer stays at the latency target, got %v want %v", deep.AnchorMedia, want)
 	}
@@ -67,21 +67,21 @@ func TestFollowRoomSettlesOnceTheBufferCoversTheLatency(t *testing.T) {
 	if st.AnchorMedia != first || math.Abs(st.Target(unixMS(start))-(first-1500)) > 1 {
 		t.Fatalf("a fresh room starts on the first frame, a moment later: %+v", st)
 	}
-	if moved := r.Settle(4, first); len(moved) != 0 {
+	if moved := r.Settle(4, first, nil); len(moved) != 0 {
 		t.Fatalf("a fresh first frame must stay, got %+v", moved)
 	}
 	*now = start.Add(20 * time.Second)
 	recent := unixMS(now.Add(-3 * time.Second))
-	if moved := r.Settle(4, recent); len(moved) != 0 {
+	if moved := r.Settle(4, recent, nil); len(moved) != 0 {
 		t.Fatalf("a first frame newer than the target must stay, got %+v", moved)
 	}
-	if moved := r.Settle(4, first); len(moved) != 0 {
+	if moved := r.Settle(4, first, nil); len(moved) != 0 {
 		t.Fatalf("a room with one screen must stay at 1x, got %+v", moved)
 	}
 	r.Join("channel:4", 4, first)
 	before, _ := r.State("channel:4")
 	onScreen := before.Target(unixMS(*now))
-	eased := r.Settle(4, first)
+	eased := r.Settle(4, first, nil)
 	if len(eased) != 1 {
 		t.Fatalf("expected one settle, got %+v", eased)
 	}
@@ -91,13 +91,13 @@ func TestFollowRoomSettlesOnceTheBufferCoversTheLatency(t *testing.T) {
 		t.Fatalf("settle must keep the frame and slow down: target %v want %v (%+v)", moved.Target(unixMS(*now)), onScreen, moved)
 	}
 	held := moved.Version
-	if again := r.Settle(4, first); len(again) != 0 {
+	if again := r.Settle(4, first, nil); len(again) != 0 {
 		t.Fatalf("a second settle moved the room: %+v", again)
 	}
 	// At the end of the ease the room is on its latency target and back at 1x.
 	*now = now.Add(eased[0].Until)
 	st, ok := r.EndEase("channel:4", held)
-	want := unixMS(now.Add(-10 * time.Second))
+	want := unixMS(now.Add(-13 * time.Second))
 	if !ok || st.Rate != 1 || math.Abs(st.Target(unixMS(*now))-want) > 5 {
 		t.Fatalf("after the ease target %v want %v (%+v ok=%v)", st.Target(unixMS(*now)), want, st, ok)
 	}
@@ -109,11 +109,33 @@ func TestFollowRoomSettlesOnceTheBufferCoversTheLatency(t *testing.T) {
 	}
 	g := r.Join("group:den", 4, first)
 	*now = start.Add(40 * time.Second)
-	if moved := r.Settle(4, first); len(moved) != 0 {
+	if moved := r.Settle(4, first, nil); len(moved) != 0 {
 		t.Fatalf("a group room must stay: %+v (group %+v)", moved, g)
 	}
 	if st, _ = r.State("group:den"); st.AnchorMedia != g.AnchorMedia || st.Version != g.Version {
 		t.Fatalf("group anchor changed: %+v", st)
+	}
+}
+
+func TestAppleOnlyRoomJumpsToItsLatency(t *testing.T) {
+	start := time.Date(2026, 9, 27, 7, 0, 0, 0, time.UTC)
+	r, now := fixedRooms(start)
+	first := unixMS(start.Add(-3500 * time.Millisecond))
+	r.Join("channel:4", 4, first)
+	apple := func(string) bool { return false }
+	if moved := r.Settle(4, first, apple); len(moved) != 0 {
+		t.Fatalf("a fresh first frame must stay, got %+v", moved)
+	}
+	// AVPlayer cannot play near the first frame, so even one screen jumps
+	// straight to the latency target instead of waiting out an ease.
+	*now = start.Add(20 * time.Second)
+	moved := r.Settle(4, first, apple)
+	want := unixMS(now.Add(-13 * time.Second))
+	if len(moved) != 1 || moved[0].Until != 0 || moved[0].State.Rate != 1 || math.Abs(moved[0].State.Target(unixMS(*now))-want) > 1 {
+		t.Fatalf("an Apple room must jump to its target at 1x, got %+v", moved)
+	}
+	if again := r.Settle(4, first, apple); len(again) != 0 {
+		t.Fatalf("a room on its target must stay: %+v", again)
 	}
 }
 
@@ -157,7 +179,7 @@ func TestGroupRoomPauseSeekLive(t *testing.T) {
 		t.Fatal("seeking past the live edge is clamped")
 	}
 	st, _ = r.Apply("group:den", Command{Action: "live"})
-	if st.AnchorMedia != unixMS(now.Add(-10*time.Second)) || st.Rate != 1 {
+	if st.AnchorMedia != unixMS(now.Add(-13*time.Second)) || st.Rate != 1 {
 		t.Fatalf("live jumps to the latency target: %+v", st)
 	}
 	r.Leave("group:den")
@@ -317,4 +339,19 @@ func TestHereAnnouncesAScreen(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("screen stayed after disconnect: %+v", bus.Screens())
+}
+
+func TestRoomsWithBrowsersSkipsAppleApps(t *testing.T) {
+	b := NewBus()
+	tv := &client{rooms: map[string]bool{"channel:1": true}, here: Presence{Kind: "appletv"}}
+	phone := &client{rooms: map[string]bool{"channel:1": true, "channel:2": true}, here: Presence{Kind: "iphone"}}
+	unknown := &client{rooms: map[string]bool{"channel:3": true}}
+	web := &client{rooms: map[string]bool{"channel:2": true, "channel:4": false}, here: Presence{Kind: "web"}}
+	for _, c := range []*client{tv, phone, unknown, web} {
+		b.clients[c] = struct{}{}
+	}
+	got := b.roomsWithBrowsers()
+	if got["channel:1"] || !got["channel:2"] || !got["channel:3"] || got["channel:4"] {
+		t.Fatalf("rooms with browsers: %v", got)
+	}
 }

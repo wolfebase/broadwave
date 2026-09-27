@@ -713,6 +713,11 @@ struct SystemPlayer: UIViewControllerRepresentable {
             context.coordinator.start(vc)
             context.coordinator.noteHint(hint, on: vc)
             context.coordinator.sample(vc)
+            // Setting the items redraws the transport bar and keeps it on screen,
+            // so a view update that changes nothing must leave them alone.
+            let key = (menu + audio).map { "\($0.id) \($0.title) \($0.current)" } + ["\(streamOn)"]
+            guard key != context.coordinator.menuKey else { return }
+            context.coordinator.menuKey = key
             let actions = menu.map { entry in
                 UIAction(title: entry.title, state: entry.current ? .on : .off) { _ in entry.action() }
             }
@@ -732,6 +737,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
     @MainActor
     final class Coordinator {
         #if os(tvOS)
+            var menuKey: [String] = []
             private var task: Task<Void, Never>?
             private var match = DisplayMatch()
             private var applied: DisplayMatch?

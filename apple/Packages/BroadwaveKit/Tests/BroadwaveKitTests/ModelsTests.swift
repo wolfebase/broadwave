@@ -225,9 +225,13 @@ private func fixture(_ name: String) throws -> Data {
     #expect(move == .pause(resumeAfter: 10, seekToTarget: false))
 }
 
-@Test @MainActor func behindWithoutThatDateWaits() {
+/// A target past the item's live edge less hold-back cannot be reached, and a
+/// faster rate only runs into that edge.
+@Test @MainActor func behindAnUnreachableTargetPlaysAtTheRoomRate() {
     let move = SyncEngine.decide(hasFrame: true, driftMS: -10000, roomRate: 1, canSeek: false)
-    #expect(move == .wait)
+    #expect(move == .play(.none, locked: false))
+    let near = SyncEngine.decide(hasFrame: true, driftMS: -300, roomRate: 1, canSeek: false, forwardBuffer: 8)
+    #expect(near == .play(.none, locked: false))
 }
 
 @Test @MainActor func behindInsideTheWindowSeeks() {
@@ -240,23 +244,48 @@ private func fixture(_ name: String) throws -> Data {
     #expect(move == .pause(resumeAfter: nil, seekToTarget: false))
 }
 
-@Test @MainActor func aSmallDriftLocksAtRateOne() {
+@Test @MainActor func aSmallDriftLocksAtTheRoomRate() {
     let move = SyncEngine.decide(hasFrame: true, driftMS: -11, roomRate: 1, canSeek: true)
-    #expect(move == .rate(1, locked: true))
+    #expect(move == .play(.none, locked: true))
+    let easing = SyncEngine.decide(hasFrame: true, driftMS: 20, roomRate: 0.975, canSeek: true)
+    #expect(easing == .play(.none, locked: true))
+    #expect(SyncEngine.rate(room: 0.975, trim: .none) == 0.975)
 }
 
 @Test @MainActor func aShortForwardBufferDoesNotChaseTheEdge() {
     let close = SyncEngine.decide(hasFrame: true, driftMS: -100, roomRate: 1, canSeek: true, forwardBuffer: 0.4)
-    #expect(close == .rate(1, locked: false))
+    #expect(close == .play(.none, locked: false))
     let seek = SyncEngine.decide(hasFrame: true, driftMS: -800, roomRate: 1, canSeek: true, forwardBuffer: 0.4)
-    #expect(seek == .rate(1, locked: false))
+    #expect(seek == .play(.none, locked: false))
     let roomy = SyncEngine.decide(hasFrame: true, driftMS: -100, roomRate: 1, canSeek: true, forwardBuffer: 4)
-    if case let .rate(rate, locked) = roomy {
-        #expect(!locked)
-        #expect(rate > 1)
-    } else {
-        #expect(Bool(false))
-    }
+    #expect(roomy == .play(.fast, locked: false))
+    #expect(SyncEngine.rate(room: 1, trim: .fast) > 1)
+}
+
+/// Noise around the band must not flip the rate every tick.
+@Test @MainActor func aTrimHoldsUntilItIsInsideTheLockBand() {
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: 22, roomRate: 1, canSeek: true) == .play(.none, locked: true))
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: 30, roomRate: 1, canSeek: true) == .play(.slow, locked: false))
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: 25, roomRate: 1, canSeek: true, trim: .slow) == .play(.slow, locked: false))
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: 8, roomRate: 1, canSeek: true, trim: .slow) == .play(.none, locked: true))
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: -25, roomRate: 1, canSeek: true, trim: .fast) == .play(.fast, locked: false))
+}
+
+@Test @MainActor func aNewTrimWaitsOutTheQuietTime() {
+    let move = SyncEngine.decide(hasFrame: true, driftMS: 80, roomRate: 1, canSeek: true, quiet: false)
+    #expect(move == .play(.none, locked: false))
+    let big = SyncEngine.decide(hasFrame: true, driftMS: 900, roomRate: 1, canSeek: true, quiet: false)
+    #expect(big == .pause(resumeAfter: 0.9, seekToTarget: false))
+}
+
+/// A live item that ignores a rate above 1 sat 60 ms behind at "1.03" for minutes.
+@Test @MainActor func behindWithoutSpeedUpSeeksOnce() {
+    let move = SyncEngine.decide(hasFrame: true, driftMS: -60, roomRate: 1, canSeek: true, forwardBuffer: 6, canSpeedUp: false)
+    #expect(move == .seek)
+    let stuck = SyncEngine.decide(hasFrame: true, driftMS: -60, roomRate: 1, canSeek: false, forwardBuffer: 6, canSpeedUp: false)
+    #expect(stuck == .play(.none, locked: false))
+    let ended = SyncEngine.decide(hasFrame: true, driftMS: -60, roomRate: 1, canSeek: true, forwardBuffer: 6, trim: .fast, canSpeedUp: false)
+    #expect(ended == .seek)
 }
 
 @Test @MainActor func aPlayingStatusWithNoRateStillRestarts() {

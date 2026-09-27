@@ -312,12 +312,6 @@ struct RootView: View {
         }
         .environment(store)
         .environment(nowPlaying)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            VStack(spacing: 0) {
-                updateBanner
-                arrivalBanner
-            }
-        }
     }
 
     @ViewBuilder
@@ -351,6 +345,14 @@ struct RootView: View {
         return url
     }
 
+    private var playerCovers: Bool {
+        #if os(tvOS)
+            nowPlaying.channel != nil
+        #else
+            nowPlaying.channel != nil && nowPlaying.expanded
+        #endif
+    }
+
     @ViewBuilder
     private var arrivalBanner: some View {
         if store.connected, let notice = store.homeNotice, !notice.isEmpty {
@@ -363,6 +365,14 @@ struct RootView: View {
                 tab = .settings
             } onDismiss: {
                 store.dismissHome()
+            }
+            // The player covers the root, so the notice waits until it is seen.
+            .task(id: "\(notice) \(playerCovers)") {
+                guard !playerCovers else { return }
+                try? await Task.sleep(for: .seconds(12))
+                if !Task.isCancelled, store.homeNotice == notice {
+                    store.dismissHome()
+                }
             }
         }
     }
