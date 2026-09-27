@@ -178,7 +178,9 @@ func TestStoredScanStartsBeforeTheHeader(t *testing.T) {
 	// and then the window ends with an empty buffer.
 	go writeUntil(ctx, pw, audioTS(1, []esAudio{{pid: 0x101, lang: "eng", audioType: 0, bsmod: 0}}))
 	started := time.Now()
+	h.mu.Lock()
 	h.learnScanLocked(m, f)
+	h.mu.Unlock()
 	if waited := time.Since(started); waited > 400*time.Millisecond {
 		t.Fatalf("stored scan waited %s for a header that was not in the buffer", waited)
 	}
@@ -210,7 +212,9 @@ func TestQuietTunerStillScansForFilm(t *testing.T) {
 	m.feeds["5.1"] = f
 	h.channels[1] = f
 	started := time.Now()
+	h.mu.Lock()
 	h.learnScanLocked(m, f)
+	h.mu.Unlock()
 	if waited := time.Since(started); waited < 500*time.Millisecond {
 		t.Fatalf("empty buffer returned in %s", waited)
 	}
@@ -255,7 +259,9 @@ func TestStoredProgressiveStillScansForFilm(t *testing.T) {
 	m.feeds["5.1"] = f
 	h.channels[1] = f
 	go writeUntil(ctx, pw, filmTS(1))
+	h.mu.Lock()
 	h.learnScanLocked(m, f)
+	h.mu.Unlock()
 	if !f.source.Film || f.source.Progressive {
 		t.Fatalf("stored progressive skipped film: %+v", f.source)
 	}
@@ -308,7 +314,9 @@ func TestProbeDoesNotOverrideTheHeader(t *testing.T) {
 		headerOrder: "film",
 		renditions:  map[string]*rendition{},
 	}
+	h.mu.Lock()
 	h.applyProbeLocked(f, "progressive")
+	h.mu.Unlock()
 	if !f.source.Film || f.source.Progressive || f.channel.FieldOrder != "tt" {
 		t.Fatalf("probe overrode film: %+v stored %q", f.source, f.channel.FieldOrder)
 	}
@@ -339,7 +347,9 @@ func TestProbeRebuildsTheRunningGraph(t *testing.T) {
 	if !ok {
 		t.Fatal("rendition key")
 	}
+	h.mu.Lock()
 	r, err := h.ensureRenditionLocked(f, spec)
+	h.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +359,9 @@ func TestProbeRebuildsTheRunningGraph(t *testing.T) {
 	seen := time.Now().Add(-time.Second)
 	r.viewers = 2
 	r.seen = seen
+	h.mu.Lock()
 	h.applyProbeLocked(f, "progressive")
+	h.mu.Unlock()
 	nr := f.renditions[spec.Key()]
 	if nr == nil || nr == r {
 		t.Fatal("probe did not rebuild the rendition")
@@ -366,7 +378,9 @@ func TestProbeRebuildsTheRunningGraph(t *testing.T) {
 	}
 
 	// A stored progressive rendition is rebuilt when the late header is film.
+	h.mu.Lock()
 	r2, err := h.ensureRenditionLocked(f, spec)
+	h.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -417,7 +431,9 @@ func TestUnscannedH264ProbeRebuilds(t *testing.T) {
 	if !ok {
 		t.Fatal("rendition key")
 	}
+	h.mu.Lock()
 	r, err := h.ensureRenditionLocked(f, spec)
+	h.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -429,7 +445,9 @@ func TestUnscannedH264ProbeRebuilds(t *testing.T) {
 	r.viewers = 2
 	r.seen = seen
 
+	h.mu.Lock()
 	h.applyProbeLocked(f, "progressive")
+	h.mu.Unlock()
 	kept := f.renditions[spec.Key()]
 	if kept == nil {
 		t.Fatal("progressive probe dropped the rendition")
@@ -445,7 +463,9 @@ func TestUnscannedH264ProbeRebuilds(t *testing.T) {
 		t.Fatalf("viewers %d", kept.viewers)
 	}
 
+	h.mu.Lock()
 	h.applyProbeLocked(f, "tt")
+	h.mu.Unlock()
 	nr := f.renditions[spec.Key()]
 	if nr == nil || nr == kept {
 		t.Fatal("interlaced probe did not rebuild the rendition")
@@ -549,7 +569,9 @@ func TestInputProbeStoresProgressive(t *testing.T) {
 	}
 	m.feeds["30.1"] = f
 	h.channels[30] = f
+	h.mu.Lock()
 	h.probeInputLocked(m, f)
+	h.mu.Unlock()
 	deadline := time.Now().Add(8 * time.Second)
 	var order string
 	for time.Now().Before(deadline) {

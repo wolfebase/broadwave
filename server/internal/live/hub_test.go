@@ -50,6 +50,8 @@ func testHub(t *testing.T) (*Hub, *mux) {
 }
 
 func addTestFeed(h *Hub, m *mux, id int64, guide string) *feed {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	return h.addFeedLocked(m, store.SourceChannel{Channel: store.Channel{ID: id, GuideNumber: guide}, FieldOrder: "progressive"})
 }
 
@@ -57,6 +59,8 @@ func addTestRendition(h *Hub, f *feed, key string, viewers int, seen time.Time) 
 	spec, _ := ParseRenditionKey(key)
 	w := &nopWriter{}
 	r := &rendition{spec: spec, dir: h.Dir + "/" + key, stdin: w, viewers: viewers, seen: seen}
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	r.sub = h.attachPipeLocked(muxOf(h, f), w)
 	f.renditions[key] = r
 	return r
@@ -65,10 +69,12 @@ func addTestRendition(h *Hub, f *feed, key string, viewers int, seen time.Time) 
 func TestStoredOrderDoesNotWaitToStart(t *testing.T) {
 	h, m := testHub(t)
 	started := time.Now()
+	h.mu.Lock()
 	f := h.addFeedLocked(m, store.SourceChannel{
 		Channel:    store.Channel{ID: 1, GuideNumber: "5.1", VideoCodec: "MPEG2"},
 		FieldOrder: "tt",
 	})
+	h.mu.Unlock()
 	if waited := time.Since(started); waited > 150*time.Millisecond {
 		t.Fatalf("stored scan held the picture for %s", waited)
 	}
@@ -92,12 +98,14 @@ func TestDeferredScanLearnsTheMainAudio(t *testing.T) {
 		_ = pw.Close()
 	}()
 	started := time.Now()
+	h.mu.Lock()
 	f := h.addFeedLocked(m, store.SourceChannel{
 		Channel:     store.Channel{ID: 1, GuideNumber: "5.1", VideoCodec: "MPEG2"},
 		FieldOrder:  "tt",
 		ProgramNum:  1,
 		FrequencyHz: m.freq,
 	})
+	h.mu.Unlock()
 	if waited := time.Since(started); waited > 150*time.Millisecond {
 		t.Fatalf("stored scan held the picture for %s", waited)
 	}
@@ -221,7 +229,9 @@ func TestRecordingWarnsBeforeTheTileStops(t *testing.T) {
 	recorded.recording = &recording{id: 9}
 
 	at := time.Date(2026, 9, 25, 15, 0, 0, 0, time.Local)
+	h.mu.Lock()
 	labels, feeds := h.viewerFeedsToPreemptLocked(599000000, 8)
+	h.mu.Unlock()
 	if _, ok := h.channels[5]; !ok {
 		t.Fatal("the warning ran after the tile was already gone")
 	}
@@ -236,7 +246,9 @@ func TestRecordingWarnsBeforeTheTileStops(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, f := range feeds {
+		h.mu.Lock()
 		h.stopFeedLocked(f)
+		h.mu.Unlock()
 	}
 	if _, ok := h.channels[5]; ok {
 		t.Fatal("9.1 should stop after the warning")
@@ -268,7 +280,9 @@ func TestSecondDropLeavesTheReplacementTune(t *testing.T) {
 	recorded := addTestFeed(h, replacement, 1, "4.1")
 	recorded.recording = &recording{id: 4}
 
+	h.mu.Lock()
 	h.stopFeedLocked(old)
+	h.mu.Unlock()
 
 	if h.muxes[freq] != replacement {
 		t.Fatal("the replacement tune was released")
@@ -363,7 +377,9 @@ func TestStoppedSubchannelLeavesMuxFanout(t *testing.T) {
 	b := addTestFeed(h, m, 2, "14.2")
 	keep := addTestRendition(h, b, "copy.aac2", 1, time.Now())
 
+	h.mu.Lock()
 	h.stopFeedLocked(a)
+	h.mu.Unlock()
 	pipes := m.snapshot()
 	if len(pipes) != 1 || pipes[0] != keep.sub {
 		t.Fatalf("mux should fan out only to the subchannel still watched, got %d pipes", len(pipes))
@@ -410,7 +426,9 @@ func TestRecordingThatCannotStartIsMarkedFailed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	h.mu.Lock()
 	h.abortRecordingLocked(context.Background(), f, id)
+	h.mu.Unlock()
 	got, err := st.Recording(context.Background(), id)
 	if err != nil {
 		t.Fatal(err)

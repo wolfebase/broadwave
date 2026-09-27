@@ -19,6 +19,7 @@ jobs:
       - run: scripts/check-names.sh
       - run: go vet ./server/...
       - run: go test ./server/...
+      - run: go test -race ./server/internal/live/ ./server/internal/hdhr/fake/
       - run: go run ./server/cmd/apigen -check
       - run: FAKE=1 scripts/relay-smoke.sh
 
