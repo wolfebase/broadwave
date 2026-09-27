@@ -94,6 +94,21 @@ public struct APIClient: Sendable {
         }
     }
 
+    /// Whether the server still serves this playlist. A server that restarted
+    /// answers 404 for every picture it had. Nil when the read itself failed.
+    public func playlistFound(_ path: String) async -> Bool? {
+        var req = URLRequest(url: url(path))
+        req.httpMethod = "GET"
+        req.timeoutInterval = 2
+        guard let (_, res) = try? await session.data(for: req), let status = (res as? HTTPURLResponse)?.statusCode else {
+            return nil
+        }
+        if status == 404 {
+            return false
+        }
+        return (200 ..< 300).contains(status) ? true : nil
+    }
+
     public func clock() async throws -> Double {
         struct R: Decodable { var serverTime: Double }
         return try await send("GET", "/clock", as: R.self).serverTime

@@ -2,9 +2,9 @@ import BroadwaveKit
 import Foundation
 import os
 
-/// One look at health, tuners, and the channel. A failed read is nil, which
-/// the decision treats as not fixed.
-func playbackSnap(api: APIClient, channelID: Int64, assumeLost: Bool) async -> RecoverySnap {
+/// One look at health, tuners, the channel, and the player's own playlist. A
+/// failed read is nil, which the decision treats as not fixed.
+func playbackSnap(api: APIClient, channelID: Int64, assumeLost: Bool, playlist: String?) async -> RecoverySnap {
     let reach = await api.reach()
     let facts = RecoveryFacts(health: reach.up, online: reach.online, channelID: channelID, assumeLost: assumeLost && reach.up)
     if !reach.up {
@@ -13,7 +13,12 @@ func playbackSnap(api: APIClient, channelID: Int64, assumeLost: Bool) async -> R
     let tuners = try? await api.tuners()
     let devices = try? await api.deviceHealth()
     let signals = try? await api.signals()
-    return PlaybackOutage.snap(facts, lists: RecoveryLists(tuners: tuners, devices: devices, signals: signals?.channels))
+    var found: Bool?
+    if let playlist {
+        found = await api.playlistFound(playlist)
+    }
+    let lists = RecoveryLists(tuners: tuners, devices: devices, signals: signals?.channels, playlistFound: found)
+    return PlaybackOutage.snap(facts, lists: lists)
 }
 
 /// Watches one player. The decision lives in `ServerOutage`. This type asks
@@ -26,7 +31,8 @@ final class ServerWatch {
     private var recovering = false
     private var recovery: PlaybackOutage.Recovery?
     private var lastTime: Double?
-    private var snap: ((Bool) async -> RecoverySnap)?
+    private var playlist: String?
+    private var snap: ((Bool, String?) async -> RecoverySnap)?
     private var onMessage: ((OutageDecision) -> Void)?
     private var onRecover: (() -> Void)?
     private let log = Logger(subsystem: "com.wolfeup.broadwave", category: "play")
@@ -38,16 +44,22 @@ final class ServerWatch {
         recovery = nil
         clock = ServerOutage()
         lastTime = nil
+        playlist = nil
     }
 
     func bind(
-        snap: @escaping (Bool) async -> RecoverySnap,
+        snap: @escaping (Bool, String?) async -> RecoverySnap,
         onMessage: @escaping (OutageDecision) -> Void,
         onRecover: @escaping () -> Void
     ) {
         self.snap = snap
         self.onMessage = onMessage
         self.onRecover = onRecover
+    }
+
+    /// The playlist the player is on. A stall checks that the server still has it.
+    func watching(_ playlist: String) {
+        self.playlist = playlist
     }
 
     /// The watch request itself could not reach the server.
@@ -62,9 +74,16 @@ final class ServerWatch {
 
     /// `waiting` is the player's own waiting state. A picture that does not
     /// advance counts too, because a stalled item can stay on "playing".
-    func note(time: Double?, waiting: Bool, failed: Bool) {
+    /// A pause by the viewer or the sync engine is not a stall: a long one
+    /// can outlast the server's hold on the picture.
+    func note(time: Double?, waiting: Bool, paused: Bool, failed: Bool) {
         if failed {
             probe(fatal: true)
+            return
+        }
+        if paused {
+            lastTime = nil
+            clock.notePlaying()
             return
         }
         var stalled = waiting
@@ -97,8 +116,9 @@ final class ServerWatch {
         guard let snap else { return }
         probing = true
         let gen = generation
+        let path = playlist
         Task {
-            let reading = await snap(false)
+            let reading = await snap(false, path)
             guard gen == generation else { return }
             probing = false
             guard let decision = clock.resolve(at: Date(), snap: reading, fatal: fatal) else { return }
@@ -116,7 +136,7 @@ final class ServerWatch {
         let gen = generation
         Task {
             while gen == generation {
-                let reading = await snap(kind == .signal)
+                let reading = await snap(kind == .signal, nil)
                 guard gen == generation else { return }
                 if PlaybackOutage.recoveryReady(kind, reading) {
                     log.info("recovered")

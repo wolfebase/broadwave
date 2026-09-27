@@ -51,6 +51,35 @@ private func fineSnap() -> RecoverySnap {
     #expect(named?.recovery == nil)
 }
 
+@Test func aServerThatLostThePictureStartsItAgain() {
+    let facts = RecoveryFacts(health: true, online: true, channelID: 1, assumeLost: false)
+    let lost = [ChannelSignal(channelId: 1, number: "4.1", name: "WDAF", verdict: "Lost", live: true)]
+    let gone = PlaybackOutage.snap(facts, lists: RecoveryLists(tuners: [], devices: [], signals: lost, playlistFound: false))
+    #expect(gone.watchGone)
+
+    var stall = ServerOutage()
+    let start = Date(timeIntervalSince1970: 6000)
+    stall.noteWaiting(at: start)
+    let named = stall.resolve(at: start.addingTimeInterval(8), snap: gone, fatal: false)
+    #expect(named?.message == PlaybackOutage.pictureRestarting)
+    #expect(named?.recovery == .restart)
+
+    var fatal = ServerOutage()
+    #expect(fatal.resolve(at: start, snap: gone, fatal: true)?.recovery == .restart)
+
+    #expect(PlaybackOutage.recoveryReady(.restart, fineSnap()))
+    let down = RecoverySnap(health: false, freeTuner: false, tunerAnswers: false, online: true, signalLost: false)
+    #expect(!PlaybackOutage.recoveryReady(.restart, down))
+}
+
+@Test func anUnreadPlaylistIsNotALostPicture() {
+    let facts = RecoveryFacts(health: true, online: true, channelID: 1, assumeLost: false)
+    #expect(!PlaybackOutage.snap(facts, lists: RecoveryLists(tuners: [], devices: [], signals: [])).watchGone)
+    #expect(!PlaybackOutage.snap(facts, lists: RecoveryLists(tuners: [], devices: [], signals: [], playlistFound: true)).watchGone)
+    let down = RecoveryFacts(health: false, online: true, channelID: 1, assumeLost: false)
+    #expect(!PlaybackOutage.snap(down, lists: RecoveryLists(playlistFound: false)).watchGone)
+}
+
 @Test func aStartFailureSurfacesOnce() {
     var clock = ServerOutage()
     #expect(clock.surface(PlaybackOutage.serverStopped) == PlaybackOutage.serverStopped)

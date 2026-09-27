@@ -9,6 +9,7 @@ public enum PlaybackOutage {
     public static let tunerStopped = "This tuner did not answer. Check that it is on."
     public static let noSignal = "This channel isn't coming in. Check the antenna."
     public static let pictureStopped = "The picture stopped. Trying again usually fixes it."
+    public static let pictureRestarting = "The picture stopped. Starting it again."
     public static let tunersBusy = "Every tuner is busy. Stop a recording or watch something already on."
     /// A stall is named only after this long, and only when something is actually wrong.
     public static let stallSeconds: TimeInterval = 8
@@ -18,6 +19,8 @@ public enum PlaybackOutage {
         case server
         case tuner
         case signal
+        /// The server no longer has this picture (it restarted, or let it go).
+        case restart
     }
 
     /// A closed port is the server. These codes are the phone itself.
@@ -81,6 +84,9 @@ public enum PlaybackOutage {
             }
             return OutageDecision(message: serverStopped, recovery: .server)
         }
+        if snap.watchGone {
+            return OutageDecision(message: pictureRestarting, recovery: .restart)
+        }
         if !snap.tunerAnswers {
             return OutageDecision(message: tunerStopped, recovery: .tuner)
         }
@@ -100,6 +106,8 @@ public enum PlaybackOutage {
             snap.tunerAnswers
         case .signal:
             snap.health && !snap.signalLost
+        case .restart:
+            snap.health && snap.online
         }
     }
 
@@ -136,7 +144,8 @@ public enum PlaybackOutage {
             freeTuner: freeTuner,
             tunerAnswers: tunerAnswers,
             online: facts.online,
-            signalLost: signalLost
+            signalLost: signalLost,
+            watchGone: lists.playlistFound == false
         )
     }
 }
@@ -161,11 +170,19 @@ public struct RecoveryLists: Equatable, Sendable {
     public var tuners: [Tuner]?
     public var devices: [DeviceHealth]?
     public var signals: [ChannelSignal]?
+    /// Whether the server still serves this player's playlist. Nil when unread.
+    public var playlistFound: Bool?
 
-    public init(tuners: [Tuner]? = nil, devices: [DeviceHealth]? = nil, signals: [ChannelSignal]? = nil) {
+    public init(
+        tuners: [Tuner]? = nil,
+        devices: [DeviceHealth]? = nil,
+        signals: [ChannelSignal]? = nil,
+        playlistFound: Bool? = nil
+    ) {
         self.tuners = tuners
         self.devices = devices
         self.signals = signals
+        self.playlistFound = playlistFound
     }
 }
 
@@ -186,13 +203,15 @@ public struct RecoverySnap: Equatable, Sendable {
     public var tunerAnswers: Bool
     public var online: Bool
     public var signalLost: Bool
+    public var watchGone: Bool
 
-    public init(health: Bool, freeTuner: Bool, tunerAnswers: Bool, online: Bool, signalLost: Bool) {
+    public init(health: Bool, freeTuner: Bool, tunerAnswers: Bool, online: Bool, signalLost: Bool, watchGone: Bool = false) {
         self.health = health
         self.freeTuner = freeTuner
         self.tunerAnswers = tunerAnswers
         self.online = online
         self.signalLost = signalLost
+        self.watchGone = watchGone
     }
 }
 

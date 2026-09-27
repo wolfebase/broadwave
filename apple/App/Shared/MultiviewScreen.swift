@@ -297,8 +297,8 @@ final class TilePlayer {
         let client = api
         let id = channel.id
         outage.bind(
-            snap: { assumeLost in
-                await playbackSnap(api: client, channelID: id, assumeLost: assumeLost)
+            snap: { assumeLost, playlist in
+                await playbackSnap(api: client, channelID: id, assumeLost: assumeLost, playlist: playlist)
             },
             onMessage: { [weak self] decision in self?.showOutage(decision) },
             onRecover: { [weak self] in self?.attempt += 1 }
@@ -310,6 +310,7 @@ final class TilePlayer {
                 return
             }
             self.session = session
+            outage.watching(session.playlist)
             error = nil
             detail = session.stream.reason
             let item = AVPlayerItem(url: api.url(session.playlist))
@@ -397,6 +398,7 @@ final class TilePlayer {
         outage.note(
             time: item?.currentTime().seconds,
             waiting: player.timeControlStatus == .waitingToPlayAtSpecifiedRate,
+            paused: player.timeControlStatus == .paused,
             failed: item?.status == .failed
         )
         // The shared sync line does not name the tile. One line a second does.
