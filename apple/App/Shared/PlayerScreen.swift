@@ -1044,6 +1044,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
                 if applied == match {
                     return
                 }
+                NotificationCenter.default.post(name: SyncEngine.displayWillChange, object: nil)
                 manager.preferredDisplayCriteria = criteria
                 applied = match
                 logDisplay("\(match.width)x\(match.height) \(match.refreshRate)")

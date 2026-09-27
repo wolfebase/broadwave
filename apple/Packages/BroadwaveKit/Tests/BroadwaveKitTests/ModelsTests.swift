@@ -300,15 +300,18 @@ private func fixture(_ name: String) throws -> Data {
     #expect(big == .pause(resumeAfter: 0.9, seekToTarget: false))
 }
 
-/// A live item that ignores a rate above 1 sits at AVPlayer's hold-back.
-/// An exact nudge there hitched every 15 s and landed where it started.
-@Test @MainActor func behindWithoutSpeedUpPlaysOn() {
+/// Past seekMS a screen catches up with one seek past the room, then a pause
+/// for the lead. A smaller gap it cannot trim away is left alone.
+@Test @MainActor func behindWithoutSpeedUpSeeksPastTheRoom() {
     let move = SyncEngine.decide(hasFrame: true, driftMS: -250, roomRate: 1, canSeek: true, forwardBuffer: 6, canSpeedUp: false)
     #expect(move == .play(.none, locked: false))
-    let ended = SyncEngine.decide(hasFrame: true, driftMS: -250, roomRate: 1, canSeek: true, forwardBuffer: 6, trim: .fast, canSpeedUp: false)
-    #expect(ended == .play(.none, locked: false))
-    let far = SyncEngine.decide(hasFrame: true, driftMS: -900, roomRate: 1, canSeek: true, forwardBuffer: 6, canSpeedUp: false)
+    let stuck = SyncEngine.decide(hasFrame: true, driftMS: -250, roomRate: 1, canSeek: false, forwardBuffer: 6, canSpeedUp: false)
+    #expect(stuck == .play(.none, locked: false))
+    let far = SyncEngine.decide(hasFrame: true, driftMS: -1700, roomRate: 1, canSeek: true, forwardBuffer: 6, canSpeedUp: false)
     #expect(far == .seek)
+    // After the overshoot the screen is ahead and pauses for exactly its lead.
+    let ahead = SyncEngine.decide(hasFrame: true, driftMS: SyncEngine.catchUpLeadMS, roomRate: 1, canSeek: true)
+    #expect(ahead == .pause(resumeAfter: SyncEngine.catchUpLeadMS / 1000, seekToTarget: false))
 }
 
 @Test @MainActor func aPlayingStatusWithNoRateStillRestarts() {

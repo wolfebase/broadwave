@@ -34,11 +34,15 @@ public final class SyncEngine {
     private var timer: Timer?
     private var holdUntil = Date.distantPast
     private var lastSeek = Date.distantPast
-    /// A seek that left the screen more than seekMS behind is not tried again
-    /// until then: AVPlayer lands on a segment or keyframe before the target,
-    /// and a target at its hold-back is out of reach. Trying again every two
-    /// seconds froze the picture under the progress bar each time.
-    private var seekOffUntil = Date.distantPast
+    /// Catch-up seeks that left the screen still behind. After two the
+    /// engine stops correcting this screen and offers "Back in sync": on a
+    /// real Apple TV each forward seek landed 1-1.8 s short, and retrying
+    /// every minute skipped the picture every minute.
+    private var misses = 0
+    private var speedUpFails = 0
+    private var kicked = false
+    private var lockedSince: Date?
+    private var displayObserver: NSObjectProtocol?
     /// `-BroadwaveSyncLog 1` logs the frame on screen once a second so screens
     /// on one Mac can be lined up against the same wall clock.
     private let logs = UserDefaults.standard.bool(forKey: "BroadwaveSyncLog")
@@ -79,6 +83,18 @@ public final class SyncEngine {
     static let seekMS = 400.0
     static let trimStep: Float = 0.02
     static let quietSeconds = 8.0
+    /// A screen behind the room seeks this far past it and then pauses for
+    /// the lead. A forward seek on an Apple TV landed 1.1-1.8 s short, however long
+    /// AVPlayer takes to refill, but a pause lands on the frame.
+    static let catchUpLeadMS = 2000.0
+    static let missesBeforeGivingUp = 2
+    /// AVPlayer takes about this long to show frames again after play(), so
+    /// a sync pause resumes this much early and lands on the room's frame.
+    static let resumeLeadSeconds = 0.12
+
+    /// Posted before a screen asks the TV for a new display mode. The HDMI
+    /// switch blanks the picture for a second or two while the clock runs.
+    public static let displayWillChange = Notification.Name("BroadwaveDisplayWillChange")
 
     public enum Trim: Sendable { case none, slow, fast }
 
@@ -150,11 +166,8 @@ public final class SyncEngine {
         if canSpeedUp {
             return .play(roomy ? .fast : .none, locked: false)
         }
-        // A live item ignores a rate above 1 at AVPlayer's hold-back from the
-        // live edge, and an exact seek past that point lands where it started.
-        // Nudging there hitched the picture and sound every 15 s and never
-        // closed the gap, so a screen that cannot speed up plays on. Every
-        // screen meets the same edge, so they still play together.
+        // Under seekMS a screen that cannot speed up plays on: a seek is a
+        // visible skip, and a gap this small is not heard across rooms.
         return .play(.none, locked: false)
     }
 
@@ -222,6 +235,14 @@ public final class SyncEngine {
         }
         // Noted before the next tick, or the tick would play a viewer's pause
         // again as if AVPlayer had stopped on its own.
+        displayObserver = NotificationCenter.default.addObserver(forName: Self.displayWillChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                // Let the TV finish switching before measuring drift again.
+                self.holdUntil = max(self.holdUntil, Date().addingTimeInterval(3))
+                self.lastSeek = Date.distantPast
+            }
+        }
         rateObserver = NotificationCenter.default.addObserver(
             forName: AVPlayer.rateDidChangeNotification, object: player, queue: .main
         ) { [weak self] note in
@@ -260,6 +281,10 @@ public final class SyncEngine {
             NotificationCenter.default.removeObserver(rateObserver)
             self.rateObserver = nil
         }
+        if let displayObserver {
+            NotificationCenter.default.removeObserver(displayObserver)
+            self.displayObserver = nil
+        }
         if let handler {
             socket.off("sync.state", handler)
         }
@@ -273,6 +298,9 @@ public final class SyncEngine {
         guard detached else { return }
         detached = false
         seenPlaying = false
+        misses = 0
+        speedUpFails = 0
+        canSpeedUp = true
         holdUntil = Date().addingTimeInterval(1)
         player.play()
         state = .syncing
@@ -356,7 +384,7 @@ public final class SyncEngine {
         let quiet = Date().timeIntervalSince(trimEnded) >= Self.quietSeconds
         checkSpeedUp(drift: d)
         let move = Self.decide(
-            hasFrame: hasFrame, driftMS: d, roomRate: roomRate, canSeek: Date() >= seekOffUntil && canSeek(to: target, item: item),
+            hasFrame: hasFrame, driftMS: d, roomRate: roomRate, canSeek: canSeek(to: target + Self.catchUpLeadMS, item: item),
             forwardBuffer: bufferedAhead(item), trim: trim, quiet: quiet, canSpeedUp: canSpeedUp
         )
         if logs, move != lastMove {
@@ -377,8 +405,9 @@ public final class SyncEngine {
                 seek(to: target)
             }
             if let resumeAfter {
-                holdUntil = Date().addingTimeInterval(resumeAfter)
-                DispatchQueue.main.asyncAfter(deadline: .now() + resumeAfter) { [weak self] in
+                let wait = max(0.05, resumeAfter - Self.resumeLeadSeconds)
+                holdUntil = Date().addingTimeInterval(wait)
+                DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
                     self?.player.play()
                 }
                 state = .syncing
@@ -387,16 +416,23 @@ public final class SyncEngine {
             }
         case .seek:
             setTrim(.none)
-            if Date().timeIntervalSince(lastSeek) < 10 {
-                // The last seek did not bring this screen within reach.
-                seekOffUntil = Date().addingTimeInterval(60)
-                if logs {
-                    Self.log.notice("sync seek missed; playing on for 60 s")
+            let since = Date().timeIntervalSince(lastSeek)
+            if since < 3 {
+                // The last seek is still landing.
+                state = .syncing
+            } else if since < 15 {
+                // It landed and the screen is still behind.
+                misses += 1
+                if misses >= Self.missesBeforeGivingUp {
+                    giveUp(item: item, drift: d)
+                    return
                 }
+                seek(to: target + Self.catchUpLeadMS)
+                state = .syncing
             } else {
-                seek(to: target)
+                seek(to: target + Self.catchUpLeadMS)
+                state = .syncing
             }
-            state = .syncing
         case let .play(wanted, locked):
             // A live item resumed straight into a trimmed rate stayed frozen on
             // tvOS. Trim only a player that is already moving.
@@ -408,6 +444,7 @@ public final class SyncEngine {
                 rateSets += 1
             }
             state = locked ? .locked : .syncing
+            kickIfAsked(item: item)
         }
     }
 
@@ -436,6 +473,35 @@ public final class SyncEngine {
         ])
     }
 
+    /// Stops correcting a screen whose catch-up seeks keep missing. It plays on
+    /// where it is, and the menu offers "Back in sync".
+    private func giveUp(item: AVPlayerItem, drift: Double) {
+        detached = true
+        setTrim(.none)
+        if player.rate != 1, player.rate != 0 {
+            player.rate = 1
+        }
+        state = .off
+        Self.log.notice("sync gave up after \(self.misses) missed catch-ups, \(Int(drift)) ms behind")
+        report(item: item, drift: drift)
+    }
+
+    /// `-BroadwaveSyncKick <ms>` knocks a locked screen that far behind once,
+    /// so a simulator can show how it gets back.
+    private func kickIfAsked(item: AVPlayerItem) {
+        let ms = UserDefaults.standard.double(forKey: "BroadwaveSyncKick")
+        guard ms > 0, !kicked, state == .locked else {
+            if state != .locked { lockedSince = nil }
+            return
+        }
+        if lockedSince == nil { lockedSince = Date() }
+        guard let since = lockedSince, Date().timeIntervalSince(since) > 5 else { return }
+        kicked = true
+        Self.log.notice("sync kick \(Int(ms)) ms back")
+        let to = CMTimeSubtract(item.currentTime(), CMTime(seconds: ms / 1000, preferredTimescale: 90000))
+        item.seek(to: to, toleranceBefore: .zero, toleranceAfter: .zero) { _ in }
+    }
+
     private func setTrim(_ next: Trim, drift: Double = 0) {
         guard next != trim else { return }
         if trim != .none {
@@ -451,7 +517,7 @@ public final class SyncEngine {
         // A trim right after a pause can lose ground while AVPlayer restarts,
         // which held a screen 250 ms off the room for five minutes. A minute
         // later the edge has usually moved and the next try gains.
-        if !canSpeedUp, Date().timeIntervalSince(speedUpOff) > 60 {
+        if !canSpeedUp, speedUpFails < 2, Date().timeIntervalSince(speedUpOff) > 60 {
             canSpeedUp = true
         }
         guard trim == .fast, let from = fastFrom else { return }
@@ -464,6 +530,7 @@ public final class SyncEngine {
         guard elapsed >= 4 else { return }
         let expected = elapsed * 1000 * Double(Self.trimStep)
         if drift - from.drift < expected * 0.4 {
+            speedUpFails += 1
             canSpeedUp = false
             speedUpOff = Date()
             setTrim(.none)
