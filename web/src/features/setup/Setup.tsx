@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { addFree, addPlaylistFile, addSource, findFree, lookHarder, setupFinish, startSetupFinish, type FreeFeed, type SetupFinish } from "../../api";
 import { useData } from "../../app/data";
 import { navigate } from "../../app/router";
+import { copy } from "../../strings";
 import { ChevronIcon } from "../../ui/icons";
 import { HomeList } from "./HomeList";
 import "./setup.css";
@@ -117,6 +118,32 @@ export function Setup() {
           ) : (
             <p>{busy ? "Searching…" : "No tuner answered yet."}</p>
           )}
+          <form
+            className="setup-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!address.trim() || busy) return;
+              setBusy(true);
+              void rediscover(address.trim())
+                .catch((e: unknown) => setNote(e instanceof Error ? e.message : "Nothing answered at that address."))
+                .finally(() => setBusy(false));
+            }}
+          >
+            <label>
+              {copy.sources.address}
+              <input
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="192.168.1.252"
+              />
+            </label>
+            <p className="hint">{copy.sources.addressHint}</p>
+            <button type="submit" className="btn" disabled={!address.trim() || busy}>
+              {copy.sources.lookup}
+            </button>
+          </form>
           <div className="setup-row">
             <button
               type="button"
@@ -232,22 +259,6 @@ export function Setup() {
               Add playlist
             </button>
           </form>
-          <div className="setup-row">
-            <input type="text" placeholder="Tuner address, like 192.168.1.50" value={address} onChange={(e) => setAddress(e.target.value)} />
-            <button
-              type="button"
-              className="btn"
-              disabled={!address || busy}
-              onClick={() => {
-                setBusy(true);
-                void rediscover(address)
-                  .catch((e: unknown) => setNote(e instanceof Error ? e.message : "Nothing answered at that address."))
-                  .finally(() => setBusy(false));
-              }}
-            >
-              Add by address
-            </button>
-          </div>
           {note ? <p className="dim">{note}</p> : null}
           <HomeList hideAdded />
         </section>

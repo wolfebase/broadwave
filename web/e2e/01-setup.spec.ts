@@ -13,6 +13,17 @@ test("setup wizard finds the fake tuner", async ({ page }, info) => {
     await expect(page.locator('[data-setup="sources"]')).toBeVisible();
     await expect(page.getByRole("heading", { name: "Your tuner" })).toBeVisible();
     await expect(page.getByText("Fake HDHomeRun")).toBeVisible();
+    // The address is how a tuner gets in when nothing announced itself, so it
+    // sits above the playlist form.
+    const addressFirst = await page.evaluate(() => {
+      const label = (el: Element) => (el.textContent || "").replace(/\s+/g, " ").trim();
+      const buttons = [...document.querySelectorAll("button")];
+      const address = buttons.findIndex((b) => label(b) === "Add by address");
+      const playlist = buttons.findIndex((b) => label(b) === "Add playlist");
+      return address >= 0 && playlist >= 0 && address < playlist;
+    });
+    expect(addressFirst).toBe(true);
+    await expect(page.getByText("Add the port if it is not 80.")).toBeVisible();
     await atSize(page, size);
     await snap(page, `setup-sources-${size.name}`, info);
   }

@@ -86,15 +86,30 @@ docker run -d --name broadwave --network host --restart unless-stopped \
   -e TZ=America/Chicago \
   -v ~/broadwave:/config \
   -v ~/broadwave/recordings:/config/work/recordings \
-  --device /dev/dri \
   ghcr.io/wolfebase/broadwave:latest
 ```
 
-Then open **`http://<your-server>:8477`**. Broadwave finds your tuner, scans your channels, and fills the guide on its own.
+Then open **`http://<your-server>:8477`**. On a Linux server, Broadwave finds your tuner, scans your channels, and fills the guide on its own.
 
-- **`--network host`** lets Broadwave find your tuner and lets your screens find Broadwave. Keep it.
-- **`--device /dev/dri`** turns on Intel or AMD hardware transcoding. No graphics chip? Leave that line out.
+- **`--network host`** lets a Linux server hear your tuner, and lets phones and TVs find Broadwave. Keep it there.
+- **Graphics.** Add `--device /dev/dri` when that path exists (Intel or AMD). Docker refuses to start if the path is missing. The picture still plays without it.
 - **`TZ`** is your time zone, so the guide lines up.
+- **Tuner address.** When the tuner does not appear, enter its address on the setup page, or set `HDHR_HOST` to that address. Add `:port` only when it is not 80.
+- **Unraid.** Add `-e PUID=99 -e PGID=100` so recordings are not owned by root.
+
+On Docker Desktop for Mac and Windows, the container's host network is a virtual machine. Publish the port and set `HDHR_HOST` to the tuner's address:
+
+```bash
+docker run -d --name broadwave --restart unless-stopped \
+  -e TZ=America/Chicago \
+  -e HDHR_HOST=<tuner address> \
+  -p 8477:8477 \
+  -v ~/broadwave:/config \
+  -v ~/broadwave/recordings:/config/work/recordings \
+  ghcr.io/wolfebase/broadwave:latest
+```
+
+Then open **`http://localhost:8477`**.
 
 <details>
 <summary><b>Docker Compose</b></summary>
@@ -105,7 +120,7 @@ curl -fsSLO https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/do
 docker compose pull && docker compose up -d
 ```
 
-Set `TZ` in `compose.yaml` first, and remove the `devices` lines if the machine has no Intel or AMD graphics.
+Set `TZ` in `compose.yaml` first. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Remove the `devices` lines when `/dev/dri` is missing — Docker will not start while they point at a path that is not there. On Unraid, leave `PUID` at 99 and `PGID` at 100.
 
 </details>
 
