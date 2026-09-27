@@ -8,6 +8,7 @@ Apple TVs play smoothly: no freeze a few seconds into a channel, and no catch in
 
 - An Apple TV that started a channel played a few seconds, then froze for about five while the room settled. It now waits once on its first picture and plays straight through.
 - Apple TVs nudged their speed to hold sync over differences nobody could hear, and each nudge held a frame and clipped speech. They now leave anything under 60 ms alone, wait longer between nudges, and stretch sound smoothly when they do (with the next app update).
+- An Apple TV that sat a quarter second behind the others jumped every 15 seconds trying to close a gap it could not, and each jump hitched the picture and cut the sound. It now plays on (with the next app update).
 - Apple TVs report their playback health to the server log every 10 seconds, so a stutter on a real TV can be traced without a Mac attached (with the next app update).
 
 ## 0.11.6 — 2026-09-27

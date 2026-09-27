@@ -145,7 +145,12 @@ public final class SyncEngine {
         if canSpeedUp {
             return .play(roomy ? .fast : .none, locked: false)
         }
-        return canSeek && roomy ? .seek : .play(.none, locked: false)
+        // A live item ignores a rate above 1 at AVPlayer's hold-back from the
+        // live edge, and an exact seek past that point lands where it started.
+        // Nudging there hitched the picture and sound every 15 s and never
+        // closed the gap, so a screen that cannot speed up plays on. Every
+        // screen meets the same edge, so they still play together.
+        return .play(.none, locked: false)
     }
 
     /// Player rate for a room rate and a trim.
@@ -376,13 +381,8 @@ public final class SyncEngine {
                 state = .locked
             }
         case .seek:
-            seeks += 1
             setTrim(.none)
-            if abs(d) > Self.seekMS {
-                seek(to: target)
-            } else {
-                nudge(by: -d, item: item)
-            }
+            seek(to: target)
             state = .syncing
         case let .play(wanted, locked):
             // A live item resumed straight into a trimmed rate stayed frozen on
@@ -487,21 +487,11 @@ public final class SyncEngine {
         return item.seekableTimeRanges.contains { CMTimeRangeContainsTime($0.timeRangeValue, time: target) }
     }
 
-    /// A small exact seek forward inside the buffer, at most every 15 s.
-    private func nudge(by ms: Double, item: AVPlayerItem) {
-        guard Date().timeIntervalSince(lastSeek) > 15 else { return }
-        lastSeek = Date()
-        if logs {
-            Self.log.notice("sync nudge \(Int(ms)) ms")
-        }
-        let to = CMTimeAdd(item.currentTime(), CMTime(seconds: ms / 1000, preferredTimescale: 90000))
-        item.seek(to: to, toleranceBefore: .zero, toleranceAfter: .zero) { _ in }
-    }
-
     private func seek(to media: Double) {
         guard Date().timeIntervalSince(lastSeek) > 2, let item = player.currentItem else { return }
         guard canSeek(to: media, item: item) else { return }
         lastSeek = Date()
+        seeks += 1
         if logs {
             Self.log.notice("sync seek to \(Int(media))")
         }
