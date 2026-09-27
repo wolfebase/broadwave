@@ -482,7 +482,8 @@ public final class SyncEngine {
             player.rate = 1
         }
         state = .off
-        Self.log.notice("sync gave up after \(misses) missed catch-ups, \(Int(drift)) ms behind")
+        let missed = misses, behind = Int(drift)
+        Self.log.notice("sync gave up after \(missed) missed catch-ups, \(behind) ms behind")
         report(item: item, drift: drift)
     }
 
