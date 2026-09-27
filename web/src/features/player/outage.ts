@@ -1,13 +1,14 @@
 // What the player tells a viewer when live TV cannot keep going, and when it
 // is worth asking again without reloading the page.
 
-export type Recovery = "" | "busy" | "server" | "tuner" | "signal";
+export type Recovery = "" | "busy" | "server" | "tuner" | "signal" | "restart";
 
 export const serverStopped = "The server stopped. It will try again when it's back.";
 export const connectionDropped = "The connection dropped. It will try again when it's back.";
 export const tunerStopped = "This tuner did not answer. Check that it is on.";
 export const noSignal = "This channel isn't coming in. Check the antenna.";
 export const pictureStopped = "The picture stopped. Trying again usually fixes it.";
+export const pictureRestarting = "The picture stopped. Starting it again.";
 export const noListing = "No listing for this channel.";
 
 const busyFallback = "Every tuner is busy. Stop a recording or watch something already on.";
@@ -43,6 +44,8 @@ export type RecoverySnap = {
   tunerAnswers: boolean;
   online: boolean;
   signalLost: boolean;
+  // A restarted server answers 404 for every playlist it had, with /health fine.
+  watchGone?: boolean;
 };
 
 export function classifySnap(snap: RecoverySnap): { message: string; recovery: Recovery } {
@@ -50,6 +53,7 @@ export function classifySnap(snap: RecoverySnap): { message: string; recovery: R
     if (!snap.online) return { message: connectionDropped, recovery: "server" };
     return { message: serverStopped, recovery: "server" };
   }
+  if (snap.watchGone) return { message: pictureRestarting, recovery: "restart" };
   if (!snap.tunerAnswers) return { message: tunerStopped, recovery: "tuner" };
   if (snap.signalLost) return { message: noSignal, recovery: "signal" };
   return { message: pictureStopped, recovery: "" };
@@ -65,7 +69,7 @@ export function aTunerAnswers(devices: { error?: string }[]): boolean {
 }
 
 export function recoveryReady(kind: Recovery, snap: RecoverySnap): boolean {
-  if (kind === "server") return snap.health && snap.online;
+  if (kind === "server" || kind === "restart") return snap.health && snap.online;
   if (kind === "busy") return snap.freeTuner;
   if (kind === "tuner") return snap.tunerAnswers;
   if (kind === "signal") return snap.health && !snap.signalLost;
