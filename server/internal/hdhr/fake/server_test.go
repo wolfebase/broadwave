@@ -114,8 +114,18 @@ func TestDarkChannelReportsNoLockAndSendsNothing(t *testing.T) {
 	if n != 0 {
 		t.Fatalf("dark channel sent %d bytes", n)
 	}
+	// Closing /tunerN/ch clears that tuner, after the handler sees the close.
+	// Tuning again before that lands is undone by it.
+	_ = res.Body.Close()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		status, _ := c.Get("/tuner0/status")
+		if strings.Contains(status, "ch=none") || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	srv.Light("5.1")
-	// Closing /tunerN/ch clears that tuner. A viewer who stays tuned does not.
 	if _, err := c.Set("/tuner0/vchannel", "5.1"); err != nil {
 		t.Fatal(err)
 	}
