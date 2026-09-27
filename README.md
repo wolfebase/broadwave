@@ -125,6 +125,20 @@ Set `TZ` in `compose.yaml` first. That file uses host networking, which is right
 </details>
 
 <details>
+<summary><b>Automatic updates (optional)</b></summary>
+<br>
+
+Broadwave can keep itself on the newest release. An updater checks every night at 03:30 and updates only Broadwave. It skips a night while someone is watching, a recording is running, or a recording starts within two hours.
+
+- **Docker Compose:** `docker compose --profile updater up -d`. Set its `TZ` to match Broadwave.
+- **Unraid:** install the Broadwave template (it carries the labels the updater reads), then add the **Broadwave-Updater** template from `deploy/unraid/broadwave-updater.xml`. After an update, the Docker tab can still say an update is ready until it checks again.
+- **Plain `docker run`:** add `--label com.centurylinklabs.watchtower.enable=true --label "com.centurylinklabs.watchtower.lifecycle.pre-update=broadwave -update-check"` to the Broadwave command, and run `nickfedor/watchtower:1` with `WATCHTOWER_LABEL_ENABLE=true`, `WATCHTOWER_LIFECYCLE_HOOKS=true`, and `WATCHTOWER_SCHEDULE="0 30 3 * * *"`.
+
+Without an updater, the web app says when a new release is out.
+
+</details>
+
+<details>
 <summary><b>Watch on</b></summary>
 <br>
 
@@ -168,7 +182,7 @@ Set `TZ` in `compose.yaml` first. That file uses host networking, which is right
 
 <details>
 <summary><b>Will it get along with the media servers I already run?</b></summary>
-<br>Yes. Everyone watching the same channel shares one tune, and other media servers can use Broadwave as a tuner too. It keeps a tuner free for its own recordings.
+<br>Yes. Everyone watching the same channel shares one tune: three TVs on one channel use one tuner. Other media servers can use Broadwave as a tuner too. It keeps a tuner free for its own recordings.
 </details>
 
 <details>
