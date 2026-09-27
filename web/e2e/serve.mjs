@@ -52,6 +52,7 @@ process.on("SIGINT", () => {
 
 const avsync = process.env.E2E_AVSYNC === "1";
 const brk = process.env.E2E_BREAK === "1";
+const playlist = process.env.E2E_PLAYLIST === "1";
 const sample = path.join(run, brk ? "loop.ts" : avsync ? "sync5.ts" : "sample.ts");
 
 function runFfmpeg(args) {
@@ -273,6 +274,7 @@ async function buildBreakLoop(dest) {
 // A 5s flash and beep, with the picture held back 1.3s. A 1s period would fold
 // a whole-second lip-sync error back to zero, and a pattern that starts together
 // hides a sound lead. The flash is moved earlier by that lead so the two meet.
+// The playlist run wants one long pass so the loop seam is not what stops the picture.
 const pattern = avsync
   ? [
       "-itsoffset",
@@ -288,18 +290,31 @@ const pattern = avsync
       "-t",
       "150",
     ]
-  : [
-      "-f",
-      "lavfi",
-      "-i",
-      "testsrc2=size=1280x720:rate=60000/1001",
-      "-f",
-      "lavfi",
-      "-i",
-      "sine=frequency=500",
-      "-t",
-      "4",
-    ];
+  : playlist
+    ? [
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=640x360:rate=30",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=500",
+        "-t",
+        "30",
+      ]
+    : [
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=1280x720:rate=60000/1001",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=500",
+        "-t",
+        "4",
+      ];
 if (brk) {
   await buildBreakLoop(sample);
 } else {
@@ -351,38 +366,127 @@ if (brk) {
   }
 }
 
-let fakeOut = "";
-// E2E_SOURCE streams a broadcast recording on every channel, for a real encode load.
-const source = process.env.E2E_SOURCE;
-const fakeArgs = brk ? ["-raw", "-ts", sample] : avsync ? ["-ts", sample, "-source", sample] : source ? ["-ts", sample, "-source", path.resolve(source)] : ["-realtime", "-ts", sample];
-const fake = start(path.join(run, "fakehdhr"), fakeArgs, { env: { ...process.env, FAKEHDHR_ADMIN: `127.0.0.1:${port + 10}` } }, (chunk) => {
-  fakeOut += chunk.toString();
-});
-for (let i = 0; i < 50 && !fakeOut.includes("CONTROL_PORT="); i++) await sleep(100);
-const fakeBase = fakeOut.match(/^BASE=(.+)$/m)?.[1]?.trim();
-const control = fakeOut.match(/^CONTROL_PORT=(.+)$/m)?.[1]?.trim();
-if (!fakeBase || !control) {
-  console.error("fake tuner did not start");
-  stop();
-  process.exit(1);
+// One M3U channel whose stream this process can stop and start. No HDHomeRun.
+function startOrigin(file, listenPort) {
+  const raw = readFileSync(file);
+  const data = raw.subarray(0, raw.length - (raw.length % 188));
+  if (data.length < 188) {
+    console.error("playlist sample is empty");
+    process.exit(1);
+  }
+  const span = pcrSpanSeconds(file) || 30;
+  const bytesPerMs = data.length / (span * 1000);
+  let serving = true;
+  let generation = 0;
+  const sockets = new Set();
+  const origin = http.createServer((req, res) => {
+    const route = (req.url || "/").split("?")[0];
+    if (req.method === "GET" && route === "/pl.m3u") {
+      const body = `#EXTM3U\n#EXTINF:-1 tvg-id="local" tvg-chno="801",Local News\nhttp://127.0.0.1:${listenPort}/live.ts\n`;
+      res.writeHead(200, { "content-type": "audio/x-mpegurl", "cache-control": "no-store" });
+      res.end(body);
+      return;
+    }
+    if (req.method === "POST" && (route === "/stop" || route === "/start")) {
+      if (route === "/stop") {
+        serving = false;
+        generation += 1;
+        for (const socket of sockets) socket.destroy();
+        sockets.clear();
+      } else {
+        serving = true;
+      }
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (req.method === "GET" && route === "/live.ts") {
+      if (!serving) {
+        res.writeHead(503);
+        res.end();
+        return;
+      }
+      const gen = generation;
+      res.writeHead(200, { "content-type": "video/mp2t", "cache-control": "no-store" });
+      const socket = res.socket;
+      if (socket) sockets.add(socket);
+      const finish = () => {
+        if (socket) sockets.delete(socket);
+      };
+      res.on("close", finish);
+      const pump = async () => {
+        let offset = 0;
+        try {
+          while (serving && gen === generation && !res.destroyed && !res.writableEnded) {
+            const n = Math.min(188 * 49, data.length - offset);
+            if (n < 188) {
+              offset = 0;
+              continue;
+            }
+            if (!res.write(data.subarray(offset, offset + n))) {
+              await new Promise((resolve) => res.once("drain", resolve));
+            }
+            offset += n;
+            if (offset >= data.length) offset = 0;
+            await sleep(n / bytesPerMs);
+          }
+        } catch {
+          // The viewer, or stop, closed this response.
+        }
+        finish();
+        if (!res.writableEnded) {
+          try {
+            res.end();
+          } catch {
+            // Already destroyed.
+          }
+        }
+      };
+      void pump();
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  origin.listen(listenPort, "127.0.0.1");
+  return origin;
 }
-const hdhr = fakeBase.replace(/^https?:\/\//, "");
 
-const serverArgs = [
-  "-config",
-  config,
-  "-addr",
-  `127.0.0.1:${port}`,
-  "-hdhr",
-  hdhr,
-  "-bonjour=false",
-  "-staging",
-];
-const serverEnv = {
-  ...process.env,
-  BROADWAVE_E2E: "1",
-  HDHR_CONTROL_PORT: control,
-};
+let fakeBase = "";
+let serverArgs;
+let serverEnv;
+const originPort = port + 8;
+if (playlist) {
+  startOrigin(sample, originPort);
+  const noted = JSON.parse(readFileSync(path.join(run, "server.json"), "utf8"));
+  noted.origin = `http://127.0.0.1:${originPort}`;
+  writeFileSync(path.join(run, "server.json"), JSON.stringify(noted));
+  serverArgs = ["-config", config, "-addr", `127.0.0.1:${port}`, "-bonjour=false", "-staging"];
+  serverEnv = { ...process.env, BROADWAVE_E2E: "1" };
+  // An address in the environment would still be passed as -hdhr's default and
+  // would tune a real device. This run has only the playlist.
+  delete serverEnv.HDHR_HOST;
+  delete serverEnv.HDHR_CONTROL_PORT;
+} else {
+  let fakeOut = "";
+  // E2E_SOURCE streams a broadcast recording on every channel, for a real encode load.
+  const source = process.env.E2E_SOURCE;
+  const fakeArgs = brk ? ["-raw", "-ts", sample] : avsync ? ["-ts", sample, "-source", sample] : source ? ["-ts", sample, "-source", path.resolve(source)] : ["-realtime", "-ts", sample];
+  start(path.join(run, "fakehdhr"), fakeArgs, { env: { ...process.env, FAKEHDHR_ADMIN: `127.0.0.1:${port + 10}` } }, (chunk) => {
+    fakeOut += chunk.toString();
+  });
+  for (let i = 0; i < 50 && !fakeOut.includes("CONTROL_PORT="); i++) await sleep(100);
+  fakeBase = fakeOut.match(/^BASE=(.+)$/m)?.[1]?.trim() || "";
+  const control = fakeOut.match(/^CONTROL_PORT=(.+)$/m)?.[1]?.trim();
+  if (!fakeBase || !control) {
+    console.error("fake tuner did not start");
+    stop();
+    process.exit(1);
+  }
+  const hdhr = fakeBase.replace(/^https?:\/\//, "");
+  serverArgs = ["-config", config, "-addr", `127.0.0.1:${port}`, "-hdhr", hdhr, "-bonjour=false", "-staging"];
+  serverEnv = { ...process.env, BROADWAVE_E2E: "1", HDHR_CONTROL_PORT: control };
+}
 // E2E_BROADWAVE runs this same harness against another binary.
 const serverBin = process.env.E2E_BROADWAVE || path.join(run, "broadwave");
 let server = start(serverBin, serverArgs, { env: serverEnv });
@@ -430,7 +534,7 @@ async function waitHealth() {
         const lineup = await probe(`${base}/api/v1/channels`);
         if (lineup.ok) {
           const body = await lineup.json();
-          if ((body.channels ?? []).length >= 3) return;
+          if ((body.channels ?? []).length >= (playlist ? 1 : 3)) return;
         }
       }
     } catch {
@@ -452,7 +556,13 @@ function queued(fn) {
   return run;
 }
 
+let ready = !playlist;
 const controls = http.createServer((req, res) => {
+  if (req.method === "GET" && req.url === "/ready") {
+    res.writeHead(ready ? 200 : 503);
+    res.end(ready ? "ok" : "");
+    return;
+  }
   if (req.method !== "POST") {
     res.writeHead(404);
     res.end();
@@ -518,5 +628,43 @@ for (let i = 0; i < 100; i++) {
   await sleep(200);
 }
 
-console.log(`e2e server ${base} fake ${fakeBase}`);
+if (playlist) {
+  await quietSettings();
+  const origin = `http://127.0.0.1:${originPort}`;
+  let added = false;
+  let last = "";
+  for (let i = 0; i < 40 && !added; i++) {
+    try {
+      const res = await fetch(`${base}/api/v1/sources`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "m3u", name: "Home", url: `${origin}/pl.m3u` }),
+      });
+      last = await res.text();
+      if (res.ok) added = true;
+    } catch (err) {
+      last = String(err);
+    }
+    if (!added) await sleep(250);
+  }
+  if (!added) {
+    console.error(`playlist was not added\n${last}\n${recent}`);
+    stop();
+    process.exit(1);
+  }
+  const marked = spawnSync(
+    "sqlite3",
+    [db, "PRAGMA busy_timeout=5000; INSERT INTO settings(key, value) VALUES('setupComplete', '1') ON CONFLICT(key) DO UPDATE SET value='1';"],
+    { encoding: "utf8" },
+  );
+  if (marked.status !== 0) {
+    console.error(marked.stderr || "could not finish setup");
+    stop();
+    process.exit(1);
+  }
+  ready = true;
+  console.log(`e2e server ${base} playlist ${origin}`);
+} else {
+  console.log(`e2e server ${base} fake ${fakeBase}`);
+}
 await new Promise(() => {});

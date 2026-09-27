@@ -41,17 +41,36 @@ INSERT INTO settings(key, value) VALUES('nextGuidePull', '2099-01-01T00:00:00Z')
 export default async function globalSetup() {
   const server = JSON.parse(readFileSync(path.join(here, ".run/server.json"), "utf8")) as { base: string; db: string };
   quiet(server.db);
+  const playlist = process.env.E2E_PLAYLIST === "1";
+  const need = playlist ? 1 : 3;
   let list: Channel[] = [];
   for (let i = 0; i < 50; i++) {
     try {
       list = await channels(server.base);
-      if (list.length >= 3) break;
+      if (list.length >= need) break;
     } catch {
       // Discovery is still writing the lineup.
     }
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
-  if (list.length < 3) throw new Error(`fake lineup has ${list.length} channels`);
+  if (list.length < need) throw new Error(`${playlist ? "playlist" : "fake"} lineup has ${list.length} channels`);
+
+  if (playlist) {
+    const half = 30 * 60_000;
+    const wall = Date.now();
+    const now = Math.floor(wall / half) * half + 15 * 60_000;
+    writeFileSync(path.join(here, ".run/runtime.json"), JSON.stringify({ base: server.base, now, channels: list }, null, 2));
+    const ch = list[0];
+    const sql = `
+PRAGMA busy_timeout=5000;
+DELETE FROM airings;
+INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_live, guide_source)
+VALUES (${ch.id}, 'Evening News', 'Local headlines', 'The evening newscast.', 'News', ${sqlQuote(stamp(now - 15 * 60_000))}, ${sqlQuote(stamp(now + 45 * 60_000))}, 'e2e-playlist', 0, 'e2e');
+`;
+    const inserted = spawnSync("sqlite3", [server.db, sql], { encoding: "utf8" });
+    if (inserted.status !== 0) throw new Error(inserted.stderr || inserted.stdout || "could not seed listings");
+    return;
+  }
 
   const byName = new Map(list.map((channel) => [channel.name, channel]));
   const wdaf = byName.get("WDAF");
