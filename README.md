@@ -79,7 +79,7 @@ Three people watching the game in three rooms use **one** tuner, not three — a
 
 <p align="center"><img src=".github/readme/terminal.svg" alt="docker run, then Broadwave finds your tuner, scans channels, and fills the guide" width="100%"></p>
 
-You need an always-on computer that runs Docker — a NAS, a mini PC, or a home server — and a network TV tuner. The image runs on **x86-64 and ARM64**.
+You need an always-on computer that runs Docker — a NAS, a mini PC, or a home server — and a network TV tuner. The image runs on **x86-64 and ARM64**. The tag `latest` is the newest release. It moves when a version is published. A full version tag from the [releases](https://github.com/wolfebase/broadwave/releases) page stays on that build.
 
 ```bash
 docker run -d --name broadwave --network host --restart unless-stopped \
@@ -89,13 +89,13 @@ docker run -d --name broadwave --network host --restart unless-stopped \
   ghcr.io/wolfebase/broadwave:latest
 ```
 
-Then open **`http://<your-server>:8477`**. On a Linux server, Broadwave finds your tuner, scans your channels, and fills the guide on its own.
+Then open **`http://<your-server>:8477`**. On a Linux server, Broadwave finds your tuner, scans your channels, and fills the guide on its own. Three TVs on the same channel use one tuner. Config and recordings stay in the folders you mounted, so an update keeps them.
 
 - **`--network host`** lets a Linux server hear your tuner, and lets phones and TVs find Broadwave. Keep it there.
 - **Graphics.** Add `--device /dev/dri` when that path exists (Intel or AMD). Docker refuses to start if the path is missing. The picture still plays without it.
 - **`TZ`** is your time zone, so the guide lines up.
 - **Tuner address.** When the tuner does not appear, enter its address on the setup page, or set `HDHR_HOST` to that address. Add `:port` only when it is not 80.
-- **Unraid.** Add `-e PUID=99 -e PGID=100` so recordings are not owned by root.
+- **Unraid.** Add the template [`deploy/unraid/broadwave.xml`](https://github.com/wolfebase/broadwave/blob/main/deploy/unraid/broadwave.xml). It uses host networking and port 8477. Leave PUID at 99 and PGID at 100 so recordings are not owned by root. Set Config and Recordings to folders on your server, and remove `/dev/dri` when the server has no Intel or AMD graphics. A plain `docker run` on Unraid needs `-e PUID=99 -e PGID=100` as well.
 
 On Docker Desktop for Mac and Windows, the container's host network is a virtual machine. Publish the port and set `HDHR_HOST` to the tuner's address:
 
@@ -128,11 +128,13 @@ Set `TZ` in `compose.yaml` first. That file uses host networking, which is right
 <summary><b>Automatic updates (optional)</b></summary>
 <br>
 
-Broadwave can keep itself on the newest release. An updater checks every night at 03:30 and updates only Broadwave. It skips a night while someone is watching, a recording is running, or a recording starts within two hours.
+Broadwave can keep itself on the newest release. An updater checks every night at 03:30 and updates only Broadwave. It follows the tag the container already uses, so `latest` moves forward and a full version tag stays put. It skips a night while someone is watching, a recording is running, or a recording starts within two hours.
 
 - **Docker Compose:** `docker compose --profile updater up -d`. Set its `TZ` to match Broadwave.
 - **Unraid:** install the Broadwave template (it carries the labels the updater reads), then add the **Broadwave-Updater** template from `deploy/unraid/broadwave-updater.xml`. After an update, the Docker tab can still say an update is ready until it checks again.
 - **Plain `docker run`:** add `--label com.centurylinklabs.watchtower.enable=true --label "com.centurylinklabs.watchtower.lifecycle.pre-update=broadwave -update-check"` to the Broadwave command, and run `nickfedor/watchtower:1` with `WATCHTOWER_LABEL_ENABLE=true`, `WATCHTOWER_LIFECYCLE_HOOKS=true`, and `WATCHTOWER_SCHEDULE="0 30 3 * * *"`.
+
+To update by hand, pull the new image and recreate the container with the same folders. The folders stay; only the container is replaced. With Compose, `docker compose pull && docker compose up -d`. On Unraid, apply the update from the Docker tab.
 
 Without an updater, the web app says when a new release is out.
 
