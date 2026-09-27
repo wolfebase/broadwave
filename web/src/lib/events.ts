@@ -125,7 +125,7 @@ class EventSocket {
     this.raw("sync.leave", { room });
   }
 
-  command(room: string, action: "play" | "pause" | "seek" | "live" | "latency", extra: { mediaTime?: number; latency?: string } = {}) {
+  command(room: string, action: "play" | "pause" | "seek" | "live" | "latency" | "stalled", extra: { mediaTime?: number; latency?: string } = {}) {
     this.raw("sync.command", { room, action, ...extra });
   }
 }
