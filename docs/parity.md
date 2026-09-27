@@ -50,3 +50,32 @@ Server choices. The iPhone and Apple TV controls are the shared settings screen,
 | Diagnostics: doctor, tuner health, guide depth, last antenna reading, check the antenna | yes | yes | yes |
 
 The demo does not share a tuner, and it does not change a guide account, a folder, or a backup. Passwords are sent once and are not shown again. Layout stays on the web because each Apple app already has its own screen.
+
+## Channels
+
+Settings, Channels on Apple; the lineup under Sources on the web. Every channel is listed, including hidden, off-guide, and off-air ones.
+
+| Choice | Web | iPhone | Apple TV |
+| --- | --- | --- | --- |
+| Favorite | yes | yes | yes |
+| On the guide | yes | yes | yes |
+| Hide | yes | yes, also from a channel's menu on Home, Guide, and Sports | yes, also from a channel's menu on Home, Guide, and Sports |
+| Name, number, and guide match | yes | yes | yes |
+
+The demo keeps favorites and hidden channels for the session. It does not rename a channel or take one off the guide.
+
+## Series passes
+
+Settings, Series passes on Apple; Schedule on the web. A pass is set from the guide on every client.
+
+| Choice | Web | iPhone | Apple TV |
+| --- | --- | --- | --- |
+| List with channel, episodes, keep rule, and padding | yes | yes | yes |
+| Early and after (0–30 min) | yes | yes | yes |
+| Priority | yes (0–100) | yes (0–10, and any value the web set) | yes (0–10, and any value the web set) |
+| Episodes: all or new only | yes | yes | yes |
+| Keep: all, unwatched, or the last few | yes | yes, with how many | yes, with how many |
+| Mark commercials | yes | yes | yes |
+| Delete a pass | yes | yes | yes |
+
+Apple uses menus for minutes and priority because tvOS has no stepper or number field.

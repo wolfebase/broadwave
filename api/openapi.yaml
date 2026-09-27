@@ -1829,7 +1829,7 @@ components:
         padAfter: { type: integer, minimum: 0, maximum: 30 }
         priority: { type: integer }
         episodes: { type: string, enum: [all, new] }
-        keepMode: { type: string, enum: [all, latest] }
+        keepMode: { type: string, enum: [all, unwatched, last] }
         keepCount: { type: integer }
         limitCount: { type: integer }
         rerecord: { type: boolean }

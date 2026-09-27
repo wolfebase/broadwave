@@ -1432,7 +1432,7 @@ export interface components {
             /** @enum {string} */
             episodes?: "all" | "new";
             /** @enum {string} */
-            keepMode?: "all" | "latest";
+            keepMode?: "all" | "unwatched" | "last";
             keepCount?: number;
             limitCount?: number;
             rerecord?: boolean;
