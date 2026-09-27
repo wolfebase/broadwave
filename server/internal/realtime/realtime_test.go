@@ -64,8 +64,8 @@ func TestFollowRoomSettlesOnceTheBufferCoversTheLatency(t *testing.T) {
 	r, now := fixedRooms(start)
 	first := unixMS(start.Add(-3500 * time.Millisecond))
 	st := r.Join("channel:4", 4, first)
-	if st.AnchorMedia != first {
-		t.Fatalf("a fresh room starts on the first frame: %+v", st)
+	if st.AnchorMedia != first || math.Abs(st.Target(unixMS(start))-(first-1500)) > 1 {
+		t.Fatalf("a fresh room starts on the first frame, a moment later: %+v", st)
 	}
 	if moved := r.Settle(4, first); len(moved) != 0 {
 		t.Fatalf("a fresh first frame must stay, got %+v", moved)
