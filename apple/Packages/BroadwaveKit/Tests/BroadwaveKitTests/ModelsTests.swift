@@ -364,3 +364,18 @@ extension Airing {
     #expect(done.pick == nil)
     #expect(done.options.isEmpty)
 }
+
+/// Pause on the remote pauses this screen; the engine must not play it again.
+@Test @MainActor func aViewerPauseIsNotAStuckPlayer() {
+    #expect(SyncEngine.viewerPaused(roomRate: 1, paused: true, forwardBuffer: 8, sinceHold: 60, followRoom: true, sinceActive: 60))
+    // A stuck player has nothing buffered; the engine restarts it.
+    #expect(!SyncEngine.viewerPaused(roomRate: 1, paused: true, forwardBuffer: 0.2, sinceHold: 60, followRoom: true, sinceActive: 60))
+    // The engine's own hold, and the system pausing the app, are not the viewer.
+    #expect(!SyncEngine.viewerPaused(roomRate: 1, paused: true, forwardBuffer: 8, sinceHold: 0.3, followRoom: true, sinceActive: 60))
+    #expect(!SyncEngine.viewerPaused(roomRate: 1, paused: true, forwardBuffer: 8, sinceHold: 60, followRoom: true, sinceActive: 1))
+    // A group room and a paused room pause through the room.
+    #expect(!SyncEngine.viewerPaused(roomRate: 1, paused: true, forwardBuffer: 8, sinceHold: 60, followRoom: false, sinceActive: 60))
+    #expect(!SyncEngine.viewerPaused(roomRate: 0, paused: true, forwardBuffer: 8, sinceHold: 60, followRoom: true, sinceActive: 60))
+    // A player that has not started yet is not paused by anyone.
+    #expect(!SyncEngine.viewerPaused(roomRate: 1, paused: true, forwardBuffer: 8, sinceHold: 60, followRoom: true, sinceActive: 60, seenPlaying: false))
+}

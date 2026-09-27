@@ -2,6 +2,9 @@ import AVFoundation
 import Foundation
 import Observation
 import os
+#if canImport(UIKit)
+    import UIKit
+#endif
 
 /// Holds an AVPlayer on a Whole-Home Sync room's timeline.
 ///
@@ -42,6 +45,13 @@ public final class SyncEngine {
     private var canSpeedUp = true
     private var speedUpOff = Date.distantPast
     private var lastMove: SyncMove?
+    /// The viewer paused this screen. It keeps its own place, time-shifted,
+    /// and the engine stops pulling it back to the room.
+    public private(set) var detached = false
+    private var inactive = false
+    private var seenPlaying = false
+    private var activeSince = Date()
+    private var lifecycle: [NSObjectProtocol] = []
     private static let log = Logger(subsystem: "com.wolfeup.broadwave", category: "sync")
 
     /// A trim starts past trimMS and ends inside lockMS, and the next one waits
@@ -138,6 +148,17 @@ public final class SyncEngine {
 
     /// The room is moving and this player is not. AVPlayer can report
     /// `.playing` with rate 0, and that state never paints the next frame.
+    /// A paused player the engine did not pause, with picture to play, in a
+    /// room that is moving: the viewer pressed pause. A group room pauses
+    /// through the room instead, and a stuck player has nothing buffered.
+    /// Before the first frame plays, a paused player has not started yet.
+    static func viewerPaused(
+        roomRate: Double, paused: Bool, forwardBuffer: Double, sinceHold: Double,
+        followRoom: Bool = true, sinceActive: Double = .infinity, seenPlaying: Bool = true
+    ) -> Bool {
+        seenPlaying && followRoom && roomRate != 0 && paused && forwardBuffer >= 1 && sinceHold > 1 && sinceActive > 3
+    }
+
     static func shouldKeepPlaying(roomRate: Double, paused: Bool, rate: Float) -> Bool {
         roomRate != 0 && (paused || rate == 0)
     }
@@ -166,10 +187,28 @@ public final class SyncEngine {
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.apply() }
         }
+        #if canImport(UIKit)
+            // The system pauses the player when the app leaves the screen. That
+            // pause is not the viewer's.
+            let center = NotificationCenter.default
+            lifecycle = [
+                center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                    Task { @MainActor in self?.inactive = true }
+                },
+                center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                    Task { @MainActor in
+                        self?.inactive = false
+                        self?.activeSince = Date()
+                    }
+                },
+            ]
+        #endif
     }
 
     public func stop() {
         timer?.invalidate()
+        lifecycle.forEach(NotificationCenter.default.removeObserver)
+        lifecycle = []
         if let handler {
             socket.off("sync.state", handler)
         }
@@ -212,6 +251,27 @@ public final class SyncEngine {
         }
         let sized = item.presentationSize.width > 0 && item.presentationSize.height > 0
         let hasFrame = displayedFrame?() ?? sized
+        if detached {
+            state = .off
+            return
+        }
+        let paused = player.timeControlStatus == .paused
+        if player.timeControlStatus == .playing {
+            seenPlaying = true
+        }
+        if Self.viewerPaused(
+            roomRate: st.rate, paused: paused, forwardBuffer: bufferedAhead(item), sinceHold: Date().timeIntervalSince(holdUntil),
+            followRoom: room.hasPrefix("channel:"), sinceActive: inactive ? 0 : Date().timeIntervalSince(activeSince),
+            seenPlaying: seenPlaying
+        ) {
+            detached = true
+            setTrim(.none)
+            state = .off
+            if logs {
+                Self.log.notice("sync detached: the viewer paused")
+            }
+            return
+        }
         // Pausing again on the tick that restarts a stuck player puts rate
         // straight back to 0, and the tile stays on one frame.
         if Self.shouldKeepPlaying(roomRate: st.rate, paused: player.timeControlStatus == .paused, rate: player.rate) {
