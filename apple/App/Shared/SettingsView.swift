@@ -9,6 +9,8 @@ struct SettingsView: View {
     @Environment(AppStore.self) private var store
     @State private var showAbout = false
     @State private var showDiagnostics = false
+    @State private var showChannels = false
+    @State private var showPasses = false
     @State private var checkUpdates = true
     @State private var updatesKnown = false
     @State private var liveScores = true
@@ -115,6 +117,8 @@ struct SettingsView: View {
         .onDisappear { flushServerText() }
         .navigationDestination(isPresented: $showAbout) { AboutView() }
         .navigationDestination(isPresented: $showDiagnostics) { DiagnosticsView() }
+        .navigationDestination(isPresented: $showChannels) { ChannelsView() }
+        .navigationDestination(isPresented: $showPasses) { PassesView() }
         .confirmationDialog(
             "Restore this backup? The catalog goes back to that copy. Recordings stay.",
             isPresented: Binding(
@@ -148,6 +152,12 @@ struct SettingsView: View {
             }
             if UserDefaults.standard.bool(forKey: "BroadwaveDiagnostics") {
                 showDiagnostics = true
+            }
+            if UserDefaults.standard.bool(forKey: "BroadwaveChannels") {
+                showChannels = true
+            }
+            if UserDefaults.standard.bool(forKey: "BroadwavePasses") {
+                showPasses = true
             }
             if let anchor = UserDefaults.standard.string(forKey: "BroadwaveSettingsAnchor") {
                 Task {
@@ -300,6 +310,7 @@ struct SettingsView: View {
                 }
             ))
             .disabled(!autoplayKnown)
+            Button("Series passes") { showPasses = true }
         } header: {
             Text("DVR")
         }
@@ -307,6 +318,7 @@ struct SettingsView: View {
 
     private var sourcesSection: some View {
         Section {
+            Button("Channels") { showChannels = true }
             if demo {
                 Text("The demo does not share a tuner.")
                     .foregroundStyle(.secondary)

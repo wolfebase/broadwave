@@ -120,6 +120,23 @@ import Testing
     #expect(rejected["sdPassword"] == nil)
 }
 
+@Test func demoHiddenChannelLeavesTheGuideOnly() async throws {
+    let server = DemoServer()
+    let port = UInt16.random(in: 20000 ... 45000)
+    let origin = try #require(await server.prepare(port: port))
+    defer { server.stop() }
+    let client = APIClient(base: origin)
+    let hidden = try await client.patchChannel(3, ChannelPatch(hidden: true))
+    #expect(hidden.hidden)
+    #expect(try await client.channels().map(\.id) == [1, 2, 4])
+    let lineup = try await client.lineup()
+    #expect(lineup.map(\.id) == [1, 2, 3, 4])
+    #expect(lineup.first { $0.id == 3 }?.hidden == true)
+    _ = try await client.patchChannel(3, ChannelPatch(hidden: false))
+    #expect(try await client.channels().count == 4)
+    #expect(try await client.passes().isEmpty)
+}
+
 @Test func demoRoomCountsBothScreens() async throws {
     let server = DemoServer()
     let port = UInt16.random(in: 45001 ... 65000)

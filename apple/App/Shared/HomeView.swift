@@ -455,6 +455,15 @@ struct ChannelActions: View {
         Button(channel.favorite ? "Remove favorite" : "Add favorite", systemImage: channel.favorite ? "star.slash" : "star") {
             Task { await store.toggleFavorite(channel) }
         }
+        Button("Hide channel", systemImage: "eye.slash") {
+            Task {
+                do {
+                    _ = try await store.editChannel(channel.id, ChannelPatch(hidden: true))
+                } catch {
+                    store.error = error.localizedDescription
+                }
+            }
+        }
     }
 }
 

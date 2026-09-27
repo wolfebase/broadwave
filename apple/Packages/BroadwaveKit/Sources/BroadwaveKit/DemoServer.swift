@@ -304,7 +304,9 @@ public final class DemoServer: @unchecked Sendable {
         case ("GET", "/api/v1/clock"):
             return Self.ok(Self.json(["serverTime": Self.nowMS()]))
         case ("GET", "/api/v1/channels"):
-            return Self.ok(Self.json(["channels": channels()]))
+            let all = channels()
+            let guide = query.split(separator: "&").contains("guide=1")
+            return Self.ok(Self.json(["channels": guide ? all.filter { !$0.hidden } : all]))
         case ("GET", "/api/v1/airings"):
             return Self.ok(Self.json(["airings": airings(query: query)]))
         case ("GET", "/api/v1/recordings"):
@@ -313,6 +315,8 @@ public final class DemoServer: @unchecked Sendable {
             return Self.ok(Self.json(currentSettings()))
         case ("PUT", "/api/v1/settings"):
             return putSettings(body)
+        case ("GET", "/api/v1/passes"):
+            return Self.ok(Data("{\"passes\":[]}".utf8))
         case ("GET", "/api/v1/teams"):
             return Self.ok(Data("{\"teams\":[]}".utf8))
         case ("GET", "/api/v1/sports/scoreboard"):

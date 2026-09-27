@@ -310,6 +310,17 @@ public final class AppStore {
         }
     }
 
+    /// Saves a channel edit, then reloads the guide's lineup so hiding or
+    /// renaming shows everywhere at once.
+    public func editChannel(_ id: Int64, _ patch: ChannelPatch) async throws -> Channel {
+        guard let api else { throw APIError(code: "offline", message: "Not connected to a server.", status: 0) }
+        let updated = try await api.patchChannel(id, patch)
+        if let list = try? await api.channels(), self.api?.base == api.base {
+            channels = list.sorted(by: Channel.guideOrder)
+        }
+        return updated
+    }
+
     public func recordSeries(_ airing: Airing) async {
         guard let api else { return }
         try? await api.addPass(title: airing.title, channelID: airing.channelId)

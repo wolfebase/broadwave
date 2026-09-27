@@ -107,6 +107,16 @@ public struct APIClient: Sendable {
         return try await send("PATCH", "/channels/\(channel.id)", body: B(hidden: on))
     }
 
+    /// Every channel, including hidden, off, and off-air ones.
+    public func lineup() async throws -> [Channel] {
+        struct R: Decodable { var channels: [Channel] }
+        return try await send("GET", "/channels", as: R.self).channels
+    }
+
+    public func patchChannel(_ id: Int64, _ patch: ChannelPatch) async throws -> Channel {
+        try await send("PATCH", "/channels/\(id)", body: patch)
+    }
+
     public struct DoctorNote: Decodable, Sendable, Hashable {
         public var id: String
         public var message: String
@@ -184,6 +194,18 @@ public struct APIClient: Sendable {
         struct B: Encodable { var title: String; var channelId: Int64 }
         struct R: Decodable {}
         _ = try await send("POST", "/passes", body: B(title: title, channelId: channelID), as: R.self)
+    }
+
+    public func passes() async throws -> [Pass] {
+        try await send("GET", "/passes", as: PassList.self).passes
+    }
+
+    public func updatePass(_ pass: Pass) async throws -> [Pass] {
+        try await send("PATCH", "/passes/\(pass.id)", body: pass, as: PassList.self).passes
+    }
+
+    public func deletePass(_ id: Int64) async throws -> [Pass] {
+        try await send("DELETE", "/passes/\(id)", as: PassList.self).passes
     }
 
     public func posterURL(recordingID: Int64) -> URL {
