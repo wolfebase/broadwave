@@ -20,6 +20,8 @@ export function Stage({
   onJump,
   error,
   errorAction,
+  note,
+  noteAction,
   tools,
   more,
   children,
@@ -48,6 +50,8 @@ export function Stage({
   onJump: (delta: number) => void;
   error?: string;
   errorAction?: ReactNode;
+  note?: string;
+  noteAction?: ReactNode;
   tools?: ReactNode;
   more?: ReactNode;
   children?: ReactNode;
@@ -191,6 +195,12 @@ export function Stage({
           <div className="player-error">
             <p role="alert">{error}</p>
             {errorAction}
+          </div>
+        ) : null}
+        {!error && note ? (
+          <div className="player-note">
+            <p role="status">{note}</p>
+            {noteAction}
           </div>
         ) : null}
         <footer className="stage-dock glass">

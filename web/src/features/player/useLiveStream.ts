@@ -1,10 +1,20 @@
 import Hls from "hls.js";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { stopWatch, watchChannel, type ApiFailure } from "../../api";
+import { getDeviceHealth, getTuners, stopWatch, watchChannel, type ApiFailure } from "../../api";
 import { SyncEngine, type SyncStatus } from "../../lib/sync";
 import type { Caps, Channel, Prefs, WatchSession } from "../../types";
 import { liveHlsConfig, type BufferProfile } from "../../picture";
 import { rememberChannel } from "../../recent";
+import {
+  aTunerIsFree,
+  pictureStopped,
+  recoveryReady,
+  serverStopped,
+  tunerStopped,
+  viewerFailure,
+  type Recovery,
+  type RecoverySnap,
+} from "./outage";
 
 function webCaps(): Caps {
   const mse = typeof MediaSource !== "undefined" ? MediaSource : undefined;
@@ -48,9 +58,11 @@ export function useLiveStream(
   const audibleRef = useRef(audible);
   const [session, setSession] = useState<WatchSession | null>(null);
   const [error, setError] = useState("");
+  const [recovery, setRecovery] = useState<Recovery>("");
   const [needsConfirm, setNeedsConfirm] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const confirmLive = useRef(false);
+  const retrying = useRef(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ state: "off", drift: 0, members: 0 });
 
   useEffect(() => {
@@ -73,6 +85,7 @@ export function useLiveStream(
     const started = performance.now();
     let primed = false;
     let stallAt = 0;
+    let stuck = 0;
     delete video.dataset.ttff;
     delete video.dataset.moving;
     delete video.dataset.stalls;
@@ -83,6 +96,7 @@ export function useLiveStream(
         video.dataset.ttff = String(Math.round(performance.now() - started));
         return;
       }
+      window.clearTimeout(stuck);
       if (stallAt) {
         const soFar = Number(video.dataset.stallMs || 0);
         video.dataset.stallMs = String(Math.round(soFar + performance.now() - stallAt));
@@ -93,6 +107,8 @@ export function useLiveStream(
       if (!primed) return;
       stallAt = performance.now();
       video.dataset.stalls = String(Number(video.dataset.stalls || 0) + 1);
+      window.clearTimeout(stuck);
+      stuck = window.setTimeout(() => void noteOutage(false), stuckMs);
     };
     // moving is the first time the picture advances and stays in play.
     // The first playing event can be the frame sync then holds.
@@ -100,10 +116,25 @@ export function useLiveStream(
       if (video.dataset.moving || video.paused || !primed) return;
       if (video.currentTime > 0.2) video.dataset.moving = String(Math.round(performance.now() - started));
     };
+    // hls.js rides through short stalls and single failed loads on its own, and
+    // naming an outage stops the picture. A long stall is named only when the
+    // server or every tuner is gone; a fatal error always is.
+    let surfaced = false;
+    const noteOutage = async (fatal: boolean) => {
+      if (dead || surfaced) return;
+      const mapped = await classifyPlayback();
+      if (dead || surfaced || (!fatal && !mapped.recovery)) return;
+      surfaced = true;
+      setNeedsConfirm(false);
+      setError(mapped.message);
+      setRecovery(mapped.recovery);
+      if (mapped.recovery) hls?.destroy();
+    };
     video.addEventListener("playing", onPlaying);
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("timeupdate", onTime);
     void (async () => {
+      retrying.current = true;
       try {
         const allow = confirmLive.current;
         confirmLive.current = false;
@@ -115,6 +146,7 @@ export function useLiveStream(
           return;
         }
         setError("");
+        setRecovery("");
         setSession(next);
         if (Hls.isSupported()) {
           hls = new Hls(liveHlsConfig(profile));
@@ -124,7 +156,7 @@ export function useLiveStream(
           hls.attachMedia(video);
           hls.on(Hls.Events.ERROR, (_e, data) => {
             video.dataset.hlsError = `${data.type}:${data.details}${data.fatal ? ":fatal" : ""}`;
-            if (data.fatal) setError("The picture stopped. Trying again usually fixes it.");
+            if (data.fatal) void noteOutage(true);
           });
         } else {
           video.src = next.playlist;
@@ -139,11 +171,16 @@ export function useLiveStream(
         const failed = err as ApiFailure;
         if (failed.status === 409 && failed.code === "recording_soon") {
           setNeedsConfirm(true);
+          setRecovery("");
           setError(failed.message);
           return;
         }
+        const mapped = viewerFailure(err);
         setNeedsConfirm(false);
-        setError(err instanceof Error ? err.message : "This channel did not start.");
+        setError(mapped.message);
+        setRecovery(mapped.recovery);
+      } finally {
+        if (!dead) retrying.current = false;
       }
     })();
     const beacon = () => {
@@ -154,6 +191,7 @@ export function useLiveStream(
     window.addEventListener("pagehide", beacon);
     return () => {
       dead = true;
+      window.clearTimeout(stuck);
       window.removeEventListener("pagehide", beacon);
       syncRef.current?.stop();
       syncRef.current = null;
@@ -181,6 +219,39 @@ export function useLiveStream(
   }, [session, sync, room, channelId, videoRef]);
 
   useEffect(() => {
+    if (!recovery) return;
+    let dead = false;
+    let ticking = false;
+    const seen = { key: "" };
+    const tick = async () => {
+      if (dead || retrying.current || ticking) return;
+      ticking = true;
+      try {
+        const snap = await readRecoverySnap();
+        if (dead || retrying.current) return;
+        const key = `${snap.health}:${snap.freeTuner}:${snap.tunerAnswers}`;
+        if (!recoveryReady(recovery, snap)) {
+          seen.key = key;
+          return;
+        }
+        if (key === seen.key) return;
+        seen.key = key;
+        retrying.current = true;
+        setAttempt((n) => n + 1);
+      } finally {
+        ticking = false;
+      }
+    };
+    const first = window.setTimeout(() => void tick(), 400);
+    const id = window.setInterval(() => void tick(), 1000);
+    return () => {
+      dead = true;
+      window.clearTimeout(first);
+      window.clearInterval(id);
+    };
+  }, [recovery]);
+
+  useEffect(() => {
     audibleRef.current = audible;
     const video = videoRef.current;
     if (!video) return;
@@ -197,8 +268,44 @@ export function useLiveStream(
       setNeedsConfirm(false);
       setAttempt((n) => n + 1);
     },
+    retry: () => setAttempt((n) => n + 1),
     syncStatus,
     command: (action: "play" | "pause" | "seek" | "live", mediaTime?: number) => syncRef.current?.command(action, mediaTime),
     mediaNow: () => syncRef.current?.mediaNow() ?? null,
   };
+}
+
+const stuckMs = 8000;
+
+async function classifyPlayback(): Promise<{ message: string; recovery: Recovery }> {
+  const snap = await readRecoverySnap();
+  if (!snap.health) return { message: serverStopped, recovery: "server" };
+  if (!snap.tunerAnswers) return { message: tunerStopped, recovery: "tuner" };
+  return { message: pictureStopped, recovery: "" };
+}
+
+async function readRecoverySnap(): Promise<RecoverySnap> {
+  let health: boolean;
+  try {
+    health = (await fetch("/api/v1/health")).ok;
+  } catch {
+    health = false;
+  }
+  if (!health) return { health: false, freeTuner: false, tunerAnswers: false };
+  let freeTuner: boolean;
+  let tunerAnswers: boolean;
+  try {
+    const body = await getTuners();
+    freeTuner = aTunerIsFree(body.tuners ?? []);
+  } catch {
+    freeTuner = false;
+  }
+  try {
+    const body = await getDeviceHealth();
+    const devices = body.devices ?? [];
+    tunerAnswers = devices.some((device) => !device.error);
+  } catch {
+    tunerAnswers = false;
+  }
+  return { health, freeTuner, tunerAnswers };
 }
