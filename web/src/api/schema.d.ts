@@ -1891,7 +1891,10 @@ export interface operations {
                 content: {
                     "application/json": {
                         scanning: boolean;
+                        /** @description Channels found so far. */
                         found: number;
+                        /** @description Percent done, when the tuner reports it. */
+                        progress?: number;
                     };
                 };
             };

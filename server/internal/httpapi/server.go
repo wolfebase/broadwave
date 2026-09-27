@@ -12,8 +12,10 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,6 +33,9 @@ import (
 )
 
 type Server struct {
+	// scans holds the base URL of each tuner this server asked to scan until a status read sees it finish.
+	scans sync.Map
+
 	Store   *store.Store
 	HDHR    *hdhr.Client
 	Hub     *live.Hub
@@ -239,6 +244,7 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	s.scans.Store(base, true)
 	writeJSON(w, http.StatusOK, map[string]any{"scanning": true})
 }
 
@@ -257,7 +263,18 @@ func (s *Server) scanStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"scanning": prog.Scan, "found": prog.Found})
+	if _, started := s.scans.Load(base); started && !prog.Scan {
+		s.scans.Delete(base)
+		// A finished scan changes the tuner's lineup; read it now rather than on the next discovery pass.
+		host := base
+		if u, err := url.Parse(base); err == nil && u.Host != "" {
+			host = u.Host
+		}
+		if _, err := source.Sync(r.Context(), s.Store, client, host); err != nil {
+			slog.Error(fmt.Sprintf("scan: lineup: %v", err))
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"scanning": prog.Scan, "found": prog.Found, "progress": prog.Progress})
 }
 
 func (s *Server) discover(w http.ResponseWriter, r *http.Request) {

@@ -208,9 +208,11 @@ func (c *Client) postScan(ctx context.Context, baseURL, action string) error {
 }
 
 // ScanProgress is lineup_status.json. Found grows while Scan is true.
+// Progress is the tuner's percent done, not a channel count.
 type ScanProgress struct {
-	Scan  bool
-	Found int
+	Scan     bool
+	Found    int
+	Progress int
 }
 
 func (c *Client) ScanProgress(ctx context.Context, baseURL string) (ScanProgress, error) {
@@ -225,11 +227,7 @@ func (c *Client) ScanProgress(ctx context.Context, baseURL string) (ScanProgress
 		return ScanProgress{}, err
 	}
 	on := (raw.Scan != nil && *raw.Scan != 0) || (raw.ScanIn != nil && *raw.ScanIn != 0)
-	found := raw.Found
-	if found == 0 {
-		found = raw.Progress
-	}
-	return ScanProgress{Scan: on, Found: found}, nil
+	return ScanProgress{Scan: on, Found: raw.Found, Progress: raw.Progress}, nil
 }
 
 func sameOrigin(a, b string) bool {

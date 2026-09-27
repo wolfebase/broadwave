@@ -79,3 +79,20 @@ Settings, Series passes on Apple; Schedule on the web. A pass is set from the gu
 | Delete a pass | yes | yes | yes |
 
 Apple uses menus for minutes and priority because tvOS has no stepper or number field.
+
+## Sources
+
+Settings, Tuners and playlists on Apple; Sources on the web. Setup uses the same finder and form.
+
+| Choice | Web | iPhone | Apple TV |
+| --- | --- | --- | --- |
+| Tuners with model, tuner count, and firmware | yes | yes | yes |
+| Scan a tuner for channels | yes | yes, with a running count | yes, with a running count |
+| Playlists and links with health, stream use, and last update | yes | yes | yes |
+| Look harder, free channels, and add a tuner by address | yes | yes | yes |
+| Add a playlist, Xtream Codes, tvheadend, Channels DVR, Threadfin, xTeVe, ErsatzTV, Dispatcharr, a stream link, or a media folder | yes | yes | yes |
+| Group filter, and choosing groups or channels from a long playlist | yes | yes, channels kept by id | yes, channels kept by id |
+| Add a playlist file from this device | yes | yes | Apple TV has no file picker. Add the playlist by address. |
+| Signal check | yes | yes, in Diagnostics | yes, in Diagnostics |
+
+The demo has no tuners or sources, so Tuners and playlists is not shown there.
