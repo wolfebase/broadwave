@@ -249,12 +249,24 @@ struct RootView: View {
                     nowPlaying.play(channel)
                 }
             }
-        case "guide": tab = .guide
-        case "search": tab = .search
-        case "sports": tab = .sports
-        case "recordings": tab = .recordings
-        default: tab = .home
+        case "guide": show(.guide)
+        case "search": show(.search)
+        case "sports": show(.sports)
+        case "recordings": show(.recordings)
+        default: show(.home)
         }
+    }
+
+    /// A page link closes the player, which would otherwise cover the page.
+    private func show(_ page: AppTab) {
+        tab = page
+        #if os(tvOS)
+            if nowPlaying.channel != nil {
+                nowPlaying.stop()
+            }
+        #else
+            nowPlaying.expanded = false
+        #endif
     }
 
     private var tabs: some View {
