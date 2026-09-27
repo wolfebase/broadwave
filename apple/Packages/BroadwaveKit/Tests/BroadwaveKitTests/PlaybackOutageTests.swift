@@ -43,6 +43,27 @@ private func fineSnap() -> RecoverySnap {
     #expect(clock.shouldProbe(at: start.addingTimeInterval(16), fatal: false))
 }
 
+@Test func aStallThatStaysWithNoNamedCauseIsTheStoppedPicture() {
+    var clock = ServerOutage()
+    let start = Date(timeIntervalSince1970: 2000)
+    clock.noteWaiting(at: start)
+    #expect(clock.resolve(at: start.addingTimeInterval(8), snap: fineSnap(), fatal: false, afterPicture: true) == nil)
+    let named = clock.resolve(at: start.addingTimeInterval(16), snap: fineSnap(), fatal: false, afterPicture: true)
+    #expect(named?.message == PlaybackOutage.pictureStopped)
+    #expect(named?.recovery == nil)
+    #expect(clock.resolve(at: start.addingTimeInterval(20), snap: fineSnap(), fatal: false, afterPicture: true) == nil)
+}
+
+@Test func playingBetweenProbesKeepsTheStallWithThePlayer() {
+    var clock = ServerOutage()
+    let start = Date(timeIntervalSince1970: 2000)
+    clock.noteWaiting(at: start)
+    #expect(clock.resolve(at: start.addingTimeInterval(8), snap: fineSnap(), fatal: false) == nil)
+    clock.notePlaying()
+    clock.noteWaiting(at: start.addingTimeInterval(9))
+    #expect(clock.resolve(at: start.addingTimeInterval(17), snap: fineSnap(), fatal: false) == nil)
+}
+
 @Test func fatalWhileTheServerIsUpSaysThePictureStopped() {
     var clock = ServerOutage()
     let now = Date(timeIntervalSince1970: 3000)
@@ -270,6 +291,43 @@ private func fineSnap() -> RecoverySnap {
     #expect(!serverDown.health)
     #expect(!serverDown.signalLost)
     #expect(!serverDown.freeTuner)
+}
+
+@Test func aStoppedPictureTriesAgainEveryTenSecondsForTwoMinutes() {
+    var fires: [Int] = []
+    var elapsed: TimeInterval = 0
+    for _ in 0 ..< 20 {
+        guard let wait = PlaybackOutage.pictureRetryDelay(
+            message: PlaybackOutage.pictureStopped,
+            recovery: nil,
+            elapsed: elapsed
+        ) else { break }
+        elapsed += wait
+        fires.append(Int((elapsed * 1000).rounded()))
+    }
+    #expect(fires == Array(stride(from: 10000, through: 120_000, by: 10000)))
+    #expect(PlaybackOutage.pictureRetryDelay(message: PlaybackOutage.pictureStopped, recovery: nil, elapsed: elapsed) == nil)
+    let later = PlaybackOutage.pictureRetryDelay(message: PlaybackOutage.pictureStopped, recovery: nil, elapsed: 10.05)
+    #expect(later.map { Int(($0 * 1000).rounded()) } == 9950)
+    #expect(PlaybackOutage.pictureRetryDelay(message: PlaybackOutage.pictureStopped, recovery: nil, elapsed: 120) == nil)
+    #expect(PlaybackOutage.pictureRetryDelay(message: PlaybackOutage.pictureStopped, recovery: nil, elapsed: -1) == nil)
+    #expect(PlaybackOutage.pictureRetryDelay(message: PlaybackOutage.pictureStopped, recovery: nil, elapsed: .nan) == nil)
+    #expect(PlaybackOutage.pictureRetryDelay(message: PlaybackOutage.pictureStopped, recovery: nil, elapsed: .infinity) == nil)
+
+    #expect(PlaybackOutage.pictureRetryDelay(message: PlaybackOutage.noSignal, recovery: nil, elapsed: 0) == nil)
+    #expect(PlaybackOutage.pictureRetryDelay(message: PlaybackOutage.noSignal, recovery: .signal, elapsed: 0) == nil)
+    #expect(PlaybackOutage.pictureRetryDelay(message: PlaybackOutage.serverStopped, recovery: .server, elapsed: 0) == nil)
+    #expect(PlaybackOutage.pictureRetryDelay(message: PlaybackOutage.tunerStopped, recovery: .tuner, elapsed: 0) == nil)
+    #expect(PlaybackOutage.pictureRetryDelay(message: PlaybackOutage.tunersBusy, recovery: .busy, elapsed: 0) == nil)
+    #expect(PlaybackOutage.pictureRetryDelay(message: PlaybackOutage.pictureStopped, recovery: .server, elapsed: 0) == nil)
+    #expect(PlaybackOutage.pictureRetryDelay(message: PlaybackOutage.pictureRestarting, recovery: .restart, elapsed: 0) == nil)
+
+    #expect(PlaybackOutage.holdPictureMessage(OutageDecision(message: PlaybackOutage.pictureStopped, recovery: nil)))
+    #expect(PlaybackOutage.holdPictureMessage(OutageDecision(message: "stream returned 503", recovery: nil)))
+    #expect(!PlaybackOutage.holdPictureMessage(OutageDecision(message: PlaybackOutage.noSignal, recovery: nil)))
+    #expect(!PlaybackOutage.holdPictureMessage(OutageDecision(message: PlaybackOutage.noSignal, recovery: .signal)))
+    #expect(!PlaybackOutage.holdPictureMessage(OutageDecision(message: PlaybackOutage.serverStopped, recovery: .server)))
+    #expect(!PlaybackOutage.holdPictureMessage(OutageDecision(message: "Every tuner is busy.", recovery: .busy)))
 }
 
 @Test func aHomeWithOnlyPlaylistsNeverBlamesATuner() {

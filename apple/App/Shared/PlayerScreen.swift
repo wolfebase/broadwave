@@ -51,6 +51,9 @@ final class LivePlayer {
     private var watchToken = 0
     private let outage = ServerWatch()
     private var outageSampled = Date.distantPast
+    /// Set for a quiet retry of a stopped picture. The message stays until the new picture moves.
+    private var quietRetry = false
+    private var holdPicture = false
     private let playLog = Logger(subsystem: "com.wolfeup.broadwave", category: "play")
     #if os(iOS)
         private var lifecycle: [NSObjectProtocol] = []
@@ -66,9 +69,12 @@ final class LivePlayer {
         watchToken += 1
         let token = watchToken
         watchTask?.cancel()
+        let quiet = quietRetry && channelID == channel.id
+        quietRetry = false
         let retry = channelID == channel.id
         let held = retry ? error : nil
-        await stop()
+        holdPicture = false
+        await stop(endPicture: !quiet)
         guard !Task.isCancelled, token == watchToken else { return }
         guard let api = store.api else { return }
         self.api = api
@@ -84,7 +90,11 @@ final class LivePlayer {
                 await playbackSnap(api: client, channelID: id, assumeLost: assumeLost, playlist: playlist)
             },
             onMessage: { [weak self] decision in self?.showOutage(decision) },
-            onRecover: { [weak self] in self?.attempt += 1 }
+            onRecover: { [weak self] quiet in
+                guard let self else { return }
+                quietRetry = quiet
+                attempt += 1
+            }
         )
         watchLifecycle()
         let caps = Capabilities.current()
@@ -102,13 +112,18 @@ final class LivePlayer {
             } onCancel: {
                 task.cancel()
             }
-            guard !Task.isCancelled, channelID == channel.id else {
+            guard !Task.isCancelled, token == watchToken, channelID == channel.id else {
                 await api.stopWatching(channelID: channel.id, rendition: session.rendition)
                 return
             }
             self.session = session
             outage.watching(session.playlist)
-            error = nil
+            if quiet {
+                holdPicture = true
+            } else {
+                error = nil
+                holdPicture = false
+            }
             let item = AVPlayerItem(url: api.url(session.playlist))
             item.externalMetadata = metadata(channel: channel, airing: store.index.on(channel.id, at: Date()))
             PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
@@ -126,26 +141,52 @@ final class LivePlayer {
         } catch is CancellationError {
             return
         } catch let error as APIError where error.code == "recording_soon" {
-            guard channelID == channel.id else { return }
+            guard token == watchToken, channelID == channel.id else { return }
+            if quiet {
+                outage.endPictureRetry()
+            }
             needsConfirm = true
             self.error = error.message
         } catch let error as URLError {
-            guard channelID == channel.id, error.code != .cancelled else { return }
+            guard token == watchToken, channelID == channel.id, error.code != .cancelled else { return }
+            if quiet {
+                outage.endPictureRetry()
+            }
             needsConfirm = false
             outage.failToReach(online: PlaybackOutage.deviceOnline(error))
         } catch let error as APIError {
-            guard channelID == channel.id else { return }
+            guard token == watchToken, channelID == channel.id else { return }
             needsConfirm = false
             let decision = PlaybackOutage.viewerFailure(code: error.code, status: error.status, message: error.message, online: true)
+            if quiet, PlaybackOutage.holdPictureMessage(decision) {
+                return
+            }
+            if quiet {
+                outage.endPictureRetry()
+            }
             if decision.recovery != nil {
                 outage.fail(decision)
+            } else if retry, PlaybackOutage.holdPictureMessage(decision) {
+                // The stream's own words ("503") are not a cause. Keep asking.
+                outage.fail(OutageDecision(message: PlaybackOutage.pictureStopped, recovery: nil))
             } else {
                 self.error = decision.message
             }
         } catch {
-            guard channelID == channel.id else { return }
+            guard token == watchToken, channelID == channel.id else { return }
             needsConfirm = false
-            self.error = error.localizedDescription
+            let decision = OutageDecision(message: error.localizedDescription, recovery: nil)
+            if quiet, PlaybackOutage.holdPictureMessage(decision) {
+                return
+            }
+            if quiet {
+                outage.endPictureRetry()
+            }
+            if retry, PlaybackOutage.holdPictureMessage(decision) {
+                outage.fail(OutageDecision(message: PlaybackOutage.pictureStopped, recovery: nil))
+            } else {
+                self.error = error.localizedDescription
+            }
         }
     }
 
@@ -167,7 +208,13 @@ final class LivePlayer {
         attempt += 1
     }
 
-    func stop() async {
+    /// The viewer's own Try again. A new two minutes starts if the picture stops again.
+    func retry() {
+        quietRetry = false
+        attempt += 1
+    }
+
+    func stop(endPicture: Bool = true) async {
         watchTask?.cancel()
         watchTask = nil
         statsTask?.cancel()
@@ -175,7 +222,12 @@ final class LivePlayer {
         picture = PictureStats()
         moving = false
         movingFrom = nil
-        outage.reset()
+        if endPicture {
+            outage.reset()
+            holdPicture = false
+        } else {
+            outage.resetStall()
+        }
         #if os(iOS)
             for token in lifecycle {
                 NotificationCenter.default.removeObserver(token)
@@ -357,6 +409,18 @@ final class LivePlayer {
             paused: player.timeControlStatus == .paused,
             failed: item?.status == .failed
         )
+        notePictureMoved()
+    }
+
+    /// The quiet message stays until this watch is actually playing. The next
+    /// sample is too late: a sync hold pauses the item before the playhead moves.
+    private func notePictureMoved() {
+        guard holdPicture, player.timeControlStatus == .playing else { return }
+        error = nil
+        holdPicture = false
+        outage.endPictureRetry()
+        print("broadwave picture-back")
+        fflush(stdout)
     }
 
     private func metadata(channel: Channel, airing: Airing?) -> [AVMetadataItem] {
@@ -467,6 +531,11 @@ struct PlayerScreen: View {
                     if live.needsConfirm {
                         Button("Watch anyway") {
                             live.confirmWatch()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        Button("Try again") {
+                            live.retry()
                         }
                         .buttonStyle(.borderedProminent)
                     }

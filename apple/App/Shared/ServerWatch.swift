@@ -32,12 +32,20 @@ final class ServerWatch {
     private var recovery: PlaybackOutage.Recovery?
     private var lastTime: Double?
     private var playlist: String?
+    /// True once this viewing's picture has moved. A stall before that is startup.
+    private var played = false
+    /// When the unnamed picture-stopped message first showed. Nil once the
+    /// picture moves, the viewer leaves, or a named cause takes over.
+    private var pictureSince: Date?
+    private var pictureGen = 0
     private var snap: ((Bool, String?) async -> RecoverySnap)?
     private var onMessage: ((OutageDecision) -> Void)?
-    private var onRecover: (() -> Void)?
+    /// `true` is a quiet retry of a stopped picture. The message stays up.
+    private var onRecover: ((Bool) -> Void)?
     private let log = Logger(subsystem: "com.wolfeup.broadwave", category: "play")
 
-    func reset() {
+    /// Drops the stall clock. A quiet picture retry keeps its own clock.
+    func resetStall() {
         generation += 1
         probing = false
         recovering = false
@@ -47,10 +55,21 @@ final class ServerWatch {
         playlist = nil
     }
 
+    func reset() {
+        resetStall()
+        endPictureRetry()
+        played = false
+    }
+
+    func endPictureRetry() {
+        pictureSince = nil
+        pictureGen += 1
+    }
+
     func bind(
         snap: @escaping (Bool, String?) async -> RecoverySnap,
         onMessage: @escaping (OutageDecision) -> Void,
-        onRecover: @escaping () -> Void
+        onRecover: @escaping (Bool) -> Void
     ) {
         self.snap = snap
         self.onMessage = onMessage
@@ -96,6 +115,9 @@ final class ServerWatch {
         if stalled {
             clock.noteWaiting(at: Date())
         } else {
+            if let time, time.isFinite {
+                played = true
+            }
             clock.notePlaying()
         }
         probe(fatal: false)
@@ -105,9 +127,7 @@ final class ServerWatch {
         guard clock.surface(decision.message) != nil else { return }
         recovery = decision.recovery
         report(decision)
-        if decision.recovery != nil {
-            beginRecover()
-        }
+        follow(decision)
     }
 
     private func probe(fatal: Bool) {
@@ -121,12 +141,49 @@ final class ServerWatch {
             let reading = await snap(false, path)
             guard gen == generation else { return }
             probing = false
-            guard let decision = clock.resolve(at: Date(), snap: reading, fatal: fatal) else { return }
+            guard let decision = clock.resolve(at: Date(), snap: reading, fatal: fatal, afterPicture: played) else { return }
             recovery = decision.recovery
             report(decision)
-            if decision.recovery != nil {
-                beginRecover()
-            }
+            follow(decision)
+        }
+    }
+
+    /// A named cause waits for that cause. A stopped picture with no name
+    /// starts a new watch on its own clock.
+    private func follow(_ decision: OutageDecision) {
+        if decision.recovery != nil {
+            endPictureRetry()
+            beginRecover()
+            return
+        }
+        armPictureRetry(decision)
+    }
+
+    private func armPictureRetry(_ decision: OutageDecision) {
+        guard pictureSince == nil else { return }
+        guard PlaybackOutage.pictureRetryDelay(message: decision.message, recovery: decision.recovery, elapsed: 0) != nil else { return }
+        let since = Date()
+        pictureSince = since
+        let gen = pictureGen
+        Task {
+            await self.runPictureRetry(gen: gen, since: since)
+        }
+    }
+
+    private func runPictureRetry(gen: Int, since: Date) async {
+        while gen == pictureGen {
+            let elapsed = Date().timeIntervalSince(since)
+            guard let wait = PlaybackOutage.pictureRetryDelay(
+                message: PlaybackOutage.pictureStopped,
+                recovery: nil,
+                elapsed: elapsed
+            ) else { return }
+            try? await Task.sleep(for: .seconds(wait))
+            guard gen == pictureGen else { return }
+            log.info("picture retry")
+            print("broadwave picture-retry")
+            fflush(stdout)
+            onRecover?(true)
         }
     }
 
@@ -142,7 +199,7 @@ final class ServerWatch {
                     log.info("recovered")
                     print("broadwave recovered")
                     fflush(stdout)
-                    onRecover()
+                    onRecover(false)
                     return
                 }
                 try? await Task.sleep(for: .seconds(1))

@@ -13,6 +13,10 @@ public enum PlaybackOutage {
     public static let tunersBusy = "Every tuner is busy. Stop a recording or watch something already on."
     /// A stall is named only after this long, and only when something is actually wrong.
     public static let stallSeconds: TimeInterval = 8
+    /// A stopped picture with no named cause has nothing to wait for. The player
+    /// starts a new watch on this clock instead. The last one starts at two minutes.
+    public static let pictureRetryEvery: TimeInterval = 10
+    public static let pictureRetryFor: TimeInterval = 2 * 60
 
     public enum Recovery: Equatable, Sendable {
         case busy
@@ -75,6 +79,29 @@ public enum PlaybackOutage {
             return 2
         }
         return 1
+    }
+
+    /// Delay until the next quiet watch. Nil when this outage is not on that
+    /// clock, or the two minutes are over.
+    public static func pictureRetryDelay(message: String, recovery: Recovery?, elapsed: TimeInterval) -> TimeInterval? {
+        guard message == pictureStopped, recovery == nil else { return nil }
+        guard elapsed.isFinite, elapsed >= 0 else { return nil }
+        let everyMs = Int(pictureRetryEvery * 1000)
+        let forMs = Int(pictureRetryFor * 1000)
+        let elapsedMs = Int((elapsed * 1000).rounded())
+        guard elapsedMs < forMs else { return nil }
+        let into = elapsedMs % everyMs
+        let wait = into == 0 ? everyMs : everyMs - into
+        if elapsedMs + wait > forMs {
+            return nil
+        }
+        return TimeInterval(wait) / 1000
+    }
+
+    /// A quiet retry that fails without a named cause keeps the picture message.
+    /// No signal stays the viewer's call, including a tune that never locked.
+    public static func holdPictureMessage(_ decision: OutageDecision) -> Bool {
+        decision.recovery == nil && decision.message != noSignal
     }
 
     public static func classify(_ snap: RecoverySnap) -> OutageDecision {
@@ -225,6 +252,8 @@ public struct ServerOutage: Equatable, Sendable {
     }
 
     public private(set) var phase: Phase = .playing
+    /// Probes that found a stall with nothing named. One rides out a sync hold.
+    private var fineStalls = 0
 
     public init() {}
 
@@ -232,6 +261,7 @@ public struct ServerOutage: Equatable, Sendable {
         if case .surfaced = phase {
             return
         }
+        fineStalls = 0
         phase = .playing
     }
 
@@ -257,12 +287,19 @@ public struct ServerOutage: Equatable, Sendable {
 
     /// A stall while the server, the tuners, and the signal are fine stays
     /// with the player, and the clock starts over. Anything else is named once.
-    public mutating func resolve(at now: Date, snap: RecoverySnap, fatal: Bool) -> OutageDecision? {
+    /// `afterPicture` is a stall that follows a moving picture. The second one
+    /// is named: a sync hold ends before that, and the picture has stopped.
+    public mutating func resolve(at now: Date, snap: RecoverySnap, fatal: Bool, afterPicture: Bool = false) -> OutageDecision? {
         if case .surfaced = phase {
             return nil
         }
         let decision = PlaybackOutage.classify(snap)
         if fatal || decision.recovery != nil {
+            phase = .surfaced
+            return decision
+        }
+        fineStalls += 1
+        if afterPicture, fineStalls >= 2 {
             phase = .surfaced
             return decision
         }
