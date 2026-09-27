@@ -118,7 +118,10 @@ struct RootView: View {
             guard store.connected else { return }
             store.socket?.announce(name: ScreenIdentity.name, kind: ScreenIdentity.kind)
             #if DEBUG
-                if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") || sidebarPageTest != nil {
+                // Setup replaces the tabs, and the player with them, so a launch
+                // straight into a channel skips it.
+                let watching = UserDefaults.standard.integer(forKey: "BroadwaveWatch") > 0
+                if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") || sidebarPageTest != nil || watching {
                     return
                 }
                 if UserDefaults.standard.string(forKey: "BroadwaveSetup") != nil {

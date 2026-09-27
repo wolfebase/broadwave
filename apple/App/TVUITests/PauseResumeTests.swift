@@ -27,7 +27,7 @@ final class PauseResumeTests: XCTestCase {
 
     /// After a pause, "Back in sync" puts the screen back on the room's frame.
     /// The transport bar's menu is out of reach of UI tests, so a debug flag
-    /// presses it 10 s after the pause.
+    /// presses it 10 s after the pause and shows the engine's state in `syncProbe`.
     func testBackInSyncAfterAPause() throws {
         let env = ProcessInfo.processInfo.environment
         guard let server = env["BROADWAVE_SERVER"], !server.isEmpty else {
@@ -39,9 +39,19 @@ final class PauseResumeTests: XCTestCase {
             "-BroadwaveSyncLog", "1", "-BroadwaveRejoinTest", "YES", "-ApplePersistenceIgnoreState", "YES",
         ]
         app.launch()
-        wait(40)
-        XCUIRemote.shared.press(.playPause)
-        wait(45)
+        let probe = app.staticTexts["syncProbe"]
+        XCTAssertTrue(until(60) { probe.exists && probe.label.hasPrefix("locked") }, "never locked: \(probe.label)")
+        print("broadwave-test focus before the pause: \(focused(app))")
+        // On the first launch after an install, Play/Pause from XCUIRemote does not
+        // reach the player; a click on the touch surface does. Try both, in that order.
+        var left = false
+        for button in [XCUIRemote.Button.playPause, .select, .playPause] where !left {
+            XCUIRemote.shared.press(button)
+            left = until(8) { probe.label.hasSuffix("detached=true") }
+            print("broadwave-test pressed \(button.rawValue): \(probe.label)")
+        }
+        XCTAssertTrue(left, "the pause never reached the player: \(probe.label), focus on \(focused(app))")
+        XCTAssertTrue(until(40) { probe.label == "locked detached=false" }, "did not lock back on: \(probe.label)")
         XCTAssertEqual(app.state, .runningForeground)
     }
 
@@ -63,6 +73,22 @@ final class PauseResumeTests: XCTestCase {
         app.activate()
         wait(40)
         XCTAssertEqual(app.state, .runningForeground)
+    }
+
+    private func focused(_ app: XCUIApplication) -> String {
+        let element = app.descendants(matching: .any).element(matching: NSPredicate(format: "hasFocus == true"))
+        return element.exists ? "\(element.elementType.rawValue) '\(element.identifier)' '\(element.label)'" : "nothing"
+    }
+
+    private func until(_ seconds: TimeInterval, _ done: () -> Bool) -> Bool {
+        let end = Date().addingTimeInterval(seconds)
+        while Date() < end {
+            if done() {
+                return true
+            }
+            wait(0.5)
+        }
+        return done()
     }
 
     private func wait(_ seconds: TimeInterval) {

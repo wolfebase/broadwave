@@ -381,10 +381,17 @@ struct PlayerScreen: View {
                 }
                 // UI tests cannot reach the transport bar's menu; this presses
                 // "Back in sync" 10 s after the viewer leaves sync.
-                if UserDefaults.standard.bool(forKey: "BroadwaveRejoinTest"), live.sync?.detached == true {
-                    Color.clear.task {
-                        try? await Task.sleep(for: .seconds(10))
-                        live.sync?.rejoin()
+                if UserDefaults.standard.bool(forKey: "BroadwaveRejoinTest") {
+                    // The test reads the engine here instead of trusting that a press landed.
+                    Text("\(live.sync?.state.rawValue ?? "none") detached=\(live.sync?.detached == true)")
+                        .font(.system(size: 2))
+                        .foregroundStyle(.clear)
+                        .accessibilityIdentifier("syncProbe")
+                    if live.sync?.detached == true {
+                        Color.clear.task {
+                            try? await Task.sleep(for: .seconds(10))
+                            live.sync?.rejoin()
+                        }
                     }
                 }
             #endif
