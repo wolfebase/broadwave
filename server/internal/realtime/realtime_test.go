@@ -75,6 +75,10 @@ func TestFollowRoomSettlesOnceTheBufferCoversTheLatency(t *testing.T) {
 	if moved := r.Settle(4, recent); len(moved) != 0 {
 		t.Fatalf("a first frame newer than the target must stay, got %+v", moved)
 	}
+	if moved := r.Settle(4, first); len(moved) != 0 {
+		t.Fatalf("a room with one screen must stay at 1x, got %+v", moved)
+	}
+	r.Join("channel:4", 4, first)
 	before, _ := r.State("channel:4")
 	onScreen := before.Target(unixMS(*now))
 	eased := r.Settle(4, first)
