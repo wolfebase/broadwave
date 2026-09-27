@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.1 — 2026-09-26
+
+Live TV no longer freezes a few seconds after it starts.
+
+### Fixed
+
+- A few seconds into a channel the picture froze for about five seconds while the server moved everyone to the shared delay. Screens now ease onto that delay by playing a little slower for a few minutes, so nothing pauses.
+- A channel starts with a short buffer instead of at the very edge of the broadcast, which stopped the brief stalls in the first minute.
+
 ## 0.11.0 — 2026-09-26
 
 Live playback keeps one timeline across renditions, rewinds about ninety minutes, and continues when the broadcast clock jumps.
