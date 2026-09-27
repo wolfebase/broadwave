@@ -1,5 +1,6 @@
 import type Hls from "hls.js";
 import { events, type RoomState } from "./events";
+import { nextSeekLead } from "./seekLead";
 
 export type SyncStatus = {
   state: "off" | "waiting" | "syncing" | "locked";
@@ -14,6 +15,11 @@ const SEEK_MS = 400;
 const MAX_TRIM = 0.03;
 // Speeding up, or seeking forward, with less media than this underruns the live edge.
 const CUSHION_S = 1.5;
+// Safari stops the picture for about a quarter second on every rate change. A
+// player that loses this much after one is corrected by seeking instead, from a
+// smaller drift.
+const RATE_STALL_S = 0.12;
+const STALL_SEEK_MS = 120;
 
 type Frag = { start: number; duration: number; programDateTime: number | null };
 
@@ -30,6 +36,11 @@ export class SyncEngine {
   private status: SyncStatus = { state: "off", drift: 0, members: 0 };
   private lastSeek = 0;
   private holdUntil = 0;
+  private seekLead = 0;
+  private usedLead = 0;
+  private leadCheck = false;
+  private rateProbe: { at: number; t: number; rate: number } | null = null;
+  private rateStalls = 0;
 
   constructor(
     private video: HTMLVideoElement,
@@ -125,6 +136,7 @@ export class SyncEngine {
       const now = performance.now();
       if (now < this.holdUntil) return;
       this.holdUntil = now + drift;
+      this.rateProbe = null;
       this.video.pause();
       window.setTimeout(() => {
         this.holdUntil = 0;
@@ -132,18 +144,41 @@ export class SyncEngine {
       }, drift);
       return;
     }
-    this.seekTo(target);
+    this.seekTo(target, true);
   }
 
   /** Seeks sparingly: every seek flushes the player, and seeking into data it does not have stalls it. */
-  private seekTo(media: number): boolean {
+  private seekTo(media: number, playing: boolean): boolean {
     const now = performance.now();
     if (now - this.lastSeek < 2000) return false;
-    const t = this.timeFor(media);
+    let lead = playing ? this.seekLead : 0;
+    let t = lead > 0 ? this.timeFor(media + lead * 1000) : null;
+    if (t != null && !this.buffered(t, CUSHION_S / 2)) t = null;
+    if (t == null) {
+      lead = 0;
+      t = this.timeFor(media);
+    }
     if (t == null) return false;
     this.lastSeek = now;
+    this.usedLead = lead;
+    this.leadCheck = playing;
+    this.rateProbe = null;
     this.video.currentTime = t;
     return true;
+  }
+
+  /** Changes speed and notes the playhead, so the next tick can tell whether the change stalled the picture. */
+  private setRate(rate: number) {
+    if (this.video.playbackRate === rate) return;
+    this.video.playbackRate = rate;
+    this.rateProbe = { at: performance.now(), t: this.video.currentTime, rate };
+  }
+
+  /** Whether t and the next margin seconds are in one buffered range. */
+  private buffered(t: number, margin: number): boolean {
+    const ranges = this.video.buffered;
+    for (let i = 0; i < ranges.length; i++) if (t >= ranges.start(i) && t + margin <= ranges.end(i)) return true;
+    return false;
   }
 
   private setStatus(s: SyncStatus) {
@@ -166,17 +201,43 @@ export class SyncEngine {
     video.dataset.syncOffset = String(Math.round(local - Date.now()));
     video.dataset.syncDrift = String(Math.round(drift));
     if (st.rate === 0) {
+      this.rateProbe = null;
       if (!video.paused) video.pause();
-      if (Math.abs(drift) > TRIM_MS * 2) this.seekTo(target);
+      if (Math.abs(drift) > TRIM_MS * 2) this.seekTo(target, false);
       this.setStatus({ state: "locked", drift, members: st.members, room: st });
       return;
     }
     if (video.paused) void video.play().catch(() => undefined);
+    const now = performance.now();
+    // A seek has not paid its cost yet; correcting now would chase the landing.
+    if (this.leadCheck) {
+      if (now - this.lastSeek < 1000) {
+        this.setStatus({ state: "syncing", drift, members: st.members, room: st });
+        return;
+      }
+      this.leadCheck = false;
+      this.seekLead = nextSeekLead(this.usedLead, drift);
+    }
+    const probe = this.rateProbe;
+    if (probe && now - probe.at >= 200) {
+      this.rateProbe = null;
+      // Only a clean window counts: playing, with data, and short enough that
+      // an underrun or a background tab cannot pass for a rate change.
+      if (!video.paused && video.readyState >= 3 && now - probe.at <= 500) {
+        const lost = ((now - probe.at) / 1000) * probe.rate - (video.currentTime - probe.t);
+        if (lost > RATE_STALL_S) this.rateStalls++;
+        else if (this.rateStalls < 2) this.rateStalls = 0;
+      }
+    }
+    const trims = this.rateStalls < 2;
+    // The room's own speed: 1, or slower while it eases back to its latency.
+    // Trimming around it keeps a screen on the target instead of 50 ms off it.
+    const base = st.rate;
     const ahead = this.forwardMedia();
-    if (Math.abs(drift) > SEEK_MS) {
-      video.playbackRate = 1;
+    if (Math.abs(drift) > (trims ? SEEK_MS : STALL_SEEK_MS)) {
+      this.setRate(base);
       // The target is not buffered, or the cushion is too thin to chase it.
-      // Hold rate at 1; a seek past the edge stalls the picture.
+      // Hold the room's rate; a seek past the edge stalls the picture.
       if (drift < 0 && (this.timeFor(target) == null || ahead < CUSHION_S)) {
         this.setStatus({ state: "syncing", drift, members: st.members, room: st });
         return;
@@ -185,14 +246,15 @@ export class SyncEngine {
       this.setStatus({ state: "syncing", drift, members: st.members, room: st });
       return;
     }
-    if (Math.abs(drift) > TRIM_MS) {
-      let rate = 1 + Math.max(-MAX_TRIM, Math.min(MAX_TRIM, -drift / 2000));
-      if (rate > 1 && ahead < CUSHION_S) rate = 1;
-      video.playbackRate = rate;
+    if (trims && Math.abs(drift) > TRIM_MS) {
+      // Steps of 0.5%: every new rate is a rate change, which Safari pays for.
+      let rate = base + Math.round(Math.max(-MAX_TRIM, Math.min(MAX_TRIM, -drift / 2000)) / 0.005) * 0.005;
+      if (rate > base && ahead < CUSHION_S) rate = base;
+      this.setRate(rate);
       this.setStatus({ state: "syncing", drift, members: st.members, room: st });
       return;
     }
-    video.playbackRate = 1;
+    this.setRate(base);
     this.setStatus({ state: "locked", drift, members: st.members, room: st });
   }
 }
