@@ -66,7 +66,6 @@ export function Stage({
 }) {
   const [paused, setPaused] = useState(false);
   const [timedIdle, setTimedIdle] = useState(false);
-  const [hudFocus, setHudFocus] = useState(false);
   const [open, setOpen] = useState(false);
   const [muted, setMuted] = useState(false);
   const ownRoot = useRef<HTMLElement>(null);
@@ -89,7 +88,7 @@ export function Stage({
     };
   }, [videoRef]);
 
-  const showChrome = paused || open || mode === "mini" || Boolean(error) || Boolean(loading) || hudFocus;
+  const showChrome = paused || open || mode === "mini" || Boolean(error) || Boolean(loading);
   const idle = !showChrome && timedIdle;
   const [seenShow, setSeenShow] = useState(showChrome);
   if (seenShow !== showChrome) {
@@ -99,7 +98,13 @@ export function Stage({
 
   useEffect(() => {
     if (showChrome) return;
-    let timer = window.setTimeout(() => setTimedIdle(true), 3200);
+    // The chrome goes inert when it fades, which would drop keyboard focus to
+    // the page; hand it back to the stage, which still takes the keys.
+    const fade = () => {
+      if (root.current?.querySelector(".stage-hud")?.contains(document.activeElement)) root.current.focus();
+      setTimedIdle(true);
+    };
+    let timer = window.setTimeout(fade, 3200);
     const poke = (event: Event) => {
       // The chrome is opacity 0 while idle, so a Tab would land on a control
       // the viewer cannot see. Show it and move to the first control instead.
@@ -112,7 +117,7 @@ export function Stage({
       }
       setTimedIdle(false);
       window.clearTimeout(timer);
-      timer = window.setTimeout(() => setTimedIdle(true), 3200);
+      timer = window.setTimeout(fade, 3200);
     };
     window.addEventListener("mousemove", poke);
     window.addEventListener("keydown", poke);
@@ -183,11 +188,6 @@ export function Stage({
       <div
         className="stage-hud"
         inert={idle ? true : undefined}
-        onFocus={() => setHudFocus(true)}
-        onBlur={(event) => {
-          const next = event.relatedTarget;
-          if (!(next instanceof Node) || !event.currentTarget.contains(next)) setHudFocus(false);
-        }}
       >
         <header className="stage-top">
           <button type="button" className="glass-icon" onClick={onBack} aria-label={backLabel}>
