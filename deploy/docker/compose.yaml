@@ -4,8 +4,10 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
-    # Host networking lets the server hear HDHomeRun discovery and lets the
-    # iPhone and Apple TV apps find the server over Bonjour.
+    # Host networking lets a Linux server hear HDHomeRun discovery and lets
+    # phones and TVs find the server over Bonjour. On Docker Desktop this
+    # network stays inside the virtual machine, so use the published-port
+    # command in the README instead.
     network_mode: host
     environment:
       TZ: UTC

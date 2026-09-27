@@ -4,8 +4,8 @@ Broadwave is live TV and DVR for your antenna. You run the Broadwave server at h
 
 ## Get started
 
-1. Run the server: `docker run -d --name Broadwave --network host -v /path/to/config:/config ghcr.io/wolfebase/broadwave:latest` (Unraid: add the Broadwave template). Host networking lets it find your tuner.
-2. Open `http://<server>:8477` and follow setup. It finds an HDHomeRun on your network by itself.
+1. Run the server: `docker run -d --name Broadwave --network host -v /path/to/config:/config ghcr.io/wolfebase/broadwave:latest` (Unraid: add the Broadwave template, and set PUID to 99 and PGID to 100). On Linux, host networking lets it find your tuner. On Docker Desktop, publish port 8477 and set `HDHR_HOST` to the tuner address. The README has both commands.
+2. Open `http://<server>:8477` and follow setup. It finds an HDHomeRun on your network by itself. When none appears, enter the tuner's address.
 3. Open the Broadwave app on the same network. It finds the server on its own. You can also enter the address.
 
 ## Common questions
