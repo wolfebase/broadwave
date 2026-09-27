@@ -2,17 +2,20 @@ import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, Device, Device
 
 export type ApiFailure = Error & { status: number; code?: string };
 
-function apiFailure(status: number, statusText: string, text: string): ApiFailure {
-  let message = text;
+// A body that is not the error envelope. Same words as requestFailed in outage.ts.
+export const unreadBody = "That did not work. Try again.";
+
+function apiFailure(status: number, text: string): ApiFailure {
+  let message = "";
   let code: string | undefined;
   try {
     const body = JSON.parse(text) as { message?: string; code?: string };
     if (body.message) message = body.message;
     if (body.code) code = body.code;
   } catch {
-    message = text;
+    message = "";
   }
-  const err = new Error(message || statusText) as ApiFailure;
+  const err = new Error(message || unreadBody) as ApiFailure;
   err.status = status;
   err.code = code;
   return err;
@@ -27,7 +30,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!res.ok) {
-    throw apiFailure(res.status, res.statusText, await res.text());
+    throw apiFailure(res.status, await res.text());
   }
   return res.json() as Promise<T>;
 }
@@ -279,14 +282,14 @@ export function addPlaylistFile(name: string, groups: string, file: File, keep =
   return fetch("/api/v1/sources", { method: "POST", body }).then(async (res) => {
     const text = await res.text();
     if (!res.ok) {
-      let message = text;
+      let message = "";
       try {
         const parsed = JSON.parse(text) as { message?: string };
         if (parsed.message) message = parsed.message;
       } catch {
-        message = text;
+        message = "";
       }
-      throw new Error(message || res.statusText);
+      throw new Error(message || unreadBody);
     }
     return JSON.parse(text) as SourceAdded;
   });
