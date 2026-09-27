@@ -254,6 +254,8 @@ final class TilePlayer {
     private var session: WatchSession?
     private var sync: SyncEngine?
     private var api: APIClient?
+    private let outage = ServerWatch()
+    private var outageLoop: Task<Void, Never>?
     /// Written by the player layer when a picture is actually on screen.
     let frameOnScreen = FrameOnScreen()
 
@@ -281,6 +283,11 @@ final class TilePlayer {
         confirmNext = false
         needsConfirm = false
         error = nil
+        outage.bind(
+            health: { await api.reachable() },
+            onMessage: { [weak self] message in self?.showOutage(message) },
+            onRecover: { [weak self] in self?.attempt += 1 }
+        )
         do {
             let session = try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: prefs, confirmLive: allow)
             guard channelID == channel.id else {
@@ -300,6 +307,7 @@ final class TilePlayer {
             applyAudible()
             player.playImmediately(atRate: 1)
             canHear = request.audible
+            watchOutage()
             if let socket = store.socket {
                 let engine = SyncEngine(player: player, socket: socket, room: room, channelID: channel.id)
                 engine.displayedFrame = { [weak self] in
@@ -313,7 +321,12 @@ final class TilePlayer {
         } catch let error as APIError where error.code == "recording_soon" {
             needsConfirm = true
             self.error = error.message
+        } catch let error as URLError {
+            guard channelID == channel.id, error.code != .cancelled else { return }
+            needsConfirm = false
+            outage.failToReach()
         } catch {
+            guard channelID == channel.id else { return }
             attempts += 1
             if attempts == 1, error.localizedDescription.localizedStandardContains("tuner") {
                 try? await Task.sleep(for: .seconds(2))
@@ -323,6 +336,34 @@ final class TilePlayer {
             }
             self.error = error.localizedDescription
         }
+    }
+
+    private func showOutage(_ message: String) {
+        error = message
+        guard message == PlaybackOutage.serverStopped else { return }
+        sync?.stop()
+        sync = nil
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+    }
+
+    private func watchOutage() {
+        outageLoop?.cancel()
+        outageLoop = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(500))
+                self?.sampleOutage()
+            }
+        }
+    }
+
+    private func sampleOutage() {
+        let item = player.currentItem
+        outage.note(
+            time: item?.currentTime().seconds,
+            waiting: player.timeControlStatus == .waitingToPlayAtSpecifiedRate,
+            failed: item?.status == .failed
+        )
     }
 
     func confirmWatch() {
@@ -354,17 +395,22 @@ final class TilePlayer {
     }
 
     func stop() async {
+        outageLoop?.cancel()
+        outageLoop = nil
+        outage.reset()
         sync?.stop()
         sync = nil
         clearRoute()
         player.pause()
         player.replaceCurrentItem(with: nil)
-        if let api, let id = channelID, let session {
-            await api.stopWatching(channelID: id, rendition: session.rendition)
-        }
-        session = nil
+        let id = channelID
+        let ended = session
         channelID = nil
+        session = nil
         canHear = false
+        if let api, let id, let ended {
+            await api.stopWatching(channelID: id, rendition: ended.rendition)
+        }
     }
 
     private func applyAudible() {

@@ -3,6 +3,7 @@ import AVKit
 import BroadwaveKit
 import BroadwaveUI
 import CoreMedia
+import os
 import SwiftUI
 
 struct PictureStats: Equatable {
@@ -37,6 +38,14 @@ final class LivePlayer {
     private(set) var refreshRate: Float = 0
     private(set) var picture = PictureStats()
     private var statsTask: Task<Void, Never>?
+    private let outage = ServerWatch()
+    private let playLog = Logger(subsystem: "com.wolfeup.broadwave", category: "play")
+
+    func playLogNote(_ message: String) {
+        playLog.info("\(message, privacy: .public)")
+        print("broadwave \(message)")
+        fflush(stdout)
+    }
 
     func start(_ channel: Channel, store: AppStore) async {
         await stop()
@@ -47,6 +56,11 @@ final class LivePlayer {
         confirmNext = false
         needsConfirm = false
         error = nil
+        outage.bind(
+            health: { await api.reachable() },
+            onMessage: { [weak self] message in self?.showOutage(message) },
+            onRecover: { [weak self] in self?.attempt += 1 }
+        )
         do {
             let session = try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: store.prefs, confirmLive: allow)
             guard channelID == channel.id else {
@@ -62,6 +76,7 @@ final class LivePlayer {
             watchStartup(item)
             player.play()
             watchPicture()
+            playLog.info("channel \(channel.displayNumber, privacy: .public)")
             if store.syncEnabled, Compatibility.gateFeature(store.info, "wholeHomeSync") == nil, let socket = store.socket {
                 let engine = SyncEngine(player: player, socket: socket, room: "channel:\(channel.id)", channelID: channel.id)
                 engine.start()
@@ -70,10 +85,26 @@ final class LivePlayer {
         } catch let error as APIError where error.code == "recording_soon" {
             needsConfirm = true
             self.error = error.message
+        } catch let error as URLError {
+            guard channelID == channel.id, error.code != .cancelled else { return }
+            needsConfirm = false
+            outage.failToReach()
         } catch {
+            guard channelID == channel.id else { return }
             needsConfirm = false
             self.error = error.localizedDescription
         }
+    }
+
+    /// The server is gone, or the item failed while the server was still up.
+    /// Clearing the item lets the next start own the player.
+    private func showOutage(_ message: String) {
+        error = message
+        guard message == PlaybackOutage.serverStopped else { return }
+        sync?.stop()
+        sync = nil
+        player.pause()
+        player.replaceCurrentItem(with: nil)
     }
 
     func confirmWatch() {
@@ -87,6 +118,7 @@ final class LivePlayer {
         statsTask?.cancel()
         statsTask = nil
         picture = PictureStats()
+        outage.reset()
         sync?.stop()
         sync = nil
         if let tick {
@@ -99,11 +131,13 @@ final class LivePlayer {
         stallObserver = nil
         player.pause()
         player.replaceCurrentItem(with: nil)
-        if let api, let id = channelID, let session {
-            await api.stopWatching(channelID: id, rendition: session.rendition)
-        }
-        session = nil
+        let id = channelID
+        let ended = session
         channelID = nil
+        session = nil
+        if let api, let id, let ended {
+            await api.stopWatching(channelID: id, rendition: ended.rendition)
+        }
     }
 
     private func watchPicture() {
@@ -195,8 +229,20 @@ final class LivePlayer {
                     self.lastBeat = Date()
                     print("broadwave beat stalls=\(self.stalls) stallMs=\(self.stallMs)")
                 }
+                if self.player.currentItem != nil {
+                    self.sampleOutage()
+                }
             }
         }
+    }
+
+    private func sampleOutage() {
+        let item = player.currentItem
+        outage.note(
+            time: item?.currentTime().seconds,
+            waiting: player.timeControlStatus == .waitingToPlayAtSpecifiedRate,
+            failed: item?.status == .failed
+        )
     }
 
     private func metadata(channel: Channel, airing: Airing?) -> [AVMetadataItem] {
@@ -321,6 +367,32 @@ struct PlayerScreen: View {
         .onDisappear {
             Task { await live.stop() }
         }
+        #if DEBUG
+        // Keystrokes go to whichever simulator is in front. A file steps the channel on this one.
+        .task {
+            guard UserDefaults.standard.bool(forKey: "BroadwaveChannelZap") else { return }
+            let file = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("broadwave-zap.txt")
+            live.playLogNote("zap-file \(file.path)")
+            var seen = ""
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+                let line = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if line.isEmpty || line == seen {
+                    continue
+                }
+                seen = line
+                let verb = line.split(separator: " ").first.map(String.init) ?? line
+                if verb == "up" {
+                    step(-1)
+                } else if verb == "down" {
+                    step(1)
+                }
+                live.playLogNote("zap \(line) \(nowPlaying.channel?.displayNumber ?? "")")
+            }
+        }
+        #endif
     }
 
     private func step(_ dir: Int) {

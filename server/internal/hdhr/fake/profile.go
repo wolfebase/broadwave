@@ -70,6 +70,11 @@ func antennaChannels() []Channel {
 	}
 }
 
+// QuadLineup is the antenna lineup plus 5.2 on 5.1's frequency, so four tiles share two tuners.
+func QuadLineup() []Channel {
+	return append(antennaChannels(), Channel{Number: "5.2", Name: "KCTV2", Freq: 533000000})
+}
+
 func flex4KChannels() []Channel {
 	chs := antennaChannels()
 	return append(chs,

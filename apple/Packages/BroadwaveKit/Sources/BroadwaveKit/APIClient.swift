@@ -61,6 +61,20 @@ public struct APIClient: Sendable {
         try await send("GET", "/server")
     }
 
+    /// True when /health answers. Two seconds, so a dead server does not stall the player.
+    public func reachable() async -> Bool {
+        var req = URLRequest(url: url("/api/v1/health"))
+        req.httpMethod = "GET"
+        req.timeoutInterval = 2
+        do {
+            let (_, res) = try await session.data(for: req)
+            let status = (res as? HTTPURLResponse)?.statusCode ?? 0
+            return (200 ..< 300).contains(status)
+        } catch {
+            return false
+        }
+    }
+
     public func clock() async throws -> Double {
         struct R: Decodable { var serverTime: Double }
         return try await send("GET", "/clock", as: R.self).serverTime
