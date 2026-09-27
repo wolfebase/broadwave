@@ -54,7 +54,10 @@ type Server struct {
 	Channels []Channel
 	TS       string
 	// Realtime spreads one pass of TS across four seconds so a relay can build a live playlist.
-	Realtime   bool
+	Realtime bool
+	// Source, when set, is a TS file played at its own pace on a loop, keeping
+	// its content. Realtime otherwise streams a generated test pattern.
+	Source     string
 	Profile    string
 	TunerCount int
 
@@ -435,12 +438,17 @@ func (s *Server) streamLegacy(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 	w.Header().Set("Content-Type", "video/mp2t")
-	if s.Realtime {
+	if s.Realtime || s.Source != "" {
 		cmd := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error", "-re",
 			"-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=60000/1001",
 			"-f", "lavfi", "-i", "sine=frequency=500",
 			"-c:v", "libx264", "-preset", "ultrafast", "-g", "30", "-pix_fmt", "yuv420p",
 			"-c:a", "ac3", "-f", "mpegts", "pipe:1")
+		if s.Source != "" {
+			// A broadcast recording as it aired, for picture and sound timing checks.
+			cmd = exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error", "-re", "-stream_loop", "-1",
+				"-i", s.Source, "-map", "0", "-c", "copy", "-f", "mpegts", "pipe:1")
+		}
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
