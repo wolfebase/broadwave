@@ -297,8 +297,15 @@ function FinishStep({ progress, note }: { progress: SetupFinish | null; note: st
     return qr.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
   }, [url]);
   return (
-    <section className="setup-card glass setup-finish" aria-busy={progress?.running ? true : undefined} data-ready={ready ? "1" : "0"}>
-      <h2>{ready || "Setting up your TV"}</h2>
+    <section
+      className="setup-card glass setup-finish"
+      tabIndex={0}
+      aria-labelledby="setup-ready-title"
+      aria-busy={progress?.running ? true : undefined}
+      data-ready={ready ? "1" : "0"}
+    >
+      {/* The card scrolls on a phone and has no controls of its own. */}
+      <h2 id="setup-ready-title">{ready || "Setting up your TV"}</h2>
       <ul className="setup-list">
         {(progress?.steps ?? []).map((item) => (
           <li key={item.id}>

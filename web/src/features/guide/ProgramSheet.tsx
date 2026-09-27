@@ -23,10 +23,33 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
   const upcoming = airing ? Date.parse(airing.start) > now : false;
 
   useEffect(() => {
+    const root = ref.current;
     const prev = document.activeElement as HTMLElement | null;
-    ref.current?.querySelector<HTMLElement>("button.primary, button")?.focus();
+    const items = () =>
+      [...(root?.querySelectorAll<HTMLElement>("button, a[href], input, select, textarea") ?? [])].filter((el) => !el.hidden && !el.hasAttribute("disabled"));
+    const list = items();
+    (list.find((el) => el.classList.contains("primary")) ?? list[0])?.focus();
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !root) return;
+      const list = items();
+      if (list.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = list[0];
+      const last = list[list.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !root.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !root.contains(active))) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => {

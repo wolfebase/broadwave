@@ -38,7 +38,7 @@ export function DiagnosticsPage() {
           {(d.tuners ?? []).map((t) => (
             <div key={t.index} className="signal">
               <span>Tuner {t.index + 1}</span>
-              <meter min={0} max={100} value={t.strength ?? 0} title="Signal strength" />
+              <meter min={0} max={100} value={t.strength ?? 0} aria-label={`Tuner ${t.index + 1} signal strength`} title="Signal strength" />
               <span className="dim">
                 {t.target ? `${t.ours ? "This server" : "Another device"} · ${tunedLabel(t.guide, t.name)} · signal ${t.strength}% · quality ${t.quality}%` : "Free"}
                 {t.viewers ? ` · ${t.viewers} watching` : ""}

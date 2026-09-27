@@ -66,6 +66,7 @@ export function Stage({
 }) {
   const [paused, setPaused] = useState(false);
   const [timedIdle, setTimedIdle] = useState(false);
+  const [hudFocus, setHudFocus] = useState(false);
   const [open, setOpen] = useState(false);
   const [muted, setMuted] = useState(false);
   const ownRoot = useRef<HTMLElement>(null);
@@ -88,7 +89,7 @@ export function Stage({
     };
   }, [videoRef]);
 
-  const showChrome = paused || open || mode === "mini" || Boolean(error) || Boolean(loading);
+  const showChrome = paused || open || mode === "mini" || Boolean(error) || Boolean(loading) || hudFocus;
   const idle = !showChrome && timedIdle;
   const [seenShow, setSeenShow] = useState(showChrome);
   if (seenShow !== showChrome) {
@@ -99,7 +100,16 @@ export function Stage({
   useEffect(() => {
     if (showChrome) return;
     let timer = window.setTimeout(() => setTimedIdle(true), 3200);
-    const poke = () => {
+    const poke = (event: Event) => {
+      // The chrome is opacity 0 while idle, so a Tab would land on a control
+      // the viewer cannot see. Show it and move to the first control instead.
+      if (event instanceof KeyboardEvent && event.key === "Tab" && idle) {
+        event.preventDefault();
+        setTimedIdle(false);
+        window.requestAnimationFrame(() => {
+          root.current?.querySelector<HTMLElement>(".stage-hud button, .stage-hud a[href], .stage-hud input, .stage-hud select, .stage-hud textarea")?.focus();
+        });
+      }
       setTimedIdle(false);
       window.clearTimeout(timer);
       timer = window.setTimeout(() => setTimedIdle(true), 3200);
@@ -113,7 +123,7 @@ export function Stage({
       window.removeEventListener("keydown", poke);
       window.removeEventListener("touchstart", poke);
     };
-  }, [showChrome]);
+  }, [showChrome, idle, root]);
 
   function toggle() {
     if (onTogglePlay) return onTogglePlay();
@@ -170,7 +180,15 @@ export function Stage({
         </button>
       ) : null}
       {mode === "full" ? (
-      <div className="stage-hud">
+      <div
+        className="stage-hud"
+        inert={idle ? true : undefined}
+        onFocus={() => setHudFocus(true)}
+        onBlur={(event) => {
+          const next = event.relatedTarget;
+          if (!(next instanceof Node) || !event.currentTarget.contains(next)) setHudFocus(false);
+        }}
+      >
         <header className="stage-top">
           <button type="button" className="glass-icon" onClick={onBack} aria-label={backLabel}>
             <BackIcon />
