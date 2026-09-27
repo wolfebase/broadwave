@@ -33,6 +33,10 @@ final class LivePlayer {
     private var tick: Any?
     private var stallObserver: NSObjectProtocol?
     private(set) var firstFrameMs: Int?
+    /// False from a new watch until the picture has moved 0.3 s. A new room
+    /// holds its first frame for the start, and that is not a picture yet.
+    private(set) var moving = false
+    private var movingFrom: Double?
     private(set) var stalls = 0
     private(set) var stallMs = 0
     private var stallStarted: Date?
@@ -169,6 +173,8 @@ final class LivePlayer {
         statsTask?.cancel()
         statsTask = nil
         picture = PictureStats()
+        moving = false
+        movingFrom = nil
         outage.reset()
         #if os(iOS)
             for token in lifecycle {
@@ -262,6 +268,8 @@ final class LivePlayer {
         }
         started = Date()
         firstFrameMs = nil
+        moving = false
+        movingFrom = nil
         stalls = 0
         stallMs = 0
         stallStarted = nil
@@ -283,6 +291,7 @@ final class LivePlayer {
                     self.firstFrameMs = Int(Date().timeIntervalSince(self.started) * 1000)
                     print("broadwave ttff \(self.firstFrameMs ?? 0)ms")
                 }
+                self.noteMoving()
                 if let start = self.stallStarted, self.player.timeControlStatus == .playing {
                     self.stallMs += Int(Date().timeIntervalSince(start) * 1000)
                     self.stallStarted = nil
@@ -319,6 +328,24 @@ final class LivePlayer {
                 })
             }
         #endif
+    }
+
+    private func noteMoving() {
+        guard !moving else { return }
+        let now = player.currentTime().seconds
+        guard player.timeControlStatus == .playing, now.isFinite else {
+            movingFrom = nil
+            return
+        }
+        guard let from = movingFrom else {
+            movingFrom = now
+            return
+        }
+        if now - from >= 0.3 {
+            moving = true
+            print("broadwave moving \(Int(Date().timeIntervalSince(started) * 1000))ms")
+            fflush(stdout)
+        }
     }
 
     private func sampleOutage() {
@@ -371,6 +398,16 @@ struct PlayerScreen: View {
         #endif
     }
 
+    private var tuning: Bool {
+        #if DEBUG
+            // Layout checks never start a picture.
+            if UserDefaults.standard.bool(forKey: "BroadwaveChrome") {
+                return false
+            }
+        #endif
+        return live.error == nil && !live.moving
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             Color.black.ignoresSafeArea()
@@ -389,6 +426,10 @@ struct PlayerScreen: View {
                 rejoin: live.sync?.detached == true ? { live.sync?.rejoin() } : nil
             )
             .ignoresSafeArea()
+            if tuning, let channel = nowPlaying.channel {
+                TuningCard(channel: channel, show: store.index.on(channel.id, at: Date())?.title)
+                    .id(channel.id)
+            }
             #if os(iOS)
                 overlay
             #endif
@@ -1236,5 +1277,39 @@ struct RecordingPlayerScreen: View {
         #if os(iOS)
             .toolbarVisibility(.hidden, for: .tabBar)
         #endif
+    }
+}
+
+/// Covers the player from a new watch until the picture moves, as the web
+/// player does, so the frame a new room holds at its start does not look frozen.
+private struct TuningCard: View {
+    let channel: Channel
+    let show: String?
+    @State private var started = Date()
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            TimelineView(.periodic(from: started, by: 0.5)) { context in
+                VStack(spacing: 10) {
+                    Text("\(channel.displayNumber) \(channel.displayName)")
+                        .font(.headline)
+                    if let show, show != channel.displayName {
+                        Text(show)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    ProgressView()
+                    Text("\(TuningSteps.text(after: context.date.timeIntervalSince(started)))…")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .multilineTextAlignment(.center)
+                .padding()
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("tuning")
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
