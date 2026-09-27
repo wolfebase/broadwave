@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
@@ -10,7 +10,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const evidence = path.resolve(here, "../../.evidence/lane");
 
 type Channel = { id: number; number: string; name: string };
-type Harness = { base: string; db: string; admin: string; control: string };
+type Harness = { base: string; db: string; config: string; admin: string; control: string };
 
 function harness(): Harness {
   return JSON.parse(readFileSync(path.join(here, ".run/server.json"), "utf8")) as Harness;
@@ -205,3 +205,106 @@ test("a channel with no listing plays, then shows the program when the guide arr
     );
   }
 });
+
+test("a channel with no signal plays again when the signal returns", async ({ page }) => {
+  const { admin } = harness();
+  const kctv = channel("KCTV");
+  try {
+    await openChannel(page, kctv.id);
+    await expectPlaying(page);
+    await mark(page);
+    await post(`${admin}/dark?channel=${encodeURIComponent(kctv.number)}`);
+    await expect(notice(page, "alert", "This channel isn't coming in. Check the antenna.")).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+    await shot(page, "l6-no-signal.jpg");
+    await post(`${admin}/light?channel=${encodeURIComponent(kctv.number)}`);
+    await nudge(page);
+    await expectPlaying(page);
+    await expect(page.locator("html")).toHaveAttribute("data-lane", "stay");
+    await expect(notice(page, "alert", "This channel isn't coming in. Check the antenna.")).toHaveCount(0);
+  } finally {
+    await post(`${admin}/light?channel=${encodeURIComponent(kctv.number)}`).catch(() => undefined);
+  }
+});
+
+test("a recordings folder that cannot be written works again without a reload", async ({ page }) => {
+  const { base, db, config } = harness();
+  const dir = path.join(config, "work", "recordings");
+  mkdirSync(dir, { recursive: true });
+  sql(db, `INSERT INTO settings(key, value) VALUES('watermarkGB', '0') ON CONFLICT(key) DO UPDATE SET value='0';`);
+  chmodSync(dir, 0o555);
+  try {
+    await page.goto("/");
+    await settle(page);
+    const setup = page.getByRole("heading", { name: "Let's set up your TV" });
+    const hero = page.getByRole("heading", { name: "NFL: Chiefs at Bills" });
+    await expect(setup.or(hero)).toBeVisible();
+    if (await setup.isVisible()) {
+      const cont = page.getByRole("button", { name: "Continue" });
+      if (await cont.isVisible()) await cont.click();
+      await page.getByRole("button", { name: "Watch", exact: true }).click();
+      await expect(setup).toHaveCount(0);
+      await page.goto("/");
+      await settle(page);
+    }
+    await mark(page);
+    await expect(page.getByRole("heading", { name: "NFL: Chiefs at Bills" })).toBeVisible();
+    await page.locator(".hero-actions").getByRole("button", { name: "Record" }).click();
+    await expect(notice(page, "alert", "Broadwave can't save this recording. Check the recordings folder, then try again.")).toBeVisible();
+    await shot(page, "l6-disk.jpg");
+    chmodSync(dir, 0o755);
+    await page.locator(".hero-actions").getByRole("button", { name: "Record" }).click();
+    await expect(notice(page, "alert", /can't save this recording/)).toHaveCount(0);
+    await expect
+      .poll(async () => {
+        const res = await fetch(`${base}/api/v1/recordings`);
+        const body = (await res.json()) as { recordings?: { status?: string }[] };
+        return (body.recordings ?? []).some((rec) => rec.status === "recording");
+      })
+      .toBe(true);
+    await expect(page.locator("html")).toHaveAttribute("data-lane", "stay");
+  } finally {
+    chmodSync(dir, 0o755);
+    sql(db, `DELETE FROM settings WHERE key = 'watermarkGB';`);
+    await stopRecordings(base);
+  }
+});
+
+test("a phone that loses its connection plays again when the network returns", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const wdaf = channel("WDAF");
+  try {
+    await openChannel(page, wdaf.id);
+    await expectPlaying(page);
+    await mark(page);
+    const dropped = Date.now();
+    await page.context().setOffline(true);
+    await expect(notice(page, "alert", "The connection dropped. It will try again when it's back.")).toBeVisible({ timeout: 30_000 });
+    const left = 20_000 - (Date.now() - dropped);
+    if (left > 0) await page.waitForTimeout(left);
+    await expect(notice(page, "alert", "The connection dropped. It will try again when it's back.")).toBeVisible();
+    await shot(page, "l6-offline.jpg");
+    await expect(page.locator("html")).toHaveAttribute("data-lane", "stay");
+    await page.context().setOffline(false);
+    await nudge(page);
+    await expectPlaying(page);
+    await expect(page.locator("html")).toHaveAttribute("data-lane", "stay");
+    await expect(notice(page, "alert", /connection dropped/)).toHaveCount(0);
+  } finally {
+    await page.context().setOffline(false).catch(() => undefined);
+  }
+});
+
+async function stopRecordings(base: string) {
+  const res = await fetch(`${base}/api/v1/recordings`).catch(() => null);
+  if (!res?.ok) return;
+  const body = (await res.json()) as { recordings?: { id: number; status?: string }[] };
+  for (const rec of body.recordings ?? []) {
+    if (rec.status !== "recording") continue;
+    await fetch(`${base}/api/v1/recordings/${rec.id}/stop`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }).catch(() => undefined);
+  }
+}

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"broadwave/internal/disk"
 	"broadwave/internal/dvr"
 	"broadwave/internal/guide"
 	"broadwave/internal/live"
@@ -130,6 +131,12 @@ func (s *Server) startRecording(w http.ResponseWriter, r *http.Request) {
 	}
 	meta := store.Recording{ChannelID: body.ChannelID, Title: strings.TrimSpace(body.Title)}
 	minutes := body.Minutes
+	if s.Hub != nil && s.Hub.Dir != "" {
+		if err := disk.Writable(filepath.Join(s.Hub.Dir, "recordings")); err != nil {
+			writeError(w, err)
+			return
+		}
+	}
 	if air, ok := s.listingFor(r.Context(), body.ChannelID, meta.Title); ok {
 		meta.Title = air.Title
 		meta.Subtitle = air.Subtitle
