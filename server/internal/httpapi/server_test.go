@@ -208,6 +208,9 @@ func TestDiskReserveBlocksRecording(t *testing.T) {
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "clip.ts")
+	if err := os.WriteFile(path, []byte{0x47}, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	recID, err := st.CreateRecording(context.Background(), store.Recording{
 		Title: "Clip", GuideNumber: "4.1", Status: "complete", Path: path, StartedAt: time.Now(),
 	})
