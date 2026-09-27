@@ -1,4 +1,4 @@
-import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, Device, DeviceHealth, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
+import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, Device, DeviceHealth, FrameList, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
 
 export type ApiFailure = Error & { status: number; code?: string };
 
@@ -130,6 +130,10 @@ export function getChannels(guide: boolean) {
   return request<{ channels: Channel[]; listings: string; message: string }>(
     `/api/v1/channels${guide ? "?guide=1" : ""}`,
   );
+}
+
+export function getFrames() {
+  return request<FrameList>("/api/v1/frames");
 }
 
 export function patchChannel(id: number, patch: ChannelPatch) {

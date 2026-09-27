@@ -162,6 +162,7 @@ func TestContractFixtures(t *testing.T) {
 		{"devices", "GET", "/api/v1/devices", "", 0},
 		{"sources", "GET", "/api/v1/sources", "", 0},
 		{"channels", "GET", "/api/v1/channels?guide=1", "", 0},
+		{"frames", "GET", "/api/v1/frames", "", 0},
 		{"airings", "GET", "/api/v1/airings?from=2026-09-24T14:00:00Z&to=2026-09-24T18:00:00Z", "", 0},
 		{"schedule", "GET", "/api/v1/schedule", "", 0},
 		{"search", "GET", "/api/v1/search?q=Jeopardy", "", 0},

@@ -5,6 +5,7 @@ import channelsBody from "../../../api/fixtures/channels.json";
 import devicesBody from "../../../api/fixtures/devices.json";
 import discoverBody from "../../../api/fixtures/discover.json";
 import eventsBody from "../../../api/fixtures/events.json";
+import framesBody from "../../../api/fixtures/frames.json";
 import freeAddBody from "../../../api/fixtures/free-add.json";
 import freeBody from "../../../api/fixtures/free.json";
 import guideRefreshBody from "../../../api/fixtures/guide-refresh.json";
@@ -54,6 +55,7 @@ import type {
   ChannelSignal,
   Device,
   Event,
+  FrameList,
   Marker,
   MultiviewPlan,
   Pass,
@@ -71,6 +73,7 @@ import type {
 // server change and a client type disagree.
 export function contractFixtures(): number {
   const channels: Channel[] = channelsBody.channels;
+  const frames: FrameList = framesBody;
   const airings: Airing[] = airingsBody.airings;
   const recordings: Recording[] = recordingsBody.recordings;
   const devices: Device[] = devicesBody.devices;
@@ -143,6 +146,7 @@ export function contractFixtures(): number {
   const restored: { ok: boolean } = backupRestoreBody;
   return (
     channels.length +
+    frames.channels.length +
     airings.length +
     recordings.length +
     devices.length +

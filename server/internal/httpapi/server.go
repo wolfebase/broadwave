@@ -122,6 +122,7 @@ func (s *Server) Handler() http.Handler {
 	api("POST /channels/star", s.starNetworks)
 	api("GET /affiliations", s.affiliations)
 	api("PATCH /channels/{id}", s.patchChannel)
+	api("GET /frames", s.frames)
 	api("GET /channels/{id}/frame", s.frame)
 	api("GET /settings", s.getSettings)
 	api("PUT /settings", s.putSettings)

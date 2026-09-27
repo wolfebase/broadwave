@@ -446,6 +446,7 @@ export function Guide() {
                       </span>
                       <span className="cell-sub">{a.subtitle || (w > 160 ? spanLabel(a) : timeLabel(a.start))}</span>
                       {a.imageUrl && w > 220 ? <img className="cell-thumb" alt="" loading="lazy" src={`/media/art/airing/${a.id}?w=96`} /> : null}
+                      {onNow && !a.imageUrl && w > 220 ? <LiveFrame id={c.id} className="cell-thumb" /> : null}
                     </button>
                   );
                 })}
