@@ -75,7 +75,17 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	if session.Rendition != decision.Rendition.Key() && session.Stream.Video != "" && session.Stream.Video != "copy" {
 		session.Stream.Reason = "Playing the " + session.Stream.Video + "p picture already running."
 	}
-	waitServable(s.Hub, session.ChannelID, session.Rendition, 12*time.Second)
+	// The viewer is counted before a segment exists. A channel change closes
+	// this request; waiting out the deadline would keep that tuner.
+	if r.Context().Err() != nil {
+		s.Hub.Release(session.ChannelID, session.Rendition)
+		return
+	}
+	waitServable(r.Context(), s.Hub, session.ChannelID, session.Rendition, 12*time.Second)
+	if r.Context().Err() != nil {
+		s.Hub.Release(session.ChannelID, session.Rendition)
+		return
+	}
 	if fresh, ok := s.Hub.Session(session.ChannelID, session.Rendition); ok {
 		reason := session.Stream.Reason
 		fresh.Tuners = session.Tuners
@@ -85,6 +95,9 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	// Tuner status is a separate request. Reading it here holds the hub lock
 	// after the first segment already exists, so the player cannot start.
 	writeJSON(w, http.StatusOK, session)
+	if r.Context().Err() != nil {
+		s.Hub.Release(session.ChannelID, session.Rendition)
+	}
 }
 
 func (s *Server) release(w http.ResponseWriter, r *http.Request) {
@@ -1124,12 +1137,19 @@ func blockReload(r *http.Request) (msn, part int, ok bool) {
 // waitServable returns once the playlist has a segment a player can fetch.
 // A playlist that lists only parts is not enough: hls.js treats that as empty
 // and waits out its retry. The first part still anchors the clock while this waits.
-func waitServable(h *live.Hub, channelID int64, key string, d time.Duration) {
+// A cancelled watch returns immediately so the handler can drop that viewer.
+func waitServable(ctx context.Context, h *live.Hub, channelID int64, key string, d time.Duration) {
 	if h == nil || key == "" {
 		return
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	deadline := time.Now().Add(d)
 	for time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			return
+		}
 		// A restart replaces the gate. Spending the whole deadline on the
 		// old one hides the playlist the new encode is writing.
 		slice := 100 * time.Millisecond

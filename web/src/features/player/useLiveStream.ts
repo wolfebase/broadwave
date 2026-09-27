@@ -73,6 +73,10 @@ export function useLiveStream(
     // The watch request can outlive this effect (Strict Mode runs it twice,
     // and leaving the page races the response). Both paths must release that
     // one viewer, and neither may release a viewer the request has not added.
+    // Aborting is how a channel change drops a watch that has not answered:
+    // the server releases that viewer. stopWatch runs only once this request
+    // has a rendition.
+    const ctrl = new AbortController();
     let released = false;
     const release = () => {
       if (released || !joined) return;
@@ -137,7 +141,7 @@ export function useLiveStream(
         const allow = confirmLive.current;
         confirmLive.current = false;
         setNeedsConfirm(false);
-        const next = await watchChannel(id, webCaps(), { quality, audio, picture, track, even }, "", allow);
+        const next = await watchChannel(id, webCaps(), { quality, audio, picture, track, even }, "", allow, ctrl.signal);
         joined = next.rendition;
         if (dead) {
           release();
@@ -189,6 +193,7 @@ export function useLiveStream(
     window.addEventListener("pagehide", beacon);
     return () => {
       dead = true;
+      ctrl.abort();
       window.clearTimeout(stuck);
       window.removeEventListener("pagehide", beacon);
       syncRef.current?.stop();

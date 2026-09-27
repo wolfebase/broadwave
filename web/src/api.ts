@@ -162,10 +162,11 @@ export function putSettings(values: Partial<Settings>) {
   });
 }
 
-export function watchChannel(channelId: number, caps: Caps, prefs: Prefs, rendition = "", confirmLive = false) {
+export function watchChannel(channelId: number, caps: Caps, prefs: Prefs, rendition = "", confirmLive = false, signal?: AbortSignal) {
   return request<WatchSession>("/api/v1/watch", {
     method: "POST",
     body: JSON.stringify({ channelId, caps, prefs, rendition, ...(confirmLive ? { confirmLive: true } : {}) }),
+    signal,
   });
 }
 

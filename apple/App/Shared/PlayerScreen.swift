@@ -38,6 +38,10 @@ final class LivePlayer {
     private(set) var refreshRate: Float = 0
     private(set) var picture = PictureStats()
     private var statsTask: Task<Void, Never>?
+    /// The watch still waiting for its first segment. A newer channel cancels it
+    /// so that tuner is not held until the request times out.
+    private var watchTask: Task<WatchSession, Error>?
+    private var watchToken = 0
     private let outage = ServerWatch()
     private let playLog = Logger(subsystem: "com.wolfeup.broadwave", category: "play")
 
@@ -48,7 +52,11 @@ final class LivePlayer {
     }
 
     func start(_ channel: Channel, store: AppStore) async {
+        watchToken += 1
+        let token = watchToken
+        watchTask?.cancel()
         await stop()
+        guard !Task.isCancelled, token == watchToken else { return }
         guard let api = store.api else { return }
         self.api = api
         channelID = channel.id
@@ -61,9 +69,22 @@ final class LivePlayer {
             onMessage: { [weak self] message in self?.showOutage(message) },
             onRecover: { [weak self] in self?.attempt += 1 }
         )
+        let caps = Capabilities.current()
+        let prefs = store.prefs
+        let task = Task { try await api.watch(channelID: channel.id, caps: caps, prefs: prefs, confirmLive: allow) }
+        watchTask = task
+        defer {
+            if watchToken == token {
+                watchTask = nil
+            }
+        }
         do {
-            let session = try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: store.prefs, confirmLive: allow)
-            guard channelID == channel.id else {
+            let session = try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
+            guard !Task.isCancelled, channelID == channel.id else {
                 await api.stopWatching(channelID: channel.id, rendition: session.rendition)
                 return
             }
@@ -82,7 +103,10 @@ final class LivePlayer {
                 engine.start()
                 sync = engine
             }
+        } catch is CancellationError {
+            return
         } catch let error as APIError where error.code == "recording_soon" {
+            guard channelID == channel.id else { return }
             needsConfirm = true
             self.error = error.message
         } catch let error as URLError {
@@ -115,6 +139,8 @@ final class LivePlayer {
     }
 
     func stop() async {
+        watchTask?.cancel()
+        watchTask = nil
         statsTask?.cancel()
         statsTask = nil
         picture = PictureStats()
