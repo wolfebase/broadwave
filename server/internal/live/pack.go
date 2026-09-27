@@ -1,6 +1,7 @@
 package live
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -110,22 +111,163 @@ type packedSeg struct {
 	gap   bool
 }
 
+// packPipe is ffmpeg's stdout. cmd.StdoutPipe would be closed by Wait, which
+// can run before the packager has read the last fragment.
+type packPipe struct {
+	*os.File
+	w *os.File
+}
+
+// started closes the parent's copy of the write end, so the read end ends
+// when ffmpeg does.
+func (p *packPipe) started() { _ = p.w.Close() }
+
+func (p *packPipe) Close() error {
+	_ = p.w.Close()
+	return p.File.Close()
+}
+
 // packOutput is called before cmd.Start. startPack runs after Start succeeds.
-func packOutput(cmd *exec.Cmd) (io.ReadCloser, *playlistGate, chan struct{}, error) {
-	stdout, err := cmd.StdoutPipe()
+func packOutput(cmd *exec.Cmd) (*packPipe, *playlistGate, chan struct{}, error) {
+	p, err := newPackPipe(cmd)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return stdout, newPlaylistGate(), make(chan struct{}), nil
+	return p, newPlaylistGate(), make(chan struct{}), nil
 }
 
-func startPack(dir string, stdout io.Reader, gate *playlistGate, done chan struct{}) {
+func newPackPipe(cmd *exec.Cmd) (*packPipe, error) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	cmd.Stdout = w
+	return &packPipe{File: r, w: w}, nil
+}
+
+func startPack(dir string, stdout *packPipe, gate *playlistGate, done chan struct{}) *packInput {
+	stdout.started()
+	in := &packInput{cur: stdout}
 	go func() {
 		defer close(done)
-		if err := Pack(dir, stdout, gate); err != nil && !os.IsNotExist(err) && !errors.Is(err, io.ErrClosedPipe) {
+		defer in.close()
+		if err := Pack(dir, in, gate); err != nil && !os.IsNotExist(err) && !errors.Is(err, io.ErrClosedPipe) && !errors.Is(err, os.ErrClosed) {
 			slog.Error(fmt.Sprintf("pack %s: %v", dir, err))
 		}
 	}()
+	return in
+}
+
+// packInput is the output of each ffmpeg that has fed one packager, in turn.
+// An encode started again after a timestamp break continues the same
+// playlist, so a player sees a discontinuity rather than a new stream.
+type packInput struct {
+	mu   sync.Mutex
+	cur  io.ReadCloser
+	next []*readAhead
+	done bool
+}
+
+// errNextEncode is where one encode's output ends and the next one's begins.
+var errNextEncode = errors.New("next encode")
+
+func (in *packInput) Read(b []byte) (int, error) {
+	in.mu.Lock()
+	cur := in.cur
+	in.mu.Unlock()
+	n, err := cur.Read(b)
+	if err == nil || n > 0 {
+		return n, nil
+	}
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	if len(in.next) == 0 {
+		return 0, err
+	}
+	_ = cur.Close()
+	in.cur, in.next = in.next[0], in.next[1:]
+	return 0, errNextEncode
+}
+
+// follow queues the next encode's output. False means the packager has
+// already stopped reading.
+func (in *packInput) follow(p *packPipe) bool {
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	if in.done {
+		return false
+	}
+	p.started()
+	in.next = append(in.next, newReadAhead(p))
+	return true
+}
+
+// readAheadCap is how much of the next encode's output is held while the
+// previous encode finishes. About a minute of a broadcast picture.
+const readAheadCap = 64 << 20
+
+// readAhead reads an encode's output from the moment it starts. Until the
+// packager gets to it, ffmpeg would otherwise block on a full pipe and stop
+// reading the tuner.
+type readAhead struct {
+	src  *packPipe
+	mu   sync.Mutex
+	cond *sync.Cond
+	buf  []byte
+	err  error
+}
+
+func newReadAhead(p *packPipe) *readAhead {
+	r := &readAhead{src: p}
+	r.cond = sync.NewCond(&r.mu)
+	go func() {
+		chunk := make([]byte, 64<<10)
+		for {
+			n, err := p.Read(chunk)
+			r.mu.Lock()
+			if n > 0 && len(r.buf)+n <= readAheadCap {
+				r.buf = append(r.buf, chunk[:n]...)
+			} else if n > 0 {
+				err = fmt.Errorf("pack: the next encode is %d MB ahead of the packager", readAheadCap>>20)
+			}
+			if err != nil {
+				r.err = err
+			}
+			r.cond.Broadcast()
+			r.mu.Unlock()
+			if err != nil {
+				return
+			}
+		}
+	}()
+	return r
+}
+
+func (r *readAhead) Read(b []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for len(r.buf) == 0 && r.err == nil {
+		r.cond.Wait()
+	}
+	if len(r.buf) == 0 {
+		return 0, r.err
+	}
+	n := copy(b, r.buf)
+	r.buf = r.buf[n:]
+	return n, nil
+}
+
+func (r *readAhead) Close() error { return r.src.Close() }
+
+func (in *packInput) close() {
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	in.done = true
+	_ = in.cur.Close()
+	for _, p := range in.next {
+		_ = p.Close()
+	}
+	in.next = nil
 }
 
 // Pack turns an fMP4 fragment stream into init.mp4 and one segment per
@@ -141,6 +283,9 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 	var track uint32
 	var scale uint32
 	var haveInit bool
+	// reinit is the header of a later encode on the same playlist. Its edit
+	// lists are that encode's own track starts.
+	var reinit []byte
 	var moof []byte
 	var open []packedPart
 	var closed []packedSeg
@@ -149,6 +294,9 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 	var segGap bool
 	var lastPTS, lastDur int64
 	var haveLast bool
+	// handover is set at an encode boundary. The next fragment starts a new
+	// timeline even when its step looks like one more group of pictures.
+	var handover bool
 	allSync := true
 
 	var hold playlistCeiling
@@ -217,7 +365,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 				expected = lastPTS + lastDur
 			}
 			d := ptsDiff(pts, expected)
-			if d < -int64(partTicks) || d > int64(jumpTicks) {
+			if d < -int64(partTicks) || d > int64(jumpTicks) || handover {
 				jumped = true
 				slog.Warn(fmt.Sprintf("pack %s: timestamp jump %.3fs", dir, float64(d)/90000))
 				if len(open) > 0 {
@@ -228,6 +376,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 				segGap = true
 			}
 		}
+		handover = false
 		if !jumped && len(open) > 0 {
 			if open[len(open)-1].dur == 0 {
 				step := ptsDiff(pts, open[len(open)-1].pts)
@@ -307,6 +456,21 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 					return err
 				}
 			default:
+				if moof == nil && haveInit && (kind == "ftyp" || reinit != nil) {
+					reinit = append(reinit, box...)
+					if kind == "moov" {
+						next, nextShifts := flattenEdits(reinit)
+						reinit = nil
+						// Players keep init.mp4. A new encode that describes its
+						// streams differently needs a new playlist.
+						if !bytes.Equal(next, init) {
+							return fmt.Errorf("pack: the next encode's header differs")
+						}
+						shifts = nextShifts
+						scales = trackScales(next)
+						leadIn = true
+					}
+				}
 				if moof == nil && !haveInit {
 					init = append(init, box...)
 					if kind == "moov" {
@@ -327,6 +491,11 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		}
 		if len(buf) > maxBox {
 			return fmt.Errorf("pack: fragment larger than %d bytes", maxBox)
+		}
+		if errors.Is(err, errNextEncode) {
+			buf, moof, reinit = buf[:0], nil, nil
+			handover = true
+			continue
 		}
 		if err != nil {
 			if err == io.EOF {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -38,7 +39,50 @@ type programPipe struct {
 	rest    []byte
 	clocks  map[int]*pesClock
 	warned  time.Time
+	// onBreak, when set, is told about a real backwards break in the picture
+	// instead of the filter following it: ffmpeg clamps every later packet of
+	// a copied track to the old timeline's high point, so the encode has to
+	// start again. From the break on, the stream is kept in tail until the
+	// next encode's input arrives on sw; it then starts from the first packet
+	// of the new timeline.
+	onBreak  func()
+	sw       *pipeSwitch
+	broken   bool
+	catching bool
+	pending  []byte
+	tail     []byte
+	breaks   []time.Time
 }
+
+// pipeSwitch passes the next encode's input to the goroutine writing the pipe.
+type pipeSwitch struct {
+	mu   sync.Mutex
+	next io.WriteCloser
+}
+
+func (s *pipeSwitch) give(w io.WriteCloser) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.next != nil {
+		_ = s.next.Close()
+	}
+	s.next = w
+}
+
+func (s *pipeSwitch) take() io.WriteCloser {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	w := s.next
+	s.next = nil
+	return w
+}
+
+// tailCap bounds what a broken pipe keeps while the next encode starts.
+const tailCap = 16 << 20
+
+// breakLimit is how many breaks a minute start the encode again. A stream
+// that keeps jumping back is followed as before, with the clamp.
+const breakLimit = 5
 
 // pesJump is how far one stream's timestamp may move from one PES header to
 // the next. A bit error the tuner did not flag can put a frame hours away.
@@ -50,6 +94,10 @@ const pesJump = 10 * 90000
 // pesAgree is how many headers in a row must agree on a new timeline before
 // it counts as a real break (a splice) rather than a bad header.
 const pesAgree = 3
+
+// pesBack is how far a timestamp may step back before it counts as a break.
+// Decode times only move forward; video without them reorders by a few frames.
+const pesBack = 90000
 
 // pesClock is one stream's timeline. shift renumbers continuity counters
 // after dropped packets, so ffmpeg does not also discard the next good frame.
@@ -70,6 +118,20 @@ func newProgramPipe(w io.WriteCloser, program int) io.WriteCloser {
 
 func (p *programPipe) Write(chunk []byte) (int, error) {
 	n := len(chunk)
+	if p.broken {
+		if len(p.tail)+len(chunk) <= tailCap {
+			p.tail = append(p.tail, chunk...)
+		}
+		next := p.sw.take()
+		if next == nil {
+			return n, nil
+		}
+		old, tail := p.w, p.tail
+		*p = programPipe{w: next, program: p.program, pmtVer: -1, onBreak: p.onBreak, sw: p.sw, breaks: p.breaks}
+		_ = old.Close()
+		_, err := p.Write(tail)
+		return n, err
+	}
 	if p.pass {
 		_, err := p.w.Write(chunk)
 		return n, err
@@ -124,7 +186,12 @@ func (p *programPipe) giveUp() error {
 }
 
 func (p *programPipe) Close() error {
-	if !p.pass && !p.ready {
+	if p.sw != nil {
+		if next := p.sw.take(); next != nil {
+			_ = next.Close()
+		}
+	}
+	if !p.pass && !p.ready && !p.broken {
 		_ = p.giveUp()
 	}
 	return p.w.Close()
@@ -308,6 +375,9 @@ func (p *programPipe) filter(data []byte) []byte {
 	for off := 0; off+188 <= len(data); off += 188 {
 		pkt := data[off : off+188]
 		pid := int(pkt[1]&0x1f)<<8 | int(pkt[2])
+		if p.catching {
+			p.pending = append(p.pending, pkt...)
+		}
 		if pid == 0 {
 			pat := p.pat
 			pat[3] = 0x10 | (p.cc & 0x0f)
@@ -332,6 +402,11 @@ func (p *programPipe) filter(data []byte) []byte {
 			}
 		}
 		if !p.keep[pid] || !p.keepPES(pid, pkt) {
+			if p.broken {
+				p.tail = append(append(p.pending, data[off+188:]...), p.rest...)
+				p.rest, p.pending, p.catching = nil, nil, false
+				return out
+			}
 			continue
 		}
 		at := len(out)
@@ -371,7 +446,10 @@ func (p *programPipe) keepPES(pid int, pkt []byte) bool {
 		p.clocks[pid] = &pesClock{last: ts}
 		return true
 	}
-	if ptsGap(ts, c.last) <= pesJump {
+	if d := ptsDelta(ts, c.last); d <= pesJump && d >= -pesBack {
+		if pid == p.video {
+			p.catching, p.pending = false, nil
+		}
 		c.last, c.agree, c.dropping = ts, 0, false
 		return true
 	}
@@ -379,18 +457,57 @@ func (p *programPipe) keepPES(pid int, pkt []byte) bool {
 		c.agree++
 	} else {
 		c.agree = 1
+		// The first packet of what may be a new timeline, and everything
+		// after it, is what the next encode would start from.
+		if pid == p.video && p.canBreak() && ptsDelta(ts, c.last) < 0 {
+			p.catching = true
+			p.pending = append(p.pending[:0], pkt...)
+		}
 		if time.Since(p.warned) > 10*time.Second {
 			p.warned = time.Now()
 			slog.Warn(fmt.Sprintf("program %d: dropped a frame on PID %d whose timestamp is %.0f s off", p.program, pid, float64(ptsDelta(ts, c.last))/90000))
 		}
 	}
+	if p.catching && len(p.pending) > tailCap {
+		p.catching, p.pending = false, nil
+	}
 	c.cand = ts
 	if c.agree >= pesAgree {
+		if pid == p.video && p.catching && ptsDelta(ts, c.last) < 0 {
+			slog.Info(fmt.Sprintf("program %d: timestamps went back %.1f s; starting the encode again", p.program, float64(-ptsDelta(ts, c.last))/90000))
+			p.breaks = append(p.breaks, time.Now())
+			p.broken = true
+			p.onBreak()
+			return false
+		}
+		if pid == p.video {
+			p.catching, p.pending = false, nil
+		}
 		c.last, c.agree, c.dropping = ts, 0, false
 		return true
 	}
 	c.dropping = true
 	c.shift++
+	return false
+}
+
+// canBreak is whether a backwards break starts the encode again. Past
+// breakLimit in a minute, the filter follows breaks the way it used to.
+func (p *programPipe) canBreak() bool {
+	if p.onBreak == nil || p.sw == nil {
+		return false
+	}
+	cut := time.Now().Add(-time.Minute)
+	for len(p.breaks) > 0 && p.breaks[0].Before(cut) {
+		p.breaks = p.breaks[1:]
+	}
+	if len(p.breaks) < breakLimit {
+		return true
+	}
+	if time.Since(p.warned) > 10*time.Second {
+		p.warned = time.Now()
+		slog.Warn(fmt.Sprintf("program %d: timestamps keep going back; following them in the same encode", p.program))
+	}
 	return false
 }
 

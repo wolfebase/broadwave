@@ -226,14 +226,20 @@ type rendition struct {
 	clock     *Timeline
 	fallback  bool
 	restarted bool
-	// waited is set after cmd.Wait returns, before the hub lock. A stop that
-	// arrives in that window must not signal the pid: Wait has reaped it.
+	// waited is set under the hub lock once cmd.Wait returns. A stop after
+	// that must not signal the pid: Wait has reaped it.
 	waited atomic.Bool
 	args   []string
 	// gate blocks a playlist reload until the requested part exists.
 	// packDone closes when the packager has finished writing that directory.
 	gate     *playlistGate
 	packDone chan struct{}
+	// input is what the packager reads; filter is the program pipe feeding
+	// the encode. A backwards timestamp break starts a new encode between
+	// the two and keeps both.
+	input     *packInput
+	filter    *programPipe
+	respawned time.Time
 }
 
 type recording struct {
@@ -734,15 +740,14 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 		}
 		return nil, err
 	}
-	startPack(dir, stdout, gate, done)
-	pid := cmd.Process.Pid
-	NotePID(h.Dir, pid)
-	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: time.Now(), args: args, gate: gate, packDone: done}
+	packIn := startPack(dir, stdout, gate, done)
+	NotePID(h.Dir, cmd.Process.Pid)
+	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: time.Now(), args: args, gate: gate, packDone: done, input: packIn}
 	if stdin != nil {
-		r.sub = h.attachPipe(muxOf(h, f), newProgramPipe(stdin, f.program), true)
+		r.sub = h.attachPipe(muxOf(h, f), h.renditionPipe(f, r, stdin), true)
 	}
 	f.renditions[key] = r
-	go h.watchRendition(f, r, pid, encoderOf(h.Encoder, want))
+	go h.watchRendition(f, r, cmd, encoderOf(h.Encoder, want), false)
 	return r, nil
 }
 
@@ -829,12 +834,28 @@ func encoderOf(base string, want Rendition) string {
 // watchRendition restarts an encode that dies, then releases the tuner if a
 // second start also dies. A restart wipes the directory so a software fallback
 // never serves the init.mp4 the GPU encode left behind.
-func (h *Hub) watchRendition(f *feed, r *rendition, pid int, encoder string) {
+// respawn is an encode started after a timestamp break. Its early death says
+// nothing about the GPU, so it does not fall back to software.
+func (h *Hub) watchRendition(f *feed, r *rendition, cmd *exec.Cmd, encoder string, respawn bool) {
+	pid := cmd.Process.Pid
 	started := time.Now()
+	h.mu.Lock()
 	done := r.packDone
-	err := r.cmd.Wait()
-	r.waited.Store(true)
+	h.mu.Unlock()
+	err := cmd.Wait()
+	h.mu.Lock()
+	// An encode started again after a timestamp break has its own watch.
+	replaced := r.cmd != cmd
+	since := r.respawned
+	if !replaced {
+		r.waited.Store(true)
+	}
+	h.mu.Unlock()
 	ForgetPID(h.Dir, pid)
+	if replaced {
+		slog.Info(fmt.Sprintf("rendition %s on %s: the encode before the break ended after %s", r.spec.Key(), f.channel.GuideNumber, time.Since(since).Round(10*time.Millisecond)))
+		return
+	}
 	// The packager can still be writing the last fragment after ffmpeg exits.
 	// A restart wipes the directory, so it waits for those writes first.
 	if done != nil {
@@ -845,10 +866,10 @@ func (h *Hub) watchRendition(f *feed, r *rendition, pid int, encoder string) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if f.renditions[r.spec.Key()] != r {
+	if f.renditions[r.spec.Key()] != r || r.cmd != cmd {
 		return
 	}
-	software := err != nil && time.Since(started) <= h.fallbackWindow() && vaapiFamily(encoder) && !r.fallback
+	software := err != nil && !respawn && time.Since(started) <= h.fallbackWindow() && vaapiFamily(encoder) && !r.fallback
 	if err != nil && !r.restarted && h.restartRenditionLocked(f, r, software) {
 		slog.Info(fmt.Sprintf("rendition %s on %s restarted after %s", r.spec.Key(), f.channel.GuideNumber, time.Since(started).Round(time.Millisecond)))
 		return
@@ -924,9 +945,8 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 		}
 		return false
 	}
-	startPack(r.dir, stdout, gate, done)
-	next := cmd.Process.Pid
-	NotePID(h.Dir, next)
+	r.input = startPack(r.dir, stdout, gate, done)
+	NotePID(h.Dir, cmd.Process.Pid)
 	r.cmd = cmd
 	r.stdin = stdin
 	r.args = args
@@ -934,11 +954,93 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 	r.packDone = done
 	r.restarted = true
 	r.waited.Store(false)
+	r.filter = nil
 	if stdin != nil {
-		r.sub = h.attachPipeLocked(muxOf(h, f), newProgramPipe(stdin, f.program))
+		r.sub = h.attachPipeLocked(muxOf(h, f), h.renditionPipe(f, r, stdin))
 	}
-	go h.watchRendition(f, r, next, encoder)
+	go h.watchRendition(f, r, cmd, encoder, false)
 	return true
+}
+
+// renditionPipe narrows the mux to the rendition's program and starts the
+// encode again on a backwards timestamp break. The caller holds h.mu.
+func (h *Hub) renditionPipe(f *feed, r *rendition, stdin io.WriteCloser) io.WriteCloser {
+	w := newProgramPipe(stdin, f.program)
+	if p, ok := w.(*programPipe); ok {
+		p.sw = &pipeSwitch{}
+		p.onBreak = func() { go h.followBreak(f, r, p) }
+		r.filter = p
+	}
+	return w
+}
+
+// respawnGap spaces encodes started for timestamp breaks.
+const respawnGap = 3 * time.Second
+
+// followBreak starts the encode again after a backwards timestamp break, on
+// the same command line and the same packager. With -copyts, the old ffmpeg
+// would clamp every later packet of a copied track to its old high point,
+// and every screen on the rendition would freeze until a channel change.
+// The program pipe hands its input over: the old encode's stdin closes, so it
+// writes its last fragment and exits, and the packager moves on to the new one.
+func (h *Hub) followBreak(f *feed, r *rendition, p *programPipe) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if f.renditions[r.spec.Key()] != r || r.filter != p || r.cmd == nil || r.input == nil {
+		return
+	}
+	if wait := respawnGap - time.Since(r.respawned); wait > 0 {
+		time.AfterFunc(wait, func() { h.followBreak(f, r, p) })
+		return
+	}
+	// The broken pipe feeds nothing, so a failed start falls back to a new
+	// playlist rather than a frozen one.
+	fail := func(err error) {
+		slog.Error(fmt.Sprintf("rendition %s on %s: start again: %v", r.spec.Key(), f.channel.GuideNumber, err))
+		if !h.restartRenditionLocked(f, r, false) {
+			h.stopRenditionLocked(f, r.spec.Key())
+			h.dropIfUnusedLocked(f)
+		}
+	}
+	cmd := exec.Command(h.FFmpeg, r.args...)
+	cmd.Dir = r.dir
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		fail(err)
+		return
+	}
+	stdout, err := newPackPipe(cmd)
+	if err != nil {
+		_ = stdin.Close()
+		fail(err)
+		return
+	}
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		_ = stdout.Close()
+		_ = stdin.Close()
+		fail(err)
+		return
+	}
+	if !r.input.follow(stdout) {
+		_ = stdout.Close()
+		_ = stdin.Close()
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		fail(errors.New("the packager has stopped"))
+		return
+	}
+	NotePID(h.Dir, cmd.Process.Pid)
+	p.sw.give(stdin)
+	// The old encode normally ends within a second of its input closing.
+	old := r.cmd
+	time.AfterFunc(10*time.Second, func() { _ = old.Process.Kill() })
+	r.cmd = cmd
+	r.stdin = stdin
+	r.waited.Store(false)
+	r.respawned = time.Now()
+	slog.Info(fmt.Sprintf("rendition %s on %s started again after a timestamp break", r.spec.Key(), f.channel.GuideNumber))
+	go h.watchRendition(f, r, cmd, encoderOf(h.Encoder, r.spec), true)
 }
 
 func usesPipe(args []string) bool {

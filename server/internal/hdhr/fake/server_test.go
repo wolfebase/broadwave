@@ -198,3 +198,56 @@ func TestHoldAndSilence(t *testing.T) {
 		t.Fatalf("answer status %s", res.Status)
 	}
 }
+
+func TestRawPlaysTheFileByteForByteAtItsOwnPace(t *testing.T) {
+	pcr := func(ticks int64) []byte {
+		pkt := make([]byte, 188)
+		pkt[0], pkt[1], pkt[2], pkt[3] = 0x47, 0x01, 0x00, 0x20
+		pkt[4], pkt[5] = 183, 0x10
+		pkt[6] = byte(ticks >> 25)
+		pkt[7] = byte(ticks >> 17)
+		pkt[8] = byte(ticks >> 9)
+		pkt[9] = byte(ticks >> 1)
+		pkt[10] = byte(ticks<<7) | 0x7e
+		return pkt
+	}
+	var data []byte
+	data = append(data, pcr(1_000_000)...)
+	for i := range 1998 {
+		pkt := make([]byte, 188)
+		pkt[0], pkt[1], pkt[2], pkt[3] = 0x47, 0x01, 0x01, 0x10|byte(i&0x0f)
+		pkt[4] = byte(i)
+		data = append(data, pkt...)
+	}
+	data = append(data, pcr(1_090_000)...)
+	sample := filepath.Join(t.TempDir(), "raw.ts")
+	if err := os.WriteFile(sample, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := &Server{TS: sample, Raw: true}
+	base, _, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	res := openStream(t, base+"/auto/v5.1")
+	defer res.Body.Close()
+	start := time.Now()
+	got := make([]byte, 2*len(data))
+	if _, err := io.ReadFull(res.Body, got[:len(data)]); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got[:len(data)], data) {
+		t.Fatal("one pass is not the file's bytes")
+	}
+	if _, err := io.ReadFull(res.Body, got[len(data):]); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got[len(data):], data) {
+		t.Fatal("the loop is not the file's bytes")
+	}
+	// Two passes of a file whose PCR spans one second, plus one interval.
+	if d := time.Since(start); d < 3500*time.Millisecond || d > 5000*time.Millisecond {
+		t.Fatalf("two passes took %s", d)
+	}
+}

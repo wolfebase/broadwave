@@ -584,10 +584,16 @@ func audioRun(pid int, pts []int64) []byte {
 
 func filterRun(t *testing.T, pts []int64) (kept []int64, ccs []byte) {
 	t.Helper()
+	return filterRunHook(t, pts, nil)
+}
+
+func filterRunHook(t *testing.T, pts []int64, onBreak func()) (kept []int64, ccs []byte) {
+	t.Helper()
 	head := twoProgramTS(1, 0x1000, 0x110, 0x111, 2, 0x1001, 0x210)
 	head = head[:len(head)-2*188]
 	var out bytes.Buffer
 	w := newProgramPipe(&closeBuf{&out}, 1)
+	w.(*programPipe).onBreak = onBreak
 	body := audioRun(0x111, pts)
 	// The first audio packet in the header run has no timestamp.
 	if _, err := w.Write(append(append(head, body...), bytes.Repeat(tsPacket(0x1fff, false, nil), 2)...)); err != nil {
@@ -657,6 +663,98 @@ func TestProgramFilterFollowsARealTimelineBreak(t *testing.T) {
 	wrap := []int64{1<<33 - 2*step, 1<<33 - step, 0, step}
 	if kept, _ := filterRun(t, wrap); len(kept) != 4 {
 		t.Fatalf("wrap dropped frames: %v", kept)
+	}
+}
+
+// videoRun is one picture PES per step, each opening with a sequence header
+// so a new encode can start on any of them.
+func videoRun(pid int, pts []int64, cc *byte) []byte {
+	var out []byte
+	for _, t := range pts {
+		pes := append(ptsPES(0xe0, t), 0x00, 0x00, 0x01, 0xb3, 0x50, 0x02, 0xd0)
+		for _, pkt := range [][]byte{tsPacket(pid, true, pes), tsPacket(pid, false, bytes.Repeat([]byte{0xaa}, 184))} {
+			pkt[3] = 0x10 | *cc&0x0f
+			*cc++
+			out = append(out, pkt...)
+		}
+	}
+	return out
+}
+
+func videoTimes(data []byte, pid int) []int64 {
+	var got []int64
+	for off := 0; off+188 <= len(data); off += 188 {
+		pkt := data[off : off+188]
+		if int(pkt[1]&0x1f)<<8|int(pkt[2]) != pid || pkt[1]&0x40 == 0 {
+			continue
+		}
+		if ts, ok := pesTime(tsPayload(pkt)); ok {
+			got = append(got, ts)
+		}
+	}
+	return got
+}
+
+func TestProgramFilterHandsABackwardsBreakToTheNextEncode(t *testing.T) {
+	step := int64(1500)
+	run := func(jump int64) (old, next []int64, breaks int) {
+		head := twoProgramTS(1, 0x1000, 0x110, 0x111, 2, 0x1001, 0x210)
+		tables := head[:3*188]
+		var a, b bytes.Buffer
+		w := newProgramPipe(&closeBuf{&a}, 1)
+		p := w.(*programPipe)
+		p.sw = &pipeSwitch{}
+		p.onBreak = func() { breaks++ }
+		var pts []int64
+		for i := range 5 {
+			pts = append(pts, 1_000_000+int64(i)*step)
+		}
+		var after []int64
+		for i := range 6 {
+			after = append(after, 1_000_000+4*step+jump+int64(i)*step)
+		}
+		cc := byte(1)
+		body := append(videoRun(0x110, pts, &cc), videoRun(0x110, after, &cc)...)
+		if _, err := w.Write(append(head[:len(head)-2*188], body...)); err != nil {
+			t.Fatal(err)
+		}
+		if breaks > 0 {
+			p.sw.give(&closeBuf{&b})
+		}
+		more := []int64{after[5] + step, after[5] + 2*step}
+		if _, err := w.Write(append(append(tables, videoRun(0x110, more, &cc)...), bytes.Repeat(tsPacket(0x1fff, false, nil), 2)...)); err != nil {
+			t.Fatal(err)
+		}
+		return videoTimes(a.Bytes(), 0x110), videoTimes(b.Bytes(), 0x110), breaks
+	}
+	// A loop or splice two seconds back: ffmpeg would clamp the copied track.
+	old, next, breaks := run(-2 * 90000)
+	if breaks != 1 {
+		t.Fatalf("breaks %d, want 1", breaks)
+	}
+	// Nothing from the new timeline reaches the old encode, and the next one
+	// starts on its first picture.
+	if len(old) != 5 || old[4] != 1_000_000+4*step {
+		t.Fatalf("old encode got %v", old)
+	}
+	if len(next) != 8 || next[0] != 1_000_000+4*step-2*90000 {
+		t.Fatalf("next encode got %v", next)
+	}
+	// Forward breaks are followed; ffmpeg does not clamp those.
+	if old, _, breaks := run(100 * 90000); breaks != 0 || len(old) != 13-(pesAgree-1) {
+		t.Fatalf("forward: breaks %d kept %v", breaks, old)
+	}
+	// A reordered picture is not a break.
+	if old, _, breaks := run(-5 * step); breaks != 0 || len(old) != 13 {
+		t.Fatalf("reorder: breaks %d kept %v", breaks, old)
+	}
+}
+
+func TestProgramFilterDropsOneBadHeaderBack(t *testing.T) {
+	pts := []int64{1_000_000, 1_002_880, 1_005_760, 200_000, 1_008_640, 1_011_520}
+	count := 0
+	if kept, _ := filterRunHook(t, pts, func() { count++ }); count != 0 || len(kept) != 5 {
+		t.Fatalf("bad header: breaks %d kept %v", count, kept)
 	}
 }
 

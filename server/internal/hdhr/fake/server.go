@@ -2,6 +2,7 @@
 package fake
 
 import (
+	"bufio"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -55,6 +56,10 @@ type Server struct {
 	TS       string
 	// Realtime spreads one pass of TS across four seconds so a relay can build a live playlist.
 	Realtime bool
+	// Raw plays TS byte for byte at the file's own pace (its PCR span), looping
+	// at the end. Each loop is a real backwards timestamp break, as a station
+	// splice is; Source hides that because ffmpeg renumbers a looped file.
+	Raw bool
 	// Source, when set, is a TS file played at its own pace on a loop, keeping
 	// its content. Realtime otherwise streams a generated test pattern.
 	Source     string
@@ -813,6 +818,41 @@ func flushTS(w http.ResponseWriter, headed *bool) {
 	}
 }
 
+// pcrSpan is how long one pass of the file plays: the span of the first
+// stream's PCRs plus one PCR interval. A file without a PCR plays over four
+// seconds. ffmpeg misbehaves when a live input arrives faster than real time.
+func pcrSpan(r io.Reader) time.Duration {
+	br := bufio.NewReaderSize(r, 188*512)
+	pkt := make([]byte, 188)
+	pid := -1
+	var first, last int64
+	n := 0
+	for {
+		if _, err := io.ReadFull(br, pkt); err != nil {
+			break
+		}
+		if pkt[0] != 0x47 || pkt[3]&0x20 == 0 || pkt[4] < 7 || pkt[5]&0x10 == 0 {
+			continue
+		}
+		p := int(pkt[1]&0x1f)<<8 | int(pkt[2])
+		if pid >= 0 && p != pid {
+			continue
+		}
+		base := int64(pkt[6])<<25 | int64(pkt[7])<<17 | int64(pkt[8])<<9 | int64(pkt[9])<<1 | int64(pkt[10]>>7)
+		if pid < 0 {
+			pid, first = p, base
+		}
+		last = base
+		n++
+	}
+	span := (last - first) & (1<<33 - 1)
+	if n < 2 || span == 0 {
+		return 4 * time.Second
+	}
+	span += span / int64(n-1)
+	return time.Duration(span) * time.Second / 90000
+}
+
 // await waits for d or for stop/done. True means the caller should return.
 func await(stop, done <-chan struct{}, d time.Duration) bool {
 	timer := time.NewTimer(d)
@@ -857,6 +897,11 @@ func (s *Server) loopFile(w http.ResponseWriter, number string, stop, done <-cha
 	start := time.Now()
 	var sent int64
 	headed := false
+	pass := 4 * time.Second
+	if s.Raw {
+		pass = pcrSpan(f)
+		_, _ = f.Seek(0, io.SeekStart)
+	}
 	for {
 		if s.starved(number) {
 			flushTS(w, &headed)
@@ -878,8 +923,8 @@ func (s *Server) loopFile(w http.ResponseWriter, number string, stop, done <-cha
 				fl.Flush()
 			}
 			sent += int64(n)
-			if s.Realtime && info.Size() > 0 {
-				want := time.Duration(int64(4*time.Second) * sent / info.Size())
+			if (s.Realtime || s.Raw) && info.Size() > 0 {
+				want := time.Duration(int64(pass) * sent / info.Size())
 				if wait := want - time.Since(start); wait > 0 {
 					timer := time.NewTimer(wait)
 					select {
