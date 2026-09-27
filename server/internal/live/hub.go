@@ -190,6 +190,8 @@ type mux struct {
 	picDirty    bool
 	picPrograms []int
 	pictures    map[int]notedPicture
+	// got is set by the first byte the tuner sends.
+	got atomic.Bool
 }
 
 // feed is one channel on a tuned frequency.
@@ -511,6 +513,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	}
 	freq, programs, err := probe(host, tuner, ch.GuideNumber)
 	if err != nil {
+		unlocked := errors.Is(err, errNoLock)
 		streamURL := strings.TrimRight(root, "/") + "/auto/v" + ch.GuideNumber
 		if h.Encoder == "" || h.Encoder == "libx264" {
 			if q := hdhr.ExtendQuery(ch.ModelNumber); q != "" {
@@ -519,6 +522,12 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 		}
 		res, err := openStream(streamURL, "", "")
 		if err != nil {
+			if strings.Contains(err.Error(), "805") {
+				return nil, &BusyError{Tuners: last}
+			}
+			if unlocked {
+				return nil, fmt.Errorf("%w (%v)", ErrNoSignal, err)
+			}
 			return nil, err
 		}
 		return h.addFeedLocked(h.streamMuxLocked(ch, res.Body, host), ch), nil
@@ -1686,6 +1695,7 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 		}
 		n, err := m.body.Read(buf)
 		if n > 0 {
+			m.got.Store(true)
 			chunk := append([]byte(nil), buf[:n]...)
 			if g, ok := m.psip.Add(chunk); ok && h.OnPSIP != nil {
 				freq, guide := m.freq, g
@@ -2408,7 +2418,7 @@ func openStream(u, userAgent, referrer string) (*http.Response, error) {
 	}
 	if res.StatusCode != http.StatusOK {
 		res.Body.Close()
-		return nil, fmt.Errorf("stream returned %s", res.Status)
+		return nil, fmt.Errorf("stream returned %s %s", res.Status, res.Header.Get("X-HDHomeRun-Error"))
 	}
 	return res, nil
 }
@@ -2435,7 +2445,7 @@ func probe(host string, tuner int, guide string) (int, []hdhr.Program, error) {
 		if err != nil {
 			return 0, nil, err
 		}
-		return 0, nil, fmt.Errorf("tuner %d did not lock %s", tuner, guide)
+		return 0, nil, fmt.Errorf("tuner %d did not lock %s: %w", tuner, guide, errNoLock)
 	}
 	info := ""
 	infoDeadline := time.Now().Add(3 * time.Second)

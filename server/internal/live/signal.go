@@ -2,11 +2,54 @@ package live
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"time"
 
 	"broadwave/internal/hdhr"
 )
+
+// ErrNoSignal is a tune the tuner could not lock. The words are the player's.
+var ErrNoSignal = errors.New("This channel isn't coming in. Check the antenna.")
+
+var errNoLock = errors.New("no lock")
+
+// NoSignal is true when this channel's tuner has sent nothing and reports no
+// lock. A tuner that does not answer, and a feed with no tuner, are not.
+func (h *Hub) NoSignal(channelID int64) bool {
+	h.mu.Lock()
+	var m *mux
+	host, tuner := "", -1
+	if f := h.channels[channelID]; f != nil {
+		if m = muxOf(h, f); m != nil {
+			host, tuner = m.host, m.tuner
+		}
+	}
+	h.mu.Unlock()
+	if m == nil || host == "" || tuner < 0 || m.got.Load() {
+		return false
+	}
+	status, err := (hdhr.Control{Addr: controlAddr(host)}).Get("/tuner" + strconv.Itoa(tuner) + "/status")
+	return err == nil && !hdhr.ParseStatus(status).Locked
+}
+
+// DropDark gives back the tuner under a channel that never locked, without
+// waiting for its renditions to idle out or its probe to give up. A channel
+// someone still watches, records, or exports is left alone.
+func (h *Hub) DropDark(channelID int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	f := h.channels[channelID]
+	if f == nil || f.recording != nil || f.exports > 0 {
+		return
+	}
+	for _, r := range f.renditions {
+		if r.viewers > 0 {
+			return
+		}
+	}
+	h.stopFeedLocked(f)
+}
 
 // Measure tunes a channel long enough to read /tunerN/status, then releases it
 // when nobody else is using it.
