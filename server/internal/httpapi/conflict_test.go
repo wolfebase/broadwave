@@ -194,8 +194,8 @@ func TestLiveWatchDoesNotStarveARecording(t *testing.T) {
 	if !tuned {
 		t.Fatalf("Watch anyway did not tune (%d %s): %v", ok.Code, ok.Body.String(), tuner.Requests())
 	}
-	// The lab tuner has no MPEG-TS, so the tune returns that error after the guard opens.
-	if ok.Code != http.StatusInternalServerError || !strings.Contains(ok.Body.String(), "no sample") {
+	// The lab tuner has no MPEG-TS and turns the tune down after the guard opens.
+	if ok.Code != http.StatusServiceUnavailable || !strings.Contains(ok.Body.String(), "tuner_refused") {
 		t.Fatalf("Watch anyway %d %s", ok.Code, ok.Body.String())
 	}
 

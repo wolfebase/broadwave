@@ -44,7 +44,7 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	}
 	src, err := s.Hub.SourceOf(r.Context(), body.ChannelID)
 	if err != nil {
-		writeError(w, err)
+		watchError(w, err)
 		return
 	}
 	var decision live.Decision
@@ -68,7 +68,7 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	}
 	session, err := s.Hub.Watch(r.Context(), body.ChannelID, decision.Rendition)
 	if err != nil {
-		writeError(w, err)
+		watchError(w, err)
 		return
 	}
 	session.Stream.Reason = decision.Reason

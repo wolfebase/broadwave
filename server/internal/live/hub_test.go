@@ -2,7 +2,10 @@ package live
 
 import (
 	"context"
+	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -465,5 +468,16 @@ func TestSlowReaderQueueIsBoundedByBytes(t *testing.T) {
 	}
 	if sub.logged.IsZero() {
 		t.Fatal("dropped reads were not logged")
+	}
+}
+
+func TestATunerThatSaysNoIsNamedForThePlayer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "805 All Tuners In Use", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	_, err := openMux(srv.URL, 0, 177_000_000)
+	if !errors.Is(err, ErrTunerRefused) || !strings.Contains(err.Error(), "805") {
+		t.Fatalf("got %v", err)
 	}
 }

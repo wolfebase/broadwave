@@ -362,7 +362,7 @@ func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition) (Sessi
 		inUse := h.streamsForDeviceLocked(cand.DeviceID)
 		h.mu.Unlock()
 		if streamBusy(cand, inUse) && !tuned {
-			last = fmt.Errorf("%s", StreamLimitMessage(cand.StreamLimit))
+			last = &StreamLimitError{Limit: cand.StreamLimit}
 			continue
 		}
 		if cand.TunerCount == 0 && cand.StreamURL != "" && !hlsStream(cand) && !tuned {
@@ -380,7 +380,7 @@ func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition) (Sessi
 	}
 	if chosen < 0 {
 		if last == nil {
-			last = fmt.Errorf("no source has this channel")
+			last = ErrNoSource
 		}
 		return Session{}, last
 	}
@@ -469,7 +469,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 		devices = append(devices, DeviceTuners{Host: hostOf(candidate), Base: candidate, Tuners: tuners})
 	}
 	if len(devices) == 0 {
-		return nil, fmt.Errorf("the tuner did not answer")
+		return nil, ErrTunerSilent
 	}
 	held := h.reserved
 	if h.hold > 0 && len(devices) > 0 {
@@ -2020,6 +2020,15 @@ func StreamLimitMessage(limit int) string {
 	return fmt.Sprintf("All %d streams from this playlist are in use. Stop one or raise the limit.", limit)
 }
 
+// StreamLimitError is a playlist with every stream it allows already open.
+type StreamLimitError struct {
+	Limit int
+}
+
+func (e *StreamLimitError) Error() string {
+	return StreamLimitMessage(e.Limit)
+}
+
 func streamBusy(ch store.SourceChannel, inUse int) bool {
 	return ch.TunerCount == 0 && ch.StreamURL != "" && ch.StreamLimit > 0 && inUse >= ch.StreamLimit
 }
@@ -2389,7 +2398,7 @@ func openKept(ctx context.Context, u string) (io.ReadCloser, error) {
 	if res.StatusCode != http.StatusOK {
 		res.Body.Close()
 		stop()
-		return nil, fmt.Errorf("tuner returned %s", res.Status)
+		return nil, fmt.Errorf("%w (tuner returned %s)", ErrTunerRefused, res.Status)
 	}
 	return &keptBody{ReadCloser: res.Body, stop: stop}, nil
 }
@@ -2562,7 +2571,7 @@ func openMux(root string, tuner, freq int) (io.ReadCloser, error) {
 	if res.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 512))
 		res.Body.Close()
-		return nil, fmt.Errorf("tuner returned %s: %s", res.Status, strings.TrimSpace(string(b)))
+		return nil, fmt.Errorf("%w (tuner returned %s: %s)", ErrTunerRefused, res.Status, strings.TrimSpace(string(b)))
 	}
 	return res.Body, nil
 }

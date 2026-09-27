@@ -3,6 +3,7 @@ package httpapi
 import (
 	"database/sql"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -31,27 +32,56 @@ func httpError(w http.ResponseWriter, message string, status int) {
 }
 
 func writeError(w http.ResponseWriter, err error) {
+	status, code, message, details := errorFor(err)
+	apiError(w, status, code, message, details)
+}
+
+// watchError is writeError for a channel start. A viewer never reads Go or
+// ffmpeg text; the log keeps it.
+func watchError(w http.ResponseWriter, err error) {
+	status, code, message, details := errorFor(err)
+	switch code {
+	case "not_found":
+		message = "That channel is not in the lineup."
+	case "internal":
+		slog.Warn("watch: " + err.Error())
+		message = "This channel did not start. The server log says why."
+	}
+	apiError(w, status, code, message, details)
+}
+
+func errorFor(err error) (int, string, string, map[string]any) {
 	var busy *live.BusyError
 	var full *live.PictureError
 	var low *disk.LowError
 	var blocked *disk.WriteError
+	var streams *live.StreamLimitError
 	switch {
 	case errors.As(err, &busy):
-		apiError(w, http.StatusConflict, "tuners_busy", "Every tuner is busy. Stop a recording or watch something already on.", map[string]any{"tuners": busy.Tuners})
+		return http.StatusConflict, "tuners_busy", "Every tuner is busy. Stop a recording or watch something already on.", map[string]any{"tuners": busy.Tuners}
 	case errors.As(err, &full):
-		apiError(w, http.StatusConflict, "pictures_full", full.Error(), map[string]any{"tiles": full.Tiles})
+		return http.StatusConflict, "pictures_full", full.Error(), map[string]any{"tiles": full.Tiles}
 	case errors.As(err, &low):
-		apiError(w, http.StatusInsufficientStorage, "disk_low", err.Error(), map[string]any{"freeBytes": low.Free, "needBytes": low.Need})
+		return http.StatusInsufficientStorage, "disk_low", err.Error(), map[string]any{"freeBytes": low.Free, "needBytes": low.Need}
 	case errors.As(err, &blocked):
-		apiError(w, http.StatusInsufficientStorage, "disk_low", blocked.Error(), nil)
+		return http.StatusInsufficientStorage, "disk_low", blocked.Error(), nil
 	case errors.Is(err, live.ErrNoSignal):
-		apiError(w, http.StatusServiceUnavailable, "no_signal", live.ErrNoSignal.Error(), nil)
+		return http.StatusServiceUnavailable, "no_signal", live.ErrNoSignal.Error(), nil
 	case errors.Is(err, live.ErrStreamDown):
-		apiError(w, http.StatusServiceUnavailable, "stream_down", live.ErrStreamDown.Error(), nil)
+		return http.StatusServiceUnavailable, "stream_down", live.ErrStreamDown.Error(), nil
+	case errors.As(err, &streams):
+		return http.StatusConflict, "streams_full", streams.Error(), map[string]any{"limit": streams.Limit}
+	case errors.Is(err, live.ErrNoSource):
+		return http.StatusNotFound, "no_source", live.ErrNoSource.Error(), nil
+	case errors.Is(err, live.ErrTunerSilent):
+		return http.StatusServiceUnavailable, "tuner_silent", live.ErrTunerSilent.Error(), nil
+	case errors.Is(err, live.ErrTunerRefused):
+		slog.Warn("tuner: " + err.Error())
+		return http.StatusServiceUnavailable, "tuner_refused", live.ErrTunerRefused.Error(), nil
 	case errors.Is(err, sql.ErrNoRows):
-		apiError(w, http.StatusNotFound, "not_found", "Not found.", nil)
+		return http.StatusNotFound, "not_found", "Not found.", nil
 	default:
-		apiError(w, http.StatusInternalServerError, "internal", err.Error(), nil)
+		return http.StatusInternalServerError, "internal", err.Error(), nil
 	}
 }
 
