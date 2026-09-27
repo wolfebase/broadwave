@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- An Apple TV that fell a second or more behind the others skipped every minute trying to catch up: a forward jump on Apple TV lands short. It now jumps past the others and pauses the exact difference, once, and if that misses twice it stops correcting and offers "Back in sync" instead of skipping (with the next app update).
+- Apple TVs wait for the TV to finish switching to the channel's frame rate before lining up again.
+
 ## 0.11.9 — 2026-09-27
 
 Apple TVs in one room play in step.
