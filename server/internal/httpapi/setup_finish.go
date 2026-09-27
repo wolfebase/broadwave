@@ -377,13 +377,14 @@ func (s *Server) measureSetupSignals(ctx context.Context) (string, string) {
 	if s.recordingSoon(ctx) {
 		return "skipped", "A recording is coming up, so the signal check can wait."
 	}
-	if !s.Hub.Idle() {
-		return "skipped", "Tuners are busy, so the signal check can wait."
-	}
 	if !s.startSignalScan() {
 		return "skipped", "Already checking channels."
 	}
 	defer s.finishSignalScan()
+	// The boot guide harvest only borrows a tuner, and it runs again when setup ends.
+	if !s.Hub.IdleWithoutScan(3 * time.Second) {
+		return "skipped", "Tuners are busy, so the signal check can wait."
+	}
 	// A fresh lineup has no stored frequency. Tuning one channel learns the
 	// whole mux, so the next pass skips the channels that share it.
 	scanCtx, cancel := context.WithTimeout(ctx, 35*time.Second)

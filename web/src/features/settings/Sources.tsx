@@ -119,7 +119,7 @@ export function Sources({
           <input
             value={ip}
             onChange={(event) => setIp(event.target.value)}
-            placeholder="192.168.1.252"
+            placeholder={copy.sources.addressPlaceholder}
             autoComplete="off"
             spellCheck={false}
           />
