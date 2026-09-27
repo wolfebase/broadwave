@@ -75,21 +75,33 @@ func TestFollowRoomSettlesOnceTheBufferCoversTheLatency(t *testing.T) {
 	if moved := r.Settle(4, recent); len(moved) != 0 {
 		t.Fatalf("a first frame newer than the target must stay, got %+v", moved)
 	}
-	moved := r.Settle(4, first)
-	if len(moved) != 1 {
-		t.Fatalf("expected one settle, got %+v", moved)
+	before, _ := r.State("channel:4")
+	onScreen := before.Target(unixMS(*now))
+	eased := r.Settle(4, first)
+	if len(eased) != 1 {
+		t.Fatalf("expected one settle, got %+v", eased)
 	}
-	want := unixMS(now.Add(-10 * time.Second))
-	if math.Abs(moved[0].Target(unixMS(*now))-want) > 1 || moved[0].Rate != 1 {
-		t.Fatalf("settled target %v want %v (%+v)", moved[0].Target(unixMS(*now)), want, moved[0])
+	moved := eased[0].State
+	// The frame on screen does not jump; the room slows instead of freezing players.
+	if math.Abs(moved.Target(unixMS(*now))-onScreen) > 1 || moved.Rate != settleRate {
+		t.Fatalf("settle must keep the frame and slow down: target %v want %v (%+v)", moved.Target(unixMS(*now)), onScreen, moved)
 	}
-	held := moved[0].Version
+	held := moved.Version
 	if again := r.Settle(4, first); len(again) != 0 {
 		t.Fatalf("a second settle moved the room: %+v", again)
 	}
-	st, _ = r.State("channel:4")
-	if st.Version != held || math.Abs(st.Target(unixMS(*now))-want) > 1 {
-		t.Fatalf("target drifted after the second settle: %+v", st)
+	// At the end of the ease the room is on its latency target and back at 1x.
+	*now = now.Add(eased[0].Until)
+	st, ok := r.EndEase("channel:4", held)
+	want := unixMS(now.Add(-10 * time.Second))
+	if !ok || st.Rate != 1 || math.Abs(st.Target(unixMS(*now))-want) > 5 {
+		t.Fatalf("after the ease target %v want %v (%+v ok=%v)", st.Target(unixMS(*now)), want, st, ok)
+	}
+	if _, ok := r.EndEase("channel:4", held); ok {
+		t.Fatal("a stale ease must not change the room again")
+	}
+	if eased[0].Until < 100*time.Second || eased[0].Until > 400*time.Second {
+		t.Fatalf("a ~6.5 s gap at 2.5%% should take a few minutes, got %v", eased[0].Until)
 	}
 	g := r.Join("group:den", 4, first)
 	*now = start.Add(40 * time.Second)
