@@ -97,18 +97,32 @@ func (r *Rooms) Join(room string, channelID int64, earliest float64) RoomState {
 	return *st
 }
 
-// Settle moves follow rooms on this channel from a first-frame anchor back to
-// the latency target once earliest (Unix ms) is old enough to play there.
-// A fresh tune, a room already on its target, a paused room, and a group room
-// stay put. Each changed state is returned so members can be told; a second
-// call is empty.
-func (r *Rooms) Settle(channelID int64, earliest float64) []RoomState {
+// settleRate is how fast a follow room plays while it eases back to its
+// latency target. Players follow a room by trimming their own rate by up to
+// 3%, so a room that slows by 2.5% moves every screen with it and none of them
+// pauses to make up the gap.
+const settleRate = 0.975
+
+// Easing is a room that Settle slowed, and how long until it reaches its target.
+type Easing struct {
+	State RoomState
+	Until time.Duration
+}
+
+// Settle eases follow rooms on this channel from a first-frame anchor back to
+// the latency target once earliest (Unix ms) is old enough to play there. The
+// room keeps its current frame and plays at settleRate until it is on target;
+// EndEase then puts it back to 1x. Jumping the target instead held every
+// screen on a frozen picture for the whole gap. A fresh tune, a room already
+// on its target or easing, a paused room, and a group room stay put. Each
+// changed state is returned so members can be told; a second call is empty.
+func (r *Rooms) Settle(channelID int64, earliest float64) []Easing {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if earliest <= 0 {
 		return nil
 	}
-	var changed []RoomState
+	var changed []Easing
 	for _, st := range r.rooms {
 		if st.ChannelID != channelID || st.Mode != "follow" || st.Rate != 1 {
 			continue
@@ -120,14 +134,31 @@ func (r *Rooms) Settle(channelID int64, earliest float64) []RoomState {
 			continue
 		}
 		// Already at the target, or further behind it. Never pull a room toward live.
-		if st.Target(nowMS) <= target+500 {
+		gap := st.Target(nowMS) - target
+		if gap <= 500 {
 			continue
 		}
-		st.AnchorServer, st.AnchorMedia, st.Rate = nowMS, target, 1
+		st.AnchorMedia, st.AnchorServer, st.Rate = st.Target(nowMS), nowMS, settleRate
 		st.Version++
-		changed = append(changed, *st)
+		until := time.Duration(gap / (1 - settleRate) * float64(time.Millisecond))
+		changed = append(changed, Easing{State: *st, Until: until})
 	}
 	return changed
+}
+
+// EndEase puts a room that Settle slowed back to 1x on its current frame. It
+// does nothing when anything else changed the room since (the version moved).
+func (r *Rooms) EndEase(room string, version int) (RoomState, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	st, ok := r.rooms[room]
+	if !ok || st.Version != version || st.Rate != settleRate {
+		return RoomState{}, false
+	}
+	nowMS := unixMS(r.now())
+	st.AnchorMedia, st.AnchorServer, st.Rate = st.Target(nowMS), nowMS, 1
+	st.Version++
+	return *st, true
 }
 
 // Leave drops a member; an empty room is forgotten.

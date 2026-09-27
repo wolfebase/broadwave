@@ -80,14 +80,21 @@ func (b *Bus) Publish(kind string, v any) {
 	}
 }
 
-// Settle moves this channel's follow rooms onto their latency target once the
-// playlist covers it, and tells the members. A fresh tune is left alone.
+// Settle eases this channel's follow rooms onto their latency target once the
+// playlist covers it, tells the members, and puts each room back to 1x when it
+// arrives. A fresh tune is left alone.
 func (b *Bus) Settle(channelID int64, earliest float64) {
 	if b == nil || b.Rooms == nil {
 		return
 	}
-	for _, st := range b.Rooms.Settle(channelID, earliest) {
-		b.publishRoom(st)
+	for _, e := range b.Rooms.Settle(channelID, earliest) {
+		b.publishRoom(e.State)
+		room, version := e.State.Room, e.State.Version
+		time.AfterFunc(e.Until, func() {
+			if st, ok := b.Rooms.EndEase(room, version); ok {
+				b.publishRoom(st)
+			}
+		})
 	}
 }
 
