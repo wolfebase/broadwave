@@ -3,6 +3,7 @@ package live
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -1281,5 +1282,50 @@ func TestTrimLeadInLeavesOtherLayoutsAlone(t *testing.T) {
 		if out := trimLeadIn(in, 1, scales); !bytes.Equal(out, in) {
 			t.Errorf("%s: the fragment changed", name)
 		}
+	}
+}
+
+func TestPackInputMovesToTheNextEncode(t *testing.T) {
+	pipe := func(body string) *packPipe {
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		go func() {
+			_, _ = w.WriteString(body)
+			_ = w.Close()
+		}()
+		// started closes this second write end, as it does for ffmpeg's.
+		_, extra, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &packPipe{File: r, w: extra}
+	}
+	in := &packInput{cur: pipe("first")}
+	if !in.follow(pipe("second")) {
+		t.Fatal("follow refused before close")
+	}
+	var got []string
+	buf := make([]byte, 64)
+	for {
+		n, err := in.Read(buf)
+		if n > 0 {
+			got = append(got, string(buf[:n]))
+		}
+		if errors.Is(err, errNextEncode) {
+			got = append(got, "|")
+			continue
+		}
+		if err != nil {
+			break
+		}
+	}
+	if strings.Join(got, "") != "first|second" {
+		t.Fatalf("read %q", got)
+	}
+	in.close()
+	if in.follow(pipe("late")) {
+		t.Fatal("follow accepted after the packager stopped")
 	}
 }
