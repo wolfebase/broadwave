@@ -221,10 +221,11 @@ export function Stage({
               type="range"
               min={0}
               max={span}
-              step={0.1}
+              step={1}
               value={at}
               style={{ ["--at" as string]: `${(at / span) * 100}%` }}
               aria-label="Playback position"
+              aria-valuetext={`${formatClock(at)} of ${formatClock(span)}`}
               onChange={(event) => onSeek(Number(event.target.value))}
             />
           </div>
