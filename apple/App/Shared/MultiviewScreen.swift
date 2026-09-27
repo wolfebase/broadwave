@@ -272,6 +272,8 @@ final class TilePlayer {
     func start(_ request: Request, room: String, store: AppStore, bind: @escaping (@escaping (String) -> Void) -> Void) async {
         let channel = request.channel
         let prefs = request.prefs
+        let retry = channelID == channel.id
+        let held = retry ? error : nil
         canHear = false
         frameOnScreen.ready = false
         await stop()
@@ -282,10 +284,14 @@ final class TilePlayer {
         let allow = confirmNext
         confirmNext = false
         needsConfirm = false
-        error = nil
+        error = held
+        let client = api
+        let id = channel.id
         outage.bind(
-            health: { await api.reachable() },
-            onMessage: { [weak self] message in self?.showOutage(message) },
+            snap: { assumeLost in
+                await playbackSnap(api: client, channelID: id, assumeLost: assumeLost)
+            },
+            onMessage: { [weak self] decision in self?.showOutage(decision) },
             onRecover: { [weak self] in self?.attempt += 1 }
         )
         do {
@@ -295,6 +301,7 @@ final class TilePlayer {
                 return
             }
             self.session = session
+            error = nil
             detail = session.stream.reason
             let item = AVPlayerItem(url: api.url(session.playlist))
             let tile = prefs.quality == .tile || prefs.quality == .tile360
@@ -324,7 +331,24 @@ final class TilePlayer {
         } catch let error as URLError {
             guard channelID == channel.id, error.code != .cancelled else { return }
             needsConfirm = false
-            outage.failToReach()
+            outage.failToReach(online: PlaybackOutage.deviceOnline(error))
+        } catch let error as APIError {
+            guard channelID == channel.id else { return }
+            let decision = PlaybackOutage.viewerFailure(code: error.code, status: error.status, message: error.message, online: true)
+            if decision.recovery != nil {
+                needsConfirm = false
+                outage.fail(decision)
+                return
+            }
+            attempts += 1
+            if attempts == 1, decision.message.localizedStandardContains("tuner") {
+                try? await Task.sleep(for: .seconds(2))
+                guard channelID == channel.id else { return }
+                await start(request, room: room, store: store, bind: bind)
+                return
+            }
+            needsConfirm = false
+            self.error = decision.message
         } catch {
             guard channelID == channel.id else { return }
             attempts += 1
@@ -338,9 +362,11 @@ final class TilePlayer {
         }
     }
 
-    private func showOutage(_ message: String) {
-        error = message
-        guard message == PlaybackOutage.serverStopped else { return }
+    /// A recoverable outage clears the item. The tile stays, and the message
+    /// stays until the next start has a picture.
+    private func showOutage(_ decision: OutageDecision) {
+        error = decision.message
+        guard decision.recovery != nil else { return }
         sync?.stop()
         sync = nil
         player.pause()
@@ -1063,6 +1089,7 @@ struct MultiviewTile: View {
                     Text(error)
                         .font(.footnote)
                         .multilineTextAlignment(.center)
+                        .accessibilityIdentifier("playback-outage")
                     if live.needsConfirm {
                         Button("Watch anyway") {
                             live.confirmWatch()

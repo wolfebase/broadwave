@@ -10,6 +10,17 @@ public struct APIError: LocalizedError, Sendable {
     }
 }
 
+/// Whether /health answered, and whether the device itself still has a connection.
+public struct ServerReach: Equatable, Sendable {
+    public var up: Bool
+    public var online: Bool
+
+    public init(up: Bool, online: Bool) {
+        self.up = up
+        self.online = online
+    }
+}
+
 /// Typed access to one server's /api/v1.
 public struct APIClient: Sendable {
     public let base: URL
@@ -63,15 +74,23 @@ public struct APIClient: Sendable {
 
     /// True when /health answers. Two seconds, so a dead server does not stall the player.
     public func reachable() async -> Bool {
+        await reach().up
+    }
+
+    /// `up` is /health. `online` is false only when the device itself has no
+    /// connection. A port that does not answer leaves `online` true.
+    public func reach() async -> ServerReach {
         var req = URLRequest(url: url("/api/v1/health"))
         req.httpMethod = "GET"
         req.timeoutInterval = 2
         do {
             let (_, res) = try await session.data(for: req)
             let status = (res as? HTTPURLResponse)?.statusCode ?? 0
-            return (200 ..< 300).contains(status)
+            return ServerReach(up: (200 ..< 300).contains(status), online: true)
+        } catch let error as URLError {
+            return ServerReach(up: false, online: PlaybackOutage.deviceOnline(error))
         } catch {
-            return false
+            return ServerReach(up: false, online: true)
         }
     }
 
@@ -154,6 +173,11 @@ public struct APIClient: Sendable {
     public func watch(channelID: Int64, caps: Caps, prefs: Prefs, confirmLive: Bool = false) async throws -> WatchSession {
         struct B: Encodable { var channelId: Int64; var caps: Caps; var prefs: Prefs; var confirmLive: Bool }
         return try await send("POST", "/watch", body: B(channelId: channelID, caps: caps, prefs: prefs, confirmLive: confirmLive))
+    }
+
+    public func tuners() async throws -> [Tuner] {
+        struct R: Decodable { var tuners: [Tuner] }
+        return try await send("GET", "/tuners", as: R.self).tuners
     }
 
     public func planMultiview(_ channelIDs: [Int64]) async throws -> MultiviewPlan {

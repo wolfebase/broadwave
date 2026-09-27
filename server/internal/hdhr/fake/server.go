@@ -537,7 +537,7 @@ func (s *Server) legacyStream() bool {
 }
 
 func (s *Server) streamLegacy(w http.ResponseWriter, r *http.Request) {
-	_, number := streamRequest(r.URL.Path)
+	n, number := streamRequest(r.URL.Path)
 	if strings.Contains(r.URL.Path, "/ch") || strings.Contains(r.URL.Path, "/auto/") {
 		s.mu.Lock()
 		limit := len(s.tuners)
@@ -551,6 +551,16 @@ func (s *Server) streamLegacy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.streams++
+		// The hub opens /tunerN/chFREQ without a control tune once it already
+		// knows the channel. Status has to follow that stream, or a dark
+		// channel stays "no lock" after the picture is back.
+		if n >= 0 && n < len(s.tuners) {
+			if ch, ok := s.find(number); ok {
+				s.tuners[n].guide = ch.Number
+				s.tuners[n].freq = ch.Freq
+				s.tuners[n].held = true
+			}
+		}
 		s.mu.Unlock()
 		defer func() {
 			s.mu.Lock()

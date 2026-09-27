@@ -62,6 +62,8 @@ final class LivePlayer {
         watchToken += 1
         let token = watchToken
         watchTask?.cancel()
+        let retry = channelID == channel.id
+        let held = retry ? error : nil
         await stop()
         guard !Task.isCancelled, token == watchToken else { return }
         guard let api = store.api else { return }
@@ -70,10 +72,14 @@ final class LivePlayer {
         let allow = confirmNext
         confirmNext = false
         needsConfirm = false
-        error = nil
+        error = held
+        let client = api
+        let id = channel.id
         outage.bind(
-            health: { await api.reachable() },
-            onMessage: { [weak self] message in self?.showOutage(message) },
+            snap: { assumeLost in
+                await playbackSnap(api: client, channelID: id, assumeLost: assumeLost)
+            },
+            onMessage: { [weak self] decision in self?.showOutage(decision) },
             onRecover: { [weak self] in self?.attempt += 1 }
         )
         watchLifecycle()
@@ -97,6 +103,7 @@ final class LivePlayer {
                 return
             }
             self.session = session
+            error = nil
             let item = AVPlayerItem(url: api.url(session.playlist))
             item.externalMetadata = metadata(channel: channel, airing: store.index.on(channel.id, at: Date()))
             PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
@@ -120,7 +127,16 @@ final class LivePlayer {
         } catch let error as URLError {
             guard channelID == channel.id, error.code != .cancelled else { return }
             needsConfirm = false
-            outage.failToReach()
+            outage.failToReach(online: PlaybackOutage.deviceOnline(error))
+        } catch let error as APIError {
+            guard channelID == channel.id else { return }
+            needsConfirm = false
+            let decision = PlaybackOutage.viewerFailure(code: error.code, status: error.status, message: error.message, online: true)
+            if decision.recovery != nil {
+                outage.fail(decision)
+            } else {
+                self.error = decision.message
+            }
         } catch {
             guard channelID == channel.id else { return }
             needsConfirm = false
@@ -128,11 +144,11 @@ final class LivePlayer {
         }
     }
 
-    /// The server is gone, or the item failed while the server was still up.
-    /// Clearing the item lets the next start own the player.
-    private func showOutage(_ message: String) {
-        error = message
-        guard message == PlaybackOutage.serverStopped else { return }
+    /// A recoverable outage clears the item so the next start owns the player.
+    /// The screen stays up, and the message stays until that start has a picture.
+    private func showOutage(_ decision: OutageDecision) {
+        error = decision.message
+        guard decision.recovery != nil else { return }
         sync?.stop()
         sync = nil
         player.pause()
@@ -404,6 +420,7 @@ struct PlayerScreen: View {
                 VStack(spacing: 12) {
                     Text(error)
                         .multilineTextAlignment(.center)
+                        .accessibilityIdentifier("playback-outage")
                     if live.needsConfirm {
                         Button("Watch anyway") {
                             live.confirmWatch()

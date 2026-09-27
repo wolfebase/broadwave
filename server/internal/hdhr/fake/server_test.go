@@ -72,6 +72,48 @@ func TestTuneStatusAndBusy(t *testing.T) {
 	}
 }
 
+func TestHTTPTuneReportsLockWithoutAControlTune(t *testing.T) {
+	dir := t.TempDir()
+	sample := filepath.Join(dir, "sample.ts")
+	pkt := make([]byte, 188)
+	pkt[0] = 0x47
+	if err := os.WriteFile(sample, bytes.Repeat(pkt, 64), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := &Server{TS: sample}
+	base, port, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/tuner0/ch593000000", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	c := hdhr.Control{Addr: "127.0.0.1:" + port}
+	status, err := c.Get("/tuner0/status")
+	if err != nil || !strings.Contains(status, "lock=8vsb") || !strings.Contains(status, "593000000") {
+		t.Fatalf("streaming status %q %v", status, err)
+	}
+	srv.Dark("4.1")
+	status, err = c.Get("/tuner0/status")
+	if err != nil || !strings.Contains(status, "lock=none") || strings.Contains(status, "lock=8vsb") {
+		t.Fatalf("dark status %q %v", status, err)
+	}
+	srv.Light("4.1")
+	status, err = c.Get("/tuner0/status")
+	if err != nil || !strings.Contains(status, "lock=8vsb") {
+		t.Fatalf("restored status %q %v", status, err)
+	}
+}
+
 func TestDarkChannelReportsNoLockAndSendsNothing(t *testing.T) {
 	dir := t.TempDir()
 	sample := filepath.Join(dir, "sample.ts")
