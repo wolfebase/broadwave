@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.2 — 2026-09-27
+
+Sound and picture line up in every browser, and Safari plays live TV again.
+
+### Fixed
+
+- In Chrome and other browsers the sound could play up to a second late. The server now places each track's start inside the stream itself, not only in a table that some browsers skip.
+- Safari showed no picture on live TV. It plays now, and the sync between screens corrects Safari by seeking instead of changing its speed, which made it stall.
+- A new screen no longer pauses and then jumps when it joins a channel.
+
 ## 0.11.1 — 2026-09-26
 
 Live TV no longer freezes a few seconds after it starts.
