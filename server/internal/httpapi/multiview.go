@@ -70,6 +70,10 @@ func (s *Server) multiviewPlan(w http.ResponseWriter, r *http.Request) {
 		candidates = s.pickerChannels(r.Context())
 	}
 	offers, stops := live.Picker(want, candidates, tunerCount, ours, foreign, s.recordingReservations(r.Context(), tunerCount), s.now())
+	if s.Hub != nil {
+		used, limit, running := s.Hub.Pictures()
+		live.LimitPictures(offers, want, used, limit, running)
+	}
 	plan := live.PlanMultiview(want, tunerCount, ours, foreign)
 	plan.Offers = offers
 	plan.Stops = stops

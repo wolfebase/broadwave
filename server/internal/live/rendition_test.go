@@ -164,6 +164,26 @@ func TestEarliestMediaUsesTheNewestRendition(t *testing.T) {
 	}
 }
 
+func TestPicturesCountsWatchedTranscodesOncePerFeed(t *testing.T) {
+	shared := &feed{renditions: map[string]*rendition{
+		"720":  {spec: Rendition{Video: "720"}, viewers: 2},
+		"copy": {spec: Rendition{Video: "copy"}, viewers: 1},
+	}}
+	h := &Hub{Host: Host{Tiles: 2}, channels: map[int64]*feed{
+		4:  shared,
+		5:  shared,
+		9:  {renditions: map[string]*rendition{"360": {spec: Rendition{Video: "360"}}}},
+		11: {renditions: map[string]*rendition{"copy": {spec: Rendition{Video: "copy"}, viewers: 1}}},
+	}}
+	used, limit, running := h.Pictures()
+	if used != 1 || limit != 2 {
+		t.Fatalf("used %d limit %d", used, limit)
+	}
+	if !running[4] || !running[5] || running[9] || running[11] {
+		t.Fatalf("running %v", running)
+	}
+}
+
 func TestCopyRenditionKeepsBroadcastTimestamps(t *testing.T) {
 	line := strings.Join(RenditionArgs(3, Source{VideoCodec: "H264", AudioCodec: "AC3", Progressive: true}, Rendition{Video: "copy", Audio: "copy"}, "libx264", ""), " ")
 	for _, want := range []string{"-copyts", "-map 0:p:3:v:0", "-c:v copy", "-c:a copy", "frag_keyframe", "pipe:1"} {

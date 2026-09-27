@@ -815,6 +815,30 @@ func (h *Hub) releaseIdleTranscodesLocked() {
 	}
 }
 
+// Pictures is how many transcodes have a viewer, the startup budget (0 is no
+// limit), and the channels with one a new tile can join when the budget is
+// full. An idle transcode is stopped to make room before a join, so it counts
+// for neither.
+func (h *Hub) Pictures() (used, limit int, running map[int64]bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	running = map[int64]bool{}
+	seen := map[*feed]bool{}
+	for id, f := range h.channels {
+		for _, r := range f.renditions {
+			if r.spec.Video == "copy" || r.viewers == 0 {
+				continue
+			}
+			running[id] = true
+			if !seen[f] {
+				used++
+			}
+		}
+		seen[f] = true
+	}
+	return used, h.Host.Tiles, running
+}
+
 func (h *Hub) transcodesLocked() int {
 	// Two channel ids can share one feed. Count that picture once.
 	seen := map[*feed]bool{}

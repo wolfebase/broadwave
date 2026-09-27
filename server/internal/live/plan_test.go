@@ -198,3 +198,56 @@ func TestPlanNamesATunerHeldBySomeoneElse(t *testing.T) {
 		t.Fatalf("reason: %q holders %v", plan.Blocked[0].Reason, plan.Blocked[0].Holders)
 	}
 }
+
+func TestPickerNamesAChannelAnotherScreenTuned(t *testing.T) {
+	now := time.Date(2026, 9, 25, 14, 40, 0, 0, time.Local)
+	current := []PlanChannel{ch(1, 593000000, "4.1")}
+	candidates := []PlanChannel{ch(3, 533000000, "5.1"), ch(4, 533000000, "5.2"), ch(9, 575000000, "9.1")}
+	ours := []TunedFreq{{FrequencyHz: 593000000, Labels: []string{"4.1"}}, {FrequencyHz: 533000000, Labels: []string{"5.1"}}}
+	offers, _ := Picker(current, candidates, 2, ours, nil, nil, now)
+	if offers[0].Cost != "same" || offers[0].Label != "Already tuned" {
+		t.Fatalf("the tuned channel itself: %+v", offers[0])
+	}
+	if offers[1].Cost != "same" || offers[1].Label != "Same tune as 5.1" {
+		t.Fatalf("its sibling: %+v", offers[1])
+	}
+	if offers[2].Cost != "none" || offers[2].Label != "No tuner free" {
+		t.Fatalf("both tuners held: %+v", offers[2])
+	}
+}
+
+func TestLimitPicturesWhenEveryPictureIsWatched(t *testing.T) {
+	current := []PlanChannel{ch(1, 593000000, "4.1"), ch(3, 533000000, "5.1")}
+	fresh := func() []Offer {
+		return []Offer{
+			{ChannelID: 1, Cost: "on"},
+			{ChannelID: 2, Cost: "same", Label: "Same tune as 4.1"},
+			{ChannelID: 7, Cost: "same", Label: "Already tuned"},
+			{ChannelID: 9, Cost: "none", Label: "No tuner free"},
+		}
+	}
+	offers := fresh()
+	LimitPictures(offers, current, 1, 2, nil)
+	if offers[1].Label != "Same tune as 4.1" {
+		t.Fatalf("a free picture changes nothing: %+v", offers)
+	}
+	offers = fresh()
+	LimitPictures(offers, current, 2, 0, nil)
+	if offers[1].Label != "Same tune as 4.1" {
+		t.Fatalf("no budget means no limit: %+v", offers)
+	}
+	offers = fresh()
+	LimitPictures(offers, current, 2, 2, map[int64]bool{7: true})
+	if offers[0].Cost != "on" {
+		t.Fatalf("a tile already on screen stays: %+v", offers[0])
+	}
+	if offers[1].Cost != "none" || offers[1].Label != "No picture free" {
+		t.Fatalf("a new picture: %+v", offers[1])
+	}
+	if offers[2].Label != "Already tuned" {
+		t.Fatalf("a channel with a running picture can share it: %+v", offers[2])
+	}
+	if offers[3].Label != "No tuner free" {
+		t.Fatalf("the tuner reason stays: %+v", offers[3])
+	}
+}
