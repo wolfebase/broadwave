@@ -543,3 +543,24 @@ func TestCopyArgsReadsURL(t *testing.T) {
 		t.Fatalf("tuner recording args: %s", pipe)
 	}
 }
+
+func TestAHalfRateTileCapsItsKeyframeGap(t *testing.T) {
+	src := Source{VideoCodec: "MPEG2", AudioCodec: "AC3", Progressive: true}
+	gop := func(r Rendition) string {
+		args := RenditionArgs(3, src, r, "h264_vaapi", "motion_adaptive")
+		for i, a := range args {
+			if a == "-g" && i+1 < len(args) {
+				return args[i+1]
+			}
+		}
+		t.Fatalf("no -g in %v", args)
+		return ""
+	}
+	// The tile halves a 60p picture and can drop the source keyframe.
+	if g := gop(Rendition{Video: "540", Audio: "aac2", Mode: "broadcast"}); g != "120" {
+		t.Fatalf("tile gop %s, want 120 (4 s)", g)
+	}
+	if g := gop(Rendition{Video: "1080", Audio: "aac2", Mode: "broadcast"}); g != strconv.Itoa(sourceKeyint) {
+		t.Fatalf("full picture gop %s, want the source ceiling", g)
+	}
+}
