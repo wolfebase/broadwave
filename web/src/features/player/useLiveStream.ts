@@ -7,6 +7,7 @@ import { liveHlsConfig, type BufferProfile } from "../../picture";
 import { rememberChannel } from "../../recent";
 import { awayBeforeSeekMs, resumePlan } from "./resume";
 import {
+  aTunerAnswers,
   aTunerIsFree,
   classifySnap,
   recoveryReady,
@@ -426,8 +427,7 @@ async function readRecoverySnap(channelId: number, assumeLost: boolean): Promise
   }
   try {
     const body = await getDeviceHealth();
-    const devices = body.devices ?? [];
-    tunerAnswers = devices.some((device) => !device.error);
+    tunerAnswers = aTunerAnswers(body.devices ?? []);
   } catch {
     tunerAnswers = false;
   }

@@ -54,6 +54,11 @@ export function aTunerIsFree(tuners: { target?: string; guide?: string }[]): boo
   return tuners.some((tuner) => !tuner.target && !tuner.guide);
 }
 
+// A home with no HDHomeRun (only playlists) has no tuner to blame.
+export function aTunerAnswers(devices: { error?: string }[]): boolean {
+  return devices.length === 0 || devices.some((device) => !device.error);
+}
+
 export function recoveryReady(kind: Recovery, snap: RecoverySnap): boolean {
   if (kind === "server") return snap.health && snap.online;
   if (kind === "busy") return snap.freeTuner;
