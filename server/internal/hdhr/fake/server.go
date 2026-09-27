@@ -71,6 +71,9 @@ type Server struct {
 	scanning bool
 	scanOnce bool
 	paths    []string
+	// silent drops new requests and ends streams. Tests use it for a tuner that stops answering.
+	silent bool
+	procs  []*exec.Cmd
 }
 
 type tuner struct {
@@ -174,6 +177,62 @@ func (s *Server) Close() {
 	}
 }
 
+// HoldAll marks every tuner in use so a new channel is refused.
+func (s *Server) HoldAll() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.tuners {
+		ch := Channel{}
+		if len(s.Channels) > 0 {
+			ch = s.Channels[i%len(s.Channels)]
+		}
+		s.tuners[i].held = true
+		s.tuners[i].guide = ch.Number
+		s.tuners[i].freq = ch.Freq
+	}
+}
+
+// FreeAll releases every tuner HoldAll took.
+func (s *Server) FreeAll() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.tuners {
+		dead := s.tuners[i].dead
+		s.closeStopLocked(i)
+		s.tuners[i] = tuner{dead: dead}
+	}
+	s.streams = 0
+}
+
+// Silence ends streams and stops answering. Answer resumes.
+func (s *Server) Silence() {
+	s.mu.Lock()
+	s.silent = true
+	procs := append([]*exec.Cmd(nil), s.procs...)
+	for i := range s.tuners {
+		s.closeStopLocked(i)
+	}
+	s.mu.Unlock()
+	for _, cmd := range procs {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+	}
+}
+
+// Answer lets the device reply again after Silence.
+func (s *Server) Answer() {
+	s.mu.Lock()
+	s.silent = false
+	s.mu.Unlock()
+}
+
+func (s *Server) silentNow() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.silent
+}
+
 // KillTuner closes one tuner mid-stream. The next tune skips it.
 func (s *Server) KillTuner(n int) {
 	s.mu.Lock()
@@ -245,9 +304,25 @@ func (s *Server) serveHTTP() {
 	mux.HandleFunc("/upgrade", refuseUpgrade)
 	mux.HandleFunc("/firmware", refuseUpgrade)
 	_ = http.Serve(s.httpLn, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.silentNow() {
+			dropConn(w)
+			return
+		}
 		s.note(r.URL.Path)
 		mux.ServeHTTP(w, r)
 	}))
+}
+
+func dropConn(w http.ResponseWriter) {
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		return
+	}
+	conn, _, err := hj.Hijack()
+	if err != nil {
+		return
+	}
+	_ = conn.Close()
 }
 
 // Requests lists HTTP paths and control names seen since Start.
@@ -458,7 +533,28 @@ func (s *Server) streamLegacy(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
+		s.mu.Lock()
+		silent := s.silent
+		if !silent {
+			s.procs = append(s.procs, cmd)
+		}
+		s.mu.Unlock()
+		defer func() {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			s.mu.Lock()
+			kept := make([]*exec.Cmd, 0, len(s.procs))
+			for _, other := range s.procs {
+				if other != cmd {
+					kept = append(kept, other)
+				}
+			}
+			s.procs = kept
+			s.mu.Unlock()
+		}()
+		if silent {
+			return
+		}
 		_, _ = io.Copy(w, stdout)
 		return
 	}
@@ -703,6 +799,9 @@ func (s *Server) serveControl() {
 
 func (s *Server) control(conn net.Conn) {
 	defer conn.Close()
+	if s.silentNow() {
+		return
+	}
 	head := make([]byte, 4)
 	if _, err := io.ReadFull(conn, head); err != nil {
 		return

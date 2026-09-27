@@ -10,6 +10,7 @@ import { InfoIcon, ListIcon, RecordIcon, SideBySideIcon, SyncIcon } from "../../
 import { Progress } from "../../ui/primitives";
 import { isLayout, multiviewPath } from "../multiview/storage";
 import { useScoreMap } from "../sports/scores";
+import { noListing } from "./outage";
 import { Stage } from "./Stage";
 import { useLiveStream } from "./useLiveStream";
 
@@ -43,7 +44,7 @@ export function LivePlayer({
   onClose: () => void;
   onExpand: () => void;
 }) {
-  const { channels, index, now, recordings, settings, saveSettings, record, stopRecord } = useData();
+  const { channels, index, now, recordings, settings, saveSettings, record, stopRecord, refresh } = useData();
   const layout = useLayout();
   const videoRef = useRef<HTMLVideoElement>(null);
   const rootRef = useRef<HTMLElement>(null);
@@ -67,6 +68,7 @@ export function LivePlayer({
   const error = stream.error;
   const sync: SyncStatus = stream.syncStatus;
   const [panel, setPanel] = useState<"none" | "guide" | "info" | "sync">("none");
+  const [checking, setChecking] = useState(false);
   const playback = usePlaybackStats(videoRef, panel === "info");
   const [behind, setBehind] = useState(0);
   const [span, setSpan] = useState({ at: 0, len: 1 });
@@ -259,6 +261,26 @@ export function LivePlayer({
         stream.needsConfirm ? (
           <button type="button" className="btn small" onClick={stream.confirm}>
             Watch anyway
+          </button>
+        ) : error ? (
+          <button type="button" className="btn small" onClick={stream.retry}>
+            Try again
+          </button>
+        ) : null
+      }
+      note={!error && !airing ? noListing : undefined}
+      noteAction={
+        !error && !airing ? (
+          <button
+            type="button"
+            className="btn small"
+            disabled={checking}
+            onClick={() => {
+              setChecking(true);
+              void refresh(["airings"]).finally(() => setChecking(false));
+            }}
+          >
+            Check for listings
           </button>
         ) : null
       }
