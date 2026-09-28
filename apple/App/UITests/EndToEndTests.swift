@@ -278,9 +278,9 @@ final class EndToEndTests: XCTestCase {
             pause(1)
         }
 
-        /// Right after setup the guide's channel column does not take focus: Down
-        /// from Now goes nowhere. A new launch does not have that, so the test
-        /// notes it and relaunches.
+        /// Right after setup the guide's channel column once refused focus: Down
+        /// from Now went nowhere. If that comes back, the run fails with a note
+        /// and the hierarchy, and a relaunch lets the other steps still run.
         private func reachRail(_ app: XCUIApplication) throws {
             let first = app.buttons["4.1 WDAF"].firstMatch
             if focus(first, [.down, .down, .down]) {
@@ -288,6 +288,7 @@ final class EndToEndTests: XCTestCase {
             }
             note("defect guide channels unreachable after setup: \(trail)")
             shot("3-guide-stuck")
+            try? app.debugDescription.write(toFile: "\(dir)/3-guide-stuck.txt", atomically: true, encoding: .utf8)
             app.terminate()
             app.launchArguments = ["-BroadwaveSyncProbe", "YES", "-ApplePersistenceIgnoreState", "YES"]
             app.launch()

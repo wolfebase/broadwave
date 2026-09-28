@@ -186,6 +186,8 @@ run_platform() {
   # First run: no saved server.
   xcrun simctl terminate "$udid" "$bundle" >/dev/null 2>&1
   xcrun simctl uninstall "$udid" "$bundle" >/dev/null 2>&1
+  # `simctl spawn defaults write` stores outside the app, where uninstall leaves it.
+  xcrun simctl spawn "$udid" defaults delete "$bundle" >/dev/null 2>&1
 
   local name="Broadwave E2E $platform $$"
   local from=0

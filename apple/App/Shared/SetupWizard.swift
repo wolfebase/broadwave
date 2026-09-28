@@ -264,10 +264,13 @@ struct SetupWizard: View {
             UserDefaults.standard.removeObject(forKey: "BroadwaveSetup")
             await store.refresh()
             let pick = store.channels.first { $0.favorite && !$0.hidden } ?? store.channels.first { !$0.hidden }
+            onFinish()
+            // The tabs replace the wizard first. A player presented over tabs that
+            // are still being built leaves the Apple TV guide rows unfocusable.
+            try? await Task.sleep(for: .milliseconds(300))
             if let pick {
                 nowPlaying.play(pick)
             }
-            onFinish()
         }
     }
 }
