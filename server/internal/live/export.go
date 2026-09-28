@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"time"
 )
 
 // Export writes a channel's original broadcast as MPEG-TS to w until ctx ends.
@@ -48,7 +49,7 @@ func (h *Hub) Export(ctx context.Context, channelID int64, w io.Writer) error {
 		h.mu.Unlock()
 		return err
 	}
-	sub := h.attachPipeLocked(muxOf(h, f), stdin)
+	sub := h.attachExportLocked(muxOf(h, f), stdin)
 	f.exports++
 	h.mu.Unlock()
 
@@ -65,6 +66,28 @@ func (h *Hub) Export(ctx context.Context, channelID int64, w io.Writer) error {
 		return nil
 	}
 	return err
+}
+
+// exportHead is how much of the ring a new export starts with, so the app on
+// the other end has its probe and a keyframe at once instead of waiting for
+// the tuner to send them.
+const exportHead = 3 * time.Second
+
+// attachExportLocked subscribes an export from exportHead back when the ring
+// holds it, else at the live edge. The caller holds h.mu; the ring's files
+// are read on another goroutine.
+func (h *Hub) attachExportLocked(m *mux, w io.WriteCloser) *pipeSub {
+	if m != nil && m.ring != nil && m.input == "" {
+		if pos, ok := m.ring.At(time.Now().Add(-exportHead)); ok {
+			if oldest, _, ok := m.ring.Position(time.Time{}); ok && packetStart(pos) < oldest {
+				pos += 188
+			}
+			sub := newPipeSub(w)
+			go m.joinLive(sub, packetStart(pos))
+			return sub
+		}
+	}
+	return h.attachPipeLocked(m, w)
 }
 
 // exportCopyArgs copies one program out of the shared tune. The probe ceiling

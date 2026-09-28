@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
@@ -49,6 +50,7 @@ type Ring struct {
 	segs     []*segment
 	marks    []mark
 	lastMark time.Time
+	lastAt   time.Time // when the newest byte arrived
 	window   time.Duration
 	low      bool
 	off      bool
@@ -124,6 +126,7 @@ func (r *Ring) Append(chunk []byte) {
 		r.marks = append(r.marks, mark{at: now, pos: r.received})
 		r.lastMark = now
 	}
+	r.lastAt = now
 	r.pending = append(r.pending, chunk)
 	r.queued += len(chunk)
 	r.received += int64(len(chunk))
@@ -173,6 +176,38 @@ func (r *Ring) Position(t time.Time) (int64, time.Time, bool) {
 	return 0, time.Time{}, false
 }
 
+// At is the position of the byte that arrived at t, between the index
+// marks around it; the multiplex arrives at a steady rate over one mark. A
+// time past the newest byte is Received. It is not ok when t is before the
+// oldest byte held.
+func (r *Ring) At(t time.Time) (int64, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return 0, false
+	}
+	// A paced reader asks many times a second, under the lock the tuner's
+	// read loop needs, and a long window holds thousands of marks.
+	lo := sort.Search(len(r.marks), func(i int) bool { return r.marks[i].pos >= r.start })
+	a := lo + sort.Search(len(r.marks)-lo, func(i int) bool { return r.marks[lo+i].at.After(t) }) - 1
+	if a < lo {
+		return 0, false
+	}
+	from := r.marks[a]
+	to := mark{at: r.lastAt, pos: r.received}
+	if a+1 < len(r.marks) {
+		to = r.marks[a+1]
+	}
+	if !t.Before(r.lastAt) {
+		return r.received, true
+	}
+	span := to.at.Sub(from.at)
+	if span <= 0 {
+		return from.pos, true
+	}
+	return from.pos + int64(float64(to.pos-from.pos)*float64(t.Sub(from.at))/float64(span)), true
+}
+
 // PendingFrom copies [pos, Received) when all of it is still in memory. A
 // caller holding a lock the read loop needs uses it instead of Copy, so it
 // never waits on a file.
@@ -189,6 +224,12 @@ func (r *Ring) PendingFrom(pos int64) ([]byte, bool) {
 
 // Copy writes bytes [from, to) to w, opening each file once.
 func (r *Ring) Copy(w io.Writer, from, to int64) (int64, error) {
+	return r.CopyBuffer(w, from, to, make([]byte, 1<<20))
+}
+
+// CopyBuffer is Copy through buf, for a reader that copies many times a
+// second.
+func (r *Ring) CopyBuffer(w io.Writer, from, to int64, buf []byte) (int64, error) {
 	r.mu.Lock()
 	closed := r.closed
 	r.mu.Unlock()
@@ -196,7 +237,6 @@ func (r *Ring) Copy(w io.Writer, from, to int64) (int64, error) {
 		return 0, ErrGone
 	}
 	var total int64
-	buf := make([]byte, 1<<20)
 	for from < to {
 		r.mu.Lock()
 		if r.closed || from < r.start || from >= r.received {
@@ -557,6 +597,7 @@ func (r *Ring) resetLocked() []string {
 	r.queued = 0
 	r.marks = nil
 	r.lastMark = time.Time{}
+	r.lastAt = time.Time{}
 	return drop
 }
 
