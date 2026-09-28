@@ -22,6 +22,9 @@ export function liveHlsConfig(profile: BufferProfile = "desktop") {
     maxBufferHole: 0.5,
     stretchShortVideoTrack: true,
     capLevelToPlayerSize: profile === "phone" || profile === "tile",
+    // The server's WebVTT track carries the captions; hls.js's in-band 608
+    // track would be a second, empty one.
+    enableCEA708Captions: false,
     // No interstitials here. Their controller starts loading at the live edge
     // on its own, which undid a start on the room's frame.
     interstitialsController: undefined,
