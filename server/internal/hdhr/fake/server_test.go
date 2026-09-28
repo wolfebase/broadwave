@@ -14,6 +14,30 @@ import (
 	"broadwave/internal/hdhr"
 )
 
+func TestStreamSourceKeepsEachFrequency(t *testing.T) {
+	s := &Server{Source: "fast.ts", Source5: "slow.ts"}
+	if got := s.streamSource("4.1"); got != "fast.ts" {
+		t.Fatalf("4.1 -> %s", got)
+	}
+	if got := s.streamSource("4.2"); got != "fast.ts" {
+		t.Fatalf("4.2 -> %s", got)
+	}
+	if got := s.streamSource("5.1"); got != "slow.ts" {
+		t.Fatalf("5.1 -> %s", got)
+	}
+	s.Channels = antennaChannels()
+	if got := s.streamSource("593000000"); got != "fast.ts" {
+		t.Fatalf("593 MHz -> %s", got)
+	}
+	if got := s.streamSource("533000000"); got != "slow.ts" {
+		t.Fatalf("533 MHz -> %s", got)
+	}
+	s.Source5 = ""
+	if got := s.streamSource("5.1"); got != "fast.ts" {
+		t.Fatalf("5.1 without a second file -> %s", got)
+	}
+}
+
 func TestTuneStatusAndBusy(t *testing.T) {
 	dir := t.TempDir()
 	sample := filepath.Join(dir, "sample.ts")

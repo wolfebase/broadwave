@@ -75,6 +75,7 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         CFBundleDisplayName: Broadwave
         UILaunchScreen: {}
+        UIBackgroundModes: [audio]
         NSLocalNetworkUsageDescription: Broadwave finds your TV server on your home network.
         NSBonjourServices:
           - _broadwave._tcp

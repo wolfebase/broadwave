@@ -117,6 +117,12 @@ struct StreamFactsPanel: View {
 final class LivePlayerController: AVPlayerViewController, UIGestureRecognizerDelegate {
     var onStep: ((Int) -> Void)?
     var onTransport: ((Bool) -> Void)?
+    #if os(tvOS)
+        var onPictureInPicture: ((Bool) -> Void)?
+        var onPictureRestore: (() -> Void)?
+        var onPictureClosed: (() -> Void)?
+        private var pipRestoring = false
+    #endif
     private(set) var transportShown = true
     private var installedGestures = false
     private var swallowedPress = false
@@ -207,8 +213,31 @@ final class LivePlayerController: AVPlayerViewController, UIGestureRecognizerDel
         onTransport?(shown)
         #if DEBUG
             print("broadwave transport \(shown ? "shown" : "hidden")")
+            if shown, UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") {
+                let names = controlNames(in: view)
+                print("broadwave pip controls \(names.isEmpty ? "none" : names.joined(separator: " | "))")
+                fflush(stdout)
+            }
         #endif
     }
+
+    #if DEBUG
+        private func controlNames(in view: UIView) -> [String] {
+            var names: [String] = []
+            if let button = view as? UIButton {
+                let label = button.accessibilityLabel ?? ""
+                let title = button.currentTitle ?? ""
+                let text = label.isEmpty ? title : label
+                if !text.isEmpty {
+                    names.append(text)
+                }
+            }
+            for child in view.subviews {
+                names.append(contentsOf: controlNames(in: child))
+            }
+            return names
+        }
+    #endif
 }
 
 #if os(tvOS)
@@ -221,6 +250,51 @@ final class LivePlayerController: AVPlayerViewController, UIGestureRecognizerDel
         ) {
             MainActor.assumeIsolated {
                 self.noteTransport(visible)
+            }
+        }
+
+        /// The player is embedded, not presented. Dismissing it when the small
+        /// window starts would release the picture, so Menu would have nothing
+        /// to come back to. Same decision as the iPhone player.
+        nonisolated func playerViewControllerShouldAutomaticallyDismissAtPictureInPictureStart(_: AVPlayerViewController) -> Bool {
+            PictureHandoff.dismissWhenPictureInPictureStarts
+        }
+
+        nonisolated func playerViewControllerWillStartPictureInPicture(_: AVPlayerViewController) {
+            MainActor.assumeIsolated {
+                self.onPictureInPicture?(true)
+            }
+        }
+
+        nonisolated func playerViewController(_: AVPlayerViewController, failedToStartPictureInPictureWithError error: Error) {
+            let text = error.localizedDescription
+            MainActor.assumeIsolated {
+                self.onPictureInPicture?(false)
+                print("broadwave pip failed \(text)")
+                fflush(stdout)
+            }
+        }
+
+        nonisolated func playerViewController(
+            _: AVPlayerViewController,
+            restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
+        ) {
+            MainActor.assumeIsolated {
+                self.pipRestoring = true
+                self.onPictureRestore?()
+            }
+            completionHandler(true)
+        }
+
+        nonisolated func playerViewControllerDidStopPictureInPicture(_: AVPlayerViewController) {
+            MainActor.assumeIsolated {
+                let away = UIApplication.shared.applicationState != .active
+                let stop = PictureHandoff.stopWhenClosed(restored: self.pipRestoring, away: away)
+                self.pipRestoring = false
+                self.onPictureInPicture?(false)
+                if stop {
+                    self.onPictureClosed?()
+                }
             }
         }
     }

@@ -15,6 +15,7 @@ func main() {
 	ts := flag.String("ts", "", "MPEG-TS file to loop")
 	realtime := flag.Bool("realtime", false, "play the file over four seconds, then loop")
 	source := flag.String("source", "", "TS file to stream at its own pace on a loop instead of the test pattern")
+	source5 := flag.String("source5", "", "TS file for 5.x channels; -source plays the others")
 	raw := flag.Bool("raw", false, "play -ts byte for byte at its own pace, so each loop is a real timestamp break")
 	quad := flag.Bool("quad", false, "add 5.2 beside 5.1 so four channels share two tuners")
 	flag.Parse()
@@ -22,11 +23,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "need -ts")
 		os.Exit(2)
 	}
-	if *raw && (*realtime || *source != "") {
+	if *raw && (*realtime || *source != "" || *source5 != "") {
 		fmt.Fprintln(os.Stderr, "-raw plays -ts on its own; drop -realtime and -source")
 		os.Exit(2)
 	}
-	srv := &fake.Server{TS: *ts, Realtime: *realtime, Raw: *raw, Source: *source}
+	srv := &fake.Server{TS: *ts, Realtime: *realtime, Raw: *raw, Source: *source, Source5: *source5}
 	if *quad {
 		srv.Channels = fake.QuadLineup()
 	}

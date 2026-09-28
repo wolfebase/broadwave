@@ -50,6 +50,8 @@ final class LivePlayer {
     private(set) var seekableFrom: Date?
     /// The small window has the picture.
     private(set) var pictureInPicture = false
+    /// The display line last asked for, such as "1280x720 59.94". Empty until a picture has a rate.
+    var displayLine = ""
     private var statsTask: Task<Void, Never>?
     /// The watch still waiting for its first segment. A newer channel cancels it
     /// so that tuner is not held until the request times out.
@@ -109,28 +111,34 @@ final class LivePlayer {
         )
         watchLifecycle()
         listenForRestart(store.socket)
-        #if os(iOS)
-            let session = AVAudioSession.sharedInstance()
-            // Automatic is what starts the small window on Home. continuesIfPossible
-            // keeps the picture in the background with no window at all.
-            player.audiovisualBackgroundPlaybackPolicy = .automatic
-            player.allowsExternalPlayback = true
-            do {
+        // Automatic is what starts the small window. continuesIfPossible
+        // keeps the picture in the background with no window at all.
+        player.audiovisualBackgroundPlaybackPolicy = .automatic
+        // Picture in Picture stays hidden until the session is playback.
+        // longFormVideo is iOS: it is what lets Home start the small window.
+        let session = AVAudioSession.sharedInstance()
+        do {
+            #if os(iOS)
+                player.allowsExternalPlayback = true
                 try session.setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo)
-                try session.setActive(true)
-            } catch {
-                playLogNote("audio session \(error.localizedDescription)")
-            }
-            if UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") {
-                let supported = AVPictureInPictureController.isPictureInPictureSupported()
-                playLogNote("pip supported \(supported ? "yes" : "no")")
+            #else
+                try session.setCategory(.playback)
+            #endif
+            try session.setActive(true)
+        } catch {
+            playLogNote("audio session \(error.localizedDescription)")
+        }
+        if UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") {
+            let supported = AVPictureInPictureController.isPictureInPictureSupported()
+            playLogNote("pip supported \(supported ? "yes" : "no")")
+            #if os(iOS)
                 // The unified log buffers while the app is away, so a test cannot
                 // see the clock move. This file is written as it plays.
                 let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
                     .appendingPathComponent("broadwave-clock.txt")
                 try? Data().write(to: url)
-            }
-        #endif
+            #endif
+        }
         let caps = Capabilities.current()
         let prefs = store.prefs
         rewatch = { try await api.watch(channelID: channel.id, caps: caps, prefs: prefs, confirmLive: false) }
@@ -737,6 +745,7 @@ struct PlayerScreen: View {
                 onStartOver: beginStartOver,
                 onStep: { step($0) },
                 onTransport: { transportShown = $0 },
+                onDisplay: { live.displayLine = $0 },
                 panelStore: store,
                 panelNow: nowPlaying,
                 panelLive: live
@@ -788,6 +797,18 @@ struct PlayerScreen: View {
                         .foregroundStyle(.clear)
                         .allowsHitTesting(false)
                         .accessibilityIdentifier("channel-now")
+                    Text(live.displayLine)
+                        .font(.system(size: 2))
+                        .foregroundStyle(.clear)
+                        .allowsHitTesting(false)
+                        .accessibilityIdentifier("displayProbe")
+                    #if os(tvOS)
+                        Text(AVPictureInPictureController.isPictureInPictureSupported() ? "yes" : "no")
+                            .font(.system(size: 2))
+                            .foregroundStyle(.clear)
+                            .allowsHitTesting(false)
+                            .accessibilityIdentifier("pipProbe")
+                    #endif
                 }
                 if UserDefaults.standard.bool(forKey: "BroadwaveSyncProbe") {
                     SyncProbe(sync: live.sync)
@@ -1444,6 +1465,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
     var onStartOver: () -> Void = {}
     var onStep: (Int) -> Void = { _ in }
     var onTransport: (Bool) -> Void = { _ in }
+    var onDisplay: (String) -> Void = { _ in }
     var panelStore: AppStore?
     var panelNow: NowPlaying?
     var panelLive: LivePlayer?
@@ -1523,9 +1545,13 @@ struct SystemPlayer: UIViewControllerRepresentable {
         #endif
         #if os(tvOS)
             vc.onTransport = onTransport
+            vc.onPictureInPicture = onPictureInPicture
+            vc.onPictureRestore = onPictureRestore
+            vc.onPictureClosed = onPictureClosed
             if liveMenu, let store = panelStore, let now = panelNow, let live = panelLive {
                 context.coordinator.installPanels(on: vc, store: store, now: now, live: live)
             }
+            context.coordinator.onDisplay = onDisplay
             context.coordinator.start(vc)
             context.coordinator.noteHint(hint, on: vc)
             context.coordinator.sample(vc)
@@ -1579,9 +1605,9 @@ struct SystemPlayer: UIViewControllerRepresentable {
         #endif
     }
 
-    /// Reads the current item until its size and rate show up, then sets
-    /// Match Frame Rate. An early 59.94 is not applied, and a closed player
-    /// clears the mode while the window still exists.
+    /// Reads the current item until its size and rate show up, then asks the
+    /// TV for that broadcast rate. A closed player clears the mode while the
+    /// window still exists.
     @MainActor
     final class Coordinator {
         #if os(iOS)
@@ -1594,9 +1620,11 @@ struct SystemPlayer: UIViewControllerRepresentable {
             private var infoPanels: [UIViewController] = []
             private var task: Task<Void, Never>?
             private var match = DisplayMatch()
+            private var hint = DisplayMatch()
             private var applied: DisplayMatch?
             private var format: CMFormatDescription?
             private var logged = ""
+            var onDisplay: (String) -> Void = { _ in }
 
             func installPanels(on vc: LivePlayerController, store: AppStore, now: NowPlaying, live: LivePlayer) {
                 guard infoPanels.isEmpty else { return }
@@ -1621,6 +1649,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
                 task?.cancel()
                 task = nil
                 match = DisplayMatch()
+                hint = DisplayMatch()
                 applied = nil
                 format = nil
             }
@@ -1628,6 +1657,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
             func sample(_ vc: AVPlayerViewController) {
                 guard vc.player?.currentItem == nil else { return }
                 match = DisplayMatch()
+                hint = DisplayMatch()
                 format = nil
                 apply(vc)
             }
@@ -1635,6 +1665,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
             private func refresh(_ vc: AVPlayerViewController) async {
                 guard let item = vc.player?.currentItem else {
                     match = DisplayMatch()
+                    hint = DisplayMatch()
                     format = nil
                     apply(vc)
                     return
@@ -1651,10 +1682,14 @@ struct SystemPlayer: UIViewControllerRepresentable {
             }
 
             func noteHint(_ hint: DisplayMatch, on vc: AVPlayerViewController) {
+                let hintChanged = hint != self.hint
+                self.hint = hint
                 let next = PlayerTuning.hintedDisplay(hint, current: match)
-                guard next != match else { return }
+                let matchChanged = next != match
                 match = next
-                apply(vc)
+                if hintChanged || matchChanged {
+                    apply(vc)
+                }
             }
 
             private func apply(_ vc: AVPlayerViewController) {
@@ -1662,7 +1697,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
                     applied = nil
                     return
                 }
-                guard let criteria = SystemPlayer.displayCriteria(match, format: format) else {
+                let asked = PlayerTuning.displayAsked(asset: match, hint: hint)
+                guard let criteria = SystemPlayer.displayCriteria(asked, format: format) else {
                     if applied != nil {
                         manager.preferredDisplayCriteria = nil
                         applied = nil
@@ -1670,13 +1706,13 @@ struct SystemPlayer: UIViewControllerRepresentable {
                     }
                     return
                 }
-                if applied == match {
+                if applied == asked {
                     return
                 }
                 NotificationCenter.default.post(name: SyncEngine.displayWillChange, object: nil)
                 manager.preferredDisplayCriteria = criteria
-                applied = match
-                logDisplay("\(match.width)x\(match.height) \(match.refreshRate)")
+                applied = asked
+                logDisplay("\(asked.width)x\(asked.height) \(PlayerTuning.refreshRateName(asked.refreshRate))")
             }
 
             private func logDisplay(_ message: String) {
@@ -1684,6 +1720,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
                 logged = message
                 print("broadwave display \(message)")
                 fflush(stdout)
+                onDisplay(message)
             }
         #endif
     }

@@ -62,7 +62,10 @@ type Server struct {
 	Raw bool
 	// Source, when set, is a TS file played at its own pace on a loop, keeping
 	// its content. Realtime otherwise streams a generated test pattern.
-	Source     string
+	Source string
+	// Source5 is the TS for guide numbers starting with 5. Source plays the
+	// others, so two channels can keep two frame rates.
+	Source5    string
 	Profile    string
 	TunerCount int
 
@@ -573,16 +576,17 @@ func (s *Server) streamLegacy(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 	w.Header().Set("Content-Type", "video/mp2t")
-	if s.Realtime || s.Source != "" {
+	file := s.streamSource(number)
+	if s.Realtime || file != "" {
 		cmd := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error", "-re",
 			"-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=60000/1001",
 			"-f", "lavfi", "-i", "sine=frequency=500",
 			"-c:v", "libx264", "-preset", "ultrafast", "-g", "30", "-pix_fmt", "yuv420p",
 			"-c:a", "ac3", "-f", "mpegts", "pipe:1")
-		if s.Source != "" {
+		if file != "" {
 			// A broadcast recording as it aired, for picture and sound timing checks.
 			cmd = exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error", "-re", "-stream_loop", "-1",
-				"-i", s.Source, "-map", "0", "-c", "copy", "-f", "mpegts", "pipe:1")
+				"-i", file, "-map", "0", "-c", "copy", "-f", "mpegts", "pipe:1")
 		}
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
@@ -1130,6 +1134,20 @@ func (s *Server) lockMod(t tuner) string {
 		}
 	}
 	return mod
+}
+
+// streamSource is the file for this channel. The relay asks by guide number
+// (/auto/v5.1) or by frequency (/tuner0/ch533000000). 5.x uses Source5 when
+// one is set, so a second channel can keep its own frame rate.
+func (s *Server) streamSource(number string) string {
+	guide := number
+	if ch, ok := s.find(number); ok {
+		guide = ch.Number
+	}
+	if s.Source5 != "" && strings.HasPrefix(guide, "5.") {
+		return s.Source5
+	}
+	return s.Source
 }
 
 func streamRequest(path string) (tuner int, target string) {
