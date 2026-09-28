@@ -78,6 +78,11 @@ type Recording struct {
 	GameID      string     `json:"gameId,omitempty"`
 	// Watched is 0 when inferred from the playhead, 1 when marked watched, 2 when marked unwatched.
 	Watched int `json:"watched,omitempty"`
+	// Season, Episode, and OriginalAir are filled from the guide when an .nfo
+	// is written. They are not stored on the recording.
+	Season      int    `json:"-"`
+	Episode     int    `json:"-"`
+	OriginalAir string `json:"-"`
 }
 
 type Pass struct {

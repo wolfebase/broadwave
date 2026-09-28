@@ -207,6 +207,17 @@ export function SettingsScreen({
         <input value={storage?.path ?? ""} readOnly spellCheck={false} />
         <span className="hint">{copy.settings.recordingsHint}</span>
       </label>
+      <label className="field">
+        {copy.settings.nfo}
+        <select
+          value={settings.writeNfo === "1" ? "1" : "0"}
+          onChange={(event) => onChange({ writeNfo: event.target.value === "1" ? "1" : "0" })}
+        >
+          <option value="0">Off</option>
+          <option value="1">On</option>
+        </select>
+        <span className="hint">{copy.settings.nfoHint}</span>
+      </label>
       <ReserveField value={settings.watermarkGB || "10"} storage={storage} onSave={(watermarkGB) => onChange({ watermarkGB })} />
       <label className="field">
         {copy.settings.buffer}

@@ -310,6 +310,7 @@ export type Settings = {
   encoder?: string;
   watermarkGB?: string;
   bufferMinutes?: string;
+  writeNfo?: string;
   pictureMode?: PictureMode;
   autoplay?: string;
   hdhrEmulate?: string;

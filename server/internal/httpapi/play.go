@@ -284,6 +284,7 @@ func removeRecordingFiles(workDir string, rec store.Recording) {
 	base := strings.TrimSuffix(rec.Path, filepath.Ext(rec.Path))
 	removeInside(root, base+".edl")
 	removeInside(root, base+".json")
+	removeInside(root, base+".nfo")
 	_ = os.Remove(filepath.Join(workDir, "posters", strconv.FormatInt(rec.ID, 10)+".jpg"))
 	_ = os.RemoveAll(filepath.Join(workDir, "file", strconv.FormatInt(rec.ID, 10)))
 }
