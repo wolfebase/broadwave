@@ -24,6 +24,7 @@ import (
 	"broadwave/internal/disk"
 	"broadwave/internal/hdhr"
 	"broadwave/internal/psip"
+	"broadwave/internal/ring"
 	"broadwave/internal/store"
 )
 
@@ -147,6 +148,11 @@ type Hub struct {
 	// another device that can tune the same channel. Zero means 5 seconds.
 	MoveBudget time.Duration
 
+	// Buffer is how much of each tuned multiplex stays on disk, so a
+	// recording can start from the beginning of a show already on. Zero
+	// keeps none.
+	Buffer time.Duration
+
 	mu         sync.Mutex
 	muxes      map[int]*mux
 	channels   map[int64]*feed
@@ -157,6 +163,7 @@ type Hub struct {
 	scanToken  *struct{}
 	playMu     sync.Mutex
 	plays      map[int64]struct{}
+	ringSeq    int
 }
 
 type mux struct {
@@ -192,6 +199,9 @@ type mux struct {
 	pictures    map[int]notedPicture
 	// got is set by the first byte the tuner sends.
 	got atomic.Bool
+	// ring holds the last Buffer of the multiplex. Chunks enter it under
+	// pipeMu, in the same order the subscribers get them.
+	ring *ring.Ring
 }
 
 // feed is one channel on a tuned frequency.
@@ -250,6 +260,13 @@ type recording struct {
 	stdin io.WriteCloser
 	sub   *pipeSub
 	timer *time.Timer
+	// ends is when the recording stops. A backfilling recording starts its
+	// timer once it reaches live, so a slow copy cannot cut off the end.
+	ends        time.Time
+	backfilling bool
+	// finished is set under the hub lock when the recording ends. A backfill
+	// that attaches after that lets go at once.
+	finished bool
 }
 
 // pipeQueueCap bounds how far one encode or recording can fall behind the
@@ -297,6 +314,7 @@ func New(st *store.Store, dir, ffmpeg, encoder string) *Hub {
 		encoder = DetectEncoder(ffmpeg)
 	}
 	broadcast, smooth := ProbeDeint(ffmpeg, encoder)
+	clearRings(dir)
 	return &Hub{
 		Store: st, Dir: dir, FFmpeg: ffmpeg, Encoder: encoder, HEVC: ProbeHEVC(ffmpeg, encoder),
 		DeintBroadcast: broadcast, DeintSmooth: smooth,
@@ -551,6 +569,7 @@ func (h *Hub) beginMuxLocked(ch store.SourceChannel, host, base string, tuner, f
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 	h.muxes[freq] = m
+	h.openRingLocked(m)
 	go h.readLoop(runCtx, m)
 	h.startFrames(runCtx, m)
 	return h.addFeedLocked(m, ch)
@@ -596,6 +615,7 @@ func (h *Hub) streamMuxLocked(ch store.SourceChannel, body io.ReadCloser, host s
 	runCtx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 	h.muxes[m.freq] = m
+	h.openRingLocked(m)
 	go h.readLoop(runCtx, m)
 	h.startFrames(runCtx, m)
 	return m
@@ -1313,7 +1333,13 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 		h.dropIfUnusedLocked(f)
 		return store.Recording{}, err
 	}
-	name := fmt.Sprintf("%s_%s_%s.ts", time.Now().Format("20060102_150405"), f.channel.GuideNumber, sanitize(f.channel.DisplayName))
+	// A show already on starts from its beginning when the buffer holds it.
+	started := time.Now()
+	from, at, backfill := ringStart(muxOf(h, f), meta.StartedAt, started)
+	if backfill {
+		started = at
+	}
+	name := fmt.Sprintf("%s_%s_%s.ts", started.Format("20060102_150405"), f.channel.GuideNumber, sanitize(f.channel.DisplayName))
 	path := uniquePath(filepath.Join(dir, name))
 	ends := time.Now().Add(time.Duration(minutes) * time.Minute)
 	if title == "" {
@@ -1325,7 +1351,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	id, err := h.Store.CreateRecording(ctx, store.Recording{
 		ChannelID: channelID, GuideNumber: f.channel.GuideNumber, Title: title,
 		Subtitle: meta.Subtitle, Description: meta.Description, Category: meta.Category, ProgramID: meta.ProgramID, GameID: meta.GameID,
-		Path: path, Status: "recording", StartedAt: time.Now(), EndsAt: &ends,
+		Path: path, Status: "recording", StartedAt: started, EndsAt: &ends,
 	})
 	if err != nil {
 		h.dropIfUnusedLocked(f)
@@ -1354,12 +1380,17 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 		return store.Recording{}, err
 	}
 	NotePID(h.Dir, cmd.Process.Pid)
-	rec := &recording{id: id, cmd: cmd, stdin: stdin}
-	if stdin != nil {
-		rec.sub = h.attachPipe(muxOf(h, f), stdin, true)
-	}
+	rec := &recording{id: id, cmd: cmd, stdin: stdin, ends: ends}
 	f.recording = rec
-	rec.timer = time.AfterFunc(time.Duration(minutes)*time.Minute, func() { h.StopRecord(id) })
+	if stdin != nil && backfill {
+		rec.backfilling = true
+		go h.backfill(muxOf(h, f), rec, from)
+	} else {
+		if stdin != nil {
+			rec.sub = h.attachPipe(muxOf(h, f), stdin, true)
+		}
+		rec.timer = time.AfterFunc(time.Duration(minutes)*time.Minute, func() { h.StopRecord(id) })
+	}
 	h.changed()
 	return h.Store.Recording(ctx, id)
 }
@@ -1415,8 +1446,11 @@ func (h *Hub) ExtendRecording(ctx context.Context, id int64, until time.Time) er
 		if f.recording == nil || f.recording.id != id {
 			continue
 		}
-		stopTimer(&f.recording.timer)
-		f.recording.timer = time.AfterFunc(time.Until(until), func() { h.StopRecord(id) })
+		f.recording.ends = until
+		if !f.recording.backfilling {
+			stopTimer(&f.recording.timer)
+			f.recording.timer = time.AfterFunc(time.Until(until), func() { h.StopRecord(id) })
+		}
 		return h.Store.SetRecordingEnd(ctx, id, until)
 	}
 	return fmt.Errorf("recording %d is not in progress", id)
@@ -1600,10 +1634,21 @@ func (m *mux) noteLead(chunk []byte) []*pipeSub {
 	m.pipeMu.Lock()
 	defer m.pipeMu.Unlock()
 	m.rememberLeadLocked(chunk)
+	m.ring.Append(chunk)
 	return append([]*pipeSub(nil), m.pipes...)
 }
 
 func (h *Hub) attachPipe(m *mux, w io.WriteCloser, lead bool) *pipeSub {
+	if !lead {
+		return h.attachPipeHead(m, w, nil)
+	}
+	return h.attachPipeHead(m, w, func() ([]byte, bool) { return m.copyLeadLocked(), true })
+}
+
+// attachPipeHead subscribes w. head runs under pipeMu, so the bytes it
+// returns end exactly where the live chunks begin. When head is not ok,
+// nothing is subscribed and the result is nil.
+func (h *Hub) attachPipeHead(m *mux, w io.WriteCloser, head func() ([]byte, bool)) *pipeSub {
 	// A few seconds of the mux have to fit. The rendition does not read during
 	// VAAPI startup, and a gap at the start leaves the deinterlacer with no
 	// picture, so the playlist stays an empty file.
@@ -1614,10 +1659,15 @@ func (h *Hub) attachPipe(m *mux, w io.WriteCloser, lead bool) *pipeSub {
 		return sub
 	}
 	m.pipeMu.Lock()
-	if lead {
-		if head := m.copyLeadLocked(); len(head) > 0 {
-			sub.ch <- head
-			sub.queued.Add(int64(len(head)))
+	if head != nil {
+		b, ok := head()
+		if !ok {
+			m.pipeMu.Unlock()
+			return nil
+		}
+		if len(b) > 0 {
+			sub.ch <- b
+			sub.queued.Add(int64(len(b)))
 		}
 	}
 	m.pipes = append(m.pipes, sub)
@@ -1900,6 +1950,7 @@ func (h *Hub) stopFeedLocked(f *feed) {
 	delete(m.feeds, f.channel.GuideNumber)
 	if len(m.feeds) == 0 {
 		m.cancel()
+		m.ring.Close()
 		if m.body != nil {
 			_ = m.body.Close()
 		}
@@ -1919,6 +1970,7 @@ func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 		return
 	}
 	stopTimer(&rec.timer)
+	rec.finished = true
 	muxOf(h, f).detach(rec.sub)
 	if rec.stdin != nil {
 		_ = rec.stdin.Close()

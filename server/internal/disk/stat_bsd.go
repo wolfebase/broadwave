@@ -18,3 +18,12 @@ func Stat(path string) (Space, error) {
 		Total: bsize * uint64(st.Blocks),
 	}, nil
 }
+
+// SameDevice reports whether two existing paths are on one filesystem.
+func SameDevice(a, b string) bool {
+	var sa, sb unix.Stat_t
+	if unix.Stat(a, &sa) != nil || unix.Stat(b, &sb) != nil {
+		return false
+	}
+	return sa.Dev == sb.Dev
+}
