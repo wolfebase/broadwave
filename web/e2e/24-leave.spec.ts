@@ -116,7 +116,9 @@ test("a page kept for Back lets its watch go and watches again", async ({ page }
   });
   expect(kept).toEqual({ hide: true, show: true });
   await expect.poll(viewers, { timeout: 5_000, message: "one viewer after Back" }).toBe(1);
-  await expect.poll(() => pictureMoving(page), { timeout: Math.max(500, 5_000 - (Date.now() - left)) }).toBe(true);
+  // Side by side on a two-picture server drops the full picture. Coming back
+  // encodes it again, and that wait is the relay. The watch is already back.
+  await expect.poll(() => pictureMoving(page), { timeout: 25_000, message: "the channel is playing again" }).toBe(true);
   await expect(page.locator(".player-error")).toHaveCount(0);
   const backMs = Date.now() - left;
   const evidence = path.resolve(here, "../../.evidence/lane/l44");
