@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Record a show you are already watching and the recording starts from the beginning of the show, as far back as the tuner has been on it (up to an hour). The server keeps the last hour of each tuned channel on disk while it is tuned, using at most half the free space and always leaving 4 GB.
+
 ### Fixed
 
 - A server with a GPU and a fast processor now checks the processor with the encode live TV actually runs. The old check timed a different encode, counted process startup, and read 2.3x on a machine that runs live TV at 3.1x, so live TV stayed on a GPU that Plex was saturating.

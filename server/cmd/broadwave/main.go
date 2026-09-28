@@ -134,6 +134,7 @@ func main() {
 	live.Reap(work)
 	hub := live.New(st, work, ffmpegPath, encoder)
 	hub.Host = host
+	hub.Buffer = time.Hour
 	if *staging {
 		slog.Info("staging: recordings, guide pulls, background tunes, and the tuner emulator are off")
 	} else if err := dvr.Recover(context.Background(), st, time.Now(), func(rec store.Recording, left time.Duration) error {

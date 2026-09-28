@@ -178,6 +178,9 @@ func (s *Server) startRecording(w http.ResponseWriter, r *http.Request) {
 		meta.Category = air.Category
 		meta.ProgramID = air.ProgramID
 		meta.GameID = air.GameID
+		// The recording starts from the show's beginning when the tuner was
+		// already on it and the buffer still holds it.
+		meta.StartedAt = air.Start
 		pad := 2 + int(dvr.SportsTail(air)/time.Minute)
 		left := int(time.Until(air.End.Add(time.Duration(pad)*time.Minute)).Minutes()) + 1
 		if left > minutes {

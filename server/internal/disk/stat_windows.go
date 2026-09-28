@@ -2,7 +2,12 @@
 
 package disk
 
-import "golang.org/x/sys/windows"
+import (
+	"path/filepath"
+	"strings"
+
+	"golang.org/x/sys/windows"
+)
 
 func Stat(path string) (Space, error) {
 	name, err := windows.UTF16PtrFromString(path)
@@ -14,4 +19,11 @@ func Stat(path string) (Space, error) {
 		return Space{}, err
 	}
 	return Space{Free: avail, Total: total}, nil
+}
+
+// SameDevice reports whether two paths are on one volume.
+func SameDevice(a, b string) bool {
+	a, errA := filepath.Abs(a)
+	b, errB := filepath.Abs(b)
+	return errA == nil && errB == nil && strings.EqualFold(filepath.VolumeName(a), filepath.VolumeName(b))
 }
