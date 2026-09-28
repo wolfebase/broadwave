@@ -1,6 +1,7 @@
 package live
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
@@ -83,7 +84,20 @@ func BenchEncoder(ctx context.Context, ffmpeg, encoder string) (float64, error) 
 	if encoder == "" {
 		encoder = "libx264"
 	}
-	cmd := exec.CommandContext(ctx, ffmpeg, benchArgs(encoder)...)
+	cmd := benchCommand(ctx, ffmpeg, benchArgs(encoder))
+	out, err := cmd.CombinedOutput()
+	speed := ParseSpeed(string(out))
+	if err != nil {
+		return speed, err
+	}
+	if speed <= 0 {
+		return 0, fmt.Errorf("encoder did not report a speed")
+	}
+	return speed, nil
+}
+
+func benchCommand(ctx context.Context, ffmpeg string, args []string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, ffmpeg, args...)
 	// CommandContext kills the direct child only. A shell that started the
 	// encode keeps the pipes open, and Wait then sits until that child exits.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -94,15 +108,156 @@ func BenchEncoder(ctx context.Context, ffmpeg, encoder string) (float64, error) 
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
 	cmd.WaitDelay = time.Second
-	out, err := cmd.CombinedOutput()
-	speed := ParseSpeed(string(out))
-	if err != nil {
-		return speed, err
+	return cmd
+}
+
+// BenchLive runs the graph a 1080i channel takes on the CPU (field-rate
+// deinterlace, then libx264 with the live settings) on four seconds of a test
+// picture and reports the speed once frames flow. BenchEncoder is the wrong
+// figure for choosing the CPU: it runs frame threads, which live encodes do
+// not (3x faster on a 24-thread host), and its figure includes startup, so on
+// that host it read 2.3x to 3.9x within minutes while this graph held 3.5x to
+// 3.9x. A broadcast runs about 20% slower than the test picture.
+func BenchLive(ctx context.Context, ffmpeg string) (float64, error) {
+	if ffmpeg == "" {
+		ffmpeg = "ffmpeg"
 	}
-	if speed <= 0 {
-		return 0, fmt.Errorf("encoder did not report a speed")
+	speed, stderr, err := runLiveBench(ctx, ffmpeg, true)
+	// -stats_period is ffmpeg 4.4. Older builds report every half second.
+	if err != nil && ctx.Err() == nil && strings.Contains(stderr, "stats_period") {
+		speed, stderr, err = runLiveBench(ctx, ffmpeg, false)
+	}
+	if err != nil {
+		if ctx.Err() != nil {
+			return 0, ctx.Err()
+		}
+		return 0, fmt.Errorf("%w: %s", err, tailLines(stderr, 3))
 	}
 	return speed, nil
+}
+
+func runLiveBench(ctx context.Context, ffmpeg string, fine bool) (float64, string, error) {
+	cmd := benchCommand(ctx, ffmpeg, liveBenchArgs(fine))
+	progress := &progressWriter{now: time.Now}
+	var stderr bytes.Buffer
+	cmd.Stdout = progress
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return 0, stderr.String(), err
+	}
+	if speed := steadySpeed(progress.samples); speed > 0 {
+		return speed, "", nil
+	}
+	if progress.cumulative > 0 {
+		return progress.cumulative, "", nil
+	}
+	return 0, stderr.String(), fmt.Errorf("encoder did not report a speed")
+}
+
+func liveBenchArgs(fine bool) []string {
+	vf, codec := liveBenchGraph()
+	args := []string{"-hide_banner", "-nostdin", "-nostats", "-progress", "pipe:1"}
+	if fine {
+		args = append(args, "-stats_period", "0.1")
+	}
+	args = append(args,
+		"-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=60000/1001:duration=4",
+		"-vf", "tinterlace=mode=interleave_top,setfield=tff,"+vf,
+	)
+	args = append(args, codec...)
+	return append(args, "-f", "null", "-")
+}
+
+// liveBenchGraph is the video filter and encoder renditionArgs builds for a
+// 1080 transcode of an HD MPEG-2 broadcast on libx264.
+func liveBenchGraph() (string, []string) {
+	g := Graph{VideoCodec: "MPEG2", Profile: renditionProfile("1080"), Encoder: "libx264"}
+	width, height, rate := outputSize(g, true)
+	fps, _ := pictureRate(g, true)
+	vf := "setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709," + videoFilter(g, "", true, true, width, height, fps)
+	return vf, videoCodec("libx264", rate, sourceKeyint)
+}
+
+type progressSample struct {
+	at  time.Time
+	out time.Duration
+}
+
+// progressWriter stamps each out_time_us line from ffmpeg -progress as it
+// arrives and keeps the last cumulative speed. It is the command's Stdout
+// rather than a pipe read before Wait, so WaitDelay still ends a bench whose
+// output something else holds open.
+type progressWriter struct {
+	now        func() time.Time
+	partial    []byte
+	samples    []progressSample
+	cumulative float64
+}
+
+func (w *progressWriter) Write(p []byte) (int, error) {
+	w.partial = append(w.partial, p...)
+	for {
+		i := bytes.IndexByte(w.partial, '\n')
+		if i < 0 {
+			return len(p), nil
+		}
+		w.line(string(w.partial[:i]))
+		w.partial = w.partial[i+1:]
+	}
+}
+
+func (w *progressWriter) line(text string) {
+	key, value, ok := strings.Cut(strings.TrimSpace(text), "=")
+	if !ok {
+		return
+	}
+	value = strings.TrimSpace(value)
+	switch key {
+	case "out_time_us":
+		if us, err := strconv.ParseInt(value, 10, 64); err == nil {
+			w.samples = append(w.samples, progressSample{at: w.now(), out: time.Duration(us) * time.Microsecond})
+		}
+	case "speed":
+		if v, err := strconv.ParseFloat(strings.TrimSuffix(value, "x"), 64); err == nil {
+			w.cumulative = v
+		}
+	}
+}
+
+// steadySpeed is encoded time over wall time from the first frame out to the
+// last, which leaves out process startup. Frames already inside the encoder at
+// the first sample still count, so it reads a few percent high; the 2.5x bar
+// in PreferSoftware was set on this figure.
+func steadySpeed(samples []progressSample) float64 {
+	first := -1
+	for i, s := range samples {
+		if s.out > 0 {
+			first = i
+			break
+		}
+	}
+	if first < 0 {
+		return 0
+	}
+	last := samples[len(samples)-1]
+	wall := last.at.Sub(samples[first].at)
+	if wall < 200*time.Millisecond {
+		return 0
+	}
+	return (last.out - samples[first].out).Seconds() / wall.Seconds()
+}
+
+func tailLines(s string, n int) string {
+	var lines []string
+	for _, l := range strings.Split(s, "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			lines = append(lines, l)
+		}
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, " / ")
 }
 
 func benchArgs(encoder string) []string {
