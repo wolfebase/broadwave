@@ -97,7 +97,7 @@ print(rts[-1]["identifier"] if rts else "")
 ' "$kind")
     [ -n "$runtime" ] || { say "no $kind runtime"; return 1; }
     udid=$(xcrun simctl create "$want" "$model" "$runtime") || return 1
-    say "created $want ($model, $runtime)"
+    say "created $want ($model, $runtime)" >&2
   fi
   echo "$udid"
 }

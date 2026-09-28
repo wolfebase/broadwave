@@ -144,3 +144,10 @@ private func signedServer(id: String, url: String, privateKey: Curve25519.Signin
     #expect(list[0].url.host() == "10.0.0.9")
     #expect(list[1].id == "zzz")
 }
+
+@Test func bonjourAddressesBecomeURLsExceptLinkLocal() {
+    #expect(Discovery.serverURL(host: "192.168.1.20", port: 8477)?.absoluteString == "http://192.168.1.20:8477")
+    #expect(Discovery.serverURL(host: "fd12::5%en0", port: 8477)?.absoluteString == "http://[fd12::5]:8477")
+    #expect(Discovery.serverURL(host: "fe80::1c2b:3aff:fe4d:5e6f%en0", port: 8477) == nil)
+    #expect(Discovery.serverURL(host: "FE80::1", port: 8477) == nil)
+}
