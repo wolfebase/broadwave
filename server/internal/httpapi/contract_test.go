@@ -76,9 +76,14 @@ func TestContractFixtures(t *testing.T) {
 	if err := st.AddPass(ctx, "Jeopardy!", 1, 1, 2); err != nil {
 		t.Fatal(err)
 	}
+	recDir := filepath.Join(dir, "recordings")
+	if err := os.MkdirAll(recDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sample := filepath.Join(recDir, "jeopardy.ts")
 	recID, err := st.CreateRecording(ctx, store.Recording{
 		ChannelID: 1, GuideNumber: "4.1", Title: "Jeopardy!",
-		Path: filepath.Join(dir, "jeopardy.ts"), Status: "complete",
+		Path: sample, Status: "complete",
 		StartedAt: start, EndedAt: &end,
 	})
 	if err != nil {
@@ -217,7 +222,6 @@ func TestContractFixtures(t *testing.T) {
 		{"team-unfollow", "DELETE", "/api/v1/teams/1", "", 0},
 		{"virtual-create", "POST", "/api/v1/virtuals", `{"number":"9001","name":"News","recordings":[1]}`, 0},
 	}
-	sample := filepath.Join(dir, "jeopardy.ts")
 	for _, tc := range cases {
 		if tc.name == "recording-play" || tc.name == "recording-file" || tc.name == "recording-detect" {
 			contractSample(t, sample)
