@@ -54,6 +54,14 @@ final class LivePlayer {
     /// Set for a quiet retry of a stopped picture. The message stays until the new picture moves.
     private var quietRetry = false
     private var holdPicture = false
+    private var restartToken: (socket: EventSocket, id: UUID)?
+    /// A watch started while the old picture played on, for the next start to use.
+    private var preparedSession: WatchSession?
+    private var rewatch: (() async throws -> WatchSession)?
+    private var handingOff = false
+    /// The server restarted, so `session` names a watch the new process never had.
+    /// Stopping it by rendition would take a viewer from a live watch.
+    private var sessionLost = false
     private let playLog = Logger(subsystem: "com.wolfeup.broadwave", category: "play")
     #if os(iOS)
         private var lifecycle: [NSObjectProtocol] = []
@@ -91,15 +99,27 @@ final class LivePlayer {
             },
             onMessage: { [weak self] decision in self?.showOutage(decision) },
             onRecover: { [weak self] quiet in
-                guard let self else { return }
+                guard let self, !handingOff else { return }
                 quietRetry = quiet
                 attempt += 1
             }
         )
         watchLifecycle()
+        listenForRestart(store.socket)
         let caps = Capabilities.current()
         let prefs = store.prefs
-        let task = Task { try await api.watch(channelID: channel.id, caps: caps, prefs: prefs, confirmLive: allow) }
+        rewatch = { try await api.watch(channelID: channel.id, caps: caps, prefs: prefs, confirmLive: false) }
+        let prepared = preparedSession?.channelId == channel.id ? preparedSession : nil
+        if let stale = preparedSession, prepared == nil {
+            await api.stopWatching(channelID: stale.channelId, rendition: stale.rendition)
+        }
+        preparedSession = nil
+        let task = Task {
+            if let prepared {
+                return prepared
+            }
+            return try await api.watch(channelID: channel.id, caps: caps, prefs: prefs, confirmLive: allow)
+        }
         watchTask = task
         defer {
             if watchToken == token {
@@ -216,7 +236,75 @@ final class LivePlayer {
         attempt += 1
     }
 
+    /// A restarted server has lost this watch. Start it again now instead of
+    /// waiting for the picture to run dry and the stall clock to name it.
+    private func listenForRestart(_ socket: EventSocket?) {
+        if let restartToken {
+            restartToken.socket.off("restarted", restartToken.id)
+        }
+        restartToken = nil
+        guard let socket else { return }
+        let id = socket.on("restarted") { [weak self] _ in
+            guard let self, !handingOff, session != nil || watchTask != nil else { return }
+            playLogNote("server restarted; watching again")
+            Task { await self.handOff() }
+        }
+        restartToken = (socket, id)
+    }
+
+    /// The old item plays on from its buffer while the new watch fills. The swap
+    /// waits until AVPlayer can start the new playlist, so a restart costs a
+    /// short cut instead of a whole fresh-tune start on a frozen picture.
+    private func handOff() async {
+        handingOff = true
+        defer { handingOff = false }
+        let token = watchToken
+        guard let api, let rewatch, let id = channelID, session != nil else {
+            quietRetry = true
+            attempt += 1
+            return
+        }
+        sessionLost = true
+        // Its room went with the old process.
+        sync?.stop()
+        sync = nil
+        if let next = try? await rewatch() {
+            // Swap when the new playlist can start, or just before the old picture runs dry.
+            let deadline = Date().addingTimeInterval(8)
+            var ready = false
+            while Date() < deadline, token == watchToken, bufferedAhead() > 0.5 {
+                if let text = await api.playlistText(next.playlist), LiveReadiness.ready(text) {
+                    ready = true
+                    break
+                }
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            guard token == watchToken, channelID == id else {
+                await api.stopWatching(channelID: id, rendition: next.rendition)
+                return
+            }
+            playLogNote("handoff \(ready ? "ready" : "early") old=\(String(format: "%.1f", bufferedAhead()))s")
+            preparedSession = next
+        }
+        guard token == watchToken else { return }
+        quietRetry = true
+        attempt += 1
+    }
+
+    /// Seconds of picture the current item holds past the playhead.
+    private func bufferedAhead() -> Double {
+        guard let item = player.currentItem else { return 0 }
+        let now = item.currentTime().seconds
+        let end = item.loadedTimeRanges.map(\.timeRangeValue).filter { $0.containsTime(item.currentTime()) }.map(\.end.seconds).max()
+        guard let end, now.isFinite, end.isFinite else { return 0 }
+        return max(0, end - now)
+    }
+
     func stop(endPicture: Bool = true) async {
+        if let restartToken {
+            restartToken.socket.off("restarted", restartToken.id)
+        }
+        restartToken = nil
         watchTask?.cancel()
         watchTask = nil
         statsTask?.cancel()
@@ -249,11 +337,19 @@ final class LivePlayer {
         player.pause()
         player.replaceCurrentItem(with: nil)
         let id = channelID
-        let ended = session
+        let ended = sessionLost ? nil : session
+        let prepared = endPicture ? preparedSession : nil
+        if endPicture {
+            preparedSession = nil
+        }
         channelID = nil
         session = nil
+        sessionLost = false
         if let api, let id, let ended {
             await api.stopWatching(channelID: id, rendition: ended.rendition)
+        }
+        if let api, let prepared {
+            await api.stopWatching(channelID: prepared.channelId, rendition: prepared.rendition)
         }
     }
 

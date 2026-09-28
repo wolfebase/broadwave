@@ -19,6 +19,12 @@ public enum CatalogCache {
         return try? APIClient.decoder.decode(CatalogSnapshot.self, from: data)
     }
 
+    /// When the saved copy was written.
+    public static func savedAt(serverID: String, directory: URL? = nil) -> Date? {
+        let attrs = try? FileManager.default.attributesOfItem(atPath: file(serverID, directory).path)
+        return attrs?[.modificationDate] as? Date
+    }
+
     public static func save(_ snapshot: CatalogSnapshot, serverID: String, directory: URL? = nil) {
         guard let data = try? encoder.encode(snapshot) else { return }
         let url = file(serverID, directory)

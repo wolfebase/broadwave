@@ -64,7 +64,7 @@ export interface paths {
         /**
          * @description WebSocket for live updates and Whole-Home Sync. Every frame is `{"type", "data"}`.
          *
-         *     Server to client: `hello` {serverTime}, `clock` {t0, t1}, `activity` (Event),
+         *     Server to client: `hello` {serverTime, boot} (boot names the server process; a new one means it restarted and every watch and room is gone), `clock` {t0, t1}, `activity` (Event),
          *     `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `error` {code, message}.
          *
          *     Client to server: `clock` {t0}, `sync.join` {room, channelId}, `sync.leave` {room},

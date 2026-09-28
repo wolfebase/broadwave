@@ -109,6 +109,16 @@ public struct APIClient: Sendable {
         return (200 ..< 300).contains(status) ? true : nil
     }
 
+    /// The playlist's text, or nil when it did not answer 200.
+    public func playlistText(_ path: String) async -> String? {
+        var req = URLRequest(url: url(path))
+        req.timeoutInterval = 2
+        guard let (data, res) = try? await session.data(for: req), (res as? HTTPURLResponse)?.statusCode == 200 else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
     public func clock() async throws -> Double {
         struct R: Decodable { var serverTime: Double }
         return try await send("GET", "/clock", as: R.self).serverTime

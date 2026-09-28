@@ -23,6 +23,11 @@ public final class AppStore {
     public private(set) var loading = false
     public var error: String?
     public var now = Date()
+    /// The event socket has been down for a few seconds, so the lists on screen are the saved copy.
+    public private(set) var offline = false
+    /// When the lists on screen last came from the server.
+    public private(set) var freshAt: Date?
+    private var offlineWait: Task<Void, Never>?
     /// A device that showed up after the house was already known. Nil when nothing is waiting.
     public private(set) var homeNotice: String?
     private var homeQueue: [String] = []
@@ -61,6 +66,7 @@ public final class AppStore {
                 channels = snap.channels
                 index = GuideIndex(snap.airings)
                 recordings = snap.recordings
+                freshAt = CatalogCache.savedAt(serverID: saved.id)
             }
             if saved.id == "demo" {
                 server = saved
@@ -117,6 +123,8 @@ public final class AppStore {
 
     public func connect(_ server: FoundServer) {
         socket?.disconnect()
+        // Down until the first message, so a server that is off at launch gets the banner.
+        noteConnection(false)
         announced = false
         self.server = server
         let api = APIClient(base: server.url)
@@ -124,6 +132,13 @@ public final class AppStore {
         let socket = EventSocket(base: server.url)
         socket.onFailure = { [weak self] in
             Task { await self?.relocate() }
+        }
+        socket.onConnected = { [weak self] up in
+            self?.noteConnection(up)
+        }
+        // Events sent while this screen was away are gone, so read everything again.
+        socket.on("reconnected") { [weak self] _ in
+            Task { await self?.refresh() }
         }
         socket.on("activity") { [weak self] data in
             if let note = try? JSONDecoder().decode(HomeNote.self, from: data), note.kind == "home" {
@@ -279,6 +294,7 @@ public final class AppStore {
             recordings = try await fetchedRecordings
             guard self.api?.base == base else { return }
             now = Date()
+            freshAt = now
             error = nil
             if let id = server?.id {
                 CatalogCache.save(CatalogSnapshot(channels: channels, airings: window, recordings: recordings), serverID: id)
@@ -299,6 +315,20 @@ public final class AppStore {
         } catch {
             guard self.api?.base == base else { return }
             self.error = error.localizedDescription
+        }
+    }
+
+    /// A drop that reconnects within a few seconds is not worth a word.
+    private func noteConnection(_ up: Bool) {
+        offlineWait?.cancel()
+        if up {
+            offline = false
+            return
+        }
+        offlineWait = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.offline = true
         }
     }
 

@@ -282,3 +282,57 @@ private final class RefusedOnce: @unchecked Sendable {
     #expect(plan.items.isEmpty)
     #expect(try await client.events().isEmpty)
 }
+
+@Test func reconnectWaitBacksOffWithJitterUnderFiveSeconds() {
+    #expect(EventSocket.reconnectWait(0, random: 0) == 0.25)
+    #expect(EventSocket.reconnectWait(0, random: 1) == 0.5)
+    #expect(EventSocket.reconnectWait(3, random: 0.5) == 3)
+    for retry in 0 ..< 40 {
+        #expect(EventSocket.reconnectWait(retry, random: 1) <= 5)
+        #expect(EventSocket.reconnectWait(retry, random: 0) >= 0.25)
+    }
+}
+
+@MainActor
+@Test func aRestartedServerIsNamedAndTheRoomIsJoinedAgain() async throws {
+    let port = UInt16.random(in: 45001 ... 65000)
+    let first = DemoServer()
+    let origin = try #require(await first.prepare(port: port))
+    let socket = EventSocket(base: origin)
+    defer { socket.disconnect() }
+    var seen: [String] = []
+    socket.on("reconnected") { _ in seen.append("reconnected") }
+    socket.on("restarted") { _ in seen.append("restarted") }
+    var members = 0
+    socket.on("sync.state") { data in
+        let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        members = (body?["members"] as? NSNumber)?.intValue ?? members
+    }
+    socket.connect()
+    socket.join(room: "channel:1", channelID: 1)
+    try await waitFor { socket.connected && members == 1 }
+    #expect(seen.isEmpty)
+
+    first.stop()
+    try await waitFor { !socket.connected }
+    members = 0
+    let second = DemoServer()
+    _ = try #require(await second.prepare(port: port))
+    defer { second.stop() }
+    let back = Date()
+    try await waitFor(seconds: 8) { socket.connected && members == 1 }
+    #expect(Date().timeIntervalSince(back) < 7)
+    try await waitFor { seen.contains("restarted") }
+    #expect(seen == ["reconnected", "restarted"])
+}
+
+@MainActor
+private func waitFor(seconds: Double = 5, _ done: () -> Bool) async throws {
+    let end = Date().addingTimeInterval(seconds)
+    while !done() {
+        if Date() > end {
+            throw CancellationError()
+        }
+        try await Task.sleep(for: .milliseconds(50))
+    }
+}

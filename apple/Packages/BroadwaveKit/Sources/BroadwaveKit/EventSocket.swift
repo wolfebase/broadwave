@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit)
+    import UIKit
+#endif
 
 /// The server's event socket: live updates, clock sync, and Whole-Home Sync rooms.
 @MainActor
@@ -19,14 +22,37 @@ public final class EventSocket {
     private var screenName = ""
     private var screenKind = ""
     private var stopped = false
+    private var opened = false
+    private var boot = ""
+    private var heard = 0
+    private var retryWork: DispatchWorkItem?
+    private var observers: [NSObjectProtocol] = []
     /// First drop of the socket. The app looks for the same server at a new address.
     public var onFailure: (() -> Void)?
+    /// Called when `connected` changes.
+    public var onConnected: ((Bool) -> Void)?
 
     public init(base: URL) {
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
         comps.scheme = base.scheme == "https" ? "wss" : "ws"
         comps.path = "/api/v1/ws"
         url = comps.url!
+        var names: [Notification.Name] = [.NSSystemClockDidChange]
+        #if canImport(UIKit)
+            names += [UIApplication.didBecomeActiveNotification, UIApplication.significantTimeChangeNotification]
+        #endif
+        for name in names {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.wake() }
+            })
+        }
+    }
+
+    /// Backoff with jitter, so a restarted server is not hit by every screen in
+    /// the same instant. Capped at 5 s so a screen is back within 5 s of the server.
+    public nonisolated static func reconnectWait(_ retry: Int, random: Double = .random(in: 0 ... 1)) -> Double {
+        let ceiling = min(5.0, 0.5 * pow(2, Double(min(retry, 16))))
+        return ceiling / 2 + random * ceiling / 2
     }
 
     public static func nowMS() -> Double {
@@ -39,14 +65,13 @@ public final class EventSocket {
 
     public func connect() {
         guard !stopped, task == nil else { return }
+        retryWork?.cancel()
+        retryWork = nil
         let task = URLSession.shared.webSocketTask(with: url)
         self.task = task
         task.resume()
         receive(task)
-        bestRTT = .infinity
-        for i in 0 ..< 5 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200 + i * 300)) { [weak self] in self?.sampleClock() }
-        }
+        burst()
         clockTimer?.invalidate()
         clockTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.sampleClock() }
@@ -69,12 +94,54 @@ public final class EventSocket {
         send("here", ["name": name, "kind": kind])
     }
 
+    /// After a sleep, a return to the foreground, or a clock change: reconnect
+    /// now and measure the clock again. A socket that stayed quiet across a
+    /// sleep can look open and be dead, so one that does not answer is replaced.
+    public func wake() {
+        guard !stopped else { return }
+        guard let task else {
+            retry = 0
+            connect()
+            return
+        }
+        burst()
+        let before = heard
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            guard let self, self.task === task, heard == before else { return }
+            task.cancel(with: .goingAway, reason: nil)
+            self.task = nil
+            setConnected(false)
+            retry = 0
+            connect()
+        }
+    }
+
     public func disconnect() {
         stopped = true
+        retryWork?.cancel()
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers = []
         clockTimer?.invalidate()
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
         connected = false
+    }
+
+    private func setConnected(_ value: Bool) {
+        guard connected != value else { return }
+        connected = value
+        onConnected?(value)
+    }
+
+    private func burst() {
+        bestRTT = .infinity
+        for i in 0 ..< 5 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200 + i * 300)) { [weak self] in self?.sampleClock() }
+        }
+    }
+
+    private func emit(_ type: String) {
+        handlers[type]?.values.forEach { $0(Data()) }
     }
 
     @discardableResult
@@ -149,23 +216,33 @@ public final class EventSocket {
                 guard let self, self.task === task else { return }
                 switch result {
                 case let .success(message):
-                    self.connected = true
+                    self.heard += 1
                     self.retry = 0
+                    if !self.connected {
+                        self.setConnected(true)
+                        // Events sent while this screen was away are gone.
+                        if self.opened {
+                            self.emit("reconnected")
+                        }
+                        self.opened = true
+                    }
                     if case let .string(text) = message, let data = text.data(using: .utf8) {
                         self.dispatch(data)
                     }
                     self.receive(task)
                 case .failure:
-                    self.connected = false
                     self.task = nil
+                    self.setConnected(false)
                     guard !self.stopped else { return }
                     self.onFailure?()
-                    let wait = min(15.0, 0.5 * pow(2, Double(self.retry)))
+                    let wait = Self.reconnectWait(self.retry)
                     self.retry += 1
-                    DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+                    let work = DispatchWorkItem { [weak self] in
                         guard self?.stopped == false else { return }
                         self?.connect()
                     }
+                    self.retryWork = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + wait, execute: work)
                 }
             }
         }
@@ -177,10 +254,19 @@ public final class EventSocket {
         if type == "sync.state", let d = obj["data"] as? [String: Any], let room = d["room"] as? String {
             latest[room] = payload
         }
+        if type == "hello", let d = obj["data"] as? [String: Any], let next = d["boot"] as? String, !next.isEmpty {
+            // Every watch and room the old process had is gone.
+            let restarted = !boot.isEmpty && next != boot
+            boot = next
+            if restarted {
+                emit("restarted")
+            }
+        }
         if type == "clock", let d = obj["data"] as? [String: Any], let t0 = d["t0"] as? Double, let t1 = d["t1"] as? Double {
             let t2 = Self.nowMS()
             let rtt = t2 - t0
-            if rtt <= bestRTT * 1.2 {
+            // A negative or huge round trip means the local clock moved while the sample was out.
+            if rtt >= 0, rtt < 10000, rtt <= bestRTT * 1.2 {
                 bestRTT = min(rtt, bestRTT)
                 offset = t1 - (t0 + t2) / 2
             }

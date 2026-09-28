@@ -11,6 +11,7 @@ public final class DemoServer: @unchecked Sendable {
     public static let port: UInt16 = 18649
 
     private let lock = NSLock()
+    private let boot = UUID().uuidString
     private let queue = DispatchQueue(label: "broadwave.demo")
     private var listener: NWListener?
     private var origin: URL?
@@ -282,7 +283,7 @@ public final class DemoServer: @unchecked Sendable {
     }
 
     fileprivate func hello() -> String {
-        Self.textFrame("hello", ["serverTime": Self.nowMS()])
+        Self.textFrame("hello", ["serverTime": Self.nowMS(), "boot": boot])
     }
 
     private static func textFrame(_ type: String, _ data: [String: Any]) -> String {

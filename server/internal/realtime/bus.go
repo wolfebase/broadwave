@@ -2,6 +2,8 @@ package realtime
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -26,6 +28,9 @@ type Bus struct {
 	// MediaStart is the earliest program time (Unix ms) a channel can play.
 	// The hub sets it. A miss leaves the room on the latency target.
 	MediaStart func(channelID int64) (float64, bool)
+	// Boot names this server process in every hello. A client that sees a
+	// new one knows the server restarted: every watch and room it had is gone.
+	Boot string
 
 	mu      sync.Mutex
 	clients map[*client]struct{}
@@ -46,7 +51,9 @@ type client struct {
 }
 
 func NewBus() *Bus {
-	return &Bus{Rooms: NewRooms(), clients: map[*client]struct{}{}, now: time.Now}
+	var id [8]byte
+	_, _ = rand.Read(id[:])
+	return &Bus{Rooms: NewRooms(), Boot: hex.EncodeToString(id[:]), clients: map[*client]struct{}{}, now: time.Now}
 }
 
 // SetClock pins the time on hello, clock, and sync messages. Tests use it.
@@ -207,7 +214,7 @@ func (b *Bus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
-	c.send <- frame("hello", map[string]any{"serverTime": unixMS(b.now())})
+	c.send <- frame("hello", map[string]any{"serverTime": unixMS(b.now()), "boot": b.Boot})
 	for {
 		_, raw, err := conn.Read(ctx)
 		if err != nil {

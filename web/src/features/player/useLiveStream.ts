@@ -1,6 +1,7 @@
 import Hls from "hls.js";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { getDeviceHealth, getSignals, getTuners, stopWatch, watchChannel, type ApiFailure } from "../../api";
+import { events } from "../../lib/events";
 import { SyncEngine, type SyncStatus } from "../../lib/sync";
 import type { Caps, Channel, Prefs, WatchSession } from "../../types";
 import { liveHlsConfig, type BufferProfile } from "../../picture";
@@ -68,6 +69,9 @@ export function useLiveStream(
   const [pictureStopAt, setPictureStopAt] = useState(0);
   const pictureStopAtRef = useRef(0);
   const quietRetry = useRef<number | null>(null);
+  // The server restarted, so this watch is gone. Stopping it by rendition on
+  // the new process would take a viewer from someone else's watch.
+  const watchLost = useRef(false);
   // A quiet watch still starting or holding for its first picture.
   const quietPending = useRef(false);
   const [needsConfirm, setNeedsConfirm] = useState(false);
@@ -92,6 +96,7 @@ export function useLiveStream(
       pictureStopAtRef.current = 0;
       setPictureStopAt(0);
     }
+    watchLost.current = false;
     const video = videoRef.current;
     if (!video || !channelId) return;
     let dead = false;
@@ -109,6 +114,7 @@ export function useLiveStream(
     const release = () => {
       if (released || !joined) return;
       released = true;
+      if (watchLost.current) return;
       void stopWatch(id, joined);
     };
     if (remember) rememberChannel(remember);
@@ -441,6 +447,22 @@ export function useLiveStream(
     };
   }, [session, sync, room, channelId, videoRef]);
 
+  // A restarted server has lost this watch. Start it again now instead of
+  // waiting for the picture to run dry and the stall clock to name it.
+  useEffect(() => {
+    if (!channelId) return;
+    const off = events().on("restarted", () => {
+      if (retrying.current) return;
+      retrying.current = true;
+      watchLost.current = true;
+      quietRetry.current = channelId;
+      setAttempt((n) => n + 1);
+    });
+    return () => {
+      off();
+    };
+  }, [channelId]);
+
   useEffect(() => {
     if (!recovery) return;
     let dead = false;
@@ -460,7 +482,10 @@ export function useLiveStream(
         if (key === seen.key) return;
         seen.key = key;
         retrying.current = true;
-        if (recovery === "restart") quietRetry.current = channelId;
+        if (recovery === "restart") {
+          quietRetry.current = channelId;
+          watchLost.current = true;
+        }
         setAttempt((n) => n + 1);
       } finally {
         ticking = false;

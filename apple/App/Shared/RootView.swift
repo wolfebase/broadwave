@@ -110,6 +110,7 @@ struct RootView: View {
         .background(Tokens.ColorToken.canvas.ignoresSafeArea())
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
+                offlineBanner
                 updateBanner
                 arrivalBanner
             }
@@ -328,6 +329,27 @@ struct RootView: View {
         }
         .environment(store)
         .environment(nowPlaying)
+    }
+
+    /// Text only, so it never takes focus from the remote.
+    @ViewBuilder
+    private var offlineBanner: some View {
+        if store.connected, store.offline {
+            Text(offlineLine)
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.regularMaterial)
+                .accessibilityAddTraits(.updatesFrequently)
+                .accessibilityIdentifier("offline-banner")
+        }
+    }
+
+    private var offlineLine: String {
+        guard let at = store.freshAt else { return "Can't reach the server. Trying again." }
+        let style: Date.FormatStyle = Calendar.current.isDateInToday(at) ? .dateTime.hour().minute() : .dateTime.month().day().hour().minute()
+        return "Can't reach the server. Showing what was saved at \(at.formatted(style))."
     }
 
     @ViewBuilder

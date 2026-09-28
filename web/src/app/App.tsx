@@ -3,6 +3,7 @@ import { Guide } from "../features/guide/Guide";
 import { Home } from "../features/home/Home";
 import { gateApp } from "../lib/compat";
 import { events } from "../lib/events";
+import { formatClock } from "../time";
 import { GuideIcon, HomeIcon, RecordingsIcon, ScheduleIcon, SearchIcon, SettingsIcon, SportsIcon } from "../ui/icons";
 import { DataProvider, useData } from "./data";
 import { useLayout } from "./layout";
@@ -57,7 +58,7 @@ export function App() {
 function Shell() {
   const { path, params } = useRoute();
   const layout = useLayout();
-  const { ready, booting, error, recordings, settings, notices, dismissNotice, update, server } = useData();
+  const { ready, booting, error, recordings, settings, notices, dismissNotice, update, server, freshAt } = useData();
   useEffect(() => {
     if (layout !== "tv") return;
     return installTvRemote();
@@ -72,8 +73,19 @@ function Shell() {
   const immersive = path === "/play" || path === "/multiview" || (path === "/watch" && params.has("virtual")) || path === "/setup" || (firstRun && path !== "/diagnostics");
 
   useEffect(() => {
-    const off = events().on("connection", (v) => setOnline(Boolean(v)));
+    // A blip that reconnects within a few seconds is not worth a word.
+    let timer = 0;
+    const off = events().on("connection", (v) => {
+      if (v) {
+        window.clearTimeout(timer);
+        timer = 0;
+        setOnline(true);
+      } else if (!timer) {
+        timer = window.setTimeout(() => setOnline(false), 3_000);
+      }
+    });
     return () => {
+      window.clearTimeout(timer);
       off();
     };
   }, []);
@@ -126,7 +138,11 @@ function Shell() {
             ))}
           </div>
           <div className="topbar-right">
-            {!online ? <span className="offline">Reconnecting…</span> : null}
+            {!online ? (
+              <span className="offline" role="status">
+                {freshAt ? `Can't reach the server. Showing what was saved at ${formatClock(new Date(freshAt))}.` : "Can't reach the server. Trying again."}
+              </span>
+            ) : null}
             <button type="button" className={active("/settings") ? "glass-icon on" : "glass-icon"} onClick={() => navigate("/settings")} aria-label="Settings">
               <SettingsIcon />
             </button>

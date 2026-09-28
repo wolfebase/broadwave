@@ -14,11 +14,16 @@ export type RoomState = {
 
 type Handler = (data: unknown) => void;
 
-class EventSocket {
+export class EventSocket {
   private ws: WebSocket | null = null;
   private handlers = new Map<string, Set<Handler>>();
-  private queue: string[] = [];
+  private queue: { msg: string; at: number }[] = [];
   private retry = 0;
+  private retryTimer = 0;
+  private boot = "";
+  private opened = false;
+  private heard = 0;
+  private tickAt = Date.now();
   private rooms = new Map<string, number>();
   private roomRefs = new Map<string, number>();
   private latest = new Map<string, unknown>();
@@ -29,26 +34,42 @@ class EventSocket {
 
   constructor() {
     this.connect();
-    window.setInterval(() => this.sampleClock(), 15_000);
+    window.setInterval(() => {
+      // A tick that comes late means the tab or the computer slept.
+      const gap = Date.now() - this.tickAt;
+      this.tickAt = Date.now();
+      if (gap > 30_000) this.wake();
+      else this.sampleClock();
+    }, 15_000);
+    window.addEventListener("online", () => this.wake());
+    window.addEventListener("pageshow", () => this.wake());
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") this.wake();
+    });
   }
 
   private connect() {
+    window.clearTimeout(this.retryTimer);
     const proto = location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(`${proto}://${location.host}/api/v1/ws`);
     this.ws = ws;
     ws.onopen = () => {
       this.connected = true;
       this.retry = 0;
-      this.bestRtt = Infinity;
       this.raw("here", { name: "This browser", kind: "web" });
       for (const [room, channelId] of this.rooms) this.raw("sync.join", { room, channelId });
-      for (const msg of this.queue.splice(0)) ws.send(msg);
-      for (let i = 0; i < 5; i++) window.setTimeout(() => this.sampleClock(), i * 300);
+      // A command older than a few seconds would move the room somewhere nobody asked for now.
+      for (const { msg, at } of this.queue.splice(0)) if (Date.now() - at < 3_000) ws.send(msg);
+      this.burst();
       this.emit("connection", true);
+      if (this.opened) this.emit("reconnected", true);
+      this.opened = true;
     };
     ws.onmessage = (event) => {
+      this.heard++;
       try {
         const msg = JSON.parse(event.data as string) as { type: string; data?: unknown };
+        if (msg.type === "hello") this.onHello(msg.data as { boot?: string });
         if (msg.type === "clock") this.onClock(msg.data as { t0: number; t1: number });
         if (msg.type === "sync.state" && msg.data && typeof msg.data === "object" && "room" in msg.data) {
           this.latest.set((msg.data as { room: string }).room, msg.data);
@@ -59,17 +80,57 @@ class EventSocket {
       }
     };
     ws.onclose = () => {
+      if (this.ws !== ws) return;
       this.connected = false;
       this.emit("connection", false);
-      const wait = Math.min(15_000, 500 * 2 ** this.retry++);
-      window.setTimeout(() => this.connect(), wait);
+      this.retryTimer = window.setTimeout(() => this.connect(), reconnectWait(this.retry++));
     };
+  }
+
+  /** After a sleep, going online, or coming back to the tab: reconnect now and measure the clock again. */
+  wake() {
+    const ws = this.ws;
+    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+      this.retry = 0;
+      this.connect();
+      return;
+    }
+    if (ws.readyState !== WebSocket.OPEN) return;
+    this.burst();
+    // A socket that went quiet across a sleep can look open and be dead.
+    const heard = this.heard;
+    window.setTimeout(() => {
+      if (this.ws === ws && this.heard === heard) this.drop(ws);
+    }, 4_000);
+  }
+
+  private drop(ws: WebSocket) {
+    ws.onclose = null;
+    ws.onmessage = null;
+    ws.close();
+    this.connected = false;
+    this.emit("connection", false);
+    this.retry = 0;
+    this.connect();
+  }
+
+  private burst() {
+    this.bestRtt = Infinity;
+    for (let i = 0; i < 5; i++) window.setTimeout(() => this.sampleClock(), i * 300);
+  }
+
+  private onHello({ boot }: { boot?: string }) {
+    if (!boot) return;
+    // Every watch and room the old process had is gone.
+    if (this.boot && boot !== this.boot) this.emit("restarted", boot);
+    this.boot = boot;
   }
 
   private raw(type: string, data: unknown) {
     const msg = JSON.stringify({ type, data });
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(msg);
-    else this.queue.push(msg);
+    // Joins and the announcement are sent again on open, so only commands wait.
+    else if (type === "sync.command") this.queue.push({ msg, at: Date.now() });
   }
 
   private sampleClock() {
@@ -79,6 +140,8 @@ class EventSocket {
   private onClock({ t0, t1 }: { t0: number; t1: number }) {
     const t2 = Date.now();
     const rtt = t2 - t0;
+    // The local clock moved while the sample was out.
+    if (rtt < 0 || rtt > 10_000) return;
     // Keep the sample with the shortest round trip; allow drift to reset it slowly.
     if (rtt <= this.bestRtt * 1.2) {
       this.bestRtt = Math.min(rtt, this.bestRtt);
@@ -128,6 +191,12 @@ class EventSocket {
   command(room: string, action: "play" | "pause" | "seek" | "live" | "latency" | "stalled", extra: { mediaTime?: number; latency?: string } = {}) {
     this.raw("sync.command", { room, action, ...extra });
   }
+}
+
+/** Backoff with jitter, so a restarted server is not hit by every screen in the same instant. Capped at 5 s so a screen is back within 5 s of the server. */
+export function reconnectWait(retry: number, random = Math.random) {
+  const ceiling = Math.min(5_000, 500 * 2 ** retry);
+  return Math.round(ceiling / 2 + (random() * ceiling) / 2);
 }
 
 let socket: EventSocket | null = null;

@@ -434,3 +434,39 @@ func TestLatencyChangeCarriesItsMilliseconds(t *testing.T) {
 		t.Fatalf("stable is 20 s, got %+v %v", st, err)
 	}
 }
+
+func TestHelloNamesTheServerProcess(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	boot := func(bus *Bus) string {
+		srv := httptest.NewServer(bus)
+		defer srv.Close()
+		c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.CloseNow()
+		_, raw, err := c.Read(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m struct {
+			Type string `json:"type"`
+			Data struct {
+				Boot string `json:"boot"`
+			} `json:"data"`
+		}
+		if json.Unmarshal(raw, &m) != nil || m.Type != "hello" {
+			t.Fatalf("first frame %s", raw)
+		}
+		return m.Data.Boot
+	}
+	running, restarted := NewBus(), NewBus()
+	first, again := boot(running), boot(running)
+	if first == "" || first != again {
+		t.Fatalf("one process said %q then %q", first, again)
+	}
+	if next := boot(restarted); next == first {
+		t.Fatalf("a restarted server kept boot %q", next)
+	}
+}
