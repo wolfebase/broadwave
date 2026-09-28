@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "ci/**"]
   pull_request:
 
 jobs:
@@ -53,9 +53,43 @@ jobs:
       - run: make apple-test
       - run: make apple
 
-  docker:
+  e2e:
     runs-on: ubuntu-latest
     needs: [server, web]
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg sqlite3
       - run: docker build -f deploy/docker/Dockerfile -t broadwave:ci .
+      - run: npm ci
+        working-directory: web
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      # The browser tests drive the built image: setup, guide, a channel
+      # playing, two screens on one timeline, multiview, and a recording.
+      - run: node e2e/prepare.mjs
+        working-directory: web
+      - run: npx playwright test --config e2e/playwright.config.ts 01-setup 02-browse 03-player-sync 04-multiview 14-recording
+        working-directory: web
+        env:
+          E2E_IMAGE: broadwave:ci
+          E2E_SNAPSHOTS: skip
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-image
+          include-hidden-files: true
+          path: |
+            web/e2e/.run/server.log
+            web/e2e/.run/test-results
+            web/e2e/.run/*-actual.jpg
+          retention-days: 7

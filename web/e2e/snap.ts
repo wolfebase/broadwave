@@ -85,6 +85,12 @@ export async function snap(page: Page, name: string, info: TestInfo) {
     info.annotations.push({ type: "snapshot", description: `wrote ${path.relative(here, file)} (${body.length} bytes)` });
     return;
   }
+  // The snapshots are drawn on macOS. Linux fonts differ, so CI keeps its shot
+  // without comparing it.
+  if (process.env.E2E_SNAPSHOTS === "skip") {
+    writeFileSync(path.join(here, ".run", `${name}-actual.jpg`), body);
+    return;
+  }
   if (!existsSync(file)) throw new Error(`missing ${path.relative(here, file)}. Re-run with E2E_UPDATE_SNAPSHOTS=1`);
   const expected = jpeg.decode(readFileSync(file), { useTArray: true, maxMemoryUsageInMB: 256 });
   const actual = jpeg.decode(body, { useTArray: true, maxMemoryUsageInMB: 256 });
