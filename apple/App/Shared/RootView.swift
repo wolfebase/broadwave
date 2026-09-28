@@ -454,9 +454,14 @@ struct HomeArrivalBanner: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("Opens the player")
+                    .accessibilityAction { nowPlaying.expanded = true }
                     Spacer()
                     Button("Close", systemImage: "xmark") { nowPlaying.stop() }
                         .labelStyle(.iconOnly)
+                        .accessibilityLabel("Close")
                 }
                 .padding(.horizontal, 16)
                 .contentShape(.rect)

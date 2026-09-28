@@ -65,6 +65,14 @@ public struct LiveDot: View {
         .onAppear {
             withAnimation(.easeInOut(duration: 1).repeatForever(autoreverses: true)) { pulse = true }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spoken)
+    }
+
+    /// VoiceOver reads the words, not the tally dot. An empty label is still "Live".
+    private var spoken: String {
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Live" : trimmed
     }
 }
 
@@ -85,7 +93,8 @@ public struct AiringProgress: View {
             }
         }
         .frame(height: 4)
-        .accessibilityValue("\(Int(value * 100)) percent aired")
+        .accessibilityLabel("Progress")
+        .accessibilityValue("\(Int((value * 100).rounded())) percent aired")
     }
 }
 
@@ -153,6 +162,16 @@ public struct NowCard: View {
                 .background(Tokens.ColorToken.surface1, in: .rect(cornerRadius: Tokens.Radius.lg))
         }
         .overlay(RoundedRectangle(cornerRadius: Tokens.Radius.lg).stroke(Tokens.ColorToken.line))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Self.spoken(channel, airing))
+    }
+
+    private static func spoken(_ channel: Channel, _ airing: Airing?) -> String {
+        let title = airing?.title ?? "No listing"
+        if title == channel.displayName {
+            return "\(channel.displayNumber) \(channel.displayName)"
+        }
+        return "\(channel.displayNumber) \(channel.displayName), \(title)"
     }
 }
 

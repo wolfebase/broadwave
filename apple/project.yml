@@ -85,11 +85,24 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.wolfeup.broadwave
             CFBundleURLSchemes: [broadwave]
+  BroadwaveUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - App/UITests
+    dependencies:
+      - target: Broadwave
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.broadwave.ui
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
   BroadwaveTVUITests:
     type: bundle.ui-testing
     platform: tvOS
     sources:
       - App/TVUITests
+      - App/UITests
     dependencies:
       - target: BroadwaveTV
     settings:
@@ -102,8 +115,13 @@ schemes:
     build:
       targets:
         Broadwave: all
+        BroadwaveUITests: [test]
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - BroadwaveUITests
   BroadwaveTV:
     build:
       targets:

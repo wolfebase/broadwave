@@ -88,6 +88,16 @@ struct RecordingsView: View {
             .task { await store.refreshRecordings() }
     }
 
+    private func recordingSpoken(_ rec: Recording) -> String {
+        var parts: [String] = []
+        if rec.isRecording {
+            parts.append("Recording")
+        }
+        parts.append(rec.subtitle ?? rec.title)
+        parts.append(rec.startedAt.formatted(date: .abbreviated, time: .shortened))
+        return parts.joined(separator: ", ")
+    }
+
     private func row(_ rec: Recording) -> some View {
         Group {
             #if os(tvOS)
@@ -96,6 +106,7 @@ struct RecordingsView: View {
                 NavigationLink(value: rec) { rowLabel(rec) }
             #endif
         }
+        .accessibilityLabel(recordingSpoken(rec))
         .contextMenu { actions(rec) }
         #if os(iOS)
             // No destructive role: it would slide the row away before the viewer confirms.

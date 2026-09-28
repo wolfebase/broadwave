@@ -150,6 +150,7 @@ struct HomeView: View {
             .overlay {
                 if store.channels.isEmpty, store.loading {
                     ProgressView()
+                        .accessibilityLabel("Loading")
                 }
             }
         #if os(tvOS)
@@ -407,6 +408,16 @@ struct GameCard: View {
         )
         .background(Tokens.ColorToken.surface1, in: .rect(cornerRadius: Tokens.Radius.lg))
         .clipShape(.rect(cornerRadius: Tokens.Radius.lg))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(spoken)
+    }
+
+    private var spoken: String {
+        if let (a, b) = airing.matchup {
+            return "\(a) at \(b), \(channel.displayNumber) \(channel.displayName)"
+        }
+        let title = airing.subtitle ?? airing.title
+        return "\(title), \(channel.displayNumber) \(channel.displayName)"
     }
 }
 
@@ -426,6 +437,16 @@ struct RecordingCard: View {
                 .lineLimit(1)
         }
         .frame(width: cardWidth)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(spoken)
+    }
+
+    private var spoken: String {
+        let when = recording.subtitle ?? recording.startedAt.formatted(date: .abbreviated, time: .omitted)
+        if when == recording.title {
+            return recording.title
+        }
+        return "\(recording.title), \(when)"
     }
 }
 

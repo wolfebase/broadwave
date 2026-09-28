@@ -71,6 +71,8 @@ struct DiagnosticsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("tuner-health-\(device.deviceId)")
                 }
             } header: {
                 Text("Tuner health")
@@ -89,6 +91,9 @@ struct DiagnosticsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("signal-row-\(row.channelId)")
+                    .accessibilityLabel("\(row.number) \(row.name), \(signalLine(row))")
                 }
                 Button(checking ? "Checking the antenna" : "Check the antenna") {
                     Task { await checkAntenna() }

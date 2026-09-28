@@ -683,6 +683,7 @@ struct PlayerScreen: View {
                     let airing = store.index.on(channel.id, at: store.now)
                     Text("\(channel.displayNumber)  \(channel.displayName)")
                         .font(.headline)
+                        .accessibilityIdentifier("player-chrome")
                     Text(airing?.title ?? "No listing")
                         .font(.title2.weight(.bold))
                         .lineLimit(1)
@@ -807,7 +808,9 @@ struct PlayerScreen: View {
                                 }
                                 Spacer(minLength: 0)
                                 if channel.id == nowPlaying.channel?.id {
-                                    Image(systemName: "checkmark").foregroundStyle(Tokens.ColorToken.tally)
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Tokens.ColorToken.tally)
+                                        .accessibilityHidden(true)
                                 }
                             }
                             .padding(.horizontal, 12)
@@ -960,6 +963,7 @@ struct PlayerScreen: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
                 .glassEffect(.regular.tint(sync.state == .locked ? Tokens.ColorToken.success.opacity(0.4) : nil))
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel(sync.members > 1 ? "Synced with \(sync.members) screens" : "Synced")
             }
         }
@@ -971,7 +975,8 @@ struct PlayerScreen: View {
     private struct StackedControlLabel: LabelStyle {
         func makeBody(configuration: Configuration) -> some View {
             VStack(spacing: 4) {
-                configuration.icon
+                // The symbol's own name ("Volume High") would be read beside the control's name.
+                configuration.icon.accessibilityHidden(true)
                 configuration.title
                     .font(.caption2.weight(.semibold))
                     .lineLimit(2)

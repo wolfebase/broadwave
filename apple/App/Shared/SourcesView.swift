@@ -50,12 +50,16 @@ struct SourcesView: View {
             }
             ForEach(devices, id: \.deviceId) { device in
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(device.friendlyName.isEmpty ? (device.modelNumber ?? "Tuner") : device.friendlyName)
-                        .font(.headline)
-                    Text(Self.detail(device)).font(.caption).foregroundStyle(.secondary)
-                    if let note = scanNotes[device.deviceId] {
-                        Text(note).font(.caption)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(device.friendlyName.isEmpty ? (device.modelNumber ?? "Tuner") : device.friendlyName)
+                            .font(.headline)
+                        Text(Self.detail(device)).font(.caption).foregroundStyle(.secondary)
+                        if let note = scanNotes[device.deviceId] {
+                            Text(note).font(.caption)
+                        }
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("tuner-row-\(device.deviceId)")
                     Button(scanning == device.deviceId ? "Scanning…" : "Scan channels") {
                         watch(device, start: true)
                     }

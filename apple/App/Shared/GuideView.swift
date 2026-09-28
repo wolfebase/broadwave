@@ -387,7 +387,10 @@ struct GuideGrid: View {
                                     .minimumScaleFactor(0.7)
                                 Spacer(minLength: 0)
                                 if channel.favorite {
-                                    Image(systemName: "star.fill").font(.caption2).foregroundStyle(Tokens.ColorToken.warning)
+                                    Image(systemName: "star.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(Tokens.ColorToken.warning)
+                                        .accessibilityHidden(true)
                                 }
                             }
                             HStack(spacing: 6) {

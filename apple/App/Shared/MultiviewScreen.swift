@@ -719,6 +719,7 @@ struct MultiviewScreen: View {
                 // Tiles start a tune on appear. Wait for the plan so a channel it would refuse never takes a tuner.
                 if nowPlaying.together.count > 1, !planReady {
                     ProgressView()
+                        .accessibilityLabel("Loading")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     grid(tiles)
