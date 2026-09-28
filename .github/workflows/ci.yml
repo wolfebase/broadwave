@@ -83,13 +83,15 @@ jobs:
         env:
           E2E_IMAGE: broadwave:ci
           E2E_SNAPSHOTS: skip
-      # A slow machine's budget of two pictures.
+      # A slow machine's budget of two pictures, on its own port: the first
+      # run's container can still hold 18731.
       - run: npx playwright test --config e2e/playwright.config.ts 01-setup 24-leave
         working-directory: web
         env:
           E2E_IMAGE: broadwave:ci
           E2E_SNAPSHOTS: skip
           E2E_SPEED: "1.8"
+          E2E_PORT: "18751"
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
