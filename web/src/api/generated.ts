@@ -457,6 +457,7 @@ export type VirtualChannel = {
 export type WatchSession = {
   channelId: number;
   playlist: string;
+  mainPlaylist?: string;
   rendition: string;
   stream: StreamInfo;
   profile?: string;

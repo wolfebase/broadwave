@@ -190,7 +190,7 @@ func (h *Hub) MainPlaylist(channelID int64, key string) ([]byte, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	f := h.channels[channelID]
-	if f == nil || f.renditions[key] == nil {
+	if f == nil || f.renditions[key] == nil || f.captions == nil {
 		return nil, os.ErrNotExist
 	}
 	return mainPlaylist(f.renditions[key].spec), nil

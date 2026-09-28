@@ -851,6 +851,7 @@ public struct VirtualChannel: Codable, Sendable, Hashable, Identifiable {
 public struct WatchSession: Codable, Sendable, Hashable {
     public var channelId: Int64
     public var playlist: String
+    public var mainPlaylist: String?
     public var rendition: String
     public var stream: StreamInfo
     public var profile: String?
@@ -866,9 +867,10 @@ public struct WatchSession: Codable, Sendable, Hashable {
     public var tuners: [Tuner]?
     public var boot: String?
 
-    public init(channelId: Int64, playlist: String, rendition: String, stream: StreamInfo, profile: String? = nil, audio: String? = nil, encoder: String, picture: PictureMode? = nil, videoMode: String? = nil, shared: Bool, viewers: Int, frequencyHz: Int? = nil, program: Int? = nil, hints: [String]? = nil, tuners: [Tuner]? = nil, boot: String? = nil) {
+    public init(channelId: Int64, playlist: String, mainPlaylist: String? = nil, rendition: String, stream: StreamInfo, profile: String? = nil, audio: String? = nil, encoder: String, picture: PictureMode? = nil, videoMode: String? = nil, shared: Bool, viewers: Int, frequencyHz: Int? = nil, program: Int? = nil, hints: [String]? = nil, tuners: [Tuner]? = nil, boot: String? = nil) {
         self.channelId = channelId
         self.playlist = playlist
+        self.mainPlaylist = mainPlaylist
         self.rendition = rendition
         self.stream = stream
         self.profile = profile
