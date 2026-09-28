@@ -204,11 +204,7 @@ export function SettingsScreen({
       </label>
       <label className="field">
         {copy.settings.recordings}
-        <input
-          value={settings.recordingsPath}
-          onChange={(event) => onChange({ recordingsPath: event.target.value })}
-          spellCheck={false}
-        />
+        <input value={storage?.path ?? ""} readOnly spellCheck={false} />
         <span className="hint">{copy.settings.recordingsHint}</span>
       </label>
       <ReserveField value={settings.watermarkGB || "10"} storage={storage} onSave={(watermarkGB) => onChange({ watermarkGB })} />

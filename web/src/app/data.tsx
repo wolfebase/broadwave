@@ -25,7 +25,6 @@ import type { Airing, Channel, ChannelPatch, Device, Pass, PlannedAiring, Record
 
 const defaults: Settings = {
   layout: "auto",
-  recordingsPath: "",
   profile: "transparent",
   audio: "stereo",
   watermarkGB: "10",

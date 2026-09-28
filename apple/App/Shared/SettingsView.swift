@@ -30,7 +30,6 @@ struct SettingsView: View {
     @State private var sdUser = ""
     @State private var sdLineup = ""
     @State private var guideURL = ""
-    @State private var recordingsPath = ""
     @AppStorage(BreakSkip.key) private var breakSkip = BreakSkip.auto
     @State private var reserve = "10"
     @State private var sdPassword = ""
@@ -41,7 +40,6 @@ struct SettingsView: View {
     @State private var loadedUser = ""
     @State private var loadedLineup = ""
     @State private var loadedGuide = ""
-    @State private var loadedPath = ""
     @State private var loadedReserve = "10"
     @State private var storage: APIClient.StorageInfo?
     @State private var backupRows: [CatalogBackup]?
@@ -381,9 +379,9 @@ struct SettingsView: View {
                 Text(storageSummary(storage))
                     .foregroundStyle(.secondary)
             }
-            TextField("Recordings folder", text: $recordingsPath)
-                .fieldTyping()
-                .onSubmit { flushServerText() }
+            if let path = storage?.path, !path.isEmpty {
+                LabeledContent("Recordings folder", value: path)
+            }
             LabeledContent("Keep this much free") {
                 TextField("GB", text: $reserve)
                     .multilineTextAlignment(.trailing)
@@ -505,12 +503,10 @@ struct SettingsView: View {
             sdUser = values["sdUser"] ?? ""
             sdLineup = values["sdLineup"] ?? ""
             guideURL = values["guideUrl"] ?? ""
-            recordingsPath = values["recordingsPath"] ?? ""
             reserve = values["watermarkGB"] ?? "10"
             loadedUser = sdUser
             loadedLineup = sdLineup
             loadedGuide = guideURL
-            loadedPath = recordingsPath
             loadedReserve = reserve
             passwordSaved = values["sdPasswordSet"] == "1"
             artSaved = values["tmdbKeySet"] == "1"
@@ -537,10 +533,6 @@ struct SettingsView: View {
         if sdLineup != loadedLineup {
             values["sdLineup"] = sdLineup
             loadedLineup = sdLineup
-        }
-        if recordingsPath != loadedPath {
-            values["recordingsPath"] = recordingsPath
-            loadedPath = recordingsPath
         }
         if reserve != loadedReserve {
             if let n = Int(reserve), (0 ... 1_000_000).contains(n), String(n) == reserve {

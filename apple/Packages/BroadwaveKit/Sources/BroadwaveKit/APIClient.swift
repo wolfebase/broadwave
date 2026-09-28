@@ -420,6 +420,7 @@ public struct APIClient: Sendable {
     }
 
     public struct StorageInfo: Decodable, Sendable {
+        public var path: String?
         public var freeBytes: Int64
         public var totalBytes: Int64
         public var watermarkGB: Int

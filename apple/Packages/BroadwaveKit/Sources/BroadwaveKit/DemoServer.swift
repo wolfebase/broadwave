@@ -404,7 +404,7 @@ public final class DemoServer: @unchecked Sendable {
             value == "broadcast" || value == "smooth" || value == "film"
         case "needsSetup", "setupComplete", "hideScores", "liveScores", "checkUpdates", "autoplay", "hdhrEmulate":
             value == "0" || value == "1"
-        case "sdUser", "sdLineup", "guideUrl", "recordingsPath":
+        case "sdUser", "sdLineup", "guideUrl":
             true
         case "watermarkGB":
             if let n = Int(value), (0 ... 1_000_000).contains(n), String(n) == value {

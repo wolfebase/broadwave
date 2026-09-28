@@ -1357,6 +1357,7 @@ paths:
               schema:
                 type: object
                 properties:
+                  path: { type: string, description: "The recordings folder as the server sees it. In a container it is the folder mounted at /config/work/recordings." }
                   freeBytes: { type: integer, format: int64 }
                   totalBytes: { type: integer, format: int64 }
                   watermarkGB: { type: integer }
@@ -1999,7 +2000,6 @@ components:
       type: object
       properties:
         layout: { type: string, enum: [auto, desktop, tv, phone] }
-        recordingsPath: { type: string }
         profile: { type: string, enum: [transparent, balanced, saver] }
         audio: { type: string, enum: [stereo, surround] }
         encoder: { type: string }

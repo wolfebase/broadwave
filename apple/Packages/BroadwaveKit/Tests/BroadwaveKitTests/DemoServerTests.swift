@@ -100,13 +100,11 @@ import Testing
         "sdUser": "guide@example.com",
         "sdPassword": secret,
         "tmdbKey": secret,
-        "recordingsPath": "/recordings",
         "watermarkGB": "12",
         "guideUrl": "https://example.com/guide.xml",
     ])
     let guide = try await client.settings()
     #expect(guide["sdUser"] == "guide@example.com")
-    #expect(guide["recordingsPath"] == "/recordings")
     #expect(guide["watermarkGB"] == "12")
     #expect(guide["guideUrl"] == "https://example.com/guide.xml")
     #expect(guide["sdPasswordSet"] == "1")
