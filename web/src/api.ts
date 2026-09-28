@@ -177,8 +177,8 @@ export function watchChannel(channelId: number, caps: Caps, prefs: Prefs, rendit
   });
 }
 
-export function stopWatch(channelId: number, rendition = "") {
-  return request<{ ok: boolean }>(`/api/v1/watch/${channelId}/stop`, { method: "POST", body: JSON.stringify({ rendition }) });
+export function stopWatch(channelId: number, rendition = "", boot = "") {
+  return request<{ ok: boolean }>(`/api/v1/watch/${channelId}/stop`, { method: "POST", body: JSON.stringify({ rendition, boot }) });
 }
 
 export function planMultiview(channelIds: number[]) {
