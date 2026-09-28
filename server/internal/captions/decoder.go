@@ -41,14 +41,17 @@ type Decoder struct {
 	open bool
 	cue  Cue
 	done []Cue
-	// pending is when text first changed on screen without being shown yet.
-	pending int64
+	// typedAt is when text being typed was last shown; typed is false until
+	// the first time on a line, which shows at once.
+	typedAt int64
+	typed   bool
 	waiting bool
 }
 
-// shownEvery is how often paint-on and roll-up text still being typed is
-// shown. Showing every character would make a cue for each one.
-const shownEvery = 90000
+// shownEvery is the least time between two showings of paint-on and roll-up
+// text while it is typed (5 a second). Showing every character would make a
+// cue for each one; showing less often puts the words behind the picture.
+const shownEvery = 18000
 
 func NewDecoder() *Decoder {
 	return &Decoder{row: rows - 1, channel: 1, depth: 3}
@@ -56,6 +59,7 @@ func NewDecoder() *Decoder {
 
 // Feed decodes one picture's caption pairs shown at pts.
 func (d *Decoder) Feed(pts int64, pairs []byte) {
+	d.due(pts)
 	for i := 0; i+1 < len(pairs); i += 2 {
 		d.pair(pts, pairs[i], pairs[i+1])
 	}
@@ -78,11 +82,22 @@ func (d *Decoder) Close(pts int64) {
 	d.end(pts)
 }
 
-func (d *Decoder) pair(pts int64, b1, b2 byte) {
-	// Checked before padding, which is what arrives while nothing is typed.
-	if d.waiting && ptsDelta(pts, d.pending) >= shownEvery {
+// due shows typed text that waited out shownEvery.
+func (d *Decoder) due(pts int64) {
+	if d.waiting && !d.soon(pts) {
+		d.typedAt = pts
 		d.show(pts)
 	}
+}
+
+// soon is true within shownEvery of the last showing of typed text. A clock
+// that went back is not soon.
+func (d *Decoder) soon(pts int64) bool {
+	delta := ptsDelta(pts, d.typedAt)
+	return delta >= 0 && delta < shownEvery
+}
+
+func (d *Decoder) pair(pts int64, b1, b2 byte) {
 	if b1 == 0 && b2 == 0 {
 		return
 	}
@@ -169,8 +184,10 @@ func (d *Decoder) misc(pts int64, b2 byte) {
 		d.mode, d.text = rollUp, false
 		d.depth = int(b2-0x25) + 2
 		d.col = 0
+		d.typed = false
 	case 0x29: // RDC resume direct captioning
 		d.mode, d.text = paintOn, false
+		d.typed = false
 	case 0x2a, 0x2b: // TR, RTD: the text service, not captions
 		d.text = true
 	case 0x2c: // EDM erase displayed memory
@@ -190,6 +207,9 @@ func (d *Decoder) misc(pts int64, b2 byte) {
 			d.shown[r] = [cols]rune{}
 		}
 		d.col = 0
+		// A TV scrolls now; a row that rolled off the top leaves now.
+		d.show(pts)
+		d.typed = false
 	case 0x2e: // ENM erase non-displayed memory
 		d.hidden.clear()
 	case 0x2f: // EOC end of caption
@@ -247,12 +267,18 @@ func (d *Decoder) put(r rune) {
 }
 
 // touch notes a change to the screen. A pop-on caption changes the hidden
-// memory, which shows at EOC.
+// memory, which shows at EOC. Typed text shows at once, then at most every
+// shownEvery.
 func (d *Decoder) touch(pts int64) {
 	if d.mode == popOn || d.waiting {
 		return
 	}
-	d.pending, d.waiting = pts, true
+	if d.typed && d.soon(pts) {
+		d.waiting = true
+		return
+	}
+	d.typed, d.typedAt = true, pts
+	d.show(pts)
 }
 
 // show makes what is on screen now the current cue.

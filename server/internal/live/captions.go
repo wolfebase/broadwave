@@ -13,7 +13,7 @@ import (
 )
 
 // captionKeep covers the live window, so a viewer who rewinds still has
-// captions. Cues are small; a busy hour is a few thousand.
+// captions. Cues are small; an hour of roll-up is under 20,000.
 const captionKeep = 2 * 3600 * 90000
 
 // captionTrack decodes one channel's CEA-608 captions from the tuner's
