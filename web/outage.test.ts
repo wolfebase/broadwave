@@ -130,6 +130,13 @@ test("system text does not reach the viewer, and a server sentence does", () => 
   );
   assert.equal(viewerFailure(new Error(requestFailed)).message, requestFailed);
   assert.equal(viewerFailure({ status: 500, code: "nope" }).message, channelDidNotStart);
+  const full = "All 2 streams from this playlist are in use. Stop one or raise the limit.";
+  const refused = "The tuner would not start this channel. Try again.";
+  const internal = "This channel did not start. The server log says why.";
+  assert.deepEqual(viewerFailure({ status: 409, code: "streams_full", message: full }), { message: full, recovery: "" });
+  assert.deepEqual(viewerFailure({ status: 503, code: "tuner_refused", message: refused }), { message: refused, recovery: "" });
+  assert.deepEqual(viewerFailure({ status: 500, code: "internal", message: internal }), { message: internal, recovery: "" });
+  assert.equal(viewerFailure(new Error("Bad Gateway")).message, channelDidNotStart);
 });
 
 test("a source that stopped sending goes on the quiet clock", () => {
