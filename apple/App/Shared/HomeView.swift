@@ -11,6 +11,7 @@ struct HomeView: View {
         @Environment(\.tvSelectedTab) private var tvSelectedTab
         @FocusState private var watch: Bool
         @FocusState private var emptyHome: Bool
+        @State private var loadedOnce = false
     #endif
 
     var body: some View {
@@ -180,10 +181,13 @@ struct HomeView: View {
             .onAppear { claimHomeFocus() }
             .onChange(of: tvSelectedTab) { _, _ in claimHomeFocus() }
             .onChange(of: store.channels.isEmpty) { _, _ in claimHomeFocus() }
-            .onChange(of: store.loading) { _, _ in claimHomeFocus() }
             .task(id: store.loading) {
-                // The sidebar takes focus on the same turn the page appears and clears a focus set then.
-                guard !store.loading else { return }
+                // Only the first load: every server event reloads, and focus must
+                // not jump back to Watch while someone is on another shelf. The
+                // sidebar takes focus on the same turn the page appears and
+                // clears a focus set then.
+                guard !store.loading, !loadedOnce else { return }
+                loadedOnce = true
                 try? await Task.sleep(for: .milliseconds(400))
                 claimHomeFocus()
             }
