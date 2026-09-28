@@ -106,7 +106,11 @@ export function LivePlayer({
       setSpan({ at: Math.max(0, video.currentTime - start), len: Math.max(1, end - start) });
     };
     video.addEventListener("timeupdate", tick);
-    return () => video.removeEventListener("timeupdate", tick);
+    video.addEventListener("seeked", tick);
+    return () => {
+      video.removeEventListener("timeupdate", tick);
+      video.removeEventListener("seeked", tick);
+    };
   }, [channel.id]);
 
   useEffect(() => {
@@ -136,7 +140,11 @@ export function LivePlayer({
   useEffect(() => () => window.clearTimeout(typedTimer.current), []);
 
   function detachSync() {
-    if (opts.sync && !opts.shared) setOpts((o) => ({ ...o, sync: false }));
+    if (!(opts.sync && !opts.shared)) return;
+    // The engine seeks forward on its next tick. Stop it before the playhead
+    // moves, or a rewind is put back before React turns sync off.
+    stream.releaseSync();
+    setOpts((o) => ({ ...o, sync: false }));
   }
 
   function jump(delta: number) {
@@ -254,7 +262,7 @@ export function LivePlayer({
     }
   }
 
-  const liveLabel = opts.sync && sync.state !== "off" ? "Live" : behind < 14 ? "Live" : `${formatBehind(behind)} behind`;
+  const liveLabel = livePillLabel(opts.sync && sync.state !== "off", behind);
   const title = airing?.title || channel.displayName;
   const eyebrow = useMemo(
     () => (
@@ -568,6 +576,12 @@ function syncLine(sync: SyncStatus) {
   if (sync.state === "off") return "Off";
   const word = sync.state.charAt(0).toUpperCase() + sync.state.slice(1);
   return `${word} · ${Math.round(sync.drift)} ms`;
+}
+
+/** "Live" while lined up. Far enough behind, the pill says how far and is the way back. */
+export function livePillLabel(synced: boolean, behindSeconds: number): string {
+  if (synced || behindSeconds < 14) return "Live";
+  return `${formatBehind(behindSeconds)} behind`;
 }
 
 function formatBehind(seconds: number) {

@@ -201,7 +201,12 @@ export function Stage({
           <div className="stage-top-right">
             {badge}
             {liveLabel ? (
-              <button type="button" className={liveLabel === "Live" ? "live-pill on" : "live-pill"} onClick={onLive}>
+              <button
+                type="button"
+                className={liveLabel === "Live" ? "live-pill on" : "live-pill"}
+                aria-label={liveLabel === "Live" ? undefined : `Go to live, ${liveLabel}`}
+                onClick={onLive}
+              >
                 <span className="live-dot-light" aria-hidden="true" />
                 {liveLabel}
               </button>
