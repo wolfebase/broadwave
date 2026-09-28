@@ -83,6 +83,8 @@ test("stats, help, last channel, a typed number, sleep, volume, and theater", as
   await expect(stats.getByText("12 ms", { exact: true })).toBeVisible({ timeout: 3_000 });
   await expect(stats.getByText("Rendition", { exact: true })).toBeVisible();
   await expect(stats.getByText("Encoder", { exact: true })).toBeVisible();
+  await expect(stats.getByText("Source", { exact: true })).toBeVisible();
+  await expect(stats.getByText("Output", { exact: true })).toBeVisible();
   const named = await stats.locator("dd").evaluateAll((nodes) => nodes.map((node) => node.textContent?.trim() ?? ""));
   expect(named.filter((line) => line && line !== "Waiting").length).toBeGreaterThan(1);
   mkdirSync(evidence, { recursive: true });
@@ -114,7 +116,7 @@ test("stats, help, last channel, a typed number, sleep, volume, and theater", as
   await expect.poll(() => new URL(page.url()).searchParams.get("channel")).not.toBe(String(first!.id));
   const nextId = Number(new URL(page.url()).searchParams.get("channel"));
   await playing(page, nextId);
-  await page.keyboard.press("Backspace");
+  await page.keyboard.press("l");
   await playing(page, first!.id);
   await page.keyboard.press("l");
   await playing(page, nextId);
@@ -122,7 +124,7 @@ test("stats, help, last channel, a typed number, sleep, volume, and theater", as
   // 4.1 and 4.2 share a first digit, so "42" waits. "51" does the same when 5.2 is in the lineup.
   const typed = fiveTwo ? { digits: ["5", "1"], echo: ["Channel 5", "Channel 51"], id: five!.id } : { digits: ["4", "2"], echo: ["Channel 4", "Channel 42"], id: fourTwo!.id };
   if (new URL(page.url()).searchParams.get("channel") === String(typed.id)) {
-    await page.keyboard.press("Backspace");
+    await page.keyboard.press("l");
     await playing(page, first!.id);
   }
   await page.keyboard.press(typed.digits[0]);
