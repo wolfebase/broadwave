@@ -102,3 +102,66 @@ test("player shell and two screens on one timeline", async ({ page }, info) => {
   }
   await other.close();
 });
+
+test("a screen joining a playing room starts on its frame", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto("/");
+  await settle(page);
+  await page.getByRole("button", { name: "Watch", exact: true }).click();
+  await expect(page.locator("video.stage-video")).toHaveAttribute("data-sync-drift", /\d/, { timeout: 30_000 });
+  // hls.js starts about three segments behind the edge, where a fresh tune's
+  // room plays anyway. Once the playlist holds 20 s, move the room there, as
+  // the stable latency setting does; a screen starting at the edge would hold
+  // its first frame for about 14 s.
+  await page.waitForTimeout(24_000);
+  const channel = new URL(page.url()).searchParams.get("channel");
+  expect(channel, page.url()).toBeTruthy();
+  await page.evaluate(async (id) => {
+    const ws = new WebSocket(`ws://${location.host}/api/v1/ws`);
+    await new Promise((resolve) => (ws.onopen = resolve));
+    ws.send(JSON.stringify({ type: "sync.join", data: { room: `channel:${id}`, channelId: Number(id) } }));
+    ws.send(JSON.stringify({ type: "sync.command", data: { room: `channel:${id}`, action: "latency", latency: "stable" } }));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    ws.close();
+  }, channel);
+
+  const other = await page.context().newPage();
+  await other.addInitScript(() => {
+    const w = window as unknown as { __holds: number[]; __still: number };
+    w.__holds = [];
+    w.__still = 0;
+    let last = -1;
+    setInterval(() => {
+      const v = document.querySelector("video.stage-video") as HTMLVideoElement | null;
+      if (!v || v.readyState < 2) return;
+      const now = performance.now();
+      if (v.currentTime === last) {
+        if (!w.__still) w.__still = now;
+      } else if (w.__still) {
+        w.__holds.push(now - w.__still);
+        w.__still = 0;
+      }
+      last = v.currentTime;
+    }, 50);
+  });
+  await other.goto(page.url());
+  const video = other.locator("video.stage-video");
+  await expect(video).toHaveAttribute("data-sync-start", "room", { timeout: 30_000 });
+  await expect(video).toHaveAttribute("data-sync-drift", /\d/, { timeout: 30_000 });
+  // Every hold after the first picture, the first included, is under a second,
+  // and the screen is on the room within 100 ms soon after.
+  let drift = Number.POSITIVE_INFINITY;
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    drift = Number((await video.getAttribute("data-sync-drift")) ?? "NaN");
+    if (Math.abs(drift) <= 100) break;
+    await other.waitForTimeout(250);
+  }
+  const holds = await other.evaluate(() => {
+    const w = window as unknown as { __holds: number[]; __still: number };
+    return [...w.__holds, w.__still ? performance.now() - w.__still : 0].map(Math.round);
+  });
+  expect(Math.abs(drift), `drift ${drift} ms, holds ${holds.join(", ")} ms`).toBeLessThanOrEqual(100);
+  expect(Math.max(0, ...holds), `holds ${holds.join(", ")} ms`).toBeLessThan(1_000);
+  await other.close();
+});

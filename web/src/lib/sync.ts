@@ -1,6 +1,7 @@
-import type Hls from "hls.js";
+import Hls from "hls.js";
 import { events, type RoomState } from "./events";
 import { holeEnd } from "./bufferHole";
+import { fragTime, roomStart, roomTarget, type Frag } from "./roomStart";
 import { nextSeekLead } from "./seekLead";
 import { SETTLE_MS, newSettle, settleDue } from "./settle";
 
@@ -24,8 +25,6 @@ const RATE_STALL_S = 0.12;
 const STALL_SEEK_MS = 120;
 // WebKit resumes about a tenth of a second late after a pause. Learned per screen.
 const MAX_RESUME_LAG_S = 0.5;
-
-type Frag = { start: number; duration: number; programDateTime: number | null };
 
 /**
  * Holds a live <video> on a room's shared timeline. Every rendition stamps
@@ -135,13 +134,7 @@ export class SyncEngine {
   /** Playhead position for a program date-time, or null when the playlist does not hold it yet. */
   private timeFor(media: number): number | null {
     const frags = this.frags().filter((f) => f.programDateTime != null && f.duration > 0 && f.duration <= 30);
-    if (frags.length) {
-      for (const f of frags) {
-        const s = f.programDateTime as number;
-        if (media >= s && media < s + f.duration * 1000) return f.start + (media - s) / 1000;
-      }
-      return null;
-    }
+    if (frags.length) return fragTime(frags, media);
     const native = (this.video as HTMLVideoElement & { getStartDate?: () => Date }).getStartDate?.();
     if (native && !Number.isNaN(native.getTime())) return (media - native.getTime()) / 1000;
     return null;
@@ -240,7 +233,7 @@ export class SyncEngine {
       this.setStatus({ ...this.status, state: "waiting", members: st.members, room: st });
       return;
     }
-    const target = st.rate === 0 ? st.anchorMedia : st.anchorMedia + (events().serverNow() - st.anchorServer) * st.rate;
+    const target = roomTarget(st, events().serverNow());
     const drift = local - target;
     video.dataset.syncOffset = String(Math.round(local - Date.now()));
     video.dataset.syncDrift = String(Math.round(drift));
@@ -330,4 +323,44 @@ export class SyncEngine {
     }
     this.setStatus({ state: "locked", drift, members: st.members, room: st });
   }
+}
+
+/**
+ * Starts hls.js on the room's frame instead of its live edge. A screen joining
+ * a room that plays well behind the edge otherwise held its first frame for
+ * the whole gap. hls must be created with autoStartLoad off; this starts it
+ * once, at the edge when the room's state or the playlist is not in within
+ * waitMs, or the playlist does not hold the room's frame.
+ */
+export function startOnRoom(hls: Hls, video: HTMLVideoElement, room: string, waitMs = 800) {
+  const bus = events();
+  let st = bus.roomState(room) as RoomState | undefined;
+  let frags: Frag[] | null = null;
+  let timer = 0;
+  let started = false;
+  const off = bus.on("sync.state", (data) => {
+    if ((data as RoomState).room !== room) return;
+    st = data as RoomState;
+    if (frags) start();
+  });
+  const done = () => {
+    started = true;
+    window.clearTimeout(timer);
+    off();
+  };
+  const start = () => {
+    if (started) return;
+    done();
+    const pos = st && frags ? roomStart(frags, st, bus.serverNow()) : null;
+    video.dataset.syncStart = pos == null ? "edge" : "room";
+    hls.startLoad(pos ?? -1);
+  };
+  hls.once(Hls.Events.MANIFEST_PARSED, () => {
+    if (!started) timer = window.setTimeout(start, waitMs);
+  });
+  hls.once(Hls.Events.LEVEL_UPDATED, (_e, data) => {
+    frags = data.details.live ? data.details.fragments : [];
+    if (st || !data.details.live) start();
+  });
+  hls.once(Hls.Events.DESTROYING, done);
 }

@@ -122,7 +122,10 @@ export class EventSocket {
   private onHello({ boot }: { boot?: string }) {
     if (!boot) return;
     // Every watch and room the old process had is gone.
-    if (this.boot && boot !== this.boot) this.emit("restarted", boot);
+    if (this.boot && boot !== this.boot) {
+      this.latest.clear();
+      this.emit("restarted", boot);
+    }
     this.boot = boot;
   }
 
@@ -184,6 +187,8 @@ export class EventSocket {
       return;
     }
     this.roomRefs.delete(room);
+    // A room joined again gets its state again; the old one may be long out of date.
+    this.latest.delete(room);
     if (!this.rooms.delete(room)) return;
     this.raw("sync.leave", { room });
   }

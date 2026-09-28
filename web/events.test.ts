@@ -152,3 +152,25 @@ test("a clock reply whose round trip is negative is ignored", () => {
   latest().hear("clock", { t0: Date.now() + 60_000, t1: Date.now() });
   assert.equal(bus.offset, 0);
 });
+
+test("a room left and joined again forgets its old state", () => {
+  FakeSocket.all = [];
+  const bus = new EventSocket();
+  latest().open();
+  bus.join("channel:4", 4);
+  latest().hear("sync.state", { room: "channel:4", anchorMedia: 1 });
+  assert.deepEqual(bus.roomState("channel:4"), { room: "channel:4", anchorMedia: 1 });
+  // A second player in the tab keeps it.
+  bus.join("channel:4", 4);
+  bus.leave("channel:4");
+  assert.ok(bus.roomState("channel:4"));
+  bus.leave("channel:4");
+  assert.equal(bus.roomState("channel:4"), undefined);
+
+  // A restarted server's rooms start over too.
+  latest().hear("hello", { boot: "a" });
+  bus.join("channel:5", 5);
+  latest().hear("sync.state", { room: "channel:5", anchorMedia: 2 });
+  latest().hear("hello", { boot: "b" });
+  assert.equal(bus.roomState("channel:5"), undefined);
+});
