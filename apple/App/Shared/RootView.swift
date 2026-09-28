@@ -50,6 +50,53 @@ enum AppTab: Hashable {
     case home, guide, search, sports, recordings, settings
 }
 
+#if os(iOS)
+    /// Six tabs leave Recordings under More, and More's bar stacks on the page.
+    /// A compact iPhone keeps five tabs. Settings is pushed on the tab that is open.
+    @MainActor
+    func usesPhoneTabs(_ width: UserInterfaceSizeClass?) -> Bool {
+        UIDevice.current.userInterfaceIdiom == .phone && width == .compact
+    }
+
+    @MainActor
+    @Observable
+    final class SettingsRoute {
+        /// The tab whose stack should show Settings. Nil when it is not pushed.
+        var on: AppTab?
+
+        func show(on tab: AppTab) {
+            on = tab
+        }
+    }
+
+    private struct SettingsOnStack: ViewModifier {
+        var tab: AppTab
+        @Environment(SettingsRoute.self) private var route
+        @Environment(\.horizontalSizeClass) private var width
+
+        func body(content: Content) -> some View {
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                content.navigationDestination(isPresented: presented) {
+                    SettingsView()
+                }
+            } else {
+                content
+            }
+        }
+
+        private var presented: Binding<Bool> {
+            Binding(
+                get: { usesPhoneTabs(width) && route.on == tab },
+                set: { show in
+                    if !show, route.on == tab {
+                        route.on = nil
+                    }
+                }
+            )
+        }
+    }
+#endif
+
 #if os(tvOS)
     private struct TVSelectedTabKey: EnvironmentKey {
         static let defaultValue: AppTab = .home
@@ -87,6 +134,10 @@ enum AppTab: Hashable {
 
 struct RootView: View {
     @Environment(AppStore.self) private var store
+    #if os(iOS)
+        @Environment(\.horizontalSizeClass) private var width
+        @State private var settingsRoute = SettingsRoute()
+    #endif
     @State private var nowPlaying = NowPlaying()
     @State private var tab: AppTab = .home
     @State private var showSetup = false
@@ -108,38 +159,41 @@ struct RootView: View {
             }
         }
         .environment(nowPlaying)
-        .background(Tokens.ColorToken.canvas.ignoresSafeArea())
-        .safeAreaInset(edge: .top, spacing: 0) {
-            VStack(spacing: 0) {
-                // The full-screen player covers this inset, so the note lives on the player then.
-                if !playerCoversTheScreen {
-                    offlineBanner
+        #if os(iOS)
+            .environment(settingsRoute)
+        #endif
+            .background(Tokens.ColorToken.canvas.ignoresSafeArea())
+            .safeAreaInset(edge: .top, spacing: 0) {
+                VStack(spacing: 0) {
+                    // The full-screen player covers this inset, so the note lives on the player then.
+                    if !playerCoversTheScreen {
+                        offlineBanner
+                    }
+                    updateBanner
+                    arrivalBanner
                 }
-                updateBanner
-                arrivalBanner
             }
-        }
-        .task(id: store.connected) {
-            guard store.connected else { return }
-            store.socket?.announce(name: ScreenIdentity.name, kind: ScreenIdentity.kind)
-            #if DEBUG
-                // Setup replaces the tabs, and the player with them, so a launch
-                // straight into a channel skips it.
-                let watching = UserDefaults.standard.integer(forKey: "BroadwaveWatch") > 0
-                    || !(UserDefaults.standard.string(forKey: "BroadwaveMultiview") ?? "").isEmpty
-                if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") || sidebarPageTest != nil || watching {
-                    return
-                }
-                if UserDefaults.standard.string(forKey: "BroadwaveSetup") != nil {
+            .task(id: store.connected) {
+                guard store.connected else { return }
+                store.socket?.announce(name: ScreenIdentity.name, kind: ScreenIdentity.kind)
+                #if DEBUG
+                    // Setup replaces the tabs, and the player with them, so a launch
+                    // straight into a channel skips it.
+                    let watching = UserDefaults.standard.integer(forKey: "BroadwaveWatch") > 0
+                        || !(UserDefaults.standard.string(forKey: "BroadwaveMultiview") ?? "").isEmpty
+                    if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") || sidebarPageTest != nil || watching {
+                        return
+                    }
+                    if UserDefaults.standard.string(forKey: "BroadwaveSetup") != nil {
+                        showSetup = true
+                        return
+                    }
+                #endif
+                if let values = try? await store.api?.settings(), values["needsSetup"] == "1" {
                     showSetup = true
-                    return
                 }
-            #endif
-            if let values = try? await store.api?.settings(), values["needsSetup"] == "1" {
-                showSetup = true
             }
-        }
-        .onOpenURL(perform: open)
+            .onOpenURL(perform: open)
         #if DEBUG
             .task {
                 if UserDefaults.standard.bool(forKey: "BroadwaveDemo"), store.server?.id != "demo" {
@@ -160,7 +214,7 @@ struct RootView: View {
                         previewChannel(id: 3, number: "5.1", name: "Two"),
                     ])
                     switch page {
-                    case "settings": tab = .settings
+                    case "settings": openSettings()
                     case "search": tab = .search
                     default: tab = .guide
                     }
@@ -172,7 +226,7 @@ struct RootView: View {
                     case "search": tab = .search
                     case "sports": tab = .sports
                     case "recordings": tab = .recordings
-                    case "settings": tab = .settings
+                    case "settings": openSettings()
                     default: tab = .home
                     }
                 }
@@ -278,25 +332,62 @@ struct RootView: View {
         #endif
     }
 
+    /// The arrival banner and a settings link push Settings on the open tab.
+    /// iPad and Apple TV keep the Settings tab.
+    private func openSettings() {
+        #if os(iOS)
+            if phoneTabs {
+                let page: AppTab = tab == .settings ? .home : tab
+                if tab == .settings {
+                    tab = .home
+                }
+                settingsRoute.show(on: page)
+                return
+            }
+        #endif
+        tab = .settings
+    }
+
+    private var phoneTabs: Bool {
+        #if os(iOS)
+            usesPhoneTabs(width)
+        #else
+            false
+        #endif
+    }
+
+    private func stack(_ page: AppTab, @ViewBuilder content: () -> some View) -> some View {
+        NavigationStack {
+            #if os(iOS)
+                content().modifier(SettingsOnStack(tab: page))
+            #else
+                content()
+            #endif
+        }
+        .phoneTabClearance()
+    }
+
     private var tabs: some View {
         TabView(selection: $tab) {
             Tab("Home", systemImage: "house.fill", value: AppTab.home) {
-                NavigationStack { HomeView() }.phoneTabClearance()
+                stack(.home) { HomeView() }
             }
             Tab("Guide", systemImage: "square.grid.3x3.topleft.filled", value: AppTab.guide) {
-                NavigationStack { GuideView() }.phoneTabClearance()
+                stack(.guide) { GuideView() }
             }
             Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) {
-                NavigationStack { SearchView() }.phoneTabClearance()
+                stack(.search) { SearchView() }
             }
             Tab("Sports", systemImage: "sportscourt.fill", value: AppTab.sports) {
-                NavigationStack { SportsView() }.phoneTabClearance()
+                stack(.sports) { SportsView() }
             }
             Tab("Recordings", systemImage: "play.rectangle.on.rectangle.fill", value: AppTab.recordings) {
-                NavigationStack { RecordingsView() }.phoneTabClearance()
+                stack(.recordings) { RecordingsView() }
             }
-            Tab("Settings", systemImage: "gearshape.fill", value: AppTab.settings) {
-                NavigationStack { SettingsView() }.phoneTabClearance()
+            if !phoneTabs {
+                Tab("Settings", systemImage: "gearshape.fill", value: AppTab.settings) {
+                    NavigationStack { SettingsView() }.phoneTabClearance()
+                }
             }
         }
         .tabViewStyle(.sidebarAdaptable)
@@ -426,7 +517,7 @@ struct RootView: View {
                 #else
                     nowPlaying.expanded = false
                 #endif
-                tab = .settings
+                openSettings()
             } onDismiss: {
                 store.dismissHome()
             }

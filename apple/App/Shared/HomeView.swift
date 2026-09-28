@@ -5,6 +5,10 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppStore.self) private var store
     @Environment(NowPlaying.self) private var nowPlaying
+    #if os(iOS)
+        @Environment(\.horizontalSizeClass) private var width
+        @Environment(SettingsRoute.self) private var settingsRoute
+    #endif
     @State private var saved = SavedMultiview.load()
     @State private var teams: [TeamFollow] = []
     #if os(tvOS)
@@ -169,6 +173,16 @@ struct HomeView: View {
         .navigationTitle("Home")
         #if os(iOS)
             .toolbarTitleDisplayMode(.inlineLarge)
+            .toolbar {
+                if usesPhoneTabs(width) {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Settings", systemImage: "gearshape") {
+                            settingsRoute.show(on: .home)
+                        }
+                        .accessibilityIdentifier("home-settings")
+                    }
+                }
+            }
         #endif
             .overlay {
                 if store.channels.isEmpty, store.loading {
