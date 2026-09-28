@@ -647,6 +647,80 @@ func TestSourceGoesOfflineAndComesBack(t *testing.T) {
 	}
 }
 
+func TestShellStaysFresh(t *testing.T) {
+	html := []byte("<!doctype html><title>Broadwave</title>")
+	var buf bytes.Buffer
+	zw, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := zw.Write(html); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	assets := fstest.MapFS{
+		"index.html":           &fstest.MapFile{Data: html},
+		"index.html.gz":        &fstest.MapFile{Data: append([]byte(nil), buf.Bytes()...)},
+		"assets/app.js":        &fstest.MapFile{Data: []byte("console.log(1)\n")},
+		"manifest.webmanifest": &fstest.MapFile{Data: []byte(`{"name":"Broadwave"}`)},
+		"sw.js":                &fstest.MapFile{Data: []byte("self.addEventListener('fetch',()=>{})\n")},
+	}
+	h := (&Server{Store: testStore(t), Assets: assets}).Handler()
+
+	index := get(t, h, "/")
+	if got := index.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("index cache %q", got)
+	}
+	named := get(t, h, "/index.html")
+	if got := named.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("index.html cache %q", got)
+	}
+	guide := get(t, h, "/guide")
+	if got := guide.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("guide cache %q", got)
+	}
+	if !bytes.Contains(guide.Body.Bytes(), []byte("Broadwave")) {
+		t.Fatalf("guide body %s", guide.Body.Bytes())
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("gzip index %d %s", rec.Code, rec.Body.Bytes())
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("gzip index cache %q", got)
+	}
+	if rec.Header().Get("Content-Encoding") != "gzip" {
+		t.Fatalf("gzip encoding %q", rec.Header().Get("Content-Encoding"))
+	}
+
+	js := get(t, h, "/assets/app.js")
+	if got := js.Header().Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
+		t.Fatalf("asset cache %q", got)
+	}
+
+	manifest := get(t, h, "/manifest.webmanifest")
+	if got := manifest.Header().Get("Content-Type"); !strings.Contains(got, "application/manifest+json") {
+		t.Fatalf("manifest type %q", got)
+	}
+	if got := manifest.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("manifest cache %q", got)
+	}
+
+	worker := get(t, h, "/sw.js")
+	if got := worker.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("worker cache %q", got)
+	}
+	if ct := worker.Header().Get("Content-Type"); !strings.Contains(ct, "javascript") {
+		t.Fatalf("worker type %q", ct)
+	}
+}
+
 func testStore(t *testing.T) *store.Store {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))
