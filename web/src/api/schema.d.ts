@@ -1396,6 +1396,12 @@ export interface components {
              *     EXT-X-PROGRAM-DATE-TIME on the channel's shared timeline, identical across renditions.
              */
             playlist: string;
+            /**
+             * @description Multivariant playlist that pairs `playlist` with an English CC WebVTT track, present
+             *     when the server reads the channel's captions. Players load this one; readiness checks
+             *     keep reading `playlist`.
+             */
+            mainPlaylist?: string;
             rendition: string;
             stream: components["schemas"]["StreamInfo"];
             profile?: string;

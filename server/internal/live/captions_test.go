@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"broadwave/internal/captions"
+	"broadwave/internal/store"
 )
 
 func TestCaptionPlaylistMirrorsTheVideo(t *testing.T) {
@@ -144,5 +145,25 @@ func TestSegmentSpanUsesPresentationTime(t *testing.T) {
 	start, dur, ok := segmentSpan(dir, "seg00001.m4s")
 	if !ok || start != 93003 || dur != 6006 {
 		t.Fatalf("span = %d, %d, %v; want 93003, 6006", start, dur, ok)
+	}
+}
+
+func TestSessionNamesTheCaptionedPlaylistOnlyWithCaptions(t *testing.T) {
+	r := &rendition{spec: Rendition{Video: "720", Audio: "aac2"}, dir: t.TempDir()}
+	f := &feed{channel: store.SourceChannel{Channel: store.Channel{ID: 7}}, renditions: map[string]*rendition{r.spec.Key(): r}}
+	h := &Hub{channels: map[int64]*feed{7: f}}
+	if s := h.sessionLocked(f, r); s.MainPlaylist != "" {
+		t.Fatalf("mainPlaylist without captions: %q", s.MainPlaylist)
+	}
+	if _, err := h.MainPlaylist(7, r.spec.Key()); err == nil {
+		t.Fatal("main.m3u8 served without captions")
+	}
+	f.captions = newCaptionTrack(0)
+	s := h.sessionLocked(f, r)
+	if want := "/media/live/7/" + r.spec.Key() + "/main.m3u8"; s.MainPlaylist != want {
+		t.Fatalf("mainPlaylist = %q, want %q", s.MainPlaylist, want)
+	}
+	if _, err := h.MainPlaylist(7, r.spec.Key()); err != nil {
+		t.Fatal(err)
 	}
 }

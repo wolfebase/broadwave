@@ -65,16 +65,19 @@ type StreamInfo struct {
 }
 
 type Session struct {
-	ChannelID int64      `json:"channelId"`
-	Playlist  string     `json:"playlist"`
-	Rendition string     `json:"rendition"`
-	Stream    StreamInfo `json:"stream"`
-	Encoder   string     `json:"encoder"`
-	Shared    bool       `json:"shared"`
-	Viewers   int        `json:"viewers"`
-	Frequency int        `json:"frequencyHz"`
-	Program   int        `json:"program"`
-	Tuners    []Tuner    `json:"tuners,omitempty"`
+	ChannelID int64  `json:"channelId"`
+	Playlist  string `json:"playlist"`
+	// MainPlaylist wraps Playlist with its captions track, when the channel's
+	// captions are read. Players load it; readiness checks keep Playlist.
+	MainPlaylist string     `json:"mainPlaylist,omitempty"`
+	Rendition    string     `json:"rendition"`
+	Stream       StreamInfo `json:"stream"`
+	Encoder      string     `json:"encoder"`
+	Shared       bool       `json:"shared"`
+	Viewers      int        `json:"viewers"`
+	Frequency    int        `json:"frequencyHz"`
+	Program      int        `json:"program"`
+	Tuners       []Tuner    `json:"tuners,omitempty"`
 
 	// Fields the current web player reads.
 	Profile   string   `json:"profile"`
@@ -1958,22 +1961,27 @@ func (h *Hub) sessionLocked(f *feed, r *rendition) Session {
 	if spec.Video == "copy" {
 		videoMode = "copy"
 	}
+	var main string
+	if f.captions != nil {
+		main = fmt.Sprintf("/media/live/%d/%s/main.m3u8", f.channel.ID, key)
+	}
 	return Session{
-		ChannelID: f.channel.ID,
-		Playlist:  fmt.Sprintf("/media/live/%d/%s/index.m3u8", f.channel.ID, key),
-		Rendition: key,
-		Stream:    info,
-		Encoder:   h.Encoder,
-		Shared:    shared,
-		Viewers:   viewers,
-		Frequency: f.channel.FrequencyHz,
-		Program:   f.program,
-		Profile:   renditionProfile(spec.Video),
-		Audio:     legacyAudio,
-		Picture:   spec.Mode,
-		VideoMode: videoMode,
-		Hints:     []string{},
-		File:      filepath.Join(r.dir, "index.m3u8"),
+		MainPlaylist: main,
+		ChannelID:    f.channel.ID,
+		Playlist:     fmt.Sprintf("/media/live/%d/%s/index.m3u8", f.channel.ID, key),
+		Rendition:    key,
+		Stream:       info,
+		Encoder:      h.Encoder,
+		Shared:       shared,
+		Viewers:      viewers,
+		Frequency:    f.channel.FrequencyHz,
+		Program:      f.program,
+		Profile:      renditionProfile(spec.Video),
+		Audio:        legacyAudio,
+		Picture:      spec.Mode,
+		VideoMode:    videoMode,
+		Hints:        []string{},
+		File:         filepath.Join(r.dir, "index.m3u8"),
 	}
 }
 

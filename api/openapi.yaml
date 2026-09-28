@@ -1822,6 +1822,12 @@ components:
           description: |
             HLS playlist path, relative to the server origin. Every segment carries
             EXT-X-PROGRAM-DATE-TIME on the channel's shared timeline, identical across renditions.
+        mainPlaylist:
+          type: string
+          description: |
+            Multivariant playlist that pairs `playlist` with an English CC WebVTT track, present
+            when the server reads the channel's captions. Players load this one; readiness checks
+            keep reading `playlist`.
         rendition: { type: string }
         stream: { $ref: "#/components/schemas/StreamInfo" }
         profile: { type: string }
