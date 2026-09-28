@@ -1,6 +1,6 @@
 import XCTest
 
-/// Info, Channels, and Stream, plus a clickpad swipe while the transport bar is hidden.
+/// Channels and Stream, plus a clickpad swipe while the transport bar is hidden.
 /// Opt-in: TEST_RUNNER_BROADWAVE_SERVER and TEST_RUNNER_BROADWAVE_SHOTS.
 final class PlayerPanelTests: XCTestCase {
     private var server: String {
@@ -28,15 +28,6 @@ final class PlayerPanelTests: XCTestCase {
         XCTAssertFalse(menu.label.contains("Start over"), "a fresh picture does not hold the start: \(menu.label)")
 
         try showTabs(app)
-        // The system metadata tab is also named Info and sits at the left. Ours is the next one.
-        try showContent(app, "panel-title", tab: "Info", occurrence: 1)
-        let title = app.descendants(matching: .any)["panel-title"]
-        XCTAssertFalse(title.label.isEmpty, app.debugDescription)
-        let episode = app.descendants(matching: .any)["panel-episode"]
-        XCTAssertTrue(episode.waitForExistence(timeout: 3), "no episode line\n\(app.debugDescription)")
-        XCTAssertFalse(episode.label.isEmpty)
-        shot(app, "info")
-
         try showContent(app, "panel-channels", tab: "Channels")
         shot(app, "channels")
         let rows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "panel-channel-"))
@@ -114,8 +105,8 @@ final class PlayerPanelTests: XCTestCase {
         )
     }
 
-    /// Focuses the named tab. Focusing it shows the page. `occurrence` picks which Info, since the system tab uses that name too.
-    private func showContent(_ app: XCUIApplication, _ identifier: String, tab label: String, occurrence: Int = 0) throws {
+    /// Focuses the named tab. Focusing it shows the page.
+    private func showContent(_ app: XCUIApplication, _ identifier: String, tab label: String) throws {
         let body = app.descendants(matching: .any)[identifier]
         if body.exists {
             return
@@ -123,7 +114,7 @@ final class PlayerPanelTests: XCTestCase {
         if !tabsReady(app) {
             try showTabs(app)
         }
-        focusTab(app, label: label, occurrence: occurrence)
+        focusTab(app, label: label)
         XCTAssertTrue(
             until(3) { body.exists },
             "\(identifier) did not appear\nfocus \(focused(app))\n\(app.debugDescription)"
@@ -137,10 +128,10 @@ final class PlayerPanelTests: XCTestCase {
 
     /// The tab cells carry no label of their own. The remote walks until the focused cell sits on the named text.
     /// A select while this panel is up does not open a tab, so this never clicks.
-    private func focusTab(_ app: XCUIApplication, label: String, occurrence: Int) {
+    private func focusTab(_ app: XCUIApplication, label: String) {
         let target = app.collectionViews["AVInfoMenuCollection"]
             .staticTexts.matching(NSPredicate(format: "label == %@", label))
-            .element(boundBy: occurrence)
+            .firstMatch
         for _ in 0 ..< 8 where !stripHasFocus(app) {
             XCUIRemote.shared.press(.down)
             RunLoop.current.run(until: Date().addingTimeInterval(0.4))

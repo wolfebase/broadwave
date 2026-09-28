@@ -3,12 +3,12 @@ import BroadwaveKit
 import SwiftUI
 import UIKit
 
-/// Info, Channels, and Stream tabs for the Apple TV playback info panel.
+/// Channels and Stream tabs for the Apple TV playback info panel. The system
+/// Info tab comes from the item's metadata, so there is no custom one.
 @MainActor
 enum PlayerPanels {
     static func controllers(store: AppStore, now: NowPlaying, live: LivePlayer) -> [UIViewController] {
         [
-            host("Info", ChannelInfoPanel(), store: store, now: now, live: live),
             host("Channels", ChannelListPanel(), store: store, now: now, live: live),
             host("Stream", StreamFactsPanel(), store: store, now: now, live: live),
         ]
@@ -27,53 +27,6 @@ enum PlayerPanels {
         controller.view.backgroundColor = .clear
         controller.view.accessibilityIdentifier = "panel-\(title.lowercased())"
         return controller
-    }
-}
-
-/// Title, episode, description, and time left for the show on now.
-struct ChannelInfoPanel: View {
-    @Environment(AppStore.self) private var store
-    @Environment(NowPlaying.self) private var nowPlaying
-
-    var body: some View {
-        let airing = nowPlaying.channel.flatMap { store.index.on($0.id, at: store.now) }
-        VStack(alignment: .leading, spacing: 14) {
-            if let channel = nowPlaying.channel {
-                Text("\(channel.displayNumber)  \(channel.displayName)")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("panel-channel")
-            }
-            Text(airing?.title ?? "No listing")
-                .font(.title2.weight(.bold))
-                .accessibilityIdentifier("panel-title")
-            if let episode = ProgramLine.episode(
-                label: airing?.episodeLabel,
-                season: airing?.season,
-                episode: airing?.episode,
-                subtitle: airing?.subtitle
-            ) {
-                Text(episode)
-                    .font(.title3)
-                    .accessibilityIdentifier("panel-episode")
-            }
-            if let description = airing?.description?.trimmingCharacters(in: .whitespacesAndNewlines), !description.isEmpty {
-                Text(description)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("panel-description")
-            }
-            if let airing {
-                Text(airing.minutesLeft(at: store.now))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("panel-left")
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(28)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 

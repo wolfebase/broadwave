@@ -263,11 +263,18 @@ final class LivePlayer {
 
     /// Jump to a show's start. Pausing first is the viewer's pause, so sync
     /// leaves this screen where it landed instead of pulling it back to live.
+    /// The engine notices the pause on a later tick; seeking before it has
+    /// would be undone.
     func jump(to date: Date) {
         player.pause()
         let token = watchToken
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(400))
+            for _ in 0 ..< 30 {
+                try? await Task.sleep(for: .milliseconds(100))
+                if sync == nil || sync?.detached == true {
+                    break
+                }
+            }
             guard token == watchToken, player.currentItem != nil else { return }
             player.seek(to: date) { [weak self] finished in
                 Task { @MainActor in
@@ -610,8 +617,13 @@ final class LivePlayer {
         }
         var out = [item(.commonIdentifierTitle, airing?.title ?? channel.displayName)]
         out.append(item(.iTunesMetadataTrackSubTitle, "\(channel.displayNumber) \(channel.displayName)"))
-        if let d = airing?.description {
-            out.append(item(.commonIdentifierDescription, d))
+        // The system Info tab shows the description, so the episode line leads it.
+        let episode = airing.flatMap {
+            ProgramLine.episode(label: $0.episodeLabel, season: $0.season, episode: $0.episode, subtitle: $0.subtitle)
+        }
+        let about = [episode, airing?.description].compactMap(\.self).joined(separator: "\n\n")
+        if !about.isEmpty {
+            out.append(item(.commonIdentifierDescription, about))
         }
         return out
     }
