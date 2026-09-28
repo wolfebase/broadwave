@@ -135,6 +135,16 @@ test("a quad kept for Back lets every tile go and watches again", async ({ page 
   const diag = (await (await fetch(`${base}/api/v1/diagnostics`)).json()) as { encoder?: { tiles?: number } };
   test.skip((diag.encoder?.tiles ?? 0) < 3, "needs three pictures");
   expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBe(true);
+  const watchLog: { at: number; channel: number }[] = [];
+  page.on("request", (req) => {
+    if (req.method() !== "POST" || !req.url().endsWith("/api/v1/watch")) return;
+    try {
+      const body = JSON.parse(req.postData() || "{}") as { channelId?: number };
+      watchLog.push({ at: Date.now(), channel: body.channelId ?? 0 });
+    } catch {
+      watchLog.push({ at: Date.now(), channel: 0 });
+    }
+  });
   await page.addInitScript(() => {
     const mark = window as Window & { __bf?: { type: string; persisted: boolean; path: string }[] };
     mark.__bf = [];
@@ -173,6 +183,22 @@ test("a quad kept for Back lets every tile go and watches again", async ({ page 
     };
   });
   expect(kept).toEqual({ hide: true, show: true });
+  // The socket drop used to restart the quiet-tile wait, so the other tiles
+  // asked only after the sound tile's watch returned. They ask with it now.
+  await expect
+    .poll(() => watchLog.filter((row) => row.at >= back).length, { timeout: 1_000, message: "three watches after Back" })
+    .toBeGreaterThanOrEqual(3);
+  const firstAsk = new Map<number, number>();
+  for (const row of watchLog) {
+    if (row.at < back || firstAsk.has(row.channel)) continue;
+    firstAsk.set(row.channel, row.at);
+  }
+  const soundAt = firstAsk.get(1);
+  const gaps = [2, 3].map((channel) => (firstAsk.get(channel) ?? 0) - (soundAt ?? 0));
+  console.log(`quad back ask gaps ${gaps.join(",")} ms`);
+  expect(soundAt, "the sound tile asks again").toBeTruthy();
+  for (const channel of [2, 3]) expect(firstAsk.has(channel), `channel ${channel} asks again`).toBe(true);
+  for (const gap of gaps) expect(Math.abs(gap)).toBeLessThan(200);
   await expect.poll(() => tilesMoving(page), { timeout: Math.max(500, 5_000 - (Date.now() - back)), message: "three tiles are playing again" }).toBe(3);
   await expect(page.getByRole("group", { name: "4.1 KBWV, sound on" })).toBeVisible();
   await expect(page.locator(".mv-error")).toHaveCount(0);

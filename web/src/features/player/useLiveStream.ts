@@ -8,6 +8,7 @@ import { liveHlsConfig, type BufferProfile } from "../../picture";
 import { rememberChannel } from "../../recent";
 import { applySound } from "./extras";
 import { followCaptions, watchTimeline } from "./liveCaptions";
+import { holdQuietStart } from "./quietStart";
 import { awayBeforeSeekMs, resumePlan } from "./resume";
 import {
   aTunerAnswers,
@@ -103,6 +104,8 @@ export function useLiveStream(
     afterRef.current = !!after;
   }, [after]);
   const held = useRef(false);
+  // A page kept for Back. The watch effect reads it and drops it after this turn.
+  const pageKept = useRef(false);
   // A player with no watch when the server came back asks after the ones that
   // had a picture, so theirs is not the one a full picture budget turns away.
   const askLast = useRef(false);
@@ -127,7 +130,14 @@ export function useLiveStream(
     let hls: Hls | null = null;
     const id = channelId;
     watching.current = false;
-    if (afterRef.current) {
+    const kept = pageKept.current;
+    // Strict mode runs this effect twice before microtasks. The flag stays
+    // through both, then a later watch waits for the sound tile again.
+    if (kept)
+      queueMicrotask(() => {
+        pageKept.current = false;
+      });
+    if (holdQuietStart(afterRef.current, kept)) {
       held.current = true;
       retrying.current = false;
       return;
@@ -358,6 +368,7 @@ export function useLiveStream(
       if (retrying.current) return;
       retrying.current = true;
       quietRetry.current = id;
+      pageKept.current = true;
       setAttempt((n) => n + 1);
     };
     // A frozen or hidden tab does not move the playhead. The room does. On
