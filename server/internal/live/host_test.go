@@ -370,10 +370,10 @@ func TestMeasureHostTreatsATimedOutBenchAsSlow(t *testing.T) {
 }
 
 func TestPreferSoftwareNeedsRoomToSpare(t *testing.T) {
-	if !PreferSoftware(Host{Speed: 3.4}) {
+	if !PreferSoftware(3.4) {
 		t.Fatal("a CPU at 3.4x should carry live TV")
 	}
-	if PreferSoftware(Host{Speed: 1.8}) || PreferSoftware(Host{}) {
+	if PreferSoftware(1.8) || PreferSoftware(0) {
 		t.Fatal("a slow or unmeasured CPU leaves live TV on the GPU")
 	}
 }

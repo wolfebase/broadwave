@@ -182,13 +182,13 @@ func (h Host) Line() string {
 	return b.String()
 }
 
-// softwareFirst is the 1080p60 speed at which a CPU encode is preferred to a
-// GPU. A live 1080i channel with field-rate deinterlacing runs about as fast
-// as the bench, so 2.5x leaves room for a second picture and a busy host.
+// softwareFirst is the BenchLive speed at which a CPU encode is preferred to
+// a GPU. A broadcast runs about 20% slower than the bench, so 2.5x holds two
+// live 1080i pictures.
 const softwareFirst = 2.5
 
-// PreferSoftware reports whether a measured CPU should carry live encodes
-// instead of a GPU that other apps on the server share.
-func PreferSoftware(sw Host) bool {
-	return sw.Speed >= softwareFirst
+// PreferSoftware reports whether a CPU that ran BenchLive at speed should
+// carry live encodes instead of a GPU that other apps on the server share.
+func PreferSoftware(speed float64) bool {
+	return speed >= softwareFirst
 }

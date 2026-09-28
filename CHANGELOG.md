@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- A server with a GPU and a fast processor now checks the processor with the encode live TV actually runs. The old check timed a different encode, counted process startup, and read 2.3x on a machine that runs live TV at 3.1x, so live TV stayed on a GPU that Plex was saturating.
 - An Apple TV that fell a second or more behind the others skipped every minute trying to catch up: a forward jump on Apple TV lands short. It now jumps past the others and pauses the exact difference, once, and if that misses twice it stops correcting and offers "Back in sync" instead of skipping (with the next app update).
 - Apple TVs wait for the TV to finish switching to the channel's frame rate before lining up again.
 
