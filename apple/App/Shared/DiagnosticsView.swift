@@ -11,6 +11,10 @@ struct DiagnosticsView: View {
     @State private var checking = false
     @State private var note = ""
     @State private var loaded = false
+    #if os(tvOS)
+        /// The sidebar stays open over a pushed page until something in that page has focus.
+        @FocusState private var firstRow: Bool
+    #endif
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -23,12 +27,13 @@ struct DiagnosticsView: View {
         Form {
             Section {
                 if !loaded {
-                    Text("Checking…")
+                    firstLine("Checking…")
                         .foregroundStyle(.secondary)
                 } else if notes.isEmpty {
-                    Text("Nothing needs attention.")
+                    firstLine("Nothing needs attention.")
                 } else {
-                    ForEach(notes, id: \.id) { item in
+                    firstLine(notes[0].message)
+                    ForEach(Array(notes.dropFirst()), id: \.id) { item in
                         Text(item.message)
                     }
                 }
@@ -113,7 +118,32 @@ struct DiagnosticsView: View {
         }
         .navigationTitle("Diagnostics")
         .task { await load() }
+        #if os(tvOS)
+            .onAppear { firstRow = true }
+            .task(id: firstRowKey) {
+                // The sidebar takes focus on the same turn a page appears and clears a focus set then.
+                try? await Task.sleep(for: .milliseconds(200))
+                firstRow = true
+            }
+        #endif
     }
+
+    /// The first Fix these row. On Apple TV it takes focus so the sidebar closes.
+    private func firstLine(_ message: String) -> some View {
+        Text(message)
+            .accessibilityIdentifier("diagnostics-first")
+        #if os(tvOS)
+            .focusable()
+            .focused($firstRow)
+        #endif
+    }
+
+    #if os(tvOS)
+        private var firstRowKey: String {
+            guard loaded else { return "loading" }
+            return notes.first?.id ?? "clear"
+        }
+    #endif
 
     private func openAntenna(_ proxy: ScrollViewProxy) {
         #if DEBUG
