@@ -294,6 +294,14 @@ final class TilePlayer {
     var viewerPaused = false
     private var stuckSince: Date?
     private var lastReplay: Date?
+    private var restartToken: (socket: EventSocket, id: UUID)?
+    /// A watch started while the old picture played on, for the next start to use.
+    private var preparedSession: WatchSession?
+    private var rewatch: (() async throws -> WatchSession)?
+    private var handingOff = false
+    /// The server restarted, so `session` names a watch the new process never had.
+    /// Stopping it by rendition would take a viewer from a live watch.
+    private var sessionLost = false
     /// Written by the player layer when a picture is actually on screen.
     let frameOnScreen = FrameOnScreen()
 
@@ -339,13 +347,24 @@ final class TilePlayer {
             },
             onMessage: { [weak self] decision in self?.showOutage(decision) },
             onRecover: { [weak self] quiet in
-                guard let self else { return }
+                guard let self, !handingOff else { return }
                 quietRetry = quiet
                 attempt += 1
             }
         )
+        listenForRestart(store.socket)
+        rewatch = { try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: prefs, confirmLive: false) }
+        let prepared = preparedSession?.channelId == channel.id ? preparedSession : nil
+        if let stale = preparedSession, prepared == nil {
+            await api.stopWatching(channelID: stale.channelId, rendition: stale.rendition)
+        }
+        preparedSession = nil
         do {
-            let session = try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: prefs, confirmLive: allow)
+            let session: WatchSession = if let prepared {
+                prepared
+            } else {
+                try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: prefs, confirmLive: allow)
+            }
             guard !Task.isCancelled, token == startToken, channelID == channel.id else {
                 await api.stopWatching(channelID: channel.id, rendition: session.rendition)
                 return
@@ -605,7 +624,49 @@ final class TilePlayer {
         driftMS = Int(sync.drift.rounded())
     }
 
+    private func listenForRestart(_ socket: EventSocket?) {
+        if let restartToken {
+            restartToken.socket.off("restarted", restartToken.id)
+        }
+        restartToken = nil
+        guard let socket else { return }
+        let id = socket.on("restarted") { [weak self] _ in
+            guard let self, !handingOff, session != nil else { return }
+            print("broadwave tile \(channelID ?? 0) restarted")
+            Task { await self.handOff() }
+        }
+        restartToken = (socket, id)
+    }
+
+    /// See `RestartHandoff`. The tile keeps its old picture while the new watch fills.
+    private func handOff() async {
+        handingOff = true
+        defer { handingOff = false }
+        let token = startToken
+        guard let api, let rewatch, let id = channelID else { return }
+        sessionLost = true
+        // Its room went with the old process.
+        sync?.stop()
+        sync = nil
+        if let next = await RestartHandoff.prepare(api: api, player: player, rewatch: rewatch, current: { token == startToken }) {
+            guard token == startToken, channelID == id else {
+                await api.stopWatching(channelID: id, rendition: next.session.rendition)
+                return
+            }
+            print("broadwave tile \(id) handoff \(next.ready ? "ready" : "early") old=\(String(format: "%.1f", RestartHandoff.bufferedAhead(player)))s")
+            fflush(stdout)
+            preparedSession = next.session
+        }
+        guard token == startToken else { return }
+        quietRetry = true
+        attempt += 1
+    }
+
     func stop(endPicture: Bool = true) async {
+        if let restartToken {
+            restartToken.socket.off("restarted", restartToken.id)
+        }
+        restartToken = nil
         outageLoop?.cancel()
         outageLoop = nil
         if endPicture {
@@ -620,14 +681,22 @@ final class TilePlayer {
         player.pause()
         player.replaceCurrentItem(with: nil)
         let id = channelID
-        let ended = session
+        let ended = sessionLost ? nil : session
+        let prepared = endPicture ? preparedSession : nil
+        if endPicture {
+            preparedSession = nil
+        }
         channelID = nil
         session = nil
+        sessionLost = false
         canHear = false
         moving = false
         movingFrom = nil
         if let api, let id, let ended {
             await api.stopWatching(channelID: id, rendition: ended.rendition)
+        }
+        if let api, let prepared {
+            await api.stopWatching(channelID: prepared.channelId, rendition: prepared.rendition)
         }
     }
 

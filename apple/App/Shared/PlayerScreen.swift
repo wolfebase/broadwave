@@ -252,9 +252,6 @@ final class LivePlayer {
         restartToken = (socket, id)
     }
 
-    /// The old item plays on from its buffer while the new watch fills. The swap
-    /// waits until AVPlayer can start the new playlist, so a restart costs a
-    /// short cut instead of a whole fresh-tune start on a frozen picture.
     private func handOff() async {
         handingOff = true
         defer { handingOff = false }
@@ -268,36 +265,17 @@ final class LivePlayer {
         // Its room went with the old process.
         sync?.stop()
         sync = nil
-        if let next = try? await rewatch() {
-            // Swap when the new playlist can start, or just before the old picture runs dry.
-            let deadline = Date().addingTimeInterval(8)
-            var ready = false
-            while Date() < deadline, token == watchToken, bufferedAhead() > 0.5 {
-                if let text = await api.playlistText(next.playlist), LiveReadiness.ready(text) {
-                    ready = true
-                    break
-                }
-                try? await Task.sleep(for: .milliseconds(250))
-            }
+        if let next = await RestartHandoff.prepare(api: api, player: player, rewatch: rewatch, current: { token == watchToken }) {
             guard token == watchToken, channelID == id else {
-                await api.stopWatching(channelID: id, rendition: next.rendition)
+                await api.stopWatching(channelID: id, rendition: next.session.rendition)
                 return
             }
-            playLogNote("handoff \(ready ? "ready" : "early") old=\(String(format: "%.1f", bufferedAhead()))s")
-            preparedSession = next
+            playLogNote("handoff \(next.ready ? "ready" : "early") old=\(String(format: "%.1f", RestartHandoff.bufferedAhead(player)))s")
+            preparedSession = next.session
         }
         guard token == watchToken else { return }
         quietRetry = true
         attempt += 1
-    }
-
-    /// Seconds of picture the current item holds past the playhead.
-    private func bufferedAhead() -> Double {
-        guard let item = player.currentItem else { return 0 }
-        let now = item.currentTime().seconds
-        let end = item.loadedTimeRanges.map(\.timeRangeValue).filter { $0.containsTime(item.currentTime()) }.map(\.end.seconds).max()
-        guard let end, now.isFinite, end.isFinite else { return 0 }
-        return max(0, end - now)
     }
 
     func stop(endPicture: Bool = true) async {
