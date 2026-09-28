@@ -86,3 +86,31 @@ private func planned(skipped: Bool = false, reason: String? = nil, later: Sugges
     bare.guideNumber = nil
     #expect(!planned().laterLine(bare).contains(" on 5.1"))
 }
+
+@Test func aBreakReadsAsAClockSpan() {
+    #expect(Marker(id: 1, start: 90, end: 120.4).span == "1:30–2:00")
+    #expect(Marker(id: 2, start: 3599.6, end: 3725).span == "1:00:00–1:02:05")
+    #expect(Marker(id: 3, start: -1, end: 5).span == "0:00–0:05")
+}
+
+@Test func aNewLibraryChannelTakesTheFirstFreeNumberFrom900() {
+    let taken = [
+        VirtualChannel(id: 1, number: "900", name: "A", recordings: []),
+        VirtualChannel(id: 2, number: "902", name: "B", recordings: []),
+    ]
+    #expect(VirtualChannel.nextNumber(after: []) == "900")
+    #expect(VirtualChannel.nextNumber(after: taken) == "901")
+    #expect(VirtualChannel.nextNumber(after: taken + [VirtualChannel(id: 3, number: "901", name: "C", recordings: [])]) == "903")
+}
+
+@Test func libraryChannelPlaybackDecodesTheServerAnswer() throws {
+    let play = try APIClient.decoder.decode(VirtualPlayback.self, from: Data("""
+    {"usesTuner":false,"index":1,"count":2,"playlist":"/play/7/index.m3u8","number":"900","name":"Jeopardy! channel",
+     "recording":{"channelId":1,"guideNumber":"4.1","id":7,"startedAt":"2026-09-24T15:00:00Z","status":"complete","title":"Jeopardy!"},
+     "markers":[{"id":2,"recordingId":7,"start":90,"end":120}]}
+    """.utf8))
+    #expect(play.usesTuner == false)
+    #expect(play.recording.id == 7)
+    #expect(play.count == 2)
+    #expect(play.markers?.first?.recordingId == 7)
+}

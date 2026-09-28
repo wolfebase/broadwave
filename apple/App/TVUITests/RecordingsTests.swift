@@ -20,11 +20,11 @@ final class RecordingsTests: XCTestCase {
 
         XCTAssertTrue(openMenu(app, showing: "Mark unwatched"), "no menu, focus on \(focused(app))")
         // Menu entries do not report focus, so the remote moves by position:
-        // Delete is third in the menu. The dialog starts on Cancel, with Delete this file to its right.
-        XCUIRemote.shared.press(.down)
-        wait(0.5)
-        XCUIRemote.shared.press(.down)
-        wait(0.5)
+        // Delete is fourth in the menu. The dialog starts on Cancel, with Delete this file to its right.
+        for _ in 0 ..< 3 {
+            XCUIRemote.shared.press(.down)
+            wait(0.5)
+        }
         XCUIRemote.shared.press(.select)
         XCTAssertTrue(entry(app, "Delete this file").waitForExistence(timeout: 5), "no confirmation")
         XCUIRemote.shared.press(.right)
@@ -75,6 +75,86 @@ final class RecordingsTests: XCTestCase {
         let position = try leavePlayer(server) { $0["id"] as? Int == id }
         let passed = position >= 39.5
         XCTAssertTrue(passed, "saved position \(position): Skip break did not skip")
+    }
+
+    /// Make a channel turns "Harness Movie" into a library channel, which plays from the list
+    /// without a tuner. In its player the transport bar marks a break by hand and removes it.
+    func testMakeAChannelThenMarkABreak() throws {
+        let server = try serverURL()
+        let app = launch(server)
+        _ = try focusRow(app, "Harness Movie")
+        XCTAssertTrue(openMenu(app, showing: "Make a channel"), "no menu, focus on \(focused(app))")
+        XCUIRemote.shared.press(.down)
+        wait(0.5)
+        XCUIRemote.shared.press(.select)
+        let library = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Harness Movie channel")).firstMatch
+        XCTAssertTrue(library.waitForExistence(timeout: 10), "no library channel listed")
+        let made = try get(server, "/api/v1/virtuals")["virtuals"] as? [[String: Any]] ?? []
+        XCTAssertEqual(made.first?["name"] as? String, "Harness Movie channel")
+        for _ in 0 ..< 8 where !focused(app).contains("Harness Movie channel") {
+            XCUIRemote.shared.press(.up)
+            wait(0.5)
+        }
+        XCTAssertTrue(focused(app).contains("Harness Movie channel"), "focus on \(focused(app))")
+        XCUIRemote.shared.press(.select)
+        wait(8)
+        shot("BROADWAVE_SHOT")
+        let tuners = try get(server, "/api/v1/tuners")["tuners"] as? [[String: Any]] ?? []
+        XCTAssertFalse(tuners.contains { $0["ours"] as? Bool == true }, "a library channel took a tuner")
+
+        // AVKit keeps the transport bar's own entries out of the accessibility tree, so the
+        // remote moves by position: Up from the scrubber lands on the first entry, and the
+        // player's note says what happened.
+        let recording = try XCTUnwrap(made.first?["recordings"] as? [Int]).first ?? 0
+        pressEntry(0)
+        XCTAssertTrue(note(app, "Break starts at").waitForExistence(timeout: 5), "no start mark: \(app.debugDescription)")
+        XCUIRemote.shared.press(.playPause)
+        wait(4)
+        pressEntry(0)
+        XCTAssertTrue(note(app, "Marked a break").waitForExistence(timeout: 5), "no break marked")
+        let marks = try get(server, "/api/v1/recordings/\(recording)/markers")["markers"] as? [[String: Any]] ?? []
+        XCTAssertEqual(marks.count, 1)
+        let length = (marks.first?["end"] as? Double ?? 0) - (marks.first?["start"] as? Double ?? 0)
+        XCTAssertTrue(length > 2 && length < 8, "marked \(length) s")
+        shot("BROADWAVE_SHOT_BAR")
+
+        // Remove a break is the second entry and opens a list of the breaks.
+        pressEntry(1)
+        wait(1)
+        shot("BROADWAVE_SHOT_BAR2")
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(note(app, "Removed the break").waitForExistence(timeout: 5), "no break removed")
+        let left = try get(server, "/api/v1/recordings/\(recording)/markers")["markers"] as? [[String: Any]] ?? []
+        XCTAssertTrue(left.isEmpty, "\(left)")
+    }
+
+    /// Pauses to bring up the transport bar, then selects its entry at `index`. The
+    /// entries sit above the scrubber on the right.
+    private func pressEntry(_ index: Int) {
+        XCUIRemote.shared.press(.playPause)
+        wait(1.5)
+        XCUIRemote.shared.press(.up)
+        wait(0.8)
+        for _ in 0 ..< index {
+            XCUIRemote.shared.press(.right)
+            wait(0.5)
+        }
+        XCUIRemote.shared.press(.select)
+    }
+
+    private func note(_ app: XCUIApplication, _ start: String) -> XCUIElement {
+        app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", start)).firstMatch
+    }
+
+    private func get(_ server: String, _ path: String) throws -> [String: Any] {
+        let data = try Data(contentsOf: URL(string: server + path)!)
+        return try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+    }
+
+    private func shot(_ key: String) {
+        if let path = ProcessInfo.processInfo.environment[key] {
+            try? XCUIScreen.main.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: path))
+        }
     }
 
     /// Coming up shows the skipped airing and records the later one instead.

@@ -245,6 +245,33 @@ public struct APIClient: Sendable {
         return try await send("POST", "/recordings/\(recordingID)/detect", body: [String: String](), timeout: 600, as: R.self).markers
     }
 
+    public func addMarker(recordingID: Int64, start: Double, end: Double) async throws -> Marker {
+        struct B: Encodable { var start: Double; var end: Double }
+        return try await send("POST", "/recordings/\(recordingID)/markers", body: B(start: start, end: end))
+    }
+
+    public func deleteMarker(_ id: Int64) async throws {
+        struct Ok: Decodable {}
+        _ = try await send("DELETE", "/markers/\(id)", as: Ok.self)
+    }
+
+    // MARK: Library channels
+
+    public func virtuals() async throws -> [VirtualChannel] {
+        struct R: Decodable { var virtuals: [VirtualChannel] }
+        return try await send("GET", "/virtuals", as: R.self).virtuals
+    }
+
+    public func createVirtual(number: String, name: String, recordings: [Int64]) async throws -> VirtualChannel {
+        struct B: Encodable { var number: String; var name: String; var recordings: [Int64] }
+        return try await send("POST", "/virtuals", body: B(number: number, name: name, recordings: recordings))
+    }
+
+    public func playVirtual(_ id: Int64, index: Int) async throws -> VirtualPlayback {
+        struct B: Encodable { var index: Int }
+        return try await send("POST", "/virtuals/\(id)/play", body: B(index: index))
+    }
+
     public func saveProgress(recordingID: Int64, position: Double) async {
         struct B: Encodable { var position: Double }
         struct R: Decodable {}

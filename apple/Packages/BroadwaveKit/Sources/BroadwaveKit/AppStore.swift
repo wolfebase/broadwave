@@ -15,6 +15,8 @@ public final class AppStore {
     public private(set) var channels: [Channel] = []
     public private(set) var index = GuideIndex([])
     public private(set) var recordings: [Recording] = []
+    /// Library channels: recordings played around the clock without a tuner.
+    public private(set) var virtuals: [VirtualChannel] = []
     public private(set) var passes: [Pass] = []
     /// Channel ids whose preview JPEG is already on the server.
     public private(set) var frameIDs: Set<Int64> = []
@@ -303,6 +305,23 @@ public final class AppStore {
     public func refreshRecordings() async {
         guard let api, let list = try? await api.recordings() else { return }
         recordings = list
+    }
+
+    public func refreshVirtuals() async {
+        guard let api, let list = try? await api.virtuals() else { return }
+        virtuals = list
+    }
+
+    /// Makes a library channel that plays one recording, numbered like the web does it.
+    public func makeChannel(from recording: Recording) async throws -> VirtualChannel {
+        guard let api else { throw APIError(code: "offline", message: "Not connected to a server.", status: 0) }
+        // The server does not keep numbers unique, so a stale list could hand out 900 twice.
+        virtuals = try await api.virtuals()
+        let made = try await api.createVirtual(
+            number: VirtualChannel.nextNumber(after: virtuals), name: "\(recording.title) channel", recordings: [recording.id]
+        )
+        await refreshVirtuals()
+        return made
     }
 
     /// Channels with a preview newer than ten minutes. A miss keeps the last list.

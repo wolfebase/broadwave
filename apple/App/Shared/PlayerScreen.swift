@@ -995,6 +995,28 @@ struct ChannelMenuEntry: Identifiable {
     let action: () -> Void
 }
 
+/// A recording's menu entry: an action, or a menu of actions when it has children.
+struct FileMenuEntry: Identifiable {
+    let id: String
+    let title: String
+    let symbol: String
+    /// What VoiceOver reads when the title leans on its menu, as a break's times do.
+    var spoken: String?
+    var children: [FileMenuEntry] = []
+    var action: () -> Void = {}
+
+    #if os(tvOS)
+        @MainActor var element: UIMenuElement {
+            if children.isEmpty {
+                let item = UIAction(title: title, image: UIImage(systemName: symbol)) { _ in action() }
+                item.accessibilityLabel = spoken
+                return item
+            }
+            return UIMenu(title: title, image: UIImage(systemName: symbol), children: children.map(\.element))
+        }
+    #endif
+}
+
 /// AVPlayerViewController: system PiP, AirPlay, captions, audio tracks, and Now Playing.
 struct SystemPlayer: UIViewControllerRepresentable {
     let player: AVPlayer
@@ -1010,6 +1032,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
     var skipBreak: (() -> Void)?
     /// A recording has no channels, audio picks, stream panel, or side by side.
     var liveMenu = true
+    /// A recording's own entries, shown instead of the live menu.
+    var fileMenu: [FileMenuEntry] = []
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -1076,9 +1100,10 @@ struct SystemPlayer: UIViewControllerRepresentable {
                 ]
             }
             guard liveMenu else {
-                if !vc.transportBarCustomMenuItems.isEmpty {
-                    vc.transportBarCustomMenuItems = []
-                }
+                let key = fileMenu.flatMap { entry in ["\(entry.id) \(entry.title)"] + entry.children.map { "\($0.id) \($0.title)" } }
+                guard key != context.coordinator.menuKey else { return }
+                context.coordinator.menuKey = key
+                vc.transportBarCustomMenuItems = fileMenu.map(\.element)
                 return
             }
             // Setting the items redraws the transport bar and keeps it on screen,
@@ -1335,25 +1360,65 @@ private func joinFacts(_ parts: [String?]) -> String {
     return line.isEmpty ? "Waiting" : line
 }
 
+private struct TunerUsed: LocalizedError {
+    var errorDescription: String? {
+        "This library channel tried to use an antenna tuner."
+    }
+}
+
+/// Plays a recording, or a library channel's recordings one after another. Neither uses a tuner.
 struct RecordingPlayerScreen: View {
+    enum Source {
+        case recording(Recording)
+        case library(VirtualChannel)
+    }
+
     @Environment(AppStore.self) private var store
-    let recording: Recording
+    let source: Source
     @State private var player = AVPlayer()
     @State private var error: String?
+    @State private var note: String?
+    /// Counts notes, so saying the same thing again shows it for the full time.
+    @State private var noteCount = 0
+    /// The recording on screen, and for a library channel its place in the channel.
+    @State private var current: Recording?
+    @State private var index = 0
+    @State private var count = 1
     @State private var markers: [Marker] = []
     @State private var inBreak: Marker?
     /// The break just skipped. It is not skipped or offered again until playback leaves it,
     /// so a seek in flight does not bring the button back and a break that runs to the end
     /// of the file is not sought forever.
     @State private var passed: Int64?
+    /// Where a break the viewer is marking by hand starts.
+    @State private var breakStart: Double?
     @AppStorage(BreakSkip.key) private var skip = BreakSkip.auto
 
+    init(recording: Recording) {
+        source = .recording(recording)
+    }
+
+    init(channel: VirtualChannel) {
+        source = .library(channel)
+    }
+
     var body: some View {
-        SystemPlayer(player: player, skipBreak: inBreak.map { marker in { Task { await skipPast(marker) } } }, liveMenu: false)
+        SystemPlayer(player: player, skipBreak: inBreak.map { marker in { Task { await skipPast(marker) } } }, liveMenu: false, fileMenu: menu)
             .ignoresSafeArea()
             .overlay {
                 if let error {
                     Text(error).padding().glassEffect()
+                }
+            }
+            .overlay(alignment: .top) {
+                if let note {
+                    Text(note)
+                        .font(.subheadline)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .glassEffect()
+                        .padding(.top, 60)
+                        .allowsHitTesting(false)
                 }
             }
         #if os(iOS)
@@ -1367,38 +1432,204 @@ struct RecordingPlayerScreen: View {
                     .padding(.bottom, 110)
                 }
             }
-        #endif
-            .task {
-                guard let api = store.api else { return }
-                do {
-                    let start = try await api.play(recordingID: recording.id)
-                    let item = AVPlayerItem(url: api.url(start.playlist))
-                    PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
-                    player.replaceCurrentItem(with: item)
-                    markers = start.markers ?? []
-                    if start.position > 5 {
-                        await player.seek(to: CMTime(seconds: start.position, preferredTimescale: 600))
+            .toolbar {
+                ForEach(menu.filter { $0.id == "next" }) { entry in
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(entry.title, systemImage: entry.symbol) { entry.action() }
                     }
-                    player.play()
-                } catch {
-                    self.error = PlaybackOutage.viewerMessage(error.localizedDescription)
-                    return
                 }
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: .milliseconds(250))
+                if menu.contains(where: { $0.id != "next" }) {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu("Breaks", systemImage: "scissors") {
+                            ForEach(menu.filter { $0.id != "next" }) { entry in
+                                if entry.children.isEmpty {
+                                    Button(entry.title, systemImage: entry.symbol) { entry.action() }
+                                } else {
+                                    Menu(entry.title, systemImage: entry.symbol) {
+                                        ForEach(entry.children) { child in
+                                            Button(child.title) { child.action() }
+                                                .accessibilityLabel(child.spoken ?? child.title)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .accessibilityIdentifier("recording-menu")
+                    }
+                }
+            }
+        #endif
+            .task(id: index) {
+                guard await load() else { return }
+                while await (try? Task.sleep(for: .milliseconds(250))) != nil {
                     await followBreaks()
                 }
+            }
+            .task(id: noteCount) {
+                guard note != nil else { return }
+                try? await Task.sleep(for: .seconds(4))
+                if !Task.isCancelled {
+                    note = nil
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification).receive(on: DispatchQueue.main)) { sent in
+                // A library channel goes on to its next recording, as the web does. The last one stays.
+                guard case .library = source, (sent.object as? AVPlayerItem) === player.currentItem, index + 1 < count else { return }
+                index += 1
             }
             .onDisappear {
                 let pos = player.currentTime().seconds
                 player.pause()
-                if let api = store.api, pos.isFinite, pos > 0 {
-                    Task { await api.saveProgress(recordingID: recording.id, position: pos) }
+                if case let .recording(rec) = source, let api = store.api, pos.isFinite, pos > 0 {
+                    Task { await api.saveProgress(recordingID: rec.id, position: pos) }
                 }
             }
         #if os(iOS)
             .toolbarVisibility(.hidden, for: .tabBar)
         #endif
+    }
+
+    /// Starts the recording on screen. A library channel asks the server for the one at `index`.
+    /// A load the viewer has already moved past changes nothing.
+    private func load() async -> Bool {
+        guard let api = store.api else { return false }
+        passed = nil
+        inBreak = nil
+        breakStart = nil
+        do {
+            let rec: Recording
+            let found: [Marker]
+            let playlist: String
+            var position = 0.0
+            var total = 1
+            switch source {
+            case let .recording(one):
+                let start = try await api.play(recordingID: one.id)
+                (rec, found, playlist, position) = (one, start.markers ?? [], start.playlist, start.position)
+            case let .library(channel):
+                let start = try await api.playVirtual(channel.id, index: index)
+                guard start.usesTuner != true else {
+                    throw TunerUsed()
+                }
+                (rec, found, playlist, total) = (start.recording, start.markers ?? [], start.playlist, max(1, start.count))
+            }
+            guard !Task.isCancelled else { return false }
+            error = nil
+            current = rec
+            markers = found
+            count = total
+            let item = AVPlayerItem(url: api.url(playlist))
+            PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
+            item.externalMetadata = metadata(rec)
+            player.replaceCurrentItem(with: item)
+            if position > 5 {
+                await player.seek(to: CMTime(seconds: position, preferredTimescale: 600))
+            }
+            player.play()
+            return true
+        } catch {
+            guard !Task.isCancelled else { return false }
+            // Nothing half loaded stays behind the message: no picture, breaks, or menu.
+            player.replaceCurrentItem(with: nil)
+            current = nil
+            markers = []
+            self.error = PlaybackOutage.viewerMessage(error.localizedDescription)
+            return false
+        }
+    }
+
+    private func metadata(_ rec: Recording) -> [AVMetadataItem] {
+        let title = AVMutableMetadataItem()
+        title.identifier = .commonIdentifierTitle
+        title.value = (rec.subtitle ?? rec.title) as NSString
+        title.extendedLanguageTag = "und"
+        let line = AVMutableMetadataItem()
+        line.identifier = .iTunesMetadataTrackSubTitle
+        if case let .library(channel) = source {
+            line.value = "\(channel.number) \(channel.name)" as NSString
+        } else {
+            line.value = rec.guideNumber as NSString
+        }
+        line.extendedLanguageTag = "und"
+        return [title, line]
+    }
+
+    /// Next recording, marking a break by hand, and removing one: the transport bar on
+    /// Apple TV, a menu in the bar on iPhone and iPad.
+    private var menu: [FileMenuEntry] {
+        var out: [FileMenuEntry] = []
+        // Next stays when a recording fails to load, so one missing file does not end the channel.
+        if case .library = source, count > 1 {
+            out.append(FileMenuEntry(id: "next", title: "Next recording", symbol: "forward.frame") { index = (index + 1) % count })
+        }
+        guard current != nil else { return out }
+        if let breakStart {
+            out.append(FileMenuEntry(id: "end", title: "Break ends here", symbol: "scissors") { Task { await markEnd(from: breakStart) } })
+            out.append(FileMenuEntry(id: "cancel", title: "Stop marking", symbol: "xmark") { self.breakStart = nil })
+        } else {
+            out.append(FileMenuEntry(id: "start", title: "Break starts here", symbol: "scissors") { markStart() })
+        }
+        if !markers.isEmpty {
+            let children = markers.sorted { $0.start < $1.start }.map { marker in
+                FileMenuEntry(
+                    id: "marker-\(marker.id)", title: marker.span, symbol: "trash",
+                    spoken: "Remove the break from \(Marker.clock(marker.start)) to \(Marker.clock(marker.end))"
+                ) { Task { await remove(marker) } }
+            }
+            out.append(FileMenuEntry(id: "remove", title: "Remove a break", symbol: "trash", children: children))
+        }
+        return out
+    }
+
+    private func markStart() {
+        let time = player.currentTime().seconds
+        guard time.isFinite else { return }
+        breakStart = time
+        say("Break starts at \(Marker.clock(time)). Play to where it ends, then choose \u{201C}Break ends here.\u{201D}")
+    }
+
+    private func markEnd(from start: Double) async {
+        guard let api = store.api, let rec = current else { return }
+        let time = player.currentTime().seconds
+        guard time.isFinite else { return }
+        let (from, to) = (min(start, time), max(start, time))
+        guard to - from >= 1 else {
+            say("A break needs at least a second. Play on, then choose \u{201C}Break ends here.\u{201D}")
+            return
+        }
+        do {
+            let made = try await api.addMarker(recordingID: rec.id, start: from, end: to)
+            // A library channel may have moved on to its next recording meanwhile.
+            guard current?.id == rec.id else { return }
+            breakStart = nil
+            markers.append(made)
+            // The playhead may sit inside the new break when it was marked backward.
+            passed = made.id
+            say("Marked a break, \(made.span).")
+        } catch {
+            say(PlaybackOutage.actionMessage(error))
+        }
+    }
+
+    private func remove(_ marker: Marker) async {
+        guard let api = store.api, let rec = current else { return }
+        do {
+            try await api.deleteMarker(marker.id)
+            guard current?.id == rec.id else { return }
+            markers.removeAll { $0.id == marker.id }
+            if inBreak?.id == marker.id {
+                inBreak = nil
+            }
+            say("Removed the break at \(marker.span).")
+        } catch {
+            say(PlaybackOutage.actionMessage(error))
+        }
+    }
+
+    private func say(_ text: String) {
+        note = text
+        noteCount += 1
+        AccessibilityNotification.Announcement(text).post()
     }
 
     /// Skips a break, offers the skip, or plays it, as the Settings choice says.

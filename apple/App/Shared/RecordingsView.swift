@@ -11,6 +11,7 @@ struct RecordingsView: View {
     #if os(tvOS)
         /// A cover, like live TV: a pushed player would keep the sidebar's handle on the picture.
         @State private var playing: Recording?
+        @State private var playingChannel: VirtualChannel?
     #endif
     #if os(tvOS)
         @Environment(\.tvSelectedTab) private var tvSelectedTab
@@ -25,6 +26,13 @@ struct RecordingsView: View {
                 ScheduleView()
             } label: {
                 Label("Coming up", systemImage: "calendar")
+            }
+            if !store.virtuals.isEmpty {
+                Section("Library channels") {
+                    ForEach(store.virtuals) { channel in
+                        libraryRow(channel)
+                    }
+                }
             }
             if !store.recordings.isEmpty {
                 Picker("Show", selection: $unwatchedOnly) {
@@ -60,8 +68,10 @@ struct RecordingsView: View {
         .navigationTitle("Recordings")
         #if os(tvOS)
             .fullScreenCover(item: $playing) { RecordingPlayerScreen(recording: $0).environment(store) }
+            .fullScreenCover(item: $playingChannel) { RecordingPlayerScreen(channel: $0).environment(store) }
         #else
             .navigationDestination(for: Recording.self) { RecordingPlayerScreen(recording: $0) }
+            .navigationDestination(for: VirtualChannel.self) { RecordingPlayerScreen(channel: $0) }
         #endif
             .confirmationDialog(
                 deleting.map { "Delete \($0.subtitle ?? $0.title)?" } ?? "",
@@ -85,17 +95,51 @@ struct RecordingsView: View {
             .onChange(of: tvSelectedTab) { _, _ in claimRecordingFocus() }
             .onChange(of: store.recordings.isEmpty) { _, _ in claimRecordingFocus() }
         #endif
-            .task { await store.refreshRecordings() }
+            .task {
+                async let recordings: Void = store.refreshRecordings()
+                async let channels: Void = store.refreshVirtuals()
+                _ = await (recordings, channels)
+            }
     }
 
+    /// The row in one sentence, with the same facts it shows: status, date, size, length, Watched.
     private func recordingSpoken(_ rec: Recording) -> String {
         var parts: [String] = []
         if rec.isRecording {
             parts.append("Recording")
         }
         parts.append(rec.subtitle ?? rec.title)
-        parts.append(rec.startedAt.formatted(date: .abbreviated, time: .shortened))
+        parts.append(details(rec).replacingOccurrences(of: " · ", with: ", "))
         return parts.joined(separator: ", ")
+    }
+
+    private func libraryRow(_ channel: VirtualChannel) -> some View {
+        let label = VStack(alignment: .leading, spacing: 4) {
+            Text("\(channel.number) \(channel.name)").font(.headline).lineLimit(1)
+            Text(channel.recordings.count == 1 ? "Plays 1 recording. Uses no tuner." : "Plays \(channel.recordings.count) recordings in turn. Uses no tuner.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+        return Group {
+            #if os(tvOS)
+                Button { playingChannel = channel } label: { label }
+            #else
+                NavigationLink(value: channel) { label }
+            #endif
+        }
+        .accessibilityIdentifier("library-\(channel.id)")
+    }
+
+    private func makeChannel(_ rec: Recording) {
+        Task {
+            do {
+                let made = try await store.makeChannel(from: rec)
+                notice = "Channel \(made.number) now plays \(rec.title) around the clock, without a tuner."
+            } catch {
+                notice = PlaybackOutage.actionMessage(error)
+            }
+        }
     }
 
     private func row(_ rec: Recording) -> some View {
@@ -162,6 +206,9 @@ struct RecordingsView: View {
         } else {
             Button(rec.isWatched ? "Mark unwatched" : "Mark watched", systemImage: rec.isWatched ? "eye.slash" : "eye") {
                 act { try await store.setWatched(rec, !rec.isWatched) }
+            }
+            Button("Make a channel", systemImage: "tv") {
+                makeChannel(rec)
             }
             Button("Find commercials", systemImage: "forward.end") {
                 findBreaks(rec)

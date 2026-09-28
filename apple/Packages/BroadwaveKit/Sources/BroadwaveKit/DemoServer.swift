@@ -321,6 +321,8 @@ public final class DemoServer: @unchecked Sendable {
             return Self.ok(Data("{\"tunerCount\":2,\"items\":[]}".utf8))
         case ("GET", "/api/v1/events"):
             return Self.ok(Data("{\"events\":[]}".utf8))
+        case ("GET", "/api/v1/virtuals"):
+            return Self.ok(Data("{\"virtuals\":[]}".utf8))
         case ("GET", "/api/v1/passes"):
             return Self.ok(Data("{\"passes\":[]}".utf8))
         case ("GET", "/api/v1/teams"):

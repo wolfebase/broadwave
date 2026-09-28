@@ -232,6 +232,44 @@ public enum BreakSkip: String, CaseIterable, Sendable {
     }
 }
 
+public extension Marker {
+    /// "12:30–13:05", or with hours past the first hour, as the break list reads it.
+    var span: String {
+        "\(Self.clock(start))–\(Self.clock(end))"
+    }
+
+    /// "12:30", or "1:02:05" past the first hour.
+    static func clock(_ seconds: Double) -> String {
+        let total = Int(max(0, seconds).rounded())
+        let (h, m, s) = (total / 3600, total / 60 % 60, total % 60)
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
+    }
+}
+
+/// One recording on a library channel, ready to play. It never uses a tuner.
+public struct VirtualPlayback: Codable, Sendable, Hashable {
+    public var usesTuner: Bool?
+    public var index: Int
+    public var count: Int
+    public var playlist: String
+    public var number: String
+    public var name: String
+    public var recording: Recording
+    public var markers: [Marker]?
+}
+
+public extension VirtualChannel {
+    /// The first free number from 900, as the web picks it.
+    static func nextNumber(after taken: [VirtualChannel]) -> String {
+        let used = Set(taken.map(\.number))
+        var n = 900
+        while used.contains(String(n)) {
+            n += 1
+        }
+        return String(n)
+    }
+}
+
 public extension RoomState {
     /// Media time (Unix ms of the frame on screen) the room shows at a server time (Unix ms).
     func target(atServer now: Double) -> Double {
