@@ -54,6 +54,7 @@ docs/appstore/
 docs/brand.md
 docs/screenshots/*
 !docs/screenshots/appstore/
+!docs/screenshots/readme/
 scripts/agent-*.sh
 scripts/agent-view.py
 scripts/unraid-guard.py
