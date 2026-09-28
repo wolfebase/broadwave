@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -22,9 +23,30 @@ type captionTrack struct {
 	mu     sync.Mutex
 	reader *captions.Reader
 	dec    *captions.Decoder
-	cues   []captions.Cue
+	cues   []keptCue
 	last   int64
 	seen   bool
+	// line counts the broadcast's timelines. A clock that goes back and stays
+	// back is a new one, and its timestamps can repeat the old one's.
+	line int
+	// held is a run of pictures off the timeline, kept until pesAgree of them
+	// agree on a new one (the program filter's rule) or the clock comes back.
+	// Past breakLimit a minute the filter follows a break in the same encode,
+	// whose segments stay on the old timeline and get no cues until the next.
+	held []heldPicture
+	// age is the media time read so far, in 90 kHz ticks, across timelines.
+	age int64
+}
+
+type keptCue struct {
+	captions.Cue
+	line int
+	at   int64
+}
+
+type heldPicture struct {
+	pts   int64
+	pairs []byte
 }
 
 func newCaptionTrack(program int) *captionTrack {
@@ -52,19 +74,52 @@ func (c *captionTrack) Close() error { return nil }
 
 // picture runs under c.mu, from Write.
 func (c *captionTrack) picture(pts int64, pairs []byte) {
-	// A station that resets its clock starts a new timeline. Cues from the
-	// old one would land on the wrong pictures.
-	if c.seen {
-		if d := ptsDiff(pts, c.last); d > 90000*3600 || d < -90000*3600 {
-			c.dec = captions.NewDecoder()
-			c.cues = nil
-		}
+	if !c.seen {
+		c.last, c.seen = pts, true
+		c.feed(pts, pairs)
+		return
 	}
-	c.last, c.seen = pts, true
+	if d := ptsDelta(pts, c.last); d <= pesJump && d >= -pesBack {
+		c.held = nil
+		if d > 0 {
+			c.age += d
+		}
+		c.last = pts
+		c.feed(pts, pairs)
+		return
+	}
+	if len(c.held) > 0 && ptsGap(pts, c.held[len(c.held)-1].pts) <= pesJump {
+		c.held = append(c.held, heldPicture{pts, append([]byte(nil), pairs...)})
+	} else {
+		c.held = []heldPicture{{pts, append([]byte(nil), pairs...)}}
+	}
+	if len(c.held) < pesAgree {
+		return
+	}
+	// A new timeline. The cue on screen ends where the old clock stopped.
+	c.dec.Close(c.last)
+	c.keep()
+	if ptsDelta(c.held[0].pts, c.last) < 0 {
+		c.line++
+	}
+	c.dec = captions.NewDecoder()
+	held := c.held
+	c.held = nil
+	c.last = held[0].pts
+	for _, h := range held {
+		if d := ptsDelta(h.pts, c.last); d > 0 {
+			c.age += d
+		}
+		c.last = h.pts
+		c.feed(h.pts, h.pairs)
+	}
+}
+
+func (c *captionTrack) feed(pts int64, pairs []byte) {
 	c.dec.Feed(pts, pairs)
-	c.cues = append(c.cues, c.dec.Take()...)
+	c.keep()
 	drop := 0
-	for drop < len(c.cues) && ptsDiff(c.last, c.cues[drop].End) > captionKeep {
+	for drop < len(c.cues) && c.age-c.cues[drop].at > captionKeep {
 		drop++
 	}
 	if drop > 0 {
@@ -72,20 +127,34 @@ func (c *captionTrack) picture(pts int64, pairs []byte) {
 	}
 }
 
-// span returns the cues on screen between from and from+dur, moved by
-// -offset onto an encode's own clock. The cue still on screen runs to the
-// end of the span.
-func (c *captionTrack) span(from, dur, offset int64) []captions.Cue {
+func (c *captionTrack) keep() {
+	for _, cue := range c.dec.Take() {
+		c.cues = append(c.cues, keptCue{Cue: cue, line: c.line, at: c.age})
+	}
+}
+
+// timeline is the broadcast timeline the captions are on now.
+func (c *captionTrack) timeline() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.line
+}
+
+// span returns the cues of one timeline on screen between from and
+// from+dur, moved by -offset onto an encode's own clock. The cue still on
+// screen runs to the end of the span.
+func (c *captionTrack) span(line int, from, dur, offset int64) []captions.Cue {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	all := c.cues
-	if cue, ok := c.dec.Showing(); ok && ptsDiff(from+dur, cue.Start) > 0 {
+	if cue, ok := c.dec.Showing(); ok && line == c.line && ptsDiff(from+dur, cue.Start) > 0 {
 		cue.End = wrapPTS(from + dur)
-		all = append(all[:len(all):len(all)], cue)
+		all = append(all[:len(all):len(all)], keptCue{Cue: cue, line: line})
 	}
 	var out []captions.Cue
-	for _, cue := range all {
-		if ptsDiff(cue.End, from) <= 0 || ptsDiff(cue.Start, from+dur) >= 0 {
+	for _, kept := range all {
+		cue := kept.Cue
+		if kept.line != line || ptsDiff(cue.End, from) <= 0 || ptsDiff(cue.Start, from+dur) >= 0 {
 			continue
 		}
 		cue.Start = wrapPTS(cue.Start - offset)
@@ -176,6 +245,15 @@ func (h *Hub) startCaptionsLocked(f *feed) {
 	f.captionSub = h.attachPipe(m, f.captions, true)
 }
 
+// captionLine reads the feed's caption timeline for a packager. The caller
+// holds h.mu; the packager calls it later without.
+func captionLine(f *feed) func() int {
+	if f.captions == nil {
+		return nil
+	}
+	return f.captions.timeline
+}
+
 // stopCaptionsLocked runs when the last rendition stops. A recording alone
 // has no use for them.
 func (h *Hub) stopCaptionsLocked(f *feed) {
@@ -210,6 +288,10 @@ func (h *Hub) CaptionPlaylist(channelID int64, key string) ([]byte, error) {
 // the picture it was sent with.
 func (h *Hub) CaptionSegment(channelID int64, key, name string) ([]byte, error) {
 	video := strings.TrimSuffix(name, ".vtt") + ".m4s"
+	seq, err := strconv.Atoi(strings.TrimPrefix(strings.TrimSuffix(name, ".vtt"), "seg"))
+	if err != nil {
+		return nil, os.ErrNotExist
+	}
 	h.mu.Lock()
 	f := h.channels[channelID]
 	var dir string
@@ -227,10 +309,10 @@ func (h *Hub) CaptionSegment(channelID int64, key, name string) ([]byte, error) 
 		return nil, os.ErrNotExist
 	}
 	var cues []captions.Cue
-	// After a timestamp break a second encode shares the playlist and the
-	// offset is no longer one number. Those segments get no cues.
-	if off, known := in.broadcastOffset(); known && track != nil {
-		cues = track.span(wrapPTS(start+off), dur, off)
+	// After a timestamp break the next encode shares the playlist with its
+	// own offset, from the first segment it wrote.
+	if enc, ok := in.encodeAt(seq); ok && track != nil {
+		cues = track.span(enc.line, wrapPTS(start+enc.offset), dur, enc.offset)
 	}
 	return captions.Segment(start, dur, cues), nil
 }

@@ -138,6 +138,54 @@ func TestReaderPutsPicturesInDisplayOrder(t *testing.T) {
 	}
 }
 
+// A splice back in time: the pictures held from the old timeline come out
+// first, and the new one is still put in display order.
+func TestReaderKeepsDisplayOrderAcrossABreak(t *testing.T) {
+	const old, next = int64(9_000_000), int64(4_500_000)
+	ts := append(stream(streamMPEG2, old, mpeg2Picture), stream(streamMPEG2, next, mpeg2Picture)...)
+	var got []int64
+	rd := NewReader(0, func(pts int64, _ []byte) { got = append(got, pts) })
+	rd.Write(ts)
+	rd.Flush()
+	split := 0
+	for split < len(got) && got[split] >= old {
+		split++
+	}
+	if split == 0 || split == len(got) {
+		t.Fatalf("pictures %v", got)
+	}
+	for i, pts := range got {
+		if (i < split) != (pts >= old) {
+			t.Fatalf("old and new pictures mixed: %v", got)
+		}
+		if i > 0 && i != split && pts <= got[i-1] {
+			t.Fatalf("picture %d out of display order: %v", i, got)
+		}
+	}
+}
+
+// Most pictures carry no caption bytes. They still move the clock the
+// caller follows, or a splice onto an uncaptioned ad would go unseen.
+func TestReaderHandsOverPicturesWithoutCaptions(t *testing.T) {
+	bare := []byte{0, 0, 1, 0x00, 0x12, 0x34, 0x56, 0x78, 0, 0, 1, 0x01, 0xaa, 0xbb}
+	ts := header(streamMPEG2)
+	for i := range 12 {
+		ts = append(ts, pes(int64(90000+i*3003), bare)...)
+	}
+	var got int
+	rd := NewReader(0, func(_ int64, pairs []byte) {
+		if len(pairs) != 0 {
+			t.Fatalf("pairs %x from a picture without captions", pairs)
+		}
+		got++
+	})
+	rd.Write(ts)
+	rd.Flush()
+	if got != 12 {
+		t.Fatalf("%d of 12 pictures handed over", got)
+	}
+}
+
 func TestReaderFindsTheProgram(t *testing.T) {
 	ts := stream(streamMPEG2, 0, mpeg2Picture)
 	if cues := decodeAll(t, ts, 188); len(cues) != 1 {
