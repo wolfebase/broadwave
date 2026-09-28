@@ -7,6 +7,7 @@ const tab = process.env.E2E_TAB === "1";
 const brk = process.env.E2E_BREAK === "1";
 const mv = process.env.E2E_MV === "1";
 const playlist = process.env.E2E_PLAYLIST === "1";
+const rec = process.env.E2E_REC === "1";
 // Opt-in runs replace the suite: each one is minutes against its own server.
 const only = avsync
   ? "08-avsync\\.spec\\.ts"
@@ -18,18 +19,20 @@ const only = avsync
         ? "13-mvsync\\.spec\\.ts"
         : playlist
           ? "15-playlist\\.spec\\.ts"
-          : "";
+          : rec
+            ? "19-record\\.spec\\.ts"
+            : "";
 
 export default defineConfig({
   testDir: ".",
   testMatch: /.*\.spec\.ts/,
   testIgnore: only
     ? new RegExp(`^(?!.*${only}).*$`)
-    : [/08-avsync\.spec\.ts/, /10-tab\.spec\.ts/, /11-break\.spec\.ts/, /13-mvsync\.spec\.ts/, /15-playlist\.spec\.ts/],
+    : [/08-avsync\.spec\.ts/, /10-tab\.spec\.ts/, /11-break\.spec\.ts/, /13-mvsync\.spec\.ts/, /15-playlist\.spec\.ts/, /19-record\.spec\.ts/],
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  timeout: avsync ? 240_000 : tab ? 1_200_000 : brk ? 420_000 : mv ? 360_000 : playlist ? 240_000 : 180_000,
+  timeout: avsync ? 240_000 : tab ? 1_200_000 : brk ? 420_000 : mv ? 360_000 : playlist ? 240_000 : rec ? 420_000 : 180_000,
   expect: { timeout: 20_000 },
   outputDir: ".run/test-results",
   globalSetup: "./global-setup.ts",
