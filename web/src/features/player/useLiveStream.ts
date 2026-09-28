@@ -336,13 +336,19 @@ export function useLiveStream(
         }
       }
     })();
-    // pagehide also fires when the browser keeps the page (back/forward cache).
-    // That tab is still watching; stopping would drop the tuner under it.
-    const beacon = (event: PageTransitionEvent) => {
-      if (event.persisted) return;
+    // pagehide also fires when the browser keeps the page for Back. That page
+    // stops fetching, so the tuner has to go too. pageshow starts a new watch.
+    const beacon = () => {
       if (released || !joined) return;
       const body = new Blob([JSON.stringify({ rendition: joined, boot })], { type: "application/json" });
       if (navigator.sendBeacon?.(`/api/v1/watch/${id}/stop`, body)) released = true;
+    };
+    const onShow = (event: PageTransitionEvent) => {
+      if (!event.persisted || dead) return;
+      if (retrying.current) return;
+      retrying.current = true;
+      quietRetry.current = id;
+      setAttempt((n) => n + 1);
     };
     // A frozen or hidden tab does not move the playhead. The room does. On
     // return, seek to the edge once the playlist knows it. The sync engine
@@ -440,6 +446,7 @@ export function useLiveStream(
       comeBack();
     }, 1000);
     window.addEventListener("pagehide", beacon);
+    window.addEventListener("pageshow", onShow);
     return () => {
       dead = true;
       ctrl.abort();
@@ -452,6 +459,7 @@ export function useLiveStream(
       document.removeEventListener("freeze", markLeft);
       document.removeEventListener("resume", comeBack);
       window.removeEventListener("pagehide", beacon);
+      window.removeEventListener("pageshow", onShow);
       syncRef.current?.stop();
       syncRef.current = null;
       hls?.destroy();
