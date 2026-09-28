@@ -10,6 +10,10 @@ const (
 	// MPEG-2 sends B-frames after the picture they follow on screen, and the
 	// 608 bytes in each picture only make sense in display order.
 	reorderDepth = 8
+
+	// maxPES bounds one picture. A 1080 broadcast picture is well under
+	// 2 MB; a stream that never starts a new PES must not grow without end.
+	maxPES = 4 << 20
 )
 
 type picture struct {
@@ -90,7 +94,7 @@ func (r *Reader) packet(pkt []byte) {
 		if start {
 			r.endPES()
 			r.pes = append(r.pes[:0], body...)
-		} else if len(r.pes) > 0 {
+		} else if len(r.pes) > 0 && len(r.pes) < maxPES {
 			r.pes = append(r.pes, body...)
 		}
 	}

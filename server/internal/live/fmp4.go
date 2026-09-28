@@ -3,8 +3,10 @@ package live
 import (
 	"cmp"
 	"encoding/binary"
+	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"slices"
 )
 
@@ -429,6 +431,53 @@ func segmentStart(dir, name string) (int64, bool) {
 	return SegmentPTS(path)
 }
 
+// segmentSpan reads an fMP4 segment's video span in 90 kHz ticks, from its
+// earliest presentation time to the end of its last picture on screen, across
+// every fragment in the file. Decode times end early by the reorder delay.
+func segmentSpan(dir, name string) (start, dur int64, ok bool) {
+	init, err := os.ReadFile(filepath.Join(dir, "init.mp4"))
+	if err != nil {
+		return 0, 0, false
+	}
+	track, scale, found := videoTrack(init)
+	if !found || scale == 0 {
+		return 0, 0, false
+	}
+	seg, err := readMoofs(filepath.Join(dir, name))
+	if err != nil {
+		return 0, 0, false
+	}
+	var first, end int64
+	for _, top := range boxes(seg) {
+		if top.kind != "moof" {
+			continue
+		}
+		for _, t := range boxes(top.body) {
+			if t.kind != "traf" {
+				continue
+			}
+			r, parsed := runTiming(t.body)
+			if !parsed || r.id != track || len(r.samples) == 0 {
+				continue
+			}
+			dts := r.decodeTime()
+			for _, s := range r.samples {
+				pts, d := dts+r.cts(s), r.sampleDur(s)
+				if !ok || pts < first {
+					first = pts
+				}
+				ok = true
+				end = max(end, pts+d)
+				dts += d
+			}
+		}
+	}
+	if !ok || end <= first {
+		return 0, 0, false
+	}
+	return first * 90000 / int64(scale), (end - first) * 90000 / int64(scale), true
+}
+
 type trunSample struct{ dur, size, flags, cts uint32 }
 
 // trackRun is one traf with a single trun, as ffmpeg writes them.
@@ -495,6 +544,82 @@ func parseRun(traf []byte) (trackRun, bool) {
 		r.hasSizes = true
 	}
 	return r, r.flags&0x1 != 0
+}
+
+// readMoofs returns a segment's moof boxes, skipping the media between them,
+// so a caption request does not read a whole segment of video.
+func readMoofs(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var out []byte
+	head := make([]byte, 16)
+	for {
+		if _, err := io.ReadFull(f, head[:8]); err != nil {
+			return out, nil
+		}
+		size, hdr := int64(binary.BigEndian.Uint32(head[:4])), int64(8)
+		if size == 1 {
+			if _, err := io.ReadFull(f, head[8:16]); err != nil {
+				return out, nil
+			}
+			size, hdr = int64(binary.BigEndian.Uint64(head[8:16])), 16
+		}
+		if size < hdr {
+			return out, nil
+		}
+		if string(head[4:8]) != "moof" {
+			if _, err := f.Seek(size-hdr, io.SeekCurrent); err != nil {
+				return out, nil
+			}
+			continue
+		}
+		if size > 4<<20 {
+			return out, nil
+		}
+		box := make([]byte, size)
+		copy(box, head[:hdr])
+		if _, err := io.ReadFull(f, box[hdr:]); err != nil {
+			return out, nil
+		}
+		out = append(out, box...)
+	}
+}
+
+// runTiming reads only a traf's timing. Unlike parseRun it accepts any
+// layout, since nothing is rewritten.
+func runTiming(traf []byte) (trackRun, bool) {
+	var r trackRun
+	for _, b := range boxes(traf) {
+		switch b.kind {
+		case "tfhd":
+			r.tfhd = b.body
+		case "tfdt":
+			r.tfdt = b.body
+		case "trun":
+			if r.samples != nil || !r.readTrun(b.body) {
+				return r, false
+			}
+		}
+	}
+	if len(r.tfhd) < 8 || len(r.tfdt) < 8 || (r.tfdt[0] == 1 && len(r.tfdt) < 12) {
+		return r, false
+	}
+	r.id = binary.BigEndian.Uint32(r.tfhd[4:8])
+	tf := uint32(r.tfhd[1])<<16 | uint32(r.tfhd[2])<<8 | uint32(r.tfhd[3])
+	off := 8
+	if tf&0x1 != 0 {
+		off += 8
+	}
+	if tf&0x2 != 0 {
+		off += 4
+	}
+	if tf&0x8 != 0 && off+4 <= len(r.tfhd) {
+		r.defDur = binary.BigEndian.Uint32(r.tfhd[off : off+4])
+	}
+	return r, true
 }
 
 func (r *trackRun) readTrun(b []byte) bool {

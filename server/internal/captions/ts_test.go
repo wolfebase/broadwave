@@ -154,3 +154,20 @@ func TestReaderFindsTheProgram(t *testing.T) {
 		t.Fatal("fixture has no caption data")
 	}
 }
+
+// Broadcast bytes are untrusted. Nothing in the reader or decoder may panic.
+func FuzzReader(f *testing.F) {
+	f.Add(stream(streamMPEG2, 1000, mpeg2Picture))
+	f.Add(stream(streamH264, 1<<33-9000, h264Picture))
+	f.Fuzz(func(t *testing.T, ts []byte) {
+		d := NewDecoder()
+		r := NewReader(0, d.Feed)
+		for len(ts) > 0 {
+			n := min(len(ts), 1000)
+			_, _ = r.Write(ts[:n])
+			ts = ts[n:]
+		}
+		r.Flush()
+		_ = Segment(0, 90000, d.Take())
+	})
+}
