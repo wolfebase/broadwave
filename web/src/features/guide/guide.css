@@ -40,6 +40,12 @@
   gap: 6px;
 }
 
+.layout-phone .guide-jump .pill-btn,
+.layout-phone .ps-actions .btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+
 .guide-chips {
   display: flex;
   gap: 6px;

@@ -65,8 +65,9 @@ test("channel changes, go to live, sports, and search", async ({ page }) => {
     if (msg.type() !== "error") return;
     const where = msg.location().url;
     const text = msg.text();
-    // The harness answers art and preview frames with 404. Those are not app errors.
-    if (/\/media\/art\/|\/channels\/\d+\/frame|favicon/.test(`${where} ${text}`)) return;
+    // The harness answers art and preview frames with 404, and a recording left
+    // by an earlier spec has no poster. Those are not app errors.
+    if (/\/media\/(?:art|poster)\/|\/channels\/\d+\/frame|favicon/.test(`${where} ${text}`)) return;
     errors.push(where ? `${text} (${where})` : text);
   });
 
@@ -153,7 +154,7 @@ test("channel changes, go to live, sports, and search", async ({ page }) => {
   await page.getByLabel("Search shows, people, and recordings").press("Enter");
   await expect(page).toHaveURL(/\/search\?q=Chiefs/);
   await expect(page.getByRole("heading", { name: "Guide" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /NFL: Chiefs at Bills/ })).toBeVisible();
+  await expect(page.locator("button.search-main", { hasText: "NFL: Chiefs at Bills" })).toBeVisible();
   await page.screenshot({ path: path.join(evidence, "search.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
 
   expect(errors, errors.join("\n")).toEqual([]);

@@ -8,7 +8,7 @@ import { typedChannel } from "../../lib/remote";
 import type { SyncStatus } from "../../lib/sync";
 import { readZoom, saveZoom, type PictureMode, type Zoom } from "../../picture";
 import type { Channel } from "../../types";
-import { InfoIcon, ListIcon, RecordIcon, SideBySideIcon, SyncIcon } from "../../ui/icons";
+import { ChevronIcon, InfoIcon, ListIcon, RecordIcon, SideBySideIcon, SyncIcon } from "../../ui/icons";
 import { Progress } from "../../ui/primitives";
 import { isLayout, multiviewPath } from "../multiview/storage";
 import { useScoreMap } from "../sports/scores";
@@ -343,6 +343,16 @@ export function LivePlayer({
       loading={tuning ? <TuningCard channel={channel} show={airing?.title} art={airing?.imageUrl ? `/media/art/airing/${airing.id}?w=960` : ""} mini={mode === "mini"} /> : null}
       tools={
         <>
+          {layout === "phone" ? (
+            <span className="channel-step">
+              <button type="button" className="glass-icon" aria-label="Previous channel" onClick={() => step(-1)}>
+                <ChevronIcon style={{ transform: "rotate(-90deg)" }} />
+              </button>
+              <button type="button" className="glass-icon" aria-label="Next channel" onClick={() => step(1)}>
+                <ChevronIcon style={{ transform: "rotate(90deg)" }} />
+              </button>
+            </span>
+          ) : null}
           <button type="button" className={panel === "guide" ? "glass-icon on" : "glass-icon"} onClick={() => setPanel((p) => (p === "guide" ? "none" : "guide"))} aria-label="Channels">
             <ListIcon />
           </button>

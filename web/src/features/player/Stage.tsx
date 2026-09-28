@@ -70,6 +70,9 @@ export function Stage({
   const [muted, setMuted] = useState(false);
   const ownRoot = useRef<HTMLElement>(null);
   const root = rootRef ?? ownRoot;
+  // A tap that brings the chrome back. The click that follows must not pause:
+  // a paused picture keeps the chrome up.
+  const wake = useRef(0);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -106,6 +109,7 @@ export function Stage({
     };
     let timer = window.setTimeout(fade, 3200);
     const poke = (event: Event) => {
+      if (event.type === "touchstart" && idle) wake.current = performance.now();
       // The chrome is opacity 0 while idle, so a Tab would land on a control
       // the viewer cannot see. Show it and move to the first control instead.
       if (event instanceof KeyboardEvent && event.key === "Tab" && idle) {
@@ -163,7 +167,24 @@ export function Stage({
       onKeyDown={mode === "mini" ? undefined : onKeyDown}
       aria-label={mode === "mini" ? `Now playing: ${title}` : "Player"}
     >
-      <video ref={videoRef} className={videoClass} autoPlay playsInline onClick={mode === "mini" ? onExpand : toggle} onDoubleClick={fullscreen} />
+      <video
+        ref={videoRef}
+        className={videoClass}
+        autoPlay
+        playsInline
+        onClick={() => {
+          if (mode === "mini") {
+            onExpand?.();
+            return;
+          }
+          if (performance.now() - wake.current < 700) {
+            wake.current = 0;
+            return;
+          }
+          toggle();
+        }}
+        onDoubleClick={fullscreen}
+      />
       {loading && !error ? loading : null}
       {mode === "mini" ? (
         <div className="mini-bar">
