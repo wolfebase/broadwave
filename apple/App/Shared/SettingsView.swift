@@ -32,6 +32,9 @@ struct SettingsView: View {
     @State private var guideURL = ""
     @AppStorage(BreakSkip.key) private var breakSkip = BreakSkip.auto
     @State private var reserve = "10"
+    @State private var bufferMinutes = "60"
+    @State private var loadedBuffer = "60"
+    @State private var bufferKnown = false
     @State private var sdPassword = ""
     @State private var tmdbKey = ""
     @State private var passwordSaved = false
@@ -392,6 +395,25 @@ struct SettingsView: View {
                 #endif
                     .onSubmit { flushServerText() }
             }
+            Picker("Keep for recording from the start", selection: Binding(
+                get: { bufferMinutes },
+                set: { minutes in
+                    guard bufferKnown, minutes != bufferMinutes else { return }
+                    bufferMinutes = minutes
+                    flushServerText()
+                }
+            )) {
+                Text("Off").tag("0")
+                Text("30 minutes").tag("30")
+                Text("1 hour").tag("60")
+                Text("2 hours").tag("120")
+                Text("4 hours").tag("240")
+            }
+            .disabled(!bufferKnown)
+            .accessibilityIdentifier("recording-buffer")
+            Text("While a channel is on, the server keeps up to this much of it, so recording a show already on starts from its beginning. It uses at most half the free space.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         } header: {
             Text("Storage")
         } footer: {
@@ -504,6 +526,9 @@ struct SettingsView: View {
             sdLineup = values["sdLineup"] ?? ""
             guideURL = values["guideUrl"] ?? ""
             reserve = values["watermarkGB"] ?? "10"
+            let minutes = values["bufferMinutes"] ?? "60"
+            bufferMinutes = Self.bufferChoices.contains(minutes) ? minutes : "60"
+            loadedBuffer = bufferMinutes
             loadedUser = sdUser
             loadedLineup = sdLineup
             loadedGuide = guideURL
@@ -511,6 +536,7 @@ struct SettingsView: View {
             passwordSaved = values["sdPasswordSet"] == "1"
             artSaved = values["tmdbKeySet"] == "1"
             guideKnown = true
+            bufferKnown = true
         }
         guard !demo else { return }
         storage = try? await store.api?.storage()
@@ -542,6 +568,10 @@ struct SettingsView: View {
             } else {
                 saveError = "Keep this much free needs a whole number of gigabytes from 0 to 1000000."
             }
+        }
+        if bufferMinutes != loadedBuffer, Self.bufferChoices.contains(bufferMinutes) {
+            values["bufferMinutes"] = bufferMinutes
+            loadedBuffer = bufferMinutes
         }
         let guide = guideURL.trimmingCharacters(in: .whitespacesAndNewlines)
         if guide != loadedGuide {
@@ -686,6 +716,10 @@ struct SettingsView: View {
             return nil
         }
     }
+}
+
+private extension SettingsView {
+    static let bufferChoices = ["0", "30", "60", "120", "240"]
 }
 
 func storageSummary(_ info: APIClient.StorageInfo) -> String {

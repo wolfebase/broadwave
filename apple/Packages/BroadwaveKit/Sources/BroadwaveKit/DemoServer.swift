@@ -364,6 +364,7 @@ public final class DemoServer: @unchecked Sendable {
         "autoplay": "1",
         "hdhrEmulate": "0",
         "pictureMode": "broadcast",
+        "bufferMinutes": "60",
     ]
 
     private func currentSettings() -> [String: String] {
@@ -412,6 +413,8 @@ public final class DemoServer: @unchecked Sendable {
             } else {
                 false
             }
+        case "bufferMinutes":
+            value == "0" || value == "30" || value == "60" || value == "120" || value == "240"
         default:
             false
         }

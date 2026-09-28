@@ -83,6 +83,7 @@ import Testing
     let client = APIClient(base: origin)
     let before = try await client.settings()
     #expect(before["pictureMode"] == "broadcast")
+    #expect(before["bufferMinutes"] == "60")
     #expect(before["autoplay"] == "1")
     #expect(before["hideScores"] == "0")
     #expect(before["hdhrEmulate"] == "0")
@@ -112,10 +113,15 @@ import Testing
     #expect(guide["sdPassword"] == nil)
     #expect(guide["tmdbKey"] == nil)
     #expect(!guide.values.contains(secret))
-    try await client.saveSettings(["watermarkGB": "nope", "sdPassword": "  "])
+    try await client.saveSettings(["watermarkGB": "nope", "sdPassword": "  ", "bufferMinutes": "15"])
     let rejected = try await client.settings()
     #expect(rejected["watermarkGB"] == "12")
     #expect(rejected["sdPassword"] == nil)
+    #expect(rejected["bufferMinutes"] == "60")
+    try await client.saveSettings(["bufferMinutes": "120"])
+    #expect(try await (client.settings())["bufferMinutes"] == "120")
+    try await client.saveSettings(["bufferMinutes": "0"])
+    #expect(try await (client.settings())["bufferMinutes"] == "0")
 }
 
 @Test func demoHiddenChannelLeavesTheGuideOnly() async throws {
