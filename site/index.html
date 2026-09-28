@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Broadwave</title>
+  <meta name="description" content="Live TV and DVR for an antenna. One tuner, every screen, the same frame.">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233D7BFF'/%3E%3C/svg%3E">
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+  <header>
+    <div class="wrap">
+      <a class="brand" href="#content">Broadwave</a>
+      <nav aria-label="On this page">
+        <a href="#features">Features</a>
+        <a href="#look">Screens</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/wolfebase/broadwave">Source</a>
+      </nav>
+    </div>
+  </header>
+  <main id="content">
+    <div class="wrap">
+      <h1>Your antenna already pulls in dozens of channels for free.</h1>
+      <p class="lead">Broadwave puts them on every screen in your house — live, recorded, and perfectly in sync.</p>
+      <p>Plug an antenna into a network tuner, run Broadwave on any always-on box, and every phone, tablet, TV, and browser in the house becomes a TV. No cable bill. No streaming subscription. No account. Just the broadcasts that are already in the air.</p>
+      <p>The picture here is a test pattern.</p>
+      <!-- Screenshots are copies of docs/screenshots/readme/. Keep the two sets together. -->
+      <div class="pair">
+        <img src="screenshots/home-1440.jpg" width="1440" height="900" alt="Home, with the show on now">
+        <img src="screenshots/home-390.jpg" width="390" height="844" alt="Home on a phone">
+      </div>
+
+      <section id="features">
+        <h2>Everything it does</h2>
+        <p>Three people watching the game in three rooms use one tuner, not three — and the kitchen never cheers three seconds before the living room.</p>
+        <dl>
+          <dt>Watch</dt>
+          <dd>Live TV on every screen, in sync. One tune shared by everyone on a channel. True 60 fps, film restored to 24p. Hardware transcoding on Intel and AMD graphics. 5.1 surround with a picker for languages and described video. Buffers tuned for phones, desktops, and TVs. A stream panel that shows exactly what's happening.</dd>
+          <dt>Record</dt>
+          <dd>Shows, series, or every game for your team. The untouched broadcast, in original quality. Games keep recording until they're final. A tuner held back for recordings. A heads-up before live TV would take a recording's tuner. A later airing suggested when one can't record. Nightly backups with one-tap restore.</dd>
+          <dt>Guide</dt>
+          <dd>Up to 14 days of listings. Guide data from your tuner's provider, Schedules Direct, XMLTV, or the broadcast itself. Artwork, seasons, premieres, and finales. Search across the guide and your recordings. Antenna and signal tools that say Great, OK, Weak, or Lost.</dd>
+          <dt>Multiview</dt>
+          <dd>Side by side, one-big-plus-three, quad, and picture-in-picture. Sound and 60 fps follow the tile you pick. A Game Switcher that moves the big tile to the game that matters. Saved layouts.</dd>
+          <dt>Sports</dt>
+          <dd>Live scores for twelve leagues. Follow teams and record every game. Spoiler-safe scores you can hide.</dd>
+          <dt>Setup</dt>
+          <dd>Finds your tuners, servers, and screens on its own. Done in about 90 seconds. A setup doctor for networking, graphics, disks, time zone, and permissions. A banner when a new device shows up.</dd>
+          <dt>Private</dt>
+          <dd>No account, no ads, no analytics. Everything stays on your server. Support bundles with secrets stripped out. Open source, Apache 2.0.</dd>
+        </dl>
+      </section>
+
+      <section id="look">
+        <h2>What it looks like</h2>
+        <p>The guide, live TV, and recordings. The phone uses the same server.</p>
+        <div class="pair">
+          <img src="screenshots/guide-1440.jpg" width="1440" height="900" alt="The guide for the afternoon">
+          <img src="screenshots/guide-390.jpg" width="390" height="844" alt="The guide on a phone">
+        </div>
+        <div class="pair">
+          <img src="screenshots/player-1440.jpg" width="1440" height="900" alt="Live TV with the channel list beside the picture">
+          <img src="screenshots/player-390.jpg" width="390" height="844" alt="Live TV on a phone, with the channel list">
+        </div>
+        <div class="pair">
+          <img src="screenshots/side-1440.jpg" width="1440" height="900" alt="Two channels side by side">
+          <img src="screenshots/side-390.jpg" width="390" height="844" alt="Two channels, one above the other, on a phone">
+        </div>
+        <div class="pair">
+          <img src="screenshots/recordings-1440.jpg" width="1440" height="900" alt="A show that is still recording">
+          <img src="screenshots/recordings-390.jpg" width="390" height="844" alt="A recording on a phone">
+        </div>
+      </section>
+
+      <section id="install">
+        <h2>Install in one command</h2>
+        <p>You need an always-on computer that runs Docker — a NAS, a mini PC, or a home server — and a network TV tuner. The image runs on x86-64 and ARM64. The tag <code>latest</code> is the newest release. It moves when a version is published. A full version tag from the <a href="https://github.com/wolfebase/broadwave/releases">releases</a> page stays on that build.</p>
+
+        <h3>Docker</h3>
+        <pre><code>docker run -d --name broadwave --network host --restart unless-stopped \
+  -e TZ=America/Chicago \
+  -v ~/broadwave:/config \
+  -v ~/broadwave/<wbr>recordings:/config/work/<wbr>recordings \
+  ghcr.io/wolfebase/broadwave:latest</code></pre>
+        <p>Then open <code>http://&lt;your-server&gt;:8477</code>. On a Linux server, Broadwave finds your tuner, scans your channels, and fills the guide on its own. Three TVs on the same channel use one tuner. Config and recordings stay in the folders you mounted, so an update keeps them.</p>
+        <ul>
+          <li><code>--network host</code> lets a Linux server hear your tuner, and lets phones and TVs find Broadwave. Keep it there.</li>
+          <li><strong>Graphics.</strong> Add <code>--device /dev/dri</code> when that path exists (Intel or AMD). Docker refuses to start if the path is missing. The picture still plays without it.</li>
+          <li><code>TZ</code> is your time zone, so the guide lines up.</li>
+          <li><strong>Tuner address.</strong> When the tuner does not appear, enter its address on the setup page, or set <code>HDHR_HOST</code> to that address. Add <code>:port</code> only when it is not 80.</li>
+        </ul>
+
+        <h3>Mac</h3>
+        <p>On Docker Desktop for Mac and Windows, the container's host network is a virtual machine. Publish the port and set <code>HDHR_HOST</code> to the tuner's address:</p>
+        <pre><code>docker run -d --name broadwave --restart unless-stopped \
+  -e TZ=America/Chicago \
+  -e HDHR_HOST=&lt;tuner address&gt; \
+  -p 8477:8477 \
+  -v ~/broadwave:/config \
+  -v ~/broadwave/<wbr>recordings:/config/work/<wbr>recordings \
+  ghcr.io/wolfebase/broadwave:latest</code></pre>
+        <p>Then open <code>http://localhost:8477</code>.</p>
+
+        <details>
+          <summary>Docker Compose</summary>
+          <pre><code>curl -fsSLO https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/docker/compose.yaml
+docker compose pull &amp;&amp; docker compose up -d</code></pre>
+          <p>Set <code>TZ</code> in <code>compose.yaml</code> first. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Remove the <code>devices</code> lines when <code>/dev/dri</code> is missing — Docker will not start while they point at a path that is not there. On Unraid, leave <code>PUID</code> at 99 and <code>PGID</code> at 100.</p>
+        </details>
+
+        <details>
+          <summary>Image options</summary>
+          <p>One image, <code>ghcr.io/wolfebase/broadwave</code>, for x86-64 and ARM64. It carries its own ffmpeg (jellyfin-ffmpeg 7), so nothing else needs installing.</p>
+          <dl>
+            <dt><code>TZ</code></dt>
+            <dd>Your time zone, such as <code>America/New_York</code>. Without it the server runs on UTC.</dd>
+            <dt><code>PUID</code>, <code>PGID</code></dt>
+            <dd>The user and group that own the config folder and recordings. Broadwave starts as root, hands the config folder to them, and then runs as them. Leave them out to run as root.</dd>
+            <dt><code>UMASK</code></dt>
+            <dd>Permissions for new files, such as <code>002</code> so the group can write. Default <code>022</code>.</dd>
+            <dt><code>HDHR_HOST</code></dt>
+            <dd>The tuner's address, when discovery can't reach it.</dd>
+            <dt><code>BROADWAVE_ENCODER</code></dt>
+            <dd><code>gpu</code> or <code>software</code> to skip the automatic choice.</dd>
+          </dl>
+          <p>Graphics, for smoother transcoding:</p>
+          <ul>
+            <li><strong>Intel or AMD (VAAPI).</strong> <code>--device /dev/dri</code>. Broadwave keeps access to the device when it switches to <code>PUID</code> and <code>PGID</code>.</li>
+            <li><strong>NVIDIA (NVENC).</strong> Install the NVIDIA Container Toolkit on the host, then add <code>--gpus all</code> (or <code>--runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all</code>). The image already asks for the video driver capability. On Unraid, add <code>--runtime=nvidia</code> to Extra Parameters and set <code>NVIDIA_VISIBLE_DEVICES</code> to the card's UUID. NVIDIA has not been tested on real hardware yet.</li>
+            <li><strong>None.</strong> The picture comes from the processor. Diagnostics says how many screens it can serve.</li>
+          </ul>
+          <p>Docker's health check runs <code>broadwave -healthcheck</code> every 30 seconds, so <code>docker ps</code> shows <code>healthy</code> once the server answers.</p>
+        </details>
+
+        <details>
+          <summary>Automatic updates (optional)</summary>
+          <p>Broadwave can keep itself on the newest release. An updater checks every night at 03:30 and updates only Broadwave. It follows the tag the container already uses, so <code>latest</code> moves forward and a full version tag stays put. It skips a night while someone is watching, a recording is running, or a recording starts within two hours.</p>
+          <ul>
+            <li><strong>Docker Compose:</strong> <code>docker compose --profile updater up -d</code>. Set its <code>TZ</code> to match Broadwave.</li>
+            <li><strong>Unraid:</strong> install the Broadwave template (it carries the labels the updater reads), then add the <strong>Broadwave-Updater</strong> template from <a href="https://github.com/wolfebase/broadwave/blob/main/deploy/unraid/broadwave-updater.xml">deploy/unraid/broadwave-updater.xml</a>. After an update, the Docker tab can still say an update is ready until it checks again.</li>
+            <li><strong>Plain <code>docker run</code>:</strong> add <code>--label com.centurylinklabs.watchtower.enable=true --label "com.centurylinklabs.watchtower.lifecycle.pre-update=broadwave -update-check"</code> to the Broadwave command, and run <code>nickfedor/watchtower:1</code> with <code>WATCHTOWER_LABEL_ENABLE=true</code>, <code>WATCHTOWER_LIFECYCLE_HOOKS=true</code>, and <code>WATCHTOWER_SCHEDULE="0 30 3 * * *"</code>.</li>
+          </ul>
+          <p>To update by hand, pull the new image and recreate the container with the same folders. The folders stay; only the container is replaced. With Compose, <code>docker compose pull &amp;&amp; docker compose up -d</code>. On Unraid, apply the update from the Docker tab.</p>
+          <p>Without an updater, the web app says when a new release is out.</p>
+        </details>
+
+        <h3>Unraid</h3>
+        <p>Add the template <a href="https://github.com/wolfebase/broadwave/blob/main/deploy/unraid/broadwave.xml">deploy/unraid/broadwave.xml</a>. It uses host networking and port 8477. Leave PUID at 99 and PGID at 100 so recordings are not owned by root. Set Config and Recordings to folders on your server, and remove <code>/dev/dri</code> when the server has no Intel or AMD graphics. A plain <code>docker run</code> on Unraid needs <code>-e PUID=99 -e PGID=100</code> as well.</p>
+
+        <h3>Build from source</h3>
+        <p>You need Go 1.26+, Node 22+, and ffmpeg.</p>
+        <pre><code>make run      # build the web app and run the server on :8477 with ./data
+make dev      # API with CORS for Vite; then: cd web &amp;&amp; npm run dev
+make test</code></pre>
+        <p>Server flags: <code>-addr :8477</code>, <code>-config data</code>, <code>-hdhr &lt;tuner address&gt;</code> (or <code>HDHR_HOST</code>).</p>
+
+        <h3>Watch on</h3>
+        <ul>
+          <li><strong>Any browser</strong> at <code>http://&lt;your-server&gt;:8477</code> — live TV, the guide, recordings, and multiview. Nothing to install.</li>
+          <li><strong>Native apps</strong> for phones, tablets, and TVs find your server on the same Wi-Fi by themselves — no typing. With no server around, they play a built-in demo so you can try everything first.</li>
+        </ul>
+        <!-- App Store link, uncomment when 1.x is live.
+        <p><a href="https://apps.apple.com/app/id6815795649">Get Broadwave on the App Store</a></p>
+        -->
+      </section>
+
+      <p>The source is on <a href="https://github.com/wolfebase/broadwave">GitHub</a>. <a href="https://github.com/wolfebase/broadwave/blob/main/LICENSE">Apache 2.0</a>.</p>
+    </div>
+  </main>
+  <footer>
+    <div class="wrap">
+      <p>Made by Wolfe Up LLC. The TV in the sky was always free.</p>
+    </div>
+  </footer>
+</body>
+</html>
