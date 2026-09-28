@@ -67,8 +67,8 @@ tokens:
 
 apple:
 	cd apple && xcodegen generate
-	cd apple && xcodebuild -project Broadwave.xcodeproj -scheme Broadwave -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build
-	cd apple && xcodebuild -project Broadwave.xcodeproj -scheme BroadwaveTV -destination 'generic/platform=tvOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build
+	cd apple && xcodebuild -project Broadwave.xcodeproj -scheme Broadwave -destination 'generic/platform=iOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build-for-testing
+	cd apple && xcodebuild -project Broadwave.xcodeproj -scheme BroadwaveTV -destination 'generic/platform=tvOS Simulator' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build-for-testing
 
 apple-test:
 	cd apple/Packages/BroadwaveKit && swift test

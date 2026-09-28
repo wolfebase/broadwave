@@ -594,6 +594,11 @@ struct PlayerScreen: View {
                     }
                 }
             #endif
+            #if DEBUG
+                if UserDefaults.standard.bool(forKey: "BroadwaveSyncProbe") {
+                    SyncProbe(sync: live.sync)
+                }
+            #endif
             if showStream, !portraitChrome {
                 StreamPanel(stream: live.session?.stream, stats: live.picture, sync: live.sync)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
@@ -1802,3 +1807,18 @@ private struct TuningCard: View {
         .allowsHitTesting(false)
     }
 }
+
+#if DEBUG
+    /// `-BroadwaveSyncProbe YES`: the engine's state and drift, for UI tests.
+    private struct SyncProbe: View {
+        let sync: SyncEngine?
+
+        var body: some View {
+            Text("\(sync?.state.rawValue ?? "none") drift=\(Int(sync?.drift ?? 0))")
+                .font(.system(size: 2))
+                .foregroundStyle(.clear)
+                .allowsHitTesting(false)
+                .accessibilityIdentifier("syncState")
+        }
+    }
+#endif
