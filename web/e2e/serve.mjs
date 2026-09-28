@@ -39,6 +39,7 @@ function start(cmd, args, extra = {}, onStdout) {
 
 function stop() {
   for (const child of children) child.kill("SIGINT");
+  if (process.env.E2E_IMAGE) spawnSync("docker", ["rm", "-f", `broadwave-e2e-${port}`], { stdio: "ignore" });
 }
 
 process.on("SIGTERM", () => {
@@ -491,14 +492,39 @@ if (playlist) {
   serverEnv = { ...process.env, BROADWAVE_E2E: "1", HDHR_CONTROL_PORT: control };
   if (quad) serverEnv.BROADWAVE_ENCODER ||= "software";
 }
-// E2E_BROADWAVE runs this same harness against another binary.
+// E2E_BROADWAVE runs this same harness against another binary. E2E_IMAGE runs
+// the server from a Docker image instead, on the host network so it reaches the
+// fake tuner on 127.0.0.1, with the config folder at the same path.
 const serverBin = process.env.E2E_BROADWAVE || path.join(run, "broadwave");
-let server = start(serverBin, serverArgs, { env: serverEnv });
+const image = process.env.E2E_IMAGE || "";
+const container = `broadwave-e2e-${port}`;
+
+function removeContainer() {
+  spawnSync("docker", ["rm", "-f", container], { stdio: "ignore" });
+  // `docker run --rm` removes it in the background after a kill.
+  for (let i = 0; i < 100; i++) {
+    if (spawnSync("docker", ["inspect", container], { stdio: "ignore" }).status !== 0) return;
+    spawnSync("sleep", ["0.1"]);
+  }
+}
 
 function launchServer() {
-  server = start(serverBin, serverArgs, { env: serverEnv });
+  if (!image) {
+    server = start(serverBin, serverArgs, { env: serverEnv });
+    return server;
+  }
+  removeContainer();
+  const env = ["BROADWAVE_E2E", "HDHR_CONTROL_PORT", "BROADWAVE_ENCODER"]
+    .filter((key) => serverEnv[key])
+    .flatMap((key) => ["-e", `${key}=${serverEnv[key]}`]);
+  const user = `${process.getuid()}:${process.getgid()}`;
+  const args = ["run", "--rm", "--name", container, "--network", "host", "--user", user, "-e", "HOME=/tmp", ...env, "-v", `${config}:${config}`, image, ...serverArgs];
+  server = start("docker", args);
   return server;
 }
+
+let server;
+launchServer();
 
 function gone(child) {
   if (!child || child.exitCode != null || child.signalCode != null) return true;
@@ -512,6 +538,7 @@ function gone(child) {
 
 async function stopServer() {
   const child = server;
+  if (image) removeContainer();
   if (gone(child)) return;
   // Closing the pipes lets the exit event arrive after a kill. A grandchild
   // can otherwise keep them open and the wait never ends.
