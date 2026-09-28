@@ -11,6 +11,11 @@ const (
 	// 608 bytes in each picture only make sense in display order.
 	reorderDepth = 8
 
+	// A picture more than breakBack before the last one, or breakAhead after
+	// it, is on a new timeline rather than a reordered B-frame.
+	breakBack  = 90000
+	breakAhead = 10 * 90000
+
 	// maxPES bounds one picture. A 1080 broadcast picture is well under
 	// 2 MB; a stream that never starts a new PES must not grow without end.
 	maxPES = 4 << 20
@@ -36,7 +41,9 @@ type Reader struct {
 	held   []picture
 }
 
-// NewReader follows the given program (0 is the first one in the PAT).
+// NewReader follows the given program (0 is the first one in the PAT). fn
+// gets every picture in display order, with its caption pairs if it has any,
+// so a clock that moves where no captions are sent is still seen.
 func NewReader(program int, fn func(pts int64, pairs []byte)) *Reader {
 	return &Reader{program: program, fn: fn, pmtPID: -1, video: -1}
 }
@@ -168,6 +175,16 @@ func (r *Reader) endPES() {
 	} else {
 		cc = fromMPEG2(b[payload:])
 	}
+	// The pictures held from before a break come out first. Held on, they
+	// would be the latest on the new clock and let every new picture out
+	// unordered until that clock passed them.
+	if n := len(r.held); n > 0 {
+		if d := ptsDelta(pts, r.held[n-1].pts); d < -breakBack || d > breakAhead {
+			for len(r.held) > 0 {
+				r.emit()
+			}
+		}
+	}
 	r.held = append(r.held, picture{pts: pts, cc: cc})
 	if len(r.held) > reorderDepth {
 		r.emit()
@@ -184,9 +201,7 @@ func (r *Reader) emit() {
 	}
 	pic := r.held[first]
 	r.held = append(r.held[:first], r.held[first+1:]...)
-	if len(pic.cc) > 0 {
-		r.fn(pic.pts, pic.cc)
-	}
+	r.fn(pic.pts, pic.cc)
 }
 
 // ptsDelta is a - b on the 33-bit clock, across a wrap.

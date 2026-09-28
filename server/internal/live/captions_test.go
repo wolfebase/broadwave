@@ -62,24 +62,122 @@ func TestMainPlaylistOffersCaptions(t *testing.T) {
 func TestCaptionSpanMovesCuesOntoTheEncodeClock(t *testing.T) {
 	c := newCaptionTrack(0)
 	const off = int64(1<<33 - 45000) // the broadcast clock wraps half a second into the encode
-	c.cues = []captions.Cue{
-		{Start: wrapPTS(off + 10), End: wrapPTS(off + 90000), Text: "before"},
-		{Start: wrapPTS(off + 180000), End: wrapPTS(off + 270000), Text: "inside"},
-		{Start: wrapPTS(off + 400000), End: wrapPTS(off + 500000), Text: "after"},
+	c.cues = []keptCue{
+		{Cue: captions.Cue{Start: wrapPTS(off + 10), End: wrapPTS(off + 90000), Text: "before"}},
+		{Cue: captions.Cue{Start: wrapPTS(off + 180000), End: wrapPTS(off + 270000), Text: "inside"}},
+		{Cue: captions.Cue{Start: wrapPTS(off + 400000), End: wrapPTS(off + 500000), Text: "after"}},
 	}
-	got := c.span(wrapPTS(off+90000), 180000, off)
+	got := c.span(0, wrapPTS(off+90000), 180000, off)
 	if len(got) != 1 || got[0].Text != "inside" || got[0].Start != 180000 || got[0].End != 270000 {
 		t.Fatalf("span = %+v", got)
 	}
 }
 
-func TestCaptionsForgetAClockReset(t *testing.T) {
+// popOn sends one pop-on caption, one pair a frame at 30 fps from pts, holds
+// it a second, and clears it. Control codes go twice, as encoders send them.
+func popOn(c *captionTrack, pts int64, s string) int64 {
+	pairs := [][]byte{{0x14, 0x20}, {0x14, 0x20}, {0x14, 0x2e}, {0x14, 0x2e}, {0x14, 0x60}, {0x14, 0x60}}
+	for i := 0; i < len(s); i += 2 {
+		pair := []byte{s[i], 0}
+		if i+1 < len(s) {
+			pair[1] = s[i+1]
+		}
+		pairs = append(pairs, pair)
+	}
+	pairs = append(pairs, []byte{0x14, 0x2f}, []byte{0x14, 0x2f})
+	for range 30 {
+		pairs = append(pairs, nil)
+	}
+	pairs = append(pairs, []byte{0x14, 0x2c}, []byte{0x14, 0x2c})
+	for _, pair := range pairs {
+		c.picture(pts, pair)
+		pts += 3003
+	}
+	return pts
+}
+
+func texts(cues []captions.Cue) string {
+	var out []string
+	for _, cue := range cues {
+		out = append(out, cue.Text)
+	}
+	return strings.Join(out, "|")
+}
+
+// A looping source or a station splice repeats timestamps. Each loop is its
+// own timeline, so a segment from the first loop never shows the second's.
+func TestCaptionsStartANewTimelineWhenTheClockGoesBack(t *testing.T) {
 	c := newCaptionTrack(0)
-	c.picture(5_000_000, nil)
-	c.cues = []captions.Cue{{Start: 4_000_000, End: 4_900_000, Text: "old"}}
-	c.picture(5_000_000+2*3600*90000, nil)
-	if len(c.cues) != 0 {
-		t.Fatalf("cues kept across a clock reset: %+v", c.cues)
+	const start = int64(1_000_000)
+	end := popOn(c, start, "FIRST")
+	popOn(c, start, "SECOND")
+	if c.line != 1 {
+		t.Fatalf("line %d after the clock went back", c.line)
+	}
+	if got := texts(c.span(0, start, end-start, 0)); got != "FIRST" {
+		t.Fatalf("first timeline: %q", got)
+	}
+	if got := texts(c.span(1, start, end-start, 0)); got != "SECOND" {
+		t.Fatalf("second timeline: %q", got)
+	}
+}
+
+// A splice onto an ad with no captions still starts the new timeline, so
+// the encode that starts there does not take the old one's cues.
+func TestABreakWithoutCaptionsStillStartsATimeline(t *testing.T) {
+	c := newCaptionTrack(0)
+	popOn(c, 90_000_000, "BEFORE")
+	for i := range pesAgree {
+		c.picture(36_000_000+int64(i)*3003, nil)
+	}
+	if c.timeline() != 1 {
+		t.Fatalf("line %d after a break with no caption bytes", c.timeline())
+	}
+}
+
+// One bad header is dropped, as the program filter drops it, and does not
+// start a timeline the encode never follows.
+func TestOneBadTimestampKeepsTheTimeline(t *testing.T) {
+	c := newCaptionTrack(0)
+	const start = int64(1_000_000)
+	pts := popOn(c, start, "FIRST")
+	c.picture(pts-30*90000, []byte{0x14, 0x20})
+	c.picture(pts+5*3600*90000, []byte{0x14, 0x20})
+	end := popOn(c, pts, "SECOND")
+	if c.line != 0 {
+		t.Fatalf("line %d after one bad header", c.line)
+	}
+	if got := texts(c.span(0, start, end-start, 0)); got != "FIRST|SECOND" {
+		t.Fatalf("cues %q", got)
+	}
+}
+
+// A clock that jumps ahead stays on the timeline; the caption on screen ends
+// where the old clock stopped rather than hours later.
+func TestAForwardJumpEndsTheCaptionOnScreen(t *testing.T) {
+	c := newCaptionTrack(0)
+	pts := int64(1_000_000)
+	for _, pair := range [][]byte{{0x14, 0x20}, {0x14, 0x60}, {'H', 'I'}, {0x14, 0x2f}, nil, nil, nil} {
+		c.picture(pts, pair)
+		pts += 3003
+	}
+	last := pts - 3003
+	for i := range pesAgree {
+		c.picture(pts+2*3600*90000+int64(i)*3003, nil)
+	}
+	if c.line != 0 || len(c.cues) != 1 || c.cues[0].Text != "HI" || c.cues[0].End != last {
+		t.Fatalf("line %d cues %+v, want HI ending at %d", c.line, c.cues, last)
+	}
+}
+
+func TestCaptionsKeepTwoHoursOfMedia(t *testing.T) {
+	c := newCaptionTrack(0)
+	c.picture(1000, nil)
+	c.cues = []keptCue{{Cue: captions.Cue{Start: 1, End: 2, Text: "old"}, at: 0}, {Cue: captions.Cue{Start: 3, End: 4, Text: "new"}, at: 90000}}
+	c.age = captionKeep
+	c.picture(4003, nil)
+	if len(c.cues) != 1 || c.cues[0].Text != "new" {
+		t.Fatalf("cues %+v", c.cues)
 	}
 }
 
@@ -95,8 +193,8 @@ func TestCaptionSegmentUsesTheSegmentsOwnStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	track := newCaptionTrack(0)
-	track.cues = []captions.Cue{{Start: off + segStart + 45000, End: off + segStart + 135000, Text: "Hello & bye"}}
-	r := &rendition{spec: Rendition{Video: "720", Audio: "aac2"}, dir: dir, input: &packInput{offset: off, known: true}}
+	track.cues = []keptCue{{Cue: captions.Cue{Start: off + segStart + 45000, End: off + segStart + 135000, Text: "Hello & bye"}}}
+	r := &rendition{spec: Rendition{Video: "720", Audio: "aac2"}, dir: dir, input: &packInput{spans: []encodeSpan{{seq: 0, offset: off}}}}
 	h := &Hub{channels: map[int64]*feed{7: {renditions: map[string]*rendition{"720.aac2": r}, captions: track}}}
 
 	body, err := h.CaptionSegment(7, "720.aac2", "seg00010.vtt")
@@ -116,6 +214,47 @@ func TestCaptionSegmentUsesTheSegmentsOwnStart(t *testing.T) {
 	body, err = h.CaptionSegment(7, "720.aac2", "seg00010.vtt")
 	if err != nil || string(body) != "WEBVTT\nX-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:900000\n" {
 		t.Fatalf("got %q, %v", body, err)
+	}
+}
+
+// After a timestamp break the next encode writes on with its own offset and
+// the captions' new timeline. A rewind to the first encode keeps its cues.
+func TestCaptionSegmentsAfterABreakUseTheirOwnEncode(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "init.mp4"), videoInit(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const offA, offB = int64(1_000_000), int64(5_000_000)
+	if err := os.WriteFile(filepath.Join(dir, "seg00010.m4s"), keyframeFragment(900000, 180000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "seg00012.m4s"), keyframeFragment(90000, 180000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	track := newCaptionTrack(0)
+	track.line = 1
+	track.cues = []keptCue{
+		{Cue: captions.Cue{Start: offA + 900000 + 45000, End: offA + 900000 + 90000, Text: "first loop"}, line: 0},
+		// The loop repeats the first one's timestamps.
+		{Cue: captions.Cue{Start: offA + 900000 + 45000, End: offA + 900000 + 90000, Text: "second loop, same time"}, line: 1},
+		{Cue: captions.Cue{Start: offB + 90000 + 45000, End: offB + 90000 + 90000, Text: "after the break"}, line: 1},
+	}
+	in := &packInput{spans: []encodeSpan{{seq: 0, offset: offA, line: 0}, {seq: 12, offset: offB, line: 1}}}
+	r := &rendition{spec: Rendition{Video: "720", Audio: "aac2"}, dir: dir, input: in}
+	h := &Hub{channels: map[int64]*feed{7: {renditions: map[string]*rendition{"720.aac2": r}, captions: track}}}
+	for name, want := range map[string]string{"seg00010.vtt": "first loop", "seg00012.vtt": "after the break"} {
+		body, err := h.CaptionSegment(7, "720.aac2", name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(body), want) || strings.Count(string(body), "-->") != 1 {
+			t.Errorf("%s: want only %q, got\n%s", name, want, body)
+		}
+	}
+	// An encode whose header gave no start cannot place its cues.
+	in.spans = append(in.spans, encodeSpan{seq: 12, line: -1})
+	if body, _ := h.CaptionSegment(7, "720.aac2", "seg00012.vtt"); strings.Contains(string(body), "-->") {
+		t.Fatalf("cues without an offset:\n%s", body)
 	}
 }
 

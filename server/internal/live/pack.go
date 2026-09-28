@@ -146,9 +146,9 @@ func newPackPipe(cmd *exec.Cmd) (*packPipe, error) {
 	return &packPipe{File: r, w: w}, nil
 }
 
-func startPack(dir string, stdout *packPipe, gate *playlistGate, done chan struct{}) *packInput {
+func startPack(dir string, stdout *packPipe, gate *playlistGate, done chan struct{}, line func() int) *packInput {
 	stdout.started()
-	in := &packInput{cur: stdout}
+	in := &packInput{cur: stdout, line: line}
 	go func() {
 		defer close(done)
 		defer in.close()
@@ -167,13 +167,30 @@ type packInput struct {
 	cur  io.ReadCloser
 	next []*readAhead
 	done bool
-	// offset is the broadcast time, in 90 kHz ticks, of fragment time zero.
-	// A later encode on the same playlist starts its own fragment clock, so
-	// the offset is known only while one encode has fed the playlist.
+	// offset is the broadcast time, in 90 kHz ticks, of fragment time zero
+	// for the latest encode. known is true only while one encode has fed
+	// the playlist; encodeAt has each encode's own.
 	offset  int64
 	known   bool
 	encodes int
+	startOK bool
+	// line is the captions' timeline when an encode writes its first
+	// segment. Nil without captions.
+	line  func() int
+	spans []encodeSpan
 }
+
+// encodeSpan is one encode's place on the playlist: the sequence number of
+// its first segment, its broadcast offset, and the captions' timeline.
+type encodeSpan struct {
+	seq    int
+	offset int64
+	line   int
+}
+
+// spanKeep bounds the encodes remembered. At most breakLimit start a minute,
+// 450 over the playlist's 90 minutes.
+const spanKeep = 1024
 
 // noteEncodeStart records where the next encode's fragment clock starts on
 // the broadcast clock, in seconds; ok is false when its header did not say.
@@ -182,7 +199,45 @@ func (in *packInput) noteEncodeStart(first float64, ok bool) {
 	defer in.mu.Unlock()
 	in.encodes++
 	in.known = ok && in.encodes == 1
+	in.startOK = ok
 	in.offset = int64(math.Round(first*90000)) % ptsWrap
+}
+
+// noteFirstSegment is told the sequence number of the segment the latest
+// encode's first fragment opens.
+// A second backward break within respawnGap can move the captions on before
+// a queued encode writes, and that encode's segments then get no cues.
+func (in *packInput) noteFirstSegment(seq int) {
+	// line never changes; it takes the caption track's lock, not this one.
+	n := 0
+	if in.line != nil {
+		n = in.line()
+	}
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	if !in.startOK {
+		// Its segments cannot be placed on the broadcast clock.
+		n = -1
+	}
+	in.spans = append(in.spans, encodeSpan{seq: seq, offset: in.offset, line: n})
+	if len(in.spans) > spanKeep {
+		in.spans = append(in.spans[:0], in.spans[len(in.spans)-spanKeep:]...)
+	}
+}
+
+// encodeAt is the encode that wrote segment seq.
+func (in *packInput) encodeAt(seq int) (encodeSpan, bool) {
+	if in == nil {
+		return encodeSpan{}, false
+	}
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	for i := len(in.spans) - 1; i >= 0; i-- {
+		if in.spans[i].seq <= seq {
+			return in.spans[i], in.spans[i].line >= 0
+		}
+	}
+	return encodeSpan{}, false
 }
 
 // broadcastOffset is what to add to a segment's time to get the broadcast
@@ -199,6 +254,7 @@ func (in *packInput) broadcastOffset() (int64, bool) {
 // encodeStarts is the packager's reader when a hub owns it.
 type encodeStarts interface {
 	noteEncodeStart(first float64, ok bool)
+	noteFirstSegment(seq int)
 }
 
 // errNextEncode is where one encode's output ends and the next one's begins.
@@ -330,6 +386,9 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 	// handover is set at an encode boundary. The next fragment starts a new
 	// timeline even when its step looks like one more group of pictures.
 	var handover bool
+	// fresh is set by each encode's header. That encode's first fragment
+	// opens a segment, and the reader learns its sequence number.
+	var fresh bool
 	allSync := true
 
 	var hold playlistCeiling
@@ -410,6 +469,14 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 			}
 		}
 		handover = false
+		if fresh {
+			fresh = false
+			// A later encode's first fragment always jumped, so the open
+			// segment is closed and this fragment is the next one's first.
+			if n, ok := r.(encodeStarts); ok && len(open) == 0 {
+				n.noteFirstSegment(msn)
+			}
+		}
 		if !jumped && len(open) > 0 {
 			if open[len(open)-1].dur == 0 {
 				step := ptsDiff(pts, open[len(open)-1].pts)
@@ -496,6 +563,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 						if n, ok := r.(encodeStarts); ok {
 							n.noteEncodeStart(first, nextShifts != nil)
 						}
+						fresh = true
 						reinit = nil
 						// Players keep init.mp4. A new encode that describes its
 						// streams differently needs a new playlist.
@@ -515,6 +583,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 						if n, ok := r.(encodeStarts); ok {
 							n.noteEncodeStart(first, shifts != nil)
 						}
+						fresh = true
 						id, sc, ok := videoTrack(init)
 						if !ok {
 							return fmt.Errorf("pack: no video track")

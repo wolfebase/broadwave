@@ -777,12 +777,14 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 		}
 		return nil, err
 	}
-	packIn := startPack(dir, stdout, gate, done)
+	if stdin != nil {
+		h.startCaptionsLocked(f)
+	}
+	packIn := startPack(dir, stdout, gate, done, captionLine(f))
 	NotePID(h.Dir, cmd.Process.Pid)
 	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: time.Now(), args: args, gate: gate, packDone: done, input: packIn}
 	if stdin != nil {
 		r.sub = h.attachPipe(muxOf(h, f), h.renditionPipe(f, r, stdin), true)
-		h.startCaptionsLocked(f)
 	}
 	f.renditions[key] = r
 	go h.watchRendition(f, r, cmd, encoderOf(h.Encoder, want), false)
@@ -1035,7 +1037,7 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 		}
 		return false
 	}
-	r.input = startPack(r.dir, stdout, gate, done)
+	r.input = startPack(r.dir, stdout, gate, done, captionLine(f))
 	NotePID(h.Dir, cmd.Process.Pid)
 	r.cmd = cmd
 	r.stdin = stdin

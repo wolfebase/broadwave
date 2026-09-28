@@ -1444,3 +1444,43 @@ func TestAHeldGroupSegmentIsAsLongAsItsFrames(t *testing.T) {
 		t.Fatalf("segment lengths %v, want 1.134 (6 + 28 frames) then 1.001:\n%s", lens, b)
 	}
 }
+
+// encodeFeed hands Pack each encode's output in turn, as packInput does.
+type encodeFeed struct {
+	parts  [][]byte
+	firsts []int
+}
+
+func (e *encodeFeed) Read(b []byte) (int, error) {
+	if len(e.parts) == 0 {
+		return 0, io.EOF
+	}
+	p := e.parts[0]
+	e.parts = e.parts[1:]
+	if p == nil {
+		return 0, errNextEncode
+	}
+	return copy(b, p), nil
+}
+
+func (e *encodeFeed) noteEncodeStart(float64, bool) {}
+
+func (e *encodeFeed) noteFirstSegment(seq int) { e.firsts = append(e.firsts, seq) }
+
+func TestPackTellsWhereEachEncodeStarts(t *testing.T) {
+	first := videoInit()
+	for _, pts := range []int64{0, 90000, 180000} {
+		first = append(first, keyframeFragment(pts, 90000)...)
+	}
+	second := videoInit()
+	for _, pts := range []int64{0, 90000} {
+		second = append(second, keyframeFragment(pts, 90000)...)
+	}
+	feed := &encodeFeed{parts: [][]byte{first, nil, second}}
+	if err := Pack(t.TempDir(), feed, nil); err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(feed.firsts) != "[0 3]" {
+		t.Fatalf("first segments %v, want [0 3]", feed.firsts)
+	}
+}
