@@ -18,6 +18,7 @@
   <a href="#-install-in-one-command"><b>Install</b></a> &nbsp;·&nbsp;
   <a href="#-one-tuner-every-screen-the-same-frame"><b>How it works</b></a> &nbsp;·&nbsp;
   <a href="#-everything-it-does"><b>Features</b></a> &nbsp;·&nbsp;
+  <a href="#-what-it-looks-like"><b>Screens</b></a> &nbsp;·&nbsp;
   <a href="#-works-with"><b>Works with</b></a> &nbsp;·&nbsp;
   <a href="#-questions"><b>FAQ</b></a>
 </p>
@@ -72,6 +73,35 @@ Three people watching the game in three rooms use **one** tuner, not three — a
 | **Private** | No account, no ads, no analytics · everything stays on your server · support bundles with secrets stripped out · open source, Apache 2.0 |
 
 </details>
+
+<br>
+
+## ✦ What it looks like
+
+The guide, live TV, and recordings. The phone uses the same server. The picture here is a test pattern.
+
+<table>
+  <tr>
+    <td width="72%"><img src="docs/screenshots/readme/home-1440.jpg" alt="Home, with the show on now" width="100%"></td>
+    <td><img src="docs/screenshots/readme/home-390.jpg" alt="Home on a phone" width="180"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/readme/guide-1440.jpg" alt="The guide for the afternoon" width="100%"></td>
+    <td><img src="docs/screenshots/readme/guide-390.jpg" alt="The guide on a phone" width="180"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/readme/player-1440.jpg" alt="Live TV with the channel list beside the picture" width="100%"></td>
+    <td><img src="docs/screenshots/readme/player-390.jpg" alt="Live TV on a phone, with the channel list" width="180"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/readme/side-1440.jpg" alt="Two channels side by side" width="100%"></td>
+    <td><img src="docs/screenshots/readme/side-390.jpg" alt="Two channels, one above the other, on a phone" width="180"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/readme/recordings-1440.jpg" alt="A show that is still recording" width="100%"></td>
+    <td><img src="docs/screenshots/readme/recordings-390.jpg" alt="A recording on a phone" width="180"></td>
+  </tr>
+</table>
 
 <br>
 
