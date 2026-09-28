@@ -12,20 +12,20 @@ final class AccessibilityAuditTests: XCTestCase {
         stampSetup()
     }
 
-    func testHome() throws {
+    @MainActor func testHome() throws {
         let app = launch(tab: "home")
         XCTAssertTrue(app.buttons["Watch"].waitForExistence(timeout: 25), app.debugDescription)
         try finish(app, "home")
     }
 
-    func testGuide() throws {
+    @MainActor func testGuide() throws {
         let app = launch(tab: "guide")
         let now = app.descendants(matching: .any)["guide-now"]
         XCTAssertTrue(now.waitForExistence(timeout: 25), app.debugDescription)
         try finish(app, "guide")
     }
 
-    func testSettings() throws {
+    @MainActor func testSettings() throws {
         let app = launch(tab: "settings")
         XCTAssertTrue(app.descendants(matching: .any)["home-scan"].waitForExistence(timeout: 25), app.debugDescription)
         scroll(app)
@@ -34,13 +34,13 @@ final class AccessibilityAuditTests: XCTestCase {
         try finish(app, "settings")
     }
 
-    func testRecordings() throws {
+    @MainActor func testRecordings() throws {
         let app = launch(tab: "recordings")
         XCTAssertTrue(recordingsReady(app), app.debugDescription)
         try finish(app, "recordings")
     }
 
-    func testPlayerChrome() throws {
+    @MainActor func testPlayerChrome() throws {
         let app = try launch(watch: firstChannel())
         #if os(tvOS)
             let chrome = app.descendants(matching: .any)["player-chrome"]
@@ -65,14 +65,14 @@ final class AccessibilityAuditTests: XCTestCase {
         try finish(app, "player")
     }
 
-    func testMultiview() throws {
+    @MainActor func testMultiview() throws {
         let ids = try twoChannels()
         let app = launch(multiview: ids)
         XCTAssertTrue(app.buttons["multiview-pause"].waitForExistence(timeout: 30), app.debugDescription)
         try finish(app, "multiview")
     }
 
-    func testTunerAndSignalRowsReadAsText() throws {
+    @MainActor func testTunerAndSignalRowsReadAsText() throws {
         let app = launch(tab: "settings", extra: ["-BroadwaveDiagnostics", "YES"])
         // tvOS section headers are capitalized, so the label is "TUNER HEALTH".
         XCTAssertTrue(text(app, "Tuner health").waitForExistence(timeout: 25), app.debugDescription)
@@ -97,7 +97,7 @@ final class AccessibilityAuditTests: XCTestCase {
         try finish(app, "diagnostics")
     }
 
-    func testDynamicTypeXXL() throws {
+    @MainActor func testDynamicTypeXXL() throws {
         let pages = ["home", "guide", "settings", "recordings"]
         for page in pages {
             let app = launch(tab: page, extra: xxl)
@@ -124,7 +124,7 @@ final class AccessibilityAuditTests: XCTestCase {
         ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryXXL"]
     }
 
-    private func finish(_ app: XCUIApplication, _ page: String) throws {
+    @MainActor private func finish(_ app: XCUIApplication, _ page: String) throws {
         saveShot(page)
         try assertAudit(app, page)
         assertNamedButtons(app, page)
@@ -210,11 +210,9 @@ final class AccessibilityAuditTests: XCTestCase {
         }
     }
 
-    private func assertAudit(_ app: XCUIApplication, _ page: String) throws {
+    @MainActor private func assertAudit(_ app: XCUIApplication, _ page: String) throws {
         let types: XCUIAccessibilityAuditType = [.sufficientElementDescription, .trait, .elementDetection]
-        // Xcode 26 hands the audit's closure to the main actor. It touches only
-        // the locked log, so it is safe to send.
-        nonisolated(unsafe) let handle: (XCUIAccessibilityAuditIssue) throws -> Bool = { [auditLog] issue in
+        try app.performAccessibilityAudit(for: types) { [auditLog] issue in
             // The tvOS sidebar's back mark is a system image named for its symbol.
             // Its accessibility node ignores a new label. It is not a control we draw.
             let label = issue.element?.label ?? ""
@@ -225,14 +223,13 @@ final class AccessibilityAuditTests: XCTestCase {
             auditLog.fail("\(page) \(Self.describe(issue))")
             return true
         }
-        try app.performAccessibilityAudit(for: types, handle)
         let found = auditLog.takeFailures()
         XCTAssertTrue(found.isEmpty, found.joined(separator: "\n"))
     }
 
     /// XXL may clip a one-line card title. That is a visual call. A clipped button name is not.
-    private func assertClippedButtons(_ app: XCUIApplication, _ page: String) throws {
-        nonisolated(unsafe) let handle: (XCUIAccessibilityAuditIssue) throws -> Bool = { [auditLog] issue in
+    @MainActor private func assertClippedButtons(_ app: XCUIApplication, _ page: String) throws {
+        try app.performAccessibilityAudit(for: [.textClipped, .dynamicType]) { [auditLog] issue in
             let line = "\(page) \(Self.describe(issue))"
             if issue.auditType == .textClipped, issue.element?.elementType == .button {
                 auditLog.fail(line)
@@ -241,7 +238,6 @@ final class AccessibilityAuditTests: XCTestCase {
             }
             return true
         }
-        try app.performAccessibilityAudit(for: [.textClipped, .dynamicType], handle)
         let found = auditLog.takeFailures()
         let visual = auditLog.takeNotes()
         if !visual.isEmpty {
