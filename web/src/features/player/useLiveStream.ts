@@ -166,6 +166,7 @@ export function useLiveStream(
     // has a rendition.
     const ctrl = new AbortController();
     let released = false;
+    let leaving = false;
     const release = () => {
       if (released || !joined) return;
       released = true;
@@ -333,7 +334,7 @@ export function useLiveStream(
           await video.play().catch(() => undefined);
         });
       } catch (err) {
-        if (dead) return;
+        if (dead || leaving) return;
         quietRetry.current = null;
         quietPending.current = false;
         const failed = err as ApiFailure;
@@ -370,7 +371,15 @@ export function useLiveStream(
     // pagehide also fires when the browser keeps the page for Back. That page
     // stops fetching, so the tuner has to go too. pageshow starts a new watch.
     const beacon = () => {
-      if (released || !joined) return;
+      if (released) return;
+      if (!joined) {
+        // A watch still on its way would be granted to a page that is gone,
+        // once the stops beside it free a picture. The server drops a watch
+        // whose request is cancelled.
+        leaving = true;
+        ctrl.abort();
+        return;
+      }
       const body = new Blob([JSON.stringify({ rendition: joined, boot })], { type: "application/json" });
       if (navigator.sendBeacon?.(`/api/v1/watch/${id}/stop`, body)) released = true;
     };
