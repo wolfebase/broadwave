@@ -2,7 +2,7 @@ import Hls from "hls.js";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { getDeviceHealth, getSignals, getTuners, stopWatch, watchChannel, type ApiFailure } from "../../api";
 import { events } from "../../lib/events";
-import { SyncEngine, type SyncStatus } from "../../lib/sync";
+import { startOnRoom, SyncEngine, type SyncStatus } from "../../lib/sync";
 import type { Caps, Channel, Prefs, WatchSession } from "../../types";
 import { liveHlsConfig, type BufferProfile } from "../../picture";
 import { rememberChannel } from "../../recent";
@@ -88,9 +88,11 @@ export function useLiveStream(
   // last, so the pictures that were playing get their room on the server first.
   const watching = useRef(false);
   const syncing = useRef(sync);
+  const roomRef = useRef(room);
   useEffect(() => {
     syncing.current = sync;
-  }, [sync]);
+    roomRef.current = room;
+  }, [sync, room]);
   // Layout effects run before the watch effect, so a start in the same render sees the gate.
   const afterRef = useRef(!!after);
   useLayoutEffect(() => {
@@ -270,9 +272,11 @@ export function useLiveStream(
         setSession(next);
         playlist = next.playlist;
         if (Hls.isSupported()) {
-          hls = new Hls(liveHlsConfig(profile));
+          const onRoom = syncing.current && !holdSync.current ? roomRef.current : null;
+          hls = new Hls({ ...liveHlsConfig(profile), autoStartLoad: !onRoom });
           hlsRef.current = hls;
           (video as HTMLVideoElement & { hls?: Hls }).hls = hls;
+          if (onRoom) startOnRoom(hls, video, onRoom);
           hls.loadSource(next.playlist);
           hls.attachMedia(video);
           attached = true;
