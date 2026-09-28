@@ -382,7 +382,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		if !haveInit {
 			return nil
 		}
-		pts, ok := fragmentPTS(frag, track, scale)
+		pts, ok := fragmentStart(frag, track, scale)
 		if !ok {
 			return nil
 		}

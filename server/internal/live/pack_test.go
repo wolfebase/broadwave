@@ -1332,3 +1332,115 @@ func TestPackInputMovesToTheNextEncode(t *testing.T) {
 		t.Fatal("follow accepted after the packager stopped")
 	}
 }
+
+// gopFragment is one group of pictures as a broadcast copy has it: n frames
+// decoded from dts. An open group shows the two B-frames decoded after the
+// keyframe before it.
+func gopFragment(dts int64, n int, open bool) []byte {
+	const d = 3003
+	tfhd := make([]byte, 8)
+	tfhd[1] = 0x02 // default-base-is-moof
+	binary.BigEndian.PutUint32(tfhd[4:8], 1)
+	tfdt := make([]byte, 12)
+	tfdt[0] = 1
+	binary.BigEndian.PutUint64(tfdt[4:12], uint64(dts))
+	trun := make([]byte, 16, 16+n*8)
+	trun[0] = 1                   // signed composition offsets
+	trun[2], trun[3] = 0x09, 0x05 // data offset, first-sample flags, duration, composition offset
+	binary.BigEndian.PutUint32(trun[4:8], uint32(n))
+	binary.BigEndian.PutUint32(trun[12:16], 0x02000000) // a keyframe
+	for i := 0; i < n; i++ {
+		var cts int32
+		if open && i == 0 {
+			cts = 2 * d
+		} else if open && i < 3 {
+			cts = -d
+		}
+		trun = binary.BigEndian.AppendUint32(trun, d)
+		trun = binary.BigEndian.AppendUint32(trun, uint32(cts))
+	}
+	traf := append(append(mp4Box("tfhd", tfhd), mp4Box("tfdt", tfdt)...), mp4Box("trun", trun)...)
+	moof := mp4Box("moof", append(mp4Box("mfhd", make([]byte, 8)), mp4Box("traf", traf)...))
+	return append(moof, mp4Box("mdat", []byte{0})...)
+}
+
+// A copy of a broadcast with open groups and a scene cut now and then (5.1,
+// measured): the dates stay on the timestamps instead of gaining two frames at
+// every closed group.
+func TestOpenGroupsKeepTheirDates(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "init.mp4"), videoInit(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	groups := []struct {
+		frames int
+		open   bool
+	}{{30, true}, {16, true}, {28, false}, {30, true}, {30, true}, {18, true}, {28, false}, {30, true}}
+	var list strings.Builder
+	list.WriteString("#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n")
+	dts := int64(900000)
+	for i, g := range groups {
+		name := fmt.Sprintf("seg%05d.m4s", i)
+		if err := os.WriteFile(filepath.Join(dir, name), gopFragment(dts, g.frames, g.open), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		fmt.Fprintf(&list, "#EXTINF:%.3f,\n%s\n", float64(g.frames*3003)/90000, name)
+		dts += int64(g.frames * 3003)
+	}
+	tl := NewTimeline()
+	fixed := time.Date(2026, 9, 28, 16, 0, 0, 0, time.UTC)
+	tl.now = func() time.Time { return fixed }
+	var p playlistStamper
+	stamped := string(p.stamp(dir, []byte(list.String()), tl))
+	var dates []time.Time
+	for _, line := range strings.Split(stamped, "\n") {
+		if v, ok := strings.CutPrefix(line, "#EXT-X-PROGRAM-DATE-TIME:"); ok {
+			at, _ := time.Parse("2006-01-02T15:04:05.000Z", v)
+			dates = append(dates, at)
+		}
+	}
+	if len(dates) != len(groups) {
+		t.Fatalf("%d dates for %d segments:\n%s", len(dates), len(groups), stamped)
+	}
+	frames := 0
+	for i, g := range groups {
+		want := dates[0].Add(time.Duration(frames*3003) * time.Second / 90000)
+		if d := dates[i].Sub(want); d > 2*time.Millisecond || d < -2*time.Millisecond {
+			t.Errorf("segment %d is dated %v, %v off its timestamps", i, dates[i], d)
+		}
+		frames += g.frames
+	}
+}
+
+// A short group held until the next keyframe and then closed with it is one
+// segment of both groups' frames. Its length used to run from keyframe to
+// keyframe, two frames long when the next group was open, and every such
+// segment pushed the channel's dates two frames ahead.
+func TestAHeldGroupSegmentIsAsLongAsItsFrames(t *testing.T) {
+	dir := t.TempDir()
+	raw := videoInit()
+	dts := int64(900000)
+	for _, g := range []struct {
+		frames int
+		open   bool
+	}{{6, false}, {28, true}, {30, true}, {30, true}} {
+		raw = append(raw, gopFragment(dts, g.frames, g.open)...)
+		dts += int64(g.frames * 3003)
+	}
+	if err := Pack(dir, bytes.NewReader(raw), nil); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lens []string
+	for _, line := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(line, "#EXTINF:"); ok {
+			lens = append(lens, strings.TrimSuffix(v, ","))
+		}
+	}
+	if len(lens) < 2 || lens[0] != "1.134" || lens[1] != "1.001" {
+		t.Fatalf("segment lengths %v, want 1.134 (6 + 28 frames) then 1.001:\n%s", lens, b)
+	}
+}
