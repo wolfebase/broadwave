@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
@@ -23,6 +23,26 @@ function channel(name: string) {
 async function setupDone(page: Page) {
   const res = await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } });
   expect(res.ok(), "setup").toBeTruthy();
+}
+
+// The spec before this one tunes another channel, and that grab can finish
+// after this test has started. Those files are not this mux. A sample of the
+// mux on now can also miss its first try and land a minute later.
+function dropOtherFrames(keep: number[]) {
+  const harness = JSON.parse(readFileSync(path.join(here, ".run/server.json"), "utf8")) as { config: string };
+  const dir = path.join(harness.config, "work", "frames");
+  const stay = new Set(keep);
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    const id = Number(name.split(/[.-]/)[0]);
+    if (stay.has(id)) continue;
+    rmSync(path.join(dir, name), { force: true });
+  }
 }
 
 async function openChannel(page: Page, id: number) {
@@ -59,11 +79,12 @@ async function shot(page: Page, name: string) {
 }
 
 test("a tuned mux previews its other channel, and the pages do not 404", async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await setupDone(page);
   const wdaf = channel("WDAF");
   const wdaf2 = channel("WDAF2");
   const kctv = channel("KCTV");
+  const keep = [wdaf.id, wdaf2.id];
   const misses = watchMisses(page);
 
   await openChannel(page, wdaf.id);
@@ -77,6 +98,7 @@ test("a tuned mux previews its other channel, and the pages do not 404", async (
   await expect
     .poll(
       async () => {
+        dropOtherFrames(keep);
         const listed = await page.request.get("/api/v1/frames");
         if (!listed.ok()) return false;
         const body = (await listed.json().catch(() => null)) as { channels?: number[] } | null;
@@ -86,11 +108,12 @@ test("a tuned mux previews its other channel, and the pages do not 404", async (
         const other = await page.request.get(`/api/v1/channels/${kctv.id}/frame?w=480`);
         return ids.includes(wdaf.id) && ids.includes(wdaf2.id) && !ids.includes(kctv.id) && wide.ok() && sibling.ok() && other.status() === 404;
       },
-      { timeout: 30_000 },
+      { timeout: 75_000 },
     )
     .toBe(true);
 
   misses.length = 0;
+  dropOtherFrames(keep);
   await page.goto("/");
   await settle(page);
   const homeCard = page.locator("button.now-card", { has: page.locator(".nc-num", { hasText: /^4\.2$/ }) });
@@ -102,6 +125,7 @@ test("a tuned mux previews its other channel, and the pages do not 404", async (
   await shot(page, "home.jpg");
 
   misses.length = 0;
+  dropOtherFrames(keep);
   await page.goto("/guide");
   await settle(page);
   const guideRow = page.locator(".guide-row", { has: page.getByRole("button", { name: "Watch 4.2 WDAF2" }) });
@@ -113,6 +137,7 @@ test("a tuned mux previews its other channel, and the pages do not 404", async (
   await shot(page, "guide.jpg");
 
   misses.length = 0;
+  dropOtherFrames(keep);
   await page.goto("/multiview?add=1");
   await settle(page);
   const picker = page.locator("button.mv-ch", { hasText: "4.2" }).locator("img.mv-frame");

@@ -276,6 +276,13 @@
   padding: 6px 8px;
   font-size: 10px;
   flex: 1;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.layout-phone .topbar .glass-icon {
+  width: 44px;
+  height: 44px;
 }
 
 .layout-phone .tab-icon {

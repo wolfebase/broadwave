@@ -547,6 +547,17 @@ html[data-layout="tv"] .stage:focus-visible {
   backdrop-filter: blur(24px);
 }
 
+.layout-phone .stage:not(.mini) .glass-icon,
+.layout-phone .stage.mini .glass-icon {
+  width: 44px;
+  height: 44px;
+}
+
+.channel-step {
+  display: inline-flex;
+  gap: 6px;
+}
+
 .layout-phone .stage-dock {
   margin: 0 var(--space-3) max(12px, env(safe-area-inset-bottom));
 }

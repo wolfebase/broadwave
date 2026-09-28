@@ -99,6 +99,9 @@ test("arrow keys, Enter, and Escape drive the TV layout", async ({ page }) => {
   await settle(page);
   await expect(page.locator("html")).toHaveAttribute("data-layout", "tv");
   await expect(page.getByRole("tab", { name: "Guide" })).toBeVisible();
+  // The TV shell claims the selected tab on the next frame. Blur after that,
+  // or the claim lands between the blur and the check.
+  await expect(page.locator(".tabs [role='tab'][aria-selected='true']")).toBeFocused();
   await page.evaluate(() => {
     const el = document.activeElement;
     if (el instanceof HTMLElement) el.blur();
