@@ -1017,6 +1017,26 @@ struct FileMenuEntry: Identifiable {
     #endif
 }
 
+#if os(iOS)
+    /// One entry of the iPhone and iPad Breaks menu.
+    private struct FileMenuItem: View {
+        let entry: FileMenuEntry
+
+        var body: some View {
+            if entry.children.isEmpty {
+                Button(entry.title, systemImage: entry.symbol) { entry.action() }
+            } else {
+                Menu(entry.title, systemImage: entry.symbol) {
+                    ForEach(entry.children) { child in
+                        Button(child.title) { child.action() }
+                            .accessibilityLabel(child.spoken ?? child.title)
+                    }
+                }
+            }
+        }
+    }
+#endif
+
 /// AVPlayerViewController: system PiP, AirPlay, captions, audio tracks, and Now Playing.
 struct SystemPlayer: UIViewControllerRepresentable {
     let player: AVPlayer
@@ -1360,6 +1380,23 @@ private func joinFacts(_ parts: [String?]) -> String {
     return line.isEmpty ? "Waiting" : line
 }
 
+/// What the recording player just did, over the top of the picture for a few seconds.
+private struct PlayerNote: View {
+    let text: String?
+
+    var body: some View {
+        if let text {
+            Text(text)
+                .font(.subheadline)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .glassEffect()
+                .padding(.top, 60)
+                .allowsHitTesting(false)
+        }
+    }
+}
+
 private struct TunerUsed: LocalizedError {
     var errorDescription: String? {
         "This library channel tried to use an antenna tuner."
@@ -1394,6 +1431,9 @@ struct RecordingPlayerScreen: View {
     @State private var breakStart: Double?
     @AppStorage(BreakSkip.key) private var skip = BreakSkip.auto
 
+    /// AVFoundation may post this off the main thread.
+    private static let ended = NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification).receive(on: DispatchQueue.main)
+
     init(recording: Recording) {
         source = .recording(recording)
     }
@@ -1410,17 +1450,7 @@ struct RecordingPlayerScreen: View {
                     Text(error).padding().glassEffect()
                 }
             }
-            .overlay(alignment: .top) {
-                if let note {
-                    Text(note)
-                        .font(.subheadline)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .glassEffect()
-                        .padding(.top, 60)
-                        .allowsHitTesting(false)
-                }
-            }
+            .overlay(alignment: .top) { PlayerNote(text: note) }
         #if os(iOS)
             .overlay(alignment: .bottomTrailing) {
                 if let marker = inBreak {
@@ -1432,32 +1462,7 @@ struct RecordingPlayerScreen: View {
                     .padding(.bottom, 110)
                 }
             }
-            .toolbar {
-                ForEach(menu.filter { $0.id == "next" }) { entry in
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(entry.title, systemImage: entry.symbol) { entry.action() }
-                    }
-                }
-                if menu.contains(where: { $0.id != "next" }) {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Menu("Breaks", systemImage: "scissors") {
-                            ForEach(menu.filter { $0.id != "next" }) { entry in
-                                if entry.children.isEmpty {
-                                    Button(entry.title, systemImage: entry.symbol) { entry.action() }
-                                } else {
-                                    Menu(entry.title, systemImage: entry.symbol) {
-                                        ForEach(entry.children) { child in
-                                            Button(child.title) { child.action() }
-                                                .accessibilityLabel(child.spoken ?? child.title)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        .accessibilityIdentifier("recording-menu")
-                    }
-                }
-            }
+            .toolbar { fileToolbar }
         #endif
             .task(id: index) {
                 guard await load() else { return }
@@ -1472,7 +1477,7 @@ struct RecordingPlayerScreen: View {
                     note = nil
                 }
             }
-            .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification).receive(on: DispatchQueue.main)) { sent in
+            .onReceive(Self.ended) { sent in
                 // A library channel goes on to its next recording, as the web does. The last one stays.
                 guard case .library = source, (sent.object as? AVPlayerItem) === player.currentItem, index + 1 < count else { return }
                 index += 1
@@ -1488,6 +1493,29 @@ struct RecordingPlayerScreen: View {
             .toolbarVisibility(.hidden, for: .tabBar)
         #endif
     }
+
+    #if os(iOS)
+        /// Next recording as its own button, and the break entries in a Breaks menu.
+        @ToolbarContentBuilder private var fileToolbar: some ToolbarContent {
+            let entries = menu
+            if let next = entries.first(where: { $0.id == "next" }) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(next.title, systemImage: next.symbol) { next.action() }
+                }
+            }
+            let breaks = entries.filter { $0.id != "next" }
+            if !breaks.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu("Breaks", systemImage: "scissors") {
+                        ForEach(breaks) { entry in
+                            FileMenuItem(entry: entry)
+                        }
+                    }
+                    .accessibilityIdentifier("recording-menu")
+                }
+            }
+        }
+    #endif
 
     /// Starts the recording on screen. A library channel asks the server for the one at `index`.
     /// A load the viewer has already moved past changes nothing.
