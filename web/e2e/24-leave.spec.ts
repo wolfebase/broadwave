@@ -183,8 +183,9 @@ test("a quad kept for Back lets every tile go and watches again", async ({ page 
     };
   });
   expect(kept).toEqual({ hide: true, show: true });
-  // The socket drop used to restart the quiet-tile wait, so the other tiles
-  // asked only after the sound tile's watch returned. They ask with it now.
+  // The socket drop used to restart the quiet-tile wait. This server can play
+  // every tile, so they ask with the sound tile. A smaller budget still lets
+  // the sound tile ask first.
   await expect
     .poll(() => watchLog.filter((row) => row.at >= back).length, { timeout: 1_000, message: "three watches after Back" })
     .toBeGreaterThanOrEqual(3);
@@ -215,4 +216,103 @@ test("a quad kept for Back lets every tile go and watches again", async ({ page 
     JSON.stringify({ clearMs, backMs, viewers: await viewers(), watches: await watches(), kept, heard }, null, 2),
   );
   await page.screenshot({ path: path.join(evidence, "back.jpg") });
+});
+
+async function oneMoving(page: Page, channel: string): Promise<boolean> {
+  const video = page.locator(`video.mv-video[data-channel="${channel}"]`);
+  if ((await video.count()) === 0) return false;
+  return video.evaluate(async (el: HTMLVideoElement) => {
+    const from = el.currentTime;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return el.videoWidth > 0 && !el.paused && !el.muted && el.currentTime > from;
+  });
+}
+
+// A two-picture server cannot grant a three-tile quad. Starting every tile
+// together can hand the sound tile's picture to a quiet one. Back keeps the
+// sound tile first, and that picture is moving within 5 s.
+test("a quad kept for Back keeps the sound tile when two pictures fit", async ({ page }) => {
+  const diag = (await (await fetch(`${base}/api/v1/diagnostics`)).json()) as { encoder?: { tiles?: number } };
+  test.skip(diag.encoder?.tiles !== 2, "needs a budget of two pictures (E2E_SPEED=1.8)");
+  expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBe(true);
+  const asks: { channel: number; at: number; status: number; answered: number }[] = [];
+  const watchAsk = (url: string, method: string) => method === "POST" && url.split("?")[0].endsWith("/api/v1/watch");
+  const channelOf = (raw: string | null) => {
+    try {
+      return (JSON.parse(raw || "{}") as { channelId?: number }).channelId ?? 0;
+    } catch {
+      return 0;
+    }
+  };
+  page.on("request", (req) => {
+    if (!watchAsk(req.url(), req.method())) return;
+    asks.push({ channel: channelOf(req.postData()), at: Date.now(), status: 0, answered: 0 });
+  });
+  page.on("response", (res) => {
+    const req = res.request();
+    if (!watchAsk(req.url(), req.method())) return;
+    const row = [...asks].reverse().find((item) => item.channel === channelOf(req.postData()) && item.answered === 0);
+    if (!row) return;
+    row.status = res.status();
+    row.answered = Date.now();
+  });
+  await page.addInitScript(() => {
+    const mark = window as Window & { __bf?: { type: string; persisted: boolean; path: string }[] };
+    mark.__bf = [];
+    window.addEventListener("pagehide", (event) => {
+      mark.__bf?.push({ type: "pagehide", persisted: event.persisted, path: location.pathname });
+    });
+    window.addEventListener("pageshow", (event) => {
+      mark.__bf?.push({ type: "pageshow", persisted: event.persisted, path: location.pathname });
+    });
+  });
+
+  await page.goto("/multiview?ch=1,2,3&layout=quad&focus=1");
+  await expect(page.getByRole("region", { name: "Quad" })).toBeVisible();
+  await expect.poll(() => oneMoving(page, "1"), { timeout: 40_000, message: "the sound tile is playing" }).toBe(true);
+
+  await page.goto("/settings", { waitUntil: "commit" });
+  await expect.poll(viewers, { timeout: 5_000, message: "the quad let its viewers go" }).toBe(0);
+
+  const back = Date.now();
+  await page.goBack({ waitUntil: "commit" });
+  const kept = await page.evaluate(() => {
+    const rows = (window as Window & { __bf?: { type: string; persisted: boolean; path: string }[] }).__bf ?? [];
+    return {
+      hide: rows.some((row) => row.type === "pagehide" && row.path === "/multiview" && row.persisted),
+      show: rows.some((row) => row.type === "pageshow" && row.path === "/multiview" && row.persisted),
+    };
+  });
+  expect(kept).toEqual({ hide: true, show: true });
+  await expect
+    .poll(() => oneMoving(page, "1"), { timeout: Math.max(500, 5_000 - (Date.now() - back)), message: "the sound tile is playing again" })
+    .toBe(true);
+  await expect(page.locator(".mv-tile.focused .mv-error")).toHaveCount(0);
+  const again = asks.filter((row) => row.at >= back);
+  const sound = again.find((row) => row.channel === 1);
+  expect(sound?.status, "the sound tile's watch was granted").toBe(200);
+  const budget = await page.locator("section.mv").evaluate((el) => ({
+    fits: el.getAttribute("data-fits"),
+    slots: el.getAttribute("data-slots"),
+    pictures: el.getAttribute("data-pictures"),
+    tiles: el.getAttribute("data-tiles"),
+  }));
+  const backMs = Date.now() - back;
+  const evidence = path.resolve(here, "../../.evidence/lane/l54");
+  mkdirSync(evidence, { recursive: true });
+  writeFileSync(
+    path.join(evidence, "budget2.json"),
+    JSON.stringify({ backMs, tiles: diag.encoder?.tiles, kept, budget, asks: again, viewers: await viewers() }, null, 2),
+  );
+  const gaps = again.filter((row) => row.channel !== 1).map((row) => row.at - (sound?.answered ?? row.at));
+  console.log(`budget2 ${JSON.stringify({ budget, gaps, channels: again.map((row) => row.channel) })}`);
+  // Tiles that fit may ask together. The others ask after the sound tile's answer,
+  // so a full budget cannot hand that picture away.
+  if (budget.fits !== "1") {
+    for (const row of again) {
+      if (row.channel === 1) continue;
+      expect(row.at, `channel ${row.channel} asks after the sound tile is answered`).toBeGreaterThanOrEqual(sound?.answered ?? 0);
+    }
+  }
+  await page.screenshot({ path: path.join(evidence, "budget2.jpg") });
 });

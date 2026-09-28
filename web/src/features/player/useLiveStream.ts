@@ -53,6 +53,8 @@ export function useLiveStream(
     remember,
     after,
     captions,
+    fits,
+    quiet,
   }: {
     channelId: number;
     quality?: Prefs["quality"];
@@ -69,6 +71,11 @@ export function useLiveStream(
     // a start waits until this turns false.
     after?: boolean;
     captions?: boolean;
+    // The last picture budget covered every tile on this page, or every tile
+    // already had a picture. A kept page uses it to start the quiet tiles now.
+    fits?: boolean;
+    // This tile is not the one the viewer is hearing.
+    quiet?: boolean;
   },
 ) {
   const syncRef = useRef<SyncEngine | null>(null);
@@ -100,9 +107,13 @@ export function useLiveStream(
   }, [sync, room]);
   // Layout effects run before the watch effect, so a start in the same render sees the gate.
   const afterRef = useRef(!!after);
+  const fitsRef = useRef(!!fits);
+  const quietRef = useRef(!!quiet);
   useLayoutEffect(() => {
     afterRef.current = !!after;
-  }, [after]);
+    fitsRef.current = !!fits;
+    quietRef.current = !!quiet;
+  }, [after, fits, quiet]);
   const held = useRef(false);
   // A page kept for Back. The watch effect reads it and drops it after this turn.
   const pageKept = useRef(false);
@@ -137,7 +148,7 @@ export function useLiveStream(
       queueMicrotask(() => {
         pageKept.current = false;
       });
-    if (holdQuietStart(afterRef.current, kept)) {
+    if (holdQuietStart(afterRef.current, kept, fitsRef.current, quietRef.current)) {
       held.current = true;
       retrying.current = false;
       return;
