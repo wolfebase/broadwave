@@ -23,6 +23,8 @@ import {
   type RecoverySnap,
 } from "./outage";
 
+const restartAskLastMs = 3000;
+
 function webCaps(): Caps {
   const mse = typeof MediaSource !== "undefined" ? MediaSource : undefined;
   const audio = ["aac"];
@@ -78,6 +80,9 @@ export function useLiveStream(
   const autoTries = useRef({ channel: 0, n: 0 });
   const confirmLive = useRef(false);
   const retrying = useRef(false);
+  // This player holds a watch. After a restart, a player without one asks
+  // last, so the pictures that were playing get their room on the server first.
+  const watching = useRef(false);
   const syncing = useRef(sync);
   useEffect(() => {
     syncing.current = sync;
@@ -98,6 +103,7 @@ export function useLiveStream(
     let dead = false;
     let hls: Hls | null = null;
     const id = channelId;
+    watching.current = false;
     let joined = "";
     // The stop names the server process that counted this viewer. After a
     // restart the new process ignores it instead of taking someone else's.
@@ -215,6 +221,7 @@ export function useLiveStream(
         const next = await watchChannel(id, webCaps(), { quality, audio, picture, track, even }, "", allow, ctrl.signal);
         joined = next.rendition;
         boot = next.boot ?? "";
+        watching.current = true;
         autoTries.current = { channel: id, n: 0 };
         if (dead) {
           release();
@@ -450,14 +457,21 @@ export function useLiveStream(
   // waiting for the picture to run dry and the stall clock to name it.
   useEffect(() => {
     if (!channelId) return;
-    const off = events().on("restarted", () => {
+    let later = 0;
+    const again = () => {
       if (retrying.current) return;
       retrying.current = true;
       quietRetry.current = channelId;
       setAttempt((n) => n + 1);
+    };
+    const off = events().on("restarted", () => {
+      window.clearTimeout(later);
+      if (watching.current) again();
+      else later = window.setTimeout(again, restartAskLastMs);
     });
     return () => {
       off();
+      window.clearTimeout(later);
     };
   }, [channelId]);
 
