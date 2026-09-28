@@ -214,8 +214,8 @@ func TestCompressedEITTitleIsNotEmpty(t *testing.T) {
 	}
 }
 
-func TestWDAFTitlesNotBlank(t *testing.T) {
-	f, err := os.ReadFile("testdata/wdaf.ts")
+func TestKBWVTitlesNotBlank(t *testing.T) {
+	f, err := os.ReadFile("testdata/kbwv.ts")
 	if err != nil {
 		t.Fatal(err)
 	}

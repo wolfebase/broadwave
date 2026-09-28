@@ -26,10 +26,10 @@ func TestFakeTunerSharesFrequencyAndYields(t *testing.T) {
 		t.Fatalf("sample: %v %s", err, out)
 	}
 	srv := &fake.Server{TS: sample, Channels: []fake.Channel{
-		{Number: "4.1", Name: "WDAF", Freq: 593000000},
-		{Number: "4.2", Name: "WDAF2", Freq: 593000000},
-		{Number: "5.1", Name: "KCTV", Freq: 533000000},
-		{Number: "9.1", Name: "KMBC", Freq: 563000000},
+		{Number: "4.1", Name: "KBWV", Freq: 593000000},
+		{Number: "4.2", Name: "KBWV2", Freq: 593000000},
+		{Number: "5.1", Name: "WTST", Freq: 533000000},
+		{Number: "9.1", Name: "KRVR", Freq: 563000000},
 	}}
 	base, port, err := srv.Start()
 	if err != nil {

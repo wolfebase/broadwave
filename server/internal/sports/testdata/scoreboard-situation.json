@@ -2,8 +2,8 @@
   "events": [
     {
       "id": "nfl-redzone",
-      "name": "Kansas City Chiefs at Las Vegas Raiders",
-      "shortName": "KC @ LV",
+      "name": "Chicago Bears at Las Vegas Raiders",
+      "shortName": "CHI @ LV",
       "date": "2026-09-25T20:00:00Z",
       "status": {"type": {"state": "in", "completed": false, "shortDetail": "3rd 8:12"}},
       "competitions": [{
@@ -15,14 +15,14 @@
           "yardLine": 12,
           "downDistanceText": "1st & 8 at LV 12",
           "shortDownDistanceText": "1st & 8",
-          "possessionText": "KC",
+          "possessionText": "CHI",
           "isRedZone": true,
           "homeTimeouts": 3,
           "awayTimeouts": 2
         },
         "competitors": [
           {"homeAway": "home", "score": "14", "team": {"displayName": "Las Vegas Raiders", "shortDisplayName": "Raiders", "abbreviation": "LV", "color": "000000", "alternateColor": "A5ACAF"}},
-          {"homeAway": "away", "score": "17", "team": {"displayName": "Kansas City Chiefs", "shortDisplayName": "Chiefs", "abbreviation": "KC", "color": "E31837", "alternateColor": "FFB81C"}}
+          {"homeAway": "away", "score": "17", "team": {"displayName": "Chicago Bears", "shortDisplayName": "Bears", "abbreviation": "CHI", "color": "0B162A", "alternateColor": "FFB81C"}}
         ]
       }]
     },

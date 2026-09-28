@@ -242,8 +242,8 @@ func TestSetupFinishRunsItself(t *testing.T) {
 	err := st.UpsertDevice(ctx, hdhr.Device{
 		DeviceID: "FAKE", FriendlyName: "Fake", ModelNumber: "HDHR4-2US", TunerCount: 2,
 	}, []hdhr.Channel{
-		{GuideNumber: "4.1", GuideName: "WDAF-DT"},
-		{GuideNumber: "5.1", GuideName: "KCTV"},
+		{GuideNumber: "4.1", GuideName: "KDVR-DT"},
+		{GuideNumber: "5.1", GuideName: "KCNC"},
 		{GuideNumber: "9.1", GuideName: "ABC"},
 	})
 	if err != nil {
@@ -343,7 +343,7 @@ func TestSetupFinishRunsItself(t *testing.T) {
 	for _, ch := range channels {
 		fav[ch.GuideName] = ch.Favorite
 	}
-	if !fav["WDAF-DT"] || !fav["KCTV"] || !fav["ABC"] {
+	if !fav["KDVR-DT"] || !fav["KCNC"] || !fav["ABC"] {
 		t.Fatalf("favorites %#v", fav)
 	}
 }

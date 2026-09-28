@@ -57,10 +57,10 @@ test("a search result opens, and records just that airing", async ({ page }) => 
 
   await page.keyboard.press("Escape");
   await expect(row).toBeFocused();
-  await field.fill("Chief");
+  await field.fill("Bears");
   await field.press("Enter");
-  await page.getByRole("button", { name: /NFL: Chiefs at Bills/ }).first().click();
-  const live = page.getByRole("dialog", { name: "NFL: Chiefs at Bills" });
+  await page.getByRole("button", { name: /NFL: Bears at Bills/ }).first().click();
+  const live = page.getByRole("dialog", { name: "NFL: Bears at Bills" });
   await live.getByRole("button", { name: "Watch", exact: true }).click();
   await expect(page).toHaveURL(/\/watch\?channel=/);
 });

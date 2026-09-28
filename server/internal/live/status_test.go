@@ -14,7 +14,7 @@ func TestFeedStatsCountsViewersAndProcesses(t *testing.T) {
 	waited := &rendition{viewers: 4, cmd: running}
 	waited.waited.Store(true)
 	feed := &feed{
-		channel: store.SourceChannel{Channel: store.Channel{ID: 7, GuideNumber: "4.1", DisplayName: "KMBC"}},
+		channel: store.SourceChannel{Channel: store.Channel{ID: 7, GuideNumber: "4.1", DisplayName: "KRVR"}},
 		renditions: map[string]*rendition{
 			"a": {viewers: 2, cmd: running},
 			"b": {viewers: 1},
@@ -30,7 +30,7 @@ func TestFeedStatsCountsViewersAndProcesses(t *testing.T) {
 		t.Fatalf("feeds %d", len(got))
 	}
 	st := got[0]
-	if st.ChannelID != 7 || st.GuideNumber != "4.1" || st.Name != "KMBC" || st.Viewers != 7 || st.FFmpeg != 2 || !st.Recording || st.Exports != 3 {
+	if st.ChannelID != 7 || st.GuideNumber != "4.1" || st.Name != "KRVR" || st.Viewers != 7 || st.FFmpeg != 2 || !st.Recording || st.Exports != 3 {
 		t.Fatalf("%+v", st)
 	}
 	if len(h.FeedStats()) != 1 {

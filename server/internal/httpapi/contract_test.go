@@ -62,6 +62,10 @@ func TestContractFixtures(t *testing.T) {
 	if err := st.PutSettings(ctx, map[string]string{"setupComplete": "1"}); err != nil {
 		t.Fatal(err)
 	}
+	// The fake lineup's call signs are made up, so the networks come from a guide.
+	if err := st.SetNetworks(ctx, map[int64]string{1: "FOX", 3: "CBS"}); err != nil {
+		t.Fatal(err)
+	}
 	start := contractNow
 	end := start.Add(time.Hour)
 	if err := st.ReplaceAirings(ctx, []store.Airing{
@@ -86,7 +90,7 @@ func TestContractFixtures(t *testing.T) {
 	if _, err := st.CreateVirtual(ctx, "9000", "Jeopardy", []int64{recID}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.FollowTeam(ctx, store.TeamFollow{Name: "Chiefs", Abbr: "KC", League: "nfl", Record: true}); err != nil {
+	if err := st.FollowTeam(ctx, store.TeamFollow{Name: "Bears", Abbr: "CHI", League: "nfl", Record: true}); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.AddEventAt(ctx, contractNow, "guide", "Listings are in."); err != nil {
@@ -604,10 +608,10 @@ func (contractSports) Boards(context.Context, time.Time) ([]sports.Game, error) 
 
 func contractGames() []sports.Game {
 	return []sports.Game{{
-		ID: "nfl-1", League: "nfl", Name: "Chiefs at Bills", ShortName: "KC @ BUF",
+		ID: "nfl-1", League: "nfl", Name: "Bears at Bills", ShortName: "CHI @ BUF",
 		Start: contractNow, State: "pre", Detail: "Sun 1:00 PM",
 		Teams: []sports.Team{
-			{Name: "Chiefs", Abbr: "KC", Home: true},
+			{Name: "Bears", Abbr: "CHI", Home: true},
 			{Name: "Bills", Abbr: "BUF"},
 		},
 	}}

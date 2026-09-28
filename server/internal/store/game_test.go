@@ -16,7 +16,7 @@ func TestSetAiringGamesKeepsTheId(t *testing.T) {
 	defer s.Close()
 	ctx := t.Context()
 	if err := s.UpsertDevice(ctx, hdhr.Device{DeviceID: "D", FriendlyName: "DUO", BaseURL: "http://127.0.0.1", TunerCount: 1}, []hdhr.Channel{
-		{GuideNumber: "4.1", GuideName: "WDAF"},
+		{GuideNumber: "4.1", GuideName: "KBWV"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func TestSetAiringGamesKeepsTheId(t *testing.T) {
 	}
 	start := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 	if err := s.ReplaceAirings(ctx, []Airing{
-		{ChannelID: channels[0].ID, Title: "Chiefs at Bills", Start: start, End: start.Add(3 * time.Hour)},
+		{ChannelID: channels[0].ID, Title: "Bears at Bills", Start: start, End: start.Add(3 * time.Hour)},
 		{ChannelID: channels[0].ID, Title: "News", Start: start, End: start.Add(time.Hour)},
 	}); err != nil {
 		t.Fatal(err)
@@ -37,7 +37,7 @@ func TestSetAiringGamesKeepsTheId(t *testing.T) {
 	}
 	var game int64
 	for _, row := range rows {
-		if row.Title == "Chiefs at Bills" {
+		if row.Title == "Bears at Bills" {
 			game = row.ID
 		}
 	}

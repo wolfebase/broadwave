@@ -75,8 +75,8 @@ test("channel changes, go to live, sports, and search", async ({ page }) => {
   expect(channels.length).toBeGreaterThan(2);
   const start = channels[0];
   const next = channels[1];
-  const chiefs = channels.find((channel) => channel.name === "WDAF");
-  expect(chiefs, "seeded NFL channel").toBeTruthy();
+  const bears = channels.find((channel) => channel.name === "KBWV");
+  expect(bears, "seeded NFL channel").toBeTruthy();
 
   const setup = await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } });
   expect(setup.ok()).toBeTruthy();
@@ -140,21 +140,21 @@ test("channel changes, go to live, sports, and search", async ({ page }) => {
   await expect(page).toHaveURL(/\/guide/);
   await page.getByRole("tab", { name: "Sports" }).click();
   await expect(page).toHaveURL(/\/sports/);
-  const game = page.getByRole("article").filter({ hasText: "NFL" }).filter({ hasText: "Kansas City" });
+  const game = page.getByRole("article").filter({ hasText: "NFL" }).filter({ hasText: "Chicago" });
   await expect(game).toBeVisible();
   await page.screenshot({ path: path.join(evidence, "sports.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
   await game.getByRole("button", { name: "Watch", exact: true }).click();
-  await expect.poll(() => new URL(page.url()).searchParams.get("channel")).toBe(String(chiefs!.id));
-  await playing(page, chiefs!.id);
+  await expect.poll(() => new URL(page.url()).searchParams.get("channel")).toBe(String(bears!.id));
+  await playing(page, bears!.id);
   await page.screenshot({ path: path.join(evidence, "sports-watch.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
 
   await player.press("Escape");
   await page.getByRole("tab", { name: "Search" }).click();
-  await page.getByLabel("Search shows, people, and recordings").fill("Chiefs");
+  await page.getByLabel("Search shows, people, and recordings").fill("Bears");
   await page.getByLabel("Search shows, people, and recordings").press("Enter");
-  await expect(page).toHaveURL(/\/search\?q=Chiefs/);
+  await expect(page).toHaveURL(/\/search\?q=Bears/);
   await expect(page.getByRole("heading", { name: "Guide" })).toBeVisible();
-  await expect(page.locator("button.search-main", { hasText: "NFL: Chiefs at Bills" })).toBeVisible();
+  await expect(page.locator("button.search-main", { hasText: "NFL: Bears at Bills" })).toBeVisible();
   await page.screenshot({ path: path.join(evidence, "search.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
 
   expect(errors, errors.join("\n")).toEqual([]);

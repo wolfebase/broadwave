@@ -73,10 +73,10 @@ VALUES (${ch.id}, 'Evening News', 'Local headlines', 'The evening newscast.', 'N
   }
 
   const byName = new Map(list.map((channel) => [channel.name, channel]));
-  const wdaf = byName.get("WDAF");
-  const wdaf2 = byName.get("WDAF2");
-  const kctv = byName.get("KCTV");
-  if (!wdaf || !wdaf2 || !kctv) throw new Error(`unexpected lineup: ${list.map((c) => c.name).join(", ")}`);
+  const kbwv = byName.get("KBWV");
+  const kbwv2 = byName.get("KBWV2");
+  const wtst = byName.get("WTST");
+  if (!kbwv || !kbwv2 || !wtst) throw new Error(`unexpected lineup: ${list.map((c) => c.name).join(", ")}`);
 
   // Fifteen minutes into the current half hour. Program bars then sit on the
   // same pixels in every run; the clock labels are hidden in the snapshots.
@@ -85,11 +85,11 @@ VALUES (${ch.id}, 'Evening News', 'Local headlines', 'The evening newscast.', 'N
   const now = Math.floor(wall / half) * half + 15 * 60_000;
   writeFileSync(path.join(here, ".run/runtime.json"), JSON.stringify({ base: server.base, now, channels: list }, null, 2));
   const rows: [number, string, string, string, string, number, number][] = [
-    [wdaf.id, "NFL: Chiefs at Bills", "Kansas City at Buffalo", "Sunday football.", "Sports", now - 20 * 60_000, now + 100 * 60_000],
-    [wdaf.id, "Late Local News", "The late newscast.", "The late newscast.", "News", now + 100 * 60_000, now + 160 * 60_000],
-    [wdaf2.id, "Evening News", "Local headlines", "The evening newscast.", "News", now - 15 * 60_000, now + 45 * 60_000],
-    [kctv.id, "The Night Show", "A guest and a band", "Talk.", "Series", now - 5 * 60_000, now + 2 * 60 * 60_000],
-    [kctv.id, "NBA: Lakers at Celtics", "Los Angeles at Boston", "Basketball.", "Sports", now + 3 * 60 * 60_000, now + 6 * 60 * 60_000],
+    [kbwv.id, "NFL: Bears at Bills", "Chicago at Buffalo", "Sunday football.", "Sports", now - 20 * 60_000, now + 100 * 60_000],
+    [kbwv.id, "Late Local News", "The late newscast.", "The late newscast.", "News", now + 100 * 60_000, now + 160 * 60_000],
+    [kbwv2.id, "Evening News", "Local headlines", "The evening newscast.", "News", now - 15 * 60_000, now + 45 * 60_000],
+    [wtst.id, "The Night Show", "A guest and a band", "Talk.", "Series", now - 5 * 60_000, now + 2 * 60 * 60_000],
+    [wtst.id, "NBA: Lakers at Celtics", "Los Angeles at Boston", "Basketball.", "Sports", now + 3 * 60 * 60_000, now + 6 * 60 * 60_000],
   ];
   const values = rows
     .map(([id, title, subtitle, description, category, start, end], index) => {

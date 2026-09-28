@@ -29,7 +29,7 @@ func TestFetchDropsDeviceAuth(t *testing.T) {
 		case "/lineup.json":
 			_, _ = w.Write([]byte(`[
 				{"GuideNumber":"14.10","GuideName":"ZLiving","URL":"http://tuner:5004/auto/v14.10","VideoCodec":"H264","AudioCodec":"AC3"},
-				{"GuideNumber":"4.1","GuideName":"WDAF-DT","URL":"http://tuner:5004/auto/v4.1","VideoCodec":"MPEG2","AudioCodec":"AC3","HD":1,"Favorite":1}
+				{"GuideNumber":"4.1","GuideName":"KBWV-DT","URL":"http://tuner:5004/auto/v4.1","VideoCodec":"MPEG2","AudioCodec":"AC3","HD":1,"Favorite":1}
 			]`))
 		default:
 			http.NotFound(w, r)
@@ -80,7 +80,7 @@ func TestFetchStaysOnTheRequestedOrigin(t *testing.T) {
 		case "/discover.json":
 			_, _ = w.Write([]byte(`{"FriendlyName":"Duo","DeviceID":"ABCDEF01","BaseURL":"http://169.254.169.254","LineupURL":"http://169.254.169.254/latest","TunerCount":2}`))
 		case "/lineup.json":
-			_, _ = w.Write([]byte(`[{"GuideNumber":"4.1","GuideName":"WDAF"}]`))
+			_, _ = w.Write([]byte(`[{"GuideNumber":"4.1","GuideName":"KBWV"}]`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -94,7 +94,7 @@ func TestFetchStaysOnTheRequestedOrigin(t *testing.T) {
 		t.Fatalf("followed the document: %+v", dev)
 	}
 	channels, err := (&Client{}).FetchLineup(context.Background(), dev.LineupURL)
-	if err != nil || len(channels) != 1 || channels[0].GuideName != "WDAF" {
+	if err != nil || len(channels) != 1 || channels[0].GuideName != "KBWV" {
 		t.Fatalf("%+v %v", channels, err)
 	}
 }

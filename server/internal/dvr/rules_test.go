@@ -24,12 +24,12 @@ func TestCategoryAndContains(t *testing.T) {
 	start := time.Date(2026, 9, 22, 15, 0, 0, 0, time.UTC)
 	passes := []store.Pass{
 		{ID: 1, Title: "Sports", MatchKind: "category"},
-		{ID: 2, Title: "chiefs", MatchKind: "contains", ChannelID: 4},
+		{ID: 2, Title: "bears", MatchKind: "contains", ChannelID: 4},
 	}
 	airings := []store.Airing{
 		{ID: 1, ChannelID: 2, Title: "Noon news", Category: "News, Sports", Start: start, End: start.Add(time.Hour)},
-		{ID: 2, ChannelID: 4, Title: "Chiefs at Broncos", Start: start, End: start.Add(3 * time.Hour)},
-		{ID: 3, ChannelID: 9, Title: "Chiefs wrap", Start: start, End: start.Add(time.Hour)},
+		{ID: 2, ChannelID: 4, Title: "Bears at Broncos", Start: start, End: start.Add(3 * time.Hour)},
+		{ID: 3, ChannelID: 9, Title: "Bears wrap", Start: start, End: start.Add(time.Hour)},
 	}
 	got := Plan(passes, airings, 2, start.Add(-time.Minute), start.Add(4*time.Hour))
 	ids := map[int64]bool{}

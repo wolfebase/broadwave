@@ -53,7 +53,7 @@ func TestNextExtensionFollowsTheGame(t *testing.T) {
 
 func TestUnmatchedSportsGetsAnExtraHour(t *testing.T) {
 	start := time.Date(2026, 9, 24, 0, 20, 0, 0, time.UTC)
-	airing := store.Airing{Title: "Chiefs at Bills", Category: "Sports", Start: start, End: start.Add(3 * time.Hour)}
+	airing := store.Airing{Title: "Bears at Bills", Category: "Sports", Start: start, End: start.Add(3 * time.Hour)}
 	ok, minutes := StartDecision(store.Pass{}, airing, start.Add(-30*time.Second))
 	if !ok || minutes < 230 || minutes > 245 {
 		t.Fatalf("unmatched sports %v %d", ok, minutes)

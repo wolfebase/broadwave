@@ -24,7 +24,7 @@ func TestPerfBudget(t *testing.T) {
 		DeviceID: "FAKEHDHR", FriendlyName: "DUO", ModelNumber: "HDHR5-2US",
 		BaseURL: "http://127.0.0.1:5004", TunerCount: 2,
 	}, []hdhr.Channel{
-		{GuideNumber: "4.1", GuideName: "WDAF-DT", VideoCodec: "MPEG2", AudioCodec: "AC3", HD: true},
+		{GuideNumber: "4.1", GuideName: "KBWV-DT", VideoCodec: "MPEG2", AudioCodec: "AC3", HD: true},
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -77,7 +77,7 @@ http://example/extra.ts
 
 func TestParseM3UKeepsChannelAttributes(t *testing.T) {
 	raw := `#EXTM3U url-tvg="http://example/guide.xml"
-#EXTINF:-1 tvg-id="wdaf" tvg-chno="4.1" tvg-logo="http://example/a.png" group-title="Local",ABC
+#EXTINF:-1 tvg-id="kbwv" tvg-chno="4.1" tvg-logo="http://example/a.png" group-title="Local",ABC
 http://example/abc.ts
 `
 	got := ParseM3U(strings.NewReader(raw))
@@ -85,20 +85,20 @@ http://example/abc.ts
 		t.Fatal(len(got))
 	}
 	e := got[0]
-	if e.ID != "wdaf" || e.Number != "4.1" || e.Logo != "http://example/a.png" || e.Group != "Local" || e.GuideURL != "http://example/guide.xml" || e.Name != "ABC" {
+	if e.ID != "kbwv" || e.Number != "4.1" || e.Logo != "http://example/a.png" || e.Group != "Local" || e.GuideURL != "http://example/guide.xml" || e.Name != "ABC" {
 		t.Fatalf("%+v", e)
 	}
 }
 
 func TestParseM3UKeepsStreamOptions(t *testing.T) {
 	raw := `#EXTM3U
-#EXTINF:-1 channel-id="wdaf" tvg-shift="0" catchup="default" catchup-source="http://example/{utc}" catchup-days="3" tvc-guide-title="News" tvc-guide-description="At 6" tvc-guide-art="http://example/art.jpg" tvc-guide-tags="news" tvc-guide-genres="News" tvc-stream-vcodec="MPEG2" tvc-stream-acodec="AC3",ABC
+#EXTINF:-1 channel-id="kbwv" tvg-shift="0" catchup="default" catchup-source="http://example/{utc}" catchup-days="3" tvc-guide-title="News" tvc-guide-description="At 6" tvc-guide-art="http://example/art.jpg" tvc-guide-tags="news" tvc-guide-genres="News" tvc-stream-vcodec="MPEG2" tvc-stream-acodec="AC3",ABC
 #EXTVLCOPT:http-user-agent=Broadwave
 #KODIPROP:http-referrer=http://example/
 http://example/abc.ts
 `
 	e := ParseM3U(strings.NewReader(raw))[0]
-	if e.ID != "wdaf" || e.Shift != "0" || e.Catchup != "default" || e.CatchupDays != "3" || e.GuideTitle != "News" || e.Video != "MPEG2" || e.Audio != "AC3" || e.UserAgent != "Broadwave" || e.Referrer != "http://example/" {
+	if e.ID != "kbwv" || e.Shift != "0" || e.Catchup != "default" || e.CatchupDays != "3" || e.GuideTitle != "News" || e.Video != "MPEG2" || e.Audio != "AC3" || e.UserAgent != "Broadwave" || e.Referrer != "http://example/" {
 		t.Fatalf("%+v", e)
 	}
 }
@@ -160,8 +160,8 @@ func TestBigPlaylistAsksForGroups(t *testing.T) {
 }
 
 func TestFilterKeep(t *testing.T) {
-	entries := []Entry{{Name: "News", ID: "wdaf"}, {Name: "Shop", ID: "shop"}}
-	got := FilterKeep(entries, "wdaf")
+	entries := []Entry{{Name: "News", ID: "kbwv"}, {Name: "Shop", ID: "shop"}}
+	got := FilterKeep(entries, "kbwv")
 	if len(got) != 1 || got[0].Name != "News" {
 		t.Fatalf("%+v", got)
 	}

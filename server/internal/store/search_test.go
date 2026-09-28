@@ -16,7 +16,7 @@ func TestSearchFindsListingsAndRecordings(t *testing.T) {
 	defer s.Close()
 	ctx := t.Context()
 	if err := s.UpsertDevice(ctx, hdhr.Device{DeviceID: "D", FriendlyName: "DUO", BaseURL: "http://127.0.0.1", TunerCount: 1}, []hdhr.Channel{
-		{GuideNumber: "4.1", GuideName: "WDAF"},
+		{GuideNumber: "4.1", GuideName: "KBWV"},
 	}); err != nil {
 		t.Fatal(err)
 	}

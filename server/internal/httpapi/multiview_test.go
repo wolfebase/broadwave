@@ -20,10 +20,10 @@ func TestPickerNamesTheCostAndTheRecording(t *testing.T) {
 	if err := st.UpsertDevice(ctx, hdhr.Device{
 		DeviceID: "D", FriendlyName: "DUO", BaseURL: "http://127.0.0.1:9", TunerCount: 2,
 	}, []hdhr.Channel{
-		{GuideNumber: "4.1", GuideName: "WDAF"},
-		{GuideNumber: "4.2", GuideName: "WDAF2"},
-		{GuideNumber: "5.1", GuideName: "KCTV"},
-		{GuideNumber: "9.1", GuideName: "KMBC"},
+		{GuideNumber: "4.1", GuideName: "KBWV"},
+		{GuideNumber: "4.2", GuideName: "KBWV2"},
+		{GuideNumber: "5.1", GuideName: "WTST"},
+		{GuideNumber: "9.1", GuideName: "KRVR"},
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -43,7 +43,7 @@ function channelIds() {
     if (!found) throw new Error(`no ${name}`);
     return found.id;
   };
-  return { wdaf: id("WDAF"), wdaf2: id("WDAF2"), kctv: id("KCTV") };
+  return { kbwv: id("KBWV"), kbwv2: id("KBWV2"), wtst: id("WTST") };
 }
 
 async function openChannel(page: Page, id: number) {
@@ -161,15 +161,15 @@ test(`${layout} with a fresh tune plays without a stall or a pause`, async ({ pa
   test.skip(process.env.E2E_MV !== "1", "Set E2E_MV=1 to measure two tiles for two minutes.");
   test.setTimeout(playMs + 180_000);
   await context.addInitScript(installProbe);
-  const { wdaf, wdaf2, kctv } = channelIds();
-  const channels = layout === "2up" ? [wdaf, kctv] : [wdaf, kctv, wdaf2];
+  const { kbwv, kbwv2, wtst } = channelIds();
+  const channels = layout === "2up" ? [kbwv, wtst] : [kbwv, wtst, kbwv2];
   await page.setViewportSize({ width: 1440, height: 900 });
   // The viewer watches one channel first, then adds a second on another frequency.
-  await openChannel(page, wdaf);
+  await openChannel(page, kbwv);
   await expect.poll(() => page.locator("video.stage-video").evaluate((v: HTMLVideoElement) => v.videoWidth > 0 && !v.paused), { timeout: 45_000 }).toBe(true);
   await page.waitForTimeout(15_000);
   const opened = Date.now();
-  await page.goto(`/multiview?ch=${channels.join(",")}&layout=${layout}&focus=${wdaf}`);
+  await page.goto(`/multiview?ch=${channels.join(",")}&layout=${layout}&focus=${kbwv}`);
   const moving = async () => (await readTiles(page)).filter((tile) => tile.firstPictureMs > 0).length;
   await expect.poll(moving, { timeout: 60_000 }).toBe(channels.length);
   const bothMs = Date.now() - opened;
@@ -178,8 +178,8 @@ test(`${layout} with a fresh tune plays without a stall or a pause`, async ({ pa
   // Half way, move the sound: equal tiles must not restart or pause for it.
   await page.waitForTimeout(playMs / 2);
   if (equal) {
-    await page.getByRole("group", { name: /^5\.1 KCTV$/ }).click();
-    await expect(page.getByRole("group", { name: "5.1 KCTV, sound on" })).toBeVisible();
+    await page.getByRole("group", { name: /^5\.1 WTST$/ }).click();
+    await expect(page.getByRole("group", { name: "5.1 WTST, sound on" })).toBeVisible();
   }
   await page.waitForTimeout(playMs / 2);
 

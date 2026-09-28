@@ -16,7 +16,7 @@ import (
 
 func TestParseEpisodeIdentity(t *testing.T) {
 	raw := []byte(`<tv>
-  <channel id="4.1"><display-name>4.1</display-name><icon src="https://img.example/wdaf.png" /></channel>
+  <channel id="4.1"><display-name>4.1</display-name><icon src="https://img.example/kbwv.png" /></channel>
   <programme start="20260922150000 -0500" stop="20260922153000 -0500" channel="4.1">
     <title>Jeopardy!</title>
     <sub-title>Show 9001</sub-title>
@@ -33,14 +33,14 @@ func TestParseEpisodeIdentity(t *testing.T) {
     <new />
   </programme>
 </tv>`)
-	got, art, err := Parse(raw, []store.Channel{{ID: 7, GuideNumber: "4.1", GuideName: "WDAF"}})
+	got, art, err := Parse(raw, []store.Channel{{ID: 7, GuideNumber: "4.1", GuideName: "KBWV"}})
 	if err != nil || len(got) != 1 {
 		t.Fatal(err, got)
 	}
 	if got[0].ProgramID != "EP1" || !got[0].New || got[0].Subtitle != "Show 9001" || got[0].Category != "Game show" {
 		t.Fatalf("%+v", got[0])
 	}
-	if art[7] != "https://img.example/wdaf.png" || got[0].ImageURL != "https://img.example/jeopardy.jpg" {
+	if art[7] != "https://img.example/kbwv.png" || got[0].ImageURL != "https://img.example/jeopardy.jpg" {
 		t.Fatalf("art %+v image %s", art, got[0].ImageURL)
 	}
 	if got[0].Season != 12 || got[0].Episode != 34 || got[0].EpisodeLabel != "S12E34" || got[0].OriginalAir != "1996-09-23" || got[0].SeriesID != "SH1" || !got[0].Live || got[0].Rating != "TV-G" || got[0].Cast != "Alex Trebek" {

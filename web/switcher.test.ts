@@ -15,7 +15,7 @@ const zone = game({
   redZone: true,
   teams: [
     { name: "Raiders", abbr: "LV", score: "14", home: true },
-    { name: "Chiefs", abbr: "KC", score: "17" },
+    { name: "Bears", abbr: "CHI", score: "17" },
   ],
 });
 
@@ -62,7 +62,7 @@ test("red zone wins over a close finish", () => {
   const got = pickFocus(now, 0, [close, zone], []);
   assert.equal(got.keepManual, false);
   assert.equal(got.gameId, "nfl-redzone");
-  assert.equal(got.banner, "Red zone: KC at LV");
+  assert.equal(got.banner, "Red zone: CHI at LV");
 });
 
 test("power play wins over a lead change", () => {

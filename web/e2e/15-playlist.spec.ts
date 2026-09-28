@@ -242,10 +242,10 @@ test("a playlist tile beside a tuner comes back on its own", async ({ page }) =>
 
     const list = (await (await fetch(`${base}/api/v1/channels`)).json()) as { channels?: { id: number; displayNumber: string; displayName: string }[] };
     const news = (list.channels ?? []).find((item) => item.displayName === "Local News");
-    const wdaf = (list.channels ?? []).find((item) => item.displayName === "WDAF");
-    if (!news || !wdaf) throw new Error(`lineup ${JSON.stringify(list.channels)}`);
+    const kbwv = (list.channels ?? []).find((item) => item.displayName === "KBWV");
+    if (!news || !kbwv) throw new Error(`lineup ${JSON.stringify(list.channels)}`);
 
-    await page.goto(`/multiview?ch=${news.id},${wdaf.id}&layout=2up&focus=${wdaf.id}`);
+    await page.goto(`/multiview?ch=${news.id},${kbwv.id}&layout=2up&focus=${kbwv.id}`);
     await settle(page);
     await expect(page.getByRole("region", { name: "Side by side" })).toBeVisible();
     const tile = (id: number) => page.locator(`video.mv-video[data-channel="${id}"]`);
@@ -255,9 +255,9 @@ test("a playlist tile beside a tuner comes back on its own", async ({ page }) =>
         await new Promise((resolve) => setTimeout(resolve, 700));
         return video.videoWidth > 0 && !video.paused && video.currentTime > from + 0.15;
       });
-    await expect.poll(async () => (await moving(wdaf.id)) && (await moving(news.id)), { timeout: 45_000, intervals: [1_000] }).toBe(true);
+    await expect.poll(async () => (await moving(kbwv.id)) && (await moving(news.id)), { timeout: 45_000, intervals: [1_000] }).toBe(true);
 
-    await tile(wdaf.id).evaluate((video: HTMLVideoElement) => {
+    await tile(kbwv.id).evaluate((video: HTMLVideoElement) => {
       const box = window as unknown as { __tunerPauses: number };
       box.__tunerPauses = 0;
       video.addEventListener("pause", () => {
@@ -266,13 +266,13 @@ test("a playlist tile beside a tuner comes back on its own", async ({ page }) =>
     });
     const pauses = () => page.evaluate(() => (window as unknown as { __tunerPauses: number }).__tunerPauses ?? 0);
 
-    const began = await tile(wdaf.id).evaluate((video: HTMLVideoElement) => video.currentTime);
+    const began = await tile(kbwv.id).evaluate((video: HTMLVideoElement) => video.currentTime);
     const stoppedAt = Date.now();
     await post(`${origin}/stop`);
     let messageMs = 0;
     const newsAlert = page.locator(`.mv-tile:has(video[data-channel="${news.id}"])`).getByRole("alert");
     while (Date.now() - stoppedAt < 30_000) {
-      const state = await tile(wdaf.id).evaluate((video: HTMLVideoElement) => ({ paused: video.paused, width: video.videoWidth, time: video.currentTime }));
+      const state = await tile(kbwv.id).evaluate((video: HTMLVideoElement) => ({ paused: video.paused, width: video.videoWidth, time: video.currentTime }));
       expect(state.paused, "the tuner picture paused while the playlist was down").toBe(false);
       expect(state.width, "the tuner picture went black while the playlist was down").toBeGreaterThan(0);
       expect(await pauses(), "the tuner picture paused while the playlist was down").toBe(0);
@@ -284,7 +284,7 @@ test("a playlist tile beside a tuner comes back on its own", async ({ page }) =>
       await page.waitForTimeout(1_000);
     }
     expect(messageMs, "the playlist tile names the picture").toBeGreaterThan(0);
-    const advanced = await tile(wdaf.id).evaluate((video: HTMLVideoElement) => video.currentTime);
+    const advanced = await tile(kbwv.id).evaluate((video: HTMLVideoElement) => video.currentTime);
     expect(advanced, "the tuner picture kept moving").toBeGreaterThan(began + 8);
     await expect(newsAlert).toContainText(picture);
     await expect(page.getByText(tuner)).toHaveCount(0);
@@ -306,7 +306,7 @@ test("a playlist tile beside a tuner comes back on its own", async ({ page }) =>
       .toBe(true);
     const recoverMs = Date.now() - againAt;
     expect(await pauses(), "the tuner picture paused").toBe(0);
-    const still = await tile(wdaf.id).evaluate((video: HTMLVideoElement) => ({
+    const still = await tile(kbwv.id).evaluate((video: HTMLVideoElement) => ({
       paused: video.paused,
       width: video.videoWidth,
       time: video.currentTime,
@@ -321,7 +321,7 @@ test("a playlist tile beside a tuner comes back on its own", async ({ page }) =>
       await fetch(`${base}/api/v1/multiview/plan`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ channelIds: [news.id, wdaf.id] }),
+        body: JSON.stringify({ channelIds: [news.id, kbwv.id] }),
       })
     ).json()) as { blocked?: unknown[] };
     expect(plan.blocked, `the plan blocked a playing channel ${JSON.stringify(plan)}`).toEqual([]);

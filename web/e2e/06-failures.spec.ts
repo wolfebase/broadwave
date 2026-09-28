@@ -104,7 +104,7 @@ test.beforeEach(async () => {
 
 test("both tuners busy, then a free tuner plays without a reload", async ({ page }) => {
   const { base, admin } = harness();
-  const wdaf = channel("WDAF");
+  const kbwv = channel("KBWV");
   try {
     // An earlier spec's viewer holds a tuner until the server drops it as abandoned (45 s).
     await expect
@@ -115,7 +115,7 @@ test("both tuners busy, then a free tuner plays without a reload", async ({ page
       }, { timeout: 90_000 })
       .toBe(true);
     await post(`${admin}/hold`);
-    await openChannel(page, wdaf.id);
+    await openChannel(page, kbwv.id);
     await mark(page);
     await expect(notice(page, "alert", /tuner is busy/i)).toBeVisible();
     await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
@@ -132,9 +132,9 @@ test("both tuners busy, then a free tuner plays without a reload", async ({ page
 
 test("the server can restart mid-play and the picture comes back", async ({ page }) => {
   const { control } = harness();
-  const wdaf = channel("WDAF");
+  const kbwv = channel("KBWV");
   try {
-    await openChannel(page, wdaf.id);
+    await openChannel(page, kbwv.id);
     await expectPlaying(page);
     await mark(page);
     await post(`${control}/stop`);
@@ -153,9 +153,9 @@ test("the server can restart mid-play and the picture comes back", async ({ page
 
 test("a server restart under a playing picture starts it again with no click", async ({ page }) => {
   const { control } = harness();
-  const wdaf = channel("WDAF");
+  const kbwv = channel("KBWV");
   try {
-    await openChannel(page, wdaf.id);
+    await openChannel(page, kbwv.id);
     await expectPlaying(page);
     await mark(page);
     let watchedAt = 0;
@@ -187,9 +187,9 @@ test("a server restart under a playing picture starts it again with no click", a
 
 test("a tuner that stops answering can be watched again", async ({ page }) => {
   const { admin } = harness();
-  const wdaf = channel("WDAF");
+  const kbwv = channel("KBWV");
   try {
-    await openChannel(page, wdaf.id);
+    await openChannel(page, kbwv.id);
     await expectPlaying(page);
     await mark(page);
     await post(`${admin}/silence`);
@@ -208,13 +208,13 @@ test("a tuner that stops answering can be watched again", async ({ page }) => {
 
 test("a channel with no listing plays, then shows the program when the guide arrives", async ({ page }) => {
   const { db } = harness();
-  const kctv = channel("KCTV");
+  const wtst = channel("WTST");
   const now = Date.now();
   const start = new Date(now - 5 * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
   const end = new Date(now + 60 * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
-  sql(db, `DELETE FROM airings WHERE channel_id = ${kctv.id};`);
+  sql(db, `DELETE FROM airings WHERE channel_id = ${wtst.id};`);
   try {
-    await openChannel(page, kctv.id);
+    await openChannel(page, wtst.id);
     await mark(page);
     await expect(notice(page, "status", "No listing for this channel.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Check for listings" })).toBeVisible();
@@ -223,7 +223,7 @@ test("a channel with no listing plays, then shows the program when the guide arr
     sql(
       db,
       `INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_live, guide_source)
-       VALUES (${kctv.id}, 'Garden Hour', 'In the yard', 'A quiet hour.', 'Series', '${start}', '${end}', 'e2e-garden', 0, 'e2e');`,
+       VALUES (${wtst.id}, 'Garden Hour', 'In the yard', 'A quiet hour.', 'Series', '${start}', '${end}', 'e2e-garden', 0, 'e2e');`,
     );
     await page.getByRole("button", { name: "Check for listings" }).click();
     await expect(page.getByRole("heading", { name: "Garden Hour" })).toBeVisible();
@@ -234,54 +234,54 @@ test("a channel with no listing plays, then shows the program when the guide arr
     sql(
       db,
       `INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_live, guide_source)
-       SELECT ${kctv.id}, 'Garden Hour', 'In the yard', 'A quiet hour.', 'Series', '${start}', '${end}', 'e2e-garden', 0, 'e2e'
-       WHERE NOT EXISTS (SELECT 1 FROM airings WHERE channel_id = ${kctv.id});`,
+       SELECT ${wtst.id}, 'Garden Hour', 'In the yard', 'A quiet hour.', 'Series', '${start}', '${end}', 'e2e-garden', 0, 'e2e'
+       WHERE NOT EXISTS (SELECT 1 FROM airings WHERE channel_id = ${wtst.id});`,
     );
   }
 });
 
 test("a channel with no signal plays again when the signal returns", async ({ page }) => {
   const { admin } = harness();
-  const kctv = channel("KCTV");
+  const wtst = channel("WTST");
   try {
-    await openChannel(page, kctv.id);
+    await openChannel(page, wtst.id);
     await expectPlaying(page);
     await mark(page);
-    await post(`${admin}/dark?channel=${encodeURIComponent(kctv.number)}`);
+    await post(`${admin}/dark?channel=${encodeURIComponent(wtst.number)}`);
     await expect(notice(page, "alert", "This channel isn't coming in. Check the antenna.")).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
     await shot(page, "l6-no-signal.jpg");
-    await post(`${admin}/light?channel=${encodeURIComponent(kctv.number)}`);
+    await post(`${admin}/light?channel=${encodeURIComponent(wtst.number)}`);
     await nudge(page);
     await expectPlaying(page);
     await expect(page.locator("html")).toHaveAttribute("data-lane", "stay");
     await expect(notice(page, "alert", "This channel isn't coming in. Check the antenna.")).toHaveCount(0);
   } finally {
-    await post(`${admin}/light?channel=${encodeURIComponent(kctv.number)}`).catch(() => undefined);
+    await post(`${admin}/light?channel=${encodeURIComponent(wtst.number)}`).catch(() => undefined);
   }
 });
 
 test("a multiview tile that does not start gives its sound away and can be removed", async ({ page }) => {
   const { admin } = harness();
-  const wdaf = channel("WDAF");
-  const kctv = channel("KCTV");
+  const kbwv = channel("KBWV");
+  const wtst = channel("WTST");
   try {
-    await openChannel(page, wdaf.id);
+    await openChannel(page, kbwv.id);
     await expectPlaying(page);
-    await post(`${admin}/dark?channel=${encodeURIComponent(kctv.number)}`);
-    await page.goto(`/multiview?ch=${wdaf.id},${kctv.id}&layout=2up&focus=${kctv.id}`);
-    const dark = page.getByRole("group", { name: `${kctv.number} ${kctv.name}`, exact: true });
+    await post(`${admin}/dark?channel=${encodeURIComponent(wtst.number)}`);
+    await page.goto(`/multiview?ch=${kbwv.id},${wtst.id}&layout=2up&focus=${wtst.id}`);
+    const dark = page.getByRole("group", { name: `${wtst.number} ${wtst.name}`, exact: true });
     await expect(dark.getByRole("alert")).toBeVisible({ timeout: 60_000 });
     await expect(dark.getByRole("button", { name: "Try again" })).toBeVisible();
-    await expect(page.getByRole("group", { name: `${wdaf.number} ${wdaf.name}, sound on` })).toBeVisible();
-    await expect(page).toHaveURL(new RegExp(`focus=${wdaf.id}`));
+    await expect(page.getByRole("group", { name: `${kbwv.number} ${kbwv.name}, sound on` })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`focus=${kbwv.id}`));
     mkdirSync(path.join(evidence, "l28"), { recursive: true });
     await page.screenshot({ path: path.join(evidence, "l28", "tile-retry.jpg"), animations: "disabled" });
     await dark.getByRole("button", { name: "Remove" }).click();
     await expect(dark).toHaveCount(0);
-    await expect(page).toHaveURL(new RegExp(`ch=${wdaf.id}(&|$)`));
+    await expect(page).toHaveURL(new RegExp(`ch=${kbwv.id}(&|$)`));
   } finally {
-    await post(`${admin}/light?channel=${encodeURIComponent(kctv.number)}`).catch(() => undefined);
+    await post(`${admin}/light?channel=${encodeURIComponent(wtst.number)}`).catch(() => undefined);
   }
 });
 
@@ -295,7 +295,7 @@ test("a recordings folder that cannot be written works again without a reload", 
     await page.goto("/");
     await settle(page);
     const setup = page.getByRole("heading", { name: "Let's set up your TV" });
-    const hero = page.getByRole("heading", { name: "NFL: Chiefs at Bills" });
+    const hero = page.getByRole("heading", { name: "NFL: Bears at Bills" });
     await expect(setup.or(hero)).toBeVisible();
     if (await setup.isVisible()) {
       const cont = page.getByRole("button", { name: "Continue" });
@@ -306,7 +306,7 @@ test("a recordings folder that cannot be written works again without a reload", 
       await settle(page);
     }
     await mark(page);
-    await expect(page.getByRole("heading", { name: "NFL: Chiefs at Bills" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "NFL: Bears at Bills" })).toBeVisible();
     await page.locator(".hero-actions").getByRole("button", { name: "Record" }).click();
     await expect(notice(page, "alert", "Broadwave can't save this recording. Check the recordings folder, then try again.")).toBeVisible();
     await shot(page, "l6-disk.jpg");
@@ -330,9 +330,9 @@ test("a recordings folder that cannot be written works again without a reload", 
 
 test("a phone that loses its connection plays again when the network returns", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  const wdaf = channel("WDAF");
+  const kbwv = channel("KBWV");
   try {
-    await openChannel(page, wdaf.id);
+    await openChannel(page, kbwv.id);
     await expectPlaying(page);
     await mark(page);
     const dropped = Date.now();
@@ -476,8 +476,8 @@ async function assertSentences(
 }
 
 test("a failed watch says the sentence, and Try again asks again", async ({ page }) => {
-  const wdaf = channel("WDAF");
-  const gate = await armWatchErrors(page, wdaf.id);
+  const kbwv = channel("KBWV");
+  const gate = await armWatchErrors(page, kbwv.id);
   const dir = path.join(evidence, "l33");
   mkdirSync(dir, { recursive: true });
   for (const size of viewports) {
@@ -485,12 +485,12 @@ test("a failed watch says the sentence, and Try again asks again", async ({ page
     const extra = size.layout ? `&layout=${size.layout}` : "";
     const player = page.getByRole("region", { name: "Player" });
     gate.reset();
-    await page.goto(`/watch?channel=${wdaf.id}${extra}`);
+    await page.goto(`/watch?channel=${kbwv.id}${extra}`);
     await settle(page);
     await finishSetup(page, player);
-    if (!page.url().includes(`channel=${wdaf.id}`) || (size.layout && !page.url().includes(`layout=${size.layout}`))) {
+    if (!page.url().includes(`channel=${kbwv.id}`) || (size.layout && !page.url().includes(`layout=${size.layout}`))) {
       gate.reset();
-      await page.goto(`/watch?channel=${wdaf.id}${extra}`);
+      await page.goto(`/watch?channel=${kbwv.id}${extra}`);
       await settle(page);
       await finishSetup(page, player);
     }
@@ -509,9 +509,9 @@ test("a failed watch says the sentence, and Try again asks again", async ({ page
 });
 
 test("a multiview tile that fails to start says the sentence, and Try again asks again", async ({ page }) => {
-  const wdaf = channel("WDAF");
-  const kctv = channel("KCTV");
-  const gate = await armWatchErrors(page, kctv.id);
+  const kbwv = channel("KBWV");
+  const wtst = channel("WTST");
+  const gate = await armWatchErrors(page, wtst.id);
   const dir = path.join(evidence, "l33");
   mkdirSync(dir, { recursive: true });
   for (const size of viewports) {
@@ -541,18 +541,18 @@ test("a multiview tile that fails to start says the sentence, and Try again asks
     await page.setViewportSize({ width: size.width, height: size.height });
     const grid = page.getByRole("region", { name: "Side by side" });
     gate.reset();
-    await page.goto(`/multiview?ch=${wdaf.id},${kctv.id}&layout=2up&focus=${kctv.id}`);
+    await page.goto(`/multiview?ch=${kbwv.id},${wtst.id}&layout=2up&focus=${wtst.id}`);
     await settle(page);
     await finishSetup(page, grid);
     if (!page.url().includes("/multiview")) {
       gate.reset();
-      await page.goto(`/multiview?ch=${wdaf.id},${kctv.id}&layout=2up&focus=${kctv.id}`);
+      await page.goto(`/multiview?ch=${kbwv.id},${wtst.id}&layout=2up&focus=${wtst.id}`);
       await settle(page);
       await finishSetup(page, grid);
     }
     const want = size.layout === "tv" ? "tv" : size.width <= 760 ? "phone" : "desktop";
     await expect(page.locator("html")).toHaveAttribute("data-layout", want);
-    const tile = page.getByRole("group", { name: new RegExp(`^${kctv.number} ${kctv.name}(, sound on)?$`) });
+    const tile = page.getByRole("group", { name: new RegExp(`^${wtst.number} ${wtst.name}(, sound on)?$`) });
     await mark(page);
     await assertSentences(
       page,
@@ -562,7 +562,7 @@ test("a multiview tile that fails to start says the sentence, and Try again asks
       (name) => path.join(dir, `tile-${name}-${size.name}.jpg`),
     );
     await expect(page.locator("html")).toHaveAttribute("data-lane", "stay");
-    await expect(page.getByRole("group", { name: new RegExp(`^${wdaf.number} ${wdaf.name}`) })).toBeVisible();
+    await expect(page.getByRole("group", { name: new RegExp(`^${kbwv.number} ${kbwv.name}`) })).toBeVisible();
   }
 });
 

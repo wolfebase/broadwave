@@ -33,9 +33,9 @@ type Channel = { id: number; name: string };
 
 function channelId() {
   const runtime = JSON.parse(readFileSync(path.join(here, ".run/runtime.json"), "utf8")) as { channels: Channel[] };
-  const wdaf = runtime.channels.find((item) => item.name === "WDAF");
-  if (!wdaf) throw new Error("no WDAF");
-  return wdaf.id;
+  const kbwv = runtime.channels.find((item) => item.name === "KBWV");
+  if (!kbwv) throw new Error("no KBWV");
+  return kbwv.id;
 }
 
 async function openPlayer(page: Page) {

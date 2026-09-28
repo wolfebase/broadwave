@@ -45,7 +45,7 @@ func watchInFlight(t *testing.T, api *Server) (hub *live.Hub, id int64, key stri
 		DeviceID: "HLS1", FriendlyName: "HLS", ModelNumber: "HDHR4-2US",
 		BaseURL: "http://127.0.0.1:9", TunerCount: 0,
 	}, []hdhr.Channel{{
-		GuideNumber: "4.1", GuideName: "WDAF", VideoCodec: "H264", AudioCodec: "AAC",
+		GuideNumber: "4.1", GuideName: "KBWV", VideoCodec: "H264", AudioCodec: "AAC",
 		StreamURL: "http://127.0.0.1/live.m3u8",
 	}}); err != nil {
 		t.Fatal(err)

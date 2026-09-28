@@ -26,7 +26,7 @@ test("a recording stops from the library and plays back at its full length", asy
   await page.goto("/");
   await settle(page);
   const setup = page.getByRole("heading", { name: "Let's set up your TV" });
-  const hero = page.getByRole("heading", { name: "NFL: Chiefs at Bills" });
+  const hero = page.getByRole("heading", { name: "NFL: Bears at Bills" });
   await expect(setup.or(hero)).toBeVisible();
   if (await setup.isVisible()) {
     const cont = page.getByRole("button", { name: "Continue" });

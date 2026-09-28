@@ -4,15 +4,15 @@
       "detail": "Sun 1:00 PM",
       "id": "nfl-1",
       "league": "nfl",
-      "name": "Chiefs at Bills",
-      "shortName": "KC @ BUF",
+      "name": "Bears at Bills",
+      "shortName": "CHI @ BUF",
       "start": "2026-09-24T15:00:00Z",
       "state": "pre",
       "teams": [
         {
-          "abbr": "KC",
+          "abbr": "CHI",
           "home": true,
-          "name": "Chiefs"
+          "name": "Bears"
         },
         {
           "abbr": "BUF",

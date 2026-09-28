@@ -81,13 +81,13 @@ async function shot(page: Page, name: string) {
 test("a tuned mux previews its other channel, and the pages do not 404", async ({ page }) => {
   test.setTimeout(180_000);
   await setupDone(page);
-  const wdaf = channel("WDAF");
-  const wdaf2 = channel("WDAF2");
-  const kctv = channel("KCTV");
-  const keep = [wdaf.id, wdaf2.id];
+  const kbwv = channel("KBWV");
+  const kbwv2 = channel("KBWV2");
+  const wtst = channel("WTST");
+  const keep = [kbwv.id, kbwv2.id];
   const misses = watchMisses(page);
 
-  await openChannel(page, wdaf.id);
+  await openChannel(page, kbwv.id);
   await expect
     .poll(
       () => page.locator("video.stage-video").evaluate((video: HTMLVideoElement) => video.videoWidth > 0 && !video.paused),
@@ -103,10 +103,10 @@ test("a tuned mux previews its other channel, and the pages do not 404", async (
         if (!listed.ok()) return false;
         const body = (await listed.json().catch(() => null)) as { channels?: number[] } | null;
         const ids = body?.channels ?? [];
-        const wide = await page.request.get(`/api/v1/channels/${wdaf.id}/frame?w=1280`);
-        const sibling = await page.request.get(`/api/v1/channels/${wdaf2.id}/frame?w=480`);
-        const other = await page.request.get(`/api/v1/channels/${kctv.id}/frame?w=480`);
-        return ids.includes(wdaf.id) && ids.includes(wdaf2.id) && !ids.includes(kctv.id) && wide.ok() && sibling.ok() && other.status() === 404;
+        const wide = await page.request.get(`/api/v1/channels/${kbwv.id}/frame?w=1280`);
+        const sibling = await page.request.get(`/api/v1/channels/${kbwv2.id}/frame?w=480`);
+        const other = await page.request.get(`/api/v1/channels/${wtst.id}/frame?w=480`);
+        return ids.includes(kbwv.id) && ids.includes(kbwv2.id) && !ids.includes(wtst.id) && wide.ok() && sibling.ok() && other.status() === 404;
       },
       { timeout: 75_000 },
     )
@@ -128,11 +128,11 @@ test("a tuned mux previews its other channel, and the pages do not 404", async (
   dropOtherFrames(keep);
   await page.goto("/guide");
   await settle(page);
-  const guideRow = page.locator(".guide-row", { has: page.getByRole("button", { name: "Watch 4.2 WDAF2" }) });
+  const guideRow = page.locator(".guide-row", { has: page.getByRole("button", { name: "Watch 4.2 KBWV2" }) });
   const guidePreview = guideRow.locator("img.cell-thumb, img.cell-frame");
   await expect(guidePreview).toBeVisible({ timeout: 15_000 });
   await expect.poll(() => guidePreview.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
-  await expect(page.locator(".guide-row", { has: page.getByRole("button", { name: "Watch 5.1 KCTV" }) }).locator("img[src*='/frame']")).toHaveCount(0);
+  await expect(page.locator(".guide-row", { has: page.getByRole("button", { name: "Watch 5.1 WTST" }) }).locator("img[src*='/frame']")).toHaveCount(0);
   expect(misses, misses.join("\n")).toEqual([]);
   await shot(page, "guide.jpg");
 
@@ -149,6 +149,6 @@ test("a tuned mux previews its other channel, and the pages do not 404", async (
   mkdirSync(evidence, { recursive: true });
   writeFileSync(
     path.join(evidence, "summary.json"),
-    JSON.stringify({ wdaf: wdaf.id, wdaf2: wdaf2.id, kctv: kctv.id, console404s: misses.length }, null, 2),
+    JSON.stringify({ kbwv: kbwv.id, kbwv2: kbwv2.id, wtst: wtst.id, console404s: misses.length }, null, 2),
   );
 });

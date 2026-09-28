@@ -64,21 +64,21 @@ func defaultProfile() profile {
 
 func antennaChannels() []Channel {
 	return []Channel{
-		{Number: "4.1", Name: "WDAF", Freq: 593000000},
-		{Number: "4.2", Name: "WDAF2", Freq: 593000000},
-		{Number: "5.1", Name: "KCTV", Freq: 533000000},
+		{Number: "4.1", Name: "KBWV", Freq: 593000000},
+		{Number: "4.2", Name: "KBWV2", Freq: 593000000},
+		{Number: "5.1", Name: "WTST", Freq: 533000000},
 	}
 }
 
 // QuadLineup is the antenna lineup plus 5.2 on 5.1's frequency, so four tiles share two tuners.
 func QuadLineup() []Channel {
-	return append(antennaChannels(), Channel{Number: "5.2", Name: "KCTV2", Freq: 533000000})
+	return append(antennaChannels(), Channel{Number: "5.2", Name: "WTST2", Freq: 533000000})
 }
 
 func flex4KChannels() []Channel {
 	chs := antennaChannels()
 	return append(chs,
-		Channel{Number: "104.1", Name: "WDAF", Freq: 599000000, Video: "HEVC", Audio: "AC-4", ATSC3: true},
+		Channel{Number: "104.1", Name: "KBWV", Freq: 599000000, Video: "HEVC", Audio: "AC-4", ATSC3: true},
 		Channel{Number: "105.1", Name: "LOCKED", Freq: 605000000, Video: "HEVC", Audio: "AC-4", ATSC3: true, DRM: true},
 	)
 }

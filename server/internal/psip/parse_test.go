@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-func TestWDAFSample(t *testing.T) {
-	f, err := os.Open("testdata/wdaf.ts")
+func TestKBWVSample(t *testing.T) {
+	f, err := os.Open("testdata/kbwv.ts")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -16,11 +16,11 @@ func TestWDAFSample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var wdaf Channel
+	var kbwv Channel
 	found := false
 	for _, ch := range g.Channels {
 		if ch.Major == 4 && ch.Minor == 1 {
-			wdaf = ch
+			kbwv = ch
 			found = true
 			break
 		}
@@ -28,8 +28,8 @@ func TestWDAFSample(t *testing.T) {
 	if !found {
 		t.Fatalf("no 4.1 in %+v", g.Channels)
 	}
-	if wdaf.ShortName != "WDAF-DT" {
-		t.Fatalf("short name %q", wdaf.ShortName)
+	if kbwv.ShortName != "KBWV-DT" {
+		t.Fatalf("short name %q", kbwv.ShortName)
 	}
 	if len(g.EITPIDs) == 0 {
 		t.Fatal("MGT listed no EIT")
@@ -39,12 +39,12 @@ func TestWDAFSample(t *testing.T) {
 	}
 	var listed int
 	for _, ev := range g.Events {
-		if ev.SourceID == wdaf.SourceID && ev.Title != "" && ev.End.After(ev.Start) {
+		if ev.SourceID == kbwv.SourceID && ev.Title != "" && ev.End.After(ev.Start) {
 			listed++
 		}
 	}
 	if listed == 0 {
-		t.Fatalf("4.1 source %d has no titled events (%d events total)", wdaf.SourceID, len(g.Events))
+		t.Fatalf("4.1 source %d has no titled events (%d events total)", kbwv.SourceID, len(g.Events))
 	}
 	if g.Events[0].Start.Before(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("event start looks wrong: %s", g.Events[0].Start)

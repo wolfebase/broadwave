@@ -41,7 +41,7 @@ function TeamMark({ name, team }: { name: string; team?: ScoreTeam }) {
   );
 }
 
-/** Splits "Chiefs at Bills" or "Lakers vs. Celtics" into a matchup. */
+/** Splits "Bears at Bills" or "Lakers vs. Celtics" into a matchup. */
 export function matchup(a: Airing): [string, string] | null {
   const text = a.subtitle && / (at|vs\.?|@) /i.test(a.subtitle) ? a.subtitle : a.title;
   const m = text.match(/^(.*?)\s+(?:at|vs\.?|@)\s+(.*)$/i);

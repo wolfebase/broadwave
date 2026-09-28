@@ -30,7 +30,7 @@ func TestGuideAndFavorite(t *testing.T) {
 		BaseURL: "http://192.168.1.252", TunerCount: 2,
 	}, []hdhr.Channel{
 		{GuideNumber: "14.2", GuideName: "Snapshp", VideoCodec: "H264", AudioCodec: "AC3"},
-		{GuideNumber: "4.1", GuideName: "WDAF-DT", VideoCodec: "MPEG2", AudioCodec: "AC3", HD: true, Favorite: true, StreamURL: "http://192.168.1.252:5004/auto/v4.1"},
+		{GuideNumber: "4.1", GuideName: "KBWV-DT", VideoCodec: "MPEG2", AudioCodec: "AC3", HD: true, Favorite: true, StreamURL: "http://192.168.1.252:5004/auto/v4.1"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -455,10 +455,10 @@ func TestFinishedScanReadsTheNewLineup(t *testing.T) {
 			fmt.Fprintf(w, `{"DeviceID":"FAKE","FriendlyName":"Fake","ModelNumber":"HDHR5-2US","TunerCount":2,"BaseURL":%q,"LineupURL":%q}`, tuner.URL, tuner.URL+"/lineup.json")
 		case "/lineup.json":
 			if !done.Load() {
-				_, _ = w.Write([]byte(`[{"GuideNumber":"4.1","GuideName":"WDAF","URL":"http://x/v4.1"}]`))
+				_, _ = w.Write([]byte(`[{"GuideNumber":"4.1","GuideName":"KBWV","URL":"http://x/v4.1"}]`))
 				return
 			}
-			_, _ = w.Write([]byte(`[{"GuideNumber":"4.1","GuideName":"WDAF","URL":"http://x/v4.1"},{"GuideNumber":"9.1","GuideName":"KMBC","URL":"http://x/v9.1"}]`))
+			_, _ = w.Write([]byte(`[{"GuideNumber":"4.1","GuideName":"KBWV","URL":"http://x/v4.1"},{"GuideNumber":"9.1","GuideName":"KRVR","URL":"http://x/v9.1"}]`))
 		case "/lineup.post":
 			w.WriteHeader(http.StatusOK)
 		case "/lineup_status.json":

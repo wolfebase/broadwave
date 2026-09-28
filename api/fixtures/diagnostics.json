@@ -43,17 +43,17 @@
     "channelsWithListings": 1,
     "coverage": [
       {
-        "name": "WDAF",
+        "name": "KBWV",
         "number": "4.1",
         "source": "broadcast",
         "until": "2026-09-24T16:00:00Z"
       },
       {
-        "name": "WDAF2",
+        "name": "KBWV2",
         "number": "4.2"
       },
       {
-        "name": "KCTV",
+        "name": "WTST",
         "number": "5.1"
       }
     ],

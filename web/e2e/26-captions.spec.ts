@@ -35,8 +35,8 @@ function norm(text: string) {
 
 function channelId() {
   const runtime = JSON.parse(readFileSync(path.join(here, ".run/runtime.json"), "utf8")) as { channels: { id: number; name: string }[] };
-  // Setup leaves WDAF running at its own rendition; KCTV starts the one asked for.
-  const name = process.env.E2E_CAPTIONS_CHANNEL || "KCTV";
+  // Setup leaves KBWV running at its own rendition; WTST starts the one asked for.
+  const name = process.env.E2E_CAPTIONS_CHANNEL || "WTST";
   const found = runtime.channels.find((item) => item.name === name);
   if (!found) throw new Error(`no ${name}`);
   return found.id;

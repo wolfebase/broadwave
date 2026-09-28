@@ -151,7 +151,7 @@ test("a quad kept for Back lets every tile go and watches again", async ({ page 
   await expect.poll(viewers, { timeout: 40_000, message: "one viewer per tile" }).toBe(3);
   await expect.poll(watches, { timeout: 5_000, message: "one watch per tile" }).toBe(3);
   await expect.poll(() => tilesMoving(page), { timeout: 30_000, message: "three tiles are playing" }).toBe(3);
-  await expect(page.getByRole("group", { name: "4.1 WDAF, sound on" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "4.1 KBWV, sound on" })).toBeVisible();
 
   const left = Date.now();
   await page.goto("/settings", { waitUntil: "commit" });
@@ -174,7 +174,7 @@ test("a quad kept for Back lets every tile go and watches again", async ({ page 
   });
   expect(kept).toEqual({ hide: true, show: true });
   await expect.poll(() => tilesMoving(page), { timeout: Math.max(500, 5_000 - (Date.now() - back)), message: "three tiles are playing again" }).toBe(3);
-  await expect(page.getByRole("group", { name: "4.1 WDAF, sound on" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "4.1 KBWV, sound on" })).toBeVisible();
   await expect(page.locator(".mv-error")).toHaveCount(0);
   const heard = await page.locator("video.mv-video").evaluateAll((videos: HTMLVideoElement[]) =>
     videos.map((video) => ({ channel: video.dataset.channel || "", muted: video.muted })),
