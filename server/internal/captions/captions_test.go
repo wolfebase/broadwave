@@ -138,3 +138,126 @@ func parseVTT(s string) []refCue {
 	}
 	return out
 }
+
+// A roll-up broadcast, in BROADWAVE_ROLLUP_SAMPLE. Each line must start on
+// screen within 200 ms of when the broadcast starts typing it, which ffmpeg's
+// real-time mode reports character by character.
+func TestRollUpLinesStartWithTheBroadcast(t *testing.T) {
+	path := os.Getenv("BROADWAVE_ROLLUP_SAMPLE")
+	if path == "" {
+		t.Skip("BROADWAVE_ROLLUP_SAMPLE is not set")
+	}
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("no ffmpeg")
+	}
+	cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "quiet", "-copyts", "-real_time", "1", "-real_time_latency_msec", "0",
+		"-f", "lavfi", "-i", "movie="+filepath.Base(path)+"[out0+subcc]", "-map", "0:s", "-f", "srt", "-")
+	cmd.Dir = filepath.Dir(path)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("ffmpeg: %v", err)
+	}
+	lines := typedLines(string(out))
+	if len(lines) < 10 {
+		t.Fatalf("reference has %d roll-up lines", len(lines))
+	}
+	ts, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cues := decodeAll(t, ts, 1316)
+	within := 0
+	for i, l := range lines[1:] {
+		d, ok := lineStart(cues, l, lines[i])
+		if !ok {
+			t.Errorf("line %q never shown", l.text)
+			continue
+		}
+		if d >= -200 && d <= 200 {
+			within++
+		}
+		t.Logf("starts %+5d ms, whole %+5d ms %q", d, lineDone(cues, l), l.text)
+	}
+	n := len(lines) - 1
+	t.Logf("%d of %d lines within 200 ms, %d cues", within, n, len(cues))
+	if within*10 < n*9 {
+		t.Errorf("%d of %d lines start within 200 ms, want 90%%", within, n)
+	}
+}
+
+// lineDone is how long after the broadcast finished typing l a cue first
+// shows all of it, on the bottom row or rolled up above the next line.
+func lineDone(cues []Cue, l typedLine) int64 {
+	for _, c := range cues {
+		start := c.Start / 90
+		if start < l.done-2000 {
+			continue
+		}
+		for _, row := range strings.Split(c.Text, "\n") {
+			if normal(row) == l.text {
+				return start - l.done
+			}
+		}
+	}
+	return -1 << 31
+}
+
+type typedLine struct {
+	start, done int64 // ms
+	text        string
+}
+
+var srtTime = regexp.MustCompile(`^(\d+):(\d+):(\d+),(\d+) -->`)
+
+// typedLines finds where each bottom row starts being typed and its final text.
+func typedLines(srt string) []typedLine {
+	var out []typedLine
+	prev := ""
+	for _, block := range strings.Split(strings.TrimSpace(srt), "\n\n") {
+		ls := strings.Split(block, "\n")
+		if len(ls) < 3 {
+			continue
+		}
+		m := srtTime.FindStringSubmatch(ls[1])
+		if m == nil {
+			continue
+		}
+		h, _ := strconv.Atoi(m[1])
+		mi, _ := strconv.Atoi(m[2])
+		sec, _ := strconv.Atoi(m[3])
+		ms, _ := strconv.Atoi(m[4])
+		at := int64(((h*60+mi)*60+sec)*1000 + ms)
+		raw := regexp.MustCompile(`<[^>]+>|\{\\an\d\}`).ReplaceAllString(strings.Join(ls[2:], "\n"), "")
+		rows := strings.Split(raw, "\n")
+		last := normal(rows[len(rows)-1])
+		switch {
+		case last == "" || last == prev:
+		case prev != "" && strings.HasPrefix(last, prev) && len(out) > 0:
+			out[len(out)-1].text, out[len(out)-1].done = last, at
+		default:
+			out = append(out, typedLine{start: at, done: at, text: last})
+		}
+		prev = last
+	}
+	return out
+}
+
+// lineStart is how long after the broadcast began typing l the first cue
+// showing part of it starts. Part of the line before it is not a match.
+func lineStart(cues []Cue, l, before typedLine) (int64, bool) {
+	for _, c := range cues {
+		start := c.Start / 90
+		if start < l.start-2000 || start > l.start+3000 {
+			continue
+		}
+		rows := strings.Split(c.Text, "\n")
+		last := normal(rows[len(rows)-1])
+		// While a line is typed, the one before has rolled up above it.
+		above := len(rows) > 1 && normal(rows[len(rows)-2]) == before.text
+		if last != "" && strings.HasPrefix(l.text, last) && (above || !strings.HasPrefix(before.text, last)) {
+			return start - l.start, true
+		}
+	}
+	return 0, false
+}

@@ -87,27 +87,38 @@ func TestTopRowCaptionIsMarkedTop(t *testing.T) {
 	}
 }
 
-func TestRollUpShowsEachFinishedLine(t *testing.T) {
+func TestRollUpShowsTypingAndScrollsAtCarriageReturn(t *testing.T) {
 	d := NewDecoder()
 	pts := feed(d, 0, ru2, pac15)
+	typing := pts
 	pts = feed(d, pts, text("FIRST LINE")...)
 	pts = feed(d, pts, cr)
 	pts = feed(d, pts, text("SECOND")...)
+	scroll := pts
 	pts = feed(d, pts, cr)
 	feed(d, pts, edm)
+	cues := d.Take()
 	var got []string
-	for _, c := range d.Take() {
+	for _, c := range cues {
 		got = append(got, c.Text)
 	}
-	want := []string{"FIRST LINE", "FIRST LINE\nSECOND"}
+	// Two rows: the second carriage return rolls the first line off.
+	want := []string{"FI", "FIRST LINE", "FIRST LINE\nSE", "SECOND"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("cues %q, want %q", got, want)
 	}
+	if cues[0].Start != typing {
+		t.Errorf("typing shows at %d, want %d", cues[0].Start, typing)
+	}
+	if cues[3].Start != scroll {
+		t.Errorf("the scroll shows at %d, want %d", cues[3].Start, scroll)
+	}
 }
 
-func TestPaintOnShowsAtMostOncePerSecond(t *testing.T) {
+func TestPaintOnShowsAtMostFiveTimesASecond(t *testing.T) {
 	d := NewDecoder()
 	pts := feed(d, 0, rdc, pac15)
+	first := pts
 	// 30 characters typed over 2.5 s, as a live captioner sends them.
 	for _, p := range text(strings.Repeat("WORD ", 6)) {
 		pts = feed(d, pts, p, []byte{0, 0}, []byte{0, 0}, []byte{0, 0}, []byte{0, 0})
@@ -117,8 +128,16 @@ func TestPaintOnShowsAtMostOncePerSecond(t *testing.T) {
 	}
 	feed(d, pts, edm)
 	cues := d.Take()
-	if len(cues) < 2 || len(cues) > 4 {
+	if len(cues) < 10 || len(cues) > 14 {
 		t.Fatalf("%d cues for 2.5 s of typing: %+v", len(cues), cues)
+	}
+	if cues[0].Start != first {
+		t.Errorf("first characters show at %d, want %d", cues[0].Start, first)
+	}
+	for i := 1; i < len(cues); i++ {
+		if gap := cues[i].Start - cues[i-1].Start; gap < shownEvery {
+			t.Errorf("cue %d shows %d after the one before", i, gap)
+		}
 	}
 	if last := cues[len(cues)-1].Text; last != strings.TrimSpace(strings.Repeat("WORD ", 6)) {
 		t.Errorf("last cue %q", last)
@@ -171,5 +190,19 @@ func TestSegmentClipsCuesAndMapsTime(t *testing.T) {
 	}
 	if empty := string(Segment(0, 90000, nil)); empty != "WEBVTT\nX-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0\n" {
 		t.Fatalf("empty segment %q", empty)
+	}
+}
+
+func TestTypingAfterTheClockWentBackShowsAtOnce(t *testing.T) {
+	d := NewDecoder()
+	pts := feed(d, 900000, ru2, pac15)
+	feed(d, pts, text("AB")...)
+	back := int64(3003)
+	feed(d, back, text("CD")...)
+	d.Close(back + 9000)
+	cues := d.Take()
+	// "AB" would end before it started, so only the new showing is kept.
+	if len(cues) != 1 || cues[0].Text != "ABCD" || cues[0].Start != back {
+		t.Fatalf("cues %+v", cues)
 	}
 }
