@@ -271,3 +271,14 @@ private final class RefusedOnce: @unchecked Sendable {
         body()
     }
 }
+
+@Test func demoHasNothingComingUp() async throws {
+    let server = DemoServer()
+    let port = UInt16.random(in: 20000 ... 45000)
+    let origin = try #require(await server.prepare(port: port))
+    defer { server.stop() }
+    let client = APIClient(base: origin)
+    let plan = try await client.schedule()
+    #expect(plan.items.isEmpty)
+    #expect(try await client.events().isEmpty)
+}

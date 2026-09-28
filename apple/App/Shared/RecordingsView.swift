@@ -21,6 +21,11 @@ struct RecordingsView: View {
     var body: some View {
         let groups = grouped
         List {
+            NavigationLink {
+                ScheduleView()
+            } label: {
+                Label("Coming up", systemImage: "calendar")
+            }
             if !store.recordings.isEmpty {
                 Picker("Show", selection: $unwatchedOnly) {
                     Text("All").tag(false)

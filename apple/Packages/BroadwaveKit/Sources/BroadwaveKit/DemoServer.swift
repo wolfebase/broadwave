@@ -317,6 +317,10 @@ public final class DemoServer: @unchecked Sendable {
             return Self.ok(Self.json(currentSettings()))
         case ("PUT", "/api/v1/settings"):
             return putSettings(body)
+        case ("GET", "/api/v1/schedule"):
+            return Self.ok(Data("{\"tunerCount\":2,\"items\":[]}".utf8))
+        case ("GET", "/api/v1/events"):
+            return Self.ok(Data("{\"events\":[]}".utf8))
         case ("GET", "/api/v1/passes"):
             return Self.ok(Data("{\"passes\":[]}".utf8))
         case ("GET", "/api/v1/teams"):

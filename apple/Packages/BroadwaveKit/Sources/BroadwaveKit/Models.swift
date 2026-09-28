@@ -172,6 +172,43 @@ public extension Recording {
     }
 }
 
+public struct SchedulePlan: Codable, Sendable, Hashable {
+    public var tunerCount: Int
+    public var items: [PlannedAiring]
+}
+
+public extension PlannedAiring {
+    /// One planned airing of one pass.
+    var key: String {
+        "\(passId)-\(airing.channelId)-\(airing.start.timeIntervalSince1970)"
+    }
+
+    /// The tuner's window: the listing plus the pass's early and after minutes.
+    var recordWindow: ClosedRange<Date> {
+        airing.start.addingTimeInterval(-Double(padBefore) * 60) ... airing.end.addingTimeInterval(Double(padAfter) * 60)
+    }
+
+    /// "Will record 7:59 PM–9:02 PM", or why it will not, as the web Schedule reads.
+    func statusLine(tuners: Int) -> String {
+        if skipped {
+            if let reason, !reason.isEmpty {
+                return reason
+            }
+            return tuners == 1 ? "Lower priority · 1 tuner" : "Lower priority · \(tuners) tuners"
+        }
+        let window = recordWindow
+        return "Will record \(window.lowerBound.formatted(date: .omitted, time: .shortened))–\(window.upperBound.formatted(date: .omitted, time: .shortened))"
+    }
+
+    func laterLine(_ later: Suggestion) -> String {
+        let when = later.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
+        if let number = later.guideNumber, !number.isEmpty {
+            return "Later on \(when) on \(number)."
+        }
+        return "Later on \(when)."
+    }
+}
+
 /// What a recording does at a commercial break. Kept per device, like the web.
 public enum BreakSkip: String, CaseIterable, Sendable {
     case auto

@@ -1,10 +1,11 @@
 import XCTest
 
 /// Manages recordings with the remote against a real server. Opt-in: run with
-/// TEST_RUNNER_BROADWAVE_SERVER=http://host:port on a server that has two
-/// finished recordings titled "Harness News" and "Harness Movie", the second
-/// with a commercial marker from 5 to 20 s. Each test changes them, so the
-/// server needs fresh ones for every run.
+/// TEST_RUNNER_BROADWAVE_SERVER=http://host:port on a server that has finished
+/// recordings titled "Harness News", "Harness Movie" (with a commercial marker
+/// from 5 to 20 s), and "Evening News", and series passes where "Movie Hour" is
+/// skipped for lack of a tuner with a later airing that fits. Each test changes
+/// them, so the server needs fresh ones for every run.
 final class RecordingsTests: XCTestCase {
     func testMarkWatchedThenDelete() throws {
         let server = try serverURL()
@@ -74,6 +75,34 @@ final class RecordingsTests: XCTestCase {
         let position = try leavePlayer(server) { $0["id"] as? Int == id }
         let passed = position >= 39.5
         XCTAssertTrue(passed, "saved position \(position): Skip break did not skip")
+    }
+
+    /// Coming up shows the skipped airing and records the later one instead.
+    func testComingUpRecordsTheLaterAiring() throws {
+        let server = try serverURL()
+        let app = launch(server)
+        XCTAssertTrue(until(20) { self.row(app, "Coming up").exists }, "no Coming up")
+        for _ in 0 ..< 6 where !focused(app).contains("Coming up") {
+            XCUIRemote.shared.press(.up)
+            wait(0.5)
+        }
+        XCTAssertTrue(focused(app).contains("Coming up"), "focus on \(focused(app))")
+        XCUIRemote.shared.press(.select)
+        let later = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Record the later airing")).firstMatch
+        XCTAssertTrue(later.waitForExistence(timeout: 10), "no later airing offered")
+        for _ in 0 ..< 8 where !focused(app).contains("Record the later airing") {
+            XCUIRemote.shared.press(.down)
+            wait(0.5)
+        }
+        XCTAssertTrue(focused(app).contains("Record the later airing"), "focus on \(focused(app))")
+        if let shot = ProcessInfo.processInfo.environment["BROADWAVE_SHOT"] {
+            try? XCUIScreen.main.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: shot))
+        }
+        XCUIRemote.shared.press(.select)
+        XCTAssertTrue(until(10) { !later.exists }, "the later airing is still offered")
+        let data = try Data(contentsOf: URL(string: server + "/api/v1/schedule")!)
+        let items = try (JSONSerialization.jsonObject(with: data) as? [String: Any])?["items"] as? [[String: Any]] ?? []
+        XCTAssertFalse(items.contains { $0["suggestion"] != nil }, "the server still suggests a later airing")
     }
 
     /// Presses Menu until the player closes and saves its position, and returns it. The
