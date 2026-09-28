@@ -212,7 +212,9 @@ final class AccessibilityAuditTests: XCTestCase {
 
     private func assertAudit(_ app: XCUIApplication, _ page: String) throws {
         let types: XCUIAccessibilityAuditType = [.sufficientElementDescription, .trait, .elementDetection]
-        try app.performAccessibilityAudit(for: types) { @MainActor [auditLog] issue in
+        // Xcode 26 hands the audit's closure to the main actor. It touches only
+        // the locked log, so it is safe to send.
+        nonisolated(unsafe) let handle: (XCUIAccessibilityAuditIssue) throws -> Bool = { [auditLog] issue in
             // The tvOS sidebar's back mark is a system image named for its symbol.
             // Its accessibility node ignores a new label. It is not a control we draw.
             let label = issue.element?.label ?? ""
@@ -223,13 +225,14 @@ final class AccessibilityAuditTests: XCTestCase {
             auditLog.fail("\(page) \(Self.describe(issue))")
             return true
         }
+        try app.performAccessibilityAudit(for: types, handle)
         let found = auditLog.takeFailures()
         XCTAssertTrue(found.isEmpty, found.joined(separator: "\n"))
     }
 
     /// XXL may clip a one-line card title. That is a visual call. A clipped button name is not.
     private func assertClippedButtons(_ app: XCUIApplication, _ page: String) throws {
-        try app.performAccessibilityAudit(for: [.textClipped, .dynamicType]) { @MainActor [auditLog] issue in
+        nonisolated(unsafe) let handle: (XCUIAccessibilityAuditIssue) throws -> Bool = { [auditLog] issue in
             let line = "\(page) \(Self.describe(issue))"
             if issue.auditType == .textClipped, issue.element?.elementType == .button {
                 auditLog.fail(line)
@@ -238,6 +241,7 @@ final class AccessibilityAuditTests: XCTestCase {
             }
             return true
         }
+        try app.performAccessibilityAudit(for: [.textClipped, .dynamicType], handle)
         let found = auditLog.takeFailures()
         let visual = auditLog.takeNotes()
         if !visual.isEmpty {
