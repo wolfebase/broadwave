@@ -114,6 +114,13 @@ func main() {
 		}
 		slog.Info("encoder: " + host.Line())
 	}
+	// The e2e harness pins the measured speed, so a fast machine gets a slow one's budget.
+	if speed, err := strconv.ParseFloat(os.Getenv("BROADWAVE_SPEED"), 64); err == nil && speed > 0 && os.Getenv("BROADWAVE_E2E") == "1" {
+		pinned := live.Budget(host.Class, speed)
+		pinned.Encoder = host.Encoder
+		host = pinned
+		slog.Info("encoder: pinned for e2e: " + host.Line())
+	}
 	live.Reap(work)
 	hub := live.New(st, work, ffmpegPath, encoder)
 	hub.Host = host

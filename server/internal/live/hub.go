@@ -708,7 +708,7 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	if want.Video != "copy" && h.Host.Tiles > 0 && h.transcodesLocked() >= h.Host.Tiles {
 		// A picture nobody is watching still holds its encode for a few seconds.
 		// That slot is free for the picture someone is asking for now.
-		h.releaseIdleTranscodesLocked()
+		h.releaseIdleTranscodesLocked(f, time.Now())
 	}
 	if want.Video != "copy" && h.Host.Tiles > 0 && h.transcodesLocked() >= h.Host.Tiles {
 		if r := joinTranscode(f, want); r != nil {
@@ -790,9 +790,16 @@ func joinTranscode(f *feed, want Rendition) *rendition {
 	return best
 }
 
-// releaseIdleTranscodesLocked stops transcodes with no viewers so a new
-// picture can use the slot. The caller holds h.mu.
-func (h *Hub) releaseIdleTranscodesLocked() {
+// stalePicture is how long a counted viewer can go without fetching video
+// before its picture is free for someone else. A page that left before its
+// watch answered never sends a stop. It is longer than the 12 s a new watch
+// waits for its first segment.
+const stalePicture = 15 * time.Second
+
+// releaseIdleTranscodesLocked stops transcodes with no viewers, or whose
+// viewers stopped fetching video, so a new picture can use the slot. The
+// tuner goes too unless it is the feed asking. The caller holds h.mu.
+func (h *Hub) releaseIdleTranscodesLocked(asking *feed, now time.Time) {
 	type idle struct {
 		f   *feed
 		key string
@@ -805,28 +812,40 @@ func (h *Hub) releaseIdleTranscodesLocked() {
 		}
 		seen[f] = true
 		for key, r := range f.renditions {
-			if r.spec.Video != "copy" && r.viewers == 0 {
+			if r.spec.Video != "copy" && freePicture(r, now) {
 				list = append(list, idle{f, key})
 			}
 		}
 	}
 	for _, item := range list {
+		if r := item.f.renditions[item.key]; r != nil && r.viewers > 0 {
+			slog.Info(fmt.Sprintf("live: %s %s: %d viewer(s) stopped fetching video, freeing the picture", item.f.channel.GuideNumber, item.key, r.viewers))
+			r.viewers = 0
+		}
 		h.stopRenditionLocked(item.f, item.key)
+		if item.f != asking {
+			h.dropIfUnusedLocked(item.f)
+		}
 	}
+}
+
+func freePicture(r *rendition, now time.Time) bool {
+	return r.viewers == 0 || now.Sub(r.seen) > stalePicture
 }
 
 // Pictures is how many transcodes have a viewer, the startup budget (0 is no
 // limit), and the channels with one a new tile can join when the budget is
-// full. An idle transcode is stopped to make room before a join, so it counts
-// for neither.
+// full. An idle or stale transcode is stopped to make room before a join, so
+// it counts for neither.
 func (h *Hub) Pictures() (used, limit int, running map[int64]bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	running = map[int64]bool{}
 	seen := map[*feed]bool{}
+	now := time.Now()
 	for id, f := range h.channels {
 		for _, r := range f.renditions {
-			if r.spec.Video == "copy" || r.viewers == 0 {
+			if r.spec.Video == "copy" || freePicture(r, now) {
 				continue
 			}
 			running[id] = true
