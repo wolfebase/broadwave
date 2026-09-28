@@ -506,6 +506,7 @@ if (playlist) {
 const serverBin = process.env.E2E_BROADWAVE || path.join(run, "broadwave");
 const image = process.env.E2E_IMAGE || "";
 const container = `broadwave-e2e-${port}`;
+const imageZone = "America/Chicago";
 
 function removeContainer() {
   spawnSync("docker", ["rm", "-f", container], { stdio: "ignore" });
@@ -525,8 +526,10 @@ function launchServer() {
   const env = ["BROADWAVE_E2E", "HDHR_CONTROL_PORT", "BROADWAVE_ENCODER"]
     .filter((key) => serverEnv[key])
     .flatMap((key) => ["-e", `${key}=${serverEnv[key]}`]);
-  const user = `${process.getuid()}:${process.getgid()}`;
-  const args = ["run", "--rm", "--name", container, "--network", "host", "--user", user, "-e", "HOME=/tmp", ...env, "-v", `${config}:${config}`, image, ...serverArgs];
+  // Started as root with PUID and PGID, as the README installs it, so the
+  // switch to that user and the hand-over of the config folder are tested.
+  const identity = ["-e", `PUID=${process.getuid()}`, "-e", `PGID=${process.getgid()}`, "-e", `TZ=${imageZone}`];
+  const args = ["run", "--rm", "--name", container, "--network", "host", "-e", "HOME=/tmp", ...identity, ...env, "-v", `${config}:${config}`, image, ...serverArgs];
   server = start("docker", args);
   return server;
 }

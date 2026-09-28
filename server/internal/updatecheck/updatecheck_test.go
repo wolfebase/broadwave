@@ -2,10 +2,8 @@ package updatecheck
 
 import (
 	"encoding/json"
-	"net"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 	"time"
 )
@@ -64,17 +62,16 @@ func TestRunExitCodes(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	_, portText, _ := net.SplitHostPort(srv.Listener.Addr().String())
-	port, _ := strconv.Atoi(portText)
-	if code, why := Run(port, time.Now()); code != Skip {
+	base := srv.URL
+	if code, why := Run(base, time.Now()); code != Skip {
 		t.Fatalf("a held tuner must skip: %d %s", code, why)
 	}
 	tuners = `{"tuners":[{"index":0,"ours":false}]}`
-	if code, why := Run(port, time.Now()); code != 0 {
+	if code, why := Run(base, time.Now()); code != 0 {
 		t.Fatalf("an idle server updates: %d %s", code, why)
 	}
 	srv.Close()
-	if code, _ := Run(port, time.Now()); code != 0 {
+	if code, _ := Run(base, time.Now()); code != 0 {
 		t.Fatal("a server that does not answer has nothing to cut off")
 	}
 }

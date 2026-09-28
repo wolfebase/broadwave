@@ -52,16 +52,21 @@ func main() {
 	updateCheck := flag.Bool("update-check", false, "exit 75 when a running server on -addr is busy (a tuner in use, or a recording within 2 h), 0 when it may update")
 	staging := flag.Bool("staging", false, "test copy beside a real server: never record, scan, or pull the guide; tune only when someone watches")
 	flag.Parse()
+	addrGiven := false
+	flag.Visit(func(f *flag.Flag) { addrGiven = addrGiven || f.Name == "addr" })
 	if *healthcheck {
-		os.Exit(checkHealth(*addr))
+		os.Exit(checkHealth(localBase(checkAddr(*addr, addrGiven))))
 	}
 	if *updateCheck {
-		code, why := updatecheck.Run(portOf(*addr), time.Now())
+		code, why := updatecheck.Run(localBase(checkAddr(*addr, addrGiven)), time.Now())
 		fmt.Println(why)
 		os.Exit(code)
 	}
 	logbuf.Install(os.Stderr)
-	doctor.ApplyIdentity(filepath.Join(*configDir, "work", "recordings"))
+	if err := doctor.ApplyIdentity(*configDir, filepath.Join(*configDir, "work", "recordings")); err != nil {
+		slog.Error(fmt.Sprintf("identity: %v", err))
+		os.Exit(1)
+	}
 	// Copy the catalog before Open migrates it, when this build is a new version.
 	if err := backup.SnapshotIfVersionChanged(context.Background(), *configDir, version, time.Now()); err != nil {
 		slog.Error(fmt.Sprintf("backup: %v", err))
@@ -266,6 +271,7 @@ func main() {
 		}
 	}
 	slog.Info(fmt.Sprintf("Broadwave listening on %s", *addr))
+	_ = os.WriteFile(addrFile(), []byte(*addr), 0o644)
 	server := &http.Server{
 		Addr:              *addr,
 		Handler:           handler,
@@ -332,9 +338,9 @@ func refreshGuide(api *httpapi.Server) {
 	}
 }
 
-func checkHealth(addr string) int {
+func checkHealth(base string) int {
 	client := http.Client{Timeout: 4 * time.Second}
-	res, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/api/v1/health", portOf(addr)))
+	res, err := client.Get(base + "/api/v1/health")
 	if err != nil {
 		return 1
 	}
@@ -343,6 +349,35 @@ func checkHealth(addr string) int {
 		return 1
 	}
 	return 0
+}
+
+// addrFile is where the running server writes its -addr, so -healthcheck and
+// -update-check reach it when the container was started on another port.
+func addrFile() string { return filepath.Join(os.TempDir(), "broadwave.addr") }
+
+// checkAddr is -addr when it was given, else the address the running server wrote down.
+func checkAddr(addr string, given bool) string {
+	if given {
+		return addr
+	}
+	if b, err := os.ReadFile(addrFile()); err == nil {
+		if s := strings.TrimSpace(string(b)); s != "" {
+			return s
+		}
+	}
+	return addr
+}
+
+// localBase is the URL a check on this machine uses for a server listening on addr.
+func localBase(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		host, port = "", "8477"
+	}
+	if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port)
 }
 
 func portOf(addr string) int {
