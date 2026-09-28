@@ -211,12 +211,36 @@ final class MultiviewSession {
     let room: String
     private let commands = TileCommands()
     var paused = false
+    /// The sound tile asks first when the server cannot play every tile.
+    var pictureRound = PictureOrder.begin(0, now: .distantPast)
+    /// Bumps when the server process restarts, so each tile asks again in order.
+    var restartTick = 0
 
     init(focusID: Int64) {
         layout = .saved
         self.focusID = focusID
         let id = String(UUID().uuidString.prefix(8)).lowercased()
         room = "multiview:\(id)"
+    }
+
+    func beginRound(_ soundID: Int64, now: Date = .now) {
+        pictureRound = PictureOrder.begin(soundID, now: now)
+    }
+
+    func noteSound(_ id: Int64, now: Date = .now) {
+        pictureRound = PictureOrder.soundChanged(pictureRound, soundID: id, now: now)
+    }
+
+    func soundDidAnswer(_ channelID: Int64) {
+        pictureRound = PictureOrder.soundDidAnswer(pictureRound, channelID: channelID)
+    }
+
+    /// The socket dropped, or the server restarted. A restart also asks again.
+    func orderAgain(restarted: Bool, now: Date = .now) {
+        pictureRound = PictureOrder.beginAgain(pictureRound, now: now)
+        if restarted {
+            restartTick += 1
+        }
     }
 
     func room(for channelID: Int64) -> String {
@@ -294,11 +318,18 @@ final class TilePlayer {
     var viewerPaused = false
     private var stuckSince: Date?
     private var lastReplay: Date?
-    private var restartToken: (socket: EventSocket, id: UUID)?
     /// A watch started while the old picture played on, for the next start to use.
     private var preparedSession: WatchSession?
     private var rewatch: (() async throws -> WatchSession)?
     private var handingOff = false
+    /// This tile had no watch when the server came back, so it asks after the others.
+    var askLate = false
+    private var pendingRecovery: PlaybackOutage.Recovery?
+
+    var hasWatch: Bool {
+        session != nil
+    }
+
     /// Written by the player layer when a picture is actually on screen.
     let frameOnScreen = FrameOnScreen()
 
@@ -345,11 +376,14 @@ final class TilePlayer {
             onMessage: { [weak self] decision in self?.showOutage(decision) },
             onRecover: { [weak self] quiet in
                 guard let self, !handingOff else { return }
+                let serverBack = pendingRecovery == .server || pendingRecovery == .restart
+                if PictureOrder.askDelay(hadWatch: session != nil, serverCameBack: !quiet && serverBack) > 0 {
+                    askLate = true
+                }
                 quietRetry = quiet
                 attempt += 1
             }
         )
-        listenForRestart(store.socket)
         rewatch = { try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: prefs, confirmLive: false) }
         let prepared = preparedSession?.channelId == channel.id ? preparedSession : nil
         if let stale = preparedSession, prepared == nil {
@@ -475,6 +509,7 @@ final class TilePlayer {
     /// A recoverable outage clears the item. The tile stays, and the message
     /// stays until the next start has a picture.
     private func showOutage(_ decision: OutageDecision) {
+        pendingRecovery = decision.recovery
         error = decision.message
         let id = channelID ?? 0
         Self.tileLog.notice("outage channel=\(id, privacy: .public) \(decision.message, privacy: .public)")
@@ -621,22 +656,14 @@ final class TilePlayer {
         driftMS = Int(sync.drift.rounded())
     }
 
-    private func listenForRestart(_ socket: EventSocket?) {
-        if let restartToken {
-            restartToken.socket.off("restarted", restartToken.id)
-        }
-        restartToken = nil
-        guard let socket else { return }
-        let id = socket.on("restarted") { [weak self] _ in
-            guard let self, !handingOff, session != nil else { return }
-            print("broadwave tile \(channelID ?? 0) restarted")
-            Task { await self.handOff() }
-        }
-        restartToken = (socket, id)
+    func kick() {
+        attempt += 1
     }
 
     /// See `RestartHandoff`. The tile keeps its old picture while the new watch fills.
-    private func handOff() async {
+    /// The grid calls this after the sound tile is allowed to ask, so a quiet tile
+    /// does not take the picture the viewer is listening to.
+    func restartKeepingPicture() async {
         handingOff = true
         defer { handingOff = false }
         let token = startToken
@@ -667,10 +694,6 @@ final class TilePlayer {
     }
 
     func stop(endPicture: Bool = true) async {
-        if let restartToken {
-            restartToken.socket.off("restarted", restartToken.id)
-        }
-        restartToken = nil
         outageLoop?.cancel()
         outageLoop = nil
         if endPicture {
@@ -896,6 +919,12 @@ struct MultiviewScreen: View {
         .onChange(of: nowPlaying.openedLayout) { _, _ in
             applyOpenedLayout()
         }
+        .onChange(of: session.focusID) { _, id in
+            session.noteSound(id)
+        }
+        .task {
+            await watchPictureOrder()
+        }
         .task(id: nowPlaying.together) {
             #if DEBUG
                 if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
@@ -907,6 +936,8 @@ struct MultiviewScreen: View {
                 planReady = false
             }
             await refreshPlan()
+            let sound = session.focusID == 0 ? (nowPlaying.together.first ?? 0) : session.focusID
+            session.beginRound(sound)
             planReady = true
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(20))
@@ -1170,7 +1201,8 @@ struct MultiviewScreen: View {
             focused: focused,
             remoteFocused: remoteFocused,
             pip: focused,
-            gridPaused: session.paused
+            gridPaused: session.paused,
+            grid: session
         ) {
             session.focusID = channel.id
         } bind: { session.bind(channel.id, $0) } unbind: {
@@ -1337,6 +1369,41 @@ struct MultiviewScreen: View {
         }
     #endif
 
+    /// Quiet tiles wait until the sound tile's watch has answered. The order
+    /// starts over when the socket drops or the server process restarts.
+    private func watchPictureOrder() async {
+        var bound: EventSocket?
+        var token: UUID?
+        var up = false
+        while !Task.isCancelled {
+            let socket = store.socket
+            if socket !== bound {
+                if let bound, let token {
+                    bound.off("restarted", token)
+                }
+                bound = socket
+                // The handler outlives this pass of the loop. Hold the session,
+                // not the view, so the restart still starts the order over.
+                let grid = session
+                token = socket?.on("restarted") { _ in
+                    Task { @MainActor in
+                        grid.orderAgain(restarted: true)
+                    }
+                }
+                up = socket?.connected ?? false
+            }
+            let nowUp = socket?.connected ?? false
+            if up, !nowUp {
+                session.orderAgain(restarted: false)
+            }
+            up = nowUp
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        if let bound, let token {
+            bound.off("restarted", token)
+        }
+    }
+
     private func refreshPlan() async {
         let ids = nowPlaying.together
         guard let api = store.api else { return }
@@ -1361,11 +1428,14 @@ struct MultiviewTile: View {
     let pip: Bool
     /// The whole grid is paused. A stuck tile must not start itself then.
     let gridPaused: Bool
+    let grid: MultiviewSession
     let onFocus: () -> Void
     let bind: (@escaping (String) -> Void) -> Void
     let unbind: () -> Void
     let onSound: () -> Void
     @State private var live = TilePlayer()
+    @State private var restartArmed = false
+    @State private var appliedRestart = 0
     private var tuning: Bool {
         #if DEBUG
             if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") || UserDefaults.standard.bool(forKey: "BroadwaveChrome") {
@@ -1475,7 +1545,48 @@ struct MultiviewTile: View {
             #endif
             unbind()
             live.viewerPaused = gridPaused
+            await waitForSound()
+            guard !Task.isCancelled else { return }
+            if live.askLate {
+                live.askLate = false
+                try? await Task.sleep(for: .seconds(PictureOrder.askDelay(hadWatch: false, serverCameBack: true)))
+                guard !Task.isCancelled else { return }
+                await waitForSound()
+                guard !Task.isCancelled else { return }
+            }
             await live.start(TilePlayer.Request(channel: channel, prefs: prefs, audible: focused), room: room, store: store, bind: bind)
+            if !Task.isCancelled {
+                grid.soundDidAnswer(channel.id)
+            }
+        }
+        .task(id: grid.restartTick) {
+            #if DEBUG
+                if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
+                    return
+                }
+            #endif
+            let tick = grid.restartTick
+            // The first run records the tick already in progress. A tile that
+            // appears later must not treat that as a restart of its own watch.
+            if !restartArmed {
+                restartArmed = true
+                appliedRestart = tick
+                return
+            }
+            guard tick != appliedRestart else { return }
+            appliedRestart = tick
+            await waitForSound()
+            guard !Task.isCancelled else { return }
+            if live.hasWatch {
+                await live.restartKeepingPicture()
+                // The quiet tiles wait on this, or on the 8 s cap.
+                grid.soundDidAnswer(channel.id)
+            } else if focused {
+                live.kick()
+            } else {
+                live.askLate = true
+                live.kick()
+            }
         }
         .onChange(of: gridPaused) { _, paused in
             live.viewerPaused = paused
@@ -1506,6 +1617,16 @@ struct MultiviewTile: View {
         .onDisappear {
             unbind()
             Task { await live.stop() }
+        }
+    }
+
+    /// A quiet tile waits until the sound tile's watch has answered, or 8 s.
+    private func waitForSound() async {
+        while PictureOrder.holdQuiet(grid.pictureRound, channelID: channel.id, now: Date()) {
+            if Task.isCancelled {
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(50))
         }
     }
 
