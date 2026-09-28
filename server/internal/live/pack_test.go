@@ -1095,7 +1095,7 @@ func TestFlattenEditsMovesEachTrackToItsStart(t *testing.T) {
 	video := trakBox(1, 90000, "vide", elstBox(1, [][2]int64{{72448376, -1}, {0, 1501}}))
 	// Two empty edits in a v0 list add up.
 	audio := trakBox(2, 48000, "soun", elstBox(0, [][2]int64{{72447000, -1}, {910, -1}, {0, 1024}}))
-	out, shifts := flattenEdits(initWith(video, audio))
+	out, shifts, first := flattenEdits(initWith(video, audio))
 	if bytes.Contains(out, []byte("edts")) || bytes.Contains(out, []byte("elst")) {
 		t.Fatal("edit lists survived")
 	}
@@ -1113,6 +1113,9 @@ func TestFlattenEditsMovesEachTrackToItsStart(t *testing.T) {
 	want := map[uint32]int64{1: int64(math.Round((videoAt - audioAt) * 90000)), 2: 0}
 	if len(shifts) != 2 || shifts[1] != want[1] || shifts[2] != want[2] {
 		t.Fatalf("shifts %v, want %v", shifts, want)
+	}
+	if math.Abs(first-audioAt) > 1e-9 {
+		t.Fatalf("fragment time zero is broadcast %f, want %f", first, audioAt)
 	}
 
 	frag := keyframeFragment(1000, 1501)
@@ -1132,13 +1135,13 @@ func TestFlattenEditsLeavesOddInitsAlone(t *testing.T) {
 			trakBox(2, 48000, "soun", elstBox(1, [][2]int64{{1000, -1}, {0, 0}}))),
 	}
 	for name, init := range cases {
-		out, shifts := flattenEdits(init)
+		out, shifts, _ := flattenEdits(init)
 		if !bytes.Equal(out, init) || shifts != nil {
 			t.Errorf("%s: changed the init (shifts %v)", name, shifts)
 		}
 	}
 	one := initWith(trakBox(1, 90000, "vide", elstBox(1, [][2]int64{{72448376, -1}, {0, 1501}})))
-	out, shifts := flattenEdits(one)
+	out, shifts, _ := flattenEdits(one)
 	if bytes.Contains(out, []byte("edts")) || shifts[1] != 0 {
 		t.Errorf("a single track: shifts %v", shifts)
 	}

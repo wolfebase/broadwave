@@ -334,7 +334,6 @@ func TestProbeRebuildsTheRunningGraph(t *testing.T) {
 		source:     Source{VideoCodec: "MPEG2"},
 		program:    1,
 		renditions: map[string]*rendition{},
-		timeline:   NewTimeline(),
 	}
 	m.feeds["4.1"] = f
 	h.channels[1] = f
@@ -418,7 +417,6 @@ func TestUnscannedH264ProbeRebuilds(t *testing.T) {
 		source:     sourceOf(ch),
 		program:    1,
 		renditions: map[string]*rendition{},
-		timeline:   NewTimeline(),
 	}
 	m.feeds["14.1"] = f
 	h.channels[14] = f

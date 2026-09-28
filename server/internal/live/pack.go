@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -166,6 +167,38 @@ type packInput struct {
 	cur  io.ReadCloser
 	next []*readAhead
 	done bool
+	// offset is the broadcast time, in 90 kHz ticks, of fragment time zero.
+	// A later encode on the same playlist starts its own fragment clock, so
+	// the offset is known only while one encode has fed the playlist.
+	offset  int64
+	known   bool
+	encodes int
+}
+
+// noteEncodeStart records where the next encode's fragment clock starts on
+// the broadcast clock, in seconds; ok is false when its header did not say.
+func (in *packInput) noteEncodeStart(first float64, ok bool) {
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	in.encodes++
+	in.known = ok && in.encodes == 1
+	in.offset = int64(math.Round(first*90000)) % ptsWrap
+}
+
+// broadcastOffset is what to add to a segment's time to get the broadcast
+// timestamp of its first picture.
+func (in *packInput) broadcastOffset() (int64, bool) {
+	if in == nil {
+		return 0, false
+	}
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	return in.offset, in.known
+}
+
+// encodeStarts is the packager's reader when a hub owns it.
+type encodeStarts interface {
+	noteEncodeStart(first float64, ok bool)
 }
 
 // errNextEncode is where one encode's output ends and the next one's begins.
@@ -459,7 +492,10 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 				if moof == nil && haveInit && (kind == "ftyp" || reinit != nil) {
 					reinit = append(reinit, box...)
 					if kind == "moov" {
-						next, nextShifts := flattenEdits(reinit)
+						next, nextShifts, first := flattenEdits(reinit)
+						if n, ok := r.(encodeStarts); ok {
+							n.noteEncodeStart(first, nextShifts != nil)
+						}
 						reinit = nil
 						// Players keep init.mp4. A new encode that describes its
 						// streams differently needs a new playlist.
@@ -474,7 +510,11 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 				if moof == nil && !haveInit {
 					init = append(init, box...)
 					if kind == "moov" {
-						init, shifts = flattenEdits(init)
+						var first float64
+						init, shifts, first = flattenEdits(init)
+						if n, ok := r.(encodeStarts); ok {
+							n.noteEncodeStart(first, shifts != nil)
+						}
 						id, sc, ok := videoTrack(init)
 						if !ok {
 							return fmt.Errorf("pack: no video track")

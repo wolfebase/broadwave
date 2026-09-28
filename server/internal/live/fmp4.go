@@ -57,13 +57,14 @@ func putBox(kind string, body []byte) []byte {
 }
 
 // flattenEdits drops the edit lists from an init segment and returns how far
-// to move each track's fragments so the tracks still line up. With -copyts,
+// to move each track's fragments so the tracks still line up, and the
+// broadcast time in seconds that fragment time zero then stands for. With -copyts,
 // ffmpeg starts every track's decode time at zero and keeps each track's
 // broadcast start only in an empty edit. hls.js and Chrome ignore edits, so
 // sound played as late as the audio led the first picture (over a second on
 // a real channel), and Safari honors them, so its buffer sat hours away from
 // where hls.js looked and the picture never started.
-func flattenEdits(init []byte) ([]byte, map[uint32]int64) {
+func flattenEdits(init []byte) ([]byte, map[uint32]int64, float64) {
 	// at is when the track's first sample is shown, in seconds on the
 	// broadcast clock; scale is the track's own timescale.
 	type start struct {
@@ -94,14 +95,14 @@ func flattenEdits(init []byte) ([]byte, map[uint32]int64) {
 			id, scale, ok := trackScale(c.body)
 			elst := child(child(c.body, "edts"), "elst")
 			if !ok || elst == nil {
-				return init, nil
+				return init, nil, 0
 			}
 			starts = append(starts, start{id, scale, editStart(elst, movie, scale)})
 		}
 		out = append(out, putBox("moov", moov)...)
 	}
 	if len(starts) == 0 {
-		return init, nil
+		return init, nil, 0
 	}
 	first := starts[0].at
 	for _, s := range starts {
@@ -112,11 +113,11 @@ func flattenEdits(init []byte) ([]byte, map[uint32]int64) {
 		// Tracks of one broadcast start seconds apart. More means a clock
 		// wrap or a track that lost its start; moving it would put it hours off.
 		if s.at-first > maxTrackLead {
-			return init, nil
+			return init, nil, 0
 		}
 		shifts[s.id] = int64(math.Round((s.at - first) * float64(s.scale)))
 	}
-	return out, shifts
+	return out, shifts, first
 }
 
 // editStart is when a track's first sample is shown, in seconds: leading
