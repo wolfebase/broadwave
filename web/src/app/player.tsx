@@ -29,6 +29,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const { path, params } = useRoute();
   const [channel, setChannel] = useState<Channel | null>(null);
   const back = useRef("/guide");
+  // The page under the player. Back to browsing steps back in history only when it is not setup.
+  const under = useRef("");
   const watchId = path === "/watch" ? Number(params.get("channel") || 0) : 0;
   const fromList = ready && watchId ? channels.find((c) => c.id === watchId) ?? null : null;
   const playing = channel && (!watchId || channel.id === watchId) ? channel : fromList;
@@ -36,7 +38,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Setup is done once you watch, so leaving the player never goes back to it.
-    if (path !== "/watch" && path !== "/multiview" && path !== "/setup") back.current = path + (params.toString() ? `?${params}` : "");
+    if (path === "/watch" || path === "/multiview") return;
+    under.current = path;
+    if (path !== "/setup") back.current = path + (params.toString() ? `?${params}` : "");
   }, [path, params]);
 
   const open = useCallback((c: Channel) => {
@@ -62,7 +66,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           mode={mode}
           onChannel={open}
           onMinimize={() => {
-            if (inAppDepth() > 0) window.history.back();
+            if (inAppDepth() > 0 && under.current !== "/setup") window.history.back();
             else navigate(back.current || "/guide");
           }}
           onExpand={() => navigate(`/watch?channel=${playing.id}`)}
