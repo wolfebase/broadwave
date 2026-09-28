@@ -1,5 +1,6 @@
 import BroadwaveKit
 import BroadwaveUI
+import os
 import SwiftUI
 #if os(iOS)
     import UIKit
@@ -110,7 +111,10 @@ struct RootView: View {
         .background(Tokens.ColorToken.canvas.ignoresSafeArea())
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
-                offlineBanner
+                // The full-screen player covers this inset, so the note lives on the player then.
+                if !playerCoversTheScreen {
+                    offlineBanner
+                }
                 updateBanner
                 arrivalBanner
             }
@@ -329,6 +333,18 @@ struct RootView: View {
         }
         .environment(store)
         .environment(nowPlaying)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            offlineBanner
+        }
+    }
+
+    /// True while a channel is on screen, so the offline note is not buried under the player.
+    private var playerCoversTheScreen: Bool {
+        #if os(iOS)
+            nowPlaying.expanded && nowPlaying.channel != nil
+        #else
+            nowPlaying.channel != nil
+        #endif
     }
 
     /// Text only, so it never takes focus from the remote.
@@ -343,7 +359,17 @@ struct RootView: View {
                 .background(.regularMaterial)
                 .accessibilityAddTraits(.updatesFrequently)
                 .accessibilityIdentifier("offline-banner")
+                .onAppear(perform: noteOfflineBanner)
         }
+    }
+
+    /// `-BroadwaveSyncLog 1` only, so a soak can see the moment the note is on screen.
+    private func noteOfflineBanner() {
+        guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") else { return }
+        let line = "broadwave offline banner \(Int(Date().timeIntervalSince1970 * 1000))"
+        print(line)
+        fflush(stdout)
+        Logger(subsystem: "com.wolfeup.broadwave", category: "socket").notice("\(line, privacy: .public)")
     }
 
     private var offlineLine: String {

@@ -1,4 +1,5 @@
 import Foundation
+import os
 #if canImport(UIKit)
     import UIKit
 #endif
@@ -27,6 +28,9 @@ public final class EventSocket {
     private var heard = 0
     private var retryWork: DispatchWorkItem?
     private var observers: [NSObjectProtocol] = []
+    /// Set on wake until the next `sync.state`, so a return can be timed.
+    private var awaitingState = false
+    private static let debugLog = Logger(subsystem: "com.wolfeup.broadwave", category: "socket")
     /// First drop of the socket. The app looks for the same server at a new address.
     public var onFailure: (() -> Void)?
     /// Called when `connected` changes.
@@ -99,15 +103,22 @@ public final class EventSocket {
     /// sleep can look open and be dead, so one that does not answer is replaced.
     public func wake() {
         guard !stopped else { return }
+        debugLine("socket wake")
+        awaitingState = true
         guard let task else {
             retry = 0
             connect()
             return
         }
+        // Already open. A later "socket open" means this one was replaced.
+        if connected {
+            debugLine("socket open")
+        }
         burst()
         let before = heard
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
             guard let self, self.task === task, heard == before else { return }
+            debugLine("socket quiet")
             task.cancel(with: .goingAway, reason: nil)
             self.task = nil
             setConnected(false)
@@ -130,7 +141,19 @@ public final class EventSocket {
     private func setConnected(_ value: Bool) {
         guard connected != value else { return }
         connected = value
+        if !value {
+            debugLine("socket down")
+        }
         onConnected?(value)
+    }
+
+    /// `-BroadwaveSyncLog 1` only. The epoch ms is the clock a soak lines up.
+    private func debugLine(_ name: String) {
+        guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") else { return }
+        let line = "broadwave \(name) \(Int(Date().timeIntervalSince1970 * 1000))"
+        print(line)
+        fflush(stdout)
+        Self.debugLog.notice("\(line, privacy: .public)")
     }
 
     private func burst() {
@@ -220,6 +243,7 @@ public final class EventSocket {
                     self.retry = 0
                     if !self.connected {
                         self.setConnected(true)
+                        self.debugLine("socket open")
                         // Events sent while this screen was away are gone.
                         if self.opened {
                             self.emit("reconnected")
@@ -253,6 +277,10 @@ public final class EventSocket {
         let payload = obj["data"].flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.fragmentsAllowed]) } ?? Data()
         if type == "sync.state", let d = obj["data"] as? [String: Any], let room = d["room"] as? String {
             latest[room] = payload
+            if awaitingState {
+                awaitingState = false
+                debugLine("sync.state")
+            }
         }
         if type == "hello", let d = obj["data"] as? [String: Any], let next = d["boot"] as? String, !next.isEmpty {
             // Every watch and room the old process had is gone.
