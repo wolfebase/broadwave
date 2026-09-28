@@ -200,6 +200,7 @@ export function Play({
   }
 
   function onKey(event: KeyboardEvent) {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
     if (event.key === " " && event.target instanceof HTMLButtonElement) return;
     const actions: Record<string, () => void> = {
       " ": togglePlay,

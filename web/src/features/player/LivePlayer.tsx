@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKey, type RefObject } from "react";
 import { useData } from "../../app/data";
 import { useLayout } from "../../app/layout";
 import { focusRing } from "../../app/remote";
 import { navigate } from "../../app/router";
 import { airingAt, categoryOf, minutesLeft, progress } from "../../lib/guide";
-import { typedChannel } from "../../lib/remote";
+import { channelNumberContinues, typedChannel } from "../../lib/remote";
 import type { SyncStatus } from "../../lib/sync";
 import { readZoom, saveZoom, type PictureMode, type Zoom } from "../../picture";
+import { copy } from "../../strings";
 import type { Channel } from "../../types";
+import { saveSound, sleepDue, sleepSentence, sleepUntilFrom } from "./extras";
 import { ChevronIcon, InfoIcon, ListIcon, RecordIcon, SideBySideIcon, SyncIcon } from "../../ui/icons";
 import { Progress } from "../../ui/primitives";
 import { isLayout, multiviewPath } from "../multiview/storage";
@@ -69,7 +71,7 @@ export function LivePlayer({
   const session = stream.session;
   const error = stream.error;
   const sync: SyncStatus = stream.syncStatus;
-  const [panel, setPanel] = useState<"none" | "guide" | "info" | "sync">("none");
+  const [panel, setPanel] = useState<"none" | "guide" | "info" | "sync" | "help">("none");
   const [listing, setListing] = useState({ id: channel.id, checks: 0, checking: false });
   if (listing.id !== channel.id) setListing({ id: channel.id, checks: 0, checking: false });
   const playback = usePlaybackStats(videoRef, panel === "info");
@@ -85,9 +87,18 @@ export function LivePlayer({
   }
   const [zoom, setZoom] = useState<Zoom>(readZoom);
   const [sleepUntil, setSleepUntil] = useState<number | null>(null);
+  const [sleepFor, setSleepFor] = useState(0);
+  const [theater, setTheater] = useState(false);
   const typed = useRef("");
   const typedTimer = useRef(0);
   const [entry, setEntry] = useState("");
+  const previous = useRef<Channel | null>(null);
+  const shown = useRef(channel.id);
+  useEffect(() => {
+    if (shown.current === channel.id) return;
+    previous.current = channels.find((c) => c.id === shown.current) ?? previous.current;
+    shown.current = channel.id;
+  }, [channel.id, channels]);
 
   const airing = airingAt(index, channel.id, now);
   const tuning = useFirstFrame(videoRef, `${channel.id}:${opts.quality}:${opts.audio}:${opts.track}:${opts.even}:${picture}`);
@@ -116,10 +127,19 @@ export function LivePlayer({
   useEffect(() => {
     if (!sleepUntil) return;
     const id = window.setInterval(() => {
-      if (Date.now() >= sleepUntil) onClose();
+      if (sleepDue(sleepUntil, Date.now())) onClose();
     }, 1000);
     return () => window.clearInterval(id);
   }, [sleepUntil, onClose]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theater && layout === "desktop") root.dataset.theater = "1";
+    else delete root.dataset.theater;
+    return () => {
+      delete root.dataset.theater;
+    };
+  }, [theater, layout]);
 
   useEffect(() => {
     if (mode !== "full") return;
@@ -198,12 +218,41 @@ export function LivePlayer({
     if (hit && hit.id !== channel.id) onChannel(hit);
   }
 
-  function onKey(event: KeyboardEvent) {
+  function lastChannel() {
+    const prior = previous.current;
+    if (!prior || prior.id === channel.id) return;
+    onChannel(prior);
+  }
+
+  function onKey(event: ReactKey) {
     const k = event.key;
+    const target = event.target;
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable)) {
+      if (k === "Escape") {
+        target.blur();
+        event.preventDefault();
+      }
+      return;
+    }
+    if (panel === "help") {
+      if (k === "Escape" || k === "Backspace" || k === "?") setPanel("none");
+      event.preventDefault();
+      return;
+    }
+    if (k === "Backspace" && typed.current) {
+      event.preventDefault();
+      window.clearTimeout(typedTimer.current);
+      const next = typed.current.slice(0, -1);
+      typed.current = next;
+      setEntry(next);
+      if (next) typedTimer.current = window.setTimeout(() => tuneTyped(typed.current), 1500);
+      return;
+    }
     // Wait for the whole number: tuning on each digit would take a tuner for 4.1 on the way to 41.1.
+    // "51" is 5.1. The dot can be skipped; the echo stays up for 1.5 s.
     if (/^[0-9.]$/.test(k)) {
       event.preventDefault();
-      const next = channels.some((c) => c.displayNumber.startsWith(typed.current + k)) ? typed.current + k : k;
+      const next = channelNumberContinues(channels, typed.current + k) ? typed.current + k : k;
       window.clearTimeout(typedTimer.current);
       if (typedChannel(channels, next, false)) return tuneTyped(next);
       typed.current = next;
@@ -229,7 +278,6 @@ export function LivePlayer({
       return;
     }
     // On a TV the arrows walk the chrome. The stage still seeks and changes channel when it has the keys.
-    const target = event.target;
     if (
       layout === "tv" &&
       target instanceof Element &&
@@ -240,7 +288,7 @@ export function LivePlayer({
     }
     const actions: Record<string, () => void> = {
       Escape: () => (panel !== "none" ? setPanel("none") : onMinimize()),
-      Backspace: () => (panel !== "none" ? setPanel("none") : onMinimize()),
+      Backspace: () => (panel !== "none" ? setPanel("none") : lastChannel()),
       " ": togglePlay,
       ArrowLeft: () => jump(-15),
       ArrowRight: () => jump(30),
@@ -253,7 +301,9 @@ export function LivePlayer({
       },
       i: () => setPanel((p) => (p === "info" ? "none" : "info")),
       r: () => void toggleRecord(),
-      l: goLive,
+      l: lastChannel,
+      t: () => setTheater((on) => !on),
+      "?": () => setPanel("help"),
     };
     const fn = actions[k] ?? actions[k.toLowerCase()];
     if (fn) {
@@ -308,6 +358,10 @@ export function LivePlayer({
       }}
       onJump={jump}
       onTogglePlay={togglePlay}
+      onSound={() => {
+        const video = videoRef.current;
+        if (video) saveSound(video);
+      }}
       error={error}
       errorAction={
         stream.needsConfirm ? (
@@ -371,7 +425,7 @@ export function LivePlayer({
             <RecordIcon />
             {active ? "Recording" : "Record"}
           </button>
-          <button type="button" className={panel === "info" ? "glass-icon on" : "glass-icon"} onClick={() => setPanel((p) => (p === "info" ? "none" : "info"))} aria-label="Stream info">
+          <button type="button" className={panel === "info" ? "glass-icon on" : "glass-icon"} onClick={() => setPanel((p) => (p === "info" ? "none" : "info"))} aria-label={copy.player.stats}>
             <InfoIcon />
           </button>
         </>
@@ -403,12 +457,27 @@ export function LivePlayer({
             }}
           />
           <OptionRow
-            label="Sleep"
-            value={sleepUntil ? "on" : "off"}
+            label={copy.player.sleep}
+            value={sleepFor ? String(sleepFor) : "off"}
             options={["off", "30", "60", "90"]}
-            labels={{ off: "Off", "30": "30 min", "60": "1 hr", "90": "90 min", on: "On" }}
-            onChange={(v) => setSleepUntil(v === "off" ? null : Date.now() + Number(v) * 60_000)}
+            labels={{ off: "Off", "30": "30 min", "60": "1 hr", "90": "90 min" }}
+            onChange={(v) => {
+              const minutes = v === "off" ? 0 : Number(v);
+              setSleepFor(minutes);
+              setSleepUntil(sleepUntilFrom(minutes, Date.now()));
+            }}
           />
+          <VolumeRow videoRef={videoRef} />
+          {sleepFor ? (
+            <p className="option-note" role="status">
+              {sleepSentence(sleepFor)}
+            </p>
+          ) : null}
+          <div className="option-actions">
+            <button type="button" className="text-btn" onClick={() => setPanel((p) => (p === "info" ? "none" : "info"))}>
+              {copy.player.stats}
+            </button>
+          </div>
         </div>
       }
     >
@@ -446,34 +515,33 @@ export function LivePlayer({
         </div>
       ) : null}
       {panel === "info" ? (
-        <div className="info-panel glass" role="dialog" aria-label="Stream info">
-          <h3>Stream info</h3>
+        <div className="info-panel glass" role="dialog" aria-label={copy.player.stats}>
+          <h3>{copy.player.stats}</h3>
           {session ? (
             <dl>
-              <dt>Playing</dt>
-              <dd>{session.stream.reason}</dd>
-              <dt>Source</dt>
-              <dd>{sourceLine(session.stream)}</dd>
-              <dt>Output</dt>
-              <dd>{outputLine(session.stream, playback)}</dd>
-              <dt>Dropped frames</dt>
+              <dt>{copy.player.bitrate}</dt>
+              <dd>{bitrateText(session.stream.bitrate) || copy.player.waiting}</dd>
+              <dt>{copy.player.dropped}</dt>
               <dd>{playback.total > 0 ? `${playback.dropped} of ${playback.total}` : "0"}</dd>
-              <dt>Buffer</dt>
+              <dt>{copy.player.buffer}</dt>
               <dd>{`${playback.buffer.toFixed(1)}s`}</dd>
-              <dt>Sound</dt>
-              <dd>{session.stream.audio === "copy" ? `Original ${session.stream.sourceAudio ?? ""}` : session.stream.audio === "aac6" ? "5.1 AAC" : "Stereo AAC"}</dd>
-              <dt>Tuner</dt>
-              <dd>{session.shared ? `Shared · ${session.viewers} watching` : "This screen only"}</dd>
-              <dt>Behind live</dt>
+              <dt>{copy.player.behind}</dt>
               <dd>{formatBehind(behind)}</dd>
-              <dt>Sync</dt>
-              <dd>{syncLine(sync)}</dd>
+              <dt>{copy.player.drift}</dt>
+              <dd>{playback.drift == null ? copy.player.waiting : `${Math.round(playback.drift)} ms`}</dd>
+              <dt>{copy.player.rendition}</dt>
+              <dd>{session.rendition || copy.player.waiting}</dd>
+              <dt>{copy.player.encoder}</dt>
+              <dd>{session.encoder || session.stream.encoder || copy.player.waiting}</dd>
+              <dt>{copy.player.sound}</dt>
+              <dd>{session.stream.audio === "copy" ? `Original ${session.stream.sourceAudio ?? ""}` : session.stream.audio === "aac6" ? "5.1 AAC" : "Stereo AAC"}</dd>
             </dl>
           ) : (
             <p>Tuning…</p>
           )}
         </div>
       ) : null}
+      {panel === "help" ? <HelpDialog onClose={() => setPanel("none")} /> : null}
       {panel === "sync" ? (
         <div className="info-panel glass" role="dialog" aria-label="Whole-Home Sync">
           <h3>Whole-Home Sync</h3>
@@ -507,10 +575,10 @@ function OptionRow<T extends string>({ label, value, options, labels, onChange }
   );
 }
 
-type PictureStats = { width: number; height: number; dropped: number; total: number; buffer: number; fps: number };
+type PictureStats = { width: number; height: number; dropped: number; total: number; buffer: number; fps: number; drift: number | null };
 
 function usePlaybackStats(videoRef: RefObject<HTMLVideoElement | null>, on: boolean): PictureStats {
-  const [stats, setStats] = useState<PictureStats>({ width: 0, height: 0, dropped: 0, total: 0, buffer: 0, fps: 0 });
+  const [stats, setStats] = useState<PictureStats>({ width: 0, height: 0, dropped: 0, total: 0, buffer: 0, fps: 0, drift: null });
   const prev = useRef({ frames: 0, at: 0 });
   useEffect(() => {
     if (!on) return;
@@ -527,34 +595,97 @@ function usePlaybackStats(videoRef: RefObject<HTMLVideoElement | null>, on: bool
         fps = ((total - prev.current.frames) * 1000) / (now - prev.current.at);
       }
       prev.current = { frames: total, at: now };
-      setStats({ width: video.videoWidth, height: video.videoHeight, dropped, total, buffer, fps });
+      const raw = video.dataset.syncDrift;
+      const drift = raw == null || raw === "" || Number.isNaN(Number(raw)) ? null : Number(raw);
+      setStats({ width: video.videoWidth, height: video.videoHeight, dropped, total, buffer, fps, drift });
     }, 1000);
     return () => window.clearInterval(id);
   }, [videoRef, on]);
   return stats;
 }
 
-function sourceLine(stream: { sourceVideo?: string; sourceWidth?: number; sourceHeight?: number; scan?: string; sourceFps?: string }) {
-  return joinFacts([stream.sourceVideo, sizeText(stream.sourceWidth, stream.sourceHeight), scanWord(stream.scan), stream.sourceFps]);
+function VolumeRow({ videoRef }: { videoRef: RefObject<HTMLVideoElement | null> }) {
+  const [level, setLevel] = useState(1);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) setLevel(video.volume);
+  }, [videoRef]);
+  return (
+    <label className="option-row">
+      <span className="option-label">{copy.player.volume}</span>
+      <input
+        className="volume"
+        type="range"
+        min={0}
+        max={1}
+        step={0.05}
+        value={level}
+        aria-label={copy.player.volume}
+        onChange={(event) => {
+          const next = Number(event.target.value);
+          setLevel(next);
+          const video = videoRef.current;
+          if (!video) return;
+          video.volume = next;
+          saveSound(video);
+        }}
+      />
+    </label>
+  );
 }
 
-function outputLine(stream: { encoder?: string; outputWidth?: number; outputHeight?: number; outputFps?: string; bitrate?: string; decode?: string; video?: string }, picture: PictureStats) {
-  const width = picture.width || stream.outputWidth;
-  const height = picture.height || stream.outputHeight;
-  const fps = stream.outputFps || (picture.fps > 1 ? picture.fps.toFixed(2) : "");
-  const decode = stream.decode === "gpu" ? "GPU" : stream.decode === "cpu" ? "CPU" : stream.video === "copy" ? "Direct" : "";
-  return joinFacts([sizeText(width, height), fps, stream.encoder, bitrateText(stream.bitrate), decode]);
-}
-
-function sizeText(width?: number, height?: number) {
-  return width && height ? `${width}×${height}` : "";
-}
-
-function scanWord(scan?: string) {
-  if (scan === "progressive") return "Progressive";
-  if (scan === "interlaced") return "Interlaced";
-  if (scan === "film") return "Film";
-  return "";
+function HelpDialog({ onClose }: { onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = ref.current;
+    const prev = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const items = () =>
+      [...(root?.querySelectorAll<HTMLElement>("button, a[href], input, select, textarea") ?? [])].filter((el) => !el.hidden && !el.hasAttribute("disabled"));
+    focusRing(items()[0] ?? root);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const list = items();
+      if (list.length === 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      const first = list[0];
+      const last = list[list.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !root?.contains(active))) {
+        event.preventDefault();
+        event.stopPropagation();
+        focusRing(last);
+      } else if (!event.shiftKey && (active === last || !root?.contains(active))) {
+        event.preventDefault();
+        event.stopPropagation();
+        focusRing(first);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      focusRing(prev);
+    };
+  }, []);
+  return (
+    <div ref={ref} className="info-panel help-panel glass" role="dialog" aria-modal="true" aria-label={copy.player.helpTitle} tabIndex={-1}>
+      <h3>{copy.player.helpTitle}</h3>
+      <ul className="key-list">
+        {copy.player.keys.map(([key, what]) => (
+          <li key={key}>
+            <span>{key}</span>
+            <span>{what}</span>
+          </li>
+        ))}
+      </ul>
+      <p>{copy.player.sleepHint}</p>
+      <button type="button" className="btn small" onClick={onClose}>
+        {copy.player.close}
+      </button>
+    </div>
+  );
 }
 
 function bitrateText(rate?: string) {
@@ -562,11 +693,6 @@ function bitrateText(rate?: string) {
   if (rate.endsWith("M")) return `${rate.slice(0, -1)} Mb/s`;
   if (rate.endsWith("k")) return `${rate.slice(0, -1)} kb/s`;
   return rate;
-}
-
-function joinFacts(parts: Array<string | undefined>) {
-  const line = parts.filter(Boolean).join(" · ");
-  return line || "Waiting";
 }
 
 function bufferedAhead(video: HTMLVideoElement) {
@@ -580,12 +706,6 @@ function bufferedAhead(video: HTMLVideoElement) {
     }
   }
   return Math.max(0, ahead);
-}
-
-function syncLine(sync: SyncStatus) {
-  if (sync.state === "off") return "Off";
-  const word = sync.state.charAt(0).toUpperCase() + sync.state.slice(1);
-  return `${word} · ${Math.round(sync.drift)} ms`;
 }
 
 /** "Live" while lined up. Far enough behind, the pill says how far and is the way back. */

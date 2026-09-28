@@ -240,6 +240,11 @@
   z-index: 50;
 }
 
+/* Theater is the desktop window with the app bar gone. Phone and TV keep theirs. */
+html[data-theater="1"] .topbar {
+  display: none;
+}
+
 .play-page {
   position: fixed;
   inset: 0;
