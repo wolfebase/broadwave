@@ -32,10 +32,13 @@ export function Play({
   const [growing, setGrowing] = useState(recording.status === "recording");
   const whereRef = useRef(0);
   const saveTimer = useRef(0);
+  // A resume seek that lands after the viewer has already moved would undo Start over.
+  const viewerSought = useRef(false);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    viewerSought.current = false;
     let dead = false;
     let hls: Hls | null = null;
     let resumeAt = 0;
@@ -49,7 +52,7 @@ export function Play({
         resumeAt = next.position;
         const started = performance.now();
         const place = () => {
-          if (placed || resumeAt < 2) {
+          if (viewerSought.current || placed || resumeAt < 2) {
             placed = true;
             return;
           }
@@ -132,7 +135,12 @@ export function Play({
     saveSkip(next);
   }
 
+  function sought() {
+    viewerSought.current = true;
+  }
+
   function ahead() {
+    sought();
     const video = videoRef.current;
     if (!video) return;
     const now = Date.now();
@@ -168,6 +176,7 @@ export function Play({
   }
 
   async function startOver() {
+    sought();
     const video = videoRef.current;
     if (video) {
       video.pause();
@@ -185,6 +194,7 @@ export function Play({
   }
 
   function back(seconds: number) {
+    sought();
     const video = videoRef.current;
     if (video) video.currentTime = Math.max(0, video.currentTime - seconds);
   }
@@ -221,6 +231,7 @@ export function Play({
       duration={total}
       onKeyDown={onKey}
       onSeek={(value) => {
+        sought();
         const video = videoRef.current;
         if (!video) return;
         const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : value;
