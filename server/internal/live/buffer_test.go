@@ -293,3 +293,25 @@ func TestBufferWindowFollowsTheSetting(t *testing.T) {
 		}
 	}
 }
+
+func TestBufferedSinceFollowsTheTunedFrequency(t *testing.T) {
+	h, st := bufferHub(t)
+	id := idOf(t, st, "4.1")
+	if !h.BufferedSince(context.Background(), id).IsZero() {
+		t.Fatal("nothing is tuned yet")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	exported := make(chan struct{})
+	go func() {
+		_ = h.Export(ctx, id, io.Discard)
+		close(exported)
+	}()
+	before := time.Now()
+	time.Sleep(3 * time.Second)
+	since := h.BufferedSince(context.Background(), id)
+	if since.IsZero() || since.Before(before.Add(-time.Second)) || since.After(before.Add(2*time.Second)) {
+		t.Fatalf("since %v, tuned at %v", since, before)
+	}
+	cancel()
+	<-exported
+}

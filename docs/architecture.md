@@ -57,7 +57,7 @@ Rooms live in server memory. Every `hello` carries a `boot` id for the server pr
 ### DVR (`internal/dvr`)
 
 - `Plan` expands passes against the guide for 14 days and resolves conflicts by priority against the tuner count. Two airings on one channel need only one tuner.
-- `Tick` runs every 20 seconds and starts recordings with padding.
+- `Tick` runs every 20 seconds and starts recordings with padding. A pass also joins an airing already underway when its frequency has been tuned since the airing began (someone was watching it, or another channel on the same frequency): the recording starts from the buffer. An airing that already has a recording in any state, one the viewer stopped or one that failed, is not joined again.
 - A crash leaves ffmpeg pid files in `work/pids`. The next start kills those processes, deletes `work/live`, and marks in-progress recordings failed. A show that is still on is recorded again for the time left. SIGTERM finishes the open recording and releases the tuner before exit.
 - `OnSaved` runs commercial detection (comskip when installed, otherwise ffmpeg blackdetect) and writes EDL and JSON sidecars.
 - Virtual (library) channels schedule recordings as a 24-hour channel without using a tuner.

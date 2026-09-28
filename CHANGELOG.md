@@ -5,6 +5,7 @@
 ### Added
 
 - Record a show you are already watching and the recording starts from the beginning of the show, as far back as the tuner has been on it (up to an hour). The server keeps the last hour of each tuned channel on disk while it is tuned, using at most half the free space and always leaving 4 GB. Settings can make it 30 minutes, 2 or 4 hours, or turn it off, and Diagnostics shows what each tuned channel holds.
+- A series pass that finds its show already on, on a channel someone has been watching since the show began, records it from the beginning instead of skipping it.
 
 ### Fixed
 
