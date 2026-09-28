@@ -57,6 +57,8 @@ type Ring struct {
 	closed   bool
 	wake     chan struct{}
 	done     chan struct{}
+	// exited closes once the flusher has removed the ring's files.
+	exited chan struct{}
 }
 
 type segment struct {
@@ -96,7 +98,7 @@ func Open(dir string, opt Options) *Ring {
 		opt.Window = func() time.Duration { return 0 }
 	}
 	r := &Ring{dir: dir, windowFn: opt.Window, span: opt.Span, room: opt.Room, now: opt.Now,
-		wake: make(chan struct{}, 1), done: make(chan struct{})}
+		wake: make(chan struct{}, 1), done: make(chan struct{}), exited: make(chan struct{})}
 	go r.flushLoop()
 	return r
 }
@@ -346,6 +348,7 @@ func (r *Ring) flushLoop() {
 		r.flushed, r.start = r.received, r.received
 		r.mu.Unlock()
 		_ = os.RemoveAll(r.dir)
+		close(r.exited)
 	}()
 	if err := os.RemoveAll(r.dir); err == nil {
 		err = os.MkdirAll(r.dir, 0o755)

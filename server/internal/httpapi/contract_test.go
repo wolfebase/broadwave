@@ -226,8 +226,20 @@ func TestContractFixtures(t *testing.T) {
 		if tc.name == "home" {
 			req.Host = "broadwave.local"
 		}
+		// The reserve is checked against this machine's disk; a recording must
+		// start here whatever its free space.
+		if tc.name == "recording-create" {
+			if err := st.PutSettings(ctx, map[string]string{"watermarkGB": "0"}); err != nil {
+				t.Fatal(err)
+			}
+		}
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
+		if tc.name == "recording-create" {
+			if err := st.PutSettings(ctx, map[string]string{"watermarkGB": "10"}); err != nil {
+				t.Fatal(err)
+			}
+		}
 		want := tc.status
 		if want == 0 {
 			want = http.StatusOK

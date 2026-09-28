@@ -54,7 +54,7 @@ func settle(t *testing.T, r *Ring) {
 func TestRingReadsBackFromATime(t *testing.T) {
 	c := &clock{t: time.Unix(1000, 0)}
 	r := Open(t.TempDir(), Options{Window: fixed(time.Hour), Span: 10 * time.Second, Now: c.now})
-	defer r.Close()
+	defer shut(r)
 	start := c.now()
 	for i := 0; i < 30; i++ {
 		r.Append(chunk(i))
@@ -84,7 +84,7 @@ func TestRingReadsBackFromATime(t *testing.T) {
 
 func TestRingReadsBytesNotYetOnDisk(t *testing.T) {
 	r := Open(t.TempDir(), Options{Window: fixed(time.Hour)})
-	defer r.Close()
+	defer shut(r)
 	// Hold the flusher off by taking the lock while appending directly.
 	r.mu.Lock()
 	r.pending = append(r.pending, chunk(1), chunk(2))
@@ -108,7 +108,7 @@ func TestRingForgetsPastItsWindow(t *testing.T) {
 	c := &clock{t: time.Unix(1000, 0)}
 	dir := t.TempDir()
 	r := Open(dir, Options{Window: fixed(30 * time.Second), Span: 10 * time.Second, Now: c.now})
-	defer r.Close()
+	defer shut(r)
 	start := c.now()
 	for i := 0; i < 100; i++ {
 		r.Append(chunk(i))
@@ -142,7 +142,7 @@ func TestRingGivesUpItsOldestFilesForRoom(t *testing.T) {
 	setRoom := func(v int64) { mu.Lock(); room = v; mu.Unlock() }
 	dir := t.TempDir()
 	r := Open(dir, Options{Window: fixed(time.Hour), Span: 10 * time.Second, Now: c.now, Room: func(int64) int64 { mu.Lock(); defer mu.Unlock(); return room }})
-	defer r.Close()
+	defer shut(r)
 	for i := 0; i < 35; i++ {
 		r.Append(chunk(i))
 		settle(t, r)
@@ -186,7 +186,7 @@ func TestRingGivesUpItsOldestFilesForRoom(t *testing.T) {
 
 func TestRingStartsOverWhenTheDiskFallsBehind(t *testing.T) {
 	r := Open(t.TempDir(), Options{Window: fixed(time.Hour)})
-	defer r.Close()
+	defer shut(r)
 	r.Append(chunk(1))
 	settle(t, r)
 	r.mu.Lock()
@@ -205,6 +205,7 @@ func TestRingStartsOverWhenTheDiskFallsBehind(t *testing.T) {
 
 func TestRingReadsFailOnceClosed(t *testing.T) {
 	r := Open(t.TempDir(), Options{Window: fixed(time.Hour)})
+	defer func() { <-r.exited }()
 	r.Append(chunk(1))
 	settle(t, r)
 	r.mu.Lock()
@@ -238,6 +239,7 @@ func TestRingReadsFailOnceClosed(t *testing.T) {
 func TestRingCloseRemovesItsFiles(t *testing.T) {
 	dir := t.TempDir() + "/ring"
 	r := Open(dir, Options{Window: fixed(time.Hour)})
+	defer func() { <-r.exited }()
 	r.Append(chunk(1))
 	settle(t, r)
 	r.Close()
@@ -254,7 +256,7 @@ func TestRingCloseRemovesItsFiles(t *testing.T) {
 func TestRingPausesAfterAFileError(t *testing.T) {
 	dir := t.TempDir() + "/ring"
 	r := Open(dir, Options{Window: fixed(time.Hour), Room: func(int64) int64 { return 1 << 40 }})
-	defer r.Close()
+	defer shut(r)
 	r.Append(chunk(1))
 	settle(t, r)
 	// The folder goes away under the ring, as a failed disk would take it.
@@ -295,7 +297,7 @@ func TestRingTurnsOffAndOnWithItsSetting(t *testing.T) {
 	window := time.Hour
 	dir := t.TempDir()
 	r := Open(dir, Options{Window: func() time.Duration { mu.Lock(); defer mu.Unlock(); return window }})
-	defer r.Close()
+	defer shut(r)
 	r.Append(chunk(1))
 	settle(t, r)
 	if st := r.Stats(); st.Bytes != 1000 || st.Off || st.Since.IsZero() {
@@ -326,7 +328,7 @@ func TestRingTurnsOffAndOnWithItsSetting(t *testing.T) {
 func TestRingAtFindsTheByteThatArrivedThen(t *testing.T) {
 	c := &clock{t: time.Unix(1000, 0)}
 	r := Open(t.TempDir(), Options{Window: fixed(time.Hour), Span: 10 * time.Second, Now: c.now})
-	defer r.Close()
+	defer shut(r)
 	start := c.now()
 	if _, ok := r.At(start); ok {
 		t.Fatal("an empty ring has no position")
@@ -357,4 +359,11 @@ func TestRingAtFindsTheByteThatArrivedThen(t *testing.T) {
 	if _, ok := r.At(start.Add(-time.Second)); ok {
 		t.Error("a time before the oldest byte has no position")
 	}
+}
+
+// shut closes r and waits for its flusher, which removes the ring's files
+// after Close returns and would race the test's temporary folder cleanup.
+func shut(r *Ring) {
+	r.Close()
+	<-r.exited
 }
