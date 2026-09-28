@@ -30,20 +30,20 @@ final class EndToEndTests: XCTestCase {
         passed(2, "setup finished")
 
         try openGuide(app)
-        passed(3, "guide shows WDAF, WDAF2, KCTV")
+        passed(3, "guide shows KBWV, KBWV2, WTST")
         #if os(tvOS)
             try reachRail(app)
         #endif
 
         let channel = 3
-        try watch(app, "KCTV")
+        try watch(app, "WTST")
         passed(4, "channel \(channel) locked \(probe(app))")
 
         try holdForBrowser(app, channel: channel)
         passed(7, "held channel \(channel) while the browser sampled")
 
         try closePlayer(app)
-        try record(app, "KCTV", channel: channel)
+        try record(app, "WTST", channel: channel)
         passed(6, "recording on channel \(channel)")
 
         try multiview(app, [1, channel])
@@ -142,7 +142,7 @@ final class EndToEndTests: XCTestCase {
             XCTAssertTrue(tab.waitForExistence(timeout: 15), app.debugDescription)
             tab.tap()
         #endif
-        for pattern in [".*WDAF(?!2).*", ".*WDAF2.*", ".*KCTV.*"] {
+        for pattern in [".*KBWV(?!2).*", ".*KBWV2.*", ".*WTST.*"] {
             let row = app.buttons.matching(NSPredicate(format: "label MATCHES %@", pattern)).firstMatch
             XCTAssertTrue(row.waitForExistence(timeout: 20), "no guide row \(pattern)\n\(app.debugDescription)")
         }
@@ -282,7 +282,7 @@ final class EndToEndTests: XCTestCase {
         /// from Now went nowhere. If that comes back, the run fails with a note
         /// and the hierarchy, and a relaunch lets the other steps still run.
         private func reachRail(_ app: XCUIApplication) throws {
-            let first = app.buttons["4.1 WDAF"].firstMatch
+            let first = app.buttons["4.1 KBWV"].firstMatch
             if focus(first, [.down, .down, .down]) {
                 return
             }

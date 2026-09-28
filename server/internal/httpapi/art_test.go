@@ -21,7 +21,7 @@ func TestArtResizesAndFallsBack(t *testing.T) {
 	st := testStore(t)
 	ctx := context.Background()
 	if err := st.UpsertDevice(ctx, hdhr.Device{DeviceID: "D", FriendlyName: "DUO", BaseURL: "http://127.0.0.1", TunerCount: 1}, []hdhr.Channel{
-		{GuideNumber: "4.1", GuideName: "WDAF"},
+		{GuideNumber: "4.1", GuideName: "KBWV"},
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -16,7 +16,7 @@ func TestBroadcastFillsOnlyGaps(t *testing.T) {
 	err := st.UpsertDevice(ctx, hdhr.Device{
 		DeviceID: "10611B4C", FriendlyName: "DUO", BaseURL: "http://127.0.0.1", TunerCount: 2,
 	}, []hdhr.Channel{
-		{GuideNumber: "4.1", GuideName: "WDAF", VideoCodec: "MPEG2", AudioCodec: "AC3"},
+		{GuideNumber: "4.1", GuideName: "KBWV", VideoCodec: "MPEG2", AudioCodec: "AC3"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestBroadcastFillsOnlyGaps(t *testing.T) {
 		t.Fatal(err)
 	}
 	n, err := (&Server{Store: st}).ApplyBroadcast(ctx, psip.Guide{
-		Channels: []psip.Channel{{Major: 4, Minor: 1, SourceID: 3, ShortName: "WDAF-DT"}},
+		Channels: []psip.Channel{{Major: 4, Minor: 1, SourceID: 3, ShortName: "KBWV-DT"}},
 		Events: []psip.Event{
 			{SourceID: 3, EventID: 1, Title: "JEOPARDY!", Start: start, End: start.Add(30 * time.Minute)},
 			{SourceID: 3, EventID: 2, Title: "WHEEL OF FORTUNE", Start: start.Add(30 * time.Minute), End: start.Add(time.Hour)},

@@ -16,8 +16,8 @@ type stubSports struct{}
 
 func (stubSports) Scoreboard(context.Context, string, time.Time) ([]sports.Game, error) {
 	return []sports.Game{{
-		ID: "1", League: "nfl", Name: "Chiefs at Bills", State: "in", Start: time.Now(),
-		Teams: []sports.Team{{Name: "Chiefs", Score: "27", Home: true}, {Name: "Bills", Score: "24"}},
+		ID: "1", League: "nfl", Name: "Bears at Bills", State: "in", Start: time.Now(),
+		Teams: []sports.Team{{Name: "Bears", Score: "27", Home: true}, {Name: "Bills", Score: "24"}},
 	}}, nil
 }
 
@@ -25,25 +25,25 @@ func TestScoreboardHidesAnUnwatchedRecording(t *testing.T) {
 	st := testStore(t)
 	ends := time.Now().Add(time.Hour)
 	if _, err := st.CreateRecording(t.Context(), store.Recording{
-		ChannelID: 1, GuideNumber: "4.1", Title: "Chiefs at Bills", Status: "recording",
+		ChannelID: 1, GuideNumber: "4.1", Title: "Bears at Bills", Status: "recording",
 		StartedAt: time.Now(), EndsAt: &ends, GameID: "1",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	h := (&Server{Store: st, Sports: stubSports{}}).Handler()
 	res := get(t, h, "/api/v1/sports/scoreboard?league=nfl")
-	if strings.Contains(res.Body.String(), `"score":"27"`) || !strings.Contains(res.Body.String(), "Chiefs at Bills") {
+	if strings.Contains(res.Body.String(), `"score":"27"`) || !strings.Contains(res.Body.String(), "Bears at Bills") {
 		t.Fatalf("%s", res.Body.String())
 	}
 }
 
 func TestFollowTeamRoute(t *testing.T) {
 	h := (&Server{Store: testStore(t)}).Handler()
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/teams", strings.NewReader(`{"name":"Kansas City Chiefs","short":"Chiefs","league":"nfl","record":true}`))
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/teams", strings.NewReader(`{"name":"Chicago Bears","short":"Bears","league":"nfl","record":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	res := httptest.NewRecorder()
 	h.ServeHTTP(res, req)
-	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), "Chiefs") {
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), "Bears") {
 		t.Fatalf("%d %s", res.Code, res.Body.String())
 	}
 }
@@ -79,7 +79,7 @@ type countingSports struct {
 func (c *countingSports) Scoreboard(context.Context, string, time.Time) ([]sports.Game, error) {
 	c.calls++
 	return []sports.Game{{
-		ID: "1", League: "nfl", Name: "Chiefs at Bills", State: "pre",
+		ID: "1", League: "nfl", Name: "Bears at Bills", State: "pre",
 		Teams: []sports.Team{{Name: "Bills", Color: "#00338d", Logo: "https://a.espncdn.com/buf.png", Home: true}},
 	}}, nil
 }
@@ -92,7 +92,7 @@ func TestLiveScoresOffDoesNotFetch(t *testing.T) {
 	counter := &countingSports{}
 	h := (&Server{Store: st, Sports: counter}).Handler()
 	res := get(t, h, "/api/v1/sports/scoreboard?league=nfl")
-	if counter.calls != 0 || strings.Contains(res.Body.String(), "Chiefs") {
+	if counter.calls != 0 || strings.Contains(res.Body.String(), "Bears") {
 		t.Fatalf("calls %d body %s", counter.calls, res.Body.String())
 	}
 }
@@ -126,7 +126,7 @@ func TestSportsDBKeyStaysOffTheList(t *testing.T) {
 func TestScoreboardReturnsGames(t *testing.T) {
 	h := (&Server{Store: testStore(t), Sports: stubSports{}}).Handler()
 	res := get(t, h, "/api/v1/sports/scoreboard?league=nfl")
-	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), "Chiefs at Bills") {
+	if res.Code != http.StatusOK || !strings.Contains(res.Body.String(), "Bears at Bills") {
 		t.Fatalf("%d %s", res.Code, res.Body.String())
 	}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/sports/scoreboard?league=quidditch", nil)
@@ -153,15 +153,15 @@ func TestLinkGamesStoresTheMatch(t *testing.T) {
 	st := testStore(t)
 	start := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 	if err := st.ReplaceAirings(t.Context(), []store.Airing{
-		{ChannelID: 1, Title: "Chiefs at Bills", Start: start, End: start.Add(3 * time.Hour)},
+		{ChannelID: 1, Title: "Bears at Bills", Start: start, End: start.Add(3 * time.Hour)},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	api := &Server{Store: st, Sports: boardStub{games: []sports.Game{{
-		ID: "401772971", League: "nfl", Name: "Kansas City Chiefs at Buffalo Bills", Start: start,
+		ID: "401772971", League: "nfl", Name: "Chicago Bears at Buffalo Bills", Start: start,
 		Teams: []sports.Team{
 			{Name: "Buffalo Bills", Short: "Bills", Abbr: "BUF", Home: true},
-			{Name: "Kansas City Chiefs", Short: "Chiefs", Abbr: "KC"},
+			{Name: "Chicago Bears", Short: "Bears", Abbr: "CHI"},
 		},
 	}}}}
 	api.LinkGames(t.Context())

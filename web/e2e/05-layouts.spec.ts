@@ -61,12 +61,12 @@ VALUES (2, 'Prime Movie', 'Late showing', 'A movie.', 'Movies', '${prime.start}'
   expect(favorites!.x).toBeGreaterThanOrEqual(chipBox!.x - 1);
   expect(favorites!.x + 24).toBeLessThanOrEqual(chipBox!.x + chipBox!.width);
   await expect(page.getByRole("button", { name: "Now", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: /Chiefs at Bills/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Bears at Bills/ })).toBeVisible();
   await page.getByRole("button", { name: "Tonight", exact: true }).click();
   await expect(page.getByRole("button", { name: "Tonight", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: /Prime Movie/ })).toBeVisible();
   await page.getByRole("button", { name: "Now", exact: true }).click();
-  await expect(page.getByRole("button", { name: /Chiefs at Bills/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Bears at Bills/ })).toBeVisible();
   // It can still show as the channel's next show; it is not what is on.
   await expect(page.locator(".onnow-title", { hasText: "Prime Movie" })).toHaveCount(0);
 });

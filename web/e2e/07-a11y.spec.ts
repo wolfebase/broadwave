@@ -123,9 +123,9 @@ test("home", async ({ page }) => {
   await holdClock(page);
   await page.goto("/");
   await settle(page);
-  await expect(page.getByRole("heading", { name: "NFL: Chiefs at Bills" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "NFL: Bears at Bills" })).toBeVisible();
   await sweep(page, "home", async () => {
-    await expect(page.getByRole("heading", { name: "NFL: Chiefs at Bills" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "NFL: Bears at Bills" })).toBeVisible();
   });
 });
 
@@ -140,8 +140,8 @@ test("guide and program sheet", async ({ page }) => {
   });
 
   await at(page, sizes[1]);
-  await page.getByRole("gridcell", { name: /NFL: Chiefs at Bills/ }).click();
-  const dialog = page.getByRole("dialog", { name: /Chiefs at Bills/ });
+  await page.getByRole("gridcell", { name: /NFL: Bears at Bills/ }).click();
+  const dialog = page.getByRole("dialog", { name: /Bears at Bills/ });
   await expect(dialog).toBeVisible();
   const inside = async () =>
     dialog.evaluate((node) => node.contains(document.activeElement));
@@ -162,7 +162,7 @@ test("search", async ({ page }) => {
   await holdClock(page);
   await page.goto("/search");
   await settle(page);
-  await page.getByLabel("Search shows, people, and recordings").fill("Chief");
+  await page.getByLabel("Search shows, people, and recordings").fill("Bears");
   await page.getByLabel("Search shows, people, and recordings").press("Enter");
   await expect(page.getByRole("heading", { name: "Guide" })).toBeVisible();
   await sweep(page, "search", async () => {
@@ -175,7 +175,7 @@ test("sports", async ({ page }) => {
   await holdClock(page);
   await page.goto("/sports");
   await settle(page);
-  await expect(page.getByRole("article").filter({ hasText: "Kansas City" })).toBeVisible();
+  await expect(page.getByRole("article").filter({ hasText: "Chicago" })).toBeVisible();
   await sweep(page, "sports", async () => {
     await expect(page.getByRole("heading", { name: "Sports" })).toBeVisible();
   });

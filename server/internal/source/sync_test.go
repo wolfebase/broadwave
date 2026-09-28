@@ -143,7 +143,7 @@ func tunerServerCount(t *testing.T, id, name string, tuners int) string {
 		case "/discover.json":
 			_, _ = w.Write([]byte(`{"FriendlyName":"` + name + `","DeviceID":"` + id + `","BaseURL":"` + srv.URL + `","LineupURL":"` + srv.URL + `/lineup.json","TunerCount":` + strconv.Itoa(tuners) + `}`))
 		case "/lineup.json":
-			_, _ = w.Write([]byte(`[{"GuideNumber":"4.1","GuideName":"WDAF"}]`))
+			_, _ = w.Write([]byte(`[{"GuideNumber":"4.1","GuideName":"KBWV"}]`))
 		default:
 			http.NotFound(w, r)
 		}

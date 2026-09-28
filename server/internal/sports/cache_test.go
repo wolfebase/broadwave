@@ -47,7 +47,7 @@ func TestCacheRefreshesLiveGamesSooner(t *testing.T) {
 
 func TestCacheKeepsTheLastBoardWhenTheFeedFails(t *testing.T) {
 	now := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
-	src := &fake{games: []Game{{ID: "9", State: "pre", Name: "Chiefs at Bills"}}}
+	src := &fake{games: []Game{{ID: "9", State: "pre", Name: "Bears at Bills"}}}
 	cache := NewCache(src)
 	cache.now = func() time.Time { return now }
 	if _, err := cache.Scoreboard(t.Context(), "nfl", now); err != nil {
@@ -56,7 +56,7 @@ func TestCacheKeepsTheLastBoardWhenTheFeedFails(t *testing.T) {
 	src.err = errors.New("down")
 	now = now.Add(3 * time.Hour)
 	games, err := cache.Scoreboard(t.Context(), "nfl", now)
-	if err != nil || len(games) != 1 || games[0].Name != "Chiefs at Bills" {
+	if err != nil || len(games) != 1 || games[0].Name != "Bears at Bills" {
 		t.Fatal(err, games)
 	}
 	calls := src.calls
@@ -72,7 +72,7 @@ func TestCacheKeepsTheLastBoardWhenTheFeedFails(t *testing.T) {
 func TestHideScoreLeavesTheBoardAlone(t *testing.T) {
 	original := Game{
 		ID: "1", State: "post", Completed: true, Detail: "Final",
-		Teams: []Team{{Name: "Chiefs", Score: "27"}, {Name: "Bills", Score: "24"}},
+		Teams: []Team{{Name: "Bears", Score: "27"}, {Name: "Bills", Score: "24"}},
 	}
 	hidden := HideScore(original)
 	if original.Teams[0].Score != "27" || original.Detail != "Final" {
@@ -81,7 +81,7 @@ func TestHideScoreLeavesTheBoardAlone(t *testing.T) {
 	if hidden.Teams[0].Score != "" || hidden.Teams[1].Score != "" || hidden.Detail != "" {
 		t.Fatalf("score still visible: %+v", hidden)
 	}
-	if hidden.Teams[0].Name != "Chiefs" {
+	if hidden.Teams[0].Name != "Bears" {
 		t.Fatalf("team name lost: %+v", hidden)
 	}
 }

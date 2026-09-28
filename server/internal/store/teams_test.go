@@ -15,19 +15,19 @@ func TestFollowTeamRecordsEveryGame(t *testing.T) {
 	defer s.Close()
 	ctx := t.Context()
 	if err := s.UpsertDevice(ctx, hdhr.Device{DeviceID: "D", FriendlyName: "DUO", BaseURL: "http://127.0.0.1", TunerCount: 1}, []hdhr.Channel{
-		{GuideNumber: "4.1", GuideName: "WDAF"},
+		{GuideNumber: "4.1", GuideName: "KBWV"},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.FollowTeam(ctx, TeamFollow{Name: "Kansas City Chiefs", Short: "Chiefs", Abbr: "KC", League: "nfl", Record: true}); err != nil {
+	if err := s.FollowTeam(ctx, TeamFollow{Name: "Chicago Bears", Short: "Bears", Abbr: "CHI", League: "nfl", Record: true}); err != nil {
 		t.Fatal(err)
 	}
 	teams, err := s.TeamFollows(ctx)
-	if err != nil || len(teams) != 1 || !teams[0].Record || teams[0].Short != "Chiefs" {
+	if err != nil || len(teams) != 1 || !teams[0].Record || teams[0].Short != "Bears" {
 		t.Fatal(err, teams)
 	}
 	passes, err := s.Passes(ctx)
-	if err != nil || len(passes) != 1 || passes[0].Kind != "team" || passes[0].Title != "Chiefs" {
+	if err != nil || len(passes) != 1 || passes[0].Kind != "team" || passes[0].Title != "Bears" {
 		t.Fatal(err, passes)
 	}
 	teams[0].Record = false

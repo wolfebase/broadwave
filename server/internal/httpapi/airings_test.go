@@ -23,8 +23,8 @@ func TestAiringsWindowAndCompression(t *testing.T) {
 		DeviceID: "10611B4C", FriendlyName: "DUO", ModelNumber: "HDHR5-2US",
 		BaseURL: "http://192.168.1.252", TunerCount: 2,
 	}, []hdhr.Channel{
-		{GuideNumber: "4.1", GuideName: "WDAF", VideoCodec: "MPEG2", AudioCodec: "AC3"},
-		{GuideNumber: "5.1", GuideName: "KCTV", VideoCodec: "MPEG2", AudioCodec: "AC3"},
+		{GuideNumber: "4.1", GuideName: "KBWV", VideoCodec: "MPEG2", AudioCodec: "AC3"},
+		{GuideNumber: "5.1", GuideName: "WTST", VideoCodec: "MPEG2", AudioCodec: "AC3"},
 	})
 	if err != nil {
 		t.Fatal(err)

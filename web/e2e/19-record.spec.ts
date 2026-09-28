@@ -101,24 +101,24 @@ test("a show recorded from the guide plays while it records, then leaves no file
   await page.goto("/guide");
   await settle(page);
 
-  const cell = page.getByRole("gridcell", { name: /NFL: Chiefs at Bills/ });
+  const cell = page.getByRole("gridcell", { name: /NFL: Bears at Bills/ });
   await expect(cell).toBeVisible();
   await cell.click();
-  const sheet = page.getByRole("dialog", { name: "NFL: Chiefs at Bills" });
+  const sheet = page.getByRole("dialog", { name: "NFL: Bears at Bills" });
   await expect(sheet).toBeVisible();
   await sheet.getByRole("button", { name: "Record", exact: true }).click();
   await expect(sheet.getByRole("button", { name: "Stop recording" })).toBeVisible();
   await page.screenshot({ path: path.join(evidence, "guide.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
 
   await expect
-    .poll(async () => (await recordings()).find((rec) => rec.title === "NFL: Chiefs at Bills" && rec.status === "recording")?.id ?? 0, { timeout: 30_000 })
+    .poll(async () => (await recordings()).find((rec) => rec.title === "NFL: Bears at Bills" && rec.status === "recording")?.id ?? 0, { timeout: 30_000 })
     .toBeGreaterThan(0);
   const id = (await recordings()).find((rec) => rec.status === "recording")!.id;
   await expect.poll(async () => (await recordings()).find((rec) => rec.id === id)?.bytes ?? 0, { timeout: 20_000 }).toBeGreaterThan(50_000);
 
   await page.goto("/recordings");
   await settle(page);
-  const row = page.locator("section").filter({ has: page.getByRole("heading", { name: "NFL: Chiefs at Bills" }) }).locator(".media-card");
+  const row = page.locator("section").filter({ has: page.getByRole("heading", { name: "NFL: Bears at Bills" }) }).locator(".media-card");
   await expect(row.getByText(/Recording/)).toBeVisible();
   await row.getByRole("button", { name: "Play" }).click();
   const player = page.getByRole("region", { name: "Player" });
@@ -144,7 +144,7 @@ test("a show recorded from the guide plays while it records, then leaves no file
   await player.getByRole("button", { name: "Library" }).click();
   await expect(page).toHaveURL(/\/recordings/);
   await row.getByRole("button", { name: "Stop recording" }).click();
-  await expect(page.getByText("Stopped NFL: Chiefs at Bills. What it recorded is kept.")).toBeVisible();
+  await expect(page.getByText("Stopped NFL: Bears at Bills. What it recorded is kept.")).toBeVisible();
   await expect(row.getByRole("button", { name: "Stop recording" })).toHaveCount(0);
   const filePath = sql(db, `SELECT path FROM recordings WHERE id = ${id};`);
   expect(filePath.endsWith(".ts"), filePath).toBe(true);
@@ -180,7 +180,7 @@ test("a show recorded from the guide plays while it records, then leaves no file
   await player.getByRole("button", { name: "Library" }).click();
   await row.getByRole("button", { name: "Delete" }).click();
   await row.getByRole("button", { name: "Delete this file" }).click();
-  await expect(page.getByText("Deleted NFL: Chiefs at Bills.")).toBeVisible();
+  await expect(page.getByText("Deleted NFL: Bears at Bills.")).toBeVisible();
   await expect(row).toHaveCount(0);
   await page.screenshot({ path: path.join(evidence, "deleted.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
 

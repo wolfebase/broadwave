@@ -114,7 +114,7 @@ func TestOtherDeviceIsTheFailover(t *testing.T) {
 func TestGuideKeyKeepsTheChannelWhenTheAddressChanges(t *testing.T) {
 	st := openTestStore(t)
 	dev := hdhr.Device{DeviceID: "src-9", FriendlyName: "Playlist", BaseURL: "source"}
-	first := []hdhr.Channel{{GuideNumber: "801", GuideName: "News", StreamURL: "http://old/news.ts", GuideKey: "wdaf"}}
+	first := []hdhr.Channel{{GuideNumber: "801", GuideName: "News", StreamURL: "http://old/news.ts", GuideKey: "kbwv"}}
 	if err := st.UpsertDevice(context.Background(), dev, first); err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestGuideKeyKeepsTheChannelWhenTheAddressChanges(t *testing.T) {
 		t.Fatalf("%+v %v", channels, err)
 	}
 	id := channels[0].ID
-	moved := []hdhr.Channel{{GuideNumber: "4.1", GuideName: "ABC", StreamURL: "http://new/abc.ts", GuideKey: "wdaf"}}
+	moved := []hdhr.Channel{{GuideNumber: "4.1", GuideName: "ABC", StreamURL: "http://new/abc.ts", GuideKey: "kbwv"}}
 	if err := st.UpsertDevice(context.Background(), dev, moved); err != nil {
 		t.Fatal(err)
 	}

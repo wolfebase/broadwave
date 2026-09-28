@@ -74,7 +74,7 @@ func TestMetricsLeavesOutSecrets(t *testing.T) {
 		CountFeeds: func() []live.FeedStat {
 			return []live.FeedStat{
 				{ChannelID: 4, GuideNumber: password, Name: auth, Viewers: 2, FFmpeg: 1, Recording: true, Exports: 1},
-				{ChannelID: 5, GuideNumber: "9.1", Name: "KMBC", Viewers: 1, FFmpeg: 0},
+				{ChannelID: 5, GuideNumber: "9.1", Name: "KRVR", Viewers: 1, FFmpeg: 0},
 			}
 		},
 	}

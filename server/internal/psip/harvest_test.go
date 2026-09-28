@@ -7,7 +7,7 @@ import (
 )
 
 func TestHarvesterReadsTheSample(t *testing.T) {
-	raw, err := os.ReadFile("testdata/wdaf.ts")
+	raw, err := os.ReadFile("testdata/kbwv.ts")
 	if err != nil {
 		t.Fatal(err)
 	}

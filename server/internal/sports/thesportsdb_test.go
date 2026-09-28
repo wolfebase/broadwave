@@ -35,7 +35,7 @@ func TestTheSportsDBParsesADay(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"events":[
-			{"idEvent":"9","strEvent":"Kansas City Chiefs vs Buffalo Bills","strLeague":"NFL","dateEvent":"2026-09-25","strTime":"00:20:00","strStatus":"FT","intHomeScore":"24","intAwayScore":27,"strHomeTeam":"Buffalo Bills","strAwayTeam":"Kansas City Chiefs","strHomeTeamBadge":"https://www.thesportsdb.com/badge.png"},
+			{"idEvent":"9","strEvent":"Chicago Bears vs Buffalo Bills","strLeague":"NFL","dateEvent":"2026-09-25","strTime":"00:20:00","strStatus":"FT","intHomeScore":"24","intAwayScore":27,"strHomeTeam":"Buffalo Bills","strAwayTeam":"Chicago Bears","strHomeTeamBadge":"https://www.thesportsdb.com/badge.png"},
 			{"idEvent":"10","strEvent":"Other","strLeague":"CFL","dateEvent":"2026-09-25","strStatus":"NS","strHomeTeam":"A","strAwayTeam":"B"}
 		]}`))
 	}))
@@ -63,7 +63,7 @@ func TestTheSportsDBParsesADay(t *testing.T) {
 		t.Fatalf("home %+v", home)
 	}
 	away, ok := game.Away()
-	if !ok || away.Name != "Kansas City Chiefs" || away.Score != "27" || away.Logo != "" {
+	if !ok || away.Name != "Chicago Bears" || away.Score != "27" || away.Logo != "" {
 		t.Fatalf("away %+v", away)
 	}
 }

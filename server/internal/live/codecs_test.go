@@ -179,7 +179,7 @@ func TestDeferredScanCorrectsLinkCodecs(t *testing.T) {
 }
 
 func TestTunerLineupCodecsAreNotRewritten(t *testing.T) {
-	st, id := codecStore(t, "1050ABCD", hdhr.Channel{GuideNumber: "5.1", GuideName: "KCTV", VideoCodec: "H264", AudioCodec: "AC3"})
+	st, id := codecStore(t, "1050ABCD", hdhr.Channel{GuideNumber: "5.1", GuideName: "WTST", VideoCodec: "H264", AudioCodec: "AC3"})
 	h, m, pw, ctx := pipeHub(t, st)
 	go writeUntil(ctx, pw, videoTS(1, streamMPEG2, []esAudio{{pid: 0x101, lang: "eng", audioType: 0, bsmod: 0}}))
 	ch, err := st.SourceChannel(ctx, id)

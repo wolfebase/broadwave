@@ -3,19 +3,19 @@
     {
       "channelId": 1,
       "frequencyHz": 0,
-      "name": "WDAF",
+      "name": "KBWV",
       "number": "4.1"
     },
     {
       "channelId": 2,
       "frequencyHz": 0,
-      "name": "WDAF2",
+      "name": "KBWV2",
       "number": "4.2"
     },
     {
       "channelId": 3,
       "frequencyHz": 0,
-      "name": "KCTV",
+      "name": "WTST",
       "number": "5.1"
     }
   ],

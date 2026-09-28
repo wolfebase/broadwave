@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Program is one line of tuner streaminfo: "3: 9.1 KMBC-HD".
+// Program is one line of tuner streaminfo: "3: 9.1 KRVR-HD".
 type Program struct {
 	Number      int
 	GuideNumber string

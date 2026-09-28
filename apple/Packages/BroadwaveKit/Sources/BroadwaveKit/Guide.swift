@@ -49,7 +49,7 @@ public extension Airing {
         return c.isEmpty ? .other : .series
     }
 
-    /// "Chiefs at Bills" as a matchup, when the listing names one.
+    /// "Bears at Bills" as a matchup, when the listing names one.
     var matchup: (String, String)? {
         let text = (subtitle.map { $0.range(of: #" (at|vs\.?|@) "#, options: [.regularExpression, .caseInsensitive]) != nil } ?? false) ? subtitle! : title
         guard let r = text.range(of: #"\s+(at|vs\.?|@)\s+"#, options: [.regularExpression, .caseInsensitive]) else { return nil }

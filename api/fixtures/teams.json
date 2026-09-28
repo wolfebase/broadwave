@@ -1,10 +1,10 @@
 {
   "teams": [
     {
-      "abbr": "KC",
+      "abbr": "CHI",
       "id": 1,
       "league": "nfl",
-      "name": "Chiefs",
+      "name": "Bears",
       "record": true
     }
   ]

@@ -48,7 +48,7 @@ UPDATE airings SET title='Late Basketball', subtitle='A late tip', description='
 }
 
 function assertPublic(text: string) {
-  const banned = [/\/Users\//, /broadwave-grok/, /MacBook/, /192\.168\./, /\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/, /Chiefs|Bills|Lakers|Celtics/, /Kansas City|Buffalo|Los Angeles/];
+  const banned = [/\/Users\//, /broadwave-grok/, /MacBook/, /192\.168\./, /\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/, /Bears|Bills|Lakers|Celtics/, /Chicago|Buffalo|Los Angeles/];
   for (const re of banned) expect(text, re.source).not.toMatch(re);
 }
 
@@ -141,9 +141,9 @@ test("readme screens from the test pattern", async ({ page, request }) => {
   const { base, db } = harness();
   genericTitles(db);
   const lineup = channels();
-  const game = lineup.find((channel) => channel.name === "WDAF");
-  const news = lineup.find((channel) => channel.name === "WDAF2");
-  const other = lineup.find((channel) => channel.name === "KCTV");
+  const game = lineup.find((channel) => channel.name === "KBWV");
+  const news = lineup.find((channel) => channel.name === "KBWV2");
+  const other = lineup.find((channel) => channel.name === "WTST");
   expect(game && news && other).toBeTruthy();
 
   const started = await request.post("/api/v1/recordings", {

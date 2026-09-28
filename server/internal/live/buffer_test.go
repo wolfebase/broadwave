@@ -25,7 +25,7 @@ func bufferHub(t *testing.T) (*Hub, *store.Store) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg is not installed")
 	}
-	srv := &fake.Server{Realtime: true, Channels: []fake.Channel{{Number: "4.1", Name: "WDAF", Freq: 593000000}}}
+	srv := &fake.Server{Realtime: true, Channels: []fake.Channel{{Number: "4.1", Name: "KBWV", Freq: 593000000}}}
 	base, port, err := srv.Start()
 	if err != nil {
 		t.Fatal(err)

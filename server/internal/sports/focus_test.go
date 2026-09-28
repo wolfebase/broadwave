@@ -98,7 +98,7 @@ func TestPickFocusRedZoneWins(t *testing.T) {
 	closeGame := eventFixture(t, "nfl", "nfl-close")
 	quiet := eventFixture(t, "nfl", "nfl-quiet")
 	got := PickFocus(now, time.Time{}, []Game{closeGame, quiet, zone}, nil)
-	if got.KeepManual || got.GameID != "nfl-redzone" || got.Banner != "Red zone: KC at LV" {
+	if got.KeepManual || got.GameID != "nfl-redzone" || got.Banner != "Red zone: CHI at LV" {
 		t.Fatalf("%+v", got)
 	}
 	both := closeGame
@@ -265,7 +265,7 @@ func TestPickFocusManualHold(t *testing.T) {
 		t.Fatalf("under 2 minutes: %+v", held)
 	}
 	free := PickFocus(now, now.Add(-2*time.Minute), games, nil)
-	if free.KeepManual || free.GameID != "nfl-redzone" || free.Banner != "Red zone: KC at LV" {
+	if free.KeepManual || free.GameID != "nfl-redzone" || free.Banner != "Red zone: CHI at LV" {
 		t.Fatalf("at 2 minutes: %+v", free)
 	}
 	if PickFocus(now, time.Time{}, games, nil).KeepManual {

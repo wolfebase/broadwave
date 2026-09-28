@@ -117,12 +117,12 @@ test("a phone walks home, the guide, and the player by touch", async ({ page }) 
 
   await tap(page.getByRole("button", { name: "Now", exact: true }));
   await expect(page.getByRole("button", { name: "Now", exact: true })).toHaveAttribute("aria-pressed", "true");
-  const onNow = page.getByRole("button", { name: /Chiefs at Bills/ });
+  const onNow = page.getByRole("button", { name: /Bears at Bills/ });
   await expect(onNow).toBeVisible();
   mkdirSync(evidence, { recursive: true });
   await page.screenshot({ path: path.join(evidence, "guide.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
   await tap(onNow);
-  const sheet = page.getByRole("dialog", { name: /Chiefs at Bills/ });
+  const sheet = page.getByRole("dialog", { name: /Bears at Bills/ });
   await expect(sheet).toBeVisible();
   const watch = sheet.getByRole("button", { name: "Watch", exact: true });
   await watch.scrollIntoViewIfNeeded();

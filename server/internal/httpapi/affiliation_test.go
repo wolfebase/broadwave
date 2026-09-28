@@ -18,9 +18,9 @@ func TestStarBigFour(t *testing.T) {
 	err := st.UpsertDevice(context.Background(), hdhr.Device{
 		DeviceID: "FAKE", FriendlyName: "Fake", ModelNumber: "HDHR4-2US", TunerCount: 2,
 	}, []hdhr.Channel{
-		{GuideNumber: "4.1", GuideName: "WDAF-DT"},
-		{GuideNumber: "4.2", GuideName: "WDAF2"},
-		{GuideNumber: "5.1", GuideName: "KCTV"},
+		{GuideNumber: "4.1", GuideName: "KDVR-DT"},
+		{GuideNumber: "4.2", GuideName: "KDVR2"},
+		{GuideNumber: "5.1", GuideName: "KCNC"},
 		{GuideNumber: "9.1", GuideName: "ABC"},
 		{GuideNumber: "11.1", GuideName: "FOX NEWS"},
 	})
@@ -40,7 +40,7 @@ func TestStarBigFour(t *testing.T) {
 	for _, ch := range listed.Channels {
 		got[ch.GuideName] = ch.Network
 	}
-	if got["WDAF-DT"] != "FOX" || got["KCTV"] != "CBS" || got["ABC"] != "ABC" || got["WDAF2"] != "" || got["FOX NEWS"] != "" {
+	if got["KDVR-DT"] != "FOX" || got["KCNC"] != "CBS" || got["ABC"] != "ABC" || got["KDVR2"] != "" || got["FOX NEWS"] != "" {
 		t.Fatalf("networks: %#v", got)
 	}
 
@@ -71,7 +71,7 @@ func TestStarBigFour(t *testing.T) {
 	for _, ch := range listed.Channels {
 		fav[ch.GuideName] = ch.Favorite
 	}
-	if !fav["WDAF-DT"] || !fav["KCTV"] || !fav["ABC"] || fav["WDAF2"] || fav["FOX NEWS"] {
+	if !fav["KDVR-DT"] || !fav["KCNC"] || !fav["ABC"] || fav["KDVR2"] || fav["FOX NEWS"] {
 		t.Fatalf("favorites %#v", fav)
 	}
 
@@ -82,7 +82,7 @@ func TestStarBigFour(t *testing.T) {
 	if err := json.Unmarshal(calls.Body.Bytes(), &table); err != nil {
 		t.Fatal(err)
 	}
-	if table.Calls["KSHB"] != "NBC" || table.Calls["WDAF2"] != "" {
-		t.Fatalf("table lookup KSHB=%q", table.Calls["KSHB"])
+	if table.Calls["KUSA"] != "NBC" || table.Calls["KDVR2"] != "" {
+		t.Fatalf("table lookup KUSA=%q", table.Calls["KUSA"])
 	}
 }

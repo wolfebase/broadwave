@@ -36,7 +36,7 @@ if [ "${FAKE:-}" = 1 ]; then
   CONTROL_PORT=$(sed -n 's/^CONTROL_PORT=//p' "$T/fake.txt")
   export HDHR_CONTROL_PORT="$CONTROL_PORT"
   HDHR=${BASE#http://}
-  NAME="WDAF"
+  NAME="KBWV"
   DIRECT="1080.copy.broadcast"
   "$BIN" -config "$T" -addr "127.0.0.1:$PORT" -hdhr "$HDHR" -bonjour=false >"$T/log.txt" 2>&1 &
 else

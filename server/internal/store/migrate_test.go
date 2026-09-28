@@ -88,7 +88,7 @@ CREATE TABLE passes (id INTEGER PRIMARY KEY, title TEXT NOT NULL, channel_id INT
 CREATE TABLE sources (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL DEFAULT '', xmltv_url TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1);
 CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL);
 INSERT INTO devices (device_id, friendly_name, base_url, tuner_count, priority) VALUES ('10611B4C', 'Living room', 'http://192.168.1.252', 2, 1);
-INSERT INTO channels (id, device_id, guide_number, guide_name) VALUES (1, '10611B4C', '4.1', 'WDAF');
+INSERT INTO channels (id, device_id, guide_number, guide_name) VALUES (1, '10611B4C', '4.1', 'KBWV');
 INSERT INTO recordings (id, channel_id, title, path, status) VALUES (4, 1, 'Jeopardy!', '/tmp/j.ts', 'complete');
 INSERT INTO passes (id, title, channel_id) VALUES (1, 'Jeopardy!', 1);
 INSERT INTO sources (id, kind, name, url) VALUES (3, 'm3u', 'Playlist', 'http://example/pl.m3u');

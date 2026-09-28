@@ -74,7 +74,7 @@ private func fineSnap() -> RecoverySnap {
 
 @Test func aServerThatLostThePictureStartsItAgain() {
     let facts = RecoveryFacts(health: true, online: true, channelID: 1, assumeLost: false)
-    let lost = [ChannelSignal(channelId: 1, number: "4.1", name: "WDAF", verdict: "Lost", live: true)]
+    let lost = [ChannelSignal(channelId: 1, number: "4.1", name: "KBWV", verdict: "Lost", live: true)]
     let gone = PlaybackOutage.snap(facts, lists: RecoveryLists(tuners: [], devices: [], signals: lost, playlistFound: false))
     #expect(gone.watchGone)
 
@@ -278,9 +278,9 @@ private func fineSnap() -> RecoverySnap {
 }
 
 @Test func aSignalReadingFailsClosedAndALiveLostRowIsTheOnlyLoss() {
-    let lost = ChannelSignal(channelId: 2, number: "5.1", name: "KCTV", verdict: "Lost", live: true)
-    let stored = ChannelSignal(channelId: 2, number: "5.1", name: "KCTV", verdict: "Lost", live: false)
-    let great = ChannelSignal(channelId: 2, number: "5.1", name: "KCTV", verdict: "Great", live: true)
+    let lost = ChannelSignal(channelId: 2, number: "5.1", name: "WTST", verdict: "Lost", live: true)
+    let stored = ChannelSignal(channelId: 2, number: "5.1", name: "WTST", verdict: "Lost", live: false)
+    let great = ChannelSignal(channelId: 2, number: "5.1", name: "WTST", verdict: "Great", live: true)
     let answering = DeviceHealth(deviceId: "A", model: "HDHR", firmwareVersion: "1", tuners: [])
     let silent = DeviceHealth(deviceId: "B", model: "HDHR", firmwareVersion: "1", tuners: [], error: PlaybackOutage.tunerStopped)
     let idle = [Tuner(index: 0, ours: false)]

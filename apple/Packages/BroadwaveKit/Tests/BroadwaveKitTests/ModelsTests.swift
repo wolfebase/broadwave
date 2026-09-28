@@ -18,8 +18,8 @@ private func fixture(_ name: String) throws -> Data {
     let channels = try APIClient.decoder.decode(Channels.self, from: fixture("channels")).channels
     #expect(!channels.isEmpty)
     #expect(channels.allSatisfy { !$0.displayNumber.isEmpty })
-    #expect(channels.first { $0.guideName == "WDAF" }?.network == "FOX")
-    #expect(channels.first { $0.guideName == "WDAF2" }?.network == nil)
+    #expect(channels.first { $0.guideName == "KBWV" }?.network == "FOX")
+    #expect(channels.first { $0.guideName == "KBWV2" }?.network == nil)
 
     let airings = try APIClient.decoder.decode(Airings.self, from: fixture("airings")).airings
     #expect(!airings.isEmpty)
@@ -103,7 +103,7 @@ private func fixture(_ name: String) throws -> Data {
     #expect(home.tunerAddress.hasSuffix(":8478"))
     #expect(!home.sharing)
     let calls = try APIClient.decoder.decode(Calls.self, from: fixture("affiliations"))
-    #expect(calls.calls["KSHB"] == "NBC")
+    #expect(calls.calls["KUSA"] == "NBC")
     let starred = try APIClient.decoder.decode(Starred.self, from: fixture("star"))
     #expect(starred.starred.contains { $0.network == "FOX" })
     _ = try APIClient.decoder.decode(FreeList.self, from: fixture("free"))

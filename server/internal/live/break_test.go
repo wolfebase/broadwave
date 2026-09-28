@@ -30,7 +30,7 @@ func TestCopiedTrackPlaysOnAcrossABackwardsBreak(t *testing.T) {
 		t.Fatalf("sample: %v %s", err, out)
 	}
 	srv := &fake.Server{TS: sample, Raw: true, Channels: []fake.Channel{
-		{Number: "4.1", Name: "WDAF", Freq: 593000000},
+		{Number: "4.1", Name: "KBWV", Freq: 593000000},
 	}}
 	base, port, err := srv.Start()
 	if err != nil {

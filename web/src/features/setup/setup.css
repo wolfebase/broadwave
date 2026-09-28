@@ -128,7 +128,7 @@
 }
 
 .ok.quiet {
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
 }
 
 .setup-row {

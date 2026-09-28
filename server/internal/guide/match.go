@@ -9,7 +9,7 @@ import (
 
 // assign pairs each XMLTV channel with one lineup channel.
 // A guide key wins. Otherwise the channel number wins, then the call sign,
-// including a call sign that only differs by a network suffix (KCTVDT and KCTVDT1).
+// including a call sign that only differs by a network suffix (WTSTDT and WTSTDT1).
 func assign(xmlCh []channel, lineup []store.Channel) map[string]int64 {
 	out := map[string]int64{}
 	usedXML := map[string]bool{}
@@ -133,7 +133,7 @@ func normCall(s string) string {
 	s = strings.ToUpper(strings.TrimSpace(s))
 	s = strings.ReplaceAll(s, "-", "")
 	s = strings.ReplaceAll(s, " ", "")
-	// DT2 and higher are subchannels (WDAF-DT2). Only a bare DT or DT1 is the primary.
+	// DT2 and higher are subchannels (KBWV-DT2). Only a bare DT or DT1 is the primary.
 	for _, suf := range []string{"DT1", "HD", "DT", "TV", "LD"} {
 		if strings.HasSuffix(s, suf) && len(s)-len(suf) >= 3 {
 			s = strings.TrimSuffix(s, suf)

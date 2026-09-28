@@ -93,7 +93,7 @@ func TestApplySetupDefault(t *testing.T) {
 	}
 
 	if err := fresh.UpsertDevice(ctx, hdhr.Device{DeviceID: "ABC", FriendlyName: "DUO", BaseURL: "http://127.0.0.1", TunerCount: 2}, []hdhr.Channel{
-		{GuideNumber: "4.1", GuideName: "WDAF", Favorite: true},
+		{GuideNumber: "4.1", GuideName: "KBWV", Favorite: true},
 	}); err != nil {
 		t.Fatal(err)
 	}

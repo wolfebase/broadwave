@@ -16,7 +16,7 @@ func TestSaveFrequencySignalWritesEveryChannel(t *testing.T) {
 	if _, err := st.db.Exec(`INSERT INTO devices (device_id, friendly_name, base_url, tuner_count) VALUES ('dev', 'Tuner', 'http://127.0.0.1', 2)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.db.Exec(`INSERT INTO channels (device_id, guide_number, guide_name, frequency_hz, present) VALUES ('dev', '4.1', 'WDAF', 593000000, 1), ('dev', '4.2', 'WDAF2', 593000000, 1), ('dev', '5.1', 'KCTV', 533000000, 1)`); err != nil {
+	if _, err := st.db.Exec(`INSERT INTO channels (device_id, guide_number, guide_name, frequency_hz, present) VALUES ('dev', '4.1', 'KBWV', 593000000, 1), ('dev', '4.2', 'KBWV2', 593000000, 1), ('dev', '5.1', 'WTST', 533000000, 1)`); err != nil {
 		t.Fatal(err)
 	}
 	when := time.Date(2026, 9, 24, 15, 0, 0, 0, time.UTC)

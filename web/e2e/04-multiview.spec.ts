@@ -104,13 +104,13 @@ test("multiview adds a channel and swaps the one with sound", async ({ page }, i
 
   await expect(page).toHaveURL(/\/multiview/);
   await expect(page.getByRole("listbox", { name: "Add a channel" })).toBeVisible();
-  await page.getByRole("option", { name: /5\.1\s*KCTV/ }).click();
-  await expect(page.getByRole("group", { name: "5.1 KCTV, sound on" })).toBeVisible();
-  await expect(page.getByRole("group", { name: "4.1 WDAF", exact: true })).toBeVisible();
+  await page.getByRole("option", { name: /5\.1\s*WTST/ }).click();
+  await expect(page.getByRole("group", { name: "5.1 WTST, sound on" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "4.1 KBWV", exact: true })).toBeVisible();
 
-  await page.getByRole("group", { name: "4.1 WDAF", exact: true }).click();
-  await expect(page.getByRole("group", { name: "4.1 WDAF, sound on" })).toBeVisible();
-  await expect(page.getByRole("group", { name: "5.1 KCTV", exact: true })).toBeVisible();
+  await page.getByRole("group", { name: "4.1 KBWV", exact: true }).click();
+  await expect(page.getByRole("group", { name: "4.1 KBWV, sound on" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "5.1 WTST", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Quad", exact: true }).click();
   await expect(page.getByRole("region", { name: "Quad" })).toBeVisible();
@@ -149,7 +149,7 @@ test("moving the sound between equal tiles restarts neither", async ({ page }) =
     for (const video of videos) video.addEventListener("emptied", () => w.__emptied++);
   });
 
-  for (const name of ["5.1 KCTV", "4.1 WDAF", "5.1 KCTV"]) {
+  for (const name of ["5.1 WTST", "4.1 KBWV", "5.1 WTST"]) {
     await page.getByRole("group", { name, exact: true }).click();
     await expect(page.getByRole("group", { name: `${name}, sound on` })).toBeVisible();
     await page.waitForTimeout(1500);
@@ -168,14 +168,14 @@ test("side by side to quad plays every picture the server has room for", async (
   test.skip(process.env.E2E_QUAD !== "1", "Set E2E_QUAD=1 for four channels and four pictures.");
   test.setTimeout(150_000);
   const { base } = harness();
-  const wdaf = channel("WDAF");
-  const kctv = channel("KCTV");
-  const wdaf2 = channel("WDAF2");
-  const kctv2 = channel("KCTV2");
+  const kbwv = channel("KBWV");
+  const wtst = channel("WTST");
+  const kbwv2 = channel("KBWV2");
+  const wtst2 = channel("WTST2");
   await expect
     .poll(async () => (await ourViewers(base)).length === 0, { timeout: 60_000, intervals: [500], message: "the previous watch let the tuners go" })
     .toBe(true);
-  await openMultiview(page, [wdaf.id, kctv.id], "2up", wdaf.id);
+  await openMultiview(page, [kbwv.id, wtst.id], "2up", kbwv.id);
   await expect.poll(async () => (await tiles(page)).filter((tile) => tile.moving).length, { timeout: 50_000, intervals: [800] }).toBe(2);
   const asked: string[] = [];
   page.on("response", async (res) => {
@@ -193,7 +193,7 @@ test("side by side to quad plays every picture the server has room for", async (
   await page.evaluate((to) => {
     window.history.pushState({ depth: 1 }, "", to);
     window.dispatchEvent(new PopStateEvent("popstate"));
-  }, `/multiview?ch=${wdaf.id},${wdaf2.id},${kctv.id},${kctv2.id}&layout=quad&focus=${wdaf.id}`);
+  }, `/multiview?ch=${kbwv.id},${kbwv2.id},${wtst.id},${wtst2.id}&layout=quad&focus=${kbwv.id}`);
   await expect(page.getByRole("region", { name: "Quad" })).toBeVisible();
   let last: Tile[] = [];
   let saw = 0;
@@ -228,16 +228,16 @@ test.describe("a restarted server", () => {
   for (const { layout, slow, title } of runs) {
     test(title, async ({ page }) => {
       const { base, control } = harness();
-      const wdaf = channel("WDAF");
-      const second = channel("KCTV");
-      const third = channel("WDAF2");
-      const ids = layout === "2up" ? [wdaf.id, second.id] : [wdaf.id, third.id, second.id];
+      const kbwv = channel("KBWV");
+      const second = channel("WTST");
+      const third = channel("KBWV2");
+      const ids = layout === "2up" ? [kbwv.id, second.id] : [kbwv.id, third.id, second.id];
       const name = (layout === "2up" ? "side" : "quad") + (slow ? "-slow" : "");
       try {
         await expect
           .poll(async () => (await ourViewers(base)).length === 0, { timeout: 60_000, intervals: [500], message: "the previous watch let the tuners go" })
           .toBe(true);
-        await openMultiview(page, ids, layout, wdaf.id);
+        await openMultiview(page, ids, layout, kbwv.id);
         await page.evaluate(() => {
           document.documentElement.dataset.lane = "stay";
         });
@@ -270,7 +270,7 @@ test.describe("a restarted server", () => {
         const had = playing.map((tile) => tile.channel);
         const sound = playing.find((tile) => !tile.muted);
         expect(sound, "one tile has the sound").toBeTruthy();
-        if (had.includes(String(wdaf.id))) expect(sound?.channel).toBe(String(wdaf.id));
+        if (had.includes(String(kbwv.id))) expect(sound?.channel).toBe(String(kbwv.id));
         const focusBefore = new URL(page.url()).searchParams.get("focus");
         expect(focusBefore).toBe(sound?.channel);
         let before: Tuner[] = [];

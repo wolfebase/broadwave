@@ -191,11 +191,11 @@ func TestPlanLetsLinksSkipTheTuner(t *testing.T) {
 }
 
 func TestPlanNamesATunerHeldBySomeoneElse(t *testing.T) {
-	plan := PlanMultiview([]PlanChannel{ch(1, 100, "4.1"), ch(2, 200, "9.1")}, 2, nil, []string{"KCTV"})
+	plan := PlanMultiview([]PlanChannel{ch(1, 100, "4.1"), ch(2, 200, "9.1")}, 2, nil, []string{"WTST"})
 	if len(plan.Playable) != 1 || plan.Blocked[0].ChannelID != 2 {
 		t.Fatalf("%+v", plan)
 	}
-	if plan.Blocked[0].Reason != "Both tuners are busy. KCTV and 4.1 are on." {
+	if plan.Blocked[0].Reason != "Both tuners are busy. WTST and 4.1 are on." {
 		t.Fatalf("reason: %q holders %v", plan.Blocked[0].Reason, plan.Blocked[0].Holders)
 	}
 }

@@ -6,8 +6,8 @@ import Testing
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let start = Date(timeIntervalSince1970: 1_700_000_000)
     let channel = Channel(
-        id: 1, deviceId: "duo", guideNumber: "4.1", guideName: "WDAF",
-        displayNumber: "4.1", displayName: "WDAF", hd: true, favorite: true,
+        id: 1, deviceId: "duo", guideNumber: "4.1", guideName: "KBWV",
+        displayNumber: "4.1", displayName: "KBWV", hd: true, favorite: true,
         enabled: true, hidden: false, present: true
     )
     let airing = Airing(id: 9, channelId: 1, title: "News", start: start, end: start.addingTimeInterval(1800))

@@ -38,7 +38,7 @@ test("player shell and two screens on one timeline", async ({ page }, info) => {
   await settle(page);
   await page.getByRole("button", { name: "Watch", exact: true }).click();
   await expect(page.getByRole("region", { name: "Player" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Chiefs at Bills|WDAF/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Bears at Bills|KBWV/ })).toBeVisible();
   const opened = await readPlay(page);
   expect(opened.url).toContain("/media/live/");
 

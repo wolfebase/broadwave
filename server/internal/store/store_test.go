@@ -19,7 +19,7 @@ func TestLineupKeepsLocalEditsOnRefresh(t *testing.T) {
 	dev := hdhr.Device{DeviceID: "10611B4C", FriendlyName: "DUO", ModelNumber: "HDHR5-2US", BaseURL: "http://192.168.1.252", LineupURL: "http://192.168.1.252/lineup.json", TunerCount: 2, FirmwareVersion: "20250815"}
 	channels := []hdhr.Channel{
 		{GuideNumber: "14.10", GuideName: "ZLiving", VideoCodec: "H264", AudioCodec: "AC3", StreamURL: "http://192.168.1.252:5004/auto/v14.10"},
-		{GuideNumber: "4.1", GuideName: "WDAF-DT", VideoCodec: "MPEG2", AudioCodec: "AC3", HD: true, Favorite: true, StreamURL: "http://192.168.1.252:5004/auto/v4.1"},
+		{GuideNumber: "4.1", GuideName: "KBWV-DT", VideoCodec: "MPEG2", AudioCodec: "AC3", HD: true, Favorite: true, StreamURL: "http://192.168.1.252:5004/auto/v4.1"},
 		{GuideNumber: "14.2", GuideName: "Snapshp", VideoCodec: "H264", AudioCodec: "AC3"},
 	}
 	if err := s.UpsertDevice(ctx, dev, channels); err != nil {

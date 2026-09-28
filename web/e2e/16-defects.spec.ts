@@ -74,7 +74,7 @@ test("the guide grid names the cell the keyboard is on", async ({ page }) => {
 
 test("reopening the player keeps the picture, and the page behind it is inert", async ({ page }) => {
   await setupDone(page);
-  const wdaf = channel("WDAF");
+  const kbwv = channel("KBWV");
   let watches = 0;
   let stops = 0;
   page.on("request", (req) => {
@@ -87,7 +87,7 @@ test("reopening the player keeps the picture, and the page behind it is inert", 
   await page.goto("/");
   await settle(page);
   await page.getByRole("button", { name: "Watch", exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`/watch\\?channel=${wdaf.id}`));
+  await expect(page).toHaveURL(new RegExp(`/watch\\?channel=${kbwv.id}`));
   const player = page.getByRole("region", { name: "Player" });
   await expect(player).toBeVisible();
   await expect
@@ -165,14 +165,14 @@ test("reopening the player keeps the picture, and the page behind it is inert", 
 test("check for listings says when nothing came back", async ({ page }) => {
   await setupDone(page);
   const { db } = harness();
-  const kctv = channel("KCTV");
+  const wtst = channel("WTST");
   const sql = (statement: string) => {
     const result = spawnSync("sqlite3", [db, `PRAGMA busy_timeout=5000; ${statement}`], { encoding: "utf8" });
     if (result.status !== 0) throw new Error(result.stderr || result.stdout || statement);
   };
-  sql(`DELETE FROM airings WHERE channel_id = ${kctv.id};`);
+  sql(`DELETE FROM airings WHERE channel_id = ${wtst.id};`);
   try {
-    await page.goto(`/watch?channel=${kctv.id}`);
+    await page.goto(`/watch?channel=${wtst.id}`);
     await settle(page);
     await expect(page.locator(".player-note p")).toHaveText("No listing for this channel.");
     await page.locator(".stage").hover();
@@ -187,8 +187,8 @@ test("check for listings says when nothing came back", async ({ page }) => {
     const end = new Date(now + 2 * 60 * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
     sql(
       `INSERT INTO airings (channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_live, guide_source)
-       SELECT ${kctv.id}, 'The Night Show', 'A guest and a band', 'Talk.', 'Series', '${start}', '${end}', 'e2e-restore', 0, 'e2e'
-       WHERE NOT EXISTS (SELECT 1 FROM airings WHERE channel_id = ${kctv.id});`,
+       SELECT ${wtst.id}, 'The Night Show', 'A guest and a band', 'Talk.', 'Series', '${start}', '${end}', 'e2e-restore', 0, 'e2e'
+       WHERE NOT EXISTS (SELECT 1 FROM airings WHERE channel_id = ${wtst.id});`,
     );
   }
 });
