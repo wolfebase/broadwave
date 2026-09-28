@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"broadwave/internal/live"
+	"broadwave/internal/nfo"
 	"broadwave/internal/store"
 )
 
@@ -17,6 +18,7 @@ func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Reco
 	if st == nil || rec.ID == 0 {
 		return
 	}
+	writeNFO(ctx, st, hub, rec)
 	passes, err := st.Passes(ctx)
 	if err != nil {
 		return
@@ -53,12 +55,27 @@ func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Reco
 				base := stringsTrimExt(victim.Path)
 				_ = os.Remove(base + ".edl")
 				_ = os.Remove(base + ".json")
+				_ = os.Remove(base + ".nfo")
 				_ = os.Remove(filepath.Join(hub.Dir, "posters", strconv.FormatInt(victim.ID, 10)+".jpg"))
 			}
 			if err := st.DeleteRecording(ctx, id); err == nil {
 				_ = st.AddEvent(ctx, "delete", "Keep rule removed "+victim.Title)
 			}
 		}
+	}
+}
+
+func writeNFO(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Recording) {
+	if hub == nil || hub.Dir == "" || rec.Status != "complete" {
+		return
+	}
+	values, err := st.Settings(ctx)
+	if err != nil || values["writeNfo"] != "1" {
+		return
+	}
+	root := filepath.Join(hub.Dir, "recordings")
+	if _, err := nfo.Write(root, RecordingNFO(ctx, st, rec)); err != nil {
+		slog.Error(fmt.Sprintf("nfo: %v", err))
 	}
 }
 

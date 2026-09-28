@@ -564,6 +564,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/recordings/nfo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Write or refresh the .nfo beside every finished recording in the recordings folder. A library folder is left alone. */
+        post: operations["writeRecordingNfo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/recordings/{id}": {
         parameters: {
             query?: never;
@@ -1597,6 +1614,11 @@ export interface components {
              * @enum {string}
              */
             bufferMinutes?: "0" | "30" | "60" | "120" | "240";
+            /**
+             * @description 1 writes a .nfo file beside each finished recording for Plex, Jellyfin, and Kodi. 0 leaves them off. Missing means off.
+             * @enum {string}
+             */
+            writeNfo?: "0" | "1";
             pictureMode?: components["schemas"]["PictureMode"];
             /** @enum {string} */
             autoplay?: "0" | "1";
@@ -2738,6 +2760,29 @@ export interface operations {
                 };
             };
             507: components["responses"]["Error"];
+        };
+    };
+    writeRecordingNfo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many files were written */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        written: number;
+                    };
+                };
+            };
+            409: components["responses"]["Error"];
         };
     };
     deleteRecording: {

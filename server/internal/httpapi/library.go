@@ -12,6 +12,7 @@ import (
 
 	"broadwave/internal/disk"
 	"broadwave/internal/live"
+	"broadwave/internal/nfo"
 	"broadwave/internal/store"
 )
 
@@ -263,24 +264,7 @@ func recordingInside(roots []string, stored string) (string, bool) {
 }
 
 func pathInside(root, candidate string) bool {
-	root = filepath.Clean(root)
-	if root == "" || root == "." {
-		return false
-	}
-	if resolved, err := filepath.EvalSymlinks(root); err == nil {
-		root = resolved
-	}
-	candidate = filepath.Clean(candidate)
-	if resolved, err := filepath.EvalSymlinks(candidate); err == nil {
-		candidate = resolved
-	} else if !os.IsNotExist(err) {
-		return false
-	}
-	rel, err := filepath.Rel(root, candidate)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-		return false
-	}
-	return true
+	return nfo.Inside(root, candidate)
 }
 
 // attachmentDisposition is one header field. A quote or a newline in the

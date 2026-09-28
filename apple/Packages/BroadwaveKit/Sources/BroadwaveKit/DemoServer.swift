@@ -365,6 +365,7 @@ public final class DemoServer: @unchecked Sendable {
         "hdhrEmulate": "0",
         "pictureMode": "broadcast",
         "bufferMinutes": "60",
+        "writeNfo": "0",
     ]
 
     private func currentSettings() -> [String: String] {
@@ -403,7 +404,7 @@ public final class DemoServer: @unchecked Sendable {
         switch key {
         case "pictureMode":
             value == "broadcast" || value == "smooth" || value == "film"
-        case "needsSetup", "setupComplete", "hideScores", "liveScores", "checkUpdates", "autoplay", "hdhrEmulate":
+        case "needsSetup", "setupComplete", "hideScores", "liveScores", "checkUpdates", "autoplay", "hdhrEmulate", "writeNfo":
             value == "0" || value == "1"
         case "sdUser", "sdLineup", "guideUrl":
             true

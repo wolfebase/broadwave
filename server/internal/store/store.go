@@ -396,6 +396,7 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		"encoder":        true,
 		"watermarkGB":    true,
 		"bufferMinutes":  true,
+		"writeNfo":       true,
 		"pictureMode":    true,
 		"autoplay":       true,
 		"hdhrEmulate":    true,
@@ -437,6 +438,9 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		}
 		if k == "bufferMinutes" && v != "0" && v != "30" && v != "60" && v != "120" && v != "240" {
 			return fmt.Errorf("bufferMinutes must be 0, 30, 60, 120, or 240")
+		}
+		if k == "writeNfo" && v != "0" && v != "1" {
+			return fmt.Errorf("writeNfo must be 0 or 1")
 		}
 		if k == "hideScores" && v != "0" && v != "1" {
 			return fmt.Errorf("hideScores must be 0 or 1")

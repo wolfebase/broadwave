@@ -44,6 +44,8 @@ export const copy = {
     layoutHint: "Auto follows the window. TV uses the large guide you can drive with arrows.",
     recordings: "Recordings folder",
     recordingsHint: "The original broadcast files. To keep them somewhere else, mount that folder at /config/work/recordings.",
+    nfo: "Write .nfo files for Plex, Jellyfin, and Kodi",
+    nfoHint: "A file beside each finished recording, with the title and description.",
     reserve: "Keep this much free",
     reserveHint: "Use 0 to turn the reserve off. A show already recording is left alone.",
     buffer: "Keep for recording from the start",

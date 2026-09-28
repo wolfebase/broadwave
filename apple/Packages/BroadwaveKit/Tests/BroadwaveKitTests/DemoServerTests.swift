@@ -87,6 +87,7 @@ import Testing
     #expect(before["autoplay"] == "1")
     #expect(before["hideScores"] == "0")
     #expect(before["hdhrEmulate"] == "0")
+    #expect(before["writeNfo"] == "0")
     try await client.saveSettings(["pictureMode": "film", "hideScores": "1", "autoplay": "0", "hdhrEmulate": "1"])
     let after = try await client.settings()
     #expect(after["pictureMode"] == "film")
@@ -122,6 +123,10 @@ import Testing
     #expect(try await (client.settings())["bufferMinutes"] == "120")
     try await client.saveSettings(["bufferMinutes": "0"])
     #expect(try await (client.settings())["bufferMinutes"] == "0")
+    try await client.saveSettings(["writeNfo": "1"])
+    #expect(try await (client.settings())["writeNfo"] == "1")
+    try await client.saveSettings(["writeNfo": "yes"])
+    #expect(try await (client.settings())["writeNfo"] == "1")
 }
 
 @Test func demoHiddenChannelLeavesTheGuideOnly() async throws {

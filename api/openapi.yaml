@@ -830,6 +830,22 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "507": { $ref: "#/components/responses/Error" }
+  /recordings/nfo:
+    post:
+      tags: [recordings]
+      operationId: writeRecordingNfo
+      description: Write or refresh the .nfo beside every finished recording in the recordings folder. A library folder is left alone.
+      responses:
+        "200":
+          description: How many files were written
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [written]
+                properties:
+                  written: { type: integer }
+        "409": { $ref: "#/components/responses/Error" }
   /recordings/{id}:
     delete:
       tags: [recordings]
@@ -2011,6 +2027,7 @@ components:
         encoder: { type: string }
         watermarkGB: { type: string, description: "Free-space reserve in GB; 0 turns it off" }
         bufferMinutes: { type: string, enum: ["0", "30", "60", "120", "240"], description: "Minutes of each tuned channel kept on disk, so a recording of a show already on starts from its beginning; 0 turns it off" }
+        writeNfo: { type: string, enum: ["0", "1"], description: "1 writes a .nfo file beside each finished recording for Plex, Jellyfin, and Kodi. 0 leaves them off. Missing means off." }
         pictureMode: { $ref: "#/components/schemas/PictureMode" }
         autoplay: { type: string, enum: ["0", "1"] }
         hdhrEmulate: { type: string, enum: ["0", "1"] }

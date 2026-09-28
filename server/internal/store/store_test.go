@@ -130,6 +130,24 @@ func numbers(channels []Channel) []string {
 	return out
 }
 
+func TestWriteNfoIsOffOrOn(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, v := range []string{"0", "1"} {
+		if err := s.PutSettings(context.Background(), map[string]string{"writeNfo": v}); err != nil {
+			t.Fatalf("%s: %v", v, err)
+		}
+	}
+	for _, v := range []string{"yes", "2", ""} {
+		if err := s.PutSettings(context.Background(), map[string]string{"writeNfo": v}); err == nil {
+			t.Fatalf("%q should be refused", v)
+		}
+	}
+}
+
 func TestBufferMinutesTakesTheOfferedLengths(t *testing.T) {
 	s, err := Open(t.TempDir())
 	if err != nil {

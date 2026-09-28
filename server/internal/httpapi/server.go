@@ -135,6 +135,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /signals", s.signals)
 	api("POST /signals/check", s.checkSignals)
 	api("POST /recordings", s.startRecording)
+	api("POST /recordings/nfo", s.writeNFOs)
 	api("POST /recordings/{id}/stop", s.stopRecording)
 	api("GET /recordings", s.recordings)
 	api("DELETE /recordings/{id}", s.deleteRecording)
@@ -449,6 +450,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(values["bufferMinutes"]) == "" {
 		values["bufferMinutes"] = "60"
 	}
+	if values["writeNfo"] != "1" {
+		values["writeNfo"] = "0"
+	}
 	if values["pictureMode"] == "" {
 		values["pictureMode"] = "broadcast"
 	}
@@ -513,6 +517,14 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	// Turning the check back on looks now. A check that already ran today is reused.
 	if body["checkUpdates"] == "1" && s.Updates != nil {
 		_, _ = s.Updates.Check(r.Context())
+	}
+	// Turning sidecars on writes them for the recordings already finished.
+	if body["writeNfo"] == "1" && s.Hub != nil && s.Hub.Dir != "" {
+		go func() {
+			if _, err := s.refreshNFOs(context.WithoutCancel(r.Context())); err != nil {
+				slog.Error(fmt.Sprintf("nfo: %v", err))
+			}
+		}()
 	}
 	s.getSettings(w, r)
 }
