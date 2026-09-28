@@ -87,6 +87,7 @@ export function DiagnosticsPage() {
                 <td>{f.recording ? "Recording" : ""}</td>
                 <td>{f.exports ? `${f.exports} app streams` : ""}</td>
                 <td className="dim">{f.fieldOrder}</td>
+                <td className="dim">{bufferLine(f.buffer)}</td>
               </tr>
             ))}
           </tbody>
@@ -210,4 +211,11 @@ function tunedLabel(guide?: string, name?: string) {
   const g = (guide ?? "").trim();
   const n = (name ?? "").trim();
   return n && n !== g ? `${g} ${n}`.trim() : g;
+}
+
+function bufferLine(b?: { minutes: number; bytes: number; state: "on" | "off" | "full" }) {
+  if (!b) return "";
+  if (b.state === "off") return "Buffer off";
+  if (b.state === "full") return "Buffer paused: the disk is nearly full";
+  return `Buffer ${Math.floor(b.minutes)} min, ${(b.bytes / 1e9).toFixed(1)} GB`;
 }

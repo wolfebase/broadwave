@@ -446,6 +446,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(values["watermarkGB"]) == "" {
 		values["watermarkGB"] = "10"
 	}
+	if strings.TrimSpace(values["bufferMinutes"]) == "" {
+		values["bufferMinutes"] = "60"
+	}
 	if values["pictureMode"] == "" {
 		values["pictureMode"] = "broadcast"
 	}

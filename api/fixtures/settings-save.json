@@ -1,6 +1,7 @@
 {
   "audio": "stereo",
   "autoplay": "1",
+  "bufferMinutes": "60",
   "hdhrEmulate": "0",
   "hideScores": "1",
   "layout": "auto",

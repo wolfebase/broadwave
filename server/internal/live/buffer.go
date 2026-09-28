@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"broadwave/internal/disk"
@@ -31,7 +33,54 @@ func (h *Hub) openRingLocked(m *mux) {
 	}
 	h.ringSeq++
 	dir := filepath.Join(h.Dir, "ring", fmt.Sprintf("%d-%d", m.freq, h.ringSeq))
-	m.ring = ring.Open(dir, ring.Options{Window: h.Buffer, Room: h.ringRoom(dir)})
+	m.ring = ring.Open(dir, ring.Options{Window: h.bufferWindow, Room: h.ringRoom(dir)})
+}
+
+// bufferWindow is the bufferMinutes setting, or Buffer when it is unset.
+func (h *Hub) bufferWindow() time.Duration {
+	if h.Store == nil {
+		return h.Buffer
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	values, err := h.Store.Settings(ctx)
+	if err != nil {
+		return h.Buffer
+	}
+	raw := strings.TrimSpace(values["bufferMinutes"])
+	if raw == "" {
+		return h.Buffer
+	}
+	minutes, err := strconv.Atoi(raw)
+	if err != nil || minutes < 0 {
+		return h.Buffer
+	}
+	return time.Duration(minutes) * time.Minute
+}
+
+// BufferStatus is what one tuned frequency's ring holds.
+type BufferStatus struct {
+	Minutes float64 `json:"minutes"`
+	Bytes   int64   `json:"bytes"`
+	// State is on, off (the setting), or full (paused until the disk has room).
+	State string `json:"state"`
+}
+
+func bufferStatus(m *mux) *BufferStatus {
+	if m == nil || m.ring == nil {
+		return nil
+	}
+	st := m.ring.Stats()
+	out := &BufferStatus{Bytes: st.Bytes, State: "on"}
+	switch {
+	case st.Off:
+		out.State = "off"
+	case st.Low:
+		out.State = "full"
+	case !st.Since.IsZero():
+		out.Minutes = time.Since(st.Since).Minutes()
+	}
+	return out
 }
 
 // ringRoom is how many more bytes a ring may hold: at most half of the free

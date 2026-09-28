@@ -1586,6 +1586,11 @@ export interface components {
             encoder?: string;
             /** @description Free-space reserve in GB; 0 turns it off */
             watermarkGB?: string;
+            /**
+             * @description Minutes of each tuned channel kept on disk, so a recording of a show already on starts from its beginning; 0 turns it off
+             * @enum {string}
+             */
+            bufferMinutes?: "0" | "30" | "60" | "120" | "240";
             pictureMode?: components["schemas"]["PictureMode"];
             /** @enum {string} */
             autoplay?: "0" | "1";

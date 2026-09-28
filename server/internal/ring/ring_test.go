@@ -27,6 +27,10 @@ func (c *clock) add(d time.Duration) {
 	c.mu.Unlock()
 }
 
+func fixed(d time.Duration) func() time.Duration {
+	return func() time.Duration { return d }
+}
+
 func chunk(i int) []byte {
 	return bytes.Repeat([]byte{byte(i)}, 1000)
 }
@@ -49,7 +53,7 @@ func settle(t *testing.T, r *Ring) {
 
 func TestRingReadsBackFromATime(t *testing.T) {
 	c := &clock{t: time.Unix(1000, 0)}
-	r := Open(t.TempDir(), Options{Window: time.Hour, Span: 10 * time.Second, Now: c.now})
+	r := Open(t.TempDir(), Options{Window: fixed(time.Hour), Span: 10 * time.Second, Now: c.now})
 	defer r.Close()
 	start := c.now()
 	for i := 0; i < 30; i++ {
@@ -79,7 +83,7 @@ func TestRingReadsBackFromATime(t *testing.T) {
 }
 
 func TestRingReadsBytesNotYetOnDisk(t *testing.T) {
-	r := Open(t.TempDir(), Options{Window: time.Hour})
+	r := Open(t.TempDir(), Options{Window: fixed(time.Hour)})
 	defer r.Close()
 	// Hold the flusher off by taking the lock while appending directly.
 	r.mu.Lock()
@@ -103,7 +107,7 @@ func TestRingReadsBytesNotYetOnDisk(t *testing.T) {
 func TestRingForgetsPastItsWindow(t *testing.T) {
 	c := &clock{t: time.Unix(1000, 0)}
 	dir := t.TempDir()
-	r := Open(dir, Options{Window: 30 * time.Second, Span: 10 * time.Second, Now: c.now})
+	r := Open(dir, Options{Window: fixed(30 * time.Second), Span: 10 * time.Second, Now: c.now})
 	defer r.Close()
 	start := c.now()
 	for i := 0; i < 100; i++ {
@@ -137,7 +141,7 @@ func TestRingGivesUpItsOldestFilesForRoom(t *testing.T) {
 	var room int64 = 1 << 40
 	setRoom := func(v int64) { mu.Lock(); room = v; mu.Unlock() }
 	dir := t.TempDir()
-	r := Open(dir, Options{Window: time.Hour, Span: 10 * time.Second, Now: c.now, Room: func(int64) int64 { mu.Lock(); defer mu.Unlock(); return room }})
+	r := Open(dir, Options{Window: fixed(time.Hour), Span: 10 * time.Second, Now: c.now, Room: func(int64) int64 { mu.Lock(); defer mu.Unlock(); return room }})
 	defer r.Close()
 	for i := 0; i < 35; i++ {
 		r.Append(chunk(i))
@@ -181,7 +185,7 @@ func TestRingGivesUpItsOldestFilesForRoom(t *testing.T) {
 }
 
 func TestRingStartsOverWhenTheDiskFallsBehind(t *testing.T) {
-	r := Open(t.TempDir(), Options{Window: time.Hour})
+	r := Open(t.TempDir(), Options{Window: fixed(time.Hour)})
 	defer r.Close()
 	r.Append(chunk(1))
 	settle(t, r)
@@ -200,7 +204,7 @@ func TestRingStartsOverWhenTheDiskFallsBehind(t *testing.T) {
 }
 
 func TestRingReadsFailOnceClosed(t *testing.T) {
-	r := Open(t.TempDir(), Options{Window: time.Hour})
+	r := Open(t.TempDir(), Options{Window: fixed(time.Hour)})
 	r.Append(chunk(1))
 	settle(t, r)
 	r.mu.Lock()
@@ -233,7 +237,7 @@ func TestRingReadsFailOnceClosed(t *testing.T) {
 
 func TestRingCloseRemovesItsFiles(t *testing.T) {
 	dir := t.TempDir() + "/ring"
-	r := Open(dir, Options{Window: time.Hour})
+	r := Open(dir, Options{Window: fixed(time.Hour)})
 	r.Append(chunk(1))
 	settle(t, r)
 	r.Close()
@@ -249,7 +253,7 @@ func TestRingCloseRemovesItsFiles(t *testing.T) {
 
 func TestRingPausesAfterAFileError(t *testing.T) {
 	dir := t.TempDir() + "/ring"
-	r := Open(dir, Options{Window: time.Hour, Room: func(int64) int64 { return 1 << 40 }})
+	r := Open(dir, Options{Window: fixed(time.Hour), Room: func(int64) int64 { return 1 << 40 }})
 	defer r.Close()
 	r.Append(chunk(1))
 	settle(t, r)
@@ -283,5 +287,38 @@ func TestRingPausesAfterAFileError(t *testing.T) {
 	settle(t, r)
 	if pos, _, ok := r.Position(time.Time{}); !ok || pos != 3000 {
 		t.Fatalf("resumed at %d ok %v", pos, ok)
+	}
+}
+
+func TestRingTurnsOffAndOnWithItsSetting(t *testing.T) {
+	var mu sync.Mutex
+	window := time.Hour
+	dir := t.TempDir()
+	r := Open(dir, Options{Window: func() time.Duration { mu.Lock(); defer mu.Unlock(); return window }})
+	defer r.Close()
+	r.Append(chunk(1))
+	settle(t, r)
+	if st := r.Stats(); st.Bytes != 1000 || st.Off || st.Since.IsZero() {
+		t.Fatalf("%+v", st)
+	}
+	mu.Lock()
+	window = 0
+	mu.Unlock()
+	r.checkWindow()
+	r.Append(chunk(2))
+	if st := r.Stats(); st.Bytes != 0 || !st.Off || !st.Since.IsZero() {
+		t.Fatalf("off: %+v", st)
+	}
+	if files, _ := os.ReadDir(dir); len(files) != 0 {
+		t.Fatalf("%d files while off", len(files))
+	}
+	mu.Lock()
+	window = 30 * time.Minute
+	mu.Unlock()
+	r.checkWindow()
+	r.Append(chunk(3))
+	settle(t, r)
+	if pos, _, ok := r.Position(time.Time{}); !ok || pos != 2000 {
+		t.Fatalf("back on at %d ok %v", pos, ok)
 	}
 }

@@ -112,6 +112,10 @@ func TestRecordingStartsFromTheBufferedShowStart(t *testing.T) {
 		<-exported
 	}()
 	time.Sleep(6 * time.Second)
+	status := h.Status()
+	if len(status) != 1 || status[0].Buffer == nil || status[0].Buffer.State != "on" || status[0].Buffer.Minutes < 0.05 || status[0].Buffer.Bytes == 0 {
+		t.Fatalf("diagnostics: %+v", status)
+	}
 	showStart := time.Now().Add(-4 * time.Second)
 	rec, err := h.RecordMeta(context.Background(), 1, store.Recording{ChannelID: id, Title: "News", StartedAt: showStart})
 	if err != nil {
@@ -267,5 +271,25 @@ func TestStoppingARecordingMidBackfillLetsGo(t *testing.T) {
 	}
 	if n := runtime.NumGoroutine(); n > before {
 		t.Fatalf("%d goroutines, %d before", n, before)
+	}
+}
+
+func TestBufferWindowFollowsTheSetting(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	h := &Hub{Store: st, Buffer: time.Hour}
+	if got := h.bufferWindow(); got != time.Hour {
+		t.Fatalf("unset: %s", got)
+	}
+	for raw, want := range map[string]time.Duration{"0": 0, "30": 30 * time.Minute, "240": 4 * time.Hour} {
+		if err := st.PutSettings(context.Background(), map[string]string{"bufferMinutes": raw}); err != nil {
+			t.Fatal(err)
+		}
+		if got := h.bufferWindow(); got != want {
+			t.Fatalf("%s: %s", raw, got)
+		}
 	}
 }

@@ -28,6 +28,7 @@ const defaults: Settings = {
   profile: "transparent",
   audio: "stereo",
   watermarkGB: "10",
+  bufferMinutes: "60",
   pictureMode: "broadcast",
   autoplay: "1",
   hdhrEmulate: "0",
