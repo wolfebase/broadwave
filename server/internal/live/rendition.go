@@ -3,6 +3,7 @@ package live
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -141,6 +142,10 @@ type Source struct {
 	// browser guesses from the picture size, so a 640 wide tile of an HD
 	// channel decodes as SD colors unless the encode says BT.709.
 	HD bool
+	// Extras are the program's other measured sound tracks, carried in the
+	// same encode after the main one so players can switch without a new
+	// watch. Tiles never get them.
+	Extras []AudioTrack
 }
 
 type Decision struct {
@@ -417,6 +422,10 @@ func RenditionArgs(program int, src Source, r Rendition, encoder, deint string) 
 	return renditionArgs(program, src, r, encoder, deint, "pipe:0")
 }
 
+// extraTrackID is the fMP4 track id of Source.Extras[i]. ffmpeg numbers the
+// tracks by output stream from 1: the picture, the main sound, then the extras.
+func extraTrackID(i int) uint32 { return uint32(i) + 3 }
+
 func renditionArgs(program int, src Source, r Rendition, encoder, deint string, input string) []string {
 	r = r.normalized()
 	args := []string{"-hide_banner", "-loglevel", "warning", "-fflags", "+genpts+discardcorrupt", "-copyts"}
@@ -470,6 +479,9 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 	}
 	if r.Audio != "none" {
 		args = append(args, "-map", audioMap)
+		for _, t := range src.Extras {
+			args = append(args, "-map", fmt.Sprintf("0:i:%d", t.PID))
+		}
 	}
 	if transcode {
 		mode := r.Mode
@@ -509,13 +521,36 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		args = append(args, "-an")
 	case "copy":
 		args = append(args, "-c:a", "copy")
-		if strings.EqualFold(src.AudioCodec, "AAC") {
-			args = append(args, "-bsf:a", "aac_adtstoasc")
+		if len(src.Extras) == 0 {
+			if strings.EqualFold(src.AudioCodec, "AAC") {
+				args = append(args, "-bsf:a", "aac_adtstoasc")
+			}
+			break
+		}
+		codecs := []string{src.AudioCodec}
+		for _, t := range src.Extras {
+			codecs = append(codecs, t.Codec)
+		}
+		for i, c := range codecs {
+			if strings.EqualFold(c, "AAC") {
+				args = append(args, fmt.Sprintf("-bsf:a:%d", i), "aac_adtstoasc")
+			}
 		}
 	case "aac6":
 		args = append(args, "-af", audioFilter(r), "-c:a", "aac", "-ac", "6", "-b:a", "384k")
+		// A stereo or mono second language stays as wide as it was sent.
+		for i, t := range src.Extras {
+			if t.Channels > 0 && t.Channels <= 2 {
+				args = append(args, fmt.Sprintf("-ac:a:%d", i+1), strconv.Itoa(t.Channels), fmt.Sprintf("-b:a:%d", i+1), "160k")
+			}
+		}
 	default:
 		args = append(args, "-af", audioFilter(r), "-c:a", "aac", "-ac", "2", "-b:a", "160k")
+	}
+	if len(src.Extras) > 0 && r.Audio != "none" {
+		// A quiet track otherwise lets the muxer hold the picture for up to
+		// ten seconds while it waits for that track's next packet.
+		args = append(args, "-max_interleave_delta", "1000000")
 	}
 	// Fragmented MP4 on stdout, one fragment per keyframe. The packager groups
 	// those into segments that start on a keyframe. Copy and transcode share
