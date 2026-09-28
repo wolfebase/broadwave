@@ -171,23 +171,44 @@ public final class Discovery {
     }
 
     /// Opens a connection to learn the address the service lives at.
+    /// IPv4 first: a server on a Mac also answers on its IPv6 link-local
+    /// address, and a URL cannot carry that address's interface.
     nonisolated static func resolve(_ endpoint: NWEndpoint, port: Int) async -> URL? {
+        if let url = await resolve(endpoint, port: port, version: .v4) {
+            return url
+        }
+        return await resolve(endpoint, port: port, version: .any)
+    }
+
+    /// The server's address as a URL, or nil for an IPv6 link-local address.
+    nonisolated static func serverURL(host: String, port: Int) -> URL? {
+        var h = host
+        if let pct = h.firstIndex(of: "%") {
+            h = String(h[..<pct])
+        }
+        if h.contains(":") {
+            if h.lowercased().hasPrefix("fe80:") {
+                return nil
+            }
+            h = "[\(h)]"
+        }
+        return URL(string: "http://\(h):\(port)")
+    }
+
+    private nonisolated static func resolve(_ endpoint: NWEndpoint, port: Int, version: NWProtocolIP.Options.Version) async -> URL? {
         await withCheckedContinuation { cont in
-            let conn = NWConnection(to: endpoint, using: .tcp)
+            let params = NWParameters.tcp
+            if let ip = params.defaultProtocolStack.internetProtocol as? NWProtocolIP.Options {
+                ip.version = version
+            }
+            let conn = NWConnection(to: endpoint, using: params)
             let once = OnceBox()
             conn.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
                     var url: URL?
                     if case let .hostPort(host, _) = conn.currentPath?.remoteEndpoint {
-                        var h = "\(host)"
-                        if let pct = h.firstIndex(of: "%") {
-                            h = String(h[..<pct])
-                        }
-                        if h.contains(":") {
-                            h = "[\(h)]"
-                        }
-                        url = URL(string: "http://\(h):\(port)")
+                        url = serverURL(host: "\(host)", port: port)
                     }
                     conn.cancel()
                     if once.claim() {
