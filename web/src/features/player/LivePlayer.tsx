@@ -288,7 +288,8 @@ export function LivePlayer({
     }
     const actions: Record<string, () => void> = {
       Escape: () => (panel !== "none" ? setPanel("none") : onMinimize()),
-      Backspace: () => (panel !== "none" ? setPanel("none") : lastChannel()),
+      // A TV remote's Back arrives as Backspace, so it leaves the player like Escape.
+      Backspace: () => (panel !== "none" ? setPanel("none") : onMinimize()),
       " ": togglePlay,
       ArrowLeft: () => jump(-15),
       ArrowRight: () => jump(30),
@@ -519,6 +520,12 @@ export function LivePlayer({
           <h3>{copy.player.stats}</h3>
           {session ? (
             <dl>
+              <dt>{copy.player.playing}</dt>
+              <dd>{session.stream.reason}</dd>
+              <dt>{copy.player.source}</dt>
+              <dd>{sourceLine(session.stream)}</dd>
+              <dt>{copy.player.output}</dt>
+              <dd>{outputLine(session.stream, playback)}</dd>
               <dt>{copy.player.bitrate}</dt>
               <dd>{bitrateText(session.stream.bitrate) || copy.player.waiting}</dd>
               <dt>{copy.player.dropped}</dt>
@@ -535,6 +542,8 @@ export function LivePlayer({
               <dd>{session.encoder || session.stream.encoder || copy.player.waiting}</dd>
               <dt>{copy.player.sound}</dt>
               <dd>{session.stream.audio === "copy" ? `Original ${session.stream.sourceAudio ?? ""}` : session.stream.audio === "aac6" ? "5.1 AAC" : "Stereo AAC"}</dd>
+              <dt>{copy.player.tuner}</dt>
+              <dd>{session.shared ? `Shared · ${session.viewers} watching` : "This screen only"}</dd>
             </dl>
           ) : (
             <p>Tuning…</p>
@@ -686,6 +695,33 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
       </button>
     </div>
   );
+}
+
+function sourceLine(stream: { sourceVideo?: string; sourceWidth?: number; sourceHeight?: number; scan?: string; sourceFps?: string }) {
+  return joinFacts([stream.sourceVideo, sizeText(stream.sourceWidth, stream.sourceHeight), scanWord(stream.scan), stream.sourceFps]);
+}
+
+function outputLine(stream: { outputWidth?: number; outputHeight?: number; outputFps?: string; decode?: string; video?: string }, picture: PictureStats) {
+  const width = picture.width || stream.outputWidth;
+  const height = picture.height || stream.outputHeight;
+  const fps = stream.outputFps || (picture.fps > 1 ? picture.fps.toFixed(2) : "");
+  const decode = stream.decode === "gpu" ? "GPU decode" : stream.decode === "cpu" ? "CPU decode" : stream.video === "copy" ? "Direct" : "";
+  return joinFacts([sizeText(width, height), fps, decode]);
+}
+
+function sizeText(width?: number, height?: number) {
+  return width && height ? `${width}×${height}` : "";
+}
+
+function scanWord(scan?: string) {
+  if (scan === "progressive") return "Progressive";
+  if (scan === "interlaced") return "Interlaced";
+  if (scan === "film") return "Film";
+  return "";
+}
+
+function joinFacts(parts: Array<string | undefined>) {
+  return parts.filter(Boolean).join(" · ") || copy.player.waiting;
 }
 
 function bitrateText(rate?: string) {
