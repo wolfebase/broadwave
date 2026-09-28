@@ -212,7 +212,7 @@ final class AccessibilityAuditTests: XCTestCase {
 
     private func assertAudit(_ app: XCUIApplication, _ page: String) throws {
         let types: XCUIAccessibilityAuditType = [.sufficientElementDescription, .trait, .elementDetection]
-        try app.performAccessibilityAudit(for: types) { [auditLog] issue in
+        try app.performAccessibilityAudit(for: types) { @MainActor [auditLog] issue in
             // The tvOS sidebar's back mark is a system image named for its symbol.
             // Its accessibility node ignores a new label. It is not a control we draw.
             let label = issue.element?.label ?? ""
@@ -229,7 +229,7 @@ final class AccessibilityAuditTests: XCTestCase {
 
     /// XXL may clip a one-line card title. That is a visual call. A clipped button name is not.
     private func assertClippedButtons(_ app: XCUIApplication, _ page: String) throws {
-        try app.performAccessibilityAudit(for: [.textClipped, .dynamicType]) { [auditLog] issue in
+        try app.performAccessibilityAudit(for: [.textClipped, .dynamicType]) { @MainActor [auditLog] issue in
             let line = "\(page) \(Self.describe(issue))"
             if issue.auditType == .textClipped, issue.element?.elementType == .button {
                 auditLog.fail(line)
