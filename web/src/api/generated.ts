@@ -305,7 +305,6 @@ export type ServerUpdate = {
 
 export type Settings = {
   layout?: string;
-  recordingsPath?: string;
   profile?: string;
   audio?: string;
   encoder?: string;

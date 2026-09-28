@@ -328,6 +328,7 @@ func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 		raw = values["watermarkGB"]
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
+		"path":        dir,
 		"freeBytes":   space.Free,
 		"totalBytes":  space.Total,
 		"watermarkGB": disk.WatermarkGB(raw),

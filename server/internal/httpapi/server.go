@@ -436,9 +436,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	if values["layout"] == "" {
 		values["layout"] = "auto"
 	}
-	if _, ok := values["recordingsPath"]; !ok {
-		values["recordingsPath"] = ""
-	}
+	delete(values, "recordingsPath")
 	if values["profile"] == "" {
 		values["profile"] = "transparent"
 	}

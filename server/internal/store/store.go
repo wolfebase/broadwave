@@ -390,7 +390,6 @@ func (s *Store) Settings(ctx context.Context) (map[string]string, error) {
 
 func (s *Store) PutSettings(ctx context.Context, values map[string]string) error {
 	allowed := map[string]bool{
-		"recordingsPath": true,
 		"layout":         true,
 		"profile":        true,
 		"audio":          true,
@@ -415,6 +414,11 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 	}
 	cleaned := map[string]string{}
 	for k, v := range values {
+		// Older apps still send it. Recordings go to the folder mounted at
+		// work/recordings, and a path typed in an app never moved them.
+		if k == "recordingsPath" {
+			continue
+		}
 		if !allowed[k] {
 			return fmt.Errorf("unknown setting %q", k)
 		}

@@ -94,7 +94,8 @@ func TestSettingsRejectUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got["layout"] != "tv" || got["recordingsPath"] != `D:\DVR` {
+	// An older app still sends the retired recordings folder; it saves the rest.
+	if _, kept := got["recordingsPath"]; got["layout"] != "tv" || kept {
 		t.Fatalf("%v", got)
 	}
 }

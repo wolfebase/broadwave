@@ -25,6 +25,7 @@ import type { Tuner } from "./api/generated";
 export type TunerStatus = Tuner;
 
 export type StorageInfo = {
+  path?: string;
   freeBytes: number;
   totalBytes: number;
   watermarkGB: number;

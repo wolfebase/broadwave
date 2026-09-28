@@ -546,6 +546,11 @@ func scrub(v any) {
 				t[k] = float64(0)
 			case "ffmpeg":
 				t[k] = "test"
+			case "path":
+				// The recordings folder is under the test's temp dir.
+				if s, ok := val.(string); ok && filepath.Base(s) == "recordings" {
+					t[k] = "/config/work/recordings"
+				}
 			case "detail":
 				// Free space and the low-disk notes depend on the machine.
 				if s, ok := val.(string); ok && diskDetail(s) {

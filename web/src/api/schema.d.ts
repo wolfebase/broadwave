@@ -1579,7 +1579,6 @@ export interface components {
         Settings: {
             /** @enum {string} */
             layout?: "auto" | "desktop" | "tv" | "phone";
-            recordingsPath?: string;
             /** @enum {string} */
             profile?: "transparent" | "balanced" | "saver";
             /** @enum {string} */
@@ -3489,6 +3488,8 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @description The recordings folder as the server sees it. In a container it is the folder mounted at /config/work/recordings. */
+                        path?: string;
                         /** Format: int64 */
                         freeBytes?: number;
                         /** Format: int64 */
