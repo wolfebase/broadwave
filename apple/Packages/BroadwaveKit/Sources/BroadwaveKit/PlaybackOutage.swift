@@ -118,10 +118,11 @@ public enum PlaybackOutage {
     /// How many times to ask before the message stays. A tuner that missed its
     /// first answer, or refused the channel, gets one more try. A full picture
     /// budget often still holds the layout just left, and those encodes free
-    /// one at a time.
+    /// one at a time. A page that left before its watch answered holds one
+    /// until the server sees nobody fetching it (15 s), so ask for 20 s.
     public static func startAttempts(code: String, message: String) -> Int {
         if code == "pictures_full" {
-            return 4
+            return 10
         }
         if code == "tuners_busy" || code == "no_signal" {
             return 1

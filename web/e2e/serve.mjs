@@ -499,6 +499,8 @@ if (playlist) {
   serverArgs = ["-config", config, ...listen, "-hdhr", hdhr, "-staging"];
   serverEnv = { ...process.env, BROADWAVE_E2E: "1", HDHR_CONTROL_PORT: control };
   if (quad) serverEnv.BROADWAVE_ENCODER ||= "software";
+  // E2E_SPEED=1.8 gives the server the picture budget of a machine that encodes at 1.8x.
+  if (process.env.E2E_SPEED) serverEnv.BROADWAVE_SPEED = process.env.E2E_SPEED;
 }
 // E2E_BROADWAVE runs this same harness against another binary. E2E_IMAGE runs
 // the server from a Docker image instead, on the host network so it reaches the
@@ -523,7 +525,7 @@ function launchServer() {
     return server;
   }
   removeContainer();
-  const env = ["BROADWAVE_E2E", "HDHR_CONTROL_PORT", "BROADWAVE_ENCODER"]
+  const env = ["BROADWAVE_E2E", "HDHR_CONTROL_PORT", "BROADWAVE_ENCODER", "BROADWAVE_SPEED"]
     .filter((key) => serverEnv[key])
     .flatMap((key) => ["-e", `${key}=${serverEnv[key]}`]);
   // Started as root with PUID and PGID, as the README installs it, so the

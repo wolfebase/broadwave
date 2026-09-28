@@ -167,15 +167,16 @@ func TestEarliestMediaUsesTheNewestRendition(t *testing.T) {
 }
 
 func TestPicturesCountsWatchedTranscodesOncePerFeed(t *testing.T) {
+	now := time.Now()
 	shared := &feed{renditions: map[string]*rendition{
-		"720":  {spec: Rendition{Video: "720"}, viewers: 2},
-		"copy": {spec: Rendition{Video: "copy"}, viewers: 1},
+		"720":  {spec: Rendition{Video: "720"}, viewers: 2, seen: now},
+		"copy": {spec: Rendition{Video: "copy"}, viewers: 1, seen: now},
 	}}
 	h := &Hub{Host: Host{Tiles: 2}, channels: map[int64]*feed{
 		4:  shared,
 		5:  shared,
 		9:  {renditions: map[string]*rendition{"360": {spec: Rendition{Video: "360"}}}},
-		11: {renditions: map[string]*rendition{"copy": {spec: Rendition{Video: "copy"}, viewers: 1}}},
+		11: {renditions: map[string]*rendition{"copy": {spec: Rendition{Video: "copy"}, viewers: 1, seen: now}}},
 	}}
 	used, limit, running := h.Pictures()
 	if used != 1 || limit != 2 {
@@ -183,6 +184,33 @@ func TestPicturesCountsWatchedTranscodesOncePerFeed(t *testing.T) {
 	}
 	if !running[4] || !running[5] || running[9] || running[11] {
 		t.Fatalf("running %v", running)
+	}
+}
+
+// A page that leaves before its watch answers never sends a stop. Its picture
+// must not hold the budget against the next one someone asks for.
+func TestAFullBudgetFreesAPictureNobodyFetches(t *testing.T) {
+	now := time.Now()
+	left := &feed{channel: store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "4.1"}}, renditions: map[string]*rendition{
+		"720": {spec: Rendition{Video: "720"}, viewers: 1, seen: now.Add(-stalePicture - time.Second)},
+	}}
+	watched := &feed{channel: store.SourceChannel{Channel: store.Channel{ID: 3, GuideNumber: "5.1"}}, renditions: map[string]*rendition{
+		"540": {spec: Rendition{Video: "540"}, viewers: 1, seen: now},
+	}}
+	asking := &feed{channel: store.SourceChannel{Channel: store.Channel{ID: 5, GuideNumber: "9.1"}}, renditions: map[string]*rendition{}}
+	h := &Hub{Host: Host{Tiles: 2}, channels: map[int64]*feed{1: left, 3: watched, 5: asking}}
+	if used, _, running := h.Pictures(); used != 1 || running[1] {
+		t.Fatalf("a stale picture counts: used %d running %v", used, running)
+	}
+	h.releaseIdleTranscodesLocked(asking, now)
+	if len(left.renditions) != 0 || h.channels[1] != nil {
+		t.Fatal("the stale picture and its tuner are still held")
+	}
+	if watched.renditions["540"] == nil || h.channels[5] != asking {
+		t.Fatal("a picture someone is fetching, or the feed asking, was stopped")
+	}
+	if h.transcodesLocked() != 1 {
+		t.Fatalf("transcodes %d", h.transcodesLocked())
 	}
 }
 

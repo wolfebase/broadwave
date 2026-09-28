@@ -147,7 +147,7 @@ test("a source that stopped sending goes on the quiet clock", () => {
 });
 
 test("a full picture budget is asked again while the last layout's encodes free up", () => {
-  assert.equal(startAttempts("pictures_full"), 4);
+  assert.equal(startAttempts("pictures_full"), 10);
   assert.equal(startAttempts("tuners_busy"), 1);
   assert.equal(startAttempts(undefined), 1);
   assert.equal(startRetryMs, 2000);
