@@ -98,6 +98,7 @@ func TestContractFixtures(t *testing.T) {
 
 	bus := realtime.NewBus()
 	bus.SetClock(func() time.Time { return contractNow })
+	bus.Boot = "contract"
 	st.OnEvent = func(ev store.Event) { bus.Publish("activity", ev) }
 	host, portText, err := net.SplitHostPort(strings.TrimPrefix(base, "http://"))
 	if err != nil {

@@ -71,6 +71,8 @@ type Data = {
   update?: ServerInfo["update"];
   /** Latest GET /api/v1/server, once it has answered. */
   server: ServerInfo | null;
+  /** When the lists on screen last came from the server or the saved copy (Unix ms). */
+  freshAt: number;
 };
 
 const Ctx = createContext<Data | null>(null);
@@ -121,6 +123,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [update, setUpdate] = useState<ServerInfo["update"]>();
   const [server, setServer] = useState<ServerInfo | null>(null);
   const loading = useRef(false);
+  const [freshAt, setFreshAt] = useState(0);
+  const loadFailed = useRef(false);
 
   const refresh = useCallback<Data["refresh"]>(async (what) => {
     const all = !what;
@@ -168,6 +172,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setAllChannels(sortChannels(snap.allChannels));
           setAirings(snap.airings);
           setRecordings(snap.recordings);
+          setFreshAt(snap.savedAt);
           setSettled(true);
           setBooting(false);
           setReady(true);
@@ -197,6 +202,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setAllChannels(allNow);
         setAirings(windowed.airings);
         setRecordings(recs.recordings);
+        setFreshAt(Date.now());
         setSettled(true);
         setReady(true);
         setBooting(false);
@@ -236,6 +242,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : "The server could not be reached.");
+        loadFailed.current = true;
         setReady(true);
         setSettled(true);
         setBooting(false);
@@ -252,7 +259,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const bus = events();
     const offActivity = bus.on("activity", (data) => {
       const kind = (data as { kind?: string }).kind;
-      if (kind === "recording") void refresh(["recordings", "passes"]);
+      if (kind === "recording" || kind === "delete") void refresh(["recordings", "passes"]);
       if (kind === "guide") void refresh(["airings"]);
       if (kind === "source") {
         const message = (data as { message?: string }).message;
@@ -265,7 +272,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
     });
     const offLive = bus.on("live.changed", () => void refresh(["recordings"]));
     const offFound = bus.on("sources.found", () => void refresh(["devices", "channels"]));
+    // Events sent while this tab was away are gone, so read everything again.
+    const back = () => {
+      void refresh()
+        .then(() => {
+          setFreshAt(Date.now());
+          if (loadFailed.current) {
+            loadFailed.current = false;
+            setError("");
+          }
+        })
+        .catch(() => undefined);
+    };
+    const offBack = bus.on("reconnected", back);
+    // A page opened while the server was down has not loaded anything yet.
+    const offFirst = bus.on("connection", (up) => {
+      if (up && loadFailed.current) back();
+    });
     return () => {
+      offBack();
+      offFirst();
       offActivity();
       offLive();
       offFound();
@@ -350,6 +376,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       dismissNotice,
       update,
       server,
+      freshAt,
       rediscover: async (ip) => {
         try {
           const res = await discover(ip);
@@ -361,7 +388,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh(["channels"]);
       },
     }),
-    [ready, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, storage, refresh, notices, dismissNotice, update, server],
+    [ready, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, storage, refresh, notices, dismissNotice, update, server, freshAt],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

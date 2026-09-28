@@ -1,5 +1,6 @@
 {
   "data": {
+    "boot": "contract",
     "serverTime": 1790262000000
   },
   "type": "hello"
