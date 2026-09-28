@@ -52,6 +52,9 @@ test("captions turned on follow the picture and go when turned off", async ({ pa
   writeFileSync(path.join(evidence, "player-captions.json"), JSON.stringify({ samples, track }, null, 2));
 
   expect(track?.mode).toBe("showing");
+  // hls.js's own in-band 608 track would be a second, empty "English" track.
+  const showing = await video.evaluate((el: HTMLVideoElement) => Array.from(el.textTracks).filter((t) => t.mode !== "disabled").map((t) => t.label));
+  expect(showing).toEqual(["English CC"]);
   const placed = samples.filter((s) => s.frag != null);
   expect(placed.length, JSON.stringify(samples)).toBeGreaterThanOrEqual(3);
   for (const s of placed) expect(Math.abs(s.at - s.frag!), JSON.stringify(s)).toBeLessThan(0.05);
