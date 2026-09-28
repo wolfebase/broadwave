@@ -309,6 +309,7 @@ export type Settings = {
   audio?: string;
   encoder?: string;
   watermarkGB?: string;
+  bufferMinutes?: string;
   pictureMode?: PictureMode;
   autoplay?: string;
   hdhrEmulate?: string;

@@ -10,7 +10,7 @@ export type Diagnostics = {
   encoder?: { name: string; hardware: boolean; deinterlace?: string; ffmpeg: string; line?: string; height?: number; focus?: string; tiles?: number };
   storage?: { Free: number; Total: number };
   guide?: { channels: number; channelsWithListings: number; airings: number; listingsUntil?: string; nextRefresh?: string; lastRefresh?: string; lastError?: string; lastErrorAt?: string };
-  relay?: { channelId: number; guideNumber: string; name: string; tuner: number; recording: boolean; exports: number; fieldOrder?: string; renditions: { key: string; viewers: number }[] }[];
+  relay?: { channelId: number; guideNumber: string; name: string; tuner: number; recording: boolean; exports: number; fieldOrder?: string; renditions: { key: string; viewers: number }[]; buffer?: { minutes: number; bytes: number; state: "on" | "off" | "full" } }[];
   connectedApps?: number;
   recentActivity?: { id: number; at: string; kind: string; message: string }[];
   doctor?: { id: string; message: string }[];

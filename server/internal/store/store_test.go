@@ -129,3 +129,21 @@ func numbers(channels []Channel) []string {
 	}
 	return out
 }
+
+func TestBufferMinutesTakesTheOfferedLengths(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, v := range []string{"0", "30", "60", "120", "240"} {
+		if err := s.PutSettings(context.Background(), map[string]string{"bufferMinutes": v}); err != nil {
+			t.Fatalf("%s: %v", v, err)
+		}
+	}
+	for _, v := range []string{"45", "-1", "one hour", ""} {
+		if err := s.PutSettings(context.Background(), map[string]string{"bufferMinutes": v}); err == nil {
+			t.Fatalf("%q should be refused", v)
+		}
+	}
+}

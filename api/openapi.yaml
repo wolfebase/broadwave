@@ -2004,6 +2004,7 @@ components:
         audio: { type: string, enum: [stereo, surround] }
         encoder: { type: string }
         watermarkGB: { type: string, description: "Free-space reserve in GB; 0 turns it off" }
+        bufferMinutes: { type: string, enum: ["0", "30", "60", "120", "240"], description: "Minutes of each tuned channel kept on disk, so a recording of a show already on starts from its beginning; 0 turns it off" }
         pictureMode: { $ref: "#/components/schemas/PictureMode" }
         autoplay: { type: string, enum: ["0", "1"] }
         hdhrEmulate: { type: string, enum: ["0", "1"] }

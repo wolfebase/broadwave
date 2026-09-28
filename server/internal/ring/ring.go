@@ -33,11 +33,11 @@ const (
 // is created, closed, or removed while mu is held: Append runs in the
 // tuner's read loop and must never wait on the disk.
 type Ring struct {
-	dir    string
-	window time.Duration
-	span   time.Duration
-	room   func(held int64) int64
-	now    func() time.Time
+	dir      string
+	windowFn func() time.Duration
+	span     time.Duration
+	room     func(held int64) int64
+	now      func() time.Time
 
 	mu       sync.Mutex
 	gen      int
@@ -49,7 +49,9 @@ type Ring struct {
 	segs     []*segment
 	marks    []mark
 	lastMark time.Time
+	window   time.Duration
 	low      bool
+	off      bool
 	closed   bool
 	wake     chan struct{}
 	done     chan struct{}
@@ -67,12 +69,13 @@ type mark struct {
 	pos int64
 }
 
-// Options configure a ring. Span is the length of one file on disk. Room is
-// how many more bytes the ring may hold, given what it holds now; below zero
-// the ring gives up its oldest files, and it stops writing if that is not
-// enough.
+// Options configure a ring. Window is read when the ring starts and at each
+// room check, so a new setting applies within roomEvery; zero turns the ring
+// off and empties it. Span is the length of one file on disk. Room is how
+// many more bytes the ring may hold, given what it holds now; below zero the
+// ring gives up its oldest files, and it stops writing if that is not enough.
 type Options struct {
-	Window time.Duration
+	Window func() time.Duration
 	Span   time.Duration
 	Room   func(held int64) int64
 	Now    func() time.Time
@@ -87,7 +90,10 @@ func Open(dir string, opt Options) *Ring {
 	if opt.Now == nil {
 		opt.Now = time.Now
 	}
-	r := &Ring{dir: dir, window: opt.Window, span: opt.Span, room: opt.Room, now: opt.Now,
+	if opt.Window == nil {
+		opt.Window = func() time.Duration { return 0 }
+	}
+	r := &Ring{dir: dir, windowFn: opt.Window, span: opt.Span, room: opt.Room, now: opt.Now,
 		wake: make(chan struct{}, 1), done: make(chan struct{})}
 	go r.flushLoop()
 	return r
@@ -99,9 +105,9 @@ func (r *Ring) Append(chunk []byte) {
 		return
 	}
 	r.mu.Lock()
-	if r.closed || r.low || r.queued+len(chunk) > pendingCap {
+	if r.closed || r.low || r.off || r.queued+len(chunk) > pendingCap {
 		var drop []string
-		if !r.closed && !r.low {
+		if !r.closed && !r.low && !r.off {
 			slog.Warn(fmt.Sprintf("ring: the disk fell %d MB behind the tuner; starting the buffer over", r.queued>>20))
 			drop = r.resetLocked()
 		}
@@ -311,6 +317,7 @@ func (r *Ring) flushLoop() {
 	}
 	tick := time.NewTicker(roomEvery)
 	defer tick.Stop()
+	r.checkWindow()
 	r.checkRoom()
 	for {
 		select {
@@ -318,6 +325,7 @@ func (r *Ring) flushLoop() {
 			return
 		case <-r.wake:
 		case <-tick.C:
+			r.checkWindow()
 			r.checkRoom()
 		}
 		for {
@@ -458,6 +466,48 @@ func (r *Ring) trimMarksLocked() {
 	if i > 0 {
 		r.marks = append(r.marks[:0], r.marks[i:]...)
 	}
+}
+
+// checkWindow applies the current window. Zero empties the ring and keeps it
+// off until the window is set again.
+func (r *Ring) checkWindow() {
+	w := r.windowFn()
+	r.mu.Lock()
+	var drop []string
+	r.window = w
+	switch {
+	case w <= 0 && !r.off:
+		drop = r.resetLocked()
+		r.flushed, r.start = r.received, r.received
+		r.off = true
+	case w > 0 && r.off:
+		r.off = false
+	}
+	if w > 0 {
+		drop = append(drop, r.trimLocked(r.now())...)
+	}
+	r.mu.Unlock()
+	removeFiles(drop)
+}
+
+// Stats is what the ring holds now: bytes on disk, the earliest time held,
+// and whether it is off by setting or paused for disk space.
+type Stats struct {
+	Bytes int64
+	Since time.Time
+	Off   bool
+	Low   bool
+}
+
+// Stats reports what the ring holds.
+func (r *Ring) Stats() Stats {
+	if r == nil {
+		return Stats{Off: true}
+	}
+	since := r.Since()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return Stats{Bytes: r.flushed - r.start, Since: since, Off: r.off, Low: r.low}
 }
 
 // checkRoom gives up the oldest files while the disk is under its floor. If

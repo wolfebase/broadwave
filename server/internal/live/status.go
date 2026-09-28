@@ -22,6 +22,8 @@ type FeedStatus struct {
 	Recording   bool              `json:"recording"`
 	Exports     int               `json:"exports"`
 	FieldOrder  string            `json:"fieldOrder,omitempty"`
+	// Buffer is the frequency's ring, when the hub keeps one.
+	Buffer *BufferStatus `json:"buffer,omitempty"`
 }
 
 // FeedStat is one tuned channel: viewers and the ffmpeg processes on it.
@@ -86,6 +88,7 @@ func (h *Hub) Status() []FeedStatus {
 		}
 		if m := muxOf(h, f); m != nil {
 			st.Tuner = m.tuner
+			st.Buffer = bufferStatus(m)
 		}
 		for key, r := range f.renditions {
 			st.Renditions = append(st.Renditions, RenditionStatus{Key: key, Viewers: r.viewers})

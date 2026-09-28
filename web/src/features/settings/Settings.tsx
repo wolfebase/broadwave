@@ -208,6 +208,20 @@ export function SettingsScreen({
         <span className="hint">{copy.settings.recordingsHint}</span>
       </label>
       <ReserveField value={settings.watermarkGB || "10"} storage={storage} onSave={(watermarkGB) => onChange({ watermarkGB })} />
+      <label className="field">
+        {copy.settings.buffer}
+        <select
+          value={settings.bufferMinutes ?? "60"}
+          onChange={(event) => onChange({ bufferMinutes: event.target.value as Settings["bufferMinutes"] })}
+        >
+          <option value="0">Off</option>
+          <option value="30">30 minutes</option>
+          <option value="60">1 hour</option>
+          <option value="120">2 hours</option>
+          <option value="240">4 hours</option>
+        </select>
+        <span className="hint">{copy.settings.bufferHint}</span>
+      </label>
       <h3 className="section-title">{copy.settings.backups}</h3>
       <BackupList />
       <a className="btn" href="/api/v1/backup">

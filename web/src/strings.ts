@@ -46,6 +46,8 @@ export const copy = {
     recordingsHint: "The original broadcast files. To keep them somewhere else, mount that folder at /config/work/recordings.",
     reserve: "Keep this much free",
     reserveHint: "Use 0 to turn the reserve off. A show already recording is left alone.",
+    buffer: "Keep for recording from the start",
+    bufferHint: "While a channel is on, the server keeps up to this much of it, so recording a show already on starts from its beginning. It uses at most half the free space.",
     backup: "Download backup",
     backups: "Backups",
     backupHint: "The backup is the catalog. Recordings stay put. Seven nightly copies and four weekly copies are kept. A copy is saved before an update.",
