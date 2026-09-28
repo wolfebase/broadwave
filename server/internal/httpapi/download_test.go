@@ -43,8 +43,24 @@ func TestDownloadRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	shelf := filepath.Join(dir, "shelf")
+	if err := os.MkdirAll(shelf, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	movie := filepath.Join(shelf, "Movie.mp4")
+	if err := os.WriteFile(movie, payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stray := filepath.Join(dir, "stray.mp4")
+	if err := os.WriteFile(stray, secret, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	st := testStore(t)
 	ctx := context.Background()
+	if _, err := st.AddSource(ctx, "folder", "Shelf", shelf, ""); err != nil {
+		t.Fatal(err)
+	}
 	idOf := func(path string) int64 {
 		t.Helper()
 		id, err := st.CreateRecording(ctx, store.Recording{
@@ -63,6 +79,8 @@ func TestDownloadRecording(t *testing.T) {
 	escapeID := idOf(root + "/../secret.ts")
 	outsideID := idOf(outside)
 	linkID := idOf(link)
+	movieID := idOf(movie)
+	strayID := idOf(stray)
 
 	h := (&Server{Store: st, Hub: &live.Hub{Store: st, Dir: dir}}).Handler()
 	fileURL := func(id int64) string {
@@ -76,6 +94,7 @@ func TestDownloadRecording(t *testing.T) {
 		filename  string
 		body      []byte
 		notSecret bool
+		kind      string
 	}{
 		{name: "unknown id", path: "/api/v1/recordings/999999/file", want: http.StatusNotFound},
 		{name: "file gone", path: fileURL(goneID), want: http.StatusNotFound},
@@ -86,6 +105,8 @@ func TestDownloadRecording(t *testing.T) {
 		{name: "dotdot", path: fileURL(escapeID), want: http.StatusNotFound, notSecret: true},
 		{name: "outside", path: fileURL(outsideID), want: http.StatusNotFound, notSecret: true},
 		{name: "symlink", path: fileURL(linkID), want: http.StatusNotFound, notSecret: true},
+		{name: "library folder", path: fileURL(movieID), want: http.StatusOK, filename: "Movie.mp4", body: payload, kind: "video/mp4"},
+		{name: "media outside every folder", path: fileURL(strayID), want: http.StatusNotFound, notSecret: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -128,8 +149,12 @@ func TestDownloadRecording(t *testing.T) {
 			if gotName != tc.filename || gotName != filepath.Base(gotName) || strings.ContainsAny(gotName, `/\`) {
 				t.Fatalf("filename %q, want %q", gotName, tc.filename)
 			}
-			if rec.Header().Get("Content-Type") != "video/mp2t" {
-				t.Fatalf("content type %s", rec.Header().Get("Content-Type"))
+			wantKind := tc.kind
+			if wantKind == "" {
+				wantKind = "video/mp2t"
+			}
+			if rec.Header().Get("Content-Type") != wantKind {
+				t.Fatalf("content type %s, want %s", rec.Header().Get("Content-Type"), wantKind)
 			}
 		})
 	}

@@ -197,8 +197,9 @@ func (s *Server) downloadRecording(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
-	// rec.Path is stored data. A ".." or a symlink must not leave the recordings folder.
-	path, ok := recordingInside(s.recordingsRoot(), rec.Path)
+	// rec.Path is stored data. A ".." or a symlink must not leave the
+	// recordings folder or a library folder the owner added.
+	path, ok := recordingInside(s.downloadRoots(r.Context()), rec.Path)
 	if !ok {
 		httpError(w, "recording not found", http.StatusNotFound)
 		return
@@ -214,30 +215,51 @@ func (s *Server) downloadRecording(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "video/mp2t")
+	w.Header().Set("Content-Type", downloadTypes[strings.ToLower(filepath.Ext(path))])
 	w.Header().Set("Content-Disposition", attachmentDisposition(filepath.Base(path)))
 	http.ServeContent(w, r, filepath.Base(path), info.ModTime(), f)
 }
 
-func (s *Server) recordingsRoot() string {
-	if s == nil || s.Hub == nil || s.Hub.Dir == "" {
-		return ""
-	}
-	return filepath.Join(s.Hub.Dir, "recordings")
+// downloadTypes are the files a recording or a library folder item can be.
+var downloadTypes = map[string]string{
+	".ts":  "video/mp2t",
+	".mp4": "video/mp4",
+	".m4v": "video/x-m4v",
+	".mkv": "video/x-matroska",
+	".mov": "video/quicktime",
 }
 
-// recordingInside is the cleaned path when it is a .ts file inside root.
-// A missing file still counts, so the caller can answer 404. A symlink that
-// resolves outside root does not.
-func recordingInside(root, stored string) (string, bool) {
-	if root == "" || stored == "" {
+func (s *Server) downloadRoots(ctx context.Context) []string {
+	var roots []string
+	if s.Hub != nil && s.Hub.Dir != "" {
+		roots = append(roots, filepath.Join(s.Hub.Dir, "recordings"))
+	}
+	sources, _ := s.Store.Sources(ctx)
+	for _, src := range sources {
+		if src.Kind == "folder" && strings.TrimSpace(src.URL) != "" {
+			roots = append(roots, strings.TrimSpace(src.URL))
+		}
+	}
+	return roots
+}
+
+// recordingInside is the cleaned path when it is a media file inside one of
+// roots. A missing file still counts, so the caller can answer 404. A symlink
+// that resolves outside every root does not.
+func recordingInside(roots []string, stored string) (string, bool) {
+	if stored == "" {
 		return "", false
 	}
 	clean := filepath.Clean(stored)
-	if !strings.EqualFold(filepath.Ext(clean), ".ts") || !pathInside(root, clean) {
+	if downloadTypes[strings.ToLower(filepath.Ext(clean))] == "" {
 		return "", false
 	}
-	return clean, true
+	for _, root := range roots {
+		if pathInside(root, clean) {
+			return clean, true
+		}
+	}
+	return "", false
 }
 
 func pathInside(root, candidate string) bool {
