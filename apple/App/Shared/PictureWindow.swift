@@ -1,0 +1,128 @@
+import AVKit
+import BroadwaveKit
+import BroadwaveUI
+import os
+import SwiftUI
+
+#if os(iOS)
+    /// System route button. The spoken name is AirPlay, and a tap opens the picker.
+    struct AirPlayRoute: View {
+        var compact = false
+        var onPresent: () -> Void = {}
+
+        var body: some View {
+            let radius: CGFloat = compact ? 22 : Tokens.Radius.lg
+            AirPlayPicker(onPresent: onPresent)
+                .frame(width: 44, height: 44)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: compact ? .center : .top)
+                .padding(.top, compact ? 0 : 4)
+                .frame(height: compact ? 44 : 64)
+                .background {
+                    // Glass behind the picker, not around it: the picker is the hit target.
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(Color.clear)
+                        .glassEffect(in: .rect(cornerRadius: radius))
+                        .allowsHitTesting(false)
+                }
+                .overlay(alignment: .bottom) {
+                    if !compact {
+                        Text(PictureHandoff.airPlayLabel)
+                            .font(.caption2.weight(.semibold))
+                            .padding(.bottom, 6)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
+        }
+    }
+
+    private struct AirPlayPicker: UIViewRepresentable {
+        var onPresent: () -> Void
+
+        func makeUIView(context: Context) -> AirPlayPickerView {
+            let picker = AirPlayPickerView(frame: CGRect(x: 0, y: 0, width: 44, height: 44))
+            picker.prioritizesVideoDevices = true
+            picker.delegate = context.coordinator
+            return picker
+        }
+
+        func updateUIView(_: AirPlayPickerView, context: Context) {
+            context.coordinator.onPresent = onPresent
+        }
+
+        func makeCoordinator() -> Presenting {
+            Presenting(onPresent: onPresent)
+        }
+
+        @MainActor
+        final class Presenting: NSObject, AVRoutePickerViewDelegate {
+            var onPresent: () -> Void
+
+            init(onPresent: @escaping () -> Void) {
+                self.onPresent = onPresent
+            }
+
+            nonisolated func routePickerViewWillBeginPresentingRoutes(_: AVRoutePickerView) {
+                MainActor.assumeIsolated { self.onPresent() }
+            }
+        }
+    }
+
+    /// Names the inner button. The picker's own label is the symbol name until this runs.
+    private final class AirPlayPickerView: AVRoutePickerView {
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            guard let button = subviews.compactMap({ $0 as? UIButton }).first,
+                  button.accessibilityIdentifier != "airplay" else { return }
+            button.accessibilityLabel = PictureHandoff.airPlayLabel
+            button.accessibilityIdentifier = "airplay"
+        }
+    }
+
+    /// Keeps the watch while Picture in Picture has the picture, and comes back to the same player.
+    /// UIKit calls the delegate on the main thread but off the actor, so each method hops before touching state.
+    @MainActor
+    final class PictureDelegate: NSObject, AVPlayerViewControllerDelegate {
+        var onChange: ((Bool) -> Void)?
+        var onRestore: (() -> Void)?
+        var onClosed: (() -> Void)?
+        private var restoring = false
+
+        nonisolated func playerViewControllerWillStartPictureInPicture(_: AVPlayerViewController) {
+            MainActor.assumeIsolated { self.onChange?(true) }
+        }
+
+        nonisolated func playerViewController(_: AVPlayerViewController, failedToStartPictureInPictureWithError error: Error) {
+            let text = error.localizedDescription
+            MainActor.assumeIsolated { self.onChange?(false) }
+            Logger(subsystem: "com.wolfeup.broadwave", category: "play").error("pip failed \(text, privacy: .public)")
+        }
+
+        nonisolated func playerViewControllerShouldAutomaticallyDismissAtPictureInPictureStart(_: AVPlayerViewController) -> Bool {
+            PictureHandoff.dismissWhenPictureInPictureStarts
+        }
+
+        nonisolated func playerViewController(
+            _: AVPlayerViewController,
+            restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
+        ) {
+            MainActor.assumeIsolated {
+                self.restoring = true
+                self.onRestore?()
+            }
+            completionHandler(true)
+        }
+
+        nonisolated func playerViewControllerDidStopPictureInPicture(_: AVPlayerViewController) {
+            MainActor.assumeIsolated {
+                let away = UIApplication.shared.applicationState != .active
+                let stop = PictureHandoff.stopWhenClosed(restored: self.restoring, away: away)
+                self.restoring = false
+                self.onChange?(false)
+                if stop {
+                    self.onClosed?()
+                }
+            }
+        }
+    }
+#endif

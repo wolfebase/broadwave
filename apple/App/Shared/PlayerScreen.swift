@@ -41,9 +41,12 @@ final class LivePlayer {
     private(set) var stallMs = 0
     private var stallStarted: Date?
     private var lastBeat = Date()
+    private var clockLogged = Date.distantPast
     /// Nominal frame rate once the asset reports it. Zero until then.
     private(set) var refreshRate: Float = 0
     private(set) var picture = PictureStats()
+    /// The small window has the picture.
+    private(set) var pictureInPicture = false
     private var statsTask: Task<Void, Never>?
     /// The watch still waiting for its first segment. A newer channel cancels it
     /// so that tuner is not held until the request times out.
@@ -106,6 +109,28 @@ final class LivePlayer {
         )
         watchLifecycle()
         listenForRestart(store.socket)
+        #if os(iOS)
+            let session = AVAudioSession.sharedInstance()
+            // Automatic is what starts the small window on Home. continuesIfPossible
+            // keeps the picture in the background with no window at all.
+            player.audiovisualBackgroundPlaybackPolicy = .automatic
+            player.allowsExternalPlayback = true
+            do {
+                try session.setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo)
+                try session.setActive(true)
+            } catch {
+                playLogNote("audio session \(error.localizedDescription)")
+            }
+            if UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") {
+                let supported = AVPictureInPictureController.isPictureInPictureSupported()
+                playLogNote("pip supported \(supported ? "yes" : "no")")
+                // The unified log buffers while the app is away, so a test cannot
+                // see the clock move. This file is written as it plays.
+                let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent("broadwave-clock.txt")
+                try? Data().write(to: url)
+            }
+        #endif
         let caps = Capabilities.current()
         let prefs = store.prefs
         rewatch = { try await api.watch(channelID: channel.id, caps: caps, prefs: prefs, confirmLive: false) }
@@ -278,6 +303,12 @@ final class LivePlayer {
         attempt += 1
     }
 
+    func notePictureInPicture(_ on: Bool) {
+        guard on != pictureInPicture else { return }
+        pictureInPicture = on
+        playLogNote(on ? "pip start" : "pip stop")
+    }
+
     func stop(endPicture: Bool = true) async {
         if let restartToken {
             restartToken.socket.off("restarted", restartToken.id)
@@ -385,6 +416,38 @@ final class LivePlayer {
         }
         next.fps = refreshRate
         picture = next
+        noteClock()
+    }
+
+    /// One info line a second while sync logging is on. The debug sync line is
+    /// buffered, so a test that reads the log as it grows never sees it move.
+    private func noteClock() {
+        guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") else { return }
+        guard Date().timeIntervalSince(clockLogged) >= 0.9 else { return }
+        guard let item = player.currentItem else { return }
+        let ms: Double
+        if let date = item.currentDate() {
+            ms = date.timeIntervalSince1970 * 1000
+        } else {
+            let seconds = CMTimeGetSeconds(item.currentTime())
+            guard seconds.isFinite else { return }
+            ms = seconds * 1000
+        }
+        clockLogged = Date()
+        let stalls = item.accessLog()?.events.last?.numberOfStalls ?? 0
+        let media = Int(ms.rounded())
+        playLogNote("clock media=\(media) stalls=\(stalls)")
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("broadwave-clock.txt")
+        let line = Data("media=\(media) stalls=\(stalls)\n".utf8)
+        if FileManager.default.fileExists(atPath: url.path), let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: line)
+            try? handle.synchronize()
+        } else {
+            try? line.write(to: url)
+        }
     }
 
     private func watchStartup(_ item: AVPlayerItem) {
@@ -420,6 +483,7 @@ final class LivePlayer {
                     print("broadwave ttff \(self.firstFrameMs ?? 0)ms")
                 }
                 self.noteMoving()
+                self.noteClock()
                 if let start = self.stallStarted, self.player.timeControlStatus == .playing {
                     self.stallMs += Int(Date().timeIntervalSince(start) * 1000)
                     self.stallStarted = nil
@@ -563,7 +627,19 @@ struct PlayerScreen: View {
                         nowPlaying.watchTogether([channel])
                     }
                 },
-                rejoin: live.sync?.detached == true ? { live.sync?.rejoin() } : nil
+                rejoin: live.sync?.detached == true ? { live.sync?.rejoin() } : nil,
+                onPictureInPicture: { live.notePictureInPicture($0) },
+                onPictureRestore: {
+                    live.playLogNote("pip restore \(nowPlaying.channel.map { String($0.id) } ?? "-")")
+                    if nowPlaying.channel != nil {
+                        nowPlaying.expanded = true
+                    }
+                },
+                onPictureClosed: {
+                    live.playLogNote("pip closed")
+                    nowPlaying.expanded = false
+                    Task { await live.stop() }
+                }
             )
             .ignoresSafeArea()
             if tuning, let channel = nowPlaying.channel {
@@ -923,6 +999,13 @@ struct PlayerScreen: View {
                 controlButton(showStream ? "Hide stream" : "Stream", systemImage: "info.circle", id: "portrait-stream") {
                     showStream.toggle()
                 }
+                airPlayControl
+            }
+        }
+
+        private var airPlayControl: some View {
+            AirPlayRoute {
+                live.playLogNote("airplay open")
             }
         }
 
@@ -1001,6 +1084,10 @@ struct PlayerScreen: View {
                 .labelStyle(.iconOnly)
                 .buttonStyle(.glass)
                 .accessibilityLabel("Audio")
+                AirPlayRoute(compact: true) {
+                    live.playLogNote("airplay open")
+                }
+                .frame(width: 44, height: 44)
                 GlassEffectContainer {
                     HStack(spacing: 6) {
                         Button("Previous channel", systemImage: "chevron.up") { step(-1) }
@@ -1133,6 +1220,9 @@ struct SystemPlayer: UIViewControllerRepresentable {
     var liveMenu = true
     /// A recording's own entries, shown instead of the live menu.
     var fileMenu: [FileMenuEntry] = []
+    var onPictureInPicture: (Bool) -> Void = { _ in }
+    var onPictureRestore: () -> Void = {}
+    var onPictureClosed: () -> Void = {}
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -1144,6 +1234,10 @@ struct SystemPlayer: UIViewControllerRepresentable {
         vc.allowsPictureInPicturePlayback = true
         #if os(iOS)
             vc.canStartPictureInPictureAutomaticallyFromInline = true
+            vc.delegate = context.coordinator.picture
+            context.coordinator.picture.onChange = onPictureInPicture
+            context.coordinator.picture.onRestore = onPictureRestore
+            context.coordinator.picture.onClosed = onPictureClosed
         #endif
         #if os(tvOS)
             vc.appliesPreferredDisplayCriteriaAutomatically = false
@@ -1185,6 +1279,12 @@ struct SystemPlayer: UIViewControllerRepresentable {
         if vc.player !== player {
             vc.player = player
         }
+        #if os(iOS)
+            vc.delegate = context.coordinator.picture
+            context.coordinator.picture.onChange = onPictureInPicture
+            context.coordinator.picture.onRestore = onPictureRestore
+            context.coordinator.picture.onClosed = onPictureClosed
+        #endif
         #if os(tvOS)
             context.coordinator.start(vc)
             context.coordinator.noteHint(hint, on: vc)
@@ -1232,6 +1332,9 @@ struct SystemPlayer: UIViewControllerRepresentable {
     /// clears the mode while the window still exists.
     @MainActor
     final class Coordinator {
+        #if os(iOS)
+            let picture = PictureDelegate()
+        #endif
         #if os(tvOS)
             var menuKey: [String] = []
             var skipShown = false

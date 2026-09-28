@@ -9,7 +9,8 @@ struct BroadwaveApp: App {
 
     init() {
         #if os(iOS)
-            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+            // longFormVideo is what lets Home start Picture in Picture and AirPlay offer a television.
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo)
         #endif
     }
 
