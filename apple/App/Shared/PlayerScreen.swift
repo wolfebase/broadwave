@@ -45,6 +45,8 @@ final class LivePlayer {
     /// Nominal frame rate once the asset reports it. Zero until then.
     private(set) var refreshRate: Float = 0
     private(set) var picture = PictureStats()
+    /// Earliest time the current item can seek to. Nil until it has a program date.
+    private(set) var seekableFrom: Date?
     /// The small window has the picture.
     private(set) var pictureInPicture = false
     private var statsTask: Task<Void, Never>?
@@ -259,6 +261,24 @@ final class LivePlayer {
         attempt += 1
     }
 
+    /// Jump to a show's start. Pausing first is the viewer's pause, so sync
+    /// leaves this screen where it landed instead of pulling it back to live.
+    func jump(to date: Date) {
+        player.pause()
+        let token = watchToken
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard token == watchToken, player.currentItem != nil else { return }
+            player.seek(to: date) { [weak self] finished in
+                Task { @MainActor in
+                    guard finished, let self, token == self.watchToken else { return }
+                    self.player.play()
+                    self.playLogNote("start over")
+                }
+            }
+        }
+    }
+
     /// A restarted server has lost this watch. Start it again now instead of
     /// waiting for the picture to run dry and the stall clock to name it.
     private func listenForRestart(_ socket: EventSocket?) {
@@ -321,6 +341,7 @@ final class LivePlayer {
         statsTask?.cancel()
         statsTask = nil
         picture = PictureStats()
+        seekableFrom = nil
         moving = false
         movingFrom = nil
         if endPicture {
@@ -418,7 +439,21 @@ final class LivePlayer {
         }
         next.fps = refreshRate
         picture = next
+        seekableFrom = seekableStart(item)
         noteClock()
+    }
+
+    private func seekableStart(_ item: AVPlayerItem) -> Date? {
+        guard let date = item.currentDate() else { return nil }
+        let now = CMTimeGetSeconds(item.currentTime())
+        var earliest: Double?
+        for value in item.seekableTimeRanges {
+            let start = CMTimeGetSeconds(value.timeRangeValue.start)
+            guard start.isFinite else { continue }
+            earliest = min(earliest ?? start, start)
+        }
+        guard let earliest else { return nil }
+        return SeekWindow.start(current: date, currentSeconds: now, earliestSeconds: earliest)
     }
 
     /// One info line a second while sync logging is on. The debug sync line is
@@ -590,6 +625,17 @@ struct PlayerScreen: View {
     #endif
     @State private var live = LivePlayer()
     @State private var showStream = false
+    /// Fill crops the picture. Fit shows the whole frame. Pinch on iPhone switches them.
+    @State private var fillPicture = false
+    #if os(iOS)
+        /// Last scale from the pinch, in case `onEnded` reports a smaller move.
+        @State private var pinchScale: CGFloat = 1
+    #endif
+    /// True while the Apple TV transport bar is on screen. Swipes change channel only when it is not.
+    @State private var transportShown = true
+    /// A recording that holds this showing's start, played from Start over.
+    @State private var startOverRecording: Recording?
+    @State private var lastChannelStep = Date.distantPast
     #if os(iOS)
         @State private var showGuide = false
     #endif
@@ -641,7 +687,22 @@ struct PlayerScreen: View {
                     live.playLogNote("pip closed")
                     nowPlaying.expanded = false
                     Task { await live.stop() }
-                }
+                },
+                channelNumber: nowPlaying.channel?.displayNumber ?? "",
+                recording: nowPlaying.channel.flatMap { store.activeRecording(on: $0) } != nil,
+                canStartOver: startOverChoice != nil,
+                fill: fillPicture,
+                onRecord: {
+                    if let channel = nowPlaying.channel {
+                        Task { await store.toggleRecord(channel) }
+                    }
+                },
+                onStartOver: beginStartOver,
+                onStep: { step($0) },
+                onTransport: { transportShown = $0 },
+                panelStore: store,
+                panelNow: nowPlaying,
+                panelLive: live
             )
             .ignoresSafeArea()
             if tuning, let channel = nowPlaying.channel {
@@ -652,6 +713,17 @@ struct PlayerScreen: View {
                 overlay
             #endif
             #if os(tvOS) && DEBUG
+                if UserDefaults.standard.bool(forKey: "BroadwaveChannelNow") {
+                    Group {
+                        Text(transportShown ? "shown" : "hidden")
+                            .accessibilityIdentifier("transportProbe")
+                        Text(transportMenuNames.joined(separator: "|"))
+                            .accessibilityIdentifier("menuProbe")
+                    }
+                    .font(.system(size: 2))
+                    .foregroundStyle(.clear)
+                    .allowsHitTesting(false)
+                }
                 // Store shots need the title on screen. The system bar hides itself.
                 if UserDefaults.standard.bool(forKey: "BroadwaveInfo") {
                     tvInfo
@@ -673,6 +745,13 @@ struct PlayerScreen: View {
                 }
             #endif
             #if DEBUG
+                if UserDefaults.standard.bool(forKey: "BroadwaveChannelNow") {
+                    Text(nowPlaying.channel?.displayNumber ?? "")
+                        .font(.system(size: 2))
+                        .foregroundStyle(.clear)
+                        .allowsHitTesting(false)
+                        .accessibilityIdentifier("channel-now")
+                }
                 if UserDefaults.standard.bool(forKey: "BroadwaveSyncProbe") {
                     SyncProbe(sync: live.sync)
                 }
@@ -735,8 +814,14 @@ struct PlayerScreen: View {
         }
         #endif
         .onDisappear {
+            // The recording cover sits on this screen. Closing the player is what stops the watch.
+            guard startOverRecording == nil else { return }
             Task { await live.stop() }
         }
+        .fullScreenCover(item: $startOverRecording, onDismiss: { live.retry() }, content: { recording in
+            RecordingPlayerScreen(recording: recording)
+                .environment(store)
+        })
         #if DEBUG
             #if os(iOS)
                 // The host writes portrait or landscape. Rotating the Simulator window would
@@ -809,9 +894,52 @@ struct PlayerScreen: View {
     #endif
 
     private func step(_ dir: Int) {
+        let now = Date()
+        // A swipe can also arrive as an arrow press. One move is enough.
+        guard now.timeIntervalSince(lastChannelStep) > 0.35 else { return }
+        lastChannelStep = now
         guard let current = nowPlaying.channel, let i = store.channels.firstIndex(of: current) else { return }
         let next = store.channels[(i + dir + store.channels.count) % store.channels.count]
         nowPlaying.channel = next
+        live.playLogNote("step \(dir) \(next.displayNumber)")
+    }
+
+    #if os(tvOS)
+        /// Names in the transport menu. The bar's own entries stay out of the accessibility tree.
+        private var transportMenuNames: [String] {
+            let recording = nowPlaying.channel.flatMap { store.activeRecording(on: $0) } != nil
+            var names = ["Channels", "Audio", recording ? "Stop recording" : "Record", "Multiview"]
+            if startOverChoice != nil {
+                names.append("Start over")
+            }
+            if live.sync?.detached == true {
+                names.insert("Back in sync", at: 0)
+            }
+            return names
+        }
+    #endif
+
+    /// The live window wins. Otherwise a recording of this showing plays from its start.
+    private var startOverChoice: StartOver? {
+        guard let channel = nowPlaying.channel, let airing = store.index.on(channel.id, at: store.now) else { return nil }
+        let held = ShowRecording.holdingStart(of: airing, in: store.recordings)
+        return StartOver.choice(showStart: airing.start, seekableFrom: live.seekableFrom, recordingStarted: held?.startedAt)
+    }
+
+    private func beginStartOver() {
+        guard let channel = nowPlaying.channel, let airing = store.index.on(channel.id, at: store.now) else { return }
+        switch startOverChoice {
+        case .live:
+            live.jump(to: airing.start)
+        case .recording:
+            guard let recording = ShowRecording.holdingStart(of: airing, in: store.recordings) else { return }
+            Task {
+                await live.stop()
+                startOverRecording = recording
+            }
+        case nil:
+            break
+        }
     }
 
     private var audioMenu: [ChannelMenuEntry] {
@@ -878,13 +1006,58 @@ struct PlayerScreen: View {
     }
 
     #if os(iOS)
-        @ViewBuilder
         private var overlay: some View {
-            if portraitChrome {
-                portraitOverlay
-            } else {
-                landscapeBar
+            ZStack {
+                gesturePad
+                if portraitChrome {
+                    portraitOverlay
+                } else {
+                    landscapeBar
+                }
             }
+        }
+
+        /// Swipe up for the previous channel, down for the next. Pinch out fills the screen.
+        /// The pad sits in the open picture. A pinch starts at the pad's edges, and the chrome covers those.
+        private var gesturePad: some View {
+            let compact = verticalSize == .compact
+            return Color.clear
+                .contentShape(Rectangle())
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .gesture(channelDrag)
+                .simultaneousGesture(fillPinch)
+                .accessibilityElement()
+                .accessibilityLabel("Picture")
+                .accessibilityValue(fillPicture ? "Fill" : "Fit")
+                .accessibilityIdentifier("player-gesture")
+                .padding(.top, compact ? 40 : 156)
+                .padding(.bottom, compact ? 72 : 200)
+                .padding(.leading, 16)
+                .padding(.trailing, compact ? 16 : 108)
+        }
+
+        private var channelDrag: some Gesture {
+            DragGesture(minimumDistance: 24)
+                .onEnded { value in
+                    let dx = value.translation.width
+                    let dy = value.translation.height
+                    guard abs(dy) > abs(dx), abs(dy) > 80 else { return }
+                    step(dy < 0 ? ChannelStep.offset(up: true) : ChannelStep.offset(up: false))
+                }
+        }
+
+        private var fillPinch: some Gesture {
+            MagnificationGesture()
+                .onChanged { pinchScale = $0 }
+                .onEnded { scale in
+                    let amount = abs(pinchScale - 1) > abs(scale - 1) ? pinchScale : scale
+                    pinchScale = 1
+                    guard abs(amount - 1) > 0.08 else { return }
+                    let fill = amount > 1
+                    guard fill != fillPicture else { return }
+                    fillPicture = fill
+                    live.playLogNote(fill ? "fill" : "fit")
+                }
         }
 
         private var portraitOverlay: some View {
@@ -1225,15 +1398,28 @@ struct SystemPlayer: UIViewControllerRepresentable {
     var onPictureInPicture: (Bool) -> Void = { _ in }
     var onPictureRestore: () -> Void = {}
     var onPictureClosed: () -> Void = {}
+    var channelNumber = ""
+    var recording = false
+    /// Start over is omitted when neither the picture nor a recording holds the show's start.
+    var canStartOver = false
+    var fill = false
+    var onRecord: () -> Void = {}
+    var onStartOver: () -> Void = {}
+    var onStep: (Int) -> Void = { _ in }
+    var onTransport: (Bool) -> Void = { _ in }
+    var panelStore: AppStore?
+    var panelNow: NowPlaying?
+    var panelLive: LivePlayer?
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
 
-    func makeUIViewController(context: Context) -> AVPlayerViewController {
-        let vc = AVPlayerViewController()
+    func makeUIViewController(context: Context) -> LivePlayerController {
+        let vc = LivePlayerController()
         vc.player = player
         vc.allowsPictureInPicturePlayback = true
+        vc.onStep = onStep
         #if os(iOS)
             vc.canStartPictureInPictureAutomaticallyFromInline = true
             vc.delegate = context.coordinator.picture
@@ -1242,6 +1428,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
             context.coordinator.picture.onClosed = onPictureClosed
         #endif
         #if os(tvOS)
+            vc.delegate = vc
+            vc.onTransport = onTransport
             vc.appliesPreferredDisplayCriteriaAutomatically = false
             context.coordinator.start(vc)
         #endif
@@ -1249,7 +1437,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
     }
 
     #if os(tvOS)
-        static func dismantleUIViewController(_ vc: AVPlayerViewController, coordinator: Coordinator) {
+        static func dismantleUIViewController(_ vc: LivePlayerController, coordinator: Coordinator) {
             coordinator.stop()
             vc.view.window?.avDisplayManager.preferredDisplayCriteria = nil
         }
@@ -1277,17 +1465,30 @@ struct SystemPlayer: UIViewControllerRepresentable {
         }
     #endif
 
-    func updateUIViewController(_ vc: AVPlayerViewController, context: Context) {
+    func updateUIViewController(_ vc: LivePlayerController, context: Context) {
         if vc.player !== player {
             vc.player = player
         }
+        vc.onStep = onStep
+        vc.view.accessibilityIdentifier = "player-channel"
+        if !channelNumber.isEmpty {
+            vc.view.accessibilityValue = channelNumber
+        }
         #if os(iOS)
+            let gravity: AVLayerVideoGravity = fill ? .resizeAspectFill : .resizeAspect
+            if vc.videoGravity != gravity {
+                vc.videoGravity = gravity
+            }
             vc.delegate = context.coordinator.picture
             context.coordinator.picture.onChange = onPictureInPicture
             context.coordinator.picture.onRestore = onPictureRestore
             context.coordinator.picture.onClosed = onPictureClosed
         #endif
         #if os(tvOS)
+            vc.onTransport = onTransport
+            if liveMenu, let store = panelStore, let now = panelNow, let live = panelLive {
+                context.coordinator.installPanels(on: vc, store: store, now: now, live: live)
+            }
             context.coordinator.start(vc)
             context.coordinator.noteHint(hint, on: vc)
             context.coordinator.sample(vc)
@@ -1309,7 +1510,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
             }
             // Setting the items redraws the transport bar and keeps it on screen,
             // so a view update that changes nothing must leave them alone.
-            let key = (menu + audio).map { "\($0.id) \($0.title) \($0.current)" } + ["\(streamOn)", "\(rejoin != nil)"]
+            let key = (menu + audio).map { "\($0.id) \($0.title) \($0.current)" } + ["\(streamOn)", "\(rejoin != nil)", "\(recording)", "\(canStartOver)"]
             guard key != context.coordinator.menuKey else { return }
             context.coordinator.menuKey = key
             let actions = menu.map { entry in
@@ -1318,14 +1519,26 @@ struct SystemPlayer: UIViewControllerRepresentable {
             let audioActions = audio.map { entry in
                 UIAction(title: entry.title, state: entry.current ? .on : .off) { _ in entry.action() }
             }
-            let together = UIAction(title: "Side by side", image: UIImage(systemName: "rectangle.split.2x1")) { _ in onTogether() }
+            let record = UIAction(title: recording ? "Stop recording" : "Record", image: UIImage(systemName: recording ? "record.circle.fill" : "record.circle")) { _ in onRecord() }
+            let together = UIAction(title: "Multiview", image: UIImage(systemName: "rectangle.split.2x1")) { _ in onTogether() }
             let stream = UIAction(title: streamOn ? "Hide stream" : "Stream", image: UIImage(systemName: "info.circle"), state: streamOn ? .on : .off) { _ in onStream() }
             let audioMenu = UIMenu(title: "Audio", image: UIImage(systemName: "speaker.wave.2"), children: audioActions)
-            var items: [UIMenuElement] = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions), audioMenu, stream, together]
+            var items: [UIMenuElement] = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions), audioMenu, stream, record]
+            if canStartOver {
+                items.append(UIAction(title: "Start over", image: UIImage(systemName: "backward.end")) { _ in onStartOver() })
+            }
+            items.append(together)
             if let rejoin {
                 items.insert(UIAction(title: "Back in sync", image: UIImage(systemName: "arrow.triangle.2.circlepath")) { _ in rejoin() }, at: 0)
             }
             vc.transportBarCustomMenuItems = items
+            // The default action is Play From Beginning, which a live picture cannot do
+            // unless the window still holds the start. An empty list leaves it off.
+            if canStartOver {
+                vc.infoViewActions = [UIAction(title: "Start over", image: UIImage(systemName: "backward.end")) { _ in onStartOver() }]
+            } else {
+                vc.infoViewActions = []
+            }
         #endif
     }
 
@@ -1341,11 +1554,21 @@ struct SystemPlayer: UIViewControllerRepresentable {
             var menuKey: [String] = []
             var skipShown = false
             var skip: (() -> Void)?
+            private var infoPanels: [UIViewController] = []
             private var task: Task<Void, Never>?
             private var match = DisplayMatch()
             private var applied: DisplayMatch?
             private var format: CMFormatDescription?
             private var logged = ""
+
+            func installPanels(on vc: LivePlayerController, store: AppStore, now: NowPlaying, live: LivePlayer) {
+                guard infoPanels.isEmpty else { return }
+                infoPanels = PlayerPanels.controllers(store: store, now: now, live: live)
+                vc.customInfoViewControllers = infoPanels
+                #if DEBUG
+                    print("broadwave panels \(infoPanels.count)")
+                #endif
+            }
 
             func start(_ vc: AVPlayerViewController) {
                 guard task == nil else { return }
@@ -1687,7 +1910,13 @@ struct RecordingPlayerScreen: View {
                     Button(next.title, systemImage: next.symbol) { next.action() }
                 }
             }
-            let breaks = entries.filter { $0.id != "next" }
+            if let start = entries.first(where: { $0.id == "start-over" }) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(start.title, systemImage: start.symbol) { start.action() }
+                        .accessibilityIdentifier("recording-start-over")
+                }
+            }
+            let breaks = entries.filter { $0.id != "next" && $0.id != "start-over" }
             if !breaks.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu("Breaks", systemImage: "scissors") {
@@ -1775,6 +2004,10 @@ struct RecordingPlayerScreen: View {
             out.append(FileMenuEntry(id: "next", title: "Next recording", symbol: "forward.frame") { index = (index + 1) % count })
         }
         guard current != nil else { return out }
+        out.insert(FileMenuEntry(id: "start-over", title: "Start over", symbol: "backward.end") {
+            player.seek(to: .zero)
+            player.play()
+        }, at: 0)
         if let breakStart {
             out.append(FileMenuEntry(id: "end", title: "Break ends here", symbol: "scissors") { Task { await markEnd(from: breakStart) } })
             out.append(FileMenuEntry(id: "cancel", title: "Stop marking", symbol: "xmark") { self.breakStart = nil })
