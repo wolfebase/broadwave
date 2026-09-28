@@ -1,7 +1,7 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Channel } from "../types";
 import { useData } from "./data";
-import { navigate, useRoute } from "./router";
+import { inAppDepth, navigate, useRoute } from "./router";
 
 type Player = {
   channel: Channel | null;
@@ -61,7 +61,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           channel={playing}
           mode={mode}
           onChannel={open}
-          onMinimize={() => navigate(back.current || "/guide")}
+          onMinimize={() => {
+            if (inAppDepth() > 0) window.history.back();
+            else navigate(back.current || "/guide");
+          }}
           onExpand={() => navigate(`/watch?channel=${playing.id}`)}
           onClose={close}
         />

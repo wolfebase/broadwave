@@ -35,24 +35,40 @@ function boxes(scope: ParentNode) {
   return out;
 }
 
-/** Arrow keys move focus. Enter still activates the focused control. Escape goes back. */
+/** A plain focus() does not match :focus-visible, so the ring would not draw. */
+export function focusRing(el: HTMLElement | null | undefined) {
+  el?.focus({ focusVisible: true } as FocusOptions);
+}
+
+function editing(target: HTMLElement | null) {
+  return Boolean(target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable));
+}
+
+/** One level back. A text field keeps Backspace so it can delete a character. */
+function goBack(event: KeyboardEvent, target: HTMLElement | null) {
+  if (event.key !== "Escape" && event.key !== "Backspace") return false;
+  if (editing(target)) {
+    if (event.key === "Escape") {
+      target?.blur();
+      event.preventDefault();
+    }
+    return true;
+  }
+  // The open dialog closes itself. Leaving now would skip that level.
+  if (document.querySelector("[role='dialog']")) return true;
+  if (inAppDepth() > 0) {
+    event.preventDefault();
+    window.history.back();
+  }
+  return true;
+}
+
+/** Arrow keys move focus. Enter still activates the focused control. Escape and Backspace go back one level. */
 export function installTvRemote(): () => void {
   const onKey = (event: KeyboardEvent) => {
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
     const target = event.target instanceof HTMLElement ? event.target : null;
-    if (event.key === "Escape") {
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
-        target.blur();
-        event.preventDefault();
-        return;
-      }
-      if (document.querySelector("[role='dialog']")) return;
-      if (inAppDepth() > 0) {
-        event.preventDefault();
-        window.history.back();
-      }
-      return;
-    }
+    if (goBack(event, target)) return;
     const dir = arrow(event.key);
     if (!dir) return;
     if (target && keepsArrows(target, dir)) return;
@@ -65,7 +81,7 @@ export function installTvRemote(): () => void {
     const next = items.find((item) => item.box.id === nextId);
     if (!next) return;
     event.preventDefault();
-    next.el.focus();
+    focusRing(next.el);
   };
   window.addEventListener("keydown", onKey);
   return () => window.removeEventListener("keydown", onKey);

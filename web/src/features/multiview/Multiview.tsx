@@ -3,7 +3,8 @@ import { planMultiview } from "../../api";
 import { useData } from "../../app/data";
 import { useLayout } from "../../app/layout";
 import { usePlayer } from "../../app/player";
-import { navigate, useRoute } from "../../app/router";
+import { focusRing } from "../../app/remote";
+import { inAppDepth, navigate, useRoute } from "../../app/router";
 import { airingAt } from "../../lib/guide";
 import { events } from "../../lib/events";
 import type { Channel, MultiviewPlan } from "../../types";
@@ -242,18 +243,47 @@ export function Multiview() {
     setMenu(false);
   }
 
+  useEffect(() => {
+    if (layoutMode !== "tv") return;
+    const frame = window.requestAnimationFrame(() => {
+      const root = document.querySelector<HTMLElement>(".mv");
+      if (!root) return;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body && root.contains(active)) return;
+      if (guide) {
+        const buttons = [...root.querySelectorAll<HTMLButtonElement>(".mv-guide button:not([disabled])")];
+        const other = buttons.find((button) => button.getAttribute("aria-selected") !== "true");
+        focusRing(other ?? buttons[0]);
+        return;
+      }
+      focusRing(root);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [layoutMode, guide, chKey]);
+
+  function leaveGrid() {
+    if (inAppDepth() > 0) {
+      window.history.back();
+      return;
+    }
+    const current = ordered.find((c) => c.id === focus) ?? ordered[0];
+    if (current) player.open(current);
+    else navigate("/guide");
+  }
+
   function onKey(event: KeyboardEvent) {
     const k = event.key;
     const i = Math.max(0, ordered.findIndex((c) => c.id === focus));
-    if (k === "Escape") {
+    const inBar = event.target instanceof Element && Boolean(event.target.closest(".mv-top, .mv-bottom, .mv-guide"));
+    if (k === "Escape" || k === "Backspace") {
       event.preventDefault();
       if (menu) return setMenu(false);
       if (guide) return go({ add: false });
-      const current = ordered.find((c) => c.id === focus) ?? ordered[0];
-      if (current) player.open(current);
-      else navigate("/guide");
+      leaveGrid();
       return;
     }
+    // The add list and the bars are buttons. Arrows walk them; Enter activates them.
+    if (inBar && (k === "Enter" || k.startsWith("Arrow"))) return;
     if (k === "g") {
       event.preventDefault();
       go({ add: !guide });

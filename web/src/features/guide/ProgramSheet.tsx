@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
+import { focusRing } from "../../app/remote";
 import { navigate } from "../../app/router";
 import { categoryLabel, categoryOf, guideSourceLine, isRecording, minutesLeft, progress, recordingKeys, spanLabel, dayLabel } from "../../lib/guide";
 import type { Airing, Channel } from "../../types";
@@ -28,9 +29,10 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
     const items = () =>
       [...(root?.querySelectorAll<HTMLElement>("button, a[href], input, select, textarea") ?? [])].filter((el) => !el.hidden && !el.hasAttribute("disabled"));
     const list = items();
-    (list.find((el) => el.classList.contains("primary")) ?? list[0])?.focus();
+    focusRing(list.find((el) => el.classList.contains("primary")) ?? list[0]);
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" || e.key === "Backspace") {
+        e.preventDefault();
         onClose();
         return;
       }
@@ -45,16 +47,16 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
       const active = document.activeElement;
       if (e.shiftKey && (active === first || !root.contains(active))) {
         e.preventDefault();
-        last.focus();
+        focusRing(last);
       } else if (!e.shiftKey && (active === last || !root.contains(active))) {
         e.preventDefault();
-        first.focus();
+        focusRing(first);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
-      prev?.focus();
+      focusRing(prev);
     };
   }, [onClose]);
 

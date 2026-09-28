@@ -8,7 +8,7 @@ import { GuideIcon, HomeIcon, RecordingsIcon, ScheduleIcon, SearchIcon, Settings
 import { DataProvider, useData } from "./data";
 import { useLayout } from "./layout";
 import { PlayerProvider, usePlayer } from "./player";
-import { installTvRemote } from "./remote";
+import { focusRing, installTvRemote } from "./remote";
 import { navigate, useRoute } from "./router";
 import "./app.css";
 
@@ -71,6 +71,28 @@ function Shell() {
   const fullPlayer = path === "/watch" && player.mode === "full" && !!player.channel;
   const firstRun = ready && settings.needsSetup === "1";
   const immersive = path === "/play" || path === "/multiview" || (path === "/watch" && params.has("virtual")) || path === "/setup" || (firstRun && path !== "/diagnostics");
+
+  useEffect(() => {
+    if (layout !== "tv" || booting) return;
+    const frame = window.requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body && active !== document.documentElement) return;
+      const pick = (selector: string) => {
+        const el = document.querySelector<HTMLElement>(selector);
+        return el && !el.closest("[inert]") ? el : null;
+      };
+      const target =
+        pick("[role='dialog'] .btn.primary") ||
+        pick(".mv-guide button:not([disabled])") ||
+        pick(".mv") ||
+        pick(".stage:not(.mini) [aria-label='Channels']") ||
+        pick(".stage:not(.mini)") ||
+        pick(".tabs [role='tab'][aria-selected='true']") ||
+        pick("main button:not([disabled]), main a[href], main [tabindex='0']");
+      focusRing(target);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [path, layout, booting, fullPlayer]);
 
   useEffect(() => {
     // A blip that reconnects within a few seconds is not worth a word.

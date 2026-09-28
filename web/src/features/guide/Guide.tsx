@@ -371,6 +371,8 @@ export function Guide() {
                 <button
                   type="button"
                   className="guide-channel"
+                  // The canvas is the remote stop. A name in the arrow order traps Down in this column.
+                  tabIndex={layout === "tv" ? -1 : 0}
                   draggable
                   onDragStart={(event) => {
                     event.dataTransfer.setData("text/plain", String(c.id));

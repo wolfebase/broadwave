@@ -111,6 +111,10 @@
   outline: none;
 }
 
+html[data-layout="tv"] .guide-canvas:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
 .guide-canvas {
   position: relative;
 }

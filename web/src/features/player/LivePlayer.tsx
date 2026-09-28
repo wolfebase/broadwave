@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { useData } from "../../app/data";
 import { useLayout } from "../../app/layout";
+import { focusRing } from "../../app/remote";
 import { navigate } from "../../app/router";
 import { airingAt, categoryOf, minutesLeft, progress } from "../../lib/guide";
 import { typedChannel } from "../../lib/remote";
@@ -117,8 +118,20 @@ export function LivePlayer({
   }, [sleepUntil, onClose]);
 
   useEffect(() => {
-    if (mode === "full") rootRef.current?.focus();
-  }, [channel.id, mode]);
+    if (mode !== "full") return;
+    const root = rootRef.current;
+    if (!root) return;
+    // On a TV the chrome takes the keys until the viewer moves to the picture.
+    // A channel change must not pull focus off a control they are already on.
+    if (layout === "tv") {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && root.contains(active)) return;
+      const channelsBtn = root.querySelector<HTMLElement>("[aria-label='Channels']");
+      focusRing(channelsBtn ?? root);
+      return;
+    }
+    root.focus();
+  }, [channel.id, mode, layout]);
 
   useEffect(() => () => window.clearTimeout(typedTimer.current), []);
 
@@ -197,7 +210,7 @@ export function LivePlayer({
       return;
     }
     if (panel === "guide") {
-      if (k === "Escape" || k === "g") setPanel("none");
+      if (k === "Escape" || k === "Backspace" || k === "g") setPanel("none");
       else if (k === "ArrowDown") setGuideRow((r) => Math.min(channels.length - 1, r + 1));
       else if (k === "ArrowUp") setGuideRow((r) => Math.max(0, r - 1));
       else if (k === "Enter" && channels[guideRow]) {
@@ -219,6 +232,7 @@ export function LivePlayer({
     }
     const actions: Record<string, () => void> = {
       Escape: () => (panel !== "none" ? setPanel("none") : onMinimize()),
+      Backspace: () => (panel !== "none" ? setPanel("none") : onMinimize()),
       " ": togglePlay,
       ArrowLeft: () => jump(-15),
       ArrowRight: () => jump(30),
