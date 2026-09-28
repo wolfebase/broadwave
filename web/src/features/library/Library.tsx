@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Recording } from "../../types";
 import { copy } from "../../strings";
 import { formatBytes, formatClockPoint } from "../../lib/format";
+import { DownloadLink } from "../recordings/DownloadLink";
 export function Library({
   recordings,
   note,
@@ -123,7 +124,7 @@ function LibraryRow({
       <button type="button" className="btn primary" onClick={() => onPlay(rec)}>Play</button>
       {rec.status !== "recording" ? <button type="button" className="btn" onClick={() => onWatched(rec, !seen)}>{seen ? "Mark unwatched" : "Mark watched"}</button> : null}
       {rec.status !== "recording" ? <button type="button" className="btn" onClick={() => onVirtual(rec)}>Make channel</button> : null}
-      <a className="btn" href={`/api/v1/recordings/${rec.id}/file`}>Download</a>
+      <DownloadLink id={rec.id} status={rec.status} />
       {rec.status === "recording" ? <button type="button" className="btn" onClick={() => onStop(rec)}>Stop recording</button> : null}
       {rec.status === "recording" ? null : armed === rec.id ? (
         <button type="button" className="btn primary" onClick={() => onDelete(rec)}>Delete this file</button>
