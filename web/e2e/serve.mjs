@@ -566,23 +566,31 @@ async function probe(url) {
 }
 
 async function waitHealth() {
-  for (let i = 0; i < 40; i++) {
+  // A hosted runner can take well over 8 s to load the lineup after a restart.
+  const deadline = Date.now() + 60_000;
+  let last = "no answer";
+  while (Date.now() < deadline) {
     try {
       const res = await probe(`${base}/api/v1/health`);
+      last = `health ${res.status}`;
       if (res.ok) {
         const lineup = await probe(`${base}/api/v1/channels`);
+        last = `channels ${lineup.status}`;
         if (lineup.ok) {
           const body = await lineup.json();
-          if ((body.channels ?? []).length >= (playlist ? 1 : 3)) return;
+          const count = (body.channels ?? []).length;
+          last = `${count} channels`;
+          if (count >= (playlist ? 1 : 3)) return;
         }
       }
-    } catch {
+    } catch (err) {
       // Still binding, or the process was stopped on purpose.
+      last = String(err?.cause?.code ?? err);
     }
     if (gone(server)) throw new Error(`server exited before health\n${recent}`);
     await sleep(200);
   }
-  throw new Error(`server did not answer\n${recent}`);
+  throw new Error(`server did not answer in 60 s (last: ${last})\n${recent}`);
 }
 
 let gate = Promise.resolve();
