@@ -116,8 +116,9 @@ public enum PlaybackOutage {
     }
 
     /// How many times to ask before the message stays. A tuner that missed its
-    /// first answer gets one more try. A full picture budget often still holds
-    /// the layout just left, and those encodes free one at a time.
+    /// first answer, or refused the channel, gets one more try. A full picture
+    /// budget often still holds the layout just left, and those encodes free
+    /// one at a time.
     public static func startAttempts(code: String, message: String) -> Int {
         if code == "pictures_full" {
             return 4
@@ -125,7 +126,7 @@ public enum PlaybackOutage {
         if code == "tuners_busy" || code == "no_signal" {
             return 1
         }
-        if message.localizedStandardContains("tuner") {
+        if code == "tuner_refused" || message.localizedStandardContains("tuner") {
             return 2
         }
         return 1

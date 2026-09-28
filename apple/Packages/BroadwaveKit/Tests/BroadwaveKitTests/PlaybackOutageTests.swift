@@ -153,6 +153,23 @@ private func fineSnap() -> RecoverySnap {
     #expect(PlaybackOutage.startAttempts(code: "internal", message: PlaybackOutage.channelDidNotStart) == 1)
 }
 
+@Test func aRefusedTunerIsAskedTwiceAndNamedErrorsKeepTheirSentence() {
+    let noSource = "No source has this channel now. Check Sources in Settings."
+    let full = "All 2 streams from this playlist are in use. Stop one or raise the limit."
+    let refused = "The tuner would not start this channel. Try again."
+    let source = PlaybackOutage.viewerFailure(code: "no_source", status: 404, message: noSource, online: true)
+    #expect(source.message == noSource)
+    #expect(source.recovery == nil)
+    let streams = PlaybackOutage.viewerFailure(code: "streams_full", status: 409, message: full, online: true)
+    #expect(streams.message == full)
+    #expect(streams.recovery == nil)
+    let tuner = PlaybackOutage.viewerFailure(code: "tuner_refused", status: 503, message: refused, online: true)
+    #expect(tuner.message == refused)
+    #expect(tuner.recovery == nil)
+    #expect(PlaybackOutage.startAttempts(code: "tuner_refused", message: refused) == 2)
+    #expect(PlaybackOutage.startAttempts(code: "tuner_refused", message: "Try again.") == 2)
+}
+
 @Test func aBusyTunerTellsTheViewerWhatToStopAndComesBackWhenOneIsFree() {
     let got = PlaybackOutage.viewerFailure(
         code: "tuners_busy",

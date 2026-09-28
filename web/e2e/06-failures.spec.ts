@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./fixture";
 import { settle } from "./snap";
 
@@ -350,6 +350,219 @@ test("a phone that loses its connection plays again when the network returns", a
     await expect(notice(page, "alert", /connection dropped/)).toHaveCount(0);
   } finally {
     await page.context().setOffline(false).catch(() => undefined);
+  }
+});
+
+type WatchEnvelope = {
+  name: string;
+  status: number;
+  sentence: string;
+  json?: { code: string; message: string; limit?: number };
+  html?: string;
+};
+
+// The sentences the server sends for these codes, plus a proxy page with no envelope.
+const watchErrors: WatchEnvelope[] = [
+  {
+    name: "no-source",
+    status: 404,
+    sentence: "No source has this channel now. Check Sources in Settings.",
+    json: { code: "no_source", message: "No source has this channel now. Check Sources in Settings." },
+  },
+  {
+    name: "streams-full",
+    status: 409,
+    sentence: "All 2 streams from this playlist are in use. Stop one or raise the limit.",
+    json: {
+      code: "streams_full",
+      message: "All 2 streams from this playlist are in use. Stop one or raise the limit.",
+      limit: 2,
+    },
+  },
+  {
+    name: "tuner-refused",
+    status: 503,
+    sentence: "The tuner would not start this channel. Try again.",
+    json: { code: "tuner_refused", message: "The tuner would not start this channel. Try again." },
+  },
+  {
+    name: "internal",
+    status: 500,
+    sentence: "This channel did not start. The server log says why.",
+    json: { code: "internal", message: "This channel did not start. The server log says why." },
+  },
+  {
+    name: "html",
+    status: 502,
+    sentence: "That did not work. Try again.",
+    html: "<!DOCTYPE html><html><head><title>502 Bad Gateway</title></head><body><h1>502 Bad Gateway</h1><p>nginx</p></body></html>",
+  },
+];
+
+const viewports = [
+  { name: "1440x900", width: 1440, height: 900, layout: "" },
+  { name: "390x844", width: 390, height: 844, layout: "phone" },
+  { name: "1920x1080", width: 1920, height: 1080, layout: "tv" },
+] as const;
+
+async function armWatchErrors(page: Page, channelId: number) {
+  let index = 0;
+  const posts: number[] = [];
+  await page.route(/\/api\/v1\/watch$/, async (route) => {
+    const req = route.request();
+    if (req.method() !== "POST") return route.continue();
+    let body: { channelId?: number } = {};
+    try {
+      body = req.postDataJSON() as { channelId?: number };
+    } catch {
+      return route.continue();
+    }
+    if (body.channelId !== channelId) return route.continue();
+    const at = index;
+    posts.push(at);
+    const item = watchErrors[Math.min(at, watchErrors.length - 1)];
+    if (item.html) {
+      await route.fulfill({ status: item.status, contentType: "text/html; charset=utf-8", body: item.html });
+      return;
+    }
+    await route.fulfill({ status: item.status, contentType: "application/json", body: JSON.stringify(item.json) });
+  });
+  return {
+    posts,
+    setIndex(next: number) {
+      index = next;
+    },
+    reset() {
+      index = 0;
+      posts.length = 0;
+    },
+  };
+}
+
+async function finishSetup(page: Page, arrived: Locator) {
+  // Settings land after the shell is ready, so the setup heading can show up late.
+  const setup = page.getByRole("heading", { name: "Let's set up your TV" });
+  await expect(setup.or(arrived)).toBeVisible();
+  if (!(await setup.isVisible())) return;
+  const cont = page.getByRole("button", { name: "Continue" });
+  if (await cont.isVisible()) await cont.click();
+  await page.getByRole("button", { name: "Watch", exact: true }).click();
+  await expect(setup).toHaveCount(0);
+}
+
+async function assertSentences(
+  page: Page,
+  sentence: Locator,
+  again: Locator,
+  gate: Awaited<ReturnType<typeof armWatchErrors>>,
+  file: (name: string) => string,
+) {
+  for (let i = 0; i < watchErrors.length; i++) {
+    const item = watchErrors[i];
+    await expect(sentence).toHaveText(item.sentence);
+    await expect(again).toBeVisible();
+    const visible = await page.locator("body").innerText();
+    expect(visible).not.toContain("<html");
+    expect(visible).not.toContain("502 Bad Gateway");
+    expect(visible).not.toContain("nginx");
+    expect(visible).not.toContain("Internal Server Error");
+    expect(await sentence.innerText()).not.toContain(String(item.status));
+    await page.screenshot({ path: file(item.name), animations: "disabled" });
+    const before = gate.posts.length;
+    gate.setIndex(i + 1);
+    await again.click();
+    await expect.poll(() => gate.posts.slice(before).some((n) => n === i + 1)).toBe(true);
+  }
+}
+
+test("a failed watch says the sentence, and Try again asks again", async ({ page }) => {
+  const wdaf = channel("WDAF");
+  const gate = await armWatchErrors(page, wdaf.id);
+  const dir = path.join(evidence, "l33");
+  mkdirSync(dir, { recursive: true });
+  for (const size of viewports) {
+    await page.setViewportSize({ width: size.width, height: size.height });
+    const extra = size.layout ? `&layout=${size.layout}` : "";
+    const player = page.getByRole("region", { name: "Player" });
+    gate.reset();
+    await page.goto(`/watch?channel=${wdaf.id}${extra}`);
+    await settle(page);
+    await finishSetup(page, player);
+    if (!page.url().includes(`channel=${wdaf.id}`) || (size.layout && !page.url().includes(`layout=${size.layout}`))) {
+      gate.reset();
+      await page.goto(`/watch?channel=${wdaf.id}${extra}`);
+      await settle(page);
+      await finishSetup(page, player);
+    }
+    await expect(player).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-layout", size.layout || "desktop");
+    await mark(page);
+    await assertSentences(
+      page,
+      page.getByRole("alert"),
+      page.getByRole("button", { name: "Try again" }),
+      gate,
+      (name) => path.join(dir, `player-${name}-${size.name}.jpg`),
+    );
+    await expect(page.locator("html")).toHaveAttribute("data-lane", "stay");
+  }
+});
+
+test("a multiview tile that fails to start says the sentence, and Try again asks again", async ({ page }) => {
+  const wdaf = channel("WDAF");
+  const kctv = channel("KCTV");
+  const gate = await armWatchErrors(page, kctv.id);
+  const dir = path.join(evidence, "l33");
+  mkdirSync(dir, { recursive: true });
+  for (const size of viewports) {
+    if (size.layout === "tv") {
+      await page.addInitScript(() => {
+        const orig = window.matchMedia.bind(window);
+        window.matchMedia = (query: string) => {
+          const q = String(query);
+          if (q.includes("pointer") && q.includes("coarse")) {
+            return {
+              matches: true,
+              media: q,
+              onchange: null,
+              addListener() {},
+              removeListener() {},
+              addEventListener() {},
+              removeEventListener() {},
+              dispatchEvent() {
+                return false;
+              },
+            } as MediaQueryList;
+          }
+          return orig(q);
+        };
+      });
+    }
+    await page.setViewportSize({ width: size.width, height: size.height });
+    const grid = page.getByRole("region", { name: "Side by side" });
+    gate.reset();
+    await page.goto(`/multiview?ch=${wdaf.id},${kctv.id}&layout=2up&focus=${kctv.id}`);
+    await settle(page);
+    await finishSetup(page, grid);
+    if (!page.url().includes("/multiview")) {
+      gate.reset();
+      await page.goto(`/multiview?ch=${wdaf.id},${kctv.id}&layout=2up&focus=${kctv.id}`);
+      await settle(page);
+      await finishSetup(page, grid);
+    }
+    const want = size.layout === "tv" ? "tv" : size.width <= 760 ? "phone" : "desktop";
+    await expect(page.locator("html")).toHaveAttribute("data-layout", want);
+    const tile = page.getByRole("group", { name: new RegExp(`^${kctv.number} ${kctv.name}(, sound on)?$`) });
+    await mark(page);
+    await assertSentences(
+      page,
+      tile.locator(".mv-error p"),
+      tile.getByRole("button", { name: "Try again" }),
+      gate,
+      (name) => path.join(dir, `tile-${name}-${size.name}.jpg`),
+    );
+    await expect(page.locator("html")).toHaveAttribute("data-lane", "stay");
+    await expect(page.getByRole("group", { name: new RegExp(`^${wdaf.number} ${wdaf.name}`) })).toBeVisible();
   }
 });
 
