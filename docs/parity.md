@@ -96,7 +96,8 @@ Recordings on every client. On Apple the actions are in each recording's menu (p
 | Commercial breaks: skip, offer a Skip button, or play | yes, in the player | yes, in Settings, DVR | yes, in Settings, DVR; Skip break is the player's own button |
 | Add or remove a break by hand | yes | not yet | not yet |
 | Make a channel from a recording | yes | not yet | not yet |
-| Upcoming recordings and conflict fixes | yes | not yet | not yet |
+| Coming up: what passes record next, skipped airings and why, and record the later airing | yes | yes, from Recordings | yes, from Recordings |
+| Recent activity | yes | yes, in Coming up | yes, in Coming up |
 | Download the original file | yes | not yet (offline downloads are a later phase) | no (Apple TV keeps no files) |
 
 The demo has no recordings.
