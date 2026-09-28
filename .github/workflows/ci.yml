@@ -93,3 +93,36 @@ jobs:
             web/e2e/.run/test-results
             web/e2e/.run/*-actual.jpg
           retention-days: 7
+
+  apple-e2e:
+    runs-on: macos-26
+    needs: [apple]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: brew install xcodegen ffmpeg
+      - run: npm ci
+        working-directory: web
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      # iPhone and Apple TV simulators against a fresh server with the fake
+      # tuner: find it, finish setup, guide, a channel playing in step with
+      # Chrome, a recording, and two channels side by side.
+      - run: scripts/e2e-apple.sh
+        env:
+          E2E_OUT: ${{ runner.temp }}/apple-e2e
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-e2e
+          path: ${{ runner.temp }}/apple-e2e
+          retention-days: 7

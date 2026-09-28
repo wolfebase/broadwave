@@ -56,6 +56,11 @@ const brk = process.env.E2E_BREAK === "1";
 const playlist = process.env.E2E_PLAYLIST === "1";
 // Four channels on two tuners, and the software budget of four pictures.
 const quad = process.env.E2E_QUAD === "1";
+// E2E_BONJOUR=1 advertises the server under E2E_NAME and listens on every
+// address, so a simulator can find it and reach the address Bonjour gives it.
+const bonjour = process.env.E2E_BONJOUR === "1";
+const bonjourName = process.env.E2E_NAME || `Broadwave E2E ${port}`;
+const listen = bonjour ? ["-addr", `:${port}`] : ["-addr", `127.0.0.1:${port}`, "-bonjour=false"];
 const sample = path.join(run, brk ? "loop.ts" : avsync ? "sync5.ts" : "sample.ts");
 
 function runFfmpeg(args) {
@@ -464,7 +469,7 @@ if (playlist) {
   const noted = JSON.parse(readFileSync(path.join(run, "server.json"), "utf8"));
   noted.origin = `http://127.0.0.1:${originPort}`;
   writeFileSync(path.join(run, "server.json"), JSON.stringify(noted));
-  serverArgs = ["-config", config, "-addr", `127.0.0.1:${port}`, "-bonjour=false", "-staging"];
+  serverArgs = ["-config", config, ...listen, "-staging"];
   serverEnv = { ...process.env, BROADWAVE_E2E: "1" };
   // An address in the environment would still be passed as -hdhr's default and
   // would tune a real device. This run has only the playlist.
@@ -488,7 +493,7 @@ if (playlist) {
     process.exit(1);
   }
   const hdhr = fakeBase.replace(/^https?:\/\//, "");
-  serverArgs = ["-config", config, "-addr", `127.0.0.1:${port}`, "-hdhr", hdhr, "-bonjour=false", "-staging"];
+  serverArgs = ["-config", config, ...listen, "-hdhr", hdhr, "-staging"];
   serverEnv = { ...process.env, BROADWAVE_E2E: "1", HDHR_CONTROL_PORT: control };
   if (quad) serverEnv.BROADWAVE_ENCODER ||= "software";
 }
@@ -587,7 +592,7 @@ function queued(fn) {
   return run;
 }
 
-let ready = !playlist;
+let ready = !playlist && !bonjour;
 const controls = http.createServer((req, res) => {
   if (req.method === "GET" && req.url === "/ready") {
     res.writeHead(ready ? 200 : 503);
@@ -697,5 +702,29 @@ if (playlist) {
   console.log(`e2e server ${base} playlist ${origin}`);
 } else {
   console.log(`e2e server ${base} fake ${fakeBase}`);
+}
+if (bonjour) {
+  // Bonjour announces the name the server started with, and every server on
+  // this computer starts with the same one. Rename, then restart to announce it.
+  const res = await fetch(`${base}/api/v1/server`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: bonjourName }),
+  });
+  if (!res.ok) {
+    console.error(`rename: ${res.status} ${await res.text()}`);
+    stop();
+    process.exit(1);
+  }
+  await queued(async () => {
+    await stopServer();
+    launchServer();
+    await waitHealth();
+  });
+  const noted = JSON.parse(readFileSync(path.join(run, "server.json"), "utf8"));
+  noted.name = bonjourName;
+  writeFileSync(path.join(run, "server.json"), JSON.stringify(noted));
+  ready = true;
+  console.log(`bonjour ${bonjourName}`);
 }
 await new Promise(() => {});
