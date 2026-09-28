@@ -143,7 +143,7 @@ import Testing
 
 @Test func demoRoomCountsBothScreens() async throws {
     let server = DemoServer()
-    let port = UInt16.random(in: 45001 ... 65000)
+    let port = UInt16.random(in: 45001 ... 49151)
     let origin = try #require(await server.prepare(port: port))
     defer { server.stop() }
     var comps = try #require(URLComponents(url: origin, resolvingAgainstBaseURL: false))
@@ -299,7 +299,9 @@ private final class RefusedOnce: @unchecked Sendable {
 
 @MainActor
 @Test func aRestartedServerIsNamedAndTheRoomIsJoinedAgain() async throws {
-    let port = UInt16.random(in: 45001 ... 65000)
+    // Below the system's ephemeral range (49152 up), which an outgoing
+    // connection can hold when the second server binds the same port.
+    let port = UInt16.random(in: 45001 ... 49151)
     let first = DemoServer()
     let origin = try #require(await first.prepare(port: port))
     let socket = EventSocket(base: origin)
