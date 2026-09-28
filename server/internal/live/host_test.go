@@ -216,9 +216,14 @@ func TestTileJoinPrefersTheClosestPicture(t *testing.T) {
 	if err != nil || joined == nil || joined.spec.Video != "540" {
 		t.Fatalf("a small tile joins the 540, not the full picture: %+v %v", joined, err)
 	}
-	again, err := h.ensureRenditionLocked(f, Rendition{Video: "1080", Audio: "aac2", Mode: "broadcast"})
+	again, err := h.ensureRenditionLocked(f, Rendition{Video: "1080", Audio: "copy", Mode: "broadcast"})
 	if err != nil || again == nil || again.spec.Video != "1080" {
 		t.Fatalf("the same size joins itself: %+v %v", again, err)
+	}
+	// A browser cannot play the broadcast sound of the full picture.
+	aac, err := h.ensureRenditionLocked(f, Rendition{Video: "1080", Audio: "aac2", Mode: "broadcast"})
+	if err != nil || aac == nil || aac.spec.Audio != "aac2" {
+		t.Fatalf("a watch that asked for AAC joins a picture with AAC: %+v %v", aac, err)
 	}
 }
 
@@ -375,5 +380,36 @@ func TestPreferSoftwareNeedsRoomToSpare(t *testing.T) {
 	}
 	if PreferSoftware(1.8) || PreferSoftware(0) {
 		t.Fatal("a slow or unmeasured CPU leaves live TV on the GPU")
+	}
+}
+
+func TestAFullBudgetSharesOnlyAPictureTheAskerCanPlay(t *testing.T) {
+	f := &feed{renditions: map[string]*rendition{}}
+	add := func(r Rendition) {
+		f.renditions[r.Key()] = &rendition{spec: r}
+	}
+	add(Rendition{Video: "1080", Audio: "copy"})
+	// A browser asked for AAC: the Apple TV's AC-3 passthrough never starts in it.
+	if got := joinTranscode(f, Rendition{Video: "1080", Audio: "aac2"}); got != nil {
+		t.Fatalf("a browser got %s", got.spec.Key())
+	}
+	// Another Apple TV, or a silent tile, can share it.
+	if got := joinTranscode(f, Rendition{Video: "1080", Audio: "copy"}); got == nil {
+		t.Fatal("a screen that asked for the broadcast sound did not share it")
+	}
+	if got := joinTranscode(f, Rendition{Video: "540", Audio: "none"}); got == nil {
+		t.Fatal("a silent tile did not share it")
+	}
+	add(Rendition{Video: "720", Audio: "aac2", Track: "es"})
+	if got := joinTranscode(f, Rendition{Video: "720", Audio: "aac2"}); got != nil {
+		t.Fatalf("the main mix got %s", got.spec.Key())
+	}
+	add(Rendition{Video: "720", Audio: "aac2"})
+	if got := joinTranscode(f, Rendition{Video: "1080", Audio: "aac2"}); got == nil || got.spec.Key() != (Rendition{Video: "720", Audio: "aac2"}).Key() {
+		t.Fatal("a browser did not share the AAC picture")
+	}
+	// The Apple TV plays AAC too.
+	if got := joinTranscode(f, Rendition{Video: "720", Audio: "copy"}); got == nil {
+		t.Fatal("an Apple TV did not share a picture it can play")
 	}
 }

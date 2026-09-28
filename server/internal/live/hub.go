@@ -785,7 +785,10 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 // joinTranscode picks the encode already running on this channel that is
 // closest to the size asked for. A smaller one wins a tie, so a tile does not
 // jump up to the full picture. A silent tile is not a stand-in for a watch
-// with sound, and HEVC is not a stand-in for H.264. Map order is not a choice.
+// with sound, and HEVC is not a stand-in for H.264. The broadcast's own sound
+// (AC-3 on most channels) stands in only for a watch that asked for it: a
+// browser cannot decode it and never starts. Another language is not a
+// stand-in either. Map order is not a choice.
 func joinTranscode(f *feed, want Rendition) *rendition {
 	rank := map[string]int{"360": 1, "540": 2, "720": 3, "1080": 4}
 	wantRank := rank[want.Video]
@@ -796,6 +799,12 @@ func joinTranscode(f *feed, want Rendition) *rendition {
 			continue
 		}
 		if want.Audio != "none" && r.spec.Audio == "none" {
+			continue
+		}
+		if r.spec.Audio == "copy" && want.Audio != "copy" && want.Audio != "none" {
+			continue
+		}
+		if want.Audio != "none" && r.spec.Track != want.Track {
 			continue
 		}
 		have := rank[r.spec.Video]
