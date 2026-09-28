@@ -240,6 +240,33 @@ func videoTrack(init []byte) (uint32, uint32, bool) {
 	return 0, 0, false
 }
 
+// fragmentStart is the earliest video presentation time in a fragment, in
+// 90 kHz ticks. In an open group of pictures the keyframe comes first and the
+// two B-frames decoded after it are shown before it, so the keyframe's time is
+// two frames late there and on time after a scene cut closes a group. Dated by
+// the keyframe, every closed group overlapped the open one before it; the
+// stamper pinned it to that segment's end, and the channel's dates ran 67 ms
+// further ahead of its timestamps each time.
+func fragmentStart(seg []byte, track, scale uint32) (int64, bool) {
+	for _, t := range boxes(child(seg, "moof")) {
+		if t.kind != "traf" {
+			continue
+		}
+		r, ok := parseRun(t.body)
+		if !ok || r.id != track || len(r.samples) == 0 || scale == 0 {
+			continue
+		}
+		dts := r.decodeTime()
+		start := dts + r.cts(r.samples[0])
+		for _, sample := range r.samples {
+			start = min(start, dts+r.cts(sample))
+			dts += r.sampleDur(sample)
+		}
+		return start * 90000 / int64(scale), true
+	}
+	return fragmentPTS(seg, track, scale)
+}
+
 // fragmentPTS returns the first video sample's presentation time in 90 kHz ticks.
 func fragmentPTS(seg []byte, track, scale uint32) (int64, bool) {
 	moof := child(seg, "moof")
@@ -380,8 +407,8 @@ func firstCompositionOffset(trun []byte) int64 {
 	return int64(v)
 }
 
-// segmentStart reads a segment's first video presentation time, from MP4 boxes
-// for fMP4 renditions or from PES headers for MPEG-TS.
+// segmentStart reads a segment's earliest video presentation time, from MP4
+// boxes for fMP4 renditions or from PES headers for MPEG-TS.
 func segmentStart(dir, name string) (int64, bool) {
 	path := dir + string(os.PathSeparator) + name
 	if len(name) > 4 && name[len(name)-4:] == ".m4s" {
@@ -397,7 +424,7 @@ func segmentStart(dir, name string) (int64, bool) {
 		if err != nil {
 			return 0, false
 		}
-		return fragmentPTS(seg, track, scale)
+		return fragmentStart(seg, track, scale)
 	}
 	return SegmentPTS(path)
 }
