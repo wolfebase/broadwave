@@ -4,6 +4,14 @@ import SwiftUI
 
 struct RecordingsView: View {
     @Environment(AppStore.self) private var store
+    @State private var unwatchedOnly = false
+    @State private var deleting: Recording?
+    @State private var notice: String?
+    @State private var detecting: Set<Int64> = []
+    #if os(tvOS)
+        /// A cover, like live TV: a pushed player would keep the sidebar's handle on the picture.
+        @State private var playing: Recording?
+    #endif
     #if os(tvOS)
         @Environment(\.tvSelectedTab) private var tvSelectedTab
         @FocusState private var focusedRec: Int64?
@@ -11,46 +19,62 @@ struct RecordingsView: View {
     #endif
 
     var body: some View {
-        let groups = Dictionary(grouping: store.recordings) { $0.title }
+        let groups = grouped
         List {
-            if store.recordings.isEmpty {
-                ContentUnavailableView("No recordings yet", systemImage: "record.circle", description: Text("Record from the guide, or set a series to record every episode."))
+            if !store.recordings.isEmpty {
+                Picker("Show", selection: $unwatchedOnly) {
+                    Text("All").tag(false)
+                    Text("Unwatched").tag(true)
+                }
+                .pickerStyle(.segmented)
+            }
+            if let notice {
+                Text(notice)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            if shown.isEmpty {
+                ContentUnavailableView(
+                    store.recordings.isEmpty ? "No recordings yet" : "All watched",
+                    systemImage: "record.circle",
+                    description: Text(store.recordings.isEmpty ? "Record from the guide, or set a series to record every episode." : "Everything in the library has been watched.")
+                )
                 #if os(tvOS)
-                    .focusable()
-                    .focused($emptyRecordings)
+                .focusable()
+                .focused($emptyRecordings)
                 #endif
             }
-            ForEach(groups.keys.sorted(), id: \.self) { title in
-                Section(title) {
-                    ForEach(groups[title] ?? []) { rec in
-                        NavigationLink(value: rec) {
-                            HStack(spacing: 14) {
-                                RecordingPoster(recording: rec)
-                                    .frame(width: 120, height: 68)
-                                    .clipShape(.rect(cornerRadius: Tokens.Radius.sm))
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack(spacing: 6) {
-                                        if rec.isRecording {
-                                            LiveDot("Recording")
-                                        }
-                                        Text(rec.subtitle ?? rec.title).font(.headline).lineLimit(1)
-                                    }
-                                    Text(rec.startedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
-                                    if let pos = rec.position, let dur = rec.durationSec, dur > 0, pos > 30 {
-                                        AiringProgress(pos / dur).frame(maxWidth: 160)
-                                    }
-                                }
-                            }
-                        }
-                        #if os(tvOS)
-                        .focused($focusedRec, equals: rec.id)
-                        #endif
+            ForEach(groups) { group in
+                Section(group.title) {
+                    ForEach(group.items) { rec in
+                        row(rec)
                     }
                 }
             }
         }
         .navigationTitle("Recordings")
-        .navigationDestination(for: Recording.self) { RecordingPlayerScreen(recording: $0) }
+        #if os(tvOS)
+            .fullScreenCover(item: $playing) { RecordingPlayerScreen(recording: $0).environment(store) }
+        #else
+            .navigationDestination(for: Recording.self) { RecordingPlayerScreen(recording: $0) }
+        #endif
+            .confirmationDialog(
+                deleting.map { "Delete \($0.subtitle ?? $0.title)?" } ?? "",
+                isPresented: Binding(get: { deleting != nil }, set: {
+                    if !$0 {
+                        deleting = nil
+                    }
+                }),
+                titleVisibility: .visible,
+                presenting: deleting
+            ) { rec in
+                Button("Delete this file", role: .destructive) {
+                    act { try await store.deleteRecording(rec) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("The recording and its commercial markers are removed from the server.")
+            }
         #if os(tvOS)
             .onAppear { claimRecordingFocus() }
             .onChange(of: tvSelectedTab) { _, _ in claimRecordingFocus() }
@@ -59,17 +83,155 @@ struct RecordingsView: View {
             .task { await store.refreshRecordings() }
     }
 
-    #if os(tvOS)
-        private var firstRecordingID: Int64? {
-            let groups = Dictionary(grouping: store.recordings) { $0.title }
-            guard let title = groups.keys.sorted().first else { return nil }
-            return (groups[title] ?? []).first?.id
+    private func row(_ rec: Recording) -> some View {
+        Group {
+            #if os(tvOS)
+                Button { playing = rec } label: { rowLabel(rec) }
+            #else
+                NavigationLink(value: rec) { rowLabel(rec) }
+            #endif
         }
+        .contextMenu { actions(rec) }
+        #if os(iOS)
+            // No destructive role: it would slide the row away before the viewer confirms.
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                if !rec.isRecording {
+                    Button("Delete", systemImage: "trash") { deleting = rec }
+                        .tint(.red)
+                }
+            }
+            .swipeActions(edge: .leading) {
+                if !rec.isRecording {
+                    Button(rec.isWatched ? "Unwatched" : "Watched", systemImage: rec.isWatched ? "eye.slash" : "eye") {
+                        act { try await store.setWatched(rec, !rec.isWatched) }
+                    }
+                    .tint(Tokens.ColorToken.accent)
+                }
+            }
+        #endif
+        #if os(tvOS)
+        .focused($focusedRec, equals: rec.id)
+        #endif
+    }
 
+    private func rowLabel(_ rec: Recording) -> some View {
+        HStack(spacing: 14) {
+            RecordingPoster(recording: rec)
+                .frame(width: 120, height: 68)
+                .clipShape(.rect(cornerRadius: Tokens.Radius.sm))
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    if rec.isRecording {
+                        LiveDot("Recording")
+                    }
+                    Text(rec.subtitle ?? rec.title).font(.headline).lineLimit(1)
+                }
+                Text(details(rec)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                if let error = rec.error, !error.isEmpty {
+                    Text(error).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                }
+                if let pos = rec.position, let dur = rec.durationSec, dur > 0, pos > 30, !rec.isWatched {
+                    AiringProgress(pos / dur).frame(maxWidth: 160)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func actions(_ rec: Recording) -> some View {
+        if rec.isRecording {
+            Button("Stop recording", systemImage: "stop.circle") {
+                act { try await store.stopRecording(rec) }
+            }
+        } else {
+            Button(rec.isWatched ? "Mark unwatched" : "Mark watched", systemImage: rec.isWatched ? "eye.slash" : "eye") {
+                act { try await store.setWatched(rec, !rec.isWatched) }
+            }
+            Button("Find commercials", systemImage: "forward.end") {
+                findBreaks(rec)
+            }
+            .disabled(detecting.contains(rec.id))
+            Button("Delete", systemImage: "trash", role: .destructive) { deleting = rec }
+        }
+    }
+
+    /// "4.1 · Stopped early · Sep 27, 8:00 PM · 2.1 GB · 1:02:00 · Watched", as the web library reads.
+    private func details(_ rec: Recording) -> String {
+        var parts = [rec.guideNumber]
+        // A recording in progress already shows the live dot.
+        if !rec.isRecording, let status = rec.statusLabel {
+            parts.append(status)
+        }
+        parts.append(rec.startedAt.formatted(date: .abbreviated, time: .shortened))
+        if let bytes = rec.bytes, bytes > 0 {
+            parts.append(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
+        }
+        if let dur = rec.durationSec, dur > 0 {
+            parts.append(Duration.seconds(dur).formatted(.time(pattern: dur >= 3600 ? .hourMinuteSecond : .minuteSecond)))
+        }
+        if !rec.isRecording, rec.isWatched {
+            parts.append("Watched")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var shown: [Recording] {
+        unwatchedOnly ? store.recordings.filter { !$0.isWatched } : store.recordings
+    }
+
+    private struct Shelf: Identifiable {
+        let id: String
+        let title: String
+        let items: [Recording]
+    }
+
+    /// One section per show, then Movies, like the web library.
+    private var grouped: [Shelf] {
+        let movies = shown.filter(\.isMovie)
+        let shows = Dictionary(grouping: shown.filter { !$0.isMovie }) { $0.title }
+        var out = shows.keys.sorted().map { Shelf(id: "show:\($0)", title: $0, items: shows[$0] ?? []) }
+        if !movies.isEmpty {
+            out.append(Shelf(id: "movies", title: "Movies", items: movies))
+        }
+        return out
+    }
+
+    private func act(_ work: @escaping () async throws -> Void) {
+        Task {
+            do {
+                try await work()
+                notice = nil
+            } catch {
+                notice = PlaybackOutage.actionMessage(error)
+            }
+        }
+    }
+
+    private func findBreaks(_ rec: Recording) {
+        guard let api = store.api else { return }
+        let name = rec.subtitle ?? rec.title
+        detecting.insert(rec.id)
+        notice = "Looking for commercials in \(name)…"
+        Task {
+            defer { detecting.remove(rec.id) }
+            do {
+                let found = try await api.detectBreaks(recordingID: rec.id)
+                notice = switch found.count {
+                case 0: "No commercials found in \(name)."
+                case 1: "Found 1 commercial break in \(name)."
+                default: "Found \(found.count) commercial breaks in \(name)."
+                }
+            } catch {
+                notice = PlaybackOutage.actionMessage(error)
+            }
+        }
+    }
+
+    #if os(tvOS)
         /// A list does not take focus from the sidebar the way Settings' form does.
         private func claimRecordingFocus() {
             guard tvSelectedTab == .recordings else { return }
-            if let id = firstRecordingID {
+            if let id = grouped.first?.items.first?.id {
                 focusedRec = id
             } else {
                 emptyRecordings = true

@@ -1001,6 +1001,10 @@ struct SystemPlayer: UIViewControllerRepresentable {
     var onTogether: () -> Void = {}
     /// Set while this screen has left sync; the menu offers the way back.
     var rejoin: (() -> Void)?
+    /// Set while a recording is in a commercial break the viewer skips by hand.
+    var skipBreak: (() -> Void)?
+    /// A recording has no channels, audio picks, stream panel, or side by side.
+    var liveMenu = true
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -1057,6 +1061,21 @@ struct SystemPlayer: UIViewControllerRepresentable {
             context.coordinator.start(vc)
             context.coordinator.noteHint(hint, on: vc)
             context.coordinator.sample(vc)
+            // The action calls the newest closure, so moving from one break to the next skips the right one.
+            let coordinator = context.coordinator
+            coordinator.skip = skipBreak
+            if (skipBreak != nil) != coordinator.skipShown {
+                coordinator.skipShown = skipBreak != nil
+                vc.contextualActions = skipBreak == nil ? [] : [
+                    UIAction(title: "Skip break", image: UIImage(systemName: "forward.end")) { [weak coordinator] _ in coordinator?.skip?() },
+                ]
+            }
+            guard liveMenu else {
+                if !vc.transportBarCustomMenuItems.isEmpty {
+                    vc.transportBarCustomMenuItems = []
+                }
+                return
+            }
             // Setting the items redraws the transport bar and keeps it on screen,
             // so a view update that changes nothing must leave them alone.
             let key = (menu + audio).map { "\($0.id) \($0.title) \($0.current)" } + ["\(streamOn)", "\(rejoin != nil)"]
@@ -1086,6 +1105,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
     final class Coordinator {
         #if os(tvOS)
             var menuKey: [String] = []
+            var skipShown = false
+            var skip: (() -> Void)?
             private var task: Task<Void, Never>?
             private var match = DisplayMatch()
             private var applied: DisplayMatch?
@@ -1314,15 +1335,34 @@ struct RecordingPlayerScreen: View {
     let recording: Recording
     @State private var player = AVPlayer()
     @State private var error: String?
+    @State private var markers: [Marker] = []
+    @State private var inBreak: Marker?
+    /// The break just skipped. It is not skipped or offered again until playback leaves it,
+    /// so a seek in flight does not bring the button back and a break that runs to the end
+    /// of the file is not sought forever.
+    @State private var passed: Int64?
+    @AppStorage(BreakSkip.key) private var skip = BreakSkip.auto
 
     var body: some View {
-        SystemPlayer(player: player)
+        SystemPlayer(player: player, skipBreak: inBreak.map { marker in { Task { await skipPast(marker) } } }, liveMenu: false)
             .ignoresSafeArea()
             .overlay {
                 if let error {
                     Text(error).padding().glassEffect()
                 }
             }
+        #if os(iOS)
+            .overlay(alignment: .bottomTrailing) {
+                if let marker = inBreak {
+                    Button("Skip break", systemImage: "forward.end") {
+                        Task { await skipPast(marker) }
+                    }
+                    .buttonStyle(.glass)
+                    .padding(.trailing, 24)
+                    .padding(.bottom, 110)
+                }
+            }
+        #endif
             .task {
                 guard let api = store.api else { return }
                 do {
@@ -1330,12 +1370,18 @@ struct RecordingPlayerScreen: View {
                     let item = AVPlayerItem(url: api.url(start.playlist))
                     PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
                     player.replaceCurrentItem(with: item)
+                    markers = start.markers ?? []
                     if start.position > 5 {
                         await player.seek(to: CMTime(seconds: start.position, preferredTimescale: 600))
                     }
                     player.play()
                 } catch {
                     self.error = PlaybackOutage.viewerMessage(error.localizedDescription)
+                    return
+                }
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(250))
+                    await followBreaks()
                 }
             }
             .onDisappear {
@@ -1348,6 +1394,40 @@ struct RecordingPlayerScreen: View {
         #if os(iOS)
             .toolbarVisibility(.hidden, for: .tabBar)
         #endif
+    }
+
+    /// Skips a break, offers the skip, or plays it, as the Settings choice says.
+    private func followBreaks() async {
+        guard !markers.isEmpty, skip != .manual else {
+            if inBreak != nil {
+                inBreak = nil
+            }
+            return
+        }
+        let time = player.currentTime().seconds
+        var hit = time.isFinite ? BreakSkip.marker(in: markers, at: time) : nil
+        if hit?.id != passed {
+            passed = nil
+        } else {
+            hit = nil
+        }
+        if let hit, skip == .auto {
+            await skipPast(hit)
+            return
+        }
+        if hit != inBreak {
+            inBreak = hit
+        }
+    }
+
+    private func skipPast(_ marker: Marker) async {
+        passed = marker.id
+        inBreak = nil
+        var end = marker.end
+        if let length = player.currentItem?.duration.seconds, length.isFinite {
+            end = min(end, length)
+        }
+        await player.seek(to: CMTime(seconds: end, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
     }
 }
 

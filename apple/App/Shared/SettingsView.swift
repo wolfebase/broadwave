@@ -31,6 +31,7 @@ struct SettingsView: View {
     @State private var sdLineup = ""
     @State private var guideURL = ""
     @State private var recordingsPath = ""
+    @AppStorage(BreakSkip.key) private var breakSkip = BreakSkip.auto
     @State private var reserve = "10"
     @State private var sdPassword = ""
     @State private var tmdbKey = ""
@@ -315,9 +316,14 @@ struct SettingsView: View {
                 }
             ))
             .disabled(!autoplayKnown)
+            Picker("Commercial breaks", selection: $breakSkip) {
+                ForEach(BreakSkip.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
             Button("Series passes") { showPasses = true }
         } header: {
             Text("DVR")
+        } footer: {
+            Text("For recordings with marked breaks. Kept on this device.")
         }
     }
 

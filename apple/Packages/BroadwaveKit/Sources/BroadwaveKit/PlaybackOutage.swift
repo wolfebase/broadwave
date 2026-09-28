@@ -15,6 +15,15 @@ public enum PlaybackOutage {
     /// A response that is not the error envelope. The same words as the web client.
     public static let requestFailed = "That did not work. Try again."
 
+    /// What a failed button says: the server's sentence, or the generic one for
+    /// anything else (a timeout, an unreachable server, a proxy page).
+    public static func actionMessage(_ error: any Error) -> String {
+        if let api = error as? APIError, !api.message.isEmpty, !unreadable(api.message) {
+            return api.message
+        }
+        return requestFailed
+    }
+
     /// A message the player can show. System and transport text is replaced.
     /// The server's own sentences pass through.
     public static func viewerMessage(_ message: String) -> String {

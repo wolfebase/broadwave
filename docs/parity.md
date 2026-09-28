@@ -80,6 +80,27 @@ Settings, Series passes on Apple; Schedule on the web. A pass is set from the gu
 
 Apple uses menus for minutes and priority because tvOS has no stepper or number field.
 
+## Recordings
+
+Recordings on every client. On Apple the actions are in each recording's menu (press and hold on iPhone, hold Select on Apple TV), and iPhone also swipes to delete or mark watched.
+
+| Choice | Web | iPhone | Apple TV |
+| --- | --- | --- | --- |
+| List by show, then Movies, with status, size, length, and resume point | yes | yes | yes |
+| All or Unwatched | yes | yes | yes |
+| Mark watched or unwatched | yes | yes | yes |
+| Stop a recording in progress | yes | yes | yes |
+| Delete, with a confirmation | yes | yes | yes |
+| Play while it records | yes | yes | yes |
+| Find commercials | yes, in the player | yes, from the menu | yes, from the menu |
+| Commercial breaks: skip, offer a Skip button, or play | yes, in the player | yes, in Settings, DVR | yes, in Settings, DVR; Skip break is the player's own button |
+| Add or remove a break by hand | yes | not yet | not yet |
+| Make a channel from a recording | yes | not yet | not yet |
+| Upcoming recordings and conflict fixes | yes | not yet | not yet |
+| Download the original file | yes | not yet (offline downloads are a later phase) | no (Apple TV keeps no files) |
+
+The demo has no recordings.
+
 ## Sources
 
 Settings, Tuners and playlists on Apple; Sources on the web. Setup uses the same finder and form.

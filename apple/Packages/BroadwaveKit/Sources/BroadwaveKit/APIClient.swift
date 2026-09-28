@@ -47,10 +47,10 @@ public struct APIClient: Sendable {
         URL(string: path, relativeTo: base)?.absoluteURL ?? base
     }
 
-    func send<T: Decodable>(_ method: String, _ path: String, body: (any Encodable)? = nil, as _: T.Type = T.self) async throws -> T {
+    func send<T: Decodable>(_ method: String, _ path: String, body: (any Encodable)? = nil, timeout: TimeInterval = 30, as _: T.Type = T.self) async throws -> T {
         var req = URLRequest(url: url("/api/v1" + path))
         req.httpMethod = method
-        req.timeoutInterval = 30
+        req.timeoutInterval = timeout
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try JSONEncoder().encode(body)
@@ -225,6 +225,24 @@ public struct APIClient: Sendable {
 
     public func play(recordingID: Int64) async throws -> PlaybackStart {
         try await send("POST", "/recordings/\(recordingID)/play", body: [String: String]())
+    }
+
+    public func deleteRecording(_ id: Int64) async throws {
+        struct Ok: Decodable {}
+        _ = try await send("DELETE", "/recordings/\(id)", as: Ok.self)
+    }
+
+    public func setWatched(recordingID: Int64, _ watched: Bool) async throws {
+        struct B: Encodable { var watched: Bool }
+        struct Ok: Decodable {}
+        _ = try await send("PUT", "/recordings/\(recordingID)/watched", body: B(watched: watched), as: Ok.self)
+    }
+
+    /// Runs commercial detection and returns every marker the recording has after it.
+    /// The server answers when detection ends, which takes minutes for a long recording.
+    public func detectBreaks(recordingID: Int64) async throws -> [Marker] {
+        struct R: Decodable { var markers: [Marker] }
+        return try await send("POST", "/recordings/\(recordingID)/detect", body: [String: String](), timeout: 600, as: R.self).markers
     }
 
     public func saveProgress(recordingID: Int64, position: Double) async {

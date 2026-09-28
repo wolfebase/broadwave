@@ -331,6 +331,28 @@ public final class AppStore {
         }
     }
 
+    /// Deletes the file and its markers on the server, then reloads the list.
+    public func deleteRecording(_ rec: Recording) async throws {
+        guard let api else { return }
+        try await api.deleteRecording(rec.id)
+        recordings.removeAll { $0.id == rec.id }
+        await refreshRecordings()
+    }
+
+    public func setWatched(_ rec: Recording, _ watched: Bool) async throws {
+        guard let api else { return }
+        try await api.setWatched(recordingID: rec.id, watched)
+        if let i = recordings.firstIndex(where: { $0.id == rec.id }) {
+            recordings[i].watched = watched ? 1 : 2
+        }
+    }
+
+    public func stopRecording(_ rec: Recording) async throws {
+        guard let api else { return }
+        try await api.stopRecording(rec.id)
+        await refreshRecordings()
+    }
+
     public func toggleFavorite(_ channel: Channel) async {
         guard let api, let updated = try? await api.setFavorite(channel, !channel.favorite) else { return }
         if let i = channels.firstIndex(where: { $0.id == updated.id }) {

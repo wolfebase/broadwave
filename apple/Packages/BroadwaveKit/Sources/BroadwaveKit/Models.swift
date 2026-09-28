@@ -91,6 +91,7 @@ public struct PlaybackStart: Codable, Sendable, Hashable {
     public var playlist: String
     public var position: Double
     public var growing: Bool
+    public var markers: [Marker]?
 }
 
 public struct APIErrorBody: Codable, Sendable {
@@ -138,6 +139,59 @@ public extension Pass {
 public extension Recording {
     var isRecording: Bool {
         status == "recording"
+    }
+
+    /// Same rule as the web library: a mark wins (1 watched, 2 unwatched),
+    /// otherwise the last 15 s or 90% has played.
+    var isWatched: Bool {
+        if watched == 1 {
+            return true
+        }
+        if watched == 2 {
+            return false
+        }
+        let pos = position ?? 0
+        let dur = durationSec ?? 0
+        guard dur >= 10, pos >= 1 else { return false }
+        return pos >= dur - 15 || pos / dur >= 0.9
+    }
+
+    /// Nothing for a finished recording; the others say what happened.
+    var statusLabel: String? {
+        switch status {
+        case "recording": "Recording"
+        case "failed": "Failed"
+        case "stopped": "Stopped early"
+        case "imported": "Imported"
+        default: nil
+        }
+    }
+
+    var isMovie: Bool {
+        (category ?? "").lowercased().contains("movie")
+    }
+}
+
+/// What a recording does at a commercial break. Kept per device, like the web.
+public enum BreakSkip: String, CaseIterable, Sendable {
+    case auto
+    case button
+    case manual
+
+    public static let key = "breakSkip"
+
+    public var label: String {
+        switch self {
+        case .auto: "Skip them"
+        case .button: "Show a Skip button"
+        case .manual: "Play them"
+        }
+    }
+
+    /// The break a player at `time` is inside, if any. The last 50 ms does not
+    /// count, so a seek to a break's end is not caught by the same break again.
+    public static func marker(in markers: [Marker], at time: Double) -> Marker? {
+        markers.first { time >= $0.start && time < $0.end - 0.05 }
     }
 }
 
