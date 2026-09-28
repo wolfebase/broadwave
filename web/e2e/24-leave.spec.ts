@@ -40,7 +40,9 @@ test.afterEach(async ({ page }) => {
 });
 
 test.beforeEach(async () => {
-  await expect.poll(viewers, { timeout: 60_000, message: "the previous test let its pictures go" }).toBe(0);
+  // A closed page that missed pagehide keeps its viewer until the server drops
+  // it: 45s without a fetch, and that check runs every 20s. 60s can miss it.
+  await expect.poll(viewers, { timeout: 90_000, message: "the previous test let its pictures go" }).toBe(0);
 });
 
 // The server counts a viewer before its watch answers. A page that leaves
