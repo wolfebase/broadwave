@@ -87,6 +87,8 @@ export function useLiveStream(
   useEffect(() => {
     syncing.current = sync;
   }, [sync]);
+  // A local rewind has to land before the engine's next tick puts the playhead back.
+  const holdSync = useRef(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ state: "off", drift: 0, members: 0 });
 
   useEffect(() => {
@@ -443,7 +445,8 @@ export function useLiveStream(
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !session || !sync || !room || session.channelId !== channelId) return;
+    if (!sync) holdSync.current = false;
+    if (!video || !session || !sync || holdSync.current || !room || session.channelId !== channelId) return;
     const engine = new SyncEngine(video, hlsRef.current, room, channelId, setSyncStatus);
     syncRef.current = engine;
     engine.start();
@@ -571,6 +574,13 @@ export function useLiveStream(
       setAttempt((n) => n + 1);
     },
     syncStatus,
+    // Stop lining up with the room before a local seek. The flag stays until sync
+    // is turned off, so a render in between does not start the engine again.
+    releaseSync: () => {
+      holdSync.current = true;
+      syncRef.current?.stop();
+      syncRef.current = null;
+    },
     command: (action: "play" | "pause" | "seek" | "live", mediaTime?: number) => syncRef.current?.command(action, mediaTime),
     mediaNow: () => syncRef.current?.mediaNow() ?? null,
   };
