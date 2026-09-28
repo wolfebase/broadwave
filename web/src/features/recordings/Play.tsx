@@ -4,6 +4,7 @@ import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } fr
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
 import { Stage } from "../player/Stage";
 import type { Recording } from "../../types";
+import { DownloadLink } from "./DownloadLink";
 
 type Marker = { id: number; start: number; end: number };
 
@@ -269,6 +270,7 @@ export function Play({
           </div>
           <div className="sheet-actions">
             <button type="button" className="btn" onClick={() => void startOver()}>Start over</button>
+            <DownloadLink id={recording.id} status={recording.status} />
             <button type="button" className="btn" onClick={() => void markHere()}>Mark 3 seconds</button>
             <button type="button" className="btn" onClick={() => void scan()}>Find black frames</button>
           </div>
