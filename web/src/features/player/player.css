@@ -51,12 +51,12 @@ html[data-layout="tv"] .stage:focus-visible {
 }
 
 /* An open guide or stream panel is why the chrome is up. The rest still fades. */
-.stage.idle .stage-hud:has(.info-panel, .mini-guide) {
+.stage.idle .stage-hud:has(.info-panel, .mini-guide, .help-panel) {
   opacity: 1;
   background: none;
 }
 
-.stage.idle .stage-hud:has(.info-panel, .mini-guide) > :not(.info-panel, .mini-guide) {
+.stage.idle .stage-hud:has(.info-panel, .mini-guide, .help-panel) > :not(.info-panel, .mini-guide, .help-panel) {
   opacity: 0;
   pointer-events: none;
 }
@@ -462,6 +462,63 @@ html[data-layout="tv"] .stage:focus-visible {
 .info-panel dd {
   margin: 0;
   font-weight: 600;
+}
+
+.help-panel {
+  width: min(420px, calc(100% - 48px));
+  max-height: calc(100dvh - 96px - 160px);
+  overflow: auto;
+}
+
+.layout-phone .help-panel {
+  /* The phone dock is three rows. The list scrolls above it, and Close stays put. */
+  max-height: calc(100dvh - 96px - 400px);
+}
+
+.help-panel .btn {
+  position: sticky;
+  bottom: 0;
+}
+
+.key-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: var(--type-footnote-size);
+}
+
+.key-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.key-list li span:first-child {
+  font-weight: 700;
+}
+
+.help-panel p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: var(--type-footnote-size);
+}
+
+.volume {
+  width: 88px;
+  accent-color: #fff;
+}
+
+.option-note {
+  margin: 0;
+  font-size: var(--type-footnote-size);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.option-actions {
+  display: flex;
+  gap: 8px;
 }
 
 /* Mini player: live TV keeps playing while you browse. */

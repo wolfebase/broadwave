@@ -32,14 +32,29 @@ export function nearest(from: Box, items: Box[], dir: Direction): number | null 
   return best?.id ?? null;
 }
 
+function digitsOf(value: string) {
+  return value.replaceAll(".", "");
+}
+
+/** True when another digit could still be part of a channel number, dot or not. */
+export function channelNumberContinues<T extends { displayNumber: string }>(channels: T[], typed: string): boolean {
+  const digits = digitsOf(typed);
+  return channels.some((c) => c.displayNumber.startsWith(typed) || (digits.length > 0 && digitsOf(c.displayNumber).startsWith(digits)));
+}
+
 /**
- * The channel a typed number points to. While another digit could still change the answer
- * it returns null, unless the viewer is done typing; then an exact number beats the first
- * one that starts with what was typed.
+ * The channel a typed number points to. "51" is 5.1. A single channel whose number
+ * starts with what was typed ("5" when only 5.1 does) tunes at once. Digits with the
+ * dot left out wait until the viewer stops, then an exact number wins.
  */
 export function typedChannel<T extends { displayNumber: string }>(channels: T[], typed: string, done: boolean): T | null {
-  const matches = channels.filter((c) => c.displayNumber.startsWith(typed));
-  if (matches.length === 1) return matches[0];
-  if (!done) return null;
-  return matches.find((c) => c.displayNumber === typed) ?? matches[0] ?? null;
+  const digits = digitsOf(typed);
+  const matches = channels.filter((c) => c.displayNumber.startsWith(typed) || (digits.length > 0 && digitsOf(c.displayNumber).startsWith(digits)));
+  const unique = matches.filter((c, i) => matches.findIndex((other) => other.displayNumber === c.displayNumber) === i);
+  if (!done) {
+    const byName = channels.filter((c) => c.displayNumber.startsWith(typed));
+    const one = byName.filter((c, i) => byName.findIndex((other) => other.displayNumber === c.displayNumber) === i);
+    return one.length === 1 ? one[0] : null;
+  }
+  return unique.find((c) => c.displayNumber === typed) ?? unique.find((c) => digitsOf(c.displayNumber) === digits) ?? unique[0] ?? null;
 }

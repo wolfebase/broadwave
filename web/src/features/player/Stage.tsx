@@ -32,6 +32,7 @@ export function Stage({
   badge,
   onTogglePlay,
   loading,
+  onSound,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   rootRef?: RefObject<HTMLElement | null>;
@@ -63,6 +64,8 @@ export function Stage({
   onTogglePlay?: () => void;
   /** Shown over the picture until the first frame. The chrome stays up meanwhile. */
   loading?: ReactNode;
+  /** The viewer changed volume or mute. Live TV remembers it. */
+  onSound?: () => void;
 }) {
   const [paused, setPaused] = useState(false);
   const [timedIdle, setTimedIdle] = useState(false);
@@ -81,6 +84,7 @@ export function Stage({
       setPaused(video.paused);
       setMuted(video.muted);
     };
+    sync();
     video.addEventListener("play", sync);
     video.addEventListener("pause", sync);
     video.addEventListener("volumechange", sync);
@@ -294,7 +298,10 @@ export function Stage({
               className="glass-icon"
               onClick={() => {
                 const v = videoRef.current;
-                if (v) v.muted = !v.muted;
+                if (!v) return;
+                v.muted = !v.muted;
+                setMuted(v.muted);
+                onSound?.();
               }}
               aria-label={muted ? "Unmute" : "Mute"}
             >

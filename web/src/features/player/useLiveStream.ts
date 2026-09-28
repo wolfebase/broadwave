@@ -6,6 +6,7 @@ import { startOnRoom, SyncEngine, type SyncStatus } from "../../lib/sync";
 import type { Caps, Channel, Prefs, WatchSession } from "../../types";
 import { liveHlsConfig, type BufferProfile } from "../../picture";
 import { rememberChannel } from "../../recent";
+import { applySound } from "./extras";
 import { awayBeforeSeekMs, resumePlan } from "./resume";
 import {
   aTunerAnswers,
@@ -300,7 +301,8 @@ export function useLiveStream(
           attached = true;
           mark = Number.NaN;
         }
-        video.muted = !audibleRef.current;
+        if (audibleRef.current) applySound(video);
+        else video.muted = true;
         await video.play().catch(async () => {
           video.muted = true;
           await video.play().catch(() => undefined);
@@ -616,7 +618,8 @@ export function useLiveStream(
     audibleRef.current = audible;
     const video = videoRef.current;
     if (!video) return;
-    video.muted = !audible;
+    if (audible) applySound(video);
+    else video.muted = true;
     if (audible) void video.play().catch(() => undefined);
   }, [audible, videoRef]);
 
