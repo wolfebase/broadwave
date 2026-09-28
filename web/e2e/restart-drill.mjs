@@ -9,6 +9,7 @@
 // `docker restart` is the restart. Or point DRILL_URL at any server and give
 // DRILL_RESTART the command that restarts it.
 // DRILL_SIMS lists simulator names or UDIDs with the app installed, comma separated.
+// DRILL_MV=1 opens the first two channels side by side on them instead of one.
 // Writes DRILL_OUT (default .evidence/p6/restart-drill.json at the repo root).
 import { execSync, spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -106,13 +107,17 @@ async function restart(harness) {
   if (!res.ok) throw new Error(`restart: ${res.status}`);
 }
 
-function launchSim(sim, channelId) {
+const multiview = process.env.DRILL_MV === "1";
+
+function launchSim(sim, channelId, pair) {
   const lines = [];
   const child = spawn(
     "xcrun",
     [
       "simctl", "launch", "--console-pty", "--terminate-running-process", sim, bundle,
-      "-BroadwaveServerURL", base, "-BroadwaveWatch", String(channelId), "-BroadwaveSyncLog", "1",
+      "-BroadwaveServerURL", base,
+      ...(pair ? ["-BroadwaveMultiview", pair.join(","), "-BroadwaveMultiviewLayout", "2up"] : ["-BroadwaveWatch", String(channelId)]),
+      "-BroadwaveSyncLog", "1",
       "-ApplePersistenceIgnoreState", "YES",
     ],
     { stdio: ["ignore", "pipe", "pipe"] },
@@ -162,7 +167,8 @@ async function main() {
     await page.getByRole("button", { name: "Watch", exact: true }).click();
     await page.goto(`${base}/watch?channel=${channel.id}`);
   }
-  const apple = sims.map((sim) => launchSim(sim, channel.id));
+  const pair = multiview ? (channels.channels ?? []).slice(0, 2).map((c) => c.id) : null;
+  const apple = sims.map((sim) => launchSim(sim, channel.id, pair));
 
   // One sample every 100 ms: is the picture moving?
   const samples = [];
@@ -183,7 +189,9 @@ async function main() {
     await page.screenshot({ path: out.replace(/\.json$/, "-nopicture.png") }).catch(() => undefined);
     throw new Error(`${err.message}; last sample ${JSON.stringify(samples.at(-1) ?? null)}`);
   });
-  for (const a of apple) await until(`${a.sim} picture`, 90, () => a.lines.some((l) => /^broadwave moving /.test(l.text)));
+  const playing = (a) =>
+    pair ? pair.every((id) => a.lines.some((l) => l.text === `broadwave tile ${id} moving`)) : a.lines.some((l) => /^broadwave moving /.test(l.text));
+  for (const a of apple) await until(`${a.sim} picture`, 90, () => playing(a));
   say(`every screen is playing; ${playSeconds} s before the restart`);
   await sleep(playSeconds * 1000);
 
@@ -224,8 +232,14 @@ async function main() {
     const moving = first(a.lines, restartAt, /^broadwave moving /);
     const stalled = first(a.lines, restartAt, /^broadwave stall \d/);
     const ready = first(a.lines, restartAt, /^broadwave handoff /);
+    const tiles = (pair ?? []).map((id) => {
+      const handoff = first(a.lines, restartAt, new RegExp(`^broadwave tile ${id} handoff `));
+      const back = first(a.lines, restartAt, new RegExp(`^broadwave tile ${id} moving`));
+      return { channel: id, handoffAfterUpMs: handoff == null ? null : handoff - upAt, movingAfterUpMs: back == null ? null : back - upAt };
+    });
     return {
       sim: a.sim,
+      tiles,
       restartNamedAfterUpMs: told == null ? null : told - upAt,
       firstFrameAfterUpMs: ttff == null ? null : ttff - upAt,
       movingAfterUpMs: moving == null ? null : moving - upAt,
@@ -244,7 +258,8 @@ async function main() {
   // One viewer per screen: a stale stop for a watch the old process had must not take one away.
   const tuners = await (await fetch(`${base}/api/v1/tuners`)).json().catch(() => ({}));
   const viewers = (tuners.tuners ?? []).reduce((n, t) => n + (t.viewers ?? 0), 0);
-  const result = { at: new Date().toISOString(), mode: container ? "container" : external ? "external" : "harness", server: base, channel: channel.id, restartToUpMs: upAt - restartAt, viewers: { counted: viewers, screens: 1 + sims.length }, web, apple: screens, roomsReported: rooms };
+  const watchers = 1 + sims.length * (pair ? pair.length : 1);
+  const result = { at: new Date().toISOString(), mode: container ? "container" : external ? "external" : "harness", server: base, channel: channel.id, restartToUpMs: upAt - restartAt, viewers: { counted: viewers, watches: watchers }, web, apple: screens, roomsReported: rooms };
   mkdirSync(path.dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
