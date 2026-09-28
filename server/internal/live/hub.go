@@ -213,7 +213,6 @@ type feed struct {
 	source     Source
 	renditions map[string]*rendition
 	recording  *recording
-	timeline   *Timeline
 	tracks     []AudioTrack
 	probing    bool
 	// headerOrder is the scan read from this tune's packets. Soft 3:2 is film
@@ -236,7 +235,8 @@ type rendition struct {
 	idle    *time.Timer
 	stamper playlistStamper
 	// clock maps this encode onto wall time. A transcode's fMP4 timestamps
-	// start at zero, so a second rendition of the channel cannot share the first.
+	// start at zero, so each encode has its own; seedClockLocked lines it up
+	// with the channel's other encodes on the broadcast clock.
 	clock     *Timeline
 	fallback  bool
 	restarted bool
@@ -662,7 +662,7 @@ func (h *Hub) addFeedLocked(m *mux, ch store.SourceChannel) *feed {
 	}
 	f := &feed{
 		channel: ch, program: ch.ProgramNum, source: sourceOf(ch),
-		renditions: map[string]*rendition{}, timeline: NewTimeline(),
+		renditions: map[string]*rendition{},
 	}
 	m.feeds[ch.GuideNumber] = f
 	h.channels[ch.ID] = f
@@ -1166,6 +1166,33 @@ func (h *Hub) EarliestMedia(channelID int64) (float64, bool) {
 	return float64(best.UnixNano()) / 1e6, true
 }
 
+// seedClockLocked puts a new encode's first picture at the wall time another
+// encode of the channel already gives that broadcast frame, so every screen
+// in a room sees the same frame at the same time whichever encode it plays.
+// Without such a sibling the encode anchors on the clock on the wall.
+func seedClockLocked(f *feed, r *rendition) {
+	own, ok := r.input.broadcastOffset()
+	if !ok {
+		return
+	}
+	if _, _, set := r.clock.Anchor(); set {
+		return
+	}
+	for _, s := range f.renditions {
+		if s == r || s.clock == nil {
+			continue
+		}
+		off, ok := s.input.broadcastOffset()
+		pts, wall, set := s.clock.Anchor()
+		if !ok || !set {
+			continue
+		}
+		// The sibling's anchor on the broadcast clock, then on this encode's.
+		r.clock.Seed(((pts+off-own)%ptsWrap+ptsWrap)%ptsWrap, wall)
+		return
+	}
+}
+
 // Playlist returns a rendition's live playlist stamped with that encode's clock.
 func (h *Hub) Playlist(channelID int64, key string) ([]byte, error) {
 	h.mu.Lock()
@@ -1178,6 +1205,7 @@ func (h *Hub) Playlist(channelID int64, key string) ([]byte, error) {
 			if r.clock == nil {
 				r.clock = NewTimeline()
 			}
+			seedClockLocked(f, r)
 		}
 	}
 	clock := (*Timeline)(nil)

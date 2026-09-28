@@ -411,7 +411,8 @@ const sourceKeyint = 600
 // RenditionArgs builds ffmpeg for one live rendition. Timestamps are kept from
 // the broadcast (-copyts). fMP4 still starts each encode near zero (Pack
 // moves each track's start out of the edit list and into its fragments), so
-// each rendition keeps its own wall clock (see rendition.clock).
+// each rendition keeps its own clock, seeded from the channel's other encodes
+// (see seedClockLocked).
 func RenditionArgs(program int, src Source, r Rendition, encoder, deint string) []string {
 	return renditionArgs(program, src, r, encoder, deint, "pipe:0")
 }

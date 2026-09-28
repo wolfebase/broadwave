@@ -90,6 +90,11 @@ type Timeline struct {
 	set      bool
 	now      func() time.Time
 	behind   time.Duration
+	// seed, when seeded, is another encode's mapping moved onto this one's
+	// timestamps: the first anchor follows it instead of the clock on the wall.
+	seedPTS  int64
+	seedWall time.Time
+	seeded   bool
 }
 
 func NewTimeline() *Timeline {
@@ -109,9 +114,32 @@ func (t *Timeline) Wall(pts int64) time.Time {
 	}
 	t.pts = pts
 	t.wall = t.now().Add(-t.behind)
+	if d := ptsDiff(pts, t.seedPTS); t.seeded && !t.set && d > -90000*3600 && d < 90000*3600 {
+		t.wall = t.seedWall.Add(time.Duration(d) * time.Second / 90000)
+	}
 	t.earliest = t.wall
 	t.set = true
 	return t.wall
+}
+
+// Seed makes the first anchor put pts at wall. After the first anchor it
+// does nothing.
+func (t *Timeline) Seed(pts int64, wall time.Time) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.set {
+		return
+	}
+	t.seedPTS = pts
+	t.seedWall = wall
+	t.seeded = true
+}
+
+// Anchor is the timestamp the clock last anchored on and its wall time.
+func (t *Timeline) Anchor() (int64, time.Time, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.pts, t.wall, t.set
 }
 
 // Reanchor keeps the program date-time on the wall clock across a timestamp

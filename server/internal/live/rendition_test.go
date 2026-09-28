@@ -642,3 +642,120 @@ func TestAHalfRateTileCapsItsKeyframeGap(t *testing.T) {
 		t.Fatalf("full picture gop %s, want the source ceiling", g)
 	}
 }
+
+// An encode that starts later than another, as one does when a second screen
+// asks for a different size, must give each broadcast frame the date the
+// first encode gave it. Before the seed it anchored on the clock on the wall.
+func TestALaterEncodeDatesFramesLikeTheFirst(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.ts")
+	gen := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc=size=640x360:rate=30000/1001", "-f", "lavfi", "-i", "sine=frequency=440",
+		"-t", "10", "-c:v", "libx264", "-g", "15", "-c:a", "ac3", "-output_ts_offset", "95000", "-f", "mpegts", src)
+	if out, err := gen.CombinedOutput(); err != nil {
+		t.Fatalf("source: %v %s", err, out)
+	}
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstPTS, ok := SegmentPTS(src)
+	if !ok {
+		t.Fatal("no timestamp in the source")
+	}
+	source := Source{VideoCodec: "H264", AudioCodec: "AC3", Progressive: true}
+	run := func(r Rendition, from int) *rendition {
+		out := filepath.Join(dir, r.Key())
+		if err := os.MkdirAll(out, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(ffmpeg, RenditionArgs(0, source, r, "libx264", "")...)
+		cmd.Dir = out
+		cmd.Stdin = bytes.NewReader(raw[packetStart(int64(from)):])
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		in := &packInput{cur: stdout}
+		packErr := Pack(out, in, nil)
+		waitErr := cmd.Wait()
+		if packErr != nil || waitErr != nil {
+			t.Fatalf("%s: pack %v wait %v %s", r.Key(), packErr, waitErr, stderr.String())
+		}
+		return &rendition{spec: r, dir: out, input: in, clock: NewTimeline()}
+	}
+	first := run(Rendition{Video: "copy", Audio: "copy"}, 0)
+	late := run(Rendition{Video: "540", Audio: "aac2", Mode: "broadcast"}, len(raw)/2)
+
+	fixed := time.Date(2026, 9, 22, 20, 0, 0, 0, time.UTC)
+	first.clock.now = func() time.Time { return fixed }
+	// The later encode's own guess would be minutes off.
+	late.clock.now = func() time.Time { return fixed.Add(3 * time.Minute) }
+	f := &feed{renditions: map[string]*rendition{"copy": first, "540": late}}
+
+	// broadcast maps each segment's broadcast timestamp to its date.
+	broadcast := func(r *rendition) map[int64]time.Time {
+		seedClockLocked(f, r)
+		body, err := readPlaylist(filepath.Join(r.dir, "index.m3u8"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		off, ok := r.input.broadcastOffset()
+		if !ok {
+			t.Fatalf("%s: no broadcast offset", r.spec.Key())
+		}
+		out := map[int64]time.Time{}
+		var at time.Time
+		for _, line := range strings.Split(string(r.stamper.stamp(r.dir, body, r.clock)), "\n") {
+			if v, ok := strings.CutPrefix(line, "#EXT-X-PROGRAM-DATE-TIME:"); ok {
+				at, _ = time.Parse("2006-01-02T15:04:05.000Z", v)
+			} else if strings.HasSuffix(line, ".m4s") && !at.IsZero() {
+				pts, ok := segmentStart(r.dir, line)
+				if !ok {
+					t.Fatalf("%s: no time in %s", r.spec.Key(), line)
+				}
+				out[(pts+off)%ptsWrap] = at
+				at = time.Time{}
+			}
+		}
+		return out
+	}
+	a := broadcast(first)
+	b := broadcast(late)
+	var earliest int64 = -1
+	for pts := range a {
+		if earliest < 0 || ptsDiff(pts, earliest) < 0 {
+			earliest = pts
+		}
+	}
+	// One frame at 29.97 is 3003 ticks.
+	if d := ptsDiff(earliest, firstPTS); d < -1500 || d > 1500 {
+		t.Fatalf("the first segment is broadcast %d, the source starts at %d", earliest, firstPTS)
+	}
+	matched := 0
+	for pts, at := range b {
+		for other, want := range a {
+			if d := ptsDiff(pts, other); d < -1500 || d > 1500 {
+				continue
+			}
+			matched++
+			// fps= puts a transcode's pictures on its own grid, up to half a
+			// frame from the broadcast's (6.5 ms on this source).
+			if d := at.Sub(want); d > 17*time.Millisecond || d < -17*time.Millisecond {
+				t.Errorf("broadcast %d (first %d, %d ticks) is %v on the later encode and %v on the first", pts, other, ptsDiff(pts, other), at, want)
+			}
+		}
+	}
+	if matched < 3 {
+		t.Fatalf("only %d segments of the later encode match the first (%d and %d segments)", matched, len(a), len(b))
+	}
+}
