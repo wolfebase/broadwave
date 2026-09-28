@@ -193,9 +193,11 @@ enum SavedMultiview {
     }
 }
 
-/// Tiles share one multiview room. `AVPlaybackCoordinationMedium` is not used:
-/// it would seek every player to one timeline, and each tile is a different
-/// live edge. The room already pauses them together.
+/// Each tile joins `multiview:<id>:<channelID>`. One shared room steps every
+/// tile back when any of them stalls, so a dead stream pauses the pictures
+/// that are fine. `AVPlaybackCoordinationMedium` is not used: it would seek
+/// every player to one timeline, and each tile is a different live edge.
+/// Pause and play go to every tile, because they no longer share a room.
 @MainActor
 @Observable
 final class MultiviewSession {
@@ -205,8 +207,9 @@ final class MultiviewSession {
     var notice = ""
     var split: CGFloat = 0.5
     var dragOrigin: CGFloat?
+    /// `multiview:<id>`. A tile's room is this plus its channel id.
     let room: String
-    private var command: ((String) -> Void)?
+    private let commands = TileCommands()
     var paused = false
 
     init(focusID: Int64) {
@@ -216,17 +219,28 @@ final class MultiviewSession {
         room = "multiview:\(id)"
     }
 
+    func room(for channelID: Int64) -> String {
+        MultiviewRooms.tile(room, channelID: channelID)
+    }
+
     func rememberLayout() {
         UserDefaults.standard.set(layout.rawValue, forKey: "broadwave-mv-layout")
     }
 
-    func bind(_ send: @escaping (String) -> Void) {
-        command = send
+    func bind(_ channelID: Int64, _ send: @escaping (String) -> Void) {
+        commands.bind(channelID, send, whenPaused: paused)
+    }
+
+    func unbind(_ channelID: Int64) {
+        commands.unbind(channelID)
     }
 
     func togglePause() {
-        command?(paused ? "play" : "pause")
+        let action = paused ? "play" : "pause"
+        commands.send(action)
         paused.toggle()
+        print("broadwave multiview \(action)")
+        fflush(stdout)
     }
 
     /// Equal tiles all get the same picture, so moving the sound only unmutes one.
@@ -262,6 +276,10 @@ final class TilePlayer {
     private var attempts = 0
     private var channelID: Int64?
     private var sampleCount = 0
+    /// The last sync sample, for a test that launched with the sync log.
+    private(set) var reportedDrift = 0
+    private(set) var reportedRate: Double = 0
+    private(set) var reportedState = "off"
     private var session: WatchSession?
     private var sync: SyncEngine?
     private static let tileLog = Logger(subsystem: "com.wolfeup.broadwave", category: "play")
@@ -272,6 +290,10 @@ final class TilePlayer {
     /// Set for a quiet retry of a stopped picture. The message stays until the new picture moves.
     private var quietRetry = false
     private var holdPicture = false
+    /// The grid's pause. A tile must not start itself while the viewer paused.
+    var viewerPaused = false
+    private var stuckSince: Date?
+    private var lastReplay: Date?
     /// Written by the player layer when a picture is actually on screen.
     let frameOnScreen = FrameOnScreen()
 
@@ -297,6 +319,8 @@ final class TilePlayer {
         canHear = false
         frameOnScreen.ready = false
         holdPicture = false
+        stuckSince = nil
+        lastReplay = nil
         await stop(endPicture: !quiet)
         guard !Task.isCancelled, token == startToken else { return }
         guard let api = store.api else { return }
@@ -353,7 +377,14 @@ final class TilePlayer {
                     self?.frameOnScreen.ready == true
                 }
                 engine.start()
+                guard !Task.isCancelled, token == startToken, channelID == channel.id else {
+                    engine.stop()
+                    return
+                }
                 sync = engine
+                if UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") {
+                    Self.tileLog.notice("tile room=\(room, privacy: .public) channel=\(channel.id)")
+                }
                 bind { engine.command($0) }
             }
             attempts = 0
@@ -429,6 +460,8 @@ final class TilePlayer {
     /// stays until the next start has a picture.
     private func showOutage(_ decision: OutageDecision) {
         error = decision.message
+        let id = channelID ?? 0
+        Self.tileLog.notice("outage channel=\(id, privacy: .public) \(decision.message, privacy: .public)")
         guard decision.recovery != nil else { return }
         sync?.stop()
         sync = nil
@@ -464,8 +497,42 @@ final class TilePlayer {
         }
     }
 
+    /// playImmediately can fail before a buffer exists. The item then has no
+    /// program date, the sync engine stays waiting, and nothing asks again.
+    private func replayIfStuck() {
+        let item = player.currentItem
+        let now = Date()
+        var snap = TilePlaybackSnap()
+        snap.syncWaiting = sync?.state == .waiting
+        snap.rate = Double(player.rate)
+        snap.itemFailed = item?.status == .failed
+        snap.hasItem = item != nil
+        snap.waitingToPlay = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
+        snap.viewerPaused = viewerPaused
+        guard TilePlayback.isStuck(snap) else {
+            stuckSince = nil
+            return
+        }
+        if stuckSince == nil {
+            stuckSince = now
+        }
+        snap.stuckFor = now.timeIntervalSince(stuckSince ?? now)
+        guard TilePlayback.shouldReplay(snap) else {
+            return
+        }
+        if let lastReplay, now.timeIntervalSince(lastReplay) < 2 {
+            return
+        }
+        lastReplay = now
+        player.automaticallyWaitsToMinimizeStalling = true
+        player.play()
+        guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog"), let id = channelID else { return }
+        Self.tileLog.notice("tile replay channel=\(id, privacy: .public)")
+    }
+
     private func sampleOutage() {
         noteMoving()
+        replayIfStuck()
         let item = player.currentItem
         outage.note(
             time: item?.currentTime().seconds,
@@ -477,7 +544,6 @@ final class TilePlayer {
         // The shared sync line does not name the tile. One line a second does.
         guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") else { return }
         sampleCount += 1
-        guard sampleCount % 2 == 0, let id = channelID else { return }
         let events = item?.accessLog()?.events ?? []
         let droppedFrames = events.reduce(0) { $0 + max(0, $1.numberOfDroppedVideoFrames) }
         let stalls = events.reduce(0) { $0 + max(0, $1.numberOfStalls) }
@@ -485,6 +551,10 @@ final class TilePlayer {
         let state = sync?.state.rawValue ?? "off"
         let hear = audible ? 1 : 0
         let rate = player.rate
+        reportedDrift = drift
+        reportedRate = Double(rate)
+        reportedState = state
+        guard sampleCount % 2 == 0, let id = channelID else { return }
         Self.tileLog.notice("tile channel=\(id) drift=\(drift) dropped=\(droppedFrames) stalls=\(stalls) state=\(state, privacy: .public) audible=\(hear) rate=\(rate)")
     }
 
@@ -508,7 +578,9 @@ final class TilePlayer {
         error = nil
         holdPicture = false
         outage.endPictureRetry()
-        print("broadwave picture-back")
+        let id = channelID ?? 0
+        Self.tileLog.notice("picture-back channel=\(id, privacy: .public)")
+        print("broadwave picture-back \(id)")
         fflush(stdout)
     }
 
@@ -1021,13 +1093,16 @@ struct MultiviewScreen: View {
             channel: channel,
             title: store.index.on(channel.id, at: store.now)?.title ?? channel.displayName,
             prefs: session.prefs(for: channel.id),
-            room: session.room,
+            room: session.room(for: channel.id),
             focused: focused,
             remoteFocused: remoteFocused,
-            pip: focused
+            pip: focused,
+            gridPaused: session.paused
         ) {
             session.focusID = channel.id
-        } bind: { session.bind($0) } onSound: {
+        } bind: { session.bind(channel.id, $0) } unbind: {
+            session.unbind(channel.id)
+        } onSound: {
             dismissHint()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1211,8 +1286,11 @@ struct MultiviewTile: View {
     /// The Siri Remote is on this tile. Sound is separate: click moves that.
     let remoteFocused: Bool
     let pip: Bool
+    /// The whole grid is paused. A stuck tile must not start itself then.
+    let gridPaused: Bool
     let onFocus: () -> Void
     let bind: (@escaping (String) -> Void) -> Void
+    let unbind: () -> Void
     let onSound: () -> Void
     @State private var live = TilePlayer()
     private var tuning: Bool {
@@ -1290,6 +1368,7 @@ struct MultiviewTile: View {
                         .font(.footnote)
                         .multilineTextAlignment(.center)
                         .accessibilityIdentifier("playback-outage")
+                        .accessibilityHidden(true)
                     if live.needsConfirm {
                         Button("Watch anyway") {
                             live.confirmWatch()
@@ -1321,7 +1400,12 @@ struct MultiviewTile: View {
                     return
                 }
             #endif
+            unbind()
+            live.viewerPaused = gridPaused
             await live.start(TilePlayer.Request(channel: channel, prefs: prefs, audible: focused), room: room, store: store, bind: bind)
+        }
+        .onChange(of: gridPaused) { _, paused in
+            live.viewerPaused = paused
         }
         .onChange(of: focused) { _, on in
             live.setAudible(on)
@@ -1347,6 +1431,7 @@ struct MultiviewTile: View {
             }
         }
         .onDisappear {
+            unbind()
             Task { await live.stop() }
         }
     }
@@ -1358,6 +1443,16 @@ struct MultiviewTile: View {
             if let drift = live.driftMS {
                 parts.append("\(drift) ms")
             }
+        }
+        if UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") {
+            parts.append("drift \(live.reportedDrift)")
+            parts.append(String(format: "rate %.2f", live.reportedRate))
+            parts.append(live.reportedState)
+        }
+        // The tile button is one accessibility element, so the words drawn on
+        // a stalled picture are part of its value. VoiceOver then reads them.
+        if let error = live.error, !error.isEmpty {
+            parts.append(error)
         }
         return parts.joined(separator: ", ")
     }
