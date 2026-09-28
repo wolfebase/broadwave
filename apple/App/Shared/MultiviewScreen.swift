@@ -299,9 +299,6 @@ final class TilePlayer {
     private var preparedSession: WatchSession?
     private var rewatch: (() async throws -> WatchSession)?
     private var handingOff = false
-    /// The server restarted, so `session` names a watch the new process never had.
-    /// Stopping it by rendition would take a viewer from a live watch.
-    private var sessionLost = false
     /// Written by the player layer when a picture is actually on screen.
     let frameOnScreen = FrameOnScreen()
 
@@ -356,7 +353,7 @@ final class TilePlayer {
         rewatch = { try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: prefs, confirmLive: false) }
         let prepared = preparedSession?.channelId == channel.id ? preparedSession : nil
         if let stale = preparedSession, prepared == nil {
-            await api.stopWatching(channelID: stale.channelId, rendition: stale.rendition)
+            await api.stopWatching(stale)
         }
         preparedSession = nil
         do {
@@ -366,7 +363,7 @@ final class TilePlayer {
                 try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: prefs, confirmLive: allow)
             }
             guard !Task.isCancelled, token == startToken, channelID == channel.id else {
-                await api.stopWatching(channelID: channel.id, rendition: session.rendition)
+                await api.stopWatching(session)
                 return
             }
             self.session = session
@@ -644,13 +641,12 @@ final class TilePlayer {
         defer { handingOff = false }
         let token = startToken
         guard let api, let rewatch, let id = channelID else { return }
-        sessionLost = true
         // Its room went with the old process.
         sync?.stop()
         sync = nil
         if let next = await RestartHandoff.prepare(api: api, player: player, rewatch: rewatch, current: { token == startToken }) {
             guard token == startToken, channelID == id else {
-                await api.stopWatching(channelID: id, rendition: next.session.rendition)
+                await api.stopWatching(next.session)
                 return
             }
             print("broadwave tile \(id) handoff \(next.ready ? "ready" : "early") old=\(String(format: "%.1f", RestartHandoff.bufferedAhead(player)))s")
@@ -660,6 +656,14 @@ final class TilePlayer {
         guard token == startToken else { return }
         quietRetry = true
         attempt += 1
+    }
+
+    private func noteStop(_ session: WatchSession) {
+        guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") else { return }
+        let boot = session.boot ?? ""
+        Self.tileLog.notice("stop channel=\(session.channelId, privacy: .public) boot=\(boot, privacy: .public)")
+        print("broadwave tile stop channel=\(session.channelId) boot=\(boot)")
+        fflush(stdout)
     }
 
     func stop(endPicture: Bool = true) async {
@@ -680,23 +684,23 @@ final class TilePlayer {
         clearRoute()
         player.pause()
         player.replaceCurrentItem(with: nil)
-        let id = channelID
-        let ended = sessionLost ? nil : session
+        let ended = session
         let prepared = endPicture ? preparedSession : nil
         if endPicture {
             preparedSession = nil
         }
         channelID = nil
         session = nil
-        sessionLost = false
         canHear = false
         moving = false
         movingFrom = nil
-        if let api, let id, let ended {
-            await api.stopWatching(channelID: id, rendition: ended.rendition)
+        if let api, let ended {
+            noteStop(ended)
+            await api.stopWatching(ended)
         }
         if let api, let prepared {
-            await api.stopWatching(channelID: prepared.channelId, rendition: prepared.rendition)
+            noteStop(prepared)
+            await api.stopWatching(prepared)
         }
     }
 

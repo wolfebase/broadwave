@@ -62,9 +62,6 @@ final class LivePlayer {
     private var preparedSession: WatchSession?
     private var rewatch: (() async throws -> WatchSession)?
     private var handingOff = false
-    /// The server restarted, so `session` names a watch the new process never had.
-    /// Stopping it by rendition would take a viewer from a live watch.
-    private var sessionLost = false
     private let playLog = Logger(subsystem: "com.wolfeup.broadwave", category: "play")
     #if os(iOS)
         private var lifecycle: [NSObjectProtocol] = []
@@ -136,7 +133,7 @@ final class LivePlayer {
         rewatch = { try await api.watch(channelID: channel.id, caps: caps, prefs: prefs, confirmLive: false) }
         let prepared = preparedSession?.channelId == channel.id ? preparedSession : nil
         if let stale = preparedSession, prepared == nil {
-            await api.stopWatching(channelID: stale.channelId, rendition: stale.rendition)
+            await api.stopWatching(stale)
         }
         preparedSession = nil
         let task = Task {
@@ -158,7 +155,7 @@ final class LivePlayer {
                 task.cancel()
             }
             guard !Task.isCancelled, token == watchToken, channelID == channel.id else {
-                await api.stopWatching(channelID: channel.id, rendition: session.rendition)
+                await api.stopWatching(session)
                 return
             }
             self.session = session
@@ -241,6 +238,7 @@ final class LivePlayer {
     /// The screen stays up, and the message stays until that start has a picture.
     private func showOutage(_ decision: OutageDecision) {
         error = decision.message
+        playLogNote("outage \(decision.message)")
         guard decision.recovery != nil else { return }
         sync?.stop()
         sync = nil
@@ -286,13 +284,12 @@ final class LivePlayer {
             attempt += 1
             return
         }
-        sessionLost = true
         // Its room went with the old process.
         sync?.stop()
         sync = nil
         if let next = await RestartHandoff.prepare(api: api, player: player, rewatch: rewatch, current: { token == watchToken }) {
             guard token == watchToken, channelID == id else {
-                await api.stopWatching(channelID: id, rendition: next.session.rendition)
+                await api.stopWatching(next.session)
                 return
             }
             playLogNote("handoff \(next.ready ? "ready" : "early") old=\(String(format: "%.1f", RestartHandoff.bufferedAhead(player)))s")
@@ -301,6 +298,11 @@ final class LivePlayer {
         guard token == watchToken else { return }
         quietRetry = true
         attempt += 1
+    }
+
+    private func noteStop(_ session: WatchSession) {
+        guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") else { return }
+        playLogNote("stop channel=\(session.channelId) boot=\(session.boot ?? "")")
     }
 
     func notePictureInPicture(_ on: Bool) {
@@ -345,20 +347,20 @@ final class LivePlayer {
         stallObserver = nil
         player.pause()
         player.replaceCurrentItem(with: nil)
-        let id = channelID
-        let ended = sessionLost ? nil : session
+        let ended = session
         let prepared = endPicture ? preparedSession : nil
         if endPicture {
             preparedSession = nil
         }
         channelID = nil
         session = nil
-        sessionLost = false
-        if let api, let id, let ended {
-            await api.stopWatching(channelID: id, rendition: ended.rendition)
+        if let api, let ended {
+            noteStop(ended)
+            await api.stopWatching(ended)
         }
         if let api, let prepared {
-            await api.stopWatching(channelID: prepared.channelId, rendition: prepared.rendition)
+            noteStop(prepared)
+            await api.stopWatching(prepared)
         }
     }
 

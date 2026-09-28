@@ -210,10 +210,16 @@ public struct APIClient: Sendable {
         return try await send("POST", "/multiview/plan", body: B(channelIds: channelIDs, picker: true))
     }
 
-    public func stopWatching(channelID: Int64, rendition: String) async {
-        struct B: Encodable { var rendition: String }
+    /// `boot` is the process from the watch answer. A restarted server ignores a
+    /// stop that names another process, so a stop always goes out.
+    public func stopWatching(channelID: Int64, rendition: String, boot: String) async {
+        struct B: Encodable { var rendition: String; var boot: String }
         struct Ok: Decodable {}
-        _ = try? await send("POST", "/watch/\(channelID)/stop", body: B(rendition: rendition), as: Ok.self)
+        _ = try? await send("POST", "/watch/\(channelID)/stop", body: B(rendition: rendition, boot: boot), as: Ok.self)
+    }
+
+    public func stopWatching(_ session: WatchSession) async {
+        await stopWatching(channelID: session.channelId, rendition: session.rendition, boot: session.boot ?? "")
     }
 
     // MARK: Recordings
