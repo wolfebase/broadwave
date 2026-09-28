@@ -128,7 +128,7 @@ final class EndToEndTests: XCTestCase {
         note("setup tuner shown=\(sawTuner)")
         shot("2-ready")
         activate(watch)
-        XCTAssertTrue(until(20) { (try? self.settings()["needsSetup"] as? String) != "1" }, "the server still needs setup")
+        XCTAssertTrue(until(20) { (try? self.settings()["needsSetup"] as? String) == "0" }, "the server still needs setup")
         // Watch plays the first channel. Close it to reach the tabs.
         XCTAssertTrue(app.staticTexts["syncState"].waitForExistence(timeout: 30), "Watch did not open the player\n\(app.debugDescription)")
         try closePlayer(app)

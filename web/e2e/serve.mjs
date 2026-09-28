@@ -1,4 +1,7 @@
-// Fake HDHomeRun on 127.0.0.1 plus a staging Broadwave. No LAN discovery.
+// Fake HDHomeRun on 127.0.0.1 plus a staging Broadwave. No LAN discovery,
+// except with E2E_BONJOUR=1: then the server listens on every address and
+// announces itself, so while it runs a fresh server that needs setup is
+// reachable from the local network.
 import { spawn, spawnSync } from "node:child_process";
 import { closeSync, createWriteStream, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import http from "node:http";

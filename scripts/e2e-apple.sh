@@ -10,16 +10,21 @@
 #                     generation)) on the newest runtimes, created if missing.
 #   PLATFORMS         "ios tvos" (default), or one of them.
 #   E2E_PORT          server port (default 18641).
-#   E2E_OUT           evidence directory (default .evidence/p7).
+#   E2E_OUT           evidence directory (default .evidence/apple-e2e). Emptied
+#                     first, so it must sit under .evidence, the temp folder,
+#                     or the CI runner's temp folder.
 #   SKIP_PREPARE=1    reuse the site and binaries in web/e2e/.run.
 #   E2E_TYPED=1       skip Bonjour and type the server address.
 #   SYNC_SECONDS      how long Chrome samples once both play (default 60).
 #   DERIVED_DATA      keep builds here between runs (default: a /tmp dir removed at the end).
+#
+# The app is uninstalled from each simulator first, so its data there is lost.
+# A defect the test notes, or a step 1 that had to type the address, fails the run.
 set -uo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 port=${E2E_PORT:-18641}
-out=${E2E_OUT:-$root/.evidence/p7}
+out=${E2E_OUT:-$root/.evidence/apple-e2e}
 platforms=${PLATFORMS:-ios tvos}
 run="$root/web/e2e/.run"
 bundle=com.wolfeup.broadwave
@@ -65,6 +70,10 @@ if pgrep -f '^([^ ]*/)?node [^ ]*e2e/serve\.mjs' >/dev/null; then
   exit 1
 fi
 
+case "$out" in
+  "$root"/.evidence/?* | "${TMPDIR:-/tmp}"/?* | /tmp/?* | "${RUNNER_TEMP:-/nonexistent}"/?*) ;;
+  *) say "E2E_OUT must be under .evidence, the temp folder, or the runner's temp folder: $out"; exit 1 ;;
+esac
 rm -rf "$out"
 mkdir -p "$out"
 
@@ -86,6 +95,10 @@ for runtime, devices in json.load(sys.stdin)["devices"].items():
         if d["udid"] == want or d["name"] == want:
             print(d["udid"]); sys.exit(0)
 ' "$want")
+  if [ -z "$udid" ] && [[ $want =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f-]{27}$ ]]; then
+    say "no simulator $want" >&2
+    return 1
+  fi
   if [ -z "$udid" ]; then
     local runtime
     runtime=$(xcrun simctl list runtimes available -j | python3 -c '
@@ -95,7 +108,7 @@ rts = [r for r in json.load(sys.stdin)["runtimes"] if r.get("platform") == kind 
 rts.sort(key=lambda r: [int(p) for p in r["version"].split(".")])
 print(rts[-1]["identifier"] if rts else "")
 ' "$kind")
-    [ -n "$runtime" ] || { say "no $kind runtime"; return 1; }
+    [ -n "$runtime" ] || { say "no $kind runtime" >&2; return 1; }
     udid=$(xcrun simctl create "$want" "$model" "$runtime") || return 1
     say "created $want ($model, $runtime)" >&2
   fi
@@ -138,6 +151,13 @@ start_server() {
 stop_server() {
   [ -n "$serve_pid" ] && kill "$serve_pid" 2>/dev/null && wait "$serve_pid" 2>/dev/null
   serve_pid=""
+  # The harness exits before its server does. The next platform's server
+  # needs the port, and must not hear the old one answer its health check.
+  for _ in $(seq 50); do
+    curl -fs "http://127.0.0.1:$port/api/v1/health" >/dev/null 2>&1 || return 0
+    sleep 0.2
+  done
+  say "the old server is still answering on :$port"
 }
 
 run_platform() {
@@ -224,12 +244,14 @@ run_platform() {
       how="bonjour or the UDP probe"
     fi
     [ "$step" = 1 ] && [ -n "$how" ] && line="$line (via $how)"
+    [ "$step" = 1 ] && [ "${E2E_TYPED:-}" != 1 ] && [[ $how != bonjour* ]] && mark=FAIL
     [ "$mark" = FAIL ] && failed=1
     results+=("$platform step $step $mark ${line:-see $dir/test.log}")
   done
   local defect
   while IFS= read -r defect; do
-    results+=("$platform ${defect:0:240}")
+    failed=1
+    results+=("$platform FAIL ${defect:0:240}")
   done < <(grep -ho "broadwave-e2e note defect.*" "$dir/test.log" | sed 's/^broadwave-e2e note //')
   if [ $status -ne 0 ]; then
     failed=1

@@ -45,7 +45,7 @@ function logSince() {
   return buf.toString("utf8");
 }
 
-// time=2026-09-28T00:07:21.964-05:00 level=INFO msg="sync report" screen="…" kind=iphone room=channel:3 drift=12 state=locked …
+// time=2026-09-28T05:07:21.964Z level=INFO msg="sync report" screen="…" kind=iphone room=channel:3 drift=12 state=locked …
 function reports(channel) {
   const found = [];
   for (const line of logSince().split("\n")) {
@@ -135,10 +135,12 @@ async function main() {
       max: diffs.length ? Math.max(...diffs) : NaN,
       want,
     };
-    result.pass = pairs.length >= want.pairs && result.median < want.median && result.max < want.max;
+    // A report that is not locked is the screen out of step with its room.
+    result.unlocked = apple.filter((a) => a.t >= from && a.state !== "locked").length;
+    result.pass = pairs.length >= want.pairs && result.median < want.median && result.max < want.max && result.unlocked === 0;
     writeFileSync(out.replace(/\.jsonl$/, "") + "-result.json", JSON.stringify({ ...result, apple }, null, 2));
     for (const p of pairs) say(`pair web ${p.web} ms apple ${p.apple} ms (${p.apart} ms apart) diff ${p.diff} ms`);
-    say(`${result.pass ? "PASS" : "FAIL"} pairs=${pairs.length} median=${result.median} ms max=${result.max} ms (want >=${want.pairs}, <${want.median}, <${want.max})`);
+    say(`${result.pass ? "PASS" : "FAIL"} pairs=${pairs.length} median=${result.median} ms max=${result.max} ms unlocked=${result.unlocked} (want >=${want.pairs}, <${want.median}, <${want.max}, 0)`);
     return result.pass;
   } finally {
     writeFileSync(sampled, "done\n");
