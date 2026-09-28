@@ -221,6 +221,9 @@ type feed struct {
 	headerOrder string
 	// exports counts raw MPEG-TS readers such as Plex or Jellyfin using the emulated tuner.
 	exports int
+	// captions follows the channel's CEA-608 captions while it has a rendition.
+	captions   *captionTrack
+	captionSub *pipeSub
 }
 
 // rendition is one ffmpeg process producing HLS for one delivery form.
@@ -776,6 +779,7 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: time.Now(), args: args, gate: gate, packDone: done, input: packIn}
 	if stdin != nil {
 		r.sub = h.attachPipe(muxOf(h, f), h.renditionPipe(f, r, stdin), true)
+		h.startCaptionsLocked(f)
 	}
 	f.renditions[key] = r
 	go h.watchRendition(f, r, cmd, encoderOf(h.Encoder, want), false)
@@ -1195,6 +1199,17 @@ func seedClockLocked(f *feed, r *rendition) {
 
 // Playlist returns a rendition's live playlist stamped with that encode's clock.
 func (h *Hub) Playlist(channelID int64, key string) ([]byte, error) {
+	body, err := h.stamped(channelID, key)
+	if err != nil {
+		return nil, err
+	}
+	if h.OnMedia != nil {
+		h.OnMedia(channelID)
+	}
+	return body, nil
+}
+
+func (h *Hub) stamped(channelID int64, key string) ([]byte, error) {
 	h.mu.Lock()
 	f := h.channels[channelID]
 	var r *rendition
@@ -1220,11 +1235,7 @@ func (h *Hub) Playlist(channelID int64, key string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	body := r.stamper.stamp(r.dir, raw, clock)
-	if h.OnMedia != nil {
-		h.OnMedia(channelID)
-	}
-	return body, nil
+	return r.stamper.stamp(r.dir, raw, clock), nil
 }
 
 // WaitMedia blocks until the rendition's playlist contains that segment or
@@ -1981,6 +1992,9 @@ func (h *Hub) stopRenditionLocked(f *feed, key string) {
 		_ = r.cmd.Process.Kill()
 	}
 	delete(f.renditions, key)
+	if len(f.renditions) == 0 {
+		h.stopCaptionsLocked(f)
+	}
 	_ = os.RemoveAll(r.dir)
 	h.changed()
 }

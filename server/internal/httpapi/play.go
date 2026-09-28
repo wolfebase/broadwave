@@ -1122,6 +1122,27 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(body)
 		return
 	}
+	if captionFile(name) {
+		var body []byte
+		var err error
+		contentType := "application/vnd.apple.mpegurl"
+		switch name {
+		case "main.m3u8":
+			body, err = s.Hub.MainPlaylist(channelID, key)
+		case "captions.m3u8":
+			body, err = s.Hub.CaptionPlaylist(channelID, key)
+		default:
+			contentType = "text/vtt; charset=utf-8"
+			body, err = s.Hub.CaptionSegment(channelID, key, name)
+		}
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", contentType)
+		_, _ = w.Write(body)
+		return
+	}
 	var contentType string
 	switch {
 	case strings.Contains(name, ".."):
@@ -1146,6 +1167,12 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 	// would play the previous file under that name.
 	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFile(w, r, path)
+}
+
+// captionFile names the files a rendition folder serves from memory for captions.
+func captionFile(name string) bool {
+	vtt := strings.HasPrefix(name, "seg") && strings.HasSuffix(name, ".vtt")
+	return name == "main.m3u8" || name == "captions.m3u8" || vtt
 }
 
 func decodeJSON(r *http.Request, dest any) error {
