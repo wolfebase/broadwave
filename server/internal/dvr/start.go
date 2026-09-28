@@ -25,6 +25,21 @@ func StartDecision(pass store.Pass, airing store.Airing, now time.Time) (bool, i
 	if now.After(airing.Start.Add(recordLead)) {
 		return false, 0
 	}
+	return true, recordMinutes(pass, airing, now)
+}
+
+// JoinDecision starts an airing that is already more than recordLead
+// underway when the tuner has been on its frequency since the airing began,
+// so the recording can start from the beginning. held is how far back that
+// frequency's buffer reaches; zero means it is not tuned.
+func JoinDecision(pass store.Pass, airing store.Airing, now, held time.Time) (bool, int) {
+	if held.IsZero() || held.After(airing.Start) || !airing.End.After(now) || !now.After(airing.Start.Add(recordLead)) {
+		return false, 0
+	}
+	return true, recordMinutes(pass, airing, now)
+}
+
+func recordMinutes(pass store.Pass, airing store.Airing, now time.Time) int {
 	tail := time.Duration(pass.PadAfter)*time.Minute + SportsTail(airing)
 	minutes := int(airing.End.Add(tail).Sub(now).Minutes()) + 1
 	if minutes < 1 {
@@ -33,5 +48,5 @@ func StartDecision(pass store.Pass, airing store.Airing, now time.Time) (bool, i
 	if minutes > 8*60 {
 		minutes = 8 * 60
 	}
-	return true, minutes
+	return minutes
 }

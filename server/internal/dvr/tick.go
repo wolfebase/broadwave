@@ -47,13 +47,19 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 			continue
 		}
 		start, minutes := StartDecision(pass, item.Airing, now)
+		if !start && !attempted(active, item.Airing) {
+			start, minutes = JoinDecision(pass, item.Airing, now, hub.BufferedSince(ctx, item.Airing.ChannelID))
+		}
 		if !start {
 			hold++
 			continue
 		}
+		// A recording that starts late begins at the airing, padding
+		// included, when the tuner's buffer still holds it.
 		if _, err := hub.RecordMeta(ctx, minutes, store.Recording{
 			ChannelID: item.Airing.ChannelID, Title: item.Airing.Title, Subtitle: item.Airing.Subtitle,
 			Description: item.Airing.Description, Category: item.Airing.Category, ProgramID: item.Airing.ProgramID, GameID: item.Airing.GameID,
+			StartedAt: item.Airing.Start.Add(-time.Duration(pass.PadBefore) * time.Minute),
 		}); err != nil {
 			slog.Error(fmt.Sprintf("pass record: %v", err))
 		}
@@ -78,6 +84,18 @@ func countTuners(ctx context.Context, st *store.Store) int {
 
 func findPass(passes []store.Pass, airing store.Airing) (store.Pass, bool) {
 	return matchPass(passes, airing)
+}
+
+// attempted reports a recording of this airing in any state, so a show the
+// viewer stopped, or one that failed, is not joined again from the buffer.
+func attempted(recs []store.Recording, airing store.Airing) bool {
+	for _, rec := range recs {
+		if rec.ChannelID == airing.ChannelID && strings.EqualFold(rec.Title, airing.Title) &&
+			rec.StartedAt.Before(airing.End) && !rec.StartedAt.Before(airing.Start.Add(-time.Hour)) {
+			return true
+		}
+	}
+	return false
 }
 
 func already(recs []store.Recording, airing store.Airing) bool {

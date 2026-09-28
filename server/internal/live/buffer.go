@@ -58,6 +58,25 @@ func (h *Hub) bufferWindow() time.Duration {
 	return time.Duration(minutes) * time.Minute
 }
 
+// BufferedSince is how far back the buffer of the frequency carrying
+// channelID reaches, or zero when that frequency is not tuned.
+func (h *Hub) BufferedSince(ctx context.Context, channelID int64) time.Time {
+	if h.Store == nil {
+		return time.Time{}
+	}
+	ch, err := h.Store.SourceChannel(ctx, channelID)
+	if err != nil || ch.FrequencyHz <= 0 {
+		return time.Time{}
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	m := h.muxes[ch.FrequencyHz]
+	if m == nil || m.ring == nil || m.input != "" {
+		return time.Time{}
+	}
+	return m.ring.Since()
+}
+
 // BufferStatus is what one tuned frequency's ring holds.
 type BufferStatus struct {
 	Minutes float64 `json:"minutes"`
