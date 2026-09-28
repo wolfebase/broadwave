@@ -1,8 +1,15 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixture";
+
+// Chromium in this runner turns the back/forward cache off. This file needs it
+// on: a kept page is the case under test. WebKit reloads instead, and Firefox
+// does not launch here.
+test.use({
+  launchOptions: { ignoreDefaultArgs: ["--disable-back-forward-cache"] },
+});
 
 // A page left for another still counted its viewer, and on a server with a
 // budget of two pictures the side by side opened next lost a tile.
@@ -53,4 +60,61 @@ test("side by side plays both tiles after a page left before its watch answered"
   await expect.poll(() => tilesMoving(page), { timeout: 40_000, message: "both tiles play once the lost picture is freed" }).toBe(2);
   await expect(page.locator(".mv-tile [role='alert']")).toHaveCount(0);
   await expect.poll(viewers, { timeout: 15_000 }).toBe(2);
+});
+
+async function pictureMoving(page: Page): Promise<boolean> {
+  const video = page.locator("video").first();
+  if ((await video.count()) === 0) return false;
+  return video.evaluate(async (el: HTMLVideoElement) => {
+    const from = el.currentTime;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return el.videoWidth > 0 && !el.paused && el.currentTime > from;
+  });
+}
+
+// The watch page is frozen for Back, so it used to keep its viewer while side
+// by side opened. The hide lets that viewer go. Coming back starts one watch.
+test("a page kept for Back lets its watch go and watches again", async ({ page }) => {
+  const diag = (await (await fetch(`${base}/api/v1/diagnostics`)).json()) as { encoder?: { tiles?: number } };
+  test.skip((diag.encoder?.tiles ?? 0) < 2, "needs two pictures");
+  expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBe(true);
+  await page.addInitScript(() => {
+    const mark = window as Window & { __bf?: { type: string; persisted: boolean; path: string }[] };
+    mark.__bf = [];
+    window.addEventListener("pagehide", (event) => {
+      mark.__bf?.push({ type: "pagehide", persisted: event.persisted, path: location.pathname });
+    });
+    window.addEventListener("pageshow", (event) => {
+      mark.__bf?.push({ type: "pageshow", persisted: event.persisted, path: location.pathname });
+    });
+  });
+
+  await page.goto("/watch?channel=1");
+  await expect.poll(viewers, { timeout: 30_000, message: "one viewer on the channel" }).toBe(1);
+  await expect.poll(() => pictureMoving(page), { timeout: 20_000, message: "the channel is playing" }).toBe(true);
+
+  await page.goto("/multiview?ch=1,3&layout=2up&focus=1");
+  await expect.poll(viewers, { timeout: 30_000, message: "the kept page let its viewer go" }).toBe(2);
+  // The stop names the rendition from the watch answer. Leaving before that
+  // answer arrives cannot free the tuner.
+  await expect.poll(() => tilesMoving(page), { timeout: 30_000, message: "both tiles are playing" }).toBe(2);
+
+  const left = Date.now();
+  await page.goBack({ waitUntil: "commit" });
+  const kept = await page.evaluate(() => {
+    const rows = (window as Window & { __bf?: { type: string; persisted: boolean; path: string }[] }).__bf ?? [];
+    return {
+      hide: rows.some((row) => row.type === "pagehide" && row.path === "/watch" && row.persisted),
+      show: rows.some((row) => row.type === "pageshow" && row.path === "/watch" && row.persisted),
+    };
+  });
+  expect(kept).toEqual({ hide: true, show: true });
+  await expect.poll(viewers, { timeout: 5_000, message: "one viewer after Back" }).toBe(1);
+  await expect.poll(() => pictureMoving(page), { timeout: Math.max(500, 5_000 - (Date.now() - left)) }).toBe(true);
+  await expect(page.locator(".player-error")).toHaveCount(0);
+  const backMs = Date.now() - left;
+  const evidence = path.resolve(here, "../../.evidence/lane/l44");
+  mkdirSync(evidence, { recursive: true });
+  writeFileSync(path.join(evidence, "summary.json"), JSON.stringify({ backMs, viewers: await viewers(), kept }, null, 2));
+  await page.screenshot({ path: path.join(evidence, "back.jpg") });
 });
