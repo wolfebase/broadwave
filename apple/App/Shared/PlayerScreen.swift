@@ -3,6 +3,7 @@ import AVKit
 import BroadwaveKit
 import BroadwaveUI
 import CoreMedia
+import MediaAccessibility
 import os
 import SwiftUI
 #if os(iOS)
@@ -168,7 +169,9 @@ final class LivePlayer {
                 error = nil
                 holdPicture = false
             }
-            let item = AVPlayerItem(url: api.url(session.playlist))
+            // The multivariant playlist carries the captions track, so the
+            // system subtitle menu and the Closed Captions setting apply.
+            let item = AVPlayerItem(url: api.url(session.mainPlaylist ?? session.playlist))
             item.externalMetadata = metadata(channel: channel, airing: store.index.on(channel.id, at: Date()))
             PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
             player.replaceCurrentItem(with: item)
@@ -177,6 +180,11 @@ final class LivePlayer {
             player.play()
             watchPicture()
             playLog.info("channel \(channel.displayNumber, privacy: .public)")
+            #if DEBUG
+                if UserDefaults.standard.bool(forKey: "BroadwaveCaptions") {
+                    Task { await showCaptions(item) }
+                }
+            #endif
             if store.syncEnabled, Compatibility.gateFeature(store.info, "wholeHomeSync") == nil, let socket = store.socket {
                 let engine = SyncEngine(player: player, socket: socket, room: "channel:\(channel.id)", channelID: channel.id)
                 engine.start()
@@ -493,6 +501,23 @@ final class LivePlayer {
             try? line.write(to: url)
         }
     }
+
+    #if DEBUG
+        /// `-BroadwaveCaptions YES` turns on the system's captions setting, as
+        /// Accessibility › Subtitles and Captioning would, and logs the track
+        /// the player chose.
+        private func showCaptions(_ item: AVPlayerItem) async {
+            MACaptionAppearanceSetDisplayType(.user, .alwaysOn)
+            guard let group = try? await item.asset.loadMediaSelectionGroup(for: .legible) else {
+                playLog.info("captions none")
+                return
+            }
+            try? await Task.sleep(for: .seconds(8))
+            let offered = group.options.map(\.displayName).joined(separator: ", ")
+            let chosen = item.currentMediaSelection.selectedMediaOption(in: group)?.displayName ?? "none"
+            playLog.info("captions offered \(offered, privacy: .public) chosen \(chosen, privacy: .public)")
+        }
+    #endif
 
     private func watchStartup(_ item: AVPlayerItem) {
         if let tick {
