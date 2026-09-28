@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -196,14 +197,81 @@ func (s *Server) downloadRecording(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
-	clean := filepath.Clean(rec.Path)
-	if !strings.EqualFold(filepath.Ext(clean), ".ts") {
+	// rec.Path is stored data. A ".." or a symlink must not leave the recordings folder.
+	path, ok := recordingInside(s.recordingsRoot(), rec.Path)
+	if !ok {
+		httpError(w, "recording not found", http.StatusNotFound)
+		return
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		httpError(w, "recording not found", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
 		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", "video/mp2t")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+filepath.Base(clean)+`"`)
-	http.ServeFile(w, r, clean)
+	w.Header().Set("Content-Disposition", attachmentDisposition(filepath.Base(path)))
+	http.ServeContent(w, r, filepath.Base(path), info.ModTime(), f)
+}
+
+func (s *Server) recordingsRoot() string {
+	if s == nil || s.Hub == nil || s.Hub.Dir == "" {
+		return ""
+	}
+	return filepath.Join(s.Hub.Dir, "recordings")
+}
+
+// recordingInside is the cleaned path when it is a .ts file inside root.
+// A missing file still counts, so the caller can answer 404. A symlink that
+// resolves outside root does not.
+func recordingInside(root, stored string) (string, bool) {
+	if root == "" || stored == "" {
+		return "", false
+	}
+	clean := filepath.Clean(stored)
+	if !strings.EqualFold(filepath.Ext(clean), ".ts") || !pathInside(root, clean) {
+		return "", false
+	}
+	return clean, true
+}
+
+func pathInside(root, candidate string) bool {
+	root = filepath.Clean(root)
+	if root == "" || root == "." {
+		return false
+	}
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
+	candidate = filepath.Clean(candidate)
+	if resolved, err := filepath.EvalSymlinks(candidate); err == nil {
+		candidate = resolved
+	} else if !os.IsNotExist(err) {
+		return false
+	}
+	rel, err := filepath.Rel(root, candidate)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return false
+	}
+	return true
+}
+
+// attachmentDisposition is one header field. A quote or a newline in the
+// file name is encoded, so it cannot start a second line or close the name.
+func attachmentDisposition(name string) string {
+	name = filepath.Base(name)
+	if name == "" || name == "." || name == ".." {
+		name = "recording.ts"
+	}
+	if v := mime.FormatMediaType("attachment", map[string]string{"filename": name}); v != "" {
+		return v
+	}
+	return `attachment; filename="recording.ts"`
 }
 
 func (s *Server) playVirtual(w http.ResponseWriter, r *http.Request) {
