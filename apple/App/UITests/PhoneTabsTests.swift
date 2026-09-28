@@ -29,6 +29,7 @@
             diagnostics.tap()
             XCTAssertTrue(app.navigationBars["Diagnostics"].waitForExistence(timeout: 10), app.debugDescription)
             assertOneBar(app, "diagnostics")
+            assertOneBackButton(app)
             shot(app, "iphone-diagnostics")
         }
 
@@ -152,9 +153,25 @@
                 let buttons = (0 ..< bar.buttons.count).map { bar.buttons.element(boundBy: $0).label }
                 return "\(bar.label) [\(buttons.joined(separator: " | "))]"
             }
-            print("l42-bars \(name) count=\(bars.count) \(lines.joined(separator: " ;; "))")
+            print("l48-bars \(name) count=\(bars.count) \(lines.joined(separator: " ;; "))")
             XCTAssertEqual(bars.count, 1, lines.joined(separator: "\n"))
             XCTAssertFalse(lines.contains { $0.hasPrefix("More") }, lines.joined(separator: "\n"))
+        }
+
+        /// More used to keep its own bar above Settings, so Diagnostics showed two Back buttons.
+        private func assertOneBackButton(_ app: XCUIApplication) {
+            let labels = navigationButtons(app)
+            print("l48-back \(labels.joined(separator: " | "))")
+            XCTAssertEqual(labels.count, 1, "expected one back button, got \(labels.joined(separator: ", "))")
+        }
+
+        private func navigationButtons(_ app: XCUIApplication) -> [String] {
+            app.navigationBars.allElementsBoundByIndex.filter(\.exists).flatMap { bar in
+                (0 ..< bar.buttons.count).compactMap { index -> String? in
+                    let button = bar.buttons.element(boundBy: index)
+                    return button.exists ? button.label : nil
+                }
+            }
         }
 
         private func shot(_: XCUIApplication, _ name: String) {
@@ -163,7 +180,7 @@
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let url = folder.appending(path: "\(name).png")
             try? XCUIScreen.main.screenshot().pngRepresentation.write(to: url)
-            print("l42-shot \(url.path)")
+            print("l48-shot \(url.path)")
         }
 
         private func until(_ seconds: TimeInterval, _ done: () -> Bool) -> Bool {
