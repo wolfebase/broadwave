@@ -202,6 +202,8 @@ type mux struct {
 	// ring holds the last Buffer of the multiplex. Chunks enter it under
 	// pipeMu, in the same order the subscribers get them.
 	ring *ring.Ring
+	// closed is set under pipeMu when the tune ends.
+	closed bool
 }
 
 // feed is one channel on a tuned frequency.
@@ -1647,23 +1649,47 @@ func (h *Hub) attachPipe(m *mux, w io.WriteCloser, lead bool) *pipeSub {
 
 // attachPipeHead subscribes w. head runs under pipeMu, so the bytes it
 // returns end exactly where the live chunks begin. When head is not ok,
-// nothing is subscribed and the result is nil.
+// nothing is subscribed and the result is nil. After the tune has ended, w
+// is closed at once.
 func (h *Hub) attachPipeHead(m *mux, w io.WriteCloser, head func() ([]byte, bool)) *pipeSub {
-	// A few seconds of the mux have to fit. The rendition does not read during
-	// VAAPI startup, and a gap at the start leaves the deinterlacer with no
-	// picture, so the playlist stays an empty file.
-	sub := &pipeSub{w: w, ch: make(chan []byte, 16384), done: make(chan struct{})}
+	sub := newPipeSub(w)
 	if m == nil {
 		sub.stop()
 		_ = w.Close()
 		return sub
 	}
+	if !m.join(sub, head) {
+		if m.isShut() {
+			sub.stop()
+			_ = w.Close()
+			return sub
+		}
+		return nil
+	}
+	go m.deliver(sub)
+	return sub
+}
+
+// newPipeSub makes a subscriber for w. A few seconds of the mux have to fit
+// its queue: the rendition does not read during VAAPI startup, and a gap at
+// the start leaves the deinterlacer with no picture, so the playlist stays an
+// empty file.
+func newPipeSub(w io.WriteCloser) *pipeSub {
+	return &pipeSub{w: w, ch: make(chan []byte, 16384), done: make(chan struct{})}
+}
+
+// join adds sub to the live fan-out. head runs under pipeMu, as in
+// attachPipeHead; when it is not ok, or the tune has ended, sub is not added.
+func (m *mux) join(sub *pipeSub, head func() ([]byte, bool)) bool {
 	m.pipeMu.Lock()
+	defer m.pipeMu.Unlock()
+	if m.closed {
+		return false
+	}
 	if head != nil {
 		b, ok := head()
 		if !ok {
-			m.pipeMu.Unlock()
-			return nil
+			return false
 		}
 		if len(b) > 0 {
 			sub.ch <- b
@@ -1671,25 +1697,31 @@ func (h *Hub) attachPipeHead(m *mux, w io.WriteCloser, head func() ([]byte, bool
 		}
 	}
 	m.pipes = append(m.pipes, sub)
-	m.pipeMu.Unlock()
-	go func() {
-		defer w.Close()
-		for {
-			select {
-			case <-sub.done:
+	return true
+}
+
+// deliver writes sub's chunks until it stops. A sub stopped before it
+// joined leaves the fan-out here, since detach may have looked first.
+func (m *mux) deliver(sub *pipeSub) {
+	w := sub.w
+	defer func() {
+		_ = w.Close()
+		m.remove(sub)
+	}()
+	for {
+		select {
+		case <-sub.done:
+			return
+		case chunk, ok := <-sub.ch:
+			if !ok {
 				return
-			case chunk, ok := <-sub.ch:
-				if !ok {
-					return
-				}
-				sub.queued.Add(-int64(len(chunk)))
-				if _, err := w.Write(chunk); err != nil {
-					return
-				}
+			}
+			sub.queued.Add(-int64(len(chunk)))
+			if _, err := w.Write(chunk); err != nil {
+				return
 			}
 		}
-	}()
-	return sub
+	}
 }
 
 // readLoop is the only reader of the tuner. A slow subscriber loses chunks
@@ -1954,7 +1986,7 @@ func (h *Hub) stopFeedLocked(f *feed) {
 		if m.body != nil {
 			_ = m.body.Close()
 		}
-		for _, sub := range m.snapshot() {
+		for _, sub := range m.shut() {
 			sub.stop()
 		}
 		if m.tuner >= 0 {
@@ -2651,15 +2683,35 @@ func (m *mux) detach(sub *pipeSub) {
 	if m == nil || sub == nil {
 		return
 	}
+	m.remove(sub)
+	sub.stop()
+}
+
+func (m *mux) remove(sub *pipeSub) {
 	m.pipeMu.Lock()
+	defer m.pipeMu.Unlock()
 	for i, s := range m.pipes {
 		if s == sub {
 			m.pipes = append(m.pipes[:i], m.pipes[i+1:]...)
-			break
+			return
 		}
 	}
-	m.pipeMu.Unlock()
-	sub.stop()
+}
+
+// shut ends the fan-out: no subscriber joins after it, and it returns the
+// ones to stop. A reader still copying from the ring would otherwise join a
+// tune that has already ended, and nothing would stop it.
+func (m *mux) shut() []*pipeSub {
+	m.pipeMu.Lock()
+	defer m.pipeMu.Unlock()
+	m.closed = true
+	return append([]*pipeSub(nil), m.pipes...)
+}
+
+func (m *mux) isShut() bool {
+	m.pipeMu.Lock()
+	defer m.pipeMu.Unlock()
+	return m.closed
 }
 
 func (m *mux) snapshot() []*pipeSub {

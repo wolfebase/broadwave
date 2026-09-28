@@ -1,6 +1,7 @@
 package live
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -314,4 +316,55 @@ func TestBufferedSinceFollowsTheTunedFrequency(t *testing.T) {
 	}
 	cancel()
 	<-exported
+}
+
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) bytes() []byte {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return bytes.Clone(b.buf.Bytes())
+}
+
+func TestASecondExportHasItsPictureAtOnce(t *testing.T) {
+	h, st := bufferHub(t)
+	defer h.Shutdown()
+	id := idOf(t, st, "4.1")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	first := make(chan struct{})
+	go func() {
+		_ = h.Export(ctx, id, io.Discard)
+		close(first)
+	}()
+	time.Sleep(exportHead + 2*time.Second)
+	out := &syncBuffer{}
+	second := make(chan struct{})
+	go func() {
+		_ = h.Export(ctx, id, out)
+		close(second)
+	}()
+	// Without the buffer the copy waits a second to probe and then for a
+	// keyframe; with it, three seconds are there at once.
+	time.Sleep(700 * time.Millisecond)
+	got := out.bytes()
+	path := filepath.Join(t.TempDir(), "head.ts")
+	if err := os.WriteFile(path, got, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if d := probeDuration(t, path); d < 1.5 {
+		t.Fatalf("%d bytes, %.2f s of picture 700 ms into the export", len(got), d)
+	}
+	cancel()
+	<-first
+	<-second
 }

@@ -322,3 +322,39 @@ func TestRingTurnsOffAndOnWithItsSetting(t *testing.T) {
 		t.Fatalf("back on at %d ok %v", pos, ok)
 	}
 }
+
+func TestRingAtFindsTheByteThatArrivedThen(t *testing.T) {
+	c := &clock{t: time.Unix(1000, 0)}
+	r := Open(t.TempDir(), Options{Window: fixed(time.Hour), Span: 10 * time.Second, Now: c.now})
+	defer r.Close()
+	start := c.now()
+	if _, ok := r.At(start); ok {
+		t.Fatal("an empty ring has no position")
+	}
+	// 1000 bytes every 250 ms: marks at 0, 1 s, 2 s; 12 chunks.
+	for i := 0; i < 12; i++ {
+		r.Append(chunk(i))
+		c.add(250 * time.Millisecond)
+	}
+	cases := []struct {
+		at   time.Duration
+		want int64
+	}{
+		{0, 0},
+		{500 * time.Millisecond, 2000},
+		{1250 * time.Millisecond, 5000},
+		// Past the last mark it runs to the newest byte, which arrived at 2.75 s.
+		{2375 * time.Millisecond, 10000},
+		{2750 * time.Millisecond, 12000},
+		{time.Hour, 12000},
+	}
+	for _, tc := range cases {
+		got, ok := r.At(start.Add(tc.at))
+		if !ok || got != tc.want {
+			t.Errorf("At(+%v) = %d, %v; want %d", tc.at, got, ok, tc.want)
+		}
+	}
+	if _, ok := r.At(start.Add(-time.Second)); ok {
+		t.Error("a time before the oldest byte has no position")
+	}
+}

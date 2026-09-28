@@ -186,3 +186,43 @@ func (h *Hub) endBackfill(m *mux, rec *recording, sub *pipeSub) {
 	id := rec.id
 	rec.timer = time.AfterFunc(time.Until(rec.ends), func() { h.StopRecord(id) })
 }
+
+// packetStart moves pos back to the start of its transport packet. The ring
+// counts bytes from the tune's first packet.
+func packetStart(pos int64) int64 {
+	return pos - pos%188
+}
+
+// joinLive writes the ring from pos into sub, then hands sub to the live
+// fan-out at the byte the copy reached, as backfill does for a recording.
+// A negative pos, or bytes the ring no longer holds, join at the live edge.
+// When the tune has ended, the writer is closed instead.
+func (m *mux) joinLive(sub *pipeSub, pos int64) {
+	buf := make([]byte, 1<<20)
+	for pos >= 0 {
+		n, err := m.ring.CopyBuffer(sub.w, pos, m.ring.Received(), buf)
+		pos += n
+		switch {
+		case errors.Is(err, ring.ErrGone):
+			pos = -1
+			continue
+		case err != nil:
+			_ = sub.w.Close()
+			return
+		}
+		at := pos
+		if m.join(sub, func() ([]byte, bool) { return m.ring.PendingFrom(at) }) {
+			go m.deliver(sub)
+			return
+		}
+		if m.isShut() {
+			_ = sub.w.Close()
+			return
+		}
+	}
+	if !m.join(sub, nil) {
+		_ = sub.w.Close()
+		return
+	}
+	go m.deliver(sub)
+}
