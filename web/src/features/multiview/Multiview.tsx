@@ -10,6 +10,7 @@ import { events } from "../../lib/events";
 import type { Channel, MultiviewPlan } from "../../types";
 import { CloseIcon, VolumeIcon } from "../../ui/icons";
 import { LiveFrame } from "../../ui/LiveFrame";
+import { pageFitsTiles } from "../player/quietStart";
 import { useLiveStream } from "../player/useLiveStream";
 import { refreshScores, scoreLine, useScoreMap, type ScoreGame } from "../sports/scores";
 import { channelsOnScreen, holdShown, layoutChoices, layoutFromParam, layoutLabel, rememberAuto, rememberLayout, roomId, saveSet, savedAuto, savedLayout, slotsFor, yieldsSound, type MvLayout } from "./storage";
@@ -323,6 +324,33 @@ export function Multiview() {
   // With fewer pictures than tiles, a quiet tile that asked first kept the
   // picture the viewer is listening to.
   const focusedId = focused?.id ?? 0;
+  const [slots, setSlots] = useState<number | null>(null);
+  const [pictures, setPictures] = useState<ReadonlySet<number>>(() => new Set());
+  useEffect(() => {
+    let dead = false;
+    fetch("/api/v1/diagnostics")
+      .then((res) => res.json() as Promise<{ encoder?: { tiles?: number } }>)
+      .then((body) => {
+        const count = body.encoder?.tiles;
+        if (!dead && typeof count === "number") setSlots(count);
+      })
+      .catch(() => undefined);
+    return () => {
+      dead = true;
+    };
+  }, []);
+  const notePicture = useCallback((id: number, on: boolean) => {
+    setPictures((prev) => {
+      if (prev.has(id) === on) return prev;
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+  // A kept page starts every tile together only when the last budget covered
+  // them. Otherwise the sound tile asks first again.
+  const fits = pageFitsTiles(slots, ordered.length, pictures.size);
   const [answered, setAnswered] = useState(0);
   const firstDone = answered === focusedId;
   const onAnswered = useCallback((id: number, done: boolean) => setAnswered((prev) => (done ? id : prev === id ? 0 : prev)), []);
@@ -354,7 +382,7 @@ export function Multiview() {
   }, [soundTo]);
 
   return (
-    <section className="mv" tabIndex={0} onKeyDown={onKey} aria-label={layoutLabel(layout)}>
+    <section className="mv" tabIndex={0} onKeyDown={onKey} aria-label={layoutLabel(layout)} data-fits={fits ? "1" : "0"} data-slots={slots ?? ""} data-pictures={pictures.size} data-tiles={ordered.length}>
       <header className="mv-top">
         <button type="button" className="glass-icon" aria-label="Back to one channel" onClick={() => (focused ? player.open(focused) : navigate("/guide"))}>
           <CloseIcon />
@@ -408,6 +436,8 @@ export function Multiview() {
             onRemove={() => remove(channel.id)}
             onFailed={markFailed}
             onAnswered={onAnswered}
+            onPicture={notePicture}
+            fits={fits}
             onRecord={() => void record(channel, airingAt(index, channel.id, now)?.title || channel.displayName)}
           />
         ))}
@@ -457,6 +487,8 @@ function Tile({
   onRecord,
   onFailed,
   onAnswered,
+  onPicture,
+  fits,
   after,
 }: {
   channel: Channel;
@@ -472,6 +504,8 @@ function Tile({
   onRecord: () => void;
   onFailed: (id: number, failed: boolean) => void;
   onAnswered: (id: number, done: boolean) => void;
+  onPicture: (id: number, on: boolean) => void;
+  fits: boolean;
   after: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -494,10 +528,17 @@ function Tile({
     profile: big ? (layoutMode === "tv" ? "tv" : "desktop") : "tile",
     audible: focused,
     after,
+    fits,
+    quiet: !focused,
   });
   useEffect(() => {
     if (focused) onAnswered(channel.id, !stream.asking);
   }, [focused, stream.asking, channel.id, onAnswered]);
+  useEffect(() => {
+    if (stream.asking) return;
+    onPicture(channel.id, stream.session != null);
+  }, [stream.asking, stream.session, channel.id, onPicture]);
+  useEffect(() => () => onPicture(channel.id, false), [channel.id, onPicture]);
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;

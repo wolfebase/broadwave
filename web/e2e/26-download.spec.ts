@@ -35,12 +35,10 @@ async function recordings(): Promise<Rec[]> {
   return ((await res.json()) as { recordings?: Rec[] }).recordings ?? [];
 }
 
-function libraryRow(page: Page) {
-  // The page section also contains the show heading, so the row is the card under that title.
-  return page
-    .locator(".show-grid > section")
-    .filter({ has: page.getByRole("heading", { name: "Evening News", exact: true, level: 3 }) })
-    .locator(".media-card", { hasText: "Local headlines" });
+function libraryRow(page: Page, id: number) {
+  // An earlier spec can replace the listing this recording was named from.
+  // The poster is this recording either way.
+  return page.locator(".media-card", { has: page.locator(`img.poster[src="/media/poster/${id}"]`) });
 }
 
 async function wake(page: Page) {
@@ -68,8 +66,11 @@ test("a finished recording can be downloaded", async ({ page }) => {
     data: { channelId: newsChannel().id, minutes: 2, title: "Evening News" },
   });
   if (!started.ok()) throw new Error(`record ${started.status()} ${await started.text()}`);
-  const id = ((await started.json()) as { id: number }).id;
+  const created = (await started.json()) as { id: number; title: string };
+  const id = created.id;
+  const title = created.title;
   expect(id).toBeGreaterThan(0);
+  expect(title).toBeTruthy();
 
   try {
     await expect.poll(async () => (await recordings()).find((rec) => rec.id === id)?.bytes ?? 0, { timeout: 20_000 }).toBeGreaterThan(10_000);
@@ -77,13 +78,13 @@ test("a finished recording can be downloaded", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/recordings");
     await settle(page);
-    const recording = libraryRow(page);
+    const recording = libraryRow(page, id);
     await expect(recording.getByRole("button", { name: "Stop recording" })).toBeVisible();
     await expect(recording.getByRole("link", { name: "Download" })).toHaveCount(0);
     await expect(recording).not.toContainText(/WDAF|KCTV|Chiefs/);
 
     await recording.getByRole("button", { name: "Stop recording" }).click();
-    await expect(page.getByText("Stopped Evening News. What it recorded is kept.")).toBeVisible();
+    await expect(page.getByText(`Stopped ${title}. What it recorded is kept.`)).toBeVisible();
     const link = recording.getByRole("link", { name: "Download" });
     await expect(link).toHaveAttribute("href", `/api/v1/recordings/${id}/file`);
     await expect(link).toHaveAttribute("download", "");
@@ -96,7 +97,11 @@ test("a finished recording can be downloaded", async ({ page }) => {
     const head = await page.request.fetch(file, { method: "HEAD" });
     expect(head.status()).toBe(200);
     const disposition = head.headers()["content-disposition"] ?? "";
-    const filename = disposition.match(/filename="([^"]*)"/)?.[1] ?? "";
+    // A plain name is a token. A name that needs quotes or percent-encoding
+    // still has to yield the base name, with no extra header field.
+    const quoted = disposition.match(/filename="((?:\\.|[^"])*)"/);
+    const plain = disposition.match(/filename=([^;\s]+)/);
+    const filename = (quoted?.[1] ?? plain?.[1] ?? "").replace(/\\"/g, '"');
     expect(disposition.startsWith("attachment;"), disposition).toBeTruthy();
     expect(filename.endsWith(".ts"), disposition).toBeTruthy();
     expect(filename.includes("/") || filename.includes("\\"), disposition).toBeFalsy();
@@ -123,7 +128,7 @@ test("a finished recording can be downloaded", async ({ page }) => {
     await settle(page);
     const player = page.getByRole("region", { name: "Player" });
     await expect(player).toBeVisible();
-    await expect(player.getByRole("heading", { name: /Evening News/ })).toBeVisible();
+    await expect(player.getByRole("heading", { name: new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) })).toBeVisible();
     await expect(player).not.toContainText(/WDAF|KCTV|Chiefs/);
     await wake(page);
     await page.getByRole("button", { name: "Options" }).click();
