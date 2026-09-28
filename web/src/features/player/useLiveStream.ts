@@ -69,9 +69,6 @@ export function useLiveStream(
   const [pictureStopAt, setPictureStopAt] = useState(0);
   const pictureStopAtRef = useRef(0);
   const quietRetry = useRef<number | null>(null);
-  // The server restarted, so this watch is gone. Stopping it by rendition on
-  // the new process would take a viewer from someone else's watch.
-  const watchLost = useRef(false);
   // A quiet watch still starting or holding for its first picture.
   const quietPending = useRef(false);
   const [needsConfirm, setNeedsConfirm] = useState(false);
@@ -96,13 +93,15 @@ export function useLiveStream(
       pictureStopAtRef.current = 0;
       setPictureStopAt(0);
     }
-    watchLost.current = false;
     const video = videoRef.current;
     if (!video || !channelId) return;
     let dead = false;
     let hls: Hls | null = null;
     const id = channelId;
     let joined = "";
+    // The stop names the server process that counted this viewer. After a
+    // restart the new process ignores it instead of taking someone else's.
+    let boot = "";
     // The watch request can outlive this effect (Strict Mode runs it twice,
     // and leaving the page races the response). Both paths must release that
     // one viewer, and neither may release a viewer the request has not added.
@@ -114,8 +113,7 @@ export function useLiveStream(
     const release = () => {
       if (released || !joined) return;
       released = true;
-      if (watchLost.current) return;
-      void stopWatch(id, joined);
+      void stopWatch(id, joined, boot);
     };
     if (remember) rememberChannel(remember);
     const started = performance.now();
@@ -216,6 +214,7 @@ export function useLiveStream(
         setNeedsConfirm(false);
         const next = await watchChannel(id, webCaps(), { quality, audio, picture, track, even }, "", allow, ctrl.signal);
         joined = next.rendition;
+        boot = next.boot ?? "";
         autoTries.current = { channel: id, n: 0 };
         if (dead) {
           release();
@@ -308,7 +307,7 @@ export function useLiveStream(
     const beacon = (event: PageTransitionEvent) => {
       if (event.persisted) return;
       if (released || !joined) return;
-      const body = new Blob([JSON.stringify({ rendition: joined })], { type: "application/json" });
+      const body = new Blob([JSON.stringify({ rendition: joined, boot })], { type: "application/json" });
       if (navigator.sendBeacon?.(`/api/v1/watch/${id}/stop`, body)) released = true;
     };
     // A frozen or hidden tab does not move the playhead. The room does. On
@@ -454,7 +453,6 @@ export function useLiveStream(
     const off = events().on("restarted", () => {
       if (retrying.current) return;
       retrying.current = true;
-      watchLost.current = true;
       quietRetry.current = channelId;
       setAttempt((n) => n + 1);
     });
@@ -482,10 +480,7 @@ export function useLiveStream(
         if (key === seen.key) return;
         seen.key = key;
         retrying.current = true;
-        if (recovery === "restart") {
-          quietRetry.current = channelId;
-          watchLost.current = true;
-        }
+        if (recovery === "restart") quietRetry.current = channelId;
         setAttempt((n) => n + 1);
       } finally {
         ticking = false;

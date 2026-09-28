@@ -698,6 +698,11 @@ paths:
               type: object
               properties:
                 rendition: { type: string, description: "The rendition this viewer joined; empty releases from the busiest" }
+                boot:
+                  type: string
+                  description: |
+                    The `boot` from the watch answer. A stop that names another server
+                    process is ignored: that process and its viewers are gone.
       responses:
         "200": { $ref: "#/components/responses/Ok" }
   /multiview/plan:
@@ -1833,6 +1838,9 @@ components:
         tuners:
           type: array
           items: { $ref: "#/components/schemas/Tuner" }
+        boot:
+          type: string
+          description: Names the server process that counted this viewer, as in the event socket's `hello`. Send it back with the stop.
     Recording:
       type: object
       required: [id, channelId, guideNumber, title, status, startedAt]

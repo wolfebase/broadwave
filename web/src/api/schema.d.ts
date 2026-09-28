@@ -1409,6 +1409,8 @@ export interface components {
             program?: number;
             hints?: string[];
             tuners?: components["schemas"]["Tuner"][];
+            /** @description Names the server process that counted this viewer, as in the event socket's `hello`. Send it back with the stop. */
+            boot?: string;
         };
         Recording: {
             /** Format: int64 */
@@ -2555,6 +2557,11 @@ export interface operations {
                 "application/json": {
                     /** @description The rendition this viewer joined; empty releases from the busiest */
                     rendition?: string;
+                    /**
+                     * @description The `boot` from the watch answer. A stop that names another server
+                     *     process is ignored: that process and its viewers are gone.
+                     */
+                    boot?: string;
                 };
             };
         };

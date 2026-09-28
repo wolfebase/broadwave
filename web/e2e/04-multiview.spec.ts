@@ -218,14 +218,21 @@ test("side by side to quad plays every picture the server has room for", async (
 test.describe("a restarted server", () => {
   test.setTimeout(180_000);
 
-  for (const layout of ["2up", "quad"] as const) {
-    test(`${layout === "2up" ? "side by side" : "quad"} plays again with no click`, async ({ page }) => {
+  // A slow restart stays down until the tiles have named the outage, as a
+  // container that benches its encoder on start does.
+  const runs = [
+    { layout: "2up", slow: false, title: "side by side plays again with no click" },
+    { layout: "quad", slow: false, title: "quad plays again with no click" },
+    { layout: "2up", slow: true, title: "side by side plays again after a slow restart, one viewer a tile" },
+  ] as const;
+  for (const { layout, slow, title } of runs) {
+    test(title, async ({ page }) => {
       const { base, control } = harness();
       const wdaf = channel("WDAF");
       const second = channel("KCTV");
       const third = channel("WDAF2");
       const ids = layout === "2up" ? [wdaf.id, second.id] : [wdaf.id, third.id, second.id];
-      const name = layout === "2up" ? "side" : "quad";
+      const name = (layout === "2up" ? "side" : "quad") + (slow ? "-slow" : "");
       try {
         await expect
           .poll(async () => (await ourViewers(base)).length === 0, { timeout: 60_000, intervals: [500], message: "the previous watch let the tuners go" })
@@ -284,6 +291,12 @@ test.describe("a restarted server", () => {
         page.on("request", (req) => {
           if (req.method() === "POST" && new URL(req.url()).pathname === "/api/v1/watch") watched += 1;
         });
+        if (slow) {
+          await post(`${control}/stop`);
+          await expect
+            .poll(async () => (await tiles(page)).some((tile) => tile.alert !== ""), { timeout: 40_000, intervals: [500], message: "a tile names the outage" })
+            .toBe(true);
+        }
         const restarted = Date.now();
         await post(`${control}/start`);
         mkdirSync(evidence, { recursive: true });
@@ -312,9 +325,9 @@ test.describe("a restarted server", () => {
         await expect
           .poll(async () => {
             after = await ourViewers(base);
-            return viewerKey(after) === viewerKey(before) && after.length === before.length;
+            return `${after.length} tuners, viewers ${viewerKey(after)}`;
           }, { timeout: viewersLeft, intervals: [500], message: "the same viewers are back" })
-          .toBe(true);
+          .toBe(`${before.length} tuners, viewers ${viewerKey(before)}`);
         await page.screenshot({ path: path.join(evidence, `${name}-back.jpg`), animations: "disabled" });
         const summaryPath = path.join(evidence, "summary.json");
         const prior = (() => {

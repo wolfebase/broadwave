@@ -864,8 +864,9 @@ public struct WatchSession: Codable, Sendable, Hashable {
     public var program: Int?
     public var hints: [String]?
     public var tuners: [Tuner]?
+    public var boot: String?
 
-    public init(channelId: Int64, playlist: String, rendition: String, stream: StreamInfo, profile: String? = nil, audio: String? = nil, encoder: String, picture: PictureMode? = nil, videoMode: String? = nil, shared: Bool, viewers: Int, frequencyHz: Int? = nil, program: Int? = nil, hints: [String]? = nil, tuners: [Tuner]? = nil) {
+    public init(channelId: Int64, playlist: String, rendition: String, stream: StreamInfo, profile: String? = nil, audio: String? = nil, encoder: String, picture: PictureMode? = nil, videoMode: String? = nil, shared: Bool, viewers: Int, frequencyHz: Int? = nil, program: Int? = nil, hints: [String]? = nil, tuners: [Tuner]? = nil, boot: String? = nil) {
         self.channelId = channelId
         self.playlist = playlist
         self.rendition = rendition
@@ -881,5 +882,6 @@ public struct WatchSession: Codable, Sendable, Hashable {
         self.program = program
         self.hints = hints
         self.tuners = tuners
+        self.boot = boot
     }
 }

@@ -98,10 +98,24 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	}
 	// Tuner status is a separate request. Reading it here holds the hub lock
 	// after the first segment already exists, so the player cannot start.
-	writeJSON(w, http.StatusOK, session)
+	writeJSON(w, http.StatusOK, watchReply{Session: session, Boot: s.boot()})
 	if r.Context().Err() != nil {
 		s.Hub.Release(session.ChannelID, session.Rendition)
 	}
+}
+
+// watchReply names the server process with the session, so the stop can
+// say which process counted the viewer.
+type watchReply struct {
+	live.Session
+	Boot string `json:"boot,omitempty"`
+}
+
+func (s *Server) boot() string {
+	if s.Bus == nil {
+		return ""
+	}
+	return s.Bus.Boot
 }
 
 func (s *Server) release(w http.ResponseWriter, r *http.Request) {
@@ -112,9 +126,12 @@ func (s *Server) release(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Rendition string `json:"rendition"`
+		Boot      string `json:"boot"`
 	}
 	_ = decodeJSON(r, &body)
-	if s.Hub != nil {
+	// A watch counted by a process that has since restarted is gone with it.
+	// Releasing by rendition here would take someone else's viewer.
+	if s.Hub != nil && (body.Boot == "" || body.Boot == s.boot()) {
 		s.Hub.Release(id, body.Rendition)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})

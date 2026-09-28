@@ -470,4 +470,5 @@ export type WatchSession = {
   program?: number;
   hints?: string[];
   tuners?: Tuner[];
+  boot?: string;
 };
