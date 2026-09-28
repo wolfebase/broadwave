@@ -7,6 +7,7 @@ import type { Caps, Channel, Prefs, WatchSession } from "../../types";
 import { liveHlsConfig, type BufferProfile } from "../../picture";
 import { rememberChannel } from "../../recent";
 import { applySound } from "./extras";
+import { followCaptions, watchTimeline } from "./liveCaptions";
 import { awayBeforeSeekMs, resumePlan } from "./resume";
 import {
   aTunerAnswers,
@@ -50,6 +51,7 @@ export function useLiveStream(
     audible,
     remember,
     after,
+    captions,
   }: {
     channelId: number;
     quality?: Prefs["quality"];
@@ -65,6 +67,7 @@ export function useLiveStream(
     // Another player asks first. A watch that is already playing keeps going;
     // a start waits until this turns false.
     after?: boolean;
+    captions?: boolean;
   },
 ) {
   const syncRef = useRef<SyncEngine | null>(null);
@@ -278,6 +281,7 @@ export function useLiveStream(
           hlsRef.current = hls;
           (video as HTMLVideoElement & { hls?: Hls }).hls = hls;
           if (onRoom) startOnRoom(hls, video, onRoom);
+          watchTimeline(hls, Hls.Events);
           hls.loadSource(next.playlist);
           hls.attachMedia(video);
           attached = true;
@@ -614,6 +618,15 @@ export function useLiveStream(
     };
   }, [pictureStopAt, channelId]);
 
+  // A new watch makes a new hls.js, so captions follow the session.
+  const mainPlaylist = session?.channelId === channelId ? session.mainPlaylist : undefined;
+  useEffect(() => {
+    const video = videoRef.current;
+    const hls = hlsRef.current;
+    if (!captions || !mainPlaylist || !video || !hls) return;
+    return followCaptions(hls, Hls.Events, video, new URL("captions.m3u8", new URL(mainPlaylist, window.location.href)).toString());
+  }, [captions, mainPlaylist, session, videoRef]);
+
   useEffect(() => {
     audibleRef.current = audible;
     const video = videoRef.current;
@@ -625,6 +638,8 @@ export function useLiveStream(
 
   return {
     session: session?.channelId === channelId ? session : null,
+    // Captions need hls.js; a native player gets none yet.
+    canCaption: !!mainPlaylist && Hls.isSupported(),
     error,
     needsConfirm,
     asking,

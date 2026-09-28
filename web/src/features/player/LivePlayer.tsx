@@ -21,13 +21,13 @@ import { useLiveStream } from "./useLiveStream";
 type Quality = "auto" | "original" | "high" | "medium" | "saver";
 type Sound = "auto" | "surround" | "stereo";
 type Track = "main" | "language" | "described";
-type Options = { quality: Quality; audio: Sound; track: Track; even: boolean; sync: boolean; shared: boolean };
+type Options = { quality: Quality; audio: Sound; track: Track; even: boolean; sync: boolean; shared: boolean; captions: boolean };
 
 function readOptions(): Options {
   try {
-    return { quality: "auto", audio: "auto", track: "main", even: false, sync: true, shared: false, ...JSON.parse(localStorage.getItem("ota-live") || "{}") };
+    return { quality: "auto", audio: "auto", track: "main", even: false, sync: true, shared: false, captions: false, ...JSON.parse(localStorage.getItem("ota-live") || "{}") };
   } catch {
-    return { quality: "auto", audio: "auto", track: "main", even: false, sync: true, shared: false };
+    return { quality: "auto", audio: "auto", track: "main", even: false, sync: true, shared: false, captions: false };
   }
 }
 
@@ -67,6 +67,7 @@ export function LivePlayer({
     profile: mode === "mini" ? "tile" : layout,
     audible: true,
     remember: channel,
+    captions: opts.captions,
   });
   const session = stream.session;
   const error = stream.error;
@@ -436,6 +437,9 @@ export function LivePlayer({
           <OptionRow label="Quality" value={opts.quality} options={Object.keys(qualityLabels) as Options["quality"][]} labels={qualityLabels} onChange={(quality) => setOpts((o) => ({ ...o, quality }))} />
           <OptionRow label="Sound" value={opts.audio} options={["auto", "surround", "stereo"]} labels={{ auto: "Auto", surround: "Surround", stereo: "Stereo" }} onChange={(audio) => setOpts((o) => ({ ...o, audio }))} />
           <OptionRow label="Audio" value={opts.track} options={["main", "language", "described"]} labels={{ main: "Main", language: "Second language", described: "Described video" }} onChange={(track) => setOpts((o) => ({ ...o, track }))} />
+          {stream.canCaption ? (
+            <OptionRow label="Captions" value={opts.captions ? "on" : "off"} options={["off", "on"]} labels={{ off: "Off", on: "On" }} onChange={(v) => setOpts((o) => ({ ...o, captions: v === "on" }))} />
+          ) : null}
           <OptionRow label="Even volume" value={opts.even ? "on" : "off"} options={["off", "on"]} labels={{ off: "Off", on: "On" }} onChange={(v) => setOpts((o) => ({ ...o, even: v === "on" }))} />
           <OptionRow
             label="Motion"
