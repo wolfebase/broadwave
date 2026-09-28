@@ -125,6 +125,30 @@ Set `TZ` in `compose.yaml` first. That file uses host networking, which is right
 </details>
 
 <details>
+<summary><b>Image options</b></summary>
+<br>
+
+One image, `ghcr.io/wolfebase/broadwave`, for x86-64 and ARM64. It carries its own ffmpeg (jellyfin-ffmpeg 7), so nothing else needs installing.
+
+| Setting | What it does |
+| --- | --- |
+| `TZ` | Your time zone, such as `America/New_York`. Without it the server runs on UTC. |
+| `PUID`, `PGID` | The user and group that own the config folder and recordings. Broadwave starts as root, hands the config folder to them, and then runs as them. Leave them out to run as root. |
+| `UMASK` | Permissions for new files, such as `002` so the group can write. Default `022`. |
+| `HDHR_HOST` | The tuner's address, when discovery can't reach it. |
+| `BROADWAVE_ENCODER` | `gpu` or `software` to skip the automatic choice. |
+
+Graphics, for smoother transcoding:
+
+- **Intel or AMD (VAAPI).** `--device /dev/dri`. Broadwave keeps access to the device when it switches to `PUID` and `PGID`.
+- **NVIDIA (NVENC).** Install the NVIDIA Container Toolkit on the host, then add `--gpus all` (or `--runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all`). The image already asks for the video driver capability. On Unraid, add `--runtime=nvidia` to Extra Parameters and set `NVIDIA_VISIBLE_DEVICES` to the card's UUID. NVIDIA has not been tested on real hardware yet.
+- **None.** The picture comes from the processor. Diagnostics says how many screens it can serve.
+
+Docker's health check runs `broadwave -healthcheck` every 30 seconds, so `docker ps` shows `healthy` once the server answers.
+
+</details>
+
+<details>
 <summary><b>Automatic updates (optional)</b></summary>
 <br>
 

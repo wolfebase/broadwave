@@ -69,8 +69,8 @@ func Decide(t Tuners, s Schedule, r Recordings, now time.Time, window time.Durat
 
 // Run asks the server on port what it is doing and returns the exit code for
 // the updater. A server that does not answer has nothing to cut off.
-func Run(port int, now time.Time) (int, string) {
-	base := fmt.Sprintf("http://127.0.0.1:%d/api/v1", port)
+func Run(server string, now time.Time) (int, string) {
+	base := server + "/api/v1"
 	client := http.Client{Timeout: 5 * time.Second}
 	var t Tuners
 	var s Schedule

@@ -4,9 +4,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -111,26 +109,4 @@ func unmounted(f Facts) bool {
 		}
 	}
 	return best == "/"
-}
-
-// ApplyIdentity honors PUID, PGID, and UMASK. It only changes the user when this process is root.
-func ApplyIdentity(recordings string) {
-	if raw := strings.TrimSpace(os.Getenv("UMASK")); raw != "" {
-		if n, err := strconv.ParseUint(raw, 8, 32); err == nil {
-			syscall.Umask(int(n))
-		}
-	}
-	if os.Getuid() != 0 {
-		return
-	}
-	uid, uerr := strconv.Atoi(strings.TrimSpace(os.Getenv("PUID")))
-	gid, gerr := strconv.Atoi(strings.TrimSpace(os.Getenv("PGID")))
-	if uerr != nil || gerr != nil {
-		return
-	}
-	if recordings != "" {
-		_ = os.Chown(recordings, uid, gid)
-	}
-	_ = syscall.Setgid(gid)
-	_ = syscall.Setuid(uid)
 }

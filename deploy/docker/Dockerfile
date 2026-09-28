@@ -48,6 +48,8 @@ RUN mkdir -p /usr/share/doc/broadwave \
     'That tag is built with --enable-gpl and --enable-version3, so this ffmpeg is GPL-3.0-or-later. The Jellyfin package also links libfdk-aac.' \
     'A later build may install a newer jellyfin-ffmpeg7 from the same suite. Package version X.Y.Z-N-bookworm corresponds to tag vX.Y.Z-N in https://github.com/jellyfin/jellyfin-ffmpeg.' \
     > /usr/share/doc/broadwave/ffmpeg-source-offer.txt
+# NVENC needs the video capability; the NVIDIA runtime grants only compute and utility by default.
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
 EXPOSE 8477
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD ["broadwave", "-healthcheck"]
 VOLUME /config

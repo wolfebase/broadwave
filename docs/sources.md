@@ -42,3 +42,7 @@ The import asks for these paths. A container was run for each app except xTeVe a
 | Plex Live TV | none from this client; Plex reads Broadwave | — | not run |
 
 Tvheadend also serves `/playlist/channels.m3u`. This client requests `/playlist/channels`.
+
+## The Broadwave image
+
+Every source above is read by the same image, `ghcr.io/wolfebase/broadwave` (x86-64 and ARM64, jellyfin-ffmpeg 7 inside). Its settings are listed under "Image options" in the README: `TZ`, `PUID`/`PGID`, `UMASK`, `HDHR_HOST`, and `BROADWAVE_ENCODER`, plus `--device /dev/dri` for Intel or AMD graphics and `--gpus all` for NVIDIA. The browser tests in CI run against this image, started as root with `PUID`, `PGID`, and `TZ` like an install, and check that it reports healthy, runs as that user, owns its config folder, and falls back to the processor with no graphics device.
