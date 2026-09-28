@@ -35,20 +35,22 @@ struct HomeView: View {
                     return (c, a)
                 }
                 .sorted { $0.0.favorite && !$1.0.favorite }
-                Shelf("On now") {
-                    ForEach(live, id: \.0.id) { channel, airing in
-                        Button { nowPlaying.play(channel) } label: {
-                            let art = store.artURL(airing, width: 640)
-                            NowCard(
-                                channel: channel,
-                                airing: airing,
-                                now: store.now,
-                                art: art,
-                                frame: art == nil ? store.api?.frameURL(channelID: channel.id, width: 480, listed: store.frameIDs) : nil
-                            )
+                if !live.isEmpty {
+                    Shelf("On now") {
+                        ForEach(live, id: \.0.id) { channel, airing in
+                            Button { nowPlaying.play(channel) } label: {
+                                let art = store.artURL(airing, width: 640)
+                                NowCard(
+                                    channel: channel,
+                                    airing: airing,
+                                    now: store.now,
+                                    art: art,
+                                    frame: art == nil ? store.api?.frameURL(channelID: channel.id, width: 480, listed: store.frameIDs) : nil
+                                )
+                            }
+                            .cardButton()
+                            .contextMenu { ChannelActions(channel: channel, airing: airing) }
                         }
-                        .cardButton()
-                        .contextMenu { ChannelActions(channel: channel, airing: airing) }
                     }
                 }
                 let games = store.sports()
@@ -134,6 +136,26 @@ struct HomeView: View {
                         }
                     }
                 }
+                if store.featured() == nil, !store.loading, saved.isEmpty, store.recordings.isEmpty {
+                    let empty = ContentUnavailableView(
+                        "No channels yet",
+                        systemImage: "tv",
+                        description: Text("Add a tuner or scan for channels.")
+                    )
+                    .padding(.top, 60)
+                    #if os(tvOS)
+                        // A focusable message is not enough: the sidebar stays open until a button in the page has focus.
+                        Button(action: {}, label: {
+                            empty.frame(maxWidth: .infinity)
+                        })
+                        .buttonStyle(FocusPlainStyle())
+                        .focused($emptyHome)
+                        .accessibilityRemoveTraits(.isButton)
+                        .accessibilityIdentifier("home-empty")
+                    #else
+                        empty
+                    #endif
+                }
             }
             .padding(.vertical, 20)
         }
@@ -154,18 +176,17 @@ struct HomeView: View {
                 }
             }
         #if os(tvOS)
-            .background {
-                if store.featured() == nil {
-                    Color.clear
-                        .frame(width: 20, height: 20)
-                        .focusable()
-                        .focused($emptyHome)
-                        .accessibilityHidden(true)
-                }
-            }
+            .modifier(HomeDefaultFocus(hasHero: store.featured() != nil, watch: $watch, empty: $emptyHome))
             .onAppear { claimHomeFocus() }
             .onChange(of: tvSelectedTab) { _, _ in claimHomeFocus() }
             .onChange(of: store.channels.isEmpty) { _, _ in claimHomeFocus() }
+            .onChange(of: store.loading) { _, _ in claimHomeFocus() }
+            .task(id: store.loading) {
+                // The sidebar takes focus on the same turn the page appears and clears a focus set then.
+                guard !store.loading else { return }
+                try? await Task.sleep(for: .milliseconds(400))
+                claimHomeFocus()
+            }
         #endif
             .onAppear { saved = SavedMultiview.load() }
     }
@@ -505,6 +526,30 @@ extension View {
         #endif
     }
 }
+
+#if os(tvOS)
+    /// The system button style draws a card behind its label. This one only takes focus.
+    private struct FocusPlainStyle: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+        }
+    }
+
+    /// One default: Watch when a channel is on screen, otherwise the empty message.
+    private struct HomeDefaultFocus: ViewModifier {
+        var hasHero: Bool
+        var watch: FocusState<Bool>.Binding
+        var empty: FocusState<Bool>.Binding
+
+        func body(content: Content) -> some View {
+            if hasHero {
+                content.defaultFocus(watch, true)
+            } else {
+                content.defaultFocus(empty, true)
+            }
+        }
+    }
+#endif
 
 struct PressCardStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
