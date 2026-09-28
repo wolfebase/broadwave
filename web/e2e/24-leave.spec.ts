@@ -21,6 +21,12 @@ async function viewers(): Promise<number> {
   return (body.tuners ?? []).filter((tuner) => tuner.ours).reduce((sum, tuner) => sum + (tuner.viewers ?? 0), 0);
 }
 
+// There is no list at GET /api/v1/watch. Each watch is a viewer on a feed.
+async function watches(): Promise<number> {
+  const body = (await (await fetch(`${base}/api/v1/diagnostics`)).json()) as { feeds?: { viewers?: number }[] };
+  return (body.feeds ?? []).reduce((sum, feed) => sum + (feed.viewers ?? 0), 0);
+}
+
 const tilesMoving = (page: Page) =>
   page.locator("video.mv-video").evaluateAll(async (videos: HTMLVideoElement[]) => {
     const from = videos.map((video) => video.currentTime);
@@ -116,5 +122,67 @@ test("a page kept for Back lets its watch go and watches again", async ({ page }
   const evidence = path.resolve(here, "../../.evidence/lane/l44");
   mkdirSync(evidence, { recursive: true });
   writeFileSync(path.join(evidence, "summary.json"), JSON.stringify({ backMs, viewers: await viewers(), kept }, null, 2));
+  await page.screenshot({ path: path.join(evidence, "back.jpg") });
+});
+
+// Side by side was one page with one watch. A quad is one page with a watch
+// per tile. Leaving has to stop all of them, and Back has to start all of them.
+test("a quad kept for Back lets every tile go and watches again", async ({ page }) => {
+  const diag = (await (await fetch(`${base}/api/v1/diagnostics`)).json()) as { encoder?: { tiles?: number } };
+  test.skip((diag.encoder?.tiles ?? 0) < 3, "needs three pictures");
+  expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBe(true);
+  await page.addInitScript(() => {
+    const mark = window as Window & { __bf?: { type: string; persisted: boolean; path: string }[] };
+    mark.__bf = [];
+    window.addEventListener("pagehide", (event) => {
+      mark.__bf?.push({ type: "pagehide", persisted: event.persisted, path: location.pathname });
+    });
+    window.addEventListener("pageshow", (event) => {
+      mark.__bf?.push({ type: "pageshow", persisted: event.persisted, path: location.pathname });
+    });
+  });
+
+  await page.goto("/multiview?ch=1,2,3&layout=quad&focus=1");
+  await expect(page.getByRole("region", { name: "Quad" })).toBeVisible();
+  await expect.poll(viewers, { timeout: 40_000, message: "one viewer per tile" }).toBe(3);
+  await expect.poll(watches, { timeout: 5_000, message: "one watch per tile" }).toBe(3);
+  await expect.poll(() => tilesMoving(page), { timeout: 30_000, message: "three tiles are playing" }).toBe(3);
+  await expect(page.getByRole("group", { name: "4.1 WDAF, sound on" })).toBeVisible();
+
+  const left = Date.now();
+  await page.goto("/settings", { waitUntil: "commit" });
+  await expect
+    .poll(async () => ({ viewers: await viewers(), watches: await watches() }), {
+      timeout: Math.max(200, 2_000 - (Date.now() - left)),
+      message: "no viewer and no watch after leaving the quad",
+    })
+    .toEqual({ viewers: 0, watches: 0 });
+  const clearMs = Date.now() - left;
+
+  const back = Date.now();
+  await page.goBack({ waitUntil: "commit" });
+  const kept = await page.evaluate(() => {
+    const rows = (window as Window & { __bf?: { type: string; persisted: boolean; path: string }[] }).__bf ?? [];
+    return {
+      hide: rows.some((row) => row.type === "pagehide" && row.path === "/multiview" && row.persisted),
+      show: rows.some((row) => row.type === "pageshow" && row.path === "/multiview" && row.persisted),
+    };
+  });
+  expect(kept).toEqual({ hide: true, show: true });
+  await expect.poll(() => tilesMoving(page), { timeout: Math.max(500, 5_000 - (Date.now() - back)), message: "three tiles are playing again" }).toBe(3);
+  await expect(page.getByRole("group", { name: "4.1 WDAF, sound on" })).toBeVisible();
+  await expect(page.locator(".mv-error")).toHaveCount(0);
+  const heard = await page.locator("video.mv-video").evaluateAll((videos: HTMLVideoElement[]) =>
+    videos.map((video) => ({ channel: video.dataset.channel || "", muted: video.muted })),
+  );
+  expect(heard.find((tile) => tile.channel === "1")?.muted).toBe(false);
+  expect(heard.filter((tile) => tile.channel !== "1").every((tile) => tile.muted)).toBe(true);
+  const backMs = Date.now() - back;
+  const evidence = path.resolve(here, "../../.evidence/lane/l50");
+  mkdirSync(evidence, { recursive: true });
+  writeFileSync(
+    path.join(evidence, "summary.json"),
+    JSON.stringify({ clearMs, backMs, viewers: await viewers(), watches: await watches(), kept, heard }, null, 2),
+  );
   await page.screenshot({ path: path.join(evidence, "back.jpg") });
 });
