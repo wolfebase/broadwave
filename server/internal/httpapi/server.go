@@ -532,6 +532,10 @@ func (s *Server) ui(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Header().Set("Cache-Control", "no-cache")
 	}
+	// The mime table has no .webmanifest, and sniffing the JSON yields text/plain.
+	if strings.HasSuffix(path, ".webmanifest") {
+		w.Header().Set("Content-Type", "application/manifest+json")
+	}
 	if serveFile(w, r, s.Assets, path) {
 		return
 	}
@@ -601,6 +605,8 @@ func contentType(path string) string {
 		return "image/svg+xml"
 	case strings.HasSuffix(path, ".json"):
 		return "application/json"
+	case strings.HasSuffix(path, ".webmanifest"):
+		return "application/manifest+json"
 	case strings.HasSuffix(path, ".woff2"):
 		return "font/woff2"
 	default:

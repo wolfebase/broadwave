@@ -15,3 +15,8 @@ createRoot(root).render(
     <App />
   </StrictMode>,
 );
+
+// The production build only. Vite's dev server is not the shell this caches.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  void navigator.serviceWorker.register("/sw.js");
+}
