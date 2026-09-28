@@ -1,5 +1,5 @@
 import Hls from "hls.js";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { getDeviceHealth, getSignals, getTuners, stopWatch, watchChannel, type ApiFailure } from "../../api";
 import { events } from "../../lib/events";
 import { SyncEngine, type SyncStatus } from "../../lib/sync";
@@ -48,6 +48,7 @@ export function useLiveStream(
     profile,
     audible,
     remember,
+    after,
   }: {
     channelId: number;
     quality?: Prefs["quality"];
@@ -60,6 +61,9 @@ export function useLiveStream(
     profile: BufferProfile;
     audible: boolean;
     remember?: Channel | null;
+    // Another player asks first. A watch that is already playing keeps going;
+    // a start waits until this turns false.
+    after?: boolean;
   },
 ) {
   const syncRef = useRef<SyncEngine | null>(null);
@@ -87,6 +91,17 @@ export function useLiveStream(
   useEffect(() => {
     syncing.current = sync;
   }, [sync]);
+  // Layout effects run before the watch effect, so a start in the same render sees the gate.
+  const afterRef = useRef(!!after);
+  useLayoutEffect(() => {
+    afterRef.current = !!after;
+  }, [after]);
+  const held = useRef(false);
+  // A player with no watch when the server came back asks after the ones that
+  // had a picture, so theirs is not the one a full picture budget turns away.
+  const askLast = useRef(false);
+  // True from a start until its watch answers or gives up.
+  const [asking, setAsking] = useState(true);
   // A local rewind has to land before the engine's next tick puts the playhead back.
   const holdSync = useRef(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ state: "off", drift: 0, members: 0 });
@@ -106,6 +121,12 @@ export function useLiveStream(
     let hls: Hls | null = null;
     const id = channelId;
     watching.current = false;
+    if (afterRef.current) {
+      held.current = true;
+      retrying.current = false;
+      return;
+    }
+    askLast.current = false;
     let joined = "";
     // The stop names the server process that counted this viewer. After a
     // restart the new process ignores it instead of taking someone else's.
@@ -216,6 +237,7 @@ export function useLiveStream(
     video.addEventListener("timeupdate", onTime);
     void (async () => {
       retrying.current = true;
+      setAsking(true);
       try {
         const allow = confirmLive.current;
         confirmLive.current = false;
@@ -308,7 +330,10 @@ export function useLiveStream(
         }
         rememberOutage(mapped.message, mapped.recovery);
       } finally {
-        if (!dead) retrying.current = false;
+        if (!dead) {
+          retrying.current = false;
+          if (!startTimer) setAsking(false);
+        }
       }
     })();
     // pagehide also fires when the browser keeps the page (back/forward cache).
@@ -456,6 +481,19 @@ export function useLiveStream(
     };
   }, [session, sync, room, channelId, videoRef]);
 
+  useEffect(() => {
+    if (after || !held.current) return;
+    held.current = false;
+    if (!askLast.current) {
+      setAttempt((n) => n + 1);
+      return;
+    }
+    const later = window.setTimeout(() => {
+      if (!watching.current && !retrying.current) setAttempt((n) => n + 1);
+    }, restartAskLastMs);
+    return () => window.clearTimeout(later);
+  }, [after]);
+
   // A restarted server has lost this watch. Start it again now instead of
   // waiting for the picture to run dry and the stall clock to name it.
   useEffect(() => {
@@ -470,7 +508,10 @@ export function useLiveStream(
     const off = events().on("restarted", () => {
       window.clearTimeout(later);
       if (watching.current) again();
-      else later = window.setTimeout(again, restartAskLastMs);
+      else {
+        askLast.current = true;
+        later = window.setTimeout(again, restartAskLastMs);
+      }
     });
     return () => {
       off();
@@ -483,6 +524,8 @@ export function useLiveStream(
     let dead = false;
     let ticking = false;
     const seen = { key: "" };
+    const lastAsk = recovery === "server" || recovery === "restart";
+    let readyAt = 0;
     const tick = async () => {
       if (dead || retrying.current || ticking) return;
       ticking = true;
@@ -492,9 +535,15 @@ export function useLiveStream(
         const key = `${snap.health}:${snap.freeTuner}:${snap.tunerAnswers}:${snap.online}:${snap.signalLost}`;
         if (!recoveryReady(recovery, snap)) {
           seen.key = key;
+          readyAt = 0;
           return;
         }
         if (key === seen.key) return;
+        if (lastAsk && !watching.current) {
+          askLast.current = true;
+          readyAt ||= performance.now();
+          if (performance.now() - readyAt < restartAskLastMs) return;
+        }
         seen.key = key;
         retrying.current = true;
         if (recovery === "restart") quietRetry.current = channelId;
@@ -563,6 +612,7 @@ export function useLiveStream(
     session: session?.channelId === channelId ? session : null,
     error,
     needsConfirm,
+    asking,
     confirm: () => {
       confirmLive.current = true;
       setNeedsConfirm(false);

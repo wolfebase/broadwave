@@ -16,6 +16,9 @@ import { channelsOnScreen, holdShown, layoutChoices, layoutFromParam, layoutLabe
 import { pickFocus } from "./switcher";
 import "./multiview.css";
 
+// A sound tile whose watch has not answered by now stops holding the others.
+const firstAskMs = 8000;
+
 function pressedAt() {
   return Date.now();
 }
@@ -316,6 +319,30 @@ export function Multiview() {
   }
 
   const focused = ordered.find((c) => c.id === focus) ?? ordered[0];
+  // The sound tile asks for its picture first, on open and after a restart.
+  // With fewer pictures than tiles, a quiet tile that asked first kept the
+  // picture the viewer is listening to.
+  const focusedId = focused?.id ?? 0;
+  const [answered, setAnswered] = useState(0);
+  const firstDone = answered === focusedId;
+  const onAnswered = useCallback((id: number, done: boolean) => setAnswered((prev) => (done ? id : prev === id ? 0 : prev)), []);
+  // A tile still asking for a picture can reach a restarted server before the
+  // socket says it restarted, so the order starts over when the socket drops.
+  useEffect(() => {
+    const offRestart = events().on("restarted", () => setAnswered(0));
+    const offConnection = events().on("connection", (up) => {
+      if (!up) setAnswered(0);
+    });
+    return () => {
+      offRestart();
+      offConnection();
+    };
+  }, []);
+  useEffect(() => {
+    if (firstDone || !focusedId) return;
+    const late = window.setTimeout(() => setAnswered(focusedId), firstAskMs);
+    return () => window.clearTimeout(late);
+  }, [firstDone, focusedId]);
   // A tile that never started has no sound to give. One that already showed a
   // picture keeps it while that picture comes back.
   const soundTo = focused && failed.has(focused.id) ? (ordered.find((c) => !failed.has(c.id))?.id ?? 0) : 0;
@@ -372,6 +399,7 @@ export function Multiview() {
             title={airingAt(index, channel.id, now)?.title || channel.displayName}
             score={scores.get(airingAt(index, channel.id, now)?.gameId ?? "")}
             focused={channel.id === (focused?.id ?? 0)}
+            after={channel.id !== focusedId && !firstDone}
             layout={layout}
             room={room}
             menu={menu && channel.id === (focused?.id ?? 0)}
@@ -379,6 +407,7 @@ export function Multiview() {
             onHeard={heard}
             onRemove={() => remove(channel.id)}
             onFailed={markFailed}
+            onAnswered={onAnswered}
             onRecord={() => void record(channel, airingAt(index, channel.id, now)?.title || channel.displayName)}
           />
         ))}
@@ -427,6 +456,8 @@ function Tile({
   onRemove,
   onRecord,
   onFailed,
+  onAnswered,
+  after,
 }: {
   channel: Channel;
   title: string;
@@ -440,6 +471,8 @@ function Tile({
   onRemove: () => void;
   onRecord: () => void;
   onFailed: (id: number, failed: boolean) => void;
+  onAnswered: (id: number, done: boolean) => void;
+  after: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const showedRef = useRef(false);
@@ -460,7 +493,11 @@ function Tile({
     sync: true,
     profile: big ? (layoutMode === "tv" ? "tv" : "desktop") : "tile",
     audible: focused,
+    after,
   });
+  useEffect(() => {
+    if (focused) onAnswered(channel.id, !stream.asking);
+  }, [focused, stream.asking, channel.id, onAnswered]);
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;

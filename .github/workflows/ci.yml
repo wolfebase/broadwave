@@ -84,8 +84,9 @@ jobs:
           E2E_IMAGE: broadwave:ci
           E2E_SNAPSHOTS: skip
       # A slow machine's budget of two pictures, on its own port: the first
-      # run's container can still hold 18731.
-      - run: npx playwright test --config e2e/playwright.config.ts 01-setup 24-leave
+      # run's container can still hold 18731. The quad restart checks that the
+      # sound tile keeps its picture when there are more tiles than pictures.
+      - run: npx playwright test --config e2e/playwright.config.ts 01-setup 24-leave 04-multiview -g "setup wizard|page left before|quad plays again"
         working-directory: web
         env:
           E2E_IMAGE: broadwave:ci

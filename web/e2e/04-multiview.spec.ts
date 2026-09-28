@@ -233,12 +233,6 @@ test.describe("a restarted server", () => {
       const third = channel("WDAF2");
       const ids = layout === "2up" ? [wdaf.id, second.id] : [wdaf.id, third.id, second.id];
       const name = (layout === "2up" ? "side" : "quad") + (slow ? "-slow" : "");
-      if (layout === "quad") {
-        const diag = (await (await fetch(`${base}/api/v1/diagnostics`)).json()) as { encoder?: { tiles?: number } };
-        // With a budget of two pictures the sound tile can lose its slot to
-        // another tile after a restart. Known bug; E2E_SPEED=1.8 reproduces it.
-        test.skip((diag.encoder?.tiles ?? 4) < 3, "the sound tile can lose its slot on a two-picture server");
-      }
       try {
         await expect
           .poll(async () => (await ourViewers(base)).length === 0, { timeout: 60_000, intervals: [500], message: "the previous watch let the tuners go" })
