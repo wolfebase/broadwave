@@ -89,6 +89,23 @@ for k in "$DIRECT" 540.aac2.broadcast 540.none.broadcast 360.none.broadcast; do
   check "$k is CMAF with init segment" '[[ "$PL" == *EXT-X-MAP* ]]'
   check "$k serves segment 0" '[[ "$PL" == *seg00000* ]]'
 done
+# Views: the picture alone and the sound alone, cut from the same encode.
+for k in "$DIRECT" 540.aac2.broadcast; do
+  M="http://127.0.0.1:$PORT/media/live/$ID/$k"
+  VP=$(curl -s "$M/video.m3u8")
+  AP=$(curl -s "$M/audio-2.m3u8")
+  check "$k video view names its own media" '[[ "$VP" == *init.v.mp4* && "$VP" == *seg00000.v.m4s* && "$VP" == *RENDITION-REPORT* ]]'
+  check "$k sound view names its own media" '[[ "$AP" == *init.a2.mp4* && "$AP" == *seg00000.a2.m4s* ]]'
+  { curl -s "$M/init.v.mp4"; curl -s "$M/seg00000.v.m4s"; } >"$T/v.mp4"
+  { curl -s "$M/init.a2.mp4"; curl -s "$M/seg00000.a2.m4s"; } >"$T/a.mp4"
+  VS=$(ffprobe -v error -show_entries stream=codec_type -of default=nw=1:nk=1 "$T/v.mp4" | tr '\n' ' ')
+  AS=$(ffprobe -v error -show_entries stream=codec_type -of default=nw=1:nk=1 "$T/a.mp4" | tr '\n' ' ')
+  check "$k video view is the picture alone ($VS)" '[ "$VS" = "video " ]'
+  check "$k sound view is the sound alone ($AS)" '[ "$AS" = "audio " ]'
+  LAST=$(echo "$AP" | sed -n 's/.*LAST-MSN=\([0-9]*\).*/\1/p' | head -1)
+  NEXT=$(curl -s -m 5 "$M/audio-2.m3u8?_HLS_msn=$((LAST + 1))&_HLS_part=0" | sed -n 's/.*LAST-MSN=\([0-9]*\).*/\1/p' | head -1)
+  check "$k sound view blocks until the next segment ($LAST -> $NEXT)" '[ "${NEXT:-0}" -gt "${LAST:-0}" ]'
+done
 curl -s -m 10 "http://127.0.0.1:$PORT/export/stream/$ID" -o "$T/export.ts"
 SZ=$(stat -f%z "$T/export.ts" 2>/dev/null || stat -c%s "$T/export.ts")
 check "export stream carries video ($SZ bytes)" "[ ${SZ:-0} -gt 100000 ]"
