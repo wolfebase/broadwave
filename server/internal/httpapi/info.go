@@ -116,5 +116,10 @@ func (s *Server) socket(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "Live updates are not available.", http.StatusServiceUnavailable)
 		return
 	}
+	// A page on another site could pause a group room through the socket.
+	if !s.Dev && crossSite(r) {
+		httpError(w, "Live updates are only for this server's own pages and apps.", http.StatusForbidden)
+		return
+	}
 	s.Bus.ServeHTTP(w, r)
 }

@@ -223,6 +223,8 @@ func (b *Bus) Clients() int {
 
 // ServeHTTP upgrades to the event socket.
 func (b *Bus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// The HTTP layer refuses other sites; a proxy may rewrite Host, so the
+	// library's Origin-equals-Host check would refuse the web app behind one.
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
 		return
