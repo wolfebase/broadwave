@@ -106,7 +106,13 @@ for k in "$DIRECT" 540.aac2.broadcast; do
   check "$k video view is the picture alone ($VS)" '[ "$VS" = "video " ]'
   check "$k sound view is the sound alone ($AS)" '[ "$AS" = "audio " ]'
   LAST=$(echo "$AP" | sed -n 's/.*LAST-MSN=\([0-9]*\).*/\1/p' | head -1)
-  NEXT=$(curl -s -m 5 "$M/audio-2.m3u8?_HLS_msn=$((LAST + 1))&_HLS_part=0" | sed -n 's/.*LAST-MSN=\([0-9]*\).*/\1/p' | head -1)
+  # A block ends after 1.5 s without the part, and a player asks again. On a
+  # slow runner one part can take longer than that.
+  NEXT=0
+  for _ in 1 2 3; do
+    NEXT=$(curl -s -m 5 "$M/audio-2.m3u8?_HLS_msn=$((LAST + 1))&_HLS_part=0" | sed -n 's/.*LAST-MSN=\([0-9]*\).*/\1/p' | head -1)
+    [ "${NEXT:-0}" -gt "${LAST:-0}" ] && break
+  done
   check "$k sound view blocks until the next segment ($LAST -> $NEXT)" '[ "${NEXT:-0}" -gt "${LAST:-0}" ]'
 done
 if [ "${FAKE:-}" = 1 ]; then
