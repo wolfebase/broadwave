@@ -107,5 +107,31 @@ VALUES ${values};
   if (inserted.status !== 0) {
     throw new Error(inserted.stderr || inserted.stdout || "could not seed listings");
   }
+  if (process.env.E2E_TRACKS === "2") await storeTracks(server.base, kbwv.id);
+}
 
+// A first tune whose scan misses a track plays without it until the next tune;
+// a slow runner does. A silent tile tunes the channel long enough for the server
+// to store its tracks, so the tests' tune carries both sounds from its start.
+async function storeTracks(base: string, id: number) {
+  const caps = { platform: "web", video: ["h264"], audio: ["aac"] };
+  const res = await fetch(`${base}/api/v1/watch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channelId: id, caps, prefs: { quality: "tile" } }),
+  });
+  if (!res.ok) throw new Error(`warm-up watch ${res.status} ${await res.text()}`);
+  const session = (await res.json()) as { rendition: string; boot?: string };
+  await new Promise((resolve) => setTimeout(resolve, 10_000));
+  await fetch(`${base}/api/v1/watch/${id}/stop`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rendition: session.rendition, boot: session.boot ?? "" }),
+  });
+  for (let i = 0; i < 60; i++) {
+    const tuners = (await (await fetch(`${base}/api/v1/tuners`)).json()) as { tuners: { ours?: boolean }[] };
+    if (!tuners.tuners.some((t) => t.ours)) return;
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  throw new Error("the warm-up tune did not end");
 }
