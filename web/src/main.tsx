@@ -5,6 +5,9 @@ import "./theme/tokens.css";
 import "./theme/base.css";
 import "./theme/brand.css";
 import { App } from "./app/App";
+import { chooseGlass } from "./lib/glass";
+
+chooseGlass();
 
 const root = document.getElementById("root");
 if (!root) {

@@ -732,3 +732,9 @@ html[data-layout="tv"] .stage:focus-visible {
     opacity: 0.6;
   }
 }
+
+:root[data-glass="flat"] .stage-fab,
+:root[data-glass="flat"] .stage.mini .mini-bar {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
