@@ -36,6 +36,7 @@ export type Caps = {
   audio: string[];
   maxHeight?: number;
   network?: string;
+  alternates?: boolean;
 };
 
 export type CatalogBackup = {

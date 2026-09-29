@@ -275,6 +275,18 @@ func mainTrackLocked(f *feed, spec Rendition) AudioTrack {
 	return f.tracks[0]
 }
 
+// MasterPath is the master playlist of a running rendition that carries
+// other sound tracks. A rendition with one sound has nothing to switch.
+func (h *Hub) MasterPath(channelID int64, key string) (string, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	f := h.channels[channelID]
+	if f == nil || f.renditions[key] == nil || len(f.renditions[key].extras) == 0 {
+		return "", false
+	}
+	return fmt.Sprintf("/media/live/%d/%s/master.m3u8", channelID, key), true
+}
+
 // MasterPlaylist is master.m3u8 for a rendition: its picture view and each
 // of its sound tracks, named from the PMT.
 func (h *Hub) MasterPlaylist(channelID int64, key string) ([]byte, error) {

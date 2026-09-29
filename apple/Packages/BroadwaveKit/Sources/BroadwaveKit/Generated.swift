@@ -68,13 +68,15 @@ public struct Caps: Codable, Sendable, Hashable {
     public var audio: [String]
     public var maxHeight: Int?
     public var network: String?
+    public var alternates: Bool?
 
-    public init(platform: String, video: [String], audio: [String], maxHeight: Int? = nil, network: String? = nil) {
+    public init(platform: String, video: [String], audio: [String], maxHeight: Int? = nil, network: String? = nil, alternates: Bool? = nil) {
         self.platform = platform
         self.video = video
         self.audio = audio
         self.maxHeight = maxHeight
         self.network = network
+        self.alternates = alternates
     }
 }
 
