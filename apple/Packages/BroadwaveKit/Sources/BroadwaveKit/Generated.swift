@@ -714,6 +714,42 @@ public struct SportsTeam: Codable, Sendable, Hashable {
     }
 }
 
+public struct StorageKeep: Codable, Sendable, Hashable, Identifiable {
+    public var id: Int64
+    public var keep: Int
+
+    public init(id: Int64, keep: Int) {
+        self.id = id
+        self.keep = keep
+    }
+}
+
+public struct StorageShow: Codable, Sendable, Hashable {
+    public var title: String
+    public var count: Int
+    public var bytes: Int64
+    public var oldest: Date
+    public var newest: Date
+    public var pass: StorageKeep?
+
+    public init(title: String, count: Int, bytes: Int64, oldest: Date, newest: Date, pass: StorageKeep? = nil) {
+        self.title = title
+        self.count = count
+        self.bytes = bytes
+        self.oldest = oldest
+        self.newest = newest
+        self.pass = pass
+    }
+}
+
+public struct StorageShows: Codable, Sendable, Hashable {
+    public var shows: [StorageShow]
+
+    public init(shows: [StorageShow]) {
+        self.shows = shows
+    }
+}
+
 public struct StreamInfo: Codable, Sendable, Hashable {
     public var rendition: String
     public var video: String

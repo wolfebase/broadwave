@@ -387,6 +387,24 @@ export type SportsTeam = {
   logo?: string;
 };
 
+export type StorageKeep = {
+  id: number;
+  keep: number;
+};
+
+export type StorageShow = {
+  title: string;
+  count: number;
+  bytes: number;
+  oldest: string;
+  newest: string;
+  pass?: StorageKeep;
+};
+
+export type StorageShows = {
+  shows: StorageShow[];
+};
+
 export type StreamInfo = {
   rendition: string;
   video: string;

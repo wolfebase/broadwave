@@ -1377,6 +1377,19 @@ paths:
                   freeBytes: { type: integer, format: int64 }
                   totalBytes: { type: integer, format: int64 }
                   watermarkGB: { type: integer }
+  /storage/shows:
+    get:
+      tags: [settings]
+      operationId: storageShows
+      description: |
+        Finished recordings in the recordings folder, grouped by title.
+        A recording still in progress is left out, and so is a file in a library folder.
+      responses:
+        "200":
+          description: Shows, largest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StorageShows" }
   /backup:
     get:
       tags: [settings]
@@ -2017,6 +2030,31 @@ components:
         steps:
           type: array
           items: { $ref: "#/components/schemas/SetupStep" }
+    StorageShows:
+      type: object
+      required: [shows]
+      description: Finished recordings in the recordings folder, grouped by title, largest first.
+      properties:
+        shows:
+          type: array
+          items: { $ref: "#/components/schemas/StorageShow" }
+    StorageShow:
+      type: object
+      required: [title, count, bytes, oldest, newest]
+      properties:
+        title: { type: string }
+        count: { type: integer, description: "Finished recordings of this show in the recordings folder." }
+        bytes: { type: integer, format: int64 }
+        oldest: { type: string, format: date-time }
+        newest: { type: string, format: date-time }
+        pass: { $ref: "#/components/schemas/StorageKeep" }
+    StorageKeep:
+      type: object
+      required: [id, keep]
+      description: The pass that keeps this show, when there is one.
+      properties:
+        id: { type: integer, format: int64 }
+        keep: { type: integer, description: "How many finished recordings the pass keeps. 0 means every one." }
     CatalogBackup:
       type: object
       required: [name, kind, takenAt, bytes]

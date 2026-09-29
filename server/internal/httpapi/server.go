@@ -168,6 +168,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /virtuals/schedule", s.virtualSchedule)
 	api("POST /virtuals/{id}/play", s.playVirtual)
 	api("GET /storage", s.storage)
+	api("GET /storage/shows", s.storageShows)
 	api("GET /backup", s.backup)
 	api("POST /backup", s.restore)
 	api("GET /backups", s.listBackups)
