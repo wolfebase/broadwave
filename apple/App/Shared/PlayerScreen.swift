@@ -40,6 +40,13 @@ final class LivePlayer {
     private var movingFrom: Double?
     private(set) var stalls = 0
     private(set) var stallMs = 0
+    /// A master's sound tracks by role, once the item lists them. Nil for a
+    /// watch without a master, which changes sound with a new watch.
+    private(set) var sounds: [SoundTrack]?
+    /// The role playing now, including a choice made in the system menu.
+    private(set) var soundRole = "main"
+    private var soundGroup: AVMediaSelectionGroup?
+    private var soundObserver: NSObjectProtocol?
     private var stallStarted: Date?
     private var lastBeat = Date()
     private var clockLogged = Date.distantPast
@@ -188,6 +195,9 @@ final class LivePlayer {
             player.play()
             watchPicture()
             playLog.info("channel \(channel.displayNumber, privacy: .public)")
+            if session.mainPlaylist != nil {
+                Task { await loadSounds(item, prefer: prefs.track) }
+            }
             #if DEBUG
                 if UserDefaults.standard.bool(forKey: "BroadwaveCaptions") {
                     Task { await showCaptions(item) }
@@ -365,6 +375,13 @@ final class LivePlayer {
         statsTask = nil
         picture = PictureStats()
         seekableFrom = nil
+        sounds = nil
+        soundGroup = nil
+        soundRole = "main"
+        if let soundObserver {
+            NotificationCenter.default.removeObserver(soundObserver)
+        }
+        soundObserver = nil
         moving = false
         movingFrom = nil
         if endPicture {
@@ -508,6 +525,62 @@ final class LivePlayer {
         } else {
             try? line.write(to: url)
         }
+    }
+
+    /// Lists a master's sound tracks and starts on the preferred one. AVPlayer
+    /// switches between them in place, keeping the picture and the room.
+    private func loadSounds(_ item: AVPlayerItem, prefer role: String?) async {
+        guard let group = try? await item.asset.loadMediaSelectionGroup(for: .audible), group.options.count > 1,
+              player.currentItem === item
+        else { return }
+        let listed = SoundTrack.roles(group.options.map {
+            SoundTrack.Option(name: $0.displayName, isDefault: $0 == group.defaultOption, describes: $0.hasMediaCharacteristic(.describesVideoForAccessibility))
+        })
+        soundGroup = group
+        sounds = listed
+        if let role, role != "main", let pick = SoundTrack.pick(listed, role: role) {
+            item.select(group.options[pick.index], in: group)
+        }
+        noteSound(item)
+        if let soundObserver {
+            NotificationCenter.default.removeObserver(soundObserver)
+        }
+        soundObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.mediaSelectionDidChangeNotification, object: item, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.noteSound(item) }
+        }
+        playLogNote("sounds \(listed.map { "\($0.role)=\($0.name)" }.joined(separator: ", ")) playing \(soundRole)")
+        #if DEBUG
+            // -BroadwaveAudio language|described switches 10 s in and reports the next 10 s.
+            if let role = UserDefaults.standard.string(forKey: "BroadwaveAudio") {
+                Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(10))
+                    guard let self, player.currentItem === item else { return }
+                    let stalls = stalls
+                    let dropped = item.accessLog()?.events.last?.numberOfDroppedVideoFrames ?? 0
+                    selectSound(role)
+                    try? await Task.sleep(for: .seconds(10))
+                    guard player.currentItem === item else { return }
+                    let after = item.accessLog()?.events.last?.numberOfDroppedVideoFrames ?? 0
+                    let chosen = item.currentMediaSelection.selectedMediaOption(in: group)?.displayName ?? "none"
+                    playLogNote("sound switched \(soundRole) playing \(chosen) stalls=\(self.stalls - stalls) dropped=\(after - dropped) state=\(player.timeControlStatus.rawValue)")
+                }
+            }
+        #endif
+    }
+
+    private func noteSound(_ item: AVPlayerItem) {
+        guard let group = soundGroup, let sounds, let chosen = item.currentMediaSelection.selectedMediaOption(in: group),
+              let index = group.options.firstIndex(of: chosen), let sound = sounds.first(where: { $0.index == index })
+        else { return }
+        soundRole = sound.role
+    }
+
+    /// Plays another of the master's sound tracks without a new watch.
+    func selectSound(_ role: String) {
+        guard let group = soundGroup, let sounds, let item = player.currentItem, let pick = SoundTrack.pick(sounds, role: role) else { return }
+        item.select(group.options[pick.index], in: group)
+        soundRole = pick.role
+        playLogNote("sound \(pick.role) stalls=\(stalls)")
     }
 
     #if DEBUG
@@ -680,6 +753,8 @@ struct PlayerScreen: View {
     @State private var transportShown = true
     /// A recording that holds this showing's start, played from Start over.
     @State private var startOverRecording: Recording?
+    /// Counts track changes that need a new watch. A master switches in place.
+    @State private var trackRestarts = 0
     @State private var lastChannelStep = Date.distantPast
     #if os(iOS)
         @State private var showGuide = false
@@ -847,7 +922,14 @@ struct PlayerScreen: View {
             live.playLogNote("size \(size == .compact ? "landscape" : "portrait")")
         }
         #endif
-        .task(id: "\(nowPlaying.channel?.id ?? 0) \(store.prefs.track ?? "") \(store.prefs.even) \(live.attempt)") {
+        .onChange(of: store.prefs.track) { _, track in
+            if live.sounds == nil {
+                trackRestarts += 1
+            } else if live.soundRole != (track ?? "main") {
+                live.selectSound(track ?? "main")
+            }
+        }
+        .task(id: "\(nowPlaying.channel?.id ?? 0) \(trackRestarts) \(store.prefs.even) \(live.attempt)") {
             #if DEBUG
                 // Layout checks must not take a tuner. -BroadwaveChrome YES skips the session.
                 if UserDefaults.standard.bool(forKey: "BroadwaveChrome") {
@@ -1010,6 +1092,17 @@ struct PlayerScreen: View {
             }
         }
         var items = [choice(1, "main", "Main"), choice(2, "language", "Second language"), choice(3, "described", "Described video")]
+        if let sounds = live.sounds {
+            // A master names its tracks; the choice is kept for the next channel.
+            items = sounds.enumerated().map { number, sound in
+                ChannelMenuEntry(id: Int64(number + 1), title: sound.name, current: live.soundRole == sound.role) {
+                    live.selectSound(sound.role)
+                    var prefs = store.prefs
+                    prefs.track = sound.role == "main" ? nil : sound.role
+                    store.prefs = prefs
+                }
+            }
+        }
         items.append(ChannelMenuEntry(id: -1, title: store.prefs.even ? "Even volume on" : "Even volume", current: store.prefs.even) {
             var prefs = store.prefs
             prefs.even.toggle()

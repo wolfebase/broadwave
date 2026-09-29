@@ -5,7 +5,9 @@ public enum Capabilities {
     /// What this device plays. Apple devices take Dolby Digital in HLS.
     /// HEVC is omitted on machines that cannot decode it (Apple TV HD, A9 and older).
     /// An unrecognized machine keeps HEVC, which is what current iPhones and Apple TV 4K play.
-    public static func current(cellular: Bool = false) -> Caps {
+    /// AVPlayer switches a master's sound tracks in place, so the player asks for
+    /// one. A multiview tile plays the one-sound playlist and does not.
+    public static func current(cellular: Bool = false, alternates: Bool = true) -> Caps {
         var caps = forMachine(machineIdentifier(), cellular: cellular)
         #if os(tvOS)
             let platform = "tvos"
@@ -19,6 +21,7 @@ public enum Capabilities {
         if platform != "macos" {
             caps = Caps(platform: platform, video: caps.video, audio: caps.audio, maxHeight: caps.maxHeight, network: caps.network)
         }
+        caps.alternates = alternates ? true : nil
         return caps
     }
 

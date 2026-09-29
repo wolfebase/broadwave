@@ -384,7 +384,7 @@ final class TilePlayer {
                 attempt += 1
             }
         )
-        rewatch = { try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: prefs, confirmLive: false) }
+        rewatch = { try await api.watch(channelID: channel.id, caps: Capabilities.current(alternates: false), prefs: prefs, confirmLive: false) }
         let prepared = preparedSession?.channelId == channel.id ? preparedSession : nil
         if let stale = preparedSession, prepared == nil {
             await api.stopWatching(stale)
@@ -394,7 +394,7 @@ final class TilePlayer {
             let session: WatchSession = if let prepared {
                 prepared
             } else {
-                try await api.watch(channelID: channel.id, caps: Capabilities.current(), prefs: prefs, confirmLive: allow)
+                try await api.watch(channelID: channel.id, caps: Capabilities.current(alternates: false), prefs: prefs, confirmLive: allow)
             }
             guard !Task.isCancelled, token == startToken, channelID == channel.id else {
                 await api.stopWatching(session)
