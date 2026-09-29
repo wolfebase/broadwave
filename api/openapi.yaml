@@ -1906,6 +1906,17 @@ components:
         position: { type: number }
         durationSec: { type: number }
         watched: { type: integer }
+        health:
+          $ref: "#/components/schemas/RecordingHealth"
+    RecordingHealth:
+      type: object
+      description: Damage counted in the recording file after it finishes. Absent until then. Zeros mean the file was clean.
+      required: [continuityErrors, transportErrors, syncLosses, packets]
+      properties:
+        continuityErrors: { type: integer, format: int64 }
+        transportErrors: { type: integer, format: int64 }
+        syncLosses: { type: integer, format: int64 }
+        packets: { type: integer, format: int64 }
     Marker:
       type: object
       required: [id, start, end]

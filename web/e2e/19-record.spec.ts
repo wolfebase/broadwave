@@ -1,17 +1,20 @@
 // Opt-in: E2E_REC=1 npm run e2e. Records the show on now, chase-plays it,
 // plays the finished file from the start and the middle, then deletes it.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, writeFileSync, writeSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import { expect, holdClock, test } from "./fixture";
 import { settle } from "./snap";
+import { signalLine } from "../src/features/library/health";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const evidence = path.resolve(here, "../../.evidence/lane/l34");
+const healthShot = path.resolve(here, "../../.evidence/lane/l65");
 
-type Rec = { id: number; title: string; status: string; bytes?: number; durationSec?: number };
+type RecHealth = { continuityErrors: number; transportErrors: number; syncLosses: number; packets: number };
+type Rec = { id: number; title: string; status: string; bytes?: number; durationSec?: number; health?: RecHealth };
 type Harness = { base: string; db: string; config: string };
 
 function harness(): Harness {
@@ -21,7 +24,9 @@ function harness(): Harness {
 function sql(db: string, statement: string) {
   const result = spawnSync("sqlite3", [db, `PRAGMA busy_timeout=5000; ${statement}`], { encoding: "utf8" });
   if (result.status !== 0) throw new Error(result.stderr || result.stdout || statement);
-  return result.stdout.trim();
+  // The pragma prints the timeout it set, ahead of the query's row.
+  const lines = result.stdout.trim().split("\n").filter((line) => line.length > 0);
+  return lines[lines.length - 1] ?? "";
 }
 
 async function recordings(): Promise<Rec[]> {
@@ -73,6 +78,53 @@ async function moving(page: Page, from: number) {
 function indexerRunning(filePath: string) {
   const ps = spawnSync("ps", ["-axww", "-o", "command="], { encoding: "utf8" });
   return ps.stdout.split("\n").some((line) => line.includes(filePath) && (line.includes("blackdetect") || line.includes("comskip")));
+}
+
+/** Skip one continuity count in a packet already on disk.
+ * The next packet of that stream looks like the one repeat MPEG-TS allows,
+ * so the finished file counts a single break. The write is one byte, behind
+ * the end the recorder is still appending.
+ */
+function dropContinuity(filePath: string) {
+  const fd = openSync(filePath, "r+");
+  try {
+    const size = fstatSync(fd).size;
+    const window = Math.min(size, 32 * 1024);
+    if (window < 188 * 8) throw new Error(`recording too small to mark (${size})`);
+    const buf = Buffer.alloc(window);
+    const n = readSync(fd, buf, 0, window, 0);
+    let start = -1;
+    for (let i = 0; i + 188 * 2 < n; i++) {
+      if (buf[i] === 0x47 && buf[i + 188] === 0x47 && buf[i + 188 * 2] === 0x47) {
+        start = i;
+        break;
+      }
+    }
+    if (start < 0) throw new Error("no MPEG-TS sync in the recording prefix");
+    const last = new Map<number, number>();
+    for (let off = start; off + 188 <= n - 188 * 4; off += 188) {
+      if (buf[off] !== 0x47) break;
+      const pid = ((buf[off + 1]! & 0x1f) << 8) | buf[off + 2]!;
+      if (pid === 0x1fff) continue;
+      const flags = buf[off + 3]!;
+      if (((flags >> 4) & 1) === 0) continue;
+      const cc = flags & 0x0f;
+      const prev = last.get(pid);
+      last.set(pid, cc);
+      if (prev === undefined || cc !== ((prev + 1) & 0x0f)) continue;
+      writeSync(fd, Buffer.from([(flags & 0xf0) | ((cc + 1) & 0x0f)]), 0, 1, off + 3);
+      return;
+    }
+    throw new Error("no continuing payload packet in the recording prefix");
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function damage(rec: Rec | undefined) {
+  const health = rec?.health;
+  if (!health) return 0;
+  return health.continuityErrors + health.transportErrors + health.syncLosses;
 }
 
 function leftovers(dir: string, filePath: string) {
@@ -140,14 +192,25 @@ test("a show recorded from the guide plays while it records, then leaves no file
   await page.screenshot({ path: path.join(evidence, "seek.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
   const seeked = { before, landed, delta: before - landed };
 
+  const filePath = sql(db, `SELECT path FROM recordings WHERE id = ${id};`);
+  expect(filePath.endsWith(".ts"), filePath).toBe(true);
+  dropContinuity(filePath);
+
   await wake(page);
   await player.getByRole("button", { name: "Library" }).click();
   await expect(page).toHaveURL(/\/recordings/);
   await row.getByRole("button", { name: "Stop recording" }).click();
   await expect(page.getByText("Stopped NFL: Bears at Bills. What it recorded is kept.")).toBeVisible();
   await expect(row.getByRole("button", { name: "Stop recording" })).toHaveCount(0);
-  const filePath = sql(db, `SELECT path FROM recordings WHERE id = ${id};`);
-  expect(filePath.endsWith(".ts"), filePath).toBe(true);
+  await expect.poll(async () => damage((await recordings()).find((rec) => rec.id === id)), { timeout: 30_000 }).toBeGreaterThan(0);
+  const marked = (await recordings()).find((rec) => rec.id === id);
+  const line = signalLine(marked?.health);
+  expect(line.startsWith("Signal broke up"), line).toBe(true);
+  await page.goto("/recordings");
+  await settle(page);
+  await expect(row.getByText(line, { exact: true })).toBeVisible();
+  mkdirSync(healthShot, { recursive: true });
+  await page.screenshot({ path: path.join(healthShot, "row.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
 
   await row.getByRole("button", { name: "Play" }).click();
   await expect(player).toBeVisible();
@@ -198,6 +261,6 @@ test("a show recorded from the guide plays while it records, then leaves no file
   expect(left, `files left for ${path.basename(filePath)}`).toEqual([]);
   writeFileSync(
     path.join(evidence, "summary.json"),
-    JSON.stringify({ id, file: path.basename(filePath), seeked, fromStart, middle: midAt, length, leftovers: left }, null, 2),
+    JSON.stringify({ id, file: path.basename(filePath), seeked, fromStart, middle: midAt, length, leftovers: left, health: marked?.health, line }, null, 2),
   );
 });
