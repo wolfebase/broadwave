@@ -1,4 +1,4 @@
-import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, Device, DeviceHealth, FrameList, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
+import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, Device, DeviceHealth, FrameList, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, StorageShows, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
 
 export type ApiFailure = Error & { status: number; code?: string };
 
@@ -149,6 +149,10 @@ export function getSettings() {
 
 export function getStorage() {
   return request<StorageInfo>("/api/v1/storage");
+}
+
+export function getStorageShows() {
+  return request<StorageShows>("/api/v1/storage/shows");
 }
 
 export function listBackups() {

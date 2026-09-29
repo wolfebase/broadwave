@@ -975,6 +975,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storage/shows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Finished recordings in the recordings folder, grouped by title.
+         *     A recording still in progress is left out, and so is a file in a library folder.
+         */
+        get: operations["storageShows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/backup": {
         parameters: {
             query?: never;
@@ -1596,6 +1616,29 @@ export interface components {
              */
             channelId?: number;
             steps: components["schemas"]["SetupStep"][];
+        };
+        /** @description Finished recordings in the recordings folder, grouped by title, largest first. */
+        StorageShows: {
+            shows: components["schemas"]["StorageShow"][];
+        };
+        StorageShow: {
+            title: string;
+            /** @description Finished recordings of this show in the recordings folder. */
+            count: number;
+            /** Format: int64 */
+            bytes: number;
+            /** Format: date-time */
+            oldest: string;
+            /** Format: date-time */
+            newest: string;
+            pass?: components["schemas"]["StorageKeep"];
+        };
+        /** @description The pass that keeps this show, when there is one. */
+        StorageKeep: {
+            /** Format: int64 */
+            id: number;
+            /** @description How many finished recordings the pass keeps. 0 means every one. */
+            keep: number;
         };
         CatalogBackup: {
             name: string;
@@ -3559,6 +3602,26 @@ export interface operations {
                         totalBytes?: number;
                         watermarkGB?: number;
                     };
+                };
+            };
+        };
+    };
+    storageShows: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Shows, largest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageShows"];
                 };
             };
         };

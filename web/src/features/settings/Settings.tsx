@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import type { CatalogBackup, Settings, StorageInfo } from "../../types";
-import { getEvents, getTuners, listBackups, restoreBackup } from "../../api";
+import type { CatalogBackup, Settings, StorageInfo, StorageShow } from "../../types";
+import { getEvents, getStorageShows, getTuners, listBackups, restoreBackup } from "../../api";
+import { navigate } from "../../app/router";
 import { gateFeature } from "../../lib/compat";
 import { copy } from "../../strings";
 import { formatBytes } from "../../lib/format";
@@ -207,6 +208,7 @@ export function SettingsScreen({
         <input value={storage?.path ?? ""} readOnly spellCheck={false} />
         <span className="hint">{copy.settings.recordingsHint}</span>
       </label>
+      <ShowSpace />
       <label className="field">
         {copy.settings.nfo}
         <select
@@ -279,6 +281,59 @@ export function SettingsScreen({
         <h3>{copy.settings.passwordTitle}</h3>
         <p>{copy.settings.passwordBody}</p>
       </article>
+    </section>
+  );
+}
+
+function ShowSpace() {
+  const [rows, setRows] = useState<StorageShow[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let stop = false;
+    void getStorageShows()
+      .then((res) => {
+        if (!stop) setRows(res.shows ?? []);
+      })
+      .catch(() => {
+        if (!stop) setError(copy.settings.byShowFailed);
+      });
+    return () => {
+      stop = true;
+    };
+  }, []);
+  return (
+    <section aria-label={copy.settings.byShow}>
+      <h3 className="section-title">{copy.settings.byShow}</h3>
+      {error ? (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {rows && rows.length === 0 ? <p className="hint">{copy.settings.byShowEmpty}</p> : null}
+      {rows && rows.length > 0 ? (
+        <ul className="source-list">
+          {rows.map((row) => {
+            const href = `/recordings?show=${encodeURIComponent(row.title)}`;
+            const count = row.count === 1 ? "1 recording" : `${row.count} recordings`;
+            return (
+              <li key={row.title} className="source-row">
+                <a
+                  href={href}
+                  onClick={(event) => {
+                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                    event.preventDefault();
+                    navigate(href);
+                  }}
+                >
+                  {row.title}
+                </a>
+                <span>{count}</span>
+                <span className="hint">{formatBytes(row.bytes)}</span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
     </section>
   );
 }

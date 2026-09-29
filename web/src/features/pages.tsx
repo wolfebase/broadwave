@@ -14,6 +14,12 @@ import { Sources } from "./settings/Sources";
 
 export function RecordingsPage() {
   const { recordings, virtuals, refresh } = useData();
+  const { params } = useRoute();
+  const show = params.get("show")?.trim() ?? "";
+  const listed =
+    show === ""
+      ? recordings
+      : recordings.filter((rec) => rec.title.trim().toLocaleLowerCase() === show.toLocaleLowerCase());
   const [note, setNote] = useState("");
   return (
     <div className="page-wrap">
@@ -21,7 +27,7 @@ export function RecordingsPage() {
         <h1>Recordings</h1>
       </header>
       <Library
-        recordings={recordings}
+        recordings={listed}
         note={note}
         onPlay={(r) => navigate(`/play?recording=${r.id}`)}
         onWatched={(r, flag) => void setWatched(r.id, flag).then(() => refresh(["recordings"]))}

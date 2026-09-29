@@ -76,6 +76,11 @@ func unwatchedCount(recs []store.Recording, pass store.Pass) int {
 	return n
 }
 
+// SameShow reports whether this pass's keep rule applies to the recording.
+func SameShow(pass store.Pass, rec store.Recording) bool {
+	return sameShow(pass, rec)
+}
+
 func sameShow(pass store.Pass, rec store.Recording) bool {
 	if pass.ChannelID != 0 && pass.ChannelID != rec.ChannelID {
 		return false
