@@ -4,6 +4,7 @@ import SwiftUI
 
 struct RecordingsView: View {
     @Environment(AppStore.self) private var store
+    @Environment(LibraryFilter.self) private var library
     @State private var unwatchedOnly = false
     @State private var deleting: Recording?
     @State private var notice: String?
@@ -42,6 +43,13 @@ struct RecordingsView: View {
                 }
                 .pickerStyle(.segmented)
             }
+            if !library.show.isEmpty {
+                Text("Showing \(library.show)")
+                    .accessibilityIdentifier("recordings-filtered")
+                Button("Show all") { library.clear() }
+                    .accessibilityIdentifier("show-all")
+                    .accessibilityLabel("Show all")
+            }
             if let notice {
                 Text(notice)
                     .font(.subheadline)
@@ -49,9 +57,9 @@ struct RecordingsView: View {
             }
             if shown.isEmpty {
                 ContentUnavailableView(
-                    store.recordings.isEmpty ? "No recordings yet" : "All watched",
+                    listed.isEmpty ? "No recordings yet" : "All watched",
                     systemImage: "record.circle",
-                    description: Text(store.recordings.isEmpty ? "Record from the guide, or set a series to record every episode." : "Everything in the library has been watched.")
+                    description: Text(listed.isEmpty ? "Record from the guide, or set a series to record every episode." : "Everything in the library has been watched.")
                 )
                 #if os(tvOS)
                 .focusable()
@@ -155,6 +163,7 @@ struct RecordingsView: View {
             #endif
         }
         .accessibilityLabel(recordingSpoken(rec))
+        .accessibilityIdentifier("recording-row")
         .contextMenu { actions(rec) }
         #if os(iOS)
             // No destructive role: it would slide the row away before the viewer confirms.
@@ -245,8 +254,13 @@ struct RecordingsView: View {
         return parts.joined(separator: " · ")
     }
 
+    /// The show filter, then Unwatched. An empty show lists every recording.
+    private var listed: [Recording] {
+        store.recordings.filter { sameShowTitle($0.title, library.show) }
+    }
+
     private var shown: [Recording] {
-        unwatchedOnly ? store.recordings.filter { !$0.isWatched } : store.recordings
+        unwatchedOnly ? listed.filter { !$0.isWatched } : listed
     }
 
     private struct Shelf: Identifiable {

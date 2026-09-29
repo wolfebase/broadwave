@@ -185,6 +185,14 @@ public extension Recording {
     }
 }
 
+/// A recording belongs to a show when the titles match after trimming, in any case.
+/// An empty show lists every recording.
+public func sameShowTitle(_ recording: String, _ show: String) -> Bool {
+    let want = show.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !want.isEmpty else { return true }
+    return recording.trimmingCharacters(in: .whitespacesAndNewlines).localizedCaseInsensitiveCompare(want) == .orderedSame
+}
+
 public struct SchedulePlan: Codable, Sendable, Hashable {
     public var tunerCount: Int
     public var items: [PlannedAiring]

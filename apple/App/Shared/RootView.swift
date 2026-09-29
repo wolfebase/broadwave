@@ -50,6 +50,24 @@ enum AppTab: Hashable {
     case home, guide, search, sports, recordings, settings
 }
 
+/// Which show Recordings is listing. Empty means every recording.
+@MainActor
+@Observable
+final class LibraryFilter {
+    var show = ""
+    /// Bumped when a show row asks for the Recordings tab.
+    var openToken = 0
+
+    func open(_ title: String) {
+        show = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        openToken += 1
+    }
+
+    func clear() {
+        show = ""
+    }
+}
+
 #if os(iOS)
     /// Six tabs leave Recordings under More, and More's bar stacks on the page.
     /// A compact iPhone keeps five tabs. Settings is pushed on the tab that is open.
@@ -139,6 +157,7 @@ struct RootView: View {
         @State private var settingsRoute = SettingsRoute()
     #endif
     @State private var nowPlaying = NowPlaying()
+    @State private var libraryFilter = LibraryFilter()
     @State private var tab: AppTab = .home
     @State private var showSetup = false
     @State private var dismissedUpdate = ""
@@ -159,9 +178,19 @@ struct RootView: View {
             }
         }
         .environment(nowPlaying)
+        .environment(libraryFilter)
         #if os(iOS)
             .environment(settingsRoute)
         #endif
+            .task(id: libraryFilter.openToken) {
+                guard libraryFilter.openToken > 0 else { return }
+                tab = .recordings
+                #if os(iOS)
+                    if phoneTabs {
+                        settingsRoute.on = nil
+                    }
+                #endif
+            }
             .background(Tokens.ColorToken.canvas.ignoresSafeArea())
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {

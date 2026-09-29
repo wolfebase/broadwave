@@ -1,0 +1,19 @@
+{
+  "shows": [
+    {
+      "title": "Evening News",
+      "count": 2,
+      "bytes": 2400000000,
+      "oldest": "2026-09-20T23:00:00Z",
+      "newest": "2026-09-24T23:00:00Z",
+      "pass": { "id": 4, "keep": 3 }
+    },
+    {
+      "title": "The Afternoon Game",
+      "count": 1,
+      "bytes": 800000000,
+      "oldest": "2026-09-22T20:00:00Z",
+      "newest": "2026-09-22T20:00:00Z"
+    }
+  ]
+}

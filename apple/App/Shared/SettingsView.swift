@@ -7,6 +7,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppStore.self) private var store
+    @Environment(LibraryFilter.self) private var library
     @State private var showAbout = false
     @State private var showDiagnostics = false
     @State private var showChannels = false
@@ -45,6 +46,8 @@ struct SettingsView: View {
     @State private var loadedGuide = ""
     @State private var loadedReserve = "10"
     @State private var storage: APIClient.StorageInfo?
+    @State private var showRows: [StorageShow]?
+    @State private var showError = ""
     @State private var backupRows: [CatalogBackup]?
     @State private var backupError = ""
     @State private var backupBusy = ""
@@ -94,7 +97,9 @@ struct SettingsView: View {
             sourcesSection
             syncSection(store)
             if !demo {
-                storageSection.id("storage")
+                storageFolderSection.id("storage")
+                showSpaceSection
+                storageOptionsSection
                 backupSection.id("backups")
             }
             updatesSection
@@ -376,7 +381,7 @@ struct SettingsView: View {
         }
     }
 
-    private var storageSection: some View {
+    private var storageFolderSection: some View {
         Section {
             if let storage {
                 Text(storageSummary(storage))
@@ -385,6 +390,13 @@ struct SettingsView: View {
             if let path = storage?.path, !path.isEmpty {
                 LabeledContent("Recordings folder", value: path)
             }
+        } header: {
+            Text("Storage")
+        }
+    }
+
+    private var storageOptionsSection: some View {
+        Section {
             LabeledContent("Keep this much free") {
                 TextField("GB", text: $reserve)
                     .multilineTextAlignment(.trailing)
@@ -414,11 +426,49 @@ struct SettingsView: View {
             Text("While a channel is on, the server keeps up to this much of it, so recording a show already on starts from its beginning. It uses at most half the free space.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        } header: {
-            Text("Storage")
         } footer: {
             Text("The container writes the original broadcast files on the recordings share. Use 0 to turn the reserve off. A show already recording is left alone.")
         }
+    }
+
+    private var showSpaceSection: some View {
+        Section {
+            if let message = showError.nilIfEmpty {
+                Text(message)
+                    .foregroundStyle(.red)
+            } else if let rows = showRows {
+                if rows.isEmpty {
+                    Text("No finished recordings yet.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(rows, id: \.title) { row in
+                        showRow(row)
+                    }
+                }
+            }
+        } header: {
+            Text("Space by show")
+        }
+    }
+
+    private func showRow(_ row: StorageShow) -> some View {
+        let count = row.count == 1 ? "1 recording" : "\(row.count) recordings"
+        let size = ByteCountFormatter.string(fromByteCount: row.bytes, countStyle: .file)
+        return Button {
+            library.open(row.title)
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.title)
+                Text(count)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(size)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityLabel("\(row.title), \(count), \(size)")
+        .accessibilityIdentifier("show-space-row")
     }
 
     private var backupSection: some View {
@@ -540,6 +590,15 @@ struct SettingsView: View {
         }
         guard !demo else { return }
         storage = try? await store.api?.storage()
+        if let api = store.api {
+            do {
+                showRows = try await api.storageShows().shows
+                showError = ""
+            } catch {
+                showRows = nil
+                showError = "Could not load space by show."
+            }
+        }
         do {
             backupRows = try await store.api?.backups() ?? []
             backupError = ""

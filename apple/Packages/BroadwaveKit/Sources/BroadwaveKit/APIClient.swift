@@ -562,6 +562,11 @@ public struct APIClient: Sendable {
         try await send("GET", "/storage")
     }
 
+    /// Finished recordings in the recordings folder, grouped by title, largest first.
+    public func storageShows() async throws -> StorageShows {
+        try await send("GET", "/storage/shows")
+    }
+
     public func guideAirings() async throws -> Int {
         struct G: Decodable { var airings: Int? }
         struct R: Decodable { var guide: G? }
