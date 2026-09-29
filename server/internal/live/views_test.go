@@ -1,10 +1,13 @@
 package live
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -60,22 +63,86 @@ func TestViewNames(t *testing.T) {
 
 func TestScreensShareOneCut(t *testing.T) {
 	var c cutCache
-	k := cutKey{path: "/x/seg00001.m4s", tag: "a2", size: 10}
-	body := []byte("0123456789")
-	c.put(k, body)
-	got, ok := c.get(k)
-	if !ok || &got[0] != &body[0] {
-		t.Fatal("a second screen should get the same bytes")
+	path := filepath.Join(t.TempDir(), "seg00001.m4s")
+	if err := os.WriteFile(path, []byte("0123456789"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	k.size = 11
-	if _, ok := c.get(k); ok {
-		t.Fatal("a file rewritten after a restart is a new cut")
+	var cuts atomic.Int32
+	cut := func(raw []byte) ([]byte, error) {
+		cuts.Add(1)
+		// Long enough for every screen to arrive while the first one cuts.
+		time.Sleep(50 * time.Millisecond)
+		return raw[:4], nil
+	}
+	start := make(chan struct{})
+	bodies := make([][]byte, 16)
+	var wg sync.WaitGroup
+	for i := range bodies {
+		wg.Go(func() {
+			<-start
+			body, err := c.file(path, "a2", cut)
+			if err != nil {
+				t.Error(err)
+			}
+			bodies[i] = body
+		})
+	}
+	close(start)
+	wg.Wait()
+	if n := cuts.Load(); n != 1 {
+		t.Fatalf("%d screens asking at once made %d cuts, want 1", len(bodies), n)
+	}
+	for _, b := range bodies {
+		if len(b) != 4 || &b[0] != &bodies[0][0] {
+			t.Fatal("every screen should get the same bytes")
+		}
+	}
+	if _, err := c.file(path, "v", cut); err != nil || cuts.Load() != 2 {
+		t.Fatalf("another view is another cut (%d, %v)", cuts.Load(), err)
+	}
+	if err := os.WriteFile(path, []byte("01234567890"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.file(path, "a2", cut); err != nil || cuts.Load() != 3 {
+		t.Fatalf("a file rewritten after a restart is a new cut (%d, %v)", cuts.Load(), err)
+	}
+	failed := errors.New("torn fragment")
+	if _, err := c.file(path, "a3", func([]byte) ([]byte, error) { return nil, failed }); !errors.Is(err, failed) {
+		t.Fatalf("a failed cut should say so: %v", err)
+	}
+	if _, err := c.file(path, "a3", cut); err != nil || cuts.Load() != 4 {
+		t.Fatalf("a failed cut is not kept (%d, %v)", cuts.Load(), err)
 	}
 	big := make([]byte, cutBudget/2+1)
-	c.put(cutKey{path: "a"}, big)
-	c.put(cutKey{path: "b"}, big)
-	if _, ok := c.get(cutKey{path: "a"}); ok || c.bytes > cutBudget {
+	c.mu.Lock()
+	c.putLocked(cutKey{path: "a"}, big)
+	c.putLocked(cutKey{path: "b"}, big)
+	_, kept := c.cuts[cutKey{path: "a"}]
+	c.mu.Unlock()
+	if kept || c.bytes > cutBudget {
 		t.Fatalf("the oldest cut should go past the budget (%d bytes)", c.bytes)
+	}
+}
+
+// A blocking reload releases every screen on a view at once: one read of
+// the init, one cut of the segment.
+func TestScreensReleasedTogetherCutOnce(t *testing.T) {
+	dir, _, _ := packThreeTracks(t)
+	h := viewHub(t, dir, []AudioTrack{spaExtra})
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			<-start
+			if body, ok, err := h.ViewMedia(1, "1080.aac2.broadcast", "seg00001.a3.m4s"); !ok || err != nil || len(body) == 0 {
+				t.Errorf("ok=%v err=%v", ok, err)
+			}
+		})
+	}
+	close(start)
+	wg.Wait()
+	if h.cuts.misses != 2 {
+		t.Fatalf("%d reads, want the init and the segment once each", h.cuts.misses)
 	}
 }
 
