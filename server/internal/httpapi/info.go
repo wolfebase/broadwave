@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"broadwave/internal/realtime"
 )
 
 const apiVersion = 1
@@ -98,6 +100,15 @@ func (s *Server) now() time.Time {
 		return s.Clock()
 	}
 	return time.Now()
+}
+
+// groups lists the watch-together groups and who is in each.
+func (s *Server) groups(w http.ResponseWriter, r *http.Request) {
+	list := []realtime.RoomState{}
+	if s.Bus != nil {
+		list = append(list, s.Bus.Groups()...)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"groups": list})
 }
 
 func (s *Server) socket(w http.ResponseWriter, r *http.Request) {

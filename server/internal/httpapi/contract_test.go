@@ -489,6 +489,17 @@ func matchSocket(t *testing.T, h http.Handler, bus *realtime.Bus, st *store.Stor
 	matchFixture(t, root, "ws-clock", read("clock"))
 	send("sync.join", map[string]any{"room": "channel:1", "channelId": 1})
 	matchFixture(t, root, "ws-sync", read("sync.state"))
+	send("here", map[string]string{"name": "Den TV", "kind": "appletv"})
+	send("sync.join", map[string]any{"room": "group:den", "channelId": 1})
+	matchFixture(t, root, "ws-group", read("sync.state"))
+	matchFixture(t, root, "ws-groups", read("groups.changed"))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/groups", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("groups %d %s", rec.Code, rec.Body.String())
+	}
+	matchFixture(t, root, "groups", rec.Body.Bytes())
 }
 
 func matchFixture(t *testing.T, root, name string, raw []byte) {

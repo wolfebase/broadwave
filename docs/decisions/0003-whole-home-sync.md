@@ -28,7 +28,7 @@ At any server time `T`, the target media time is `anchorMediaTime + (T - anchorS
 
 Measured on a real ATSC broadcast (2026-09-22): two browser screens locked 15 ms apart, each within 5 ms of the room target.
 
-**Group mode.** Pause, seek, and jump-to-live become room commands sent over the WebSocket. The server rewrites the anchor and broadcasts it, and every client converges. Because everyone reads the same buffer, rewinding for the room needs no extra tuner or transcode.
+**Group mode.** Pause, seek, and jump-to-live become room commands sent over the WebSocket. The server rewrites the anchor and broadcasts it, and every client converges. Because everyone reads the same buffer, rewinding for the room needs no extra tuner or transcode. A household needs no codes: the group for a channel is `group:ch<id>`, every screen on that channel sees who is in it and can join, and anyone can leave.
 
 **Remote friends.** SharePlay (`AVPlaybackCoordinator`) covers watching together outside the home and is independent of room sync.
 

@@ -416,6 +416,16 @@ public struct PassList: Codable, Sendable, Hashable {
     }
 }
 
+public struct Person: Codable, Sendable, Hashable {
+    public var name: String
+    public var kind: String
+
+    public init(name: String, kind: String) {
+        self.name = name
+        self.kind = kind
+    }
+}
+
 public typealias PictureMode = String
 
 public struct PlannedAiring: Codable, Sendable, Hashable {
@@ -511,8 +521,9 @@ public struct RoomState: Codable, Sendable, Hashable {
     public var latencyMs: Double?
     public var version: Int
     public var members: Int
+    public var people: [Person]?
 
-    public init(room: String, channelId: Int64? = nil, mode: String, anchorServer: Double, anchorMedia: Double, rate: Double, latency: String, latencyMs: Double? = nil, version: Int, members: Int) {
+    public init(room: String, channelId: Int64? = nil, mode: String, anchorServer: Double, anchorMedia: Double, rate: Double, latency: String, latencyMs: Double? = nil, version: Int, members: Int, people: [Person]? = nil) {
         self.room = room
         self.channelId = channelId
         self.mode = mode
@@ -523,6 +534,7 @@ public struct RoomState: Codable, Sendable, Hashable {
         self.latencyMs = latencyMs
         self.version = version
         self.members = members
+        self.people = people
     }
 }
 

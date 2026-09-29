@@ -106,6 +106,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /diagnostics", s.diagnostics)
 	api("GET /metrics", s.metrics)
 	api("GET /ws", s.socket)
+	api("GET /groups", s.groups)
 	api("GET /profile", s.profile)
 	api("GET /devices", s.devices)
 	api("GET /devices/health", s.deviceHealth)

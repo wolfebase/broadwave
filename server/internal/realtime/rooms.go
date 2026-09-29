@@ -2,6 +2,7 @@ package realtime
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,14 @@ type RoomState struct {
 	LatencyMS float64 `json:"latencyMs"`
 	Version   int     `json:"version"`
 	Members   int     `json:"members"`
+	// People names who is in a group room, so every screen can show it.
+	People []Person `json:"people,omitempty"`
+}
+
+// Person is one screen in a group room.
+type Person struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
 }
 
 // Target is the media time the room shows at server time now (Unix ms).
@@ -254,6 +263,20 @@ func (r *Rooms) Leave(room string) {
 	if st.Members <= 0 {
 		delete(r.rooms, room)
 	}
+}
+
+// Groups lists the group rooms by code.
+func (r *Rooms) Groups() []RoomState {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []RoomState
+	for name, st := range r.rooms {
+		if strings.HasPrefix(name, "group:") {
+			out = append(out, *st)
+		}
+	}
+	slices.SortFunc(out, func(a, b RoomState) int { return strings.Compare(a.Room, b.Room) })
+	return out
 }
 
 func (r *Rooms) State(room string) (RoomState, bool) {

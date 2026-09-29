@@ -1,5 +1,7 @@
 import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, Device, DeviceHealth, FrameList, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, StorageShows, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
 
+import type { RoomState } from "./lib/events";
+
 export type ApiFailure = Error & { status: number; code?: string };
 
 // A body that is not the error envelope. Same words as requestFailed in outage.ts.
@@ -195,6 +197,10 @@ export function planMultiview(channelIds: number[]) {
     method: "POST",
     body: JSON.stringify({ channelIds, picker: true }),
   });
+}
+
+export function getGroups() {
+  return request<{ groups: RoomState[] }>("/api/v1/groups");
 }
 
 export function getServer() {
