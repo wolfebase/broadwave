@@ -240,7 +240,7 @@ func (p *programPipe) packets() []byte {
 }
 
 // start drops the program until its first sequence header and puts the
-// tables in front of it. ffmpeg probes one second of input; an encode that
+// tables in front of it. ffmpeg probes half a second of input; an encode that
 // joins mid-picture group can reach that ceiling before a sequence header,
 // and a VAAPI decoder opened without a picture size never recovers.
 func (p *programPipe) start(out []byte) []byte {

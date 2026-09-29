@@ -1,13 +1,16 @@
 package live
 
 import (
+	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math/bits"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // A master playlist lists a rendition's picture view once and each of its
@@ -288,21 +291,42 @@ func (h *Hub) MasterPath(channelID int64, key string) (string, bool) {
 }
 
 // MasterPlaylist is master.m3u8 for a rendition: its picture view and each
-// of its sound tracks, named from the PMT.
-func (h *Hub) MasterPlaylist(channelID int64, key string) ([]byte, error) {
+// of its sound tracks, named from the PMT. An encode started again after the
+// watch answered (a late scan-type result) has no header until its first
+// segment, so this waits up to masterWait for it.
+func (h *Hub) MasterPlaylist(ctx context.Context, channelID int64, key string) ([]byte, error) {
+	deadline := time.Now().Add(masterWait)
+	for {
+		body, gate, err := h.masterOnce(channelID, key)
+		if !errors.Is(err, os.ErrNotExist) || gate == nil || ctx.Err() != nil || !time.Now().Before(deadline) {
+			return body, err
+		}
+		started := time.Now()
+		gate.wait(0, -1, min(250*time.Millisecond, time.Until(deadline)))
+		// A gate already past segment 0 with no header yet would spin.
+		if time.Since(started) < 50*time.Millisecond {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
+const masterWait = 8 * time.Second
+
+func (h *Hub) masterOnce(channelID int64, key string) ([]byte, *playlistGate, error) {
 	h.mu.Lock()
 	f := h.channels[channelID]
 	if f == nil || f.renditions[key] == nil {
 		h.mu.Unlock()
-		return nil, os.ErrNotExist
+		return nil, nil, os.ErrNotExist
 	}
 	r := f.renditions[key]
-	spec, dir, captions := r.spec, r.dir, f.captions != nil
+	spec, dir, captions, gate := r.spec, r.dir, f.captions != nil, r.gate
 	tracks := append([]AudioTrack{mainTrackLocked(f, spec)}, r.extras...)
 	h.mu.Unlock()
 	init, err := os.ReadFile(filepath.Join(dir, "init.mp4"))
 	if err != nil {
-		return nil, err
+		return nil, gate, err
 	}
-	return masterPlaylist(spec, initCodecs(init), tracks, captions)
+	body, err := masterPlaylist(spec, initCodecs(init), tracks, captions)
+	return body, gate, err
 }

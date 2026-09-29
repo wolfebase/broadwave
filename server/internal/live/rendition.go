@@ -460,10 +460,16 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		args = append(args, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5")
 	}
 	args = append(args, headerArgs(src.UserAgent, src.Referrer)...)
-	// Ceilings, not waits: ffmpeg returns once it has the parameters. A tuner
-	// multiplex is tens of megabits, so a 2 MB cap ends before the sequence
-	// header. A remote playlist is slower to start and is not a fat mux.
+	// A tuner multiplex is tens of megabits, so a 2 MB cap ends before the
+	// sequence header. The program pipe starts a program on a sequence header
+	// with its tables, so half a second holds every stream's parameters; at
+	// 1 s a new tune on a 1080i channel waited ~0.4 s more. A stream that can
+	// start mid-group, with its sound up to a second ahead of the picture,
+	// keeps the second. A remote playlist is slower to start and is not a fat mux.
 	probeSize, probeFor := "8000000", "1000000"
+	if program > 0 && input == "pipe:0" {
+		probeFor = "500000"
+	}
 	if strings.Contains(input, "://") {
 		probeSize, probeFor = "2000000", "1500000"
 	}

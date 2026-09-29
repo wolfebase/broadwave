@@ -107,6 +107,10 @@ func TestOpeningSegmentsAreShort(t *testing.T) {
 			t.Errorf("missing %q in %s", want, live)
 		}
 	}
+	// The program pipe starts on a sequence header, so half a second is enough.
+	if piped := strings.Join(RenditionArgs(3, Source{VideoCodec: "MPEG2"}, Rendition{Video: "720", Audio: "aac2"}, "libx264", ""), " "); !strings.Contains(piped, "-analyzeduration 500000") {
+		t.Errorf("a program pipe input probes half a second: %s", piped)
+	}
 	gpu := strings.Join(RenditionArgs(0, Source{VideoCodec: "MPEG2"}, Rendition{Video: "720", Audio: "aac2"}, "h264_vaapi", ""), " ")
 	if strings.Contains(gpu, "sliced-threads") || !strings.Contains(gpu, "h264_vaapi") {
 		t.Fatalf("a hardware encode does not take the software thread cap: %s", gpu)

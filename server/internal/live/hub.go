@@ -214,6 +214,9 @@ type mux struct {
 	ring *ring.Ring
 	// closed is set under pipeMu when the tune ends.
 	closed bool
+	// The tune's steps, for StartTimes. Set and read under h.mu.
+	tuneBegan, tuneStatus, tuneLocked time.Time
+	firstByte                         stamp
 }
 
 // feed is one channel on a tuned frequency.
@@ -278,6 +281,9 @@ type rendition struct {
 	input     *packInput
 	filter    *programPipe
 	respawned time.Time
+	// began and fed time the encode's start for StartTimes.
+	began time.Time
+	fed   stamp
 }
 
 type recording struct {
@@ -504,6 +510,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 			return h.addFeedLocked(m, ch), nil
 		}
 	}
+	began := time.Now()
 	bases := []string{ch.BaseURL}
 	if h.Store != nil {
 		if more, err := h.Store.OtherDevices(ctx, ch.GuideNumber, ch.DeviceID); err == nil {
@@ -527,6 +534,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	if len(devices) == 0 {
 		return nil, ErrTunerSilent
 	}
+	status := time.Now()
 	held := h.reserved
 	if h.hold > 0 && len(devices) > 0 {
 		held = map[int]bool{}
@@ -574,7 +582,9 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	// wait for streaminfo, before this same request.
 	if ch.FrequencyHz > 0 && ch.ProgramNum > 0 {
 		if body, err := openMux(root, tuner, ch.FrequencyHz); err == nil {
+			locked := time.Now()
 			feed := h.beginMuxLocked(ch, host, base, tuner, ch.FrequencyHz, nil, body)
+			noteTune(muxOf(h, feed), began, status, locked)
 			// streaminfo on a tuner that is already locked records the other
 			// subchannels. A vchannel probe would lock the same frequency again.
 			go h.rememberSiblings(host, tuner, ch.FrequencyHz)
@@ -612,7 +622,10 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 		_, _ = hdhr.Control{Addr: controlAddr(host)}.Set(fmt.Sprintf("/tuner%d/channel", tuner), "none")
 		return nil, err
 	}
-	return h.beginMuxLocked(ch, host, base, tuner, freq, programs, body), nil
+	locked := time.Now()
+	feed := h.beginMuxLocked(ch, host, base, tuner, freq, programs, body)
+	noteTune(muxOf(h, feed), began, status, locked)
+	return feed, nil
 }
 
 // beginMuxLocked owns the tuner stream and starts the feed. The caller holds h.mu.
@@ -835,7 +848,8 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	}
 	packIn := startPack(dir, stdout, gate, done, captionLine(f))
 	NotePID(h.Dir, cmd.Process.Pid)
-	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: time.Now(), args: args, extras: extras, gate: gate, packDone: done, input: packIn}
+	now := time.Now()
+	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: now, began: now, args: args, extras: extras, gate: gate, packDone: done, input: packIn}
 	if stdin != nil {
 		r.sub = h.attachPipe(muxOf(h, f), h.renditionPipe(f, r, stdin), true)
 	}
@@ -1135,7 +1149,7 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 // renditionPipe narrows the mux to the rendition's program and starts the
 // encode again on a backwards timestamp break. The caller holds h.mu.
 func (h *Hub) renditionPipe(f *feed, r *rendition, stdin io.WriteCloser) io.WriteCloser {
-	w := newProgramPipe(stdin, f.program)
+	w := newProgramPipe(markWriter{stdin, &r.fed}, f.program)
 	if p, ok := w.(*programPipe); ok {
 		p.sw = &pipeSwitch{}
 		p.onBreak = func() { go h.followBreak(f, r, p) }
@@ -1959,6 +1973,7 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 		n, err := m.body.Read(buf)
 		if n > 0 {
 			m.got.Store(true)
+			m.firstByte.mark()
 			chunk := append([]byte(nil), buf[:n]...)
 			if g, ok := m.psip.Add(chunk); ok && h.OnPSIP != nil {
 				freq, guide := m.freq, g
