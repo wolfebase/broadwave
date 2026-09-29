@@ -34,6 +34,8 @@ enum PlayerPanels {
 struct ChannelListPanel: View {
     @Environment(AppStore.self) private var store
     @Environment(NowPlaying.self) private var nowPlaying
+    @State private var warming: Task<Void, Never>?
+    @FocusState private var focus: Int64?
 
     var body: some View {
         ScrollView {
@@ -64,11 +66,29 @@ struct ChannelListPanel: View {
                     .accessibilityLabel("\(channel.displayNumber) \(channel.displayName), \(title)")
                     .accessibilityAddTraits(current ? .isSelected : [])
                     .accessibilityIdentifier("panel-channel-\(channel.id)")
+                    .focused($focus, equals: channel.id)
                 }
             }
             .padding(12)
         }
+        .onChange(of: focus) { _, id in
+            warming?.cancel()
+            guard let id, id != nowPlaying.channel?.id, let channel = store.channels.first(where: { $0.id == id }) else { return }
+            warm(channel)
+        }
         .accessibilityIdentifier("panel-channels")
+    }
+}
+
+extension ChannelListPanel {
+    /// A row the remote rests on starts its picture, when that costs no tuner.
+    private func warm(_ channel: Channel) {
+        warming?.cancel()
+        warming = Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled, let api = store.api else { return }
+            await api.warm(channelID: channel.id, caps: Capabilities.current(), prefs: store.prefs)
+        }
     }
 }
 

@@ -200,6 +200,16 @@ public struct APIClient: Sendable {
         return try await send("POST", "/watch", body: B(channelId: channelID, caps: caps, prefs: prefs, confirmLive: confirmLive))
     }
 
+    /// Starts the picture a watch is about to ask for, when the channel's
+    /// frequency is already tuned and a picture fits. It counts no viewer, so
+    /// nothing needs stopping. False when the server made no guess.
+    @discardableResult
+    public func warm(channelID: Int64, caps: Caps, prefs: Prefs) async -> Bool {
+        struct B: Encodable { var caps: Caps; var prefs: Prefs }
+        struct R: Decodable { var warm: Bool }
+        return await (try? send("POST", "/watch/\(channelID)/warm", body: B(caps: caps, prefs: prefs), timeout: 5, as: R.self))?.warm ?? false
+    }
+
     public func tuners() async throws -> [Tuner] {
         struct R: Decodable { var tuners: [Tuner] }
         return try await send("GET", "/tuners", as: R.self).tuners

@@ -58,6 +58,54 @@ final class PlayerPanelTests: XCTestCase {
         XCTAssertTrue(moved, "stayed on \(app.staticTexts["channel-now"].label)")
     }
 
+    func testRestingOnAChannelRowStartsItsPicture() throws {
+        try XCTSkipIf(server.isEmpty, "set TEST_RUNNER_BROADWAVE_SERVER")
+        let app = try launch()
+        let started = try waitChannel(app)
+        let playing = try XCTUnwrap(Int64(firstChannelID()))
+        let sibling = try XCTUnwrap(sameFrequency(as: playing), "no second channel on the playing frequency")
+        XCTAssertNil(try relayFeed(sibling), "\(sibling) was running before the row had focus")
+
+        try showTabs(app)
+        try showContent(app, "panel-channels", tab: "Channels")
+        let row = "panel-channel-\(sibling)"
+        for _ in 0 ..< 8 where !focused(app).hasPrefix(row + " ") {
+            XCUIRemote.shared.press(.down)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        }
+        XCTAssertTrue(focused(app).hasPrefix(row + " "), "focus \(focused(app))\n\(app.debugDescription)")
+        shot(app, "warm-row")
+
+        var feed: RelayFeed?
+        XCTAssertTrue(until(8) {
+            feed = try? self.relayFeed(sibling)
+            return feed?.renditions?.contains { $0.viewers == 0 } == true
+        }, "no guessed picture for \(sibling): \(String(describing: feed))")
+        print("warm-relay \(String(describing: feed))")
+        XCTAssertEqual(app.staticTexts["channel-now"].label, started, "resting on a row changed the channel")
+    }
+
+    private func sameFrequency(as channel: Int64) -> Int64? {
+        var match: Int64?
+        _ = until(10) {
+            guard let signals = try? self.fetch(SignalPage.self, "/api/v1/signals").channels,
+                  let freq = signals.first(where: { $0.channelId == channel })?.frequencyHz, freq > 0
+            else { return false }
+            match = signals.first { $0.channelId != channel && $0.frequencyHz == freq }?.channelId
+            return true
+        }
+        return match
+    }
+
+    private func relayFeed(_ channel: Int64) throws -> RelayFeed? {
+        try fetch(Diagnostics.self, "/api/v1/diagnostics").relay?.first { $0.channelId == channel }
+    }
+
+    private func fetch<T: Decodable>(_: T.Type, _ path: String) throws -> T {
+        let url = try XCTUnwrap(URL(string: server + path))
+        return try JSONDecoder().decode(T.self, from: Data(contentsOf: url))
+    }
+
     private func launch() throws -> XCUIApplication {
         let channel = try firstChannelID()
         let app = XCUIApplication()
@@ -217,4 +265,27 @@ private struct ChannelPage: Decodable {
     }
 
     let channels: [Item]
+}
+
+private struct SignalPage: Decodable {
+    struct Item: Decodable {
+        let channelId: Int64
+        let frequencyHz: Int?
+    }
+
+    let channels: [Item]
+}
+
+private struct Diagnostics: Decodable {
+    let relay: [RelayFeed]?
+}
+
+private struct RelayFeed: Decodable {
+    struct Rendition: Decodable {
+        let key: String
+        let viewers: Int
+    }
+
+    let channelId: Int64
+    let renditions: [Rendition]?
 }

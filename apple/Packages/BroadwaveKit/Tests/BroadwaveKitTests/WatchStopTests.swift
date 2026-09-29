@@ -40,6 +40,20 @@ import Testing
     #expect(empty["rendition"] as? String == "720.aac2")
 }
 
+@Test func warmSendsThePlayersCapabilities() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [WarmStub.self]
+    let api = try APIClient(base: #require(URL(string: "http://stub.invalid")), session: URLSession(configuration: config))
+    let started = await api.warm(channelID: 7, caps: Capabilities.current(), prefs: Prefs(quality: .high))
+    #expect(started)
+    #expect(WarmStub.lastPath == "/api/v1/watch/7/warm")
+    let body = try #require(WarmStub.lastBody)
+    let sent = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    let caps = try #require(sent["caps"] as? [String: Any])
+    #expect(caps["alternates"] as? Bool == true)
+    #expect((sent["prefs"] as? [String: Any])?["quality"] as? String == "high")
+}
+
 private final class WatchStopStub: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var lastBody: Data?
     nonisolated(unsafe) static var lastPath: String?
@@ -63,7 +77,7 @@ private final class WatchStopStub: URLProtocol, @unchecked Sendable {
 
     override func stopLoading() {}
 
-    private static func read(_ stream: InputStream) -> Data {
+    fileprivate static func read(_ stream: InputStream) -> Data {
         stream.open()
         defer { stream.close() }
         var out = Data()
@@ -77,4 +91,29 @@ private final class WatchStopStub: URLProtocol, @unchecked Sendable {
         }
         return out
     }
+}
+
+/// Its own statics: Swift Testing runs the stop test beside this one.
+private final class WarmStub: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var lastBody: Data?
+    nonisolated(unsafe) static var lastPath: String?
+
+    override static func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        Self.lastBody = request.httpBody ?? request.httpBodyStream.map(WatchStopStub.read)
+        Self.lastPath = request.url?.path
+        let res = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: res, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(#"{"warm":true}"#.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }
