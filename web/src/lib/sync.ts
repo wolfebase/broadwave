@@ -14,6 +14,12 @@ export type SyncStatus = {
 };
 
 const TRIM_MS = 20;
+// Chrome loses 15-20 ms of playback when it leaves 1x. Trimming from 20 ms
+// paid that back on every change and trimmed forever, dropping 4 % of frames;
+// a trim now starts past TRIM_START_MS and holds one rate until the drift has
+// crossed back within TRIM_STOP_MS.
+const TRIM_START_MS = 25;
+const TRIM_STOP_MS = 5;
 const SEEK_MS = 400;
 const MAX_TRIM = 0.03;
 // Speeding up, or seeking forward, with less media than this underruns the live edge.
@@ -46,6 +52,8 @@ export class SyncEngine {
   private leadCheck = false;
   private rateProbe: { at: number; t: number; rate: number } | null = null;
   private rateStalls = 0;
+  // The rate a trim holds, relative to the room's own rate. Zero when not trimming.
+  private trimBy = 0;
   private settle = newSettle();
   private resumeLag = 0;
   private resumeAt = 0;
@@ -253,6 +261,7 @@ export class SyncEngine {
     video.dataset.syncDrift = String(Math.round(drift));
     if (st.rate === 0) {
       this.rateProbe = null;
+      this.trimBy = 0;
       if (!video.paused) video.pause();
       if (Math.abs(drift) > TRIM_MS * 2) this.seekTo(target, false);
       this.setStatus({ state: "locked", drift, members: st.members, room: st });
@@ -305,6 +314,7 @@ export class SyncEngine {
     const base = st.rate;
     const ahead = this.forwardMedia();
     if (Math.abs(drift) > (trims ? SEEK_MS : STALL_SEEK_MS)) {
+      this.trimBy = 0;
       this.setRate(base);
       // The target is not buffered, or the cushion is too thin to chase it.
       // Hold the room's rate; a seek past the edge stalls the picture.
@@ -316,14 +326,19 @@ export class SyncEngine {
       this.setStatus({ state: "syncing", drift, members: st.members, room: st });
       return;
     }
-    if (trims && Math.abs(drift) > TRIM_MS) {
+    if (trims && (this.trimBy || Math.abs(drift) > TRIM_START_MS)) {
       // Steps of 0.5%: every new rate is a rate change, which Safari pays for.
-      let rate = base + Math.round(Math.max(-MAX_TRIM, Math.min(MAX_TRIM, -drift / 2000)) / 0.005) * 0.005;
-      if (rate > base && ahead < CUSHION_S) rate = base;
-      this.setRate(rate);
-      this.setStatus({ state: "syncing", drift, members: st.members, room: st });
-      return;
+      const want = Math.round(Math.max(-MAX_TRIM, Math.min(MAX_TRIM, -drift / 2000)) / 0.005) * 0.005;
+      const crossed = this.trimBy > 0 ? drift >= -TRIM_STOP_MS : this.trimBy < 0 && drift <= TRIM_STOP_MS;
+      if (!this.trimBy || (Math.sign(want) === Math.sign(this.trimBy) && Math.abs(want) > Math.abs(this.trimBy))) this.trimBy = want;
+      if (crossed || (this.trimBy > 0 && ahead < CUSHION_S)) this.trimBy = 0;
+      if (this.trimBy) {
+        this.setRate(base + this.trimBy);
+        this.setStatus({ state: "syncing", drift, members: st.members, room: st });
+        return;
+      }
     }
+    this.trimBy = 0;
     this.setRate(base);
     // No trims: a drift under the seek threshold would stay for good.
     if (!trims && settleDue(this.settle, drift, now)) {
