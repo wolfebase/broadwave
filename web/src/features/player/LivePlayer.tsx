@@ -323,12 +323,14 @@ export function LivePlayer({
       l: lastChannel,
       t: () => setTheater((on) => !on),
       "?": () => setPanel("help"),
+      c: () => setOpts((o) => ({ ...o, captions: !o.captions })),
     };
     const fn = actions[k] ?? actions[k.toLowerCase()];
-    if (fn) {
-      event.preventDefault();
-      fn();
-    }
+    if (!fn) return;
+    // A held C would flip twice, and Ctrl+C is Copy.
+    if (k.toLowerCase() === "c" && (event.repeat || event.metaKey || event.ctrlKey || event.altKey)) return;
+    event.preventDefault();
+    fn();
   }
 
   const liveLabel = livePillLabel(opts.sync && sync.state !== "off", behind);
@@ -465,7 +467,14 @@ export function LivePlayer({
             <OptionRow label="Audio" value={opts.track} options={["main", "language", "described"]} labels={{ main: "Main", language: "Second language", described: "Described video" }} onChange={(track) => setOpts((o) => ({ ...o, track }))} />
           )}
           {stream.canCaption ? (
-            <OptionRow label="Captions" value={opts.captions ? "on" : "off"} options={["off", "on"]} labels={{ off: "Off", on: "On" }} onChange={(v) => setOpts((o) => ({ ...o, captions: v === "on" }))} />
+            <OptionRow
+              label="Captions"
+              value={opts.captions ? "on" : "off"}
+              options={["off", "on"]}
+              labels={{ off: "Off", on: "On" }}
+              pressed
+              onChange={(v) => setOpts((o) => ({ ...o, captions: v === "on" }))}
+            />
           ) : null}
           <OptionRow label="Even volume" value={opts.even ? "on" : "off"} options={["off", "on"]} labels={{ off: "Off", on: "On" }} onChange={(v) => setOpts((o) => ({ ...o, even: v === "on" }))} />
           <OptionRow
@@ -600,13 +609,27 @@ export function LivePlayer({
   );
 }
 
-function OptionRow<T extends string>({ label, value, options, labels, onChange }: { label: string; value: T | string; options: T[]; labels: Record<string, string>; onChange: (v: T) => void }) {
+function OptionRow<T extends string>({
+  label,
+  value,
+  options,
+  labels,
+  onChange,
+  pressed,
+}: {
+  label: string;
+  value: T | string;
+  options: T[];
+  labels: Record<string, string>;
+  onChange: (v: T) => void;
+  pressed?: boolean;
+}) {
   return (
     <div className="option-row">
       <span className="option-label">{label}</span>
       <div className="segmented" role="group" aria-label={label}>
         {options.map((o) => (
-          <button key={o} type="button" className={value === o ? "seg on" : "seg"} onClick={() => onChange(o)}>
+          <button key={o} type="button" className={value === o ? "seg on" : "seg"} aria-pressed={pressed ? value === o : undefined} onClick={() => onChange(o)}>
             {labels[o] ?? o}
           </button>
         ))}
