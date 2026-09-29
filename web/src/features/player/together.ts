@@ -22,11 +22,17 @@ export function useGroup(channelId: number): RoomState | undefined {
         .catch(() => undefined);
     };
     void load();
-    const offChanged = events().on("groups.changed", () => void load());
+    // A burst of joins asks once, after it settles.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const offChanged = events().on("groups.changed", () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => void load(), 250);
+    });
     const offRestart = events().on("restarted", () => void load());
     const offBack = events().on("reconnected", () => void load());
     return () => {
       live = false;
+      clearTimeout(timer);
       offChanged();
       offRestart();
       offBack();
