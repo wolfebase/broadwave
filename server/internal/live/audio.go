@@ -158,11 +158,25 @@ func iso639(b []byte) (lang string, audioType int) {
 		if tag != descISO639 || len(body) < 4 {
 			continue
 		}
-		lang = string(body[0:3])
-		audioType = int(body[3])
-		return lang, audioType
+		return cleanLanguage(body[0:3]), int(body[3])
 	}
 	return "", -1
+}
+
+// cleanLanguage keeps an ISO 639-2 code a player can match. Stations send
+// upper case, NUL padding, "und", and reserved codes.
+func cleanLanguage(raw []byte) string {
+	code := strings.ToLower(string(raw))
+	for _, c := range code {
+		if c < 'a' || c > 'z' {
+			return ""
+		}
+	}
+	switch {
+	case code == "und", code == "zxx", code == "mis", code == "mul", code >= "qaa" && code <= "qtz":
+		return ""
+	}
+	return code
 }
 
 // ac3Meta reads bitstream_mode and mix width from an AC-3 descriptor (tag 0x81).

@@ -538,8 +538,10 @@ func (h *Hub) learnScanLocked(m *mux, f *feed) {
 				f.tracks = tracks
 				// Two complete mains share one copied descriptor on some
 				// stations. Wait for a frame from each before the rendition
-				// locks the passthrough pid.
-				if audioReady(tracks) {
+				// locks the passthrough pid. An encode that carries the other
+				// tracks waits for theirs too; this is a first tune, so nothing
+				// stored vouches for them.
+				if audioReady(tracks) && (!h.Alternates || allMeasured(tracks)) {
 					needAudio = false
 				}
 			}

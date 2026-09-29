@@ -1125,6 +1125,16 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(body)
 		return
 	}
+	if name == "master.m3u8" {
+		body, err := s.Hub.MasterPlaylist(channelID, key)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		_, _ = w.Write(body)
+		return
+	}
 	if body, ok, err := s.viewPlaylist(r, channelID, key, name); ok {
 		if err != nil {
 			http.NotFound(w, r)
