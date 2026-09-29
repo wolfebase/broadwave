@@ -80,6 +80,8 @@ test("each Live delay plays at its distance from live", async ({ page }, info) =
     console.log(lines.at(-1));
     expect(Math.abs(median - targets[name]), lines.at(-1)).toBeLessThan(1_500);
     expect(stalls, lines.at(-1)).toBe(0);
+    // A drift just past the trim band once kept Chrome trimming for good at Lowest: 5 % dropped.
+    expect(dropped / frames, lines.at(-1)).toBeLessThan(0.03);
   }
   await page.goto("/settings");
   await settle(page);
