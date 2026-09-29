@@ -593,3 +593,89 @@ func TestGroupCodes(t *testing.T) {
 		}
 	}
 }
+
+func TestJoinAtStartsANewRoomOnTheScreensLatency(t *testing.T) {
+	start := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	r, _ := fixedRooms(start)
+	st := r.JoinAt("channel:4", 4, 0, "lowest")
+	if st.Latency != "lowest" || st.LatencyMS != 6000 || st.AnchorMedia != liveAnchor(start, "lowest") {
+		t.Fatalf("a new room should start at the joiner's latency, got %+v", st)
+	}
+	if st = r.JoinAt("channel:4", 4, 0, "stable"); st.Latency != "lowest" {
+		t.Fatalf("a second screen must not move the room, got %+v", st)
+	}
+	if st = r.JoinAt("channel:5", 5, 0, "fastest"); st.Latency != "balanced" {
+		t.Fatalf("an unknown latency starts balanced, got %+v", st)
+	}
+}
+
+func TestFloorOnlyMovesARoomCloserToLive(t *testing.T) {
+	start := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	r, _ := fixedRooms(start)
+	r.JoinAt("channel:4", 4, 0, "lowest")
+	st, ok := r.Floor("channel:4", "balanced")
+	if !ok || st.Latency != "balanced" || st.AnchorMedia != liveAnchor(start, "balanced") {
+		t.Fatalf("a lowest room should move back to balanced, got %+v %v", st, ok)
+	}
+	r.JoinAt("channel:5", 5, 0, "stable")
+	if _, ok := r.Floor("channel:5", "balanced"); ok {
+		t.Fatal("a stable room is already behind balanced")
+	}
+	if _, ok := r.Floor("channel:9", "balanced"); ok {
+		t.Fatal("no room, nothing to floor")
+	}
+}
+
+func TestAnAppleScreenKeepsItsRoomAtBalanced(t *testing.T) {
+	bus := NewBus()
+	srv := httptest.NewServer(bus)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	dial := func(here string) *websocket.Conn {
+		conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { conn.CloseNow() })
+		send(t, ctx, conn, "here", here)
+		return conn
+	}
+	latencyIs := func(conn *websocket.Conn, want string) {
+		t.Helper()
+		for {
+			_, msg, err := conn.Read(ctx)
+			if err != nil {
+				t.Fatalf("waiting for %s: %v", want, err)
+			}
+			var m Message
+			_ = json.Unmarshal(msg, &m)
+			var st RoomState
+			if m.Type == "sync.state" && json.Unmarshal(m.Data, &st) == nil && st.Latency == want {
+				return
+			}
+		}
+	}
+	web := dial(`{"name":"Chrome","kind":"web"}`)
+	send(t, ctx, web, "sync.join", `{"room":"channel:4","channelId":4,"latency":"lowest"}`)
+	latencyIs(web, "lowest")
+	tv := dial(`{"name":"Den","kind":"appletv"}`)
+	send(t, ctx, tv, "sync.join", `{"room":"channel:4","channelId":4,"latency":"lowest"}`)
+	latencyIs(tv, "balanced")
+	latencyIs(web, "balanced")
+	send(t, ctx, web, "sync.command", `{"room":"channel:4","action":"latency","latency":"lowest"}`)
+	latencyIs(web, "balanced")
+	if st, _ := bus.Rooms.State("channel:4"); st.Latency != "balanced" {
+		t.Fatalf("lowest is out of an Apple screen's reach, got %+v", st)
+	}
+	send(t, ctx, web, "sync.command", `{"room":"channel:4","action":"latency","latency":"stable"}`)
+	latencyIs(tv, "stable")
+}
+
+func send(t *testing.T, ctx context.Context, conn *websocket.Conn, kind, data string) {
+	t.Helper()
+	raw, _ := json.Marshal(Message{Type: kind, Data: json.RawMessage(data)})
+	if err := conn.Write(ctx, websocket.MessageText, raw); err != nil {
+		t.Fatal(err)
+	}
+}

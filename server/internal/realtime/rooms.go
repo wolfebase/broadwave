@@ -114,16 +114,26 @@ func liveAnchor(now time.Time, latency string) float64 {
 // The next member keeps that anchor. lowest, balanced, and stable still apply
 // once the buffer is deep enough to hold them.
 func (r *Rooms) Join(room string, channelID int64, earliest float64) RoomState {
+	return r.JoinAt(room, channelID, earliest, "balanced")
+}
+
+// JoinAt is Join with the latency a new room starts at: the joining screen's
+// own default. A room that exists keeps the latency it has, since every
+// screen in it shows the same frame.
+func (r *Rooms) JoinAt(room string, channelID int64, earliest float64, latency string) RoomState {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	st := r.rooms[room]
 	if st == nil {
+		if _, ok := latencies[latency]; !ok {
+			latency = "balanced"
+		}
 		now := r.now()
 		mode := "follow"
 		if strings.HasPrefix(room, "group:") || strings.HasPrefix(room, "multiview:") {
 			mode = "group"
 		}
-		media := liveAnchor(now, "balanced")
+		media := liveAnchor(now, latency)
 		anchorServer := unixMS(now)
 		if earliest > media {
 			// A fresh tune: start on the first frame, a moment later, so the
@@ -132,7 +142,7 @@ func (r *Rooms) Join(room string, channelID int64, earliest float64) RoomState {
 			anchorServer += float64(startCushion / time.Millisecond)
 		}
 		st = &RoomState{
-			Room: room, ChannelID: channelID, Mode: mode, Latency: "balanced", LatencyMS: latencyMS("balanced"), Rate: 1,
+			Room: room, ChannelID: channelID, Mode: mode, Latency: latency, LatencyMS: latencyMS(latency), Rate: 1,
 			AnchorServer: anchorServer, AnchorMedia: media, Version: 1,
 		}
 		r.rooms[room] = st
@@ -303,11 +313,7 @@ func (r *Rooms) Apply(room string, c Command) (RoomState, error) {
 		if _, ok := latencies[c.Latency]; !ok {
 			return RoomState{}, errors.New("latency is lowest, balanced, or stable")
 		}
-		st.Latency, st.LatencyMS = c.Latency, latencyMS(c.Latency)
-		if st.Mode == "follow" {
-			st.AnchorServer, st.AnchorMedia, st.Rate = nowMS, liveAnchor(now, st.Latency), 1
-		}
-		st.Version++
+		r.setLatencyLocked(st, c.Latency, now)
 		return *st, nil
 	}
 	if c.Action == "stalled" {
@@ -336,4 +342,27 @@ func (r *Rooms) Apply(room string, c Command) (RoomState, error) {
 	}
 	st.Version++
 	return *st, nil
+}
+
+func (r *Rooms) setLatencyLocked(st *RoomState, latency string, now time.Time) {
+	st.Latency, st.LatencyMS = latency, latencyMS(latency)
+	if st.Mode == "follow" {
+		st.AnchorServer, st.AnchorMedia, st.Rate = unixMS(now), liveAnchor(now, latency), 1
+	}
+	st.Version++
+}
+
+// Floor moves a room that plays closer to live than latency back to it. An
+// Apple screen holds back about 13 s behind live and never reaches lowest, so
+// a room it is in plays at balanced or further back. It reports whether the
+// room changed.
+func (r *Rooms) Floor(room, latency string) (RoomState, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	st := r.rooms[room]
+	if st == nil || latencyMS(st.Latency) >= latencyMS(latency) {
+		return RoomState{}, false
+	}
+	r.setLatencyLocked(st, latency, r.now())
+	return *st, true
 }

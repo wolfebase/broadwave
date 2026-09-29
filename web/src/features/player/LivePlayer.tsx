@@ -6,6 +6,7 @@ import { navigate } from "../../app/router";
 import { airingAt, categoryOf, minutesLeft, progress } from "../../lib/guide";
 import { channelNumberContinues, typedChannel } from "../../lib/remote";
 import type { SyncStatus } from "../../lib/sync";
+import { events, saveLiveDelay, type LiveDelay } from "../../lib/events";
 import { readZoom, saveZoom, type PictureMode, type Zoom } from "../../picture";
 import { copy } from "../../strings";
 import type { Channel } from "../../types";
@@ -34,6 +35,7 @@ function readOptions(): Options {
 }
 
 const qualityLabels: Record<Options["quality"], string> = { auto: "Auto", original: "Original", high: "High", medium: "Medium", saver: "Data saver" };
+const delayLabels: Record<LiveDelay, string> = { lowest: "Lowest", balanced: "Balanced", stable: "Stable" };
 
 export function LivePlayer({
   channel,
@@ -104,6 +106,9 @@ export function LivePlayer({
     return () => window.clearTimeout(t);
   }, [restingOn, channel.id, warm]);
   const [zoom, setZoom] = useState<Zoom>(readZoom);
+  // Only a pick made on this channel explains itself: a room someone else
+  // started at balanced is not a refusal.
+  const [asked, setAsked] = useState<{ channel: number; delay: LiveDelay } | null>(null);
   const [sleepUntil, setSleepUntil] = useState<number | null>(null);
   const [sleepFor, setSleepFor] = useState(0);
   const [theater, setTheater] = useState(false);
@@ -526,6 +531,24 @@ export function LivePlayer({
               void saveSettings({ pictureMode: p });
             }}
           />
+          {sync.room ? (
+            <OptionRow
+              label="Live delay"
+              value={sync.room.latency}
+              options={["lowest", "balanced", "stable"]}
+              labels={delayLabels}
+              onChange={(latency) => {
+                setAsked({ channel: channel.id, delay: latency });
+                saveLiveDelay(latency);
+                events().command(room, "latency", { latency });
+              }}
+            />
+          ) : null}
+          {asked?.channel === channel.id && asked.delay === "lowest" && sync.room && sync.room.latency !== "lowest" ? (
+            <p className="option-note" role="status">
+              {copy.player.delayApple}
+            </p>
+          ) : null}
           <OptionRow
             label="Picture"
             value={zoom}

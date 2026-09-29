@@ -84,8 +84,9 @@ export interface paths {
          *     Server to client: `hello` {serverTime, boot} (boot names the server process; a new one means it restarted and every watch and room is gone), `clock` {t0, t1}, `activity` (Event),
          *     `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `error` {code, message}.
          *
-         *     Client to server: `clock` {t0}, `sync.join` {room, channelId}, `sync.leave` {room},
+         *     Client to server: `clock` {t0}, `sync.join` {room, channelId, latency}, `sync.leave` {room},
          *     `sync.command` {room, action: play|pause|seek|live|latency|stalled, mediaTime, latency}. `stalled` steps a one-screen room or a multiview 2 s further from live, never past its latency target.
+         *     A join's `latency` (lowest|balanced|stable, the screen's default) applies only when the join starts the room. A room with an Apple screen in it plays at balanced or further back: AVPlayer never reaches lowest.
          *
          *     Rooms are `channel:<id>` (everyone on a channel, following live) or `group:<code>`
          *     (watch together: shared controls, and `people` names who is in it). A code is 1-32
