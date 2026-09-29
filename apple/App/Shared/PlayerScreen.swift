@@ -70,6 +70,10 @@ final class LivePlayer {
     private var quietRetry = false
     private var holdPicture = false
     private var restartToken: (socket: EventSocket, id: UUID)?
+    /// The room's live delay, from its latest state; nil until it has one.
+    private(set) var roomLatency: String?
+    private var roomToken: (socket: EventSocket, id: UUID)?
+    private var roomName: String?
     /// A watch started while the old picture played on, for the next start to use.
     private var preparedSession: WatchSession?
     private var rewatch: (() async throws -> WatchSession)?
@@ -205,6 +209,7 @@ final class LivePlayer {
             #endif
             if store.syncEnabled, Compatibility.gateFeature(store.info, "wholeHomeSync") == nil, let socket = store.socket {
                 let engine = SyncEngine(player: player, socket: socket, room: "channel:\(channel.id)", channelID: channel.id)
+                listenForRoom(socket, room: "channel:\(channel.id)")
                 engine.start()
                 sync = engine
             }
@@ -328,6 +333,30 @@ final class LivePlayer {
         restartToken = (socket, id)
     }
 
+    private func listenForRoom(_ socket: EventSocket?, room: String?) {
+        if let roomToken {
+            roomToken.socket.off("sync.state", roomToken.id)
+        }
+        roomToken = nil
+        roomName = room
+        roomLatency = nil
+        guard let socket, let room else { return }
+        if let data = socket.roomState(room), let state = try? JSONDecoder().decode(RoomState.self, from: data) {
+            roomLatency = state.latency
+        }
+        let id = socket.on("sync.state") { [weak self] data in
+            guard let state = try? JSONDecoder().decode(RoomState.self, from: data), state.room == room else { return }
+            self?.roomLatency = state.latency
+        }
+        roomToken = (socket, id)
+    }
+
+    /// Moves the room this screen is in, for everyone in it.
+    func setDelay(_ delay: LiveDelay) {
+        guard let roomToken, let roomName else { return }
+        roomToken.socket.command(room: roomName, action: "latency", latency: delay.rawValue)
+    }
+
     private func handOff() async {
         handingOff = true
         defer { handingOff = false }
@@ -398,6 +427,7 @@ final class LivePlayer {
         #endif
         sync?.stop()
         sync = nil
+        listenForRoom(nil, room: nil)
         if let tick {
             player.removeTimeObserver(tick)
         }
@@ -788,6 +818,7 @@ struct PlayerScreen: View {
                 hint: displayHint(live.session?.stream),
                 menu: channelMenu,
                 audio: audioMenu,
+                delay: delayMenu,
                 streamOn: showStream,
                 onStream: { showStream.toggle() },
                 onTogether: {
@@ -1049,6 +1080,9 @@ struct PlayerScreen: View {
         private var transportMenuNames: [String] {
             let recording = nowPlaying.channel.flatMap { store.activeRecording(on: $0) } != nil
             var names = ["Channels", "Audio", recording ? "Stop recording" : "Record", "Multiview"]
+            if let current = delayMenu.first(where: \.current) {
+                names.insert("Live delay \(current.title)", at: 2)
+            }
             if startOverChoice != nil {
                 names.append("Start over")
             }
@@ -1079,6 +1113,17 @@ struct PlayerScreen: View {
             }
         case nil:
             break
+        }
+    }
+
+    /// Empty until the screen is in a room with a known delay.
+    private var delayMenu: [ChannelMenuEntry] {
+        guard live.sync != nil, let current = live.roomLatency else { return [] }
+        return LiveDelay.allCases.enumerated().map { number, delay in
+            ChannelMenuEntry(id: Int64(number + 1), title: delay.title, current: current == delay.rawValue) {
+                LiveDelay.saved = delay
+                live.setDelay(delay)
+            }
         }
     }
 
@@ -1157,6 +1202,22 @@ struct PlayerScreen: View {
     }
 
     #if os(iOS)
+        @ViewBuilder private var delaySection: some View {
+            if !delayMenu.isEmpty {
+                Section("Live delay") {
+                    ForEach(delayMenu) { entry in
+                        Button(action: entry.action) {
+                            if entry.current {
+                                Label(entry.title, systemImage: "checkmark")
+                            } else {
+                                Text(entry.title)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         private var overlay: some View {
             ZStack {
                 gesturePad
@@ -1357,6 +1418,7 @@ struct PlayerScreen: View {
                         }
                     }
                 }
+                delaySection
             } label: {
                 Label("Audio", systemImage: "speaker.wave.2")
                     .labelStyle(StackedControlLabel())
@@ -1406,6 +1468,7 @@ struct PlayerScreen: View {
                             }
                         }
                     }
+                    delaySection
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.glass)
@@ -1535,6 +1598,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
     var hint = DisplayMatch()
     var menu: [ChannelMenuEntry] = []
     var audio: [ChannelMenuEntry] = []
+    var delay: [ChannelMenuEntry] = []
     var streamOn = false
     var onStream: () -> Void = {}
     var onTogether: () -> Void = {}
@@ -1666,7 +1730,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
             }
             // Setting the items redraws the transport bar and keeps it on screen,
             // so a view update that changes nothing must leave them alone.
-            let key = (menu + audio).map { "\($0.id) \($0.title) \($0.current)" } + ["\(streamOn)", "\(rejoin != nil)", "\(recording)", "\(canStartOver)"]
+            let key = (menu + audio + delay).map { "\($0.id) \($0.title) \($0.current)" } + ["\(streamOn)", "\(rejoin != nil)", "\(recording)", "\(canStartOver)"]
             guard key != context.coordinator.menuKey else { return }
             context.coordinator.menuKey = key
             let actions = menu.map { entry in
@@ -1680,6 +1744,12 @@ struct SystemPlayer: UIViewControllerRepresentable {
             let stream = UIAction(title: streamOn ? "Hide stream" : "Stream", image: UIImage(systemName: "info.circle"), state: streamOn ? .on : .off) { _ in onStream() }
             let audioMenu = UIMenu(title: "Audio", image: UIImage(systemName: "speaker.wave.2"), children: audioActions)
             var items: [UIMenuElement] = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions), audioMenu, stream, record]
+            if !delay.isEmpty {
+                let choices = delay.map { entry in
+                    UIAction(title: entry.title, state: entry.current ? .on : .off) { _ in entry.action() }
+                }
+                items.insert(UIMenu(title: "Live delay", image: UIImage(systemName: "clock"), children: choices), at: 2)
+            }
             if canStartOver {
                 items.append(UIAction(title: "Start over", image: UIImage(systemName: "backward.end")) { _ in onStartOver() })
             }

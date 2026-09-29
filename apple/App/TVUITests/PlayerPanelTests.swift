@@ -26,6 +26,8 @@ final class PlayerPanelTests: XCTestCase {
         XCTAssertTrue(menu.label.contains("Record"), menu.label)
         XCTAssertTrue(menu.label.contains("Multiview"), menu.label)
         XCTAssertFalse(menu.label.contains("Start over"), "a fresh picture does not hold the start: \(menu.label)")
+        // The room's delay arrives with its first state; a new room starts at this device's default.
+        XCTAssertTrue(until(20) { menu.label.contains("Live delay Balanced") }, menu.label)
 
         try showTabs(app)
         try showContent(app, "panel-channels", tab: "Channels")

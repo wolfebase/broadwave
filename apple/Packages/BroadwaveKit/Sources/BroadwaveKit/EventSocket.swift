@@ -86,7 +86,7 @@ public final class EventSocket {
             send("here", ["name": screenName, "kind": screenKind])
         }
         for (room, channel) in rooms {
-            send("sync.join", ["room": room, "channelId": channel])
+            send("sync.join", ["room": room, "channelId": channel, "latency": LiveDelay.saved.rawValue])
         }
     }
 
@@ -183,7 +183,7 @@ public final class EventSocket {
         refs[room] = n
         rooms[room] = channelID
         if n == 1 {
-            send("sync.join", ["room": room, "channelId": channelID])
+            send("sync.join", ["room": room, "channelId": channelID, "latency": LiveDelay.saved.rawValue])
         }
     }
 
@@ -209,10 +209,13 @@ public final class EventSocket {
         latest[room]
     }
 
-    public func command(room: String, action: String, mediaTime: Double? = nil) {
+    public func command(room: String, action: String, mediaTime: Double? = nil, latency: String? = nil) {
         var body: [String: Any] = ["room": room, "action": action]
         if let mediaTime {
             body["mediaTime"] = mediaTime
+        }
+        if let latency {
+            body["latency"] = latency
         }
         send("sync.command", body)
     }

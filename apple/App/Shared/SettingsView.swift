@@ -27,6 +27,7 @@ struct SettingsView: View {
     @State private var shareTuner = false
     @State private var shareKnown = false
     @State private var pictureMode = "broadcast"
+    @State private var liveDelay = LiveDelay.saved
     @State private var pictureKnown = false
     @State private var sdUser = ""
     @State private var sdLineup = ""
@@ -83,6 +84,7 @@ struct SettingsView: View {
             }
             serverSection
             playbackSection(store)
+            delaySection
             pictureSection
             if demo {
                 Section {
@@ -223,6 +225,24 @@ struct SettingsView: View {
             Text("Playback")
         } footer: {
             Text("Auto plays the original broadcast with Dolby Digital whenever this device can.")
+        }
+    }
+
+    private var delaySection: some View {
+        Section {
+            Picker("Live delay", selection: Binding(
+                get: { liveDelay },
+                set: { delay in
+                    liveDelay = delay
+                    LiveDelay.saved = delay
+                }
+            )) {
+                ForEach(LiveDelay.allCases) { delay in
+                    Text(delay.title).tag(delay)
+                }
+            }
+        } footer: {
+            Text("How far behind live a channel plays when this device starts it: Balanced about 16 seconds, Stable 20.")
         }
     }
 
