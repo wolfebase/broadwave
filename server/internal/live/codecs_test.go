@@ -248,7 +248,7 @@ func TestLinkTuneStoresTheStreamCodecs(t *testing.T) {
 	}
 	h := New(st, t.TempDir(), ffmpeg, "libx264")
 	defer h.Shutdown()
-	session, err := h.Watch(ctx, id, first.Rendition)
+	session, err := h.Watch(ctx, id, first.Rendition, false)
 	if err != nil {
 		t.Fatal(err)
 	}

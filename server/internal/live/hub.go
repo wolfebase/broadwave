@@ -379,7 +379,10 @@ func sourceOf(ch store.SourceChannel) Source {
 }
 
 // Watch starts or joins one rendition of a channel.
-func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition) (Session, error) {
+// Watch adds a viewer. With alternates the player switches sound tracks in
+// place from a master, so a second-language or described watch joins the main
+// encode when that encode serves it (mainServesLocked).
+func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition, alternates bool) (Session, error) {
 	h.preemptScan()
 	want = want.normalized()
 	ch, err := h.Store.SourceChannel(ctx, channelID)
@@ -430,6 +433,14 @@ func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition) (Sessi
 	f, err := h.ensureFeedLocked(ctx, ch, res)
 	if err != nil {
 		return Session{}, err
+	}
+	if alternates && want.Track != "" {
+		main := want
+		main.Track = ""
+		main = main.normalized()
+		if h.mainServesLocked(f, main, want.Track) {
+			want = main
+		}
 	}
 	r, err := h.ensureRenditionLocked(f, want)
 	if err != nil {

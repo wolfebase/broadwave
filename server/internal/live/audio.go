@@ -597,6 +597,31 @@ func (h *Hub) extrasLocked(f *feed, want Rendition) []AudioTrack {
 	return out
 }
 
+// mainServesLocked reports whether the main encode serves a player that
+// switches sound in place and asked for a rendition track ("lang", "vi"): the
+// encode carries that track among its extras, or the channel's known tracks
+// have none in that role, so a separate encode would play the main sound too.
+// A running encode keeps the extras it started with.
+func (h *Hub) mainServesLocked(f *feed, main Rendition, track string) bool {
+	role := map[string]string{"lang": "language", "vi": "described"}[track]
+	if role == "" {
+		return false
+	}
+	known := f.tracks
+	if len(known) == 0 {
+		known = f.stored
+	}
+	if _, ok := PickTrack(known, role); len(known) > 0 && !ok {
+		return true
+	}
+	extras := h.extrasLocked(f, main)
+	if r := f.renditions[main.Key()]; r != nil {
+		extras = r.extras
+	}
+	_, ok := PickTrack(extras, role)
+	return ok
+}
+
 // trackWindow is how long a tune reads its audio before storing it.
 var trackWindow = 8 * time.Second
 

@@ -50,7 +50,8 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var decision live.Decision
-	if forced, ok := live.ParseRenditionKey(body.Rendition); ok {
+	forced, chosen := live.ParseRenditionKey(body.Rendition)
+	if chosen {
 		decision = live.Decision{Rendition: forced, Reason: "Chosen in the player"}
 	} else {
 		caps, prefs := live.LegacyCaps(body.Profile, body.Audio, body.Picture)
@@ -68,13 +69,19 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	session, err := s.Hub.Watch(r.Context(), body.ChannelID, decision.Rendition)
+	alternates := body.Caps != nil && body.Caps.Alternates
+	// A rendition the player named is played as named.
+	session, err := s.Hub.Watch(r.Context(), body.ChannelID, decision.Rendition, alternates && !chosen)
 	if err != nil {
 		watchError(w, err)
 		return
 	}
 	session.Stream.Reason = decision.Reason
-	if session.Rendition != decision.Rendition.Key() && session.Stream.Video != "" && session.Stream.Video != "copy" {
+	// A player that switches sound in place plays the main encode, which carries its track.
+	main := decision.Rendition
+	main.Track = ""
+	inPlace := alternates && decision.Rendition.Key() != main.Key() && session.Rendition == main.Key()
+	if session.Rendition != decision.Rendition.Key() && !inPlace && session.Stream.Video != "" && session.Stream.Video != "copy" {
 		session.Stream.Reason = "Playing the " + session.Stream.Video + "p picture already running."
 	}
 	// The viewer is counted before a segment exists. A channel change closes
@@ -98,7 +105,9 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		session = fresh
 		session.Stream.Reason = reason
 	}
-	if body.Caps != nil && body.Caps.Alternates {
+	// A master names its default sound as the main one, so an encode that
+	// carries another track first keeps its one-sound playlist.
+	if spec, ok := live.ParseRenditionKey(session.Rendition); alternates && ok && spec.Track == "" {
 		if master, ok := s.Hub.MasterPath(session.ChannelID, session.Rendition); ok {
 			session.MainPlaylist = master
 		}

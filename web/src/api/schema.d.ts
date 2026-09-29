@@ -1342,7 +1342,7 @@ export interface components {
             audio?: "auto" | "surround" | "stereo" | "none";
             picture?: components["schemas"]["PictureMode"];
             /**
-             * @description Which broadcast audio mix to play. Empty is main.
+             * @description Which broadcast audio mix to play. Empty is main. With `caps.alternates`, a watch plays the main encode when that encode carries this mix as an alternate, and the player selects it from the master.
              * @enum {string}
              */
             track?: "main" | "language" | "described";
