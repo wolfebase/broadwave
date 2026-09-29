@@ -15,7 +15,7 @@ import (
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	places, err := s.homePlaces(ctx, r.URL.Query().Get("fresh") == "1")
+	places, err := s.homePlaces(ctx, r.URL.Query().Get("fresh") == "1", true)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -37,8 +37,8 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) homePlaces(ctx context.Context, fresh bool) ([]discovery.Place, error) {
-	found := s.cachedHome(ctx, fresh)
+func (s *Server) homePlaces(ctx context.Context, fresh, logScan bool) ([]discovery.Place, error) {
+	found := s.cachedHome(ctx, fresh, logScan)
 	var known []discovery.Known
 	if s.Store != nil {
 		devices, err := s.Store.Devices(ctx)
@@ -68,7 +68,9 @@ func (s *Server) homePlaces(ctx context.Context, fresh bool) ([]discovery.Place,
 	return places, nil
 }
 
-func (s *Server) cachedHome(ctx context.Context, fresh bool) []discovery.Found {
+// cachedHome logs a scan only when logScan is set. The arrival watch scans
+// every 45 s all day, and its line would bury the rest of the log.
+func (s *Server) cachedHome(ctx context.Context, fresh, logScan bool) []discovery.Found {
 	s.homeMu.Lock()
 	defer s.homeMu.Unlock()
 	if !fresh && time.Since(s.homeAt) < 20*time.Second && s.homeAt != (time.Time{}) {
@@ -83,14 +85,16 @@ func (s *Server) cachedHome(ctx context.Context, fresh bool) []discovery.Found {
 	if found == nil {
 		found = []discovery.Found{}
 	}
-	parts := make([]string, 0, len(found))
-	for _, item := range found {
-		parts = append(parts, item.Kind+" "+item.Name+" "+item.Addr)
-	}
-	if len(parts) == 0 {
-		slog.Info("home scan: nothing")
-	} else {
-		slog.Info(fmt.Sprintf("home scan: %s", strings.Join(parts, "; ")))
+	if logScan {
+		parts := make([]string, 0, len(found))
+		for _, item := range found {
+			parts = append(parts, item.Kind+" "+item.Name+" "+item.Addr)
+		}
+		if len(parts) == 0 {
+			slog.Info("home scan: nothing")
+		} else {
+			slog.Info(fmt.Sprintf("home scan: %s", strings.Join(parts, "; ")))
+		}
 	}
 	s.homeFound = found
 	s.homeAt = time.Now()

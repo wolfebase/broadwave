@@ -35,7 +35,7 @@ func (s *Server) noteArrivals(ctx context.Context) {
 	}
 	arrivals := s.arrivals
 	s.homeMu.Unlock()
-	places, err := s.homePlaces(ctx, true)
+	places, err := s.homePlaces(ctx, true, false)
 	if err != nil {
 		slog.Error(fmt.Sprintf("home: %v", err))
 		return
