@@ -165,7 +165,10 @@ export function Guide() {
     el.scrollTo({ left: Math.max(0, ((t - origin) / MIN) * pxPerMin), behavior });
   }
 
+  // Now keeps half an hour of what just aired on the left and moves the cursor
+  // to the show on now. The jump is instant: the cursor effect would stop a smooth one short.
   function jumpToNow() {
+    scrollToTime(now - 30 * MIN, "auto");
     move(focus.row, now);
   }
 
