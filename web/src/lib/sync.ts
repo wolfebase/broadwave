@@ -23,6 +23,8 @@ const CUSHION_S = 1.5;
 // smaller drift.
 const RATE_STALL_S = 0.12;
 const STALL_SEEK_MS = 120;
+/** Ahead of a group room by more than this is a rewind by another screen, not drift. */
+const GROUP_REWIND_MS = 2000;
 // WebKit resumes about a tenth of a second late after a pause. Learned per screen.
 const MAX_RESUME_LAG_S = 0.5;
 
@@ -66,6 +68,8 @@ export class SyncEngine {
       const st = data as RoomState;
       if (st.room !== this.room) return;
       this.state = st;
+      // A hold skips the tick; who is in the room shows now anyway.
+      this.setStatus({ ...this.status, members: st.members, room: st });
       this.apply();
     });
     bus.join(this.room, this.channelId);
@@ -157,6 +161,12 @@ export class SyncEngine {
    * buffer keeps filling (backward seeks in a live buffer are fragile). Behind: seek forward.
    */
   private correct(drift: number, target: number) {
+    // Another screen rewound the group. The frame is behind this playhead, in
+    // the buffer; pausing for the whole rewind froze every browser for 15 s.
+    if (drift > GROUP_REWIND_MS && this.room.startsWith("group:") && this.timeFor(target) != null) {
+      this.seekTo(target, !this.video.paused);
+      return;
+    }
     if (drift > 0) {
       const now = performance.now();
       if (now < this.holdUntil) return;

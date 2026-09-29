@@ -96,6 +96,29 @@ test("two browsers watch together: who is in, pause, rewind, play, leave", async
     await control(other, "Play");
     const playing = await onOneFrame(page, other, false, 150);
 
+    // A rewind while playing: every screen seeks back to the frame and plays
+    // on, instead of pausing for the whole rewind. Live first, so the window
+    // holds a long rewind behind the room.
+    await page.mouse.move(40, 300);
+    await page.getByRole("button", { name: /^(Live$|Go to live)/ }).click();
+    await onOneFrame(page, other, false, 150);
+    await expect.poll(() => other.locator("video.stage-video").evaluate((v: HTMLVideoElement) => v.currentTime - v.seekable.start(0)), { timeout: 20_000 }).toBeGreaterThan(8);
+    const behindOther = await other.locator("video.stage-video").evaluate((v: HTMLVideoElement) => (v.currentTime - v.seekable.start(0) - 1) * 1000);
+    const want2 = Math.min(15_000, behindOther);
+    const rewindAt = (await frame(other)).media;
+    const t1 = Date.now();
+    await control(page, "Back 15 seconds");
+    await expect
+      .poll(
+        async () => {
+          const f = await frame(other);
+          return !f.paused && rewindAt + (Date.now() - t1) - f.media > want2 - 1_500;
+        },
+        { timeout: 5_000, intervals: [100] },
+      )
+      .toBe(true);
+    const rewoundPlaying = await onOneFrame(page, other, false, 150);
+
     // The scrubber moves the group once it rests, to the same frame on both
     // screens. The room plays well behind live, so there is room ahead.
     const slider = page.getByRole("slider", { name: "Playback position" });
@@ -107,7 +130,7 @@ test("two browsers watch together: who is in, pause, rewind, play, leave", async
     await expect.poll(async () => (await frame(other)).media - playingAt - (Date.now() - t0), { timeout: 20_000 }).toBeGreaterThan(4_000);
     const scrubbed = await onOneFrame(page, other, false, 150);
 
-    const numbers = JSON.stringify({ pausedGapMs: paused, rewoundGapMs: rewound, playingGapMs: playing, scrubbedGapMs: scrubbed, rewindMs: before - after, wantMs: Math.round(want) });
+    const numbers = JSON.stringify({ pausedGapMs: paused, rewoundGapMs: rewound, playingGapMs: playing, rewoundPlayingGapMs: rewoundPlaying, playingRewindMs: Math.round(want2), scrubbedGapMs: scrubbed, rewindMs: before - after, wantMs: Math.round(want) });
     console.log(`together ${numbers}`);
     await info.attach("together.json", { body: numbers, contentType: "application/json" });
 
