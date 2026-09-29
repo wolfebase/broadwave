@@ -185,7 +185,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /media/poster/{id}", s.poster)
 	mux.HandleFunc("GET /media/art/{kind}/{id}", s.art)
 	mux.HandleFunc("GET /", s.ui)
-	return s.withDevCORS(mux)
+	if s.Dev {
+		return s.withDevCORS(mux)
+	}
+	// The LAN API has no sign-in, so a page on another site must not be able
+	// to post to it: a restore from any tab would replace the catalog. The
+	// apps and curl send no Origin and pass.
+	return http.NewCrossOriginProtection().Handler(mux)
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
