@@ -54,6 +54,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Watch-together groups on this server and who is in each. A group ends when its last screen leaves. */
+        get: operations["listGroups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ws": {
         parameters: {
             query?: never;
@@ -65,13 +82,14 @@ export interface paths {
          * @description WebSocket for live updates and Whole-Home Sync. Every frame is `{"type", "data"}`.
          *
          *     Server to client: `hello` {serverTime, boot} (boot names the server process; a new one means it restarted and every watch and room is gone), `clock` {t0, t1}, `activity` (Event),
-         *     `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `error` {code, message}.
+         *     `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `error` {code, message}.
          *
          *     Client to server: `clock` {t0}, `sync.join` {room, channelId}, `sync.leave` {room},
          *     `sync.command` {room, action: play|pause|seek|live|latency|stalled, mediaTime, latency}. `stalled` steps a one-screen room or a multiview 2 s further from live, never past its latency target.
          *
          *     Rooms are `channel:<id>` (everyone on a channel, following live) or `group:<code>`
-         *     (shared controls). At server time T a room shows media time
+         *     (watch together: shared controls, and `people` names who is in it). A code is 1-32
+         *     letters, digits, `-`, or `_`; a join with any other code is ignored. At server time T a room shows media time
          *     `anchorMedia + (T - anchorServer) * rate`, where media time is the segment
          *     program date-time (Unix ms). See docs/decisions/0003-whole-home-sync.md.
          */
@@ -1137,6 +1155,13 @@ export interface components {
             latencyMs?: number;
             version: number;
             members: number;
+            /** @description Group rooms only. Who is in the room; a screen that has not said what it is has an empty name and kind. */
+            people?: components["schemas"]["Person"][];
+        };
+        Person: {
+            name: string;
+            /** @description iphone, ipad, appletv, web, or empty */
+            kind: string;
         };
         ServerInfo: {
             id: string;
@@ -1880,6 +1905,28 @@ export interface operations {
                     "application/json": {
                         /** @description Unix milliseconds */
                         serverTime: number;
+                    };
+                };
+            };
+        };
+    };
+    listGroups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every group room */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        groups: components["schemas"]["RoomState"][];
                     };
                 };
             };

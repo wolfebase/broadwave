@@ -1,0 +1,21 @@
+{
+  "data": {
+    "anchorMedia": 1790261984000,
+    "anchorServer": 1790262000000,
+    "channelId": 1,
+    "latency": "balanced",
+    "latencyMs": 16000,
+    "members": 1,
+    "mode": "group",
+    "people": [
+      {
+        "kind": "appletv",
+        "name": "Den TV"
+      }
+    ],
+    "rate": 1,
+    "room": "group:den",
+    "version": 1
+  },
+  "type": "sync.state"
+}

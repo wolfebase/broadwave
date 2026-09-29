@@ -1,6 +1,7 @@
 package realtime
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -95,15 +97,22 @@ func (b *Bus) Settle(channelID int64, earliest float64) {
 		return
 	}
 	browsers := b.roomsWithBrowsers()
-	for _, e := range b.Rooms.Settle(channelID, earliest, func(room string) bool { return browsers[room] }) {
-		b.publishRoom(e.State)
+	b.mu.Lock()
+	eased := b.Rooms.Settle(channelID, earliest, func(room string) bool { return browsers[room] })
+	for _, e := range eased {
+		b.publishRoomLocked(e.State)
+	}
+	b.mu.Unlock()
+	for _, e := range eased {
 		if e.Until <= 0 {
 			continue
 		}
 		room, version := e.State.Room, e.State.Version
 		time.AfterFunc(e.Until, func() {
+			b.mu.Lock()
+			defer b.mu.Unlock()
 			if st, ok := b.Rooms.EndEase(room, version); ok {
-				b.publishRoom(st)
+				b.publishRoomLocked(st)
 			}
 		})
 	}
@@ -129,10 +138,15 @@ func (b *Bus) roomsWithBrowsers() map[string]bool {
 	return out
 }
 
-func (b *Bus) publishRoom(st RoomState) {
+// publishRoomLocked sends a room's state with b.mu held. A state read from
+// Rooms under the same hold cannot be overtaken by an older one: a pause and
+// a join at the same moment otherwise delivered the join's state last, and
+// every screen played on in a paused room.
+func (b *Bus) publishRoomLocked(st RoomState) {
+	if groupRoom(st.Room) {
+		st.People = b.peopleLocked(st.Room)
+	}
 	msg := frame("sync.state", st)
-	b.mu.Lock()
-	defer b.mu.Unlock()
 	for c := range b.clients {
 		if c.rooms[st.Room] {
 			select {
@@ -140,6 +154,48 @@ func (b *Bus) publishRoom(st RoomState) {
 			default:
 			}
 		}
+	}
+}
+
+// peopleLocked names the screens in a room. A screen that has not said what
+// it is still counts, with no name.
+func (b *Bus) peopleLocked(room string) []Person {
+	out := []Person{}
+	for c := range b.clients {
+		if c.rooms[room] {
+			out = append(out, Person{Name: c.here.Name, Kind: c.here.Kind})
+		}
+	}
+	slices.SortFunc(out, func(a, b Person) int {
+		return cmp.Or(strings.Compare(a.Name, b.Name), strings.Compare(a.Kind, b.Kind))
+	})
+	return out
+}
+
+// Groups lists every group room with who is in it.
+func (b *Bus) Groups() []RoomState {
+	if b == nil || b.Rooms == nil {
+		return nil
+	}
+	list := b.Rooms.Groups()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for i := range list {
+		list[i].People = b.peopleLocked(list[i].Room)
+	}
+	return list
+}
+
+// roomChanged tells a room's members its new state after someone joined or
+// left, and tells everyone when the list of groups changed.
+func (b *Bus) roomChanged(room string) {
+	b.mu.Lock()
+	if st, ok := b.Rooms.State(room); ok {
+		b.publishRoomLocked(st)
+	}
+	b.mu.Unlock()
+	if groupRoom(room) {
+		b.Publish("groups.changed", struct{}{})
 	}
 }
 
@@ -181,9 +237,7 @@ func (b *Bus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		b.mu.Unlock()
 		for room := range c.rooms {
 			b.Rooms.Leave(room)
-			if st, ok := b.Rooms.State(room); ok {
-				b.publishRoom(st)
-			}
+			b.roomChanged(room)
 		}
 	}()
 
@@ -258,7 +312,16 @@ func (b *Bus) handle(c *client, m Message) {
 		b.mu.Lock()
 		c.here.Name = name
 		c.here.Kind = kind
+		var groups []string
+		for room := range c.rooms {
+			if groupRoom(room) {
+				groups = append(groups, room)
+			}
+		}
 		b.mu.Unlock()
+		for _, room := range groups {
+			b.roomChanged(room)
+		}
 	case "clock":
 		var req struct {
 			T0 float64 `json:"t0"`
@@ -287,8 +350,8 @@ func (b *Bus) handle(c *client, m Message) {
 				earliest = v
 			}
 		}
-		st := b.Rooms.Join(req.Room, req.ChannelID, earliest)
-		b.publishRoom(st)
+		b.Rooms.Join(req.Room, req.ChannelID, earliest)
+		b.roomChanged(req.Room)
 	case "sync.report":
 		// A screen's playback health, logged so a stutter on a real TV shows
 		// up in the server log without Xcode attached to it.
@@ -320,9 +383,7 @@ func (b *Bus) handle(c *client, m Message) {
 			return
 		}
 		b.Rooms.Leave(req.Room)
-		if st, ok := b.Rooms.State(req.Room); ok {
-			b.publishRoom(st)
-		}
+		b.roomChanged(req.Room)
 	case "sync.command":
 		var req struct {
 			Room string `json:"room"`
@@ -331,12 +392,15 @@ func (b *Bus) handle(c *client, m Message) {
 		if json.Unmarshal(m.Data, &req) != nil || !b.isMember(c, req.Room) {
 			return
 		}
+		b.mu.Lock()
 		st, err := b.Rooms.Apply(req.Room, req.Command)
+		if err == nil {
+			b.publishRoomLocked(st)
+		}
+		b.mu.Unlock()
 		if err != nil {
 			b.reply(c, "error", map[string]string{"code": "sync", "message": err.Error()})
-			return
 		}
-		b.publishRoom(st)
 	default:
 		slog.Info(fmt.Sprintf("realtime: unknown message %q", m.Type))
 	}
@@ -391,7 +455,27 @@ func validRoom(room string) bool {
 	if len(room) > 64 {
 		return false
 	}
-	return strings.HasPrefix(room, "channel:") || strings.HasPrefix(room, "group:") || strings.HasPrefix(room, "multiview:")
+	if code, ok := strings.CutPrefix(room, "group:"); ok {
+		return validCode(code)
+	}
+	return strings.HasPrefix(room, "channel:") || strings.HasPrefix(room, "multiview:")
+}
+
+// validCode keeps group codes to what a person can read out and type.
+func validCode(code string) bool {
+	if code == "" || len(code) > 32 {
+		return false
+	}
+	for _, r := range code {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+func groupRoom(room string) bool {
+	return strings.HasPrefix(room, "group:")
 }
 
 func appleKind(kind string) bool {

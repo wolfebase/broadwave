@@ -470,3 +470,126 @@ func TestHelloNamesTheServerProcess(t *testing.T) {
 		t.Fatalf("a restarted server kept boot %q", next)
 	}
 }
+
+func TestGroupRoomNamesWhoIsIn(t *testing.T) {
+	bus := NewBus()
+	srv := httptest.NewServer(bus)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	dial := func() *websocket.Conn {
+		c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	send := func(c *websocket.Conn, kind string, v any) {
+		data, _ := json.Marshal(v)
+		raw, _ := json.Marshal(Message{Type: kind, Data: data})
+		if err := c.Write(ctx, websocket.MessageText, raw); err != nil {
+			t.Fatal(err)
+		}
+	}
+	people := func(c *websocket.Conn, want int) RoomState {
+		for {
+			_, raw, err := c.Read(ctx)
+			if err != nil {
+				t.Fatalf("waiting for %d people: %v", want, err)
+			}
+			var m Message
+			_ = json.Unmarshal(raw, &m)
+			var st RoomState
+			if m.Type == "sync.state" && json.Unmarshal(m.Data, &st) == nil && len(st.People) == want {
+				return st
+			}
+		}
+	}
+	tv, phone, other := dial(), dial(), dial()
+	defer tv.CloseNow()
+	defer phone.CloseNow()
+	defer other.CloseNow()
+
+	send(tv, "here", map[string]string{"name": "Den TV", "kind": "appletv"})
+	send(tv, "sync.join", map[string]any{"room": "group:den", "channelId": 9})
+	people(tv, 1)
+	send(phone, "sync.join", map[string]any{"room": "group:den", "channelId": 9})
+	send(phone, "here", map[string]string{"name": "Sam's iPhone", "kind": "iphone"})
+	st := people(tv, 2)
+	for st.People[1].Name != "Sam's iPhone" {
+		st = people(tv, 2)
+	}
+	if st.People[0] != (Person{Name: "Den TV", Kind: "appletv"}) || st.People[1].Kind != "iphone" {
+		t.Fatalf("people: %+v", st.People)
+	}
+
+	groups := bus.Groups()
+	if len(groups) != 1 || groups[0].Room != "group:den" || groups[0].ChannelID != 9 || len(groups[0].People) != 2 {
+		t.Fatalf("groups: %+v", groups)
+	}
+	send(other, "sync.join", map[string]any{"room": "group:no spaces", "channelId": 9})
+	send(other, "sync.join", map[string]any{"room": "channel:9", "channelId": 9})
+	for {
+		_, raw, err := other.Read(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m Message
+		_ = json.Unmarshal(raw, &m)
+		if m.Type == "sync.state" {
+			var cs RoomState
+			_ = json.Unmarshal(m.Data, &cs)
+			if cs.Room != "channel:9" || cs.People != nil {
+				t.Fatalf("only a valid code joins, and channel rooms name nobody: %+v", cs)
+			}
+			break
+		}
+	}
+	if len(bus.Groups()) != 1 {
+		t.Fatalf("a bad code made a group: %+v", bus.Groups())
+	}
+
+	// Everything published so far reaches other before its clock reply.
+	send(other, "clock", map[string]float64{"t0": 1})
+	for {
+		_, raw, err := other.Read(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(raw), `"type":"clock"`) {
+			break
+		}
+	}
+	phone.Close(websocket.StatusNormalClosure, "")
+	st = people(tv, 1)
+	if st.People[0].Name != "Den TV" || st.Members != 1 {
+		t.Fatalf("after leaving: %+v", st)
+	}
+	for {
+		_, raw, err := other.Read(ctx)
+		if err != nil {
+			t.Fatal("everyone hears that the groups changed")
+		}
+		if strings.Contains(string(raw), `"groups.changed"`) {
+			break
+		}
+	}
+}
+
+func TestGroupCodes(t *testing.T) {
+	for room, want := range map[string]bool{
+		"group:den":                        true,
+		"group:K7-QX_2":                    true,
+		"group:":                           false,
+		"group:has space":                  false,
+		"group:é":                          false,
+		"group:" + strings.Repeat("a", 33): false,
+		"channel:4":                        true,
+		"multiview:1:4":                    true,
+		"lobby":                            false,
+	} {
+		if validRoom(room) != want {
+			t.Errorf("validRoom(%q) = %v", room, !want)
+		}
+	}
+}

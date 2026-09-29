@@ -8,9 +8,21 @@ export type RoomState = {
   anchorMedia: number;
   rate: number;
   latency: "lowest" | "balanced" | "stable";
+  latencyMs?: number;
   version: number;
   members: number;
+  /** Group rooms only: who is in the room. */
+  people?: { name: string; kind: string }[];
 };
+
+/** What other screens call this one, such as "Chrome on Mac". */
+export function browserName(ua = navigator.userAgent, touch = navigator.maxTouchPoints ?? 0): string {
+  const browser = /Edg/.test(ua) ? "Edge" : /Firefox\/|FxiOS/.test(ua) ? "Firefox" : /Chrome\/|CriOS/.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Browser";
+  // iPadOS asks for desktop pages and names itself a Mac, one with a touch screen.
+  const ipad = /iPad/.test(ua) || (/Macintosh/.test(ua) && touch > 1);
+  const os = /iPhone/.test(ua) ? "iPhone" : ipad ? "iPad" : /Android/.test(ua) ? "Android" : /CrOS/.test(ua) ? "Chromebook" : /Mac OS X/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "";
+  return os ? `${browser} on ${os}` : browser;
+}
 
 type Handler = (data: unknown) => void;
 
@@ -56,7 +68,7 @@ export class EventSocket {
     ws.onopen = () => {
       this.connected = true;
       this.retry = 0;
-      this.raw("here", { name: "This browser", kind: "web" });
+      this.raw("here", { name: browserName(), kind: "web" });
       for (const [room, channelId] of this.rooms) this.raw("sync.join", { room, channelId });
       // A command older than a few seconds would move the room somewhere nobody asked for now.
       for (const { msg, at } of this.queue.splice(0)) if (Date.now() - at < 3_000) ws.send(msg);

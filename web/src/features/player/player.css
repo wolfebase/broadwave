@@ -464,6 +464,15 @@ html[data-layout="tv"] .stage:focus-visible {
   font-weight: 600;
 }
 
+.together-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
 .help-panel {
   width: min(420px, calc(100% - 48px));
   max-height: calc(100dvh - 96px - 160px);

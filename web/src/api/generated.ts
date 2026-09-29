@@ -207,6 +207,11 @@ export type PassList = {
   passes: Pass[];
 };
 
+export type Person = {
+  name: string;
+  kind: string;
+};
+
 export type PictureMode = "broadcast" | "smooth" | "film";
 
 export type PlannedAiring = {
@@ -261,6 +266,7 @@ export type RoomState = {
   latencyMs?: number;
   version: number;
   members: number;
+  people?: Person[];
 };
 
 export type SearchAiring = {

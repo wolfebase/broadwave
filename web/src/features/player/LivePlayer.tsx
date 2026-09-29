@@ -17,18 +17,19 @@ import { useScoreMap } from "../sports/scores";
 import { listingNote } from "./outage";
 import { soundFor } from "./sounds";
 import { Stage } from "./Stage";
+import { groupRoom, peopleSentence, personLabel, useGroup } from "./together";
 import { useLiveStream } from "./useLiveStream";
 
 type Quality = "auto" | "original" | "high" | "medium" | "saver";
 type Sound = "auto" | "surround" | "stereo";
 type Track = "main" | "language" | "described";
-type Options = { quality: Quality; audio: Sound; track: Track; even: boolean; sync: boolean; shared: boolean; captions: boolean };
+type Options = { quality: Quality; audio: Sound; track: Track; even: boolean; sync: boolean; captions: boolean };
 
 function readOptions(): Options {
   try {
-    return { quality: "auto", audio: "auto", track: "main", even: false, sync: true, shared: false, captions: false, ...JSON.parse(localStorage.getItem("ota-live") || "{}") };
+    return { quality: "auto", audio: "auto", track: "main", even: false, sync: true, captions: false, ...JSON.parse(localStorage.getItem("ota-live") || "{}") };
   } catch {
-    return { quality: "auto", audio: "auto", track: "main", even: false, sync: true, shared: false, captions: false };
+    return { quality: "auto", audio: "auto", track: "main", even: false, sync: true, captions: false };
   }
 }
 
@@ -55,7 +56,12 @@ export function LivePlayer({
   const rootRef = useRef<HTMLElement>(null);
   const [opts, setOpts] = useState<Options>(readOptions);
   const [picture, setPicture] = useState<PictureMode>(settings.pictureMode || "broadcast");
-  const room = opts.shared ? `group:ch${channel.id}` : `channel:${channel.id}`;
+  // Watching together is this channel, this visit: a new channel or a reload
+  // starts alone instead of opening a group of one there.
+  const [togetherOn, setTogetherOn] = useState<number | null>(null);
+  const together = opts.sync && togetherOn === channel.id;
+  const room = together ? groupRoom(channel.id) : `channel:${channel.id}`;
+  const group = useGroup(channel.id);
   const stream = useLiveStream(videoRef, {
     channelId: channel.id,
     quality: opts.quality,
@@ -179,7 +185,7 @@ export function LivePlayer({
   useEffect(() => () => window.clearTimeout(typedTimer.current), []);
 
   function detachSync() {
-    if (!(opts.sync && !opts.shared)) return;
+    if (!opts.sync || together) return;
     // The engine seeks forward on its next tick. Stop it before the playhead
     // moves, or a rewind is put back before React turns sync off.
     stream.releaseSync();
@@ -189,19 +195,42 @@ export function LivePlayer({
   function jump(delta: number) {
     const video = videoRef.current;
     if (!video) return;
-    if (opts.sync && opts.shared) {
-      const media = stream.mediaNow();
-      if (media) stream.command("seek", media + delta * 1000);
+    if (together) {
+      seekTogether(video.currentTime + delta);
       return;
     }
     detachSync();
     video.currentTime = Math.max(0, video.currentTime + delta);
   }
 
+  // Moves the group to this screen's time t, kept inside this screen's
+  // playlist window: a frame no screen holds would leave every screen waiting.
+  function seekTogether(t: number) {
+    const video = videoRef.current;
+    const media = stream.mediaNow();
+    if (!video || !media || !video.seekable.length) return;
+    const first = Math.min(video.seekable.start(0) + 1, video.currentTime);
+    stream.command("seek", media + (Math.max(first, t) - video.currentTime) * 1000);
+  }
+
+  // A drag on the scrubber is one seek for the group, sent when it rests.
+  const [scrubAt, setScrubAt] = useState<number | null>(null);
+  const scrubTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(scrubTimer.current), []);
+  function scrubTogether(value: number) {
+    setScrubAt(value);
+    window.clearTimeout(scrubTimer.current);
+    scrubTimer.current = window.setTimeout(() => {
+      const video = videoRef.current;
+      if (video?.seekable.length) seekTogether(video.seekable.start(0) + value);
+      scrubTimer.current = window.setTimeout(() => setScrubAt(null), 1000);
+    }, 250);
+  }
+
   function togglePlay() {
     const video = videoRef.current;
     if (!video) return;
-    if (opts.sync && opts.shared) {
+    if (together) {
       stream.command(video.paused ? "play" : "pause");
       return;
     }
@@ -213,7 +242,7 @@ export function LivePlayer({
   function goLive() {
     const video = videoRef.current;
     if (!video) return;
-    if (opts.sync && opts.shared) return stream.command("live");
+    if (together) return stream.command("live");
     if (!opts.sync) return setOpts((o) => ({ ...o, sync: true }));
     if (video.seekable.length) video.currentTime = video.seekable.end(video.seekable.length - 1) - 10;
     void video.play();
@@ -358,7 +387,7 @@ export function LivePlayer({
     opts.sync && sync.state !== "off" ? (
       <button type="button" className={`sync-pill ${sync.state}`} onClick={() => setPanel((p) => (p === "sync" ? "none" : "sync"))} aria-label="Whole-Home Sync">
         <SyncIcon />
-        {sync.members > 1 ? `${sync.members} screens` : "Synced"}
+        {together ? (sync.members > 1 ? `Together · ${sync.members}` : "Together") : sync.members > 1 ? `${sync.members} screens` : "Synced"}
       </button>
     ) : null;
 
@@ -378,11 +407,12 @@ export function LivePlayer({
       onClose={onClose}
       liveLabel={liveLabel}
       onLive={goLive}
-      position={span.at}
+      position={scrubAt ?? span.at}
       duration={span.len}
       onSeek={(value) => {
         const video = videoRef.current;
         if (!video || !video.seekable.length) return;
+        if (together) return scrubTogether(value);
         detachSync();
         video.currentTime = video.seekable.start(0) + value;
       }}
@@ -601,17 +631,48 @@ export function LivePlayer({
       ) : null}
       {panel === "help" ? <HelpDialog onClose={() => setPanel("none")} /> : null}
       {panel === "sync" ? (
-        <div className="info-panel glass" role="dialog" aria-label="Whole-Home Sync">
-          <h3>Whole-Home Sync</h3>
-          <p className="dim">Every screen on this channel shows the same moment{sync.members > 1 ? ` — ${sync.members} screens right now` : ""}.</p>
-          <label className="switch-row">
-            <input type="checkbox" checked={opts.sync} onChange={(e) => setOpts((o) => ({ ...o, sync: e.target.checked }))} />
-            <span>Sync with other screens</span>
-          </label>
-          <label className="switch-row">
-            <input type="checkbox" checked={opts.shared} onChange={(e) => setOpts((o) => ({ ...o, shared: e.target.checked, sync: true }))} />
-            <span>Shared controls: pause and rewind for everyone</span>
-          </label>
+        <div className="info-panel glass" role="dialog" aria-labelledby="sync-panel-title">
+          <h3 id="sync-panel-title">{together ? "Watching together" : "Whole-Home Sync"}</h3>
+          {together ? (
+            <>
+              <p className="dim">Pause, rewind, and Live move every screen watching together.</p>
+              <ul className="together-list" aria-label="Screens watching together">
+                {(sync.room?.people ?? []).map((p, i) => (
+                  <li key={`${p.name}:${p.kind}:${i}`}>{personLabel(p)}</li>
+                ))}
+              </ul>
+              <div className="option-actions">
+                <button type="button" className="btn" onClick={() => setTogetherOn(null)}>
+                  Leave
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="dim">Every screen on this channel shows the same moment{sync.members > 1 ? ` — ${sync.members} screens right now` : ""}.</p>
+              <label className="switch-row">
+                <input type="checkbox" checked={opts.sync} onChange={(e) => setOpts((o) => ({ ...o, sync: e.target.checked }))} />
+                <span>Sync with other screens</span>
+              </label>
+              <p className="dim">
+                {group?.people?.length
+                  ? `${peopleSentence(group.people)} ${group.people.length === 1 ? "is" : "are"} watching together.`
+                  : "Watch together: pause and rewind for every screen that joins."}
+              </p>
+              <div className="option-actions">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    setTogetherOn(channel.id);
+                    setOpts((o) => ({ ...o, sync: true }));
+                  }}
+                >
+                  {group?.people?.length ? "Join" : "Watch together"}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       ) : null}
     </Stage>
