@@ -43,6 +43,8 @@ type playlistGate struct {
 	origin    int
 	openMSN   int
 	openParts int
+	// firstPart and firstSegment are when the playlist first listed one.
+	firstPart, firstSegment stamp
 }
 
 func newPlaylistGate() *playlistGate {
@@ -54,6 +56,12 @@ func newPlaylistGate() *playlistGate {
 func (g *playlistGate) publish(origin, openMSN, openParts int) {
 	if g == nil {
 		return
+	}
+	if openParts > 0 || openMSN > origin {
+		g.firstPart.mark()
+	}
+	if openMSN > origin {
+		g.firstSegment.mark()
 	}
 	g.mu.Lock()
 	g.origin = origin
@@ -178,6 +186,8 @@ type packInput struct {
 	// segment. Nil without captions.
 	line  func() int
 	spans []encodeSpan
+	// firstRead is when the first encode first wrote.
+	firstRead stamp
 }
 
 // encodeSpan is one encode's place on the playlist: the sequence number of
@@ -265,6 +275,9 @@ func (in *packInput) Read(b []byte) (int, error) {
 	cur := in.cur
 	in.mu.Unlock()
 	n, err := cur.Read(b)
+	if n > 0 {
+		in.firstRead.mark()
+	}
 	if err == nil || n > 0 {
 		return n, nil
 	}

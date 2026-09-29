@@ -57,6 +57,7 @@ func (s *Server) decide(ctx context.Context, body watchBody) (live.Decision, boo
 }
 
 func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
+	asked := time.Now()
 	if s.Hub == nil {
 		httpError(w, "Live TV is not set up on this server.", http.StatusServiceUnavailable)
 		return
@@ -106,6 +107,9 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 			writeError(w, live.ErrNoSignal)
 		}
 		return
+	}
+	if steps := s.Hub.StartTimes(session.ChannelID, session.Rendition, asked); steps != "" {
+		slog.Info(steps)
 	}
 	if fresh, ok := s.Hub.Session(session.ChannelID, session.Rendition); ok {
 		reason := session.Stream.Reason
@@ -1181,7 +1185,7 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if name == "master.m3u8" {
-		body, err := s.Hub.MasterPlaylist(channelID, key)
+		body, err := s.Hub.MasterPlaylist(r.Context(), channelID, key)
 		if err != nil {
 			http.NotFound(w, r)
 			return

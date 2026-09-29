@@ -1,10 +1,13 @@
 package live
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestInitCodecsReadThePackedEncode(t *testing.T) {
@@ -112,7 +115,7 @@ func TestHubMasterNamesThePMT(t *testing.T) {
 	h.mu.Lock()
 	h.channels[1].tracks = []AudioTrack{engMain, spaExtra}
 	h.mu.Unlock()
-	body, err := h.MasterPlaylist(1, "1080.aac2.broadcast")
+	body, err := h.MasterPlaylist(context.Background(), 1, "1080.aac2.broadcast")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,12 +133,45 @@ func TestHubMasterNamesTheStoredMainBeforeThePMT(t *testing.T) {
 	h.mu.Lock()
 	h.channels[1].stored = []AudioTrack{engMain, spaExtra}
 	h.mu.Unlock()
-	body, err := h.MasterPlaylist(1, "copy.copy")
+	body, err := h.MasterPlaylist(context.Background(), 1, "copy.copy")
 	if err == nil {
 		t.Fatalf("no such rendition:\n%s", body)
 	}
-	body, err = h.MasterPlaylist(1, "1080.aac2.broadcast")
+	body, err = h.MasterPlaylist(context.Background(), 1, "1080.aac2.broadcast")
 	if err != nil || !strings.Contains(string(body), `NAME="English",LANGUAGE="en",DEFAULT=YES`) {
 		t.Fatalf("%v\n%s", err, body)
+	}
+}
+
+// An encode started again after the watch answered has no header until its
+// first segment. Its master waits for that instead of a not-found the
+// player gives up on.
+func TestHubMasterWaitsForAnEncodeStartedAgain(t *testing.T) {
+	dir, _, _ := packThreeTracks(t)
+	h := viewHub(t, dir, []AudioTrack{spaExtra})
+	gate := newPlaylistGate()
+	h.mu.Lock()
+	h.channels[1].tracks = []AudioTrack{engMain, spaExtra}
+	h.channels[1].renditions["1080.aac2.broadcast"].gate = gate
+	h.mu.Unlock()
+	init := filepath.Join(dir, "init.mp4")
+	if err := os.Rename(init, init+".later"); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		_ = os.Rename(init+".later", init)
+		gate.publish(0, 1, 0)
+	}()
+	began := time.Now()
+	body, err := h.MasterPlaylist(context.Background(), 1, "1080.aac2.broadcast")
+	if err != nil || !strings.Contains(string(body), `LANGUAGE="es"`) {
+		t.Fatalf("%v\n%s", err, body)
+	}
+	if waited := time.Since(began); waited < 250*time.Millisecond || waited > 2*time.Second {
+		t.Fatalf("answered after %s", waited)
+	}
+	if _, err := h.MasterPlaylist(context.Background(), 2, "1080.aac2.broadcast"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a channel that is not playing: %v", err)
 	}
 }
