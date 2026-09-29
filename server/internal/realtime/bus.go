@@ -417,10 +417,24 @@ func (b *Bus) handle(c *client, m Message) {
 }
 
 // setMember changes membership and reports whether anything changed.
+// A screen joins a handful of rooms (a quad joins five). The caps stop one
+// socket from growing memory without end or flooding every screen with
+// groups.changed.
+const (
+	maxClientRooms = 32
+	maxGroups      = 64
+)
+
 func (b *Bus) setMember(c *client, room string, in bool) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if c.rooms[room] == in {
+		return false
+	}
+	if in && len(c.rooms) >= maxClientRooms {
+		return false
+	}
+	if in && groupRoom(room) && b.groupCountLocked(room) >= maxGroups {
 		return false
 	}
 	if in {
@@ -429,6 +443,23 @@ func (b *Bus) setMember(c *client, room string, in bool) bool {
 		delete(c.rooms, room)
 	}
 	return true
+}
+
+// groupCountLocked counts the group rooms screens are in, or 0 when room is
+// already one of them.
+func (b *Bus) groupCountLocked(room string) int {
+	groups := map[string]bool{}
+	for c := range b.clients {
+		for r := range c.rooms {
+			if r == room {
+				return 0
+			}
+			if groupRoom(r) {
+				groups[r] = true
+			}
+		}
+	}
+	return len(groups)
 }
 
 func (b *Bus) isMember(c *client, room string) bool {

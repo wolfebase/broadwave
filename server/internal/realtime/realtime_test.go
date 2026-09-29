@@ -3,6 +3,7 @@ package realtime
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http/httptest"
 	"strings"
@@ -573,6 +574,41 @@ func TestGroupRoomNamesWhoIsIn(t *testing.T) {
 		if strings.Contains(string(raw), `"groups.changed"`) {
 			break
 		}
+	}
+}
+
+func TestOneSocketCannotJoinRoomsWithoutEnd(t *testing.T) {
+	bus := NewBus()
+	a := &client{rooms: map[string]bool{}}
+	b := &client{rooms: map[string]bool{}}
+	bus.clients[a] = struct{}{}
+	bus.clients[b] = struct{}{}
+	for i := range maxClientRooms {
+		if !bus.setMember(a, fmt.Sprintf("channel:%d", i), true) {
+			t.Fatalf("room %d refused", i)
+		}
+	}
+	if bus.setMember(a, "channel:999", true) {
+		t.Fatal("a socket joined more than the cap")
+	}
+	if !bus.setMember(a, "channel:0", false) || !bus.setMember(a, "channel:999", true) {
+		t.Fatal("leaving a room frees its place")
+	}
+
+	// Group rooms are counted across the house, and joining one that exists
+	// always works.
+	for i := range maxGroups {
+		c := &client{rooms: map[string]bool{fmt.Sprintf("group:g%d", i): true}}
+		bus.clients[c] = struct{}{}
+	}
+	if bus.setMember(b, "group:new", true) {
+		t.Fatal("a group past the cap was made")
+	}
+	if !bus.setMember(b, "group:g3", true) {
+		t.Fatal("joining an existing group was refused")
+	}
+	if !bus.setMember(b, "channel:4", true) {
+		t.Fatal("the group cap refused a channel room")
 	}
 }
 
