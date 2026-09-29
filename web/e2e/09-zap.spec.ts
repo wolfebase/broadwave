@@ -139,6 +139,16 @@ test.describe("rapid channel changes", () => {
       writeFileSync(path.join(evidence, `l12-${size.name}.json`), JSON.stringify(summary, null, 2));
       expect(held, JSON.stringify(all)).toHaveLength(1);
       expect(skipped, JSON.stringify(held)).toEqual([]);
+
+      // Each picture a watch started is timed in Diagnostics.
+      const diag = (await (await page.request.get("/api/v1/diagnostics")).json()) as {
+        starts?: { guideNumber: string; seconds: number; keyframe: number; encoder: number; segment: number }[];
+      };
+      const starts = diag.starts ?? [];
+      expect(starts.length, JSON.stringify(starts)).toBeGreaterThan(0);
+      expect(starts.every((s) => s.seconds > 0 && s.seconds >= s.keyframe + s.encoder + s.segment - 0.01), JSON.stringify(starts)).toBe(true);
+      await page.goto("/diagnostics");
+      await expect(page.getByRole("region", { name: "Channel starts" }).getByText(starts[0].guideNumber, { exact: true }).first()).toBeVisible();
     });
   }
 });

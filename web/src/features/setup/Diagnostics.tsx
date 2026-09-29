@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { getDeviceHealth } from "../../api";
 import type { DeviceHealth } from "../../types";
 import { copy } from "../../strings";
-import { useDiagnostics } from "./useDiagnostics";
+import { useDiagnostics, type ChannelStart } from "./useDiagnostics";
 import "./setup.css";
 
 export function DiagnosticsPage() {
@@ -94,6 +94,19 @@ export function DiagnosticsPage() {
         </table>
       </section>
 
+      <section className="settings-section" aria-label="Channel starts">
+        <h2>Channel starts</h2>
+        <p className="dim">Time from asking for a channel to its first segment. The player adds a moment.</p>
+        {(d.starts ?? []).length === 0 ? <p className="dim">No channel has started since the server did.</p> : null}
+        <ul className="activity">
+          {(d.starts ?? []).map((s) => (
+            <li key={`${s.at}-${s.channelId}-${s.rendition}`}>
+              <time>{shortTime(s.at)}</time> <strong>{s.guideNumber}</strong> {startLine(s)}
+            </li>
+          ))}
+        </ul>
+      </section>
+
       <section className="settings-section">
         <h2>Encoding and storage</h2>
         <dl className="share-urls">
@@ -177,6 +190,18 @@ export function DiagnosticsPage() {
       </section>
     </div>
   );
+}
+
+function seconds(n: number) {
+  return `${n.toFixed(1)} s`;
+}
+
+/** "3.8 s · tuner 0.5 s · keyframe 1.3 s · encoder 1.0 s · first segment 1.0 s" */
+export function startLine(s: ChannelStart) {
+  const parts = [seconds(s.seconds)];
+  if (s.tune) parts.push(`tuner ${seconds(s.tune)}`);
+  parts.push(`keyframe ${seconds(s.keyframe)}`, `encoder ${seconds(s.encoder)}`, `first segment ${seconds(s.segment)}`);
+  return parts.join(" · ");
 }
 
 function countPhrase(n: number, one: string, many: string) {

@@ -108,7 +108,7 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if steps := s.Hub.StartTimes(session.ChannelID, session.Rendition, asked); steps != "" {
+	if steps := s.Hub.NoteStart(session.ChannelID, session.Rendition, asked); steps != "" {
 		slog.Info(steps)
 	}
 	if fresh, ok := s.Hub.Session(session.ChannelID, session.Rendition); ok {

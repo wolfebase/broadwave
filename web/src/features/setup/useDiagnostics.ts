@@ -11,12 +11,16 @@ export type Diagnostics = {
   storage?: { Free: number; Total: number };
   guide?: { channels: number; channelsWithListings: number; airings: number; listingsUntil?: string; nextRefresh?: string; lastRefresh?: string; lastError?: string; lastErrorAt?: string };
   relay?: { channelId: number; guideNumber: string; name: string; tuner: number; recording: boolean; exports: number; fieldOrder?: string; renditions: { key: string; viewers: number }[]; buffer?: { minutes: number; bytes: number; state: "on" | "off" | "full" } }[];
+  starts?: ChannelStart[];
   connectedApps?: number;
   recentActivity?: { id: number; at: string; kind: string; message: string }[];
   doctor?: { id: string; message: string }[];
   feeds?: { channelId: number; guideNumber: string; name: string; viewers: number; ffmpeg: number; recording?: boolean; exports?: number }[];
   logs?: string[];
 };
+
+/** A picture a watch started: seconds from the ask to its first segment. tune is absent when the frequency was already tuned. */
+export type ChannelStart = { at: string; channelId: number; guideNumber: string; rendition: string; seconds: number; tune?: number; keyframe: number; encoder: number; segment: number };
 
 /** Diagnostics, refreshed every few seconds while mounted. */
 export function useDiagnostics(key?: unknown, every = 5000): Diagnostics | null {

@@ -174,6 +174,8 @@ type Hub struct {
 	ringSeq    int
 	// cuts keeps recent view cuts, so screens on one view share one copy.
 	cuts cutCache
+	// starts are the last pictures a watch started, newest last. Under mu.
+	starts []StartRecord
 }
 
 type mux struct {
@@ -214,7 +216,7 @@ type mux struct {
 	ring *ring.Ring
 	// closed is set under pipeMu when the tune ends.
 	closed bool
-	// The tune's steps, for StartTimes. Set and read under h.mu.
+	// The tune's steps, for NoteStart. Set and read under h.mu.
 	tuneBegan, tuneStatus, tuneLocked time.Time
 	firstByte                         stamp
 }
@@ -281,9 +283,11 @@ type rendition struct {
 	input     *packInput
 	filter    *programPipe
 	respawned time.Time
-	// began and fed time the encode's start for StartTimes.
+	// began and fed time the encode's start for NoteStart; noted is set
+	// once it is in the hub's starts.
 	began time.Time
 	fed   stamp
+	noted bool
 }
 
 type recording struct {

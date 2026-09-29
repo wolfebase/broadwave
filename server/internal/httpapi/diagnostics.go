@@ -60,6 +60,7 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 		}
 		out["encoder"] = encoder
 		out["relay"] = s.Hub.Status()
+		out["starts"] = s.Hub.RecentStarts()
 		if space, err := disk.Stat(filepath.Join(s.Hub.Dir, "recordings")); err == nil {
 			out["storage"] = space
 		}
