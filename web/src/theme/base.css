@@ -132,6 +132,14 @@ html[data-layout="tv"] :focus-visible {
   }
 }
 
+/* No graphics chip (lib/glass.ts): a blur over video costs frames. */
+:root[data-glass="flat"] .glass,
+:root[data-glass="flat"] .glass-flat {
+  background: var(--color-surface2);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 /* Buttons */
 .btn {
   display: inline-flex;

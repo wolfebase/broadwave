@@ -7,7 +7,7 @@ import { settle } from "./snap";
 // A measurement, not a gate: a sound switch on a CPU-starved browser. It runs
 // only with E2E_SLOW_SWITCH set to how the switch is made (option, next, track,
 // ui from the Options panel, or panel: the panel opens and nothing switches)
-// and E2E_CPU to Chrome's throttling rate.
+// and E2E_CPU to Chrome's throttling rate. E2E_STYLE adds CSS to the page.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const evidence = path.resolve(here, "../../.evidence/f2/slow");
 const mode = process.env.E2E_SLOW_SWITCH ?? "";
@@ -29,6 +29,7 @@ test("a sound switch on a slow browser", async ({ page }) => {
   test.skip(!mode || process.env.E2E_TRACKS !== "2", "measurement: E2E_SLOW_SWITCH=option|next|track|panel|ui with E2E_TRACKS=2");
   test.setTimeout(150_000);
   await page.goto("/");
+  if (process.env.E2E_STYLE) await page.addStyleTag({ content: process.env.E2E_STYLE });
   await settle(page);
   await page.getByRole("button", { name: "Watch", exact: true }).click();
   const video = page.locator("video.stage-video");
@@ -88,6 +89,8 @@ test("a sound switch on a slow browser", async ({ page }) => {
     await page.mouse.move(640, 420);
     await page.getByRole("button", { name: "Options" }).click();
     await page.getByRole("group", { name: "Audio" }).waitFor();
+    mkdirSync(evidence, { recursive: true });
+    await page.screenshot({ path: path.join(evidence, `${mode}-${rate}x.png`) });
   }
   const switchNode = Date.now() - t0;
   const switchAt = await video.evaluate(
@@ -117,7 +120,8 @@ test("a sound switch on a slow browser", async ({ page }) => {
     const b = [...s].reverse().find((x) => x.at <= to)!;
     return { frames: b.frames - a.frames, dropped: b.dropped - a.dropped, played: +(b.t - a.t).toFixed(2) };
   };
-  const summary = { mode, rate, switchAt, cpus: (await import("node:os")).cpus().length, before: window6(switchAt - 6_000, switchAt), after: window6(switchAt, switchAt + 6_000), later: window6(switchAt + 4_000, switchAt + 10_000) };
+  const glass = await page.evaluate(() => document.documentElement.dataset.glass ?? "blur");
+  const summary = { mode, rate, glass, switchAt, cpus: (await import("node:os")).cpus().length, before: window6(switchAt - 6_000, switchAt), after: window6(switchAt, switchAt + 6_000), later: window6(switchAt + 4_000, switchAt + 10_000) };
   mkdirSync(evidence, { recursive: true });
   writeFileSync(path.join(evidence, `${mode}-${rate}x.json`), JSON.stringify({ summary, ...out, media, mediaSwitchAt: switchNode, pageAt }, null, 1));
   console.log(JSON.stringify(summary));
