@@ -69,7 +69,7 @@ export class EventSocket {
       this.connected = true;
       this.retry = 0;
       this.raw("here", { name: browserName(), kind: "web" });
-      for (const [room, channelId] of this.rooms) this.raw("sync.join", { room, channelId });
+      for (const [room, channelId] of this.rooms) this.raw("sync.join", { room, channelId, latency: readLiveDelay() });
       // A command older than a few seconds would move the room somewhere nobody asked for now.
       for (const { msg, at } of this.queue.splice(0)) if (Date.now() - at < 3_000) ws.send(msg);
       this.burst();
@@ -189,7 +189,7 @@ export class EventSocket {
     const n = (this.roomRefs.get(room) ?? 0) + 1;
     this.roomRefs.set(room, n);
     this.rooms.set(room, channelId);
-    if (n === 1) this.raw("sync.join", { room, channelId });
+    if (n === 1) this.raw("sync.join", { room, channelId, latency: readLiveDelay() });
   }
 
   leave(room: string) {
@@ -214,6 +214,24 @@ export class EventSocket {
 export function reconnectWait(retry: number, random = Math.random) {
   const ceiling = Math.min(5_000, 500 * 2 ** retry);
   return Math.round(ceiling / 2 + (random() * ceiling) / 2);
+}
+
+export type LiveDelay = "lowest" | "balanced" | "stable";
+
+const delayKey = "broadwave-live-delay";
+
+/** This device's live delay. It sets a channel's delay when this device is the first screen on it. */
+export function readLiveDelay(): LiveDelay {
+  try {
+    const value = localStorage.getItem(delayKey);
+    return value === "lowest" || value === "stable" ? value : "balanced";
+  } catch {
+    return "balanced";
+  }
+}
+
+export function saveLiveDelay(value: LiveDelay) {
+  localStorage.setItem(delayKey, value);
 }
 
 let socket: EventSocket | null = null;

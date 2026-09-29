@@ -40,6 +40,8 @@ export const copy = {
   },
   settings: {
     title: "Settings",
+    liveDelay: "Live delay",
+    liveDelayHint: "How far behind live a channel plays when this device starts it. Lowest is about 6 seconds, Balanced 16, Stable 20. Apple devices play at Balanced or Stable.",
     layout: "Layout",
     layoutHint: "Auto follows the window. TV uses the large guide you can drive with arrows.",
     recordings: "Recordings folder",
@@ -90,6 +92,7 @@ export const copy = {
   },
   player: {
     stats: "Stats",
+    delayApple: "An Apple device is watching, so this channel stays at Balanced.",
     playing: "Playing",
     source: "Source",
     output: "Output",

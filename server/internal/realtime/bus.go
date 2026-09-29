@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"slices"
@@ -312,15 +313,16 @@ func (b *Bus) handle(c *client, m Message) {
 		b.mu.Lock()
 		c.here.Name = name
 		c.here.Kind = kind
-		var groups []string
-		for room := range c.rooms {
-			if groupRoom(room) {
-				groups = append(groups, room)
-			}
-		}
+		rooms := slices.Collect(maps.Keys(c.rooms))
 		b.mu.Unlock()
-		for _, room := range groups {
-			b.roomChanged(room)
+		for _, room := range rooms {
+			floored := false
+			if appleKind(kind) {
+				_, floored = b.Rooms.Floor(room, appleLatency)
+			}
+			if floored || groupRoom(room) {
+				b.roomChanged(room)
+			}
 		}
 	case "clock":
 		var req struct {
@@ -332,6 +334,8 @@ func (b *Bus) handle(c *client, m Message) {
 		var req struct {
 			Room      string `json:"room"`
 			ChannelID int64  `json:"channelId"`
+			// Latency is the screen's default, used only when this join starts the room.
+			Latency string `json:"latency"`
 		}
 		if json.Unmarshal(m.Data, &req) != nil || !validRoom(req.Room) || !b.setMember(c, req.Room, true) {
 			return
@@ -350,7 +354,10 @@ func (b *Bus) handle(c *client, m Message) {
 				earliest = v
 			}
 		}
-		b.Rooms.Join(req.Room, req.ChannelID, earliest)
+		b.Rooms.JoinAt(req.Room, req.ChannelID, earliest, req.Latency)
+		if appleKind(kind) {
+			b.Rooms.Floor(req.Room, appleLatency)
+		}
 		b.roomChanged(req.Room)
 	case "sync.report":
 		// A screen's playback health, logged so a stutter on a real TV shows
@@ -393,6 +400,9 @@ func (b *Bus) handle(c *client, m Message) {
 			return
 		}
 		b.mu.Lock()
+		if req.Action == "latency" && latencyMS(req.Latency) < latencyMS(appleLatency) && b.appleInLocked(req.Room) {
+			req.Latency = appleLatency
+		}
 		st, err := b.Rooms.Apply(req.Room, req.Command)
 		if err == nil {
 			b.publishRoomLocked(st)
@@ -476,6 +486,18 @@ func validCode(code string) bool {
 
 func groupRoom(room string) bool {
 	return strings.HasPrefix(room, "group:")
+}
+
+// appleLatency is the closest to live a room with an Apple screen plays.
+const appleLatency = "balanced"
+
+func (b *Bus) appleInLocked(room string) bool {
+	for c := range b.clients {
+		if c.rooms[room] && appleKind(c.here.Kind) {
+			return true
+		}
+	}
+	return false
 }
 
 func appleKind(kind string) bool {

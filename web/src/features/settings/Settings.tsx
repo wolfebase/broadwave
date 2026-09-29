@@ -5,6 +5,7 @@ import { navigate } from "../../app/router";
 import { gateFeature } from "../../lib/compat";
 import { copy } from "../../strings";
 import { formatBytes } from "../../lib/format";
+import { readLiveDelay, saveLiveDelay, type LiveDelay } from "../../lib/events";
 export function SettingsScreen({
   settings,
   storage,
@@ -18,6 +19,7 @@ export function SettingsScreen({
   onChange: (values: Partial<Settings>) => void;
 }) {
   const [encoder, setEncoder] = useState("");
+  const [delay, setDelay] = useState<LiveDelay>(readLiveDelay);
   const [tunerLine, setTunerLine] = useState("Checking tuners.");
   const [lastEvent, setLastEvent] = useState("");
   useEffect(() => {
@@ -77,6 +79,26 @@ export function SettingsScreen({
           ))}
         </div>
         <span className="hint">Broadcast rebuilds interlaced channels at 60 frames a second. Smooth adds motion compensation when this server can hold it. Film is for movies.</span>
+      </div>
+      <div className="field">
+        <span>{copy.settings.liveDelay}</span>
+        <div className="segmented" role="group" aria-label={copy.settings.liveDelay}>
+          {(["lowest", "balanced", "stable"] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              className={delay === item ? "seg on" : "seg"}
+              aria-pressed={delay === item}
+              onClick={() => {
+                setDelay(item);
+                saveLiveDelay(item);
+              }}
+            >
+              {item === "lowest" ? "Lowest" : item === "balanced" ? "Balanced" : "Stable"}
+            </button>
+          ))}
+        </div>
+        <span className="hint">{copy.settings.liveDelayHint}</span>
       </div>
       <h3 className="section-title">Guide</h3>
       <label className="field">
