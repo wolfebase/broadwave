@@ -2,6 +2,7 @@ import Hls from "hls.js";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { getDeviceHealth, getSignals, getTuners, stopWatch, watchChannel, type ApiFailure } from "../../api";
 import { events } from "../../lib/events";
+import { masterConfig, primeLevel } from "../../lib/primeLevel";
 import { startOnRoom, SyncEngine, type SyncStatus } from "../../lib/sync";
 import type { Caps, Channel, Prefs, WatchSession } from "../../types";
 import { liveHlsConfig, type BufferProfile } from "../../picture";
@@ -28,13 +29,14 @@ import {
 
 const restartAskLastMs = 3000;
 
-function webCaps(): Caps {
+function webCaps(alternates: boolean): Caps {
   const mse = typeof MediaSource !== "undefined" ? MediaSource : undefined;
   const audio = ["aac"];
   if (mse?.isTypeSupported('audio/mp4; codecs="ac-3"')) audio.push("ac3");
   if (mse?.isTypeSupported('audio/mp4; codecs="ec-3"')) audio.push("eac3");
   const conn = (navigator as Navigator & { connection?: { type?: string; saveData?: boolean } }).connection;
-  return { platform: "web", video: ["h264"], audio, network: conn?.type === "cellular" || conn?.saveData ? "cellular" : "lan" };
+  const network = conn?.type === "cellular" || conn?.saveData ? "cellular" : "lan";
+  return { platform: "web", video: ["h264"], audio, network, ...(alternates ? { alternates } : {}) };
 }
 
 export function useLiveStream(
@@ -55,6 +57,7 @@ export function useLiveStream(
     captions,
     fits,
     quiet,
+    alternates,
   }: {
     channelId: number;
     quality?: Prefs["quality"];
@@ -76,6 +79,8 @@ export function useLiveStream(
     fits?: boolean;
     // This tile is not the one the viewer is hearing.
     quiet?: boolean;
+    // Ask for a master with every sound track when the channel carries more than one.
+    alternates?: boolean;
   },
 ) {
   const syncRef = useRef<SyncEngine | null>(null);
@@ -270,11 +275,21 @@ export function useLiveStream(
         const allow = confirmLive.current;
         confirmLive.current = false;
         setNeedsConfirm(false);
-        const next = await watchChannel(id, webCaps(), { quality, audio, picture, track, even }, "", allow, ctrl.signal);
+        const askAlternates = !!alternates && Hls.isSupported();
+        const next = await watchChannel(id, webCaps(askAlternates), { quality, audio, picture, track, even }, "", allow, ctrl.signal);
         joined = next.rendition;
         boot = next.boot ?? "";
         watching.current = true;
         autoTries.current = { channel: id, n: 0 };
+        if (dead) {
+          release();
+          return;
+        }
+        // A master is played only once its picture playlist is in hand, so the
+        // start can land on the room's frame. Otherwise the plain playlist,
+        // which carries the main sound, plays as before.
+        const master = askAlternates && /\/master\.m3u8(\?|$)/.test(next.mainPlaylist ?? "") ? next.mainPlaylist! : "";
+        const primedLevel = master ? await primeLevel(master, ctrl.signal).catch(() => null) : null;
         if (dead) {
           release();
           return;
@@ -299,12 +314,12 @@ export function useLiveStream(
         playlist = next.playlist;
         if (Hls.isSupported()) {
           const onRoom = syncing.current && !holdSync.current ? roomRef.current : null;
-          hls = new Hls({ ...liveHlsConfig(profile), autoStartLoad: !onRoom });
+          hls = new Hls({ ...liveHlsConfig(profile), ...(primedLevel ? masterConfig(primedLevel) : {}), autoStartLoad: !onRoom });
           hlsRef.current = hls;
           (video as HTMLVideoElement & { hls?: Hls }).hls = hls;
-          if (onRoom) startOnRoom(hls, video, onRoom);
+          if (onRoom) startOnRoom(hls, video, onRoom, 800, primedLevel?.frags);
           watchTimeline(hls, Hls.Events);
-          hls.loadSource(next.playlist);
+          hls.loadSource(primedLevel ? primedLevel.url : next.playlist);
           hls.attachMedia(video);
           attached = true;
           mark = Number.NaN;
@@ -515,7 +530,7 @@ export function useLiveStream(
     // and rebuilding the watch to apply it freezes the picture. A watch that
     // is already playing keeps going; the next watch uses the profile it starts with.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, quality, audio, track, even, picture, attempt]);
+  }, [channelId, quality, audio, track, even, picture, alternates, attempt]);
 
   useEffect(() => {
     const video = videoRef.current;
