@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -533,7 +534,21 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 			held[k] = v
 		}
 	}
-	picked, tuner, ok := PickTuner(devices, h.usedTunersLocked(devices[0].Host), held, NeedFor(ch.VideoCodec, ch.AudioCodec, ch.ATSC3))
+	need := NeedFor(ch.VideoCodec, ch.AudioCodec, ch.ATSC3)
+	picked, tuner, ok := PickTuner(devices, h.usedTunersLocked(devices[0].Host), held, need)
+	for !ok {
+		freed, found := h.freeWarmTunerLocked(devices[0].Host)
+		if !found {
+			break
+		}
+		// The status read above still shows the channel that tuner had.
+		for i := range devices[0].Tuners {
+			if devices[0].Tuners[i].Index == freed {
+				devices[0].Tuners[i].Target, devices[0].Tuners[i].Guide = "", ""
+			}
+		}
+		picked, tuner, ok = PickTuner(devices, h.usedTunersLocked(devices[0].Host), held, need)
+	}
 	if !ok {
 		return nil, &BusyError{Tuners: last}
 	}
@@ -2220,6 +2235,52 @@ func (h *Hub) feedsLocked() []*feed {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].channel.ID < out[j].channel.ID })
 	return out
+}
+
+// freeWarmTunerLocked stops the tuner that was left longest ago among those
+// held only so a flip back is instant: no viewer, recording, export, or probe
+// on any of its channels. It returns that tuner, and false when none was.
+func (h *Hub) freeWarmTunerLocked(host string) (int, bool) {
+	want := hostOf(host)
+	var oldest *mux
+	var left time.Time
+	for _, m := range h.muxes {
+		if m.tuner < 0 || (want != "" && hostOf(m.host) != want && hostOf(m.base) != want) {
+			continue
+		}
+		last, warm := warmSince(m)
+		if warm && (oldest == nil || last.Before(left)) {
+			oldest, left = m, last
+		}
+	}
+	if oldest == nil {
+		return 0, false
+	}
+	slog.Info(fmt.Sprintf("live: tuner %d: a channel was left a moment ago; giving the tuner to a new one", oldest.tuner))
+	for _, f := range maps.Clone(oldest.feeds) {
+		h.stopFeedLocked(f)
+	}
+	return oldest.tuner, true
+}
+
+// warmSince is when a mux was last watched, and whether it is held only for a
+// flip back.
+func warmSince(m *mux) (time.Time, bool) {
+	var last time.Time
+	for _, f := range m.feeds {
+		if f.recording != nil || f.probing || f.exports > 0 {
+			return time.Time{}, false
+		}
+		for _, r := range f.renditions {
+			if r.viewers > 0 {
+				return time.Time{}, false
+			}
+			if r.seen.After(last) {
+				last = r.seen
+			}
+		}
+	}
+	return last, true
 }
 
 // usedTunersLocked is the tuner indexes already streaming on one host.
