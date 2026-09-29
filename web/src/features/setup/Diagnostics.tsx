@@ -192,8 +192,9 @@ export function DiagnosticsPage() {
   );
 }
 
+/** A narrow screen wraps between steps, never between a number and its unit. */
 function seconds(n: number) {
-  return `${n.toFixed(1)} s`;
+  return `${n.toFixed(1)}\u00a0s`;
 }
 
 /** "3.8 s · tuner 0.5 s · keyframe 1.3 s · encoder 1.0 s · first segment 1.0 s" */
