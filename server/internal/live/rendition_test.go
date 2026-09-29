@@ -214,6 +214,27 @@ func TestAFullBudgetFreesAPictureNobodyFetches(t *testing.T) {
 	}
 }
 
+// A full budget frees one picture for the next channel: the one left longest
+// ago. The channel left a moment ago stays warm, so flipping back is instant.
+func TestAFullBudgetFreesOnlyTheOldestIdlePicture(t *testing.T) {
+	now := time.Now()
+	older := &feed{channel: store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "38.1"}}, renditions: map[string]*rendition{
+		"720": {spec: Rendition{Video: "720"}, seen: now.Add(-12 * time.Second)},
+	}}
+	recent := &feed{channel: store.SourceChannel{Channel: store.Channel{ID: 3, GuideNumber: "41.1"}}, renditions: map[string]*rendition{
+		"720": {spec: Rendition{Video: "720"}, seen: now.Add(-time.Second)},
+	}}
+	asking := &feed{channel: store.SourceChannel{Channel: store.Channel{ID: 5, GuideNumber: "5.1"}}, renditions: map[string]*rendition{}}
+	h := &Hub{Host: Host{Tiles: 2}, channels: map[int64]*feed{1: older, 3: recent, 5: asking}}
+	h.releaseIdleTranscodesLocked(asking, now)
+	if len(older.renditions) != 0 || h.channels[1] != nil {
+		t.Fatal("the picture left longest ago is still held")
+	}
+	if recent.renditions["720"] == nil || h.channels[3] != recent {
+		t.Fatal("the channel just left was stopped too")
+	}
+}
+
 func TestCopyRenditionKeepsBroadcastTimestamps(t *testing.T) {
 	line := strings.Join(RenditionArgs(3, Source{VideoCodec: "H264", AudioCodec: "AC3", Progressive: true}, Rendition{Video: "copy", Audio: "copy"}, "libx264", ""), " ")
 	for _, want := range []string{"-copyts", "-map 0:p:3:v:0", "-c:v copy", "-c:a copy", "frag_keyframe", "pipe:1"} {

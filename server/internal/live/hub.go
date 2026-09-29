@@ -887,12 +887,15 @@ func joinTranscode(f *feed, want Rendition) *rendition {
 const stalePicture = 15 * time.Second
 
 // releaseIdleTranscodesLocked stops transcodes with no viewers, or whose
-// viewers stopped fetching video, so a new picture can use the slot. The
-// tuner goes too unless it is the feed asking. The caller holds h.mu.
+// viewers stopped fetching video, until a new picture fits the budget. The
+// one left longest ago goes first, so a channel just left stays warm for a
+// flip back. The tuner goes too unless it is the feed asking. The caller
+// holds h.mu.
 func (h *Hub) releaseIdleTranscodesLocked(asking *feed, now time.Time) {
 	type idle struct {
-		f   *feed
-		key string
+		f    *feed
+		key  string
+		seen time.Time
 	}
 	var list []idle
 	seen := map[*feed]bool{}
@@ -903,11 +906,15 @@ func (h *Hub) releaseIdleTranscodesLocked(asking *feed, now time.Time) {
 		seen[f] = true
 		for key, r := range f.renditions {
 			if r.spec.Video != "copy" && freePicture(r, now) {
-				list = append(list, idle{f, key})
+				list = append(list, idle{f, key, r.seen})
 			}
 		}
 	}
+	sort.Slice(list, func(i, j int) bool { return list[i].seen.Before(list[j].seen) })
 	for _, item := range list {
+		if h.Host.Tiles > 0 && h.transcodesLocked() < h.Host.Tiles {
+			return
+		}
 		if r := item.f.renditions[item.key]; r != nil && r.viewers > 0 {
 			slog.Info(fmt.Sprintf("live: %s %s: %d viewer(s) stopped fetching video, freeing the picture", item.f.channel.GuideNumber, item.key, r.viewers))
 			r.viewers = 0
