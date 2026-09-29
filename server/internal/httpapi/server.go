@@ -131,6 +131,7 @@ func (s *Server) Handler() http.Handler {
 	api("POST /watch", s.watch)
 	api("POST /multiview/plan", s.multiviewPlan)
 	api("POST /watch/{id}/stop", s.release)
+	api("POST /watch/{id}/warm", s.warm)
 	api("GET /tuners", s.tuners)
 	api("GET /signals", s.signals)
 	api("POST /signals/check", s.checkSignals)

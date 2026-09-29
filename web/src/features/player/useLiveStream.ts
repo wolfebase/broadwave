@@ -1,6 +1,6 @@
 import Hls from "hls.js";
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { getDeviceHealth, getSignals, getTuners, stopWatch, watchChannel, type ApiFailure } from "../../api";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { getDeviceHealth, getSignals, getTuners, stopWatch, warmChannel, watchChannel, type ApiFailure } from "../../api";
 import { events } from "../../lib/events";
 import { masterConfig, primeLevel } from "../../lib/primeLevel";
 import { startOnRoom, SyncEngine, type SyncStatus } from "../../lib/sync";
@@ -705,8 +705,15 @@ export function useLiveStream(
     if (audible) void video.play().catch(() => undefined);
   }, [audible, videoRef]);
 
+  // A guess at the next channel: the server starts its picture only when that costs no tuner and no picture.
+  const warm = useCallback(
+    (id: number) => void warmChannel(id, webCaps(!!alternates && Hls.isSupported()), { quality, audio, picture, track, even }).catch(() => undefined),
+    [alternates, quality, audio, picture, track, even],
+  );
+
   return {
     session: session?.channelId === channelId ? session : null,
+    warm,
     sounds: session?.channelId === channelId ? sounds : null,
     // Captions need hls.js; a native player gets none yet.
     canCaption: !!mainPlaylist && Hls.isSupported(),

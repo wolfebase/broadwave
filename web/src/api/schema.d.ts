@@ -476,6 +476,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/watch/{id}/warm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Start the picture a watch of this channel would play, before the viewer asks,
+         *     so the channel change that follows is instant. Send the same `caps`, `prefs`,
+         *     and `rendition` a watch would. It never tunes, never stops another picture to
+         *     fit the budget, and counts no viewer; one warmed picture runs at a time and
+         *     stops after about 20 s unless a watch joins it.
+         */
+        post: operations["warmChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/multiview/plan": {
         parameters: {
             query?: never;
@@ -2661,6 +2684,47 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["Ok"];
+        };
+    };
+    warmChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    caps?: components["schemas"]["Caps"];
+                    prefs?: components["schemas"]["Prefs"];
+                    rendition?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Whether the picture is running. False when the frequency is not tuned or the picture budget is full. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        warm: boolean;
+                    };
+                };
+            };
+            /** @description `not_found`: the channel is not in the lineup. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     planMultiview: {

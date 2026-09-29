@@ -25,43 +25,51 @@ import (
 	"broadwave/internal/store"
 )
 
+type watchBody struct {
+	ChannelID   int64      `json:"channelId"`
+	Caps        *live.Caps `json:"caps"`
+	Prefs       live.Prefs `json:"prefs"`
+	Rendition   string     `json:"rendition"`
+	Profile     string     `json:"profile"`
+	Audio       string     `json:"audio"`
+	Picture     string     `json:"pictureMode"`
+	ConfirmLive bool       `json:"confirmLive"`
+}
+
+// decide picks the rendition a watch plays: the one the player named, or the
+// stream decision for its capabilities.
+func (s *Server) decide(ctx context.Context, body watchBody) (live.Decision, bool, error) {
+	src, err := s.Hub.SourceOf(ctx, body.ChannelID)
+	if err != nil {
+		return live.Decision{}, false, err
+	}
+	if forced, chosen := live.ParseRenditionKey(body.Rendition); chosen {
+		return live.Decision{Rendition: forced, Reason: "Chosen in the player"}, true, nil
+	}
+	caps, prefs := live.LegacyCaps(body.Profile, body.Audio, body.Picture)
+	if body.Caps != nil {
+		caps, prefs = *body.Caps, body.Prefs
+	}
+	if prefs.Picture == "" {
+		_, prefs.Picture, _ = s.playbackChoice(ctx, 0, "")
+	}
+	return live.DecideFor(src, caps, prefs, s.Hub.Encoder, s.Hub.Host), false, nil
+}
+
 func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	if s.Hub == nil {
 		httpError(w, "Live TV is not set up on this server.", http.StatusServiceUnavailable)
 		return
 	}
-	var body struct {
-		ChannelID   int64      `json:"channelId"`
-		Caps        *live.Caps `json:"caps"`
-		Prefs       live.Prefs `json:"prefs"`
-		Rendition   string     `json:"rendition"`
-		Profile     string     `json:"profile"`
-		Audio       string     `json:"audio"`
-		Picture     string     `json:"pictureMode"`
-		ConfirmLive bool       `json:"confirmLive"`
-	}
+	var body watchBody
 	if err := decodeJSON(r, &body); err != nil {
 		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
-	src, err := s.Hub.SourceOf(r.Context(), body.ChannelID)
+	decision, chosen, err := s.decide(r.Context(), body)
 	if err != nil {
 		watchError(w, err)
 		return
-	}
-	var decision live.Decision
-	forced, chosen := live.ParseRenditionKey(body.Rendition)
-	if chosen {
-		decision = live.Decision{Rendition: forced, Reason: "Chosen in the player"}
-	} else {
-		caps, prefs := live.LegacyCaps(body.Profile, body.Audio, body.Picture)
-		if body.Caps != nil {
-			caps, prefs = *body.Caps, body.Prefs
-		}
-		if prefs.Picture == "" {
-			_, prefs.Picture, _ = s.playbackChoice(r.Context(), 0, "")
-		}
-		decision = live.DecideFor(src, caps, prefs, s.Hub.Encoder, s.Hub.Host)
 	}
 	if !body.ConfirmLive {
 		if msg := s.liveWarning(r.Context(), body.ChannelID); msg != "" {
@@ -132,6 +140,39 @@ func (s *Server) boot() string {
 		return ""
 	}
 	return s.Bus.Boot
+}
+
+// warm starts the picture a player is about to ask for, when the channel's
+// frequency is already tuned and the picture budget has room. It counts no
+// viewer; the next watch joins it.
+func (s *Server) warm(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpError(w, "invalid channel", http.StatusBadRequest)
+		return
+	}
+	if s.Hub == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"warm": false})
+		return
+	}
+	var body watchBody
+	if err := decodeJSON(r, &body); err != nil && !errors.Is(err, io.EOF) {
+		httpError(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	body.ChannelID = id
+	decision, chosen, err := s.decide(r.Context(), body)
+	if err != nil {
+		watchError(w, err)
+		return
+	}
+	alternates := body.Caps != nil && body.Caps.Alternates
+	ok, err := s.Hub.Warm(r.Context(), id, decision.Rendition, alternates && !chosen)
+	if err != nil {
+		watchError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"warm": ok})
 }
 
 func (s *Server) release(w http.ResponseWriter, r *http.Request) {
