@@ -176,12 +176,16 @@ func pesPayload(b []byte) []byte {
 	return b[off:]
 }
 
+// eachPacket re-syncs on its own: a buffer can start, or a dropped read can
+// leave it, in the middle of a packet.
 func eachPacket(data []byte, pid int, fn func(start bool, payload []byte)) {
-	for off := 0; off+188 <= len(data); off += 188 {
-		pkt := data[off : off+188]
-		if pkt[0] != 0x47 {
+	for off := 0; off+188 <= len(data); {
+		if !tsAligned(data, off) {
+			off++
 			continue
 		}
+		pkt := data[off : off+188]
+		off += 188
 		got := int(pkt[1]&0x1f)<<8 | int(pkt[2])
 		if got != pid {
 			continue
