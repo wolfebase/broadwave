@@ -57,13 +57,13 @@ async function wake(page: Page) {
 
 async function seekTo(page: Page, seconds: number) {
   await wake(page);
-  await page.getByRole("slider", { name: "Playback position" }).evaluate((el: HTMLInputElement, value: number) => {
-    // React keeps its own value tracker, so a plain fill does not reach onSeek.
-    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    set?.call(el, String(value));
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    el.dispatchEvent(new Event("change", { bubbles: true }));
-  }, Math.max(0, Math.round(seconds)));
+  // A click on the scrubber, as a viewer seeks. A synthetic input event never
+  // reached the player, and the check passed only when playback caught up.
+  const slider = page.getByRole("slider", { name: "Playback position" });
+  const max = Number(await slider.getAttribute("max"));
+  const box = await slider.boundingBox();
+  if (!box || !(max > 0)) throw new Error("the scrubber is not on screen");
+  await page.mouse.click(box.x + box.width * Math.min(1, seconds / max), box.y + box.height / 2);
 }
 
 async function moving(page: Page, from: number) {

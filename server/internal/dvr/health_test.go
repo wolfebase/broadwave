@@ -67,6 +67,25 @@ func TestOnSavedStoresRecordingHealth(t *testing.T) {
 	})
 }
 
+func TestHealthReadKeepsToItsRate(t *testing.T) {
+	orig := healthRate
+	t.Cleanup(func() { healthRate = orig })
+	healthRate = 188 * 20
+	path := filepath.Join(t.TempDir(), "a.ts")
+	if err := os.WriteFile(path, tsPackets(0x100, 0, 1, 2, 3, 4), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	sum, err := readHealth(path)
+	if err != nil || sum.Packets != 5 {
+		t.Fatalf("%+v %v", sum, err)
+	}
+	// Five packets at twenty a second.
+	if took := time.Since(start); took < 200*time.Millisecond {
+		t.Fatalf("read in %s", took)
+	}
+}
+
 func finishedRecording(t *testing.T, body []byte) (*store.Store, store.Recording) {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))
