@@ -240,6 +240,14 @@ export type Recording = {
   position?: number;
   durationSec?: number;
   watched?: number;
+  health?: RecordingHealth;
+};
+
+export type RecordingHealth = {
+  continuityErrors: number;
+  transportErrors: number;
+  syncLosses: number;
+  packets: number;
 };
 
 export type RoomState = {

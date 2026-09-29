@@ -4,6 +4,7 @@ import { copy } from "../../strings";
 import { formatBytes, formatClockPoint } from "../../lib/format";
 import { focusRing } from "../../app/remote";
 import { DownloadLink } from "../recordings/DownloadLink";
+import { signalLine } from "./health";
 export function Library({
   recordings,
   note,
@@ -100,6 +101,7 @@ function LibraryRow({
   onStop: (recording: Recording) => void;
 }) {
   const seen = watched(rec);
+  const line = signalLine(rec.health);
   const confirmRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (armed === rec.id) focusRing(confirmRef.current);
@@ -134,6 +136,7 @@ function LibraryRow({
           {seen ? " · Watched" : ""}
           {rec.error ? ` · ${rec.error}` : ""}
         </span>
+        {line ? <span className="ch-tags">{line}</span> : null}
         <div className="sheet-actions">
       <button type="button" className="btn primary" onClick={() => onPlay(rec)}>Play</button>
       {rec.status !== "recording" ? <button type="button" className="btn" onClick={() => onWatched(rec, !seen)}>{seen ? "Mark unwatched" : "Mark watched"}</button> : null}

@@ -59,6 +59,15 @@ type Airing struct {
 	End          time.Time `json:"end"`
 }
 
+// RecordingHealth is the damage counted in a finished recording file.
+// Zeros mean the read finished and the file was clean.
+type RecordingHealth struct {
+	ContinuityErrors int64 `json:"continuityErrors"`
+	TransportErrors  int64 `json:"transportErrors"`
+	SyncLosses       int64 `json:"syncLosses"`
+	Packets          int64 `json:"packets"`
+}
+
 type Recording struct {
 	ID          int64      `json:"id"`
 	ChannelID   int64      `json:"channelId"`
@@ -80,6 +89,9 @@ type Recording struct {
 	GameID      string     `json:"gameId,omitempty"`
 	// Watched is 0 when inferred from the playhead, 1 when marked watched, 2 when marked unwatched.
 	Watched int `json:"watched,omitempty"`
+	// Health is counted from the file after the recording finishes.
+	// Nil until then, including when the file disappeared during the read.
+	Health *RecordingHealth `json:"health,omitempty"`
 	// Season, Episode, and OriginalAir are filled from the guide when an .nfo
 	// is written. They are not stored on the recording.
 	Season      int    `json:"-"`
@@ -375,6 +387,15 @@ UPDATE recordings SET status = ?, error = ?, ended_at = ? WHERE id = ?`,
 	return err
 }
 
+// SetRecordingHealth stores the damage counted in a finished file.
+// A row that was deleted while the file was read is left alone.
+func (s *Store) SetRecordingHealth(ctx context.Context, id, continuity, transport, syncLoss, packets int64) error {
+	_, err := s.db.ExecContext(ctx, `
+UPDATE recordings SET continuity_errors = ?, transport_errors = ?, sync_losses = ?, packets = ?
+WHERE id = ?`, continuity, transport, syncLoss, packets, id)
+	return err
+}
+
 func (s *Store) SetRecordingEnd(ctx context.Context, id int64, ends time.Time) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE recordings SET ends_at = ? WHERE id = ?`, ends.UTC().Format(time.RFC3339), id)
 	return err
@@ -383,7 +404,8 @@ func (s *Store) SetRecordingEnd(ctx context.Context, id int64, ends time.Time) e
 func (s *Store) Recordings(ctx context.Context) ([]Recording, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, channel_id, guide_number, title, path, status, error, started_at, ends_at, ended_at, duration_sec,
-	subtitle, description, category, program_id, watched, game_id
+	subtitle, description, category, program_id, watched, game_id,
+	continuity_errors, transport_errors, sync_losses, packets
 FROM recordings ORDER BY id DESC`)
 	if err != nil {
 		return nil, err
@@ -393,7 +415,8 @@ FROM recordings ORDER BY id DESC`)
 	for rows.Next() {
 		var rec Recording
 		var start, ends, ended string
-		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID); err != nil {
+		var continuity, transport, syncLoss, packets sql.NullInt64
+		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID, &continuity, &transport, &syncLoss, &packets); err != nil {
 			return nil, err
 		}
 		rec.StartedAt, _ = time.Parse(time.RFC3339, start)
@@ -404,6 +427,14 @@ FROM recordings ORDER BY id DESC`)
 		if ended != "" {
 			t, _ := time.Parse(time.RFC3339, ended)
 			rec.EndedAt = &t
+		}
+		if continuity.Valid {
+			rec.Health = &RecordingHealth{
+				ContinuityErrors: continuity.Int64,
+				TransportErrors:  transport.Int64,
+				SyncLosses:       syncLoss.Int64,
+				Packets:          packets.Int64,
+			}
 		}
 		out = append(out, rec)
 	}

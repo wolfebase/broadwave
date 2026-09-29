@@ -13,11 +13,13 @@ import (
 	"broadwave/internal/store"
 )
 
-// OnSaved indexes commercials and applies keep rules after a recording finishes.
+// OnSaved runs after a recording's file is closed. It counts the file, writes
+// an .nfo when that is on, indexes commercials, and applies keep rules.
 func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Recording) {
 	if st == nil || rec.ID == 0 {
 		return
 	}
+	measureHealth(ctx, st, rec)
 	writeNFO(ctx, st, hub, rec)
 	passes, err := st.Passes(ctx)
 	if err != nil {

@@ -111,6 +111,9 @@ struct RecordingsView: View {
         }
         parts.append(rec.subtitle ?? rec.title)
         parts.append(details(rec).replacingOccurrences(of: " · ", with: ", "))
+        if let line = rec.signalLine {
+            parts.append(line)
+        }
         return parts.joined(separator: ", ")
     }
 
@@ -190,6 +193,9 @@ struct RecordingsView: View {
                 Text(details(rec)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 if let error = rec.error, !error.isEmpty {
                     Text(error).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                }
+                if let line = rec.signalLine {
+                    Text(line).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 }
                 if let pos = rec.position, let dur = rec.durationSec, dur > 0, pos > 30, !rec.isWatched {
                     AiringProgress(pos / dur).frame(maxWidth: 160)

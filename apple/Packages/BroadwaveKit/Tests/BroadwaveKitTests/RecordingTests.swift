@@ -20,6 +20,19 @@ private func rec(status: String = "done", position: Double? = nil, duration: Dou
     #expect(!rec(position: 3590, duration: 3600, watched: 2).isWatched)
 }
 
+@Test func aCleanRecordingSaysNothingAboutTheSignal() {
+    #expect(rec().signalLine == nil)
+    var once = rec()
+    once.health = RecordingHealth(continuityErrors: 1, transportErrors: 0, syncLosses: 0, packets: 8)
+    #expect(once.signalLine == "Signal broke up once")
+    var many = rec()
+    many.health = RecordingHealth(continuityErrors: 12, transportErrors: 1, syncLosses: 1, packets: 40)
+    #expect(many.signalLine == "Signal broke up 14 times")
+    var clean = rec()
+    clean.health = RecordingHealth(continuityErrors: 0, transportErrors: 0, syncLosses: 0, packets: 40)
+    #expect(clean.signalLine == nil)
+}
+
 @Test func aRecordingSaysWhatHappenedOnlyWhenItIsNotPlainlyDone() {
     #expect(rec().statusLabel == nil)
     #expect(rec(status: "recording").statusLabel == "Recording")

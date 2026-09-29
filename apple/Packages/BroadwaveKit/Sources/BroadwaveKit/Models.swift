@@ -170,6 +170,19 @@ public extension Recording {
     var isMovie: Bool {
         (category ?? "").lowercased().contains("movie")
     }
+
+    /// A line when the finished file was damaged. Nil when it was clean or not counted yet.
+    var signalLine: String? {
+        guard let health else { return nil }
+        let times = health.continuityErrors + health.transportErrors + health.syncLosses
+        if times <= 0 {
+            return nil
+        }
+        if times == 1 {
+            return "Signal broke up once"
+        }
+        return "Signal broke up \(times) times"
+    }
 }
 
 public struct SchedulePlan: Codable, Sendable, Hashable {

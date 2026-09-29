@@ -1489,6 +1489,18 @@ export interface components {
             position?: number;
             durationSec?: number;
             watched?: number;
+            health?: components["schemas"]["RecordingHealth"];
+        };
+        /** @description Damage counted in the recording file after it finishes. Absent until then. Zeros mean the file was clean. */
+        RecordingHealth: {
+            /** Format: int64 */
+            continuityErrors: number;
+            /** Format: int64 */
+            transportErrors: number;
+            /** Format: int64 */
+            syncLosses: number;
+            /** Format: int64 */
+            packets: number;
         };
         Marker: {
             /** Format: int64 */

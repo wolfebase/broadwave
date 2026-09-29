@@ -461,8 +461,9 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
     public var position: Double?
     public var durationSec: Double?
     public var watched: Int?
+    public var health: RecordingHealth?
 
-    public init(id: Int64, channelId: Int64, guideNumber: String, title: String, subtitle: String? = nil, description: String? = nil, category: String? = nil, programId: String? = nil, gameId: String? = nil, status: String, error: String? = nil, startedAt: Date, endsAt: Date? = nil, endedAt: Date? = nil, bytes: Int64? = nil, position: Double? = nil, durationSec: Double? = nil, watched: Int? = nil) {
+    public init(id: Int64, channelId: Int64, guideNumber: String, title: String, subtitle: String? = nil, description: String? = nil, category: String? = nil, programId: String? = nil, gameId: String? = nil, status: String, error: String? = nil, startedAt: Date, endsAt: Date? = nil, endedAt: Date? = nil, bytes: Int64? = nil, position: Double? = nil, durationSec: Double? = nil, watched: Int? = nil, health: RecordingHealth? = nil) {
         self.id = id
         self.channelId = channelId
         self.guideNumber = guideNumber
@@ -481,6 +482,21 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
         self.position = position
         self.durationSec = durationSec
         self.watched = watched
+        self.health = health
+    }
+}
+
+public struct RecordingHealth: Codable, Sendable, Hashable {
+    public var continuityErrors: Int64
+    public var transportErrors: Int64
+    public var syncLosses: Int64
+    public var packets: Int64
+
+    public init(continuityErrors: Int64, transportErrors: Int64, syncLosses: Int64, packets: Int64) {
+        self.continuityErrors = continuityErrors
+        self.transportErrors = transportErrors
+        self.syncLosses = syncLosses
+        self.packets = packets
     }
 }
 
