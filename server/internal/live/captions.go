@@ -215,22 +215,13 @@ func captionPlaylist(video []byte) []byte {
 // players offer the captions track. CLOSED-CAPTIONS=NONE keeps a player from
 // also offering the 608 bytes some encodes carry in the picture.
 func mainPlaylist(r Rendition) []byte {
-	bandwidth := 14_000_000
-	switch r.normalized().Video {
-	case "copy":
-		bandwidth = 20_000_000
-	case "720":
-		bandwidth = 8_000_000
-	case "540":
-		bandwidth = 3_000_000
-	case "360":
-		bandwidth = 1_500_000
-	}
-	return fmt.Appendf(nil, "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-INDEPENDENT-SEGMENTS\n"+
-		"#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"cc\",NAME=\"English CC\",LANGUAGE=\"en\",DEFAULT=NO,AUTOSELECT=YES,FORCED=NO,"+
-		"CHARACTERISTICS=\"public.accessibility.transcribes-spoken-dialog,public.accessibility.describes-music-and-sound\",URI=\"captions.m3u8\"\n"+
-		"#EXT-X-STREAM-INF:BANDWIDTH=%d,SUBTITLES=\"cc\",CLOSED-CAPTIONS=NONE\nindex.m3u8\n", bandwidth)
+	return fmt.Appendf(nil, "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-INDEPENDENT-SEGMENTS\n"+captionMedia+
+		"#EXT-X-STREAM-INF:BANDWIDTH=%d,SUBTITLES=\"cc\",CLOSED-CAPTIONS=NONE\nindex.m3u8\n", renditionBandwidth(r))
 }
+
+// captionMedia is the SUBTITLES group of every multivariant playlist.
+const captionMedia = "#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"cc\",NAME=\"English CC\",LANGUAGE=\"en\",DEFAULT=NO,AUTOSELECT=YES,FORCED=NO," +
+	"CHARACTERISTICS=\"public.accessibility.transcribes-spoken-dialog,public.accessibility.describes-music-and-sound\",URI=\"captions.m3u8\"\n"
 
 // startCaptionsLocked follows the feed's captions while it has a rendition.
 func (h *Hub) startCaptionsLocked(f *feed) {

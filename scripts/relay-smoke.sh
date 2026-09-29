@@ -21,12 +21,15 @@ DIRECT="copy.copy"
 (cd "$ROOT" && go build -o "$BIN" ./server/cmd/broadwave) || exit 1
 
 if [ "${FAKE:-}" = 1 ]; then
+  # Two sound tracks, English and Spanish, carried in one encode.
+  export BROADWAVE_ALTERNATES=1
   ffmpeg -hide_banner -loglevel error \
-    -f lavfi -i "testsrc2=size=1280x720:rate=60000/1001" -f lavfi -i "sine=frequency=500" \
-    -t 4 -c:v libx264 -preset ultrafast -g 30 -pix_fmt yuv420p -c:a ac3 \
+    -f lavfi -i "testsrc2=size=1280x720:rate=60000/1001" -f lavfi -i "sine=frequency=500" -f lavfi -i "sine=frequency=900" \
+    -map 0 -map 1 -map 2 -t 30 -c:v libx264 -preset ultrafast -g 30 -pix_fmt yuv420p -c:a ac3 \
+    -metadata:s:a:0 language=eng -metadata:s:a:1 language=spa \
     -f mpegts "$T/sample.ts" >"$T/src.log" 2>&1 || exit 1
   (cd "$ROOT" && go build -o "$T/fakehdhr" ./server/cmd/fakehdhr) || exit 1
-  "$T/fakehdhr" -realtime -ts "$T/sample.ts" >"$T/fake.txt" 2>&1 &
+  "$T/fakehdhr" -realtime -ts "$T/sample.ts" -source "$T/sample.ts" >"$T/fake.txt" 2>&1 &
   SRC=$!
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     grep -q '^BASE=' "$T/fake.txt" 2>/dev/null && break
@@ -106,6 +109,17 @@ for k in "$DIRECT" 540.aac2.broadcast; do
   NEXT=$(curl -s -m 5 "$M/audio-2.m3u8?_HLS_msn=$((LAST + 1))&_HLS_part=0" | sed -n 's/.*LAST-MSN=\([0-9]*\).*/\1/p' | head -1)
   check "$k sound view blocks until the next segment ($LAST -> $NEXT)" '[ "${NEXT:-0}" -gt "${LAST:-0}" ]'
 done
+if [ "${FAKE:-}" = 1 ]; then
+  M="http://127.0.0.1:$PORT/media/live/$ID/$DIRECT"
+  MP=$(curl -s "$M/master.m3u8")
+  check "$DIRECT master lists both sound tracks" '[[ "$MP" == *audio-2.m3u8* && "$MP" == *audio-3.m3u8* && "$MP" == *LANGUAGE=\"es\"* && "$MP" == *video.m3u8* ]]'
+  { curl -s "$M/init.a3.mp4"; curl -s "$M/seg00000.a3.m4s"; } >"$T/a3.mp4"
+  { curl -s "$M/init.mp4"; curl -s "$M/seg00000.m4s"; } >"$T/legacy.mp4"
+  A3=$(ffprobe -v error -show_entries stream=codec_type -of default=nw=1:nk=1 "$T/a3.mp4" | tr '\n' ' ')
+  LS=$(ffprobe -v error -show_entries stream=codec_type -of default=nw=1:nk=1 "$T/legacy.mp4" | tr '\n' ' ')
+  check "$DIRECT second sound view is one sound ($A3)" '[ "$A3" = "audio " ]'
+  check "$DIRECT legacy names carry one sound ($LS)" '[ "$LS" = "video audio " ]'
+fi
 curl -s -m 10 "http://127.0.0.1:$PORT/export/stream/$ID" -o "$T/export.ts"
 SZ=$(stat -f%z "$T/export.ts" 2>/dev/null || stat -c%s "$T/export.ts")
 check "export stream carries video ($SZ bytes)" "[ ${SZ:-0} -gt 100000 ]"
