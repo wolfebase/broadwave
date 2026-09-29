@@ -120,6 +120,7 @@ export const copy = {
       ["I", "Stats"],
       ["M", "Side by side"],
       ["R", "Record"],
+      ["C", "Captions"],
       ["T", "Theater"],
       ["?", "This list"],
       ["0–9", "Channel number"],
