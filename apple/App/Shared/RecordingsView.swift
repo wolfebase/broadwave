@@ -25,7 +25,8 @@ struct RecordingsView: View {
             NavigationLink {
                 ScheduleView()
             } label: {
-                Label("Coming up", systemImage: "calendar")
+                Label("Upcoming", systemImage: "calendar")
+                    .accessibilityLabel("Upcoming")
             }
             if !store.virtuals.isEmpty {
                 Section("Library channels") {

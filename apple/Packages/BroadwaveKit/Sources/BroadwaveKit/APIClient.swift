@@ -300,19 +300,7 @@ public struct APIClient: Sendable {
 
     /// Records the later airing instead of a skipped one and returns the schedule after it.
     public func fixSchedule(_ item: PlannedAiring, later: Suggestion) async throws -> SchedulePlan {
-        struct B: Encodable {
-            var passId: Int64
-            var channelId: Int64
-            var start: String
-            var suggestionChannelId: Int64
-            var suggestionStart: String
-        }
-        let format = ISO8601DateFormatter.plain
-        let body = B(
-            passId: item.passId, channelId: item.airing.channelId, start: format.string(from: item.airing.start),
-            suggestionChannelId: later.channelId, suggestionStart: format.string(from: later.start)
-        )
-        return try await send("POST", "/schedule/fix", body: body)
+        try await send("POST", "/schedule/fix", body: ScheduleFixRequest(item: item, later: later))
     }
 
     public func events() async throws -> [Event] {

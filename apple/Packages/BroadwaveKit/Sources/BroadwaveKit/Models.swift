@@ -177,10 +177,59 @@ public struct SchedulePlan: Codable, Sendable, Hashable {
     public var items: [PlannedAiring]
 }
 
+/// How an upcoming airing stands: it will record, it was skipped once, or a conflict holds the tuner.
+public enum ScheduleState: String, Sendable, Equatable {
+    case willRecord
+    case skippedOnce
+    case conflict
+}
+
+/// The body of POST /schedule/fix. The five fields the schedule endpoint accepts.
+public struct ScheduleFixRequest: Encodable, Equatable, Sendable {
+    public var passId: Int64
+    public var channelId: Int64
+    public var start: String
+    public var suggestionChannelId: Int64
+    public var suggestionStart: String
+
+    public init(item: PlannedAiring, later: Suggestion) {
+        let format = ISO8601DateFormatter.plain
+        passId = item.passId
+        channelId = item.airing.channelId
+        start = format.string(from: item.airing.start)
+        suggestionChannelId = later.channelId
+        suggestionStart = format.string(from: later.start)
+    }
+}
+
 public extension PlannedAiring {
     /// One planned airing of one pass.
     var key: String {
         "\(passId)-\(airing.channelId)-\(airing.start.timeIntervalSince1970)"
+    }
+
+    /// Will record, skipped once, or a tuner conflict. Already recorded and a full limit are neither.
+    var scheduleState: ScheduleState? {
+        if conflict {
+            return .conflict
+        }
+        if skipped, reason == "Skipped once" {
+            return .skippedOnce
+        }
+        if !skipped {
+            return .willRecord
+        }
+        return nil
+    }
+
+    /// Title, when, and the state, for VoiceOver. The same words the row shows.
+    func summary(tuners: Int) -> String {
+        let when = airing.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
+        var parts = [airing.title, when, statusLine(tuners: tuners)]
+        if let later = suggestion {
+            parts.append(laterLine(later))
+        }
+        return parts.joined(separator: ", ")
     }
 
     /// The tuner's window: the listing plus the pass's early and after minutes.

@@ -157,32 +157,98 @@ final class RecordingsTests: XCTestCase {
         }
     }
 
-    /// Coming up shows the skipped airing and records the later one instead.
+    /// Upcoming shows the skipped airing and records the later one instead.
     func testComingUpRecordsTheLaterAiring() throws {
         let server = try serverURL()
         let app = launch(server)
-        XCTAssertTrue(until(20) { self.row(app, "Coming up").exists }, "no Coming up")
-        for _ in 0 ..< 6 where !focused(app).contains("Coming up") {
+        XCTAssertTrue(until(20) { self.row(app, "Upcoming").exists }, "no Upcoming")
+        for _ in 0 ..< 6 where !focused(app).contains("Upcoming") {
             XCUIRemote.shared.press(.up)
             wait(0.5)
         }
-        XCTAssertTrue(focused(app).contains("Coming up"), "focus on \(focused(app))")
+        XCTAssertTrue(focused(app).contains("Upcoming"), "focus on \(focused(app))")
+        dismissUpdate(app)
         XCUIRemote.shared.press(.select)
-        let later = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Record the later airing")).firstMatch
-        XCTAssertTrue(later.waitForExistence(timeout: 10), "no later airing offered")
-        for _ in 0 ..< 8 where !focused(app).contains("Record the later airing") {
-            XCUIRemote.shared.press(.down)
-            wait(0.5)
-        }
-        XCTAssertTrue(focused(app).contains("Record the later airing"), "focus on \(focused(app))")
+        let later = app.buttons["record-later"]
+        XCTAssertTrue(later.waitForExistence(timeout: 10), "no later airing offered\n\(focusDump(app))")
+        let watch = app.buttons["watch-anyway"]
+        XCTAssertTrue(watch.waitForExistence(timeout: 5), "no Watch anyway")
+        dismissUpdate(app)
+        XCTAssertTrue(moveFocus(app, to: "record-later", label: "Record the later airing"), "focus on \(focusDump(app))")
         if let shot = ProcessInfo.processInfo.environment["BROADWAVE_SHOT"] {
             try? XCUIScreen.main.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: shot))
         }
         XCUIRemote.shared.press(.select)
         XCTAssertTrue(until(10) { !later.exists }, "the later airing is still offered")
+        XCTAssertTrue(until(8) { self.entry(app, "Skipped once").exists || self.labelContains(app, "Skipped once") }, "no Skipped once")
+        if let shot = ProcessInfo.processInfo.environment["BROADWAVE_SHOT_AFTER"] {
+            try? XCUIScreen.main.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: shot))
+        }
         let data = try Data(contentsOf: URL(string: server + "/api/v1/schedule")!)
         let items = try (JSONSerialization.jsonObject(with: data) as? [String: Any])?["items"] as? [[String: Any]] ?? []
         XCTAssertFalse(items.contains { $0["suggestion"] != nil }, "the server still suggests a later airing")
+        XCTAssertTrue(items.contains { ($0["reason"] as? String) == "Skipped once" }, "the early showing was not skipped once")
+    }
+
+    private func labelContains(_ app: XCUIApplication, _ text: String) -> Bool {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch.exists
+    }
+
+    /// The update note's buttons sit above the list and take Select. Not now clears it.
+    private func dismissUpdate(_ app: XCUIApplication) {
+        let note = app.buttons["Not now"].firstMatch
+        guard note.waitForExistence(timeout: 1) else { return }
+        for _ in 0 ..< 8 where !note.hasFocus {
+            XCUIRemote.shared.press(.up)
+            wait(0.3)
+        }
+        guard note.hasFocus else { return }
+        XCUIRemote.shared.press(.select)
+        _ = until(4) { !note.exists }
+    }
+
+    /// Down, then back up, until the button itself has focus. A parent whose label merely
+    /// contains the title is not the control Select presses.
+    private func moveFocus(_ app: XCUIApplication, to identifier: String, label: String) -> Bool {
+        if onControl(app, identifier, label) {
+            return true
+        }
+        XCUIRemote.shared.press(.right)
+        wait(0.4)
+        for _ in 0 ..< 18 {
+            if onControl(app, identifier, label) {
+                return true
+            }
+            XCUIRemote.shared.press(.down)
+            wait(0.35)
+        }
+        for _ in 0 ..< 18 {
+            if onControl(app, identifier, label) {
+                return true
+            }
+            XCUIRemote.shared.press(.up)
+            wait(0.35)
+        }
+        return onControl(app, identifier, label)
+    }
+
+    private func onControl(_ app: XCUIApplication, _ identifier: String, _ label: String) -> Bool {
+        let button = app.buttons[identifier]
+        if button.exists, button.hasFocus {
+            return true
+        }
+        let element = app.descendants(matching: .any).element(matching: NSPredicate(
+            format: "hasFocus == true AND (identifier == %@ OR label == %@)", identifier, label
+        ))
+        return element.exists
+    }
+
+    private func focusDump(_ app: XCUIApplication) -> String {
+        let hits = app.descendants(matching: .any).matching(NSPredicate(format: "hasFocus == true")).allElementsBoundByIndex
+        if hits.isEmpty {
+            return "nothing"
+        }
+        return hits.prefix(4).map { "id=\($0.identifier) label=\($0.label.prefix(140))" }.joined(separator: " || ")
     }
 
     /// Presses Menu until the player closes and saves its position, and returns it. The

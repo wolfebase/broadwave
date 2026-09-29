@@ -2,7 +2,7 @@
     import XCTest
 
     /// A compact iPhone has five tabs, so More never stacks a second navigation bar.
-    /// Settings is the gear on Home. Coming up, a recording, and Diagnostics each
+    /// Settings is the gear on Home. Upcoming, a recording, and Diagnostics each
     /// keep one bar. Opt-in: TEST_RUNNER_BROADWAVE_SERVER, with a finished recording
     /// titled "Evening News".
     @MainActor
@@ -33,17 +33,53 @@
             shot(app, "iphone-diagnostics")
         }
 
+        /// Upcoming lists will-record and a conflict, with both actions, under one navigation bar.
+        func testUpcomingShowsTheConflict() throws {
+            try requirePhone()
+            let server = try serverURL()
+            try finishSetup(server)
+            let app = launch(server, tab: "recordings")
+            let coming = app.buttons["Upcoming"]
+            XCTAssertTrue(coming.waitForExistence(timeout: 20), app.debugDescription)
+            coming.tap()
+            XCTAssertTrue(app.navigationBars["Upcoming"].waitForExistence(timeout: 10), app.debugDescription)
+            assertOneBar(app, "upcoming")
+            XCTAssertTrue(app.buttons["Record the later airing"].waitForExistence(timeout: 10), app.debugDescription)
+            XCTAssertTrue(app.buttons["Watch anyway"].waitForExistence(timeout: 5), app.debugDescription)
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Will record")).firstMatch.waitForExistence(timeout: 5) || app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Will record")).firstMatch.exists, app.debugDescription)
+            XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Lower priority")).firstMatch.exists, app.debugDescription)
+            shot(app, "iphone-upcoming-before")
+        }
+
+        /// After Record the later airing, the early showing reads Skipped once and the actions are gone.
+        func testUpcomingAfterTheFix() throws {
+            try requirePhone()
+            let server = try serverURL()
+            try finishSetup(server)
+            let app = launch(server, tab: "recordings")
+            let coming = app.buttons["Upcoming"]
+            XCTAssertTrue(coming.waitForExistence(timeout: 20), app.debugDescription)
+            coming.tap()
+            XCTAssertTrue(app.navigationBars["Upcoming"].waitForExistence(timeout: 10), app.debugDescription)
+            assertOneBar(app, "upcoming-after")
+            let skipped = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "Skipped once")).firstMatch
+            XCTAssertTrue(skipped.waitForExistence(timeout: 10), app.debugDescription)
+            XCTAssertFalse(app.buttons["Record the later airing"].exists)
+            XCTAssertFalse(app.buttons["Watch anyway"].exists)
+            shot(app, "iphone-upcoming-after")
+        }
+
         func testRecordingsHaveOneNavigationBar() throws {
             try requirePhone()
             let server = try serverURL()
             try finishSetup(server)
             let app = launch(server, tab: "recordings")
-            let coming = app.buttons["Coming up"]
+            let coming = app.buttons["Upcoming"]
             XCTAssertTrue(coming.waitForExistence(timeout: 20), app.debugDescription)
             coming.tap()
-            XCTAssertTrue(app.navigationBars["Coming up"].waitForExistence(timeout: 10), app.debugDescription)
-            assertOneBar(app, "coming-up")
-            shot(app, "iphone-coming-up")
+            XCTAssertTrue(app.navigationBars["Upcoming"].waitForExistence(timeout: 10), app.debugDescription)
+            assertOneBar(app, "upcoming")
+            shot(app, "iphone-upcoming")
 
             app.navigationBars.buttons.element(boundBy: 0).tap()
             let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Evening News")).firstMatch

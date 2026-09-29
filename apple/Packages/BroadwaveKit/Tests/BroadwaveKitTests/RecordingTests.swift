@@ -66,6 +66,40 @@ private func planned(skipped: Bool = false, reason: String? = nil, later: Sugges
     )
 }
 
+@Test func scheduleStatesDecodeFromTheServer() throws {
+    let plan = try APIClient.decoder.decode(SchedulePlan.self, from: Data("""
+    {"tunerCount":1,"items":[
+      {"passId":1,"airing":{"id":1,"channelId":4,"title":"Evening News","start":"2026-09-28T23:00:00Z","end":"2026-09-29T00:00:00Z"},"priority":5,"padBefore":1,"padAfter":2,"conflict":false,"skipped":false},
+      {"passId":2,"airing":{"id":2,"channelId":5,"title":"Night Talk","start":"2026-09-28T23:00:00Z","end":"2026-09-29T00:00:00Z"},"priority":0,"padBefore":1,"padAfter":2,"conflict":false,"skipped":true,"reason":"Skipped once"},
+      {"passId":3,"airing":{"id":3,"channelId":6,"title":"The Afternoon Game","start":"2026-09-28T23:00:00Z","end":"2026-09-29T00:00:00Z"},"priority":0,"padBefore":0,"padAfter":0,"conflict":true,"skipped":true,"suggestion":{"channelId":6,"guideNumber":"5.1","title":"The Afternoon Game","start":"2026-09-29T02:00:00Z","end":"2026-09-29T03:00:00Z"}}
+    ]}
+    """.utf8))
+    #expect(plan.tunerCount == 1)
+    #expect(plan.items.map(\.scheduleState) == [.willRecord, .skippedOnce, .conflict])
+    #expect(plan.items[0].summary(tuners: 1).contains("Will record"))
+    #expect(plan.items[1].summary(tuners: 1).contains("Skipped once"))
+    #expect(plan.items[2].summary(tuners: 1).contains("Lower priority · 1 tuner"))
+    #expect(plan.items[2].summary(tuners: 1).contains("5.1"))
+    let kept = PlannedAiring(
+        passId: 4,
+        airing: Airing(id: 4, channelId: 4, title: "Evening News", start: Date(timeIntervalSince1970: 1_800_000_000), end: Date(timeIntervalSince1970: 1_800_003_600)),
+        priority: 0, padBefore: 1, padAfter: 2, conflict: false, skipped: true, reason: "Already recorded"
+    )
+    #expect(kept.scheduleState == nil)
+}
+
+@Test func aScheduleFixSendsOnlyTheFieldsTheServerAccepts() throws {
+    let item = planned()
+    let later = Suggestion(channelId: 5, guideNumber: "5.1", title: "News", start: item.airing.start.addingTimeInterval(7200), end: item.airing.end.addingTimeInterval(7200))
+    let body = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(ScheduleFixRequest(item: item, later: later))) as? [String: Any])
+    #expect(Set(body.keys) == ["passId", "channelId", "start", "suggestionChannelId", "suggestionStart"])
+    #expect(body["passId"] as? Int == 7)
+    #expect(body["channelId"] as? Int == 4)
+    #expect(body["suggestionChannelId"] as? Int == 5)
+    #expect(body["start"] as? String == ISO8601DateFormatter.plain.string(from: item.airing.start))
+    #expect(body["suggestionStart"] as? String == ISO8601DateFormatter.plain.string(from: later.start))
+}
+
 @Test func aPlannedAiringSaysWhenItRecordsOrWhyNot() {
     let item = planned()
     #expect(item.recordWindow.lowerBound == item.airing.start.addingTimeInterval(-60))
