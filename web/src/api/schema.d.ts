@@ -1328,6 +1328,11 @@ export interface components {
             maxHeight?: number;
             /** @enum {string} */
             network?: "lan" | "wifi" | "cellular" | "remote";
+            /**
+             * @description The player switches sound tracks in place from a master playlist. When the rendition
+             *     carries more than one sound track, `mainPlaylist` is then that master.
+             */
+            alternates?: boolean;
         };
         /** @description The viewer's choices. Empty means automatic. */
         Prefs: {
@@ -1415,8 +1420,10 @@ export interface components {
             playlist: string;
             /**
              * @description Multivariant playlist that pairs `playlist` with an English CC WebVTT track, present
-             *     when the server reads the channel's captions. Players load this one; readiness checks
-             *     keep reading `playlist`.
+             *     when the server reads the channel's captions. For a watch with `caps.alternates` whose
+             *     rendition carries more than one sound track, it is `master.m3u8` instead: the picture
+             *     view and each sound track as an alternate (plus captions when they run). Players load
+             *     this one; readiness checks keep reading `playlist`.
              */
             mainPlaylist?: string;
             rendition: string;

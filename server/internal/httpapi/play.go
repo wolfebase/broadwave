@@ -98,6 +98,11 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		session = fresh
 		session.Stream.Reason = reason
 	}
+	if body.Caps != nil && body.Caps.Alternates {
+		if master, ok := s.Hub.MasterPath(session.ChannelID, session.Rendition); ok {
+			session.MainPlaylist = master
+		}
+	}
 	// Tuner status is a separate request. Reading it here holds the hub lock
 	// after the first segment already exists, so the player cannot start.
 	writeJSON(w, http.StatusOK, watchReply{Session: session, Boot: s.boot()})

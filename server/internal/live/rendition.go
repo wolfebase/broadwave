@@ -111,6 +111,9 @@ type Caps struct {
 	Audio     []string `json:"audio"`
 	MaxHeight int      `json:"maxHeight,omitempty"`
 	Network   string   `json:"network,omitempty"`
+	// Alternates is true when the player switches sound tracks in place from
+	// a master playlist instead of asking for another watch.
+	Alternates bool `json:"alternates,omitempty"`
 }
 
 // Prefs are the viewer's choices. Empty fields mean automatic.
