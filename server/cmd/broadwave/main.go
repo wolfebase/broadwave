@@ -135,9 +135,9 @@ func main() {
 	hub := live.New(st, work, ffmpegPath, encoder)
 	hub.Host = host
 	hub.Buffer = time.Hour
-	// Other sound tracks ride in each full-size encode once players can pick
-	// them from master.m3u8. Until then only staging and the relay check set it.
-	hub.Alternates = os.Getenv("BROADWAVE_ALTERNATES") == "1"
+	// Other sound tracks ride in each full-size encode, so a player can pick
+	// them from master.m3u8 without a new encode. 0 keeps one sound per encode.
+	hub.Alternates = os.Getenv("BROADWAVE_ALTERNATES") != "0"
 	if *staging {
 		slog.Info("staging: recordings, guide pulls, background tunes, and the tuner emulator are off")
 	} else if err := dvr.Recover(context.Background(), st, time.Now(), func(rec store.Recording, left time.Duration) error {
