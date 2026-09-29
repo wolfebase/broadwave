@@ -1,17 +1,41 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 — 2026-09-29
+
+Live captions, every sound track in one stream, Watch together, a choice of live delay, and the last hour of each tuned channel kept for Start over and recordings.
 
 ### Added
 
-- Record a show you are already watching and the recording starts from the beginning of the show, as far back as the tuner has been on it (up to an hour). The server keeps the last hour of each tuned channel on disk while it is tuned, using at most half the free space and always leaving 4 GB. Settings can make it 30 minutes, 2 or 4 hours, or turn it off, and Diagnostics shows what each tuned channel holds.
-- A series pass that finds its show already on, on a channel someone has been watching since the show began, records it from the beginning instead of skipping it.
+- Live captions in the web player and in the iPhone and Apple TV players. Roll-up captions appear as they are typed, in step with the picture, and stay on through a break in the broadcast. `c` turns them on and off on the web.
+- Switch between a channel's sound tracks (English, Spanish, described video) without restarting the picture, on the web, iPhone, iPad, and Apple TV. Every sound track rides in the one stream; set `BROADWAVE_ALTERNATES=0` to carry only the main one.
+- Watch together in the browser: see who is watching the same channel, join or leave, and a pause, rewind, or seek moves everyone in the group.
+- Live delay: Lowest, Balanced, or Stable, per room from the player's Options, with a default for each device in Settings. On iPhone, iPad, and Apple TV too.
+- The server keeps the last hour of each tuned channel on disk while it is tuned, using at most half the free space and always leaving 4 GB. Record a show you are already watching and the recording starts from the beginning of the show. A series pass that finds its show already on, on a channel someone has been watching since it began, records it from the beginning. Settings can make it 30 minutes, 2 or 4 hours, or turn it off, and Diagnostics shows what each tuned channel holds.
+- Channel changes are faster: the channel you just left stays warm for 20 seconds, and on Apple TV the channel the remote rests on in the Channels panel starts before you press. Diagnostics lists the last channel starts and how long each step took.
+- Web player extras: a stats overlay (`i`), keyboard help (`?`), last channel (`L`), typing a channel number, a sleep timer, volume memory, and theater mode (`t`). A TV remote can walk the guide, the player, and setup.
+- Apple TV info panels (Info, Channels, Stream), Record, Start over, and Multiview in the player's menu, and clickpad up and down to change channel. On iPhone, swipe to change channel and pinch to fill the screen.
+- Download a finished recording from the web. A `.nfo` file can be written beside each recording for Plex, Jellyfin, and Kodi.
+- Settings list how much space each show uses and what records next, and a conflict can record the later airing instead.
+- A recording that finishes counts the signal damage it carries.
+- Manage recordings, skip commercial breaks, and record one airing from the guide in the Apple apps.
+- The web app installs as a standalone app.
 
 ### Fixed
 
+- Screens come back on their own after the server restarts, and the pictures that were playing come back first. A multiview tile keeps its picture across a restart, the sound tile gets its picture first, and a tile the picture budget turned away asks again.
+- A channel that will not start says why in plain words, and a picture that stops tries again by itself.
+- A web screen joining a room starts on the room's frame instead of catching up. Every encode of a channel dates the same broadcast frame the same way, so a TV and a browser on different streams stay together.
+- The web player no longer trims its speed forever when it sits just outside the sync band, which dropped frames at Lowest delay.
+- The player's Options panel no longer drops half the frames on a browser drawing without a graphics chip.
 - A server with a GPU and a fast processor now checks the processor with the encode live TV actually runs. The old check timed a different encode, counted process startup, and read 2.3x on a machine that runs live TV at 3.1x, so live TV stayed on a GPU that Plex was saturating.
-- An Apple TV that fell a second or more behind the others skipped every minute trying to catch up: a forward jump on Apple TV lands short. It now jumps past the others and pauses the exact difference, once, and if that misses twice it stops correcting and offers "Back in sync" instead of skipping (with the next app update).
+- An Apple TV that fell a second or more behind the others skipped every minute trying to catch up: a forward jump on Apple TV lands short. It now jumps past the others and pauses the exact difference, once, and if that misses twice it stops correcting and offers "Back in sync" instead of skipping.
 - Apple TVs wait for the TV to finish switching to the channel's frame rate before lining up again.
+- A channel's other sound tracks are found even when the first read of the broadcast starts in the middle of a packet.
+- A page kept for Back no longer holds its tuner, and a tuner held for a flip back goes to the next channel when it is needed.
+- HD encodes are tagged BT.709, so small tiles keep their colors.
+- The container switches to `PUID` and `PGID` safely.
+- A page on another website can no longer change the server or replace its catalog through a browser open on your network. The web app and the Apple apps work as before.
+- The server log no longer repeats a look around the house every 45 seconds.
 
 ## 0.11.9 — 2026-09-27
 
