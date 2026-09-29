@@ -12,9 +12,9 @@ import (
 	"broadwave/internal/store"
 )
 
-// A new tune names every step to its first segment; a watch that joins a
-// running picture has nothing to report.
-func TestStartTimesNameEachStepOfANewTune(t *testing.T) {
+// A new tune names every step to its first segment and is listed once for
+// Diagnostics; a watch that joins a running picture has nothing to report.
+func TestANewTuneNamesEachStepOnce(t *testing.T) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg is not installed")
 	}
@@ -64,7 +64,7 @@ func TestStartTimesNameEachStepOfANewTune(t *testing.T) {
 	}
 	var steps string
 	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
-		steps = h.StartTimes(id, session.Rendition, asked)
+		steps = h.NoteStart(id, session.Rendition, asked)
 		if !strings.Contains(steps, " -") {
 			break
 		}
@@ -75,7 +75,15 @@ func TestStartTimesNameEachStepOfANewTune(t *testing.T) {
 		}
 	}
 
-	if joined := h.StartTimes(id, session.Rendition, time.Now()); joined != "" {
+	if joined := h.NoteStart(id, session.Rendition, time.Now()); joined != "" {
 		t.Fatalf("a running picture reported %q", joined)
+	}
+	starts := h.RecentStarts()
+	if len(starts) != 1 {
+		t.Fatalf("one start, noted once: %+v", starts)
+	}
+	s := starts[0]
+	if s.GuideNumber != "5.1" || s.Rendition != session.Rendition || s.Tune <= 0 || s.Seconds < s.Tune+s.Keyframe+s.Encoder+s.Segment-0.01 {
+		t.Fatalf("start %+v", s)
 	}
 }

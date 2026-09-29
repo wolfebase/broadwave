@@ -75,6 +75,7 @@
     "id": "contract-server",
     "name": "Home"
   },
+  "starts": [],
   "storage": {
     "Free": 0,
     "Total": 0

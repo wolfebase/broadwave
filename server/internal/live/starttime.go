@@ -33,11 +33,29 @@ func (w markWriter) Write(b []byte) (int, error) {
 	return w.WriteCloser.Write(b)
 }
 
-// StartTimes names the steps of a picture that started after since, each
-// measured from since: the tune when it began after since (tuner status read,
-// lock, first byte), then the encode (first input, first output, first part,
-// first segment). It is empty for a picture that was already running.
-func (h *Hub) StartTimes(channelID int64, key string, since time.Time) string {
+// StartRecord is how long one picture took to start, in seconds from the
+// watch that asked for it. Tune is zero when the frequency was already tuned.
+type StartRecord struct {
+	At          time.Time `json:"at"`
+	ChannelID   int64     `json:"channelId"`
+	GuideNumber string    `json:"guideNumber"`
+	Rendition   string    `json:"rendition"`
+	Seconds     float64   `json:"seconds"`
+	Tune        float64   `json:"tune,omitempty"`
+	Keyframe    float64   `json:"keyframe"`
+	Encoder     float64   `json:"encoder"`
+	Segment     float64   `json:"segment"`
+}
+
+// keptStarts is how many StartRecords Diagnostics lists.
+const keptStarts = 10
+
+// NoteStart records a picture that started after since and returns the log
+// line naming each step from since: the tune when it began after since
+// (tuner status read, lock, first byte), then the encode (first input, first
+// output, first part, first segment). It is empty for a picture that was
+// already running.
+func (h *Hub) NoteStart(channelID int64, key string, since time.Time) string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	f := h.channels[channelID]
@@ -56,21 +74,55 @@ func (h *Hub) StartTimes(channelID int64, key string, since time.Time) string {
 		}
 		steps = append(steps, fmt.Sprintf("%s %.2f", name, t.Sub(since).Seconds()))
 	}
+	var locked time.Time
 	if m := muxOf(h, f); m != nil && !m.tuneBegan.Before(since) {
+		locked = m.tuneLocked
 		step("status", m.tuneStatus)
 		step("lock", m.tuneLocked)
 		step("first byte", m.firstByte.at())
 	}
+	input := r.fed.at()
+	var output, segment time.Time
 	step("encode", r.began)
-	step("input", r.fed.at())
+	step("input", input)
 	if r.input != nil {
-		step("output", r.input.firstRead.at())
+		output = r.input.firstRead.at()
+		step("output", output)
 	}
 	if r.gate != nil {
+		segment = r.gate.firstSegment.at()
 		step("part", r.gate.firstPart.at())
-		step("segment", r.gate.firstSegment.at())
+		step("segment", segment)
+	}
+	if !r.noted && !input.IsZero() && !output.IsZero() && !segment.IsZero() {
+		r.noted = true
+		rec := StartRecord{
+			At: since, ChannelID: channelID, GuideNumber: f.channel.GuideNumber, Rendition: key,
+			Seconds:  segment.Sub(since).Seconds(),
+			Keyframe: input.Sub(r.began).Seconds(),
+			Encoder:  output.Sub(input).Seconds(),
+			Segment:  segment.Sub(output).Seconds(),
+		}
+		if !locked.IsZero() {
+			rec.Tune = locked.Sub(since).Seconds()
+		}
+		h.starts = append(h.starts, rec)
+		if len(h.starts) > keptStarts {
+			h.starts = h.starts[len(h.starts)-keptStarts:]
+		}
 	}
 	return fmt.Sprintf("live: %s %s started: %s s", f.channel.GuideNumber, key, strings.Join(steps, ", "))
+}
+
+// RecentStarts are the last pictures a watch started, newest first.
+func (h *Hub) RecentStarts() []StartRecord {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]StartRecord, 0, len(h.starts))
+	for i := len(h.starts) - 1; i >= 0; i-- {
+		out = append(out, h.starts[i])
+	}
+	return out
 }
 
 // noteTune records a tune's steps. The caller holds h.mu.
