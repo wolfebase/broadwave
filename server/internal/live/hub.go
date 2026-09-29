@@ -171,6 +171,8 @@ type Hub struct {
 	playMu     sync.Mutex
 	plays      map[int64]struct{}
 	ringSeq    int
+	// cuts keeps recent view cuts, so screens on one view share one copy.
+	cuts cutCache
 }
 
 type mux struct {

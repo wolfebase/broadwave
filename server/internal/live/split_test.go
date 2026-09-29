@@ -10,12 +10,15 @@ import (
 	"testing"
 )
 
-func TestKeepTracksSplitsAMultiAudioEncode(t *testing.T) {
+// packThreeTracks packs 8 s of H.264 with a stereo and a mono AC-3 track,
+// one encode, the way a rendition with an extra sound track is written.
+func packThreeTracks(t *testing.T) (out, ffmpeg, ffprobe string) {
+	t.Helper()
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		t.Skip("ffmpeg not installed")
 	}
-	ffprobe, err := exec.LookPath("ffprobe")
+	ffprobe, err = exec.LookPath("ffprobe")
 	if err != nil {
 		t.Skip("ffprobe not installed")
 	}
@@ -31,7 +34,7 @@ func TestKeepTracksSplitsAMultiAudioEncode(t *testing.T) {
 	if out, err := gen.CombinedOutput(); err != nil {
 		t.Fatalf("source: %v %s", err, out)
 	}
-	out := filepath.Join(dir, "packed")
+	out = filepath.Join(dir, "packed")
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +61,12 @@ func TestKeepTracksSplitsAMultiAudioEncode(t *testing.T) {
 	if err := cmd.Wait(); packErr != nil || err != nil {
 		t.Fatalf("pack %v wait %v %s", packErr, err, stderr.String())
 	}
+	return out, ffmpeg, ffprobe
+}
 
+func TestKeepTracksSplitsAMultiAudioEncode(t *testing.T) {
+	out, ffmpeg, ffprobe := packThreeTracks(t)
+	dir := t.TempDir()
 	init, err := os.ReadFile(filepath.Join(out, "init.mp4"))
 	if err != nil {
 		t.Fatal(err)

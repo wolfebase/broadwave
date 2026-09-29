@@ -1,12 +1,14 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
@@ -1123,6 +1125,35 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(body)
 		return
 	}
+	if body, ok, err := s.viewPlaylist(r, channelID, key, name); ok {
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		_, _ = w.Write(body)
+		return
+	}
+	if body, ok, err := s.Hub.ViewMedia(channelID, key, name); ok {
+		if errors.Is(err, fs.ErrNotExist) {
+			http.NotFound(w, r)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		contentType := "video/iso.segment"
+		switch {
+		case strings.HasPrefix(name, "init.a"):
+			contentType = "audio/mp4"
+		case strings.HasPrefix(name, "init."):
+			contentType = "video/mp4"
+		}
+		w.Header().Set("Content-Type", contentType)
+		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(body))
+		return
+	}
 	if captionFile(name) {
 		var body []byte
 		var err error
@@ -1168,6 +1199,23 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 	// would play the previous file under that name.
 	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFile(w, r, path)
+}
+
+// viewPlaylist answers a view's playlist with the same blocking reload and
+// delta form as index.m3u8.
+func (s *Server) viewPlaylist(r *http.Request, channelID int64, key, name string) ([]byte, bool, error) {
+	if !live.IsViewPlaylist(name) {
+		return nil, false, nil
+	}
+	if msn, part, ok := blockReload(r); ok {
+		s.Hub.WaitMedia(channelID, key, msn, part, 1500*time.Millisecond)
+	}
+	skip := false
+	switch r.URL.Query().Get("_HLS_skip") {
+	case "YES", "v2":
+		skip = true
+	}
+	return s.Hub.ViewPlaylist(channelID, key, name, skip)
 }
 
 // captionFile names the files a rendition folder serves from memory for captions.
