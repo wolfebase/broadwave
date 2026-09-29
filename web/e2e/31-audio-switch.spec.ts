@@ -57,9 +57,7 @@ async function switchTo(page: Page, video: Locator, name: string, lang: string, 
   // The room trims by at most 3 %.
   expect(played, JSON.stringify(result)).toBeGreaterThan(5.7);
   expect(frames, JSON.stringify(result)).toBeGreaterThan(0.9 * 60 * 6 * 0.95);
-  // A hosted runner, short of CPU, drops about half the frames in the seconds
-  // after a switch without stalling. Drops are checked on real machines.
-  if (!process.env.CI) expect(dropped / Math.max(1, frames), JSON.stringify(result)).toBeLessThanOrEqual(baseline + 0.02);
+  expect(dropped / Math.max(1, frames), JSON.stringify(result)).toBeLessThanOrEqual(baseline + 0.02);
   expect(result.switched, JSON.stringify(result)).toContain(lang);
   expect(since.filter((u) => u.startsWith("POST /api/v1/watch")), JSON.stringify(result)).toEqual([]);
   // The sound playlist being reloaded is the new track's, not the old one's.
@@ -89,6 +87,15 @@ test("the sound switches in place without a stall or a new watch", async ({ page
     el.addEventListener("waiting", () => w.__waiting++);
     el.hls?.on("hlsAudioTrackSwitched", (_e, d) => w.__switched.push(el.hls?.audioTracks[d.id]?.lang ?? "?"));
   });
+  // The baseline is taken with the Options panel open, as the switch is made.
+  // On a browser drawing without a GPU the open panel alone drops about half
+  // the frames (a hosted runner: 170 of 360 with no switch), and the switch
+  // itself adds none.
+  await wake(page);
+  await page.getByRole("button", { name: "Options" }).click();
+  const row = page.getByRole("group", { name: "Audio" });
+  await expect(row).toBeVisible();
+  await page.waitForTimeout(1_000);
   const quiet = await probe(video);
   await page.waitForTimeout(6_000);
   const still = await probe(video);
@@ -96,9 +103,6 @@ test("the sound switches in place without a stall or a new watch", async ({ page
   const master = await video.evaluate((el: HTMLVideoElement & { hls?: { url?: string } }) => el.hls?.url ?? "");
   expect(master).toMatch(/\/master\.m3u8$/);
 
-  await wake(page);
-  await page.getByRole("button", { name: "Options" }).click();
-  const row = page.getByRole("group", { name: "Audio" });
   await expect(row.getByRole("button")).toHaveText(["English", "Spanish"]);
   const results = [await switchTo(page, video, "Spanish", "es", asked, baseline), await switchTo(page, video, "English", "en", asked, baseline)];
   mkdirSync(evidence, { recursive: true });
