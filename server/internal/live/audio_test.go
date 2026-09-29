@@ -33,6 +33,15 @@ func TestAudioTracksPMT(t *testing.T) {
 	if got := AudioTracks(raw, 99); len(got) != 0 {
 		t.Fatalf("wrong program: %+v", got)
 	}
+	// A pipe read can start mid-packet. The first tune's encode then started
+	// without its other sound tracks.
+	// A stream repeats its tables, so the cut loses only the first copy.
+	twice := append(append([]byte(nil), raw...), raw...)
+	for _, cut := range []int{1, 100, 187} {
+		if got := AudioTracks(twice[cut:], 1); len(got) != 3 {
+			t.Fatalf("cut %d: %+v", cut, got)
+		}
+	}
 }
 
 func TestFirstAudioKeepsTheProgramMap(t *testing.T) {
