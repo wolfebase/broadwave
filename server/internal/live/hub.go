@@ -252,6 +252,8 @@ type rendition struct {
 	viewers int
 	seen    time.Time
 	idle    *time.Timer
+	// guess is set on a picture Warm started that no watch has joined yet.
+	guess   bool
 	stamper playlistStamper
 	// clock maps this encode onto wall time. A transcode's fMP4 timestamps
 	// start at zero, so each encode has its own; seedClockLocked lines it up
@@ -450,6 +452,7 @@ func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition, altern
 	}
 	r.viewers++
 	r.seen = time.Now()
+	r.guess = false
 	stopTimer(&r.idle)
 	h.changed()
 	return h.sessionLocked(f, r), nil

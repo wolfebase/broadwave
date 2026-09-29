@@ -88,6 +88,15 @@ export function LivePlayer({
     setRowFor(rowKey);
     setGuideRow(matchedRow);
   }
+  // A row the viewer rests on is the likely next channel. Its picture starts
+  // now when that costs nothing, so the change that follows is instant.
+  const warm = stream.warm;
+  const restingOn = panel === "guide" ? channels[guideRow]?.id : undefined;
+  useEffect(() => {
+    if (!restingOn || restingOn === channel.id) return;
+    const t = window.setTimeout(() => warm(restingOn), 300);
+    return () => window.clearTimeout(t);
+  }, [restingOn, channel.id, warm]);
   const [zoom, setZoom] = useState<Zoom>(readZoom);
   const [sleepUntil, setSleepUntil] = useState<number | null>(null);
   const [sleepFor, setSleepFor] = useState(0);

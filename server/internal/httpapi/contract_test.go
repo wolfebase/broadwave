@@ -203,6 +203,7 @@ func TestContractFixtures(t *testing.T) {
 		{"xtream", "POST", "/api/v1/sources", `{"kind":"xtream","name":"Lab","url":"` + feeds.URL + `","username":"lab","password":"secret"}`, 0},
 		{"watch", "POST", "/api/v1/watch", `{"channelId":1}`, http.StatusServiceUnavailable},
 		{"watch-stop", "POST", "/api/v1/watch/1/stop", "{}", 0},
+		{"watch-warm", "POST", "/api/v1/watch/1/warm", "", 0},
 		{"setup-finish", "GET", "/api/v1/setup/finish", "", 0},
 		{"server-rename", "PATCH", "/api/v1/server", `{"name":"Living Room"}`, 0},
 		{"settings-save", "PUT", "/api/v1/settings", `{"hideScores":"1"}`, 0},

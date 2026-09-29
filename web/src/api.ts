@@ -181,6 +181,11 @@ export function watchChannel(channelId: number, caps: Caps, prefs: Prefs, rendit
   });
 }
 
+// Starts the picture a watch of this channel would play, when its frequency is already tuned.
+export function warmChannel(channelId: number, caps: Caps, prefs: Prefs) {
+  return request<{ warm: boolean }>(`/api/v1/watch/${channelId}/warm`, { method: "POST", body: JSON.stringify({ caps, prefs }) });
+}
+
 export function stopWatch(channelId: number, rendition = "", boot = "") {
   return request<{ ok: boolean }>(`/api/v1/watch/${channelId}/stop`, { method: "POST", body: JSON.stringify({ rendition, boot }) });
 }
