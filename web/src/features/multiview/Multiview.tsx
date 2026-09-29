@@ -64,6 +64,11 @@ export function Multiview() {
   const layout: MvLayout = layoutFromParam(params.get("layout")) ?? savedLayout();
   const focus = Number(params.get("focus")) || ids[0] || 0;
   const guide = params.get("add") === "1";
+  // The ring and the sound are separate. Arrows move the ring; Enter moves the sound.
+  // A new sound tile (Enter, or the page opening) puts the ring back on that tile.
+  const [cursor, setCursor] = useState({ focus, id: focus });
+  if (cursor.focus !== focus) setCursor({ focus, id: focus });
+  const mark = cursor.focus === focus ? cursor.id : focus;
   const [plan, setPlan] = useState<MultiviewPlan | null>(null);
   const [planFor, setPlanFor] = useState("");
   const [menu, setMenu] = useState(false);
@@ -253,17 +258,19 @@ export function Multiview() {
       const root = document.querySelector<HTMLElement>(".mv");
       if (!root) return;
       const active = document.activeElement;
-      if (active instanceof HTMLElement && active !== document.body && root.contains(active)) return;
+      // A button already inside the grid keeps the keys. The section itself does not.
+      if (active instanceof HTMLElement && active !== document.body && root.contains(active) && !active.classList.contains("mv")) return;
       if (guide) {
         const buttons = [...root.querySelectorAll<HTMLButtonElement>(".mv-guide button:not([disabled])")];
         const other = buttons.find((button) => button.getAttribute("aria-selected") !== "true");
         focusRing(other ?? buttons[0]);
         return;
       }
-      focusRing(root);
+      const tile = root.querySelector<HTMLElement>(`.mv-tile[data-channel="${mark}"]`);
+      focusRing(tile ?? root);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [layoutMode, guide, chKey]);
+  }, [layoutMode, guide, chKey, mark]);
 
   function leaveGrid() {
     if (inAppDepth() > 0) {
@@ -277,8 +284,8 @@ export function Multiview() {
 
   function onKey(event: KeyboardEvent) {
     const k = event.key;
-    const i = Math.max(0, ordered.findIndex((c) => c.id === focus));
-    const inBar = event.target instanceof Element && Boolean(event.target.closest(".mv-top, .mv-bottom, .mv-guide"));
+    const target = event.target;
+    const control = target instanceof Element && target.closest("button, a[href], input, select, textarea");
     if (k === "Escape" || k === "Backspace") {
       event.preventDefault();
       if (menu) return setMenu(false);
@@ -286,8 +293,8 @@ export function Multiview() {
       leaveGrid();
       return;
     }
-    // The add list and the bars are buttons. Arrows walk them; Enter activates them.
-    if (inBar && (k === "Enter" || k.startsWith("Arrow"))) return;
+    // Buttons, links, and fields keep their own keys. Enter activates them.
+    if (control && (k === "Enter" || k.startsWith("Arrow"))) return;
     if (k === "g") {
       event.preventDefault();
       go({ add: !guide });
@@ -298,9 +305,11 @@ export function Multiview() {
       setMenu((v) => !v);
       return;
     }
+    const i = Math.max(0, ordered.findIndex((c) => c.id === mark));
     if (k === "Enter") {
       event.preventDefault();
-      if (layout === "1+2" || layout === "1+3" || layout === "pip") focusManual(focus);
+      if (mark && mark !== focus) focusManual(mark);
+      else if (layout === "1+2" || layout === "1+3" || layout === "pip") focusManual(focus);
       return;
     }
     if (k === " ") {
@@ -316,7 +325,10 @@ export function Multiview() {
     if (!step) return;
     const dest = Math.max(0, Math.min(ordered.length - 1, i + step));
     event.preventDefault();
-    if (ordered[dest]) focusManual(ordered[dest].id);
+    const next = ordered[dest];
+    if (!next || next.id === mark) return;
+    setCursor({ focus, id: next.id });
+    focusRing(document.querySelector<HTMLElement>(`.mv-tile[data-channel="${next.id}"]`));
   }
 
   const focused = ordered.find((c) => c.id === focus) ?? ordered[0];
@@ -427,6 +439,7 @@ export function Multiview() {
             title={airingAt(index, channel.id, now)?.title || channel.displayName}
             score={scores.get(airingAt(index, channel.id, now)?.gameId ?? "")}
             focused={channel.id === (focused?.id ?? 0)}
+            pointed={channel.id === mark}
             after={channel.id !== focusedId && !firstDone}
             layout={layout}
             room={room}
@@ -478,6 +491,7 @@ function Tile({
   title,
   score,
   focused,
+  pointed,
   layout,
   room,
   menu,
@@ -495,6 +509,7 @@ function Tile({
   title: string;
   score?: string;
   focused: boolean;
+  pointed: boolean;
   layout: MvLayout;
   room: string;
   menu: boolean;
@@ -571,7 +586,7 @@ function Tile({
   }, [focused, onHeard]);
   return (
     <div className="mv-cell" onClick={onFocus}>
-    <div className={focused ? "mv-tile focused" : "mv-tile"} role="group" aria-label={`${channel.displayNumber} ${channel.displayName}${focused ? ", sound on" : ""}`}>
+    <div className={focused ? "mv-tile focused" : "mv-tile"} role="group" tabIndex={pointed ? 0 : -1} data-channel={channel.id} aria-label={`${channel.displayNumber} ${channel.displayName}${focused ? ", sound on" : ""}`}>
       <video ref={videoRef} className="mv-video" autoPlay playsInline data-channel={channel.id} />
       <div className="mv-meta">
         <span>{channel.displayNumber}</span>

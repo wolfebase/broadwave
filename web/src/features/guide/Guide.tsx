@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
+import { focusRing } from "../../app/remote";
 import { navigate } from "../../app/router";
 import { useLayout } from "../../app/layout";
 import {
@@ -164,6 +165,10 @@ export function Guide() {
     el.scrollTo({ left: Math.max(0, ((t - origin) / MIN) * pxPerMin), behavior });
   }
 
+  function jumpToNow() {
+    move(focus.row, now);
+  }
+
   function tonight() {
     scrollToTime(primeTime(now) - 30 * MIN);
   }
@@ -207,7 +212,9 @@ export function Guide() {
     const t = Math.max(origin, Math.min(end - MIN, at));
     setFocus({ row: r, at: t });
     const el = scrollRef.current;
-    if (!el) return;
+    // A scroller that has not been laid out reports 0. Writing scrollLeft from that
+    // parks the cursor off to the side, and nothing later puts it back.
+    if (!el || el.clientWidth < 80 || el.clientHeight < 80) return;
     const y = r * rowH;
     if (y < el.scrollTop) el.scrollTop = y;
     else if (y + rowH > el.scrollTop + el.clientHeight - headH) el.scrollTop = y + rowH - el.clientHeight + headH;
@@ -217,6 +224,8 @@ export function Guide() {
   }
 
   function onKey(e: KeyboardEvent) {
+    const target = e.target;
+    if (!(target instanceof HTMLElement) || !target.closest(".guide-canvas")) return;
     const row = rows[focus.row];
     if (!row) return;
     const cur = airingAt(index, row.id, focus.at);
@@ -227,6 +236,16 @@ export function Guide() {
         move(focus.row + 1, focus.at);
         break;
       case "ArrowUp":
+        // The grid eats every arrow. Up from the first row has to reach Now,
+        // or a remote cannot jump back to the current show.
+        if (tv && focus.row <= 0) {
+          const jump = document.querySelector<HTMLElement>(".guide-jump button");
+          if (jump) {
+            handled();
+            focusRing(jump);
+            return;
+          }
+        }
         handled();
         move(focus.row - 1, focus.at);
         break;
@@ -271,6 +290,36 @@ export function Guide() {
   const focusRow = rows[focus.row];
   const focusAiring = focusRow ? airingAt(index, focusRow.id, focus.at) : undefined;
   const activeId = focusRow ? guideCellId(focusRow.id, focusAiring?.id) : undefined;
+
+  // The keyboard cell is the active descendant. A gap has no program block, so that
+  // cell can sit past the last listing, outside the window move() aimed at the time.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || el.clientWidth < 80 || el.clientHeight < 80) return;
+    const cell = activeId ? document.getElementById(activeId) : null;
+    if (!cell) return;
+    const box = el.getBoundingClientRect();
+    const cellBox = cell.getBoundingClientRect();
+    if (cellBox.width < 1 || cellBox.height < 1) return;
+    const pad = 12;
+    const visibleLeft = box.left + channelW + pad;
+    const visibleRight = box.right - pad;
+    const visibleTop = box.top + headH + pad;
+    const visibleBottom = box.bottom - pad;
+    // A show can be wider than the screen. On screen means the cell meets the grid.
+    const seen =
+      cellBox.bottom > visibleTop && cellBox.top < visibleBottom && cellBox.right > visibleLeft && cellBox.left < visibleRight;
+    if (seen) return;
+    const slip = Math.min(cellBox.width, 80);
+    let dx = 0;
+    let dy = 0;
+    if (cellBox.right <= visibleLeft) dx = cellBox.right - visibleLeft - slip;
+    else if (cellBox.left >= visibleRight) dx = cellBox.left - visibleRight + slip;
+    if (cellBox.bottom <= visibleTop) dy = cellBox.bottom - visibleTop - Math.min(cellBox.height, 40);
+    else if (cellBox.top >= visibleBottom) dy = cellBox.top - visibleBottom + Math.min(cellBox.height, 40);
+    if (dx !== 0) el.scrollLeft += dx;
+    if (dy !== 0) el.scrollTop += dy;
+  }, [activeId, focus.row, focus.at, layout, view.width, view.height, channelW, headH]);
 
   if (layout === "phone" && !landscape) {
     return (
@@ -331,7 +380,7 @@ export function Guide() {
         counts={counts}
         days={days}
         now={now}
-        onNow={() => scrollToTime(now - 30 * MIN)}
+        onNow={jumpToNow}
         onTonight={tonight}
         onDay={jumpToDay}
       />
@@ -364,7 +413,11 @@ export function Guide() {
           <div className="now-line" style={{ left: channelW + nowX, top: headH, height: rows.length * rowH }} aria-hidden="true" />
           {rows.slice(firstRow, lastRow).map((c, i) => {
             const r = firstRow + i;
-            const list = (index.get(c.id) ?? []).filter((a) => Date.parse(a.end) > leftT && Date.parse(a.start) < rightT);
+            const programs = index.get(c.id) ?? [];
+            const list = programs.filter((a) => Date.parse(a.end) > leftT && Date.parse(a.start) < rightT);
+            const gap = r === focus.row && !focusAiring;
+            const gapLabel = emptyGuideLabel(programs, focus.at);
+            const trailId = !gap && list.length > 0 && activeId === guideCellId(c.id) ? activeId : undefined;
             return (
               <div key={c.id} className="guide-row" role="row" aria-rowindex={r + 1} style={{ top: headH + r * rowH, width: channelW + width }}>
                 <div role="rowheader" className="guide-rowhead">
@@ -402,12 +455,23 @@ export function Guide() {
                 {list.length === 0 ? (
                   <div role="gridcell" id={activeId === guideCellId(c.id) ? activeId : undefined} className="guide-cell empty" style={{ left: channelW + view.left + 4, width: Math.max(200, view.width - channelW - 8) }}>
                     <LiveFrame id={c.id} className="cell-frame" />
-                    <span className="cell-title">{emptyGuideLabel(index.get(c.id) ?? [], leftT)}</span>
+                    <span className="cell-title">{emptyGuideLabel(programs, leftT)}</span>
                   </div>
                 ) : null}
-                {(index.get(c.id) ?? []).length > 0 && Date.parse((index.get(c.id) ?? []).at(-1)!.end) < end - 60_000 ? (
-                  <div role="gridcell" id={list.length > 0 && activeId === guideCellId(c.id) ? activeId : undefined} className="guide-cell empty" style={{ left: channelW + ((Math.max(origin, Date.parse((index.get(c.id) ?? []).at(-1)!.end)) - origin) / MIN) * pxPerMin + 4, width: 280 }}>
-                    <span className="cell-title">{emptyGuideLabel(index.get(c.id) ?? [], end)}</span>
+                {gap && list.length > 0 ? (
+                  <div
+                    role="gridcell"
+                    id={guideCellId(c.id)}
+                    className="guide-cell empty focused"
+                    aria-label={`${gapLabel}, ${c.displayName}`}
+                    style={{ left: channelW + ((Math.max(origin, focus.at) - origin) / MIN) * pxPerMin, width: Math.max(160, 24 * pxPerMin) }}
+                  >
+                    <span className="cell-title">{gapLabel}</span>
+                  </div>
+                ) : null}
+                {programs.length > 0 && !gap && Date.parse(programs[programs.length - 1].end) < end - 60_000 ? (
+                  <div role="gridcell" id={trailId} className="guide-cell empty" style={{ left: channelW + ((Math.max(origin, Date.parse(programs[programs.length - 1].end)) - origin) / MIN) * pxPerMin + 4, width: 280 }}>
+                    <span className="cell-title">{emptyGuideLabel(programs, end)}</span>
                   </div>
                 ) : null}
                 {list.map((a) => {
@@ -468,7 +532,16 @@ export function Guide() {
         </div>
       ) : null}
       {nowInView ? null : (
-        <button type="button" className="guide-now-float pill-btn" onClick={() => scrollToTime(now - 30 * MIN)}>
+        <button
+          type="button"
+          className="guide-now-float pill-btn"
+          onClick={jumpToNow}
+          onKeyDown={(event) => {
+            if (!tv || event.key !== "ArrowDown") return;
+            event.preventDefault();
+            focusRing(document.querySelector<HTMLElement>(".guide-canvas"));
+          }}
+        >
           Now
         </button>
       )}
@@ -504,11 +577,19 @@ function GuideControls({
   compact?: boolean;
   pressed?: "now" | "tonight";
 }) {
+  const tvLayout = useLayout() === "tv";
   const cats: Category[] = ["sports", "news", "movies", "kids"];
+  // Down from Now returns to the grid. The canvas is one big target, so spatial
+  // nav would rather stop on the chips or the floating Now.
+  const enterGrid = (event: KeyboardEvent) => {
+    if (!tvLayout || event.key !== "ArrowDown") return;
+    event.preventDefault();
+    focusRing(document.querySelector<HTMLElement>(".guide-canvas"));
+  };
   return (
     <div className="guide-controls">
       <div className="guide-jump">
-        <button type="button" className="pill-btn" aria-pressed={pressed ? pressed === "now" : undefined} onClick={onNow}>
+        <button type="button" className="pill-btn" aria-pressed={pressed ? pressed === "now" : undefined} onClick={onNow} onKeyDown={enterGrid}>
           Now
         </button>
         <button type="button" className="pill-btn" aria-pressed={pressed ? pressed === "tonight" : undefined} onClick={onTonight}>

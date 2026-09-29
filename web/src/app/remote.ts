@@ -1,4 +1,4 @@
-import { nearest, type Box, type Direction } from "../lib/remote";
+import { firstBelow, nearest, type Box, type Direction } from "../lib/remote";
 import { inAppDepth } from "./router";
 
 const selector = "button, a[href], input, select, textarea, [tabindex]";
@@ -14,11 +14,17 @@ function arrow(key: string): Direction | null {
 function keepsArrows(target: HTMLElement, dir: Direction): boolean {
   if (target.isContentEditable) return true;
   const tag = target.tagName;
-  if (tag === "TEXTAREA" || tag === "SELECT") return true;
+  if (tag === "TEXTAREA") return true;
+  // Up and Down leave a closed menu, a checkbox, and a file field. Left and Right
+  // still edit a line of text or a menu. A remote that stops on the first menu
+  // cannot reach the rest of the page.
+  const along = dir === "left" || dir === "right";
+  if (tag === "SELECT") return along;
   if (tag === "INPUT") {
     const type = (target as HTMLInputElement).type;
     const text = type === "text" || type === "search" || type === "password" || type === "email" || type === "url" || type === "";
-    return text ? dir === "left" || dir === "right" : true;
+    if (text || type === "range") return along;
+    return false;
   }
   return false;
 }
@@ -26,7 +32,8 @@ function keepsArrows(target: HTMLElement, dir: Direction): boolean {
 function boxes(scope: ParentNode) {
   const out: { el: HTMLElement; box: Box }[] = [];
   for (const node of scope.querySelectorAll<HTMLElement>(selector)) {
-    if (node.tabIndex < 0 || node.closest("[aria-hidden='true']")) continue;
+    // An inert control sits behind the player. Focusing it would drop the keys.
+    if (node.tabIndex < 0 || node.closest("[inert], [aria-hidden='true']")) continue;
     if ((node as HTMLButtonElement).disabled) continue;
     const rect = node.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) continue;
@@ -77,7 +84,25 @@ export function installTvRemote(): () => void {
     if (items.length === 0) return;
     const current = items.find((item) => item.el === document.activeElement);
     const from: Box = current?.box ?? { id: -1, left: window.innerWidth / 2 - 1, top: -2, right: window.innerWidth / 2 + 1, bottom: 0 };
-    const nextId = nearest(from, items.map((item) => item.box), dir);
+    const focused = current?.el ?? target;
+    const inBar = Boolean(focused?.closest(".topbar"));
+    // Left and Right stay on the tab bar. A scrolled field can sit under the sticky
+    // bar and look closer than the next tab, and a text field then keeps the keys.
+    const alongBar = (dir === "left" || dir === "right") && inBar;
+    const pool = alongBar ? items.filter((item) => item.el.closest(".topbar")) : items;
+    const all = pool.map((item) => item.box);
+    // Down from the bar enters at the top of the page. A tab that happens to sit
+    // over Delete would otherwise skip Play.
+    let nextId: number | null = null;
+    if (dir === "down" && inBar) {
+      const page = items.filter((item) => item.el.closest("main")).map((item) => item.box);
+      nextId = firstBelow(from, page);
+    } else {
+      nextId = nearest(from, all, dir);
+      // Nothing shares this row or column. Still move, so a corner control
+      // (the mini player) is reachable.
+      if (nextId == null) nextId = nearest(from, all, dir, true);
+    }
     const next = items.find((item) => item.box.id === nextId);
     if (!next) return;
     event.preventDefault();
