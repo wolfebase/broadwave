@@ -151,12 +151,18 @@ export function LivePlayer({
     if (layout === "tv") {
       const active = document.activeElement;
       if (active instanceof HTMLElement && root.contains(active)) return;
-      const channelsBtn = root.querySelector<HTMLElement>("[aria-label='Channels']");
+      const channelsBtn = root.querySelector<HTMLElement>("button[aria-label='Channels']");
       focusRing(channelsBtn ?? root);
       return;
     }
     root.focus();
   }, [channel.id, mode, layout]);
+
+  useEffect(() => {
+    if (panel !== "guide" || layout !== "tv") return;
+    const row = document.querySelectorAll<HTMLElement>(".mini-guide [role='option']")[guideRow];
+    focusRing(row);
+  }, [panel, guideRow, layout]);
 
   useEffect(() => () => window.clearTimeout(typedTimer.current), []);
 
@@ -268,12 +274,20 @@ export function LivePlayer({
       return;
     }
     if (panel === "guide") {
-      if (k === "Escape" || k === "Backspace" || k === "g") setPanel("none");
-      else if (k === "ArrowDown") setGuideRow((r) => Math.min(channels.length - 1, r + 1));
+      const backToChannels = () => {
+        if (layout !== "tv") return;
+        // The list is also named Channels, and it is about to unmount. The button keeps the keys.
+        focusRing(document.querySelector<HTMLElement>(".stage:not(.mini) button[aria-label='Channels']"));
+      };
+      if (k === "Escape" || k === "Backspace" || k === "g") {
+        setPanel("none");
+        backToChannels();
+      } else if (k === "ArrowDown") setGuideRow((r) => Math.min(channels.length - 1, r + 1));
       else if (k === "ArrowUp") setGuideRow((r) => Math.max(0, r - 1));
       else if (k === "Enter" && channels[guideRow]) {
         setPanel("none");
         onChannel(channels[guideRow]);
+        backToChannels();
       } else return;
       event.preventDefault();
       return;

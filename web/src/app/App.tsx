@@ -24,6 +24,20 @@ const VirtualPage = lazy(() => import("../features/pages").then((m) => ({ defaul
 const Multiview = lazy(() => import("../features/multiview/Multiview").then((m) => ({ default: m.Multiview })));
 const SearchPage = lazy(() => import("../features/search/Search").then((m) => ({ default: m.SearchPage })));
 
+/** The recording player arrives after the page that opened it is gone, so nothing else is focused. */
+function PlayClaim() {
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      if (document.documentElement.dataset.layout !== "tv") return;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active !== document.body && active !== document.documentElement) return;
+      focusRing(document.querySelector<HTMLElement>(".stage:not(.mini)"));
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+  return null;
+}
+
 const tabs = [
   { path: "/", label: "Home", Icon: HomeIcon },
   { path: "/guide", label: "Guide", Icon: GuideIcon },
@@ -190,7 +204,12 @@ function Shell() {
             <button type="button" className="btn small ghost" onClick={dismissNotice}>Not now</button>
           </div>
         ) : null}
-        {!booting ? <Suspense fallback={null}>{page}</Suspense> : null}
+        {!booting ? (
+          <Suspense fallback={null}>
+            {path === "/play" ? <PlayClaim /> : null}
+            {page}
+          </Suspense>
+        ) : null}
       </main>
     </div>
   );

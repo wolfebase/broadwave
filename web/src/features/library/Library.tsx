@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Recording } from "../../types";
 import { copy } from "../../strings";
 import { formatBytes, formatClockPoint } from "../../lib/format";
+import { focusRing } from "../../app/remote";
 import { DownloadLink } from "../recordings/DownloadLink";
 export function Library({
   recordings,
@@ -22,10 +23,19 @@ export function Library({
 }) {
   const [armed, setArmed] = useState<number | null>(null);
   const [libraryFilter, setLibraryFilter] = useState<"all" | "unwatched">("all");
+  const rootRef = useRef<HTMLElement>(null);
+  const armedWas = useRef<number | null>(null);
   const shown = libraryFilter === "unwatched" ? recordings.filter((rec) => !watched(rec)) : recordings;
   const grouped = groupLibrary(shown);
+  useEffect(() => {
+    const previous = armedWas.current;
+    armedWas.current = armed;
+    // The confirm button replaces Delete. When the file is gone, that button is gone too.
+    if (previous == null || recordings.some((rec) => rec.id === previous)) return;
+    focusRing(rootRef.current?.querySelector<HTMLElement>("button, a[href]"));
+  }, [recordings, armed]);
   return (
-    <section className="page">
+    <section className="page" ref={rootRef}>
       <div className="page-head">
         <h2>{copy.library.title}</h2>
       </div>
@@ -90,6 +100,10 @@ function LibraryRow({
   onStop: (recording: Recording) => void;
 }) {
   const seen = watched(rec);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (armed === rec.id) focusRing(confirmRef.current);
+  }, [armed, rec.id]);
   return (
     <li className="media-card">
       <span className="poster-wrap">
@@ -127,7 +141,7 @@ function LibraryRow({
       <DownloadLink id={rec.id} status={rec.status} />
       {rec.status === "recording" ? <button type="button" className="btn" onClick={() => onStop(rec)}>Stop recording</button> : null}
       {rec.status === "recording" ? null : armed === rec.id ? (
-        <button type="button" className="btn primary" onClick={() => onDelete(rec)}>Delete this file</button>
+        <button ref={confirmRef} type="button" className="btn primary" onClick={() => onDelete(rec)}>Delete this file</button>
       ) : (
         <button type="button" className="btn" onClick={() => setArmed(rec.id)}>Delete</button>
       )}
