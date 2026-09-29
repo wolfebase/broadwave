@@ -162,8 +162,12 @@ export class SyncEngine {
    */
   private correct(drift: number, target: number) {
     // Another screen rewound the group. The frame is behind this playhead, in
-    // the buffer; pausing for the whole rewind froze every browser for 15 s.
-    if (drift > GROUP_REWIND_MS && this.room.startsWith("group:") && this.timeFor(target) != null) {
+    // the window; pausing for the whole rewind froze every browser for 15 s.
+    // A frame from before this screen's stream began (joining a group from a
+    // fresh tune) cannot be sought to, and the pause below lines it up.
+    const back = this.timeFor(target);
+    const seekable = this.video.seekable;
+    if (drift > GROUP_REWIND_MS && this.room.startsWith("group:") && back != null && seekable.length && back >= seekable.start(0)) {
       this.seekTo(target, !this.video.paused);
       return;
     }
