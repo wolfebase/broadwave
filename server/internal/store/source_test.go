@@ -150,6 +150,31 @@ func TestChannelKeepsTheStreamHeaders(t *testing.T) {
 	}
 }
 
+func TestChannelKeepsItsMeasuredAudio(t *testing.T) {
+	st := openTestStore(t)
+	dev := hdhr.Device{DeviceID: "dev-1", FriendlyName: "Tuner", BaseURL: "http://tuner"}
+	if err := st.UpsertDevice(context.Background(), dev, []hdhr.Channel{{GuideNumber: "4.1", GuideName: "KBWV"}}); err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.Channels(context.Background(), false)
+	if err != nil || len(channels) != 1 {
+		t.Fatalf("%+v %v", channels, err)
+	}
+	id := channels[0].ID
+	const tracks = `[{"pid":52,"role":"main","codec":"ac3","channels":6,"measured":true}]`
+	if err := st.SetChannelAudioTracks(context.Background(), id, tracks); err != nil {
+		t.Fatal(err)
+	}
+	// A rescan rewrites the lineup row but keeps what a tune measured.
+	if err := st.UpsertDevice(context.Background(), dev, []hdhr.Channel{{GuideNumber: "4.1", GuideName: "KBWV"}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.SourceChannel(context.Background(), id)
+	if err != nil || got.AudioTracks != tracks {
+		t.Fatalf("%q %v", got.AudioTracks, err)
+	}
+}
+
 func TestAlternateChannelFollowsPriority(t *testing.T) {
 	st := openTestStore(t)
 	low := hdhr.Device{DeviceID: "src-low", FriendlyName: "Second", BaseURL: "http://second"}

@@ -24,6 +24,8 @@ type SourceChannel struct {
 	// FieldOrder is the station scan: progressive, tt, bb, tb, bt, or empty.
 	// Film cadence is decided per tune and is not stored.
 	FieldOrder string `json:"fieldOrder,omitempty"`
+	// AudioTracks is the last tune's measured PMT audio, as JSON.
+	AudioTracks string `json:"-"`
 	// ATSC3 is set when this channel cannot use a 1.0 tuner.
 	// The lineup's codecs are the other way a row is marked. A guide number is not.
 	ATSC3 bool `json:"-"`
@@ -113,14 +115,14 @@ func (s *Store) SourceChannel(ctx context.Context, id int64) (SourceChannel, err
 	err := s.db.QueryRowContext(ctx, `
 SELECT c.id, c.device_id, c.guide_number, c.guide_name, c.custom_number, c.custom_name,
 	c.video_codec, c.audio_codec, c.hd, c.favorite, c.enabled, c.hidden, c.present,
-	c.stream_url, c.frequency_hz, c.program_num, c.field_order, c.user_agent, c.referrer,
+	c.stream_url, c.frequency_hz, c.program_num, c.field_order, c.audio_tracks, c.user_agent, c.referrer,
 	d.base_url, d.tuner_count, d.model_number,
 	COALESCE((SELECT stream_limit FROM sources WHERE device_id = c.device_id LIMIT 1), 0),
 	COALESCE((SELECT stream_format FROM sources WHERE device_id = c.device_id LIMIT 1), '')
 FROM channels c JOIN devices d ON d.device_id = c.device_id WHERE c.id = ?`, id).Scan(
 		&ch.ID, &ch.DeviceID, &ch.GuideNumber, &ch.GuideName, &customNumber, &customName,
 		&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present,
-		&ch.StreamURL, &ch.FrequencyHz, &ch.ProgramNum, &ch.FieldOrder, &ch.UserAgent, &ch.Referrer,
+		&ch.StreamURL, &ch.FrequencyHz, &ch.ProgramNum, &ch.FieldOrder, &ch.AudioTracks, &ch.UserAgent, &ch.Referrer,
 		&ch.BaseURL, &ch.TunerCount, &ch.ModelNumber, &ch.StreamLimit, &ch.StreamFormat,
 	)
 	if err != nil {
@@ -190,6 +192,12 @@ WHERE device_id = ? AND guide_number = ?`, freq, program, deviceID, guide)
 
 func (s *Store) SetFieldOrder(ctx context.Context, channelID int64, order string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE channels SET field_order = ? WHERE id = ?`, order, channelID)
+	return err
+}
+
+// SetChannelAudioTracks stores the audio a tune measured, as JSON.
+func (s *Store) SetChannelAudioTracks(ctx context.Context, channelID int64, tracks string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE channels SET audio_tracks = ? WHERE id = ?`, tracks, channelID)
 	return err
 }
 

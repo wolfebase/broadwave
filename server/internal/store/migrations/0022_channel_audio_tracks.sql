@@ -1,0 +1,1 @@
+ALTER TABLE channels ADD COLUMN audio_tracks TEXT NOT NULL DEFAULT '';

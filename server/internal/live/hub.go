@@ -147,6 +147,10 @@ type Hub struct {
 	// Zero means 8 seconds.
 	FallbackWindow time.Duration
 
+	// Alternates carries a program's other measured sound tracks in each
+	// full-size encode, after the main one.
+	Alternates bool
+
 	// MoveBudget is how long a vanished device has to hand its stream to
 	// another device that can tune the same channel. Zero means 5 seconds.
 	MoveBudget time.Duration
@@ -217,7 +221,13 @@ type feed struct {
 	renditions map[string]*rendition
 	recording  *recording
 	tracks     []AudioTrack
-	probing    bool
+	// stored is the audio measured on the last tune, then on this one. It
+	// vouches for a track this tune has not measured yet.
+	stored []AudioTrack
+	// plain is set once an encode died with extras. The rest of this tune's
+	// encodes carry one sound.
+	plain   bool
+	probing bool
 	// headerOrder is the scan read from this tune's packets. Soft 3:2 is film
 	// here even when the stored field order says progressive. ffprobe must not
 	// overwrite it: its field_order calls those pictures progressive.
@@ -250,6 +260,9 @@ type rendition struct {
 	// that must not signal the pid: Wait has reaped it.
 	waited atomic.Bool
 	args   []string
+	// extras are the sound tracks args carries after the main one. Tracks
+	// learned later do not restart the encode.
+	extras []AudioTrack
 	// gate blocks a playlist reload until the requested part exists.
 	// packDone closes when the packager has finished writing that directory.
 	gate     *playlistGate
@@ -668,7 +681,7 @@ func (h *Hub) addFeedLocked(m *mux, ch store.SourceChannel) *feed {
 	}
 	f := &feed{
 		channel: ch, program: ch.ProgramNum, source: sourceOf(ch),
-		renditions: map[string]*rendition{},
+		renditions: map[string]*rendition{}, stored: loadTracks(ch.AudioTracks),
 	}
 	m.feeds[ch.GuideNumber] = f
 	h.channels[ch.ID] = f
@@ -681,18 +694,23 @@ func (h *Hub) addFeedLocked(m *mux, ch store.SourceChannel) *feed {
 	} else if m.input == "" {
 		h.deferScanLocked(m, f)
 	}
+	if m.input == "" && h.Store != nil {
+		go h.saveTracks(m, f, trackWindow)
+	}
 	if m.input != "" && probeInput(ch) {
 		h.probeInputLocked(m, f)
 	}
 	return f
 }
 
-func (h *Hub) pictureArgs(f *feed, want Rendition) (string, []string) {
+func (h *Hub) pictureArgs(f *feed, want Rendition, extras []AudioTrack) (string, []string) {
 	input := "pipe:0"
 	if m := muxOf(h, f); m != nil && m.input != "" {
 		input = m.input
 	}
-	args := renditionArgs(f.program, f.sourceFor(want), want, h.Encoder, h.deintFor(want.Mode, f.source.VideoCodec), input)
+	src := f.sourceFor(want)
+	src.Extras = extras
+	args := renditionArgs(f.program, src, want, h.Encoder, h.deintFor(want.Mode, f.source.VideoCodec), input)
 	return input, args
 }
 
@@ -707,7 +725,10 @@ func (h *Hub) rebuildRenditionsLocked(f *feed) {
 	}
 	var list []kept
 	for key, r := range f.renditions {
-		_, next := h.pictureArgs(f, r.spec)
+		// Tracks measured after the start are left out: a new sound track is
+		// not worth a restart. A changed main still is, and so is a stored
+		// track the PMT no longer lists the same way.
+		_, next := h.pictureArgs(f, r.spec, keptExtras(f, r))
 		if slices.Equal(r.args, next) {
 			continue
 		}
@@ -751,7 +772,8 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	input, args := h.pictureArgs(f, want)
+	extras := h.extrasLocked(f, want)
+	input, args := h.pictureArgs(f, want, extras)
 	cmd := exec.Command(h.FFmpeg, args...)
 	cmd.Dir = dir
 	var stdin io.WriteCloser
@@ -782,7 +804,7 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	}
 	packIn := startPack(dir, stdout, gate, done, captionLine(f))
 	NotePID(h.Dir, cmd.Process.Pid)
-	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: time.Now(), args: args, gate: gate, packDone: done, input: packIn}
+	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: time.Now(), args: args, extras: extras, gate: gate, packDone: done, input: packIn}
 	if stdin != nil {
 		r.sub = h.attachPipe(muxOf(h, f), h.renditionPipe(f, r, stdin), true)
 	}
@@ -961,7 +983,23 @@ func (h *Hub) watchRendition(f *feed, r *rendition, cmd *exec.Cmd, encoder strin
 	if f.renditions[r.spec.Key()] != r || r.cmd != cmd {
 		return
 	}
-	software := err != nil && !respawn && time.Since(started) <= h.fallbackWindow() && vaapiFamily(encoder) && !r.fallback
+	early := err != nil && !respawn && time.Since(started) <= h.fallbackWindow()
+	if early && len(r.extras) > 0 {
+		// A listed track that sends nothing, or something ffmpeg cannot open,
+		// stops the whole encode. The picture and main sound come first.
+		r.extras = nil
+		f.plain = true
+		_, r.args = h.pictureArgs(f, r.spec, nil)
+		if h.restartRenditionLocked(f, r, false) {
+			// The GPU still gets its own fallback if this start dies too.
+			if vaapiFamily(encoder) && !r.fallback {
+				r.restarted = false
+			}
+			slog.Info(fmt.Sprintf("rendition %s on %s restarted without its other sound tracks after %s", r.spec.Key(), f.channel.GuideNumber, time.Since(started).Round(time.Millisecond)))
+			return
+		}
+	}
+	software := early && vaapiFamily(encoder) && !r.fallback
 	if err != nil && !r.restarted && h.restartRenditionLocked(f, r, software) {
 		slog.Info(fmt.Sprintf("rendition %s on %s restarted after %s", r.spec.Key(), f.channel.GuideNumber, time.Since(started).Round(time.Millisecond)))
 		return
@@ -1008,7 +1046,9 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 		if m := muxOf(h, f); m != nil && m.input != "" {
 			input = m.input
 		}
-		args = renditionArgs(f.program, f.sourceFor(r.spec), r.spec, encoder, "", input)
+		src := f.sourceFor(r.spec)
+		src.Extras = r.extras
+		args = renditionArgs(f.program, src, r.spec, encoder, "", input)
 		r.fallback = true
 		encoder = OutputEncoder(encoder, r.spec.Codec)
 	}
@@ -1850,6 +1890,13 @@ func (m *mux) parseLocked(program int) {
 	if ok {
 		m.pictures[program] = facts
 	}
+}
+
+// pictureFull is set once the capture stops growing.
+func (m *mux) pictureFull() bool {
+	m.picMu.Lock()
+	defer m.picMu.Unlock()
+	return m.picDone
 }
 
 func (m *mux) pictureBytes() []byte {

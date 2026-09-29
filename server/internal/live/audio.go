@@ -1,8 +1,13 @@
 package live
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"log/slog"
+	"slices"
 	"strings"
+	"time"
 )
 
 // Audio tracks come from the PMT, not from the order ffmpeg would pick.
@@ -531,4 +536,157 @@ func (f *feed) sourceFor(want Rendition) Source {
 		}
 	}
 	return src
+}
+
+// extrasLocked lists the sound tracks an encode carries after its main one.
+// A 540 or 360 picture is a tile or data saver and carries one sound. A track
+// goes in only once an AC-3 frame measured it, on this tune or the last one:
+// a listed stream that never sends a packet can stop ffmpeg.
+func (h *Hub) extrasLocked(f *feed, want Rendition) []AudioTrack {
+	want = want.normalized()
+	if !h.Alternates || f.plain || want.Audio == "none" || want.Video == "540" || want.Video == "360" {
+		return nil
+	}
+	// A playlist or URL source has no PMT of ours to map by PID.
+	if m := muxOf(h, f); m == nil || m.input != "" {
+		return nil
+	}
+	tracks := f.tracks
+	if len(tracks) == 0 {
+		tracks = f.stored
+	}
+	if len(tracks) == 0 {
+		return nil
+	}
+	// Without a PID the encode maps the program's first audio stream.
+	main := f.sourceFor(want).AudioPID
+	if main == 0 {
+		main = tracks[0].PID
+	}
+	var out []AudioTrack
+	for _, t := range tracks {
+		if t.PID == main {
+			continue
+		}
+		if !t.Measured {
+			i := slices.IndexFunc(f.stored, func(s AudioTrack) bool {
+				return s.PID == t.PID && s.Codec == t.Codec && s.Measured
+			})
+			if i < 0 {
+				continue
+			}
+			t.Channels = f.stored[i].Channels
+			t.Measured = true
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+// trackWindow is how long a tune reads its audio before storing it.
+var trackWindow = 8 * time.Second
+
+// keptExtras is the part of r's extras that the PMT, once read, still lists
+// as the same track and not as the main. The first encode of a tune maps
+// stored PIDs, and a station can renumber them.
+func keptExtras(f *feed, r *rendition) []AudioTrack {
+	if len(f.tracks) == 0 || len(r.extras) == 0 {
+		return r.extras
+	}
+	main := f.sourceFor(r.spec).AudioPID
+	if main == 0 {
+		main = f.tracks[0].PID
+	}
+	var out []AudioTrack
+	for _, t := range r.extras {
+		same := slices.ContainsFunc(f.tracks, func(p AudioTrack) bool {
+			return p.PID == t.PID && p.Codec == t.Codec && p.Language == t.Language && p.Role == t.Role
+		})
+		if same && t.PID != main {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// savedTrack is AudioTrack as stored. The API hides the measured width.
+type savedTrack struct {
+	PID      int    `json:"pid"`
+	Language string `json:"language,omitempty"`
+	Role     string `json:"role"`
+	Codec    string `json:"codec"`
+	Label    string `json:"label"`
+	Channels int    `json:"channels,omitempty"`
+	Measured bool   `json:"measured,omitempty"`
+}
+
+func loadTracks(raw string) []AudioTrack {
+	var saved []savedTrack
+	if raw == "" || json.Unmarshal([]byte(raw), &saved) != nil {
+		return nil
+	}
+	out := make([]AudioTrack, len(saved))
+	for i, t := range saved {
+		out[i] = AudioTrack{PID: t.PID, Language: t.Language, Role: t.Role, Codec: t.Codec, Label: t.Label, Channels: t.Channels, Measured: t.Measured}
+	}
+	return out
+}
+
+func encodeTracks(tracks []AudioTrack) string {
+	saved := make([]savedTrack, len(tracks))
+	for i, t := range tracks {
+		saved[i] = savedTrack{PID: t.PID, Language: t.Language, Role: t.Role, Codec: t.Codec, Label: t.Label, Channels: t.Channels, Measured: t.Measured}
+	}
+	b, _ := json.Marshal(saved)
+	return string(b)
+}
+
+// allMeasured is true once every AC-3 track has had a frame read.
+func allMeasured(tracks []AudioTrack) bool {
+	for _, t := range tracks {
+		if t.Codec == "ac3" && !t.Measured {
+			return false
+		}
+	}
+	return len(tracks) > 0
+}
+
+// saveTracks stores the program's audio once every AC-3 track is measured,
+// or what was measured when the window ends, so the next tune's first encode
+// can carry the other tracks at once. A track that sent nothing is stored
+// unmeasured and stops vouching for itself. Running encodes are left alone.
+func (h *Hub) saveTracks(m *mux, f *feed, window time.Duration) {
+	deadline := time.Now().Add(window)
+	id := f.channel.ID
+	var tracks []AudioTrack
+	for time.Now().Before(deadline) {
+		h.mu.Lock()
+		gone := h.channels[id] != f
+		h.mu.Unlock()
+		if gone {
+			return
+		}
+		full := m.pictureFull()
+		tracks = AudioTracks(m.pictureBytes(), f.program)
+		if allMeasured(tracks) || full {
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	if len(tracks) == 0 {
+		return
+	}
+	raw := encodeTracks(tracks)
+	h.mu.Lock()
+	same := h.channels[id] == f && encodeTracks(f.stored) == raw
+	if h.channels[id] == f {
+		f.stored = tracks
+	}
+	h.mu.Unlock()
+	if same {
+		return
+	}
+	if err := h.Store.SetChannelAudioTracks(context.Background(), id, raw); err != nil {
+		slog.Warn(fmt.Sprintf("store audio tracks for %s: %v", f.channel.GuideNumber, err))
+	}
 }
