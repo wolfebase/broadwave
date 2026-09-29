@@ -10,6 +10,7 @@ import { rememberChannel } from "../../recent";
 import { applySound } from "./extras";
 import { followCaptions, watchTimeline } from "./liveCaptions";
 import { holdQuietStart } from "./quietStart";
+import { soundFor, type Sound } from "./sounds";
 import { awayBeforeSeekMs, resumePlan } from "./resume";
 import {
   aTunerAnswers,
@@ -87,6 +88,9 @@ export function useLiveStream(
   const hlsRef = useRef<Hls | null>(null);
   const audibleRef = useRef(audible);
   const [session, setSession] = useState<WatchSession | null>(null);
+  // The master's sounds when this watch switches them in place, else null.
+  const [sounds, setSounds] = useState<Sound[] | null>(null);
+  const inPlace = useRef(false);
   const [error, setError] = useState("");
   const [recovery, setRecovery] = useState<Recovery>("");
   const [pictureStopAt, setPictureStopAt] = useState(0);
@@ -146,6 +150,7 @@ export function useLiveStream(
     let hls: Hls | null = null;
     const id = channelId;
     watching.current = false;
+    inPlace.current = false;
     const kept = pageKept.current;
     // Strict mode runs this effect twice before microtasks. The flag stays
     // through both, then a later watch waits for the sound tile again.
@@ -310,11 +315,13 @@ export function useLiveStream(
           setError("");
           setRecovery("");
         }
+        inPlace.current = !!primedLevel;
+        setSounds(primedLevel?.sounds ?? null);
         setSession(next);
         playlist = next.playlist;
         if (Hls.isSupported()) {
           const onRoom = syncing.current && !holdSync.current ? roomRef.current : null;
-          hls = new Hls({ ...liveHlsConfig(profile), ...(primedLevel ? masterConfig(primedLevel) : {}), autoStartLoad: !onRoom });
+          hls = new Hls({ ...liveHlsConfig(profile), ...(primedLevel ? masterConfig(primedLevel, soundFor(primedLevel.sounds, track)) : {}), autoStartLoad: !onRoom });
           hlsRef.current = hls;
           (video as HTMLVideoElement & { hls?: Hls }).hls = hls;
           if (onRoom) startOnRoom(hls, video, onRoom, 800, primedLevel?.frags);
@@ -530,7 +537,23 @@ export function useLiveStream(
     // and rebuilding the watch to apply it freezes the picture. A watch that
     // is already playing keeps going; the next watch uses the profile it starts with.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, quality, audio, track, even, picture, alternates, attempt]);
+  }, [channelId, quality, audio, even, picture, alternates, attempt]);
+
+  // A master switches sound in place, keeping the picture and the buffered
+  // sound. Any other watch starts again with the new track.
+  const lastTrack = useRef(track);
+  useEffect(() => {
+    if (lastTrack.current === track) return;
+    lastTrack.current = track;
+    if (!inPlace.current) {
+      setAttempt((n) => n + 1);
+      return;
+    }
+    const pick = sounds ? soundFor(sounds, track) : undefined;
+    // This keeps the buffered sound playing until the new track is in, and
+    // holds the choice when hls.js has not listed the tracks yet.
+    if (pick) hlsRef.current?.setAudioOption({ name: pick.name, lang: pick.lang });
+  }, [track, sounds]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -684,6 +707,7 @@ export function useLiveStream(
 
   return {
     session: session?.channelId === channelId ? session : null,
+    sounds: session?.channelId === channelId ? sounds : null,
     // Captions need hls.js; a native player gets none yet.
     canCaption: !!mainPlaylist && Hls.isSupported(),
     error,

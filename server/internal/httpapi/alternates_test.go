@@ -61,19 +61,25 @@ func TestAnAlternatesWatchGetsTheMaster(t *testing.T) {
 	h := (&Server{Store: st, HDHR: client, Hub: hub}).Handler()
 	id := guideID(t, st, "4.1")
 
-	watch := func(alternates bool) (string, string) {
+	watch := func(alternates bool, track string) (string, string) {
 		t.Helper()
 		caps := fmt.Sprintf(`{"platform":"web","video":["h264"],"audio":["aac"],"alternates":%t}`, alternates)
-		res := postJSON(t, h, "/api/v1/watch", fmt.Sprintf(`{"channelId":%d,"caps":%s}`, id, caps))
+		res := postJSON(t, h, "/api/v1/watch", fmt.Sprintf(`{"channelId":%d,"caps":%s,"prefs":{"track":%q}}`, id, caps, track))
 		if res.Code != http.StatusOK {
 			t.Fatalf("watch %d %s", res.Code, res.Body.String())
 		}
 		var s struct {
 			MainPlaylist string `json:"mainPlaylist"`
 			Rendition    string `json:"rendition"`
+			Stream       struct {
+				Reason string `json:"reason"`
+			} `json:"stream"`
 		}
 		if err := json.Unmarshal(res.Body.Bytes(), &s); err != nil {
 			t.Fatal(err)
+		}
+		if strings.Contains(s.Stream.Reason, "already running") && track != "" {
+			t.Fatalf("a %s watch says %q", track, s.Stream.Reason)
 		}
 		return s.MainPlaylist, s.Rendition
 	}
@@ -87,7 +93,7 @@ func TestAnAlternatesWatchGetsTheMaster(t *testing.T) {
 		return rec.Body.String()
 	}
 
-	master, key := watch(true)
+	master, key := watch(true, "")
 	want := fmt.Sprintf("/media/live/%d/%s/master.m3u8", id, key)
 	if master != want {
 		t.Fatalf("mainPlaylist %q, want %q", master, want)
@@ -111,8 +117,27 @@ func TestAnAlternatesWatchGetsTheMaster(t *testing.T) {
 	}
 
 	// The same rendition, asked for by a player that reloads to switch.
-	main, again := watch(false)
+	main, again := watch(false, "")
 	if again != key || strings.HasSuffix(main, "master.m3u8") {
 		t.Fatalf("legacy watch got %q on %s", main, again)
+	}
+
+	// Spanish is in that encode, so a player that switches in place joins it.
+	// A player that reloads to switch still gets an encode with Spanish first.
+	if spanish, on := watch(true, "language"); on != key || spanish != master {
+		t.Fatalf("second language with alternates got %q on %s, want %s", spanish, on, key)
+	}
+	if _, on := watch(false, "language"); on != key+".lang" {
+		t.Fatalf("second language without alternates got %s, want %s.lang", on, key)
+	}
+	// No described track here, so a described encode would play the main sound.
+	if _, on := watch(true, "described"); on != key {
+		t.Fatalf("described with alternates got %s, want %s", on, key)
+	}
+	// An encode that plays another track first names it as its default sound,
+	// so a player that switches in place gets its one-sound playlist there.
+	res := postJSON(t, h, "/api/v1/watch", fmt.Sprintf(`{"channelId":%d,"rendition":%q,"caps":{"platform":"web","video":["h264"],"audio":["aac"],"alternates":true}}`, id, key+".lang"))
+	if res.Code != http.StatusOK || strings.Contains(res.Body.String(), "master.m3u8") {
+		t.Fatalf("a .lang watch with alternates: %d %s", res.Code, res.Body.String())
 	}
 }

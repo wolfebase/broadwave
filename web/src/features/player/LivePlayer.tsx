@@ -15,6 +15,7 @@ import { Progress } from "../../ui/primitives";
 import { isLayout, multiviewPath } from "../multiview/storage";
 import { useScoreMap } from "../sports/scores";
 import { listingNote } from "./outage";
+import { soundFor } from "./sounds";
 import { Stage } from "./Stage";
 import { useLiveStream } from "./useLiveStream";
 
@@ -103,7 +104,8 @@ export function LivePlayer({
   }, [channel.id, channels]);
 
   const airing = airingAt(index, channel.id, now);
-  const tuning = useFirstFrame(videoRef, `${channel.id}:${opts.quality}:${opts.audio}:${opts.track}:${opts.even}:${picture}`);
+  // A master switches sound without a new picture.
+  const tuning = useFirstFrame(videoRef, `${channel.id}:${opts.quality}:${opts.audio}:${stream.sounds ? "" : opts.track}:${opts.even}:${picture}`);
   const scores = useScoreMap();
   const active = recordings.find((r) => r.status === "recording" && r.channelId === channel.id);
 
@@ -451,7 +453,17 @@ export function LivePlayer({
         <div className="options-grid">
           <OptionRow label="Quality" value={opts.quality} options={Object.keys(qualityLabels) as Options["quality"][]} labels={qualityLabels} onChange={(quality) => setOpts((o) => ({ ...o, quality }))} />
           <OptionRow label="Sound" value={opts.audio} options={["auto", "surround", "stereo"]} labels={{ auto: "Auto", surround: "Surround", stereo: "Stereo" }} onChange={(audio) => setOpts((o) => ({ ...o, audio }))} />
-          <OptionRow label="Audio" value={opts.track} options={["main", "language", "described"]} labels={{ main: "Main", language: "Second language", described: "Described video" }} onChange={(track) => setOpts((o) => ({ ...o, track }))} />
+          {stream.sounds ? (
+            <OptionRow
+              label="Audio"
+              value={soundFor(stream.sounds, opts.track)?.role ?? "main"}
+              options={stream.sounds.map((s) => s.role)}
+              labels={Object.fromEntries(stream.sounds.map((s) => [s.role, s.name]))}
+              onChange={(track) => setOpts((o) => ({ ...o, track }))}
+            />
+          ) : (
+            <OptionRow label="Audio" value={opts.track} options={["main", "language", "described"]} labels={{ main: "Main", language: "Second language", described: "Described video" }} onChange={(track) => setOpts((o) => ({ ...o, track }))} />
+          )}
           {stream.canCaption ? (
             <OptionRow label="Captions" value={opts.captions ? "on" : "off"} options={["off", "on"]} labels={{ off: "Off", on: "On" }} onChange={(v) => setOpts((o) => ({ ...o, captions: v === "on" }))} />
           ) : null}

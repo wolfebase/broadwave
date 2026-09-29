@@ -8,12 +8,13 @@ import Hls, {
   type LoaderConfiguration,
   type LoaderContext,
 } from "hls.js";
+import { soundsOf, type Sound } from "../features/player/sounds";
 import type { Frag } from "./roomStart";
 
 type Body = { data: string; start: number; first: number; end: number };
 
 /** A master and its picture playlist, fetched once, for a start on the room's frame. */
-export type Primed = { url: string; bodies: Map<string, Body>; frags: Frag[] };
+export type Primed = { url: string; bodies: Map<string, Body>; frags: Frag[]; sounds: Sound[] };
 
 const key = (url: string) => new URL(url, window.location.href).href;
 
@@ -37,7 +38,8 @@ export async function primeLevel(master: string, signal?: AbortSignal): Promise<
   const masterUrl = key(master);
   const top = await load(masterUrl, signal);
   if (M3U8Parser.isMediaPlaylist(top.data)) return null;
-  const { levels } = M3U8Parser.parseMasterPlaylist(top.data, masterUrl);
+  const parsed = M3U8Parser.parseMasterPlaylist(top.data, masterUrl);
+  const { levels } = parsed;
   const urls = new Set(levels.map((level) => level.url));
   if (urls.size !== 1) return null;
   const [levelUrl] = urls;
@@ -45,6 +47,7 @@ export async function primeLevel(master: string, signal?: AbortSignal): Promise<
   const details = M3U8Parser.parseLevelPlaylist(level.data, levelUrl, 0, PlaylistLevelType.MAIN, 0, null);
   if (!details.live) return null;
   const frags = details.fragments.map((f) => ({ start: f.start, duration: f.duration, programDateTime: f.programDateTime }));
+  const sounds = soundsOf(M3U8Parser.parseMasterPlaylistMedia(top.data, masterUrl, parsed).AUDIO ?? []);
   return {
     url: masterUrl,
     bodies: new Map([
@@ -52,6 +55,7 @@ export async function primeLevel(master: string, signal?: AbortSignal): Promise<
       [key(levelUrl), level],
     ]),
     frags,
+    sounds,
   };
 }
 
@@ -112,9 +116,15 @@ export function primedLoader(primed: Primed): HlsConfig["pLoader"] {
 }
 
 /**
- * hls.js settings for a primed master. Captions come from liveCaptions, so
- * hls.js does not load the master's subtitle group as a second track.
+ * hls.js settings for a primed master, starting on the given sound. Captions
+ * come from liveCaptions, so hls.js does not load the master's subtitle group
+ * as a second track.
  */
-export function masterConfig(primed: Primed): Partial<HlsConfig> {
-  return { pLoader: primedLoader(primed), subtitleTrackController: undefined, subtitleStreamController: undefined };
+export function masterConfig(primed: Primed, sound?: Sound): Partial<HlsConfig> {
+  return {
+    pLoader: primedLoader(primed),
+    subtitleTrackController: undefined,
+    subtitleStreamController: undefined,
+    ...(sound ? { audioPreference: { name: sound.name, lang: sound.lang } } : {}),
+  };
 }

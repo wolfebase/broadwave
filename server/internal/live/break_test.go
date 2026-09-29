@@ -59,7 +59,7 @@ func TestCopiedTrackPlaysOnAcrossABackwardsBreak(t *testing.T) {
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
 	defer h.Shutdown()
 	id := idOf(t, st, "4.1")
-	session, err := h.Watch(ctx, id, Rendition{Video: "copy", Audio: "copy"})
+	session, err := h.Watch(ctx, id, Rendition{Video: "copy", Audio: "copy"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
