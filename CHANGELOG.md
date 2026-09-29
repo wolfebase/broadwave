@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A web page can no longer reach the server by pointing its own name at your server's address, and a page on another site can no longer join a room's live updates. A browser behind an HTTPS reverse proxy needs nothing; set `BROADWAVE_HOSTS` for any other public name you reach the server by.
+
 ## 0.12.0 — 2026-09-29
 
 Live captions, every sound track in one stream, Watch together, a choice of live delay, and the last hour of each tuned channel kept for Start over and recordings.

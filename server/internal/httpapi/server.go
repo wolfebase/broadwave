@@ -75,6 +75,9 @@ type Server struct {
 	// BackupDir is the catalog copy folder under the config directory.
 	// Empty means the backup list is empty.
 	BackupDir string
+	// Hosts are public names the server answers to on its own port, such as a
+	// reverse proxy's. An entry starting with a dot covers its subdomains.
+	Hosts []string
 
 	sportsMu  sync.Mutex
 	sportsKey string
@@ -186,12 +189,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /media/art/{kind}/{id}", s.art)
 	mux.HandleFunc("GET /", s.ui)
 	if s.Dev {
-		return s.withDevCORS(mux)
+		return s.withHostCheck(s.withDevCORS(mux))
 	}
 	// The LAN API has no sign-in, so a page on another site must not be able
 	// to post to it: a restore from any tab would replace the catalog. The
 	// apps and curl send no Origin and pass.
-	return http.NewCrossOriginProtection().Handler(mux)
+	return s.withHostCheck(http.NewCrossOriginProtection().Handler(mux))
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
