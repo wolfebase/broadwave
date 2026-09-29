@@ -14,8 +14,9 @@ async function readPlay(page: Page): Promise<Play> {
   await expect
     .poll(async () => {
       last = await page.locator("video.stage-video").evaluate(async (video) => {
-        const el = video as HTMLVideoElement & { hls?: { url?: string } };
-        const url = el.hls?.url || "";
+        // A master names the picture playlist as its level; that one has the dates.
+        const el = video as HTMLVideoElement & { hls?: { url?: string; levels?: { uri?: string }[]; currentLevel?: number } };
+        const url = el.hls?.levels?.[Math.max(0, el.hls.currentLevel ?? 0)]?.uri || el.hls?.url || "";
         let body = "";
         if (url) {
           const res = await fetch(url);
@@ -144,6 +145,13 @@ test("a screen joining a playing room starts on its frame", async ({ page }) => 
       last = v.currentTime;
     }, 50);
   });
+  // hls.js takes the master and its first picture playlist from the ones the
+  // start was computed on, so each is asked for once without a blocking reload.
+  const asked: string[] = [];
+  other.on("request", (req) => {
+    const url = new URL(req.url());
+    if (/\/(master|video)\.m3u8$/.test(url.pathname) && !url.searchParams.has("_HLS_msn")) asked.push(url.pathname.split("/").pop()!);
+  });
   await other.goto(page.url());
   const video = other.locator("video.stage-video");
   await expect(video).toHaveAttribute("data-sync-start", "room", { timeout: 30_000 });
@@ -161,7 +169,19 @@ test("a screen joining a playing room starts on its frame", async ({ page }) => 
     const w = window as unknown as { __holds: number[]; __still: number };
     return [...w.__holds, w.__still ? performance.now() - w.__still : 0].map(Math.round);
   });
+  const start = await video.evaluate((v: HTMLVideoElement & { hls?: { url?: string; audioTracks?: unknown[] } }) => ({
+    ttff: Number(v.dataset.ttff),
+    manifest: v.hls?.url ?? "",
+    sounds: v.hls?.audioTracks?.length ?? 0,
+  }));
+  console.log(`join start ${JSON.stringify({ ...start, drift, holds, asked })}`);
   expect(Math.abs(drift), `drift ${drift} ms, holds ${holds.join(", ")} ms`).toBeLessThanOrEqual(100);
   expect(Math.max(0, ...holds), `holds ${holds.join(", ")} ms`).toBeLessThan(1_000);
+  if (process.env.E2E_TRACKS === "2") {
+    // Two sound tracks: the screen plays the master, with both as alternates.
+    expect(start.manifest).toMatch(/\/master\.m3u8/);
+    expect(start.sounds).toBe(2);
+    expect(asked.sort()).toEqual(["master.m3u8", "video.m3u8"]);
+  }
   await other.close();
 });

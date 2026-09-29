@@ -68,6 +68,7 @@ export function LivePlayer({
     audible: true,
     remember: channel,
     captions: opts.captions,
+    alternates: true,
   });
   const session = stream.session;
   const error = stream.error;

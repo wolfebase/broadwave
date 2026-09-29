@@ -1,0 +1,120 @@
+import Hls, {
+  LoadStats,
+  M3U8Parser,
+  PlaylistLevelType,
+  type HlsConfig,
+  type Loader,
+  type LoaderCallbacks,
+  type LoaderConfiguration,
+  type LoaderContext,
+} from "hls.js";
+import type { Frag } from "./roomStart";
+
+type Body = { data: string; start: number; first: number; end: number };
+
+/** A master and its picture playlist, fetched once, for a start on the room's frame. */
+export type Primed = { url: string; bodies: Map<string, Body>; frags: Frag[] };
+
+const key = (url: string) => new URL(url, window.location.href).href;
+
+async function load(url: string, signal?: AbortSignal): Promise<Body> {
+  const start = performance.now();
+  const res = await fetch(url, { signal, cache: "no-store" });
+  const first = performance.now();
+  if (!res.ok) throw new Error(`${res.status} ${url}`);
+  const data = await res.text();
+  return { data, start, first, end: performance.now() };
+}
+
+/**
+ * hls.js loads no level playlist from a master until startLoad, and a start on
+ * the room's frame needs that playlist's fragments before it. This fetches the
+ * master and its one picture playlist and parses the fragments with hls.js's own
+ * parser. primedLoader then answers hls.js's first requests with the same
+ * bodies, so the fragment starts it plays by are the ones the start was computed on.
+ */
+export async function primeLevel(master: string, signal?: AbortSignal): Promise<Primed | null> {
+  const masterUrl = key(master);
+  const top = await load(masterUrl, signal);
+  if (M3U8Parser.isMediaPlaylist(top.data)) return null;
+  const { levels } = M3U8Parser.parseMasterPlaylist(top.data, masterUrl);
+  const urls = new Set(levels.map((level) => level.url));
+  if (urls.size !== 1) return null;
+  const [levelUrl] = urls;
+  const level = await load(levelUrl, signal);
+  const details = M3U8Parser.parseLevelPlaylist(level.data, levelUrl, 0, PlaylistLevelType.MAIN, 0, null);
+  if (!details.live) return null;
+  const frags = details.fragments.map((f) => ({ start: f.start, duration: f.duration, programDateTime: f.programDateTime }));
+  return {
+    url: masterUrl,
+    bodies: new Map([
+      [masterUrl, top],
+      [key(levelUrl), level],
+    ]),
+    frags,
+  };
+}
+
+/** A playlist loader that answers each primed URL once from its body and fetches the rest. */
+export function primedLoader(primed: Primed): HlsConfig["pLoader"] {
+  const Base = Hls.DefaultConfig.loader;
+  class PrimedLoader implements Loader<LoaderContext> {
+    private inner: Loader<LoaderContext> | null = null;
+    private own = new LoadStats();
+    private owned: LoaderContext | null = null;
+    private timer = 0;
+
+    constructor(private config: HlsConfig) {}
+
+    get stats() {
+      return this.inner?.stats ?? this.own;
+    }
+
+    get context() {
+      return this.inner?.context ?? this.owned;
+    }
+
+    load(context: LoaderContext, config: LoaderConfiguration, callbacks: LoaderCallbacks<LoaderContext>) {
+      const body = primed.bodies.get(key(context.url));
+      if (!body) {
+        this.inner = new Base(this.config);
+        this.inner.load(context, config, callbacks);
+        return;
+      }
+      primed.bodies.delete(key(context.url));
+      this.owned = context;
+      this.own.loading = { start: body.start, first: body.first, end: body.end };
+      this.own.loaded = this.own.total = body.data.length;
+      this.timer = window.setTimeout(() => callbacks.onSuccess({ url: context.url, data: body.data }, this.own, context, null));
+    }
+
+    abort() {
+      window.clearTimeout(this.timer);
+      this.own.aborted = true;
+      this.inner?.abort();
+    }
+
+    destroy() {
+      window.clearTimeout(this.timer);
+      this.inner?.destroy();
+      this.inner = null;
+    }
+
+    getCacheAge() {
+      return this.inner?.getCacheAge?.() ?? null;
+    }
+
+    getResponseHeader(name: string) {
+      return this.inner?.getResponseHeader?.(name) ?? null;
+    }
+  }
+  return PrimedLoader as unknown as HlsConfig["pLoader"];
+}
+
+/**
+ * hls.js settings for a primed master. Captions come from liveCaptions, so
+ * hls.js does not load the master's subtitle group as a second track.
+ */
+export function masterConfig(primed: Primed): Partial<HlsConfig> {
+  return { pLoader: primedLoader(primed), subtitleTrackController: undefined, subtitleStreamController: undefined };
+}

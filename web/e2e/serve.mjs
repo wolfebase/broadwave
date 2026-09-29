@@ -57,6 +57,9 @@ process.on("SIGINT", () => {
 const avsync = process.env.E2E_AVSYNC === "1";
 const brk = process.env.E2E_BREAK === "1";
 const playlist = process.env.E2E_PLAYLIST === "1";
+// Two sound tracks (English, Spanish), so a watch that asks for alternates gets a
+// master. The realtime pattern has one sound, so the sample streams as the source.
+const tracks = process.env.E2E_TRACKS === "2";
 // Four channels on two tuners, and the software budget of four pictures.
 const quad = process.env.E2E_QUAD === "1";
 // E2E_BONJOUR=1 advertises the server under E2E_NAME and listens on every
@@ -323,8 +326,12 @@ const pattern = avsync
         "lavfi",
         "-i",
         "sine=frequency=500",
+        ...(tracks ? ["-f", "lavfi", "-i", "sine=frequency=800"] : []),
         "-t",
-        "4",
+        tracks ? "30" : "4",
+        ...(tracks
+          ? ["-map", "0:v", "-map", "1:a", "-map", "2:a", "-metadata:s:a:0", "language=eng", "-metadata:s:a:1", "language=spa"]
+          : []),
       ];
 if (brk) {
   await buildBreakLoop(sample);
@@ -482,7 +489,7 @@ if (playlist) {
   let fakeOut = "";
   // E2E_SOURCE streams a broadcast recording on every channel, for a real encode load.
   const source = process.env.E2E_SOURCE;
-  const fakeArgs = brk ? ["-raw", "-ts", sample] : avsync ? ["-ts", sample, "-source", sample] : source ? ["-ts", sample, "-source", path.resolve(source)] : ["-realtime", "-ts", sample];
+  const fakeArgs = brk ? ["-raw", "-ts", sample] : avsync ? ["-ts", sample, "-source", sample] : source ? ["-ts", sample, "-source", path.resolve(source)] : tracks ? ["-ts", sample, "-source", sample] : ["-realtime", "-ts", sample];
   if (quad) fakeArgs.push("-quad");
   start(path.join(run, "fakehdhr"), fakeArgs, { env: { ...process.env, FAKEHDHR_ADMIN: `127.0.0.1:${port + 10}` } }, (chunk) => {
     fakeOut += chunk.toString();

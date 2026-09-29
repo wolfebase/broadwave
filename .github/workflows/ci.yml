@@ -98,6 +98,15 @@ jobs:
           E2E_SNAPSHOTS: skip
           E2E_SPEED: "1.8"
           E2E_PORT: "18751"
+      # A channel with two sound tracks: the player loads the master and still
+      # starts on the room's frame.
+      - run: npx playwright test --config e2e/playwright.config.ts 01-setup 03-player-sync
+        working-directory: web
+        env:
+          E2E_IMAGE: broadwave:ci
+          E2E_SNAPSHOTS: skip
+          E2E_TRACKS: "2"
+          E2E_PORT: "18755"
       - run: npx playwright test --config e2e/playwright.config.ts 01-setup 04-multiview -g "setup wizard|quad plays again with no click"
         continue-on-error: true
         working-directory: web

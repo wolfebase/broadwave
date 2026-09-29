@@ -330,9 +330,10 @@ export class SyncEngine {
  * a room that plays well behind the edge otherwise held its first frame for
  * the whole gap. hls must be created with autoStartLoad off; this starts it
  * once, at the edge when the room's state or the playlist is not in within
- * waitMs, or the playlist does not hold the room's frame.
+ * waitMs, or the playlist does not hold the room's frame. A master loads no
+ * level before startLoad, so its caller passes the primed level's fragments.
  */
-export function startOnRoom(hls: Hls, video: HTMLVideoElement, room: string, waitMs = 800) {
+export function startOnRoom(hls: Hls, video: HTMLVideoElement, room: string, waitMs = 800, primed?: Frag[]) {
   const bus = events();
   let st = bus.roomState(room) as RoomState | undefined;
   let frags: Frag[] | null = null;
@@ -356,11 +357,17 @@ export function startOnRoom(hls: Hls, video: HTMLVideoElement, room: string, wai
     hls.startLoad(pos ?? -1);
   };
   hls.once(Hls.Events.MANIFEST_PARSED, () => {
-    if (!started) timer = window.setTimeout(start, waitMs);
+    if (started) return;
+    if (primed) {
+      frags = primed;
+      if (st) return start();
+    }
+    timer = window.setTimeout(start, waitMs);
   });
-  hls.once(Hls.Events.LEVEL_UPDATED, (_e, data) => {
-    frags = data.details.live ? data.details.fragments : [];
-    if (st || !data.details.live) start();
-  });
+  if (!primed)
+    hls.once(Hls.Events.LEVEL_UPDATED, (_e, data) => {
+      frags = data.details.live ? data.details.fragments : [];
+      if (st || !data.details.live) start();
+    });
   hls.once(Hls.Events.DESTROYING, done);
 }
