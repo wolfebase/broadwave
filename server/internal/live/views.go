@@ -111,7 +111,7 @@ func (h *Hub) ViewMedia(channelID int64, key, name string) (body []byte, ok bool
 	if dir == "" {
 		return nil, true, os.ErrNotExist
 	}
-	init, err := os.ReadFile(filepath.Join(dir, "init.mp4"))
+	init, err := h.cuts.file(filepath.Join(dir, "init.mp4"), "raw", func(b []byte) ([]byte, error) { return b, nil })
 	if err != nil {
 		return nil, true, err
 	}
@@ -119,28 +119,12 @@ func (h *Hub) ViewMedia(channelID int64, key, name string) (body []byte, ok bool
 	if !ok {
 		return nil, true, os.ErrNotExist
 	}
+	cut := func(raw []byte) ([]byte, error) { return keepTracksFrag(raw, ids) }
 	if file == "init.mp4" {
-		body, err := keepTracks(init, ids)
-		return body, true, err
+		cut = func(raw []byte) ([]byte, error) { return keepTracks(raw, ids) }
 	}
-	path := filepath.Join(dir, file)
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, true, err
-	}
-	k := cutKey{path: path, tag: tag, size: info.Size(), mod: info.ModTime()}
-	if body, ok := h.cuts.get(k); ok {
-		return body, true, nil
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, true, err
-	}
-	if body, err = keepTracksFrag(raw, ids); err != nil {
-		return nil, true, err
-	}
-	h.cuts.put(k, body)
-	return body, true, nil
+	body, err = h.cuts.file(filepath.Join(dir, file), tag, cut)
+	return body, true, err
 }
 
 // cutBudget bounds the bytes cutCache holds: a few segments of every view
@@ -155,27 +139,62 @@ type cutKey struct {
 
 // cutCache is a small least-recently-used store of cut segments and parts.
 // A restart rewrites a file under the same name, so size and time are in the key.
+// Screens that a blocking reload releases together ask for the same cut at
+// once; one of them reads and cuts, the others wait for it.
 type cutCache struct {
-	mu    sync.Mutex
-	order []cutKey
-	cuts  map[cutKey][]byte
-	bytes int
+	mu      sync.Mutex
+	order   []cutKey
+	cuts    map[cutKey][]byte
+	pending map[cutKey]chan struct{}
+	bytes   int
+	misses  int
 }
 
-func (c *cutCache) get(k cutKey) ([]byte, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	body, ok := c.cuts[k]
-	if ok {
-		i := slices.Index(c.order, k)
-		c.order = append(slices.Delete(c.order, i, i+1), k)
+// file is the cut of path for tag, made at most once while it is cached.
+func (c *cutCache) file(path, tag string, cut func([]byte) ([]byte, error)) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
 	}
-	return body, ok
-}
-
-func (c *cutCache) put(k cutKey, body []byte) {
+	k := cutKey{path: path, tag: tag, size: info.Size(), mod: info.ModTime()}
+	for {
+		c.mu.Lock()
+		if body, ok := c.cuts[k]; ok {
+			i := slices.Index(c.order, k)
+			c.order = append(slices.Delete(c.order, i, i+1), k)
+			c.mu.Unlock()
+			return body, nil
+		}
+		wait, busy := c.pending[k]
+		if !busy {
+			if c.pending == nil {
+				c.pending = map[cutKey]chan struct{}{}
+			}
+			c.pending[k] = make(chan struct{})
+			c.misses++
+			c.mu.Unlock()
+			break
+		}
+		c.mu.Unlock()
+		<-wait
+	}
+	raw, err := os.ReadFile(path)
+	var body []byte
+	if err == nil {
+		body, err = cut(raw)
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	close(c.pending[k])
+	delete(c.pending, k)
+	if err != nil {
+		return nil, err
+	}
+	c.putLocked(k, body)
+	return body, nil
+}
+
+func (c *cutCache) putLocked(k cutKey, body []byte) {
 	if c.cuts == nil {
 		c.cuts = map[cutKey][]byte{}
 	}
