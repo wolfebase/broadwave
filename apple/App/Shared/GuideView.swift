@@ -13,7 +13,18 @@ struct GuideView: View {
     @State private var scores: [String: String] = [:]
     #if os(tvOS)
         @Environment(\.tvSelectedTab) private var tvSelectedTab
-        @FocusState private var nowFocused: Bool
+        @FocusState private var headerFocus: GuideHeader?
+        @FocusState private var channelFocus: Int64?
+
+        /// The day row and the filters. Arrow keys move through this list; Down from a day
+        /// lands on the first channel. Geometric search cannot, because the collapsed sidebar
+        /// still occupies the left edge between Now and that channel.
+        private enum GuideHeader: Hashable {
+            case now
+            case tonight
+            case later(TimeInterval)
+            case chip(String)
+        }
     #endif
 
     struct Selection: Identifiable {
@@ -40,7 +51,7 @@ struct GuideView: View {
             filters
             dayJump
             #if os(tvOS)
-                GuideGrid(channels: rows, highlight: filter, jump: jump, scores: scores) { selected = Selection(channel: $0, airing: $1) }
+                GuideGrid(channels: rows, highlight: filter, jump: jump, scores: scores, channelFocus: $channelFocus) { selected = Selection(channel: $0, airing: $1) }
             #else
                 if sizeClass == .compact, verticalSize != .compact {
                     onNowList
@@ -87,7 +98,7 @@ struct GuideView: View {
         .sheet(item: $selected) { sel in
             ProgramSheet(channel: sel.channel, airing: sel.airing)
         }
-        .defaultFocus($nowFocused, true)
+        .defaultFocus($headerFocus, .now)
         .onAppear { claimGuideFocus() }
         .onChange(of: tvSelectedTab) { _, _ in claimGuideFocus() }
         .task(id: tvSelectedTab) {
@@ -103,28 +114,38 @@ struct GuideView: View {
         /// The sidebar stays open over the grid until something in the page has focus, and it covers the channel column.
         private func claimGuideFocus() {
             guard tvSelectedTab == .guide else { return }
-            nowFocused = true
+            headerFocus = .now
         }
     #endif
 
     private var dayJump: some View {
-        ScrollView(.horizontal) {
+        guideRow {
             HStack(spacing: 8) {
                 Button("Now") { jump = store.now.addingTimeInterval(-15 * 60) }
                     .buttonStyle(.glass)
                     .accessibilityIdentifier("guide-now")
                 #if os(tvOS)
-                    .focused($nowFocused)
+                    .focused($headerFocus, equals: .now)
+                    .onMoveCommand { moveHeader($0, from: .now) }
                 #endif
-                Button("Tonight") { jump = primeTime(on: store.now, after: store.now) }.buttonStyle(.glass)
+                Button("Tonight") { jump = primeTime(on: store.now, after: store.now) }
+                    .buttonStyle(.glass)
+                #if os(tvOS)
+                    .focused($headerFocus, equals: .tonight)
+                    .onMoveCommand { moveHeader($0, from: .tonight) }
+                #endif
                 ForEach(comingDays, id: \.timeIntervalSince1970) { day in
-                    Button(dayLabel(day)) { jump = primeTime(on: day, after: day) }.buttonStyle(.glass)
+                    Button(dayLabel(day)) { jump = primeTime(on: day, after: day) }
+                        .buttonStyle(.glass)
+                    #if os(tvOS)
+                        .focused($headerFocus, equals: .later(day.timeIntervalSince1970))
+                        .onMoveCommand { moveHeader($0, from: .later(day.timeIntervalSince1970)) }
+                    #endif
                 }
             }
             .padding(.horizontal)
             .padding(.bottom, 8)
         }
-        .scrollIndicators(.hidden)
     }
 
     private var comingDays: [Date] {
@@ -153,21 +174,33 @@ struct GuideView: View {
     }
 
     private var filters: some View {
-        ScrollView(.horizontal) {
+        guideRow {
             HStack(spacing: 8) {
-                chip("All", on: filter == nil && !favoritesOnly) { filter = nil; favoritesOnly = false }
-                chip("Favorites", on: favoritesOnly) { favoritesOnly.toggle() }
+                chip("All", spot: "all", on: filter == nil && !favoritesOnly) { filter = nil; favoritesOnly = false }
+                chip("Favorites", spot: "favorites", on: favoritesOnly) { favoritesOnly.toggle() }
                 ForEach([BroadwaveKit.Category.sports, .news, .movies, .kids], id: \.self) { c in
-                    chip(c.label, color: c.color, on: filter == c) { filter = filter == c ? nil : c }
+                    chip(c.label, spot: c.rawValue, color: c.color, on: filter == c) { filter = filter == c ? nil : c }
                 }
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
         }
-        .scrollIndicators(.hidden)
     }
 
-    private func chip(_ title: String, color: Color? = nil, on: Bool, action: @escaping () -> Void) -> some View {
+    /// A horizontal scroller on Apple TV keeps Up and Down inside the row. A short row
+    /// centered on the screen sits beside the channel column, so Down from Now has nowhere to land.
+    @ViewBuilder
+    private func guideRow(@ViewBuilder content: () -> some View) -> some View {
+        #if os(tvOS)
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        #else
+            ScrollView(.horizontal) { content() }
+                .scrollIndicators(.hidden)
+        #endif
+    }
+
+    private func chip(_ title: String, spot: String, color: Color? = nil, on: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 if let color {
@@ -181,7 +214,60 @@ struct GuideView: View {
         .tint(on ? .white : nil)
         .foregroundStyle(on ? .primary : .secondary)
         .accessibilityAddTraits(on ? .isSelected : [])
+        .accessibilityIdentifier("guide-filter-\(spot)")
+        #if os(tvOS)
+            .focused($headerFocus, equals: .chip(spot))
+            .onMoveCommand { moveHeader($0, from: .chip(spot)) }
+        #endif
     }
+
+    #if os(tvOS)
+        private var headerOrder: [GuideHeader] {
+            var spots: [GuideHeader] = [.chip("all"), .chip("favorites")]
+            spots += [BroadwaveKit.Category.sports, .news, .movies, .kids].map { .chip($0.rawValue) }
+            spots += [.now, .tonight]
+            spots += comingDays.map { .later($0.timeIntervalSince1970) }
+            return spots
+        }
+
+        /// Left and right stay on the same row. Down from a filter returns to Now.
+        /// Down from a day opens the first channel, which geometric search cannot reach.
+        private func moveHeader(_ direction: MoveCommandDirection, from spot: GuideHeader) {
+            let spots = headerOrder
+            guard let index = spots.firstIndex(of: spot) else { return }
+            switch direction {
+            case .down:
+                if case .chip = spot {
+                    headerFocus = .now
+                } else if let id = rows.first?.id {
+                    channelFocus = id
+                }
+            case .up:
+                if case .chip = spot {
+                    return
+                }
+                headerFocus = .chip("all")
+            case .left:
+                guard index > 0, headerSameRow(spots[index - 1], spot) else { return }
+                headerFocus = spots[index - 1]
+            case .right:
+                guard index + 1 < spots.count, headerSameRow(spots[index + 1], spot) else { return }
+                headerFocus = spots[index + 1]
+            @unknown default:
+                break
+            }
+        }
+
+        private func headerSameRow(_ a: GuideHeader, _ b: GuideHeader) -> Bool {
+            func isChip(_ spot: GuideHeader) -> Bool {
+                if case .chip = spot {
+                    return true
+                }
+                return false
+            }
+            return isChip(a) == isChip(b)
+        }
+    #endif
 
     #if os(iOS)
         private var onNowList: some View {
@@ -217,6 +303,9 @@ struct GuideGrid: View {
     let highlight: BroadwaveKit.Category?
     let jump: Date?
     var scores: [String: String] = [:]
+    #if os(tvOS)
+        var channelFocus: FocusState<Int64?>.Binding
+    #endif
     let onSelect: (Channel, Airing?) -> Void
     @State private var offset: CGPoint = .zero
     @State private var hasScrollSample = false
@@ -286,6 +375,10 @@ struct GuideGrid: View {
                     .frame(width: channelW, height: viewport.height, alignment: .top)
                     .background(Tokens.ColorToken.surface1)
                     .clipped()
+                #if os(tvOS)
+                    // Down from a channel stays in this column, ahead of a program cell to the right.
+                    .focusSection()
+                #endif
                 ScrollView([.horizontal, .vertical]) {
                     ZStack(alignment: .topLeading) {
                         // Layout position, not offset: scrollTo ignores offset.
@@ -416,8 +509,11 @@ struct GuideGrid: View {
                         .background(Tokens.ColorToken.surface1)
                         .overlay(alignment: .bottom) { Rectangle().fill(Tokens.ColorToken.line).frame(height: 1) }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(channel.displayNumber) \(channel.displayName)")
+                    .buttonStyle(GuideChannelStyle())
+                    #if os(tvOS)
+                        .focused(channelFocus, equals: channel.id)
+                    #endif
+                        .accessibilityLabel("\(channel.displayNumber) \(channel.displayName)")
                 }
             }
             .offset(y: -offset.y)
@@ -523,6 +619,27 @@ struct GuideCell: View {
         .opacity(airing.end <= now ? 0.45 : dim ? 0.3 : 1)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(airing.title), \(airing.start.formatted(date: .omitted, time: .shortened))")
+    }
+}
+
+/// Unfocused this is the same row as the system plain style. Focused, it draws the same stroke as a program cell.
+struct GuideChannelStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        ChannelBody(configuration: configuration)
+    }
+
+    private struct ChannelBody: View {
+        let configuration: ButtonStyleConfiguration
+        @Environment(\.isFocused) private var focused
+
+        var body: some View {
+            configuration.label
+                .overlay(
+                    RoundedRectangle(cornerRadius: Tokens.Radius.sm)
+                        .stroke(.white, lineWidth: focused ? 3 : 0)
+                )
+                .opacity(configuration.isPressed && !focused ? 0.75 : 1)
+        }
     }
 }
 
