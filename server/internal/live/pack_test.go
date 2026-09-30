@@ -1484,3 +1484,91 @@ func TestPackTellsWhereEachEncodeStarts(t *testing.T) {
 		t.Fatalf("first segments %v, want [0 3]", feed.firsts)
 	}
 }
+
+// avFragment is a keyframe fragment of track 1 lasting dur ticks, with one
+// sound sample on track 2 when sound is set.
+func avFragment(pts int64, dur uint32, sound bool) []byte {
+	traf := func(id uint32, trFlags uint32, run []byte) []byte {
+		tfhd := binary.BigEndian.AppendUint32(make([]byte, 4), id)
+		tfdt := binary.BigEndian.AppendUint64([]byte{1, 0, 0, 0}, uint64(pts))
+		trun := []byte{0, byte(trFlags >> 16), byte(trFlags >> 8), byte(trFlags)}
+		trun = binary.BigEndian.AppendUint32(trun, 1)
+		trun = append(trun, run...)
+		return mp4Box("traf", append(append(mp4Box("tfhd", tfhd), mp4Box("tfdt", tfdt)...), mp4Box("trun", trun)...))
+	}
+	video := binary.BigEndian.AppendUint32(make([]byte, 4), dur) // first-sample flags 0 (sync), duration
+	body := append(mp4Box("mfhd", make([]byte, 8)), traf(1, 0x104, video)...)
+	if sound {
+		body = append(body, traf(2, 0x100, binary.BigEndian.AppendUint32(nil, 2880))...)
+	}
+	return append(mp4Box("moof", body), mp4Box("mdat", []byte{0})...)
+}
+
+// An interlaced broadcast can start each group with a one-field keyframe
+// fragment (17 ms) that carries no sound. Published alone, its sound view is
+// an empty part and AVPlayer fails the whole master. Live, it is held until
+// the next fragment arrives and goes out in the same part.
+func TestNoPartIsOneField(t *testing.T) {
+	dir := t.TempDir()
+	pr, pw := io.Pipe()
+	packErr := make(chan error, 1)
+	go func() { packErr <- Pack(dir, pr, nil) }()
+	write := func(b []byte) {
+		t.Helper()
+		if _, err := pw.Write(b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(videoInit())
+	const field, group = 1500, 90000
+	for g := range int64(3) {
+		write(avFragment(g*group, field, false))
+		write(avFragment(g*group+field, group-field, true))
+		name := fmt.Sprintf("seg%05d.m4s", g)
+		playlist := waitPlaylist(t, dir, name)
+		if strings.Contains(playlist, "DURATION=0.017") || strings.Contains(playlist, "#EXTINF:0.017") {
+			t.Fatalf("group %d: the field was listed alone:\n%s", g, playlist)
+		}
+		seg, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := soundSamples(seg); n != 1 {
+			t.Fatalf("group %d: segment has %d sound samples", g, n)
+		}
+	}
+	write(avFragment(3*group, field, false))
+	write(avFragment(3*group+field, 20000, true))
+	playlist := waitPlaylist(t, dir, "#EXT-X-PART:")
+	if !strings.Contains(playlist, "#EXT-X-PART:DURATION=0.239,INDEPENDENT=YES,URI=\"part00003.m4s\"") {
+		t.Fatalf("the field and the frames after it should be one 0.239 s part:\n%s", playlist)
+	}
+	part, err := os.ReadFile(filepath.Join(dir, "part00003.m4s"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, n := len(topBoxes(part)), soundSamples(part); got != 4 || n != 1 {
+		t.Fatalf("part has %d boxes and %d sound samples, want two moof/mdat pairs and one", got, n)
+	}
+	_ = pw.Close()
+	if err := <-packErr; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// soundSamples counts track 2's samples in every fragment of b.
+func soundSamples(b []byte) int {
+	n := 0
+	for _, box := range topBoxes(b) {
+		if string(box[4:8]) != "moof" {
+			continue
+		}
+		for _, tr := range boxes(box[8:]) {
+			tfhd, trun := child(tr.body, "tfhd"), child(tr.body, "trun")
+			if tr.kind == "traf" && len(tfhd) >= 8 && binary.BigEndian.Uint32(tfhd[4:8]) == 2 && len(trun) >= 8 {
+				n += int(binary.BigEndian.Uint32(trun[4:8]))
+			}
+		}
+	}
+	return n
+}
