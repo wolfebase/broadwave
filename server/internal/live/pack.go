@@ -27,6 +27,10 @@ const (
 	// a new timeline. ptsDiff already folds a 33-bit wrap of one group into
 	// a normal step, so that wrap is not a jump.
 	jumpTicks = 10 * 90000
+	// minPartTicks is the shortest fragment published as its own part. An
+	// interlaced keyframe can come as a one-field fragment (17 ms) that holds
+	// no sound frame, and AVPlayer fails a sound view with an empty part.
+	minPartTicks = 9000
 	// maxOpenBytes bounds the fragments held for the segment that is still
 	// open. A backwards timestamp never meets the keyframe close.
 	maxOpenBytes = 32 << 20
@@ -450,19 +454,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		}
 		return nil
 	}
-	take := func(frag []byte) error {
-		if !haveInit {
-			return nil
-		}
-		pts, ok := fragmentStart(frag, track, scale)
-		if !ok {
-			return nil
-		}
-		dur := int64(0)
-		if d, known := fragmentDuration(frag, track, scale); known {
-			dur = d
-		}
-		sync := fragmentIndependent(frag, track)
+	place := func(frag []byte, pts, dur int64, sync bool) error {
 		jumped := false
 		if haveLast {
 			expected := lastPTS
@@ -537,6 +529,62 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 			}
 		}
 		return flush()
+	}
+	// short is a keyframe fragment under minPartTicks. It goes out in front
+	// of the next fragment, in one part, with the encode marks it came with.
+	type held struct {
+		body            []byte
+		pts, dur        int64
+		fresh, handover bool
+	}
+	var short *held
+	placeShort := func() error {
+		if short == nil {
+			return nil
+		}
+		s := short
+		short = nil
+		f, h := fresh, handover
+		fresh, handover = s.fresh, s.handover
+		err := place(s.body, s.pts, s.dur, true)
+		fresh, handover = f, h
+		return err
+	}
+	take := func(frag []byte) error {
+		if !haveInit {
+			return nil
+		}
+		pts, ok := fragmentStart(frag, track, scale)
+		if !ok {
+			return nil
+		}
+		dur := int64(0)
+		if d, known := fragmentDuration(frag, track, scale); known {
+			dur = d
+		}
+		sync := fragmentIndependent(frag, track)
+		if short != nil {
+			d := ptsDiff(pts, short.pts+short.dur)
+			if fresh || handover || d < -int64(partTicks) || d > int64(jumpTicks) {
+				if err := placeShort(); err != nil {
+					return err
+				}
+			} else {
+				frag = append(short.body, frag...)
+				if dur > 0 {
+					dur += ptsDiff(pts, short.pts)
+				}
+				pts, sync = short.pts, true
+				fresh, handover = short.fresh, short.handover
+				short = nil
+			}
+		}
+		if sync && dur > 0 && dur < minPartTicks {
+			short = &held{body: frag, pts: pts, dur: dur, fresh: fresh, handover: handover}
+			fresh, handover = false, false
+			return nil
+		}
+		return place(frag, pts, dur, sync)
 	}
 
 	buf := make([]byte, 0, 1<<20)
@@ -621,6 +669,9 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		}
 		if err != nil {
 			if err == io.EOF {
+				if err := placeShort(); err != nil {
+					return err
+				}
 				if len(open) > 0 {
 					end := open[len(open)-1].pts + partTicks
 					if open[len(open)-1].dur > 0 {
