@@ -32,6 +32,12 @@ func scanType(data []byte, program int) (order string, ok bool) {
 		return mpeg2Scan(es)
 	case streamH264:
 		return h264Scan(es)
+	case streamHEVC:
+		// ATSC 3.0 sends progressive pictures. An SPS says the header is in.
+		if _, ok := hevcPicture(es); ok {
+			return "progressive", true
+		}
+		return "", false
 	default:
 		return "", false
 	}
@@ -94,7 +100,7 @@ func pmtVideo(sec []byte) (pid, kind int) {
 		epid := int(sec[off+1]&0x1f)<<8 | int(sec[off+2])
 		esInfo := int(sec[off+3]&0x0f)<<8 | int(sec[off+4])
 		off += 5 + esInfo
-		if streamType == streamMPEG2 || streamType == streamH264 {
+		if streamType == streamMPEG2 || streamType == streamH264 || streamType == streamHEVC {
 			return epid, streamType
 		}
 	}
@@ -836,9 +842,103 @@ func pictureFacts(data []byte, program int) (notedPicture, bool) {
 		return mpeg2Picture(es)
 	case streamH264:
 		return h264Picture(es)
+	case streamHEVC:
+		return hevcPicture(es)
 	default:
 		return notedPicture{}, false
 	}
+}
+
+// hevcPicture reads the cropped size from an HEVC SPS (NAL type 33).
+func hevcPicture(es []byte) (notedPicture, bool) {
+	for i := 0; i+6 < len(es); i++ {
+		if es[i] != 0 || es[i+1] != 0 || es[i+2] != 1 || (es[i+3]>>1)&0x3f != 33 {
+			continue
+		}
+		w, h, ok := hevcSize(unescape(es[i+5:]))
+		if ok && w >= 16 && h >= 16 && w <= 7680 && h <= 4320 {
+			return notedPicture{Width: w, Height: h}, true
+		}
+	}
+	return notedPicture{}, false
+}
+
+// hevcSize walks an HEVC SPS, after its two-byte NAL header, to the
+// conformance-window size (ITU-T H.265 7.3.2.2).
+func hevcSize(rbsp []byte) (int, int, bool) {
+	r := &bitReader{b: rbsp}
+	if _, ok := r.u(4); !ok {
+		return 0, 0, false
+	}
+	sub, ok := r.u(3)
+	if !ok {
+		return 0, 0, false
+	}
+	// temporal_id_nesting, then the general profile, tier, and level.
+	if _, ok := r.u(1 + 88 + 8); !ok {
+		return 0, 0, false
+	}
+	var profile, level [8]uint
+	for i := uint(0); i < sub; i++ {
+		if profile[i], ok = r.u(1); !ok {
+			return 0, 0, false
+		}
+		if level[i], ok = r.u(1); !ok {
+			return 0, 0, false
+		}
+	}
+	if sub > 0 {
+		if _, ok := r.u(int(2 * (8 - sub))); !ok {
+			return 0, 0, false
+		}
+	}
+	for i := uint(0); i < sub; i++ {
+		if _, ok := r.u(int(88*profile[i] + 8*level[i])); !ok {
+			return 0, 0, false
+		}
+	}
+	if _, ok := r.ue(); !ok {
+		return 0, 0, false
+	}
+	chroma, ok := r.ue()
+	if !ok {
+		return 0, 0, false
+	}
+	if chroma == 3 {
+		if _, ok := r.u(1); !ok {
+			return 0, 0, false
+		}
+	}
+	w, ok := r.ue()
+	if !ok {
+		return 0, 0, false
+	}
+	h, ok := r.ue()
+	if !ok {
+		return 0, 0, false
+	}
+	window, ok := r.u(1)
+	if !ok {
+		return 0, 0, false
+	}
+	if window == 1 {
+		var crop [4]uint
+		for i := range crop {
+			if crop[i], ok = r.ue(); !ok {
+				return 0, 0, false
+			}
+		}
+		sx, sy := uint(1), uint(1)
+		switch chroma {
+		case 1:
+			sx, sy = 2, 2
+		case 2:
+			sx = 2
+		}
+		w -= sx * (crop[0] + crop[1])
+		h -= sy * (crop[2] + crop[3])
+	}
+	return int(w), int(h), true
 }
 
 func mpeg2Picture(es []byte) (notedPicture, bool) {

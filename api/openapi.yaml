@@ -1897,7 +1897,7 @@ components:
       properties:
         rendition: { type: string }
         video: { type: string, enum: [copy, "1080", "720", "540", "360"] }
-        audio: { type: string, enum: [copy, aac2, aac6, none] }
+        audio: { type: string, enum: [copy, aac2, aac6, ac3, none] }
         mode: { $ref: "#/components/schemas/PictureMode" }
         reason: { type: string, description: "Short, user-facing explanation of the choice" }
         sourceVideo: { type: string }

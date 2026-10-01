@@ -226,7 +226,7 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 		if rate == "" {
 			rate = "24000/1001"
 		}
-		return fmt.Sprintf("pullup,fps=%s,format=nv12,hwupload,scale_vaapi=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease", rate, width, height)
+		return fmt.Sprintf("pullup,fps=%s,format=nv12,hwupload,scale_vaapi=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:format=nv12", rate, width, height)
 	}
 	if vaapiFamily(g.Encoder) && g.Mode != "film" && (vaapiDeint != "" || !interlaced) {
 		// Frames already on the GPU skip the upload. A software fps cap still uploads once.
@@ -246,7 +246,8 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 				vf += "," + piece
 			}
 		}
-		scale := fmt.Sprintf("scale_vaapi=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease", width, height)
+		// A 10-bit (ATSC 3.0) picture decodes to P010; the encoders take 8-bit.
+		scale := fmt.Sprintf("scale_vaapi=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:format=nv12", width, height)
 		if vf == "" {
 			vf = scale
 		} else {
@@ -271,8 +272,12 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 	}
 	pre = append(pre, scale)
 	vf := strings.Join(pre, ",")
+	// A 10-bit source would make libx264 write High 10, which browsers and
+	// Apple players do not decode.
 	if vaapiFamily(g.Encoder) || g.Encoder == "h264_qsv" || g.Encoder == "hevc_qsv" {
 		vf += ",format=nv12"
+	} else {
+		vf += ",format=yuv420p"
 	}
 	if vaapiFamily(g.Encoder) {
 		vf += ",hwupload"
