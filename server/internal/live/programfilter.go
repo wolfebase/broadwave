@@ -285,7 +285,7 @@ func tsPayload(pkt []byte) []byte {
 }
 
 // sequenceStart reports whether a PES start carries a sequence header
-// (MPEG-2) or a sequence parameter set (H.264).
+// (MPEG-2) or a parameter set (H.264, HEVC).
 func sequenceStart(payload []byte, kind int) bool {
 	es := pesPayload(payload)
 	for i := 0; i+3 < len(es); i++ {
@@ -297,6 +297,10 @@ func sequenceStart(payload []byte, kind int) bool {
 			return true
 		}
 		if kind == streamH264 && code&0x1f == 7 {
+			return true
+		}
+		// An HEVC random access point carries its VPS or SPS.
+		if kind == streamHEVC && (code>>1)&0x3f >= 32 && (code>>1)&0x3f <= 33 {
 			return true
 		}
 	}
