@@ -24,6 +24,8 @@ CONNECT DUO is the only model this project has already read on a real device (di
 
 A pool keeps ATSC 3.0 tuners for HEVC + AC-4 (a guide number alone does not count). A 1.0 channel uses a tuner that cannot do 3.0 when one is free. The picker test covers two DUOs plus a FLEX 4K, eight tuners in all. A device that disappears mid-stream opens that same frequency on the next device. This house has one CONNECT DUO, so that path is verified on fakes only.
 
+ATSC 3.0 channels arrive as HEVC Main 10 with AC-4 sound, sometimes with a second-language AC-4 track. Players that decode HEVC (Apple devices, Safari, Chrome with HEVC) get the picture as sent; other browsers get 8-bit H.264. No player decodes AC-4. The server reads each AC-4 track's width once per tune with ffprobe, which needs the AC-4 decoder that jellyfin-ffmpeg has. A 5.1 mix goes out as AC-3 5.1 to players that take AC-3, and everything else as stereo AAC. This was read on a real FLEX 4K.
+
 Untested, on a fake and on real hardware: first-generation HDHR-US, DVB and ISDB variants, CONNECT 4K (HDHR5-4K), FLEX 4K development edition, SCRIBE QUATRO, SCRIBE 4K, and the TECH rack models.
 
 ## Clients
