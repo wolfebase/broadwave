@@ -226,7 +226,7 @@ func masterPlaylist(r Rendition, codecs map[uint32]trackCodec, tracks []AudioTra
 	// A player plays the picture and one sound track at a time.
 	soundRate := 160_000
 	switch r.Audio {
-	case "copy", "ac3":
+	case "copy":
 		soundRate = 448_000
 	case "aac6":
 		soundRate = 384_000

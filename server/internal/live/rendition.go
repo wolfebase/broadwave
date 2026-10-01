@@ -28,7 +28,7 @@ func (r Rendition) normalized() Rendition {
 		r.Video = "1080"
 	}
 	switch r.Audio {
-	case "copy", "aac2", "aac6", "ac3", "none":
+	case "copy", "aac2", "aac6", "none":
 	default:
 		r.Audio = "aac2"
 	}
@@ -149,8 +149,6 @@ type Source struct {
 	// same encode after the main one so players can switch without a new
 	// watch. Tiles never get them.
 	Extras []AudioTrack
-	// AudioChannels is the measured width of the main sound, 0 when unknown.
-	AudioChannels int
 }
 
 type Decision struct {
@@ -310,26 +308,18 @@ func DecideFor(src Source, caps Caps, p Prefs, encoder string, host Host) Decisi
 		r.Audio = "aac2"
 		why = append(why, "stereo")
 	case "surround":
-		switch {
-		case has(caps.Audio, a):
+		if has(caps.Audio, a) {
 			r.Audio = "copy"
 			why = append(why, "original surround")
-		case surroundAC4(a, src, caps):
-			r.Audio = "ac3"
-			why = append(why, "5.1 AC-3")
-		default:
+		} else {
 			r.Audio = "aac6"
 			why = append(why, "5.1 AAC")
 		}
 	default:
-		switch {
-		case has(caps.Audio, a) && quality != "saver":
+		if has(caps.Audio, a) && quality != "saver" {
 			r.Audio = "copy"
 			why = append(why, "original sound")
-		case surroundAC4(a, src, caps) && quality != "saver":
-			r.Audio = "ac3"
-			why = append(why, "5.1 AC-3")
-		default:
+		} else {
 			r.Audio = "aac2"
 			why = append(why, "stereo")
 		}
@@ -354,20 +344,12 @@ func DecideFor(src Source, caps Caps, p Prefs, encoder string, host Host) Decisi
 		why = append(why, "even volume")
 	}
 	r.Mode = p.Picture
-	// A browser that lists HEVC plays it as sent; its conversions stay H.264,
-	// which every browser decodes in hardware.
-	if r.Video != "copy" && has(caps.Video, "hevc") && caps.Platform != "web" {
+	if r.Video != "copy" && has(caps.Video, "hevc") {
 		r.Codec = "hevc"
 		why = append(why, "HEVC")
 	}
 	r = r.normalized()
 	return Decision{Rendition: r, Reason: strings.Join(why, ", ")}
-}
-
-// surroundAC4 is an ATSC 3.0 5.1 mix for a player that plays AC-3 but not
-// AC-4, which is every player today.
-func surroundAC4(codec string, src Source, caps Caps) bool {
-	return codec == "ac4" && src.AudioChannels >= 6 && has(caps.Audio, "ac3")
 }
 
 // LegacyCaps maps the web player's profile and audio choice from before
@@ -542,10 +524,6 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		args = append(args, "-force_key_frames", openingKeyframes)
 	} else {
 		args = append(args, "-c:v", "copy")
-		// ffmpeg tags copied HEVC hev1; Apple players only take hvc1.
-		if codecName(src.VideoCodec) == "hevc" {
-			args = append(args, "-tag:v", "hvc1")
-		}
 	}
 	switch r.Audio {
 	case "none":
@@ -573,14 +551,6 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		for i, t := range src.Extras {
 			if t.Channels > 0 && t.Channels <= 2 {
 				args = append(args, fmt.Sprintf("-ac:a:%d", i+1), strconv.Itoa(t.Channels), fmt.Sprintf("-b:a:%d", i+1), "160k")
-			}
-		}
-	case "ac3":
-		// AC-3 keeps a 5.1 mix as sent; a stereo second language stays stereo.
-		args = append(args, "-af", audioFilter(r), "-c:a", "ac3", "-b:a", "448k")
-		for i, t := range src.Extras {
-			if t.Channels > 0 && t.Channels <= 2 {
-				args = append(args, fmt.Sprintf("-b:a:%d", i+1), "192k")
 			}
 		}
 	default:
