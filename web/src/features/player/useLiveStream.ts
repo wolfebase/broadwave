@@ -37,10 +37,7 @@ function webCaps(alternates: boolean): Caps {
   if (mse?.isTypeSupported('audio/mp4; codecs="ec-3"')) audio.push("eac3");
   const conn = (navigator as Navigator & { connection?: { type?: string; saveData?: boolean } }).connection;
   const network = conn?.type === "cellular" || conn?.saveData ? "cellular" : "lan";
-  // ATSC 3.0 sends 10-bit HEVC; a browser that decodes it gets the picture as sent.
-  const video = ["h264"];
-  if (mse?.isTypeSupported('video/mp4; codecs="hvc1.2.4.L153.B0"')) video.push("hevc");
-  return { platform: "web", video, audio, network, ...(alternates ? { alternates } : {}) };
+  return { platform: "web", video: ["h264"], audio, network, ...(alternates ? { alternates } : {}) };
 }
 
 export function useLiveStream(

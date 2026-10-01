@@ -1,14 +1,11 @@
 package live
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os/exec"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -26,12 +23,9 @@ const (
 	streamMP2  = 0x03
 	streamPriv = 0x06
 
-	descISO639       = 0x0A
-	descAC3          = 0x81
-	descEAC3         = 0x7A
-	descRegistration = 0x05
-	descExtension    = 0x7F
-	extAC4           = 0x15
+	descISO639 = 0x0A
+	descAC3    = 0x81
+	descEAC3   = 0x7A
 )
 
 // AudioTrack is one elementary audio stream on a program.
@@ -130,33 +124,8 @@ func audioCodecOf(streamType int, desc []byte) (string, bool) {
 		if hasDesc(desc, descAC3) {
 			return "ac3", true
 		}
-		if ac4Desc(desc) {
-			return "ac4", true
-		}
 	}
 	return "", false
-}
-
-// ac4Desc finds AC-4 by its registration ("AC-4", as an HDHomeRun sends
-// ATSC 3.0) or by the DVB extension descriptor.
-func ac4Desc(b []byte) bool {
-	for off := 0; off+2 <= len(b); {
-		t := int(b[off])
-		n := int(b[off+1])
-		off += 2
-		if off+n > len(b) {
-			return false
-		}
-		body := b[off : off+n]
-		off += n
-		if t == descRegistration && len(body) >= 4 && string(body[:4]) == "AC-4" {
-			return true
-		}
-		if t == descExtension && len(body) > 0 && body[0] == extAC4 {
-			return true
-		}
-	}
-	return false
 }
 
 func hasDesc(b []byte, tag int) bool {
@@ -711,47 +680,6 @@ func encodeTracks(tracks []AudioTrack) string {
 	return string(b)
 }
 
-// ac4Widths reads each AC-4 track's width with ffprobe. The PMT does not say
-// it, and only a decoder reads AC-4's table of contents. An ffmpeg without
-// the decoder reports nothing, and the tracks stay unmeasured.
-func ac4Widths(tool string, tracks []AudioTrack, data []byte) map[int]int {
-	if tool == "" || len(data) == 0 || !slices.ContainsFunc(tracks, func(t AudioTrack) bool { return t.Codec == "ac4" && !t.Measured }) {
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, tool, "-v", "error", "-probesize", "8000000", "-analyzeduration", "3000000",
-		"-f", "mpegts", "-show_entries", "stream=id,codec_name,channels", "-of", "json", "-i", "pipe:0")
-	cmd.Stdin = bytes.NewReader(data)
-	out, err := cmd.Output()
-	if err != nil {
-		return nil
-	}
-	return ac4WidthsFrom(out)
-}
-
-func ac4WidthsFrom(raw []byte) map[int]int {
-	var rep struct {
-		Streams []struct {
-			ID       string `json:"id"`
-			Codec    string `json:"codec_name"`
-			Channels int    `json:"channels"`
-		} `json:"streams"`
-	}
-	if json.Unmarshal(raw, &rep) != nil {
-		return nil
-	}
-	out := map[int]int{}
-	for _, s := range rep.Streams {
-		pid, err := strconv.ParseInt(s.ID, 0, 32)
-		if err != nil || s.Codec != "ac4" || s.Channels <= 0 {
-			continue
-		}
-		out[int(pid)] = s.Channels
-	}
-	return out
-}
-
 // allMeasured is true once every AC-3 track has had a frame read.
 func allMeasured(tracks []AudioTrack) bool {
 	for _, t := range tracks {
@@ -779,23 +707,13 @@ func (h *Hub) saveTracks(m *mux, f *feed, window time.Duration) {
 		}
 		full := m.pictureFull()
 		tracks = AudioTracks(m.pictureBytes(), f.program)
-		// AC-4 is measured by a decoder, which wants more than the PMT.
-		ac4 := slices.ContainsFunc(tracks, func(t AudioTrack) bool { return t.Codec == "ac4" })
-		if allMeasured(tracks) && !ac4 || full {
+		if allMeasured(tracks) || full {
 			break
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
 	if len(tracks) == 0 {
 		return
-	}
-	if widths := ac4Widths(FFProbePath(h.FFmpeg), tracks, m.pictureBytes()); len(widths) > 0 {
-		for i, t := range tracks {
-			if n := widths[t.PID]; n > 0 && t.Codec == "ac4" {
-				tracks[i].Channels = n
-				tracks[i].Measured = true
-			}
-		}
 	}
 	raw := encodeTracks(tracks)
 	h.mu.Lock()

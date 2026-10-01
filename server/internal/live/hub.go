@@ -388,11 +388,7 @@ func sourceOf(ch store.SourceChannel) Source {
 	if order == "film" {
 		order = ""
 	}
-	src := Source{VideoCodec: ch.VideoCodec, AudioCodec: ch.AudioCodec, Progressive: order == "progressive", Film: false, UserAgent: ch.UserAgent, Referrer: ch.Referrer, Lace: interlacedOrder(order), HD: ch.HD}
-	if t, ok := PickTrack(loadTracks(ch.AudioTracks), "main"); ok && t.Measured {
-		src.AudioChannels = t.Channels
-	}
-	return src
+	return Source{VideoCodec: ch.VideoCodec, AudioCodec: ch.AudioCodec, Progressive: order == "progressive", Film: false, UserAgent: ch.UserAgent, Referrer: ch.Referrer, Lace: interlacedOrder(order), HD: ch.HD}
 }
 
 // Watch starts or joins one rendition of a channel.
@@ -2064,7 +2060,7 @@ func (h *Hub) sessionLocked(f *feed, r *rendition) Session {
 	info.Bitrate = facts.Bitrate
 	info.Decode = facts.Decode
 	legacyAudio := "stereo"
-	if spec.Audio == "aac6" || spec.Audio == "ac3" || spec.Audio == "copy" {
+	if spec.Audio == "aac6" || spec.Audio == "copy" {
 		legacyAudio = "surround"
 	}
 	videoMode := "transcode"

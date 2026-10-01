@@ -643,7 +643,7 @@ export function LivePlayer({
               <dt>{copy.player.encoder}</dt>
               <dd>{session.encoder || session.stream.encoder || copy.player.waiting}</dd>
               <dt>{copy.player.sound}</dt>
-              <dd>{session.stream.audio === "copy" ? `Original ${session.stream.sourceAudio ?? ""}` : session.stream.audio === "aac6" ? "5.1 AAC" : session.stream.audio === "ac3" ? "5.1 AC-3" : "Stereo AAC"}</dd>
+              <dd>{session.stream.audio === "copy" ? `Original ${session.stream.sourceAudio ?? ""}` : session.stream.audio === "aac6" ? "5.1 AAC" : "Stereo AAC"}</dd>
               <dt>{copy.player.tuner}</dt>
               <dd>{session.shared ? `Shared · ${session.viewers} watching` : "This screen only"}</dd>
             </dl>

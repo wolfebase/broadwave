@@ -1458,7 +1458,7 @@ export interface components {
             /** @enum {string} */
             video: "copy" | "1080" | "720" | "540" | "360";
             /** @enum {string} */
-            audio: "copy" | "aac2" | "aac6" | "ac3" | "none";
+            audio: "copy" | "aac2" | "aac6" | "none";
             mode?: components["schemas"]["PictureMode"];
             /** @description Short, user-facing explanation of the choice */
             reason: string;
