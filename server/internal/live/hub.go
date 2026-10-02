@@ -176,8 +176,8 @@ type Hub struct {
 	cuts cutCache
 	// starts are the last pictures a watch started, newest last. Under mu.
 	starts []StartRecord
-	// stall overrides inputStall. Tests shorten it.
-	stall time.Duration
+	// stall overrides inputStall, and outStall outputStall. Tests shorten them.
+	stall, outStall time.Duration
 	// grabbers counts preview-frame loops, so Shutdown returns only after
 	// the last one stops writing.
 	grabbers sync.WaitGroup
@@ -303,6 +303,8 @@ type rendition struct {
 	began time.Time
 	fed   stamp
 	noted bool
+	// unfroze is when the output watchdog last ended this encode.
+	unfroze time.Time
 }
 
 type recording struct {
@@ -2113,12 +2115,16 @@ func (h *Hub) watchInput(ctx context.Context, m *mux) {
 	tick := min(time.Second, stall/4)
 	t := time.NewTicker(tick)
 	defer t.Stop()
+	// began is when the tuner last started sending without a pause, so a
+	// playlist is judged only on time it was fed.
+	var began time.Time
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case now := <-t.C:
 			if m.recovering.Load() || m.stalled.Load() {
+				began = time.Time{}
 				continue
 			}
 			h.mu.Lock()
@@ -2131,11 +2137,53 @@ func (h *Hub) watchInput(ctx context.Context, m *mux) {
 			case !reopen:
 				limit = stall * (stallReopens + 1)
 			}
-			if now.Sub(time.Unix(0, m.heard.Load())) < limit || !current || body == nil || !reopen && recording {
+			quiet := now.Sub(time.Unix(0, m.heard.Load()))
+			if quiet >= time.Second || began.IsZero() {
+				began = now
+			} else if current {
+				h.mu.Lock()
+				h.unfreezeLocked(m, now, began)
+				h.mu.Unlock()
+			}
+			if quiet < limit || !current || body == nil || !reopen && recording {
 				continue
 			}
 			m.stalled.Store(true)
 			_ = body.Close()
+		}
+	}
+}
+
+// outputStall is how long an encode fed by a live tune may add nothing to
+// its playlist before it is ended and started again. A broadcast with long
+// picture groups gets three of its own longest gaps instead.
+const outputStall = 12 * time.Second
+
+// unfreezeGap spaces the watchdog's restarts of one encode.
+const unfreezeGap = time.Minute
+
+// unfreezeLocked ends an encode whose playlist stopped growing while the
+// tuner kept sending. ffmpeg can stay alive and write nothing, and every
+// screen on the rendition would sit on its last frame. watchRendition
+// starts it again.
+// fed is when the tuner last began sending without a pause.
+func (h *Hub) unfreezeLocked(m *mux, now, fed time.Time) {
+	limit := outputStall
+	if h.outStall > 0 {
+		limit = h.outStall
+	}
+	for _, f := range m.feeds {
+		if f == nil {
+			continue
+		}
+		for _, r := range f.renditions {
+			if r.cmd == nil || r.cmd.Process == nil || r.waited.Load() || now.Sub(r.unfroze) < unfreezeGap || !r.gate.stuck(now, fed, limit) {
+				continue
+			}
+			r.unfroze = now
+			r.restarted = false
+			slog.Warn(fmt.Sprintf("rendition %s on %s wrote nothing for %s while the tuner sent; starting it again", r.spec.Key(), f.channel.GuideNumber, now.Sub(time.Unix(0, r.gate.moved.Load())).Round(time.Second)))
+			_ = r.cmd.Process.Kill()
 		}
 	}
 }

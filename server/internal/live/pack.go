@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -49,6 +50,9 @@ type playlistGate struct {
 	openParts int
 	// firstPart and firstSegment are when the playlist first listed one.
 	firstPart, firstSegment stamp
+	// moved is when the playlist last grew, in Unix ns; gap is the longest
+	// wait between two growths, so the output watchdog learns the pace.
+	moved, gap atomic.Int64
 }
 
 func newPlaylistGate() *playlistGate {
@@ -68,11 +72,34 @@ func (g *playlistGate) publish(origin, openMSN, openParts int) {
 		g.firstSegment.mark()
 	}
 	g.mu.Lock()
+	if openMSN != g.openMSN || openParts != g.openParts {
+		now := time.Now().UnixNano()
+		if last := g.moved.Load(); last != 0 && now-last > g.gap.Load() {
+			g.gap.Store(now - last)
+		}
+		g.moved.Store(now)
+	}
 	g.origin = origin
 	g.openMSN = openMSN
 	g.openParts = openParts
 	g.cond.Broadcast()
 	g.mu.Unlock()
+}
+
+// stuck reports a playlist that has not grown for limit since it last grew
+// or since from, whichever is later, or for three of its own longest gaps
+// when a broadcast's picture groups run longer.
+func (g *playlistGate) stuck(now, from time.Time, limit time.Duration) bool {
+	if g == nil || g.moved.Load() == 0 {
+		return false
+	}
+	since := time.Unix(0, g.moved.Load())
+	if from.After(since) {
+		since = from
+	}
+	// A tuner silence also counts as a gap; the cap keeps one from
+	// loosening the watch for the rest of the tune.
+	return now.Sub(since) > max(limit, 3*min(time.Duration(g.gap.Load()), 10*time.Second))
 }
 
 func (g *playlistGate) ready(msn, part int) bool {
