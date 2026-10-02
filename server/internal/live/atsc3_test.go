@@ -147,6 +147,16 @@ func TestATSC3RenditionArgs(t *testing.T) {
 	if strings.Contains(copyLine, "-ac ") {
 		t.Fatalf("AC-3 keeps each track's width: %s", copyLine)
 	}
+	// A converted AC-4 mix is 48 kHz; ffmpeg would pick 44.1.
+	for _, audio := range []string{"ac3", "aac2", "aac6"} {
+		if line := strings.Join(RenditionArgs(3, src, Rendition{Video: "copy", Audio: audio}, "libx264", ""), " "); !strings.Contains(line, "-ar 48000") {
+			t.Fatalf("%s from AC-4 without -ar 48000: %s", audio, line)
+		}
+	}
+	ac3 := Source{VideoCodec: "MPEG2", AudioCodec: "AC3"}
+	if line := strings.Join(RenditionArgs(1, ac3, Rendition{Video: "1080", Audio: "aac2"}, "libx264", ""), " "); strings.Contains(line, "-ar ") {
+		t.Fatalf("a 1.0 conversion changed its rate: %s", line)
+	}
 	h264 := Source{VideoCodec: "H264", AudioCodec: "AC3", Progressive: true}
 	if line := strings.Join(RenditionArgs(1, h264, Rendition{Video: "copy", Audio: "copy"}, "libx264", ""), " "); strings.Contains(line, "hvc1") {
 		t.Fatalf("H.264 copy tagged hvc1: %s", line)

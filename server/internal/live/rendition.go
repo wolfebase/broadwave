@@ -606,6 +606,12 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 	default:
 		args = append(args, "-af", audioFilter(r), "-c:a", "aac", "-ac", "2", "-b:a", "160k")
 	}
+	// ffmpeg opens an AC-4 track before the decoder has read a frame, so it
+	// has no rate and the conversion falls back to 44.1 kHz. Broadcast sound
+	// is 48 kHz, and many receivers refuse AC-3 at 44.1.
+	if codecName(src.AudioCodec) == "ac4" && r.Audio != "none" && r.Audio != "copy" {
+		args = append(args, "-ar", "48000")
+	}
 	if len(src.Extras) > 0 && r.Audio != "none" {
 		// A quiet track otherwise lets the muxer hold the picture for up to
 		// ten seconds while it waits for that track's next packet.
