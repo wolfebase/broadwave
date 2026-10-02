@@ -507,6 +507,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Channel" }
         "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /frames:
     get:
       tags: [channels]
@@ -1693,6 +1694,10 @@ components:
         artWidth: { type: integer, description: "Native logo width in pixels. Omitted until the picture has been measured." }
         artHeight: { type: integer, description: "Native logo height in pixels. Omitted until the picture has been measured." }
         network: { type: string, description: "ABC, CBS, FOX, or NBC when the server can tell. Empty otherwise." }
+        protected: { type: boolean, description: "The tuner marks this channel DRM or copy protected (for example ATSC 3.0 DRM). It stays hidden and cannot be played." }
+        standard: { type: string, enum: [atsc3], description: "atsc3 for an ATSC 3.0 broadcast. Omitted for everything else." }
+        twinId: { type: integer, format: int64, description: "The other channel of an ATSC 1.0 and 3.0 pair of the same station. Its listings are shared." }
+        twinChoice: { type: string, enum: [atsc3, atsc1, both], description: "Which channel of the pair shows in the guide." }
     ChannelPatch:
       type: object
       properties:
@@ -1702,6 +1707,10 @@ components:
         customName: { type: string }
         customNumber: { type: string }
         guideKey: { type: string }
+        twinChoice:
+          type: string
+          enum: [atsc3, atsc1, both]
+          description: Show the pair's ATSC 3.0 channel, its 1.0 channel, or both. The channel that stays keeps the favorite.
     FrameList:
       type: object
       required: [channels]

@@ -21,7 +21,7 @@ import {
 } from "../../lib/guide";
 import type { Airing, Channel } from "../../types";
 import { SearchIcon, StarIcon } from "../../ui/icons";
-import { ChannelBadge, Chip, Empty, Progress, RecDot } from "../../ui/primitives";
+import { Atsc3Tag, ChannelBadge, Chip, Empty, Progress, RecDot } from "../../ui/primitives";
 import { useScoreMap } from "../sports/scores";
 import { ProgramSheet } from "./ProgramSheet";
 import { LiveFrame } from "../../ui/LiveFrame";
@@ -444,10 +444,11 @@ export function Guide() {
                     void editChannel(c, { hidden: true });
                   }}
                   onClick={() => watch(c)}
-                  aria-label={`Watch ${c.displayNumber} ${c.displayName}`}
+                  aria-label={`Watch ${c.displayNumber} ${c.displayName}${c.standard === "atsc3" ? ", ATSC 3.0" : ""}`}
                   title="Drag to reorder. Right-click to hide."
                 >
                   <span className="gc-num">{c.displayNumber}</span>
+                  {c.standard === "atsc3" ? <Atsc3Tag /> : null}
                   <span className="gc-name">
                     {c.artUrl ? <img className="gc-logo" alt="" src={`/media/art/channel/${c.id}?w=72`} /> : null}
                     {c.displayName}

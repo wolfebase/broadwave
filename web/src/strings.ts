@@ -26,6 +26,16 @@ export const copy = {
     number: "Number",
     match: "Guide match",
     matchHint: "Leave guide match blank to use the number and call sign.",
+    atsc3: "ATSC 3.0",
+    encrypted: (atsc3: boolean) =>
+      atsc3 ? "Encrypted (ATSC 3.0 DRM). Only the tuner maker's app can play it." : "Copy protected. Only the tuner maker's app can play it.",
+    twinShow: "Show",
+    twinChoices: {
+      atsc3: "3.0 only",
+      atsc1: (n: string) => (n ? `1.0 only (${n})` : "1.0 only"),
+      both: "Both",
+    },
+    twinOf: (n: string) => `Same station as ${n} in ATSC 3.0`,
     groups: "Groups",
     groupsHint: "News, Sports, -Shopping. Leave blank to keep every group.",
     file: "Playlist file",

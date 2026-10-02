@@ -2,11 +2,20 @@ import type { ReactNode } from "react";
 import type { Category } from "../lib/guide";
 import type { Channel } from "../types";
 
-export function ChannelBadge({ channel, size = "md" }: { channel: Pick<Channel, "displayNumber" | "displayName">; size?: "sm" | "md" | "lg" }) {
+export function ChannelBadge({ channel, size = "md" }: { channel: Pick<Channel, "displayNumber" | "displayName" | "standard">; size?: "sm" | "md" | "lg" }) {
   return (
     <span className={`ch-badge ch-badge-${size}`}>
       <span className="ch-badge-num">{channel.displayNumber}</span>
       <span className="ch-badge-name">{channel.displayName}</span>
+      {channel.standard === "atsc3" ? <Atsc3Tag /> : null}
+    </span>
+  );
+}
+
+export function Atsc3Tag() {
+  return (
+    <span className="tag" aria-label="ATSC 3.0">
+      3.0
     </span>
   );
 }

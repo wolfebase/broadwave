@@ -65,6 +65,10 @@ export type Channel = {
   artWidth?: number;
   artHeight?: number;
   network?: string;
+  protected?: boolean;
+  standard?: string;
+  twinId?: number;
+  twinChoice?: string;
 };
 
 export type ChannelPatch = {
@@ -74,6 +78,7 @@ export type ChannelPatch = {
   customName?: string;
   customNumber?: string;
   guideKey?: string;
+  twinChoice?: string;
 };
 
 export type ChannelSignal = {

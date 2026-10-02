@@ -130,7 +130,7 @@ func (s *Server) recordingReservations(ctx context.Context, tunerCount int) []li
 	if err != nil || len(passes) == 0 {
 		return nil
 	}
-	airings, err := s.Store.Airings(ctx, now.Add(-time.Minute), now.Add(window))
+	airings, err := s.Store.RecordingAirings(ctx, now.Add(-time.Minute), now.Add(window))
 	if err != nil {
 		return nil
 	}

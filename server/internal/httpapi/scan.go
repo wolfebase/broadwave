@@ -104,7 +104,7 @@ func (s *Server) recordingSoon(ctx context.Context) bool {
 		}
 	}
 	passes, _ := s.Store.Passes(ctx)
-	airings, err := s.Store.Airings(ctx, now, now.Add(30*time.Minute))
+	airings, err := s.Store.RecordingAirings(ctx, now, now.Add(30*time.Minute))
 	if err != nil {
 		return true
 	}

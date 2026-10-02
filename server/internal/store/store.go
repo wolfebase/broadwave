@@ -50,6 +50,14 @@ type Channel struct {
 	ArtHeight     int    `json:"artHeight,omitempty"`
 	// Network is ABC, CBS, FOX, or NBC when a guide said so. Empty means the caller fills it from the call sign.
 	Network string `json:"network,omitempty"`
+	// Protected is a channel the tuner marks DRM or copy protected. It stays hidden.
+	Protected bool `json:"protected,omitempty"`
+	// Standard is "atsc3" for an ATSC 3.0 broadcast and empty for everything else.
+	Standard string `json:"standard,omitempty"`
+	// TwinID pairs an ATSC 3.0 channel with the 1.0 channel of the same station.
+	TwinID int64 `json:"twinId,omitempty"`
+	// TwinChoice is the pair's choice: atsc3, atsc1, or both.
+	TwinChoice string `json:"twinChoice,omitempty"`
 }
 
 type ChannelPatch struct {
@@ -120,11 +128,12 @@ UPDATE channels SET guide_name=?,
 	hd=?, present=1,
 	user_agent=CASE WHEN ?!='' THEN ? ELSE user_agent END,
 	referrer=CASE WHEN ?!='' THEN ? ELSE referrer END,
-	hidden=CASE WHEN ?=1 THEN 1 ELSE hidden END
+	hidden=CASE WHEN ?=1 THEN 1 ELSE hidden END,
+	protected=?
 WHERE device_id=? AND stream_url=?`,
 				ch.GuideName, ch.VideoCodec, ch.VideoCodec, ch.AudioCodec, ch.AudioCodec, boolInt(ch.HD),
 				ch.UserAgent, ch.UserAgent, ch.Referrer, ch.Referrer,
-				protect, dev.DeviceID, ch.StreamURL)
+				protect, protect, dev.DeviceID, ch.StreamURL)
 			if err != nil {
 				return err
 			}
@@ -141,11 +150,12 @@ UPDATE channels SET guide_number=?, guide_name=?, stream_url=?,
 	art_url=CASE WHEN ?!='' THEN ? ELSE art_url END,
 	user_agent=CASE WHEN ?!='' THEN ? ELSE user_agent END,
 	referrer=CASE WHEN ?!='' THEN ? ELSE referrer END,
-	hidden=CASE WHEN ?=1 THEN 1 ELSE hidden END
+	hidden=CASE WHEN ?=1 THEN 1 ELSE hidden END,
+	protected=?
 WHERE device_id=? AND guide_key=?`,
 				ch.GuideNumber, ch.GuideName, ch.StreamURL, ch.VideoCodec, ch.VideoCodec, ch.AudioCodec, ch.AudioCodec, boolInt(ch.HD),
 				ch.ArtURL, ch.ArtURL, ch.UserAgent, ch.UserAgent, ch.Referrer, ch.Referrer,
-				protect, dev.DeviceID, ch.GuideKey)
+				protect, protect, dev.DeviceID, ch.GuideKey)
 			if err != nil {
 				return err
 			}
@@ -155,8 +165,8 @@ WHERE device_id=? AND guide_key=?`,
 		}
 		_, err := tx.ExecContext(ctx, `
 INSERT INTO channels (
-	device_id, guide_number, guide_name, stream_url, video_codec, audio_codec, hd, favorite, present, hidden, guide_key, art_url, user_agent, referrer
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+	device_id, guide_number, guide_name, stream_url, video_codec, audio_codec, hd, favorite, present, hidden, protected, guide_key, art_url, user_agent, referrer
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(device_id, guide_number) DO UPDATE SET
 	guide_name=excluded.guide_name,
 	stream_url=excluded.stream_url,
@@ -165,16 +175,20 @@ ON CONFLICT(device_id, guide_number) DO UPDATE SET
 	hd=excluded.hd,
 	present=1,
 	hidden=CASE WHEN excluded.hidden=1 THEN 1 ELSE channels.hidden END,
+	protected=excluded.protected,
 	guide_key=CASE WHEN excluded.guide_key!='' THEN excluded.guide_key ELSE channels.guide_key END,
 	art_url=CASE WHEN excluded.art_url!='' THEN excluded.art_url ELSE channels.art_url END,
 	user_agent=CASE WHEN excluded.user_agent!='' THEN excluded.user_agent ELSE channels.user_agent END,
 	referrer=CASE WHEN excluded.referrer!='' THEN excluded.referrer ELSE channels.referrer END
-`, dev.DeviceID, ch.GuideNumber, ch.GuideName, ch.StreamURL, ch.VideoCodec, ch.AudioCodec, boolInt(ch.HD), boolInt(ch.Favorite), protect, ch.GuideKey, ch.ArtURL, ch.UserAgent, ch.Referrer)
+`, dev.DeviceID, ch.GuideNumber, ch.GuideName, ch.StreamURL, ch.VideoCodec, ch.AudioCodec, boolInt(ch.HD), boolInt(ch.Favorite), protect, protect, ch.GuideKey, ch.ArtURL, ch.UserAgent, ch.Referrer)
 		if err != nil {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.ApplyTwinDefaults(ctx)
 }
 
 // OtherDevices lists base URLs for other tuners that already have this channel number, lowest priority first.
@@ -260,23 +274,27 @@ FROM devices ORDER BY priority, friendly_name`)
 
 func (s *Store) Channels(ctx context.Context, guideOnly bool) ([]Channel, error) {
 	q := `SELECT id, device_id, guide_number, guide_name, custom_number, custom_name,
-		video_codec, audio_codec, hd, favorite, enabled, hidden, present, guide_key, art_url, art_width, art_height, network FROM channels`
-	if guideOnly {
-		q += ` WHERE present=1 AND enabled=1 AND hidden=0`
-	}
+		video_codec, audio_codec, hd, favorite, enabled, hidden, present, guide_key, art_url, art_width, art_height, network,
+		protected, twin_choice FROM channels`
 	rows, err := s.db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []Channel
+	choices := map[int64]string{}
 	for rows.Next() {
 		var ch Channel
-		var customNumber, customName string
-		var hd, fav, en, hidden, present int
+		var customNumber, customName, choice string
+		var hd, fav, en, hidden, present, protected int
 		if err := rows.Scan(&ch.ID, &ch.DeviceID, &ch.GuideNumber, &ch.GuideName, &customNumber, &customName,
-			&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present, &ch.GuideKey, &ch.ArtURL, &ch.ArtWidth, &ch.ArtHeight, &ch.Network); err != nil {
+			&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present, &ch.GuideKey, &ch.ArtURL, &ch.ArtWidth, &ch.ArtHeight, &ch.Network,
+			&protected, &choice); err != nil {
 			return nil, err
+		}
+		ch.Protected = protected != 0
+		if choice != "" {
+			choices[ch.ID] = choice
 		}
 		ch.HD = hd != 0
 		ch.Favorite = fav != 0
@@ -295,6 +313,17 @@ func (s *Store) Channels(ctx context.Context, guideOnly bool) ([]Channel, error)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+	// Pairs are found on every row, so a hidden twin still names its partner.
+	markTwins(out, choices)
+	if guideOnly {
+		shown := out[:0]
+		for _, ch := range out {
+			if ch.Present && ch.Enabled && !ch.Hidden {
+				shown = append(shown, ch)
+			}
+		}
+		out = shown
 	}
 	sort.Slice(out, func(i, j int) bool {
 		cmp := hdhr.CompareGuide(out[i].DisplayNumber, out[j].DisplayNumber)
@@ -359,6 +388,11 @@ func (s *Store) PatchChannel(ctx context.Context, id int64, patch ChannelPatch) 
 	if n == 0 {
 		return Channel{}, sql.ErrNoRows
 	}
+	return s.Channel(ctx, id)
+}
+
+// Channel is one channel as Channels lists it.
+func (s *Store) Channel(ctx context.Context, id int64) (Channel, error) {
 	channels, err := s.Channels(ctx, false)
 	if err != nil {
 		return Channel{}, err
