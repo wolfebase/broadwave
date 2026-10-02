@@ -3,8 +3,11 @@ package live
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -469,4 +472,111 @@ func TestAWarm3Point0StreamGivesItsTunerToANewChannel(t *testing.T) {
 		t.Fatalf("a new channel with a warm 3.0 stream on tuner %d: %v (%v)", held, err, fetchGuides(t, base))
 	}
 	waitGuide(t, base, held, "5.1")
+}
+
+// A guess at a 3.0 channel tunes it ahead of the click, without holding the
+// hub while the device answers, only when another 3.0 tuner stays free, and
+// only for a player that takes the picture as sent. The watch joins it.
+func TestAGuessTunesA3Point0ChannelAhead(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	st := openStore(t)
+	srv := &fake.Server{Profile: fake.ProfileFlex4K, TuneDelay: 800 * time.Millisecond, Channels: []fake.Channel{
+		{Number: "4.1", Name: "KBWV", Freq: 593000000},
+		{Number: "104.1", Name: "KBWV", Freq: 599000000, Video: "HEVC", Audio: "AC-4", ATSC3: true},
+		{Number: "106.1", Name: "WTST", Freq: 611000000, Video: "HEVC", Audio: "AC-4", ATSC3: true},
+	}}
+	base, control, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(srv.Close)
+	t.Setenv("HDHR_CONTROL_PORT", control)
+	ctx := context.Background()
+	dev, err := (&hdhr.Client{}).FetchDevice(ctx, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lineup, err := (&hdhr.Client{}).FetchLineup(ctx, dev.LineupURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertDevice(ctx, dev, lineup); err != nil {
+		t.Fatal(err)
+	}
+	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h.Shutdown)
+	// Both were watched before, so a tune runs no field-order probe.
+	for _, n := range []string{"104.1", "106.1"} {
+		if err := st.SetFieldOrder(ctx, sourceByNumber(t, st, n).ID, "progressive"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c3 := sourceByNumber(t, st, "104.1")
+	copied := Rendition{Video: "copy", Audio: "aac2"}
+	opens := func(number ...string) int {
+		want := "/auto/v104.1"
+		if len(number) > 0 {
+			want = "/auto/v" + number[0]
+		}
+		n := 0
+		for _, r := range srv.Requests() {
+			if r == want {
+				n++
+			}
+		}
+		return n
+	}
+
+	if ok, err := h.Warm(ctx, c3.ID, Rendition{Video: "1080", Audio: "aac2"}, false); err != nil || ok || opens() != 0 {
+		t.Fatalf("a guess tuned for a transcode: ok %v err %v opens %d", ok, err, opens())
+	}
+
+	// Someone else has one of the two 3.0 tuners.
+	other, err := http.Get(base + "/tuner0/v4.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitGuide(t, base, 0, "4.1")
+	if ok, err := h.Warm(ctx, c3.ID, copied, false); err != nil || ok || opens() != 0 {
+		t.Fatalf("a guess took the last 3.0 tuner: ok %v err %v opens %d", ok, err, opens())
+	}
+	other.Body.Close()
+	waitGuide(t, base, 0, "")
+
+	done := make(chan error, 1)
+	go func() {
+		ok, err := h.Warm(ctx, c3.ID, copied, false)
+		if err == nil && !ok {
+			err = errors.New("no guess with both 3.0 tuners free")
+		}
+		done <- err
+	}()
+	time.Sleep(300 * time.Millisecond)
+	began := time.Now()
+	h.Touch(c3.ID, copied.normalized().Key())
+	if waited := time.Since(began); waited > 200*time.Millisecond {
+		t.Fatalf("the hub was held %v while the device answered", waited)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	// Resting on another 3.0 row replaces the guess; it does not need a third tuner.
+	next := sourceByNumber(t, st, "106.1")
+	if ok, err := h.Warm(ctx, next.ID, copied, false); err != nil || !ok {
+		t.Fatalf("a second guess was refused while the first held a tuner: ok %v err %v", ok, err)
+	}
+	h.mu.Lock()
+	_, kept := h.channels[c3.ID]
+	h.mu.Unlock()
+	if kept {
+		t.Fatal("the first guess kept its tuner")
+	}
+	if _, err := h.Watch(ctx, next.ID, copied, false); err != nil {
+		t.Fatal(err)
+	}
+	if n := opens("106.1"); n != 1 {
+		t.Fatalf("the watch tuned again: %d opens", n)
+	}
 }
