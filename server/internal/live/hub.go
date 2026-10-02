@@ -161,11 +161,13 @@ type Hub struct {
 	// keeps none.
 	Buffer time.Duration
 
-	mu         sync.Mutex
-	muxes      map[int]*mux
-	channels   map[int64]*feed
-	reserved   map[int]bool
-	hold       int
+	mu       sync.Mutex
+	muxes    map[int]*mux
+	channels map[int64]*feed
+	reserved map[int]bool
+	hold     int
+	// statusDown is when a device whose status read failed is asked again.
+	statusDown map[string]time.Time
 	next       int
 	scanCancel context.CancelFunc
 	scanToken  *struct{}
@@ -535,6 +537,9 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	if h.muxes == nil {
 		h.muxes = map[int]*mux{}
 	}
+	if h.statusDown == nil {
+		h.statusDown = map[string]time.Time{}
+	}
 	if h.reserved == nil {
 		h.reserved = map[int]bool{}
 	}
@@ -569,13 +574,34 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	}
 	var devices []DeviceTuners
 	var last []Tuner
-	for _, candidate := range bases {
-		tuners, err := h.readTuners(ctx, candidate)
-		if err != nil {
-			continue
+	read := func(candidates []string, skipDown bool) {
+		for _, candidate := range candidates {
+			if skipDown && time.Now().Before(h.statusDown[candidate]) {
+				continue
+			}
+			tuners, err := h.readTuners(ctx, candidate)
+			if err != nil {
+				// An unplugged device costs every tune its status timeout (3 s).
+				if ctx.Err() == nil {
+					h.statusDown[candidate] = time.Now().Add(statusDownFor)
+				}
+				continue
+			}
+			delete(h.statusDown, candidate)
+			last = tuners
+			devices = append(devices, DeviceTuners{Host: hostOf(candidate), Base: candidate, Tuners: tuners})
 		}
-		last = tuners
-		devices = append(devices, DeviceTuners{Host: hostOf(candidate), Base: candidate, Tuners: tuners})
+	}
+	// Other devices are failover. Their status is read only when the
+	// channel's own device has no tuner that suits it.
+	read(bases[:1], true)
+	rest := bases[1:]
+	if len(devices) == 0 {
+		read(rest, true)
+		rest = nil
+	}
+	if len(devices) == 0 {
+		read(bases, false)
 	}
 	if len(devices) == 0 {
 		return nil, ErrTunerSilent
@@ -593,6 +619,12 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	}
 	need := NeedFor(ch.VideoCodec, ch.AudioCodec, ch.ATSC3)
 	picked, tuner, ok := PickTuner(devices, h.usedTunersLocked(devices[0].Host), held, need)
+	// A 1.0 channel would rather take a 1.0 tuner on another device than
+	// a 3.0 tuner here.
+	if len(rest) > 0 && (!ok || (!need.ATSC3 && atsc3Tuner(devices[0].Tuners, tuner))) {
+		read(rest, true)
+		picked, tuner, ok = PickTuner(devices, h.usedTunersLocked(devices[0].Host), held, need)
+	}
 	for !ok {
 		freed, guide, found := h.freeWarmTunerLocked(devices[0].Host)
 		if !found {
@@ -2715,6 +2747,19 @@ func (h *Hub) readTuners(ctx context.Context, host string) ([]Tuner, error) {
 	}
 	h.markATSC3(ctx, host, out)
 	return out, nil
+}
+
+// statusDownFor is how long a tune skips a device whose status read failed,
+// while another device can carry the channel.
+const statusDownFor = time.Minute
+
+func atsc3Tuner(tuners []Tuner, index int) bool {
+	for _, t := range tuners {
+		if t.Index == index {
+			return t.ATSC3
+		}
+	}
+	return false
 }
 
 // moveBudget is the production limit for handing a live stream to another
