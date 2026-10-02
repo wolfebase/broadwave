@@ -368,3 +368,81 @@ public struct ServerOutage: Equatable, Sendable {
         return message
     }
 }
+
+/// A picture that should be moving and is not. AVPlayer can stop on a live
+/// item with seconds buffered and never say why: it pauses itself, or stays
+/// on "playing" while the playhead stands still. Eight seconds of a still
+/// playhead, or one second of a pause AVPlayer made itself (that item does
+/// not play again), reloads the item at the live edge. The next step starts
+/// a new watch, and they alternate until the picture has played 20 s or the
+/// cap. A reload can play the few seconds the server still lists, so a short
+/// run of picture does not start the count over.
+public struct FrozenPicture: Equatable, Sendable {
+    public enum Step: Equatable, Sendable {
+        case reload
+        case retune
+    }
+
+    public static let seconds: TimeInterval = 8
+    public static let stoppedSeconds: TimeInterval = 1
+    static let settledSeconds: TimeInterval = 20
+    /// After this many steps with no settled picture, the outage clock has the last word.
+    static let maxSteps = 6
+    /// One sample is about a second apart. A larger step is a seek or a new
+    /// item, not the picture playing.
+    static let largestStep: Double = 3
+
+    private var lastTime: Double?
+    private var since: Date?
+    private var movingSince: Date?
+    private var tries = 0
+    private var moved = false
+    /// True from the first step until the picture moves again.
+    public private(set) var reconnecting = false
+
+    public init() {}
+
+    /// `time` is the item's playhead, nil with no item. `playing` is false
+    /// while the viewer or the sync engine holds the picture. `stoppedItself`
+    /// is a pause AVPlayer made on its own.
+    public mutating func note(time: Double?, playing: Bool, stoppedItself: Bool = false, at now: Date) -> Step? {
+        guard let time, time.isFinite, playing || stoppedItself else {
+            lastTime = nil
+            since = nil
+            movingSince = nil
+            return nil
+        }
+        defer { lastTime = time }
+        guard let last = lastTime else {
+            since = now
+            return nil
+        }
+        let step = time - last
+        if step > 0.04, step < Self.largestStep {
+            moved = true
+            reconnecting = false
+            since = now
+            let from = movingSince ?? now
+            movingSince = from
+            if now.timeIntervalSince(from) >= Self.settledSeconds {
+                tries = 0
+            }
+            return nil
+        }
+        movingSince = nil
+        if abs(step) >= Self.largestStep {
+            since = now
+            return nil
+        }
+        let wait = stoppedItself ? Self.stoppedSeconds : Self.seconds
+        guard moved, let start = since, now.timeIntervalSince(start) >= wait else { return nil }
+        guard tries < Self.maxSteps else {
+            reconnecting = false
+            return nil
+        }
+        since = now
+        tries += 1
+        reconnecting = true
+        return tries % 2 == 1 ? .reload : .retune
+    }
+}

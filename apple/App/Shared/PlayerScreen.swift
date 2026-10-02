@@ -66,6 +66,18 @@ final class LivePlayer {
     private var watchToken = 0
     private let outage = ServerWatch()
     private var outageSampled = Date.distantPast
+    private var frozen = FrozenPicture()
+    /// A picture that stopped is being reloaded or tuned again.
+    private(set) var reconnecting = false
+    /// AVPlayer set its rate to 0 on its own, not a viewer, the sync engine,
+    /// or the system. That is a stopped picture, not a pause.
+    private var pausedItself = false
+    private var rateObserver: NSObjectProtocol?
+    private var routeObserver: NSObjectProtocol?
+    /// When the audio route lost its device. AVPlayer pauses for that on its
+    /// own, and that pause is the viewer's: playing on would move the sound
+    /// to the speaker.
+    private var routeLost = Date.distantPast
     /// Set for a quiet retry of a stopped picture. The message stays until the new picture moves.
     private var quietRetry = false
     private var holdPicture = false
@@ -97,6 +109,11 @@ final class LivePlayer {
         quietRetry = false
         let retry = channelID == channel.id
         let held = retry ? error : nil
+        if !retry {
+            frozen = FrozenPicture()
+            reconnecting = false
+        }
+        watchRate()
         holdPicture = false
         await stop(endPicture: !quiet)
         guard !Task.isCancelled, token == watchToken else { return }
@@ -726,10 +743,80 @@ final class LivePlayer {
         outage.note(
             time: item?.currentTime().seconds,
             waiting: player.timeControlStatus == .waitingToPlayAtSpecifiedRate,
-            paused: player.timeControlStatus == .paused,
+            paused: player.timeControlStatus == .paused && !pausedItself,
             failed: item?.status == .failed
         )
+        noteFrozen(item)
         notePictureMoved()
+    }
+
+    private func watchRate() {
+        guard rateObserver == nil else { return }
+        routeObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+            guard raw.flatMap(AVAudioSession.RouteChangeReason.init) == .oldDeviceUnavailable else { return }
+            MainActor.assumeIsolated {
+                self?.routeLost = Date()
+            }
+        }
+        rateObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayer.rateDidChangeNotification, object: player, queue: .main
+        ) { [weak self] note in
+            let reason = note.userInfo?[AVPlayer.rateDidChangeReasonKey] as? AVPlayer.RateDidChangeReason
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let other: Set<AVPlayer.RateDidChangeReason> = [.setRateCalled, .appBackgrounded, .audioSessionInterrupted]
+                let lostRoute = Date().timeIntervalSince(self.routeLost) < 2
+                self.pausedItself = self.player.rate == 0 && !lostRoute && !(reason.map(other.contains) ?? false)
+                if self.pausedItself {
+                    self.playLogNote("paused itself (\(reason?.rawValue ?? "no reason"))")
+                }
+            }
+        }
+    }
+
+    /// A picture that should move and does not reloads the item, then starts
+    /// a new watch (`FrozenPicture`). An outage message has its own clock.
+    private func noteFrozen(_ item: AVPlayerItem?) {
+        // The route notice can come after the rate change it caused.
+        if Date().timeIntervalSince(routeLost) < 3 {
+            pausedItself = false
+        }
+        let paused = player.timeControlStatus == .paused
+        let time = error == nil ? item?.currentTime().seconds : nil
+        let step = frozen.note(time: time, playing: !paused, stoppedItself: paused && pausedItself, at: Date())
+        if !frozen.reconnecting {
+            reconnecting = false
+        }
+        guard let step else { return }
+        reconnecting = true
+        switch step {
+        case .reload:
+            playLogNote("frozen: reload")
+            reload()
+        case .retune:
+            playLogNote("frozen: retune")
+            quietRetry = false
+            attempt += 1
+        }
+    }
+
+    /// The same watch on a fresh item, which AVPlayer opens at the live edge.
+    private func reload() {
+        guard let api, let session, let old = player.currentItem else { return }
+        let item = AVPlayerItem(url: api.url(session.mainPlaylist ?? session.playlist))
+        item.externalMetadata = old.externalMetadata
+        PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
+        pausedItself = false
+        player.replaceCurrentItem(with: item)
+        watchStartup(item)
+        player.play()
+        if session.mainPlaylist != nil {
+            let role = soundRole
+            Task { await loadSounds(item, prefer: role) }
+        }
     }
 
     /// The quiet message stays until this watch is actually playing. The next
@@ -945,6 +1032,16 @@ struct PlayerScreen: View {
                 .padding()
                 .glassEffect(in: .rect(cornerRadius: Tokens.Radius.md))
                 .padding(.top, 80)
+            } else if live.reconnecting {
+                Text("Reconnecting…")
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .glassEffect(in: .capsule)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .padding(.top, 24)
+                    .allowsHitTesting(false)
+                    .accessibilityIdentifier("playback-reconnecting")
             }
         }
         #if os(iOS)

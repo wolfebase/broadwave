@@ -139,3 +139,68 @@ export function pictureRetryDelay(message: string, recovery: Recovery, elapsedMs
 export function holdPictureMessage(next: { message: string; recovery: Recovery }): boolean {
   return next.recovery === "" && next.message !== noSignal;
 }
+
+// A picture that should be moving and is not. A player can stop on a live
+// stream with seconds buffered and never fire an error. Eight seconds of that
+// reloads the stream at the live edge; the next step starts a new watch, and
+// they alternate until the picture has played 20 s or the cap. A reload can
+// play the few seconds the server still lists, so a short run of picture does
+// not start the count over.
+export const frozenMs = 8000;
+const settledMs = 20_000;
+// After this many steps with no settled picture, the outage clock has the last word.
+const maxFrozenSteps = 6;
+// One sample is about a second apart. A larger step is a seek or a new
+// stream, not the picture playing.
+const largestStep = 3;
+export type FrozenStep = "reload" | "retune";
+
+export class FrozenPicture {
+  private last: number | null = null;
+  private since = 0;
+  private movingSince = 0;
+  private tries = 0;
+  private moved = false;
+  // True from the first step until the picture moves again.
+  reconnecting = false;
+
+  // time is null with nothing to watch. playing is false while the viewer or
+  // the sync engine holds the picture.
+  note(time: number | null, playing: boolean, now: number): FrozenStep | null {
+    if (time == null || !Number.isFinite(time) || !playing) {
+      this.last = null;
+      this.since = 0;
+      this.movingSince = 0;
+      return null;
+    }
+    const last = this.last;
+    this.last = time;
+    if (last == null) {
+      this.since = now;
+      return null;
+    }
+    const step = time - last;
+    if (step > 0.04 && step < largestStep) {
+      this.moved = true;
+      this.reconnecting = false;
+      this.since = now;
+      if (!this.movingSince) this.movingSince = now;
+      if (now - this.movingSince >= settledMs) this.tries = 0;
+      return null;
+    }
+    this.movingSince = 0;
+    if (Math.abs(step) >= largestStep) {
+      this.since = now;
+      return null;
+    }
+    if (!this.moved || now - this.since < frozenMs) return null;
+    if (this.tries >= maxFrozenSteps) {
+      this.reconnecting = false;
+      return null;
+    }
+    this.since = now;
+    this.tries++;
+    this.reconnecting = true;
+    return this.tries % 2 === 1 ? "reload" : "retune";
+  }
+}

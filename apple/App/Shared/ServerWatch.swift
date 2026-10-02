@@ -117,10 +117,17 @@ final class ServerWatch {
         }
         var stalled = waiting
         if let time, time.isFinite {
-            if let lastTime, abs(time - lastTime) < 0.04 {
+            let jump = lastTime.map { abs(time - $0) }
+            lastTime = time
+            // A seek or a reloaded item is not the picture playing. The stall
+            // clock keeps its place, so a reload does not hide what is wrong.
+            if let jump, jump >= 3 {
+                probe(fatal: false)
+                return
+            }
+            if let jump, jump < 0.04 {
                 stalled = true
             }
-            lastTime = time
         }
         if stalled {
             clock.noteWaiting(at: Date())
