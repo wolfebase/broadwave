@@ -45,7 +45,7 @@ func TestATuneReadsOnlyTheDevicesItNeeds(t *testing.T) {
 		t.Fatal(err)
 	}
 	other := dev
-	other.DeviceID, other.BaseURL, other.FriendlyName = "B0000001", gone.URL, "Unplugged"
+	other.DeviceID, other.BaseURL, other.FriendlyName = "B0000001", gone.URL, "Attic"
 	if err := st.UpsertDevice(ctx, other, lineup); err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +84,17 @@ func TestATuneReadsOnlyTheDevicesItNeeds(t *testing.T) {
 	tune("5.1", other.DeviceID)
 	if n := asked.Load(); n != 1 {
 		t.Fatalf("a device that just failed was asked again (%d)", n)
+	}
+	// With nothing tuned, the tuner list is the first device that answers;
+	// the unplugged one sorts first and is skipped.
+	h.mu.Lock()
+	for _, f := range h.feedsLocked() {
+		h.stopFeedLocked(f)
+	}
+	h.mu.Unlock()
+	list, err := h.Tuners(ctx)
+	if err != nil || len(list) != 2 || asked.Load() != 1 {
+		t.Fatalf("tuners %v err %v, unplugged asked %d", list, err, asked.Load())
 	}
 }
 
