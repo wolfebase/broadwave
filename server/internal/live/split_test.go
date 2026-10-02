@@ -190,6 +190,55 @@ func TestKeepTracksSplitsAMultiAudioEncode(t *testing.T) {
 	}
 }
 
+// A copied broadcast cut at a splice can start a segment with a one-field
+// picture fragment and no sound. The sound view leaves that fragment out:
+// AVPlayer fails a sound view on a moof with no traf.
+func TestASoundViewLeavesOutAFragmentWithNoSound(t *testing.T) {
+	out, _, _ := packThreeTracks(t)
+	init, err := os.ReadFile(filepath.Join(out, "init.mp4"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	video, _, ok := videoTrack(init)
+	if !ok {
+		t.Fatal("no video track")
+	}
+	var sound []uint32
+	for id := range trackScales(init) {
+		if id != video {
+			sound = append(sound, id)
+		}
+	}
+	slices.Sort(sound)
+	seg, err := os.ReadFile(filepath.Join(out, "seg00001.m4s"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pictureOnly, err := keepTracksFrag(seg, []uint32{video})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := keepTracksFrag(seg, sound[:1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := keepTracksFrag(append(pictureOnly, seg...), sound[:1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, moof := range boxesOf(got, "moof") {
+		if len(boxesOf(moof, "traf")) == 0 {
+			t.Fatal("the sound view kept a moof with no traf")
+		}
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("cut is %d bytes, want %d", len(got), len(want))
+	}
+	if only, err := keepTracksFrag(pictureOnly, sound[:1]); err != nil || len(only) != 0 {
+		t.Fatalf("a picture-only fragment cut to sound: %d bytes, %v", len(only), err)
+	}
+}
+
 func TestKeepTracksRefusesWhatItCannotCut(t *testing.T) {
 	if _, err := keepTracks(putBox("moov", putBox("mvhd", make([]byte, 100))), []uint32{1}); err == nil {
 		t.Fatal("kept a track that is not there")

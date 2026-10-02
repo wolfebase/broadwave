@@ -61,8 +61,10 @@ func keepTracks(init []byte, ids []uint32) ([]byte, error) {
 }
 
 // keepTracksFrag returns a segment or part with only the given tracks in each
-// moof and only their samples in each mdat. A fragment where a kept track has
-// no samples keeps its moof with no traf for it.
+// moof and only their samples in each mdat. A fragment with no samples of the
+// kept tracks is left out: AVPlayer fails a sound view on a moof with no traf
+// (CoreMedia -16171), and a copied broadcast cut at a splice can start a
+// segment with a one-field picture fragment that holds no sound.
 func keepTracksFrag(frag []byte, ids []uint32) ([]byte, error) {
 	var out []byte
 	for len(frag) > 0 {
@@ -126,6 +128,9 @@ func keepMoof(moof, mdat []byte, ids []uint32) ([]byte, error) {
 	}
 	if mfhd == nil {
 		return nil, errSplit
+	}
+	if len(runs) == 0 {
+		return nil, nil
 	}
 	body := func(offsets []int64) []byte {
 		b := putBox("mfhd", mfhd)
