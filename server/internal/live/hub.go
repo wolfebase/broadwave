@@ -392,6 +392,7 @@ func sourceOf(ch store.SourceChannel) Source {
 	if t, ok := PickTrack(loadTracks(ch.AudioTracks), "main"); ok && t.Measured {
 		src.AudioChannels = t.Channels
 	}
+	src.Height = ch.PictureHeight
 	return src
 }
 
