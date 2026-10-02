@@ -86,9 +86,10 @@ func PictureArgs(g Graph) []string {
 	}
 	args = append(args, "-i", g.Input)
 	if g.Program > 0 {
-		args = append(args, "-map", fmt.Sprintf("0:p:%d:v:0", g.Program), "-map", fmt.Sprintf("0:p:%d:a:0", g.Program))
+		args = append(args, "-map", fmt.Sprintf("0:p:%d:v:0", g.Program), "-map", fmt.Sprintf("0:p:%d:a:0?", g.Program))
 	} else {
-		args = append(args, "-map", "0:v:0", "-map", "0:a:0")
+		// A recording with no sound track still plays its picture.
+		args = append(args, "-map", "0:v:0", "-map", "0:a:0?")
 	}
 	args = append(args, "-vf", videoFilter(g, vaapiDeint, interlaced, field, width, height, fps))
 	args = append(args, videoCodec(g.Encoder, rate, gop)...)

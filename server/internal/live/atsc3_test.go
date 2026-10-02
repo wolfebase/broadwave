@@ -1,8 +1,10 @@
 package live
 
 import (
+	"bytes"
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -242,5 +244,75 @@ func TestAn3Point0TileIsTheBroadcastAsSent(t *testing.T) {
 		if got.Rendition.Key() != c.want || got.Reason == "" {
 			t.Errorf("%s: got %s (%s), want %s", c.name, got.Rendition.Key(), got.Reason, c.want)
 		}
+	}
+}
+
+func TestAnAC4RecordingKeepsTheBroadcastPackets(t *testing.T) {
+	if !rawRecording(store.SourceChannel{Channel: store.Channel{AudioCodec: "AC-4"}}) || rawRecording(store.SourceChannel{Channel: store.Channel{AudioCodec: "AC3"}}) {
+		t.Fatal("only an AC-4 channel records its own packets")
+	}
+	const pmtPID, videoPID, audioPID = 0x1000, 0x100, 0x101
+	pmt := []byte{0x00, 0x03, 0xc1, 0x00, 0x00, 0xe1, 0x00, 0xf0, 0x00,
+		streamHEVC, 0xe1, 0x00, 0xf0, 0x00,
+		streamPriv, 0xe1, 0x01, 0xf0, 0x0c, 0x05, 0x04, 'A', 'C', '-', '4', 0x0a, 0x04, 'e', 'n', 'g', 0x00,
+	}
+	in := tsPacket(0, true, psiSection(0x00, append([]byte{0x00, 0x01, 0xc1, 0x00, 0x00}, progPID(3, pmtPID)...)))
+	in = append(in, tsPacket(pmtPID, true, psiSection(0x02, pmt))...)
+	var pts int64 = -1
+	sent := 0
+	data := hevcFixture(t)
+	for off := 0; off+188 <= len(data); off += 188 {
+		pkt := data[off : off+188]
+		pid := int(pkt[1]&0x1f)<<8 | int(pkt[2])
+		if pid != videoPID {
+			continue
+		}
+		in = append(in, pkt...)
+		if pkt[1]&0x40 != 0 && pts < 0 {
+			pts, _ = pesTime(tsPayload(pkt))
+		}
+		if pts >= 0 && off%(188*20) == 0 {
+			at := pts + int64(sent)*3003
+			pes := []byte{0x00, 0x00, 0x01, 0xbd, 0x00, 0x00, 0x80, 0x80, 0x05,
+				byte(0x21 | (at>>29)&0x0e), byte(at >> 22), byte(0x01 | (at>>14)&0xfe), byte(at >> 7), byte(0x01 | (at<<1)&0xfe)}
+			in = append(in, tsPacket(audioPID, true, append(pes, make([]byte, 100)...))...)
+			sent++
+		}
+	}
+	if pts < 0 || sent < 3 {
+		t.Fatalf("fixture: pts %d, %d sound packets", pts, sent)
+	}
+	path := filepath.Join(t.TempDir(), "rec.ts")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := newProgramPipe(file, 3)
+	for len(in) > 0 {
+		n := min(len(in), 7*188)
+		if _, err := w.Write(in[:n]); err != nil {
+			t.Fatal(err)
+		}
+		in = in[n:]
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := map[int]int{}
+	described := false
+	for off := 0; off+188 <= len(out); off += 188 {
+		pkt := out[off : off+188]
+		pid := int(pkt[1]&0x1f)<<8 | int(pkt[2])
+		count[pid]++
+		if pid == pmtPID && bytes.Contains(pkt, []byte("AC-4")) {
+			described = true
+		}
+	}
+	if !described || count[videoPID] == 0 || count[audioPID] == 0 {
+		t.Fatalf("recording: AC-4 in the map %v, packets per pid %v", described, count)
 	}
 }

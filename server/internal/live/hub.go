@@ -1521,21 +1521,31 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	if mux := muxOf(h, f); mux != nil && mux.input != "" {
 		input = mux.input
 	}
-	cmd := exec.Command(h.FFmpeg, copyArgs(f.program, input, f.channel.UserAgent, f.channel.Referrer, path)...)
+	var cmd *exec.Cmd
 	var stdin io.WriteCloser
-	if input == "pipe:0" {
-		stdin, err = cmd.StdinPipe()
+	if input == "pipe:0" && rawRecording(f.channel) {
+		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if err != nil {
 			h.abortRecordingLocked(ctx, f, id)
 			return store.Recording{}, err
 		}
+		stdin = newProgramPipe(file, f.program)
+	} else {
+		cmd = exec.Command(h.FFmpeg, copyArgs(f.program, input, f.channel.UserAgent, f.channel.Referrer, path)...)
+		if input == "pipe:0" {
+			stdin, err = cmd.StdinPipe()
+			if err != nil {
+				h.abortRecordingLocked(ctx, f, id)
+				return store.Recording{}, err
+			}
+		}
+		cmd.Stderr = os.Stderr
+		if err := cmd.Start(); err != nil {
+			h.abortRecordingLocked(ctx, f, id)
+			return store.Recording{}, err
+		}
+		NotePID(h.Dir, cmd.Process.Pid)
 	}
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		h.abortRecordingLocked(ctx, f, id)
-		return store.Recording{}, err
-	}
-	NotePID(h.Dir, cmd.Process.Pid)
 	rec := &recording{id: id, cmd: cmd, stdin: stdin, ends: ends}
 	f.recording = rec
 	if stdin != nil && backfill {
@@ -1549,6 +1559,14 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	}
 	h.changed()
 	return h.Store.Recording(ctx, id)
+}
+
+// rawRecording writes the program's own packets instead of an ffmpeg copy.
+// ffmpeg's MPEG-TS muxer has no AC-4: it writes the sound as unlabeled
+// private data that nothing decodes later. The program filter keeps the
+// broadcast's map, so the picture, every AC-4 track, and captions stay as sent.
+func rawRecording(ch store.SourceChannel) bool {
+	return codecName(ch.AudioCodec) == "ac4"
 }
 
 // Shutdown stops every rendition, finishes recordings that are in progress,
@@ -2177,7 +2195,7 @@ func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 	if rec.stdin != nil {
 		_ = rec.stdin.Close()
 	}
-	if rec.cmd.Process != nil {
+	if rec.cmd != nil && rec.cmd.Process != nil {
 		ForgetPID(h.Dir, rec.cmd.Process.Pid)
 		done := make(chan struct{})
 		go func() { _ = rec.cmd.Wait(); close(done) }()
