@@ -95,6 +95,10 @@ type Timeline struct {
 	seedPTS  int64
 	seedWall time.Time
 	seeded   bool
+	// carry is input silence (Shift) not yet stamped on a segment. A
+	// re-anchor on a timestamp break adds it, so the break lands on the wall
+	// clock instead of right after the last segment.
+	carry time.Duration
 }
 
 func NewTimeline() *Timeline {
@@ -148,8 +152,30 @@ func (t *Timeline) Reanchor(pts int64, wall time.Time) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.pts = pts
-	t.wall = wall
+	t.wall = wall.Add(t.carry)
+	t.carry = 0
 	t.set = true
+}
+
+// Shift moves the clock on by d after the tuner sent nothing for d. A source
+// that pauses and then carries on with the next timestamp would otherwise put
+// every later frame d in the past, and players would chase a live edge that
+// is not there.
+func (t *Timeline) Shift(d time.Duration) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.set || d <= 0 {
+		return
+	}
+	t.wall = t.wall.Add(d)
+	t.carry += d
+}
+
+// Settle marks the shift as stamped: a segment after the silence carries it.
+func (t *Timeline) Settle() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.carry = 0
 }
 
 // Earliest is the program time of the first part or segment this encode stamped.
@@ -262,9 +288,10 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 				// segment. Pin it to that segment's end and re-anchor, so the
 				// program timeline stays monotonic and the next segment continues.
 				if haveEnd && wall.Before(lastEnd) {
-					wall = lastEnd
-					tl.Reanchor(pts, wall)
+					tl.Reanchor(pts, lastEnd)
+					wall = tl.Wall(pts)
 				}
+				tl.Settle()
 				p.walls[name] = wall
 				out.WriteString("#EXT-X-PROGRAM-DATE-TIME:" + wall.UTC().Format("2006-01-02T15:04:05.000Z") + "\n")
 				if d := pendingDur(pending); d > 0 {

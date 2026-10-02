@@ -1993,12 +1993,18 @@ func (m *mux) picture(program int) (notedPicture, bool) {
 
 func (h *Hub) readLoop(ctx context.Context, m *mux) {
 	buf := make([]byte, 188*49)
+	var last time.Time
 	for {
 		if ctx.Err() != nil {
 			return
 		}
 		n, err := m.body.Read(buf)
 		if n > 0 {
+			now := time.Now()
+			if gap := now.Sub(last); !last.IsZero() && gap >= inputGap {
+				h.shiftClocks(m, gap)
+			}
+			last = now
 			m.got.Store(true)
 			m.firstByte.mark()
 			chunk := append([]byte(nil), buf[:n]...)
@@ -2023,6 +2029,29 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 			return
 		}
 	}
+}
+
+// inputGap is the silence after which the tuner's next bytes are taken as
+// the broadcast resuming, not as a slow read. A tuner sends every few
+// milliseconds, and it cannot hold back seconds of a live broadcast.
+var inputGap = 5 * time.Second
+
+// shiftClocks moves every encode's clock on a mux past a silence, so the
+// program date-times after it stay on the wall clock.
+func (h *Hub) shiftClocks(m *mux, gap time.Duration) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.muxes[m.freq] != m {
+		return
+	}
+	for _, f := range m.feeds {
+		for _, r := range f.renditions {
+			if r.clock != nil {
+				r.clock.Shift(gap)
+			}
+		}
+	}
+	slog.Warn(fmt.Sprintf("mux %d: the tuner sent nothing for %.1f s; program times move on by that much", m.freq, gap.Seconds()))
 }
 
 // releaseMux drops every channel on a mux whose tuner read has ended.
