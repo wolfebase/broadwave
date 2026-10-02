@@ -502,7 +502,13 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 	// A failed SiliconDust pull still lets Schedules Direct and a guide
 	// address fill the guide; its own listings stay until the next pull.
 	var rows []store.Airing
-	raw, pullErr := guide.Pull(ctx, s.HDHR, devices[0].BaseURL)
+	var bases []string
+	for _, d := range devices {
+		if !strings.HasPrefix(d.DeviceID, "src-") && d.TunerCount > 0 {
+			bases = append(bases, d.BaseURL)
+		}
+	}
+	raw, pullErr := guide.Pull(ctx, s.HDHR, bases...)
 	if pullErr == nil {
 		var art map[int64]string
 		rows, art, pullErr = guide.Parse(raw, antenna)
