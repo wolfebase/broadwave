@@ -144,16 +144,31 @@ func requestError(err error) error {
 	return fmt.Errorf("guide request: %w", err)
 }
 
-func Pull(ctx context.Context, client *hdhr.Client, baseURL string) ([]byte, error) {
+// deviceAuth asks each tuner in turn and keeps the first DeviceAuth offered,
+// so one tuner that is unplugged or gone does not leave the guide empty.
+func deviceAuth(ctx context.Context, client *hdhr.Client, bases []string) (string, error) {
 	if client == nil {
 		client = &hdhr.Client{}
 	}
-	auth, err := client.DeviceAuth(ctx, baseURL)
+	err := errors.New("no tuner")
+	for _, base := range bases {
+		auth, askErr := client.DeviceAuth(ctx, base)
+		switch {
+		case askErr != nil:
+			err = askErr
+		case auth == "":
+			err = fmt.Errorf("tuner did not offer guide access")
+		default:
+			return auth, nil
+		}
+	}
+	return "", err
+}
+
+func Pull(ctx context.Context, client *hdhr.Client, bases ...string) ([]byte, error) {
+	auth, err := deviceAuth(ctx, client, bases)
 	if err != nil {
 		return nil, err
-	}
-	if auth == "" {
-		return nil, fmt.Errorf("tuner did not offer guide access")
 	}
 	u := "https://api.hdhomerun.com/api/xmltv?DeviceAuth=" + url.QueryEscape(auth)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)

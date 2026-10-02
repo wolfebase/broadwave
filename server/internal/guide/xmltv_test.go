@@ -3,6 +3,7 @@ package guide
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"broadwave/internal/hdhr"
 	"broadwave/internal/store"
 )
 
@@ -104,5 +106,28 @@ func TestRequestErrorDropsTheDeviceAuth(t *testing.T) {
 	got := requestError(err).Error()
 	if strings.Contains(got, "SECRET") || !strings.Contains(got, "connection refused") {
 		t.Fatal(got)
+	}
+}
+
+func TestGuideAccessSkipsATunerThatIsGone(t *testing.T) {
+	quiet := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"DeviceID":"OLD"}`))
+	}))
+	defer quiet.Close()
+	flex := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"DeviceID":"FLEX","DeviceAuth":"abc"}`))
+	}))
+	defer flex.Close()
+	gone := httptest.NewServer(http.NotFoundHandler())
+	gone.Close()
+	auth, err := deviceAuth(context.Background(), &hdhr.Client{}, []string{gone.URL, quiet.URL, flex.URL})
+	if err != nil || auth != "abc" {
+		t.Fatalf("auth %q, %v; want the first tuner that offers one", auth, err)
+	}
+	if _, err := deviceAuth(context.Background(), &hdhr.Client{}, []string{gone.URL}); err == nil {
+		t.Fatal("a tuner that is gone gave guide access")
+	}
+	if _, err := deviceAuth(context.Background(), &hdhr.Client{}, nil); err == nil {
+		t.Fatal("no tuner gave guide access")
 	}
 }
