@@ -1841,26 +1841,55 @@ func (h *Hub) Tuners(ctx context.Context) ([]Tuner, error) {
 		}
 	}
 	h.mu.Unlock()
+	bases := []string{host}
 	if h.Store != nil && !strings.Contains(host, "://") {
 		devices, err := h.Store.Devices(ctx)
 		if err != nil {
 			return nil, err
 		}
+		// The device with a tune open first, then the rest in order: an
+		// unplugged one does not hide the others.
+		bases = nil
 		for _, d := range devices {
-			if d.TunerCount > 0 && (host == "" || hostOf(d.BaseURL) == host) {
-				host = d.BaseURL
-				break
+			if d.TunerCount > 0 && host != "" && hostOf(d.BaseURL) == host {
+				bases = append([]string{d.BaseURL}, bases...)
+			} else if d.TunerCount > 0 {
+				bases = append(bases, d.BaseURL)
 			}
 		}
 	}
-	if host == "" {
+	if len(bases) == 0 || bases[0] == "" {
 		return nil, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return h.readTuners(ctx, host)
+	var last error
+	for i, base := range bases {
+		h.mu.Lock()
+		down := h.statusDown != nil && time.Now().Before(h.statusDown[base])
+		h.mu.Unlock()
+		if down && i < len(bases)-1 {
+			continue
+		}
+		// The read runs without h.mu: playlists wait on it.
+		raw, err := fetchTunerStatus(ctx, base)
+		h.mu.Lock()
+		if err != nil {
+			if ctx.Err() == nil && h.statusDown != nil {
+				h.statusDown[base] = time.Now().Add(statusDownFor)
+			}
+			h.mu.Unlock()
+			last = err
+			continue
+		}
+		if h.statusDown != nil {
+			delete(h.statusDown, base)
+		}
+		out := h.tunersFromLocked(ctx, base, raw)
+		h.mu.Unlock()
+		return out, nil
+	}
+	return nil, last
 }
 
 func (h *Hub) attachPipeLocked(m *mux, w io.WriteCloser) *pipeSub {
@@ -2754,6 +2783,12 @@ func (h *Hub) readTuners(ctx context.Context, host string) ([]Tuner, error) {
 	if err != nil {
 		return nil, err
 	}
+	return h.tunersFromLocked(ctx, host, raw), nil
+}
+
+// tunersFromLocked is one device's status as this server's tuners. The
+// caller holds h.mu.
+func (h *Hub) tunersFromLocked(ctx context.Context, host string, raw []tunerStatus) []Tuner {
 	ours := h.usedTunersLocked(host)
 	out := make([]Tuner, 0, len(raw))
 	for i, row := range raw {
@@ -2764,7 +2799,7 @@ func (h *Hub) readTuners(ctx context.Context, host string) ([]Tuner, error) {
 		})
 	}
 	h.markATSC3(ctx, host, out)
-	return out, nil
+	return out
 }
 
 // statusDownFor is how long a tune skips a device whose status read failed,
