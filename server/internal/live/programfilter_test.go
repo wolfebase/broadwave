@@ -563,6 +563,38 @@ func TestProgramFilterStartsAtASequenceHeader(t *testing.T) {
 	}
 }
 
+// An ATSC 3.0 tune is one program with no stored number. An encode that
+// joins it mid-group starts on the parameter sets, behind the tables.
+func TestTheFirstProgramStartsAtItsParameterSets(t *testing.T) {
+	var join []byte
+	join = append(join, psiPacket(0, psiSection(0x00, append([]byte{0x00, 0x01, 0xc1, 0x00, 0x00}, progPID(7, 0x100)...)))...)
+	join = append(join, psiPacket(0x100, psiSection(0x02, pmtBody(7, streamHEVC, 0x101)))...)
+	// A trailing picture (type 1), then a VPS (type 32) at the next random access point.
+	join = append(join, tsPacket(0x101, true, pesPacket([]byte{0x00, 0x00, 0x01, 0x02, 0x01}))...)
+	join = append(join, tsPacket(0x101, true, pesPacket([]byte{0x00, 0x00, 0x01, 0x40, 0x01}))...)
+	join = append(join, tsPacket(0x1fff, false, nil)...)
+	join = append(join, tsPacket(0x1fff, false, nil)...)
+	var buf bytes.Buffer
+	w := newProgramPipe(&closeBuf{&buf}, anyProgram)
+	if _, err := w.Write(join); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.Bytes()
+	var pids []int
+	for off := 0; off+188 <= len(out); off += 188 {
+		pids = append(pids, int(out[off+1]&0x1f)<<8|int(out[off+2]))
+	}
+	if len(pids) < 3 || pids[0] != 0 || pids[1] != 0x100 || pids[2] != 0x101 {
+		t.Fatalf("encode must start with the tables and then the parameter sets: %v", pids)
+	}
+	if !sequenceStart(tsPayload(out[188*2:188*3]), streamHEVC) {
+		t.Fatal("first video packet is not the parameter sets")
+	}
+	if got := patPMT(tsPayload(out[:188])[1:], 7); got != 0x100 {
+		t.Fatalf("the table names program 7 at PID %#x, got %#x", 0x100, got)
+	}
+}
+
 func ptsPES(stream byte, pts int64) []byte {
 	return []byte{0x00, 0x00, 0x01, stream, 0x00, 0x00, 0x80, 0x80, 0x05,
 		0x21 | byte(pts>>29)&0x0e, byte(pts >> 22), byte(pts>>14) | 1, byte(pts >> 7), byte(pts<<1) | 1}

@@ -88,6 +88,17 @@ func patPMT(sec []byte, program int) int {
 	return 0
 }
 
+// firstProgram is the first program a PAT lists, or anyProgram if none.
+func firstProgram(sec []byte) int {
+	end := sectionEnd(sec)
+	for off := 8; off+4 <= end; off += 4 {
+		if prog := int(sec[off])<<8 | int(sec[off+1]); prog != 0 {
+			return prog
+		}
+	}
+	return anyProgram
+}
+
 func pmtVideo(sec []byte) (pid, kind int) {
 	if len(sec) < 12 {
 		return 0, 0

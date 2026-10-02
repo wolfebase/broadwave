@@ -109,8 +109,13 @@ type pesClock struct {
 	shift    byte
 }
 
+// anyProgram asks a program pipe for the first program its PAT lists. An
+// ATSC 3.0 tune is a stream of one program whose number is not stored, and
+// an encode that joins it mid-group still needs to start on its parameter sets.
+const anyProgram = -1
+
 func newProgramPipe(w io.WriteCloser, program int) io.WriteCloser {
-	if w == nil || program <= 0 {
+	if w == nil || program == 0 {
 		return w
 	}
 	return &programPipe{w: w, program: program, pmtVer: -1}
@@ -319,6 +324,9 @@ func (p *programPipe) learn(buf []byte) bool {
 			continue
 		}
 		tsID = int(sec[3])<<8 | int(sec[4])
+		if p.program == anyProgram {
+			p.program = firstProgram(sec)
+		}
 		if pid := patPMT(sec, p.program); pid != 0 {
 			pmtPID = pid
 			absent = false
