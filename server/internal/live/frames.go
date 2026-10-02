@@ -99,7 +99,11 @@ func (h *Hub) startFrames(ctx context.Context, m *mux) {
 		return
 	}
 	m.frames.Do(func() {
-		go h.watchFrames(ctx, m)
+		h.grabbers.Add(1)
+		go func() {
+			defer h.grabbers.Done()
+			h.watchFrames(ctx, m)
+		}()
 	})
 }
 
