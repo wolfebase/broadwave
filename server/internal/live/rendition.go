@@ -224,6 +224,10 @@ func DecideFor(src Source, caps Caps, p Prefs, encoder string, host Host) Decisi
 	if tooTall {
 		canCopyVideo = false
 	}
+	// An HEVC picture up to 1080 is already small enough for a tile on a
+	// player that decodes HEVC. Sending it as is costs nothing; a new encode
+	// of 10-bit HEVC costs more than two cores.
+	copyTile := canCopyVideo && v == "hevc" && src.Height > 0 && src.Height <= 1080
 	quality := strings.ToLower(p.Quality)
 	if quality == "" || quality == "auto" {
 		quality = "original"
@@ -241,7 +245,10 @@ func DecideFor(src Source, caps Caps, p Prefs, encoder string, host Host) Decisi
 		r.Video = "540"
 		why = append(why, "Data saver")
 	case "tile":
-		if host.Focus == "360" {
+		if copyTile {
+			r.Video = "copy"
+			why = append(why, "Original picture tile")
+		} else if host.Focus == "360" {
 			r.Video = "360"
 			why = append(why, "360p tile")
 		} else {
@@ -251,6 +258,8 @@ func DecideFor(src Source, caps Caps, p Prefs, encoder string, host Host) Decisi
 	case "focus":
 		// A measured host picks the tile. The screen cap below can still lower it.
 		switch {
+		case copyTile:
+			r.Video = "copy"
 		case host.Focus != "":
 			r.Video = host.Focus
 		case !hardwareEncoder(encoder):
@@ -290,11 +299,13 @@ func DecideFor(src Source, caps Caps, p Prefs, encoder string, host Host) Decisi
 			r.Video = "720"
 		}
 	}
-	if quality == "focus" && r.Video != "720" {
+	if quality == "focus" && r.Video != "720" && r.Video != "copy" {
 		r.FullRate = host.Focus == "" || host.FullRate
 	}
 	if quality == "focus" {
 		switch {
+		case r.Video == "copy":
+			why = append(why, "Original picture tile")
 		case r.Video == "720":
 			why = append(why, "720p60 tile")
 		case r.Video == "360" && r.FullRate:

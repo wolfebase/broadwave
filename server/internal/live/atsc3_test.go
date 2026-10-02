@@ -216,3 +216,31 @@ func TestATooTallPictureIsScaledToTheScreen(t *testing.T) {
 		t.Errorf("a 1080 picture on a 1080 screen: %s", d.Rendition.Key())
 	}
 }
+
+func TestAn3Point0TileIsTheBroadcastAsSent(t *testing.T) {
+	apple := Caps{Platform: "tvos", Video: []string{"h264", "hevc"}, Audio: []string{"ac3", "aac"}}
+	noHEVC := Caps{Platform: "web", Video: []string{"h264"}, Audio: []string{"aac"}}
+	hd := Source{VideoCodec: "HEVC", AudioCodec: "AC4", Progressive: true, AudioChannels: 6, Height: 1080}
+	uhd := Source{VideoCodec: "HEVC", AudioCodec: "AC4", Progressive: true, AudioChannels: 6, Height: 2160}
+	unknown := Source{VideoCodec: "HEVC", AudioCodec: "AC4", Progressive: true, AudioChannels: 6}
+	gpu := Host{Focus: "720", Tiles: 4}
+	for _, c := range []struct {
+		name string
+		src  Source
+		caps Caps
+		p    Prefs
+		want string
+	}{
+		{"a 1080 HEVC tile is copied", hd, apple, Prefs{Quality: "tile"}, "copy.none"},
+		{"the focused 1080 HEVC tile is copied with sound", hd, apple, Prefs{Quality: "focus", Audio: "stereo"}, "copy.aac2"},
+		{"a 2160 tile is converted", uhd, apple, Prefs{Quality: "tile"}, "540.none.broadcast.hevc"},
+		{"a tile of a picture not measured yet is converted", unknown, apple, Prefs{Quality: "tile"}, "540.none.broadcast.hevc"},
+		{"a player without HEVC gets a converted tile", hd, noHEVC, Prefs{Quality: "tile"}, "540.none.broadcast"},
+		{"the smallest tile is still converted", hd, apple, Prefs{Quality: "360", Audio: "none"}, "360.none.broadcast.hevc"},
+	} {
+		got := DecideFor(c.src, c.caps, c.p, "h264_vaapi", gpu)
+		if got.Rendition.Key() != c.want || got.Reason == "" {
+			t.Errorf("%s: got %s (%s), want %s", c.name, got.Rendition.Key(), got.Reason, c.want)
+		}
+	}
+}
