@@ -151,3 +151,29 @@ func TestATSC3RenditionArgs(t *testing.T) {
 		t.Fatalf("VAAPI keeps P010: %s", gpu)
 	}
 }
+
+// hevc2160.ts is three libx265 Main 10 pictures at 3840x2160, service 3.
+// No broadcast here sends 4K yet; the picture must reach the player as sent.
+func TestA2160pHEVCPassesThroughAsSent(t *testing.T) {
+	data, err := os.ReadFile("testdata/hevc2160.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := pictureFacts(data, 3)
+	if !ok || p.Width != 3840 || p.Height != 2160 {
+		t.Fatalf("facts: %+v %v", p, ok)
+	}
+	if VideoCodecOf(data, 3) != "HEVC" {
+		t.Fatalf("codec: %q", VideoCodecOf(data, 3))
+	}
+	src := Source{VideoCodec: "HEVC", AudioCodec: "AC4", Progressive: true, AudioChannels: 6}
+	apple := Caps{Platform: "tvos", Video: []string{"h264", "hevc"}, Audio: []string{"aac", "ac3"}}
+	r := DecideFor(src, apple, Prefs{}, "libx264", Host{}).Rendition
+	if r.Video != "copy" {
+		t.Fatalf("rendition %s", r.Key())
+	}
+	line := strings.Join(RenditionArgs(3, src, r, "libx264", ""), " ")
+	if !strings.Contains(line, "-c:v copy -tag:v hvc1") || strings.Contains(line, "-vf ") || strings.Contains(line, "scale=") {
+		t.Fatalf("copy args: %s", line)
+	}
+}
