@@ -31,7 +31,7 @@ func (h *Hub) Warm(ctx context.Context, channelID int64, want Rendition, alterna
 	var opened *autoGuess
 	// Only a picture sent as broadcast is cheap enough to start on a guess.
 	if untuned && want.Video == "copy" {
-		if opened = h.openGuess(ctx, ch); opened == nil {
+		if opened = h.openAuto(ctx, ch, true); opened == nil {
 			return false, nil
 		}
 	}
@@ -116,11 +116,12 @@ type autoGuess struct {
 	host, url string
 }
 
-// openGuess opens a device-tuned (ATSC 3.0) channel for a guess. It runs
-// without h.mu: the device takes about 2 s to answer, and every playlist and
-// watch waits on h.mu. It opens nothing unless another tuner that can carry
-// the channel stays free for a recording or another app on the device.
-func (h *Hub) openGuess(ctx context.Context, ch store.SourceChannel) *autoGuess {
+// openAuto opens a device-tuned (ATSC 3.0) channel without h.mu: the device
+// takes about 2 s to answer, and every playlist and watch waits on h.mu. A
+// guess opens only when another tuner that can carry the channel stays free
+// for a recording or another app on the device; a watch opens when one is
+// free now, and otherwise leaves freeing a tuner to ensureFeedLocked.
+func (h *Hub) openAuto(ctx context.Context, ch store.SourceChannel, guess bool) *autoGuess {
 	need := NeedFor(ch.VideoCodec, ch.AudioCodec, ch.ATSC3)
 	if !need.ATSC3 || ch.TunerCount == 0 || ch.BaseURL == "" || hlsStream(ch) {
 		return nil
@@ -145,15 +146,19 @@ func (h *Hub) openGuess(ctx context.Context, ch store.SourceChannel) *autoGuess 
 		maps.Copy(held, HoldBack(tuners, h.hold))
 	}
 	h.mu.Unlock()
-	free := 0
+	free, idle := 0, 0
 	for _, t := range tuners {
-		// A guess nobody joined is stopped when this one starts.
-		idle := (t.Target == "" && t.Guide == "") || replaced[t.Guide]
-		if t.ATSC3 && idle && !used[t.Index] && !held[t.Index] {
+		if !t.ATSC3 || used[t.Index] || held[t.Index] {
+			continue
+		}
+		if t.Target == "" && t.Guide == "" {
 			free++
+		} else if replaced[t.Guide] {
+			// A guess nobody joined is stopped when another one starts.
+			idle++
 		}
 	}
-	if free < 2 {
+	if (guess && free+idle < 2) || (!guess && free < 1) {
 		return nil
 	}
 	url := h.autoURL(ch, h.streamRootFor(ctx, ch.BaseURL, ch.GuideNumber))

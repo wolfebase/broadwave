@@ -580,3 +580,79 @@ func TestAGuessTunesA3Point0ChannelAhead(t *testing.T) {
 		t.Fatalf("the watch tuned again: %d opens", n)
 	}
 }
+
+// A 3.0 watch does not hold the hub while the device answers, and when no
+// 3.0 tuner is free it still takes the one a channel left a moment ago holds.
+func TestA3Point0WatchLeavesTheHubFreeWhileTheDeviceAnswers(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	st := openStore(t)
+	srv := &fake.Server{Profile: fake.ProfileFlex4K, TuneDelay: 800 * time.Millisecond, Channels: []fake.Channel{
+		{Number: "4.1", Name: "KBWV", Freq: 593000000},
+		{Number: "104.1", Name: "KBWV", Freq: 599000000, Video: "HEVC", Audio: "AC-4", ATSC3: true},
+		{Number: "106.1", Name: "WTST", Freq: 611000000, Video: "HEVC", Audio: "AC-4", ATSC3: true},
+	}}
+	base, control, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(srv.Close)
+	t.Setenv("HDHR_CONTROL_PORT", control)
+	ctx := context.Background()
+	dev, err := (&hdhr.Client{}).FetchDevice(ctx, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lineup, err := (&hdhr.Client{}).FetchLineup(ctx, dev.LineupURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertDevice(ctx, dev, lineup); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"104.1", "106.1"} {
+		if err := st.SetFieldOrder(ctx, sourceByNumber(t, st, n).ID, "progressive"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h.Shutdown)
+	copied := Rendition{Video: "copy", Audio: "aac2"}
+	first := sourceByNumber(t, st, "104.1")
+
+	done := make(chan error, 1)
+	var session Session
+	go func() {
+		var err error
+		session, err = h.Watch(ctx, first.ID, copied, false)
+		done <- err
+	}()
+	time.Sleep(300 * time.Millisecond)
+	began := time.Now()
+	h.Touch(first.ID, copied.normalized().Key())
+	if waited := time.Since(began); waited > 200*time.Millisecond {
+		t.Fatalf("the hub was held %v while the device answered", waited)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	h.Release(first.ID, session.Rendition)
+
+	// Someone else takes the other 3.0 tuner; 104.1 is kept for a flip back.
+	var other int
+	for i, g := range fetchGuides(t, base) {
+		if g == "" && i < 2 {
+			other = i
+		}
+	}
+	res, err := http.Get(fmt.Sprintf("%s/tuner%d/v4.1", base, other))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { res.Body.Close() })
+	waitGuide(t, base, other, "4.1")
+	if _, err := h.Watch(ctx, sourceByNumber(t, st, "106.1").ID, copied, false); err != nil {
+		t.Fatalf("no 3.0 tuner was free and the one left a moment ago was kept: %v (%v)", err, fetchGuides(t, base))
+	}
+}
