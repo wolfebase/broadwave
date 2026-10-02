@@ -73,9 +73,10 @@ type Server struct {
 	httpLn net.Listener
 	ctrlLn net.Listener
 
-	mu       sync.Mutex
-	tuners   []tuner
-	streams  int
+	mu     sync.Mutex
+	tuners []tuner
+	// open is each legacy stream still counted against the tuners.
+	open     map[chan struct{}]bool
 	scanning bool
 	scanOnce bool
 	paths    []string
@@ -211,7 +212,7 @@ func (s *Server) FreeAll() {
 		s.closeStopLocked(i)
 		s.tuners[i] = tuner{dead: dead}
 	}
-	s.streams = 0
+	clear(s.open)
 }
 
 // Silence ends streams and stops answering. Answer resumes.
@@ -298,6 +299,9 @@ func (s *Server) KillTuner(n int) {
 
 func (s *Server) closeStopLocked(n int) {
 	if s.tuners[n].stop != nil {
+		// A real tuner is free the moment it is set to none, not when the
+		// stream's connection is noticed closed.
+		delete(s.open, s.tuners[n].stop)
 		close(s.tuners[n].stop)
 		s.tuners[n].stop = nil
 	}
@@ -541,19 +545,24 @@ func (s *Server) legacyStream() bool {
 
 func (s *Server) streamLegacy(w http.ResponseWriter, r *http.Request) {
 	n, number := streamRequest(r.URL.Path)
+	var stop chan struct{}
 	if strings.Contains(r.URL.Path, "/ch") || strings.Contains(r.URL.Path, "/auto/") {
 		s.mu.Lock()
 		limit := len(s.tuners)
 		if limit == 0 {
 			limit = 2
 		}
-		if s.streams >= limit {
+		if len(s.open) >= limit {
 			s.mu.Unlock()
 			w.Header().Set("X-HDHomeRun-Error", "805 All Tuners In Use")
 			http.Error(w, "805 All tuners in use", http.StatusServiceUnavailable)
 			return
 		}
-		s.streams++
+		stop = make(chan struct{})
+		if s.open == nil {
+			s.open = map[chan struct{}]bool{}
+		}
+		s.open[stop] = true
 		// The hub opens /tunerN/chFREQ without a control tune once it already
 		// knows the channel. Status has to follow that stream, or a dark
 		// channel stays "no lock" after the picture is back.
@@ -562,13 +571,15 @@ func (s *Server) streamLegacy(w http.ResponseWriter, r *http.Request) {
 				s.tuners[n].guide = ch.Number
 				s.tuners[n].freq = ch.Freq
 				s.tuners[n].held = true
+				s.tuners[n].stop = stop
 			}
 		}
 		s.mu.Unlock()
 		defer func() {
 			s.mu.Lock()
-			s.streams--
-			if n := tunerFromPath(r.URL.Path); n >= 0 && n < len(s.tuners) {
+			delete(s.open, stop)
+			// A later tune owns the tuner once this stream was set to none.
+			if n >= 0 && n < len(s.tuners) && s.tuners[n].stop == stop {
 				dead := s.tuners[n].dead
 				s.tuners[n] = tuner{dead: dead}
 			}
@@ -619,10 +630,10 @@ func (s *Server) streamLegacy(w http.ResponseWriter, r *http.Request) {
 		if silent {
 			return
 		}
-		s.pump(w, number, stdout, nil, r.Context().Done())
+		s.pump(w, number, stdout, stop, r.Context().Done())
 		return
 	}
-	s.loopFile(w, number, nil, r.Context().Done())
+	s.loopFile(w, number, stop, r.Context().Done())
 }
 
 func (s *Server) streamAllocated(w http.ResponseWriter, r *http.Request) {

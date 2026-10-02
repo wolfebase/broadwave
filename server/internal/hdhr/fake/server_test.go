@@ -3,6 +3,7 @@ package fake
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -315,5 +316,49 @@ func TestRawPlaysTheFileByteForByteAtItsOwnPace(t *testing.T) {
 	// Two passes of a file whose PCR spans one second, plus one interval.
 	if d := time.Since(start); d < 3500*time.Millisecond || d > 5000*time.Millisecond {
 		t.Fatalf("two passes took %s", d)
+	}
+}
+
+// A tuner set to none is free at once, as on a real device. The hub stops a
+// stream and retunes that tuner right away; the server noticing the closed
+// connection can come later.
+func TestATunerSetToNoneIsFreeBeforeItsStreamCloses(t *testing.T) {
+	sample := filepath.Join(t.TempDir(), "null.ts")
+	pkt := make([]byte, 188)
+	pkt[0], pkt[1], pkt[2] = 0x47, 0x1f, 0xff
+	if err := os.WriteFile(sample, bytes.Repeat(pkt, 1000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := &Server{TS: sample}
+	base, port, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(srv.Close)
+	t.Setenv("HDHR_CONTROL_PORT", port)
+	open := func(n int) (*http.Response, error) {
+		return http.Get(fmt.Sprintf("%s/tuner%d/ch593000000", base, n))
+	}
+	for n := range 2 {
+		res, err := open(n)
+		if err != nil || res.StatusCode != http.StatusOK {
+			t.Fatalf("tuner %d: %v %v", n, res, err)
+		}
+		// Left open: the server has not seen it go.
+		defer res.Body.Close()
+		if _, err := io.ReadFull(res.Body, make([]byte, 188)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := (hdhr.Control{Addr: "127.0.0.1:" + port}).Set("/tuner1/channel", "none"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := open(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("the tuner set to none is still busy: %s", res.Status)
 	}
 }

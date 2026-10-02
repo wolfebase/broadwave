@@ -2159,7 +2159,7 @@ func (h *Hub) stopFeedLocked(f *feed) {
 			sub.stop()
 		}
 		if m.tuner >= 0 {
-			_, _ = hdhr.Control{Addr: m.host}.Set(fmt.Sprintf("/tuner%d/channel", m.tuner), "none")
+			_, _ = hdhr.Control{Addr: controlAddr(m.host)}.Set(fmt.Sprintf("/tuner%d/channel", m.tuner), "none")
 		}
 		delete(h.muxes, m.freq)
 	}
