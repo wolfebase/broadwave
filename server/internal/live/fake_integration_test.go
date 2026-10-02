@@ -61,6 +61,9 @@ func TestFakeTunerSharesFrequencyAndYields(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	// Runs before the temp dirs are removed, so no frame grab writes into
+	// a directory being deleted.
+	t.Cleanup(h.Shutdown)
 	defer func() {
 		for _, rec := range mustRecordings(t, st) {
 			if rec.Status == "recording" {
