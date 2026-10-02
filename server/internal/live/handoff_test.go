@@ -29,6 +29,7 @@ func TestDeviceVanishHandsTheStreamOff(t *testing.T) {
 	}
 
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h.Shutdown)
 	h.MoveBudget = time.Second
 	m := &mux{
 		freq: 593000000, tuner: 0, host: "127.0.0.1", device: idA, body: res.Body,
@@ -83,6 +84,7 @@ func TestATSC3MoveSkipsATunerThatCannot(t *testing.T) {
 	mustTune(t, base+"/tuner0/v4.1")
 	waitGuide(t, base, 0, "4.1")
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h.Shutdown)
 	h.MoveBudget = time.Second
 	m := deadMux(t, "104.1", "HEVC", "AC-4")
 	h.muxes[m.freq] = m
@@ -105,6 +107,7 @@ func TestATSC3MoveSkipsATunerThatCannot(t *testing.T) {
 		t.Fatalf("tuner 0 was released: %+v", fetchGuides(t, base))
 	}
 	h2 := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h2.Shutdown)
 	h2.MoveBudget = time.Second
 	again := deadMux(t, "104.1", "HEVC", "AC-4")
 	h2.muxes[again.freq] = again
@@ -147,6 +150,7 @@ func TestFailedOpenTriesTheNextDevice(t *testing.T) {
 	}
 
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h.Shutdown)
 	h.MoveBudget = time.Second
 	m := deadMux(t, "4.1", "MPEG2", "AC3")
 	h.muxes[m.freq] = m
@@ -200,6 +204,7 @@ func TestHandOffStopsAtTheDeadline(t *testing.T) {
 	}, "4.1")
 
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h.Shutdown)
 	h.MoveBudget = 100 * time.Millisecond
 	m := deadMux(t, "4.1", "MPEG2", "AC3")
 	h.muxes[m.freq] = m
@@ -223,6 +228,7 @@ func TestHandOffReleasesTheTunerWhenTheViewerLeft(t *testing.T) {
 	st := openStore(t)
 	base, _, _ := saveProfile(t, st, fake.ProfileConnectDuo)
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h.Shutdown)
 	h.MoveBudget = time.Second
 	m := deadMux(t, "4.1", "MPEG2", "AC3")
 	if h.handOff(context.Background(), m) {
@@ -267,6 +273,7 @@ func TestFailoverTuneOpensTheOtherDevice(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h.Shutdown)
 	h.mu.Lock()
 	f, err := h.ensureFeedLocked(context.Background(), ch, nil)
 	h.mu.Unlock()
@@ -339,6 +346,7 @@ func TestKnownFrequencySkipsTheControlTune(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h.Shutdown)
 	h.mu.Lock()
 	feed, err := h.ensureFeedLocked(ctx, ch, nil)
 	h.mu.Unlock()

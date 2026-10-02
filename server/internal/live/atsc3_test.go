@@ -354,6 +354,7 @@ func TestA3Point0WatchOpensTheAutoStreamWithoutAProbe(t *testing.T) {
 	}
 	ch := sourceByNumber(t, st, "104.1")
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h.Shutdown)
 	began := time.Now()
 	h.mu.Lock()
 	f, err := h.ensureFeedLocked(ctx, ch, nil)
