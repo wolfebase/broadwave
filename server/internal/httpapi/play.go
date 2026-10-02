@@ -1181,7 +1181,7 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	if name == "index.m3u8" {
 		if msn, part, ok := blockReload(r); ok {
-			s.Hub.WaitMedia(channelID, key, msn, part, 1500*time.Millisecond)
+			s.Hub.WaitBlocking(channelID, key, msn, part)
 		}
 		body, err := s.Hub.Playlist(channelID, key)
 		if err != nil {
@@ -1289,7 +1289,7 @@ func (s *Server) viewPlaylist(r *http.Request, channelID int64, key, name string
 		return nil, false, nil
 	}
 	if msn, part, ok := blockReload(r); ok {
-		s.Hub.WaitMedia(channelID, key, msn, part, 1500*time.Millisecond)
+		s.Hub.WaitBlocking(channelID, key, msn, part)
 	}
 	skip := false
 	switch r.URL.Query().Get("_HLS_skip") {

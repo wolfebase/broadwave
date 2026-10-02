@@ -1463,6 +1463,24 @@ func (h *Hub) WaitMedia(channelID int64, key string, msn, part int, d time.Durat
 	}
 }
 
+// WaitBlocking holds a blocking playlist request (_HLS_msn) until the
+// playlist lists the segment or part it asked for, for up to twice the
+// playlist's target duration.
+func (h *Hub) WaitBlocking(channelID int64, key string, msn, part int) {
+	h.mu.Lock()
+	var gate *playlistGate
+	if f := h.channels[channelID]; f != nil {
+		if r := f.renditions[key]; r != nil {
+			gate = r.gate
+			r.seen = time.Now()
+		}
+	}
+	h.mu.Unlock()
+	if gate != nil {
+		gate.wait(msn, part, gate.holdFor())
+	}
+}
+
 // Touch records that a viewer of a rendition is still fetching video.
 func (h *Hub) Touch(channelID int64, key string) {
 	h.mu.Lock()

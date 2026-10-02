@@ -1572,3 +1572,31 @@ func soundSamples(b []byte) int {
 	}
 	return n
 }
+
+// A blocking reload is answered with the segment it asked for. A copied
+// broadcast is cut at its own keyframes, so the next segment can take longer
+// than 1.5 s; answering without it made AVPlayer drop the stream's dates and
+// pause itself.
+func TestABlockingReloadWaitsForItsSegment(t *testing.T) {
+	gate := newPlaylistGate()
+	closed := []packedSeg{{name: "seg00000.m4s", dur: 225000}} // 2.5 s
+	if err := writePacked(t.TempDir(), []byte("init"), closed, nil, 0, true, false, nil, gate); err != nil {
+		t.Fatal(err)
+	}
+	if got := gate.holdFor(); got != 6*time.Second {
+		t.Fatalf("hold %v for a 3 s target, want 6 s", got)
+	}
+	go func() {
+		time.Sleep(1800 * time.Millisecond)
+		gate.publish(0, 2, 0)
+	}()
+	began := time.Now()
+	gate.wait(1, -1, gate.holdFor())
+	waited := time.Since(began)
+	gate.mu.Lock()
+	ready := gate.ready(1, -1)
+	gate.mu.Unlock()
+	if !ready || waited < 1700*time.Millisecond || waited > 3*time.Second {
+		t.Fatalf("answered after %v with segment 1 listed %v", waited, ready)
+	}
+}
