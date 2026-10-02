@@ -463,11 +463,31 @@ func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition, altern
 		}
 		return Session{}, last
 	}
+	var auto *autoGuess
+	if res == nil {
+		h.mu.Lock()
+		_, tuned := h.channels[ch.ID]
+		h.mu.Unlock()
+		if !tuned {
+			auto = h.openAuto(ctx, ch, false)
+		}
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	f, err := h.ensureFeedLocked(ctx, ch, res)
-	if err != nil {
-		return Session{}, err
+	f := h.channels[ch.ID]
+	if auto != nil {
+		if f != nil {
+			auto.body.Close()
+		} else {
+			f = h.attachAutoLocked(ch, auto.body, auto.host, auto.url)
+		}
+	}
+	if f == nil {
+		if f, err = h.ensureFeedLocked(ctx, ch, res); err != nil {
+			return Session{}, err
+		}
+	} else if res != nil {
+		res.Body.Close()
 	}
 	if alternates && want.Track != "" {
 		main := want
