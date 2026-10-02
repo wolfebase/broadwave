@@ -1260,7 +1260,11 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 // renditionPipe narrows the mux to the rendition's program and starts the
 // encode again on a backwards timestamp break. The caller holds h.mu.
 func (h *Hub) renditionPipe(f *feed, r *rendition, stdin io.WriteCloser) io.WriteCloser {
-	w := newProgramPipe(markWriter{stdin, &r.fed}, f.program)
+	program := f.program
+	if program == 0 && NeedFor(f.channel.VideoCodec, f.channel.AudioCodec, f.channel.ATSC3).ATSC3 {
+		program = anyProgram
+	}
+	w := newProgramPipe(markWriter{stdin, &r.fed}, program)
 	if p, ok := w.(*programPipe); ok {
 		p.sw = &pipeSwitch{}
 		p.onBreak = func() { go h.followBreak(f, r, p) }

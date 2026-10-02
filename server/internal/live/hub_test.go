@@ -1,6 +1,7 @@
 package live
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -479,5 +480,32 @@ func TestATunerThatSaysNoIsNamedForThePlayer(t *testing.T) {
 	_, err := openMux(srv.URL, 0, 177_000_000)
 	if !errors.Is(err, ErrTunerRefused) || !strings.Contains(err.Error(), "805") {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// An encode of an ATSC 3.0 channel reads the stream's one program through the
+// filter, so it starts on parameter sets; a playlist stream with no program
+// number is passed through as it comes.
+func TestA3Point0EncodeReadsItsProgramThroughTheFilter(t *testing.T) {
+	h := &Hub{}
+	for _, c := range []struct {
+		name    string
+		ch      store.SourceChannel
+		program int
+		want    int
+	}{
+		{"3.0", store.SourceChannel{Channel: store.Channel{VideoCodec: "HEVC", AudioCodec: "AC-4"}}, 0, anyProgram},
+		{"1.0", store.SourceChannel{Channel: store.Channel{VideoCodec: "MPEG2", AudioCodec: "AC3"}}, 3, 3},
+		{"playlist", store.SourceChannel{Channel: store.Channel{VideoCodec: "H264", AudioCodec: "AAC"}}, 0, 0},
+	} {
+		w := h.renditionPipe(&feed{channel: c.ch, program: c.program}, &rendition{}, closeBuf{new(bytes.Buffer)})
+		p, ok := w.(*programPipe)
+		got := 0
+		if ok {
+			got = p.program
+		}
+		if got != c.want {
+			t.Errorf("%s: program %d, want %d", c.name, got, c.want)
+		}
 	}
 }
