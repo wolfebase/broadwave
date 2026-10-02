@@ -55,20 +55,23 @@ type playlistGate struct {
 	moved, gap atomic.Int64
 	// target is the TARGETDURATION the playlist advertises, in ns.
 	target atomic.Int64
+	// closedParts is how many parts each recent closed segment had, the
+	// last one being openMSN-1.
+	closedParts []int
 }
 
 // blockFloor is the least a blocking playlist request waits.
 const blockFloor = 1500 * time.Millisecond
 
 // holdFor is how long a blocking playlist request may wait for what it asked
-// for: twice the advertised target. A server must not answer one without
-// that segment or part, and a player gives up after three targets. A copied
-// broadcast is cut at its own keyframes, so a segment can take 1.5 s or more.
+// for: three advertised targets, as the protocol allows. A server must not
+// answer one without that segment or part. A copied broadcast is cut at its
+// own keyframes, so a segment can take 1.5 s or more.
 func (g *playlistGate) holdFor() time.Duration {
 	if g == nil {
 		return blockFloor
 	}
-	return max(blockFloor, 2*time.Duration(g.target.Load()))
+	return max(blockFloor, 3*time.Duration(g.target.Load()))
 }
 
 func newPlaylistGate() *playlistGate {
@@ -77,7 +80,7 @@ func newPlaylistGate() *playlistGate {
 	return g
 }
 
-func (g *playlistGate) publish(origin, openMSN, openParts int) {
+func (g *playlistGate) publish(origin, openMSN, openParts int, closedParts ...int) {
 	if g == nil {
 		return
 	}
@@ -98,6 +101,7 @@ func (g *playlistGate) publish(origin, openMSN, openParts int) {
 	g.origin = origin
 	g.openMSN = openMSN
 	g.openParts = openParts
+	g.closedParts = closedParts
 	g.cond.Broadcast()
 	g.mu.Unlock()
 }
@@ -118,9 +122,19 @@ func (g *playlistGate) stuck(now, from time.Time, limit time.Duration) bool {
 	return now.Sub(since) > max(limit, 3*min(time.Duration(g.gap.Load()), 10*time.Second))
 }
 
+// ready reports whether the playlist holds the segment, or the part, asked
+// for. A part past a closed segment's last one is the next segment's first.
 func (g *playlistGate) ready(msn, part int) bool {
-	if msn < g.openMSN {
-		return true
+	for msn < g.openMSN {
+		back := g.openMSN - 1 - msn
+		if part < 0 || back >= len(g.closedParts) {
+			return true
+		}
+		n := g.closedParts[len(g.closedParts)-1-back]
+		if n == 0 || part < n {
+			return true
+		}
+		msn, part = msn+1, 0
 	}
 	return msn == g.openMSN && part >= 0 && g.openParts > part
 }
@@ -163,8 +177,25 @@ type packedSeg struct {
 	name  string
 	pts   int64
 	dur   int64
-	parts []string
+	parts []partRef
 	gap   bool
+}
+
+// partRef is a part of a closed segment, listed until it is three target
+// durations from the end of the playlist.
+type partRef struct {
+	name string
+	dur  int64
+	sync bool
+}
+
+// partsKept reports whether a closed segment that ends this far before the
+// end of the playlist still lists its parts, and whether their files stay.
+// A player may still fetch a part for three target durations after it is
+// no longer listed.
+func partsKept(fromEnd int64, target int) (listed, kept bool) {
+	t := int64(max(target, 2*90000))
+	return fromEnd < 3*t, fromEnd < 6*t
 }
 
 // packPipe is ffmpeg's stdout. cmd.StdoutPipe would be closed by Wait, which
@@ -461,10 +492,10 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		}
 		name := fmt.Sprintf("seg%05d.m4s", msn)
 		var body []byte
-		names := make([]string, len(open))
+		names := make([]partRef, len(open))
 		for i, p := range open {
 			body = append(body, p.body...)
-			names[i] = p.name
+			names[i] = partRef{name: p.name, dur: p.dur, sync: p.sync}
 		}
 		if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
 			return err
@@ -487,13 +518,21 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 			closed = closed[1:]
 			_ = os.Remove(filepath.Join(dir, old.name))
 			for _, n := range old.parts {
-				_ = os.Remove(filepath.Join(dir, n))
+				_ = os.Remove(filepath.Join(dir, n.name))
 			}
 		}
-		if len(closed) >= 3 {
-			for _, n := range closed[len(closed)-3].parts {
-				_ = os.Remove(filepath.Join(dir, n))
+		var fromEnd int64
+		for i := len(closed) - 1; i >= 0; i-- {
+			if _, keep := partsKept(fromEnd, hold.target); !keep {
+				for _, n := range closed[i].parts {
+					_ = os.Remove(filepath.Join(dir, n.name))
+				}
+				closed[i].parts = nil
+				if i > 0 && closed[i-1].parts == nil {
+					break
+				}
 			}
+			fromEnd += closed[i].dur
 		}
 		return nil
 	}
@@ -843,9 +882,36 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 	}
 	b = append(b, "#EXT-X-MEDIA-SEQUENCE:"+strconv.Itoa(origin)+"\n"...)
 	b = append(b, "#EXT-X-MAP:URI=\"init.mp4\"\n"...)
-	for _, s := range closed {
+	// A recent segment keeps its parts in the list. A player that was
+	// playing them finds where they went when the segment closes.
+	var openDur int64
+	for _, p := range open {
+		openDur += p.dur
+	}
+	fromEnd := make([]int64, len(closed))
+	end := openDur
+	for i := len(closed) - 1; i >= 0; i-- {
+		fromEnd[i] = end
+		end += closed[i].dur
+	}
+	partLine := func(name string, dur int64, sync bool) {
+		if dur <= 0 {
+			dur = partTicks
+		}
+		line := "#EXT-X-PART:DURATION=" + fmtDur(dur)
+		if sync {
+			line += ",INDEPENDENT=YES"
+		}
+		b = append(b, line+",URI=\""+name+"\"\n"...)
+	}
+	for i, s := range closed {
 		if s.gap {
 			b = append(b, "#EXT-X-DISCONTINUITY\n"...)
+		}
+		if listed, _ := partsKept(fromEnd[i], target); listed {
+			for _, p := range s.parts {
+				partLine(p.name, p.dur, p.sync)
+			}
 		}
 		b = append(b, "#EXTINF:"+fmtDur(s.dur)+",\n"+s.name+"\n"...)
 	}
@@ -853,16 +919,7 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 		b = append(b, "#EXT-X-DISCONTINUITY\n"...)
 	}
 	for _, p := range open {
-		dur := p.dur
-		if dur <= 0 {
-			dur = partTicks
-		}
-		line := "#EXT-X-PART:DURATION=" + fmtDur(dur)
-		if p.sync {
-			line += ",INDEPENDENT=YES"
-		}
-		line += ",URI=\"" + p.name + "\"\n"
-		b = append(b, line...)
+		partLine(p.name, p.dur, p.sync)
 	}
 	tmp := filepath.Join(dir, "index.m3u8.tmp")
 	if err := os.WriteFile(tmp, b, 0o644); err != nil {
@@ -873,7 +930,11 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 	}
 	if gate != nil {
 		gate.target.Store(int64(targetSec) * int64(time.Second))
-		gate.publish(origin, origin+len(closed), len(open))
+		recent := make([]int, 0, 4)
+		for _, c := range closed[max(0, len(closed)-4):] {
+			recent = append(recent, len(c.parts))
+		}
+		gate.publish(origin, origin+len(closed), len(open), recent...)
 	}
 	return nil
 }

@@ -1464,7 +1464,7 @@ func (h *Hub) WaitMedia(channelID int64, key string, msn, part int, d time.Durat
 }
 
 // WaitBlocking holds a blocking playlist request (_HLS_msn) until the
-// playlist lists the segment or part it asked for, for up to twice the
+// playlist lists the segment or part it asked for, for up to three times the
 // playlist's target duration.
 func (h *Hub) WaitBlocking(channelID int64, key string, msn, part int) {
 	h.mu.Lock()
