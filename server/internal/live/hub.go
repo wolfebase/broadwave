@@ -654,12 +654,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 // openAutoLocked lets the device tune the channel itself through its /auto
 // stream. unlocked is a probe that already found no signal.
 func (h *Hub) openAutoLocked(ch store.SourceChannel, root, host string, last []Tuner, unlocked bool) (*feed, error) {
-	streamURL := strings.TrimRight(root, "/") + "/auto/v" + ch.GuideNumber
-	if h.Encoder == "" || h.Encoder == "libx264" {
-		if q := hdhr.ExtendQuery(ch.ModelNumber); q != "" {
-			streamURL += "?" + q
-		}
-	}
+	streamURL := h.autoURL(ch, root)
 	res, err := openStream(streamURL, "", "")
 	if err != nil {
 		if strings.Contains(err.Error(), "805") {
@@ -670,9 +665,23 @@ func (h *Hub) openAutoLocked(ch store.SourceChannel, root, host string, last []T
 		}
 		return nil, err
 	}
-	m := h.streamMuxLocked(ch, res.Body, host)
+	return h.attachAutoLocked(ch, res.Body, host, streamURL), nil
+}
+
+func (h *Hub) autoURL(ch store.SourceChannel, root string) string {
+	streamURL := strings.TrimRight(root, "/") + "/auto/v" + ch.GuideNumber
+	if h.Encoder == "" || h.Encoder == "libx264" {
+		if q := hdhr.ExtendQuery(ch.ModelNumber); q != "" {
+			streamURL += "?" + q
+		}
+	}
+	return streamURL
+}
+
+func (h *Hub) attachAutoLocked(ch store.SourceChannel, body io.ReadCloser, host, streamURL string) *feed {
+	m := h.streamMuxLocked(ch, body, host)
 	m.reopen = streamURL
-	return h.addFeedLocked(m, ch), nil
+	return h.addFeedLocked(m, ch)
 }
 
 // beginMuxLocked owns the tuner stream and starts the feed. The caller holds h.mu.

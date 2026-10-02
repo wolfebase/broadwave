@@ -507,9 +507,10 @@ export interface paths {
         /**
          * @description Start the picture a watch of this channel would play, before the viewer asks,
          *     so the channel change that follows is instant. Send the same `caps`, `prefs`,
-         *     and `rendition` a watch would. It never tunes, never stops another picture to
-         *     fit the budget, and counts no viewer; one warmed picture runs at a time and
-         *     stops after about 20 s unless a watch joins it.
+         *     and `rendition` a watch would. It tunes only an ATSC 3.0 channel the player
+         *     takes as broadcast, and only while another tuner that can carry it stays free.
+         *     It never stops another picture to fit the budget, and counts no viewer; one
+         *     warmed picture runs at a time and stops after about 20 s unless a watch joins it.
          */
         post: operations["warmChannel"];
         delete?: never;

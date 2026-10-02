@@ -68,6 +68,9 @@ type Server struct {
 	Source5    string
 	Profile    string
 	TunerCount int
+	// TuneDelay holds each new stream this long before it answers, as a
+	// real device takes about 2 s to answer an ATSC 3.0 /auto request.
+	TuneDelay time.Duration
 
 	spec   profile
 	httpLn net.Listener
@@ -549,7 +552,9 @@ func (s *Server) recorded(w http.ResponseWriter, r *http.Request) {
 func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	refuse := s.refuse
+	delay := s.TuneDelay
 	s.mu.Unlock()
+	time.Sleep(delay)
 	if refuse {
 		writeErr(w, http.StatusServiceUnavailable, "806 Tune Failed")
 		return
