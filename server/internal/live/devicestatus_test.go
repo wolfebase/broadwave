@@ -26,10 +26,13 @@ func TestATuneReadsOnlyTheDevicesItNeeds(t *testing.T) {
 	t.Cleanup(srv.Close)
 	t.Setenv("HDHR_CONTROL_PORT", control)
 	var asked atomic.Int32
+	// An unplugged device does not answer at all.
 	gone := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		asked.Add(1)
-		time.Sleep(300 * time.Millisecond)
-		http.Error(w, "unplugged", http.StatusBadGateway)
+		select {
+		case <-r.Context().Done():
+		case <-time.After(5 * time.Second):
+		}
 	}))
 	t.Cleanup(gone.Close)
 	ctx := context.Background()
@@ -95,6 +98,24 @@ func TestATuneReadsOnlyTheDevicesItNeeds(t *testing.T) {
 	list, err := h.Tuners(ctx)
 	if err != nil || len(list) != 2 || asked.Load() != 1 {
 		t.Fatalf("tuners %v err %v, unplugged asked %d", list, err, asked.Load())
+	}
+	// Once its skip runs out it is asked again, and still the list comes
+	// from the other device within a second, as the tune check needs.
+	h.mu.Lock()
+	clear(h.statusDown)
+	h.mu.Unlock()
+	short, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	began := time.Now()
+	list, err = h.Tuners(short)
+	if err != nil || len(list) != 2 || time.Since(began) > time.Second {
+		t.Fatalf("tuners %v err %v after %v", list, err, time.Since(began))
+	}
+	h.mu.Lock()
+	down := time.Now().Before(h.statusDown[gone.URL])
+	h.mu.Unlock()
+	if !down {
+		t.Fatal("a device that did not answer was not set aside")
 	}
 }
 

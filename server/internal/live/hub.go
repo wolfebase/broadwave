@@ -3056,7 +3056,14 @@ type tunerStatus struct {
 	SymbolQualityPercent  int
 }
 
+// statusTimeout bounds one device's status read. A tuner on the network
+// answers in milliseconds; an unplugged one would hold every caller for
+// the connection timeout, and the next device's read would never start.
+const statusTimeout = 800 * time.Millisecond
+
 func fetchTunerStatus(ctx context.Context, host string) ([]tunerStatus, error) {
+	ctx, cancel := context.WithTimeout(ctx, statusTimeout)
+	defer cancel()
 	var raw []tunerStatus
 	base := host
 	if !strings.Contains(base, "://") {
