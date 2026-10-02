@@ -83,8 +83,11 @@ type Server struct {
 	// silent drops new requests and ends streams. Tests use it for a tuner that stops answering.
 	silent bool
 	// dark guide numbers report no lock and send no packets until Light.
-	dark  map[string]bool
-	procs []*exec.Cmd
+	dark map[string]bool
+	// refuse answers new streams 806, as a tuner with no signal does. Open
+	// streams carry on.
+	refuse bool
+	procs  []*exec.Cmd
 }
 
 type tuner struct {
@@ -235,6 +238,21 @@ func (s *Server) Silence() {
 func (s *Server) Answer() {
 	s.mu.Lock()
 	s.silent = false
+	s.mu.Unlock()
+}
+
+// Refuse answers every new stream "806 Tune Failed" until Accept. Streams
+// already open are left alone.
+func (s *Server) Refuse() {
+	s.mu.Lock()
+	s.refuse = true
+	s.mu.Unlock()
+}
+
+// Accept lets new streams open again after Refuse.
+func (s *Server) Accept() {
+	s.mu.Lock()
+	s.refuse = false
 	s.mu.Unlock()
 }
 
@@ -529,6 +547,13 @@ func (s *Server) recorded(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	refuse := s.refuse
+	s.mu.Unlock()
+	if refuse {
+		writeErr(w, http.StatusServiceUnavailable, "806 Tune Failed")
+		return
+	}
 	if s.legacyStream() {
 		s.streamLegacy(w, r)
 		return

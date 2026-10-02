@@ -117,10 +117,45 @@ func TestASilentTunerKeepsItsRecording(t *testing.T) {
 	time.Sleep(3500 * time.Millisecond)
 	srv.Light("4.1")
 	if got := streamOpens(srv) - opens; got <= stallReopens {
-		t.Fatalf("%d reopens in a silence that outlasts the viewer limit", got)
+		t.Fatalf("%d reopens in a silence that outlasts a viewer's budget", got)
 	}
 	got, err := st.Recording(context.Background(), rec.ID)
 	if err != nil || got.Status != "recording" {
 		t.Fatalf("status %q err %v", got.Status, err)
+	}
+}
+
+// A real tuner with no signal answers a reopen with an error, and another app
+// can take a tuner the moment it is free. Neither may fail a recording.
+func TestARecordingOutlastsARefusedReopen(t *testing.T) {
+	h, st, srv := liveHub(t)
+	h.stall = 500 * time.Millisecond
+	id := idOf(t, st, "4.1")
+	rec, err := h.RecordMeta(context.Background(), 1, store.Recording{ChannelID: id, Title: "News", StartedAt: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.StopRecord(rec.ID)
+	var m *mux
+	waitUntil(t, 20*time.Second, "the first bytes", func() bool {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if f := h.channels[id]; f != nil {
+			m = muxOf(h, f)
+		}
+		return m != nil && m.got.Load()
+	})
+	srv.Refuse()
+	srv.Dark("4.1")
+	time.Sleep(6 * time.Second)
+	if got, err := st.Recording(context.Background(), rec.ID); err != nil || got.Status != "recording" {
+		t.Fatalf("status %q err %v while the tuner refused", got.Status, err)
+	}
+	at := m.heard.Load()
+	srv.Accept()
+	srv.Light("4.1")
+	waitUntil(t, 30*time.Second, "bytes after the tuner came back", func() bool { return m.heard.Load() > at && !m.recovering.Load() && m.got.Load() })
+	if got, err := st.Recording(context.Background(), rec.ID); err != nil || got.Status != "recording" {
+		t.Fatalf("status %q err %v after the tuner came back", got.Status, err)
 	}
 }
