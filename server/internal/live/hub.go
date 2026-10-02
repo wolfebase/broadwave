@@ -479,7 +479,7 @@ func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition, altern
 		if f != nil {
 			auto.body.Close()
 		} else {
-			f = h.attachAutoLocked(ch, auto.body, auto.host, auto.url)
+			f = h.attachAutoLocked(ch, auto)
 		}
 	}
 	if f == nil {
@@ -648,11 +648,11 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	// it, so the probe would wait out its deadlines (about 7 s, holding every
 	// other watch) before falling back to the same /auto stream.
 	if need.ATSC3 {
-		return h.openAutoLocked(ch, root, host, last, false)
+		return h.openAutoLocked(ch, root, host, last, false, began, status)
 	}
 	freq, programs, err := probe(host, tuner, ch.GuideNumber)
 	if err != nil {
-		return h.openAutoLocked(ch, root, host, last, errors.Is(err, errNoLock))
+		return h.openAutoLocked(ch, root, host, last, errors.Is(err, errNoLock), began, status)
 	}
 	for _, p := range programs {
 		_ = h.Store.RememberProgram(ctx, ch.DeviceID, p.GuideNumber, freq, p.Number)
@@ -673,7 +673,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 
 // openAutoLocked lets the device tune the channel itself through its /auto
 // stream. unlocked is a probe that already found no signal.
-func (h *Hub) openAutoLocked(ch store.SourceChannel, root, host string, last []Tuner, unlocked bool) (*feed, error) {
+func (h *Hub) openAutoLocked(ch store.SourceChannel, root, host string, last []Tuner, unlocked bool, began, status time.Time) (*feed, error) {
 	streamURL := h.autoURL(ch, root)
 	res, err := openStream(streamURL, "", "")
 	if err != nil {
@@ -685,7 +685,7 @@ func (h *Hub) openAutoLocked(ch store.SourceChannel, root, host string, last []T
 		}
 		return nil, err
 	}
-	return h.attachAutoLocked(ch, res.Body, host, streamURL), nil
+	return h.attachAutoLocked(ch, &autoGuess{body: res.Body, host: host, url: streamURL, began: began, status: status, answered: time.Now()}), nil
 }
 
 func (h *Hub) autoURL(ch store.SourceChannel, root string) string {
@@ -698,9 +698,12 @@ func (h *Hub) autoURL(ch store.SourceChannel, root string) string {
 	return streamURL
 }
 
-func (h *Hub) attachAutoLocked(ch store.SourceChannel, body io.ReadCloser, host, streamURL string) *feed {
-	m := h.streamMuxLocked(ch, body, host)
-	m.reopen = streamURL
+// attachAutoLocked starts the feed on an /auto stream the device answered.
+// Its answer is the lock step: the device tuned and locked before it.
+func (h *Hub) attachAutoLocked(ch store.SourceChannel, a *autoGuess) *feed {
+	m := h.streamMuxLocked(ch, a.body, a.host)
+	m.reopen = a.url
+	noteTune(m, a.began, a.status, a.answered)
 	return h.addFeedLocked(m, ch)
 }
 

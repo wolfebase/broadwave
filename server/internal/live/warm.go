@@ -42,7 +42,7 @@ func (h *Hub) Warm(ctx context.Context, channelID int64, want Rendition, alterna
 		if f != nil {
 			opened.body.Close()
 		} else {
-			f = h.attachAutoLocked(ch, opened.body, opened.host, opened.url)
+			f = h.attachAutoLocked(ch, opened)
 			slog.Info("live: tuned " + ch.GuideNumber + " ahead of a channel change")
 		}
 	}
@@ -114,6 +114,8 @@ func (h *Hub) idleLocked(channelID int64, key string, r *rendition) {
 type autoGuess struct {
 	body      io.ReadCloser
 	host, url string
+	// began, status, and answered are the tune's steps for NoteStart.
+	began, status, answered time.Time
 }
 
 // openAuto opens a device-tuned (ATSC 3.0) channel without h.mu: the device
@@ -126,10 +128,12 @@ func (h *Hub) openAuto(ctx context.Context, ch store.SourceChannel, guess bool) 
 	if !need.ATSC3 || ch.TunerCount == 0 || ch.BaseURL == "" || hlsStream(ch) {
 		return nil
 	}
+	began := time.Now()
 	raw, err := fetchTunerStatus(ctx, ch.BaseURL)
 	if err != nil {
 		return nil
 	}
+	status := time.Now()
 	tuners := make([]Tuner, len(raw))
 	for i, row := range raw {
 		tuners[i] = Tuner{Index: i, Guide: row.VctNumber, Target: row.TargetIP}
@@ -166,7 +170,7 @@ func (h *Hub) openAuto(ctx context.Context, ch store.SourceChannel, guess bool) 
 	if err != nil {
 		return nil
 	}
-	return &autoGuess{body: res.Body, host: hostOf(ch.BaseURL), url: url}
+	return &autoGuess{body: res.Body, host: hostOf(ch.BaseURL), url: url, began: began, status: status, answered: time.Now()}
 }
 
 // guessGuidesLocked is the guide numbers of device-tuned streams that carry
