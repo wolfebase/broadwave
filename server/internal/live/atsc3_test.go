@@ -623,6 +623,7 @@ func TestA3Point0WatchLeavesTheHubFreeWhileTheDeviceAnswers(t *testing.T) {
 
 	done := make(chan error, 1)
 	var session Session
+	asked := time.Now()
 	go func() {
 		var err error
 		session, err = h.Watch(ctx, first.ID, copied, false)
@@ -636,6 +637,12 @@ func TestA3Point0WatchLeavesTheHubFreeWhileTheDeviceAnswers(t *testing.T) {
 	}
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+	// The start line names the device's answer, so a slow 3.0 start can be read.
+	note := h.NoteStart(first.ID, session.Rendition, asked)
+	var answered float64
+	if _, err := fmt.Sscanf(note[strings.Index(note, "lock ")+5:], "%f", &answered); err != nil || answered < 0.7 {
+		t.Fatalf("no tune steps in %q", note)
 	}
 	h.Release(first.ID, session.Rendition)
 
