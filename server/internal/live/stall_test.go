@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -157,5 +158,65 @@ func TestARecordingOutlastsARefusedReopen(t *testing.T) {
 	waitUntil(t, 30*time.Second, "bytes after the tuner came back", func() bool { return m.heard.Load() > at && !m.recovering.Load() && m.got.Load() })
 	if got, err := st.Recording(context.Background(), rec.ID); err != nil || got.Status != "recording" {
 		t.Fatalf("status %q err %v after the tuner came back", got.Status, err)
+	}
+}
+
+func TestAnEncodeThatStopsWritingIsStartedAgain(t *testing.T) {
+	h, st, _ := liveHub(t)
+	h.outStall = 2 * time.Second
+	id := idOf(t, st, "4.1")
+	session, err := h.Watch(context.Background(), id, Rendition{Video: "copy", Audio: "copy"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendition := func() *rendition {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if f := h.channels[id]; f != nil {
+			return f.renditions[session.Rendition]
+		}
+		return nil
+	}
+	waitUntil(t, 20*time.Second, "a growing playlist", func() bool {
+		r := rendition()
+		return r != nil && r.gate.moved.Load() != 0
+	})
+	r := rendition()
+	h.mu.Lock()
+	frozen := r.cmd
+	h.mu.Unlock()
+	// Alive and writing nothing, as ffmpeg was on a live channel.
+	if err := frozen.Process.Signal(syscall.SIGSTOP); err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, 20*time.Second, "a new encode with a growing playlist", func() bool {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		return r.cmd != nil && r.cmd != frozen && !r.unfroze.IsZero() && r.gate.moved.Load() != 0
+	})
+}
+
+func TestAPlaylistIsJudgedOnlyWhileItIsFed(t *testing.T) {
+	g := newPlaylistGate()
+	now := time.Now()
+	if g.stuck(now, time.Time{}, time.Second) {
+		t.Fatal("a playlist that never grew is not stuck; the start has its own limits")
+	}
+	g.publish(0, 0, 1)
+	g.moved.Store(now.Add(-5 * time.Second).UnixNano())
+	if !g.stuck(now, time.Time{}, 2*time.Second) {
+		t.Fatal("5 s without a part while fed is stuck at a 2 s limit")
+	}
+	if g.stuck(now, now.Add(-time.Second), 2*time.Second) {
+		t.Fatal("the tuner only came back 1 s ago")
+	}
+	g.gap.Store(int64(2 * time.Second))
+	if g.stuck(now, time.Time{}, 2*time.Second) {
+		t.Fatal("a broadcast with 2 s gaps gets three of them")
+	}
+	g.gap.Store(int64(time.Minute))
+	g.moved.Store(now.Add(-31 * time.Second).UnixNano())
+	if !g.stuck(now, time.Time{}, 2*time.Second) {
+		t.Fatal("a minute-long silence loosened the watch past 30 s")
 	}
 }
