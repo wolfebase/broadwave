@@ -46,6 +46,11 @@ func TestAViewIsTheSamePlaylistWithItsOwnMedia(t *testing.T) {
 	if r := renditionReports([]byte(closed), []string{"video.m3u8"}); len(r) != 1 || r[0] != `#EXT-X-RENDITION-REPORT:URI="video.m3u8",LAST-MSN=41` {
 		t.Fatalf("no open parts: %v", r)
 	}
+	// The last segment lists its own two parts and nothing is open.
+	own := strings.Replace(closed, "#EXTINF:2.002,\nseg00041.m4s", "#EXT-X-PART:DURATION=1.001,INDEPENDENT=YES,URI=\"part09.m4s\"\n#EXT-X-PART:DURATION=1.001,URI=\"part10.m4s\"\n#EXTINF:2.002,\nseg00041.m4s", 1)
+	if r := renditionReports([]byte(own), []string{"video.m3u8"}); len(r) != 1 || r[0] != `#EXT-X-RENDITION-REPORT:URI="video.m3u8",LAST-MSN=41,LAST-PART=1` {
+		t.Fatalf("the last segment's parts: %v\n%s", r, own)
+	}
 }
 
 func TestViewNames(t *testing.T) {
