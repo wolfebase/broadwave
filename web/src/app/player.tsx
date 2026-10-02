@@ -1,4 +1,5 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { copy } from "../strings";
 import type { Channel } from "../types";
 import { useData } from "./data";
 import { inAppDepth, navigate, useRoute } from "./router";
@@ -25,7 +26,7 @@ export function usePlayer(): Player {
  * mini player, and one video element carries playback between the two.
  */
 export function PlayerProvider({ children }: { children: ReactNode }) {
-  const { channels, ready } = useData();
+  const { channels, allChannels, ready } = useData();
   const { path, params } = useRoute();
   const [channel, setChannel] = useState<Channel | null>(null);
   const back = useRef("/guide");
@@ -36,6 +37,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const playing = channel && (!watchId || channel.id === watchId) ? channel : fromList;
   const mode: "full" | "mini" = watchId && playing && playing.id === watchId ? "full" : "mini";
 
+  // An encrypted 3.0 channel plays its clear 1.0 twin, so a link to one opens
+  // the twin, and the player says why for a few seconds.
+  const asked = ready && watchId ? allChannels.find((c) => c.id === watchId) : undefined;
+  useEffect(() => {
+    if (asked?.playsAs) navigate(`/watch?channel=${asked.playsAs}&from=${asked.id}`, true);
+  }, [asked]);
+  const from = watchId ? Number(params.get("from") || 0) : 0;
+  const standIn = from && allChannels.some((c) => c.id === from && c.playsAs === watchId) ? `${from}-${watchId}` : "";
+  const [noted, setNoted] = useState("");
+  useEffect(() => {
+    if (!standIn) return;
+    const t = window.setTimeout(() => setNoted(standIn), 10_000);
+    return () => window.clearTimeout(t);
+  }, [standIn]);
+
   useEffect(() => {
     // Setup is done once you watch, so leaving the player never goes back to it.
     if (path === "/watch" || path === "/multiview") return;
@@ -44,9 +60,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [path, params]);
 
   const open = useCallback((c: Channel) => {
-    setChannel(c);
-    navigate(`/watch?channel=${c.id}`, path === "/watch");
-  }, [path]);
+    const twin = c.playsAs ? allChannels.find((t) => t.id === c.playsAs) : undefined;
+    setChannel(twin ?? c);
+    navigate(twin ? `/watch?channel=${twin.id}&from=${c.id}` : `/watch?channel=${c.id}`, path === "/watch");
+  }, [path, allChannels]);
 
   const close = useCallback(() => {
     setChannel(null);
@@ -64,6 +81,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           key="live"
           channel={playing}
           mode={mode}
+          notice={standIn && standIn !== noted && mode === "full" ? copy.player.encrypted : undefined}
           onChannel={open}
           onMinimize={() => {
             if (inAppDepth() > 0 && under.current !== "/setup") window.history.back();

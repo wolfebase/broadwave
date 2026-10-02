@@ -58,6 +58,9 @@ type Channel struct {
 	TwinID int64 `json:"twinId,omitempty"`
 	// TwinChoice is the pair's choice: atsc3, atsc1, or both.
 	TwinChoice string `json:"twinChoice,omitempty"`
+	// PlaysAs is the clear 1.0 channel that plays and records in place of an
+	// encrypted 3.0 one.
+	PlaysAs int64 `json:"playsAs,omitempty"`
 }
 
 type ChannelPatch struct {

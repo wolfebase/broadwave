@@ -29,6 +29,7 @@ export const copy = {
     atsc3: "ATSC 3.0",
     encrypted: (atsc3: boolean) =>
       atsc3 ? "Encrypted (ATSC 3.0 DRM). Only the tuner maker's app can play it." : "Copy protected. Only the tuner maker's app can play it.",
+    playsAs: (n: string) => `Encrypted (ATSC 3.0 DRM). Plays and records ${n}, the same station in ATSC 1.0.`,
     twinShow: "Show",
     twinChoices: {
       atsc3: "3.0 only",
@@ -101,6 +102,7 @@ export const copy = {
     profile: "Profile",
   },
   player: {
+    encrypted: "The 3.0 version is encrypted. Showing the regular broadcast.",
     stats: "Stats",
     delayApple: "An Apple device is watching, so this channel stays at Balanced.",
     playing: "Playing",

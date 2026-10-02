@@ -86,6 +86,9 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session.Stream.Reason = decision.Reason
+	if ch, err := s.Store.SourceChannel(r.Context(), body.ChannelID); err == nil && ch.PlaysAs != 0 {
+		session.Stream.Reason = "The 3.0 version is encrypted. Showing the regular broadcast."
+	}
 	// A player that switches sound in place plays the main encode, which carries its track.
 	main := decision.Rendition
 	main.Track = ""
