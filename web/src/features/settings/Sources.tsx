@@ -17,7 +17,7 @@ export function Sources({
   error: string;
   onDiscover: () => void;
   onLookup: (ip: string) => void;
-  onPatch: (channel: Channel, patch: { enabled?: boolean; hidden?: boolean; customName?: string; customNumber?: string; guideKey?: string }) => void;
+  onPatch: (channel: Channel, patch: { enabled?: boolean; hidden?: boolean; customName?: string; customNumber?: string; guideKey?: string; twinChoice?: string }) => void;
 }) {
   const [ip, setIp] = useState("");
   const [looking, setLooking] = useState(false);
@@ -277,29 +277,52 @@ export function Sources({
             <span className="codec">
               {channel.hd ? "HD" : "SD"}
               {channel.videoCodec ? ` ${channel.videoCodec}` : ""}
+              {channel.standard === "atsc3" ? ` · ${copy.sources.atsc3}` : ""}
               {!channel.present ? " · off air" : ""}
             </span>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={channel.enabled}
-                onChange={(event) => onPatch(channel, { enabled: event.target.checked })}
-              />
-              {copy.sources.enabled}
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={channel.hidden}
-                onChange={(event) => onPatch(channel, { hidden: event.target.checked })}
-              />
-              {copy.sources.hidden}
-            </label>
+            {channel.protected ? (
+              <span className="hint">{copy.sources.encrypted(channel.standard === "atsc3")}</span>
+            ) : null}
+            {channel.twinId && channel.standard === "atsc3" ? (
+              <label className="check">
+                {copy.sources.twinShow}
+                <select value={channel.twinChoice || "both"} onChange={(event) => onPatch(channel, { twinChoice: event.target.value })}>
+                  <option value="atsc3">{copy.sources.twinChoices.atsc3}</option>
+                  <option value="atsc1">{copy.sources.twinChoices.atsc1(twinNumber(channels, channel.twinId))}</option>
+                  <option value="both">{copy.sources.twinChoices.both}</option>
+                </select>
+              </label>
+            ) : null}
+            {channel.twinId && channel.standard !== "atsc3" ? <span className="hint">{copy.sources.twinOf(twinNumber(channels, channel.twinId))}</span> : null}
+            {channel.protected ? null : (
+              <>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={channel.enabled}
+                    onChange={(event) => onPatch(channel, { enabled: event.target.checked })}
+                  />
+                  {copy.sources.enabled}
+                </label>
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={channel.hidden}
+                    onChange={(event) => onPatch(channel, { hidden: event.target.checked })}
+                  />
+                  {copy.sources.hidden}
+                </label>
+              </>
+            )}
           </li>
         ))}
       </ul>
     </section>
   );
+}
+
+function twinNumber(channels: Channel[], id: number) {
+  return channels.find((c) => c.id === id)?.displayNumber ?? "";
 }
 
 function SourceAdd() {

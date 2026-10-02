@@ -741,3 +741,44 @@ func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
 	}
 	return rec
 }
+
+func TestPatchChannelTwinChoice(t *testing.T) {
+	st := testStore(t)
+	ctx := context.Background()
+	dev := hdhr.Device{DeviceID: "FLEX1", BaseURL: "http://flex", LineupURL: "http://flex/lineup.json", TunerCount: 4}
+	if err := st.UpsertDevice(ctx, dev, []hdhr.Channel{
+		{GuideNumber: "4.1", GuideName: "KBWV-DT", VideoCodec: "MPEG2", AudioCodec: "AC3", HD: true, StreamURL: "http://flex:5004/auto/v4.1"},
+		{GuideNumber: "14.2", GuideName: "Snapshp", VideoCodec: "H264", AudioCodec: "AC3", StreamURL: "http://flex:5004/auto/v14.2"},
+		{GuideNumber: "104.1", GuideName: "KBWV", VideoCodec: "HEVC", AudioCodec: "AC4", HD: true, StreamURL: "http://flex:5004/auto/v104.1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]int64{}
+	chs, _ := st.Channels(ctx, false)
+	for _, ch := range chs {
+		ids[ch.GuideNumber] = ch.ID
+	}
+	h := (&Server{Store: st}).Handler()
+	patch := func(id int64, body string) (int, store.Channel) {
+		req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/channels/%d", id), strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		var ch store.Channel
+		_ = json.Unmarshal(rec.Body.Bytes(), &ch)
+		return rec.Code, ch
+	}
+	code, ch := patch(ids["4.1"], `{"twinChoice":"both"}`)
+	if code != http.StatusOK || ch.ID != ids["4.1"] || ch.Hidden || ch.TwinID != ids["104.1"] || ch.TwinChoice != "both" {
+		t.Fatalf("%d %+v", code, ch)
+	}
+	if code, ch = patch(ids["104.1"], `{"twinChoice":"atsc1","favorite":true}`); code != http.StatusOK || !ch.Hidden || !ch.Favorite || ch.Standard != "atsc3" {
+		t.Fatalf("%d %+v", code, ch)
+	}
+	if code, _ = patch(ids["14.2"], `{"twinChoice":"atsc3"}`); code != http.StatusConflict {
+		t.Fatalf("a channel with no twin answered %d", code)
+	}
+	if code, _ = patch(ids["4.1"], `{"twinChoice":"sometimes"}`); code != http.StatusBadRequest {
+		t.Fatalf("an unknown choice answered %d", code)
+	}
+}

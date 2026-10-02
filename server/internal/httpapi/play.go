@@ -507,6 +507,7 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 		var art map[int64]string
 		rows, art, pullErr = guide.Parse(raw, antenna)
 		if pullErr == nil {
+			rows = guide.ShareTwins(rows, art, antenna)
 			_ = s.Store.SetChannelArt(ctx, art)
 			_ = s.Store.SetNetworks(ctx, guide.Networks(raw, antenna))
 			rows = guide.FillImages(ctx, tmdbKey, rows)
@@ -529,11 +530,13 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 		lineup = strings.TrimSpace(os.Getenv("SD_LINEUP"))
 	}
 	if extra, _, err := guide.SchedulesDirect(ctx, antenna, user, pass, lineup); err == nil && len(extra) > 0 {
+		extra = guide.ShareTwins(extra, nil, antenna)
 		rows = s.fillUnlisted(ctx, rows, tagGuideSource(extra, "schedules-direct"))
 	}
 	if rawURL := strings.TrimSpace(settings["guideUrl"]); rawURL != "" {
 		if body, err := guide.PullURL(ctx, rawURL); err == nil {
 			if extra, extraArt, err := guide.Parse(body, antenna); err == nil && len(extra) > 0 {
+				extra = guide.ShareTwins(extra, extraArt, antenna)
 				_ = s.Store.SetChannelArt(ctx, extraArt)
 				_ = s.Store.SetNetworks(ctx, guide.Networks(body, antenna))
 				extra = guide.FillImages(ctx, tmdbKey, extra)
@@ -620,7 +623,7 @@ func (s *Server) loadSchedule(ctx context.Context) (scheduleSnap, error) {
 	if err != nil {
 		return scheduleSnap{}, err
 	}
-	airings, err := s.Store.Airings(ctx, now.Add(-time.Minute), end)
+	airings, err := s.Store.RecordingAirings(ctx, now.Add(-time.Minute), end)
 	if err != nil {
 		return scheduleSnap{}, err
 	}
@@ -897,7 +900,7 @@ func (s *Server) upcomingSoon(ctx context.Context, watch store.SourceChannel, tu
 	}
 	from := now.Add(-time.Minute)
 	to := now.Add(31 * time.Minute)
-	airings, err := s.Store.Airings(ctx, from, to)
+	airings, err := s.Store.RecordingAirings(ctx, from, to)
 	if err != nil {
 		return nil
 	}

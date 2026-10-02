@@ -118,6 +118,11 @@ private func closest(_ list: [Airing], to date: Date) -> Airing? {
 }
 
 public extension Channel {
+    /// An ATSC 3.0 broadcast.
+    var isATSC3: Bool {
+        standard == "atsc3"
+    }
+
     /// Channel numbers sort as numbers: 14.2 before 14.10.
     static func guideOrder(_ a: Channel, _ b: Channel) -> Bool {
         let x = a.displayNumber.split(separator: ".").map { Int($0) ?? 0 }

@@ -420,15 +420,37 @@ func (s *Server) patchChannel(w http.ResponseWriter, r *http.Request) {
 		CustomName   *string `json:"customName"`
 		CustomNumber *string `json:"customNumber"`
 		GuideKey     *string `json:"guideKey"`
+		TwinChoice   *string `json:"twinChoice"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err != nil {
 		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
-	ch, err := s.Store.PatchChannel(r.Context(), id, store.ChannelPatch{
+	if body.TwinChoice != nil {
+		err := s.Store.SetTwinChoice(r.Context(), id, *body.TwinChoice)
+		if errors.Is(err, store.ErrNoTwin) {
+			httpError(w, err.Error(), http.StatusConflict)
+			return
+		}
+		if errors.Is(err, store.ErrTwinChoice) {
+			httpError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+	}
+	patch := store.ChannelPatch{
 		Favorite: body.Favorite, Enabled: body.Enabled, Hidden: body.Hidden,
 		CustomName: body.CustomName, CustomNumber: body.CustomNumber, GuideKey: body.GuideKey,
-	})
+	}
+	var ch store.Channel
+	if body.TwinChoice != nil && patch == (store.ChannelPatch{}) {
+		ch, err = s.Store.Channel(r.Context(), id)
+	} else {
+		ch, err = s.Store.PatchChannel(r.Context(), id, patch)
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		httpError(w, "channel not found", http.StatusNotFound)
 		return

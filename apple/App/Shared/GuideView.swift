@@ -478,6 +478,9 @@ struct GuideGrid: View {
                                     .monospacedDigit()
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.7)
+                                if channel.isATSC3 {
+                                    ATSC3Tag()
+                                }
                                 Spacer(minLength: 0)
                                 if channel.favorite {
                                     Image(systemName: "star.fill")
@@ -513,7 +516,7 @@ struct GuideGrid: View {
                     #if os(tvOS)
                         .focused(channelFocus, equals: channel.id)
                     #endif
-                        .accessibilityLabel("\(channel.displayNumber) \(channel.displayName)")
+                        .accessibilityLabel("\(channel.displayNumber) \(channel.displayName)\(channel.isATSC3 ? ", ATSC 3.0" : "")")
                 }
             }
             .offset(y: -offset.y)

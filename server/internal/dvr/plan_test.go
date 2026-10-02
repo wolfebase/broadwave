@@ -109,3 +109,19 @@ func TestOncePassRecordsOnlyItsAiring(t *testing.T) {
 		t.Fatalf("asked for by name, it records even if seen before: %+v", got[0])
 	}
 }
+
+func TestASimulcastIsRecordedOnce(t *testing.T) {
+	start := time.Date(2026, 10, 4, 18, 0, 0, 0, time.UTC)
+	airings := []store.Airing{
+		{ID: 1, ChannelID: 1, Title: "Football", Start: start, End: start.Add(3 * time.Hour), Simulcast: 2},
+		{ID: 2, ChannelID: 2, Title: "Football", Start: start, End: start.Add(3 * time.Hour)},
+	}
+	got := Plan([]store.Pass{{ID: 1, Title: "Football"}}, airings, 2, start.Add(-time.Minute), start.Add(4*time.Hour))
+	if len(got) != 1 || got[0].Airing.ID != 2 {
+		t.Fatalf("series pass planned %+v, want only the airing on channel 2", got)
+	}
+	got = Plan([]store.Pass{{ID: 1, Title: "Football", ChannelID: 1}}, airings, 2, start.Add(-time.Minute), start.Add(4*time.Hour))
+	if len(got) != 1 || got[0].Airing.ID != 1 {
+		t.Fatalf("a pass pinned to channel 1 planned %+v, want its own airing", got)
+	}
+}

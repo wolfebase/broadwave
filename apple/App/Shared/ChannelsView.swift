@@ -28,6 +28,10 @@ struct ChannelsView: View {
                             if let i = lineup.firstIndex(where: { $0.id == updated.id }) {
                                 lineup[i] = updated
                             }
+                            // A pair's choice also changes the other channel.
+                            if updated.twinId != nil {
+                                Task { await load() }
+                            }
                         }
                     } label: {
                         row(channel)
@@ -71,6 +75,12 @@ struct ChannelsView: View {
         var parts = [channel.hd ? "HD" : "SD"]
         if let codec = channel.videoCodec, !codec.isEmpty {
             parts.append(codec)
+        }
+        if channel.isATSC3 {
+            parts.append("ATSC 3.0")
+        }
+        if channel.protected == true {
+            parts.append("Encrypted")
         }
         if !channel.present {
             parts.append("Off air")
@@ -128,14 +138,38 @@ struct ChannelEditView: View {
                     Text(error).foregroundStyle(.red)
                 }
             }
-            Section {
-                toggle("Favorite", \.favorite) { ChannelPatch(favorite: $0) }
-                if !demo {
-                    toggle("On the guide", \.enabled) { ChannelPatch(enabled: $0) }
+            if channel.protected == true {
+                Section {
+                    Text(channel.isATSC3
+                        ? "Encrypted (ATSC 3.0 DRM). Only the tuner maker's app can play it."
+                        : "Copy protected. Only the tuner maker's app can play it.")
+                } footer: {
+                    Text(ChannelsView.status(channel))
                 }
-                toggle("Hide", \.hidden) { ChannelPatch(hidden: $0) }
-            } footer: {
-                Text(ChannelsView.status(channel))
+            } else {
+                Section {
+                    toggle("Favorite", \.favorite) { ChannelPatch(favorite: $0) }
+                    if !demo {
+                        toggle("On the guide", \.enabled) { ChannelPatch(enabled: $0) }
+                    }
+                    toggle("Hide", \.hidden) { ChannelPatch(hidden: $0) }
+                } footer: {
+                    Text(ChannelsView.status(channel))
+                }
+            }
+            if channel.twinId != nil, !demo {
+                Section {
+                    Picker("Show", selection: Binding(
+                        get: { channel.twinChoice ?? "both" },
+                        set: { choice in Task { await save(ChannelPatch(twinChoice: choice)) } }
+                    )) {
+                        Text("3.0 only").tag("atsc3")
+                        Text("1.0 only").tag("atsc1")
+                        Text("Both").tag("both")
+                    }
+                } footer: {
+                    Text("This station broadcasts in ATSC 1.0 and 3.0. Both share one guide.")
+                }
             }
             if demo {
                 Section {

@@ -59,6 +59,9 @@ type Airing struct {
 	GuideSource  string    `json:"guideSource,omitempty"`
 	Start        time.Time `json:"start"`
 	End          time.Time `json:"end"`
+	// Simulcast is the channel that records this broadcast when it also airs
+	// there (an ATSC 1.0 and 3.0 pair). Only RecordingAirings sets it.
+	Simulcast int64 `json:"-"`
 }
 
 // RecordingHealth is the damage counted in a finished recording file.

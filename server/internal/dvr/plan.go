@@ -71,6 +71,10 @@ func passMatches(pass store.Pass, airing store.Airing) bool {
 	if pass.ChannelID != 0 && pass.ChannelID != airing.ChannelID {
 		return false
 	}
+	// The other channel of a simulcast pair records this broadcast.
+	if pass.ChannelID == 0 && airing.Simulcast != 0 {
+		return false
+	}
 	if pass.Kind == "once" {
 		// The guide can retitle an airing before it starts; the channel and start name it.
 		return pass.ChannelID != 0 && airing.Start.Equal(pass.AiringStart)

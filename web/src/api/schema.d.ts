@@ -1266,6 +1266,23 @@ export interface components {
             artHeight?: number;
             /** @description ABC, CBS, FOX, or NBC when the server can tell. Empty otherwise. */
             network?: string;
+            /** @description The tuner marks this channel DRM or copy protected (for example ATSC 3.0 DRM). It stays hidden and cannot be played. */
+            protected?: boolean;
+            /**
+             * @description atsc3 for an ATSC 3.0 broadcast. Omitted for everything else.
+             * @enum {string}
+             */
+            standard?: "atsc3";
+            /**
+             * Format: int64
+             * @description The other channel of an ATSC 1.0 and 3.0 pair of the same station. Its listings are shared.
+             */
+            twinId?: number;
+            /**
+             * @description Which channel of the pair shows in the guide.
+             * @enum {string}
+             */
+            twinChoice?: "atsc3" | "atsc1" | "both";
         };
         ChannelPatch: {
             favorite?: boolean;
@@ -1274,6 +1291,11 @@ export interface components {
             customName?: string;
             customNumber?: string;
             guideKey?: string;
+            /**
+             * @description Show the pair's ATSC 3.0 channel, its 1.0 channel, or both. The channel that stays keeps the favorite.
+             * @enum {string}
+             */
+            twinChoice?: "atsc3" | "atsc1" | "both";
         };
         /** @description Channel ids whose preview JPEG exists and is newer than 10 minutes. */
         FrameList: {
@@ -2450,6 +2472,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     listFrames: {

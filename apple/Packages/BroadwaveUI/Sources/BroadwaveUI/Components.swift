@@ -36,9 +36,27 @@ public struct ChannelBadge: View {
                 .font(large ? .headline : .subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+            if channel.isATSC3 {
+                ATSC3Tag()
+            }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Channel \(channel.displayNumber), \(channel.displayName)")
+        .accessibilityLabel("Channel \(channel.displayNumber), \(channel.displayName)\(channel.isATSC3 ? ", ATSC 3.0" : "")")
+    }
+}
+
+/// Marks an ATSC 3.0 broadcast next to its number.
+public struct ATSC3Tag: View {
+    public init() {}
+
+    public var body: some View {
+        Text("3.0")
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(.white.opacity(0.12), in: .rect(cornerRadius: Tokens.Radius.xs))
+            .accessibilityLabel("ATSC 3.0")
     }
 }
 

@@ -113,8 +113,12 @@ public struct Channel: Codable, Sendable, Hashable, Identifiable {
     public var artWidth: Int?
     public var artHeight: Int?
     public var network: String?
+    public var protected: Bool?
+    public var standard: String?
+    public var twinId: Int64?
+    public var twinChoice: String?
 
-    public init(id: Int64, deviceId: String, guideNumber: String, guideName: String, displayNumber: String, displayName: String, videoCodec: String? = nil, audioCodec: String? = nil, hd: Bool, favorite: Bool, enabled: Bool, hidden: Bool, present: Bool, guideKey: String? = nil, artUrl: String? = nil, artWidth: Int? = nil, artHeight: Int? = nil, network: String? = nil) {
+    public init(id: Int64, deviceId: String, guideNumber: String, guideName: String, displayNumber: String, displayName: String, videoCodec: String? = nil, audioCodec: String? = nil, hd: Bool, favorite: Bool, enabled: Bool, hidden: Bool, present: Bool, guideKey: String? = nil, artUrl: String? = nil, artWidth: Int? = nil, artHeight: Int? = nil, network: String? = nil, protected: Bool? = nil, standard: String? = nil, twinId: Int64? = nil, twinChoice: String? = nil) {
         self.id = id
         self.deviceId = deviceId
         self.guideNumber = guideNumber
@@ -133,6 +137,10 @@ public struct Channel: Codable, Sendable, Hashable, Identifiable {
         self.artWidth = artWidth
         self.artHeight = artHeight
         self.network = network
+        self.protected = protected
+        self.standard = standard
+        self.twinId = twinId
+        self.twinChoice = twinChoice
     }
 }
 
@@ -143,14 +151,16 @@ public struct ChannelPatch: Codable, Sendable, Hashable {
     public var customName: String?
     public var customNumber: String?
     public var guideKey: String?
+    public var twinChoice: String?
 
-    public init(favorite: Bool? = nil, enabled: Bool? = nil, hidden: Bool? = nil, customName: String? = nil, customNumber: String? = nil, guideKey: String? = nil) {
+    public init(favorite: Bool? = nil, enabled: Bool? = nil, hidden: Bool? = nil, customName: String? = nil, customNumber: String? = nil, guideKey: String? = nil, twinChoice: String? = nil) {
         self.favorite = favorite
         self.enabled = enabled
         self.hidden = hidden
         self.customName = customName
         self.customNumber = customNumber
         self.guideKey = guideKey
+        self.twinChoice = twinChoice
     }
 }
 
