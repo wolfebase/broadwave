@@ -5,10 +5,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"broadwave/internal/hdhr"
+	"broadwave/internal/hdhr/fake"
 	"broadwave/internal/store"
 )
 
@@ -315,4 +318,70 @@ func TestAnAC4RecordingKeepsTheBroadcastPackets(t *testing.T) {
 	if !described || count[videoPID] == 0 || count[audioPID] == 0 {
 		t.Fatalf("recording: AC-4 in the map %v, packets per pid %v", described, count)
 	}
+}
+
+func TestA3Point0WatchOpensTheAutoStreamWithoutAProbe(t *testing.T) {
+	st := openStore(t)
+	srv := &fake.Server{Profile: fake.ProfileFlex4K}
+	base, control, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(srv.Close)
+	t.Setenv("HDHR_CONTROL_PORT", control)
+	ctx := context.Background()
+	dev, err := (&hdhr.Client{}).FetchDevice(ctx, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lineup, err := (&hdhr.Client{}).FetchLineup(ctx, dev.LineupURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertDevice(ctx, dev, lineup); err != nil {
+		t.Fatal(err)
+	}
+	ch := sourceByNumber(t, st, "104.1")
+	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	began := time.Now()
+	h.mu.Lock()
+	f, err := h.ensureFeedLocked(ctx, ch, nil)
+	h.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	took := time.Since(began)
+	t.Cleanup(func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		h.stopFeedLocked(f)
+	})
+	reqs := srv.Requests()
+	for _, r := range reqs {
+		if strings.HasSuffix(r, "/vchannel") {
+			t.Fatalf("a 3.0 watch probed the control port: %v", reqs)
+		}
+	}
+	if !slices.Contains(reqs, "/auto/v104.1") || took > 2*time.Second {
+		t.Fatalf("3.0 watch took %v; requests %v", took, reqs)
+	}
+}
+
+func sourceByNumber(t *testing.T, st *store.Store, number string) store.SourceChannel {
+	t.Helper()
+	chs, err := st.Channels(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range chs {
+		if c.GuideNumber == number {
+			ch, err := st.SourceChannel(context.Background(), c.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return ch
+		}
+	}
+	t.Fatalf("no %s", number)
+	return store.SourceChannel{}
 }

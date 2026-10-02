@@ -600,26 +600,15 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 			return feed, nil
 		}
 	}
+	// The control port's lock reads 8vsb only. An ATSC 3.0 channel never shows
+	// it, so the probe would wait out its deadlines (about 7 s, holding every
+	// other watch) before falling back to the same /auto stream.
+	if need.ATSC3 {
+		return h.openAutoLocked(ch, root, host, last, false)
+	}
 	freq, programs, err := probe(host, tuner, ch.GuideNumber)
 	if err != nil {
-		unlocked := errors.Is(err, errNoLock)
-		streamURL := strings.TrimRight(root, "/") + "/auto/v" + ch.GuideNumber
-		if h.Encoder == "" || h.Encoder == "libx264" {
-			if q := hdhr.ExtendQuery(ch.ModelNumber); q != "" {
-				streamURL += "?" + q
-			}
-		}
-		res, err := openStream(streamURL, "", "")
-		if err != nil {
-			if strings.Contains(err.Error(), "805") {
-				return nil, &BusyError{Tuners: last}
-			}
-			if unlocked {
-				return nil, fmt.Errorf("%w (%v)", ErrNoSignal, err)
-			}
-			return nil, err
-		}
-		return h.addFeedLocked(h.streamMuxLocked(ch, res.Body, host), ch), nil
+		return h.openAutoLocked(ch, root, host, last, errors.Is(err, errNoLock))
 	}
 	for _, p := range programs {
 		_ = h.Store.RememberProgram(ctx, ch.DeviceID, p.GuideNumber, freq, p.Number)
@@ -635,6 +624,28 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	feed := h.beginMuxLocked(ch, host, base, tuner, freq, programs, body)
 	noteTune(muxOf(h, feed), began, status, locked)
 	return feed, nil
+}
+
+// openAutoLocked lets the device tune the channel itself through its /auto
+// stream. unlocked is a probe that already found no signal.
+func (h *Hub) openAutoLocked(ch store.SourceChannel, root, host string, last []Tuner, unlocked bool) (*feed, error) {
+	streamURL := strings.TrimRight(root, "/") + "/auto/v" + ch.GuideNumber
+	if h.Encoder == "" || h.Encoder == "libx264" {
+		if q := hdhr.ExtendQuery(ch.ModelNumber); q != "" {
+			streamURL += "?" + q
+		}
+	}
+	res, err := openStream(streamURL, "", "")
+	if err != nil {
+		if strings.Contains(err.Error(), "805") {
+			return nil, &BusyError{Tuners: last}
+		}
+		if unlocked {
+			return nil, fmt.Errorf("%w (%v)", ErrNoSignal, err)
+		}
+		return nil, err
+	}
+	return h.addFeedLocked(h.streamMuxLocked(ch, res.Body, host), ch), nil
 }
 
 // beginMuxLocked owns the tuner stream and starts the feed. The caller holds h.mu.
