@@ -299,9 +299,7 @@ func renditionReports(body []byte, siblings []string) []string {
 	if len(siblings) == 0 {
 		return nil
 	}
-	// A closed segment lists its parts before it, so the newest part may be
-	// the last segment's own; a report must name it when there is one.
-	origin, segments, parts, closedParts := -1, 0, 0, 0
+	origin, segments, parts := -1, 0, 0
 	for line := range strings.SplitSeq(string(body), "\n") {
 		switch {
 		case strings.HasPrefix(line, "#EXT-X-MEDIA-SEQUENCE:"):
@@ -310,18 +308,15 @@ func renditionReports(body []byte, siblings []string) []string {
 			parts++
 		case line != "" && !strings.HasPrefix(line, "#"):
 			segments++
-			closedParts, parts = parts, 0
+			parts = 0
 		}
 	}
 	if origin < 0 || segments+parts == 0 {
 		return nil
 	}
 	last := fmt.Sprintf("LAST-MSN=%d", origin+segments-1)
-	switch {
-	case parts > 0:
+	if parts > 0 {
 		last = fmt.Sprintf("LAST-MSN=%d,LAST-PART=%d", origin+segments, parts-1)
-	case closedParts > 0:
-		last = fmt.Sprintf("LAST-MSN=%d,LAST-PART=%d", origin+segments-1, closedParts-1)
 	}
 	out := make([]string, len(siblings))
 	for i, s := range siblings {
