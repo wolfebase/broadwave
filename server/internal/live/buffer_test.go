@@ -22,6 +22,14 @@ import (
 // bufferHub is a hub on a live fake tuner with the buffer on.
 func bufferHub(t *testing.T) (*Hub, *store.Store) {
 	t.Helper()
+	h, st, _ := liveHub(t)
+	h.Buffer = time.Hour
+	return h, st
+}
+
+// liveHub is a hub on a live fake tuner with one channel, 4.1.
+func liveHub(t *testing.T) (*Hub, *store.Store, *fake.Server) {
+	t.Helper()
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg is not installed")
 	}
@@ -54,11 +62,10 @@ func bufferHub(t *testing.T) (*Hub, *store.Store) {
 		t.Fatal(err)
 	}
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
-	h.Buffer = time.Hour
 	// Runs before the temp dirs are removed, so no frame grab writes into
 	// a directory being deleted.
 	t.Cleanup(h.Shutdown)
-	return h, st
+	return h, st, srv
 }
 
 func probeDuration(t *testing.T, path string) float64 {

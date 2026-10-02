@@ -176,6 +176,8 @@ type Hub struct {
 	cuts cutCache
 	// starts are the last pictures a watch started, newest last. Under mu.
 	starts []StartRecord
+	// stall overrides inputStall. Tests shorten it.
+	stall time.Duration
 	// grabbers counts preview-frame loops, so Shutdown returns only after
 	// the last one stops writing.
 	grabbers sync.WaitGroup
@@ -214,6 +216,13 @@ type mux struct {
 	pictures    map[int]notedPicture
 	// got is set by the first byte the tuner sends.
 	got atomic.Bool
+	// reopen is the URL that opens this tune's stream again in place. Empty
+	// when it cannot be opened again. Set and read under h.mu.
+	reopen string
+	// heard is when the tuner last sent anything, in Unix nanoseconds.
+	heard atomic.Int64
+	// stalled is set when the input watchdog closed a silent stream.
+	stalled atomic.Bool
 	// ring holds the last Buffer of the multiplex. Chunks enter it under
 	// pipeMu, in the same order the subscribers get them.
 	ring *ring.Ring
@@ -602,6 +611,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 		if body, err := openMux(root, tuner, ch.FrequencyHz); err == nil {
 			locked := time.Now()
 			feed := h.beginMuxLocked(ch, host, base, tuner, ch.FrequencyHz, nil, body)
+			muxOf(h, feed).reopen = muxURL(root, tuner, ch.FrequencyHz)
 			noteTune(muxOf(h, feed), began, status, locked)
 			// streaminfo on a tuner that is already locked records the other
 			// subchannels. A vchannel probe would lock the same frequency again.
@@ -631,6 +641,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	}
 	locked := time.Now()
 	feed := h.beginMuxLocked(ch, host, base, tuner, freq, programs, body)
+	muxOf(h, feed).reopen = muxURL(root, tuner, freq)
 	noteTune(muxOf(h, feed), began, status, locked)
 	return feed, nil
 }
@@ -654,7 +665,9 @@ func (h *Hub) openAutoLocked(ch store.SourceChannel, root, host string, last []T
 		}
 		return nil, err
 	}
-	return h.addFeedLocked(h.streamMuxLocked(ch, res.Body, host), ch), nil
+	m := h.streamMuxLocked(ch, res.Body, host)
+	m.reopen = streamURL
+	return h.addFeedLocked(m, ch), nil
 }
 
 // beginMuxLocked owns the tuner stream and starts the feed. The caller holds h.mu.
@@ -2018,6 +2031,9 @@ func (m *mux) picture(program int) (notedPicture, bool) {
 func (h *Hub) readLoop(ctx context.Context, m *mux) {
 	buf := make([]byte, 188*49)
 	var last time.Time
+	reopened := 0
+	m.heard.Store(time.Now().UnixNano())
+	go h.watchInput(ctx, m)
 	for {
 		if ctx.Err() != nil {
 			return
@@ -2029,6 +2045,8 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 				h.shiftClocks(m, gap)
 			}
 			last = now
+			reopened = 0
+			m.heard.Store(now.UnixNano())
 			m.got.Store(true)
 			m.firstByte.mark()
 			chunk := append([]byte(nil), buf[:n]...)
@@ -2045,6 +2063,13 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 			if ctx.Err() != nil {
 				return
 			}
+			if m.stalled.Swap(false) {
+				reopened++
+				if h.reopenInput(ctx, m, reopened) {
+					continue
+				}
+				err = errors.New("the tuner went silent")
+			}
 			if h.handOff(ctx, m) {
 				continue
 			}
@@ -2059,6 +2084,98 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 // the broadcast resuming, not as a slow read. A tuner sends every few
 // milliseconds, and it cannot hold back seconds of a live broadcast.
 var inputGap = 5 * time.Second
+
+// inputStall is how long a tune may send nothing before its stream is opened
+// again. A tuner that loses an ATSC 3.0 signal can keep the connection open
+// and silent for minutes, and every screen would sit on its last frame.
+const inputStall = 10 * time.Second
+
+func (h *Hub) stallAfter() time.Duration {
+	if h.stall > 0 {
+		return h.stall
+	}
+	return inputStall
+}
+
+// stallReopens is how many silent reopens in a row end a tune nobody is
+// recording. Its players then tune again or say why they cannot.
+const stallReopens = 3
+
+// watchInput closes a stream that has gone silent, so readLoop can open it
+// again. A recording on a stream that cannot be reopened keeps waiting, as
+// it did before there was a watchdog.
+func (h *Hub) watchInput(ctx context.Context, m *mux) {
+	stall := h.stallAfter()
+	tick := min(time.Second, stall/4)
+	t := time.NewTicker(tick)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			if now.Sub(time.Unix(0, m.heard.Load())) < stall {
+				continue
+			}
+			h.mu.Lock()
+			body, closeIt := m.body, h.muxes[m.freq] == m && (m.reopen != "" || !recordingOnLocked(m))
+			h.mu.Unlock()
+			if !closeIt || body == nil {
+				continue
+			}
+			m.heard.Store(now.UnixNano())
+			m.stalled.Store(true)
+			_ = body.Close()
+		}
+	}
+}
+
+func recordingOnLocked(m *mux) bool {
+	for _, f := range m.feeds {
+		if f != nil && f.recording != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// reopenInput opens a silent tune's stream again on the same tuner. tries
+// counts silent reopens in a row; past stallReopens only a recording keeps
+// trying. False ends the tune.
+func (h *Hub) reopenInput(ctx context.Context, m *mux, tries int) bool {
+	h.mu.Lock()
+	u, recording := m.reopen, recordingOnLocked(m)
+	current := h.muxes[m.freq] == m
+	h.mu.Unlock()
+	if !current || u == "" || (tries > stallReopens && !recording) {
+		return false
+	}
+	slog.Warn(fmt.Sprintf("mux %d: the tuner sent nothing for %.0f s; opening its stream again (%d)", m.freq, h.stallAfter().Seconds(), tries))
+	for attempt := 0; attempt < 3 && ctx.Err() == nil; attempt++ {
+		if attempt > 0 {
+			// The device frees the tuner when it sees the old connection close.
+			time.Sleep(time.Second)
+		}
+		openCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		body, err := openKept(openCtx, u)
+		cancel()
+		if err != nil {
+			slog.Warn(fmt.Sprintf("mux %d: reopen: %v", m.freq, err))
+			continue
+		}
+		h.mu.Lock()
+		if h.muxes[m.freq] != m || ctx.Err() != nil {
+			h.mu.Unlock()
+			_ = body.Close()
+			return false
+		}
+		m.body = body
+		h.mu.Unlock()
+		m.heard.Store(time.Now().UnixNano())
+		return true
+	}
+	return false
+}
 
 // shiftClocks moves every encode's clock on a mux past a silence, so the
 // program date-times after it stay on the wall clock.
@@ -2588,6 +2705,7 @@ func (h *Hub) commitMove(ctx context.Context, m *mux, base string, tuner int, bo
 	m.base = base
 	m.tuner = tuner
 	m.body = body
+	m.reopen = ""
 	if id != "" {
 		m.device = id
 		for _, f := range m.feeds {
@@ -2960,8 +3078,12 @@ func streamOrigin(base string) string {
 	return u.Scheme + "://" + u.Hostname() + ":5004"
 }
 
+func muxURL(root string, tuner, freq int) string {
+	return fmt.Sprintf("%s/tuner%d/ch%d", strings.TrimRight(root, "/"), tuner, freq)
+}
+
 func openMux(root string, tuner, freq int) (io.ReadCloser, error) {
-	u := fmt.Sprintf("%s/tuner%d/ch%d", strings.TrimRight(root, "/"), tuner, freq)
+	u := muxURL(root, tuner, freq)
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
