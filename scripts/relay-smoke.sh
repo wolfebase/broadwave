@@ -131,9 +131,14 @@ SZ=$(stat -f%z "$T/export.ts" 2>/dev/null || stat -c%s "$T/export.ts")
 check "export stream carries video ($SZ bytes)" "[ ${SZ:-0} -gt 100000 ]"
 check "m3u export lists the channel" "curl -s http://127.0.0.1:$PORT/export/lineup.m3u | grep -q '$NAME'"
 curl -s -XPOST "$API/watch/$ID/stop" -d '{}' >/dev/null
-echo "logs: $T"
 # A hosted runner keeps nothing from $T; show the server's side of a failure.
 if [ "$fail" != 0 ]; then
+  echo "logs: $T"
   grep -v "GET /media" "$T/log.txt" | tail -60
+else
+  # Each run leaves about 150 MB; make check runs it before every push.
+  kill $SRV $SRC 2>/dev/null
+  wait 2>/dev/null
+  rm -rf "$T"
 fi
 exit $fail
