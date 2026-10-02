@@ -140,7 +140,9 @@ struct ChannelEditView: View {
             }
             if channel.protected == true {
                 Section {
-                    Text(channel.isATSC3
+                    Text(channel.playsAs != nil
+                        ? "Encrypted (ATSC 3.0 DRM). It plays and records the same station in ATSC 1.0."
+                        : channel.isATSC3
                         ? "Encrypted (ATSC 3.0 DRM). Only the tuner maker's app can play it."
                         : "Copy protected. Only the tuner maker's app can play it.")
                 } footer: {

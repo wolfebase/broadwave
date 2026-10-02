@@ -16,11 +16,14 @@ final class NowPlaying {
     var together: [Int64] = []
     /// Layout Watch together or a saved set asked for. The multiview screen applies it once.
     var openedLayout: String?
+    /// A short note over the picture, such as why another channel is playing.
+    var note: String?
 
-    func play(_ channel: Channel) {
+    func play(_ channel: Channel, note: String? = nil) {
         together = []
         openedLayout = nil
         self.channel = channel
+        self.note = note
         expanded = true
     }
 
@@ -40,6 +43,7 @@ final class NowPlaying {
 
     func stop() {
         channel = nil
+        note = nil
         together = []
         openedLayout = nil
         expanded = false
@@ -339,6 +343,8 @@ struct RootView: View {
                 }
                 if let channel = store.channels.first(where: { $0.id == id }) {
                     nowPlaying.play(channel)
+                } else if let channel = await clearTwin(of: id) {
+                    nowPlaying.play(channel, note: "The 3.0 version is encrypted. Showing the regular broadcast.")
                 }
             }
         case "guide": show(.guide)
@@ -347,6 +353,13 @@ struct RootView: View {
         case "recordings": show(.recordings)
         default: show(.home)
         }
+    }
+
+    /// The station's clear 1.0 channel that an encrypted 3.0 channel plays as.
+    private func clearTwin(of id: Int64) async -> Channel? {
+        guard let all = try? await store.api?.allChannels() else { return nil }
+        guard let twin = all.first(where: { $0.id == id })?.playsAs else { return nil }
+        return store.channels.first { $0.id == twin }
     }
 
     /// A page link closes the player, which would otherwise cover the page.

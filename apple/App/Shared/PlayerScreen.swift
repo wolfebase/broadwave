@@ -1042,6 +1042,22 @@ struct PlayerScreen: View {
                     .padding(.top, 24)
                     .allowsHitTesting(false)
                     .accessibilityIdentifier("playback-reconnecting")
+            } else if let note = nowPlaying.note {
+                Text(note)
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .glassEffect(in: .capsule)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .padding(.top, 24)
+                    .allowsHitTesting(false)
+                    .accessibilityIdentifier("playback-note")
+                    .task(id: note) {
+                        try? await Task.sleep(for: .seconds(10))
+                        if nowPlaying.note == note {
+                            nowPlaying.note = nil
+                        }
+                    }
             }
         }
         #if os(iOS)
