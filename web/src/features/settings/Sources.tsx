@@ -281,7 +281,11 @@ export function Sources({
               {!channel.present ? " · off air" : ""}
             </span>
             {channel.protected ? (
-              <span className="hint">{copy.sources.encrypted(channel.standard === "atsc3")}</span>
+              <span className="hint">
+                {channel.playsAs
+                  ? copy.sources.playsAs(twinNumber(channels, channel.playsAs))
+                  : copy.sources.encrypted(channel.standard === "atsc3")}
+              </span>
             ) : null}
             {channel.twinId && channel.standard === "atsc3" ? (
               <label className="check">

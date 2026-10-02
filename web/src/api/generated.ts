@@ -69,6 +69,7 @@ export type Channel = {
   standard?: string;
   twinId?: number;
   twinChoice?: string;
+  playsAs?: number;
 };
 
 export type ChannelPatch = {

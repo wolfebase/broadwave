@@ -213,3 +213,78 @@ func TestASimulcastRecordsOnTheShownChannel(t *testing.T) {
 		t.Fatalf("both shown: %v, want the 3.0 copy marked for 4.1", m)
 	}
 }
+
+// The lineup names an encrypted 3.0 channel by its bare call sign and its 1.0
+// twin in each of the forms tuners use.
+func TestEachEncryptedChannelPlaysItsClearTwin(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	flex := hdhr.Device{DeviceID: "FLEX1", BaseURL: "http://flex", LineupURL: "http://flex/lineup.json", TunerCount: 4}
+	lineup := []hdhr.Channel{
+		{GuideNumber: "5.1", GuideName: "KQRSDT1"},
+		{GuideNumber: "5.2", GuideName: "KQRS365"},
+		{GuideNumber: "9.1", GuideName: "KLMN-HD"},
+		{GuideNumber: "29.1", GuideName: "KWXY-HD"},
+		{GuideNumber: "41.1", GuideName: "KOPQ-TV"},
+		{GuideNumber: "62.1", GuideName: "KTUVDT1"},
+		{GuideNumber: "105.1", GuideName: "KQRS", Protected: true},
+		{GuideNumber: "109.1", GuideName: "KLMN", Protected: true},
+		{GuideNumber: "129.1", GuideName: "KWXY", Protected: true},
+		{GuideNumber: "141.1", GuideName: "KOPQ", Protected: true},
+		{GuideNumber: "162.1", GuideName: "KTUV", Protected: true},
+		{GuideNumber: "170.1", GuideName: "KZZZ", Protected: true},
+	}
+	for i := range lineup {
+		lineup[i].VideoCodec, lineup[i].AudioCodec = "MPEG2", "AC3"
+		if lineup[i].Protected {
+			lineup[i].VideoCodec, lineup[i].AudioCodec = "HEVC", "AC4"
+		}
+		lineup[i].StreamURL = "http://flex:5004/auto/v" + lineup[i].GuideNumber
+	}
+	if err := s.UpsertDevice(ctx, flex, lineup); err != nil {
+		t.Fatal(err)
+	}
+	got := byNumber(t, s, ctx)
+	for c3, c1 := range map[string]string{"105.1": "5.1", "109.1": "9.1", "129.1": "29.1", "141.1": "41.1", "162.1": "62.1"} {
+		ch := got[c3][0]
+		if ch.PlaysAs != got[c1][0].ID || !ch.Hidden || ch.TwinID != 0 {
+			t.Errorf("%s %+v, want hidden, unpaired, playing as %s", c3, ch, c1)
+			continue
+		}
+		src, err := s.SourceChannel(ctx, ch.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if src.ID != ch.ID || src.PlaysAs != got[c1][0].ID || src.StreamURL != "http://flex:5004/auto/v"+c1 || src.Protected || src.VideoCodec != "MPEG2" {
+			t.Errorf("%s streams %+v, want %s's stream under its own id", c3, src, c1)
+		}
+	}
+	if ch := got["170.1"][0]; ch.PlaysAs != 0 {
+		t.Errorf("170.1 has no 1.0 station but plays as %d", ch.PlaysAs)
+	}
+	if src, err := s.SourceChannel(ctx, got["170.1"][0].ID); err != nil || src.StreamURL != "http://flex:5004/auto/v170.1" || src.PlaysAs != 0 {
+		t.Errorf("170.1 streams %+v (%v), want its own stream", src, err)
+	}
+
+	start := time.Now().Add(time.Hour).Truncate(time.Minute)
+	enc, clear := got["105.1"][0].ID, got["5.1"][0].ID
+	if err := s.InsertAirings(ctx, []Airing{
+		{ChannelID: clear, Title: "News", Start: start, End: start.Add(time.Hour)},
+		{ChannelID: enc, Title: "News", Start: start, End: start.Add(time.Hour)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := s.RecordingAirings(ctx, start.Add(-time.Hour), start.Add(2*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if want := map[int64]int64{clear: 0, enc: clear}[r.ChannelID]; r.Simulcast != want {
+			t.Errorf("airing on %d marked for %d, want %d", r.ChannelID, r.Simulcast, want)
+		}
+	}
+}

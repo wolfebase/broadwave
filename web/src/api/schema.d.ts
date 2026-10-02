@@ -1266,7 +1266,7 @@ export interface components {
             artHeight?: number;
             /** @description ABC, CBS, FOX, or NBC when the server can tell. Empty otherwise. */
             network?: string;
-            /** @description The tuner marks this channel DRM or copy protected (for example ATSC 3.0 DRM). It stays hidden and cannot be played. */
+            /** @description The tuner marks this channel DRM or copy protected (for example ATSC 3.0 DRM). It stays hidden; one with a clear 1.0 twin plays as that channel (playsAs). */
             protected?: boolean;
             /**
              * @description atsc3 for an ATSC 3.0 broadcast. Omitted for everything else.
@@ -1283,6 +1283,11 @@ export interface components {
              * @enum {string}
              */
             twinChoice?: "atsc3" | "atsc1" | "both";
+            /**
+             * Format: int64
+             * @description An encrypted ATSC 3.0 channel's clear 1.0 channel of the same station. Watching or recording the encrypted channel plays this one.
+             */
+            playsAs?: number;
         };
         ChannelPatch: {
             favorite?: boolean;

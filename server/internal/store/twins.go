@@ -70,6 +70,22 @@ func minor(number string) int {
 // shares: same device first, then the lowest subchannel. Other devices that
 // carry the same 1.0 channel follow it.
 func Twins(chs []Channel) map[int64][]int64 {
+	return pairs(chs, false)
+}
+
+// StandIns maps each encrypted ATSC 3.0 channel to the clear 1.0 channel of the
+// same station, which plays and records in its place.
+func StandIns(chs []Channel) map[int64]int64 {
+	out := map[int64]int64{}
+	for c3, ones := range pairs(chs, true) {
+		out[c3] = ones[0]
+	}
+	return out
+}
+
+// pairs matches 3.0 rows to their station's 1.0 main channels: the clear 3.0
+// rows, or with encrypted the protected ones.
+func pairs(chs []Channel, encrypted bool) map[int64][]int64 {
 	byKey := map[string][]Channel{}
 	for _, ch := range chs {
 		if strings.HasPrefix(ch.DeviceID, "src-") || IsATSC3(ch.VideoCodec, ch.AudioCodec) {
@@ -81,7 +97,7 @@ func Twins(chs []Channel) map[int64][]int64 {
 	}
 	out := map[int64][]int64{}
 	for _, c3 := range chs {
-		if strings.HasPrefix(c3.DeviceID, "src-") || c3.Protected || !IsATSC3(c3.VideoCodec, c3.AudioCodec) {
+		if strings.HasPrefix(c3.DeviceID, "src-") || c3.Protected != encrypted || !IsATSC3(c3.VideoCodec, c3.AudioCodec) {
 			continue
 		}
 		cands := byKey[callKey(c3.GuideName)]
@@ -115,7 +131,7 @@ func Twins(chs []Channel) map[int64][]int64 {
 	return out
 }
 
-// markTwins fills Standard, TwinID, and TwinChoice on a full channel list.
+// markTwins fills Standard, TwinID, TwinChoice, and PlaysAs on a full channel list.
 func markTwins(chs []Channel, choices map[int64]string) {
 	index := map[int64]int{}
 	for i, ch := range chs {
@@ -123,6 +139,9 @@ func markTwins(chs []Channel, choices map[int64]string) {
 		if IsATSC3(ch.VideoCodec, ch.AudioCodec) && !strings.HasPrefix(ch.DeviceID, "src-") {
 			chs[i].Standard = TwinATSC3
 		}
+	}
+	for c3, one := range StandIns(chs) {
+		chs[index[c3]].PlaysAs = one
 	}
 	for c3, ones := range Twins(chs) {
 		choice := choices[c3]
@@ -260,7 +279,8 @@ func contains(ids []int64, id int64) bool {
 
 // RecordingAirings is Airings with each simulcast copy marked, so a series pass
 // records the broadcast once. A pair records on the channel that shows; when
-// both show (or neither), on the 1.0 channel.
+// both show (or neither), on the 1.0 channel. An encrypted 3.0 channel's
+// copy goes to its 1.0 twin.
 func (s *Store) RecordingAirings(ctx context.Context, from, to time.Time) ([]Airing, error) {
 	rows, err := s.Airings(ctx, from, to)
 	if err != nil {
@@ -270,28 +290,35 @@ func (s *Store) RecordingAirings(ctx context.Context, from, to time.Time) ([]Air
 	if err != nil {
 		return nil, err
 	}
-	twins := Twins(chs)
-	if len(twins) == 0 {
+	twins, stand := Twins(chs), StandIns(chs)
+	if len(twins) == 0 && len(stand) == 0 {
 		return rows, nil
 	}
 	hidden := map[int64]bool{}
 	for _, ch := range chs {
 		hidden[ch.ID] = ch.Hidden
 	}
-	group := map[int64]int64{}
+	group, atsc3 := map[int64]int64{}, map[int64]bool{}
 	for c3, ones := range twins {
-		group[c3] = c3
+		group[c3], atsc3[c3] = c3, true
 		for _, id := range ones {
 			group[id] = c3
 		}
+	}
+	// An encrypted channel's broadcast is its 1.0 twin's.
+	for c3, one := range stand {
+		if _, ok := group[one]; !ok {
+			group[one] = one
+		}
+		group[c3], atsc3[c3] = group[one], true
 	}
 	// better ranks a shown channel first, then 1.0 over 3.0, then the lower id.
 	better := func(a, b int64) bool {
 		if hidden[a] != hidden[b] {
 			return !hidden[a]
 		}
-		if (group[a] == a) != (group[b] == b) {
-			return group[b] == b
+		if atsc3[a] != atsc3[b] {
+			return atsc3[b]
 		}
 		return a < b
 	}

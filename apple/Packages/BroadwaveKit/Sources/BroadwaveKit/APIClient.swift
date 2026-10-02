@@ -131,6 +131,12 @@ public struct APIClient: Sendable {
         return try await send("GET", "/channels?guide=1", as: R.self).channels
     }
 
+    /// Every channel, hidden and encrypted ones too.
+    public func allChannels() async throws -> [Channel] {
+        struct R: Decodable { var channels: [Channel] }
+        return try await send("GET", "/channels", as: R.self).channels
+    }
+
     public func search(_ query: String) async throws -> SearchResult {
         let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         return try await send("GET", "/search?q=\(q)")

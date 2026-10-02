@@ -44,9 +44,12 @@ export function LivePlayer({
   onMinimize,
   onClose,
   onExpand,
+  notice,
 }: {
   channel: Channel;
   mode: "full" | "mini";
+  /** A short note over the picture, such as why another channel is playing. */
+  notice?: string;
   onChannel: (channel: Channel) => void;
   onMinimize: () => void;
   onClose: () => void;
@@ -439,9 +442,9 @@ export function LivePlayer({
           </button>
         ) : null
       }
-      note={error ? undefined : stream.reconnecting ? "Reconnecting…" : !airing ? listingNote(listing.checks > 0) : undefined}
+      note={error ? undefined : stream.reconnecting ? "Reconnecting…" : notice ? notice : !airing ? listingNote(listing.checks > 0) : undefined}
       noteAction={
-        !error && !stream.reconnecting && !airing ? (
+        !error && !stream.reconnecting && !notice && !airing ? (
           <button
             type="button"
             className="btn small"
