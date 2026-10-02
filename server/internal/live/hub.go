@@ -176,6 +176,9 @@ type Hub struct {
 	cuts cutCache
 	// starts are the last pictures a watch started, newest last. Under mu.
 	starts []StartRecord
+	// grabbers counts preview-frame loops, so Shutdown returns only after
+	// the last one stops writing.
+	grabbers sync.WaitGroup
 }
 
 type mux struct {
@@ -1591,13 +1594,17 @@ func rawRecording(ch store.SourceChannel) bool {
 // running or a tuner locked.
 func (h *Hub) Shutdown() {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	for _, f := range h.feedsLocked() {
 		if f.recording != nil {
 			h.finishRecordingLocked(f, "complete", "")
 		}
 		h.stopFeedLocked(f)
 	}
+	for _, m := range h.muxes {
+		m.cancel()
+	}
+	h.mu.Unlock()
+	h.grabbers.Wait()
 }
 
 // uniquePath adds -2, -3, ... when a recording file already exists. Names are

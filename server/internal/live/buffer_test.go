@@ -55,6 +55,9 @@ func bufferHub(t *testing.T) (*Hub, *store.Store) {
 	}
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
 	h.Buffer = time.Hour
+	// Runs before the temp dirs are removed, so no frame grab writes into
+	// a directory being deleted.
+	t.Cleanup(h.Shutdown)
 	return h, st
 }
 
