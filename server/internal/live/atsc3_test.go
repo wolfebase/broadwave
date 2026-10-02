@@ -3,6 +3,7 @@ package live
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -384,4 +385,77 @@ func sourceByNumber(t *testing.T, st *store.Store, number string) store.SourceCh
 	}
 	t.Fatalf("no %s", number)
 	return store.SourceChannel{}
+}
+
+func TestAWarm3Point0StreamGivesItsTunerToANewChannel(t *testing.T) {
+	st := openStore(t)
+	srv := &fake.Server{Profile: fake.ProfileFlex4K}
+	base, control, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(srv.Close)
+	t.Setenv("HDHR_CONTROL_PORT", control)
+	ctx := context.Background()
+	dev, err := (&hdhr.Client{}).FetchDevice(ctx, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lineup, err := (&hdhr.Client{}).FetchLineup(ctx, dev.LineupURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertDevice(ctx, dev, lineup); err != nil {
+		t.Fatal(err)
+	}
+	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		for _, f := range h.feedsLocked() {
+			h.stopFeedLocked(f)
+		}
+	})
+	// 104.1 was watched and left: the device tuned it, and nobody is on it now.
+	// Its first watch stored the scan, as on any channel watched before.
+	c3 := sourceByNumber(t, st, "104.1")
+	if err := st.SetFieldOrder(ctx, c3.ID, "progressive"); err != nil {
+		t.Fatal(err)
+	}
+	h.mu.Lock()
+	_, err = h.ensureFeedLocked(ctx, sourceByNumber(t, st, "104.1"), nil)
+	h.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	held := -1
+	for i := 0; i < 4 && held < 0; i++ {
+		waitTuned := time.Now().Add(2 * time.Second)
+		for time.Now().Before(waitTuned) && guideOn(t, base, i) != "104.1" {
+			if g := fetchGuides(t, base); slices.Contains(g, "104.1") {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		if guideOn(t, base, i) == "104.1" {
+			held = i
+		}
+	}
+	if held < 0 {
+		t.Fatalf("104.1 is on no tuner: %v", fetchGuides(t, base))
+	}
+	// Someone else has every other tuner.
+	for i := 0; i < 4; i++ {
+		if i != held {
+			mustTune(t, fmt.Sprintf("%s/tuner%d/v4.1", base, i))
+			waitGuide(t, base, i, "4.1")
+		}
+	}
+	h.mu.Lock()
+	_, err = h.ensureFeedLocked(ctx, sourceByNumber(t, st, "5.1"), nil)
+	h.mu.Unlock()
+	if err != nil {
+		t.Fatalf("a new channel with a warm 3.0 stream on tuner %d: %v (%v)", held, err, fetchGuides(t, base))
+	}
+	waitGuide(t, base, held, "5.1")
 }

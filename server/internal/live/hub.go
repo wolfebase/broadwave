@@ -557,14 +557,20 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	need := NeedFor(ch.VideoCodec, ch.AudioCodec, ch.ATSC3)
 	picked, tuner, ok := PickTuner(devices, h.usedTunersLocked(devices[0].Host), held, need)
 	for !ok {
-		freed, found := h.freeWarmTunerLocked(devices[0].Host)
+		freed, guide, found := h.freeWarmTunerLocked(devices[0].Host)
 		if !found {
 			break
 		}
-		// The status read above still shows the channel that tuner had.
+		// The status read above still shows the channel that tuner had. A
+		// device-tuned (/auto) stream is known by its channel, not its tuner,
+		// and closing it leaves the device to free the tuner in its own time.
 		for i := range devices[0].Tuners {
-			if devices[0].Tuners[i].Index == freed {
-				devices[0].Tuners[i].Target, devices[0].Tuners[i].Guide = "", ""
+			t := &devices[0].Tuners[i]
+			if t.Index == freed || (freed < 0 && guide != "" && t.Guide == guide) {
+				if freed < 0 {
+					_, _ = hdhr.Control{Addr: controlAddr(devices[0].Host)}.Set(fmt.Sprintf("/tuner%d/channel", t.Index), "none")
+				}
+				t.Target, t.Guide = "", ""
 			}
 		}
 		picked, tuner, ok = PickTuner(devices, h.usedTunersLocked(devices[0].Host), held, need)
@@ -2332,12 +2338,16 @@ func (h *Hub) feedsLocked() []*feed {
 // freeWarmTunerLocked stops the tuner that was left longest ago among those
 // held only so a flip back is instant: no viewer, recording, export, or probe
 // on any of its channels. It returns that tuner, and false when none was.
-func (h *Hub) freeWarmTunerLocked(host string) (int, bool) {
+func (h *Hub) freeWarmTunerLocked(host string) (int, string, bool) {
 	want := hostOf(host)
 	var oldest *mux
 	var left time.Time
 	for _, m := range h.muxes {
-		if m.tuner < 0 || (want != "" && hostOf(m.host) != want && hostOf(m.base) != want) {
+		if want != "" && hostOf(m.host) != want && hostOf(m.base) != want {
+			continue
+		}
+		// A device-tuned stream (ATSC 3.0) has no tuner index but holds one tuner.
+		if m.tuner < 0 && (len(m.feeds) != 1 || m.input != "") {
 			continue
 		}
 		last, warm := warmSince(m)
@@ -2346,13 +2356,21 @@ func (h *Hub) freeWarmTunerLocked(host string) (int, bool) {
 		}
 	}
 	if oldest == nil {
-		return 0, false
+		return 0, "", false
 	}
-	slog.Info(fmt.Sprintf("live: tuner %d: a channel was left a moment ago; giving the tuner to a new one", oldest.tuner))
+	guide := ""
+	for g := range oldest.feeds {
+		guide = g
+	}
+	label := fmt.Sprintf("tuner %d", oldest.tuner)
+	if oldest.tuner < 0 {
+		label = "the tuner on " + guide
+	}
+	slog.Info(fmt.Sprintf("live: %s: a channel was left a moment ago; giving the tuner to a new one", label))
 	for _, f := range maps.Clone(oldest.feeds) {
 		h.stopFeedLocked(f)
 	}
-	return oldest.tuner, true
+	return oldest.tuner, guide, true
 }
 
 // warmSince is when a mux was last watched, and whether it is held only for a
