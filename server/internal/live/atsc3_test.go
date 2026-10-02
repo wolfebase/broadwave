@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"broadwave/internal/hdhr"
+	"broadwave/internal/store"
 )
 
 // hevc10.ts is three libx265 Main 10 pictures, 1920x1080 coded as 1088 with a
@@ -187,9 +188,11 @@ func TestATooTallPictureIsScaledToTheScreen(t *testing.T) {
 	st, id := codecStore(t, "1010ABCD", hdhr.Channel{GuideNumber: "119.1", GuideName: "UHD"})
 	h, m := testHub(t)
 	h.Store = st
-	f := addTestFeed(h, m, id, "119.1")
-	f.program = 3
+	// A bare feed: a real one starts scans that race these fields.
+	f := &feed{channel: store.SourceChannel{Channel: store.Channel{ID: id, GuideNumber: "119.1"}}, program: 3}
+	m.picMu.Lock()
 	m.pictures = map[int]notedPicture{3: {Width: 3840, Height: 2160}}
+	m.picMu.Unlock()
 	h.savePictureHeight(m, f)
 	src, err := h.SourceOf(context.Background(), id)
 	if err != nil || src.Height != 2160 {
