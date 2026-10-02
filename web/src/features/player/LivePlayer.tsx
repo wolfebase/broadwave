@@ -439,9 +439,9 @@ export function LivePlayer({
           </button>
         ) : null
       }
-      note={!error && !airing ? listingNote(listing.checks > 0) : undefined}
+      note={error ? undefined : stream.reconnecting ? "Reconnecting…" : !airing ? listingNote(listing.checks > 0) : undefined}
       noteAction={
-        !error && !airing ? (
+        !error && !stream.reconnecting && !airing ? (
           <button
             type="button"
             className="btn small"

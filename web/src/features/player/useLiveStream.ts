@@ -16,6 +16,7 @@ import {
   aTunerAnswers,
   aTunerIsFree,
   classifySnap,
+  FrozenPicture,
   holdPictureMessage,
   pictureRetryDelay,
   pictureRetryEveryMs,
@@ -137,6 +138,9 @@ export function useLiveStream(
   // A local rewind has to land before the engine's next tick puts the playhead back.
   const holdSync = useRef(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ state: "off", drift: 0, members: 0 });
+  // Outlives a retune, so a watch started for a stopped picture is not reloaded again.
+  const frozen = useRef({ channel: 0, picture: new FrozenPicture() });
+  const [reconnecting, setReconnecting] = useState({ channel: 0, on: false });
 
   useEffect(() => {
     // A channel change, a viewer retry, or leaving this watch ends the quiet
@@ -152,6 +156,7 @@ export function useLiveStream(
     let dead = false;
     let hls: Hls | null = null;
     const id = channelId;
+    if (frozen.current.channel !== id) frozen.current = { channel: id, picture: new FrozenPicture() };
     watching.current = false;
     inPlace.current = false;
     const kept = pageKept.current;
@@ -511,11 +516,36 @@ export function useLiveStream(
       edgeAtLeave = edgeThen;
       comeBack();
     }, 1000);
+    // A stalled stream names no error when the server is fine, and a playhead
+    // can stand still without a stall at all.
+    const frozenTimer = window.setInterval(() => {
+      if (dead) return;
+      const picture = frozen.current.picture;
+      // A hidden tab, a page coming back, or a named outage has its own clock.
+      const away = !primed || surfaced || resumeQuiet || poll || document.visibilityState === "hidden";
+      const step = picture.note(away ? null : video.currentTime, !video.paused, performance.now());
+      setReconnecting((was) => (was.channel === id && was.on === picture.reconnecting ? was : { channel: id, on: picture.reconnecting }));
+      if (step === "reload") {
+        if (hls) {
+          hls.stopLoad();
+          hls.startLoad(-1);
+          const edge = hls.liveSyncPosition;
+          if (edge != null) video.currentTime = edge;
+        } else if (video.currentSrc) {
+          video.src = video.currentSrc;
+        }
+        void video.play().catch(() => undefined);
+      } else if (step === "retune") {
+        retrying.current = true;
+        setAttempt((n) => n + 1);
+      }
+    }, 1000);
     window.addEventListener("pagehide", beacon);
     window.addEventListener("pageshow", onShow);
     return () => {
       dead = true;
       ctrl.abort();
+      window.clearInterval(frozenTimer);
       window.clearTimeout(stuck);
       stopPoll();
       window.clearTimeout(quietTimer);
@@ -721,6 +751,7 @@ export function useLiveStream(
     // Captions need hls.js; a native player gets none yet.
     canCaption: !!mainPlaylist && Hls.isSupported(),
     error,
+    reconnecting: reconnecting.on && reconnecting.channel === channelId,
     needsConfirm,
     asking,
     confirm: () => {
