@@ -53,6 +53,22 @@ type playlistGate struct {
 	// moved is when the playlist last grew, in Unix ns; gap is the longest
 	// wait between two growths, so the output watchdog learns the pace.
 	moved, gap atomic.Int64
+	// target is the TARGETDURATION the playlist advertises, in ns.
+	target atomic.Int64
+}
+
+// blockFloor is the least a blocking playlist request waits.
+const blockFloor = 1500 * time.Millisecond
+
+// holdFor is how long a blocking playlist request may wait for what it asked
+// for: twice the advertised target. A server must not answer one without
+// that segment or part, and a player gives up after three targets. A copied
+// broadcast is cut at its own keyframes, so a segment can take 1.5 s or more.
+func (g *playlistGate) holdFor() time.Duration {
+	if g == nil {
+		return blockFloor
+	}
+	return max(blockFloor, 2*time.Duration(g.target.Load()))
 }
 
 func newPlaylistGate() *playlistGate {
@@ -856,6 +872,7 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 		return err
 	}
 	if gate != nil {
+		gate.target.Store(int64(targetSec) * int64(time.Second))
 		gate.publish(origin, origin+len(closed), len(open))
 	}
 	return nil
