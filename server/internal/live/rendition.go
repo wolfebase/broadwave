@@ -151,6 +151,8 @@ type Source struct {
 	Extras []AudioTrack
 	// AudioChannels is the measured width of the main sound, 0 when unknown.
 	AudioChannels int
+	// Height is the picture height the last tune read, 0 when unknown.
+	Height int
 }
 
 type Decision struct {
@@ -217,6 +219,11 @@ func DecideFor(src Source, caps Caps, p Prefs, encoder string, host Host) Decisi
 	v := codecName(src.VideoCodec)
 	a := codecName(src.AudioCodec)
 	canCopyVideo := has(caps.Video, v) && (src.Progressive || v == "hevc")
+	// A player that can't decode the broadcast's size gets it scaled, not sent.
+	tooTall := caps.MaxHeight > 0 && src.Height > caps.MaxHeight
+	if tooTall {
+		canCopyVideo = false
+	}
 	quality := strings.ToLower(p.Quality)
 	if quality == "" || quality == "auto" {
 		quality = "original"
@@ -265,6 +272,8 @@ func DecideFor(src Source, caps Caps, p Prefs, encoder string, host Host) Decisi
 				why = append(why, "Converted from MPEG-2")
 			case src.Lace && v == "h264":
 				why = append(why, "Deinterlaced for smooth motion")
+			case tooTall:
+				why = append(why, "Scaled to fit this device")
 			default:
 				why = append(why, "Converted for this device")
 			}

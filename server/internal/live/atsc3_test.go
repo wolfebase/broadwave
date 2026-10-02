@@ -1,9 +1,12 @@
 package live
 
 import (
+	"context"
 	"os"
 	"strings"
 	"testing"
+
+	"broadwave/internal/hdhr"
 )
 
 // hevc10.ts is three libx265 Main 10 pictures, 1920x1080 coded as 1088 with a
@@ -175,5 +178,38 @@ func TestA2160pHEVCPassesThroughAsSent(t *testing.T) {
 	line := strings.Join(RenditionArgs(3, src, r, "libx264", ""), " ")
 	if !strings.Contains(line, "-c:v copy -tag:v hvc1") || strings.Contains(line, "-vf ") || strings.Contains(line, "scale=") {
 		t.Fatalf("copy args: %s", line)
+	}
+}
+
+// A player that can't show the broadcast's size gets it scaled; the size is
+// the one the last tune stored.
+func TestATooTallPictureIsScaledToTheScreen(t *testing.T) {
+	st, id := codecStore(t, "1010ABCD", hdhr.Channel{GuideNumber: "119.1", GuideName: "UHD"})
+	h, m := testHub(t)
+	h.Store = st
+	f := addTestFeed(h, m, id, "119.1")
+	f.program = 3
+	m.pictures = map[int]notedPicture{3: {Width: 3840, Height: 2160}}
+	h.savePictureHeight(m, f)
+	src, err := h.SourceOf(context.Background(), id)
+	if err != nil || src.Height != 2160 {
+		t.Fatalf("stored height %d %v", src.Height, err)
+	}
+	src.VideoCodec, src.AudioCodec, src.Progressive = "HEVC", "AC4", true
+	tv := Caps{Platform: "tvos", Video: []string{"h264", "hevc"}, Audio: []string{"aac", "ac3"}}
+	for _, c := range []struct {
+		max  int
+		want string
+	}{{0, "copy"}, {2160, "copy"}, {1080, "1080"}, {720, "720"}} {
+		tv.MaxHeight = c.max
+		d := DecideFor(src, tv, Prefs{}, "libx264", Host{})
+		if d.Rendition.Video != c.want {
+			t.Errorf("max %d: %s (%s)", c.max, d.Rendition.Key(), d.Reason)
+		}
+	}
+	src.Height = 1080
+	tv.MaxHeight = 1080
+	if d := DecideFor(src, tv, Prefs{}, "libx264", Host{}); d.Rendition.Video != "copy" {
+		t.Errorf("a 1080 picture on a 1080 screen: %s", d.Rendition.Key())
 	}
 }

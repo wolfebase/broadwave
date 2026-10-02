@@ -752,6 +752,18 @@ func ac4WidthsFrom(raw []byte) map[int]int {
 	return out
 }
 
+// savePictureHeight stores the tune's picture height so the next watch can
+// tell whether a player can show the broadcast as sent.
+func (h *Hub) savePictureHeight(m *mux, f *feed) {
+	p, ok := m.picture(f.program)
+	if !ok || p.Height == f.channel.PictureHeight || h.Store == nil {
+		return
+	}
+	if err := h.Store.SetChannelPictureHeight(context.Background(), f.channel.ID, p.Height); err != nil {
+		slog.Warn(fmt.Sprintf("store picture height for %s: %v", f.channel.GuideNumber, err))
+	}
+}
+
 // allMeasured is true once every AC-3 track has had a frame read.
 func allMeasured(tracks []AudioTrack) bool {
 	for _, t := range tracks {
@@ -786,6 +798,7 @@ func (h *Hub) saveTracks(m *mux, f *feed, window time.Duration) {
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
+	h.savePictureHeight(m, f)
 	if len(tracks) == 0 {
 		return
 	}

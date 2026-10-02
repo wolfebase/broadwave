@@ -1,0 +1,1 @@
+ALTER TABLE channels ADD COLUMN picture_height INTEGER NOT NULL DEFAULT 0;
