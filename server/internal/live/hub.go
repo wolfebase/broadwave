@@ -173,7 +173,11 @@ type Hub struct {
 	channels map[int64]*feed
 	// long holds each channel ID whose station sends groups of pictures past
 	// longGroup. Packagers write it, so it is not under mu.
-	long     sync.Map
+	long sync.Map
+	// served maps a channel ID a viewer asked for to the twin row (same
+	// guide number, another device) whose feed plays it. Rooms carry the
+	// asked ID.
+	served   sync.Map
 	reserved map[int]bool
 	// opening holds a channel whose device stream is being opened outside
 	// h.mu. Another watch of it waits for that open instead of taking a
@@ -485,6 +489,7 @@ func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition, altern
 		}
 		return Session{}, last
 	}
+	h.serve(candidates[0], ch)
 	var auto *autoGuess
 	opener := false
 	if res == nil {
@@ -1455,10 +1460,56 @@ func usesPipe(args []string) bool {
 // longGroup. Its playlists advertise a 4 s target, and AVPlayer holds back
 // three targets from their live edge.
 func (h *Hub) LongGroups(channelID int64) bool {
+	channelID = h.resolve(channelID)
 	h.mu.Lock()
 	_, tuned := h.channels[channelID]
 	h.mu.Unlock()
 	return tuned && h.knownLong(channelID)
+}
+
+// serve notes which row plays a watch. Twins are one station, so a long-group
+// mark either one has is the other's too, before the first playlist is written.
+func (h *Hub) serve(asked, chosen store.SourceChannel) {
+	if asked.ID == chosen.ID {
+		h.served.Delete(asked.ID)
+		return
+	}
+	h.served.Store(asked.ID, chosen.ID)
+	if asked.LongGroups || chosen.LongGroups || h.knownLong(asked.ID) || h.knownLong(chosen.ID) {
+		h.long.Store(chosen.ID, true)
+		h.long.Store(asked.ID, true)
+		if !asked.LongGroups && h.Store != nil {
+			go func() {
+				if err := h.Store.SetChannelLongGroups(context.Background(), asked.ID, true); err != nil {
+					slog.Warn(fmt.Sprintf("store long groups for %s: %v", asked.GuideNumber, err))
+				}
+			}()
+		}
+	}
+}
+
+func (h *Hub) resolve(channelID int64) int64 {
+	if v, ok := h.served.Load(channelID); ok {
+		return v.(int64)
+	}
+	return channelID
+}
+
+// Twins is the channel and every twin a viewer asked for that it serves.
+// Rooms carry the asked ID.
+func (h *Hub) Twins(id int64) []int64 {
+	return h.askedFor(id)
+}
+
+func (h *Hub) askedFor(id int64) []int64 {
+	ids := []int64{id}
+	h.served.Range(func(k, v any) bool {
+		if v.(int64) == id {
+			ids = append(ids, k.(int64))
+		}
+		return true
+	})
+	return ids
 }
 
 func (h *Hub) knownLong(channelID int64) bool {
@@ -1487,15 +1538,22 @@ func (h *Hub) seedLong(f *feed, gate *playlistGate) {
 		} else {
 			slog.Info(fmt.Sprintf("live: %s no longer sends long groups of pictures", number))
 		}
+		// A twin is the same station, so it keeps the mark too.
+		ids := h.askedFor(id)
+		for _, twin := range ids[1:] {
+			h.long.Store(twin, long)
+		}
 		go func() {
-			if long && h.OnLongGroups != nil {
-				h.OnLongGroups(id)
-			}
-			if h.Store == nil {
-				return
-			}
-			if err := h.Store.SetChannelLongGroups(context.Background(), id, long); err != nil {
-				slog.Warn(fmt.Sprintf("store long groups for %s: %v", number, err))
+			for _, twin := range ids {
+				if long && h.OnLongGroups != nil {
+					h.OnLongGroups(twin)
+				}
+				if h.Store == nil {
+					continue
+				}
+				if err := h.Store.SetChannelLongGroups(context.Background(), twin, long); err != nil {
+					slog.Warn(fmt.Sprintf("store long groups for %s: %v", number, err))
+				}
 			}
 		}()
 	}
@@ -1505,6 +1563,7 @@ func (h *Hub) seedLong(f *feed, gate *playlistGate) {
 // channel's encodes. A fresh tune is a few seconds old. One that has been
 // running keeps its original first frame, which is older than the latency target.
 func (h *Hub) EarliestMedia(channelID int64) (float64, bool) {
+	channelID = h.resolve(channelID)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	f := h.channels[channelID]

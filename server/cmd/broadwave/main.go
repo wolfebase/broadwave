@@ -176,7 +176,9 @@ func main() {
 	hub.OnChange = debounce(500*time.Millisecond, func() { bus.Publish("live.changed", nil) })
 	hub.OnMedia = func(channelID int64) {
 		if earliest, ok := hub.EarliestMedia(channelID); ok {
-			bus.Settle(channelID, earliest)
+			for _, id := range hub.Twins(channelID) {
+				bus.Settle(id, earliest)
+			}
 		}
 	}
 	api := &httpapi.Server{Store: st, Assets: assets, Dev: *dev, Hub: hub, Version: version, Bus: bus, Sports: sports.NewCache(sports.NewESPN()), Staging: *staging, BackupDir: filepath.Join(*configDir, "backups")}
