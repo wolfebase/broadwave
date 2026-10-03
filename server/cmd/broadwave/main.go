@@ -170,6 +170,7 @@ func main() {
 	slog.Info(fmt.Sprintf("encoder: %s deint: %s smooth: %s", encoder, hub.DeintBroadcast, hub.DeintSmooth))
 	bus := realtime.NewBus()
 	bus.MediaStart = hub.EarliestMedia
+	bus.LongHold = hub.LongGroups
 	st.OnEvent = func(ev store.Event) { bus.Publish("activity", ev) }
 	hub.OnChange = debounce(500*time.Millisecond, func() { bus.Publish("live.changed", nil) })
 	hub.OnMedia = func(channelID int64) {

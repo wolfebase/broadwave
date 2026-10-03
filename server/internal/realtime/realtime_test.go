@@ -722,6 +722,39 @@ func TestAnAppleScreenKeepsItsRoomAtBalanced(t *testing.T) {
 	latencyIs(tv, "stable")
 }
 
+// A station with 2.4 s groups gets a 4 s target and AVPlayer holds back
+// 12 s. At balanced an Apple TV sat at 1x and fell 3 ms a second behind.
+func TestAnAppleScreenHoldsALongGroupRoomAtStable(t *testing.T) {
+	bus := NewBus()
+	bus.LongHold = func(channelID int64) bool { return channelID == 9 }
+	srv := httptest.NewServer(bus)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+	send(t, ctx, conn, "here", `{"name":"Den","kind":"appletv"}`)
+	send(t, ctx, conn, "sync.join", `{"room":"channel:9","channelId":9,"latency":"balanced"}`)
+	send(t, ctx, conn, "sync.join", `{"room":"channel:4","channelId":4,"latency":"balanced"}`)
+	send(t, ctx, conn, "sync.command", `{"room":"channel:9","action":"latency","latency":"balanced"}`)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		long, _ := bus.Rooms.State("channel:9")
+		one, _ := bus.Rooms.State("channel:4")
+		if long.Version >= 3 && one.Latency != "" {
+			if long.Latency != "stable" || one.Latency != "balanced" {
+				t.Fatalf("long groups at %s, one-second groups at %s", long.Latency, one.Latency)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("the rooms never settled")
+}
+
 func send(t *testing.T, ctx context.Context, conn *websocket.Conn, kind, data string) {
 	t.Helper()
 	raw, _ := json.Marshal(Message{Type: kind, Data: json.RawMessage(data)})

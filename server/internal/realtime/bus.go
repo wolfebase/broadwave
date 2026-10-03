@@ -31,6 +31,9 @@ type Bus struct {
 	// MediaStart is the earliest program time (Unix ms) a channel can play.
 	// The hub sets it. A miss leaves the room on the latency target.
 	MediaStart func(channelID int64) (float64, bool)
+	// LongHold reports a channel whose playlists hold Apple players 12 s
+	// back from their live edge. The hub sets it.
+	LongHold func(channelID int64) bool
 	// Boot names this server process in every hello. A client that sees a
 	// new one knows the server restarted: every watch and room it had is gone.
 	Boot string
@@ -320,7 +323,7 @@ func (b *Bus) handle(c *client, m Message) {
 		for _, room := range rooms {
 			floored := false
 			if appleKind(kind) {
-				_, floored = b.Rooms.Floor(room, appleLatency)
+				_, floored = b.Rooms.Floor(room, b.appleLatencyFor(room))
 			}
 			if floored || groupRoom(room) {
 				b.roomChanged(room)
@@ -358,7 +361,7 @@ func (b *Bus) handle(c *client, m Message) {
 		}
 		b.Rooms.JoinAt(req.Room, req.ChannelID, earliest, req.Latency)
 		if appleKind(kind) {
-			b.Rooms.Floor(req.Room, appleLatency)
+			b.Rooms.Floor(req.Room, b.appleLatencyFor(req.Room))
 		}
 		b.roomChanged(req.Room)
 	case "sync.report":
@@ -401,9 +404,13 @@ func (b *Bus) handle(c *client, m Message) {
 		if json.Unmarshal(m.Data, &req) != nil || !b.isMember(c, req.Room) {
 			return
 		}
+		var floor string
+		if req.Action == "latency" {
+			floor = b.appleLatencyFor(req.Room)
+		}
 		b.mu.Lock()
-		if req.Action == "latency" && latencyMS(req.Latency) < latencyMS(appleLatency) && b.appleInLocked(req.Room) {
-			req.Latency = appleLatency
+		if floor != "" && latencyMS(req.Latency) < latencyMS(floor) && b.appleInLocked(req.Room) {
+			req.Latency = floor
 		}
 		st, err := b.Rooms.Apply(req.Room, req.Command)
 		if err == nil {
@@ -523,6 +530,20 @@ func groupRoom(room string) bool {
 
 // appleLatency is the closest to live a room with an Apple screen plays.
 const appleLatency = "balanced"
+
+// appleLatencyFor is appleLatency for a room's channel. A channel with long
+// groups of pictures holds AVPlayer 12 s back from a live edge that is
+// itself a group old, so at balanced 1.02x does nothing and the screen
+// falls behind the room.
+func (b *Bus) appleLatencyFor(room string) string {
+	if b.LongHold == nil {
+		return appleLatency
+	}
+	if st, ok := b.Rooms.State(room); ok && b.LongHold(st.ChannelID) {
+		return "stable"
+	}
+	return appleLatency
+}
 
 func (b *Bus) appleInLocked(room string) bool {
 	for c := range b.clients {
