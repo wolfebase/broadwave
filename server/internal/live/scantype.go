@@ -757,12 +757,31 @@ func (h *Hub) finishScan(m *mux, f *feed, buf *scanBuf, sub *pipeSub) {
 	guide := f.channel.GuideNumber
 	var order string
 	var data []byte
+	// A link's sound is learned from the PMT as soon as it arrives. The
+	// encode already started without it, and one that cannot open the sound
+	// (AC-4 on an ffmpeg without a decoder) dies twice in about 2 s. A 3.0
+	// stream can send its PMT only every 2 s.
+	h.mu.Lock()
+	needCodec := linkChannel(f.channel) && f.source.AudioCodec == ""
+	h.mu.Unlock()
 	for time.Now().Before(deadline) {
 		buf.mu.Lock()
 		data = append(data[:0], buf.b...)
 		buf.mu.Unlock()
-		if got, ok := scanType(data, program); ok {
-			order = got
+		if order == "" {
+			if got, ok := scanType(data, program); ok {
+				order = got
+			}
+		}
+		if needCodec {
+			if tracks := AudioTracks(data, program); len(tracks) > 0 {
+				needCodec = false
+				h.applyDeferredAudio(f, id, tracks)
+			}
+		}
+		// The order is read from the PMT's video, so a PMT without a sound
+		// this server knows has been seen.
+		if order != "" {
 			break
 		}
 		wait := time.Until(deadline)

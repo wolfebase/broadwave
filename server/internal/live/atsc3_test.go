@@ -811,6 +811,110 @@ func TestAnAC4EncodeIsSilentWithoutADecoder(t *testing.T) {
 	}
 }
 
+// A link that declares no codecs and turns out to carry AC-4 moves its encodes
+// to one silent encode on an ffmpeg that cannot decode it. Their viewers stay,
+// and the keys they joined under still find it.
+func TestALinkFoundToCarryAC4PlaysSilentUnderItsOldKey(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "ffmpeg")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := New(nil, dir, script, "libx264")
+	h.NoAC4 = true
+	t.Cleanup(func() { lockHub(h)() })
+	h.mu.Lock()
+	m := &mux{freq: 1, tuner: -1, input: "color", feeds: map[string]*feed{}, cancel: func() {}}
+	h.muxes[m.freq] = m
+	f := h.addFeedLocked(m, store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "801", DeviceID: "src-1"}, FieldOrder: "progressive"})
+	r, err := h.ensureRenditionLocked(f, Rendition{Video: "1080", Audio: "aac2"})
+	if err != nil {
+		h.mu.Unlock()
+		t.Fatal(err)
+	}
+	// A second sound choice of the same picture lands on the same silent encode.
+	r6, err := h.ensureRenditionLocked(f, Rendition{Video: "1080", Audio: "aac6"})
+	if err != nil {
+		h.mu.Unlock()
+		t.Fatal(err)
+	}
+	r.viewers, r6.viewers = 2, 1
+	old := r.spec.Key()
+	learned := h.learnCodecsLocked(f, "", "ac4")
+	h.rebuildRenditionsLocked(f)
+	count := len(f.renditions)
+	h.mu.Unlock()
+
+	now := h.Current(1, old)
+	s, ok := h.Session(1, now)
+	h.Release(1, old)
+	h.mu.Lock()
+	var spec Rendition
+	var args []string
+	viewers := -1
+	if moved := f.renditions[now]; moved != nil {
+		spec, viewers = moved.spec, moved.viewers
+		if moved.cmd != nil {
+			args = moved.cmd.Args
+		}
+	}
+	h.mu.Unlock()
+	if !learned || now == old || !ok || s.Rendition != now || count != 1 {
+		t.Fatalf("learned %v old %s now %s session %v %s renditions %d", learned, old, now, ok, s.Rendition, count)
+	}
+	if spec.Audio != "none" || !slices.Contains(args, "-an") {
+		t.Fatalf("spec %+v args %v", spec, args)
+	}
+	if viewers != 2 {
+		t.Fatalf("3 viewers, 1 released by the old key: %d left", viewers)
+	}
+}
+
+// The first scan of a link can end before its PMT: a 3.0 stream may send one
+// every 2 s. The encode starts on unknown sound, and on an ffmpeg without an
+// AC-4 decoder it dies twice in about 2 s. The late scan learns the codec from
+// the PMT and moves the encode to a silent one first.
+func TestALateScanLearnsALinksAC4(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "ffmpeg")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := New(nil, dir, script, "libx264")
+	h.NoAC4 = true
+	t.Cleanup(func() { lockHub(h)() })
+	h.mu.Lock()
+	m := &mux{freq: 1, tuner: -1, input: "color", feeds: map[string]*feed{}, cancel: func() {}}
+	h.muxes[m.freq] = m
+	f := h.addFeedLocked(m, store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "801", DeviceID: "src-1"}})
+	f.program = 3
+	r, err := h.ensureRenditionLocked(f, Rendition{Video: "1080", Audio: "aac2"})
+	h.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := r.spec.Key()
+	body := append(pmtBody(3, streamMPEG2, 0x100), streamPriv, 0xe1, 0x01, 0xf0, 0x06, 0x05, 0x04, 'A', 'C', '-', '4')
+	var ts []byte
+	ts = append(ts, tsPacket(0, true, psiSection(0x00, append([]byte{0x00, 0x01, 0xc1, 0x00, 0x00}, progPID(3, 0x1000)...)))...)
+	ts = append(ts, tsPacket(0x1000, true, psiSection(0x02, body))...)
+	ts = append(ts, tsPacket(0x100, true, pesPacket([]byte{0x00, 0x00, 0x01, 0xB5, 0x10, 0x08}))...)
+	h.finishScan(m, f, &scanBuf{wake: make(chan struct{}, 1), b: ts}, nil)
+
+	now := h.Current(1, old)
+	h.mu.Lock()
+	codec := f.source.AudioCodec
+	tracks := len(f.tracks)
+	var spec Rendition
+	if moved := f.renditions[now]; moved != nil {
+		spec = moved.spec
+	}
+	h.mu.Unlock()
+	if codecName(codec) != "ac4" || tracks != 1 || now == old || spec.Audio != "none" {
+		t.Fatalf("codec %q tracks %d old %s now %s spec %+v", codec, tracks, old, now, spec)
+	}
+}
+
 // A 3.0 recording plays its picture alone on an ffmpeg with no AC-4 decoder,
 // and its playlist is made again once ffmpeg has one.
 func TestASilentRecordingLeavesOutItsSound(t *testing.T) {

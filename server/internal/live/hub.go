@@ -251,8 +251,11 @@ type feed struct {
 	program    int
 	source     Source
 	renditions map[string]*rendition
-	recording  *recording
-	tracks     []AudioTrack
+	// moved names the key a rebuilt rendition runs under now, for viewers
+	// who joined it under its old one.
+	moved     map[string]string
+	recording *recording
+	tracks    []AudioTrack
 	// stored is the audio measured on the last tune, then on this one. It
 	// vouches for a track this tune has not measured yet.
 	stored []AudioTrack
@@ -913,6 +916,7 @@ func (h *Hub) pictureArgs(f *feed, want Rendition, extras []AudioTrack) (string,
 // served for a progressive or film picture.
 func (h *Hub) rebuildRenditionsLocked(f *feed) {
 	type kept struct {
+		key     string
 		spec    Rendition
 		viewers int
 		seen    time.Time
@@ -926,8 +930,13 @@ func (h *Hub) rebuildRenditionsLocked(f *feed) {
 		if slices.Equal(r.args, next) {
 			continue
 		}
-		list = append(list, kept{r.spec, r.viewers, r.seen})
+		list = append(list, kept{key, r.spec, r.viewers, r.seen})
 		h.stopRenditionLocked(f, key)
+	}
+	// Two old keys can land on one encode, or on one already running.
+	had := map[*rendition]bool{}
+	for _, r := range f.renditions {
+		had[r] = true
 	}
 	for _, k := range list {
 		r, err := h.ensureRenditionLocked(f, k.spec)
@@ -935,9 +944,46 @@ func (h *Hub) rebuildRenditionsLocked(f *feed) {
 			slog.Error(fmt.Sprintf("rebuild %s on %s: %v", k.spec.Key(), f.channel.GuideNumber, err))
 			continue
 		}
-		r.viewers = k.viewers
-		r.seen = k.seen
+		if had[r] {
+			r.viewers += k.viewers
+			if k.seen.After(r.seen) {
+				r.seen = k.seen
+			}
+		} else {
+			r.viewers, r.seen = k.viewers, k.seen
+			had[r] = true
+		}
+		if now := r.spec.Key(); now != k.key {
+			if f.moved == nil {
+				f.moved = map[string]string{}
+			}
+			f.moved[k.key] = now
+			delete(f.moved, now)
+		}
 	}
+}
+
+// currentKey follows a rebuilt rendition from a key a viewer joined under.
+func (f *feed) currentKey(key string) string {
+	for range 4 {
+		next, ok := f.moved[key]
+		if !ok || f.renditions[key] != nil {
+			break
+		}
+		key = next
+	}
+	return key
+}
+
+// Current returns the key a channel's rendition runs under now. A rebuild
+// can move it while the watch waits for its first segment, or after.
+func (h *Hub) Current(channelID int64, key string) string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if f := h.channels[channelID]; f != nil {
+		return f.currentKey(key)
+	}
+	return key
 }
 
 func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error) {
@@ -1525,15 +1571,18 @@ func (h *Hub) WaitBlocking(channelID int64, key string, msn, part int) {
 	gate.block(msn, part)
 }
 
-// Touch records that a viewer of a rendition is still fetching video.
-func (h *Hub) Touch(channelID int64, key string) {
+// Touch records that a viewer of a rendition is still fetching video. It
+// returns the key the rendition runs under now.
+func (h *Hub) Touch(channelID int64, key string) string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if f := h.channels[channelID]; f != nil {
+		key = f.currentKey(key)
 		if r := f.renditions[key]; r != nil {
 			r.seen = time.Now()
 		}
 	}
+	return key
 }
 
 // ReleaseAbandoned drops viewers that stopped asking for video, so a closed
@@ -1563,6 +1612,7 @@ func (h *Hub) Release(channelID int64, key string) {
 	if f == nil {
 		return
 	}
+	key = f.currentKey(key)
 	if key == "" {
 		best := 0
 		for k, r := range f.renditions {

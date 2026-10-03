@@ -56,6 +56,8 @@ func (s *Server) decide(ctx context.Context, body watchBody) (live.Decision, boo
 	return s.unvoiced(src, live.DecideFor(src, caps, prefs, s.Hub.Encoder, s.Hub.Host)), false, nil
 }
 
+const noAC4Reason = "No sound: this server's ffmpeg can't decode ATSC 3.0 sound (AC-4)."
+
 // unvoiced plays an AC-4 channel's picture alone on an ffmpeg that cannot
 // decode its sound, as the hub will, and says why.
 func (s *Server) unvoiced(src live.Source, d live.Decision) live.Decision {
@@ -64,9 +66,27 @@ func (s *Server) unvoiced(src live.Source, d live.Decision) live.Decision {
 	}
 	if r := live.Unvoiced(src.AudioCodec, d.Rendition); r != d.Rendition {
 		d.Rendition = r
-		d.Reason = "No sound: this server's ffmpeg can't decode ATSC 3.0 sound (AC-4)."
+		d.Reason = noAC4Reason
 	}
 	return d
+}
+
+// ranAs says why the hub played another encode than the one decided, or ""
+// when the decision's reason still holds.
+func ranAs(noAC4 bool, want live.Rendition, session live.Session, alternates bool) string {
+	// A player that switches sound in place plays the main encode, which carries its track.
+	main := want
+	main.Track = ""
+	inPlace := alternates && want.Key() != main.Key() && session.Rendition == main.Key()
+	switch {
+	case noAC4 && session.Stream.Audio == "none" && live.Unvoiced(session.Stream.SourceAudio, want) != want:
+		// A link's codecs are learned when it opens, and AC-4 found then
+		// plays silent.
+		return noAC4Reason
+	case session.Rendition != want.Key() && !inPlace && session.Stream.Video != "" && session.Stream.Video != "copy":
+		return "Playing the " + session.Stream.Video + "p picture already running."
+	}
+	return ""
 }
 
 func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
@@ -102,13 +122,6 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	if ch, err := s.Store.SourceChannel(r.Context(), body.ChannelID); err == nil && ch.PlaysAs != 0 {
 		session.Stream.Reason = "The 3.0 version is encrypted. Showing the regular broadcast."
 	}
-	// A player that switches sound in place plays the main encode, which carries its track.
-	main := decision.Rendition
-	main.Track = ""
-	inPlace := alternates && decision.Rendition.Key() != main.Key() && session.Rendition == main.Key()
-	if session.Rendition != decision.Rendition.Key() && !inPlace && session.Stream.Video != "" && session.Stream.Video != "copy" {
-		session.Stream.Reason = "Playing the " + session.Stream.Video + "p picture already running."
-	}
 	// The viewer is counted before a segment exists. A channel change closes
 	// this request; waiting out the deadline would keep that tuner.
 	if r.Context().Err() != nil {
@@ -124,6 +137,7 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	session.Rendition = s.Hub.Current(session.ChannelID, session.Rendition)
 	if steps := s.Hub.NoteStart(session.ChannelID, session.Rendition, asked); steps != "" {
 		slog.Info(steps)
 	}
@@ -132,6 +146,9 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		fresh.Tuners = session.Tuners
 		session = fresh
 		session.Stream.Reason = reason
+	}
+	if why := ranAs(s.Hub.NoAC4, decision.Rendition, session, alternates); why != "" {
+		session.Stream.Reason = why
 	}
 	// A master names its default sound as the main one, so an encode that
 	// carries another track first keeps its one-sound playlist.
@@ -1190,7 +1207,8 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	s.Hub.Touch(channelID, key)
+	// A rendition rebuilt under another key keeps the URLs it was joined by.
+	key = s.Hub.Touch(channelID, key)
 	w.Header().Set("Cache-Control", "no-cache")
 	if name == "index.m3u8" {
 		if msn, part, ok := blockReload(r); ok {
@@ -1385,6 +1403,7 @@ func waitServable(ctx context.Context, h *live.Hub, channelID int64, key string,
 			slice = remain
 		}
 		started := time.Now()
+		key = h.Current(channelID, key)
 		// Segment 0. A negative part means the whole segment, not an open part.
 		h.WaitMedia(channelID, key, 0, -1, slice)
 		body, err := h.Playlist(channelID, key)

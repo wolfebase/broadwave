@@ -47,3 +47,26 @@ func TestA3Point0ChannelPlaysSilentWithoutAnAC4Decoder(t *testing.T) {
 		}
 	}
 }
+
+// A link declares no codecs, so the watch decides on sound and the hub, which
+// reads AC-4 when the link opens, plays it silent. The note says why.
+func TestALinkFoundSilentSaysWhy(t *testing.T) {
+	want := live.Rendition{Video: "1080", Audio: "aac2", Mode: "broadcast"}
+	silent := want
+	silent.Audio = "none"
+	ran := live.Session{Rendition: silent.Key(), Stream: live.StreamInfo{Video: "1080", Audio: "none", SourceAudio: "AC4"}}
+	if why := ranAs(true, want, ran, false); why != noAC4Reason {
+		t.Fatalf("no AC-4 decoder: %q", why)
+	}
+	if why := ranAs(false, want, ran, false); why != "Playing the 1080p picture already running." {
+		t.Fatalf("a running silent picture: %q", why)
+	}
+	ran.Stream.SourceAudio = "AC3"
+	if why := ranAs(true, want, ran, false); why != "Playing the 1080p picture already running." {
+		t.Fatalf("a silent picture of AC-3 sound: %q", why)
+	}
+	same := live.Session{Rendition: want.Key(), Stream: live.StreamInfo{Video: "1080", Audio: "aac2"}}
+	if why := ranAs(true, want, same, false); why != "" {
+		t.Fatalf("as decided: %q", why)
+	}
+}
