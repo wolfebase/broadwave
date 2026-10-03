@@ -569,6 +569,29 @@ html[data-layout="tv"] :focus-visible {
   gap: 8px 12px;
 }
 
+/* The encrypted sentence and the 3.0/1.0 choice sit on their own line.
+   A text field keeps Left and Right, so a control beside it is unreachable. */
+.source-row > .protected-note,
+.source-row > .twin-choice {
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.source-row > .twin-choice select {
+  max-width: 100%;
+}
+
+/* Focusing the choice should leave the encrypted line above it clear of the tab bar. */
+html[data-layout="tv"] .source-row > .twin-choice select {
+  scroll-margin-top: 220px;
+  scroll-margin-bottom: 80px;
+}
+
+/* A 104.1 row is taller than the field that has focus. Keep the line under it on screen. */
+html[data-layout="tv"] .source-row input {
+  scroll-margin-bottom: 220px;
+}
+
 .show-grid,
 .device-grid,
 .source-list {
@@ -663,7 +686,7 @@ select {
 }
 
 .num-input {
-  width: 76px;
+  width: 8.5ch;
 }
 
 .check {

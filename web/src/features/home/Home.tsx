@@ -10,7 +10,7 @@ import { isLayout, layoutForCount, layoutLabel, multiviewPath, savedSets } from 
 import { ArtFrame } from "../../ui/ArtFrame";
 import { useHasFrame } from "../../ui/frames";
 import { LiveFrame } from "../../ui/LiveFrame";
-import { ChannelBadge, Empty, LiveDot, Progress, SectionHeader } from "../../ui/primitives";
+import { Atsc3Tag, ChannelBadge, Empty, LiveDot, Progress, SectionHeader } from "../../ui/primitives";
 import "./home.css";
 
 type Live = { channel: Channel; airing?: Airing; cat: Category };
@@ -191,6 +191,7 @@ export function Home() {
             <LiveFrame id={l.channel.id} className="nc-frame" />
             <span className="nc-top">
               <span className="nc-num">{l.channel.displayNumber}</span>
+              {l.channel.standard === "atsc3" ? <Atsc3Tag /> : null}
               <span className="nc-name">{l.channel.displayName}</span>
             </span>
             {l.airing ? (

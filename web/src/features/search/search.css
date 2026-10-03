@@ -38,6 +38,12 @@
   flex-wrap: wrap;
 }
 
+/* The show is taller than the action beside it. A centered action sits a
+   pixel higher, so Down from the field lands on Record instead of the show. */
+.search-list li > .btn {
+  align-self: end;
+}
+
 .search-main {
   display: flex;
   align-items: center;
@@ -48,6 +54,18 @@
 
 .search-copy {
   min-width: 0;
+}
+
+.search-list .search-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.search-list .search-meta .tag {
+  flex: none;
 }
 
 .layout-phone .search-list li {

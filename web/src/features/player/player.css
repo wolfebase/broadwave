@@ -345,6 +345,15 @@ html[data-layout="tv"] .stage:focus-visible {
   color: #fff;
 }
 
+/* The note shares the middle of the screen with the tuning card. Park it below that card. */
+.stage-hud > .player-note {
+  position: absolute;
+  left: 50%;
+  top: 68%;
+  z-index: 2;
+  transform: translateX(-50%);
+}
+
 .player-error p,
 .player-note p {
   margin: 0;
