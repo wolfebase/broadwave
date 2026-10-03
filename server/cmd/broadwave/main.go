@@ -171,6 +171,7 @@ func main() {
 	bus := realtime.NewBus()
 	bus.MediaStart = hub.EarliestMedia
 	bus.LongHold = hub.LongGroups
+	hub.OnLongGroups = bus.LongGroupsFound
 	st.OnEvent = func(ev store.Event) { bus.Publish("activity", ev) }
 	hub.OnChange = debounce(500*time.Millisecond, func() { bus.Publish("live.changed", nil) })
 	hub.OnMedia = func(channelID int64) {

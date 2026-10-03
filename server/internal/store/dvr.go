@@ -28,6 +28,9 @@ type SourceChannel struct {
 	AudioTracks string `json:"-"`
 	// PictureHeight is the last tune's picture height, 0 before one.
 	PictureHeight int `json:"-"`
+	// LongGroups is set once a tune has seen the station send groups of
+	// pictures longer than a second and a half.
+	LongGroups bool `json:"-"`
 	// ATSC3 is set when this channel cannot use a 1.0 tuner.
 	// The lineup's codecs are the other way a row is marked. A guide number is not.
 	ATSC3 bool `json:"-"`
@@ -151,19 +154,19 @@ func (s *Store) SourceChannel(ctx context.Context, id int64) (SourceChannel, err
 
 func (s *Store) sourceChannel(ctx context.Context, id int64) (SourceChannel, error) {
 	var ch SourceChannel
-	var hd, fav, en, hidden, present, protected int
+	var hd, fav, en, hidden, present, protected, long int
 	var customNumber, customName string
 	err := s.db.QueryRowContext(ctx, `
 SELECT c.id, c.device_id, c.guide_number, c.guide_name, c.custom_number, c.custom_name,
 	c.video_codec, c.audio_codec, c.hd, c.favorite, c.enabled, c.hidden, c.present, c.protected,
-	c.stream_url, c.frequency_hz, c.program_num, c.field_order, c.audio_tracks, c.picture_height, c.user_agent, c.referrer,
+	c.stream_url, c.frequency_hz, c.program_num, c.field_order, c.audio_tracks, c.picture_height, c.long_groups, c.user_agent, c.referrer,
 	d.base_url, d.tuner_count, d.model_number,
 	COALESCE((SELECT stream_limit FROM sources WHERE device_id = c.device_id LIMIT 1), 0),
 	COALESCE((SELECT stream_format FROM sources WHERE device_id = c.device_id LIMIT 1), '')
 FROM channels c JOIN devices d ON d.device_id = c.device_id WHERE c.id = ?`, id).Scan(
 		&ch.ID, &ch.DeviceID, &ch.GuideNumber, &ch.GuideName, &customNumber, &customName,
 		&ch.VideoCodec, &ch.AudioCodec, &hd, &fav, &en, &hidden, &present, &protected,
-		&ch.StreamURL, &ch.FrequencyHz, &ch.ProgramNum, &ch.FieldOrder, &ch.AudioTracks, &ch.PictureHeight, &ch.UserAgent, &ch.Referrer,
+		&ch.StreamURL, &ch.FrequencyHz, &ch.ProgramNum, &ch.FieldOrder, &ch.AudioTracks, &ch.PictureHeight, &long, &ch.UserAgent, &ch.Referrer,
 		&ch.BaseURL, &ch.TunerCount, &ch.ModelNumber, &ch.StreamLimit, &ch.StreamFormat,
 	)
 	if err != nil {
@@ -171,6 +174,7 @@ FROM channels c JOIN devices d ON d.device_id = c.device_id WHERE c.id = ?`, id)
 	}
 	ch.HD, ch.Favorite, ch.Enabled, ch.Hidden, ch.Present = hd != 0, fav != 0, en != 0, hidden != 0, present != 0
 	ch.Protected = protected != 0
+	ch.LongGroups = long != 0
 	ch.DisplayNumber = ch.GuideNumber
 	if strings.TrimSpace(customNumber) != "" {
 		ch.DisplayNumber = strings.TrimSpace(customNumber)
@@ -246,6 +250,13 @@ func (s *Store) SetChannelAudioTracks(ctx context.Context, channelID int64, trac
 // SetChannelPictureHeight stores the picture height a tune read.
 func (s *Store) SetChannelPictureHeight(ctx context.Context, channelID int64, height int) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE channels SET picture_height = ? WHERE id = ?`, height, channelID)
+	return err
+}
+
+// SetChannelLongGroups records whether a tune found the station sending long
+// groups of pictures.
+func (s *Store) SetChannelLongGroups(ctx context.Context, channelID int64, long bool) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE channels SET long_groups = ? WHERE id = ?`, long, channelID)
 	return err
 }
 

@@ -299,6 +299,19 @@ func (r *Rooms) Groups() []RoomState {
 	return out
 }
 
+// OnChannel names every room that plays the channel.
+func (r *Rooms) OnChannel(channelID int64) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []string
+	for name, st := range r.rooms {
+		if st.ChannelID == channelID {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 func (r *Rooms) State(room string) (RoomState, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -364,8 +377,10 @@ func (r *Rooms) setLatencyLocked(st *RoomState, latency string, now time.Time) {
 
 // Floor moves a room that plays closer to live than latency back to it. An
 // Apple screen holds back about 13 s behind live and never reaches lowest, so
-// a room it is in plays at balanced or further back. It reports whether the
-// room changed.
+// a room it is in plays at balanced or further back. A multiview or group room
+// keeps its place on a latency change, but one still closer to live than the
+// floor moves back too: AVPlayer cannot reach it. It reports whether the room
+// changed.
 func (r *Rooms) Floor(room, latency string) (RoomState, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -373,6 +388,10 @@ func (r *Rooms) Floor(room, latency string) (RoomState, bool) {
 	if st == nil || latencyMS(st.Latency) >= latencyMS(latency) {
 		return RoomState{}, false
 	}
-	r.setLatencyLocked(st, latency, r.now())
+	now := r.now()
+	r.setLatencyLocked(st, latency, now)
+	if floor := liveAnchor(now, latency); st.Mode != "follow" && st.Target(unixMS(now)) > floor {
+		st.AnchorServer, st.AnchorMedia = unixMS(now), floor
+	}
 	return *st, true
 }

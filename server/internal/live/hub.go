@@ -139,6 +139,10 @@ type Hub struct {
 	// holds the frame.
 	OnMedia func(channelID int64)
 
+	// OnLongGroups is called, outside the hub lock, the first time a channel
+	// is found to send groups of pictures past longGroup.
+	OnLongGroups func(channelID int64)
+
 	// OnPSIP is called, outside the read loop, when a tuned mux yields a guide.
 	OnPSIP func(freqHz int, guide psip.Guide)
 
@@ -167,6 +171,9 @@ type Hub struct {
 	mu       sync.Mutex
 	muxes    map[int]*mux
 	channels map[int64]*feed
+	// long holds each channel ID whose station sends groups of pictures past
+	// longGroup. Packagers write it, so it is not under mu.
+	long     sync.Map
 	reserved map[int]bool
 	// opening holds a channel whose device stream is being opened outside
 	// h.mu. Another watch of it waits for that open instead of taking a
@@ -1048,6 +1055,7 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	if stdin != nil {
 		h.startCaptionsLocked(f)
 	}
+	h.seedLong(f, gate)
 	packIn := startPack(dir, stdout, gate, done, captionLine(f))
 	NotePID(h.Dir, cmd.Process.Pid)
 	now := time.Now()
@@ -1331,6 +1339,7 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 		}
 		return false
 	}
+	h.seedLong(f, gate)
 	r.input = startPack(r.dir, stdout, gate, done, captionLine(f))
 	NotePID(h.Dir, cmd.Process.Pid)
 	r.cmd = cmd
@@ -1447,20 +1456,49 @@ func usesPipe(args []string) bool {
 // three targets from their live edge.
 func (h *Hub) LongGroups(channelID int64) bool {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	f := h.channels[channelID]
-	if f == nil {
-		return false
+	_, tuned := h.channels[channelID]
+	h.mu.Unlock()
+	return tuned && h.knownLong(channelID)
+}
+
+func (h *Hub) knownLong(channelID int64) bool {
+	v, ok := h.long.Load(channelID)
+	return ok && v.(bool)
+}
+
+// seedLong tells a new playlist whether its channel sends long groups of
+// pictures, so the first playlist already advertises room for them: AVPlayer
+// drops a stream whose target changes, and an encode cannot know a station's
+// groups before it has seen some. What a playlist finds is kept for every
+// other encode of the channel and, in the catalog, for tunes after a restart.
+func (h *Hub) seedLong(f *feed, gate *playlistGate) {
+	id, number := f.channel.ID, f.channel.GuideNumber
+	if f.channel.LongGroups {
+		h.long.LoadOrStore(id, true)
 	}
-	for _, r := range f.renditions {
-		if r == nil {
-			continue
+	gate.known = func() bool { return h.knownLong(id) }
+	gate.verdict = func(long bool) {
+		prev, had := h.long.Swap(id, long)
+		if had && prev.(bool) == long || !had && !long {
+			return
 		}
-		if _, ok := longGroups.Load(r.dir); ok {
-			return true
+		if long {
+			slog.Info(fmt.Sprintf("live: %s sends long groups of pictures; its playlists start at a 4 s target from now on", number))
+		} else {
+			slog.Info(fmt.Sprintf("live: %s no longer sends long groups of pictures", number))
 		}
+		go func() {
+			if long && h.OnLongGroups != nil {
+				h.OnLongGroups(id)
+			}
+			if h.Store == nil {
+				return
+			}
+			if err := h.Store.SetChannelLongGroups(context.Background(), id, long); err != nil {
+				slog.Warn(fmt.Sprintf("store long groups for %s: %v", number, err))
+			}
+		}()
 	}
-	return false
 }
 
 // EarliestMedia is the newest first-frame program time (Unix ms) among the
