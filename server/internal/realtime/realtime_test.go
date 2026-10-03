@@ -60,6 +60,20 @@ func TestFreshRoomStartsOnTheFirstFrame(t *testing.T) {
 	}
 }
 
+func TestAFreshMultiviewTileStartsAStepBack(t *testing.T) {
+	start := time.Date(2026, 10, 3, 17, 0, 0, 0, time.UTC)
+	r, _ := fixedRooms(start)
+	first := unixMS(start.Add(-3500 * time.Millisecond))
+	one := r.Join("channel:4", 4, first)
+	tile := r.Join("multiview:7:4", 4, first)
+	if one.AnchorMedia != first || tile.AnchorMedia != first {
+		t.Fatalf("both start on the first frame: %+v %+v", one, tile)
+	}
+	if got := tile.AnchorServer - one.AnchorServer; got != float64(stallStep/time.Millisecond) {
+		t.Fatalf("a tile waits one stall step longer on its first frame, got %v ms", got)
+	}
+}
+
 func TestFollowRoomSettlesOnceTheBufferCoversTheLatency(t *testing.T) {
 	start := time.Date(2026, 9, 26, 21, 0, 0, 0, time.UTC)
 	r, now := fixedRooms(start)

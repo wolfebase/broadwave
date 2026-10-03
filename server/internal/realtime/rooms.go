@@ -139,7 +139,11 @@ func (r *Rooms) JoinAt(room string, channelID int64, earliest float64, latency s
 			// A fresh tune: start on the first frame, a moment later, so the
 			// player has a little buffer before Settle eases it back further.
 			media = earliest
-			anchorServer += float64(startCushion / time.Millisecond)
+			cushion := startCushion
+			if strings.HasPrefix(room, "multiview:") {
+				cushion = tileCushion
+			}
+			anchorServer += float64(cushion / time.Millisecond)
 		}
 		st = &RoomState{
 			Room: room, ChannelID: channelID, Mode: mode, Latency: latency, LatencyMS: latencyMS(latency), Rate: 1,
@@ -155,6 +159,12 @@ func (r *Rooms) JoinAt(room string, channelID int64, earliest float64, latency s
 // right at the edge left under a second buffered and stalled a few times in
 // the first minute while the room eased back.
 const startCushion = 1500 * time.Millisecond
+
+// tileCushion is startCushion for a multiview tile. A fresh tile rendition's
+// segments arrive about 1.5 s apart, so after its sync hold a tile had 0.6-2.4 s
+// buffered, and a late segment froze it until the room stepped back. Starting
+// one step back lands where that first stall would have put it.
+const tileCushion = startCushion + stallStep
 
 // settleRate is how fast a follow room plays while it eases back to its
 // latency target. Players follow a room by trimming their own rate by up to
