@@ -12,7 +12,7 @@ import (
 // Host is what startup measured, and the picture sizes that measurement allows.
 // Height is the tallest transcode. Focus is the large tile of a multiview
 // (two up, or the big one beside smaller ones; a quad is all 360p). Tiles is how
-// many of those encodes can run at once. FullRate is field rate on a 540p or
+// many encodes of any size can run at once. FullRate is field rate on a 540p or
 // 360p tile; 720p is always field rate.
 type Host struct {
 	Class    string
@@ -120,8 +120,21 @@ func MeasureHost(ctx context.Context, ffmpeg, encoder string) Host {
 		h.Encoder = encoder
 		return h
 	}
-	h := Budget(class, speed)
+	h := budgetFor(class, encoder, speed)
 	h.Encoder = encoder
+	return h
+}
+
+// budgetFor is Budget for the encoder that will run. One encode on Intel's
+// fixed-function encoder is held back by its own pipeline, not by the GPU:
+// on a UHD 770 that ran one 1080 encode at 7x, four 1080 encodes and four
+// tiles together still each ran at 2.4x or faster. Six pictures fit a quad
+// beside two full screens and leave room for another app's transcodes.
+func budgetFor(class, encoder string, speed float64) Host {
+	h := Budget(class, speed)
+	if speed >= 4 && lowPower[encoder] && strings.HasPrefix(class, "intel") {
+		h.Tiles = 6
+	}
 	return h
 }
 
@@ -174,11 +187,11 @@ func (h Host) Line() string {
 		if h.FullRate || h.Focus == "720" {
 			rate += "60"
 		}
-		tiles := "1 tile"
+		pictures := "one picture at a time"
 		if h.Tiles != 1 {
-			tiles = fmt.Sprintf("%d tiles", h.Tiles)
+			pictures = fmt.Sprintf("%d pictures at once", h.Tiles)
 		}
-		fmt.Fprintf(&b, " %s on a large tile, %s.", rate, tiles)
+		fmt.Fprintf(&b, " %s on a large tile, %s.", rate, pictures)
 	}
 	return b.String()
 }
