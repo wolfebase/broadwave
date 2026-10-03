@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.4 — 2026-10-02
+
+### Fixed
+
+- After a tuner went quiet and carried on, the program clock kept the quiet time for a moment and then lost it again, so screens chased a live edge that was not there.
+
 ## 0.12.3 — 2026-10-02
 
 ### Fixed
