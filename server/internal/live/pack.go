@@ -24,6 +24,10 @@ const (
 	// longGroup is past the one-second group of pictures most stations send,
 	// also with a short keyframe fragment in front of it.
 	longGroup = 135000
+	// longEvidence long groups in one tune mark a station as sending them;
+	// shortEvidence segments with none clear it.
+	longEvidence  = 3
+	shortEvidence = 120
 	// windowTicks is how much media a live playlist keeps, about 90 minutes.
 	windowTicks = 90 * 60 * 90000
 	// jumpTicks is a presentation-time step that is not one more group of
@@ -61,6 +65,30 @@ type playlistGate struct {
 	// closedParts is how many parts each recent closed segment had, the
 	// last one being openMSN-1.
 	closedParts []int
+	// known reports whether the channel sends groups of pictures past
+	// longGroup, as any of its encodes found, now or on an earlier tune.
+	// verdict hears what this playlist found, once it has seen enough.
+	known   func() bool
+	verdict func(long bool)
+	said    atomic.Int32
+}
+
+func (g *playlistGate) longGroups() bool {
+	return g != nil && g.known != nil && g.known()
+}
+
+// judge passes this playlist's finding on when it changes: 1 short, 2 long.
+func (g *playlistGate) judge(long bool) {
+	if g == nil || g.verdict == nil {
+		return
+	}
+	v := int32(1)
+	if long {
+		v = 2
+	}
+	if g.said.Swap(v) != v {
+		g.verdict(long)
+	}
 }
 
 // blockFloor is the least a blocking playlist request waits.
@@ -840,18 +868,18 @@ type playlistCeiling struct {
 	part   int
 }
 
-// longGroups holds each playlist folder (one channel and rendition) whose
-// station has sent a group of pictures past longGroup.
-var longGroups sync.Map
-
 func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart, origin int, allSync, segGap bool, hold *playlistCeiling, gate *playlistGate) error {
 	if len(init) == 0 {
 		return nil
 	}
 	longest := partTicks
 	longestPart := partTicks
+	var longCount int
 	for _, s := range closed {
 		longest = max(longest, int(s.dur))
+		if s.dur > longGroup {
+			longCount++
+		}
 	}
 	for _, p := range open {
 		longest = max(longest, int(p.dur))
@@ -861,8 +889,13 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 	// one-second segments this packager writes.
 	const floor = 2 * 90000
 	target := max(longest, floor)
-	if longest > longGroup {
-		longGroups.Store(dir, true)
+	// One long group can be a lost keyframe on a weak signal or a splice,
+	// and what a playlist finds is kept for the channel.
+	switch {
+	case longCount >= longEvidence:
+		gate.judge(true)
+	case longCount == 0 && len(closed) >= shortEvidence:
+		gate.judge(false)
 	}
 	if hold != nil {
 		// A broadcast's groups of pictures vary: 2.4 s with 3.3 s now and
@@ -870,7 +903,7 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 		// A station whose groups run past longGroup gets four, so the
 		// target is set once.
 		if hold.target == 0 && len(closed)+len(open) > 0 {
-			if _, long := longGroups.Load(dir); long {
+			if longest > longGroup || gate.longGroups() {
 				target = max(target, 4*90000)
 			}
 		}

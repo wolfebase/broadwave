@@ -93,6 +93,26 @@ func (b *Bus) Publish(kind string, v any) {
 	}
 }
 
+// LongGroupsFound floors each room on the channel that has an Apple screen.
+// A station's long groups are known only once a tune has seen one, which can
+// be after its screens joined.
+func (b *Bus) LongGroupsFound(channelID int64) {
+	if b == nil || b.Rooms == nil {
+		return
+	}
+	for _, room := range b.Rooms.OnChannel(channelID) {
+		b.mu.Lock()
+		apple := b.appleInLocked(room)
+		b.mu.Unlock()
+		if !apple {
+			continue
+		}
+		if _, floored := b.Rooms.Floor(room, b.appleLatencyFor(room)); floored {
+			b.roomChanged(room)
+		}
+	}
+}
+
 // Settle eases this channel's follow rooms onto their latency target once the
 // playlist covers it, tells the members, and puts each room back to 1x when it
 // arrives. A fresh tune is left alone.

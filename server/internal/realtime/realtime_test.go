@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -674,6 +675,30 @@ func TestFloorOnlyMovesARoomCloserToLive(t *testing.T) {
 	if _, ok := r.Floor("channel:9", "balanced"); ok {
 		t.Fatal("no room, nothing to floor")
 	}
+	// An Apple multiview tile on a long-group channel sat at balanced, 1.5 s
+	// inside what AVPlayer reaches, labelled stable.
+	r.JoinAt("multiview:ab12:9", 9, 0, "balanced")
+	if st, ok := r.Floor("multiview:ab12:9", "stable"); !ok || st.AnchorMedia != liveAnchor(start, "stable") || st.Rate != 1 {
+		t.Fatalf("a playing tile room should move back to stable, got %+v %v", st, ok)
+	}
+	// A group room the viewers rewound is already further back and stays.
+	r.JoinAt("group:ch9", 9, 0, "balanced")
+	back := liveAnchor(start, "balanced") - 60000
+	if _, err := r.Apply("group:ch9", Command{Action: "seek", MediaTime: back}); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := r.Floor("group:ch9", "stable"); st.Target(unixMS(start)) != back {
+		t.Fatalf("a rewound room kept its place, got target %v want %v", st.Target(unixMS(start)), back)
+	}
+	// A room paused closer to live than an Apple screen reaches holds a frame
+	// it cannot show, so it moves back too, still paused.
+	r.JoinAt("group:ch4", 4, 0, "lowest")
+	if _, err := r.Apply("group:ch4", Command{Action: "pause"}); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := r.Floor("group:ch4", "balanced"); st.Rate != 0 || st.Target(unixMS(start)) != liveAnchor(start, "balanced") {
+		t.Fatalf("a paused room near live should move back, still paused, got %+v", st)
+	}
 }
 
 func TestAnAppleScreenKeepsItsRoomAtBalanced(t *testing.T) {
@@ -739,20 +764,81 @@ func TestAnAppleScreenHoldsALongGroupRoomAtStable(t *testing.T) {
 	send(t, ctx, conn, "here", `{"name":"Den","kind":"appletv"}`)
 	send(t, ctx, conn, "sync.join", `{"room":"channel:9","channelId":9,"latency":"balanced"}`)
 	send(t, ctx, conn, "sync.join", `{"room":"channel:4","channelId":4,"latency":"balanced"}`)
+	// Each multiview tile on Apple joins its own room with its channel.
+	send(t, ctx, conn, "sync.join", `{"room":"multiview:ab12:9","channelId":9,"latency":"balanced"}`)
+	send(t, ctx, conn, "sync.join", `{"room":"multiview:ab12:4","channelId":4,"latency":"balanced"}`)
 	send(t, ctx, conn, "sync.command", `{"room":"channel:9","action":"latency","latency":"balanced"}`)
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		long, _ := bus.Rooms.State("channel:9")
 		one, _ := bus.Rooms.State("channel:4")
-		if long.Version >= 3 && one.Latency != "" {
+		longTile, _ := bus.Rooms.State("multiview:ab12:9")
+		tile, _ := bus.Rooms.State("multiview:ab12:4")
+		if long.Version >= 3 && one.Latency != "" && longTile.Latency != "" && tile.Latency != "" {
 			if long.Latency != "stable" || one.Latency != "balanced" {
 				t.Fatalf("long groups at %s, one-second groups at %s", long.Latency, one.Latency)
+			}
+			if longTile.Latency != "stable" || tile.Latency != "balanced" {
+				t.Fatalf("tiles: long groups at %s, one-second groups at %s", longTile.Latency, tile.Latency)
 			}
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("the rooms never settled")
+}
+
+// A station's long groups are known only once a tune has seen one: after the
+// screens joined on a first tune, or on a tile whose second join the bus
+// ignored because the screen was still a member.
+func TestLongGroupsFoundLaterFloorAnAppleRoom(t *testing.T) {
+	bus := NewBus()
+	var long atomic.Bool
+	bus.LongHold = func(channelID int64) bool { return channelID == 9 && long.Load() }
+	srv := httptest.NewServer(bus)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	dial := func() *websocket.Conn {
+		conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return conn
+	}
+	tv, web := dial(), dial()
+	defer tv.CloseNow()
+	defer web.CloseNow()
+	send(t, ctx, tv, "here", `{"name":"Den","kind":"appletv"}`)
+	send(t, ctx, web, "here", `{"name":"Laptop","kind":"web"}`)
+	send(t, ctx, tv, "sync.join", `{"room":"multiview:ab12:9","channelId":9,"latency":"balanced"}`)
+	send(t, ctx, web, "sync.join", `{"room":"channel:9","channelId":9,"latency":"balanced"}`)
+	settled := func(rooms ...string) bool {
+		for _, r := range rooms {
+			if st, ok := bus.Rooms.State(r); !ok || st.Latency == "" {
+				return false
+			}
+		}
+		return true
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for !settled("multiview:ab12:9", "channel:9") {
+		if time.Now().After(deadline) {
+			t.Fatal("the rooms never started")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	long.Store(true)
+	bus.LongGroupsFound(9)
+	tile, _ := bus.Rooms.State("multiview:ab12:9")
+	browser, _ := bus.Rooms.State("channel:9")
+	if tile.Latency != "stable" || browser.Latency != "balanced" {
+		t.Fatalf("the Apple tile at %s, the browser room at %s", tile.Latency, browser.Latency)
+	}
+	// Not only the label: the tile room plays where AVPlayer reaches.
+	if now := unixMS(time.Now()); tile.Target(now) > now-19900 {
+		t.Fatalf("the tile room plays %.0f ms behind live", now-tile.Target(now))
+	}
 }
 
 func send(t *testing.T, ctx context.Context, conn *websocket.Conn, kind, data string) {

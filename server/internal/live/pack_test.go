@@ -2,6 +2,7 @@ package live
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -17,6 +18,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"broadwave/internal/hdhr"
+	"broadwave/internal/store"
 )
 
 func TestPlaylistGateWakesForTheNextPart(t *testing.T) {
@@ -894,14 +898,19 @@ func TestTargetIsSetOnceForLongGroups(t *testing.T) {
 }
 
 func TestALongGroupStationStartsLongNextTime(t *testing.T) {
-	dir := t.TempDir()
-	tune := func(groups ...int64) string {
+	h := &Hub{channels: map[int64]*feed{
+		9: {channel: store.SourceChannel{Channel: store.Channel{ID: 9, GuideNumber: "9.1"}}},
+		5: {channel: store.SourceChannel{Channel: store.Channel{ID: 5, GuideNumber: "5.1"}}},
+	}}
+	tune := func(channel int64, dir string, groups ...int64) string {
 		t.Helper()
+		gate := newPlaylistGate()
+		h.seedLong(h.channels[channel], gate)
 		var hold playlistCeiling
 		var closed []packedSeg
 		for i, dur := range groups {
 			closed = append(closed, packedSeg{name: fmt.Sprintf("seg%05d.m4s", i), dur: dur})
-			if err := writePacked(dir, []byte("init"), closed, nil, 0, true, false, &hold, nil); err != nil {
+			if err := writePacked(dir, []byte("init"), closed, nil, 0, true, false, &hold, gate); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -913,13 +922,105 @@ func TestALongGroupStationStartsLongNextTime(t *testing.T) {
 	}
 	// A one-second station, with a short keyframe fragment in front of a
 	// group now and then, stays at two.
-	if text := tune(90090, 105105, 90090); !strings.Contains(text, "#EXT-X-TARGETDURATION:2\n") {
+	if text := tune(5, t.TempDir(), 90090, 105105, 90090); !strings.Contains(text, "#EXT-X-TARGETDURATION:2\n") {
 		t.Fatalf("one-second groups:\n%s", text)
 	}
+	// One long group, a lost keyframe on a weak signal, is not a station's.
+	tune(5, t.TempDir(), 90090, 216216, 90090)
 	// The first group was cut short, so this tune grew.
-	tune(111111, 216216)
-	if text := tune(111111); !strings.Contains(text, "#EXT-X-TARGETDURATION:4\n") || !strings.Contains(text, "PART-TARGET=3.999") {
-		t.Fatalf("the next tune starts where long groups fit:\n%s", text)
+	tune(9, t.TempDir(), 111111, 216216, 216216, 216216)
+	// The next tune, and a tile of the same channel in its own folder, start
+	// where long groups fit.
+	for _, dir := range []string{t.TempDir(), t.TempDir()} {
+		if text := tune(9, dir, 111111); !strings.Contains(text, "#EXT-X-TARGETDURATION:4\n") || !strings.Contains(text, "PART-TARGET=3.999") {
+			t.Fatalf("the next playlist starts where long groups fit:\n%s", text)
+		}
+	}
+	if text := tune(5, t.TempDir(), 111111); !strings.Contains(text, "#EXT-X-TARGETDURATION:2\n") {
+		t.Fatalf("another channel stays at two:\n%s", text)
+	}
+	if !h.LongGroups(9) || h.LongGroups(5) || h.LongGroups(4) {
+		t.Fatalf("long groups: 9 %v, 5 %v, 4 %v", h.LongGroups(9), h.LongGroups(5), h.LongGroups(4))
+	}
+}
+
+// A multiview tile of the station was a new folder, so its first playlist
+// said 2 s and AVPlayer dropped it at the first long group: "illegal
+// PART-HOLD-BACK change". The catalog keeps what an earlier tune learned.
+func TestALongGroupStationStartsLongAfterARestart(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	dev := hdhr.Device{DeviceID: "FLEX1", BaseURL: "http://flex", LineupURL: "http://flex/lineup.json", TunerCount: 4}
+	if err := s.UpsertDevice(ctx, dev, []hdhr.Channel{
+		{GuideNumber: "9.1", GuideName: "KABC", VideoCodec: "MPEG2", AudioCodec: "AC3", HD: true, StreamURL: "http://flex:5004/auto/v9.1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	chans, err := s.Channels(ctx, false)
+	if err != nil || len(chans) != 1 {
+		t.Fatalf("channels %v %v", chans, err)
+	}
+	id := chans[0].ID
+	read := func() store.SourceChannel {
+		t.Helper()
+		ch, err := s.SourceChannel(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ch
+	}
+	first := &Hub{Store: s, channels: map[int64]*feed{id: {channel: read()}}}
+	gate := newPlaylistGate()
+	first.seedLong(first.channels[id], gate)
+	if gate.longGroups() {
+		t.Fatal("a channel never tuned is not known to send long groups")
+	}
+	var closed []packedSeg
+	for i := range longEvidence {
+		closed = append(closed, packedSeg{name: fmt.Sprintf("seg%05d.m4s", i), dur: 216216})
+	}
+	if err := writePacked(t.TempDir(), []byte("init"), closed, nil, 0, true, false, &playlistCeiling{}, gate); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for !read().LongGroups {
+		if time.Now().After(deadline) {
+			t.Fatal("the long group was never stored")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	restarted := &Hub{Store: s, channels: map[int64]*feed{id: {channel: read()}}}
+	gate = newPlaylistGate()
+	restarted.seedLong(restarted.channels[id], gate)
+	dir := t.TempDir()
+	if err := writePacked(dir, []byte("init"), nil, []packedPart{{name: "part00000.m4s", dur: 111111, sync: true}}, 0, true, false, &playlistCeiling{}, gate); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "#EXT-X-TARGETDURATION:4\n") || !restarted.LongGroups(id) {
+		t.Fatalf("after a restart the first playlist should hold long groups:\n%s", b)
+	}
+	// A station that went back to one-second groups is cleared.
+	closed = nil
+	for i := range shortEvidence {
+		closed = append(closed, packedSeg{name: fmt.Sprintf("seg%05d.m4s", i), dur: 90090})
+	}
+	if err := writePacked(dir, []byte("init"), closed, nil, 0, true, false, &playlistCeiling{}, gate); err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(2 * time.Second)
+	for read().LongGroups || restarted.LongGroups(id) {
+		if time.Now().After(deadline) {
+			t.Fatal("a station with one-second groups stayed marked")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -1882,21 +1983,5 @@ func TestAGroupAfterAShortKeyframeClosesWhenItArrives(t *testing.T) {
 	_ = pw.Close()
 	if err := <-packErr; err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestLongGroupsNamesTheChannel(t *testing.T) {
-	long, short := t.TempDir(), t.TempDir()
-	for dir, dur := range map[string]int64{long: 216216, short: 90090} {
-		if err := writePacked(dir, []byte("init"), []packedSeg{{name: "seg00000.m4s", dur: dur}}, nil, 0, true, false, &playlistCeiling{}, nil); err != nil {
-			t.Fatal(err)
-		}
-	}
-	h := &Hub{channels: map[int64]*feed{
-		9: {renditions: map[string]*rendition{"1080": {dir: long}}},
-		5: {renditions: map[string]*rendition{"1080": {dir: short}}},
-	}}
-	if !h.LongGroups(9) || h.LongGroups(5) || h.LongGroups(4) {
-		t.Fatalf("long groups: 9 %v, 5 %v, 4 %v", h.LongGroups(9), h.LongGroups(5), h.LongGroups(4))
 	}
 }
