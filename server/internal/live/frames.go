@@ -58,11 +58,13 @@ func FramePath(dir string, channelID int64, width int) string {
 // writes one keyframe per program. It never opens a tuner URL.
 func FrameArgs(jobs []FrameJob, dir string) []string {
 	args := []string{"-hide_banner", "-loglevel", "error", "-skip_frame", "nokey"}
-	// A link carries one channel at its own bitrate, often a few Mb/s in real
-	// time, so the default 5 s analysis outlasts frameGrabLimit and every grab
-	// is killed. A tuned mux keeps the default so each program's video is found.
+	// A link or an ATSC 3.0 tune carries one program at a few Mb/s in real
+	// time. Its PMT already names the codecs, and the probe outlasts
+	// frameGrabLimit: on a 3.0 tune it waits on the AC-4 tracks until ~8 MB
+	// (13 s) are read. A tuned 1.0 mux keeps the probe, or a program whose
+	// PMT comes later is not there to map.
 	if singleProgram(jobs) {
-		args = append(args, "-analyzeduration", "1000000", "-probesize", "8000000")
+		args = append(args, "-nofind_stream_info")
 	}
 	args = append(args, "-i", "pipe:0")
 	for _, job := range jobs {

@@ -54,8 +54,17 @@ func TestFrameArgsSampleTheOpenMux(t *testing.T) {
 	if !strings.Contains(text, "/work/frames/4.jpg.part") || !strings.Contains(text, "/work/frames/5-1280.jpg.part") {
 		t.Fatalf("paths = %s", text)
 	}
-	if strings.Contains(text, "-analyzeduration") {
+	if strings.Contains(text, "-analyzeduration") || strings.Contains(text, "-nofind_stream_info") {
 		t.Fatal("a tuned mux keeps the full probe so every program is found")
+	}
+}
+
+// A 3.0 tune is one program whose AC-4 tracks hold ffmpeg's probe for about
+// 13 s of stream, so every grab was killed at frameGrabLimit.
+func TestASingleProgramGrabSkipsTheProbe(t *testing.T) {
+	text := strings.Join(FrameArgs([]FrameJob{{ChannelID: 73}}, "/work/frames"), " ")
+	if !strings.Contains(text, "-nofind_stream_info -i pipe:0") {
+		t.Fatalf("args = %s", text)
 	}
 }
 
