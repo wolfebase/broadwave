@@ -185,6 +185,18 @@ func codecName(raw string) string {
 	return c
 }
 
+// captionProbe settles an ATSC 3.0 caption stream (STPP) on its first
+// packet. ffmpeg has to identify that stream from its data, and captions come
+// seconds apart: when one arrives during the probe, every other packet queues
+// behind it until probesize is read, about 12 s of a 3.0 start. Elsewhere an
+// unlabeled sound track may need more than one packet to be found.
+func captionProbe(audio string) []string {
+	if codecName(audio) != "ac4" {
+		return nil
+	}
+	return []string{"-max_probe_packets", "1"}
+}
+
 func has(list []string, codec string) bool {
 	return codec != "" && slices.ContainsFunc(list, func(s string) bool { return codecName(s) == codec })
 }
@@ -521,7 +533,8 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 	if strings.Contains(input, "://") {
 		probeSize, probeFor = "2000000", "1500000"
 	}
-	args = append(args, "-probesize", probeSize, "-analyzeduration", probeFor, "-i", input)
+	args = append(args, "-probesize", probeSize, "-analyzeduration", probeFor)
+	args = append(append(args, captionProbe(src.AudioCodec)...), "-i", input)
 	audioMap := "0:a:0"
 	if program > 0 {
 		audioMap = fmt.Sprintf("0:p:%d:a:0", program)

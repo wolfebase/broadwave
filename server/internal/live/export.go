@@ -35,7 +35,7 @@ func (h *Hub) Export(ctx context.Context, channelID int64, w io.Writer) error {
 		h.mu.Unlock()
 		return err
 	}
-	cmd := exec.CommandContext(ctx, h.FFmpeg, exportCopyArgs(f.program)...)
+	cmd := exec.CommandContext(ctx, h.FFmpeg, exportCopyArgs(f.program, ch.AudioCodec)...)
 	cmd.Stdout = w
 	cmd.Stderr = os.Stderr
 	stdin, err := cmd.StdinPipe()
@@ -93,9 +93,10 @@ func (h *Hub) attachExportLocked(m *mux, w io.WriteCloser) *pipeSub {
 // exportCopyArgs copies one program out of the shared tune. The probe ceiling
 // matches a live rendition: a one- or two-megabyte cap ends before the
 // sequence header on a full multiplex, and the copy then has no video.
-func exportCopyArgs(program int) []string {
+func exportCopyArgs(program int, audio string) []string {
 	args := []string{"-hide_banner", "-loglevel", "error", "-fflags", "+genpts+discardcorrupt", "-copyts",
-		"-probesize", "8000000", "-analyzeduration", "1000000", "-i", "pipe:0"}
+		"-probesize", "8000000", "-analyzeduration", "1000000"}
+	args = append(append(args, captionProbe(audio)...), "-i", "pipe:0")
 	if program > 0 {
 		args = append(args, "-map", fmt.Sprintf("0:p:%d", program))
 	} else {

@@ -93,6 +93,24 @@ func TestFocusedTileIs60(t *testing.T) {
 	}
 }
 
+// A 3.0 program's caption stream is identified from its packets. Left at the
+// default, a caption that arrives during the probe holds every packet until
+// 8 MB are read (~12 s); one packet settles it.
+func TestA3Point0EncodeSettlesItsCaptionsOnOnePacket(t *testing.T) {
+	for _, r := range []Rendition{{Video: "copy", Audio: "ac3"}, {Video: "360", Audio: "none"}, {Video: "1080", Audio: "aac2"}} {
+		line := strings.Join(renditionArgs(0, Source{VideoCodec: "HEVC", AudioCodec: "AC4"}, r, "libx264", "", "pipe:0"), " ")
+		if !strings.Contains(line, "-max_probe_packets 1 -i pipe:0") {
+			t.Fatalf("%+v: %s", r, line)
+		}
+	}
+	for _, audio := range []string{"AC3", "AAC", ""} {
+		line := strings.Join(renditionArgs(0, Source{VideoCodec: "MPEG2", AudioCodec: audio}, Rendition{Video: "720", Audio: "aac2"}, "libx264", "", "pipe:0"), " ")
+		if strings.Contains(line, "max_probe_packets") {
+			t.Fatalf("%q settles an unlabeled stream on one packet: %s", audio, line)
+		}
+	}
+}
+
 func TestHLSInputReconnects(t *testing.T) {
 	line := strings.Join(renditionArgs(0, Source{VideoCodec: "H264", AudioCodec: "AAC", Progressive: true, UserAgent: "Broadwave", Referrer: "http://example/"}, Rendition{Video: "copy", Audio: "copy"}, "libx264", "", "http://example/live.m3u8"), " ")
 	if !strings.Contains(line, "-reconnect 1") || !strings.Contains(line, "-i http://example/live.m3u8") || !strings.Contains(line, "aac_adtstoasc") || !strings.Contains(line, "User-Agent: Broadwave") {
