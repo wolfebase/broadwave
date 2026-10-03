@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.12.6 — 2026-10-03
+
+### Changed
+
+- On an Intel GPU, live TV now encodes on the chip's low-power encoder, which Plex and Jellyfin transcodes do not slow down. A 1080i channel kept 3.7 times real time beside three 4K transcodes, where it used to fall to 1.4 times. The server no longer moves live TV to the processor on such a machine.
+- Multiview tiles decode on the GPU too. A 1080i tile takes a seventh of the processor time it did.
+
+### Fixed
+
+- An ATSC 3.0 channel plays its picture, without sound, on an ffmpeg that has no AC-4 decoder. It used to stop after a second and a half. Diagnostics says why.
+- A playlist link that carries AC-4 sound without declaring it plays on its first watch on such an ffmpeg.
+- The preview pictures for a channel group with several programs no longer time out every minute.
+
 ## 0.12.5 — 2026-10-03
 
 ### Fixed
