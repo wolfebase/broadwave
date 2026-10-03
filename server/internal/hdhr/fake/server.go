@@ -71,6 +71,10 @@ type Server struct {
 	// TuneDelay holds each new stream this long before it answers, as a
 	// real device takes about 2 s to answer an ATSC 3.0 /auto request.
 	TuneDelay time.Duration
+	// TunesFirst takes the tuner when a stream request arrives and answers
+	// after TuneDelay, as a FLEX does: its status shows the tune while the
+	// request waits. By default the delay comes before the tuner is taken.
+	TunesFirst bool
 
 	spec   profile
 	httpLn net.Listener
@@ -553,8 +557,11 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	refuse := s.refuse
 	delay := s.TuneDelay
+	first := s.TunesFirst && !s.legacyStream()
 	s.mu.Unlock()
-	time.Sleep(delay)
+	if !first {
+		time.Sleep(delay)
+	}
 	if refuse {
 		writeErr(w, http.StatusServiceUnavailable, "806 Tune Failed")
 		return
@@ -708,6 +715,13 @@ func (s *Server) streamAllocated(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer s.release(idx, stop)
+	if s.TunesFirst {
+		select {
+		case <-time.After(s.TuneDelay):
+		case <-r.Context().Done():
+			return
+		}
+	}
 	var pkt []byte
 	switch {
 	case transcode != "":
