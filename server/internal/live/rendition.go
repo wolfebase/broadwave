@@ -521,6 +521,12 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 	if strings.Contains(input, "://") {
 		probeSize, probeFor = "2000000", "1500000"
 	}
+	// An AC-4 track without a decoder never gets its parameters, and from some
+	// starts ffmpeg then reads the whole probe: 8 MB is ~13 s of a 3.0 stream.
+	// An encode that leaves the sound out needs only the picture's.
+	if r.Audio == "none" && codecName(src.AudioCodec) == "ac4" {
+		probeSize = "2000000"
+	}
 	args = append(args, "-probesize", probeSize, "-analyzeduration", probeFor, "-i", input)
 	audioMap := "0:a:0"
 	if program > 0 {

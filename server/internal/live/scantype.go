@@ -776,6 +776,14 @@ func (h *Hub) finishScan(m *mux, f *feed, buf *scanBuf, sub *pipeSub) {
 		if needCodec {
 			if tracks := AudioTracks(data, program); len(tracks) > 0 {
 				needCodec = false
+				// HEVC with AC-4 is a 3.0 program: the rebuilt encode reads
+				// through the program pipe, which starts it on a PAT. Fed
+				// mid-stream, ffmpeg probes 8 MB (~13 s) for the AC-4 tracks.
+				h.mu.Lock()
+				if h.channels[id] == f {
+					h.learnCodecsLocked(f, VideoCodecOf(data, program), "")
+				}
+				h.mu.Unlock()
 				h.applyDeferredAudio(f, id, tracks)
 			}
 		}
