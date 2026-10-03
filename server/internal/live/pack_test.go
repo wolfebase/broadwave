@@ -1787,3 +1787,39 @@ func TestAPartPastAClosedSegmentWaitsForTheNext(t *testing.T) {
 		t.Error("segment 3's first part is out")
 	}
 }
+
+// A source can key twice within a few frames, so a group starts with a short
+// keyframe fragment (a tile: 5 frames, 0.167 s) and the rest of the group
+// follows as a second one. The segment ends with that second fragment; it
+// used to wait for the next group's keyframe, and a tile near the live edge
+// ran out of picture while it did.
+func TestAGroupAfterAShortKeyframeClosesWhenItArrives(t *testing.T) {
+	dir := t.TempDir()
+	pr, pw := io.Pipe()
+	packErr := make(chan error, 1)
+	go func() { packErr <- Pack(dir, pr, nil) }()
+	write := func(b []byte) {
+		t.Helper()
+		if _, err := pw.Write(b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(videoInit())
+	write(avFragment(0, 90000, true))
+	waitPlaylist(t, dir, "seg00000.m4s")
+	write(avFragment(90000, 15015, true))
+	write(avFragment(105015, 249000, true))
+	playlist := waitPlaylist(t, dir, "seg00001.m4s")
+	if !strings.Contains(playlist, "#EXTINF:2.933,\nseg00001.m4s") {
+		t.Fatalf("segment 1 should be both fragments, 2.933 s:\n%s", playlist)
+	}
+	write(avFragment(354015, 90000, true))
+	playlist = waitPlaylist(t, dir, "seg00002.m4s")
+	if !strings.Contains(playlist, "#EXTINF:1.000,\nseg00002.m4s") {
+		t.Fatalf("segment 2 should start on the next group:\n%s", playlist)
+	}
+	_ = pw.Close()
+	if err := <-packErr; err != nil {
+		t.Fatal(err)
+	}
+}
