@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.2 — 2026-10-02
+
+### Fixed
+
+- A channel whose tuner was unplugged plays from another tuner that carries it, also when that tuner's copy is hidden behind its 3.0 version. It said "This tuner did not answer."
+
 ## 0.12.1 — 2026-10-02
 
 ATSC 3.0 channels, and a picture that never stays frozen.
