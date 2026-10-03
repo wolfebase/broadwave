@@ -1,9 +1,23 @@
 # Changelog
 
-## Unreleased
+## 0.12.1 — 2026-10-02
+
+ATSC 3.0 channels, and a picture that never stays frozen.
+
+### Added
+
+- ATSC 3.0 (NextGen TV) channels on tuners that receive them. Apple TV, iPhone, iPad, and Safari get the broadcast's own HEVC picture, untouched; other browsers get H.264. AC-4 sound arrives as 5.1 Dolby Digital where the device takes it and as stereo AAC elsewhere, and a second sound track (often Spanish) can be picked like any other.
+- A 3.0 channel is paired with its station's 1.0 channel and shows the same guide listings. An encrypted 3.0 channel stays hidden and opens the station's clear 1.0 channel instead; Settings lists it as encrypted rather than broken.
+- 3.0 recordings keep the broadcast's own packets. A 3.0 multiview tile is sent as broadcast instead of encoded again.
+- A 2160p HEVC picture passes through as sent; a picture taller than the screen it plays on is scaled down.
 
 ### Fixed
 
+- A picture that stops moving reloads itself, then tunes again, on the web. On the server, an encode that stops writing starts again, a tuner stream that goes silent is opened again, and a recording keeps going when the tuner refuses to reopen.
+- A 5.1 channel with more than one sound track no longer stops after its first frame on iPhone, iPad, and Apple TV.
+- Two screens that open the same 3.0 channel at once share one tuner, and a warm 3.0 channel gives its tuner to a new one.
+- A tuner set to none is freed at once. An unplugged tuner no longer slows the tuner list or every channel start.
+- Guide access is asked of every tuner, not only the first one, and program times stay right after a tuner goes quiet.
 - A web page can no longer reach the server by pointing its own name at your server's address, and a page on another site can no longer join a room's live updates. A browser behind an HTTPS reverse proxy needs nothing; set `BROADWAVE_HOSTS` for any other public name you reach the server by.
 
 ## 0.12.0 — 2026-09-29
