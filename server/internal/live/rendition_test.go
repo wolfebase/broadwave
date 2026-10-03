@@ -541,51 +541,7 @@ func TestLongGroupOfPicturesCutsTogether(t *testing.T) {
 		t.Fatalf("source: %v %s", err, out)
 	}
 	source := Source{VideoCodec: "H264", AudioCodec: "AC3", Progressive: true}
-	run := func(r Rendition) []float64 {
-		out := filepath.Join(dir, r.Key())
-		if err := os.MkdirAll(out, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		in, err := os.Open(src)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer in.Close()
-		cmd := exec.Command(ffmpeg, RenditionArgs(0, source, r, "libx264", "")...)
-		cmd.Dir = out
-		cmd.Stdin = in
-		stdout, err := cmd.StdoutPipe()
-		if err != nil {
-			t.Fatal(err)
-		}
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-		packErr := Pack(out, stdout, nil)
-		waitErr := cmd.Wait()
-		if packErr != nil || waitErr != nil {
-			t.Fatalf("%s: pack %v wait %v %s", r.Key(), packErr, waitErr, stderr.String())
-		}
-		raw, err := os.ReadFile(filepath.Join(out, "index.m3u8"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		var durs []float64
-		for _, line := range strings.Split(string(raw), "\n") {
-			v, ok := strings.CutPrefix(line, "#EXTINF:")
-			if !ok {
-				continue
-			}
-			f, err := strconv.ParseFloat(strings.TrimSuffix(v, ","), 64)
-			if err != nil {
-				t.Fatal(err)
-			}
-			durs = append(durs, f)
-		}
-		return durs
-	}
+	run := func(r Rendition) []float64 { return cutDurations(t, ffmpeg, dir, src, source, r) }
 	copyDurs := run(Rendition{Video: "copy", Audio: "copy"})
 	transDurs := run(Rendition{Video: "540", Audio: "aac2", Mode: "broadcast"})
 	if len(copyDurs) < 2 || len(transDurs) < 2 {
@@ -800,5 +756,83 @@ func TestALaterEncodeDatesFramesLikeTheFirst(t *testing.T) {
 	}
 	if matched < 3 {
 		t.Fatalf("only %d segments of the later encode match the first (%d and %d segments)", matched, len(a), len(b))
+	}
+}
+
+// cutDurations runs one rendition of src through the packager and returns its segment lengths.
+func cutDurations(t *testing.T, ffmpeg, dir, src string, source Source, r Rendition) []float64 {
+	t.Helper()
+	out := filepath.Join(dir, r.Key())
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer in.Close()
+	cmd := exec.Command(ffmpeg, RenditionArgs(0, source, r, "libx264", "")...)
+	cmd.Dir = out
+	cmd.Stdin = in
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	packErr := Pack(out, stdout, nil)
+	waitErr := cmd.Wait()
+	if packErr != nil || waitErr != nil {
+		t.Fatalf("%s: pack %v wait %v %s", r.Key(), packErr, waitErr, stderr.String())
+	}
+	raw, err := os.ReadFile(filepath.Join(out, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var durs []float64
+	for _, line := range strings.Split(string(raw), "\n") {
+		v, ok := strings.CutPrefix(line, "#EXTINF:")
+		if !ok {
+			continue
+		}
+		f, err := strconv.ParseFloat(strings.TrimSuffix(v, ","), 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		durs = append(durs, f)
+	}
+	return durs
+}
+
+// A 60p broadcast's keyframes fall on either half of a 30p tile's frames.
+// Each one must still open a tile segment, or the tile's segments run to
+// twice the broadcast's groups and a player at the live edge waits.
+func TestAHalfRateTileKeepsEveryKeyframe(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.ts")
+	gen := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc=size=1280x720:rate=60000/1001", "-f", "lavfi", "-i", "sine=frequency=440",
+		"-t", "9", "-c:v", "libx264", "-preset", "ultrafast", "-g", "61", "-keyint_min", "61", "-sc_threshold", "0",
+		"-c:a", "ac3", "-output_ts_offset", "95000", "-f", "mpegts", src)
+	if out, err := gen.CombinedOutput(); err != nil {
+		t.Fatalf("source: %v %s", err, out)
+	}
+	source := Source{VideoCodec: "H264", AudioCodec: "AC3", Progressive: true, HD: true}
+	copyDurs := cutDurations(t, ffmpeg, dir, src, source, Rendition{Video: "copy", Audio: "copy"})
+	tileDurs := cutDurations(t, ffmpeg, dir, src, source, Rendition{Video: "360", Audio: "aac2"})
+	if d := len(copyDurs) - len(tileDurs); d > 1 || d < -1 || len(copyDurs) < 6 {
+		t.Fatalf("cuts differ: copy %v tile %v", copyDurs, tileDurs)
+	}
+	for i := 0; i < min(len(copyDurs), len(tileDurs))-1; i++ {
+		if d := tileDurs[i] - copyDurs[i]; d > 0.05 || d < -0.05 {
+			t.Fatalf("segment %d: copy %v tile %v", i, copyDurs, tileDurs)
+		}
 	}
 }
