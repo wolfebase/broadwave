@@ -96,6 +96,34 @@ func TestOtherDeviceIsTheFailover(t *testing.T) {
 	if err != nil || stream != "http://b/4.1" {
 		t.Fatalf("stream %q %v", stream, err)
 	}
+	// A row hidden from the lineup, as a 1.0 channel whose 3.0 twin is shown
+	// is, still takes over when the first device is unplugged.
+	if _, err := st.db.Exec(`UPDATE channels SET hidden=1 WHERE device_id='BBBB'`); err != nil {
+		t.Fatal(err)
+	}
+	got, err = st.OtherDevices(ctx, "4.1", "AAAA")
+	if err != nil || len(got) != 1 {
+		t.Fatalf("hidden row was not a failover: %v %v", got, err)
+	}
+	var firstID int64
+	if err := st.db.QueryRow(`SELECT id FROM channels WHERE device_id='AAAA' AND guide_number='4.1'`).Scan(&firstID); err != nil {
+		t.Fatal(err)
+	}
+	if alts, err := st.AlternateChannels(ctx, "4.1", firstID); err != nil || len(alts) != 1 {
+		t.Fatalf("hidden row was not an alternate: %v %v", alts, err)
+	}
+	if _, err := st.db.Exec(`UPDATE channels SET protected=1 WHERE device_id='BBBB'`); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := st.OtherDevices(ctx, "4.1", "AAAA"); err != nil || len(got) != 0 {
+		t.Fatalf("protected row was a failover: %v %v", got, err)
+	}
+	if alts, err := st.AlternateChannels(ctx, "4.1", firstID); err != nil || len(alts) != 0 {
+		t.Fatalf("protected row was an alternate: %v %v", alts, err)
+	}
+	if _, err := st.db.Exec(`UPDATE channels SET hidden=0, protected=0 WHERE device_id='BBBB'`); err != nil {
+		t.Fatal(err)
+	}
 	locked := []hdhr.Channel{{GuideNumber: "702", GuideName: "HBO", StreamURL: "http://a/702", Protected: true}}
 	if err := st.UpsertDevice(ctx, a, append([]hdhr.Channel{{GuideNumber: "4.1", GuideName: "ABC", StreamURL: "http://a/4.1"}}, locked...)); err != nil {
 		t.Fatal(err)

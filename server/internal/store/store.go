@@ -195,11 +195,13 @@ ON CONFLICT(device_id, guide_number) DO UPDATE SET
 }
 
 // OtherDevices lists base URLs for other tuners that already have this channel number, lowest priority first.
+// A row hidden from the lineup still counts: hiding is a display choice, and a
+// 1.0 channel with its 3.0 twin shown is stored hidden.
 func (s *Store) OtherDevices(ctx context.Context, guideNumber, exceptDevice string) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT d.base_url FROM devices d
 JOIN channels c ON c.device_id = d.device_id
-WHERE c.guide_number = ? AND c.present = 1 AND c.hidden = 0 AND d.device_id != ?
+WHERE c.guide_number = ? AND c.present = 1 AND c.protected = 0 AND d.device_id != ?
 ORDER BY d.priority, d.device_id`, guideNumber, exceptDevice)
 	if err != nil {
 		return nil, err
@@ -237,7 +239,7 @@ func (s *Store) AlternateChannels(ctx context.Context, guideNumber string, excep
 	rows, err := s.db.QueryContext(ctx, `
 SELECT c.id FROM channels c
 JOIN devices d ON d.device_id = c.device_id
-WHERE c.guide_number = ? AND c.id != ? AND c.present = 1 AND c.hidden = 0 AND c.stream_url != ''
+WHERE c.guide_number = ? AND c.id != ? AND c.present = 1 AND c.protected = 0 AND c.stream_url != ''
 ORDER BY d.priority, c.id`, guideNumber, exceptID)
 	if err != nil {
 		return nil, err
