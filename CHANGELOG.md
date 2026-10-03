@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.3 — 2026-10-02
+
+### Fixed
+
+- Live playlists keep a closed segment's parts listed for as long as low-latency HLS asks. iPhone, iPad, and Apple TV no longer lose their place in a 3.0 channel's picture when a segment closes.
+- The captions playlist holds a low-latency reload until the segment it asks for is out. Apple players logged an error on every 3.0 channel and fell back to slower reloads.
+- A low-latency reload that arrives before a channel's first playlist waits the full time instead of 1.5 s.
+
 ## 0.12.2 — 2026-10-02
 
 ### Fixed
