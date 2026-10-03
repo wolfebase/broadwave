@@ -201,9 +201,11 @@ func OutputEncoder(base, codec string) string {
 }
 
 // gpuDecode keeps frames on the GPU. Software filters (pullup, bwdif) need
-// system memory, so those graphs stay on the upload path.
+// system memory, so those graphs stay on the upload path. A tile's fps cap
+// only drops frames and runs on GPU frames: decoding a 1080i tile there took
+// a seventh of the CPU time.
 func gpuDecode(g Graph, interlaced bool, vaapiDeint string) bool {
-	if !vaapiFamily(g.Encoder) || g.Mode == "film" || smallPicture(g) {
+	if !vaapiFamily(g.Encoder) || g.Mode == "film" {
 		return false
 	}
 	if interlaced && vaapiDeint == "" {
@@ -238,7 +240,7 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 		return fmt.Sprintf("pullup,fps=%s,format=nv12,hwupload,scale_vaapi=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease:format=nv12", rate, width, height)
 	}
 	if vaapiFamily(g.Encoder) && g.Mode != "film" && (vaapiDeint != "" || !interlaced) {
-		// Frames already on the GPU skip the upload. A software fps cap still uploads once.
+		// Frames already on the GPU skip the upload.
 		vf := ""
 		if !gpuDecode(g, interlaced, vaapiDeint) {
 			vf = "format=nv12,hwupload"
