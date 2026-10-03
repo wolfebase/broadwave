@@ -164,6 +164,40 @@ var ErrNoTwin = errors.New("channel has no ATSC 1.0 and 3.0 pair")
 // ErrTwinChoice is a choice other than atsc3, atsc1, or both.
 var ErrTwinChoice = errors.New("choice must be atsc3, atsc1, or both")
 
+// passFavoriteToShown copies a favorite set on a hidden half of a 1.0/3.0 pair
+// onto the half that stays on the guide. The hidden row keeps its own flag.
+func (s *Store) passFavoriteToShown(ctx context.Context, id int64) error {
+	chs, err := s.Channels(ctx, false)
+	if err != nil {
+		return err
+	}
+	byID := map[int64]Channel{}
+	for _, ch := range chs {
+		byID[ch.ID] = ch
+	}
+	self, ok := byID[id]
+	if !ok || !self.Hidden {
+		return nil
+	}
+	var pair []int64
+	for c3, ones := range Twins(chs) {
+		if c3 == id || contains(ones, id) {
+			pair = append([]int64{c3}, ones...)
+			break
+		}
+	}
+	for _, other := range pair {
+		ch := byID[other]
+		if ch.Hidden || ch.Favorite {
+			continue
+		}
+		if _, err := s.db.ExecContext(ctx, `UPDATE channels SET favorite=1 WHERE id=?`, other); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // SetTwinChoice shows the 3.0 channel, the 1.0 channel, or both for the pair id belongs to.
 // The channel that is hidden passes its favorite to the one that stays.
 func (s *Store) SetTwinChoice(ctx context.Context, id int64, choice string) error {

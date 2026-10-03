@@ -393,6 +393,11 @@ func (s *Store) PatchChannel(ctx context.Context, id int64, patch ChannelPatch) 
 	if n == 0 {
 		return Channel{}, sql.ErrNoRows
 	}
+	if patch.Favorite != nil && *patch.Favorite {
+		if err := s.passFavoriteToShown(ctx, id); err != nil {
+			return Channel{}, err
+		}
+	}
 	return s.Channel(ctx, id)
 }
 
