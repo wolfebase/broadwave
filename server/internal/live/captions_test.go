@@ -52,7 +52,7 @@ func TestMainPlaylistOffersCaptions(t *testing.T) {
 	body := string(mainPlaylist(Rendition{Video: "720", Audio: "aac2"}))
 	for _, want := range []string{
 		`TYPE=SUBTITLES,GROUP-ID="cc"`, `LANGUAGE="en"`, `AUTOSELECT=YES`, `URI="captions.m3u8"`,
-		"BANDWIDTH=8000000", `SUBTITLES="cc"`, "CLOSED-CAPTIONS=NONE", "\nindex.m3u8\n",
+		"BANDWIDTH=16000000,AVERAGE-BANDWIDTH=8000000,", `SUBTITLES="cc"`, "CLOSED-CAPTIONS=NONE", "\nindex.m3u8\n",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q in\n%s", want, body)

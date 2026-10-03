@@ -63,11 +63,35 @@ func TestMasterListsEachSoundTrack(t *testing.T) {
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="English",LANGUAGE="en",DEFAULT=YES,AUTOSELECT=YES,CHANNELS="6",URI="audio-2.m3u8"
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="Spanish",LANGUAGE="es",DEFAULT=NO,AUTOSELECT=YES,CHANNELS="2",URI="audio-3.m3u8"
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="Described video",LANGUAGE="en",DEFAULT=NO,AUTOSELECT=YES,CHANNELS="2",CHARACTERISTICS="public.accessibility.describes-video",URI="audio-4.m3u8"
-` + captionMedia + `#EXT-X-STREAM-INF:BANDWIDTH=14384000,CODECS="avc1.640028,mp4a.40.2",RESOLUTION=1920x1080,AUDIO="aud",SUBTITLES="cc",CLOSED-CAPTIONS=NONE
+` + captionMedia + `#EXT-X-STREAM-INF:BANDWIDTH=28384000,AVERAGE-BANDWIDTH=14384000,CODECS="avc1.640028,mp4a.40.2",RESOLUTION=1920x1080,AUDIO="aud",SUBTITLES="cc",CLOSED-CAPTIONS=NONE
 video.m3u8
 `
 	if string(body) != want {
 		t.Fatalf("master:\n%s\nwant:\n%s", body, want)
+	}
+}
+
+// AVPlayer logs every segment over BANDWIDTH, so BANDWIDTH is the peak and
+// the encoder's target is the average. A full-rate tile has twice the bits.
+func TestBandwidthIsThePeakAndTheTargetIsTheAverage(t *testing.T) {
+	for _, c := range []struct {
+		key  string
+		want string
+	}{
+		{"1080.aac2.broadcast", "BANDWIDTH=28000000,AVERAGE-BANDWIDTH=14000000"},
+		{"720.aac2.broadcast", "BANDWIDTH=16000000,AVERAGE-BANDWIDTH=8000000"},
+		{"540.aac2.broadcast", "BANDWIDTH=5000000,AVERAGE-BANDWIDTH=2500000"},
+		{"360.none.broadcast", "BANDWIDTH=2400000,AVERAGE-BANDWIDTH=1200000"},
+		{"360.none.broadcast.60", "BANDWIDTH=4800000,AVERAGE-BANDWIDTH=2400000"},
+		{"copy.copy", "BANDWIDTH=20000000"},
+	} {
+		r, ok := ParseRenditionKey(c.key)
+		if !ok {
+			t.Fatalf("bad key %s", c.key)
+		}
+		if got := streamRates(r, 0); got != c.want {
+			t.Errorf("%s: got %s, want %s", c.key, got, c.want)
+		}
 	}
 }
 

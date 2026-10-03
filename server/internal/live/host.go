@@ -10,7 +10,8 @@ import (
 )
 
 // Host is what startup measured, and the picture sizes that measurement allows.
-// Height is the tallest transcode. Focus is the selected tile. Tiles is how
+// Height is the tallest transcode. Focus is the large tile of a multiview
+// (two up, or the big one beside smaller ones; a quad is all 360p). Tiles is how
 // many of those encodes can run at once. FullRate is field rate on a 540p or
 // 360p tile; 720p is always field rate.
 type Host struct {
@@ -177,7 +178,7 @@ func (h Host) Line() string {
 		if h.Tiles != 1 {
 			tiles = fmt.Sprintf("%d tiles", h.Tiles)
 		}
-		fmt.Fprintf(&b, " %s on the selected tile, %s.", rate, tiles)
+		fmt.Fprintf(&b, " %s on a large tile, %s.", rate, tiles)
 	}
 	return b.String()
 }

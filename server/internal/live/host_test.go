@@ -73,17 +73,17 @@ func TestBudgetCoversEveryHost(t *testing.T) {
 func TestHostLine(t *testing.T) {
 	fast := Budget("intel-vaapi", 5.4)
 	fast.Encoder = "h264_vaapi"
-	if got := fast.Line(); got != "Intel GPU found: 1080p60 at 5.4x real time. 720p60 on the selected tile, 4 tiles." {
+	if got := fast.Line(); got != "Intel GPU found: 1080p60 at 5.4x real time. 720p60 on a large tile, 4 tiles." {
 		t.Fatalf("fast: %q", got)
 	}
 	slow := Budget("software", 0.4)
 	slow.Encoder = "libx264"
-	if got := slow.Line(); got != "Software encoder: 1080p60 at 0.4x real time. Picture up to 540p. 360p on the selected tile, 1 tile." {
+	if got := slow.Line(); got != "Software encoder: 1080p60 at 0.4x real time. Picture up to 540p. 360p on a large tile, 1 tile." {
 		t.Fatalf("slow: %q", got)
 	}
 	plain := Budget("software", 0)
 	plain.Encoder = "libx264"
-	if got := plain.Line(); got != "Software encoder. Picture up to 540p. 360p on the selected tile, 1 tile." {
+	if got := plain.Line(); got != "Software encoder. Picture up to 540p. 360p on a large tile, 1 tile." {
 		t.Fatalf("unmeasured: %q", got)
 	}
 }
