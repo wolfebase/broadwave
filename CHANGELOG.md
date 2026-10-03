@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.11 — 2026-10-03
+
+### Fixed
+
+- A multiview tile on a channel that sends a keyframe only every two seconds or more no longer drops out on an iPhone, iPad, or Apple TV right after it opens. The same went for the first watch of such a channel after the server restarted. The server now remembers which channels send long groups, so every encode of them starts with room for them.
+- An Apple multiview tile on such a channel no longer drifts half a second behind and stays there. Its room now really plays 20 seconds behind live, as a single screen does.
+
 ## 0.12.10 — 2026-10-03
 
 ### Fixed
