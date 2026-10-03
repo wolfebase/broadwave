@@ -491,6 +491,8 @@ if (playlist) {
   const source = process.env.E2E_SOURCE;
   const fakeArgs = brk ? ["-raw", "-ts", sample] : avsync ? ["-ts", sample, "-source", sample] : source ? ["-ts", sample, "-source", path.resolve(source)] : tracks ? ["-ts", sample, "-source", sample] : ["-realtime", "-ts", sample];
   if (quad) fakeArgs.push("-quad");
+  // FLEX-4K adds a clear 3.0 row and an encrypted 3.0 twin of 5.1 (115.1 WTST).
+  if (process.env.E2E_ATSC3 === "1") fakeArgs.push("-profile", "FLEX-4K");
   start(path.join(run, "fakehdhr"), fakeArgs, { env: { ...process.env, FAKEHDHR_ADMIN: `127.0.0.1:${port + 10}` } }, (chunk) => {
     fakeOut += chunk.toString();
   });

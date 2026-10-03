@@ -80,6 +80,8 @@ func flex4KChannels() []Channel {
 	return append(chs,
 		Channel{Number: "104.1", Name: "KBWV", Freq: 599000000, Video: "HEVC", Audio: "AC-4", ATSC3: true},
 		Channel{Number: "105.1", Name: "LOCKED", Freq: 605000000, Video: "HEVC", Audio: "AC-4", ATSC3: true, DRM: true},
+		// 115.1 is the encrypted 3.0 of WTST. 5.1 is the clear broadcast that plays in its place.
+		Channel{Number: "115.1", Name: "WTST", Freq: 611000000, Video: "HEVC", Audio: "AC-4", ATSC3: true, DRM: true},
 	)
 }
 

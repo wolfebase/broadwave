@@ -9,6 +9,7 @@ const mv = process.env.E2E_MV === "1";
 const playlist = process.env.E2E_PLAYLIST === "1";
 const rec = process.env.E2E_REC === "1";
 const readme = process.env.E2E_README === "1";
+const atsc3 = process.env.E2E_ATSC3 === "1";
 // Opt-in runs replace the suite: each one is minutes against its own server.
 const only = avsync
   ? "08-avsync\\.spec\\.ts"
@@ -24,14 +25,16 @@ const only = avsync
             ? "19-record\\.spec\\.ts"
             : readme
               ? "25-readme\\.spec\\.ts"
-              : "";
+              : atsc3
+                ? "37-atsc3\\.spec\\.ts"
+                : "";
 
 export default defineConfig({
   testDir: ".",
   testMatch: /.*\.spec\.ts/,
   testIgnore: only
     ? new RegExp(`^(?!.*${only}).*$`)
-    : [/08-avsync\.spec\.ts/, /10-tab\.spec\.ts/, /11-break\.spec\.ts/, /13-mvsync\.spec\.ts/, /15-playlist\.spec\.ts/, /19-record\.spec\.ts/, /25-readme\.spec\.ts/],
+    : [/08-avsync\.spec\.ts/, /10-tab\.spec\.ts/, /11-break\.spec\.ts/, /13-mvsync\.spec\.ts/, /15-playlist\.spec\.ts/, /19-record\.spec\.ts/, /25-readme\.spec\.ts/, /37-atsc3\.spec\.ts/],
   fullyParallel: false,
   workers: 1,
   retries: 0,

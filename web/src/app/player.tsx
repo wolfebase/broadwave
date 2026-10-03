@@ -46,6 +46,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const from = watchId ? Number(params.get("from") || 0) : 0;
   const standIn = from && allChannels.some((c) => c.id === from && c.playsAs === watchId) ? `${from}-${watchId}` : "";
   const [noted, setNoted] = useState("");
+  const [notedFor, setNotedFor] = useState(standIn);
+  // Leaving the player forgets the note, so the next visit says why again.
+  if (standIn !== notedFor) {
+    setNotedFor(standIn);
+    setNoted("");
+  }
   useEffect(() => {
     if (!standIn) return;
     const t = window.setTimeout(() => setNoted(standIn), 10_000);
