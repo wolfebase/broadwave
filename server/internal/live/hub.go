@@ -317,6 +317,9 @@ type rendition struct {
 	noted bool
 	// unfroze is when the output watchdog last ended this encode.
 	unfroze time.Time
+	// late is when the playlist last grew before a late gap, in Unix ns,
+	// until the gap ends and is logged.
+	late int64
 }
 
 type recording struct {
@@ -2253,6 +2256,8 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 			now := time.Now()
 			if gap := now.Sub(last); !last.IsZero() && gap >= inputGap {
 				h.shiftClocks(m, gap)
+			} else if gap >= tunerPause && !last.IsZero() {
+				slog.Info(fmt.Sprintf("mux %d: the tuner sent nothing for %.1f s", m.freq, gap.Seconds()))
 			}
 			last = now
 			m.heard.Store(now.UnixNano())
@@ -2290,6 +2295,10 @@ func (h *Hub) readLoop(ctx context.Context, m *mux) {
 // the broadcast resuming, not as a slow read. A tuner sends every few
 // milliseconds, and it cannot hold back seconds of a live broadcast.
 var inputGap = 5 * time.Second
+
+// tunerPause is a pause in a tuner's stream worth a log line: an encode fed
+// by it falls that far behind, and a screen near the live edge waits.
+const tunerPause = 1500 * time.Millisecond
 
 // inputStall is how long a tune may send nothing before its stream is opened
 // again. A tuner that loses an ATSC 3.0 signal can keep the connection open
@@ -2382,6 +2391,7 @@ func (h *Hub) unfreezeLocked(m *mux, now, fed time.Time) {
 			continue
 		}
 		for _, r := range f.renditions {
+			noteLate(r, f.channel.GuideNumber, now, fed)
 			if r.cmd == nil || r.cmd.Process == nil || r.waited.Load() || now.Sub(r.unfroze) < unfreezeGap || !r.gate.stuck(now, fed, limit) {
 				continue
 			}
@@ -2390,6 +2400,40 @@ func (h *Hub) unfreezeLocked(m *mux, now, fed time.Time) {
 			slog.Warn(fmt.Sprintf("rendition %s on %s wrote nothing for %s while the tuner sent; starting it again", r.spec.Key(), f.channel.GuideNumber, now.Sub(time.Unix(0, r.gate.moved.Load())).Round(time.Second)))
 			_ = r.cmd.Process.Kill()
 		}
+	}
+}
+
+// lateOutput is how long an encode fed by a live tune may add nothing to its
+// playlist, or two of its targets if longer, before the gap is logged when
+// it ends. A screen near the live edge waits through one; the watchdog ends
+// the encode only at outputStall.
+const lateOutput = 4 * time.Second
+
+// noteLate logs a late gap in an encode's playlist once it ends. fed is when
+// the tuner last began sending without a pause; time before it is the
+// tuner's gap, logged by readLoop.
+func noteLate(r *rendition, channel string, now, fed time.Time) {
+	g := r.gate
+	if g == nil {
+		return
+	}
+	moved := g.moved.Load()
+	if moved == 0 {
+		return
+	}
+	if r.late != 0 {
+		if moved != r.late {
+			slog.Info(fmt.Sprintf("rendition %s on %s wrote nothing for %.1f s while the tuner sent", r.spec.Key(), channel, time.Duration(moved-r.late).Seconds()))
+			r.late = 0
+		}
+		return
+	}
+	since := time.Unix(0, moved)
+	if fed.After(since) {
+		since = fed
+	}
+	if now.Sub(since) > max(lateOutput, 2*time.Duration(g.target.Load())) {
+		r.late = moved
 	}
 }
 
