@@ -185,6 +185,10 @@ func captionPlaylist(video []byte) []byte {
 			strings.HasPrefix(line, "#EXT-X-DISCONTINUITY-SEQUENCE:"),
 			strings.HasPrefix(line, "#EXT-X-PLAYLIST-TYPE:"):
 			b.WriteString(line + "\n")
+		case strings.HasPrefix(line, "#EXT-X-SERVER-CONTROL:") && strings.Contains(line, "CAN-BLOCK-RELOAD=YES"):
+			// AVPlayer asks this playlist for the video's next segment too;
+			// the server holds it until the video lists that segment.
+			b.WriteString("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES\n")
 		case line == "#EXT-X-ENDLIST":
 			pending = nil
 			b.WriteString(line + "\n")
