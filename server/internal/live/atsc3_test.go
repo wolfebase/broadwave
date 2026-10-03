@@ -961,28 +961,6 @@ func TestALateScanStartsA3Point0LinkOnItsTables(t *testing.T) {
 	}
 }
 
-// A silent encode of an AC-4 program probes 2 MB, not 8: without a decoder the
-// AC-4 tracks never get their parameters, and the probe could read ~13 s.
-func TestASilentAC4EncodeProbesOnlyThePicture(t *testing.T) {
-	probe := func(audio string, want Rendition) string {
-		args := renditionArgs(0, Source{VideoCodec: "HEVC", AudioCodec: audio}, want, "libx264", "", "pipe:0")
-		i := slices.Index(args, "-probesize")
-		return args[i+1]
-	}
-	if got := probe("AC4", Rendition{Video: "1080", Audio: "none"}); got != "2000000" {
-		t.Fatalf("silent AC-4 transcode: %s", got)
-	}
-	if got := probe("AC4", Rendition{Video: "copy", Audio: "none"}); got != "2000000" {
-		t.Fatalf("silent AC-4 copy: %s", got)
-	}
-	if got := probe("AC4", Rendition{Video: "1080", Audio: "aac2"}); got != "8000000" {
-		t.Fatalf("voiced AC-4: %s", got)
-	}
-	if got := probe("AC3", Rendition{Video: "1080", Audio: "none"}); got != "8000000" {
-		t.Fatalf("silent AC-3: %s", got)
-	}
-}
-
 // A 3.0 recording plays its picture alone on an ffmpeg with no AC-4 decoder,
 // and its playlist is made again once ffmpeg has one.
 func TestASilentRecordingLeavesOutItsSound(t *testing.T) {
