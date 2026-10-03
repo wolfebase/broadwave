@@ -33,6 +33,9 @@ final class LivePlayer {
     private var started = Date()
     private var tick: Any?
     private var stallObserver: NSObjectProtocol?
+    private var endObserver: NSObjectProtocol?
+    /// AVPlayer ended the current item (failedToPlayToEndTime). Read once.
+    private var itemEnded = false
     private(set) var firstFrameMs: Int?
     /// False from a new watch until the picture has moved 0.3 s. A new room
     /// holds its first frame for the start, and that is not a picture yet.
@@ -453,6 +456,11 @@ final class LivePlayer {
             NotificationCenter.default.removeObserver(stallObserver)
         }
         stallObserver = nil
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+        }
+        endObserver = nil
+        itemEnded = false
         player.pause()
         player.replaceCurrentItem(with: nil)
         let ended = session
@@ -654,6 +662,16 @@ final class LivePlayer {
         if let stallObserver {
             NotificationCenter.default.removeObserver(stallObserver)
         }
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+        }
+        itemEnded = false
+        endObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.failedToPlayToEndTimeNotification, object: item, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.itemEnded = true
+                self?.playLogNote("item ended")
+            }
+        }
         started = Date()
         firstFrameMs = nil
         moving = false
@@ -786,7 +804,11 @@ final class LivePlayer {
         }
         let paused = player.timeControlStatus == .paused
         let time = error == nil ? item?.currentTime().seconds : nil
-        let step = frozen.note(time: time, playing: !paused, stoppedItself: paused && pausedItself, at: Date())
+        // A reload plays. The viewer's pause stays; their play finds the item dead.
+        let viewerPaused = paused && !pausedItself && sync?.detached == true
+        let ended = itemEnded && error == nil && !viewerPaused
+        itemEnded = false
+        let step = frozen.note(time: time, playing: !paused, stoppedItself: paused && pausedItself, ended: ended, at: Date())
         if !frozen.reconnecting {
             reconnecting = false
         }

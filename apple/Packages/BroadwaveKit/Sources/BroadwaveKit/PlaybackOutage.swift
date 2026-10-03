@@ -376,7 +376,9 @@ public struct ServerOutage: Equatable, Sendable {
 /// not play again), reloads the item at the live edge. The next step starts
 /// a new watch, and they alternate until the picture has played 20 s or the
 /// cap. A reload can play the few seconds the server still lists, so a short
-/// run of picture does not start the count over.
+/// run of picture does not start the count over. A fresh item pauses itself
+/// while it starts, so that second applies only once it has moved. An item
+/// AVPlayer ended (failedToPlayToEndTime) is a step at once, moved or not.
 public struct FrozenPicture: Equatable, Sendable {
     public enum Step: Equatable, Sendable {
         case reload
@@ -397,6 +399,7 @@ public struct FrozenPicture: Equatable, Sendable {
     private var movingSince: Date?
     private var tries = 0
     private var moved = false
+    private var movedSinceStep = true
     /// True from the first step until the picture moves again.
     public private(set) var reconnecting = false
 
@@ -405,7 +408,11 @@ public struct FrozenPicture: Equatable, Sendable {
     /// `time` is the item's playhead, nil with no item. `playing` is false
     /// while the viewer or the sync engine holds the picture. `stoppedItself`
     /// is a pause AVPlayer made on its own.
-    public mutating func note(time: Double?, playing: Bool, stoppedItself: Bool = false, at now: Date) -> Step? {
+    public mutating func note(time: Double?, playing: Bool, stoppedItself: Bool = false, ended: Bool = false, at now: Date) -> Step? {
+        if ended {
+            lastTime = nil
+            return nextStep(at: now)
+        }
         guard let time, time.isFinite, playing || stoppedItself else {
             lastTime = nil
             since = nil
@@ -420,6 +427,7 @@ public struct FrozenPicture: Equatable, Sendable {
         let step = time - last
         if step > 0.04, step < Self.largestStep {
             moved = true
+            movedSinceStep = true
             reconnecting = false
             since = now
             let from = movingSince ?? now
@@ -434,14 +442,19 @@ public struct FrozenPicture: Equatable, Sendable {
             since = now
             return nil
         }
-        let wait = stoppedItself ? Self.stoppedSeconds : Self.seconds
+        let wait = stoppedItself && movedSinceStep ? Self.stoppedSeconds : Self.seconds
         guard moved, let start = since, now.timeIntervalSince(start) >= wait else { return nil }
+        return nextStep(at: now)
+    }
+
+    private mutating func nextStep(at now: Date) -> Step? {
         guard tries < Self.maxSteps else {
             reconnecting = false
             return nil
         }
         since = now
         tries += 1
+        movedSinceStep = false
         reconnecting = true
         return tries % 2 == 1 ? .reload : .retune
     }

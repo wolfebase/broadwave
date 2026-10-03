@@ -128,3 +128,39 @@ private func play(_ frozen: inout FrozenPicture, from time: Double, seconds: Int
         #expect(frozen.note(time: at, playing: true, at: start.addingTimeInterval(Double(i))) == nil)
     }
 }
+
+/// A reloaded item pauses itself while it starts. That is not the next freeze.
+@Test func aReloadGetsTimeToStart() {
+    var frozen = FrozenPicture()
+    let at = play(&frozen, from: 100, seconds: 5)
+    #expect(frozen.note(time: at, playing: false, stoppedItself: true, at: start.addingTimeInterval(5.5)) == nil)
+    #expect(frozen.note(time: at, playing: false, stoppedItself: true, at: start.addingTimeInterval(6)) == .reload)
+    // The new item opens at the live edge and pauses itself for a few seconds.
+    let edge = at + 20
+    for i in 7 ... 13 {
+        #expect(frozen.note(time: edge, playing: false, stoppedItself: true, at: start.addingTimeInterval(Double(i))) == nil)
+    }
+    // Eight seconds that never start are the next step.
+    #expect(frozen.note(time: edge, playing: false, stoppedItself: true, at: start.addingTimeInterval(15)) == .retune)
+}
+
+@Test func anEndedItemIsAStepAtOnce() {
+    var frozen = FrozenPicture()
+    // It never moved: the sync engine held its first frame when it died.
+    #expect(frozen.note(time: 0, playing: false, at: start) == nil)
+    #expect(frozen.note(time: 0, playing: false, ended: true, at: start.addingTimeInterval(1)) == .reload)
+    #expect(frozen.reconnecting)
+    #expect(frozen.note(time: nil, playing: false, ended: true, at: start.addingTimeInterval(2)) == .retune)
+}
+
+@Test func aReloadThatPlaysGetsTheShortWaitBack() {
+    var frozen = FrozenPicture()
+    var at = play(&frozen, from: 100, seconds: 5)
+    _ = frozen.note(time: at, playing: false, stoppedItself: true, at: start.addingTimeInterval(5.5))
+    #expect(frozen.note(time: at, playing: false, stoppedItself: true, at: start.addingTimeInterval(6)) == .reload)
+    at += 20
+    #expect(frozen.note(time: at, playing: true, at: start.addingTimeInterval(7)) == nil)
+    #expect(frozen.note(time: at + 1, playing: true, at: start.addingTimeInterval(8)) == nil)
+    #expect(frozen.note(time: at + 1, playing: false, stoppedItself: true, at: start.addingTimeInterval(8.5)) == nil)
+    #expect(frozen.note(time: at + 1, playing: false, stoppedItself: true, at: start.addingTimeInterval(9)) == .retune)
+}
