@@ -1884,3 +1884,19 @@ func TestAGroupAfterAShortKeyframeClosesWhenItArrives(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestLongGroupsNamesTheChannel(t *testing.T) {
+	long, short := t.TempDir(), t.TempDir()
+	for dir, dur := range map[string]int64{long: 216216, short: 90090} {
+		if err := writePacked(dir, []byte("init"), []packedSeg{{name: "seg00000.m4s", dur: dur}}, nil, 0, true, false, &playlistCeiling{}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := &Hub{channels: map[int64]*feed{
+		9: {renditions: map[string]*rendition{"1080": {dir: long}}},
+		5: {renditions: map[string]*rendition{"1080": {dir: short}}},
+	}}
+	if !h.LongGroups(9) || h.LongGroups(5) || h.LongGroups(4) {
+		t.Fatalf("long groups: 9 %v, 5 %v, 4 %v", h.LongGroups(9), h.LongGroups(5), h.LongGroups(4))
+	}
+}

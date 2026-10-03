@@ -1442,6 +1442,27 @@ func usesPipe(args []string) bool {
 	return false
 }
 
+// LongGroups reports a channel whose station sends groups of pictures past
+// longGroup. Its playlists advertise a 4 s target, and AVPlayer holds back
+// three targets from their live edge.
+func (h *Hub) LongGroups(channelID int64) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	f := h.channels[channelID]
+	if f == nil {
+		return false
+	}
+	for _, r := range f.renditions {
+		if r == nil {
+			continue
+		}
+		if _, ok := longGroups.Load(r.dir); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // EarliestMedia is the newest first-frame program time (Unix ms) among the
 // channel's encodes. A fresh tune is a few seconds old. One that has been
 // running keeps its original first frame, which is older than the latency target.
