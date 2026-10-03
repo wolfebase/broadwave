@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.5 — 2026-10-03
+
+### Fixed
+
+- On an ATSC 3.0 channel, an iPhone, iPad, or Apple TV could sit a tenth of a second or more off the other screens in the room and never catch up. The channel's first segment ran four seconds long while the sound started, which kept Apple players far from live for as long as it was listed.
+- The preview picture for an ATSC 3.0 channel timed out every minute and logged an error.
+- Switching the sound track in a browser no longer counts the cancelled download as a player error.
+
 ## 0.12.4 — 2026-10-02
 
 ### Fixed
