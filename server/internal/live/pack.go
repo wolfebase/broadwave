@@ -1000,9 +1000,20 @@ func fragmentIndependent(seg []byte, track uint32) bool {
 func firstSampleFlags(tfhd, trun []byte) (uint32, bool) {
 	if len(trun) >= 8 {
 		trFlags := uint32(trun[1])<<16 | uint32(trun[2])<<8 | uint32(trun[3])
+		off := 8
+		if trFlags&0x1 != 0 {
+			off += 4
+		}
 		if trFlags&0x4 != 0 {
-			off := 8
-			if trFlags&0x1 != 0 {
+			if off+4 <= len(trun) {
+				return binary.BigEndian.Uint32(trun[off : off+4]), true
+			}
+		} else if trFlags&0x400 != 0 && binary.BigEndian.Uint32(trun[4:8]) > 0 {
+			// The first sample's own flags, after its duration and size.
+			if trFlags&0x100 != 0 {
+				off += 4
+			}
+			if trFlags&0x200 != 0 {
 				off += 4
 			}
 			if off+4 <= len(trun) {

@@ -721,6 +721,14 @@ func (r *trackRun) build(dataOff int64) []byte {
 // hls.js anchors its timeline on whichever track starts first while the
 // playlist dates the first picture, so a lead there paused and then seeked
 // every new screen. A layout other than ffmpeg's comes back unchanged.
+//
+// It also drops the groups of pictures that end before the sound starts.
+// delay_moov holds the first fragment until every track has a sample, so
+// sound that starts late (AC-4 converted on a 3.0 channel, about 4 s after
+// the picture) makes it several groups long. That one segment sets the
+// playlist's target duration, and AVPlayer's hold-back with it, for as long
+// as it is listed: 15 s instead of 6 s, which kept Apple screens from
+// reaching their room.
 func trimLeadIn(frag []byte, video uint32, scales map[uint32]uint32) []byte {
 	top := boxes(frag)
 	if len(top) != 2 || top[0].kind != "moof" || top[1].kind != "mdat" ||
@@ -746,17 +754,62 @@ func trimLeadIn(frag []byte, video uint32, scales map[uint32]uint32) []byte {
 		}
 	}
 	vs := scales[video]
-	var picture int64 = -1
-	for i := range runs {
-		if runs[i].id == video && len(runs[i].samples) > 0 {
-			picture = runs[i].decodeTime() + runs[i].cts(runs[i].samples[0])
-		}
-	}
-	if picture < 0 || vs == 0 {
+	if vs == 0 {
 		return frag
 	}
 	type cut struct{ at, n int64 }
 	var cuts []cut
+	drop := func(r *trackRun, k int, at int64) {
+		var n int64
+		for _, s := range r.samples[:k] {
+			n += r.sampleSize(s)
+		}
+		cuts = append(cuts, cut{r.dataOff, n})
+		r.samples = r.samples[k:]
+		if r.tfdt[0] == 1 && len(r.tfdt) >= 12 {
+			r.tfdt = binary.BigEndian.AppendUint64(append([]byte{}, r.tfdt[:4]...), uint64(at))
+		} else {
+			r.tfdt = binary.BigEndian.AppendUint32(append([]byte{}, r.tfdt[:4]...), uint32(at))
+		}
+		r.dataOff += n
+		if r.flags&0x4 != 0 {
+			r.first = r.samples[0].flags
+		}
+	}
+	sound := int64(-1)
+	for i := range runs {
+		r := &runs[i]
+		if scale := scales[r.id]; r.id != video && scale != 0 && len(r.samples) > 0 {
+			at := (r.decodeTime() + r.cts(r.samples[0])) * int64(vs) / int64(scale)
+			if sound < 0 || at < sound {
+				sound = at
+			}
+		}
+	}
+	var picture int64 = -1
+	for i := range runs {
+		r := &runs[i]
+		if r.id != video || len(r.samples) == 0 {
+			continue
+		}
+		// Only per-sample flags say where the later groups start.
+		if sound >= 0 && r.flags&0x400 != 0 {
+			at, from, fromAt := r.decodeTime(), 0, int64(0)
+			for k, s := range r.samples {
+				if k > 0 && s.flags&0x10000 == 0 && at+r.cts(s) <= sound {
+					from, fromAt = k, at
+				}
+				at += r.sampleDur(s)
+			}
+			if from > 0 {
+				drop(r, from, fromAt)
+			}
+		}
+		picture = r.decodeTime() + r.cts(r.samples[0])
+	}
+	if picture < 0 {
+		return frag
+	}
 	for i := range runs {
 		r := &runs[i]
 		scale := scales[r.id]
@@ -764,23 +817,14 @@ func trimLeadIn(frag []byte, video uint32, scales map[uint32]uint32) []byte {
 			continue
 		}
 		before := picture * int64(scale) / int64(vs)
-		at, drop, k := r.decodeTime(), int64(0), 0
+		at, k := r.decodeTime(), 0
 		for k < len(r.samples)-1 && at+r.cts(r.samples[k]) < before {
 			at += r.sampleDur(r.samples[k])
-			drop += r.sampleSize(r.samples[k])
 			k++
 		}
-		if k == 0 {
-			continue
+		if k > 0 {
+			drop(r, k, at)
 		}
-		cuts = append(cuts, cut{r.dataOff, drop})
-		r.samples = r.samples[k:]
-		if r.tfdt[0] == 1 && len(r.tfdt) >= 12 {
-			r.tfdt = binary.BigEndian.AppendUint64(append([]byte{}, r.tfdt[:4]...), uint64(at))
-		} else {
-			r.tfdt = binary.BigEndian.AppendUint32(append([]byte{}, r.tfdt[:4]...), uint32(at))
-		}
-		r.dataOff += drop
 	}
 	if len(cuts) == 0 {
 		return frag

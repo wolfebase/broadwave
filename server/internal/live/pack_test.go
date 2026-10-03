@@ -1158,12 +1158,14 @@ func TestFlattenEditsLeavesOddInitsAlone(t *testing.T) {
 // testRun is one traf of a synthetic fragment: its samples' durations and
 // payloads, and the flags ffmpeg would write.
 type testRun struct {
-	id         uint32
-	tfdt       uint64
-	tfdtV0     bool
-	cts        uint32
-	durs       []uint32
-	data       [][]byte
+	id     uint32
+	tfdt   uint64
+	tfdtV0 bool
+	cts    uint32
+	durs   []uint32
+	data   [][]byte
+	// flags, when set, are written per sample.
+	flags      []uint32
 	tfhdFlags  uint32
 	noOffset   bool
 	extraChild bool
@@ -1186,6 +1188,9 @@ func testFragment(runs []testRun, order []int) []byte {
 			if r.noOffset {
 				flags &^= 0x1
 			}
+			if r.flags != nil {
+				flags |= 0x400
+			}
 			trun := []byte{0, byte(flags >> 16), byte(flags >> 8), byte(flags)}
 			trun = binary.BigEndian.AppendUint32(trun, uint32(len(r.durs)))
 			if !r.noOffset {
@@ -1198,6 +1203,9 @@ func testFragment(runs []testRun, order []int) []byte {
 				}
 				trun = binary.BigEndian.AppendUint32(trun, r.durs[j])
 				trun = binary.BigEndian.AppendUint32(trun, uint32(len(r.data[j])))
+				if r.flags != nil {
+					trun = binary.BigEndian.AppendUint32(trun, r.flags[j])
+				}
 				trun = binary.BigEndian.AppendUint32(trun, cts)
 			}
 			traf := append(append(mp4Box("tfhd", tfhd), mp4Box("tfdt", tfdt)...), mp4Box("trun", trun)...)
@@ -1268,6 +1276,86 @@ func TestTrimLeadInDropsSoundBeforeThePicture(t *testing.T) {
 				t.Errorf("%s v0=%v: fragment is %d bytes, want %d", name, v0, len(out), len(in)-15)
 			}
 		}
+	}
+}
+
+// lateSound is a first fragment as delay_moov writes it when the sound
+// starts late: groups of 30 frames from 0 s and sound from soundAt (48 kHz).
+func lateSound(groups int, soundAt uint64) []testRun {
+	v := testRun{id: 1, tfhdFlags: 0x20000 | 0x38}
+	for g := 0; g < groups; g++ {
+		for f := 0; f < 30; f++ {
+			flags := uint32(0x10000)
+			if f == 0 {
+				flags = 0
+			}
+			v.durs = append(v.durs, 3003)
+			v.flags = append(v.flags, flags)
+			v.data = append(v.data, []byte{byte('A' + g)})
+		}
+	}
+	return []testRun{v, {id: 2, tfdt: soundAt, durs: []uint32{1536, 1536}, data: [][]byte{[]byte("s"), []byte("t")}, tfhdFlags: 0x20000 | 0x38}}
+}
+
+func TestTrimLeadInDropsPictureGroupsBeforeTheSound(t *testing.T) {
+	scales := map[uint32]uint32{1: 90000, 2: 48000}
+	for _, c := range []struct {
+		name    string
+		soundAt uint64
+		keep    int64 // first kept group
+	}{
+		{"sound in the last group", 172800, 3},  // 3.6 s
+		{"sound in the third group", 120000, 2}, // 2.5 s
+		{"sound on a group's first frame", 48048 * 2, 2},
+		{"sound in the first group", 24000, 0},
+	} {
+		for name, order := range map[string][]int{"video data first": {0, 1}, "sound data first": {1, 0}} {
+			in := testFragment(lateSound(4, c.soundAt), order)
+			got := runData(t, trimLeadIn(in, 1, scales))
+			want := ""
+			for g := c.keep; g < 4; g++ {
+				want += strings.Repeat(string(rune('A'+g)), 30)
+			}
+			if got[1] != [2]any{c.keep * 90090, want} {
+				t.Errorf("%s, %s: picture %v, want from group %d", c.name, name, got[1], c.keep)
+			}
+			if got[2] != [2]any{int64(c.soundAt), "st"} {
+				t.Errorf("%s, %s: sound changed: %v", c.name, name, got[2])
+			}
+		}
+	}
+	// Without per-sample flags the later groups are unknown.
+	runs := lateSound(4, 172800)
+	runs[0].flags = nil
+	in := testFragment(runs, []int{0, 1})
+	if out := trimLeadIn(in, 1, scales); !bytes.Equal(out, in) {
+		t.Error("a fragment without sample flags changed")
+	}
+}
+
+// One long first segment set the playlist's target duration, and AVPlayer's
+// hold-back with it, for the whole 90 min it stayed listed.
+func TestLateSoundLeavesTheFirstSegmentOneGroupLong(t *testing.T) {
+	dir := t.TempDir()
+	raw := initWith(trakBox(1, 90000, "vide", nil), trakBox(2, 48000, "soun", nil))
+	raw = append(raw, testFragment(lateSound(4, 172800), []int{0, 1})...)
+	for g := int64(4); g < 8; g++ {
+		runs := lateSound(1, uint64(g*48048))
+		runs[0].tfdt = uint64(g * 90090)
+		raw = append(raw, testFragment(runs, []int{0, 1})...)
+	}
+	if err := Pack(dir, bytes.NewReader(raw), nil); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(b, []byte("#EXT-X-TARGETDURATION:2\n")) || !bytes.Contains(b, []byte("HOLD-BACK=6.000")) {
+		t.Errorf("want a 2 s target and 6 s hold-back:\n%s", b)
+	}
+	if first := strings.SplitN(strings.SplitN(string(b), "#EXTINF:", 2)[1], ",", 2)[0]; first != "1.001" {
+		t.Errorf("first segment %s s, want 1.001", first)
 	}
 }
 
