@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.10 — 2026-10-03
+
+### Fixed
+
+- An iPhone, iPad, or Apple TV now plays a channel whose station sends a keyframe only every two seconds or more. It used to stay on "Still tuning" and then say the picture stopped: the playlist's target duration grew as longer groups arrived, and Apple's player drops a stream when that changes. The target is now set once, with room for the longest group.
+- An Apple screen on such a channel no longer drifts a few hundred milliseconds behind the other screens. Its room plays 20 seconds behind live instead of 16, where the player can still speed up to catch up.
+
 ## 0.12.9 — 2026-10-03
 
 ### Fixed
