@@ -2,6 +2,7 @@ package live
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -21,7 +22,20 @@ const (
 	// away. -skip_frame nokey does not decode the frames in between, so the
 	// wait is not a busy core. Anything longer is stopped.
 	frameGrabLimit = 4 * time.Second
+	// Every program on a mux waits for its own keyframe, so the grab ends on
+	// the slowest one: five programs on one 1.0 mux took 3.8-4.8 s.
+	frameGrabPerProgram = time.Second
+	frameGrabMax        = 10 * time.Second
 )
+
+// grabLimit is how long a grab for these jobs may run.
+func grabLimit(jobs []FrameJob) time.Duration {
+	limit := frameGrabLimit
+	if len(jobs) > 1 {
+		limit += time.Duration(len(jobs)-1) * frameGrabPerProgram
+	}
+	return min(limit, frameGrabMax)
+}
 
 // FrameJob is one program on an already-tuned mux.
 type FrameJob struct {
@@ -120,7 +134,7 @@ func (h *Hub) watchFrames(ctx context.Context, m *mux) {
 		case now := <-timer.C:
 			if FrameDue(last, now) {
 				if err := h.grabFrames(ctx, m); err != nil {
-					slog.Error(fmt.Sprintf("frames freq %d: %v", m.freq, err))
+					slog.Warn(fmt.Sprintf("frames freq %d: %v", m.freq, err))
 				} else {
 					last = now
 				}
@@ -168,7 +182,7 @@ func (h *Hub) grabFrames(ctx context.Context, m *mux) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	grabCtx, cancel := context.WithTimeout(ctx, frameGrabLimit)
+	grabCtx, cancel := context.WithTimeout(ctx, grabLimit(jobs))
 	defer cancel()
 	pr, pw := io.Pipe()
 	sub := h.attachPipeLocked(m, pw)
@@ -184,20 +198,34 @@ func (h *Hub) grabFrames(ctx context.Context, m *mux) error {
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	err := cmd.Run()
+	var missing []int64
 	for _, job := range jobs {
-		publishFrame(dir, job.ChannelID)
+		if job.ChannelID > 0 && !publishFrame(dir, job.ChannelID) {
+			missing = append(missing, job.ChannelID)
+		}
 	}
-	return err
+	// ffmpeg can be stopped after the last still is written; that grab worked.
+	if len(missing) == 0 {
+		return nil
+	}
+	if err == nil {
+		err = errors.New("no keyframe")
+	}
+	return fmt.Errorf("channels %v: %w", missing, err)
 }
 
-func publishFrame(dir string, channelID int64) {
+// publishFrame reports whether both sizes landed.
+func publishFrame(dir string, channelID int64) bool {
+	ok := true
 	for _, name := range []string{fmt.Sprintf("%d.jpg", channelID), fmt.Sprintf("%d-1280.jpg", channelID)} {
 		part := filepath.Join(dir, name+".part")
 		info, err := os.Stat(part)
 		if err != nil || info.Size() == 0 {
 			_ = os.Remove(part)
+			ok = false
 			continue
 		}
 		_ = os.Rename(part, filepath.Join(dir, name))
 	}
+	return ok
 }
