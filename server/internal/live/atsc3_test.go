@@ -915,6 +915,74 @@ func TestALateScanLearnsALinksAC4(t *testing.T) {
 	}
 }
 
+// The late scan learns a link's picture with its sound, so the rebuilt encode
+// of an HEVC + AC-4 program reads through the program pipe and starts on a
+// PAT. Fed mid-stream, ffmpeg probes 8 MB (~13 s) for the AC-4 tracks.
+func TestALateScanStartsA3Point0LinkOnItsTables(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "ffmpeg")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := New(nil, dir, script, "libx264")
+	h.NoAC4 = true
+	t.Cleanup(func() { lockHub(h)() })
+	h.mu.Lock()
+	m := &mux{freq: 1, tuner: -1, feeds: map[string]*feed{}, cancel: func() {}}
+	h.muxes[m.freq] = m
+	f := h.addFeedLocked(m, store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "801", DeviceID: "src-1"}})
+	r, err := h.ensureRenditionLocked(f, Rendition{Video: "1080", Audio: "aac2"})
+	h.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := r.spec.Key()
+	pmt := []byte{0x00, 0x03, 0xc1, 0x00, 0x00, 0xe1, 0x00, 0xf0, 0x00,
+		streamHEVC, 0xe1, 0x00, 0xf0, 0x00,
+		streamPriv, 0xe1, 0x01, 0xf0, 0x06, 0x05, 0x04, 'A', 'C', '-', '4',
+	}
+	ts := tsPacket(0, true, psiSection(0x00, append([]byte{0x00, 0x01, 0xc1, 0x00, 0x00}, progPID(3, 0x1000)...)))
+	ts = append(ts, tsPacket(0x1000, true, psiSection(0x02, pmt))...)
+	data := hevcFixture(t)
+	for off := 0; off+188 <= len(data); off += 188 {
+		if pkt := data[off : off+188]; int(pkt[1]&0x1f)<<8|int(pkt[2]) == 0x100 {
+			ts = append(ts, pkt...)
+		}
+	}
+	h.finishScan(m, f, &scanBuf{wake: make(chan struct{}, 1), b: ts}, nil)
+
+	now := h.Current(1, old)
+	h.mu.Lock()
+	moved := f.renditions[now]
+	piped := moved != nil && moved.filter != nil
+	h.mu.Unlock()
+	if now == old || !piped {
+		t.Fatalf("old %s now %s through the program pipe %v", old, now, piped)
+	}
+}
+
+// A silent encode of an AC-4 program probes 2 MB, not 8: without a decoder the
+// AC-4 tracks never get their parameters, and the probe could read ~13 s.
+func TestASilentAC4EncodeProbesOnlyThePicture(t *testing.T) {
+	probe := func(audio string, want Rendition) string {
+		args := renditionArgs(0, Source{VideoCodec: "HEVC", AudioCodec: audio}, want, "libx264", "", "pipe:0")
+		i := slices.Index(args, "-probesize")
+		return args[i+1]
+	}
+	if got := probe("AC4", Rendition{Video: "1080", Audio: "none"}); got != "2000000" {
+		t.Fatalf("silent AC-4 transcode: %s", got)
+	}
+	if got := probe("AC4", Rendition{Video: "copy", Audio: "none"}); got != "2000000" {
+		t.Fatalf("silent AC-4 copy: %s", got)
+	}
+	if got := probe("AC4", Rendition{Video: "1080", Audio: "aac2"}); got != "8000000" {
+		t.Fatalf("voiced AC-4: %s", got)
+	}
+	if got := probe("AC3", Rendition{Video: "1080", Audio: "none"}); got != "8000000" {
+		t.Fatalf("silent AC-3: %s", got)
+	}
+}
+
 // A 3.0 recording plays its picture alone on an ffmpeg with no AC-4 decoder,
 // and its playlist is made again once ffmpeg has one.
 func TestASilentRecordingLeavesOutItsSound(t *testing.T) {
