@@ -37,6 +37,35 @@ func TestClassifyNamesEveryFamily(t *testing.T) {
 	}
 }
 
+// Only Intel's fixed-function encoder was measured to hold more pictures
+// than its single-encode speed suggests.
+func TestAFixedFunctionIntelEncoderHoldsSixPictures(t *testing.T) {
+	UseLowPower("h264_vaapi")
+	defer UseLowPower()
+	cases := []struct {
+		name    string
+		class   string
+		encoder string
+		speed   float64
+		tiles   int
+	}{
+		{"intel low power at 6.6x", "intel-vaapi", "h264_vaapi", 6.6, 6},
+		{"intel low power at 3x", "intel-vaapi", "h264_vaapi", 3, 2},
+		{"amd vaapi at 6.6x", "amd-vaapi", "h264_vaapi", 6.6, 4},
+		{"intel software at 6.6x", "software", "libx264", 6.6, 4},
+		{"intel low power unmeasured", "intel-vaapi", "h264_vaapi", 0, 2},
+	}
+	for _, c := range cases {
+		if got := budgetFor(c.class, c.encoder, c.speed).Tiles; got != c.tiles {
+			t.Errorf("%s: %d pictures, want %d", c.name, got, c.tiles)
+		}
+	}
+	UseLowPower()
+	if got := budgetFor("intel-vaapi", "h264_vaapi", 6.6).Tiles; got != 4 {
+		t.Errorf("the shader encoder at 6.6x: %d pictures, want 4", got)
+	}
+}
+
 func TestBudgetCoversEveryHost(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -73,17 +102,17 @@ func TestBudgetCoversEveryHost(t *testing.T) {
 func TestHostLine(t *testing.T) {
 	fast := Budget("intel-vaapi", 5.4)
 	fast.Encoder = "h264_vaapi"
-	if got := fast.Line(); got != "Intel GPU found: 1080p60 at 5.4x real time. 720p60 on a large tile, 4 tiles." {
+	if got := fast.Line(); got != "Intel GPU found: 1080p60 at 5.4x real time. 720p60 on a large tile, 4 pictures at once." {
 		t.Fatalf("fast: %q", got)
 	}
 	slow := Budget("software", 0.4)
 	slow.Encoder = "libx264"
-	if got := slow.Line(); got != "Software encoder: 1080p60 at 0.4x real time. Picture up to 540p. 360p on a large tile, 1 tile." {
+	if got := slow.Line(); got != "Software encoder: 1080p60 at 0.4x real time. Picture up to 540p. 360p on a large tile, one picture at a time." {
 		t.Fatalf("slow: %q", got)
 	}
 	plain := Budget("software", 0)
 	plain.Encoder = "libx264"
-	if got := plain.Line(); got != "Software encoder. Picture up to 540p. 360p on a large tile, 1 tile." {
+	if got := plain.Line(); got != "Software encoder. Picture up to 540p. 360p on a large tile, one picture at a time." {
 		t.Fatalf("unmeasured: %q", got)
 	}
 }
