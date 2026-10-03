@@ -44,7 +44,7 @@ func (s *Server) decide(ctx context.Context, body watchBody) (live.Decision, boo
 		return live.Decision{}, false, err
 	}
 	if forced, chosen := live.ParseRenditionKey(body.Rendition); chosen {
-		return live.Decision{Rendition: forced, Reason: "Chosen in the player"}, true, nil
+		return s.unvoiced(src, live.Decision{Rendition: forced, Reason: "Chosen in the player"}), true, nil
 	}
 	caps, prefs := live.LegacyCaps(body.Profile, body.Audio, body.Picture)
 	if body.Caps != nil {
@@ -53,7 +53,20 @@ func (s *Server) decide(ctx context.Context, body watchBody) (live.Decision, boo
 	if prefs.Picture == "" {
 		_, prefs.Picture, _ = s.playbackChoice(ctx, 0, "")
 	}
-	return live.DecideFor(src, caps, prefs, s.Hub.Encoder, s.Hub.Host), false, nil
+	return s.unvoiced(src, live.DecideFor(src, caps, prefs, s.Hub.Encoder, s.Hub.Host)), false, nil
+}
+
+// unvoiced plays an AC-4 channel's picture alone on an ffmpeg that cannot
+// decode its sound, as the hub will, and says why.
+func (s *Server) unvoiced(src live.Source, d live.Decision) live.Decision {
+	if !s.Hub.NoAC4 {
+		return d
+	}
+	if r := live.Unvoiced(src.AudioCodec, d.Rendition); r != d.Rendition {
+		d.Rendition = r
+		d.Reason = "No sound: this server's ffmpeg can't decode ATSC 3.0 sound (AC-4)."
+	}
+	return d
 }
 
 func (s *Server) watch(w http.ResponseWriter, r *http.Request) {

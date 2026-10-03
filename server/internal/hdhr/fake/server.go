@@ -60,6 +60,9 @@ type Server struct {
 	// at the end. Each loop is a real backwards timestamp break, as a station
 	// splice is; Source hides that because ffmpeg renumbers a looped file.
 	Raw bool
+	// TS3, when set, plays on the ATSC 3.0 rows (a capture with HEVC and
+	// AC-4) the way TS plays on the others. Unset, those rows send a marker.
+	TS3 string
 	// Source, when set, is a TS file played at its own pace on a loop, keeping
 	// its content. Realtime otherwise streams a generated test pattern.
 	Source string
@@ -670,7 +673,7 @@ func (s *Server) streamLegacy(w http.ResponseWriter, r *http.Request) {
 		s.pump(w, number, stdout, stop, r.Context().Done())
 		return
 	}
-	s.loopFile(w, number, stop, r.Context().Done())
+	s.loopFile(w, number, s.TS, stop, r.Context().Done())
 }
 
 func (s *Server) streamAllocated(w http.ResponseWriter, r *http.Request) {
@@ -726,9 +729,9 @@ func (s *Server) streamAllocated(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case transcode != "":
 		pkt = markerPacket("AVC", "AAC")
-	case ch.Video == "HEVC":
+	case ch.Video == "HEVC" && s.TS3 == "":
 		pkt = markerPacket("HEVC", "AC-4")
-	case s.TS == "":
+	case s.TS == "" && ch.Video != "HEVC":
 		pkt = markerPacket("MPEG2", "AC3")
 	}
 	done := r.Context().Done()
@@ -736,7 +739,11 @@ func (s *Server) streamAllocated(w http.ResponseWriter, r *http.Request) {
 		s.loopPacket(w, ch.Number, pkt, stop, done)
 		return
 	}
-	s.loopFile(w, ch.Number, stop, done)
+	file := s.TS
+	if ch.Video == "HEVC" {
+		file = s.TS3
+	}
+	s.loopFile(w, ch.Number, file, stop, done)
 }
 
 func (s *Server) allocate(forced int, ch Channel) (int, chan struct{}, string) {
@@ -954,8 +961,8 @@ func stopped(stop, done <-chan struct{}) bool {
 	return false
 }
 
-func (s *Server) loopFile(w http.ResponseWriter, number string, stop, done <-chan struct{}) {
-	f, err := os.Open(s.TS)
+func (s *Server) loopFile(w http.ResponseWriter, number, file string, stop, done <-chan struct{}) {
+	f, err := os.Open(file)
 	if err != nil {
 		http.Error(w, "no sample", http.StatusNotFound)
 		return

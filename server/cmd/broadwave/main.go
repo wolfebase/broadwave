@@ -133,6 +133,9 @@ func main() {
 	}
 	live.Reap(work)
 	hub := live.New(st, work, ffmpegPath, encoder)
+	if hub.NoAC4 = live.MissingAC4(ffmpegPath); hub.NoAC4 {
+		slog.Warn("ffmpeg has no AC-4 decoder: ATSC 3.0 channels play without sound (the Docker image's ffmpeg has one)")
+	}
 	hub.Host = host
 	hub.Buffer = time.Hour
 	// Other sound tracks ride in each full-size encode, so a player can pick

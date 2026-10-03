@@ -18,6 +18,8 @@ func main() {
 	source5 := flag.String("source5", "", "TS file for 5.x channels; -source plays the others")
 	raw := flag.Bool("raw", false, "play -ts byte for byte at its own pace, so each loop is a real timestamp break")
 	quad := flag.Bool("quad", false, "add 5.2 beside 5.1 so four channels share two tuners")
+	ts3 := flag.String("ts3", "", "MPEG-TS capture with HEVC and AC-4 for the ATSC 3.0 rows of -profile FLEX-4K")
+	profile := flag.String("profile", "", "device to act as, such as FLEX-4K (adds ATSC 3.0 rows); empty is the original two-tuner fake")
 	flag.Parse()
 	if *ts == "" {
 		fmt.Fprintln(os.Stderr, "need -ts")
@@ -27,7 +29,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "-raw plays -ts on its own; drop -realtime and -source")
 		os.Exit(2)
 	}
-	srv := &fake.Server{TS: *ts, Realtime: *realtime, Raw: *raw, Source: *source, Source5: *source5}
+	srv := &fake.Server{TS: *ts, Realtime: *realtime, Raw: *raw, Source: *source, Source5: *source5, Profile: *profile, TS3: *ts3}
 	if *quad {
 		srv.Channels = fake.QuadLineup()
 	}
