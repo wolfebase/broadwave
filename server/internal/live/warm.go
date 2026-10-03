@@ -27,16 +27,28 @@ func (h *Hub) Warm(ctx context.Context, channelID int64, want Rendition, alterna
 	h.mu.Lock()
 	f := h.channels[ch.ID]
 	untuned := f == nil && (ch.FrequencyHz <= 0 || h.muxes[ch.FrequencyHz] == nil)
+	if untuned && h.opening[ch.ID] != nil {
+		h.mu.Unlock()
+		return false, nil
+	}
+	// Only a picture sent as broadcast is cheap enough to start on a guess.
+	opener := untuned && want.Video == "copy"
+	if opener {
+		h.beginOpenLocked(ch.ID)
+	}
 	h.mu.Unlock()
 	var opened *autoGuess
-	// Only a picture sent as broadcast is cheap enough to start on a guess.
-	if untuned && want.Video == "copy" {
-		if opened = h.openAuto(ctx, ch, true); opened == nil {
-			return false, nil
-		}
+	if opener {
+		opened = h.openAuto(ctx, ch, true)
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if opener {
+		h.endOpenLocked(ch.ID)
+		if opened == nil {
+			return false, nil
+		}
+	}
 	f = h.channels[ch.ID]
 	if opened != nil {
 		if f != nil {

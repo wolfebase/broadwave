@@ -663,3 +663,69 @@ func TestA3Point0WatchLeavesTheHubFreeWhileTheDeviceAnswers(t *testing.T) {
 		t.Fatalf("no 3.0 tuner was free and the one left a moment ago was kept: %v (%v)", err, fetchGuides(t, base))
 	}
 }
+
+// Viewers who open 3.0 channels at the same moment share a tune per channel.
+// Two watches of one channel each opened the device stream, so that channel
+// held both 3.0 tuners until one let go, and a third viewer found every
+// tuner busy.
+func TestViewersOpening3Point0ChannelsTogetherShareATune(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	st := openStore(t)
+	srv := &fake.Server{Profile: fake.ProfileFlex4K, TuneDelay: 800 * time.Millisecond, TunesFirst: true, Channels: []fake.Channel{
+		{Number: "4.1", Name: "KBWV", Freq: 593000000},
+		{Number: "104.1", Name: "KBWV", Freq: 599000000, Video: "HEVC", Audio: "AC-4", ATSC3: true},
+		{Number: "106.1", Name: "WTST", Freq: 611000000, Video: "HEVC", Audio: "AC-4", ATSC3: true},
+	}}
+	base, control, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(srv.Close)
+	t.Setenv("HDHR_CONTROL_PORT", control)
+	ctx := context.Background()
+	dev, err := (&hdhr.Client{}).FetchDevice(ctx, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lineup, err := (&hdhr.Client{}).FetchLineup(ctx, dev.LineupURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertDevice(ctx, dev, lineup); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"104.1", "106.1"} {
+		if err := st.SetFieldOrder(ctx, sourceByNumber(t, st, n).ID, "progressive"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := New(st, t.TempDir(), "ffmpeg", "libx264")
+	t.Cleanup(h.Shutdown)
+	first, second := sourceByNumber(t, st, "104.1"), sourceByNumber(t, st, "106.1")
+	asks := []struct {
+		id   int64
+		want Rendition
+	}{
+		{first.ID, Rendition{Video: "copy", Audio: "aac2"}},
+		{first.ID, Rendition{Video: "copy", Audio: "none"}},
+		{second.ID, Rendition{Video: "copy", Audio: "aac2"}},
+	}
+	errs := make(chan error, len(asks))
+	for _, a := range asks {
+		// The other channel's viewer comes while the device still answers.
+		if a.id == second.ID {
+			time.Sleep(300 * time.Millisecond)
+		}
+		go func() {
+			_, err := h.Watch(ctx, a.id, a.want, false)
+			errs <- err
+		}()
+	}
+	for range asks {
+		if err := <-errs; err != nil {
+			t.Fatalf("a viewer was refused: %v (%v)", err, fetchGuides(t, base))
+		}
+	}
+}

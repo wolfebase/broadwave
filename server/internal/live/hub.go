@@ -165,7 +165,11 @@ type Hub struct {
 	muxes    map[int]*mux
 	channels map[int64]*feed
 	reserved map[int]bool
-	hold     int
+	// opening holds a channel whose device stream is being opened outside
+	// h.mu. Another watch of it waits for that open instead of taking a
+	// second tuner, which would leave a third viewer with none.
+	opening map[int64]chan struct{}
+	hold    int
 	// statusDown is when a device whose status read failed is asked again.
 	statusDown map[string]time.Time
 	next       int
@@ -466,16 +470,31 @@ func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition, altern
 		return Session{}, last
 	}
 	var auto *autoGuess
+	opener := false
 	if res == nil {
 		h.mu.Lock()
 		_, tuned := h.channels[ch.ID]
+		wait := h.opening[ch.ID]
+		if !tuned && wait == nil {
+			h.beginOpenLocked(ch.ID)
+			opener = true
+		}
 		h.mu.Unlock()
-		if !tuned {
+		if opener {
 			auto = h.openAuto(ctx, ch, false)
+		} else if wait != nil {
+			select {
+			case <-wait:
+			case <-ctx.Done():
+				return Session{}, ctx.Err()
+			}
 		}
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if opener {
+		h.endOpenLocked(ch.ID)
+	}
 	f := h.channels[ch.ID]
 	if auto != nil {
 		if f != nil {
@@ -718,6 +737,23 @@ func (h *Hub) openAutoLocked(ch store.SourceChannel, root, host string, last []T
 		return nil, err
 	}
 	return h.attachAutoLocked(ch, &autoGuess{body: res.Body, host: host, url: streamURL, began: began, status: status, answered: time.Now()}), nil
+}
+
+// beginOpenLocked marks a channel's device stream as being opened.
+func (h *Hub) beginOpenLocked(id int64) {
+	if h.opening == nil {
+		h.opening = map[int64]chan struct{}{}
+	}
+	h.opening[id] = make(chan struct{})
+}
+
+// endOpenLocked lets the watches waiting on that open in. They take h.mu
+// after the caller and find the feed it attached.
+func (h *Hub) endOpenLocked(id int64) {
+	if c := h.opening[id]; c != nil {
+		close(c)
+		delete(h.opening, id)
+	}
 }
 
 func (h *Hub) autoURL(ch store.SourceChannel, root string) string {
