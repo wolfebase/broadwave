@@ -339,7 +339,8 @@ export function useLiveStream(
           attached = true;
           mark = Number.NaN;
           hls.on(Hls.Events.ERROR, (_e, data) => {
-            video.dataset.hlsError = `${data.type}:${data.details}${data.fatal ? ":fatal" : ""}`;
+            // hls.js cancels a fragment it no longer needs, as on a sound switch.
+            if (data.details !== Hls.ErrorDetails.INTERNAL_ABORTED) video.dataset.hlsError = `${data.type}:${data.details}${data.fatal ? ":fatal" : ""}`;
             if (!data.fatal) return;
             if (resumeQuiet) {
               // One media error from the stale buffer is expected; anything
