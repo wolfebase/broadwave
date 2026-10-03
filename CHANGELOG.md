@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.12.8 — 2026-10-03
+
+### Fixed
+
+- A multiview tile of a 60-frame channel no longer waits at the live edge every few minutes. The tile kept only every other frame and lost the broadcast's keyframes with them, so its segments ran up to 4 seconds long.
+- A freshly tuned multiview tile no longer freezes for 2 seconds just after it starts. It now starts a little further back, so its first moving picture comes about 2 seconds later.
+- Starring the hidden half of a 1.0/3.0 pair now stars the channel on the guide.
+- An iPhone, iPad, or Apple TV no longer logs a bandwidth warning on every segment of a 1080 encode. Playlists declare each encode's peak rate and its average.
+
+### Changed
+
+- On Intel's low-power GPU encoder, the server runs six pictures at once instead of four, so a quad fits beside two full screens. Diagnostics says how many pictures fit.
+- Diagnostics says the 720p picture goes to a large multiview tile. Quad tiles are 360p.
+
 ## 0.12.7 — 2026-10-03
 
 ### Fixed
