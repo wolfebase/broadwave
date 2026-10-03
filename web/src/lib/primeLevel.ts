@@ -44,6 +44,7 @@ export async function primeLevel(master: string, signal?: AbortSignal): Promise<
   if (urls.size !== 1) return null;
   const [levelUrl] = urls;
   const level = await load(levelUrl, signal);
+  level.data = openPartsOnly(level.data);
   const details = M3U8Parser.parseLevelPlaylist(level.data, levelUrl, 0, PlaylistLevelType.MAIN, 0, null);
   if (!details.live) return null;
   const frags = details.fragments.map((f) => ({ start: f.start, duration: f.duration, programDateTime: f.programDateTime }));
@@ -59,9 +60,43 @@ export async function primeLevel(master: string, signal?: AbortSignal): Promise<
   };
 }
 
+/**
+ * The server lists a recent segment's parts before it, as LL-HLS asks, and
+ * AVPlayer needs them. hls.js 1.7 mis-times a playlist that ends on such a
+ * segment with nothing open after it, then rejects the next playlist and stops
+ * loading. It played whole segments and the open segment's parts before, so
+ * those are all it gets.
+ */
+export function openPartsOnly(text: string): string {
+  if (!text.includes("#EXT-X-PART:")) return text;
+  const lines = text.split("\n");
+  let last = -1;
+  lines.forEach((line, i) => {
+    if (line && !line.startsWith("#")) last = i;
+  });
+  return lines.filter((line, i) => i > last || !line.startsWith("#EXT-X-PART:")).join("\n");
+}
+
+/** hls.js's playlist loader, with each playlist passed through openPartsOnly. */
+export function livePlaylistLoader(): HlsConfig["pLoader"] {
+  const Base = Hls.DefaultConfig.loader;
+  class OpenPartsLoader extends Base {
+    load(context: LoaderContext, config: LoaderConfiguration, callbacks: LoaderCallbacks<LoaderContext>) {
+      super.load(context, config, {
+        ...callbacks,
+        onSuccess: (response, stats, ctx, details) => {
+          if (typeof response.data === "string") response.data = openPartsOnly(response.data);
+          callbacks.onSuccess(response, stats, ctx, details);
+        },
+      });
+    }
+  }
+  return OpenPartsLoader as unknown as HlsConfig["pLoader"];
+}
+
 /** A playlist loader that answers each primed URL once from its body and fetches the rest. */
 export function primedLoader(primed: Primed): HlsConfig["pLoader"] {
-  const Base = Hls.DefaultConfig.loader;
+  const Base = livePlaylistLoader() as unknown as typeof Hls.DefaultConfig.loader;
   class PrimedLoader implements Loader<LoaderContext> {
     private inner: Loader<LoaderContext> | null = null;
     private own = new LoadStats();

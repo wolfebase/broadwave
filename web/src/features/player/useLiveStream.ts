@@ -2,7 +2,7 @@ import Hls from "hls.js";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { getDeviceHealth, getSignals, getTuners, stopWatch, warmChannel, watchChannel, type ApiFailure } from "../../api";
 import { events } from "../../lib/events";
-import { masterConfig, primeLevel } from "../../lib/primeLevel";
+import { livePlaylistLoader, masterConfig, primeLevel } from "../../lib/primeLevel";
 import { startOnRoom, SyncEngine, type SyncStatus } from "../../lib/sync";
 import type { Caps, Channel, Prefs, WatchSession } from "../../types";
 import { liveHlsConfig, type BufferProfile } from "../../picture";
@@ -329,7 +329,7 @@ export function useLiveStream(
         playlist = next.playlist;
         if (Hls.isSupported()) {
           const onRoom = syncing.current && !holdSync.current ? roomRef.current : null;
-          hls = new Hls({ ...liveHlsConfig(profile), ...(primedLevel ? masterConfig(primedLevel, soundFor(primedLevel.sounds, track)) : {}), autoStartLoad: !onRoom });
+          hls = new Hls({ ...liveHlsConfig(profile), pLoader: livePlaylistLoader(), ...(primedLevel ? masterConfig(primedLevel, soundFor(primedLevel.sounds, track)) : {}), autoStartLoad: !onRoom });
           hlsRef.current = hls;
           (video as HTMLVideoElement & { hls?: Hls }).hls = hls;
           if (onRoom) startOnRoom(hls, video, onRoom, 800, primedLevel?.frags);
