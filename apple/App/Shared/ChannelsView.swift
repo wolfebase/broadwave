@@ -117,6 +117,11 @@ struct ChannelEditView: View {
     @State private var number: String
     @State private var match: String
     @State private var error = ""
+    #if os(tvOS)
+        /// The sidebar stays open over a pushed page until something in that page has focus.
+        @FocusState private var lead: Lead?
+        private enum Lead: Hashable { case choice, first }
+    #endif
     let saved: (Channel) -> Void
 
     init(channel: Channel, saved: @escaping (Channel) -> Void) {
@@ -150,7 +155,7 @@ struct ChannelEditView: View {
                 }
             } else {
                 Section {
-                    toggle("Favorite", \.favorite) { ChannelPatch(favorite: $0) }
+                    toggle("Favorite", \.favorite, focus: channel.twinId == nil) { ChannelPatch(favorite: $0) }
                     if !demo {
                         toggle("On the guide", \.enabled) { ChannelPatch(enabled: $0) }
                     }
@@ -169,6 +174,10 @@ struct ChannelEditView: View {
                         Text("1.0 only").tag("atsc1")
                         Text("Both").tag("both")
                     }
+                    .accessibilityIdentifier("twin-choice")
+                    #if os(tvOS)
+                        .focused($lead, equals: .choice)
+                    #endif
                 } footer: {
                     Text("This station broadcasts in ATSC 1.0 and 3.0. Both share one guide.")
                 }
@@ -196,10 +205,25 @@ struct ChannelEditView: View {
         #endif
         .navigationTitle(channel.displayName)
         .onDisappear { commitText() }
+        #if os(tvOS)
+            .onAppear { claimLead() }
+            .task {
+                // The sidebar takes focus on the same turn a page appears and clears a focus set then.
+                try? await Task.sleep(for: .milliseconds(200))
+                claimLead()
+            }
+        #endif
     }
 
-    private func toggle(_ title: String, _ key: WritableKeyPath<Channel, Bool>, _ patch: @escaping (Bool) -> ChannelPatch) -> some View {
-        Toggle(title, isOn: Binding(
+    #if os(tvOS)
+        private func claimLead() {
+            lead = channel.twinId == nil ? .first : .choice
+        }
+    #endif
+
+    @ViewBuilder
+    private func toggle(_ title: String, _ key: WritableKeyPath<Channel, Bool>, focus: Bool = false, _ patch: @escaping (Bool) -> ChannelPatch) -> some View {
+        let control = Toggle(title, isOn: Binding(
             get: { channel[keyPath: key] },
             set: { on in
                 let before = channel
@@ -207,6 +231,15 @@ struct ChannelEditView: View {
                 Task { await save(patch(on), revert: before) }
             }
         ))
+        #if os(tvOS)
+            if focus {
+                control.focused($lead, equals: .first)
+            } else {
+                control
+            }
+        #else
+            control
+        #endif
     }
 
     private func commitText() {

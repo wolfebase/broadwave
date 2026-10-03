@@ -138,6 +138,38 @@ public extension Channel {
     }
 }
 
+/// Which channel to play when a viewer picks a row, including an encrypted 3.0 station.
+public struct PlaybackChoice: Equatable, Sendable {
+    public var channel: Channel
+    /// Set when the row was an encrypted 3.0 station and the clear broadcast plays instead.
+    public var note: String?
+
+    public init(channel: Channel, note: String? = nil) {
+        self.channel = channel
+        self.note = note
+    }
+}
+
+public enum ClearBroadcast {
+    public static let encryptedNote = "The 3.0 version is encrypted. Showing the regular broadcast."
+
+    /// A channel on the guide plays as itself. An encrypted 3.0 station plays its clear 1.0 twin.
+    /// A hidden half of a 1.0/3.0 pair plays as the half that is on the guide.
+    public static func play(id: Int64, visible: [Channel], lineup: [Channel]) -> PlaybackChoice? {
+        if let shown = visible.first(where: { $0.id == id }) {
+            return PlaybackChoice(channel: shown)
+        }
+        guard let asked = lineup.first(where: { $0.id == id }) else { return nil }
+        if let twin = asked.playsAs, let clear = visible.first(where: { $0.id == twin }) {
+            return PlaybackChoice(channel: clear, note: encryptedNote)
+        }
+        if asked.protected != true, let twin = asked.twinId, let other = visible.first(where: { $0.id == twin }) {
+            return PlaybackChoice(channel: other)
+        }
+        return nil
+    }
+}
+
 /// Where the guide grid starts: the half hour before the one `now` is in, so the
 /// program on the air and the now line are always on screen.
 /// `Calendar.date(bySetting:)` searches forward, so it would pick the next half hour.

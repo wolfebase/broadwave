@@ -51,12 +51,18 @@ public struct ATSC3Tag: View {
 
     public var body: some View {
         Text("3.0")
-            .font(.caption2.weight(.bold))
+        #if os(tvOS)
+            // Caption is the smallest size that still reads across a room.
+            .font(.body.weight(.bold))
+        #else
+            .font(.caption.weight(.bold))
+        #endif
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 5)
+            .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(.white.opacity(0.12), in: .rect(cornerRadius: Tokens.Radius.xs))
             .accessibilityLabel("ATSC 3.0")
+            .accessibilityIdentifier("atsc3-tag")
     }
 }
 
@@ -155,8 +161,13 @@ public struct NowCard: View {
                 }
                 .accessibilityHidden(true)
             }
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(channel.displayNumber).font(.title2.weight(.heavy)).monospacedDigit()
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(channel.displayNumber).font(.title2.weight(.heavy)).monospacedDigit()
+                    if channel.isATSC3 {
+                        ATSC3Tag()
+                    }
+                }
                 Text(channel.displayName).font(.footnote.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
             }
             Text(airing?.title ?? "No listing")
@@ -185,11 +196,14 @@ public struct NowCard: View {
     }
 
     private static func spoken(_ channel: Channel, _ airing: Airing?) -> String {
+        let station = channel.isATSC3
+            ? "\(channel.displayNumber) \(channel.displayName), ATSC 3.0"
+            : "\(channel.displayNumber) \(channel.displayName)"
         let title = airing?.title ?? "No listing"
         if title == channel.displayName {
-            return "\(channel.displayNumber) \(channel.displayName)"
+            return station
         }
-        return "\(channel.displayNumber) \(channel.displayName), \(title)"
+        return "\(station), \(title)"
     }
 }
 
@@ -214,10 +228,15 @@ public struct OnNowRow: View {
         HStack(spacing: 14) {
             RoundedRectangle(cornerRadius: 2).fill(kind.color).frame(width: 3)
             VStack(alignment: .leading, spacing: 2) {
-                Text(channel.displayNumber).font(.headline.weight(.heavy)).monospacedDigit()
+                HStack(spacing: 6) {
+                    Text(channel.displayNumber).font(.headline.weight(.heavy)).monospacedDigit()
+                    if channel.isATSC3 {
+                        ATSC3Tag()
+                    }
+                }
                 Text(channel.displayName).font(.caption.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
             }
-            .frame(width: 84, alignment: .leading)
+            .frame(minWidth: 84, alignment: .leading)
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     if recording {

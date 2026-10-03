@@ -341,10 +341,9 @@ struct RootView: View {
                 if store.channels.isEmpty {
                     await store.refresh()
                 }
-                if let channel = store.channels.first(where: { $0.id == id }) {
-                    nowPlaying.play(channel)
-                } else if let channel = await clearTwin(of: id) {
-                    nowPlaying.play(channel, note: "The 3.0 version is encrypted. Showing the regular broadcast.")
+                let lineup = await (try? store.api?.allChannels()) ?? store.channels
+                if let choice = ClearBroadcast.play(id: id, visible: store.channels, lineup: lineup) {
+                    nowPlaying.play(choice.channel, note: choice.note)
                 }
             }
         case "guide": show(.guide)
@@ -353,13 +352,6 @@ struct RootView: View {
         case "recordings": show(.recordings)
         default: show(.home)
         }
-    }
-
-    /// The station's clear 1.0 channel that an encrypted 3.0 channel plays as.
-    private func clearTwin(of id: Int64) async -> Channel? {
-        guard let all = try? await store.api?.allChannels() else { return nil }
-        guard let twin = all.first(where: { $0.id == id })?.playsAs else { return nil }
-        return store.channels.first { $0.id == twin }
     }
 
     /// A page link closes the player, which would otherwise cover the page.
