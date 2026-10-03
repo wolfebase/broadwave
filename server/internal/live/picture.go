@@ -294,6 +294,34 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 	return vf
 }
 
+// lowPower holds the VAAPI encoders that run on the GPU's fixed-function
+// (low-power) encoder. It is set once at startup. See UseLowPower.
+var lowPower = map[string]bool{}
+
+// UseLowPower moves these VAAPI encoders to the fixed-function encoder. The
+// normal one runs on the shader cores that Plex and Jellyfin transcode and
+// tone-map on: with three 4K transcodes beside it on a UHD 770, a 1080i
+// channel fell to 1.4x and slowed them by 29%; low-power held 3.7x and slowed
+// them by 4%.
+func UseLowPower(encoders ...string) {
+	lowPower = map[string]bool{}
+	for _, e := range encoders {
+		lowPower[e] = true
+	}
+}
+
+// LowPower reports whether live H.264 encodes use the fixed-function encoder.
+func LowPower() bool { return lowPower["h264_vaapi"] }
+
+// vaapiPower is the encoder choice. Low-power drops B-frames without an
+// error, so it asks for none.
+func vaapiPower(encoder string) []string {
+	if lowPower[encoder] {
+		return []string{"-bf", "0", "-low_power", "1"}
+	}
+	return []string{"-bf", "2", "-low_power", "0"}
+}
+
 func videoCodec(encoder, rate string, gop int) []string {
 	buf := twice(rate)
 	g := strconv.Itoa(gop)
@@ -303,14 +331,13 @@ func videoCodec(encoder, rate string, gop int) []string {
 	case "h264_qsv":
 		return []string{"-c:v", "h264_qsv", "-preset", "veryfast", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
 	case "h264_vaapi":
-		// UHD 770 keeps B-frames with the normal encoder. Low-power rejects them.
 		// The packed-header buffer is 1024 bytes. An OTA caption SEI overflows it
 		// ("Access unit too large", errno 28) and the encoder exits. Same as HEVC.
-		return []string{"-c:v", "h264_vaapi", "-sei", "0", "-rc_mode", "VBR", "-profile:v", "high", "-bf", "2", "-low_power", "0", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
+		return append([]string{"-c:v", "h264_vaapi", "-sei", "0", "-rc_mode", "VBR", "-profile:v", "high"}, append(vaapiPower("h264_vaapi"), "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g)...)
 	case "hevc_vaapi":
 		// The packed-header buffer is 1024 bytes. An OTA caption SEI overflows it
 		// ("Access unit too large: 8192 < N", errno 28) and the encoder exits.
-		return []string{"-c:v", "hevc_vaapi", "-sei", "0", "-rc_mode", "VBR", "-profile:v", "main", "-bf", "2", "-low_power", "0", "-tag:v", "hvc1", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g}
+		return append([]string{"-c:v", "hevc_vaapi", "-sei", "0", "-rc_mode", "VBR", "-profile:v", "main"}, append(vaapiPower("hevc_vaapi"), "-tag:v", "hvc1", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g)...)
 	case "hevc_videotoolbox":
 		return []string{"-c:v", "hevc_videotoolbox", "-realtime", "1", "-tag:v", "hvc1", "-b:v", rate, "-maxrate", rate, "-bufsize", buf, "-g", g, "-profile:v", "main"}
 	case "libx265":

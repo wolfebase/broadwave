@@ -95,13 +95,18 @@ func main() {
 	if choice == "software" {
 		encoder = "libx264"
 	}
+	live.UseLowPower(live.ProbeLowPower(ffmpegPath, encoder)...)
 	var host live.Host
 	if os.Getenv("BROADWAVE_BENCH") != "0" {
 		// A home server's GPU is shared: Plex, Jellyfin, and Channels DVR
 		// transcode on the same iGPU, and under their load a 1080i channel
 		// encoded at 0.75x real time and every screen ran dry. A CPU that
 		// holds a live 1080i encode with room to spare takes live TV off it.
-		if encoder != "libx264" && choice != "gpu" {
+		// A fixed-function encoder is not what they share, so it stays.
+		if live.LowPower() {
+			slog.Info("encoder: live TV runs on the GPU's low-power encoder, which other apps' transcodes do not slow")
+		}
+		if encoder != "libx264" && choice != "gpu" && !live.LowPower() {
 			// Four seconds of picture at 2.5x take under two. A CPU still going
 			// at eight is far too slow, and startup does not wait for it.
 			swCtx, swCancel := context.WithTimeout(context.Background(), 8*time.Second)
