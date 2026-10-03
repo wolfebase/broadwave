@@ -271,3 +271,37 @@ func TestVideoToolboxIsRealtime(t *testing.T) {
 		t.Fatalf("videotoolbox args: %s", line)
 	}
 }
+
+func TestLowPowerVAAPIDropsBFrames(t *testing.T) {
+	src := Source{VideoCodec: "MPEG2", AudioCodec: "AC3", HD: true}
+	r := Rendition{Video: "1080", Audio: "aac2"}
+	for _, enc := range []string{"h264_vaapi", "hevc_vaapi"} {
+		line := strings.Join(RenditionArgs(0, src, r, enc, "motion_adaptive"), " ")
+		if !strings.Contains(line, "-bf 2 -low_power 0") {
+			t.Fatalf("%s without low power keeps B-frames on the normal encoder: %s", enc, line)
+		}
+		UseLowPower("h264_vaapi", "hevc_vaapi")
+		line = strings.Join(RenditionArgs(0, src, r, enc, "motion_adaptive"), " ")
+		bench := strings.Join(benchArgs(enc), " ")
+		UseLowPower()
+		if !strings.Contains(line, "-bf 0 -low_power 1") {
+			t.Fatalf("%s on low power asks for no B-frames: %s", enc, line)
+		}
+		if !strings.Contains(bench, "-low_power 1") {
+			t.Fatalf("%s bench measures the encoder live TV uses: %s", enc, bench)
+		}
+	}
+	UseLowPower("h264_vaapi", "hevc_vaapi")
+	line := strings.Join(RenditionArgs(0, src, r, "libx264", ""), " ")
+	UseLowPower()
+	if strings.Contains(line, "low_power") {
+		t.Fatalf("software encodes take no low_power: %s", line)
+	}
+	// A chip with low-power H.264 but not HEVC keeps HEVC on the normal encoder.
+	UseLowPower("h264_vaapi")
+	hevc := strings.Join(RenditionArgs(0, src, r, "hevc_vaapi", "motion_adaptive"), " ")
+	UseLowPower()
+	if !strings.Contains(hevc, "-bf 2 -low_power 0") {
+		t.Fatalf("hevc without its own low-power encoder stays on the normal one: %s", hevc)
+	}
+}

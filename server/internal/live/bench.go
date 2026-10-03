@@ -266,12 +266,12 @@ func benchArgs(encoder string) []string {
 	input := []string{"-hide_banner", "-nostdin", "-f", "lavfi", "-i", src}
 	switch {
 	case vaapiFamily(encoder):
-		return []string{
+		return append([]string{
 			"-hide_banner", "-nostdin",
 			"-init_hw_device", "vaapi=va:/dev/dri/renderD128", "-filter_hw_device", "va",
 			"-f", "lavfi", "-i", src,
-			"-vf", "format=nv12,hwupload", "-c:v", encoder, "-f", "null", "-",
-		}
+			"-vf", "format=nv12,hwupload", "-c:v", encoder,
+		}, append(vaapiPower(encoder), "-f", "null", "-")...)
 	case strings.Contains(encoder, "videotoolbox"), encoder == "h264_nvenc", encoder == "h264_qsv", encoder == "hevc_qsv":
 		return append(input, "-pix_fmt", "yuv420p", "-c:v", encoder, "-f", "null", "-")
 	default:
