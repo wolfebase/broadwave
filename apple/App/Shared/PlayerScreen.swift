@@ -2195,6 +2195,27 @@ struct RecordingPlayerScreen: View {
         source = .recording(recording)
     }
 
+    #if DEBUG
+        private static let log = Logger(subsystem: "com.wolfeup.broadwave", category: "play")
+
+        /// Simulator testing: -BroadwaveSyncLog 1 logs the file player once a second,
+        /// and -BroadwaveRecordingSeek <seconds> seeks there 20 s in, as a viewer would.
+        private func debugReport(_ ticks: Int) {
+            guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog"), ticks % 4 == 0, let item = player.currentItem else { return }
+            let seekTo = UserDefaults.standard.double(forKey: "BroadwaveRecordingSeek")
+            if seekTo > 0, ticks == 80 {
+                player.seek(to: CMTime(seconds: seekTo, preferredTimescale: 600))
+            }
+            let events = item.accessLog()?.events ?? []
+            let stalls = events.reduce(0) { $0 + max(0, $1.numberOfStalls) }
+            let dropped = events.reduce(0) { $0 + max(0, $1.numberOfDroppedVideoFrames) }
+            let time = player.currentTime().seconds, rate = player.rate, tc = player.timeControlStatus.rawValue
+            let size = item.presentationSize, status = item.status.rawValue
+            let err = item.errorLog()?.events.last?.errorComment ?? "-"
+            Self.log.notice("file t=\(time) rate=\(rate) tc=\(tc) item=\(status) stalls=\(stalls) dropped=\(dropped) size=\(Int(size.width))x\(Int(size.height)) err=\(err, privacy: .public)")
+        }
+    #endif
+
     init(channel: VirtualChannel) {
         source = .library(channel)
     }
@@ -2223,8 +2244,15 @@ struct RecordingPlayerScreen: View {
         #endif
             .task(id: index) {
                 guard await load() else { return }
+                #if DEBUG
+                    var ticks = 0
+                #endif
                 while await (try? Task.sleep(for: .milliseconds(250))) != nil {
                     await followBreaks()
+                    #if DEBUG
+                        ticks += 1
+                        debugReport(ticks)
+                    #endif
                 }
             }
             .task(id: noteCount) {

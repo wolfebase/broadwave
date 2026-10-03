@@ -108,6 +108,14 @@ struct RecordingsView: View {
                 async let recordings: Void = store.refreshRecordings()
                 async let channels: Void = store.refreshVirtuals()
                 _ = await (recordings, channels)
+                #if DEBUG && os(tvOS)
+                    // Simulator testing: -BroadwaveTab recordings -BroadwaveRecording <id>
+                    // opens it as Select would; simctl cannot press Select.
+                    let id = Int64(UserDefaults.standard.integer(forKey: "BroadwaveRecording"))
+                    if id > 0, playing == nil {
+                        playing = store.recordings.first { $0.id == id }
+                    }
+                #endif
             }
     }
 
