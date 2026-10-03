@@ -87,7 +87,8 @@ func ProbeHEVC(ffmpeg, encoder string) bool {
 
 // ProbeLowPower returns the VAAPI encoders of this family that run on the
 // GPU's fixed-function encoder (Intel VDEnc). Drivers without it refuse
-// low_power, and older Intel chips have it for H.264 but not HEVC.
+// low_power, and older Intel chips have it for H.264 but not HEVC. The test
+// picture is 320x240: a UHD 770 refuses low-power HEVC at 160x120.
 func ProbeLowPower(ffmpeg, encoder string) []string {
 	if !vaapiFamily(encoder) || ffmpeg == "" {
 		return nil
@@ -97,7 +98,7 @@ func ProbeLowPower(ffmpeg, encoder string) []string {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		cmd := exec.CommandContext(ctx, ffmpeg, "-hide_banner", "-loglevel", "error",
 			"-init_hw_device", "vaapi=va:/dev/dri/renderD128", "-filter_hw_device", "va",
-			"-f", "lavfi", "-i", "testsrc=size=160x120:rate=30:duration=0.2",
+			"-f", "lavfi", "-i", "testsrc=size=320x240:rate=30:duration=0.2",
 			"-vf", "format=nv12,hwupload", "-c:v", name, "-low_power", "1", "-bf", "0", "-f", "null", "-")
 		if cmd.Run() == nil {
 			found = append(found, name)
