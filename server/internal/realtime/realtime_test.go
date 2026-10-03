@@ -196,8 +196,8 @@ func TestGroupRoomPauseSeekLive(t *testing.T) {
 		t.Fatalf("play resumes from the paused frame, got %v want %v", got, paused+10000)
 	}
 	st, _ = r.Apply("group:den", Command{Action: "seek", MediaTime: unixMS(*now) + 60000})
-	if st.AnchorMedia > unixMS(now.Add(-6*time.Second)) {
-		t.Fatal("seeking past the live edge is clamped")
+	if st.AnchorMedia != unixMS(now.Add(-16*time.Second)) {
+		t.Fatalf("seeking past the live edge stops where Live goes: %+v", st)
 	}
 	st, _ = r.Apply("group:den", Command{Action: "live"})
 	if st.AnchorMedia != unixMS(now.Add(-16*time.Second)) || st.Rate != 1 {
@@ -689,6 +689,10 @@ func TestFloorOnlyMovesARoomCloserToLive(t *testing.T) {
 	}
 	if st, _ := r.Floor("group:ch9", "stable"); st.Target(unixMS(start)) != back {
 		t.Fatalf("a rewound room kept its place, got target %v want %v", st.Target(unixMS(start)), back)
+	}
+	// Once floored, a seek toward live stops at the floor, not at lowest.
+	if st, _ := r.Apply("group:ch9", Command{Action: "seek", MediaTime: unixMS(start)}); st.AnchorMedia != liveAnchor(start, "stable") {
+		t.Fatalf("a floored room's seek should stop at stable, got %+v", st)
 	}
 	// A room paused closer to live than an Apple screen reaches holds a frame
 	// it cannot show, so it moves back too, still paused.

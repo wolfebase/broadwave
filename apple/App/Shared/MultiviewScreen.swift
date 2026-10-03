@@ -318,6 +318,12 @@ final class TilePlayer {
     var viewerPaused = false
     private var stuckSince: Date?
     private var lastReplay: Date?
+    private var deadSince: Date?
+    private var primed = false
+    private var endedItem: ObjectIdentifier?
+    private var endWatch: Task<Void, Never>?
+    private var reloads = 0
+    private var tileTuning = false
     /// A watch started while the old picture played on, for the next start to use.
     private var preparedSession: WatchSession?
     private var rewatch: (() async throws -> WatchSession)?
@@ -357,6 +363,9 @@ final class TilePlayer {
         holdPicture = false
         stuckSince = nil
         lastReplay = nil
+        deadSince = nil
+        primed = false
+        reloads = 0
         await stop(endPicture: !quiet)
         guard !Task.isCancelled, token == startToken else { return }
         guard let api = store.api else { return }
@@ -411,8 +420,10 @@ final class TilePlayer {
             detail = session.stream.reason
             let item = AVPlayerItem(url: api.url(session.playlist))
             let tile = prefs.quality == .tile || prefs.quality == .tile360
+            tileTuning = tile
             PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: tile)
             player.replaceCurrentItem(with: item)
+            watchEnd(item)
             frameOnScreen.ready = false
             // The first segment has to paint. Waiting for an 8s buffer, then
             // pausing until the room's older anchor, leaves this layer black.
@@ -553,6 +564,14 @@ final class TilePlayer {
     private func replayIfStuck() {
         let item = player.currentItem
         let now = Date()
+        let buffered = RestartHandoff.bufferedAhead(player)
+        if buffered >= 0.5 {
+            primed = true
+        }
+        // A tile that locked again has earned its reloads back.
+        if sync?.state == .locked {
+            reloads = 0
+        }
         var snap = TilePlaybackSnap()
         snap.syncWaiting = sync?.state == .waiting
         snap.rate = Double(player.rate)
@@ -560,6 +579,25 @@ final class TilePlayer {
         snap.hasItem = item != nil
         snap.waitingToPlay = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
         snap.viewerPaused = viewerPaused
+        snap.buffered = buffered
+        snap.primed = primed
+        snap.ended = item.map(ObjectIdentifier.init) == endedItem && endedItem != nil
+        snap.reloads = reloads
+        if TilePlayback.isDead(snap) {
+            let since = deadSince ?? now
+            deadSince = since
+            snap.deadFor = now.timeIntervalSince(since)
+        } else {
+            deadSince = nil
+        }
+        if TilePlayback.shouldReload(snap) {
+            reloadItem()
+            return
+        }
+        // Out of reloads, the picture is stopped and the outage clock says so.
+        if TilePlayback.isDead(snap), snap.deadFor >= TilePlayback.wait(snap) {
+            outage.fail(OutageDecision(message: PlaybackOutage.pictureStopped, recovery: nil))
+        }
         guard TilePlayback.isStuck(snap) else {
             stuckSince = nil
             return
@@ -579,6 +617,41 @@ final class TilePlayer {
         player.play()
         guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog"), let id = channelID else { return }
         Self.tileLog.notice("tile replay channel=\(id, privacy: .public)")
+    }
+
+    /// The same watch on a fresh item, which AVPlayer opens at the live edge.
+    /// The sync engine follows the player, so it places the new item itself.
+    private func reloadItem() {
+        guard let api, let session else { return }
+        reloads += 1
+        deadSince = nil
+        primed = false
+        stuckSince = nil
+        let item = AVPlayerItem(url: api.url(session.playlist))
+        PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: tileTuning)
+        // Through nil, as start() does: the layer's ready flag only reports a
+        // change, and the engine waits for it.
+        player.replaceCurrentItem(with: nil)
+        frameOnScreen.ready = false
+        player.replaceCurrentItem(with: item)
+        watchEnd(item)
+        player.automaticallyWaitsToMinimizeStalling = false
+        player.playImmediately(atRate: 1)
+        let id = channelID ?? 0
+        Self.tileLog.notice("tile reload channel=\(id, privacy: .public)")
+    }
+
+    private func watchEnd(_ item: AVPlayerItem) {
+        endedItem = nil
+        endWatch?.cancel()
+        let id = ObjectIdentifier(item)
+        endWatch = Task { [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: AVPlayerItem.failedToPlayToEndTimeNotification, object: item) {
+                self?.endedItem = id
+                let channel = self?.channelID ?? 0
+                Self.tileLog.notice("tile item ended channel=\(channel, privacy: .public)")
+            }
+        }
     }
 
     private func sampleOutage() {
@@ -696,6 +769,9 @@ final class TilePlayer {
     func stop(endPicture: Bool = true) async {
         outageLoop?.cancel()
         outageLoop = nil
+        endWatch?.cancel()
+        endWatch = nil
+        endedItem = nil
         if endPicture {
             outage.reset()
             holdPicture = false

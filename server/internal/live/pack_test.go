@@ -944,6 +944,76 @@ func TestALongGroupStationStartsLongNextTime(t *testing.T) {
 	}
 }
 
+// A watch of 9.1 on one device, served by its twin row on another, joins a
+// room under the asked ID. The long-group mark has to reach that room.
+func TestALongGroupMarkReachesTheTwinAViewerAskedFor(t *testing.T) {
+	h := &Hub{channels: map[int64]*feed{
+		9: {channel: store.SourceChannel{Channel: store.Channel{ID: 9, GuideNumber: "9.1"}}},
+	}}
+	found := make(chan int64, 4)
+	h.OnLongGroups = func(id int64) { found <- id }
+	row := func(id int64, long bool) store.SourceChannel {
+		return store.SourceChannel{Channel: store.Channel{ID: id, GuideNumber: "9.1"}, LongGroups: long}
+	}
+	h.serve(row(19, false), row(9, false))
+	h.serve(row(5, false), row(5, false))
+	gate := newPlaylistGate()
+	h.seedLong(h.channels[9], gate)
+	var hold playlistCeiling
+	var closed []packedSeg
+	dir := t.TempDir()
+	for i, dur := range []int64{111111, 216216, 216216, 216216} {
+		closed = append(closed, packedSeg{name: fmt.Sprintf("seg%05d.m4s", i), dur: dur})
+		if err := writePacked(dir, []byte("init"), closed, nil, 0, true, false, &hold, gate); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !h.LongGroups(19) || !h.LongGroups(9) || !h.knownLong(19) {
+		t.Fatalf("long groups: asked 19 %v, served 9 %v", h.LongGroups(19), h.LongGroups(9))
+	}
+	got := map[int64]bool{}
+	for range 2 {
+		select {
+		case id := <-found:
+			got[id] = true
+		case <-time.After(2 * time.Second):
+			t.Fatalf("rooms told: %v", got)
+		}
+	}
+	if !got[9] || !got[19] {
+		t.Fatalf("rooms told: %v", got)
+	}
+	// Asked on its own device again, 19 is its own feed, not tuned yet.
+	h.serve(row(19, false), row(19, false))
+	if h.LongGroups(19) {
+		t.Fatal("19 is not tuned on its own device")
+	}
+	if got := h.Twins(9); len(got) != 1 {
+		t.Fatalf("19 is no longer served by 9: %v", got)
+	}
+}
+
+// A mark already in the catalog never reaches a verdict that changes, so a
+// twin has to take it when the watch picks its row.
+func TestATwinTakesALongGroupMarkTheCatalogHas(t *testing.T) {
+	h := &Hub{}
+	row := func(id int64, long bool) store.SourceChannel {
+		return store.SourceChannel{Channel: store.Channel{ID: id, GuideNumber: "9.1"}, LongGroups: long}
+	}
+	h.serve(row(19, false), row(9, true))
+	if !h.knownLong(19) || !h.knownLong(9) {
+		t.Fatalf("served by a marked row: 19 %v, 9 %v", h.knownLong(19), h.knownLong(9))
+	}
+	h.serve(row(29, true), row(39, false))
+	if !h.knownLong(39) {
+		t.Fatal("a marked asked row should seed the row that plays it")
+	}
+	h.serve(row(49, false), row(59, false))
+	if h.knownLong(49) || h.knownLong(59) {
+		t.Fatal("no mark, none shared")
+	}
+}
+
 // A multiview tile of the station was a new folder, so its first playlist
 // said 2 s and AVPlayer dropped it at the first long group: "illegal
 // PART-HOLD-BACK change". The catalog keeps what an earlier tune learned.

@@ -58,6 +58,53 @@ private func stuckSnap(_ edit: (inout TilePlaybackSnap) -> Void = { _ in }) -> T
     #expect(!TilePlayback.shouldReplay(stuckSnap { $0.viewerPaused = true }))
 }
 
+private func deadSnap(_ edit: (inout TilePlaybackSnap) -> Void = { _ in }) -> TilePlaybackSnap {
+    var snap = TilePlaybackSnap()
+    snap.syncWaiting = true
+    snap.hasItem = true
+    snap.rate = 1
+    snap.waitingToPlay = true
+    snap.primed = true
+    snap.deadFor = 5
+    edit(&snap)
+    return snap
+}
+
+@Test func aTileThatStoppedFetchingReloads() {
+    #expect(TilePlayback.shouldReload(deadSnap()))
+    #expect(TilePlayback.shouldReload(deadSnap { $0.rate = 0; $0.waitingToPlay = false }))
+    #expect(TilePlayback.isDead(deadSnap { $0.deadFor = 0 }))
+    #expect(!TilePlayback.shouldReload(deadSnap { $0.deadFor = 4.9 }))
+    // A fresh encode that has not sent its first segment is still starting.
+    #expect(!TilePlayback.shouldReload(deadSnap { $0.primed = false }))
+    #expect(!TilePlayback.shouldReload(deadSnap { $0.buffered = 2 }))
+    #expect(!TilePlayback.shouldReload(deadSnap { $0.syncWaiting = false }))
+    #expect(!TilePlayback.shouldReload(deadSnap { $0.itemFailed = true }))
+    #expect(!TilePlayback.shouldReload(deadSnap { $0.viewerPaused = true }))
+    #expect(!TilePlayback.shouldReload(deadSnap { $0.hasItem = false }))
+    #expect(TilePlayback.shouldReload(deadSnap { $0.reloads = 1 }))
+    #expect(!TilePlayback.shouldReload(deadSnap { $0.reloads = TilePlayback.maxReloads }))
+}
+
+/// tvOS posts failedToPlayToEndTime on an item that refused a playlist. It
+/// still lists its buffer, and the sync engine may be holding it.
+@Test func aTileWhoseItemEndedReloadsAtOnce() {
+    let ended = deadSnap {
+        $0.ended = true
+        $0.buffered = 8
+        $0.syncWaiting = false
+        $0.rate = 0
+        $0.waitingToPlay = false
+        $0.deadFor = 1
+    }
+    #expect(TilePlayback.shouldReload(ended))
+    #expect(!TilePlayback.shouldReload(deadSnap { $0.ended = true; $0.buffered = 8; $0.deadFor = 0.9 }))
+    #expect(!TilePlayback.shouldReload(deadSnap { $0.ended = true; $0.viewerPaused = true }))
+    #expect(!TilePlayback.shouldReload(deadSnap { $0.ended = true; $0.itemFailed = true }))
+    // Without the notice, a buffer it still lists is not dead.
+    #expect(!TilePlayback.isDead(deadSnap { $0.buffered = 8 }))
+}
+
 @Test @MainActor func aTileThatJoinsWhilePausedStartsPaused() {
     let commands = TileCommands()
     var heard: [String] = []

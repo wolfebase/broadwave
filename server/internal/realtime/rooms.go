@@ -352,7 +352,9 @@ func (r *Rooms) Apply(room string, c Command) (RoomState, error) {
 	case "play":
 		st.AnchorServer, st.AnchorMedia, st.Rate = nowMS, current, 1
 	case "seek":
-		limit := liveAnchor(now, "lowest")
+		// No closer to live than Live goes. A room floored for an Apple
+		// screen sits where AVPlayer reaches, and lowest is past that.
+		limit := liveAnchor(now, st.Latency)
 		media := c.MediaTime
 		if media > limit {
 			media = limit

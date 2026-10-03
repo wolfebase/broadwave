@@ -53,6 +53,13 @@ public struct TilePlaybackSnap: Equatable, Sendable {
     public var waitingToPlay = false
     public var viewerPaused = false
     public var stuckFor: TimeInterval = 0
+    /// Seconds of media loaded past the playhead, and whether this item ever had any.
+    public var buffered = 0.0
+    public var primed = false
+    /// The item posted failedToPlayToEndTime. It holds media and never plays it.
+    public var ended = false
+    public var deadFor: TimeInterval = 0
+    public var reloads = 0
 
     public init() {}
 }
@@ -67,5 +74,28 @@ public enum TilePlayback {
 
     public static func shouldReplay(_ snap: TilePlaybackSnap) -> Bool {
         isStuck(snap) && snap.stuckFor >= replayAfter
+    }
+
+    public static let reloadAfter: TimeInterval = 5
+    public static let endedAfter: TimeInterval = 1
+    public static let maxReloads = 3
+
+    /// AVPlayer gave up on the item (a playlist it refused, often inside the
+    /// join hold), or it once had media, has none, and the engine has nothing
+    /// to follow. Play alone never opens it again, and a tile that never moved
+    /// never reaches the outage clock, which waits for a picture that played.
+    /// The clock starts here.
+    public static func isDead(_ snap: TilePlaybackSnap) -> Bool {
+        guard snap.hasItem, !snap.itemFailed, !snap.viewerPaused else { return false }
+        return snap.ended || snap.syncWaiting && snap.primed && snap.buffered < 0.5
+    }
+
+    /// A new item opens at the live edge, and the engine places it.
+    public static func shouldReload(_ snap: TilePlaybackSnap) -> Bool {
+        isDead(snap) && snap.deadFor >= wait(snap) && snap.reloads < maxReloads
+    }
+
+    public static func wait(_ snap: TilePlaybackSnap) -> TimeInterval {
+        snap.ended ? endedAfter : reloadAfter
     }
 }
