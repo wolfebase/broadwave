@@ -854,11 +854,72 @@ func TestTargetDurationDoesNotShrink(t *testing.T) {
 			t.Fatalf("a longer part under the pin changed %s:\n%s", tag, grown)
 		}
 	}
-	if text := write(45000, 200000); !strings.Contains(text, "#EXT-X-TARGETDURATION:3\n") || !strings.Contains(text, "PART-TARGET=2.222") {
+	if text := write(45000, 200000); !strings.Contains(text, "#EXT-X-TARGETDURATION:3\n") || !strings.Contains(text, "PART-TARGET=2.999") {
 		t.Fatalf("a longer part raises it:\n%s", text)
 	}
-	if text := write(45000, 45000); !strings.Contains(text, "#EXT-X-TARGETDURATION:3\n") || !strings.Contains(text, "PART-TARGET=2.222") {
+	if text := write(45000, 45000); !strings.Contains(text, "#EXT-X-TARGETDURATION:3\n") || !strings.Contains(text, "PART-TARGET=2.999") {
 		t.Fatalf("it must not shrink:\n%s", text)
+	}
+}
+
+// A station that sends a group of pictures every 2.4 s, and 3.3 s now and
+// then, changed PART-TARGET on three reloads and TARGETDURATION once in its
+// first minute, and AVPlayer dropped the stream at the first change.
+func TestTargetIsSetOnceForLongGroups(t *testing.T) {
+	dir := t.TempDir()
+	var hold playlistCeiling
+	var closed []packedSeg
+	var first string
+	for i, dur := range []int64{213210, 216216, 219219, 252252, 273273, 297297, 216216, 45045} {
+		if err := writePacked(dir, []byte("init"), closed,
+			[]packedPart{{name: fmt.Sprintf("part%05d.m4s", i), dur: dur, sync: true}},
+			0, true, false, &hold, nil); err != nil {
+			t.Fatal(err)
+		}
+		b, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		head := strings.Join(strings.Split(string(b), "\n")[:5], "\n")
+		if first == "" {
+			first = head
+		} else if head != first {
+			t.Fatalf("reload %d changed the header:\n%s\nwas:\n%s", i, head, first)
+		}
+		closed = append(closed, packedSeg{name: fmt.Sprintf("seg%05d.m4s", i), dur: dur})
+	}
+	if !strings.Contains(first, "#EXT-X-TARGETDURATION:4\n") || !strings.Contains(first, "PART-TARGET=3.999") {
+		t.Fatalf("a 2.4 s group needs room for 3.3 s:\n%s", first)
+	}
+}
+
+func TestALongGroupStationStartsLongNextTime(t *testing.T) {
+	dir := t.TempDir()
+	tune := func(groups ...int64) string {
+		t.Helper()
+		var hold playlistCeiling
+		var closed []packedSeg
+		for i, dur := range groups {
+			closed = append(closed, packedSeg{name: fmt.Sprintf("seg%05d.m4s", i), dur: dur})
+			if err := writePacked(dir, []byte("init"), closed, nil, 0, true, false, &hold, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		b, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	// A one-second station, with a short keyframe fragment in front of a
+	// group now and then, stays at two.
+	if text := tune(90090, 105105, 90090); !strings.Contains(text, "#EXT-X-TARGETDURATION:2\n") {
+		t.Fatalf("one-second groups:\n%s", text)
+	}
+	// The first group was cut short, so this tune grew.
+	tune(111111, 216216)
+	if text := tune(111111); !strings.Contains(text, "#EXT-X-TARGETDURATION:4\n") || !strings.Contains(text, "PART-TARGET=3.999") {
+		t.Fatalf("the next tune starts where long groups fit:\n%s", text)
 	}
 }
 
