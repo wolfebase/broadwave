@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.12.7 — 2026-10-03
+
+### Fixed
+
+- A second screen joining an ATSC 3.0 channel that is already playing no longer waits about 12 seconds now and then. ffmpeg held the stream while it worked out the channel's caption track; it now settles that on the first packet. The same wait could hit a 3.0 multiview tile and a 3.0 channel shared to Plex or Jellyfin.
+
+### Changed
+
+- Opening an encrypted ATSC 3.0 channel again shows the note that it plays the station's regular broadcast, not only the first time.
+- On a TV browser, the 3.0 tag stays inside the channel name, the encrypted note sits below the tuning card, and Left and Right change a Settings menu.
+- New page: [ATSC 3.0](docs/atsc3.md).
+
 ## 0.12.6 — 2026-10-03
 
 ### Changed
