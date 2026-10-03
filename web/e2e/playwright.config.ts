@@ -26,7 +26,7 @@ const only = avsync
             : readme
               ? "25-readme\\.spec\\.ts"
               : atsc3
-                ? "3[78]-atsc3"
+                ? "3[789]-atsc3"
                 : "";
 
 export default defineConfig({
@@ -34,7 +34,7 @@ export default defineConfig({
   testMatch: /.*\.spec\.ts/,
   testIgnore: only
     ? new RegExp(`^(?!.*${only}).*$`)
-    : [/08-avsync\.spec\.ts/, /10-tab\.spec\.ts/, /11-break\.spec\.ts/, /13-mvsync\.spec\.ts/, /15-playlist\.spec\.ts/, /19-record\.spec\.ts/, /25-readme\.spec\.ts/, /37-atsc3\.spec\.ts/, /38-atsc3-tv\.spec\.ts/],
+    : [/08-avsync\.spec\.ts/, /10-tab\.spec\.ts/, /11-break\.spec\.ts/, /13-mvsync\.spec\.ts/, /15-playlist\.spec\.ts/, /19-record\.spec\.ts/, /25-readme\.spec\.ts/, /37-atsc3\.spec\.ts/, /38-atsc3-tv\.spec\.ts/, /39-atsc3-mv\.spec\.ts/],
   fullyParallel: false,
   workers: 1,
   retries: 0,
