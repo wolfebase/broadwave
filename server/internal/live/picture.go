@@ -226,10 +226,22 @@ func vaapiDeintMode(g Graph, interlaced bool) string {
 	}
 }
 
+// halfRate brings a 60p picture to fps without losing its keyframes. fps
+// alone keeps every other frame, and a broadcast's groups are mostly 60
+// frames, so all of a stretch's keyframes fell on dropped frames and a tile's
+// groups swung from 0.4 to 4 s. select keeps each keyframe and counts every
+// other frame from it; a 30p picture passes whole.
+func halfRate(fps string) string {
+	return "select='isnan(prev_selected_t)+key+gte(t-prev_selected_t\\,0.025)',fps=" + fps
+}
+
 func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, height int, fps string) string {
 	rate := ""
 	if fps != "" {
 		rate = ",fps=" + fps
+		if smallPicture(g) && g.Mode != "film" {
+			rate = "," + halfRate(fps)
+		}
 	}
 	if g.Mode == "film" && vaapiFamily(g.Encoder) {
 		// pullup recovers hard telecine (no repeat_first_field). Scale and encode stay on the GPU.
@@ -265,7 +277,7 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 			vf += "," + scale
 		}
 		if smallPicture(g) && fps != "" {
-			vf = "fps=" + fps + "," + vf
+			vf = halfRate(fps) + "," + vf
 		}
 		return vf
 	}
