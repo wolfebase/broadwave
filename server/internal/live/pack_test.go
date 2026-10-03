@@ -150,7 +150,9 @@ func TestPackClosesAFinishedGroupBeforeTheNext(t *testing.T) {
 	}
 	// This source's group of pictures is two seconds. Closing it as 0.500
 	// would make the player expect the next group half a second later.
-	if segDur < 1.5 || strings.Contains(playlist, "#EXT-X-PART:") || !strings.Contains(playlist, "CAN-BLOCK-RELOAD=YES") {
+	// A closed segment lists its own parts; nothing is left open after it.
+	openParts := strings.Contains(playlist[strings.LastIndex(playlist, "#EXTINF:"):], "#EXT-X-PART:")
+	if segDur < 1.5 || openParts || !strings.Contains(playlist, "CAN-BLOCK-RELOAD=YES") {
 		t.Fatalf("segment %.3f, playlist:\n%s", segDur, playlist)
 	}
 	fixed := time.Date(2026, 9, 26, 4, 0, 0, 0, time.UTC)
@@ -197,7 +199,7 @@ func TestFinishedGroupClosesBeforeTheNextFragment(t *testing.T) {
 		t.Fatal(err)
 	}
 	playlist := waitPlaylist(t, dir, "#EXTINF:1.000,\nseg00000.m4s\n")
-	if strings.Contains(playlist, "#EXT-X-PART:") {
+	if openParts(playlist) > 0 {
 		t.Fatalf("a one-second group stayed a part:\n%s", playlist)
 	}
 	if _, err := pw.Write(keyframeFragment(90000, 20000)); err != nil {
@@ -540,9 +542,8 @@ func TestTimestampJumpClosesTheSegment(t *testing.T) {
 			t.Fatalf("segment %.3f would stall:\n%s", f, playlist)
 		}
 	}
-	parts, _ := filepath.Glob(filepath.Join(dir, "part*.m4s"))
-	if len(parts) > 4 {
-		t.Fatalf("open segment kept %d parts", len(parts))
+	if n := openParts(playlist); n > 4 {
+		t.Fatalf("open segment kept %d parts", n)
 	}
 	_ = pw.Close()
 	if err := <-packErr; err != nil {
@@ -713,10 +714,17 @@ func TestOpenRunStaysBounded(t *testing.T) {
 	if n < 2 {
 		t.Fatalf("a run with no keyframe stayed one segment:\n%s", pl)
 	}
-	parts, _ := filepath.Glob(filepath.Join(dir, "part*.m4s"))
-	if len(parts) > 6 {
-		t.Fatalf("kept %d parts", len(parts))
+	if n := openParts(pl); n > 6 {
+		t.Fatalf("kept %d parts", n)
 	}
+}
+
+// openParts counts the parts listed after the last closed segment.
+func openParts(playlist string) int {
+	if i := strings.LastIndex(playlist, "#EXTINF:"); i >= 0 {
+		playlist = playlist[i:]
+	}
+	return strings.Count(playlist, "#EXT-X-PART:")
 }
 
 func TestPackRejectsAHugeBox(t *testing.T) {
@@ -1539,7 +1547,7 @@ func TestNoPartIsOneField(t *testing.T) {
 	}
 	write(avFragment(3*group, field, false))
 	write(avFragment(3*group+field, 20000, true))
-	playlist := waitPlaylist(t, dir, "#EXT-X-PART:")
+	playlist := waitPlaylist(t, dir, `URI="part00003.m4s"`)
 	if !strings.Contains(playlist, "#EXT-X-PART:DURATION=0.239,INDEPENDENT=YES,URI=\"part00003.m4s\"") {
 		t.Fatalf("the field and the frames after it should be one 0.239 s part:\n%s", playlist)
 	}
@@ -1583,8 +1591,8 @@ func TestABlockingReloadWaitsForItsSegment(t *testing.T) {
 	if err := writePacked(t.TempDir(), []byte("init"), closed, nil, 0, true, false, nil, gate); err != nil {
 		t.Fatal(err)
 	}
-	if got := gate.holdFor(); got != 6*time.Second {
-		t.Fatalf("hold %v for a 3 s target, want 6 s", got)
+	if got := gate.holdFor(); got != 9*time.Second {
+		t.Fatalf("hold %v for a 3 s target, want 9 s", got)
 	}
 	go func() {
 		time.Sleep(1800 * time.Millisecond)
@@ -1598,5 +1606,96 @@ func TestABlockingReloadWaitsForItsSegment(t *testing.T) {
 	gate.mu.Unlock()
 	if !ready || waited < 1700*time.Millisecond || waited > 3*time.Second {
 		t.Fatalf("answered after %v with segment 1 listed %v", waited, ready)
+	}
+}
+
+// A blocking request that comes before the first playlist still gets three
+// targets once the target is known, not the floor.
+func TestABlockingReloadBeforeTheFirstPlaylistWaitsTheFullHold(t *testing.T) {
+	gate := newPlaylistGate()
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		gate.target.Store(int64(2 * time.Second))
+		gate.publish(0, 1, 0)
+		time.Sleep(2 * time.Second)
+		gate.publish(0, 2, 0)
+	}()
+	began := time.Now()
+	gate.block(1, -1)
+	waited := time.Since(began)
+	gate.mu.Lock()
+	ready := gate.ready(1, -1)
+	gate.mu.Unlock()
+	if !ready || waited < 2*time.Second {
+		t.Fatalf("answered after %v with segment 1 listed %v", waited, ready)
+	}
+}
+
+// A closed segment keeps its parts in the list while it is within three
+// target durations of the end, and its part files a while longer, so a
+// player that was playing them finds them when the segment closes.
+func TestARecentSegmentKeepsItsParts(t *testing.T) {
+	dir := t.TempDir()
+	parts := func(names ...string) []partRef {
+		out := make([]partRef, len(names))
+		for i, n := range names {
+			out[i] = partRef{name: n, dur: 45045, sync: true}
+		}
+		return out
+	}
+	// Ten one-second segments under a 2 s target: seg00000 ends 9.5 s from
+	// the end, past three targets (6 s).
+	var closed []packedSeg
+	for i := range 9 {
+		closed = append(closed, packedSeg{name: fmt.Sprintf("seg%05d.m4s", i), dur: 90090, parts: parts(fmt.Sprintf("part%05d.m4s", i))})
+	}
+	closed = append(closed, packedSeg{name: "seg00009.m4s", dur: 90090, parts: parts("part00010.m4s", "part00011.m4s")})
+	open := []packedPart{{name: "part00012.m4s", dur: 45045, sync: true}}
+	if err := writePacked(dir, []byte("init"), closed, open, 0, true, false, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(b)
+	if strings.Contains(text, "part00000.m4s") || !strings.Contains(text, "part00005.m4s") {
+		t.Fatalf("parts listed for the wrong segments:\n%s", text)
+	}
+	want := "#EXT-X-PART:DURATION=0.500,INDEPENDENT=YES,URI=\"part00010.m4s\"\n#EXT-X-PART:DURATION=0.500,INDEPENDENT=YES,URI=\"part00011.m4s\"\n#EXTINF:1.001,\nseg00009.m4s\n"
+	if !strings.Contains(text, want) {
+		t.Fatalf("the last segment does not list its parts before it:\n%s", text)
+	}
+	if listed, kept := partsKept(int64(7*90000), 2*90000); listed || !kept {
+		t.Fatalf("7 s from the end of a 2 s target: listed %v kept %v, want false true", listed, kept)
+	}
+}
+
+// A part past the last one of a closed segment is the next segment's first
+// part, so a blocking reload for it waits for that part.
+func TestAPartPastAClosedSegmentWaitsForTheNext(t *testing.T) {
+	g := newPlaylistGate()
+	// Segments 0-2 closed with 1, 3, and 1 parts; segment 3 open, empty.
+	g.publish(0, 3, 0, 1, 3, 1)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, c := range []struct {
+		msn, part int
+		want      bool
+	}{
+		{1, 2, true},  // the third of segment 1's three parts
+		{1, 3, true},  // past segment 1: segment 2's first part
+		{2, 0, true},  // listed
+		{2, 3, false}, // past segment 2: segment 3's first part, not out yet
+		{2, -1, true}, // the whole segment 2
+		{3, -1, false},
+	} {
+		if got := g.ready(c.msn, c.part); got != c.want {
+			t.Errorf("ready(%d, %d) = %v, want %v", c.msn, c.part, got, c.want)
+		}
+	}
+	g.openParts = 1
+	if !g.ready(2, 3) {
+		t.Error("segment 3's first part is out")
 	}
 }
