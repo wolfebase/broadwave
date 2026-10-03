@@ -126,6 +126,9 @@ type Hub struct {
 	DeintBroadcast string
 	DeintSmooth    string
 	OnSaved        func(store.Recording)
+	// NoAC4 is set when ffmpeg cannot decode AC-4: an ATSC 3.0 channel then
+	// plays its picture without sound instead of not at all.
+	NoAC4 bool
 
 	// OnChange is called, outside the hub lock, when viewers, renditions,
 	// recordings, or tuners change.
@@ -940,6 +943,9 @@ func (h *Hub) rebuildRenditionsLocked(f *feed) {
 func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error) {
 	if want.Codec == "hevc" && !h.HEVC {
 		want.Codec = ""
+	}
+	if h.NoAC4 {
+		want = Unvoiced(f.channel.AudioCodec, want)
 	}
 	key := want.Key()
 	if r := f.renditions[key]; r != nil {

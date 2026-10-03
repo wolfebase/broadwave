@@ -384,6 +384,16 @@ func DecideFor(src Source, caps Caps, p Prefs, encoder string, host Host) Decisi
 	return Decision{Rendition: r, Reason: strings.Join(why, ", ")}
 }
 
+// Unvoiced is want without sound when the source's sound is AC-4, for an
+// ffmpeg that cannot decode it. Copied sound needs no decoder.
+func Unvoiced(audioCodec string, want Rendition) Rendition {
+	if codecName(audioCodec) != "ac4" || want.Audio == "copy" || want.Audio == "none" {
+		return want
+	}
+	want.Audio = "none"
+	return want.normalized()
+}
+
 // surroundAC4 is an ATSC 3.0 5.1 mix for a player that plays AC-3 but not
 // AC-4, which is every player today.
 func surroundAC4(codec string, src Source, caps Caps) bool {

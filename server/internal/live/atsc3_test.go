@@ -729,3 +729,116 @@ func TestViewersOpening3Point0ChannelsTogetherShareATune(t *testing.T) {
 		}
 	}
 }
+
+func TestListsDecoderReadsTheDecoderColumn(t *testing.T) {
+	jellyfin := " A....D ac3                  ATSC A/52A (AC-3)\n A....D ac4                  AC-4\n"
+	stock := " A....D ac3                  ATSC A/52A (AC-3)\n A....D eac3                 ATSC A/52B (AC-3, E-AC-3)\n V....D ac4like              not ac4\n"
+	if !listsDecoder(jellyfin, "ac4") {
+		t.Fatal("jellyfin-ffmpeg lists ac4")
+	}
+	if listsDecoder(stock, "ac4") {
+		t.Fatal("a description that names ac4 is not the decoder")
+	}
+}
+
+func TestMissingAC4OnlyJudgesAnFFmpegThatAnswers(t *testing.T) {
+	dir := t.TempDir()
+	script := func(name, body string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	stock := script("stock", "echo ' A....D aac                  AAC (Advanced Audio Coding)'; echo ' A....D ac3                  ATSC A/52A (AC-3)'")
+	jellyfin := script("jellyfin", "echo ' A....D aac                  AAC (Advanced Audio Coding)'; echo ' A....D ac4                  AC-4'")
+	broken := script("broken", "exit 1")
+	if !MissingAC4(stock) {
+		t.Fatal("a stock ffmpeg has no AC-4")
+	}
+	if MissingAC4(jellyfin) || MissingAC4(broken) || MissingAC4("") {
+		t.Fatal("only an ffmpeg that lists its decoders without AC-4 is missing it")
+	}
+}
+
+func TestUnvoicedLeavesOutOnlyAC4Sound(t *testing.T) {
+	r := Unvoiced("AC4", Rendition{Video: "copy", Audio: "ac3", Track: "lang"})
+	if r.Audio != "none" || r.Track != "" {
+		t.Fatalf("AC-4 converted to AC-3 needs a decoder: %+v", r)
+	}
+	if r := Unvoiced("AC4", Rendition{Video: "copy", Audio: "copy"}); r.Audio != "copy" {
+		t.Fatalf("copied AC-4 needs no decoder: %+v", r)
+	}
+	if r := Unvoiced("AC3", Rendition{Video: "1080", Audio: "aac2"}); r.Audio != "aac2" {
+		t.Fatalf("AC-3 keeps its sound: %+v", r)
+	}
+}
+
+// A hub whose ffmpeg cannot decode AC-4 starts a 3.0 channel's encode without
+// sound, whatever the watch asked for, so ffmpeg does not exit at once.
+func TestAnAC4EncodeIsSilentWithoutADecoder(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "ffmpeg")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := New(nil, dir, script, "libx264")
+	h.NoAC4 = true
+	t.Cleanup(func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		for _, f := range h.channels {
+			for _, r := range f.renditions {
+				if r.cmd != nil && r.cmd.Process != nil {
+					_ = r.cmd.Process.Kill()
+				}
+			}
+		}
+	})
+	defer lockHub(h)()
+	m := &mux{freq: 593000000, tuner: -1, input: "color", feeds: map[string]*feed{}, cancel: func() {}}
+	h.muxes[m.freq] = m
+	f := h.addFeedLocked(m, store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "104.1", VideoCodec: "HEVC", AudioCodec: "AC4"}, FieldOrder: "progressive"})
+	r, err := h.ensureRenditionLocked(f, Rendition{Video: "copy", Audio: "ac3"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.spec.Audio != "none" {
+		t.Fatalf("spec %+v", r.spec)
+	}
+	if r.cmd == nil || !slices.Contains(r.cmd.Args, "-an") || slices.Contains(r.cmd.Args, "ac3") {
+		t.Fatalf("args %v", r.cmd)
+	}
+}
+
+// A 3.0 recording plays its picture alone on an ffmpeg with no AC-4 decoder,
+// and its playlist is made again once ffmpeg has one.
+func TestASilentRecordingLeavesOutItsSound(t *testing.T) {
+	dir := t.TempDir()
+	ac4 := filepath.Join(dir, "ac4.ts")
+	if err := os.WriteFile(ac4, atsc3PMT(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(dir, "other.ts")
+	if err := os.WriteFile(other, make([]byte, 188*4), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := &Hub{Encoder: "libx264", NoAC4: true}
+	g := h.fileGraphFor(ac4, "hevc", "broadcast", "progressive")
+	if g.Audio != "none" {
+		t.Fatalf("graph %+v", g)
+	}
+	list := PictureArgs(g)
+	args := strings.Join(list, " ")
+	if !slices.Contains(list, "-an") || strings.Contains(args, "0:a:0") || strings.Contains(args, "-c:a") {
+		t.Fatalf("args %s", args)
+	}
+	if g := h.fileGraphFor(other, "mpeg2video", "broadcast", ""); g.Audio == "none" {
+		t.Fatal("a 1.0 recording keeps its sound")
+	}
+	h.NoAC4 = false
+	voiced := h.fileGraphFor(ac4, "hevc", "broadcast", "progressive")
+	if voiced.Audio == "none" || graphStamp(voiced) == graphStamp(g) {
+		t.Fatalf("with a decoder: %+v, stamps %q %q", voiced, graphStamp(voiced), graphStamp(g))
+	}
+}

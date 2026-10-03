@@ -110,7 +110,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Tuners and signal, encoder and ffmpeg, the startup picture benchmark (class, speed, transcode height, selected tile, and how many tiles fit), storage, guide freshness, what the relay is carrying, the last ten channel starts (`starts`, seconds from the watch to the first segment split into tune, keyframe, encoder, and segment, newest first), feed counts, recent logs, connected apps, and recent activity. */
+        /** @description Tuners and signal, encoder and ffmpeg (`encoder.ac4` is false when ffmpeg cannot decode ATSC 3.0 sound), the startup picture benchmark (class, speed, transcode height, selected tile, and how many tiles fit), storage, guide freshness, what the relay is carrying, the last ten channel starts (`starts`, seconds from the watch to the first segment split into tune, keyframe, encoder, and segment, newest first), feed counts, recent logs, connected apps, and recent activity. */
         get: operations["getDiagnostics"];
         put?: never;
         post?: never;

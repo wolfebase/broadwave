@@ -122,6 +122,12 @@ export function DiagnosticsPage() {
           ) : null}
           <dt>ffmpeg</dt>
           <dd>{d.encoder?.ffmpeg}</dd>
+          {d.encoder?.ac4 === false ? (
+            <>
+              <dt>ATSC 3.0 sound</dt>
+              <dd>This ffmpeg can't decode AC-4, so ATSC 3.0 channels play without sound.</dd>
+            </>
+          ) : null}
           <dt>Free space</dt>
           <dd>{d.storage ? `${(d.storage.Free / 1e9).toFixed(0)} GB of ${(d.storage.Total / 1e9).toFixed(0)} GB` : "—"}</dd>
           <dt>Guide</dt>

@@ -85,18 +85,26 @@ func PictureArgs(g Graph) []string {
 		args = append(args, "-probesize", "2000000", "-analyzeduration", "1500000")
 	}
 	args = append(args, "-i", g.Input)
-	if g.Program > 0 {
+	switch {
+	case g.Audio == "none" && g.Program > 0:
+		args = append(args, "-map", fmt.Sprintf("0:p:%d:v:0", g.Program))
+	case g.Audio == "none":
+		args = append(args, "-map", "0:v:0")
+	case g.Program > 0:
 		args = append(args, "-map", fmt.Sprintf("0:p:%d:v:0", g.Program), "-map", fmt.Sprintf("0:p:%d:a:0?", g.Program))
-	} else {
+	default:
 		// A recording with no sound track still plays its picture.
 		args = append(args, "-map", "0:v:0", "-map", "0:a:0?")
 	}
 	args = append(args, "-vf", videoFilter(g, vaapiDeint, interlaced, field, width, height, fps))
 	args = append(args, videoCodec(g.Encoder, rate, gop)...)
 	args = append(args, "-force_key_frames", "expr:gte(t,n_forced*2)")
-	if g.Audio == "surround" {
+	switch g.Audio {
+	case "none":
+		args = append(args, "-an")
+	case "surround":
 		args = append(args, "-af", "aresample=async=1000:first_pts=0", "-c:a", "aac", "-ac", "6", "-b:a", "384k")
-	} else {
+	default:
 		args = append(args, "-af", "aresample=async=1000:first_pts=0", "-c:a", "aac", "-ac", "2", "-b:a", "160k")
 	}
 	args = append(args, "-f", "hls", "-hls_time", "2", "-hls_segment_filename", "seg%05d.ts")

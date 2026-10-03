@@ -58,6 +58,34 @@ func fileScanOrder(path string) (string, bool) {
 	return scanType(buf[:n], 0)
 }
 
+// fileAC4 reports a recording whose sound is AC-4, from the PMT at its head.
+func fileAC4(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	buf := make([]byte, fileScanBytes)
+	n, _ := io.ReadFull(f, buf)
+	for _, t := range AudioTracks(buf[:n], 0) {
+		if t.Codec == "ac4" {
+			return true
+		}
+	}
+	return false
+}
+
+// fileGraphFor is fileGraph for the recording at path. Its sound is left out
+// when it is AC-4 and ffmpeg cannot decode it.
+func (h *Hub) fileGraphFor(path, codec, mode, fieldOrder string) Graph {
+	scanned, ok := fileScanOrder(path)
+	g := h.fileGraph(codec, mode, recordingOrder(scanned, ok, fieldOrder))
+	if h.NoAC4 && fileAC4(path) {
+		g.Audio = "none"
+	}
+	return g
+}
+
 func graphStamp(g Graph) string {
 	scan := "interlaced"
 	if g.Progressive {
@@ -65,7 +93,12 @@ func graphStamp(g Graph) string {
 	} else if NormalizeMode(g.Mode) == "film" {
 		scan = "film"
 	}
-	return strings.Join([]string{NormalizeMode(g.Mode), g.VideoCodec, g.Encoder, g.Deint, g.Profile, scan}, "|")
+	parts := []string{NormalizeMode(g.Mode), g.VideoCodec, g.Encoder, g.Deint, g.Profile, scan}
+	// A silent playlist is redone once ffmpeg can decode the sound.
+	if g.Audio == "none" {
+		parts = append(parts, "silent")
+	}
+	return strings.Join(parts, "|")
 }
 
 func playlistFresh(dir, stamp string) bool {
@@ -80,8 +113,7 @@ func playlistFresh(dir, stamp string) bool {
 // PlayFile transcodes a finished recording into an HLS playlist and returns when the first segment exists.
 func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string) (string, error) {
 	dir := filepath.Join(h.Dir, "file", fmt.Sprintf("%d", id))
-	scanned, ok := fileScanOrder(path)
-	g := h.fileGraph(videoCodec, mode, recordingOrder(scanned, ok, fieldOrder))
+	g := h.fileGraphFor(path, videoCodec, mode, fieldOrder)
 	g.Live = false
 	stamp := graphStamp(g)
 	playlist := filepath.Join(dir, "index.m3u8")
@@ -121,8 +153,7 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string) (str
 // PlayFollow transcodes a recording that is still being written. Playback starts at the beginning of the file.
 func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, still func() bool) (string, error) {
 	dir := filepath.Join(h.Dir, "file", fmt.Sprintf("%d", id))
-	scanned, ok := fileScanOrder(path)
-	g := h.fileGraph(videoCodec, mode, recordingOrder(scanned, ok, fieldOrder))
+	g := h.fileGraphFor(path, videoCodec, mode, fieldOrder)
 	g.Input = "pipe:0"
 	g.Live = false
 	stamp := graphStamp(g)

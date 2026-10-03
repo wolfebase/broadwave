@@ -35,6 +35,33 @@ func DetectEncoder(ffmpeg string) string {
 	return "libx264"
 }
 
+// MissingAC4 reports an ffmpeg that lists its decoders without AC-4, the
+// sound of ATSC 3.0. jellyfin-ffmpeg has one; a stock build such as
+// Homebrew's does not. An ffmpeg that does not answer is not judged.
+func MissingAC4(ffmpeg string) bool {
+	if ffmpeg == "" {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, ffmpeg, "-hide_banner", "-decoders")
+	cmd.WaitDelay = time.Second
+	out, err := cmd.Output()
+	return err == nil && listsDecoder(string(out), "aac") && !listsDecoder(string(out), "ac4")
+}
+
+// listsDecoder finds name in `ffmpeg -decoders` output, whose lines are
+// " A....D ac4                  AC-4".
+func listsDecoder(out, name string) bool {
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 2 && f[1] == name {
+			return true
+		}
+	}
+	return false
+}
+
 // ProbeHEVC reports whether this machine can encode HEVC with the same hardware family.
 func ProbeHEVC(ffmpeg, encoder string) bool {
 	if ffmpeg == "" {

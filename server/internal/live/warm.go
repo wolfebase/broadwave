@@ -77,6 +77,9 @@ func (h *Hub) Warm(ctx context.Context, channelID int64, want Rendition, alterna
 	if want.Codec == "hevc" && !h.HEVC {
 		want.Codec = ""
 	}
+	if h.NoAC4 {
+		want = Unvoiced(f.channel.AudioCodec, want)
+	}
 	key := want.Key()
 	h.dropGuessesLocked(f, key)
 	if r := f.renditions[key]; r != nil {

@@ -45,6 +45,7 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 			"name":        s.Hub.Encoder,
 			"hardware":    s.Hub.Encoder != "libx264",
 			"hevc":        s.Hub.HEVC,
+			"ac4":         !s.Hub.NoAC4,
 			"gpuDecode":   s.Hub.Encoder == "h264_vaapi",
 			"deinterlace": s.Hub.DeintBroadcast,
 			"ffmpeg":      s.Hub.FFmpegVersion(),
