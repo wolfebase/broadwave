@@ -85,3 +85,36 @@ func TestEveryEncodeOnAMuxMovesTogether(t *testing.T) {
 		}
 	}
 }
+
+// The first part after a break stays listed while its segment is open and
+// for three targets after. Anchoring it on every stamp counted the silence
+// once and then dropped it, so later frames went back by the silence.
+func TestAListedPartAfterABreakKeepsTheSilence(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string][]byte{
+		"init.mp4":      videoInit(),
+		"seg00000.m4s":  keyframeFragment(0, 90000),
+		"part00001.m4s": keyframeFragment(9_000_000, 90000),
+		"seg00001.m4s":  keyframeFragment(9_000_000, 90000),
+		"part00002.m4s": keyframeFragment(9_090_000, 90000),
+	}
+	for name, b := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tl := NewTimeline()
+	tl.now = func() time.Time { return time.Date(2026, 10, 2, 15, 51, 0, 0, time.UTC) }
+	var st playlistStamper
+	head := "#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:1.000,\nseg00000.m4s\n"
+	st.stamp(dir, []byte(head), tl)
+	lastEnd := tl.Wall(90000)
+	tl.Shift(70 * time.Second)
+	after := head + "#EXT-X-DISCONTINUITY\n#EXT-X-PART:DURATION=1.000,INDEPENDENT=YES,URI=\"part00001.m4s\"\n#EXTINF:1.000,\nseg00001.m4s\n#EXT-X-PART:DURATION=1.000,INDEPENDENT=YES,URI=\"part00002.m4s\"\n"
+	for i := range 3 {
+		st.stamp(dir, []byte(after), tl)
+		if got := tl.Wall(9_090_000).Sub(lastEnd); got != 71*time.Second {
+			t.Fatalf("stamp %d: the part after the break is %v after the last segment, want 71s", i+1, got)
+		}
+	}
+}

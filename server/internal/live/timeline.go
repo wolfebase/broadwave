@@ -198,6 +198,10 @@ type playlistStamper struct {
 	mu    sync.Mutex
 	cache map[string]int64
 	walls map[string]time.Time
+	// broke names the first part after each break, anchored once. It stays
+	// listed while its segment is open and for a while after; anchoring it
+	// again would drop the shift a silence added.
+	broke map[string]bool
 }
 
 // reset forgets segment times. A restarted encode reuses seg00001.m4s for a
@@ -206,6 +210,7 @@ func (p *playlistStamper) reset() {
 	p.mu.Lock()
 	p.cache = nil
 	p.walls = nil
+	p.broke = nil
 	p.mu.Unlock()
 }
 
@@ -217,6 +222,9 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 	}
 	if p.walls == nil {
 		p.walls = map[string]time.Time{}
+	}
+	if p.broke == nil {
+		p.broke = map[string]bool{}
 	}
 	lines := strings.Split(string(src), "\n")
 	var out bytes.Buffer
@@ -253,6 +261,11 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 				// The part anchors the clock. A date on every part is not written:
 				// the tag belongs to the next media segment.
 				if ok && tl != nil {
+					if breakNext && p.broke[name] {
+						breakNext = false
+					} else if breakNext && haveEnd {
+						p.broke[name] = true
+					}
 					noteBreak(pts)
 					tl.Wall(pts)
 				}
@@ -321,6 +334,7 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 		if !seen[name] {
 			delete(p.cache, name)
 			delete(p.walls, name)
+			delete(p.broke, name)
 		}
 	}
 	return out.Bytes()
