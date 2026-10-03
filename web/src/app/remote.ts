@@ -78,6 +78,16 @@ export function installTvRemote(): () => void {
     if (goBack(event, target)) return;
     const dir = arrow(event.key);
     if (!dir) return;
+    // A closed menu does not move on Left or Right. Step it here so a remote can change it.
+    if (target instanceof HTMLSelectElement && (dir === "left" || dir === "right")) {
+      const next = target.selectedIndex + (dir === "right" ? 1 : -1);
+      if (next >= 0 && next < target.options.length) {
+        target.selectedIndex = next;
+        target.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      event.preventDefault();
+      return;
+    }
     if (target && keepsArrows(target, dir)) return;
     const dialog = document.querySelector<HTMLElement>("[role='dialog']");
     const items = boxes(dialog ?? document);

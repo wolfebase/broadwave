@@ -448,8 +448,8 @@ export function Guide() {
                   title="Drag to reorder. Right-click to hide."
                 >
                   <span className="gc-num">{c.displayNumber}</span>
-                  {c.standard === "atsc3" ? <Atsc3Tag /> : null}
                   <span className="gc-name">
+                    {c.standard === "atsc3" ? <Atsc3Tag /> : null}
                     {c.artUrl ? <img className="gc-logo" alt="" src={`/media/art/channel/${c.id}?w=72`} /> : null}
                     {c.displayName}
                   </span>

@@ -7,6 +7,7 @@ import { cappedCss } from "../../lib/art";
 import { dayLabel, spanLabel } from "../../lib/guide";
 import type { Recording, SearchAiring } from "../../types";
 import { SearchIcon } from "../../ui/icons";
+import { Atsc3Tag } from "../../ui/primitives";
 import { ProgramSheet } from "../guide/ProgramSheet";
 import "./search.css";
 
@@ -128,8 +129,11 @@ export function SearchPage() {
                   ) : null}
                   <span className="search-copy">
                     <strong>{airing.title}</strong>
-                    <span>
-                      {airing.guideNumber} {airing.channelName} · {dayLabel(airing.start, now)} · {spanLabel(airing)}
+                    <span className="search-meta">
+                      {allChannels.some((channel) => channel.id === airing.channelId && channel.standard === "atsc3") ? <Atsc3Tag /> : null}
+                      <span>
+                        {airing.guideNumber} {airing.channelName} · {dayLabel(airing.start, now)} · {spanLabel(airing)}
+                      </span>
                     </span>
                   </span>
                 </button>

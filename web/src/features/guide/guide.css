@@ -240,6 +240,11 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
   white-space: nowrap;
 }
 
+/* The tag is a grid item otherwise, and it takes the name's column. */
+.gc-name .tag {
+  flex: none;
+}
+
 .gc-logo {
   width: 28px;
   height: 18px;

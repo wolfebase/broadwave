@@ -341,15 +341,11 @@ export function LivePlayer({
       event.preventDefault();
       return;
     }
-    // On a TV the arrows walk the chrome. The stage still seeks and changes channel when it has the keys.
-    if (
-      layout === "tv" &&
-      target instanceof Element &&
-      target.closest(".stage-hud") &&
-      (k === "ArrowLeft" || k === "ArrowRight" || k === "ArrowUp" || k === "ArrowDown")
-    ) {
-      return;
-    }
+    // On a TV the arrows walk the page, and the chrome when the stage has them.
+    // The stage still seeks and changes channel when it has the keys. A mini
+    // player must not take those keys from the page underneath it.
+    const arrows = k === "ArrowLeft" || k === "ArrowRight" || k === "ArrowUp" || k === "ArrowDown";
+    if (layout === "tv" && arrows && (!(target instanceof Element) || !target.closest(".stage") || target.closest(".stage-hud"))) return;
     const actions: Record<string, () => void> = {
       Escape: () => (panel !== "none" ? setPanel("none") : onMinimize()),
       // A TV remote's Back arrives as Backspace, so it leaves the player like Escape.

@@ -281,16 +281,20 @@ export function Sources({
               {!channel.present ? " · off air" : ""}
             </span>
             {channel.protected ? (
-              <span className="hint">
+              <span className="hint protected-note">
                 {channel.playsAs
                   ? copy.sources.playsAs(twinNumber(channels, channel.playsAs))
                   : copy.sources.encrypted(channel.standard === "atsc3")}
               </span>
             ) : null}
             {channel.twinId && channel.standard === "atsc3" ? (
-              <label className="check">
+              <label className="check twin-choice">
                 {copy.sources.twinShow}
-                <select value={channel.twinChoice || "both"} onChange={(event) => onPatch(channel, { twinChoice: event.target.value })}>
+                <select
+                  aria-label={`${copy.sources.twinShow} ${channel.displayNumber}`}
+                  value={channel.twinChoice || "both"}
+                  onChange={(event) => onPatch(channel, { twinChoice: event.target.value })}
+                >
                   <option value="atsc3">{copy.sources.twinChoices.atsc3}</option>
                   <option value="atsc1">{copy.sources.twinChoices.atsc1(twinNumber(channels, channel.twinId))}</option>
                   <option value="both">{copy.sources.twinChoices.both}</option>
