@@ -220,7 +220,7 @@ func captionPlaylist(video []byte) []byte {
 // also offering the 608 bytes some encodes carry in the picture.
 func mainPlaylist(r Rendition) []byte {
 	return fmt.Appendf(nil, "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-INDEPENDENT-SEGMENTS\n"+captionMedia+
-		"#EXT-X-STREAM-INF:BANDWIDTH=%d,SUBTITLES=\"cc\",CLOSED-CAPTIONS=NONE\nindex.m3u8\n", renditionBandwidth(r))
+		"#EXT-X-STREAM-INF:%s,SUBTITLES=\"cc\",CLOSED-CAPTIONS=NONE\nindex.m3u8\n", streamRates(r, 0))
 }
 
 // captionMedia is the SUBTITLES group of every multivariant playlist.

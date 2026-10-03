@@ -148,19 +148,48 @@ func quoted(s string) string {
 	}, s) + `"`
 }
 
-// renditionBandwidth is a ceiling for the picture a rendition sends.
+// renditionBandwidth is the peak segment rate of a rendition's picture:
+// twice the encoder's target. The rate holds over two seconds, so a short
+// segment that opens on a keyframe runs far above it (1080 from a 1080i
+// channel: median 14.2, max 26.8 Mb/s per segment). AVPlayer flags every
+// segment over BANDWIDTH. A copy is the broadcast, under 20 Mb/s.
 func renditionBandwidth(r Rendition) int {
-	switch r.normalized().Video {
-	case "copy":
+	if r.normalized().Video == "copy" {
 		return 20_000_000
-	case "720":
-		return 8_000_000
-	case "540":
-		return 3_000_000
-	case "360":
-		return 1_500_000
 	}
-	return 14_000_000
+	return 2 * renditionRate(r)
+}
+
+// renditionRate is the encoder's target for a rendition's picture, at the
+// field-rate size where that size differs.
+func renditionRate(r Rendition) int {
+	r = r.normalized()
+	if r.Video == "copy" {
+		return 0
+	}
+	_, _, rate := outputSize(Graph{Profile: renditionProfile(r.Video), FullRate: r.FullRate}, true)
+	return bitsPerSecond(rate)
+}
+
+// bitsPerSecond reads an ffmpeg rate such as 14M or 1200k.
+func bitsPerSecond(rate string) int {
+	scale := 1
+	if n, ok := strings.CutSuffix(rate, "M"); ok {
+		rate, scale = n, 1_000_000
+	} else if n, ok := strings.CutSuffix(rate, "k"); ok {
+		rate, scale = n, 1_000
+	}
+	v, _ := strconv.Atoi(rate)
+	return v * scale
+}
+
+// streamRates is BANDWIDTH and, for an encode, AVERAGE-BANDWIDTH.
+func streamRates(r Rendition, sound int) string {
+	s := fmt.Sprintf("BANDWIDTH=%d", renditionBandwidth(r)+sound)
+	if avg := renditionRate(r); avg > 0 {
+		s += fmt.Sprintf(",AVERAGE-BANDWIDTH=%d", avg+sound)
+	}
+	return s
 }
 
 // masterPlaylist lists video.m3u8 and one audio-<id>.m3u8 per sound track.
@@ -231,7 +260,7 @@ func masterPlaylist(r Rendition, codecs map[uint32]trackCodec, tracks []AudioTra
 	case "aac6":
 		soundRate = 384_000
 	}
-	inf := []string{fmt.Sprintf("BANDWIDTH=%d", renditionBandwidth(r)+soundRate), fmt.Sprintf(`CODECS="%s,%s"`, video.codec, sound.codec)}
+	inf := []string{streamRates(r, soundRate), fmt.Sprintf(`CODECS="%s,%s"`, video.codec, sound.codec)}
 	if video.width > 0 && video.height > 0 {
 		inf = append(inf, fmt.Sprintf("RESOLUTION=%dx%d", video.width, video.height))
 	}

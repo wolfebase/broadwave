@@ -39,7 +39,7 @@ func TestDiagnosticsShowsTheHostBudget(t *testing.T) {
 	if got.Class != "software" || got.Speed != 0.4 || got.Height != 540 || got.Focus != "360" || got.Tiles != 1 || got.FullRate {
 		t.Fatalf("encoder %+v", got)
 	}
-	if got.Line != "Software encoder: 1080p60 at 0.4x real time. Picture up to 540p. 360p on the selected tile, 1 tile." {
+	if got.Line != "Software encoder: 1080p60 at 0.4x real time. Picture up to 540p. 360p on a large tile, 1 tile." {
 		t.Fatalf("line %q", got.Line)
 	}
 }
