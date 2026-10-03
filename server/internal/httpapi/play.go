@@ -1243,6 +1243,11 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 		case "main.m3u8":
 			body, err = s.Hub.MainPlaylist(channelID, key)
 		case "captions.m3u8":
+			// It lists the video's whole segments, so a blocking request
+			// waits for that segment; it has no parts.
+			if msn, _, ok := blockReload(r); ok {
+				s.Hub.WaitBlocking(channelID, key, msn, -1)
+			}
 			body, err = s.Hub.CaptionPlaylist(channelID, key)
 		default:
 			contentType = "text/vtt; charset=utf-8"
