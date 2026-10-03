@@ -73,10 +73,13 @@ VALUES (${ch.id}, 'Evening News', 'Local headlines', 'The evening newscast.', 'N
   }
 
   const byName = new Map(list.map((channel) => [channel.name, channel]));
-  const kbwv = byName.get("KBWV");
+  const byNumber = new Map(list.map((channel) => [channel.number, channel]));
+  const kbwv = byNumber.get("4.1") ?? byName.get("KBWV");
   const kbwv2 = byName.get("KBWV2");
-  const wtst = byName.get("WTST");
-  if (!kbwv || !kbwv2 || !wtst) throw new Error(`unexpected lineup: ${list.map((c) => c.name).join(", ")}`);
+  const wtst = byNumber.get("5.1") ?? byName.get("WTST");
+  if (!kbwv || !kbwv2 || !wtst) throw new Error(`unexpected lineup: ${list.map((c) => `${c.number} ${c.name}`).join(", ")}`);
+  const encrypted = process.env.E2E_ATSC3 === "1" ? byNumber.get("115.1") : undefined;
+  if (process.env.E2E_ATSC3 === "1" && !encrypted) throw new Error("115.1 WTST is not in the lineup");
 
   // Fifteen minutes into the current half hour. Program bars then sit on the
   // same pixels in every run; the clock labels are hidden in the snapshots.
@@ -91,6 +94,9 @@ VALUES (${ch.id}, 'Evening News', 'Local headlines', 'The evening newscast.', 'N
     [wtst.id, "The Night Show", "A guest and a band", "Talk.", "Series", now - 5 * 60_000, now + 2 * 60 * 60_000],
     [wtst.id, "NBA: Lakers at Celtics", "Los Angeles at Boston", "Basketball.", "Sports", now + 3 * 60 * 60_000, now + 6 * 60 * 60_000],
   ];
+  if (encrypted) {
+    rows.push([encrypted.id, "Sealed Signal", "A locked hour", "The encrypted broadcast.", "Series", now - 10 * 60_000, now + 50 * 60_000]);
+  }
   const values = rows
     .map(([id, title, subtitle, description, category, start, end], index) => {
       const live = start <= now ? 1 : 0;
