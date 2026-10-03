@@ -341,7 +341,10 @@ struct RootView: View {
                 if store.channels.isEmpty {
                     await store.refresh()
                 }
-                let lineup = await (try? store.api?.allChannels()) ?? store.channels
+                var lineup = store.channels
+                if !lineup.contains(where: { $0.id == id }), let all = try? await store.api?.allChannels() {
+                    lineup = all
+                }
                 if let choice = ClearBroadcast.play(id: id, visible: store.channels, lineup: lineup) {
                     nowPlaying.play(choice.channel, note: choice.note)
                 }

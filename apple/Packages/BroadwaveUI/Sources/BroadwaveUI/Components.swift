@@ -52,7 +52,7 @@ public struct ATSC3Tag: View {
     public var body: some View {
         Text("3.0")
         #if os(tvOS)
-            // Caption is the smallest size that still reads across a room.
+            // Smaller sizes do not read across a room.
             .font(.body.weight(.bold))
         #else
             .font(.caption.weight(.bold))
