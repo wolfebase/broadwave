@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.9 — 2026-10-03
+
+### Fixed
+
+- A multiview tile no longer freezes for 2 seconds now and then when the broadcast sends two keyframes a few frames apart. The tile's segment now closes when its group is complete instead of a whole group later.
+- A multiview address that names the hidden half of a 1.0/3.0 pair opens the half on the guide instead of dropping that tile. An encrypted 3.0 channel opens its regular broadcast, and the tile says why.
+
+### Changed
+
+- The server log notes a pause of 1.5 seconds or more in a tuner's stream, and an encode that stops producing segments while the tuner is still sending.
+
 ## 0.12.8 — 2026-10-03
 
 ### Fixed
