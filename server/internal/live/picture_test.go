@@ -75,8 +75,8 @@ func TestInterlacedStaysFieldRateOnTheGPU(t *testing.T) {
 		t.Fatalf("1080i should be bobbed to 59.94 on the GPU: %s", line)
 	}
 	tile := strings.Join(RenditionArgs(0, src, Rendition{Video: "360", Audio: "none"}, "h264_vaapi", "motion_adaptive"), " ")
-	if !strings.Contains(tile, "fps=30000/1001,format=nv12,hwupload,deinterlace_vaapi=mode=motion_adaptive:rate=frame") {
-		t.Fatalf("tiles stay at frame rate: %s", tile)
+	if !strings.Contains(tile, "fps=30000/1001,deinterlace_vaapi=mode=motion_adaptive:rate=frame") || !strings.Contains(tile, "-hwaccel_output_format vaapi") || strings.Contains(tile, "hwupload") {
+		t.Fatalf("tiles stay at frame rate, decoded on the GPU: %s", tile)
 	}
 	focus := strings.Join(RenditionArgs(0, src, Rendition{Video: "720", Audio: "aac2", Mode: "broadcast"}, "h264_vaapi", "motion_adaptive"), " ")
 	if !strings.Contains(focus, "deinterlace_vaapi=mode=motion_adaptive:rate=field") || strings.Contains(focus, "rate=frame") || strings.Contains(focus, "fps=30000/1001") {
