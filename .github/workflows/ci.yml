@@ -114,6 +114,15 @@ jobs:
           E2E_IMAGE: broadwave:ci
           E2E_SNAPSHOTS: skip
           E2E_PORT: "18753"
+      # Encrypted 3.0 plays as its clear twin. Own port: the steps above can
+      # still hold 18731, and this lineup is the FLEX-4K profile.
+      - run: npx playwright test --config e2e/playwright.config.ts 37-atsc3 38-atsc3-tv
+        working-directory: web
+        env:
+          E2E_IMAGE: broadwave:ci
+          E2E_SNAPSHOTS: skip
+          E2E_ATSC3: "1"
+          E2E_PORT: "18757"
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
