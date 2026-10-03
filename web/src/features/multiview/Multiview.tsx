@@ -7,12 +7,14 @@ import { focusRing } from "../../app/remote";
 import { inAppDepth, navigate, useRoute } from "../../app/router";
 import { airingAt } from "../../lib/guide";
 import { events } from "../../lib/events";
+import { copy } from "../../strings";
 import type { Channel, MultiviewPlan } from "../../types";
 import { CloseIcon, VolumeIcon } from "../../ui/icons";
 import { LiveFrame } from "../../ui/LiveFrame";
 import { pageFitsTiles } from "../player/quietStart";
 import { useLiveStream } from "../player/useLiveStream";
 import { refreshScores, scoreLine, useScoreMap, type ScoreGame } from "../sports/scores";
+import { clearBroadcast, fromStillOn, resolveClear, standInIds } from "./clear";
 import { channelsOnScreen, holdShown, layoutChoices, layoutFromParam, layoutLabel, rememberAuto, rememberLayout, roomId, saveSet, savedAuto, savedLayout, slotsFor, yieldsSound, type MvLayout } from "./storage";
 import { pickFocus } from "./switcher";
 import "./multiview.css";
@@ -56,13 +58,16 @@ function scheduleStop(stops: { at: string; channelId: number }[], selected: numb
 }
 
 export function Multiview() {
-  const { channels, index, now, record } = useData();
+  const { channels, allChannels, ready, index, now, record } = useData();
   const { params } = useRoute();
   const layoutMode = useLayout();
   const player = usePlayer();
   const ids = parseIds(params.get("ch"));
+  const fromIds = parseIds(params.get("from"));
+  const fromKey = fromIds.join(",");
   const layout: MvLayout = layoutFromParam(params.get("layout")) ?? savedLayout();
   const focus = Number(params.get("focus")) || ids[0] || 0;
+  const standIns = new Set(standInIds(fromIds, allChannels));
   const guide = params.get("add") === "1";
   // The ring and the sound are separate. Arrows move the ring; Enter moves the sound.
   // A new sound tile (Enter, or the page opening) puts the ring back on that tile.
@@ -95,6 +100,27 @@ export function Multiview() {
     });
   }, []);
   const chKey = params.get("ch") ?? "";
+  // A link may name the hidden half of a 1.0/3.0 pair, or an encrypted 3.0 id.
+  // Play the half that is on the guide. The address bar follows, so the tile is
+  // that channel and an encrypted stand-in keeps its note.
+  useEffect(() => {
+    if (!ready || allChannels.length === 0) return;
+    const asked = parseIds(chKey);
+    const next = resolveClear(asked, channels, allChannels);
+    if (next.ids.join(",") === asked.join(",")) return;
+    const q = new URLSearchParams(window.location.search);
+    q.set("ch", next.ids.join(","));
+    if (next.from.length) q.set("from", next.from.join(","));
+    else q.delete("from");
+    const focusNow = Number(q.get("focus")) || asked[0] || 0;
+    if (focusNow && !next.ids.includes(focusNow)) {
+      const mapped = clearBroadcast(focusNow, channels, allChannels);
+      const focusNext = mapped && next.ids.includes(mapped.id) ? mapped.id : (next.ids[0] ?? 0);
+      if (focusNext) q.set("focus", String(focusNext));
+      else q.delete("focus");
+    }
+    navigate(`/multiview?${q}`, true);
+  }, [ready, chKey, channels, allChannels]);
   const waiting = ids.length > 1 && planFor !== chKey;
   const known = ids.map((id) => channels.find((c) => c.id === id)).filter((c): c is Channel => !!c);
   const blocked = new Set(plan?.blocked.map((b) => b.channelId) ?? []);
@@ -169,10 +195,12 @@ export function Multiview() {
       q.set("ch", next.join(","));
       q.set("layout", layout);
       q.set("focus", String(nextFocus));
+      const kept = fromStillOn(parseIds(fromKey), next, allChannels);
+      if (kept.length) q.set("from", kept.join(","));
       navigate(`/multiview?${q}`);
     });
     return () => window.clearTimeout(timer);
-  }, [plan, chKey, layout, focus]);
+  }, [plan, chKey, layout, focus, fromKey, allChannels]);
 
   useEffect(() => {
     if (!auto) return;
@@ -211,8 +239,10 @@ export function Multiview() {
     q.set("layout", layout);
     q.set("focus", String(autoChannel));
     if (guide) q.set("add", "1");
+    const kept = fromStillOn(parseIds(fromKey), parseIds(chKey), allChannels);
+    if (kept.length) q.set("from", kept.join(","));
     navigate(`/multiview?${q}`, true);
-  }, [autoChannel, focus, chKey, layout, guide]);
+  }, [autoChannel, focus, chKey, layout, guide, fromKey, allChannels]);
 
   function go(next: { ch?: number[]; layout?: MvLayout; focus?: number; add?: boolean }, replace = true) {
     const q = new URLSearchParams();
@@ -221,6 +251,8 @@ export function Multiview() {
     q.set("layout", next.layout ?? layout);
     q.set("focus", String(next.focus ?? focus));
     if (next.add ?? guide) q.set("add", "1");
+    const kept = fromStillOn(fromIds, ch, allChannels);
+    if (kept.length) q.set("from", kept.join(","));
     navigate(`/multiview?${q}`, replace);
   }
 
@@ -451,6 +483,7 @@ export function Multiview() {
             onAnswered={onAnswered}
             onPicture={notePicture}
             fits={fits}
+            standIn={standIns.has(channel.id)}
             onRecord={() => void record(channel, airingAt(index, channel.id, now)?.title || channel.displayName)}
           />
         ))}
@@ -504,6 +537,7 @@ function Tile({
   onPicture,
   fits,
   after,
+  standIn,
 }: {
   channel: Channel;
   title: string;
@@ -522,6 +556,7 @@ function Tile({
   onPicture: (id: number, on: boolean) => void;
   fits: boolean;
   after: boolean;
+  standIn: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const showedRef = useRef(false);
@@ -586,11 +621,12 @@ function Tile({
   }, [focused, onHeard]);
   return (
     <div className="mv-cell" onClick={onFocus}>
-    <div className={focused ? "mv-tile focused" : "mv-tile"} role="group" tabIndex={pointed ? 0 : -1} data-channel={channel.id} aria-label={`${channel.displayNumber} ${channel.displayName}${focused ? ", sound on" : ""}`}>
+    <div className={focused ? "mv-tile focused" : "mv-tile"} role="group" tabIndex={pointed ? 0 : -1} data-channel={channel.id} aria-label={`${channel.displayNumber} ${channel.displayName}${focused ? ", sound on" : ""}${standIn ? `. ${copy.player.encrypted}` : ""}`}>
       <video ref={videoRef} className="mv-video" autoPlay playsInline data-channel={channel.id} />
       <div className="mv-meta">
         <span>{channel.displayNumber}</span>
         <span className="mv-title">{title}{score ? ` · ${score}` : ""}</span>
+        {standIn ? <p className="mv-note" role="status">{copy.player.encrypted}</p> : null}
         {focused ? (
           <span className="mv-audio">
             <VolumeIcon /> Sound
