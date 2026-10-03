@@ -21,6 +21,9 @@ const (
 	// partTicks is the shortest segment. A segment starts on a keyframe and
 	// stays open until the next one once it has reached this length.
 	partTicks = 45000 // 0.5s at 90 kHz
+	// longGroup is past the one-second group of pictures most stations send,
+	// also with a short keyframe fragment in front of it.
+	longGroup = 135000
 	// windowTicks is how much media a live playlist keeps, about 90 minutes.
 	windowTicks = 90 * 60 * 90000
 	// jumpTicks is a presentation-time step that is not one more group of
@@ -830,71 +833,63 @@ func openBytes(open []packedPart) int {
 }
 
 // playlistCeiling is the longest target this rendition has advertised.
-// AVPlayer rejects a reload that changes TARGETDURATION or PART-TARGET
-// (CoreMedia -12642), so both stick.
+// AVPlayer drops the stream on a reload that changes TARGETDURATION or
+// PART-TARGET (CoreMedia -12642), so both stick.
 type playlistCeiling struct {
 	target int
 	part   int
 }
 
+// longGroups holds each playlist folder (one channel and rendition) whose
+// station has sent a group of pictures past longGroup.
+var longGroups sync.Map
+
 func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart, origin int, allSync, segGap bool, hold *playlistCeiling, gate *playlistGate) error {
 	if len(init) == 0 {
 		return nil
 	}
-	partTarget := partTicks
-	target := partTicks
+	longest := partTicks
+	longestPart := partTicks
 	for _, s := range closed {
-		if s.dur > int64(target) {
-			target = int(s.dur)
-		}
+		longest = max(longest, int(s.dur))
 	}
 	for _, p := range open {
-		if p.dur > int64(target) {
-			target = int(p.dur)
-		}
-		if p.dur > int64(partTarget) {
-			partTarget = int(p.dur)
-		}
+		longest = max(longest, int(p.dur))
+		longestPart = max(longestPart, int(p.dur))
 	}
 	// A part can outlast every closed segment. Two seconds covers the
-	// one-second segments this packager writes; a longer one sticks.
+	// one-second segments this packager writes.
 	const floor = 2 * 90000
-	if target < floor {
-		target = floor
-	}
-	if hold != nil && hold.target > target {
-		target = hold.target
-	}
-	// One millisecond under the segment target, unless the open part is
-	// already longer. A value copied from the open part grows and shrinks
-	// on every reload.
-	pinned := target - 90
-	if pinned < partTicks {
-		pinned = partTicks
-	}
-	if partTarget < pinned {
-		partTarget = pinned
-	}
-	if partTarget > target {
-		partTarget = target
+	target := max(longest, floor)
+	if longest > longGroup {
+		longGroups.Store(dir, true)
 	}
 	if hold != nil {
-		if hold.target < target {
+		// A broadcast's groups of pictures vary: 2.4 s with 3.3 s now and
+		// then on one station, and an encode's first group can be cut short.
+		// A station whose groups run past longGroup gets four, so the
+		// target is set once.
+		if hold.target == 0 && len(closed)+len(open) > 0 {
+			if _, long := longGroups.Load(dir); long {
+				target = max(target, 4*90000)
+			}
+		}
+		target = max(target, hold.target)
+		if len(closed)+len(open) > 0 {
 			hold.target = target
 		}
-		if hold.part > partTarget && hold.part <= target {
-			partTarget = hold.part
-		} else if partTarget > hold.part {
-			hold.part = partTarget
-		}
+	}
+	targetSec := max((target+89999)/90000, 1)
+	// One millisecond under the advertised target, so it moves only when
+	// TARGETDURATION does, unless a part is already longer.
+	partTarget := min(max(longestPart, targetSec*90000-90), targetSec*90000)
+	if hold != nil {
+		partTarget = max(partTarget, hold.part)
+		hold.part = partTarget
 	}
 	var b []byte
 	// Parts, part-inf, and server-control require version 9.
 	b = append(b, "#EXTM3U\n#EXT-X-VERSION:9\n"...)
-	targetSec := (target + 89999) / 90000
-	if targetSec < 1 {
-		targetSec = 1
-	}
 	b = append(b, "#EXT-X-TARGETDURATION:"+strconv.Itoa(targetSec)+"\n"...)
 	// Part hold-back is three part targets. Full hold-back is three target
 	// durations; the part value has to stay under it.
