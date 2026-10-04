@@ -85,9 +85,10 @@ export function classifySnap(snap: RecoverySnap): { message: string; recovery: R
     if (!snap.online) return { message: connectionDropped, recovery: "server" };
     return { message: serverStopped, recovery: "server" };
   }
+  // A dark tune the server gave back also leaves its playlist gone.
+  if (snap.signalLost && snap.tunerAnswers) return { message: noSignal, recovery: "signal" };
   if (snap.watchGone) return { message: pictureRestarting, recovery: "restart" };
   if (!snap.tunerAnswers) return { message: tunerStopped, recovery: "tuner" };
-  if (snap.signalLost) return { message: noSignal, recovery: "signal" };
   return { message: pictureStopped, recovery: "" };
 }
 

@@ -191,6 +191,8 @@ type Hub struct {
 	hold    int
 	// statusDown is when a device whose status read failed is asked again.
 	statusDown map[string]time.Time
+	// dark is when a tune of a channel or frequency last found no signal.
+	dark       map[darkKey]time.Time
 	next       int
 	scanCancel context.CancelFunc
 	scanToken  *struct{}

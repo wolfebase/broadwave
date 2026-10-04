@@ -272,7 +272,7 @@ test("a multiview tile that does not start gives its sound away and can be remov
     await post(`${admin}/dark?channel=${encodeURIComponent(wtst.number)}`);
     await page.goto(`/multiview?ch=${kbwv.id},${wtst.id}&layout=2up&focus=${wtst.id}`);
     const dark = page.getByRole("group", { name: `${wtst.number} ${wtst.name}`, exact: true });
-    await expect(dark.getByRole("alert")).toBeVisible({ timeout: 60_000 });
+    await expect(dark.getByRole("alert")).toContainText("This channel isn't coming in. Check the antenna.", { timeout: 60_000 });
     await expect(dark.getByRole("button", { name: "Try again" })).toBeVisible();
     await expect(page.getByRole("group", { name: `${kbwv.number} ${kbwv.name}, sound on` })).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`focus=${kbwv.id}`));

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"broadwave/internal/hdhr"
+	"broadwave/internal/store"
 )
 
 // ErrNoSignal is a tune the tuner could not lock. The words are the player's.
@@ -63,7 +64,63 @@ func (h *Hub) DropDark(channelID int64) {
 			return
 		}
 	}
+	h.markDarkLocked(f.channel.ID, f.channel.FrequencyHz)
+	if m := muxOf(h, f); m != nil {
+		h.markDarkLocked(f.channel.ID, m.freq)
+	}
 	h.stopFeedLocked(f)
+}
+
+// darkFor is how long a channel whose tune found no signal still reads as
+// lost after its tuner is given back, so a player asking why it stopped is
+// told about the antenna. A player waits this out before it tunes again.
+const darkFor = 20 * time.Second
+
+type darkKey struct {
+	channel int64
+	freq    int
+}
+
+// noteDarkLocked remembers a tune that found no signal and forgets an older
+// one when this tune worked.
+func (h *Hub) noteDarkLocked(ch store.SourceChannel, err error) {
+	switch {
+	case errors.Is(err, ErrNoSignal):
+		h.markDarkLocked(ch.ID, ch.FrequencyHz)
+	case err == nil:
+		delete(h.dark, darkKey{channel: ch.ID})
+		if ch.FrequencyHz > 0 {
+			delete(h.dark, darkKey{freq: ch.FrequencyHz})
+		}
+	}
+}
+
+func (h *Hub) markDarkLocked(channelID int64, freq int) {
+	if h.dark == nil {
+		h.dark = map[darkKey]time.Time{}
+	}
+	now := time.Now()
+	h.dark[darkKey{channel: channelID}] = now
+	if freq > 0 {
+		h.dark[darkKey{freq: freq}] = now
+	}
+}
+
+// RecentlyDark is true when a tune of this channel, or of another channel on
+// its frequency, found no signal in the last darkFor.
+func (h *Hub) RecentlyDark(channelID int64, freq int) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for key, at := range h.dark {
+		if time.Since(at) >= darkFor {
+			delete(h.dark, key)
+		}
+	}
+	if _, ok := h.dark[darkKey{channel: channelID}]; ok {
+		return true
+	}
+	_, ok := h.dark[darkKey{freq: freq}]
+	return freq > 0 && ok
 }
 
 // Measure tunes a channel long enough to read /tunerN/status, then releases it

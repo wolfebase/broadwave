@@ -563,7 +563,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Last antenna reading for each channel, plus a live reading when that frequency is already tuned. */
+        /** @description Last antenna reading for each channel, plus a live reading when that frequency is already tuned. A channel whose tune found no signal in the last 20 seconds reads live and Lost. */
         get: operations["listSignals"];
         put?: never;
         post?: never;

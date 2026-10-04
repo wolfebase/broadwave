@@ -40,6 +40,13 @@ func (s *Server) signals(w http.ResponseWriter, r *http.Request) {
 				item["tip"] = tip
 			}
 			item["live"] = true
+		} else if s.Hub != nil && s.Hub.RecentlyDark(row.ChannelID, row.FrequencyHz) {
+			// The tuner is given back, but its last tune found nothing.
+			lock := hdhr.Lock{}
+			verdict, tip := lock.Verdict()
+			item["strength"], item["quality"], item["symbol"] = 0, 0, 0
+			item["verdict"], item["tip"] = verdict, tip
+			item["live"] = true
 		} else if row.HasReading {
 			lock := hdhr.Lock{Strength: row.Strength, Quality: row.Quality, Symbol: row.Symbol, Locked: row.Locked}
 			item["strength"] = row.Strength

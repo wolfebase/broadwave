@@ -114,6 +114,12 @@ test("a playlist the server no longer has starts again at once, ahead of tuner a
   assert.equal(pictureRetryDelay(pictureRestarting, "restart", 0), null);
 });
 
+test("a dark tune the server gave back says no signal, not a restart", () => {
+  const snap = { health: true, freeTuner: true, tunerAnswers: true, online: true, signalLost: true, watchGone: true };
+  assert.deepEqual(classifySnap(snap), { message: noSignal, recovery: "signal" });
+  assert.equal(classifySnap({ ...snap, signalLost: false }).recovery, "restart");
+});
+
 test("system text does not reach the viewer, and a server sentence does", () => {
   assert.equal(requestFailed, "That did not work. Try again.");
   assert.equal(unreadBody, requestFailed);
