@@ -10,6 +10,7 @@ export function Sources({
   onDiscover,
   onLookup,
   onPatch,
+  onRemove,
 }: {
   devices: Device[];
   channels: Channel[];
@@ -18,6 +19,7 @@ export function Sources({
   onDiscover: () => void;
   onLookup: (ip: string) => void;
   onPatch: (channel: Channel, patch: { enabled?: boolean; hidden?: boolean; customName?: string; customNumber?: string; guideKey?: string; twinChoice?: string }) => void;
+  onRemove: (deviceId: string) => void;
 }) {
   const [ip, setIp] = useState("");
   const [looking, setLooking] = useState(false);
@@ -231,6 +233,17 @@ export function Sources({
               }}
             >
               {scanning === device.deviceId ? copy.sources.scanning : copy.sources.scan}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={busy}
+              aria-label={copy.sources.removeLabel(device.friendlyName || device.modelNumber || device.deviceId)}
+              onClick={() => {
+                if (window.confirm(copy.sources.removeConfirm(device.friendlyName || device.modelNumber || device.deviceId))) onRemove(device.deviceId);
+              }}
+            >
+              {copy.sources.remove}
             </button>
           </article>
         ))}

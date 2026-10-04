@@ -288,3 +288,114 @@ func TestEachEncryptedChannelPlaysItsClearTwin(t *testing.T) {
 		}
 	}
 }
+
+func TestRemovingADeadTunerMovesItsFavoritesAndPasses(t *testing.T) {
+	s, ctx := openTwins(t)
+	duo := hdhr.Device{DeviceID: "DUO1", BaseURL: "http://duo", LineupURL: "http://duo/lineup.json", TunerCount: 2}
+	if err := s.UpsertDevice(ctx, duo, []hdhr.Channel{
+		{GuideNumber: "4.1", GuideName: "KBWV-DT", VideoCodec: "MPEG2", AudioCodec: "AC3", HD: true, StreamURL: "http://duo:5004/auto/v4.1"},
+		{GuideNumber: "9.1", GuideName: "KLMN-DT", VideoCodec: "MPEG2", AudioCodec: "AC3", HD: true, StreamURL: "http://duo:5004/auto/v9.1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`UPDATE channels SET favorite=0`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`UPDATE channels SET favorite=1, custom_name='Fox 4' WHERE device_id='DUO1' AND guide_number='4.1'`); err != nil {
+		t.Fatal(err)
+	}
+	ch := byNumber(t, s, ctx)
+	var old4, old9 int64
+	for _, c := range append(ch["4.1"], ch["9.1"]...) {
+		if c.DeviceID == "DUO1" && c.GuideNumber == "4.1" {
+			old4 = c.ID
+		}
+		if c.GuideNumber == "9.1" {
+			old9 = c.ID
+		}
+	}
+	if old4 == 0 || old9 == 0 {
+		t.Fatalf("missing DUO rows: %+v", ch)
+	}
+	if err := s.AddPass(ctx, "News", old4, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddPass(ctx, "Late", old9, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.RemoveDevice(ctx, "DUO1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RemoveDevice(ctx, "DUO1"); err != ErrNoDevice {
+		t.Fatalf("second remove = %v", err)
+	}
+	devices, err := s.Devices(ctx)
+	if err != nil || len(devices) != 1 || devices[0].DeviceID != "FLEX1" {
+		t.Fatalf("devices %+v %v", devices, err)
+	}
+	ch = byNumber(t, s, ctx)
+	if len(ch["4.1"]) != 1 || len(ch["9.1"]) != 0 {
+		t.Fatalf("lineup after remove: %+v", ch)
+	}
+	flex4 := ch["4.1"][0]
+	if flex4.DeviceID != "FLEX1" || !flex4.Favorite || flex4.DisplayName != "Fox 4" {
+		t.Fatalf("FLEX 4.1 = %+v", flex4)
+	}
+	// 4.1 sits behind its 3.0 twin, so the guide's half carries the favorite too.
+	if wide := ch["104.1"][0]; !flex4.Hidden || !wide.Favorite {
+		t.Fatalf("4.1 hidden %v, 104.1 = %+v", flex4.Hidden, wide)
+	}
+	passes, err := s.Passes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range passes {
+		switch p.Title {
+		case "News":
+			if p.ChannelID != flex4.ID {
+				t.Fatalf("News pass on %d, want %d", p.ChannelID, flex4.ID)
+			}
+		case "Late":
+			t.Fatalf("the pass for 9.1, carried by no other tuner, stayed on %d", p.ChannelID)
+		}
+	}
+	// A device added later reuses the freed ids. Nothing may point at them.
+	if err := s.UpsertDevice(ctx, hdhr.Device{DeviceID: "src-9", BaseURL: "source"}, []hdhr.Channel{
+		{GuideNumber: "901", GuideName: "New", StreamURL: "http://example/901.ts"},
+		{GuideNumber: "902", GuideName: "New 2", StreamURL: "http://example/902.ts"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	passes, err = s.Passes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range passes {
+		if p.ChannelID == old4 || p.ChannelID == old9 {
+			t.Fatalf("pass %q points at a freed id %d", p.Title, p.ChannelID)
+		}
+	}
+}
+
+func TestARefreshDoesNotBringBackARemovedTuner(t *testing.T) {
+	s, ctx := openTwins(t)
+	if err := s.RemoveDevice(ctx, "DUO1"); err != nil {
+		t.Fatal(err)
+	}
+	duo := hdhr.Device{DeviceID: "DUO1", BaseURL: "http://duo", LineupURL: "http://duo/lineup.json", TunerCount: 2}
+	lineup := []hdhr.Channel{{GuideNumber: "4.1", GuideName: "KBWV-DT", StreamURL: "http://duo:5004/auto/v4.1"}}
+	if err := s.RefreshDevice(ctx, duo, lineup); err != nil {
+		t.Fatal(err)
+	}
+	if got := byNumber(t, s, ctx)["4.1"]; len(got) != 1 || got[0].DeviceID != "FLEX1" {
+		t.Fatalf("4.1 rows %+v", got)
+	}
+	// A search the viewer starts adds it again.
+	if err := s.UpsertDevice(ctx, duo, lineup); err != nil {
+		t.Fatal(err)
+	}
+	if got := byNumber(t, s, ctx)["4.1"]; len(got) != 2 {
+		t.Fatalf("4.1 rows after a search %+v", got)
+	}
+}

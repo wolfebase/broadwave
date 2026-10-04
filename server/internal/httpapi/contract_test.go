@@ -295,6 +295,14 @@ func TestContractFixtures(t *testing.T) {
 	matchFixture(t, root, "recording-delete", rec.Body.Bytes())
 	matchFrame(t, h, dir, root)
 	matchBackup(t, h, root)
+	// Last: it drops the playlist's channels.
+	req = httptest.NewRequest(http.MethodDelete, "/api/v1/devices/src-2", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("remove device %d %s", rec.Code, rec.Body.String())
+	}
+	matchFixture(t, root, "device-remove", rec.Body.Bytes())
 }
 
 // contractSample is a short recording so play and commercial detection have a file.

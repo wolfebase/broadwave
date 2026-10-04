@@ -103,7 +103,7 @@ export function VirtualPage() {
 }
 
 export function SettingsPage() {
-  const { settings, storage, saveSettings, devices, allChannels, error, rediscover, editChannel, server: known } = useData();
+  const { settings, storage, saveSettings, devices, allChannels, error, rediscover, forgetDevice, editChannel, server: known } = useData();
   const [busy, setBusy] = useState(false);
   const [fetched, setFetched] = useState<ServerInfo | null>(null);
   const server = fetched ?? known;
@@ -154,6 +154,10 @@ export function SettingsPage() {
             void rediscover(ip).finally(() => setBusy(false));
           }}
           onPatch={(c, patch) => void editChannel(c, patch)}
+          onRemove={(id) => {
+            setBusy(true);
+            void forgetDevice(id).finally(() => setBusy(false));
+          }}
         />
       </section>
       <section className="settings-section">

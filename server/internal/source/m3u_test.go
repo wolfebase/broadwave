@@ -25,6 +25,10 @@ func TestInstallLeavesUnnamedCodecsEmpty(t *testing.T) {
 		{Number: "801", Name: "Link", URL: "http://example/live.ts"},
 		{Number: "802", Name: "Named", URL: "http://example/named.ts", Video: "mpeg2video", Audio: "ac3"},
 	}
+	item, err := st.AddSource(ctx, "link", "Link", "http://example/live.ts", "")
+	if err != nil || item.ID != 1 {
+		t.Fatalf("%+v %v", item, err)
+	}
 	if err := Install(ctx, st, 1, "Link", "Link", entries); err != nil {
 		t.Fatal(err)
 	}
@@ -203,5 +207,37 @@ func TestParseM3UHandlesALargePlaylist(t *testing.T) {
 	}
 	if time.Since(start) > 3*time.Second {
 		t.Fatalf("import took %s", time.Since(start))
+	}
+}
+
+func TestARemovedPlaylistStaysRemoved(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := t.Context()
+	item, err := st.AddSource(ctx, "m3u", "Old", "http://example/old.m3u", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := []Entry{{Number: "801", Name: "Old", URL: "http://example/old.ts"}}
+	if err := Install(ctx, st, item.ID, "Old", "Playlist", entries); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RemoveDevice(ctx, fmt.Sprintf("src-%d", item.ID)); err != nil {
+		t.Fatal(err)
+	}
+	// A refresh that read the source list before the remove finishes after it.
+	if err := Install(ctx, st, item.ID, "Old", "Playlist", entries); err != nil {
+		t.Fatal(err)
+	}
+	devices, err := st.Devices(ctx)
+	if err != nil || len(devices) != 0 {
+		t.Fatalf("devices %+v %v", devices, err)
+	}
+	channels, err := st.Channels(ctx, false)
+	if err != nil || len(channels) != 0 {
+		t.Fatalf("channels %+v %v", channels, err)
 	}
 }

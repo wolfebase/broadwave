@@ -93,7 +93,11 @@ func writeDevices(ctx context.Context, st *store.Store, client *hdhr.Client, bas
 			}
 			continue
 		}
-		if err := st.UpsertDevice(ctx, dev, channels); err != nil {
+		save := st.UpsertDevice
+		if known[id] && !addAll {
+			save = st.RefreshDevice
+		}
+		if err := save(ctx, dev, channels); err != nil {
 			return 0, err
 		}
 		if !known[id] {

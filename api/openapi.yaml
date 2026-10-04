@@ -178,6 +178,30 @@ paths:
                   devices:
                     type: array
                     items: { $ref: "#/components/schemas/Device" }
+  /devices/{id}:
+    delete:
+      tags: [sources]
+      operationId: removeDevice
+      description: Forget a tuner or playlist and its channels. A channel another device also carries keeps its favorite, custom name and number, and passes there; the other passes are deleted. Recordings stay. A tuner that answers a later search for tuners comes back.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The devices that are left
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [devices]
+                properties:
+                  devices:
+                    type: array
+                    items: { $ref: "#/components/schemas/Device" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /devices/health:
     get:
       tags: [sources]
