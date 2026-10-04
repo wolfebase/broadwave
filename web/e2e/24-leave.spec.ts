@@ -49,7 +49,7 @@ test.beforeEach(async () => {
 // between the answer and reading it never learns what to stop.
 test("side by side plays both tiles after a page left before its watch answered", async ({ page }) => {
   const diag = (await (await fetch(`${base}/api/v1/diagnostics`)).json()) as { encoder?: { tiles?: number } };
-  test.skip(diag.encoder?.tiles !== 2, "needs a budget of two pictures (E2E_SPEED=1.8)");
+  test.skip(diag.encoder?.tiles !== 2, "needs a budget of two pictures (E2E_SPEED=3.1)");
   let answered!: () => void;
   const lost = new Promise<void>((resolve) => (answered = resolve));
   await page.route("**/api/v1/watch", async (route) => {
@@ -233,7 +233,7 @@ async function oneMoving(page: Page, channel: string): Promise<boolean> {
 // sound tile first, and that picture is moving within 5 s.
 test("a quad kept for Back keeps the sound tile when two pictures fit", async ({ page }) => {
   const diag = (await (await fetch(`${base}/api/v1/diagnostics`)).json()) as { encoder?: { tiles?: number } };
-  test.skip(diag.encoder?.tiles !== 2, "needs a budget of two pictures (E2E_SPEED=1.8)");
+  test.skip(diag.encoder?.tiles !== 2, "needs a budget of two pictures (E2E_SPEED=3.1)");
   expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBe(true);
   const asks: { channel: number; at: number; status: number; answered: number }[] = [];
   const watchAsk = (url: string, method: string) => method === "POST" && url.split("?")[0].endsWith("/api/v1/watch");

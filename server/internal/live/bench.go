@@ -73,16 +73,22 @@ func ParseSpeed(log string) float64 {
 	return v
 }
 
-// BenchEncoder encodes three seconds of 1080p60 and reports how fast it ran.
-// One second is mostly process startup, so a fast GPU looks too slow and the
-// budget drops a picture it can hold. The graph is a test picture, not a
-// broadcast, and it does not deinterlace.
+// BenchEncoder encodes a 1080p60 test picture and reports how fast it ran.
+// On a GPU it is three seconds timed with startup, which the GPU rows of
+// Budget were set on. libx264 is timed from the first frame out over five
+// seconds of picture: with startup in it, the same six cores read 1.6x on a
+// cold start and 4.2x a second later, and the budget flipped between one
+// picture and four. The graph is a test picture, not a broadcast, and it
+// does not deinterlace.
 func BenchEncoder(ctx context.Context, ffmpeg, encoder string) (float64, error) {
 	if ffmpeg == "" {
 		ffmpeg = "ffmpeg"
 	}
 	if encoder == "" {
 		encoder = "libx264"
+	}
+	if encoder == "libx264" {
+		return steadyBench(ctx, ffmpeg, softwareBenchArgs)
 	}
 	cmd := benchCommand(ctx, ffmpeg, benchArgs(encoder))
 	out, err := cmd.CombinedOutput()
@@ -122,10 +128,16 @@ func BenchLive(ctx context.Context, ffmpeg string) (float64, error) {
 	if ffmpeg == "" {
 		ffmpeg = "ffmpeg"
 	}
-	speed, stderr, err := runLiveBench(ctx, ffmpeg, true)
+	return steadyBench(ctx, ffmpeg, liveBenchArgs)
+}
+
+// steadyBench runs a bench that writes -progress to stdout and reports its
+// speed from the first frame out.
+func steadyBench(ctx context.Context, ffmpeg string, args func(fine bool) []string) (float64, error) {
+	speed, stderr, err := runSteadyBench(ctx, ffmpeg, args(true))
 	// -stats_period is ffmpeg 4.4. Older builds report every half second.
 	if err != nil && ctx.Err() == nil && strings.Contains(stderr, "stats_period") {
-		speed, stderr, err = runLiveBench(ctx, ffmpeg, false)
+		speed, stderr, err = runSteadyBench(ctx, ffmpeg, args(false))
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -136,8 +148,8 @@ func BenchLive(ctx context.Context, ffmpeg string) (float64, error) {
 	return speed, nil
 }
 
-func runLiveBench(ctx context.Context, ffmpeg string, fine bool) (float64, string, error) {
-	cmd := benchCommand(ctx, ffmpeg, liveBenchArgs(fine))
+func runSteadyBench(ctx context.Context, ffmpeg string, args []string) (float64, string, error) {
+	cmd := benchCommand(ctx, ffmpeg, args)
 	progress := &progressWriter{now: time.Now}
 	var stderr bytes.Buffer
 	cmd.Stdout = progress
@@ -154,13 +166,25 @@ func runLiveBench(ctx context.Context, ffmpeg string, fine bool) (float64, strin
 	return 0, stderr.String(), fmt.Errorf("encoder did not report a speed")
 }
 
-func liveBenchArgs(fine bool) []string {
-	vf, codec := liveBenchGraph()
+func progressArgs(fine bool) []string {
 	args := []string{"-hide_banner", "-nostdin", "-nostats", "-progress", "pipe:1"}
 	if fine {
 		args = append(args, "-stats_period", "0.1")
 	}
-	args = append(args,
+	return args
+}
+
+// softwareBenchArgs is five seconds so that the frames libx264 holds in its
+// frame threads when the first one comes out are a small part of the run.
+func softwareBenchArgs(fine bool) []string {
+	return append(progressArgs(fine),
+		"-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=60:duration=5",
+		"-c:v", "libx264", "-preset", "veryfast", "-f", "null", "-")
+}
+
+func liveBenchArgs(fine bool) []string {
+	vf, codec := liveBenchGraph()
+	args := append(progressArgs(fine),
 		"-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=60000/1001:duration=4",
 		"-vf", "tinterlace=mode=interleave_top,setfield=tff,"+vf,
 	)
