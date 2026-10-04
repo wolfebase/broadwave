@@ -74,3 +74,20 @@ for (const layout of ["desktop", "tv"] as const) {
     expect(keysAfterTune).toBe(true);
   });
 }
+
+test("the player keeps its keys when focus falls to the page", async ({ page }) => {
+  const setup = await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } });
+  expect(setup.ok()).toBeTruthy();
+  const { channels } = (await (await page.request.get("/api/v1/channels?guide=1")).json()) as { channels: Channel[] };
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/watch?channel=${channels[0].id}`);
+  await settle(page);
+  await expect(page.getByRole("region", { name: "Player" })).toBeVisible();
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
+  await page.keyboard.press("g");
+  await expect(page.getByRole("listbox", { name: "Channels" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("listbox", { name: "Channels" })).toHaveCount(0);
+  expect(await page.evaluate(() => Boolean(document.activeElement?.closest("[aria-label=Player]")))).toBe(true);
+});
