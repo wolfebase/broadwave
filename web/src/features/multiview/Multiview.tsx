@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { planMultiview } from "../../api";
 import { useData } from "../../app/data";
 import { useLayout } from "../../app/layout";
@@ -11,7 +11,7 @@ import { copy } from "../../strings";
 import type { Channel, MultiviewPlan } from "../../types";
 import { CloseIcon, VolumeIcon } from "../../ui/icons";
 import { LiveFrame } from "../../ui/LiveFrame";
-import { pageFitsTiles } from "../player/quietStart";
+import { pageFitsTiles, StartGate } from "../player/quietStart";
 import { useLiveStream } from "../player/useLiveStream";
 import { refreshScores, scoreLine, useScoreMap, type ScoreGame } from "../sports/scores";
 import { clearBroadcast, fromStillOn, resolveClear, standInIds } from "./clear";
@@ -19,8 +19,6 @@ import { channelsOnScreen, holdShown, layoutChoices, layoutFromParam, layoutLabe
 import { pickFocus } from "./switcher";
 import "./multiview.css";
 
-// A sound tile whose watch has not answered by now stops holding the others.
-const firstAskMs = 8000;
 
 function pressedAt() {
   return Date.now();
@@ -364,10 +362,6 @@ export function Multiview() {
   }
 
   const focused = ordered.find((c) => c.id === focus) ?? ordered[0];
-  // The sound tile asks for its picture first, on open and after a restart.
-  // With fewer pictures than tiles, a quiet tile that asked first kept the
-  // picture the viewer is listening to.
-  const focusedId = focused?.id ?? 0;
   const [slots, setSlots] = useState<number | null>(null);
   const [pictures, setPictures] = useState<ReadonlySet<number>>(() => new Set());
   useEffect(() => {
@@ -395,26 +389,23 @@ export function Multiview() {
   // A kept page starts every tile together only when the last budget covered
   // them. Otherwise the sound tile asks first again.
   const fits = pageFitsTiles(slots, ordered.length, pictures.size);
-  const [answered, setAnswered] = useState(0);
-  const firstDone = answered === focusedId;
-  const onAnswered = useCallback((id: number, done: boolean) => setAnswered((prev) => (done ? id : prev === id ? 0 : prev)), []);
-  // A tile still asking for a picture can reach a restarted server before the
-  // socket says it restarted, so the order starts over when the socket drops.
+  // The sound tile asks for its picture first, on open and after a restart.
+  // With fewer pictures than tiles, a quiet tile that asked first kept the
+  // picture the viewer is listening to.
+  const [gate] = useState(() => new StartGate());
   useEffect(() => {
-    const offRestart = events().on("restarted", () => setAnswered(0));
+    const offRestart = events().on("restarted", () => gate.restarted());
     const offConnection = events().on("connection", (up) => {
-      if (!up) setAnswered(0);
+      if (!up) gate.dropped();
     });
+    const offHello = events().on("hello", () => gate.back());
     return () => {
       offRestart();
       offConnection();
+      offHello();
+      gate.stop();
     };
-  }, []);
-  useEffect(() => {
-    if (firstDone || !focusedId) return;
-    const late = window.setTimeout(() => setAnswered(focusedId), firstAskMs);
-    return () => window.clearTimeout(late);
-  }, [firstDone, focusedId]);
+  }, [gate]);
   // A tile that never started has no sound to give. One that already showed a
   // picture keeps it while that picture comes back.
   const soundTo = focused && failed.has(focused.id) ? (ordered.find((c) => !failed.has(c.id))?.id ?? 0) : 0;
@@ -472,7 +463,7 @@ export function Multiview() {
             score={scores.get(airingAt(index, channel.id, now)?.gameId ?? "")}
             focused={channel.id === (focused?.id ?? 0)}
             pointed={channel.id === mark}
-            after={channel.id !== focusedId && !firstDone}
+            gate={gate}
             layout={layout}
             room={room}
             menu={menu && channel.id === (focused?.id ?? 0)}
@@ -480,7 +471,6 @@ export function Multiview() {
             onHeard={heard}
             onRemove={() => remove(channel.id)}
             onFailed={markFailed}
-            onAnswered={onAnswered}
             onPicture={notePicture}
             fits={fits}
             standIn={standIns.has(channel.id)}
@@ -533,10 +523,9 @@ function Tile({
   onRemove,
   onRecord,
   onFailed,
-  onAnswered,
   onPicture,
   fits,
-  after,
+  gate,
   standIn,
 }: {
   channel: Channel;
@@ -552,10 +541,9 @@ function Tile({
   onRemove: () => void;
   onRecord: () => void;
   onFailed: (id: number, failed: boolean) => void;
-  onAnswered: (id: number, done: boolean) => void;
   onPicture: (id: number, on: boolean) => void;
   fits: boolean;
-  after: boolean;
+  gate: StartGate;
   standIn: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -566,6 +554,10 @@ function Tile({
   // Equal tiles all get the same picture, so moving the sound only unmutes one.
   // A focus-dependent picture restarted both tiles on every swap.
   const big = focused && !equal;
+  // Layout effects run before the watch effect, so a start in this render has its rank.
+  const rank = focused ? 0 : showedPicture ? 1 : 2;
+  useLayoutEffect(() => gate.rank(channel.id, rank), [gate, channel.id, rank]);
+  useEffect(() => () => gate.leave(channel.id), [gate, channel.id]);
   const stream = useLiveStream(videoRef, {
     channelId: channel.id,
     quality: layout === "2up" || big ? "focus" : layout === "quad" || layout === "pip" ? "360" : "tile",
@@ -577,13 +569,9 @@ function Tile({
     sync: true,
     profile: big ? (layoutMode === "tv" ? "tv" : "desktop") : "tile",
     audible: focused,
-    after,
+    gate,
     fits,
-    quiet: !focused,
   });
-  useEffect(() => {
-    if (focused) onAnswered(channel.id, !stream.asking);
-  }, [focused, stream.asking, channel.id, onAnswered]);
   useEffect(() => {
     if (stream.asking) return;
     onPicture(channel.id, stream.session != null);

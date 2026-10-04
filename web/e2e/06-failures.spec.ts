@@ -263,9 +263,18 @@ test("a channel with no signal plays again when the signal returns", async ({ pa
 });
 
 test("a multiview tile that does not start gives its sound away and can be removed", async ({ page }) => {
-  const { admin } = harness();
+  const { admin, base } = harness();
   const kbwv = channel("KBWV");
   const wtst = channel("WTST");
+  // A picture of 5.1 still running from the test before would play a moment,
+  // and a tile that showed a picture keeps its sound.
+  await expect
+    .poll(async () => ((await (await fetch(`${base}/api/v1/tuners`)).json()) as { tuners?: { ours?: boolean }[] }).tuners?.some((t) => t.ours) ?? false, {
+      timeout: 60_000,
+      intervals: [500],
+      message: "the previous watch let the tuners go",
+    })
+    .toBe(false);
   try {
     await openChannel(page, kbwv.id);
     await expectPlaying(page);
