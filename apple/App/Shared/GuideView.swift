@@ -371,7 +371,7 @@ struct GuideGrid: View {
             HStack(alignment: .top, spacing: 0) {
                 // A tvOS ScrollView scrolls its overlay with the content, so the column
                 // slid off the left when the grid opened on now. Keep it beside the scroller.
-                channelRail(rowHeight: rowHeight)
+                channelRail(rowHeight: rowHeight, viewport: viewport.height)
                     .frame(width: channelW, height: viewport.height, alignment: .top)
                     .background(Tokens.ColorToken.surface1)
                     .clipped()
@@ -460,7 +460,7 @@ struct GuideGrid: View {
         }
     }
 
-    private func channelRail(rowHeight: CGFloat) -> some View {
+    private func channelRail(rowHeight: CGFloat, viewport: CGFloat) -> some View {
         VStack(spacing: 0) {
             Rectangle()
                 .fill(Tokens.ColorToken.surface1)
@@ -515,6 +515,7 @@ struct GuideGrid: View {
                     .buttonStyle(GuideChannelStyle())
                     #if os(tvOS)
                         .focused(channelFocus, equals: channel.id)
+                        .onMoveCommand { moveRail($0, from: channel.id, rowHeight: rowHeight, viewport: viewport) }
                     #endif
                         .accessibilityLabel("\(channel.displayNumber) \(channel.displayName)\(channel.isATSC3 ? ", ATSC 3.0" : "")")
                 }
@@ -522,6 +523,28 @@ struct GuideGrid: View {
             .offset(y: -offset.y)
         }
     }
+
+    #if os(tvOS)
+        /// Up and Down step through the column. With no programs to its right, the
+        /// geometric search left focus on the first channel. A row that is not fully on
+        /// screen is left to that search, which scrolls the grid.
+        private func moveRail(_ direction: MoveCommandDirection, from id: Int64, rowHeight: CGFloat, viewport: CGFloat) {
+            guard let index = channels.firstIndex(where: { $0.id == id }) else { return }
+            let next: Int
+            switch direction {
+            case .down:
+                next = index + 1
+            case .up:
+                next = index - 1
+            default:
+                return
+            }
+            guard channels.indices.contains(next) else { return }
+            let top = headH + CGFloat(next) * rowHeight - offset.y
+            guard top >= headH, top + rowHeight <= viewport + 1 else { return }
+            channelFocus.wrappedValue = channels[next].id
+        }
+    #endif
 
     private func row(_ channel: Channel, end: Date, rowHeight: CGFloat) -> some View {
         let list = store.index.airings(channel.id).filter { $0.end > origin && $0.start < end }
