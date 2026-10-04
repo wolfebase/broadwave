@@ -211,7 +211,7 @@ Without an updater, the web app says when a new release is out.
 
 | | |
 | --- | --- |
-| **Tuners** | HDHomeRun and compatible network tuners — several at once, with automatic failover |
+| **Tuners** | HDHomeRun and compatible network tuners — several at once, with automatic failover. [Tuners](docs/tuners.md) |
 | **Playlists** | M3U (file or URL, with `tvg-*` tags and its own guide) and Xtream Codes |
 | **Other TV servers** | tvheadend, Channels DVR, Threadfin, xTeVe, ErsatzTV, Dispatcharr, Antennas |
 | **Free streaming channels** | Popular free ad-supported services through a FastChannels container |
@@ -235,7 +235,7 @@ Without an updater, the web app says when a new release is out.
 
 <details>
 <summary><b>Which tuner should I get?</b></summary>
-<br>Any current HDHomeRun works out of the box, and Broadwave finds it on its own. Other network tuners work by address. A FLEX 4K also receives ATSC 3.0 on two of its four tuners. [How that works](docs/atsc3.md).
+<br>Any current HDHomeRun works out of the box, and Broadwave finds it on its own. Other network tuners work by address. [How tuners are found](docs/tuners.md). A FLEX 4K also receives ATSC 3.0 on two of its four tuners. [How that works](docs/atsc3.md).
 </details>
 
 <details>
