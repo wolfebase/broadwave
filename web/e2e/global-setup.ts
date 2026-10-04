@@ -90,6 +90,8 @@ VALUES (${ch.id}, 'Evening News', 'Local headlines', 'The evening newscast.', 'N
   const rows: [number, string, string, string, string, number, number][] = [
     [kbwv.id, "NFL: Bears at Bills", "Chicago at Buffalo", "Sunday football.", "Sports", now - 20 * 60_000, now + 100 * 60_000],
     [kbwv.id, "Late Local News", "The late newscast.", "The late newscast.", "News", now + 100 * 60_000, now + 160 * 60_000],
+    // Ended an hour ago: search leaves it out.
+    [kbwv2.id, "Morning News", "Early headlines", "The morning newscast.", "News", now - 2 * 60 * 60_000, now - 60 * 60_000],
     [kbwv2.id, "Evening News", "Local headlines", "The evening newscast.", "News", now - 15 * 60_000, now + 45 * 60_000],
     [wtst.id, "The Night Show", "A guest and a band", "Talk.", "Series", now - 5 * 60_000, now + 2 * 60 * 60_000],
     [wtst.id, "NBA: Lakers at Celtics", "Los Angeles at Boston", "Basketball.", "Sports", now + 3 * 60 * 60_000, now + 6 * 60 * 60_000],
