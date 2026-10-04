@@ -93,6 +93,7 @@ targets:
       - App/UITests
     dependencies:
       - target: Broadwave
+      - package: BroadwaveKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.broadwave.ui
@@ -106,6 +107,7 @@ targets:
       - App/UITests
     dependencies:
       - target: BroadwaveTV
+      - package: BroadwaveKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.broadwave.tvui

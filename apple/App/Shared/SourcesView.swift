@@ -7,6 +7,8 @@ struct SourcesView: View {
     @Environment(AppStore.self) private var store
     @State private var devices: [Device] = []
     @State private var sources: [Source] = []
+    /// lastSeen for every device, including ones a playlist owns.
+    @State private var seenAt: [String: String] = [:]
     @State private var scanning: String?
     @State private var scanTask: Task<Void, Never>?
     @State private var scanNotes: [String: String] = [:]
@@ -120,26 +122,36 @@ struct SourcesView: View {
                 Text("No playlists, links, or folders.").foregroundStyle(.secondary)
             }
             ForEach(sources) { source in
+                let name = source.name.isEmpty ? Self.kindName(source.kind) : source.name
+                let offline = Self.isOffline(source)
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(source.name.isEmpty ? Self.kindName(source.kind) : source.name).font(.headline)
-                        Spacer()
-                        Text(Self.healthWord(source))
-                            .foregroundStyle(source.health?.isEmpty == false ? Tokens.ColorToken.warning : Tokens.ColorToken.success)
+                    if offline, let id = source.deviceId, !id.isEmpty {
+                        removeButton(id: id, name: name)
                     }
-                    Text(Self.sourceDetail(source)).font(.caption).foregroundStyle(.secondary)
-                    if let health = source.health, !health.isEmpty {
-                        Text(health).font(.caption)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(name).font(.headline)
+                            if !offline {
+                                Spacer()
+                                Text(Self.healthWord(source))
+                                    .foregroundStyle(Tokens.ColorToken.success)
+                            }
+                        }
+                        Text(Self.sourceDetail(source)).font(.caption).foregroundStyle(.secondary)
+                        if offline {
+                            Text(LastSeen.offline(LastSeen.phrase(source.deviceId.flatMap { seenAt[$0] })))
+                                .font(.caption)
+                        }
                     }
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("source-row-\(source.id)")
-                #if os(tvOS)
-                    .focusable()
-                    .focused($focusedRow, equals: "source-\(source.id)")
-                #endif
-                if let id = source.deviceId, !id.isEmpty {
-                    removeButton(id: id, name: source.name.isEmpty ? Self.kindName(source.kind) : source.name)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("source-row-\(source.id)")
+                    #if os(tvOS)
+                        .focusable()
+                        .focused($focusedRow, equals: "source-\(source.id)")
+                    #endif
+                    if !offline, let id = source.deviceId, !id.isEmpty {
+                        removeButton(id: id, name: name)
+                    }
                 }
             }
         } header: {
@@ -233,6 +245,11 @@ struct SourcesView: View {
         }
     }
 
+    static func isOffline(_ source: Source) -> Bool {
+        guard let health = source.health else { return false }
+        return !health.isEmpty
+    }
+
     static func healthWord(_ source: Source) -> String {
         if !source.enabled {
             return "Off"
@@ -257,8 +274,14 @@ struct SourcesView: View {
             async let foundDevices = api.devices()
             async let foundSources = api.sources()
             let list = try await foundSources
+            let found = try await foundDevices
             let owned = Set(list.compactMap(\.deviceId))
-            devices = try await foundDevices.filter { !owned.contains($0.deviceId) }
+            var seen: [String: String] = [:]
+            for device in found {
+                seen[device.deviceId] = device.lastSeen ?? ""
+            }
+            seenAt = seen
+            devices = found.filter { !owned.contains($0.deviceId) }
             sources = list
             error = ""
             if scanning == nil {
