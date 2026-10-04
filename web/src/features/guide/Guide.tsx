@@ -301,7 +301,8 @@ export function Guide() {
   const rightT = origin + ((view.left + view.width) / pxPerMin) * MIN;
   const nowX = ((now - origin) / MIN) * pxPerMin;
   const slots = Array.from({ length: hours * 2 }, (_, i) => origin + i * 30 * MIN).filter((t) => t > leftT - 60 * MIN && t < rightT + 60 * MIN);
-  const nowInView = nowX - view.left > channelW - 8 && nowX - view.left < view.width - 24;
+  // The now line sits at channelW + nowX on the canvas, and the channel column covers the scroller's first channelW.
+  const nowInView = nowX - view.left > 8 && nowX - view.left < view.width - channelW - 24;
   const focusRow = rows[focus.row];
   const focusAiring = focusRow ? airingAt(index, focusRow.id, focus.at) : undefined;
   const activeId = focusRow ? guideCellId(focusRow.id, focusAiring?.id) : undefined;
