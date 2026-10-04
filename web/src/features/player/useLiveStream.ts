@@ -289,7 +289,9 @@ export function useLiveStream(
         confirmLive.current = false;
         setNeedsConfirm(false);
         const askAlternates = !!alternates && Hls.isSupported();
-        const next = await watchChannel(id, webCaps(askAlternates), { quality, audio, picture, track, even }, "", allow, ctrl.signal);
+        // Only hls.js starts on the room's frame (startOnRoom below).
+        const joining = Hls.isSupported() && syncing.current && !holdSync.current ? (roomRef.current ?? "") : "";
+        const next = await watchChannel(id, webCaps(askAlternates), { quality, audio, picture, track, even }, "", allow, ctrl.signal, joining);
         joined = next.rendition;
         boot = next.boot ?? "";
         watching.current = true;

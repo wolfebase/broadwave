@@ -678,6 +678,7 @@ paths:
                 audio: { type: string, enum: [stereo, surround], deprecated: true }
                 pictureMode: { $ref: "#/components/schemas/PictureMode" }
                 confirmLive: { type: boolean, description: "Set when the viewer chooses to watch even though that recording will be missed." }
+                room: { type: string, description: "The sync room the player joins, for a player that starts on the room's frame. A new encode for a room that plays well behind live starts in the buffer at that frame, and the reply waits until the playlist holds it (a few seconds at most)." }
       responses:
         "200":
           description: Live session

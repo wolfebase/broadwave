@@ -328,6 +328,11 @@ type rendition struct {
 	noted bool
 	// unfroze is when the output watchdog last ended this encode.
 	unfroze time.Time
+	// ringFrom is when the first byte this encode read from the buffer
+	// reached the tuner. Zero when it started at the live edge. dated is set
+	// once it fell back to dating by that arrival.
+	ringFrom time.Time
+	dated    bool
 	// late is when the playlist last grew before a late gap, in Unix ns,
 	// until the gap ends and is logged.
 	late int64
@@ -444,6 +449,12 @@ func sourceOf(ch store.SourceChannel) Source {
 // place from a master, so a second-language or described watch joins the main
 // encode when that encode serves it (mainServesLocked).
 func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition, alternates bool) (Session, error) {
+	return h.WatchAt(ctx, channelID, want, alternates, time.Time{})
+}
+
+// WatchAt is Watch for a player that starts on its room's frame, which plays
+// frame now. A new encode for a room well behind live starts in the buffer.
+func (h *Hub) WatchAt(ctx context.Context, channelID int64, want Rendition, alternates bool, frame time.Time) (Session, error) {
 	h.preemptScan()
 	want = want.normalized()
 	ch, err := h.Store.SourceChannel(ctx, channelID)
@@ -539,7 +550,7 @@ func (h *Hub) Watch(ctx context.Context, channelID int64, want Rendition, altern
 			want = main
 		}
 	}
-	r, err := h.ensureRenditionLocked(f, want)
+	r, err := h.ensureRenditionAtLocked(f, want, frame)
 	if err != nil {
 		h.dropIfUnusedLocked(f)
 		return Session{}, err
@@ -1002,6 +1013,12 @@ func (h *Hub) Current(channelID int64, key string) string {
 }
 
 func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error) {
+	return h.ensureRenditionAtLocked(f, want, time.Time{})
+}
+
+// ensureRenditionAtLocked is ensureRenditionLocked for a viewer whose room
+// plays frame now; a zero frame starts a new encode at the live edge.
+func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) (*rendition, error) {
 	if want.Codec == "hevc" && !h.HEVC {
 		want.Codec = ""
 	}
@@ -1066,7 +1083,7 @@ func (h *Hub) ensureRenditionLocked(f *feed, want Rendition) (*rendition, error)
 	now := time.Now()
 	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: now, began: now, args: args, extras: extras, gate: gate, packDone: done, input: packIn}
 	if stdin != nil {
-		r.sub = h.attachPipe(muxOf(h, f), h.renditionPipe(f, r, stdin), true)
+		r.sub = h.attachRenditionLocked(f, r, h.renditionPipe(f, r, stdin), frame, now)
 	}
 	f.renditions[key] = r
 	go h.watchRendition(f, r, cmd, encoderOf(h.Encoder, want), false)
@@ -1299,6 +1316,8 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 	r.stdin = nil
 	r.stamper.reset()
 	r.clock = nil
+	r.ringFrom = time.Time{}
+	r.dated = false
 	if err := os.RemoveAll(r.dir); err != nil {
 		return false
 	}
@@ -1591,30 +1610,101 @@ func (h *Hub) EarliestMedia(channelID int64) (float64, bool) {
 	return float64(best.UnixNano()) / 1e6, true
 }
 
-// seedClockLocked puts a new encode's first picture at the wall time another
-// encode of the channel already gives that broadcast frame, so every screen
-// in a room sees the same frame at the same time whichever encode it plays.
-// Without such a sibling the encode anchors on the clock on the wall.
-func seedClockLocked(f *feed, r *rendition) {
-	own, ok := r.input.broadcastOffset()
-	if !ok {
-		return
+// A new encode starts in the buffer only for a room between roomBackMin and
+// roomBackMax behind live. Closer, the live edge holds the room's frame in a
+// second or two; further (a paused or rewound group room), the encode would
+// spend the GPU catching up on a backlog.
+const (
+	roomBackMin = 6 * time.Second
+	roomBackMax = time.Minute
+)
+
+// ringLead is how long before the room's frame, by arrival at the tuner, a
+// new encode starts reading the buffer: room for a keyframe, and for the
+// running encode's dates, which trail arrival by a second or two.
+const ringLead = 4 * time.Second
+
+// ringDelay is how much older than its arrival at the tuner an encode with
+// no running sibling dates its first picture: about what an encode fed at
+// the live edge gets from its probe and its first fragment.
+const ringDelay = 1500 * time.Millisecond
+
+// attachRenditionLocked feeds a new encode, from the buffer ringLead before
+// the room's frame when the room is well behind live, as fast as the encode
+// reads, then from the fan-out. Its dates come from a running sibling.
+func (h *Hub) attachRenditionLocked(f *feed, r *rendition, w io.WriteCloser, frame, now time.Time) *pipeSub {
+	m := muxOf(h, f)
+	back := now.Sub(frame)
+	if m != nil && m.ring != nil && m.input == "" && !frame.IsZero() && back >= roomBackMin && back <= roomBackMax && datedSiblingLocked(f, r) {
+		from := frame.Add(-ringLead)
+		if pos, ok := m.ring.At(from); ok {
+			r.ringFrom = from
+			sub := newPipeSub(w)
+			go m.joinLive(sub, packetStart(pos))
+			slog.Info(fmt.Sprintf("channel %s: %s starts %.1f s back in the buffer, at its room", f.channel.GuideNumber, r.spec.Key(), now.Sub(from).Seconds()))
+			return sub
+		}
 	}
-	if _, _, set := r.clock.Anchor(); set {
-		return
+	return h.attachPipe(m, w, true)
+}
+
+// FromBuffer reports whether a rendition started in the buffer, so its
+// playlist is still catching up with the room it started for.
+func (h *Hub) FromBuffer(channelID int64, key string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	f := h.channels[channelID]
+	if f == nil || f.renditions[key] == nil {
+		return false
 	}
+	return !f.renditions[key].ringFrom.IsZero()
+}
+
+// datedSiblingLocked reports whether another encode of the channel has
+// dated its pictures, so a new one can be seeded from it.
+func datedSiblingLocked(f *feed, r *rendition) bool {
 	for _, s := range f.renditions {
 		if s == r || s.clock == nil {
 			continue
 		}
-		off, ok := s.input.broadcastOffset()
-		pts, wall, set := s.clock.Anchor()
-		if !ok || !set {
+		if _, ok := s.input.broadcastOffset(); !ok {
 			continue
 		}
-		// The sibling's anchor on the broadcast clock, then on this encode's.
-		r.clock.Seed(((pts+off-own)%ptsWrap+ptsWrap)%ptsWrap, wall)
+		if _, _, set := s.clock.Anchor(); set {
+			return true
+		}
+	}
+	return false
+}
+
+// seedClockLocked puts a new encode's first picture at the wall time another
+// encode of the channel already gives that broadcast frame, so every screen
+// in a room sees the same frame at the same time whichever encode it plays.
+// Without such a sibling the encode anchors on the clock on the wall, or for
+// one fed from the buffer, on when its first byte arrived.
+func seedClockLocked(f *feed, r *rendition) {
+	if _, _, set := r.clock.Anchor(); set {
 		return
+	}
+	if own, ok := r.input.broadcastOffset(); ok {
+		for _, s := range f.renditions {
+			if s == r || s.clock == nil {
+				continue
+			}
+			off, ok := s.input.broadcastOffset()
+			pts, wall, set := s.clock.Anchor()
+			if !ok || !set {
+				continue
+			}
+			// The sibling's anchor on the broadcast clock, then on this encode's.
+			r.clock.Seed(((pts+off-own)%ptsWrap+ptsWrap)%ptsWrap, wall)
+			return
+		}
+	}
+	if !r.ringFrom.IsZero() && !r.dated && r.input.started() {
+		r.dated = true
+		r.clock.Start(r.ringFrom.Add(-ringDelay))
+		slog.Warn(fmt.Sprintf("channel %s: %s started in the buffer with no encode to date it by; its dates may be a second or two off", f.channel.GuideNumber, r.spec.Key()))
 	}
 }
 

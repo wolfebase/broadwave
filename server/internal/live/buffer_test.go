@@ -378,3 +378,100 @@ func TestASecondExportHasItsPictureAtOnce(t *testing.T) {
 	<-first
 	<-second
 }
+
+// playlistSpan is the program time of a stamped playlist's first segment and
+// where its last one ends.
+func playlistSpan(body []byte) (first, end time.Time, ok bool) {
+	var at time.Time
+	for _, line := range strings.Split(string(body), "\n") {
+		if v, found := strings.CutPrefix(line, "#EXT-X-PROGRAM-DATE-TIME:"); found {
+			t, err := time.Parse("2006-01-02T15:04:05.000Z", v)
+			if err != nil {
+				return time.Time{}, time.Time{}, false
+			}
+			if first.IsZero() {
+				first = t
+			}
+			at, end = t, t
+		} else if v, found := strings.CutPrefix(line, "#EXTINF:"); found && !at.IsZero() {
+			sec, err := strconv.ParseFloat(strings.TrimSuffix(v, ","), 64)
+			if err == nil {
+				end = end.Add(time.Duration(sec * float64(time.Second)))
+			}
+		}
+	}
+	return first, end, !first.IsZero()
+}
+
+// A browser joining a room that plays well behind live used to get a new
+// encode at the live edge and hold its first picture until the room caught
+// up, 11-15 s. The encode now starts in the buffer at the room's frame.
+func TestANewEncodeForARoomBehindLiveHoldsItsFrame(t *testing.T) {
+	h, st := bufferHub(t)
+	id := idOf(t, st, "4.1")
+	ctx := context.Background()
+	first, err := h.Watch(ctx, id, Rendition{Video: "copy", Audio: "copy"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		if body, err := h.Playlist(id, first.Rendition); err == nil {
+			if _, _, ok := playlistSpan(body); ok {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the first encode wrote no segment")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	// The room plays 7 s behind; the buffer holds it once the tune is 11 s old.
+	time.Sleep(12 * time.Second)
+	// A paused group room minutes back would make an encode chew through
+	// the backlog; it starts at the edge.
+	paused, err := h.WatchAt(ctx, id, Rendition{Video: "540", Audio: "aac2", Mode: "broadcast"}, false, time.Now().Add(-2*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.FromBuffer(id, paused.Rendition) {
+		t.Fatal("an encode for a room two minutes back started in the buffer")
+	}
+	frame := time.Now().Add(-7 * time.Second)
+	asked := time.Now()
+	second, err := h.WatchAt(ctx, id, Rendition{Video: "360", Audio: "aac2", Mode: "broadcast"}, false, frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Rendition == first.Rendition {
+		t.Fatalf("joined %s instead of starting an encode", second.Rendition)
+	}
+	for {
+		body, err := h.Playlist(id, second.Rendition)
+		if err == nil {
+			if start, end, ok := playlistSpan(body); ok {
+				if start.After(frame) {
+					t.Fatalf("the new encode starts %v after the room's frame", start.Sub(frame))
+				}
+				// The room moves on while the encode catches up.
+				if !end.Before(frame.Add(time.Since(asked) + time.Second)) {
+					t.Logf("frame held %v after the watch, first picture %v before it", time.Since(asked), frame.Sub(start))
+					h.mu.Lock()
+					dated := h.channels[id].renditions[second.Rendition].dated
+					h.mu.Unlock()
+					if dated {
+						t.Fatal("the new encode was dated by arrival, not by the running one")
+					}
+					if !h.FromBuffer(id, second.Rendition) || h.FromBuffer(id, first.Rendition) {
+						t.Fatal("FromBuffer does not tell the encode started in the buffer from the one at the edge")
+					}
+					return
+				}
+			}
+		}
+		if time.Since(asked) > 8*time.Second {
+			t.Fatalf("the new encode did not reach the room's frame in 8 s: %s", body)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}

@@ -22,6 +22,7 @@ import (
 	"broadwave/internal/dvr"
 	"broadwave/internal/guide"
 	"broadwave/internal/live"
+	"broadwave/internal/realtime"
 	"broadwave/internal/store"
 )
 
@@ -34,6 +35,8 @@ type watchBody struct {
 	Audio       string     `json:"audio"`
 	Picture     string     `json:"pictureMode"`
 	ConfirmLive bool       `json:"confirmLive"`
+	// Room is the sync room a player that starts on the room's frame joins.
+	Room string `json:"room"`
 }
 
 // decide picks the rendition a watch plays: the one the player named, or the
@@ -112,8 +115,13 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	alternates := body.Caps != nil && body.Caps.Alternates
+	room, inRoom := s.roomOf(body)
+	var frame time.Time
+	if inRoom {
+		frame = roomFrame(room, time.Now())
+	}
 	// A rendition the player named is played as named.
-	session, err := s.Hub.Watch(r.Context(), body.ChannelID, decision.Rendition, alternates && !chosen)
+	session, err := s.Hub.WatchAt(r.Context(), body.ChannelID, decision.Rendition, alternates && !chosen, frame)
 	if err != nil {
 		watchError(w, err)
 		return
@@ -138,6 +146,13 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session.Rendition = s.Hub.Current(session.ChannelID, session.Rendition)
+	if inRoom && s.Hub.FromBuffer(session.ChannelID, session.Rendition) {
+		waitFrame(r.Context(), s.Hub, session.ChannelID, session.Rendition, room, roomFrameWait)
+		if r.Context().Err() != nil {
+			s.Hub.Release(session.ChannelID, session.Rendition)
+			return
+		}
+	}
 	if steps := s.Hub.NoteStart(session.ChannelID, session.Rendition, asked); steps != "" {
 		slog.Info(steps)
 	}
@@ -1419,4 +1434,73 @@ func waitServable(ctx context.Context, h *live.Hub, channelID int64, key string,
 		}
 	}
 	return false
+}
+
+// roomFrameWait caps how long a watch waits for an encode started in the
+// buffer to reach its room's frame. Past it the player starts at the edge.
+const roomFrameWait = 6 * time.Second
+
+// roomAhead is how far past the room's frame the playlist must reach before
+// the watch answers: the player starts half a second ahead of the room and
+// needs a little picture beyond that.
+const roomAhead = 1500 * time.Millisecond
+
+// roomFrame is the program time the room plays at t.
+func roomFrame(st realtime.RoomState, t time.Time) time.Time {
+	return time.UnixMilli(int64(st.Target(float64(t.UnixNano()) / 1e6)))
+}
+
+// roomOf is the room the watch names, when it plays this channel and has
+// screens in it.
+func (s *Server) roomOf(body watchBody) (realtime.RoomState, bool) {
+	if body.Room == "" || s.Bus == nil || s.Bus.Rooms == nil {
+		return realtime.RoomState{}, false
+	}
+	st, ok := s.Bus.Rooms.State(body.Room)
+	if !ok || st.ChannelID != body.ChannelID || st.Members == 0 {
+		return realtime.RoomState{}, false
+	}
+	return st, true
+}
+
+// waitFrame waits until the playlist of an encode started in the buffer,
+// which grows faster than real time, holds roomAhead past the room's frame.
+func waitFrame(ctx context.Context, h *live.Hub, channelID int64, key string, room realtime.RoomState, d time.Duration) {
+	deadline := time.Now().Add(d)
+	for ctx.Err() == nil && time.Now().Before(deadline) {
+		body, err := h.Playlist(channelID, h.Current(channelID, key))
+		if err != nil {
+			return
+		}
+		end, ok := playlistEnd(body)
+		if !ok || !end.Before(roomFrame(room, time.Now()).Add(roomAhead)) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// playlistEnd is the program time where a stamped playlist's last segment ends.
+func playlistEnd(body []byte) (time.Time, bool) {
+	var at time.Time
+	var dur float64
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSpace(line)
+		if v, ok := strings.CutPrefix(line, "#EXT-X-PROGRAM-DATE-TIME:"); ok {
+			t, err := time.Parse(time.RFC3339Nano, v)
+			if err != nil {
+				return time.Time{}, false
+			}
+			at, dur = t, 0
+		} else if v, ok := strings.CutPrefix(line, "#EXTINF:"); ok && !at.IsZero() {
+			sec, err := strconv.ParseFloat(strings.SplitN(v, ",", 2)[0], 64)
+			if err == nil {
+				dur += sec
+			}
+		}
+	}
+	if at.IsZero() {
+		return time.Time{}, false
+	}
+	return at.Add(time.Duration(dur * float64(time.Second))), true
 }

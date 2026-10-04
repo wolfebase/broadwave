@@ -118,3 +118,23 @@ func TestAListedPartAfterABreakKeepsTheSilence(t *testing.T) {
 		}
 	}
 }
+
+// An encode fed from the buffer dates its first picture when that byte
+// arrived, not seconds later when it was encoded. A sibling's seed wins.
+func TestAStartDatesTheFirstPictureUnlessSeeded(t *testing.T) {
+	now := time.Date(2026, 10, 3, 20, 0, 0, 0, time.UTC)
+	arrived := now.Add(-20 * time.Second)
+	tl := NewTimeline()
+	tl.now = func() time.Time { return now }
+	tl.Start(arrived)
+	if got := tl.Wall(90000); !got.Equal(arrived) {
+		t.Fatalf("first picture at %v, want %v", got, arrived)
+	}
+	seeded := NewTimeline()
+	seeded.now = func() time.Time { return now }
+	seeded.Seed(90000, arrived.Add(time.Second))
+	seeded.Start(arrived)
+	if got := seeded.Wall(90000); !got.Equal(arrived.Add(time.Second)) {
+		t.Fatalf("seeded first picture at %v, want the seed's %v", got, arrived.Add(time.Second))
+	}
+}
