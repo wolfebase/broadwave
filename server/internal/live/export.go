@@ -29,8 +29,7 @@ func (h *Hub) Export(ctx context.Context, channelID int64, w io.Writer) error {
 			}
 		}
 	}
-	h.mu.Lock()
-	f, err := h.ensureFeedLocked(ctx, ch, res)
+	f, err := h.tuneFeed(ctx, ch, res)
 	if err != nil {
 		h.mu.Unlock()
 		return err

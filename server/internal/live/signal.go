@@ -77,8 +77,7 @@ func (h *Hub) Measure(ctx context.Context, channelID int64) (hdhr.Lock, error) {
 	if err != nil {
 		return zero, err
 	}
-	h.mu.Lock()
-	f, err := h.ensureFeedLocked(ctx, ch, nil)
+	f, err := h.tuneFeed(ctx, ch, nil)
 	if err != nil {
 		h.mu.Unlock()
 		return zero, err

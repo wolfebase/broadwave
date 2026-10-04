@@ -2,6 +2,7 @@ package live
 
 import (
 	"context"
+	"io"
 	"os/exec"
 	"strings"
 	"sync"
@@ -73,6 +74,58 @@ func TestA1Point0TuneLeavesTheHubFree(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.Release(id, session.Rendition)
+}
+
+// A recording, an export, a guide dwell, and a signal check tune the same
+// way a watch does: a channel with no signal must not hold the hub.
+func TestEveryTuneLeavesTheHubFree(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	cases := map[string]func(ctx context.Context, h *Hub, id int64) error{
+		"record": func(ctx context.Context, h *Hub, id int64) error {
+			rec, err := h.Record(ctx, id, 1, "News")
+			if err == nil {
+				h.StopRecord(rec.ID)
+			}
+			return err
+		},
+		"export": func(ctx context.Context, h *Hub, id int64) error {
+			ctx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+			defer cancel()
+			return h.Export(ctx, id, io.Discard)
+		},
+		"dwell": func(ctx context.Context, h *Hub, id int64) error {
+			_, err := h.Dwell(ctx, id, 0)
+			return err
+		},
+		"measure": func(ctx context.Context, h *Hub, id int64) error {
+			_, err := h.Measure(ctx, id)
+			return err
+		},
+	}
+	for name, tune := range cases {
+		t.Run(name, func(t *testing.T) {
+			srv := &fake.Server{Profile: fake.ProfileConnectDuo, TuneDelay: 800 * time.Millisecond}
+			st, _ := tuneStore(t, srv)
+			h := New(st, t.TempDir(), "ffmpeg", "libx264")
+			t.Cleanup(h.Shutdown)
+			ctx := context.Background()
+			id := idOf(t, st, "4.1")
+
+			done := make(chan error, 1)
+			go func() { done <- tune(ctx, h, id) }()
+			time.Sleep(300 * time.Millisecond)
+			began := time.Now()
+			h.Touch(idOf(t, st, "5.1"), Rendition{Video: "copy", Audio: "aac2"}.normalized().Key())
+			if waited := time.Since(began); waited > 200*time.Millisecond {
+				t.Fatalf("the hub was held %v while the tuner locked", waited)
+			}
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
 }
 
 // Two subchannels of one station opened at once share one tuner.

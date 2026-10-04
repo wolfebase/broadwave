@@ -506,70 +506,10 @@ func (h *Hub) WatchAt(ctx context.Context, channelID int64, want Rendition, alte
 		return Session{}, last
 	}
 	h.serve(candidates[0], ch)
-	var auto *autoGuess
-	var tune *tuned
-	opener := false
-	if res == nil {
-		h.mu.Lock()
-		_, isTuned := h.channels[ch.ID]
-		wait := h.opening[ch.ID]
-		if !isTuned && wait == nil {
-			h.beginOpenLocked(ch.ID)
-			opener = true
-		}
-		h.mu.Unlock()
-		if opener {
-			if auto = h.openAuto(ctx, ch, false); auto == nil {
-				tune = h.openTuned(ctx, ch)
-			}
-		} else if wait != nil {
-			select {
-			case <-wait:
-			case <-ctx.Done():
-				return Session{}, ctx.Err()
-			}
-		}
-		// A sibling's open that failed leaves this watch to tune for itself,
-		// still without h.mu. Two waits at most, then the locked path.
-		for i := 0; tune != nil && tune.wait != nil; i++ {
-			select {
-			case <-tune.wait:
-			case <-ctx.Done():
-				h.mu.Lock()
-				h.endOpenLocked(ch.ID)
-				h.mu.Unlock()
-				return Session{}, ctx.Err()
-			}
-			tune = nil
-			if i < 2 {
-				tune = h.openTuned(ctx, ch)
-			}
-		}
-	}
-	h.mu.Lock()
+	f, err := h.tuneFeed(ctx, ch, res)
 	defer h.mu.Unlock()
-	if opener {
-		h.endOpenLocked(ch.ID)
-	}
-	f := h.channels[ch.ID]
-	if auto != nil {
-		if f != nil {
-			auto.body.Close()
-		} else {
-			f = h.attachAutoLocked(ch, auto)
-		}
-	}
-	if tune != nil {
-		if f, err = h.attachTunedLocked(tune); err != nil {
-			return Session{}, err
-		}
-	}
-	if f == nil {
-		if f, err = h.ensureFeedLocked(ctx, ch, res); err != nil {
-			return Session{}, err
-		}
-	} else if res != nil {
-		res.Body.Close()
+	if err != nil {
+		return Session{}, err
 	}
 	if alternates && want.Track != "" {
 		main := want
@@ -1908,9 +1848,8 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 			}
 		}
 	}
-	h.mu.Lock()
+	f, err := h.tuneFeed(ctx, ch, res)
 	defer h.mu.Unlock()
-	f, err := h.ensureFeedLocked(ctx, ch, res)
 	if _, busy := err.(*BusyError); busy {
 		labels, feeds := h.viewerFeedsToPreemptLocked(ch.FrequencyHz, channelID)
 		if len(feeds) > 0 {
