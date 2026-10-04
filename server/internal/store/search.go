@@ -34,23 +34,39 @@ func (s *Store) Search(ctx context.Context, query string, from time.Time, limit 
 }
 
 // searchAirings reads listings on the channels the guide shows: one row per
-// channel when two tuners carry it, and none that are hidden. Shows named by
-// the words come before ones that only mention them.
+// channel when two tuners carry it, and none that are hidden. An encrypted 3.0
+// station is searched too, since it records as its clear twin, unless the twin
+// lists the same show. Shows named by the words come before ones that only
+// mention them.
 func (s *Store) searchAirings(ctx context.Context, match, title string, from time.Time, limit int) ([]AiringHit, error) {
-	shown, err := s.Channels(ctx, true)
+	all, err := s.Channels(ctx, false)
 	if err != nil {
 		return nil, err
 	}
-	if len(shown) == 0 {
-		return []AiringHit{}, nil
+	shown := map[int64]bool{}
+	for _, ch := range all {
+		if ch.Present && ch.Enabled && !ch.Hidden && ch.SameAs == 0 {
+			shown[ch.ID] = true
+		}
 	}
+	standIn := map[int64]int64{}
 	args := []any{match, from.UTC().Format(time.RFC3339)}
-	marks := make([]string, len(shown))
-	for i, ch := range shown {
-		marks[i] = "?"
+	var marks []string
+	for _, ch := range all {
+		if !shown[ch.ID] && (ch.PlaysAs == 0 || !shown[ch.PlaysAs]) {
+			continue
+		}
+		if !shown[ch.ID] {
+			standIn[ch.ID] = ch.PlaysAs
+		}
+		marks = append(marks, "?")
 		args = append(args, ch.ID)
 	}
-	args = append(args, title, limit)
+	if len(marks) == 0 {
+		return []AiringHit{}, nil
+	}
+	// A stand-in's duplicates are dropped below, so read a few more.
+	args = append(args, title, limit+len(standIn)*4)
 	rows, err := s.db.QueryContext(ctx, `
 SELECT a.id, a.channel_id, a.title, a.subtitle, a.description, a.category, a.starts_at, a.ends_at,
 	a.program_id, a.is_new, a.image_url, a.image_width, a.image_height, a.season, a.episode, a.episode_label, a.original_air, a.series_id,
@@ -83,10 +99,37 @@ LIMIT ?`, args...)
 		hit.End, _ = time.Parse(time.RFC3339, end)
 		out = append(out, hit)
 	}
-	if out == nil {
-		out = []AiringHit{}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
-	return out, rows.Err()
+	return withoutTwinRepeats(out, standIn, limit), nil
+}
+
+// withoutTwinRepeats drops an encrypted station's listing when its clear twin
+// lists the same show at the same time.
+func withoutTwinRepeats(hits []AiringHit, standIn map[int64]int64, limit int) []AiringHit {
+	type key struct {
+		channel int64
+		title   string
+		start   int64
+	}
+	listed := map[key]bool{}
+	for _, hit := range hits {
+		if _, ok := standIn[hit.ChannelID]; !ok {
+			listed[key{hit.ChannelID, hit.Title, hit.Start.Unix()}] = true
+		}
+	}
+	out := []AiringHit{}
+	for _, hit := range hits {
+		if twin, ok := standIn[hit.ChannelID]; ok && listed[key{twin, hit.Title, hit.Start.Unix()}] {
+			continue
+		}
+		if len(out) == limit {
+			break
+		}
+		out = append(out, hit)
+	}
+	return out
 }
 
 func (s *Store) searchRecordings(ctx context.Context, match string, limit int) ([]Recording, error) {

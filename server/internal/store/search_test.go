@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -84,5 +85,41 @@ func TestSearchListsAChannelOnceAndSkipsHiddenOnes(t *testing.T) {
 	}
 	if len(got) != 2 || seen["5.1 WTSTDT1"] != 1 || seen["5.2 Rivers"] != 1 {
 		t.Fatalf("hits %v, want 5.1 and 5.2 Rivers once each (two tuners carry them; Mountains is hidden)", seen)
+	}
+}
+
+func TestSearchFindsAnEncryptedStationsShowOnce(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	flex := hdhr.Device{DeviceID: "FLEX1", BaseURL: "http://flex", LineupURL: "http://flex/lineup.json", TunerCount: 4}
+	if err := s.UpsertDevice(ctx, flex, []hdhr.Channel{
+		{GuideNumber: "5.1", GuideName: "KQRSDT1", VideoCodec: "MPEG2", AudioCodec: "AC3", StreamURL: "http://flex:5004/auto/v5.1"},
+		{GuideNumber: "105.1", GuideName: "KQRS", Protected: true, VideoCodec: "HEVC", AudioCodec: "AC4", StreamURL: "http://flex:5004/auto/v105.1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := byNumber(t, s, ctx)
+	clear, sealed := got["5.1"][0], got["105.1"][0]
+	if sealed.PlaysAs != clear.ID {
+		t.Fatalf("105.1 plays as %d, want %d", sealed.PlaysAs, clear.ID)
+	}
+	start := time.Now().Add(time.Hour)
+	if err := s.ReplaceAirings(ctx, []Airing{
+		{ChannelID: clear.ID, Title: "Evening News", Start: start, End: start.Add(30 * time.Minute)},
+		{ChannelID: sealed.ID, Title: "Evening News", Start: start, End: start.Add(30 * time.Minute)},
+		{ChannelID: sealed.ID, Title: "Late News", Start: start.Add(time.Hour), End: start.Add(90 * time.Minute)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	hits, _, err := s.Search(ctx, "news", time.Now(), 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seen []string
+	for _, hit := range hits {
+		seen = append(seen, hit.GuideNumber+" "+hit.Title)
+	}
+	if len(hits) != 2 || seen[0] != "5.1 Evening News" || seen[1] != "105.1 Late News" {
+		t.Fatalf("hits %v, want the show both list once on 5.1 and the one only 105.1 lists", seen)
 	}
 }
