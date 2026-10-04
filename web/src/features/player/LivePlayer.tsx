@@ -305,6 +305,8 @@ export function LivePlayer({
       return;
     }
     if (panel === "help") {
+      // A modal keeps the player's keys, but Enter, Space, and Tab belong to its Close button.
+      if (k === "Enter" || k === " " || k === "Tab") return;
       if (k === "Escape" || k === "Backspace" || k === "?") setPanel("none");
       event.preventDefault();
       return;
