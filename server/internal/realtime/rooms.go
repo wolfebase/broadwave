@@ -143,7 +143,11 @@ func (r *Rooms) JoinAt(room string, channelID int64, earliest float64, latency s
 			if strings.HasPrefix(room, "multiview:") {
 				cushion = tileCushion
 			}
-			anchorServer += float64(cushion / time.Millisecond)
+			// An encode that ran before this room (a page back from another)
+			// already holds part of that buffer and waits only for the rest.
+			age := time.Duration((anchorServer - earliest) * float64(time.Millisecond))
+			wait := max(0, cushion-max(0, age-youngTune))
+			anchorServer += float64(wait / time.Millisecond)
 		}
 		st = &RoomState{
 			Room: room, ChannelID: channelID, Mode: mode, Latency: latency, LatencyMS: latencyMS(latency), Rate: 1,
@@ -159,6 +163,10 @@ func (r *Rooms) JoinAt(room string, channelID int64, earliest float64, latency s
 // right at the edge left under a second buffered and stalled a few times in
 // the first minute while the room eased back.
 const startCushion = 1500 * time.Millisecond
+
+// youngTune is how old a first frame can be and still get the whole cushion:
+// a fresh tune's first segment answers its watch within a few seconds.
+const youngTune = 4 * time.Second
 
 // tileCushion is startCushion for a multiview tile. A fresh tile rendition's
 // segments arrive about 1.5 s apart, so after its sync hold a tile had 0.6-2.4 s

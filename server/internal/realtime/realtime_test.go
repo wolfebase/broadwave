@@ -75,6 +75,28 @@ func TestAFreshMultiviewTileStartsAStepBack(t *testing.T) {
 	}
 }
 
+// A quad kept for Back left its rooms, and they went. Its encodes kept
+// running, so the rooms it joins again need no wait on the first frame.
+func TestARoomOnAnEncodeThatRanAWhileWaitsOnlyForTheRest(t *testing.T) {
+	start := time.Date(2026, 10, 4, 4, 0, 0, 0, time.UTC)
+	r, _ := fixedRooms(start)
+	now := unixMS(start)
+	old := unixMS(start.Add(-8 * time.Second))
+	tile := r.Join("multiview:7:4", 4, old)
+	if tile.AnchorMedia != old || tile.AnchorServer != now {
+		t.Fatalf("an 8 s old first frame plays at once: %+v", tile)
+	}
+	mid := unixMS(start.Add(-6 * time.Second))
+	part := r.Join("multiview:7:5", 5, mid)
+	if got := part.AnchorServer - now; got != 1500 {
+		t.Fatalf("a 6 s old first frame waits the 1.5 s it lacks, got %v ms", got)
+	}
+	one := r.Join("channel:6", 6, mid)
+	if one.AnchorMedia != mid || one.AnchorServer != now {
+		t.Fatalf("a one-screen room on a 6 s old first frame plays at once: %+v", one)
+	}
+}
+
 func TestFollowRoomSettlesOnceTheBufferCoversTheLatency(t *testing.T) {
 	start := time.Date(2026, 9, 26, 21, 0, 0, 0, time.UTC)
 	r, now := fixedRooms(start)
