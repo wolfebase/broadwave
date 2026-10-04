@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.12 — 2026-10-03
+
+### Fixed
+
+- A browser joining a channel that an iPhone, iPad, or Apple TV is already watching now shows a moving picture in about 2 seconds instead of up to 20. Its picture starts at the room's frame, so it is in step with the other screens from the start.
+- An Apple screen whose player gives up on the stream after a hiccup now reloads it by itself and comes back on the room's frame in a few seconds, where it used to sit on a still picture for up to a minute. A multiview tile does the same.
+- A reloaded Apple picture is no longer named "stopped" a few seconds after it came back.
+
 ## 0.12.11 — 2026-10-03
 
 ### Fixed
