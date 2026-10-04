@@ -13,6 +13,10 @@ struct SourcesView: View {
     @State private var loaded = false
     @State private var error = ""
     @State private var openAdd = false
+    @State private var pending: PendingRemove?
+    #if os(tvOS)
+        @FocusState private var focusedRow: String?
+    #endif
 
     var body: some View {
         List {
@@ -37,6 +41,35 @@ struct SourcesView: View {
         .navigationTitle("Sources")
         .onDisappear { scanTask?.cancel() }
         .task { await load() }
+        .alert(pending.map(Self.confirm) ?? "", isPresented: Binding(
+            get: { pending != nil },
+            set: {
+                if !$0 {
+                    pending = nil
+                }
+            }
+        )) {
+            Button("Remove", role: .destructive) {
+                let id = pending?.id ?? ""
+                pending = nil
+                Task { await forget(id) }
+            }
+            .accessibilityIdentifier("confirm-remove")
+            Button("Cancel", role: .cancel) {}
+        }
+        #if os(tvOS)
+        .onChange(of: loaded) { _, ready in
+            if ready {
+                claimPageFocus()
+            }
+        }
+        .task(id: loaded) {
+            // The sidebar takes focus on the same turn a page appears and clears a focus set then.
+            guard loaded else { return }
+            try? await Task.sleep(for: .milliseconds(200))
+            claimPageFocus()
+        }
+        #endif
         .navigationDestination(isPresented: $openAdd) {
             AddSourceView { Task { await load() } }
         }
@@ -60,6 +93,10 @@ struct SourcesView: View {
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("tuner-row-\(device.deviceId)")
+                    #if os(tvOS)
+                        .focusable()
+                        .focused($focusedRow, equals: device.deviceId)
+                    #endif
                     Button(scanning == device.deviceId ? "Scanning…" : "Scan channels") {
                         watch(device, start: true)
                     }
@@ -67,6 +104,7 @@ struct SourcesView: View {
                     #if os(iOS)
                         .buttonStyle(.borderless)
                     #endif
+                    removeButton(id: device.deviceId, name: Self.deviceName(device))
                 }
             }
         } header: {
@@ -95,9 +133,73 @@ struct SourcesView: View {
                     }
                 }
                 .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("source-row-\(source.id)")
+                #if os(tvOS)
+                    .focusable()
+                    .focused($focusedRow, equals: "source-\(source.id)")
+                #endif
+                if let id = source.deviceId, !id.isEmpty {
+                    removeButton(id: id, name: source.name.isEmpty ? Self.kindName(source.kind) : source.name)
+                }
             }
         } header: {
             Text("Playlists and links")
+        }
+    }
+
+    private struct PendingRemove: Equatable {
+        var id: String
+        var name: String
+    }
+
+    /// The same words as the web confirm. Recordings stay; a matching channel on another tuner keeps its favorite and passes.
+    private static func confirm(_ pending: PendingRemove) -> String {
+        "Remove \(pending.name)? Its channels leave the lineup. Favorites and passes move to another tuner with the same channel, and the other passes go. Recordings stay."
+    }
+
+    static func deviceName(_ device: Device) -> String {
+        if !device.friendlyName.isEmpty {
+            return device.friendlyName
+        }
+        if let model = device.modelNumber, !model.isEmpty {
+            return model
+        }
+        return "this tuner"
+    }
+
+    private func removeButton(id: String, name: String) -> some View {
+        Button(role: .destructive) {
+            pending = PendingRemove(id: id, name: name)
+        } label: {
+            Text("Remove")
+        }
+        .accessibilityLabel("Remove \(name)")
+        .accessibilityIdentifier("remove-device-\(id)")
+        #if os(iOS)
+            .buttonStyle(.borderless)
+        #endif
+    }
+
+    #if os(tvOS)
+        private func claimPageFocus() {
+            if let id = devices.first?.deviceId {
+                focusedRow = id
+                return
+            }
+            if let source = sources.first {
+                focusedRow = "source-\(source.id)"
+            }
+        }
+    #endif
+
+    private func forget(_ id: String) async {
+        guard !id.isEmpty, let api = store.api else { return }
+        do {
+            _ = try await api.removeDevice(id)
+            await store.refresh()
+            await load()
+        } catch {
+            self.error = (error as? APIError)?.message ?? error.localizedDescription
         }
     }
 

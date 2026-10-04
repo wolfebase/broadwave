@@ -444,6 +444,12 @@ public struct APIClient: Sendable {
         return try await send("GET", "/devices", as: R.self).devices
     }
 
+    /// Forgets a tuner or playlist. 200 is the devices still stored. 409 `device_busy` means something is still playing or recording from it; the message is safe to show.
+    public func removeDevice(_ id: String) async throws -> [Device] {
+        struct R: Decodable { var devices: [Device] }
+        return try await send("DELETE", "/devices/\(Self.pathSegment(id))", as: R.self).devices
+    }
+
     public func discover(ip: String) async throws -> [Device] {
         struct B: Encodable { var ip: String }
         struct R: Decodable { var devices: [Device] }
