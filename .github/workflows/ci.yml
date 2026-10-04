@@ -80,15 +80,15 @@ jobs:
         working-directory: web
       # The quad restart runs on its own below until the sound tile keeps its
       # picture there every time.
-      # The budget is pinned to what a typical runner benches (1.9x: two
-      # pictures). A slow runner benched 0.7x once, got one picture, and
-      # failed every two-tile check.
+      # The budget is pinned to two pictures (3.1x, what three cores bench).
+      # A slow runner benched one picture once and failed every two-tile
+      # check.
       - run: npx playwright test --config e2e/playwright.config.ts 01-setup 02-browse 03-player-sync 04-multiview 14-recording 23-image 27-live-captions 31-audio-switch 36-quiet 40-remove-device --grep-invert "quad plays again with no click"
         working-directory: web
         env:
           E2E_IMAGE: broadwave:ci
           E2E_SNAPSHOTS: skip
-          E2E_SPEED: "1.9"
+          E2E_SPEED: "3.1"
       # A slow machine's budget of two pictures, on its own port: the first
       # run's container can still hold 18731.
       - run: npx playwright test --config e2e/playwright.config.ts 01-setup 24-leave
@@ -96,7 +96,7 @@ jobs:
         env:
           E2E_IMAGE: broadwave:ci
           E2E_SNAPSHOTS: skip
-          E2E_SPEED: "1.8"
+          E2E_SPEED: "3.1"
           E2E_PORT: "18751"
       # A channel with two sound tracks: the player loads the master, still
       # starts on the room's frame, and switches sound in place.

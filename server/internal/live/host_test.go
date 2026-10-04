@@ -82,14 +82,24 @@ func TestBudgetCoversEveryHost(t *testing.T) {
 		{"nvidia at 8x", "nvidia", 8, 1080, "720", 4, true},
 		{"apple at 11x", "apple", 11, 1080, "720", 4, true},
 		{"unknown vaapi at 4x", "vaapi", 4, 1080, "720", 4, true},
-		{"fast software at 1.5x", "software", 1.5, 720, "540", 2, true},
-		{"pi 5 class software at 0.7x", "software", 0.7, 540, "360", 1, true},
+		{"apple at 1.5x", "apple", 1.5, 720, "540", 2, true},
+		{"gpu at 0.7x", "vaapi", 0.7, 540, "360", 1, true},
+		{"six cores at 6.2x", "software", 6.2, 1080, "720", 4, true},
+		{"three cores at 3.1x", "software", 3.1, 720, "540", 2, true},
+		{"software at 4x", "software", 4, 1080, "720", 2, true},
+		{"software at 2x", "software", 2, 540, "360", 1, true},
+		{"pi 5 class software at 0.7x", "software", 0.7, 540, "360", 1, false},
 		{"j4125 class software at 0.4x", "software", 0.4, 540, "360", 1, false},
 		{"unmeasured software", "software", 0, 540, "360", 1, false},
+		{"unmeasured, no class", "", 0, 540, "360", 1, false},
 		{"unmeasured intel", "intel-vaapi", 0, 1080, "720", 2, true},
 		{"boundary 2x", "nvidia", 2, 1080, "720", 2, true},
 		{"boundary 1x", "apple", 1, 720, "540", 2, true},
-		{"boundary 0.5x", "software", 0.5, 540, "360", 1, true},
+		{"boundary 0.5x", "vaapi", 0.5, 540, "360", 1, true},
+		{"software boundary 5.5x", "software", 5.5, 1080, "720", 4, true},
+		{"software boundary 3.8x", "software", 3.8, 1080, "720", 2, true},
+		{"software boundary 2.7x", "software", 2.7, 720, "540", 2, true},
+		{"software boundary 1.4x", "software", 1.4, 540, "360", 1, true},
 	}
 	for _, c := range cases {
 		got := Budget(c.class, c.speed)
@@ -120,15 +130,16 @@ func TestHostLine(t *testing.T) {
 func TestMeasureHostReadsAScript(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "ffmpeg")
-	script := "#!/bin/sh\necho 'frame=60 speed=0.7x' >&2\nexit 0\n"
+	// Startup holds the first frame for a second; the speed counts from it.
+	script := "#!/bin/sh\necho out_time_us=0\nsleep 1\necho out_time_us=200000\nsleep 0.3\necho out_time_us=800000\necho speed=0.6x\nexit 0\n"
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	got := MeasureHost(context.Background(), path, "libx264")
-	if got.Class != "software" || got.Speed != 0.7 || got.Height != 540 || got.Focus != "360" || got.Tiles != 1 || !got.FullRate {
+	if got.Class != "software" || got.Speed < 1.5 || got.Height != 540 || got.Focus != "360" || got.Tiles != 1 || !got.FullRate {
 		t.Fatalf("measured %+v", got)
 	}
-	if !strings.Contains(got.Line(), "0.7x") || !strings.Contains(got.Line(), "360p60") {
+	if !strings.Contains(got.Line(), "360p60") {
 		t.Fatalf("line %q", got.Line())
 	}
 }
@@ -377,7 +388,7 @@ func TestMeasureHostKeepsASpeedFromAFailedEncode(t *testing.T) {
 	if err := os.WriteFile(script, []byte("#!/bin/sh\necho 'speed=2.5x' >&2\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	got := MeasureHost(context.Background(), script, "libx264")
+	got := MeasureHost(context.Background(), script, "h264_nvenc")
 	if got.Height != 1080 || got.Tiles != 2 || got.Speed != 2.5 {
 		t.Fatalf("%+v", got)
 	}

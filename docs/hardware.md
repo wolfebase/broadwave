@@ -51,7 +51,9 @@ A GPU on a home server is often shared: Plex, Jellyfin, and Channels DVR transco
 
 Without a low-power encoder, when startup finds a GPU it first runs the encode a 1080i channel takes on the processor: four seconds of a test picture through field-rate `bwdif` and libx264 with the live settings, timed from the first frame out. At 2.5× or faster, live TV runs on the processor. A broadcast runs about 20% slower than the test picture, so that still holds two 1080i pictures. `BROADWAVE_ENCODER=gpu` or `software` skips the check. On a 12th-gen Core i9 the check read 3.5× to 3.9× while a real 1080i sample ran 3.1×. The 1080p60 speed below read anywhere from 2.3× to 3.9× on the same machine within minutes, so it is not used for this choice.
 
-The same startup encodes three seconds of 1080p60. One second is mostly process startup, so a fast GPU looks too slow. The speed is how many times faster than real time that encode finished. It chooses the tallest transcode and how many new pictures can start. A broadcast the device can already play is still copied. A channel that is already being converted keeps a compatible picture instead of starting another: the same codec, and a watch with sound does not take a silent tile. A picture nobody is watching does not hold a slot. One more channel than the table allows is refused. A bench that does not finish within 20 seconds uses the under 0.5× row and does not invent a speed. A probe that fails before it encodes stays on the unmeasured row.
+The same startup encodes a 1080p60 test picture. On a GPU it encodes three seconds and times the whole run; one second is mostly process startup, so a fast GPU looks too slow, and the GPU rows below were set on that figure. On the processor it encodes five seconds and times them from the first frame out: timed with startup, the same six cores read 1.6× right after a restart and 4.2× a second later, and the budget flipped between one picture and four. Timed from the first frame, it read 6.2× to 6.4× there, and 3.0× to 3.2× on three cores. The speed is how many times faster than real time that encode ran. It chooses the tallest transcode and how many new pictures can start. A broadcast the device can already play is still copied. A channel that is already being converted keeps a compatible picture instead of starting another: the same codec, and a watch with sound does not take a silent tile. A picture nobody is watching does not hold a slot. One more channel than the table allows is refused. A bench that does not finish within 20 seconds uses the under 0.5× row and does not invent a speed. A probe that fails before it encodes stays on the unmeasured row.
+
+On a GPU:
 
 | 1080p60 speed | Tallest transcode | Selected tile | Tiles at once |
 | --- | --- | --- | --- |
@@ -60,7 +62,19 @@ The same startup encodes three seconds of 1080p60. One second is mostly process 
 | 1× to 2× | 720p | 540p60 | 2 |
 | 0.5× to 1× | 540p | 360p60 | 1 |
 | under 0.5× | 540p | 360p | 1 |
-| not measured, GPU | 1080p | 720p60 | 2 |
-| not measured, software | 540p | 360p | 1 |
+| not measured | 1080p | 720p60 | 2 |
 
-Intel VAAPI, Intel Quick Sync, AMD VAAPI, NVIDIA NVENC, and Apple VideoToolbox are the GPU rows. Software is libx264, which is what a Raspberry Pi 5 runs (it has no H.264 encoder in this image) and what a J4125-class board runs when it has no GPU device. Those two boards were not in the room. The 0.7× row is the Pi 5 class and the 0.4× row is the J4125 class: the rule, applied to a speed in that range. Diagnostics shows the sentence for the machine that actually ran.
+On the processor:
+
+| 1080p60 speed | Tallest transcode | Selected tile | Tiles at once |
+| --- | --- | --- | --- |
+| 5.5× and up | 1080p | 720p60 | 4 |
+| 3.8× to 5.5× | 1080p | 720p60 | 2 |
+| 2.7× to 3.8× | 720p | 540p60 | 2 |
+| 1.4× to 2.7× | 540p | 360p60 | 1 |
+| under 1.4× | 540p | 360p | 1 |
+| not measured | 540p | 360p | 1 |
+
+Intel VAAPI, Intel Quick Sync, AMD VAAPI, NVIDIA NVENC, and Apple VideoToolbox are the GPU rows. Software is libx264, which is what a Raspberry Pi 5 runs (it has no H.264 encoder in this image) and what a J4125-class board runs when it has no GPU device. Those two boards were not in the room: their rows are the rule, applied to their speed. Diagnostics shows the sentence for the machine that actually ran.
+
+The processor rows leave each layout half again the processor it needs. Every encode decodes and deinterlaces its own 1080i feed. On 1080i MPEG-2 with the live settings, at three and at six cores, one encode at real time took this share of the bench speed: a 360p60 tile 0.79, 540p60 0.90, 720p60 1.27. A quad of 360p60 tiles ran at 2.0× each on six cores and 1.0× on three; two 720p60 pictures ran at 2.5× on six cores and 1.2× on three, too close for a broadcast, which runs about 20% slower than the test picture.

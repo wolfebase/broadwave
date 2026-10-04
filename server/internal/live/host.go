@@ -76,10 +76,13 @@ func Classify(encoder, vendor string) string {
 }
 
 // Budget turns one 1080p60 speed into the rendition and the tile budget.
-// Speed is how many times faster than real time the three-second encode ran.
-// Zero means the bench did not finish: a GPU keeps a modest budget, and
-// software stays on the small picture (a Pi 5 or a J4125-class CPU).
+// Speed is how many times faster than real time BenchEncoder ran. Zero means
+// the bench did not finish: a GPU keeps a modest budget, and software stays
+// on the small picture (a Pi 5 or a J4125-class CPU).
 func Budget(class string, speed float64) Host {
+	if class == "" || class == "software" {
+		return softwareBudget(class, speed)
+	}
 	h := Host{Class: class, Speed: speed}
 	switch {
 	case speed >= 4:
@@ -93,11 +96,31 @@ func Budget(class string, speed float64) Host {
 	case speed > 0:
 		h.Height, h.Focus, h.Tiles, h.FullRate = 540, "360", 1, false
 	default:
-		if class == "" || class == "software" {
-			h.Height, h.Focus, h.Tiles, h.FullRate = 540, "360", 1, false
-		} else {
-			h.Height, h.Focus, h.Tiles, h.FullRate = 1080, "720", 2, true
-		}
+		h.Height, h.Focus, h.Tiles, h.FullRate = 1080, "720", 2, true
+	}
+	return h
+}
+
+// softwareBudget leaves every layout half again the CPU it needs. Each
+// encode decodes and deinterlaces its own 1080i feed. Measured on 1080i
+// MPEG-2 with the live settings, at 3 and at 6 cores, one encode at real time
+// takes this much of the bench speed: a 360p60 tile 0.79, 540p60 0.90,
+// 720p60 1.27. So a quad needs 4.7 and two 720p60 pictures 3.8. One big
+// and three (720p60 and three at 540p60) needs 6.0; at 6.2 it ran 1.4x
+// and 1.6x, and a broadcast runs about 20% slower than the test picture.
+func softwareBudget(class string, speed float64) Host {
+	h := Host{Class: class, Speed: speed}
+	switch {
+	case speed >= 5.5:
+		h.Height, h.Focus, h.Tiles, h.FullRate = 1080, "720", 4, true
+	case speed >= 3.8:
+		h.Height, h.Focus, h.Tiles, h.FullRate = 1080, "720", 2, true
+	case speed >= 2.7:
+		h.Height, h.Focus, h.Tiles, h.FullRate = 720, "540", 2, true
+	case speed >= 1.4:
+		h.Height, h.Focus, h.Tiles, h.FullRate = 540, "360", 1, true
+	default:
+		h.Height, h.Focus, h.Tiles, h.FullRate = 540, "360", 1, false
 	}
 	return h
 }
