@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.17 — 2026-10-04
+
+### Fixed
+
+- Two tuners on one antenna no longer list every channel twice. The guide, Home, and channel up and down show each channel once, with its listings; the other tuner still carries it if the first is busy.
+- Settings › Tuners and channels counts an ATSC 3.0 channel's tuner as Broadwave's while it plays, with its number of viewers. It used to look like another app holding the tuner, so multiview could count one tuner too few.
+- Settings no longer says "All 4 tuners are free" on a server with 6 when 2 are off. It names the ones that don't answer.
+- A multiview tile on a channel with no signal says to check the antenna, as a single channel does, and keeps saying it after the tuner is given back.
+- After a server restart, a multiview with more tiles than the server has pictures for gives them back to the tiles that were playing, starting with the one with sound. A tile that had no picture could take one before.
+- A recording whose file was moved or deleted outside Broadwave says the file is gone and offers only Delete. It used to offer Play, sit on Home, and show in search.
+
 ## 0.12.16 — 2026-10-04
 
 ### Fixed
