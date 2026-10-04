@@ -184,11 +184,25 @@ export function LivePlayer({
     root.focus();
   }, [channel.id, mode, layout]);
 
+  // The selected row keeps the keys and stays in view. A row the pointer
+  // rests on is selected too, but it must not take focus from the keys.
+  const hoverRow = useRef(false);
   useEffect(() => {
-    if (panel !== "guide" || layout !== "tv") return;
+    if (panel !== "guide") return;
     const row = document.querySelectorAll<HTMLElement>(".mini-guide [role='option']")[guideRow];
-    focusRing(row);
+    if (hoverRow.current) {
+      hoverRow.current = false;
+      return;
+    }
+    if (layout === "tv") focusRing(row);
+    else row?.focus();
   }, [panel, guideRow, layout]);
+
+  function openGuide() {
+    hoverRow.current = false;
+    setGuideRow(matchedRow);
+    setPanel("guide");
+  }
 
   useEffect(() => () => window.clearTimeout(typedTimer.current), []);
 
@@ -324,9 +338,10 @@ export function LivePlayer({
     }
     if (panel === "guide") {
       const backToChannels = () => {
-        if (layout !== "tv") return;
-        // The list is also named Channels, and it is about to unmount. The button keeps the keys.
-        focusRing(document.querySelector<HTMLElement>(".stage:not(.mini) button[aria-label='Channels']"));
+        // The list is about to unmount with the focus in it. On a TV the button
+        // (also named Channels) keeps the keys; elsewhere the picture does.
+        if (layout === "tv") focusRing(document.querySelector<HTMLElement>(".stage:not(.mini) button[aria-label='Channels']"));
+        else rootRef.current?.focus();
       };
       if (k === "Escape" || k === "Backspace" || k === "g") {
         setPanel("none");
@@ -355,7 +370,7 @@ export function LivePlayer({
       ArrowRight: () => jump(30),
       ArrowUp: () => step(-1),
       ArrowDown: () => step(1),
-      g: () => setPanel("guide"),
+      g: openGuide,
       m: () => {
         const stored = localStorage.getItem("broadwave-mv-layout");
         navigate(multiviewPath([channel.id], isLayout(stored) ? stored : "2up", channel.id, true));
@@ -471,7 +486,7 @@ export function LivePlayer({
               </button>
             </span>
           ) : null}
-          <button type="button" className={panel === "guide" ? "glass-icon on" : "glass-icon"} onClick={() => setPanel((p) => (p === "guide" ? "none" : "guide"))} aria-label="Channels">
+          <button type="button" className={panel === "guide" ? "glass-icon on" : "glass-icon"} onClick={() => (panel === "guide" ? setPanel("none") : openGuide())} aria-label="Channels">
             <ListIcon />
           </button>
           <button
@@ -599,7 +614,11 @@ export function LivePlayer({
                 role="option"
                 aria-selected={i === guideRow}
                 className={c.id === channel.id ? "mg-row current" : i === guideRow ? "mg-row on" : "mg-row"}
-                onMouseEnter={() => setGuideRow(i)}
+                onMouseEnter={() => {
+                  if (i === guideRow) return;
+                  hoverRow.current = true;
+                  setGuideRow(i);
+                }}
                 onClick={() => {
                   setPanel("none");
                   onChannel(c);
