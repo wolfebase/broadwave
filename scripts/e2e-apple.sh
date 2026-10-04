@@ -215,6 +215,9 @@ run_platform() {
 
   local sync=1
   if [ -e "$dir/sampled" ] || ! kill -0 "$sample_pid" 2>/dev/null; then
+    # A sampler that is done exits within seconds. One that does not is stuck.
+    for _ in $(seq 60); do kill -0 "$sample_pid" 2>/dev/null || break; sleep 0.5; done
+    kill "$sample_pid" 2>/dev/null
     wait "$sample_pid"
     sync=$?
   else

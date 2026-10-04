@@ -144,7 +144,8 @@ async function main() {
     return result.pass;
   } finally {
     writeFileSync(sampled, "done\n");
-    await browser.close();
+    // Chrome on the CI runner has hung in close and held the job to its timeout.
+    await Promise.race([browser.close(), sleep(10_000)]);
   }
 }
 
