@@ -266,6 +266,49 @@ func TestHoldAndSilence(t *testing.T) {
 	}
 }
 
+// A tuner whose stream ended when the device went silent is free when it
+// answers again, as a device that dropped its connections is.
+func TestSilenceFreesTheTunersItsStreamsHeld(t *testing.T) {
+	dir := t.TempDir()
+	sample := filepath.Join(dir, "sample.ts")
+	pkt := make([]byte, 188)
+	pkt[0] = 0x47
+	if err := os.WriteFile(sample, bytes.Repeat(pkt, 64), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := &Server{TS: sample}
+	base, port, err := srv.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	res, err := http.Get(base + "/tuner0/ch593000000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	c := hdhr.Control{Addr: "127.0.0.1:" + port}
+	if status, err := c.Get("/tuner0/status"); err != nil || !strings.Contains(status, "593000000") {
+		t.Fatalf("streaming status %q %v", status, err)
+	}
+	srv.Silence()
+	_, _ = io.Copy(io.Discard, res.Body)
+	srv.Answer()
+	if status, err := c.Get("/tuner0/status"); err != nil || !strings.Contains(status, "ch=none") {
+		t.Fatalf("status after silence %q %v", status, err)
+	}
+	for i := range 2 {
+		res, err := http.Get(fmt.Sprintf("%s/tuner%d/ch533000000", base, i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("tuner%d after silence: %s", i, res.Status)
+		}
+	}
+}
+
 func TestRawPlaysTheFileByteForByteAtItsOwnPace(t *testing.T) {
 	pcr := func(ticks int64) []byte {
 		pkt := make([]byte, 188)

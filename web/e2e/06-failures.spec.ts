@@ -84,7 +84,8 @@ function notice(page: Page, role: "alert" | "status", text: string | RegExp) {
 
 async function nudge(page: Page) {
   const again = page.getByRole("button", { name: "Try again" });
-  if (await again.isVisible()) await again.click();
+  // The player may recover by itself and take the button away mid-click.
+  if (await again.isVisible()) await again.click({ timeout: 5_000 }).catch(() => undefined);
 }
 
 async function serverUp(base: string, control: string) {

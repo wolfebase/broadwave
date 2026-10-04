@@ -237,8 +237,12 @@ func (s *Server) Silence() {
 	s.mu.Lock()
 	s.silent = true
 	procs := append([]*exec.Cmd(nil), s.procs...)
+	// A device that dropped its connections holds no tuner. The streams'
+	// own cleanup no longer matches a tuner once its stop is cleared.
 	for i := range s.tuners {
+		dead := s.tuners[i].dead
 		s.closeStopLocked(i)
+		s.tuners[i] = tuner{dead: dead}
 	}
 	s.mu.Unlock()
 	for _, cmd := range procs {
