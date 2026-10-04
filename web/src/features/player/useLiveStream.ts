@@ -22,6 +22,7 @@ import {
   pictureRetryEveryMs,
   pictureStopped,
   recoveryReady,
+  restartDelayMs,
   startAttempts,
   startRetryMs,
   viewerFailure,
@@ -97,6 +98,10 @@ export function useLiveStream(
   const inPlace = useRef(false);
   const [error, setError] = useState("");
   const [recovery, setRecovery] = useState<Recovery>("");
+  // Each named outage, so a restart that fails the same way is tried again.
+  const [outageSeq, setOutageSeq] = useState(0);
+  // Restarts since the picture last moved.
+  const restarts = useRef(0);
   const [pictureStopAt, setPictureStopAt] = useState(0);
   const pictureStopAtRef = useRef(0);
   const quietRetry = useRef<number | null>(null);
@@ -237,7 +242,10 @@ export function useLiveStream(
         }
       }
       if (video.dataset.moving) return;
-      if (video.currentTime > 0.2) video.dataset.moving = String(Math.round(performance.now() - started));
+      if (video.currentTime > 0.2) {
+        video.dataset.moving = String(Math.round(performance.now() - started));
+        restarts.current = 0;
+      }
     };
     // hls.js rides through short stalls and single failed loads on its own, and
     // naming an outage stops the picture. A long stall is named only when the
@@ -256,6 +264,7 @@ export function useLiveStream(
       setNeedsConfirm(false);
       setError(message);
       setRecovery(kind);
+      setOutageSeq((n) => n + 1);
       if (message === pictureStopped && kind === "") {
         if (!pictureStopAtRef.current) {
           pictureStopAtRef.current = performance.now();
@@ -362,7 +371,11 @@ export function useLiveStream(
         }
         if (audibleRef.current) applySound(video);
         else video.muted = true;
-        await video.play().catch(async () => {
+        // Only a refused autoplay is tried again, muted. A play() cut off by a
+        // torn-down stream would wait forever on no source, and the next restart
+        // waits for this one to finish.
+        await video.play().catch(async (err: unknown) => {
+          if ((err as { name?: string } | null)?.name !== "NotAllowedError") return;
           video.muted = true;
           await video.play().catch(() => undefined);
         });
@@ -669,20 +682,27 @@ export function useLiveStream(
         }
         seen.key = key;
         retrying.current = true;
-        if (recovery === "restart") quietRetry.current = channelId;
+        if (recovery === "restart") {
+          quietRetry.current = channelId;
+          restarts.current += 1;
+        }
         setAttempt((n) => n + 1);
       } finally {
         ticking = false;
       }
     };
-    const first = window.setTimeout(() => void tick(), 400);
-    const id = window.setInterval(() => void tick(), 1000);
+    let id = 0;
+    const hold = recovery === "restart" ? restartDelayMs(restarts.current) : 0;
+    const first = window.setTimeout(() => {
+      void tick();
+      id = window.setInterval(() => void tick(), 1000);
+    }, Math.max(400, hold));
     return () => {
       dead = true;
       window.clearTimeout(first);
       window.clearInterval(id);
     };
-  }, [recovery, channelId]);
+  }, [recovery, channelId, outageSeq]);
 
   // The picture message is the outage nothing else can see change. Start a
   // watch on the clock, and stop when the viewer leaves or the channel changes.

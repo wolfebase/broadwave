@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { unreadBody } from "./src/api.ts";
-import { aTunerAnswers, aTunerIsFree, channelDidNotStart, classifySnap, connectionDropped, holdPictureMessage, listingNote, noListing, noListingChecked, noSignal, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, requestFailed, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage } from "./src/features/player/outage.ts";
+import { aTunerAnswers, aTunerIsFree, channelDidNotStart, classifySnap, connectionDropped, holdPictureMessage, listingNote, noListing, noListingChecked, noSignal, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, requestFailed, restartDelayMs, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage } from "./src/features/player/outage.ts";
 
 test("checking for listings says so when nothing comes back", () => {
   assert.equal(listingNote(false), noListing);
@@ -151,4 +151,8 @@ test("a full picture budget is asked again while the last layout's encodes free 
   assert.equal(startAttempts("tuners_busy"), 1);
   assert.equal(startAttempts(undefined), 1);
   assert.equal(startRetryMs, 2000);
+});
+
+test("a restart that fails at once waits longer each time", () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 500].map(restartDelayMs), [0, 1000, 2000, 4000, 8000, 10_000, 10_000]);
 });
