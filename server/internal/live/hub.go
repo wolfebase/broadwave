@@ -3028,8 +3028,18 @@ func warmSince(m *mux) (time.Time, bool) {
 // usedTunersLocked is the tuner indexes already streaming on one host.
 // Two devices both have a tuner 0. A tune on one must not mark the other busy.
 func (h *Hub) usedTunersLocked(host string) map[int]bool {
-	want := hostOf(host)
 	used := map[int]bool{}
+	for i := range h.tunerMuxesLocked(host) {
+		used[i] = true
+	}
+	return used
+}
+
+// tunerMuxesLocked is the streams this server opened on one host's tuners,
+// by tuner index.
+func (h *Hub) tunerMuxesLocked(host string) map[int]*mux {
+	want := hostOf(host)
+	out := map[int]*mux{}
 	for _, m := range h.muxes {
 		if m.tuner < 0 {
 			continue
@@ -3037,17 +3047,17 @@ func (h *Hub) usedTunersLocked(host string) map[int]bool {
 		if want != "" && hostOf(m.host) != want && hostOf(m.base) != want {
 			continue
 		}
-		used[m.tuner] = true
+		out[m.tuner] = m
 	}
-	return used
+	return out
 }
 
-// autoGuidesLocked counts the /auto streams open on one device by channel
+// autoGuidesLocked is the /auto streams open on one device by channel
 // number. The device picks the tuner for those, so its status row is the
 // only place that says which one: the row tuned to that number.
-func (h *Hub) autoGuidesLocked(host string) map[string]int {
+func (h *Hub) autoGuidesLocked(host string) map[string][]*mux {
 	want := hostOf(host)
-	out := map[string]int{}
+	out := map[string][]*mux{}
 	if want == "" {
 		return out
 	}
@@ -3057,7 +3067,7 @@ func (h *Hub) autoGuidesLocked(host string) map[string]int {
 		}
 		for _, f := range m.feeds {
 			if f != nil && f.channel.GuideNumber != "" {
-				out[f.channel.GuideNumber]++
+				out[f.channel.GuideNumber] = append(out[f.channel.GuideNumber], m)
 				break
 			}
 		}
@@ -3100,16 +3110,14 @@ func (h *Hub) streamsForDeviceLocked(deviceID string) int {
 	return n
 }
 
-func (h *Hub) viewersOnTunerLocked(tuner int) int {
+func viewersOn(m *mux) int {
+	if m == nil {
+		return 0
+	}
 	n := 0
-	for _, m := range h.muxes {
-		if m.tuner != tuner {
-			continue
-		}
-		for _, f := range m.feeds {
-			for _, r := range f.renditions {
-				n += r.viewers
-			}
+	for _, f := range m.feeds {
+		for _, r := range f.renditions {
+			n += r.viewers
 		}
 	}
 	return n
@@ -3126,19 +3134,19 @@ func (h *Hub) readTuners(ctx context.Context, host string) ([]Tuner, error) {
 // tunersFromLocked is one device's status as this server's tuners. The
 // caller holds h.mu.
 func (h *Hub) tunersFromLocked(ctx context.Context, host string, raw []tunerStatus) []Tuner {
-	ours := h.usedTunersLocked(host)
+	ours := h.tunerMuxesLocked(host)
 	auto := h.autoGuidesLocked(host)
 	out := make([]Tuner, 0, len(raw))
 	for i, row := range raw {
-		mine := ours[i]
-		if !mine && row.VctNumber != "" && auto[row.VctNumber] > 0 {
-			auto[row.VctNumber]--
-			mine = true
+		m := ours[i]
+		if m == nil && row.VctNumber != "" && len(auto[row.VctNumber]) > 0 {
+			m = auto[row.VctNumber][0]
+			auto[row.VctNumber] = auto[row.VctNumber][1:]
 		}
 		out = append(out, Tuner{
 			Index: i, Guide: row.VctNumber, Name: row.VctName, Target: row.TargetIP,
-			Ours: mine, Strength: row.SignalStrengthPercent, Quality: row.SignalQualityPercent, Symbol: row.SymbolQualityPercent,
-			Shared: h.viewersOnTunerLocked(i),
+			Ours: m != nil, Strength: row.SignalStrengthPercent, Quality: row.SignalQualityPercent, Symbol: row.SymbolQualityPercent,
+			Shared: viewersOn(m),
 		})
 	}
 	h.markATSC3(ctx, host, out)

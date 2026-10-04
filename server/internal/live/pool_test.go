@@ -233,19 +233,32 @@ func wantPick(t *testing.T, name string, devices []DeviceTuners, need Need, host
 
 func TestAnAutoStreamMarksItsTunerOurs(t *testing.T) {
 	h := New(nil, t.TempDir(), "ffmpeg", "libx264")
-	h.muxes[-1] = &mux{freq: -1, tuner: -1, host: "10.0.0.2", feeds: map[string]*feed{"104.1": {channel: store.SourceChannel{Channel: store.Channel{GuideNumber: "104.1"}}}}}
-	h.muxes[-2] = &mux{freq: -2, tuner: -1, host: "10.0.0.9", feeds: map[string]*feed{"119.1": {channel: store.SourceChannel{Channel: store.Channel{GuideNumber: "119.1"}}}}}
+	watched := func(guide string, viewers int) map[string]*feed {
+		return map[string]*feed{guide: {
+			channel:    store.SourceChannel{Channel: store.Channel{GuideNumber: guide}},
+			renditions: map[string]*rendition{"copy.ac3": {viewers: viewers}},
+		}}
+	}
+	h.muxes[-1] = &mux{freq: -1, tuner: -1, host: "10.0.0.2", feeds: watched("104.1", 3)}
+	h.muxes[-2] = &mux{freq: -2, tuner: -1, host: "10.0.0.9", feeds: watched("119.1", 1)}
+	h.muxes[593000000] = &mux{freq: 593000000, tuner: 1, host: "10.0.0.2", feeds: watched("4.1", 1)}
+	// The other device's tuner 2 is not this one's.
+	h.muxes[551000000] = &mux{freq: 551000000, tuner: 2, host: "10.0.0.9", feeds: watched("5.1", 2)}
 	raw := []tunerStatus{
 		{VctNumber: "104.1", TargetIP: "10.0.0.5"},
-		{},
+		{VctNumber: "4.1", TargetIP: "10.0.0.5"},
 		{VctNumber: "119.1", TargetIP: "10.0.0.5"},
 		{VctNumber: "104.1", TargetIP: "10.0.0.6"},
 	}
 	got := h.tunersFromLocked(context.Background(), "http://10.0.0.2", raw)
-	want := []bool{true, false, false, false}
+	wantOurs := []bool{true, true, false, false}
+	wantViewers := []int{3, 1, 0, 0}
 	for i, tuner := range got {
-		if tuner.Ours != want[i] {
-			t.Fatalf("tuner %d ours %v, want %v (another device's stream, or a second app on the same channel, is not ours)", i, tuner.Ours, want[i])
+		if tuner.Ours != wantOurs[i] {
+			t.Fatalf("tuner %d ours %v, want %v (another device's stream, or a second app on the same channel, is not ours)", i, tuner.Ours, wantOurs[i])
+		}
+		if tuner.Shared != wantViewers[i] {
+			t.Fatalf("tuner %d viewers %d, want %d", i, tuner.Shared, wantViewers[i])
 		}
 	}
 }
