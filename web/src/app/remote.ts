@@ -29,6 +29,29 @@ function keepsArrows(target: HTMLElement, dir: Direction): boolean {
   return false;
 }
 
+/**
+ * The part of a box the viewer can see. The guide grid is far bigger than the
+ * screen, so its center sits below the mini player and Up would skip it. A box
+ * inside a scroller is cut to the scroller. A box wholly off screen keeps its
+ * place, so Down still reaches it.
+ */
+function onScreen(node: HTMLElement, rect: DOMRect) {
+  let left = Math.max(rect.left, 0);
+  let top = Math.max(rect.top, 0);
+  let right = Math.min(rect.right, window.innerWidth);
+  let bottom = Math.min(rect.bottom, window.innerHeight);
+  const parent = node.parentElement;
+  if (parent && (parent.scrollHeight > parent.clientHeight || parent.scrollWidth > parent.clientWidth)) {
+    const view = parent.getBoundingClientRect();
+    left = Math.max(left, view.left);
+    top = Math.max(top, view.top);
+    right = Math.min(right, view.right);
+    bottom = Math.min(bottom, view.bottom);
+  }
+  if (right - left < 2 || bottom - top < 2) return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+  return { left, top, right, bottom };
+}
+
 function boxes(scope: ParentNode) {
   const out: { el: HTMLElement; box: Box }[] = [];
   for (const node of scope.querySelectorAll<HTMLElement>(selector)) {
@@ -37,7 +60,7 @@ function boxes(scope: ParentNode) {
     if ((node as HTMLButtonElement).disabled) continue;
     const rect = node.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) continue;
-    out.push({ el: node, box: { id: out.length, left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom } });
+    out.push({ el: node, box: { id: out.length, ...onScreen(node, rect) } });
   }
   return out;
 }

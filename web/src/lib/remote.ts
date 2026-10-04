@@ -41,12 +41,20 @@ export function nearest(from: Box, items: Box[], dir: Direction, loose = false):
   return best?.id ?? null;
 }
 
-/** The topmost box under a bar. Used when nothing lines up directly beneath the focused tab. */
+/**
+ * The control in the first row under a bar, the one nearest the focused tab across.
+ * The first row is every box that starts before the topmost one ends.
+ */
 export function firstBelow(from: Box, items: Box[]): number | null {
+  const below = items.filter((item) => item.id !== from.id && item.top >= from.bottom - 1);
+  if (below.length === 0) return null;
+  const top = below.reduce((a, b) => (b.top < a.top || (b.top === a.top && b.bottom < a.bottom) ? b : a));
+  const x = center(from).x;
   let best: Box | null = null;
-  for (const item of items) {
-    if (item.id === from.id || item.top < from.bottom - 1) continue;
-    if (!best || item.top < best.top || (item.top === best.top && item.left < best.left)) best = item;
+  for (const item of below) {
+    if (item.top >= top.bottom) continue;
+    const gap = Math.abs(center(item).x - x);
+    if (!best || gap < Math.abs(center(best).x - x) || (gap === Math.abs(center(best).x - x) && item.left < best.left)) best = item;
   }
   return best?.id ?? null;
 }

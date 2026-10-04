@@ -54,3 +54,13 @@ test("a tab still reaches a page that does not line up under it", () => {
   assert.equal(nearest(tab, [tab, button], "down", true), 2);
   assert.equal(firstBelow(tab, [tab, button]), 2);
 });
+
+test("down from a tab enters the first row under it, at the control nearest across", () => {
+  const tab = box(1, 760, 10, 80, 30);
+  const now = box(2, 40, 90, 60, 40);
+  const chip = box(3, 740, 92, 90, 36);
+  const search = box(4, 1300, 88, 300, 44);
+  const card = box(5, 760, 300, 200, 120);
+  assert.equal(firstBelow(tab, [tab, now, chip, search, card]), 3);
+  assert.equal(firstBelow(box(6, 1400, 10, 80, 30), [now, chip, search, card]), 4);
+});
