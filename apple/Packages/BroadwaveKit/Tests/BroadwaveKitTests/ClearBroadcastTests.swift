@@ -8,13 +8,14 @@ private func channel(
     protected: Bool = false,
     standard: String? = nil,
     twinId: Int64? = nil,
-    playsAs: Int64? = nil
+    playsAs: Int64? = nil,
+    sameAs: Int64? = nil
 ) -> Channel {
     Channel(
         id: id, deviceId: "flex", guideNumber: number, guideName: number,
         displayNumber: number, displayName: number,
         hd: true, favorite: false, enabled: true, hidden: hidden, present: true,
-        protected: protected ? true : nil, standard: standard, twinId: twinId, playsAs: playsAs
+        protected: protected ? true : nil, standard: standard, twinId: twinId, playsAs: playsAs, sameAs: sameAs
     )
 }
 
@@ -76,4 +77,12 @@ private func channel(
     let gone = ClearBroadcast.grid(ids: [9, 115], visible: [other], lineup: [other, sealed])
     #expect(gone.channels.isEmpty)
     #expect(gone.standIns.isEmpty)
+}
+
+@Test func anotherTunersCopyPlaysAsTheShownRow() {
+    let shownHalf = channel(28, "4.1", hidden: true, twinId: 104)
+    let copy = channel(1, "4.1", hidden: true, sameAs: 28)
+    let next = channel(104, "104.1", standard: "atsc3", twinId: 28)
+    let choice = ClearBroadcast.play(id: 1, visible: [next], lineup: [copy, shownHalf, next])
+    #expect(choice?.channel.id == 104)
 }

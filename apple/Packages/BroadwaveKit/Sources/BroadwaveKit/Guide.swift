@@ -155,7 +155,7 @@ public enum ClearBroadcast {
 
     /// A channel on the guide plays as itself. An encrypted 3.0 station plays its clear 1.0 twin.
     /// A hidden half of a 1.0/3.0 pair plays as the half that is on the guide.
-    public static func play(id: Int64, visible: [Channel], lineup: [Channel]) -> PlaybackChoice? {
+    public static func play(id: Int64, visible: [Channel], lineup: [Channel], depth: Int = 0) -> PlaybackChoice? {
         if let shown = visible.first(where: { $0.id == id }) {
             return PlaybackChoice(channel: shown)
         }
@@ -165,6 +165,11 @@ public enum ClearBroadcast {
         }
         if asked.protected != true, let twin = asked.twinId, let other = visible.first(where: { $0.id == twin }) {
             return PlaybackChoice(channel: other)
+        }
+        // Another tuner's copy plays as the row on the guide, which can itself
+        // be the hidden half of a pair.
+        if let row = asked.sameAs, row != id, depth < 2 {
+            return play(id: row, visible: visible, lineup: lineup, depth: depth + 1)
         }
         return nil
     }

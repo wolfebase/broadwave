@@ -1,4 +1,5 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { clearBroadcast } from "../features/multiview/clear";
 import { copy } from "../strings";
 import type { Channel } from "../types";
 import { useData } from "./data";
@@ -33,16 +34,24 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // The page under the player. Back to browsing steps back in history only when it is not setup.
   const under = useRef("");
   const watchId = path === "/watch" ? Number(params.get("channel") || 0) : 0;
-  const fromList = ready && watchId ? channels.find((c) => c.id === watchId) ?? null : null;
+  // A link can name a row the guide does not show: an encrypted 3.0 station,
+  // the hidden half of a pair, or another tuner's copy. It plays as the row on
+  // the guide (below). A row with no such stand-in, such as one the viewer hid,
+  // plays as itself.
+  const choice = ready && watchId ? clearBroadcast(watchId, channels, allChannels) : null;
+  const fromList = ready && watchId ? (channels.find((c) => c.id === watchId) ?? (choice ? null : allChannels.find((c) => c.id === watchId) ?? null)) : null;
   const playing = channel && (!watchId || channel.id === watchId) ? channel : fromList;
   const mode: "full" | "mini" = watchId && playing && playing.id === watchId ? "full" : "mini";
 
-  // An encrypted 3.0 channel plays its clear 1.0 twin, so a link to one opens
-  // the twin, and the player says why for a few seconds.
-  const asked = ready && watchId ? allChannels.find((c) => c.id === watchId) : undefined;
+  // An encrypted 3.0 channel plays its clear 1.0 twin, and the player says why
+  // for a few seconds. A link to a channel that is not in the lineup goes to the guide.
+  const unknown = ready && watchId > 0 && allChannels.length > 0 && !allChannels.some((c) => c.id === watchId);
+  const playsId = choice?.id ?? 0;
+  const playsNote = choice?.note ?? false;
   useEffect(() => {
-    if (asked?.playsAs) navigate(`/watch?channel=${asked.playsAs}&from=${asked.id}`, true);
-  }, [asked]);
+    if (unknown) navigate("/guide", true);
+    else if (playsId && playsId !== watchId) navigate(`/watch?channel=${playsId}${playsNote ? `&from=${watchId}` : ""}`, true);
+  }, [playsId, playsNote, watchId, unknown]);
   const from = watchId ? Number(params.get("from") || 0) : 0;
   const standIn = from && allChannels.some((c) => c.id === from && c.playsAs === watchId) ? `${from}-${watchId}` : "";
   const [noted, setNoted] = useState("");

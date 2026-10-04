@@ -1,22 +1,26 @@
 // Which channel a multiview link should play. Matches ClearBroadcast.play:
 // a channel on the guide plays as itself, an encrypted 3.0 station plays its
-// clear 1.0 twin, and a hidden half of a pair plays as the half on the guide.
+// clear 1.0 twin, a hidden half of a pair plays as the half on the guide, and
+// another tuner's copy of a channel plays as the row on the guide.
 
 export type ClearChannel = {
   id: number;
   playsAs?: number;
   protected?: boolean;
   twinId?: number;
+  sameAs?: number;
 };
 
 export type ClearChoice = { id: number; note: boolean };
 
-export function clearBroadcast(id: number, visible: readonly { id: number }[], lineup: readonly ClearChannel[]): ClearChoice | null {
+export function clearBroadcast(id: number, visible: readonly { id: number }[], lineup: readonly ClearChannel[], depth = 0): ClearChoice | null {
   if (visible.some((channel) => channel.id === id)) return { id, note: false };
   const asked = lineup.find((channel) => channel.id === id);
   if (!asked) return null;
   if (asked.playsAs && visible.some((channel) => channel.id === asked.playsAs)) return { id: asked.playsAs, note: true };
   if (asked.protected !== true && asked.twinId && visible.some((channel) => channel.id === asked.twinId)) return { id: asked.twinId, note: false };
+  // The shown row can itself be the hidden half of a pair.
+  if (asked.sameAs && asked.sameAs !== id && depth < 2) return clearBroadcast(asked.sameAs, visible, lineup, depth + 1);
   return null;
 }
 
