@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.15 — 2026-10-04
+
+### Fixed
+
+- A channel with no signal no longer stops every other channel. Its tune takes about 17 seconds to fail, and the server used to hold everything else while it tried, so a multiview with one dead channel froze the good tiles too, and other screens' pictures stalled. A viewer's tune now runs beside the others.
+- The picture budget on a server without a GPU no longer changes from one restart to the next. The startup encode is now timed from its first frame, and the number of pictures at once is set from what real tile encodes cost on the processor. A six-core server holds four; three cores hold two at 540p60.
+
 ## 0.12.14 — 2026-10-04
 
 ### Added
