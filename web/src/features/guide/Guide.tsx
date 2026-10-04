@@ -98,8 +98,10 @@ export function Guide() {
   const keys = useMemo(() => recordingKeys(planned, recordings), [planned, recordings]);
 
   const ordered = useMemo(() => {
+    // The sort is stable, so unranked rows keep the server's channel-number order,
+    // as the mini-guide does. An id tiebreak put channels from a later scan last.
     const rank = new Map(order.map((id, i) => [id, i]));
-    return [...channels].sort((a, b) => (rank.get(a.id) ?? 10_000) - (rank.get(b.id) ?? 10_000) || a.id - b.id);
+    return [...channels].sort((a, b) => (rank.get(a.id) ?? 10_000) - (rank.get(b.id) ?? 10_000));
   }, [channels, order]);
 
   const rows = useMemo(() => {
