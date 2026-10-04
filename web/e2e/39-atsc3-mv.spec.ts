@@ -109,3 +109,36 @@ test("a multiview link plays the half that is on the guide", async ({ page }) =>
     await choose(page, wide.id, before);
   }
 });
+
+test("a watch link to a channel the guide does not show still plays", async ({ page }) => {
+  test.setTimeout(90_000);
+  const hd = byNumber("4.1");
+  const wide = byNumber("104.1");
+  const other = byNumber("4.2");
+  expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1", watermarkGB: "0" } })).ok()).toBe(true);
+  const before = (await channels(page)).find((channel) => channel.id === wide.id)?.twinChoice ?? "atsc3";
+  const player = page.getByRole("region", { name: "Player" });
+  const video = page.locator("video.stage-video");
+  try {
+    await choose(page, wide.id, "atsc3");
+    // The hidden half of a pair plays as the half on the guide.
+    await page.goto(`/watch?channel=${hd.id}`);
+    await settle(page);
+    await expect.poll(() => page.evaluate(() => new URL(location.href).searchParams.get("channel"))).toBe(String(wide.id));
+    await expect(player).toBeVisible();
+
+    // A channel the viewer hid has no stand-in, so it plays as itself.
+    expect((await page.request.patch(`/api/v1/channels/${other.id}`, { data: { hidden: true } })).ok()).toBe(true);
+    await page.goto(`/watch?channel=${other.id}`);
+    await settle(page);
+    await expect(player).toBeVisible();
+    await expect.poll(() => video.evaluate((node) => (node as HTMLVideoElement).currentTime), { timeout: 30_000 }).toBeGreaterThan(0.2);
+
+    // A channel that is not in the lineup goes to the guide, not a blank page.
+    await page.goto("/watch?channel=987654");
+    await expect(page).toHaveURL(/\/guide$/);
+  } finally {
+    await page.request.patch(`/api/v1/channels/${other.id}`, { data: { hidden: false } });
+    await choose(page, wide.id, before);
+  }
+});
