@@ -419,6 +419,13 @@ extension Airing {
     }
     #expect(from.drift == -179)
     #expect(SyncEngine.judgeSpeedUp(&from, drift: -98, now: t0.addingTimeInterval(4.5)) == .gaining)
+
+    // After a Back in sync seek (TV sim, 2026-09-27): set at -222, the seek
+    // settled to -251 a second later, then -191 three seconds after that.
+    var seek = SyncEngine.SpeedUpStart(at: t0, drift: -222)
+    #expect(SyncEngine.judgeSpeedUp(&seek, drift: -251, now: t0.addingTimeInterval(1)) == .wait)
+    #expect(SyncEngine.judgeSpeedUp(&seek, drift: -191, now: t0.addingTimeInterval(4)) == .wait)
+    #expect(SyncEngine.judgeSpeedUp(&seek, drift: -171, now: t0.addingTimeInterval(5)) == .gaining)
 }
 
 /// An item that ignores the rate still loses its speed-up, and a drift that
