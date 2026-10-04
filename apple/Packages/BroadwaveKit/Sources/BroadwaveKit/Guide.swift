@@ -168,6 +168,37 @@ public enum ClearBroadcast {
         }
         return nil
     }
+
+    /// The channels a multiview link, a saved set, or a deep link should open.
+    /// Each id goes through `play`. The first choice for a channel wins, so a
+    /// later encrypted id for a channel already on the grid does not add the note.
+    public static func grid(ids: [Int64], visible: [Channel], lineup: [Channel]) -> PlaybackGrid {
+        var channels: [Channel] = []
+        var standIns = Set<Int64>()
+        var seen = Set<Int64>()
+        for id in ids {
+            guard let choice = play(id: id, visible: visible, lineup: lineup) else { continue }
+            if !seen.insert(choice.channel.id).inserted {
+                continue
+            }
+            channels.append(choice.channel)
+            if choice.note != nil {
+                standIns.insert(choice.channel.id)
+            }
+        }
+        return PlaybackGrid(channels: channels, standIns: standIns)
+    }
+}
+
+/// Channels a multiview should show, and which of them stand in for an encrypted 3.0 station.
+public struct PlaybackGrid: Equatable, Sendable {
+    public var channels: [Channel]
+    public var standIns: Set<Int64>
+
+    public init(channels: [Channel], standIns: Set<Int64>) {
+        self.channels = channels
+        self.standIns = standIns
+    }
 }
 
 /// Where the guide grid starts: the half hour before the one `now` is in, so the

@@ -46,3 +46,34 @@ private func channel(
     #expect(ClearBroadcast.play(id: 115, visible: [], lineup: [sealed]) == nil)
     #expect(ClearBroadcast.play(id: 9, visible: [], lineup: [sealed]) == nil)
 }
+
+@Test func aGridPlaysTheHalfOnTheGuide() {
+    let older = channel(4, "4.1", hidden: true, twinId: 104)
+    let next = channel(104, "104.1", standard: "atsc3", twinId: 4)
+    let other = channel(42, "4.2")
+    let clear = channel(5, "5.1")
+    let sealed = channel(115, "115.1", hidden: true, protected: true, standard: "atsc3", playsAs: 5)
+    let visible = [next, other, clear]
+    let lineup = [older, next, other, clear, sealed]
+
+    let hidden = ClearBroadcast.grid(ids: [4, 42], visible: visible, lineup: lineup)
+    #expect(hidden.channels.map(\.id) == [104, 42])
+    #expect(hidden.standIns.isEmpty)
+
+    let encrypted = ClearBroadcast.grid(ids: [115, 42], visible: visible, lineup: lineup)
+    #expect(encrypted.channels.map(\.id) == [5, 42])
+    #expect(encrypted.standIns == [5])
+
+    let itself = ClearBroadcast.grid(ids: [104, 5], visible: visible, lineup: lineup)
+    #expect(itself.channels.map(\.id) == [104, 5])
+    #expect(itself.standIns.isEmpty)
+
+    // The clear channel was named first, so the later encrypted id does not add the note.
+    let clearFirst = ClearBroadcast.grid(ids: [5, 115], visible: visible, lineup: lineup)
+    #expect(clearFirst.channels.map(\.id) == [5])
+    #expect(clearFirst.standIns.isEmpty)
+
+    let gone = ClearBroadcast.grid(ids: [9, 115], visible: [other], lineup: [other, sealed])
+    #expect(gone.channels.isEmpty)
+    #expect(gone.standIns.isEmpty)
+}

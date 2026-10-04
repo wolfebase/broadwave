@@ -13,23 +13,31 @@ final class NowPlaying {
     var channel: Channel?
     var expanded = false
     /// Channel ids playing side by side. Empty means one channel.
-    var together: [Int64] = []
+    var together: [Int64] = [] {
+        // A tile that left must not bring its note back if the channel is added again.
+        didSet { standIns.formIntersection(together) }
+    }
+
     /// Layout Watch together or a saved set asked for. The multiview screen applies it once.
     var openedLayout: String?
     /// A short note over the picture, such as why another channel is playing.
     var note: String?
+    /// Tile channel ids that stand in for an encrypted 3.0 station.
+    var standIns: Set<Int64> = []
 
     func play(_ channel: Channel, note: String? = nil) {
         together = []
+        standIns = []
         openedLayout = nil
         self.channel = channel
         self.note = note
         expanded = true
     }
 
-    func watchTogether(_ channels: [Channel], layout: String? = nil) {
+    func watchTogether(_ channels: [Channel], layout: String? = nil, standIns: Set<Int64> = []) {
         var seen = Set<Int64>()
         together = channels.map(\.id).filter { seen.insert($0).inserted }
+        self.standIns = standIns.intersection(seen)
         if let layout, TileLayout(rawValue: layout) != nil {
             openedLayout = layout
         } else {
@@ -45,9 +53,28 @@ final class NowPlaying {
         channel = nil
         note = nil
         together = []
+        standIns = []
         openedLayout = nil
         expanded = false
     }
+}
+
+/// A multiview named by channel ids (a deep link, a saved set, or a launch
+/// argument). A hidden half plays as the half on the guide. An encrypted 3.0
+/// id plays its clear broadcast.
+@MainActor
+func openSavedMultiview(ids: [Int64], layout: String?, store: AppStore, nowPlaying: NowPlaying) async {
+    if store.channels.isEmpty {
+        await store.refresh()
+    }
+    var lineup = store.channels
+    let missing = ids.contains { id in !lineup.contains(where: { $0.id == id }) }
+    if missing, let all = try? await store.api?.allChannels() {
+        lineup = all
+    }
+    let grid = ClearBroadcast.grid(ids: ids, visible: store.channels, lineup: lineup)
+    guard !grid.channels.isEmpty else { return }
+    nowPlaying.watchTogether(grid.channels, layout: layout, standIns: grid.standIns)
 }
 
 enum AppTab: Hashable {
@@ -273,18 +300,10 @@ struct RootView: View {
                     }
                 #endif
                 if let raw = UserDefaults.standard.string(forKey: "BroadwaveMultiview"), !raw.isEmpty {
-                    if store.channels.isEmpty {
-                        await store.refresh()
-                    }
-                    let channels = raw.split(separator: ",").compactMap { piece -> Channel? in
-                        let id = Int64(piece.trimmingCharacters(in: .whitespaces)) ?? 0
-                        return store.channels.first { $0.id == id }
-                    }
-                    if !channels.isEmpty {
-                        // -BroadwaveMultiviewLayout picks pip or 1+3. fitting() never does.
-                        let layout = UserDefaults.standard.string(forKey: "BroadwaveMultiviewLayout")
-                        nowPlaying.watchTogether(channels, layout: layout)
-                    }
+                    let ids = raw.split(separator: ",").compactMap { Int64($0.trimmingCharacters(in: .whitespaces)) }
+                    // -BroadwaveMultiviewLayout picks pip or 1+3. fitting() never does.
+                    let layout = UserDefaults.standard.string(forKey: "BroadwaveMultiviewLayout")
+                    await openSavedMultiview(ids: ids, layout: layout, store: store, nowPlaying: nowPlaying)
                     return
                 }
                 let id = UserDefaults.standard.integer(forKey: "BroadwaveWatch")
@@ -316,7 +335,8 @@ struct RootView: View {
         }
     #endif
 
-    /// broadwave://connect?url=, broadwave://watch/<channel id>, broadwave://guide, broadwave://sports.
+    /// broadwave://connect?url=, broadwave://watch/<channel id>,
+    /// broadwave://multiview?ch=<id>,<id>, broadwave://guide, broadwave://sports.
     private var installedVersion: String {
         if let raw = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, !raw.isEmpty {
             return raw
@@ -348,6 +368,16 @@ struct RootView: View {
                 if let choice = ClearBroadcast.play(id: id, visible: store.channels, lineup: lineup) {
                     nowPlaying.play(choice.channel, note: choice.note)
                 }
+            }
+        case "multiview":
+            let parts = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let query = parts?.queryItems ?? []
+            let raw = query.first { $0.name == "ch" }?.value
+                ?? url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            let ids = raw.split(separator: ",").compactMap { Int64($0.trimmingCharacters(in: .whitespaces)) }
+            let layout = query.first { $0.name == "layout" }?.value
+            Task {
+                await openSavedMultiview(ids: ids, layout: layout, store: store, nowPlaying: nowPlaying)
             }
         case "guide": show(.guide)
         case "search": show(.search)

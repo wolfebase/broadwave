@@ -1282,7 +1282,8 @@ struct MultiviewScreen: View {
             remoteFocused: remoteFocused,
             pip: focused,
             gridPaused: session.paused,
-            grid: session
+            grid: session,
+            standIn: nowPlaying.standIns.contains(channel.id)
         ) {
             session.focusID = channel.id
         } bind: { session.bind(channel.id, $0) } unbind: {
@@ -1509,6 +1510,8 @@ struct MultiviewTile: View {
     /// The whole grid is paused. A stuck tile must not start itself then.
     let gridPaused: Bool
     let grid: MultiviewSession
+    /// This tile is the clear broadcast standing in for an encrypted 3.0 station.
+    let standIn: Bool
     let onFocus: () -> Void
     let bind: (@escaping (String) -> Void) -> Void
     let unbind: () -> Void
@@ -1584,6 +1587,21 @@ struct MultiviewTile: View {
             }
         }
         .buttonStyle(.plain)
+        .overlay(alignment: .top) {
+            if standIn {
+                Text(ClearBroadcast.encryptedNote)
+                    .font(.footnote.weight(.semibold))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .glassEffect(in: .capsule)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .allowsHitTesting(false)
+                    .accessibilityIdentifier("playback-note")
+            }
+        }
         .overlay {
             if let error = live.error {
                 VStack(spacing: 8) {
@@ -1727,6 +1745,9 @@ struct MultiviewTile: View {
         // a stalled picture are part of its value. VoiceOver then reads them.
         if let error = live.error, !error.isEmpty {
             parts.append(error)
+        }
+        if standIn {
+            parts.append(ClearBroadcast.encryptedNote)
         }
         return parts.joined(separator: ", ")
     }

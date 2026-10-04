@@ -117,9 +117,10 @@ struct HomeView: View {
                     Shelf("Saved sets") {
                         ForEach(saved) { set in
                             Button {
-                                let channels = set.channels.compactMap { id in store.channels.first { $0.id == id } }
-                                if !channels.isEmpty {
-                                    nowPlaying.watchTogether(channels, layout: set.layout)
+                                let ids = set.channels
+                                let layout = set.layout
+                                Task {
+                                    await openSavedMultiview(ids: ids, layout: layout, store: store, nowPlaying: nowPlaying)
                                 }
                             } label: {
                                 Text(set.name)
