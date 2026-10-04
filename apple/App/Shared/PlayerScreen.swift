@@ -174,6 +174,8 @@ final class LivePlayer {
         }
         let caps = Capabilities.current()
         let prefs = store.prefs
+        let room = "channel:\(channel.id)"
+        let syncs = store.syncEnabled && Compatibility.gateFeature(store.info, "wholeHomeSync") == nil && store.socket != nil
         rewatch = { try await api.watch(channelID: channel.id, caps: caps, prefs: prefs, confirmLive: false) }
         let prepared = preparedSession?.channelId == channel.id ? preparedSession : nil
         if let stale = preparedSession, prepared == nil {
@@ -184,7 +186,7 @@ final class LivePlayer {
             if let prepared {
                 return prepared
             }
-            return try await api.watch(channelID: channel.id, caps: caps, prefs: prefs, confirmLive: allow)
+            return try await api.watch(channelID: channel.id, caps: caps, prefs: prefs, confirmLive: allow, room: syncs ? room : nil)
         }
         watchTask = task
         defer {
@@ -229,9 +231,9 @@ final class LivePlayer {
                     Task { await showCaptions(item) }
                 }
             #endif
-            if store.syncEnabled, Compatibility.gateFeature(store.info, "wholeHomeSync") == nil, let socket = store.socket {
-                let engine = SyncEngine(player: player, socket: socket, room: "channel:\(channel.id)", channelID: channel.id)
-                listenForRoom(socket, room: "channel:\(channel.id)")
+            if syncs, let socket = store.socket {
+                let engine = SyncEngine(player: player, socket: socket, room: room, channelID: channel.id)
+                listenForRoom(socket, room: room)
                 engine.start()
                 sync = engine
             }

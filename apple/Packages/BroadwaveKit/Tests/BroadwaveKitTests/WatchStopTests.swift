@@ -54,6 +54,22 @@ import Testing
     #expect((sent["prefs"] as? [String: Any])?["quality"] as? String == "high")
 }
 
+@Test func watchNamesItsRoomOnlyWhenItSyncs() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [WatchRoomStub.self]
+    let api = try APIClient(base: #require(URL(string: "http://stub.invalid")), session: URLSession(configuration: config))
+    _ = try await api.watch(channelID: 4, caps: Capabilities.current(), prefs: Prefs(), room: "channel:4")
+    let body = try #require(WatchRoomStub.lastBody)
+    let sent = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    #expect(sent["room"] as? String == "channel:4")
+    #expect(WatchRoomStub.lastPath == "/api/v1/watch")
+
+    _ = try await api.watch(channelID: 4, caps: Capabilities.current(), prefs: Prefs())
+    let aloneBody = try #require(WatchRoomStub.lastBody)
+    let alone = try #require(JSONSerialization.jsonObject(with: aloneBody) as? [String: Any])
+    #expect(alone["room"] == nil)
+}
+
 private final class WatchStopStub: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var lastBody: Data?
     nonisolated(unsafe) static var lastPath: String?
@@ -112,6 +128,31 @@ private final class WarmStub: URLProtocol, @unchecked Sendable {
         let res = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: res, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(#"{"warm":true}"#.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+private final class WatchRoomStub: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var lastBody: Data?
+    nonisolated(unsafe) static var lastPath: String?
+
+    override static func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        Self.lastBody = request.httpBody ?? request.httpBodyStream.map(WatchStopStub.read)
+        Self.lastPath = request.url?.path
+        let json = #"{"channelId":4,"playlist":"/live/4/index.m3u8","rendition":"720.aac2","stream":{"rendition":"720.aac2","video":"720","audio":"aac2","reason":"Original picture"},"encoder":"copy","shared":false,"viewers":1}"#
+        let res = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: res, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(json.utf8))
         client?.urlProtocolDidFinishLoading(self)
     }
 

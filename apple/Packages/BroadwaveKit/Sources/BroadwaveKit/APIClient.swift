@@ -201,9 +201,11 @@ public struct APIClient: Sendable {
 
     // MARK: Live
 
-    public func watch(channelID: Int64, caps: Caps, prefs: Prefs, confirmLive: Bool = false) async throws -> WatchSession {
-        struct B: Encodable { var channelId: Int64; var caps: Caps; var prefs: Prefs; var confirmLive: Bool }
-        return try await send("POST", "/watch", body: B(channelId: channelID, caps: caps, prefs: prefs, confirmLive: confirmLive))
+    /// `room` is the sync room the player joins. A new encode for a room that
+    /// plays well behind live then starts at the room's frame.
+    public func watch(channelID: Int64, caps: Caps, prefs: Prefs, confirmLive: Bool = false, room: String? = nil) async throws -> WatchSession {
+        struct B: Encodable { var channelId: Int64; var caps: Caps; var prefs: Prefs; var confirmLive: Bool; var room: String? }
+        return try await send("POST", "/watch", body: B(channelId: channelID, caps: caps, prefs: prefs, confirmLive: confirmLive, room: room))
     }
 
     /// Starts the picture a watch is about to ask for, when the channel's
