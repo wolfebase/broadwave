@@ -224,6 +224,7 @@ test.describe("a restarted server", () => {
     { layout: "2up", slow: false, title: "side by side plays again with no click" },
     { layout: "quad", slow: false, title: "quad plays again with no click" },
     { layout: "2up", slow: true, title: "side by side plays again after a slow restart, one viewer a tile" },
+    { layout: "quad", slow: true, title: "quad plays again after a slow restart" },
   ] as const;
   for (const { layout, slow, title } of runs) {
     test(title, async ({ page }) => {

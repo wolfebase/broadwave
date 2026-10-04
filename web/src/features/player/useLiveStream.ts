@@ -9,7 +9,7 @@ import { liveHlsConfig, type BufferProfile } from "../../picture";
 import { rememberChannel } from "../../recent";
 import { applySound } from "./extras";
 import { followCaptions, watchTimeline } from "./liveCaptions";
-import { holdQuietStart } from "./quietStart";
+import type { StartGate } from "./quietStart";
 import { soundFor, type Sound } from "./sounds";
 import { awayBeforeSeekMs, resumePlan } from "./resume";
 import {
@@ -30,6 +30,8 @@ import {
   type RecoverySnap,
 } from "./outage";
 
+// A player with no watch when the server came back asks after the ones that
+// had a picture, so theirs is not the one a full picture budget turns away.
 const restartAskLastMs = 3000;
 
 function webCaps(alternates: boolean): Caps {
@@ -59,10 +61,9 @@ export function useLiveStream(
     profile,
     audible,
     remember,
-    after,
+    gate,
     captions,
     fits,
-    quiet,
     alternates,
   }: {
     channelId: number;
@@ -76,15 +77,13 @@ export function useLiveStream(
     profile: BufferProfile;
     audible: boolean;
     remember?: Channel | null;
-    // Another player asks first. A watch that is already playing keeps going;
-    // a start waits until this turns false.
-    after?: boolean;
+    // Multiview's start order. A watch that is already playing keeps going;
+    // a start waits until the gate lets this tile ask.
+    gate?: StartGate;
     captions?: boolean;
     // The last picture budget covered every tile on this page, or every tile
     // already had a picture. A kept page uses it to start the quiet tiles now.
     fits?: boolean;
-    // This tile is not the one the viewer is hearing.
-    quiet?: boolean;
     // Ask for a master with every sound track when the channel carries more than one.
     alternates?: boolean;
   },
@@ -123,21 +122,17 @@ export function useLiveStream(
     syncing.current = sync;
     roomRef.current = room;
   }, [sync, room]);
-  // Layout effects run before the watch effect, so a start in the same render sees the gate.
-  const afterRef = useRef(!!after);
+  // Layout effects run before the watch effect, so a start in the same render sees them.
+  const gateRef = useRef(gate);
   const fitsRef = useRef(!!fits);
-  const quietRef = useRef(!!quiet);
   useLayoutEffect(() => {
-    afterRef.current = !!after;
+    gateRef.current = gate;
     fitsRef.current = !!fits;
-    quietRef.current = !!quiet;
-  }, [after, fits, quiet]);
-  const held = useRef(false);
+  }, [gate, fits]);
+  // The channel the gate let ask on the next run of the watch effect.
+  const passed = useRef(0);
   // A page kept for Back. The watch effect reads it and drops it after this turn.
   const pageKept = useRef(false);
-  // A player with no watch when the server came back asks after the ones that
-  // had a picture, so theirs is not the one a full picture budget turns away.
-  const askLast = useRef(false);
   // True from a start until its watch answers or gives up.
   const [asking, setAsking] = useState(true);
   // A local rewind has to land before the engine's next tick puts the playhead back.
@@ -171,12 +166,20 @@ export function useLiveStream(
       queueMicrotask(() => {
         pageKept.current = false;
       });
-    if (holdQuietStart(afterRef.current, kept, fitsRef.current, quietRef.current)) {
-      held.current = true;
-      retrying.current = false;
-      return;
+    // A kept page whose tiles all fit starts them together.
+    const order = kept && fitsRef.current ? undefined : gateRef.current;
+    if (order) {
+      order.want(id);
+      if (passed.current !== id) {
+        retrying.current = false;
+        order.wait(id, () => {
+          passed.current = id;
+          setAttempt((n) => n + 1);
+        });
+        return () => order.cancel(id);
+      }
+      passed.current = 0;
     }
-    askLast.current = false;
     let joined = "";
     // The stop names the server process that counted this viewer. After a
     // restart the new process ignores it instead of taking someone else's.
@@ -303,6 +306,7 @@ export function useLiveStream(
         // Only hls.js starts on the room's frame (startOnRoom below).
         const joining = Hls.isSupported() && syncing.current && !holdSync.current ? (roomRef.current ?? "") : "";
         const next = await watchChannel(id, webCaps(askAlternates), { quality, audio, picture, track, even }, "", allow, ctrl.signal, joining);
+        if (!dead) order?.answered(id);
         joined = next.rendition;
         boot = next.boot ?? "";
         watching.current = true;
@@ -401,6 +405,7 @@ export function useLiveStream(
         });
       } catch (err) {
         if (dead || leaving) return;
+        order?.answered(id);
         quietRetry.current = null;
         quietPending.current = false;
         const failed = err as ApiFailure;
@@ -639,19 +644,6 @@ export function useLiveStream(
     };
   }, [session, sync, room, channelId, videoRef]);
 
-  useEffect(() => {
-    if (after || !held.current) return;
-    held.current = false;
-    if (!askLast.current) {
-      setAttempt((n) => n + 1);
-      return;
-    }
-    const later = window.setTimeout(() => {
-      if (!watching.current && !retrying.current) setAttempt((n) => n + 1);
-    }, restartAskLastMs);
-    return () => window.clearTimeout(later);
-  }, [after]);
-
   // A restarted server has lost this watch. Start it again now instead of
   // waiting for the picture to run dry and the stall clock to name it.
   useEffect(() => {
@@ -666,10 +658,7 @@ export function useLiveStream(
     const off = events().on("restarted", () => {
       window.clearTimeout(later);
       if (watching.current) again();
-      else {
-        askLast.current = true;
-        later = window.setTimeout(again, restartAskLastMs);
-      }
+      else later = window.setTimeout(again, restartAskLastMs);
     });
     return () => {
       off();
@@ -698,7 +687,6 @@ export function useLiveStream(
         }
         if (key === seen.key) return;
         if (lastAsk && !watching.current) {
-          askLast.current = true;
           readyAt ||= performance.now();
           if (performance.now() - readyAt < restartAskLastMs) return;
         }
