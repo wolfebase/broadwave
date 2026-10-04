@@ -239,6 +239,11 @@ Without an updater, the web app says when a new release is out.
 </details>
 
 <details>
+<summary><b>Can I watch more than one channel?</b></summary>
+<br>Yes. Side by side, one large picture with smaller ones beside it, or four at once, on the web, iPad, and Apple TV. The iPhone app shows two. One tile has the sound. [How that works](docs/multiview.md).
+</details>
+
+<details>
 <summary><b>Will it get along with the media servers I already run?</b></summary>
 <br>Yes. Everyone watching the same channel shares one tune: three TVs on one channel use one tuner. Other media servers can use Broadwave as a tuner too. It keeps a tuner free for its own recordings.
 </details>
