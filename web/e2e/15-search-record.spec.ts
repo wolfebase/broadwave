@@ -7,6 +7,24 @@ async function passes(page: import("@playwright/test").Page) {
   return ((await (await page.request.get("/api/v1/passes")).json()) as { passes: Pass[] }).passes;
 }
 
+test("search lists what is on now first, as you type", async ({ page }) => {
+  expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBe(true);
+  await page.goto("/search");
+  await settle(page);
+  const field = page.getByLabel("Search shows, people, and recordings");
+  await field.pressSequentially("news", { delay: 40 });
+  const guide = page.locator("section", { has: page.getByRole("heading", { name: "Guide" }) });
+  const titles = guide.locator(".search-list > li");
+  await expect(titles.first()).toContainText("Evening News");
+  await expect(titles.filter({ hasText: "Late Local News" })).toHaveCount(1);
+  await expect(titles.filter({ hasText: "Morning News" })).toHaveCount(0);
+  const order = await titles.allInnerTexts();
+  expect(order.findIndex((text) => text.includes("Evening News"))).toBeLessThan(order.findIndex((text) => text.includes("Late Local News")));
+  await expect(page).toHaveURL(/\/search\?q=news$/);
+  await page.goBack();
+  await expect(page).not.toHaveURL(/\/search/);
+});
+
 test("a search result opens, and records just that airing", async ({ page }) => {
   // Run alone, the fresh catalog would open on setup.
   expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBe(true);

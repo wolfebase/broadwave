@@ -50,3 +50,34 @@ func TestSearchFindsListingsAndRecordings(t *testing.T) {
 		t.Fatal(err, none, norec)
 	}
 }
+
+func TestSearchListsAChannelOnceAndSkipsHiddenOnes(t *testing.T) {
+	s, ctx := openTwoTuners(t)
+	all, err := s.Channels(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now().Add(time.Hour)
+	var airings []Airing
+	for _, ch := range all {
+		airings = append(airings, Airing{ChannelID: ch.ID, Title: "News at " + ch.GuideNumber, Start: start, End: start.Add(30 * time.Minute)})
+	}
+	if err := s.ReplaceAirings(ctx, airings); err != nil {
+		t.Fatal(err)
+	}
+	hide := true
+	if _, err := s.PatchChannel(ctx, rowFor(t, all, "CCC3", "5.2").ID, ChannelPatch{Hidden: &hide}); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := s.Search(ctx, "news", time.Now(), 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]int{}
+	for _, hit := range got {
+		seen[hit.GuideNumber+" "+hit.ChannelName]++
+	}
+	if len(got) != 2 || seen["5.1 WTSTDT1"] != 1 || seen["5.2 Rivers"] != 1 {
+		t.Fatalf("hits %v, want 5.1 and 5.2 Rivers once each (two tuners carry them; Mountains is hidden)", seen)
+	}
+}

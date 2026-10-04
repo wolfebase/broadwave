@@ -628,6 +628,9 @@ paths:
     get:
       tags: [guide]
       operationId: search
+      description: |
+        Listings that have not ended, on the channels the guide shows (one row per channel when
+        two tuners carry it), what is on now first and then by start time; and matching recordings.
       parameters:
         - in: query
           name: q

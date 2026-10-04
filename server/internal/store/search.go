@@ -33,7 +33,23 @@ func (s *Store) Search(ctx context.Context, query string, from time.Time, limit 
 	return airings, recordings, nil
 }
 
+// searchAirings reads listings on the channels the guide shows: one row per
+// channel when two tuners carry it, and none that are hidden.
 func (s *Store) searchAirings(ctx context.Context, match string, from time.Time, limit int) ([]AiringHit, error) {
+	shown, err := s.Channels(ctx, true)
+	if err != nil {
+		return nil, err
+	}
+	if len(shown) == 0 {
+		return []AiringHit{}, nil
+	}
+	args := []any{match, from.UTC().Format(time.RFC3339)}
+	marks := make([]string, len(shown))
+	for i, ch := range shown {
+		marks[i] = "?"
+		args = append(args, ch.ID)
+	}
+	args = append(args, limit)
 	rows, err := s.db.QueryContext(ctx, `
 SELECT a.id, a.channel_id, a.title, a.subtitle, a.description, a.category, a.starts_at, a.ends_at,
 	a.program_id, a.is_new, a.image_url, a.image_width, a.image_height, a.season, a.episode, a.episode_label, a.original_air, a.series_id,
@@ -41,9 +57,9 @@ SELECT a.id, a.channel_id, a.title, a.subtitle, a.description, a.category, a.sta
 FROM airing_search
 JOIN airings a ON a.id = airing_search.rowid
 JOIN channels c ON c.id = a.channel_id
-WHERE airing_search MATCH ? AND a.ends_at > ?
-ORDER BY a.starts_at
-LIMIT ?`, match, from.UTC().Format(time.RFC3339), limit)
+WHERE airing_search MATCH ? AND a.ends_at > ? AND a.channel_id IN (`+strings.Join(marks, ",")+`)
+ORDER BY a.starts_at, a.id
+LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}

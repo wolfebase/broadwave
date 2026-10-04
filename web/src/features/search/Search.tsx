@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { addPass, search } from "../../api";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
@@ -63,7 +63,11 @@ export function SearchPage() {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [note, setNote] = useState("");
 
+  const typing = useRef(0);
+
   const active = initial.trim().length >= 2;
+
+  useEffect(() => () => window.clearTimeout(typing.current), []);
 
   useEffect(() => {
     const q = initial.trim();
@@ -87,7 +91,16 @@ export function SearchPage() {
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    window.clearTimeout(typing.current);
     navigate(`/search?q=${encodeURIComponent(draft.trim())}`);
+  }
+
+  // Results follow the typing after a short pause. The address is replaced, so
+  // Back leaves Search instead of stepping through every partial word.
+  function type(value: string) {
+    setDraft(value);
+    window.clearTimeout(typing.current);
+    typing.current = window.setTimeout(() => navigate(`/search?q=${encodeURIComponent(value.trim())}`, true), 300);
   }
 
   return (
@@ -103,7 +116,7 @@ export function SearchPage() {
           value={draft}
           placeholder="Shows, people, recordings"
           aria-label="Search shows, people, and recordings"
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => type(event.target.value)}
         />
       </form>
       {active && note ? <p className="hint">{note}</p> : null}

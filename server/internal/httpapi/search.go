@@ -6,14 +6,15 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"broadwave/internal/store"
 )
 
 func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
-	airings, recordings, err := s.Store.Search(r.Context(), query, s.now().Add(-2*time.Hour), 40)
+	// Listings that already ended are left out: what is on now comes first,
+	// then what starts next. Recordings cover what aired.
+	airings, recordings, err := s.Store.Search(r.Context(), query, s.now(), 40)
 	if err != nil {
 		writeError(w, err)
 		return
