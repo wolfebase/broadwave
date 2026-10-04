@@ -134,6 +134,14 @@ export function pictureRetryDelay(message: string, recovery: Recovery, elapsedMs
   return wait;
 }
 
+// Wait before starting the picture again after `restarts` restarts that never
+// played. A watch can answer while its playlist is still gone (a proxy, a server
+// mid-restart), and the new stream then fails at once.
+export function restartDelayMs(restarts: number): number {
+  if (!(restarts > 0)) return 0;
+  return Math.min(10_000, 1000 * 2 ** (Math.min(restarts, 8) - 1));
+}
+
 // A quiet retry that fails without a named cause keeps the picture message.
 // No signal stays the viewer's call, including a tune that never locked.
 export function holdPictureMessage(next: { message: string; recovery: Recovery }): boolean {
