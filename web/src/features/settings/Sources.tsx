@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Channel, Device, TunerStatus } from "../../types";
 import { addFree, addPlaylistFile, addSource, checkSignals, findFree, getSignals, getTuners, lookHarder, sourceStatuses, startScan, type ChannelSignal, type FreeFeed, type SourceAdded, type SourceStatus } from "../../api";
 import { copy } from "../../strings";
+import { lastSeenPhrase } from "../../time";
 export function Sources({
   devices,
   channels,
@@ -194,14 +195,14 @@ export function Sources({
         </ul>
       )}
       <SignalCheck />
-      {statuses.length > 0 ? (
+      {unmatchedSources(statuses, devices).length > 0 ? (
         <ul className="source-list">
-          {statuses.map((item) => (
+          {unmatchedSources(statuses, devices).map((item) => (
             <li key={item.id} className="source-row">
               <span>{item.name}</span>
               <span className="codec">{item.health ? "Offline" : "Online"}</span>
               <span className="codec">
-                {item.streamLimit ? `${item.streamsInUse ?? 0} of ${item.streamLimit} streams` : "No stream limit"}
+                {item.streamLimit ? copy.sources.streams(item.streamsInUse ?? 0, item.streamLimit) : "No stream limit"}
                 {item.health && !item.health.includes("://") ? `. ${item.health}` : ""}
               </span>
             </li>
@@ -210,20 +211,13 @@ export function Sources({
       ) : null}
       {devices.length === 0 ? <p className="empty">{copy.sources.none}</p> : null}
       <div className="device-grid">
-        {devices.map((device) => (
-          <article key={device.deviceId} className="device-card">
-            <h3>{device.friendlyName || device.modelNumber}</h3>
-            <p>
-              {device.modelNumber} · {device.tunerCount} {copy.sources.tuners}
-            </p>
-            {device.note ? <p className="hint">{device.note}</p> : null}
-            <p className="hint">
-              {copy.sources.firmware} {device.firmwareVersion}
-              {device.upgradeAvailable
-                ? `. A newer build, ${device.upgradeAvailable}, is published. This app will not install it.`
-                : "."}
-            </p>
+        {devices.map((device) => {
+          const status = statuses.find((item) => item.deviceId === device.deviceId);
+          const name = device.friendlyName || device.modelNumber || device.deviceId;
+          const offline = Boolean(status?.health);
+          const scan = (
             <button
+              key="scan"
               type="button"
               className="btn"
               disabled={busy || scanning === device.deviceId}
@@ -234,19 +228,42 @@ export function Sources({
             >
               {scanning === device.deviceId ? copy.sources.scanning : copy.sources.scan}
             </button>
+          );
+          const remove = (
             <button
+              key="remove"
               type="button"
               className="btn"
               disabled={busy}
-              aria-label={copy.sources.removeLabel(device.friendlyName || device.modelNumber || device.deviceId)}
+              aria-label={copy.sources.removeLabel(name)}
               onClick={() => {
-                if (window.confirm(copy.sources.removeConfirm(device.friendlyName || device.modelNumber || device.deviceId))) onRemove(device.deviceId);
+                if (window.confirm(copy.sources.removeConfirm(name))) onRemove(device.deviceId);
               }}
             >
               {copy.sources.remove}
             </button>
-          </article>
-        ))}
+          );
+          return (
+            <article key={device.deviceId} className="device-card">
+              <h3>{device.friendlyName || device.modelNumber}</h3>
+              <p>
+                {device.modelNumber} · {device.tunerCount} {copy.sources.tuners}
+              </p>
+              {device.note ? <p className="hint">{device.note}</p> : null}
+              <p className="hint">
+                {copy.sources.firmware} {device.firmwareVersion}
+                {device.upgradeAvailable
+                  ? `. A newer build, ${device.upgradeAvailable}, is published. This app will not install it.`
+                  : "."}
+              </p>
+              {offline ? <p className="hint">{copy.sources.offline(lastSeenPhrase(device.lastSeen))}</p> : null}
+              {status?.streamLimit ? <p className="hint">{copy.sources.streams(status.streamsInUse ?? 0, status.streamLimit)}</p> : null}
+              {offline ? remove : null}
+              {scan}
+              {offline ? null : remove}
+            </article>
+          );
+        })}
       </div>
       <h3 className="section-title">{copy.sources.channels}</h3>
       <p className="hint">{copy.sources.matchHint}</p>
@@ -344,6 +361,13 @@ export function Sources({
 
 function twinNumber(channels: Channel[], id: number) {
   return channels.find((c) => c.id === id)?.displayNumber ?? "";
+}
+
+// A source that already has a device card reports there. This list is only
+// what the cards cannot show.
+function unmatchedSources(statuses: SourceStatus[], devices: Device[]) {
+  const known = new Set(devices.map((device) => device.deviceId));
+  return statuses.filter((item) => !item.deviceId || !known.has(item.deviceId));
 }
 
 function SourceAdd() {
