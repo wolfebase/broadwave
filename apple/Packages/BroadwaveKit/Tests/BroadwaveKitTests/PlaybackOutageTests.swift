@@ -74,8 +74,8 @@ private func fineSnap() -> RecoverySnap {
 
 @Test func aServerThatLostThePictureStartsItAgain() {
     let facts = RecoveryFacts(health: true, online: true, channelID: 1, assumeLost: false)
-    let lost = [ChannelSignal(channelId: 1, number: "4.1", name: "KBWV", verdict: "Lost", live: true)]
-    let gone = PlaybackOutage.snap(facts, lists: RecoveryLists(tuners: [], devices: [], signals: lost, playlistFound: false))
+    let fine = [ChannelSignal(channelId: 1, number: "4.1", name: "KBWV", verdict: "Great", live: true)]
+    let gone = PlaybackOutage.snap(facts, lists: RecoveryLists(tuners: [], devices: [], signals: fine, playlistFound: false))
     #expect(gone.watchGone)
 
     var stall = ServerOutage()
@@ -91,6 +91,19 @@ private func fineSnap() -> RecoverySnap {
     #expect(PlaybackOutage.recoveryReady(.restart, fineSnap()))
     let down = RecoverySnap(health: false, freeTuner: false, tunerAnswers: false, online: true, signalLost: false)
     #expect(!PlaybackOutage.recoveryReady(.restart, down))
+}
+
+@Test func aDarkTuneTheServerGaveBackSaysNoSignal() {
+    let facts = RecoveryFacts(health: true, online: true, channelID: 1, assumeLost: false)
+    let lost = [ChannelSignal(channelId: 1, number: "4.1", name: "KBWV", verdict: "Lost", live: true)]
+    let gone = PlaybackOutage.snap(facts, lists: RecoveryLists(tuners: [], devices: [], signals: lost, playlistFound: false))
+    #expect(gone.watchGone)
+    var stall = ServerOutage()
+    let start = Date(timeIntervalSince1970: 6500)
+    stall.noteWaiting(at: start)
+    let named = stall.resolve(at: start.addingTimeInterval(8), snap: gone, fatal: false)
+    #expect(named?.message == PlaybackOutage.noSignal)
+    #expect(named?.recovery == .signal)
 }
 
 @Test func anUnreadPlaylistIsNotALostPicture() {

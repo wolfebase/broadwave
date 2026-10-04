@@ -820,7 +820,7 @@ paths:
     get:
       tags: [live]
       operationId: listSignals
-      description: Last antenna reading for each channel, plus a live reading when that frequency is already tuned.
+      description: Last antenna reading for each channel, plus a live reading when that frequency is already tuned. A channel whose tune found no signal in the last 20 seconds reads live and Lost.
       responses:
         "200":
           description: Channel signals

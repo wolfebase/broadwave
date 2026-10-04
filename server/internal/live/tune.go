@@ -220,11 +220,14 @@ func (h *Hub) tuneFeed(ctx context.Context, ch store.SourceChannel, res *http.Re
 		var err error
 		if o, err = h.openUnlocked(ctx, ch); err != nil {
 			h.mu.Lock()
+			h.noteDarkLocked(ch, err)
 			return nil, err
 		}
 	}
 	h.mu.Lock()
-	return h.feedLocked(ctx, ch, o, res)
+	f, err := h.feedLocked(ctx, ch, o, res)
+	h.noteDarkLocked(ch, err)
+	return f, err
 }
 
 // siblingLocked is a watch whose station is already tuned or being tuned:

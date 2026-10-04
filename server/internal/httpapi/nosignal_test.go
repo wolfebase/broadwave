@@ -70,6 +70,10 @@ func TestWatchingADarkChannelSaysItIsNotComingIn(t *testing.T) {
 		if !hub.Idle() || !tunersFree(t, h) {
 			t.Fatalf("%s kept the tuner", pass)
 		}
+		// A player asking why it stopped still hears about the antenna.
+		if live, verdict := signalOf(t, h, id); !live || verdict != "Lost" {
+			t.Fatalf("%s: signal after release live=%v verdict=%q", pass, live, verdict)
+		}
 	}
 
 	tuner.Light("5.1")
@@ -77,6 +81,33 @@ func TestWatchingADarkChannelSaysItIsNotComingIn(t *testing.T) {
 	if res.Code != http.StatusOK {
 		t.Fatalf("lit channel: %d %s", res.Code, res.Body.String())
 	}
+	if _, verdict := signalOf(t, h, id); verdict == "Lost" {
+		t.Fatal("a channel that came back still reads lost")
+	}
+}
+
+func signalOf(t *testing.T, h http.Handler, channelID int64) (bool, string) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/signals", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	var body struct {
+		Channels []struct {
+			ChannelID int64  `json:"channelId"`
+			Live      bool   `json:"live"`
+			Verdict   string `json:"verdict"`
+		} `json:"channels"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("signals: %v %s", err, rec.Body.String())
+	}
+	for _, row := range body.Channels {
+		if row.ChannelID == channelID {
+			return row.Live, row.Verdict
+		}
+	}
+	t.Fatalf("signals: no row for %d", channelID)
+	return false, ""
 }
 
 // tunersFree waits briefly for every tuner to report nothing tuned.

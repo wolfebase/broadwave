@@ -172,14 +172,15 @@ public enum PlaybackOutage {
             }
             return OutageDecision(message: serverStopped, recovery: .server)
         }
+        // A dark tune the server gave back also leaves its playlist gone.
+        if snap.signalLost, snap.tunerAnswers {
+            return OutageDecision(message: noSignal, recovery: .signal)
+        }
         if snap.watchGone {
             return OutageDecision(message: pictureRestarting, recovery: .restart)
         }
         if !snap.tunerAnswers {
             return OutageDecision(message: tunerStopped, recovery: .tuner)
-        }
-        if snap.signalLost {
-            return OutageDecision(message: noSignal, recovery: .signal)
         }
         return OutageDecision(message: pictureStopped, recovery: nil)
     }
