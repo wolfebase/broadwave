@@ -41,6 +41,11 @@ func TestSearchFindsListingsAndRecordings(t *testing.T) {
 	if len(airings) != 1 || airings[0].Title != "Jeopardy!" || airings[0].GuideNumber != "4.1" || len(recordings) != 1 {
 		t.Fatalf("airings %+v recordings %+v", airings, recordings)
 	}
+	// Two words: one in the title, one in the subtitle.
+	both, _, err := s.Search(ctx, "jeop show", time.Now(), 20)
+	if err != nil || len(both) != 1 {
+		t.Fatal(err, both)
+	}
 	byCast, _, err := s.Search(ctx, "Ken", time.Now(), 20)
 	if err != nil || len(byCast) != 1 {
 		t.Fatal(err, byCast)
