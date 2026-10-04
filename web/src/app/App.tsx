@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Guide } from "../features/guide/Guide";
 import { Home } from "../features/home/Home";
 import { gateApp } from "../lib/compat";
@@ -197,12 +197,8 @@ function Shell() {
             <button type="button" className="btn small ghost" onClick={() => setHiddenUpdate(notice.message)}>Not now</button>
           </div>
         ) : null}
-        {!booting && notices[0] ? (
-          <div className="banner-home" role="status">
-            <p>{notices[0]}</p>
-            <button type="button" className="btn small" onClick={() => navigate("/settings")}>Your home</button>
-            <button type="button" className="btn small ghost" onClick={dismissNotice}>Not now</button>
-          </div>
+        {!booting && notices[0] && !immersive && !fullPlayer ? (
+          <HomeNotice key={`${notices.length}:${notices[0]}`} message={notices[0]} onDismiss={dismissNotice} />
         ) : null}
         {!booting ? (
           <Suspense fallback={null}>
@@ -211,6 +207,42 @@ function Shell() {
           </Suspense>
         ) : null}
       </main>
+    </div>
+  );
+}
+
+/** A device that joined the house. It waits off the player and multiview, and goes by itself. */
+function HomeNotice({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // 12 s once it can be seen: a tab in the background has not seen it yet.
+    let timer = 0;
+    const arm = () => {
+      window.clearTimeout(timer);
+      if (document.visibilityState === "visible") timer = window.setTimeout(onDismiss, 12_000);
+    };
+    // It floats over the page. A control under it that takes focus wins.
+    const onFocus = (event: FocusEvent) => {
+      const box = ref.current?.getBoundingClientRect();
+      const target = event.target;
+      if (!box || !(target instanceof HTMLElement) || ref.current?.contains(target)) return;
+      const r = target.getBoundingClientRect();
+      if (r.left < box.right && box.left < r.right && r.top < box.bottom && box.top < r.bottom) onDismiss();
+    };
+    arm();
+    document.addEventListener("visibilitychange", arm);
+    document.addEventListener("focusin", onFocus);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", arm);
+      document.removeEventListener("focusin", onFocus);
+    };
+  }, [message, onDismiss]);
+  return (
+    <div ref={ref} className="banner-home" role="status">
+      <p>{message}</p>
+      <button type="button" className="btn small" onClick={() => navigate("/settings")}>Your home</button>
+      <button type="button" className="btn small ghost" onClick={onDismiss}>Not now</button>
     </div>
   );
 }
