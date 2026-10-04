@@ -87,7 +87,9 @@ func TestBudgetCoversEveryHost(t *testing.T) {
 		{"six cores at 6.2x", "software", 6.2, 1080, "720", 4, true},
 		{"three cores at 3.1x", "software", 3.1, 720, "540", 2, true},
 		{"software at 4x", "software", 4, 1080, "720", 2, true},
-		{"software at 2x", "software", 2, 540, "360", 1, true},
+		{"software at 2.4x", "software", 2.4, 720, "360", 1, true},
+		{"software at 1.6x", "software", 1.6, 540, "360", 1, true},
+		{"software boundary 1.9x", "software", 1.9, 720, "360", 1, true},
 		{"pi 5 class software at 0.7x", "software", 0.7, 540, "360", 1, false},
 		{"j4125 class software at 0.4x", "software", 0.4, 540, "360", 1, false},
 		{"unmeasured software", "software", 0, 540, "360", 1, false},
@@ -131,12 +133,12 @@ func TestMeasureHostReadsAScript(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "ffmpeg")
 	// Startup holds the first frame for a second; the speed counts from it.
-	script := "#!/bin/sh\necho out_time_us=0\nsleep 1\necho out_time_us=200000\nsleep 0.3\necho out_time_us=800000\necho speed=0.6x\nexit 0\n"
+	script := "#!/bin/sh\necho out_time_us=0\nsleep 1\necho out_time_us=200000\nsleep 0.3\necho out_time_us=680000\necho speed=0.6x\nexit 0\n"
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	got := MeasureHost(context.Background(), path, "libx264")
-	if got.Class != "software" || got.Speed < 1.5 || got.Height != 540 || got.Focus != "360" || got.Tiles != 1 || !got.FullRate {
+	if got.Class != "software" || got.Speed < 1.4 || got.Speed >= 1.9 || got.Height != 540 || got.Focus != "360" || got.Tiles != 1 || !got.FullRate {
 		t.Fatalf("measured %+v", got)
 	}
 	if !strings.Contains(got.Line(), "360p60") {

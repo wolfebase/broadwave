@@ -105,7 +105,8 @@ func Budget(class string, speed float64) Host {
 // encode decodes and deinterlaces its own 1080i feed. Measured on 1080i
 // MPEG-2 with the live settings, at 3 and at 6 cores, one encode at real time
 // takes this much of the bench speed: a 360p60 tile 0.79, 540p60 0.90,
-// 720p60 1.27. So a quad needs 4.7 and two 720p60 pictures 3.8. One big
+// 720p60 1.27. So a quad needs 4.7, two 720p60 pictures 3.8, and one
+// 720p60 picture 1.9. One big
 // and three (720p60 and three at 540p60) needs 6.0; at 6.2 it ran 1.4x
 // and 1.6x, and a broadcast runs about 20% slower than the test picture.
 func softwareBudget(class string, speed float64) Host {
@@ -117,6 +118,8 @@ func softwareBudget(class string, speed float64) Host {
 		h.Height, h.Focus, h.Tiles, h.FullRate = 1080, "720", 2, true
 	case speed >= 2.7:
 		h.Height, h.Focus, h.Tiles, h.FullRate = 720, "540", 2, true
+	case speed >= 1.9:
+		h.Height, h.Focus, h.Tiles, h.FullRate = 720, "360", 1, true
 	case speed >= 1.4:
 		h.Height, h.Focus, h.Tiles, h.FullRate = 540, "360", 1, true
 	default:

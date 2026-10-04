@@ -107,6 +107,7 @@ jobs:
           E2E_SNAPSHOTS: skip
           E2E_TRACKS: "2"
           E2E_PORT: "18755"
+          E2E_SPEED: "3.1"
       - run: npx playwright test --config e2e/playwright.config.ts 01-setup 04-multiview -g "setup wizard|quad plays again with no click"
         continue-on-error: true
         working-directory: web
@@ -114,6 +115,7 @@ jobs:
           E2E_IMAGE: broadwave:ci
           E2E_SNAPSHOTS: skip
           E2E_PORT: "18753"
+          E2E_SPEED: "3.1"
       # Encrypted 3.0 plays as its clear twin. A multiview link to a hidden half
       # plays the channel on the guide. Own port: the steps above can still
       # hold 18731, and this lineup is the FLEX-4K profile.
@@ -124,6 +126,7 @@ jobs:
           E2E_SNAPSHOTS: skip
           E2E_ATSC3: "1"
           E2E_PORT: "18757"
+          E2E_SPEED: "3.1"
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
