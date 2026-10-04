@@ -164,3 +164,21 @@ private func play(_ frozen: inout FrozenPicture, from time: Double, seconds: Int
     #expect(frozen.note(time: at + 1, playing: false, stoppedItself: true, at: start.addingTimeInterval(8.5)) == nil)
     #expect(frozen.note(time: at + 1, playing: false, stoppedItself: true, at: start.addingTimeInterval(9)) == .retune)
 }
+
+/// It died before its first frame moved, with seconds loaded, and nothing
+/// restarts an item AVPlayer paused. The outage clock waits for a picture
+/// that played, so this is the only step it gets.
+@Test func aStartThatPausedItselfWithMediaLoadedSteps() {
+    var frozen = FrozenPicture()
+    #expect(frozen.note(time: 5, playing: false, stoppedItself: true, primed: true, at: start) == nil)
+    #expect(frozen.note(time: 5, playing: false, stoppedItself: true, primed: true, at: start.addingTimeInterval(2.9)) == nil)
+    #expect(frozen.note(time: 5, playing: false, stoppedItself: true, primed: true, at: start.addingTimeInterval(3)) == .reload)
+}
+
+@Test func aStartWithNothingLoadedIsStillStarting() {
+    var frozen = FrozenPicture()
+    for i in 0 ... 30 {
+        #expect(frozen.note(time: 0, playing: false, stoppedItself: true, at: start.addingTimeInterval(Double(i))) == nil)
+        #expect(frozen.note(time: 0, playing: true, primed: true, at: start.addingTimeInterval(Double(i) + 0.5)) == nil)
+    }
+}

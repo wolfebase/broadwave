@@ -27,6 +27,7 @@ func playbackSnap(api: APIClient, channelID: Int64, assumeLost: Bool, playlist: 
 final class ServerWatch {
     private var clock = ServerOutage()
     private var generation = 0
+    private var probeGen = 0
     private var probing = false
     private var recovering = false
     private var recovery: PlaybackOutage.Recovery?
@@ -51,6 +52,7 @@ final class ServerWatch {
     /// Drops the stall clock. A quiet picture retry keeps its own clock.
     func resetStall() {
         generation += 1
+        probeGen += 1
         probing = false
         recovering = false
         recovery = nil
@@ -63,6 +65,14 @@ final class ServerWatch {
         resetStall()
         endPictureRetry()
         played = false
+    }
+
+    /// A reload replaced the item. A probe that started for the old one, often
+    /// fatal for an item AVPlayer gave up on, would name an outage over the new
+    /// picture. The stall clock keeps its place.
+    func newItem() {
+        probeGen += 1
+        probing = false
     }
 
     func endPictureRetry() {
@@ -152,11 +162,11 @@ final class ServerWatch {
         guard clock.shouldProbe(at: Date(), fatal: fatal) else { return }
         guard let snap else { return }
         probing = true
-        let gen = generation
+        let gen = probeGen
         let path = playlist
         Task {
             let reading = await snap(false, path)
-            guard gen == generation else { return }
+            guard gen == probeGen else { return }
             probing = false
             guard let decision = clock.resolve(at: Date(), snap: reading, fatal: fatal, afterPicture: played) else { return }
             recovery = decision.recovery

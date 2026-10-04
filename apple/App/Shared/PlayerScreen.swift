@@ -36,6 +36,8 @@ final class LivePlayer {
     private var endObserver: NSObjectProtocol?
     /// AVPlayer ended the current item (failedToPlayToEndTime). Read once.
     private var itemEnded = false
+    /// The current item has had media loaded past its playhead.
+    private var itemPrimed = false
     private(set) var firstFrameMs: Int?
     /// False from a new watch until the picture has moved 0.3 s. A new room
     /// holds its first frame for the start, and that is not a picture yet.
@@ -666,6 +668,7 @@ final class LivePlayer {
             NotificationCenter.default.removeObserver(endObserver)
         }
         itemEnded = false
+        itemPrimed = false
         endObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.failedToPlayToEndTimeNotification, object: item, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.itemEnded = true
@@ -808,7 +811,12 @@ final class LivePlayer {
         let viewerPaused = paused && !pausedItself && sync?.detached == true
         let ended = itemEnded && error == nil && !viewerPaused
         itemEnded = false
-        let step = frozen.note(time: time, playing: !paused, stoppedItself: paused && pausedItself, ended: ended, at: Date())
+        if RestartHandoff.bufferedAhead(player) >= 0.5 {
+            itemPrimed = true
+        }
+        let step = frozen.note(
+            time: time, playing: !paused, stoppedItself: paused && pausedItself, ended: ended, primed: itemPrimed, at: Date()
+        )
         if !frozen.reconnecting {
             reconnecting = false
         }
@@ -833,6 +841,7 @@ final class LivePlayer {
         PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
         pausedItself = false
         player.replaceCurrentItem(with: item)
+        outage.newItem()
         watchStartup(item)
         player.play()
         if session.mainPlaylist != nil {

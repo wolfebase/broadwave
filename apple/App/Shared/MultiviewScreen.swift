@@ -634,6 +634,7 @@ final class TilePlayer {
         player.replaceCurrentItem(with: nil)
         frameOnScreen.ready = false
         player.replaceCurrentItem(with: item)
+        outage.newItem()
         watchEnd(item)
         player.automaticallyWaitsToMinimizeStalling = false
         player.playImmediately(atRate: 1)
