@@ -6,16 +6,20 @@ import { gateFeature } from "../../lib/compat";
 import { copy } from "../../strings";
 import { formatBytes } from "../../lib/format";
 import { readLiveDelay, saveLiveDelay, type LiveDelay } from "../../lib/events";
+import { tunerLine as describeTuners } from "./deviceCard";
 export function SettingsScreen({
   settings,
   storage,
   features,
+  tunerCount,
   onChange,
 }: {
   settings: Settings;
   storage: StorageInfo | null;
   /** Omitted until GET /api/v1/server has answered. */
   features?: string[];
+  /** Every tuner the server knows, answering or not. */
+  tunerCount?: number;
   onChange: (values: Partial<Settings>) => void;
 }) {
   const [encoder, setEncoder] = useState("");
@@ -29,10 +33,7 @@ export function SettingsScreen({
         if (stop) return;
         setEncoder(res.encoder || "");
         const busy = (res.tuners ?? []).filter((tuner) => tuner.guide || tuner.target).length;
-        const total = (res.tuners ?? []).length;
-        if (total === 0) setTunerLine("Tuner status is not available yet.");
-        else if (busy === 0) setTunerLine(`All ${total} tuners are free.`);
-        else setTunerLine(`${busy} of ${total} tuners are in use.`);
+        setTunerLine(describeTuners(busy, (res.tuners ?? []).length, tunerCount));
       })
       .catch(() => {
         if (!stop) setTunerLine("Tuner status is not available yet.");
@@ -45,7 +46,7 @@ export function SettingsScreen({
     return () => {
       stop = true;
     };
-  }, []);
+  }, [tunerCount]);
   const hdhrNote = gateFeature(features ? { features } : null, "hdhrEmulation");
   return (
     <section className="page">

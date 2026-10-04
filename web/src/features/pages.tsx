@@ -162,7 +162,7 @@ export function SettingsPage() {
       </section>
       <section className="settings-section">
         <h2>Playback and recording</h2>
-        <SettingsScreen settings={settings} storage={storage} features={server?.features} onChange={(v) => void saveSettings(v)} />
+        <SettingsScreen settings={settings} storage={storage} features={server?.features} tunerCount={server?.tunerCount} onChange={(v) => void saveSettings(v)} />
       </section>
       <section className="settings-section">
         <h2>Share with other apps</h2>
