@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.12.18 — 2026-10-04
+
+### Fixed
+
+- Search lists what is on now first, once per channel, and leaves out shows that have already ended and channels you hid. Shows with the search words in their title come before ones that only mention them. On the web, results follow your typing.
+- An encrypted ATSC 3.0 station's shows can still be found in search, so they can be recorded from its regular broadcast.
+- A link to a channel the guide doesn't show, such as the 1.0 half of a 3.0 pair, plays the channel the guide shows for it instead of an empty page.
+- Channels found by a later scan take their place in the guide by number instead of sitting at the bottom.
+- On the web, the mini-guide opens on the playing channel and its arrow keys move the selection you can see.
+- Enter closes the player's keyboard help on the web, so a remote can close it.
+- The web notice for a new device in the house goes away by itself after 12 seconds and waits until you leave the player.
+- On a TV browser, the remote's focus ring stays where you can see it: Up from the mini player reaches the guide, and Back from the player lands on the channel that was playing.
+- The guide's floating Now button no longer covers the grid when the guide opens at now.
+- The player's keyboard shortcuts keep working after focus falls off the player.
+
 ## 0.12.17 — 2026-10-04
 
 ### Fixed
