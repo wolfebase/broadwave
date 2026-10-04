@@ -60,6 +60,10 @@ const playlist = process.env.E2E_PLAYLIST === "1";
 // Two sound tracks (English, Spanish), so a watch that asks for alternates gets a
 // master. The realtime pattern has one sound, so the sample streams as the source.
 const tracks = process.env.E2E_TRACKS === "2";
+// E2E_LOOP=1 streams a 30 s sample in a loop instead of encoding the pattern
+// live. A CI runner busy with a simulator encoded it slower than real time, the
+// tuner went quiet for seconds at a time, and the room ran past the live edge.
+const loop = process.env.E2E_LOOP === "1";
 // Four channels on two tuners, and the software budget of four pictures.
 const quad = process.env.E2E_QUAD === "1";
 // E2E_BONJOUR=1 advertises the server under E2E_NAME and listens on every
@@ -328,7 +332,7 @@ const pattern = avsync
         "sine=frequency=500",
         ...(tracks ? ["-f", "lavfi", "-i", "sine=frequency=800"] : []),
         "-t",
-        tracks ? "30" : "4",
+        tracks || loop ? "30" : "4",
         ...(tracks
           ? ["-map", "0:v", "-map", "1:a", "-map", "2:a", "-metadata:s:a:0", "language=eng", "-metadata:s:a:1", "language=spa"]
           : []),
@@ -489,7 +493,7 @@ if (playlist) {
   let fakeOut = "";
   // E2E_SOURCE streams a broadcast recording on every channel, for a real encode load.
   const source = process.env.E2E_SOURCE;
-  const fakeArgs = brk ? ["-raw", "-ts", sample] : avsync ? ["-ts", sample, "-source", sample] : source ? ["-ts", sample, "-source", path.resolve(source)] : tracks ? ["-ts", sample, "-source", sample] : ["-realtime", "-ts", sample];
+  const fakeArgs = brk ? ["-raw", "-ts", sample] : avsync ? ["-ts", sample, "-source", sample] : source ? ["-ts", sample, "-source", path.resolve(source)] : tracks || loop ? ["-ts", sample, "-source", sample] : ["-realtime", "-ts", sample];
   if (quad) fakeArgs.push("-quad");
   // FLEX-4K adds a clear 3.0 row and an encrypted 3.0 twin of 5.1 (115.1 WTST).
   if (process.env.E2E_ATSC3 === "1") fakeArgs.push("-profile", "FLEX-4K");
