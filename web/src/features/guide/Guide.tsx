@@ -161,6 +161,16 @@ export function Guide() {
     // Only on first mount and layout changes.
   }, [layout]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // On a TV, back from the player the keys pick up on the channel that is playing.
+  const placed = useRef(false);
+  useEffect(() => {
+    if (placed.current || rows.length === 0) return;
+    placed.current = true;
+    const playing = player.channel?.id;
+    const row = tv && playing ? rows.findIndex((c) => c.id === playing) : -1;
+    if (row > 0) move(row, now);
+  }, [rows]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function scrollToTime(t: number, behavior: ScrollBehavior = "smooth") {
     const el = scrollRef.current;
     if (!el) return;

@@ -29,8 +29,10 @@ function PlayClaim() {
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       if (document.documentElement.dataset.layout !== "tv") return;
+      // Leaving the player leaves focus on the docked mini player, which no key reaches and no ring shows.
       const active = document.activeElement;
-      if (active instanceof HTMLElement && active !== document.body && active !== document.documentElement) return;
+      const lost = !(active instanceof HTMLElement) || active === document.body || active === document.documentElement || active.matches(".stage.mini") || Boolean(active.closest("[inert]"));
+      if (!lost) return;
       focusRing(document.querySelector<HTMLElement>(".stage:not(.mini)"));
     });
     return () => window.cancelAnimationFrame(frame);
@@ -89,8 +91,10 @@ function Shell() {
   useEffect(() => {
     if (layout !== "tv" || booting) return;
     const frame = window.requestAnimationFrame(() => {
+      // Leaving the player leaves focus on the docked mini player, which no key reaches and no ring shows.
       const active = document.activeElement;
-      if (active instanceof HTMLElement && active !== document.body && active !== document.documentElement) return;
+      const lost = !(active instanceof HTMLElement) || active === document.body || active === document.documentElement || active.matches(".stage.mini") || Boolean(active.closest("[inert]"));
+      if (!lost) return;
       const pick = (selector: string) => {
         const el = document.querySelector<HTMLElement>(selector);
         return el && !el.closest("[inert]") ? el : null;
@@ -101,6 +105,7 @@ function Shell() {
         pick(".mv") ||
         pick(".stage:not(.mini) [aria-label='Channels']") ||
         pick(".stage:not(.mini)") ||
+        pick(".has-mini .guide-canvas") ||
         pick(".tabs [role='tab'][aria-selected='true']") ||
         pick("main button:not([disabled]), main a[href], main [tabindex='0']");
       focusRing(target);

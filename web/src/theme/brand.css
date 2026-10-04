@@ -45,6 +45,13 @@ body {
   box-shadow: var(--focus-ring);
 }
 
+/* A selected tab or chip and a primary button keep the ring when focused. */
+:root .tab.on:focus-visible,
+:root .chip.on:focus-visible,
+:root .btn.primary:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
 /* ---- Page titles carry the brand ---- */
 :root .page-header h1,
 :root .page-wrap > h1,
