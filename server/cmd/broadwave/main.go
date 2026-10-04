@@ -147,7 +147,7 @@ func main() {
 	// them from master.m3u8 without a new encode. 0 keeps one sound per encode.
 	hub.Alternates = os.Getenv("BROADWAVE_ALTERNATES") != "0"
 	if *staging {
-		slog.Info("staging: recordings, guide pulls, background tunes, and the tuner emulator are off")
+		slog.Info("staging: scheduled recordings and guide pulls, background tunes, and the tuner emulator are off; a recording or guide refresh you start still runs")
 	} else if err := dvr.Recover(context.Background(), st, time.Now(), func(rec store.Recording, left time.Duration) error {
 		minutes := int(left / time.Minute)
 		if minutes < 1 {
