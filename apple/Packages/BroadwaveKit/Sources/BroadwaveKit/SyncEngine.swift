@@ -53,7 +53,7 @@ public final class SyncEngine {
     private var rateSets = 0
     private var trim = Trim.none
     private var trimEnded = Date.distantPast
-    private var fastFrom: (at: Date, drift: Double)?
+    private var fastFrom: SpeedUpStart?
     private var canSpeedUp = true
     private var speedUpOff = Date.distantPast
     private var lastMove: SyncMove?
@@ -512,12 +512,11 @@ public final class SyncEngine {
         if trim != .none {
             trimEnded = Date()
         }
-        fastFrom = next == .fast ? (Date(), drift) : nil
+        fastFrom = next == .fast ? SpeedUpStart(at: Date(), drift: drift) : nil
         trim = next
     }
 
-    /// A fast trim should gain about trimStep of wall time. A live item that
-    /// ignores the rate gains nothing, so behind is then fixed with a seek.
+    /// Turns speed-up off for a minute when a fast trim does not gain.
     private func checkSpeedUp(drift: Double) {
         // A trim right after a pause can lose ground while AVPlayer restarts,
         // which held a screen 250 ms off the room for five minutes. A minute
@@ -525,23 +524,61 @@ public final class SyncEngine {
         if !canSpeedUp, speedUpFails < 2, Date().timeIntervalSince(speedUpOff) > 60 {
             canSpeedUp = true
         }
-        guard trim == .fast, let from = fastFrom else { return }
+        guard trim == .fast, var from = fastFrom else { return }
         // A stall or rebuffer during the trim is not the item ignoring the rate.
         guard player.timeControlStatus == .playing else {
-            fastFrom = (Date(), drift)
+            fastFrom = SpeedUpStart(at: Date(), drift: drift)
             return
         }
-        let elapsed = Date().timeIntervalSince(from.at)
-        guard elapsed >= 4 else { return }
-        let expected = elapsed * 1000 * Double(Self.trimStep)
-        if drift - from.drift < expected * 0.4 {
+        let verdict = Self.judgeSpeedUp(&from, drift: drift, now: Date())
+        fastFrom = from
+        switch verdict {
+        case .wait:
+            break
+        case .gaining:
+            fastFrom = nil
+        case .failed:
             speedUpFails += 1
             canSpeedUp = false
             speedUpOff = Date()
             setTrim(.none)
-        } else {
-            fastFrom = nil
         }
+    }
+
+    struct SpeedUpStart {
+        var at: Date
+        var drift: Double
+        /// When the trim began. The baseline can still move until settleSeconds after it.
+        let began: Date
+
+        init(at: Date, drift: Double) {
+            self.at = at
+            self.drift = drift
+            began = at
+        }
+    }
+
+    enum SpeedUpVerdict: Equatable { case wait, gaining, failed }
+
+    /// AVPlayer keeps losing ground for a moment after it resumes, so a trim
+    /// set on the resume measured from that drift: a screen that went -110 →
+    /// -179 → -103 ms in 4 s read as gaining 7 ms instead of 76, lost its
+    /// speed-up for a minute, and sat 125 ms off the room.
+    static let settleSeconds = 1.5
+
+    /// A fast trim should gain about trimStep of wall time, measured from the
+    /// furthest behind it fell while it settled. A live item that ignores the
+    /// rate gains nothing, so behind is then fixed with a seek.
+    static func judgeSpeedUp(_ from: inout SpeedUpStart, drift: Double, now: Date) -> SpeedUpVerdict {
+        if now.timeIntervalSince(from.began) < settleSeconds, drift < from.drift {
+            from.at = now
+            from.drift = drift
+            return .wait
+        }
+        let elapsed = now.timeIntervalSince(from.at)
+        guard elapsed >= 4 else { return .wait }
+        let expected = elapsed * 1000 * Double(trimStep)
+        return drift - from.drift < expected * 0.4 ? .failed : .gaining
     }
 
     /// Seconds of media loaded past the playhead.

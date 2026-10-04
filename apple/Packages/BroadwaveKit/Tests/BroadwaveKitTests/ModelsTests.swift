@@ -407,3 +407,31 @@ extension Airing {
     // AVPlayer stopping itself at a discontinuity: no pause or rate call made it.
     #expect(!SyncEngine.viewerPaused(roomRate: 1, paused: true, forwardBuffer: 8, sinceHold: 60, followRoom: true, sinceActive: 60, byCall: false))
 }
+
+/// Production-like resume (staging TV sim, 2026-10-03): the trim was set at
+/// -110 ms, AVPlayer's restart fell to -179, then 1.02x gained 20 ms/s.
+@Test @MainActor func aSpeedUpIsJudgedFromWhereTheRestartLeftIt() {
+    let t0 = Date(timeIntervalSince1970: 1000)
+    var from = SyncEngine.SpeedUpStart(at: t0, drift: -110)
+    let samples: [(Double, Double)] = [(0.5, -179), (1.5, -159), (2.5, -138), (3.5, -118), (4.25, -103)]
+    for (at, drift) in samples {
+        #expect(SyncEngine.judgeSpeedUp(&from, drift: drift, now: t0.addingTimeInterval(at)) == .wait)
+    }
+    #expect(from.drift == -179)
+    #expect(SyncEngine.judgeSpeedUp(&from, drift: -98, now: t0.addingTimeInterval(4.5)) == .gaining)
+}
+
+/// An item that ignores the rate still loses its speed-up, and a drift that
+/// keeps falling past the settle time does not move the baseline forever.
+@Test @MainActor func aSpeedUpThatDoesNotGainFails() {
+    let t0 = Date(timeIntervalSince1970: 1000)
+    var flat = SyncEngine.SpeedUpStart(at: t0, drift: -120)
+    #expect(SyncEngine.judgeSpeedUp(&flat, drift: -121, now: t0.addingTimeInterval(4)) == .failed)
+
+    var falling = SyncEngine.SpeedUpStart(at: t0, drift: -120)
+    #expect(SyncEngine.judgeSpeedUp(&falling, drift: -150, now: t0.addingTimeInterval(1)) == .wait)
+    for step in 2 ... 4 {
+        #expect(SyncEngine.judgeSpeedUp(&falling, drift: -150 - Double(step) * 10, now: t0.addingTimeInterval(Double(step))) == .wait)
+    }
+    #expect(SyncEngine.judgeSpeedUp(&falling, drift: -200, now: t0.addingTimeInterval(5)) == .failed)
+}
