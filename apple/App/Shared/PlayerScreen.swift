@@ -492,7 +492,9 @@ final class LivePlayer {
                 try? await Task.sleep(for: .seconds(1))
                 guard let self else { return }
                 var rate: Float = 0
-                if let item = player.currentItem {
+                // A failed asset's track load may never answer, and this loop
+                // is what names a stopped picture.
+                if let item = player.currentItem, item.status != .failed {
                     rate = await videoPicture(item).rate
                 }
                 samplePicture(rate: rate)

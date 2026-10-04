@@ -64,6 +64,15 @@ public enum PlaybackOutage {
     public static let pictureRetryEvery: TimeInterval = 10
     public static let pictureRetryFor: TimeInterval = 2 * 60
 
+    /// Wait before starting the picture again after `restarts` restarts that
+    /// never played. A watch can answer while its playlist is still gone (a
+    /// proxy, a server mid-restart), and the new item then fails within
+    /// milliseconds, so without this the player asked about 20 times a second.
+    public static func restartDelay(after restarts: Int) -> TimeInterval {
+        guard restarts > 0 else { return 0 }
+        return min(10, pow(2, Double(min(restarts, 8) - 1)))
+    }
+
     public enum Recovery: Equatable, Sendable {
         case busy
         case server

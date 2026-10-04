@@ -388,3 +388,13 @@ private func fineSnap() -> RecoverySnap {
     #expect(!PlaybackOutage.aTunerAnswers([silent]))
     #expect(!PlaybackOutage.snap(facts, lists: RecoveryLists(tuners: [], devices: nil, signals: [])).tunerAnswers)
 }
+
+@Test func aRestartThatFailsAtOnceWaitsLongerEachTime() {
+    #expect(PlaybackOutage.restartDelay(after: 0) == 0)
+    #expect(PlaybackOutage.restartDelay(after: 1) == 1)
+    #expect(PlaybackOutage.restartDelay(after: 2) == 2)
+    #expect(PlaybackOutage.restartDelay(after: 3) == 4)
+    #expect(PlaybackOutage.restartDelay(after: 4) == 8)
+    #expect(PlaybackOutage.restartDelay(after: 5) == 10)
+    #expect(PlaybackOutage.restartDelay(after: 500) == 10)
+}

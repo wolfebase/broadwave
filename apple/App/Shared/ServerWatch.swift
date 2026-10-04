@@ -35,6 +35,9 @@ final class ServerWatch {
     private var playlist: String?
     /// True once this viewing's picture has moved. A stall before that is startup.
     private var played = false
+    /// Restarts since the picture last moved. Kept across `reset`, which each
+    /// restart runs, so a restart that fails at once waits longer each time.
+    private var restarts = 0
     /// When the unnamed picture-stopped message first showed. Nil once the
     /// picture moves, the viewer leaves, or a named cause takes over.
     private var pictureSince: Date?
@@ -144,6 +147,7 @@ final class ServerWatch {
         } else {
             if let time, time.isFinite {
                 played = true
+                restarts = 0
             }
             clock.notePlaying()
         }
@@ -221,11 +225,19 @@ final class ServerWatch {
         guard !recovering, let snap, let onRecover, let kind = recovery else { return }
         recovering = true
         let gen = generation
+        let hold = kind == .restart ? PlaybackOutage.restartDelay(after: restarts) : 0
         Task {
+            if hold > 0 {
+                log.info("restart in \(hold, format: .fixed(precision: 0)) s")
+                try? await Task.sleep(for: .seconds(hold))
+            }
             while gen == generation {
                 let reading = await snap(kind == .signal, nil)
                 guard gen == generation else { return }
                 if PlaybackOutage.recoveryReady(kind, reading) {
+                    if kind == .restart {
+                        restarts += 1
+                    }
                     log.info("recovered")
                     print("broadwave recovered")
                     fflush(stdout)
