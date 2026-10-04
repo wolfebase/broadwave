@@ -128,6 +128,10 @@ export function discover(ip?: string) {
   });
 }
 
+export function removeDevice(deviceId: string) {
+  return request<{ devices: Device[] }>(`/api/v1/devices/${encodeURIComponent(deviceId)}`, { method: "DELETE" });
+}
+
 export function getChannels(guide: boolean) {
   return request<{ channels: Channel[]; listings: string; message: string }>(
     `/api/v1/channels${guide ? "?guide=1" : ""}`,

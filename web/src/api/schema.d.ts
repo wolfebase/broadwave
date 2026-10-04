@@ -169,6 +169,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/devices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Forget a tuner or playlist and its channels. A channel another device also carries keeps its favorite, custom name and number, and passes there; the other passes are deleted. Recordings stay. A tuner that answers a later search for tuners comes back. */
+        delete: operations["removeDevice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/devices/health": {
         parameters: {
             query?: never;
@@ -2066,6 +2083,32 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    removeDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The devices that are left */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        devices: components["schemas"]["Device"][];
+                    };
+                };
+            };
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     getDeviceHealth: {

@@ -83,7 +83,7 @@ jobs:
       # The budget is pinned to what a typical runner benches (1.9x: two
       # pictures). A slow runner benched 0.7x once, got one picture, and
       # failed every two-tile check.
-      - run: npx playwright test --config e2e/playwright.config.ts 01-setup 02-browse 03-player-sync 04-multiview 14-recording 23-image 27-live-captions 31-audio-switch 36-quiet --grep-invert "quad plays again with no click"
+      - run: npx playwright test --config e2e/playwright.config.ts 01-setup 02-browse 03-player-sync 04-multiview 14-recording 23-image 27-live-captions 31-audio-switch 36-quiet 40-remove-device --grep-invert "quad plays again with no click"
         working-directory: web
         env:
           E2E_IMAGE: broadwave:ci

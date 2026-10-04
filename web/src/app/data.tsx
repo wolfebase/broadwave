@@ -3,6 +3,7 @@ import {
   addPass,
   deletePass,
   discover,
+  removeDevice,
   getAirings,
   getChannels,
   getDevices,
@@ -64,6 +65,7 @@ type Data = {
   recordOnce: (airing: Airing, channel: Channel) => Promise<void>;
   removePass: (id: number) => Promise<void>;
   rediscover: (ip?: string) => Promise<void>;
+  forgetDevice: (deviceId: string) => Promise<void>;
   setError: (message: string) => void;
   /** Devices that showed up after the house was already known. One line each. */
   notices: string[];
@@ -387,6 +389,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setError(err instanceof Error ? err.message : "No tuner answered.");
         }
         await refresh(["channels"]);
+      },
+      forgetDevice: async (deviceId) => {
+        try {
+          const res = await removeDevice(deviceId);
+          setDevices(res.devices);
+          setError("");
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "That device was not removed.");
+        }
+        await refresh(["channels", "passes"]);
       },
     }),
     [ready, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, storage, refresh, notices, dismissNotice, update, server, freshAt],

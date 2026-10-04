@@ -19,6 +19,10 @@ export const copy = {
     firmware: "Firmware",
     scan: "Scan channels",
     scanning: "Scanning for channels.",
+    remove: "Remove",
+    removeLabel: (name: string) => `Remove ${name}`,
+    removeConfirm: (name: string) =>
+      `Remove ${name}? Its channels leave the lineup. Favorites and passes move to another tuner with the same channel, and the other passes go. Recordings stay.`,
     channels: "Lineup",
     enabled: "On guide",
     hidden: "Hidden",

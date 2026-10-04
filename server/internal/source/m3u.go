@@ -322,7 +322,8 @@ func Install(ctx context.Context, st *store.Store, id int64, name, kind string, 
 	if label == "" {
 		label = kind
 	}
-	return st.UpsertDevice(ctx, hdhr.Device{
+	// A playlist removed while it loaded stays removed: its source row is gone.
+	return st.RefreshDevice(ctx, hdhr.Device{
 		DeviceID: devID, FriendlyName: label, ModelNumber: kind, FirmwareName: "broadwave",
 		BaseURL: "source", TunerCount: 0,
 	}, channels)

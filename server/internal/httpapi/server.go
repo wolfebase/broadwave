@@ -112,6 +112,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /groups", s.groups)
 	api("GET /profile", s.profile)
 	api("GET /devices", s.devices)
+	api("DELETE /devices/{id}", s.removeDevice)
 	api("GET /devices/health", s.deviceHealth)
 	api("POST /devices/{id}/scan", s.startScan)
 	api("GET /devices/{id}/scan", s.scanStatus)
@@ -228,6 +229,24 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 		out = append(out, noted{Device: device, Note: hdhr.ModelNote(device.ModelNumber)})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"devices": out})
+}
+
+func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if s.Hub != nil && s.Hub.StreamsInUse(id) > 0 {
+		apiError(w, http.StatusConflict, "device_busy", "Something is playing or recording from it. Stop that first.", nil)
+		return
+	}
+	if err := s.Store.RemoveDevice(r.Context(), id); err != nil {
+		if errors.Is(err, store.ErrNoDevice) {
+			apiError(w, http.StatusNotFound, "not_found", "That device is not in the list.", nil)
+			return
+		}
+		writeError(w, err)
+		return
+	}
+	slog.Info("removed device", "device", id)
+	s.devices(w, r)
 }
 
 func (s *Server) deviceBase(r *http.Request) (string, error) {

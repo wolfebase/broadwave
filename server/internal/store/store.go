@@ -91,11 +91,32 @@ func Open(dir string) (*Store, error) {
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) UpsertDevice(ctx context.Context, dev hdhr.Device, channels []hdhr.Channel) error {
+	return s.upsertDevice(ctx, dev, channels, true)
+}
+
+// RefreshDevice is UpsertDevice for a device the catalog already has, as a
+// tuner or as a source. One removed while its lineup loaded stays removed.
+func (s *Store) RefreshDevice(ctx context.Context, dev hdhr.Device, channels []hdhr.Channel) error {
+	return s.upsertDevice(ctx, dev, channels, false)
+}
+
+func (s *Store) upsertDevice(ctx context.Context, dev hdhr.Device, channels []hdhr.Channel, adopt bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if !adopt {
+		var known int
+		if err := tx.QueryRowContext(ctx, `
+SELECT (SELECT COUNT(*) FROM devices WHERE device_id=?) + (SELECT COUNT(*) FROM sources WHERE device_id=?)`,
+			dev.DeviceID, dev.DeviceID).Scan(&known); err != nil {
+			return err
+		}
+		if known == 0 {
+			return nil
+		}
+	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err = tx.ExecContext(ctx, `
@@ -275,6 +296,102 @@ FROM devices ORDER BY priority, friendly_name`)
 		out = append(out, d)
 	}
 	return out, rows.Err()
+}
+
+// ErrNoDevice means no device has that id.
+var ErrNoDevice = errors.New("no device with that id")
+
+// RemoveDevice forgets a tuner or playlist and its channels. A channel another
+// device also carries hands over its favorite, its custom name and number, and
+// its passes; other passes go. Recordings stay.
+func (s *Store) RemoveDevice(ctx context.Context, deviceID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var found int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM devices WHERE device_id=?`, deviceID).Scan(&found); err != nil {
+		return err
+	}
+	if found == 0 {
+		return ErrNoDevice
+	}
+	type gone struct {
+		id                               int64
+		number, customName, customNumber string
+		favorite                         int
+	}
+	rows, err := tx.QueryContext(ctx, `
+SELECT id, guide_number, custom_name, custom_number, favorite FROM channels WHERE device_id=?`, deviceID)
+	if err != nil {
+		return err
+	}
+	var list []gone
+	for rows.Next() {
+		var g gone
+		if err := rows.Scan(&g.id, &g.number, &g.customName, &g.customNumber, &g.favorite); err != nil {
+			rows.Close()
+			return err
+		}
+		list = append(list, g)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	var favorites []int64
+	for _, g := range list {
+		var next int64
+		err := tx.QueryRowContext(ctx, `
+SELECT c.id FROM channels c JOIN devices d ON d.device_id = c.device_id
+WHERE c.guide_number = ? AND c.device_id != ? AND c.present = 1 AND c.protected = 0
+ORDER BY d.priority, c.id LIMIT 1`, g.number, deviceID).Scan(&next)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+UPDATE channels SET
+	favorite = CASE WHEN ?=1 THEN 1 ELSE favorite END,
+	custom_name = CASE WHEN custom_name='' THEN ? ELSE custom_name END,
+	custom_number = CASE WHEN custom_number='' THEN ? ELSE custom_number END
+WHERE id=?`, g.favorite, g.customName, g.customNumber, next); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE passes SET channel_id=? WHERE channel_id=?`, next, g.id); err != nil {
+			return err
+		}
+		if g.favorite == 1 {
+			favorites = append(favorites, next)
+		}
+	}
+	// Channel ids are reused, so nothing may keep pointing at these rows.
+	for _, q := range []string{
+		`DELETE FROM passes WHERE channel_id IN (SELECT id FROM channels WHERE device_id=?)`,
+		`UPDATE recordings SET channel_id=0 WHERE channel_id IN (SELECT id FROM channels WHERE device_id=?)`,
+		`DELETE FROM airings WHERE channel_id IN (SELECT id FROM channels WHERE device_id=?)`,
+		`DELETE FROM channel_signals WHERE channel_id IN (SELECT id FROM channels WHERE device_id=?)`,
+		`DELETE FROM sources WHERE device_id=?`,
+		`DELETE FROM devices WHERE device_id=?`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, deviceID); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	// A favorite moved onto the hidden half of a 1.0/3.0 pair shows on the half the guide keeps.
+	for _, id := range favorites {
+		if err := s.passFavoriteToShown(ctx, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) Channels(ctx context.Context, guideOnly bool) ([]Channel, error) {
