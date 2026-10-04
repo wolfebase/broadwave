@@ -15,8 +15,7 @@ func (h *Hub) Dwell(ctx context.Context, channelID int64, dwell time.Duration) (
 	if err != nil {
 		return 0, err
 	}
-	h.mu.Lock()
-	f, err := h.ensureFeedLocked(ctx, ch, nil)
+	f, err := h.tuneFeed(ctx, ch, nil)
 	if err != nil {
 		h.mu.Unlock()
 		return 0, err

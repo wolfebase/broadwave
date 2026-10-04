@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net/http"
 	"strings"
 	"time"
 
@@ -126,6 +127,104 @@ func (h *Hub) openTuned(ctx context.Context, ch store.SourceChannel) *tuned {
 	}()
 	h.openTunedStream(ctx, t, device.Tuners)
 	return t
+}
+
+// opened is what openUnlocked did for feedLocked to attach.
+type opened struct {
+	opener bool
+	auto   *autoGuess
+	tune   *tuned
+}
+
+// openUnlocked does the slow device steps of a tune without h.mu, or waits
+// for another caller's open of the same channel. It opens nothing when the
+// tune needs the locked path (failover, freeing a warm tuner).
+func (h *Hub) openUnlocked(ctx context.Context, ch store.SourceChannel) (opened, error) {
+	var o opened
+	h.mu.Lock()
+	_, isTuned := h.channels[ch.ID]
+	wait := h.opening[ch.ID]
+	if !isTuned && wait == nil {
+		h.beginOpenLocked(ch.ID)
+		o.opener = true
+	}
+	h.mu.Unlock()
+	if wait != nil {
+		select {
+		case <-wait:
+			return o, nil
+		case <-ctx.Done():
+			return o, ctx.Err()
+		}
+	}
+	if !o.opener {
+		return o, nil
+	}
+	if o.auto = h.openAuto(ctx, ch, false); o.auto != nil {
+		return o, nil
+	}
+	o.tune = h.openTuned(ctx, ch)
+	// A sibling's open that failed leaves this one to tune for itself, still
+	// without h.mu. Two waits at most, then the locked path.
+	for i := 0; o.tune != nil && o.tune.wait != nil; i++ {
+		select {
+		case <-o.tune.wait:
+		case <-ctx.Done():
+			h.mu.Lock()
+			h.endOpenLocked(ch.ID)
+			h.mu.Unlock()
+			return opened{}, ctx.Err()
+		}
+		o.tune = nil
+		if i < 2 {
+			o.tune = h.openTuned(ctx, ch)
+		}
+	}
+	return o, nil
+}
+
+// feedLocked attaches what openUnlocked opened, or tunes under h.mu when it
+// opened nothing. res is a playlist stream the caller opened instead.
+func (h *Hub) feedLocked(ctx context.Context, ch store.SourceChannel, o opened, res *http.Response) (*feed, error) {
+	if o.opener {
+		h.endOpenLocked(ch.ID)
+	}
+	f := h.channels[ch.ID]
+	if o.auto != nil {
+		if f != nil {
+			o.auto.body.Close()
+		} else {
+			f = h.attachAutoLocked(ch, o.auto)
+		}
+	}
+	if o.tune != nil {
+		var err error
+		if f, err = h.attachTunedLocked(o.tune); err != nil {
+			return nil, err
+		}
+	}
+	if f == nil {
+		return h.ensureFeedLocked(ctx, ch, res)
+	}
+	if res != nil {
+		res.Body.Close()
+	}
+	return f, nil
+}
+
+// tuneFeed is the feed for a channel, tuned without holding h.mu through
+// the device's answer. It returns with h.mu held, also on an error.
+func (h *Hub) tuneFeed(ctx context.Context, ch store.SourceChannel, res *http.Response) (*feed, error) {
+	var o opened
+	if res == nil {
+		var err error
+		if o, err = h.openUnlocked(ctx, ch); err != nil {
+			h.mu.Lock()
+			return nil, err
+		}
+	}
+	h.mu.Lock()
+	return h.feedLocked(ctx, ch, o, res)
 }
 
 // siblingLocked is a watch whose station is already tuned or being tuned:
