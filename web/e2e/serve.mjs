@@ -678,10 +678,11 @@ INSERT INTO settings(key, value) VALUES('nextGuidePull', '2099-01-01T00:00:00Z')
 };
 void quietSettings();
 
-for (let i = 0; i < 100; i++) {
+// A cold macOS runner can take well over 20 s to start a new binary.
+let healthy = false;
+for (let i = 0; i < 300 && !healthy; i++) {
   try {
-    const res = await fetch(`${base}/api/v1/health`);
-    if (res.ok) break;
+    healthy = (await fetch(`${base}/api/v1/health`)).ok;
   } catch {
     // The process is still binding.
   }
@@ -690,7 +691,12 @@ for (let i = 0; i < 100; i++) {
     stop();
     process.exit(1);
   }
-  await sleep(200);
+  if (!healthy) await sleep(200);
+}
+if (!healthy) {
+  console.error(`server did not answer ${base}/api/v1/health in 60 s`);
+  stop();
+  process.exit(1);
 }
 
 if (playlist) {
