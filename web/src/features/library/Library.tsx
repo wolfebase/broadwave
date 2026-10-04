@@ -112,7 +112,8 @@ function LibraryRow({
         <img
           className="poster"
           alt=""
-          src={`/media/poster/${rec.id}`}
+          src={rec.missing ? `/media/art/channel/${rec.channelId}?w=320` : `/media/poster/${rec.id}`}
+          data-fallback={rec.missing ? "1" : undefined}
           onError={(event) => {
             const img = event.currentTarget;
             if (img.dataset.fallback) {
@@ -126,6 +127,11 @@ function LibraryRow({
       </span>
       <div>
         <strong>{rec.subtitle || rec.title}</strong>
+        {rec.missing ? (
+          <span className="ch-tags">
+            {rec.guideNumber} · {copy.library.gone}
+          </span>
+        ) : (
         <span className="ch-tags">
           {rec.guideNumber}
           {statusLabel(rec.status) ? ` · ${statusLabel(rec.status)}` : ""}
@@ -136,7 +142,17 @@ function LibraryRow({
           {seen ? " · Watched" : ""}
           {rec.error ? ` · ${rec.error}` : ""}
         </span>
-        {line ? <span className="ch-tags">{line}</span> : null}
+        )}
+        {line && !rec.missing ? <span className="ch-tags">{line}</span> : null}
+        {rec.missing ? (
+          <div className="sheet-actions">
+            {armed === rec.id ? (
+              <button ref={confirmRef} type="button" className="btn primary" onClick={() => onDelete(rec)}>{copy.library.removeGone}</button>
+            ) : (
+              <button type="button" className="btn" onClick={() => setArmed(rec.id)}>Delete</button>
+            )}
+          </div>
+        ) : (
         <div className="sheet-actions">
       <button type="button" className="btn primary" onClick={() => onPlay(rec)}>Play</button>
       {rec.status !== "recording" ? <button type="button" className="btn" onClick={() => onWatched(rec, !seen)}>{seen ? "Mark unwatched" : "Mark watched"}</button> : null}
@@ -149,6 +165,7 @@ function LibraryRow({
         <button type="button" className="btn" onClick={() => setArmed(rec.id)}>Delete</button>
       )}
         </div>
+        )}
       </div>
     </li>
   );

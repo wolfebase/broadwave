@@ -74,7 +74,7 @@ LIMIT ?`, match, from.UTC().Format(time.RFC3339), limit)
 
 func (s *Store) searchRecordings(ctx context.Context, match string, limit int) ([]Recording, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT r.id, r.channel_id, r.guide_number, r.title, r.status, r.error, r.started_at, r.ends_at, r.ended_at, r.duration_sec,
+SELECT r.id, r.channel_id, r.guide_number, r.title, r.path, r.status, r.error, r.started_at, r.ends_at, r.ended_at, r.duration_sec,
 	r.subtitle, r.description, r.category, r.program_id, r.watched
 FROM recording_search
 JOIN recordings r ON r.id = recording_search.rowid
@@ -89,7 +89,7 @@ LIMIT ?`, match, limit)
 	for rows.Next() {
 		var rec Recording
 		var started, ends, ended string
-		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Status, &rec.Error, &started, &ends, &ended, &rec.Duration,
+		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &started, &ends, &ended, &rec.Duration,
 			&rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched); err != nil {
 			return nil, err
 		}

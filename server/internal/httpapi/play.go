@@ -326,6 +326,11 @@ func (s *Server) recordings(w http.ResponseWriter, r *http.Request) {
 	for i := range list {
 		if info, err := os.Stat(list[i].Path); err == nil {
 			list[i].Bytes = info.Size()
+		} else if fileGone(list[i]) {
+			// Its stored length is not a file anyone can play.
+			list[i].Missing = true
+			list[i].Duration = 0
+			continue
 		}
 		if pos, err := s.Store.Progress(r.Context(), list[i].ID); err == nil && pos > 0 {
 			list[i].Position = pos

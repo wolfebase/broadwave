@@ -89,6 +89,10 @@ func TestContractFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Empty until a case needs the real sample, so the list fixtures have no size.
+	if err := os.WriteFile(sample, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := st.AddMarker(ctx, recID, 12, 40); err != nil {
 		t.Fatal(err)
 	}
@@ -309,9 +313,10 @@ func TestContractFixtures(t *testing.T) {
 // The bytes are not a fixture. The file route compares them in memory.
 func contractSample(t *testing.T, path string) {
 	t.Helper()
-	if _, err := os.Stat(path); err == nil {
+	if info, err := os.Stat(path); err == nil && info.Size() > 0 {
 		return
 	}
+	_ = os.Remove(path)
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		t.Fatal(err)

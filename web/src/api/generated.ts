@@ -251,6 +251,7 @@ export type Recording = {
   position?: number;
   durationSec?: number;
   watched?: number;
+  missing?: boolean;
   health?: RecordingHealth;
 };
 

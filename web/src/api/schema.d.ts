@@ -1583,6 +1583,8 @@ export interface components {
             position?: number;
             durationSec?: number;
             watched?: number;
+            /** @description The recording finished but its file is gone (moved or deleted outside Broadwave). It cannot play; delete removes it from the list. */
+            missing?: boolean;
             health?: components["schemas"]["RecordingHealth"];
         };
         /** @description Damage counted in the recording file after it finishes. Absent until then. Zeros mean the file was clean. */
