@@ -1,6 +1,7 @@
 // A tuner or playlist that is gone for good can be removed from Settings.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { copy } from "../src/strings";
@@ -11,6 +12,7 @@ import { settle } from "./snap";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const evidence = path.resolve(here, "../../.evidence/j082");
 const offlineShots = path.resolve(here, "../../.evidence/lane/l85");
+const playlistShots = path.resolve(here, "../../.evidence/l87");
 
 type Device = { deviceId: string; friendlyName?: string; lastSeen?: string };
 
@@ -110,5 +112,45 @@ test("an offline playlist says so on its card", async ({ page }) => {
     }
   } finally {
     await fetch(`${base}/api/v1/devices/${encodeURIComponent(box?.deviceId ?? "")}`, { method: "DELETE" });
+  }
+});
+
+test("a playlist card skips scan and firmware", async ({ page }) => {
+  const { base } = harness();
+  const file = path.join(tmpdir(), "broadwave-l87.m3u");
+  writeFileSync(file, "#EXTM3U\n#EXTINF:-1,Night Owl\nhttp://127.0.0.1:9/night.ts\n");
+  const added = await fetch(`${base}/api/v1/sources`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind: "m3u", name: "Night List", url: file }),
+  });
+  expect(added.ok, await added.clone().text()).toBe(true);
+  const list = (await devices()).find((device) => device.friendlyName === "Night List");
+  expect(list).toBeTruthy();
+  const setup = await fetch(`${base}/api/v1/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ setupComplete: "1" }),
+  });
+  expect(setup.ok).toBe(true);
+  try {
+    await page.goto("/settings#sources");
+    await settle(page);
+    const card = page.locator(".device-card", { has: page.getByRole("heading", { name: "Night List" }) });
+    await expect(card).toBeVisible();
+    await expect(card.getByRole("button", { name: "Scan channels" })).toHaveCount(0);
+    await expect(card.getByText("Firmware")).toHaveCount(0);
+    await expect(card.getByText("0 tuners")).toHaveCount(0);
+    await expect(card.getByRole("button", { name: "Remove Night List" })).toBeVisible();
+    const tuner = page.locator(".device-card", { has: page.getByRole("heading", { name: "Fake HDHomeRun" }) });
+    await expect(tuner.getByRole("button", { name: "Scan channels" })).toBeVisible();
+    await expect(tuner.getByText("Firmware 20260101")).toBeVisible();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const grid = page.locator(".device-grid");
+    await grid.scrollIntoViewIfNeeded();
+    mkdirSync(playlistShots, { recursive: true });
+    await page.screenshot({ path: path.join(playlistShots, "cards.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
+  } finally {
+    await fetch(`${base}/api/v1/devices/${encodeURIComponent(list?.deviceId ?? "")}`, { method: "DELETE" });
   }
 });
