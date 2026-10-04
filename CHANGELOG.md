@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.12.16 — 2026-10-04
+
+### Fixed
+
+- A recording, an export to another app, or a guide check on a channel with no signal no longer freezes live TV. Its tune takes about 17 seconds to fail, and every viewer's picture used to wait for it.
+- A channel with no signal now says so ("isn't coming in") on tuners that answer "No Video Data", where it used to say the stream wasn't answering.
+- On the web, a picture whose restart failed the same way is tried again, with a growing wait, until it plays. It used to say "Starting it again" for good.
+- An iPhone, iPad, or Apple TV whose stream keeps failing at once now waits a little longer between tries instead of asking the server about 20 times a second.
+
+### Changed
+
+- Settings › Tuners and channels says on a tuner's or playlist's card when it is offline and when it was last seen, with Remove first. On iPhone, iPad, and Apple TV too, which can now remove a device.
+- A playlist's card no longer shows an empty firmware line or Scan channels.
+- A page for people installing Broadwave describes how tuners are found, paired, and removed.
+
 ## 0.12.15 — 2026-10-04
 
 ### Fixed
