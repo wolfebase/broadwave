@@ -95,6 +95,8 @@ type Timeline struct {
 	seedPTS  int64
 	seedWall time.Time
 	seeded   bool
+	// startWall, when set, dates the first anchor instead of the wall clock.
+	startWall time.Time
 	// carry is input silence (Shift) not yet stamped on a segment. A
 	// re-anchor on a timestamp break adds it, so the break lands on the wall
 	// clock instead of right after the last segment.
@@ -118,6 +120,9 @@ func (t *Timeline) Wall(pts int64) time.Time {
 	}
 	t.pts = pts
 	t.wall = t.now().Add(-t.behind)
+	if !t.set && !t.startWall.IsZero() {
+		t.wall = t.startWall
+	}
 	if d := ptsDiff(pts, t.seedPTS); t.seeded && !t.set && d > -90000*3600 && d < 90000*3600 {
 		t.wall = t.seedWall.Add(time.Duration(d) * time.Second / 90000)
 	}
@@ -137,6 +142,17 @@ func (t *Timeline) Seed(pts int64, wall time.Time) {
 	t.seedPTS = pts
 	t.seedWall = wall
 	t.seeded = true
+}
+
+// Start makes the first anchor put its picture at wall, for an encode whose
+// first picture is older than the clock on the wall says. A seed wins.
+func (t *Timeline) Start(wall time.Time) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.set || t.seeded {
+		return
+	}
+	t.startWall = wall
 }
 
 // Anchor is the timestamp the clock last anchored on and its wall time.

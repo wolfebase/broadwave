@@ -396,6 +396,17 @@ func (in *packInput) broadcastOffset() (int64, bool) {
 	return in.offset, in.known
 }
 
+// started reports whether an encode's header has reached the packager, so
+// broadcastOffset says what it will.
+func (in *packInput) started() bool {
+	if in == nil {
+		return false
+	}
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	return in.encodes > 0
+}
+
 // encodeStarts is the packager's reader when a hub owns it.
 type encodeStarts interface {
 	noteEncodeStart(first float64, ok bool)

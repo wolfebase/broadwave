@@ -175,10 +175,11 @@ export function putSettings(values: Partial<Settings>) {
   });
 }
 
-export function watchChannel(channelId: number, caps: Caps, prefs: Prefs, rendition = "", confirmLive = false, signal?: AbortSignal) {
+// room is the sync room a player that starts on the room's frame joins.
+export function watchChannel(channelId: number, caps: Caps, prefs: Prefs, rendition = "", confirmLive = false, signal?: AbortSignal, room = "") {
   return request<WatchSession>("/api/v1/watch", {
     method: "POST",
-    body: JSON.stringify({ channelId, caps, prefs, rendition, ...(confirmLive ? { confirmLive: true } : {}) }),
+    body: JSON.stringify({ channelId, caps, prefs, rendition, ...(confirmLive ? { confirmLive: true } : {}), ...(room ? { room } : {}) }),
     signal,
   });
 }

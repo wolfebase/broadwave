@@ -2686,6 +2686,8 @@ export interface operations {
                     pictureMode?: components["schemas"]["PictureMode"];
                     /** @description Set when the viewer chooses to watch even though that recording will be missed. */
                     confirmLive?: boolean;
+                    /** @description The sync room the player joins, for a player that starts on the room's frame. A new encode for a room that plays well behind live starts in the buffer at that frame, and the reply waits until the playlist holds it (a few seconds at most). */
+                    room?: string;
                 };
             };
         };
