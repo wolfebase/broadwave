@@ -17,6 +17,7 @@
 #   E2E_TYPED=1       skip Bonjour and type the server address.
 #   SYNC_SECONDS      how long Chrome samples once both play (default 60).
 #   DERIVED_DATA      keep builds here between runs (default: a /tmp dir removed at the end).
+#   TEST_MINUTES      stop a platform's test run after this long (default 25).
 #
 # The app is uninstalled from each simulator first, so its data there is lost.
 # A defect the test notes, or a step 1 that had to type the address, fails the run.
@@ -211,7 +212,22 @@ run_platform() {
     TEST_RUNNER_BROADWAVE_E2E_SYNC_WAIT=$((${SYNC_SECONDS:-60} * 3 + 120)) \
     xcodebuild test-without-building -project "$root/apple/Broadwave.xcodeproj" -scheme "$scheme" \
     -destination "$destination" -derivedDataPath "$dd" -only-testing:"$target/EndToEndTests" -collect-test-diagnostics never \
-    CODE_SIGNING_ALLOWED=NO >"$dir/test.log" 2>&1 || status=$?
+    -test-timeouts-enabled YES CODE_SIGNING_ALLOWED=NO >"$dir/test.log" 2>&1 &
+  local test_pid=$!
+  # The test's own allowance needs -test-timeouts-enabled; this catches an
+  # xcodebuild that hangs past it anyway, so the job ends with its evidence.
+  local limit=${TEST_MINUTES:-25}
+  (
+    for _ in $(seq $((limit * 12))); do
+      sleep 5
+      kill -0 "$test_pid" 2>/dev/null || exit 0
+    done
+    touch "$dir/timed-out"
+    pkill -TERM -P "$test_pid"
+    kill -TERM "$test_pid"
+  ) >/dev/null 2>&1 &
+  wait "$test_pid" || status=$?
+  [ -e "$dir/timed-out" ] && say "$platform: EndToEndTests ran past $limit min; stopped"
 
   local sync=1
   if [ -e "$dir/sampled" ] || ! kill -0 "$sample_pid" 2>/dev/null; then
