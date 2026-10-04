@@ -78,6 +78,10 @@ type Server struct {
 	// after TuneDelay, as a FLEX does: its status shows the tune while the
 	// request waits. By default the delay comes before the tuner is taken.
 	TunesFirst bool
+	// NoVideoData makes a dark channel list no program and answer its stream
+	// with 503 "807 No Video Data" after TuneDelay, as a FLEX does when it
+	// reads the frequency but never locks.
+	NoVideoData bool
 
 	spec   profile
 	httpLn net.Listener
@@ -585,6 +589,12 @@ func (s *Server) legacyStream() bool {
 
 func (s *Server) streamLegacy(w http.ResponseWriter, r *http.Request) {
 	n, number := streamRequest(r.URL.Path)
+	if s.NoVideoData && s.starved(number) {
+		time.Sleep(s.TuneDelay)
+		w.Header().Set("X-HDHomeRun-Error", "807 No Video Data")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
 	var stop chan struct{}
 	if strings.Contains(r.URL.Path, "/ch") || strings.Contains(r.URL.Path, "/auto/") {
 		s.mu.Lock()
@@ -1174,6 +1184,9 @@ func (s *Server) command(name, value string, set bool) (string, string) {
 		return fmt.Sprintf("ch=%s:%d lock=%s ss=90 snq=88 seq=100", mod, t.freq, mod), ""
 	case "streaminfo":
 		var b strings.Builder
+		if s.NoVideoData && s.dark[t.guide] {
+			return "none\n", ""
+		}
 		for _, ch := range s.Channels {
 			if ch.Freq == t.freq {
 				fmt.Fprintf(&b, "1: %s %s\n", ch.Number, ch.Name)

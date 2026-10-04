@@ -108,9 +108,13 @@ func TestEveryTuneLeavesTheHubFree(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srv := &fake.Server{Profile: fake.ProfileConnectDuo, TuneDelay: 800 * time.Millisecond}
 			st, _ := tuneStore(t, srv)
+			ctx := context.Background()
+			// The reserve is checked against this machine's disk.
+			if err := st.PutSettings(ctx, map[string]string{"watermarkGB": "0"}); err != nil {
+				t.Fatal(err)
+			}
 			h := New(st, t.TempDir(), "ffmpeg", "libx264")
 			t.Cleanup(h.Shutdown)
-			ctx := context.Background()
 			id := idOf(t, st, "4.1")
 
 			done := make(chan error, 1)

@@ -714,19 +714,26 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	return feed, nil
 }
 
+// autoError names a device's refusal of an /auto stream. unlocked is a
+// probe that already found no signal. 807 is the device's own no signal:
+// a tuner that reads a frequency but never locks answers it after about 10 s.
+func autoError(err error, tuners []Tuner, unlocked bool) error {
+	switch msg := err.Error(); {
+	case strings.Contains(msg, "805"):
+		return &BusyError{Tuners: tuners}
+	case unlocked || strings.Contains(msg, " 807 "):
+		return fmt.Errorf("%w (%v)", ErrNoSignal, err)
+	}
+	return err
+}
+
 // openAutoLocked lets the device tune the channel itself through its /auto
 // stream. unlocked is a probe that already found no signal.
 func (h *Hub) openAutoLocked(ch store.SourceChannel, root, host string, last []Tuner, unlocked bool, began, status time.Time) (*feed, error) {
 	streamURL := h.autoURL(ch, root)
 	res, err := openStream(streamURL, "", "")
 	if err != nil {
-		if strings.Contains(err.Error(), "805") {
-			return nil, &BusyError{Tuners: last}
-		}
-		if unlocked {
-			return nil, fmt.Errorf("%w (%v)", ErrNoSignal, err)
-		}
-		return nil, err
+		return nil, autoError(err, last, unlocked)
 	}
 	return h.attachAutoLocked(ch, &autoGuess{body: res.Body, host: host, url: streamURL, began: began, status: status, answered: time.Now()}), nil
 }
