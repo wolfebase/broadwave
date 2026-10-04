@@ -402,6 +402,16 @@ final class EndToEndTests: XCTestCase {
         try? XCUIScreen.main.screenshot().pngRepresentation.write(to: url)
     }
 
+    /// A screenshot is evidence, not a check. On a busy CI runner one timed
+    /// out after the player had locked, and XCTest failed the run for it.
+    override func record(_ issue: XCTIssue) {
+        if issue.compactDescription.contains("Failed to get screenshot") {
+            note("screenshot skipped: \(issue.compactDescription)")
+            return
+        }
+        super.record(issue)
+    }
+
     private func pause(_ seconds: TimeInterval) {
         RunLoop.current.run(until: Date().addingTimeInterval(seconds))
     }

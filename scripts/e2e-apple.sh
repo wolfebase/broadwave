@@ -193,7 +193,7 @@ run_platform() {
   local from=0
   [ -f "$run/server.log" ] && from=$(stat -f %z "$run/server.log")
   say "$platform: starting a fresh server on :$port"
-  E2E_PORT=$port E2E_BONJOUR=1 E2E_NAME="$name" BROADWAVE_E2E=1 start_server "$name" "$dir/serve.out" || return 1
+  E2E_PORT=$port E2E_BONJOUR=1 E2E_LOOP=1 E2E_NAME="$name" BROADWAVE_E2E=1 start_server "$name" "$dir/serve.out" || return 1
 
   rm -f "$dir/watching" "$dir/sampled"
   SAMPLE_BASE="http://127.0.0.1:$port" SAMPLE_DIR="$dir" SAMPLE_LOG="$run/server.log" SAMPLE_LOG_FROM=$from \
