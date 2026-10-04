@@ -64,10 +64,10 @@ type Finder struct {
 	cancel context.CancelFunc
 }
 
-// ListenFinder binds FinderPort on every IPv4 interface. A second server on
-// the same computer logs the error and keeps serving; Bonjour still works.
+// ListenFinder binds FinderPort on every IPv4 interface. Other servers on
+// the same computer share the port, so a broadcast probe finds all of them.
 func ListenFinder(httpPort int, id, name string, key ed25519.PrivateKey) (*Finder, error) {
-	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: FinderPort})
+	conn, err := listenFinder(&net.UDPAddr{IP: net.IPv4zero, Port: FinderPort})
 	if err != nil {
 		return nil, fmt.Errorf("udp %d: %w", FinderPort, err)
 	}
@@ -75,6 +75,15 @@ func ListenFinder(httpPort int, id, name string, key ed25519.PrivateKey) (*Finde
 	go serveFinder(ctx, conn, httpPort, id, name, key)
 	slog.Info(fmt.Sprintf("discovery: udp %d", FinderPort))
 	return &Finder{conn: conn, cancel: cancel}, nil
+}
+
+func listenFinder(addr *net.UDPAddr) (*net.UDPConn, error) {
+	lc := net.ListenConfig{Control: sharePort}
+	pc, err := lc.ListenPacket(context.Background(), "udp4", addr.String())
+	if err != nil {
+		return nil, err
+	}
+	return pc.(*net.UDPConn), nil
 }
 
 func (f *Finder) Close() error {

@@ -206,3 +206,64 @@ func TestLoadKeyRoundTrip(t *testing.T) {
 		t.Fatalf("mode %o", info.Mode().Perm())
 	}
 }
+
+func TestTwoServersShareTheFinderPort(t *testing.T) {
+	first, err := listenFinder(&net.UDPAddr{IP: net.IPv4zero})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	port := first.LocalAddr().(*net.UDPAddr).Port
+	second, err := listenFinder(&net.UDPAddr{IP: net.IPv4zero, Port: port})
+	if err != nil {
+		t.Fatalf("a second server could not bind the finder port: %v", err)
+	}
+	defer second.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go serveFinder(ctx, first, 8477, "one", "One", nil)
+	go serveFinder(ctx, second, 8490, "two", "Two", nil)
+
+	client, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	ask := func(to net.IP) map[string]bool {
+		if _, err := client.WriteToUDP([]byte(finderAsk), &net.UDPAddr{IP: to, Port: port}); err != nil {
+			t.Logf("probe to %s: %v", to, err)
+			return nil
+		}
+		seen := map[string]bool{}
+		buf := make([]byte, 512)
+		deadline := time.Now().Add(time.Second)
+		for len(seen) < 2 {
+			_ = client.SetReadDeadline(deadline)
+			n, err := client.Read(buf)
+			if err != nil {
+				break
+			}
+			var got FinderReply
+			if n > len(finderYes) && json.Unmarshal(buf[len(finderYes):n], &got) == nil {
+				seen[got.ID] = true
+			}
+		}
+		return seen
+	}
+	if got := ask(net.IPv4(127, 0, 0, 1)); len(got) == 0 {
+		t.Fatal("a probe to the shared port got no reply")
+	}
+	// The apps broadcast first. Each server must get its own copy.
+	raw, err := client.SyscallConn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = raw.Control(func(fd uintptr) { _ = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1) })
+	got := ask(net.IPv4bcast)
+	if len(got) == 0 {
+		t.Skip("this host does not loop a broadcast back to itself")
+	}
+	if !got["one"] || !got["two"] {
+		t.Fatalf("a broadcast reached %v, want both servers", got)
+	}
+}
