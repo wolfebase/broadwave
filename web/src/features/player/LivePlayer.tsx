@@ -392,6 +392,27 @@ export function LivePlayer({
     fn();
   }
 
+  // Nothing else on the page takes focus under the full player. A key that
+  // lands on the page itself (focus lost to a remount or a click on nothing)
+  // is the player's, or every key would go dead.
+  const keyRef = useRef(onKey);
+  useEffect(() => {
+    keyRef.current = onKey;
+  });
+  useEffect(() => {
+    if (mode !== "full") return;
+    const onStray = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || (event.target !== document.body && event.target !== document.documentElement)) return;
+      const root = rootRef.current;
+      if (!root) return;
+      if (layout === "tv") focusRing(root);
+      else root.focus();
+      keyRef.current(event as unknown as ReactKey);
+    };
+    window.addEventListener("keydown", onStray);
+    return () => window.removeEventListener("keydown", onStray);
+  }, [mode, layout]);
+
   const liveLabel = livePillLabel(opts.sync && sync.state !== "off", behind);
   const title = airing?.title || channel.displayName;
   const eyebrow = useMemo(
