@@ -256,16 +256,11 @@ func (h *Hub) openTunedStream(ctx context.Context, t *tuned, tuners []Tuner) {
 	if err != nil {
 		url := h.autoURL(ch, t.root)
 		res, openErr := openStream(url, "", "")
-		switch {
-		case openErr == nil:
-			t.auto = &autoGuess{body: res.Body, host: t.host, url: url, began: t.began, status: t.status, answered: time.Now()}
-		case strings.Contains(openErr.Error(), "805"):
-			t.err = &BusyError{Tuners: tuners}
-		case errors.Is(err, errNoLock):
-			t.err = fmt.Errorf("%w (%v)", ErrNoSignal, openErr)
-		default:
-			t.err = openErr
+		if openErr != nil {
+			t.err = autoError(openErr, tuners, errors.Is(err, errNoLock))
+			return
 		}
+		t.auto = &autoGuess{body: res.Body, host: t.host, url: url, began: t.began, status: t.status, answered: time.Now()}
 		return
 	}
 	if h.Store != nil {

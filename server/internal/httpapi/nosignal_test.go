@@ -109,3 +109,55 @@ func tunersFree(t *testing.T, h http.Handler) bool {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
+
+// A FLEX tunes a channel with no signal to its frequency, never locks, and
+// answers the stream with 807 No Video Data. A watch and a recording of it
+// say it is not coming in, not that a stream is down.
+func TestADeviceWithNoVideoDataSaysItIsNotComingIn(t *testing.T) {
+	ctx := context.Background()
+	sample := filepath.Join(t.TempDir(), "sample.ts")
+	contractSample(t, sample)
+	tuner := &fake.Server{TS: sample, NoVideoData: true}
+	base, control, err := tuner.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(tuner.Close)
+	t.Setenv("HDHR_CONTROL_PORT", control)
+	st := testStore(t)
+	client := &hdhr.Client{}
+	dev, err := client.FetchDevice(ctx, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channels, err := client.FetchLineup(ctx, dev.LineupURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertDevice(ctx, dev, channels); err != nil {
+		t.Fatal(err)
+	}
+	// The reserve is checked against this machine's disk.
+	if err := st.PutSettings(ctx, map[string]string{"watermarkGB": "0"}); err != nil {
+		t.Fatal(err)
+	}
+	hub := &live.Hub{Store: st, Dir: t.TempDir(), Encoder: "libx264", FFmpeg: "ffmpeg"}
+	t.Cleanup(hub.Shutdown)
+	h := (&Server{Store: st, HDHR: client, Hub: hub}).Handler()
+	id := guideID(t, st, "5.1")
+	tuner.Dark("5.1")
+
+	for _, path := range []string{"/api/v1/watch", "/api/v1/recordings"} {
+		res := postJSON(t, h, path, fmt.Sprintf(`{"channelId":%d}`, id))
+		var problem struct {
+			Code string `json:"code"`
+		}
+		_ = json.Unmarshal(res.Body.Bytes(), &problem)
+		if res.Code != http.StatusServiceUnavailable || problem.Code != "no_signal" {
+			t.Fatalf("%s: %d %s", path, res.Code, res.Body.String())
+		}
+		if !hub.Idle() || !tunersFree(t, h) {
+			t.Fatalf("%s kept the tuner", path)
+		}
+	}
+}
