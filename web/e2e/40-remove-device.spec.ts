@@ -1,7 +1,6 @@
 // A tuner or playlist that is gone for good can be removed from Settings.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { copy } from "../src/strings";
@@ -17,7 +16,7 @@ const playlistShots = path.resolve(here, "../../.evidence/l87");
 type Device = { deviceId: string; friendlyName?: string; lastSeen?: string };
 
 function harness() {
-  return JSON.parse(readFileSync(path.join(here, ".run/server.json"), "utf8")) as { base: string; db: string };
+  return JSON.parse(readFileSync(path.join(here, ".run/server.json"), "utf8")) as { base: string; db: string; config: string };
 }
 
 function sql(statement: string) {
@@ -116,8 +115,9 @@ test("an offline playlist says so on its card", async ({ page }) => {
 });
 
 test("a playlist card skips scan and firmware", async ({ page }) => {
-  const { base } = harness();
-  const file = path.join(tmpdir(), "broadwave-l87.m3u");
+  const { base, config } = harness();
+  // The config folder is the one path a server in a container shares with the test.
+  const file = path.join(config, "night-list.m3u");
   writeFileSync(file, "#EXTM3U\n#EXTINF:-1,Night Owl\nhttp://127.0.0.1:9/night.ts\n");
   const added = await fetch(`${base}/api/v1/sources`, {
     method: "POST",
@@ -152,5 +152,6 @@ test("a playlist card skips scan and firmware", async ({ page }) => {
     await page.screenshot({ path: path.join(playlistShots, "cards.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
   } finally {
     await fetch(`${base}/api/v1/devices/${encodeURIComponent(list?.deviceId ?? "")}`, { method: "DELETE" });
+    rmSync(file, { force: true });
   }
 });
