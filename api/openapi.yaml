@@ -1725,6 +1725,7 @@ components:
         twinId: { type: integer, format: int64, description: "The other channel of an ATSC 1.0 and 3.0 pair of the same station. Its listings are shared." }
         twinChoice: { type: string, enum: [atsc3, atsc1, both], description: "Which channel of the pair shows in the guide." }
         playsAs: { type: integer, format: int64, description: "An encrypted ATSC 3.0 channel's clear 1.0 channel of the same station. Watching or recording the encrypted channel plays this one." }
+        sameAs: { type: integer, format: int64, description: "The row shown for this channel when another tuner on the same antenna carries it too. This row stays off the guide (guide=1) and still plays. A change to either row changes both." }
     ChannelPatch:
       type: object
       properties:

@@ -70,6 +70,7 @@ export type Channel = {
   twinId?: number;
   twinChoice?: string;
   playsAs?: number;
+  sameAs?: number;
 };
 
 export type ChannelPatch = {

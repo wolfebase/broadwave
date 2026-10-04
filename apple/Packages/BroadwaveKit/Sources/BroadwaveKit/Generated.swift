@@ -118,8 +118,9 @@ public struct Channel: Codable, Sendable, Hashable, Identifiable {
     public var twinId: Int64?
     public var twinChoice: String?
     public var playsAs: Int64?
+    public var sameAs: Int64?
 
-    public init(id: Int64, deviceId: String, guideNumber: String, guideName: String, displayNumber: String, displayName: String, videoCodec: String? = nil, audioCodec: String? = nil, hd: Bool, favorite: Bool, enabled: Bool, hidden: Bool, present: Bool, guideKey: String? = nil, artUrl: String? = nil, artWidth: Int? = nil, artHeight: Int? = nil, network: String? = nil, protected: Bool? = nil, standard: String? = nil, twinId: Int64? = nil, twinChoice: String? = nil, playsAs: Int64? = nil) {
+    public init(id: Int64, deviceId: String, guideNumber: String, guideName: String, displayNumber: String, displayName: String, videoCodec: String? = nil, audioCodec: String? = nil, hd: Bool, favorite: Bool, enabled: Bool, hidden: Bool, present: Bool, guideKey: String? = nil, artUrl: String? = nil, artWidth: Int? = nil, artHeight: Int? = nil, network: String? = nil, protected: Bool? = nil, standard: String? = nil, twinId: Int64? = nil, twinChoice: String? = nil, playsAs: Int64? = nil, sameAs: Int64? = nil) {
         self.id = id
         self.deviceId = deviceId
         self.guideNumber = guideNumber
@@ -143,6 +144,7 @@ public struct Channel: Codable, Sendable, Hashable, Identifiable {
         self.twinId = twinId
         self.twinChoice = twinChoice
         self.playsAs = playsAs
+        self.sameAs = sameAs
     }
 }
 

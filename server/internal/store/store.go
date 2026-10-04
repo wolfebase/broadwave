@@ -61,6 +61,9 @@ type Channel struct {
 	// PlaysAs is the clear 1.0 channel that plays and records in place of an
 	// encrypted 3.0 one.
 	PlaysAs int64 `json:"playsAs,omitempty"`
+	// SameAs is the row shown for this channel when another tuner carries it too.
+	// This row stays off the guide and still plays.
+	SameAs int64 `json:"sameAs,omitempty"`
 }
 
 type ChannelPatch struct {
@@ -438,10 +441,13 @@ func (s *Store) Channels(ctx context.Context, guideOnly bool) ([]Channel, error)
 	}
 	// Pairs are found on every row, so a hidden twin still names its partner.
 	markTwins(out, choices)
+	if err := s.markSameAs(ctx, out); err != nil {
+		return nil, err
+	}
 	if guideOnly {
 		shown := out[:0]
 		for _, ch := range out {
-			if ch.Present && ch.Enabled && !ch.Hidden {
+			if ch.Present && ch.Enabled && !ch.Hidden && ch.SameAs == 0 {
 				shown = append(shown, ch)
 			}
 		}
@@ -501,8 +507,18 @@ func (s *Store) PatchChannel(ctx context.Context, id int64, patch ChannelPatch) 
 	if len(sets) == 0 {
 		return Channel{}, errors.New("no changes")
 	}
-	args = append(args, id)
-	res, err := s.db.ExecContext(ctx, `UPDATE channels SET `+strings.Join(sets, ", ")+` WHERE id=?`, args...)
+	// One channel on two tuners is one row on the guide, so a change to it is
+	// a change to every tuner's row.
+	ids, err := s.sameChannel(ctx, id)
+	if err != nil {
+		return Channel{}, err
+	}
+	marks := make([]string, len(ids))
+	for i, other := range ids {
+		marks[i] = "?"
+		args = append(args, other)
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE channels SET `+strings.Join(sets, ", ")+` WHERE id IN (`+strings.Join(marks, ",")+`)`, args...)
 	if err != nil {
 		return Channel{}, err
 	}
