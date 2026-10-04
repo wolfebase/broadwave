@@ -41,3 +41,31 @@ func TestShareTwinsCopiesTheOtherBroadcastsListings(t *testing.T) {
 		t.Fatalf("104.1 logo %q", art[2])
 	}
 }
+
+func TestShareSameListsEveryTunersRowOfAChannel(t *testing.T) {
+	lineup := []store.Channel{
+		{ID: 1, DeviceID: "A", GuideNumber: "5.1", GuideName: "WTSTDT1", Present: true},
+		{ID: 2, DeviceID: "B", GuideNumber: "5.1", GuideName: "WTSTDT1", Present: true},
+		{ID: 3, DeviceID: "A", GuideNumber: "5.2", GuideName: "Rivers", Present: true},
+		{ID: 4, DeviceID: "C", GuideNumber: "5.2", GuideName: "Mountains", Present: true},
+	}
+	at := time.Date(2026, 10, 4, 18, 0, 0, 0, time.UTC)
+	rows := []store.Airing{
+		{ChannelID: 1, Title: "News", Start: at, End: at.Add(time.Hour)},
+		{ChannelID: 3, Title: "Boats", Start: at, End: at.Add(time.Hour)},
+	}
+	art := map[int64]string{1: "wtst.png"}
+	got := map[int64][]string{}
+	for _, r := range ShareSame(rows, art, lineup) {
+		got[r.ChannelID] = append(got[r.ChannelID], r.Title)
+	}
+	if g := got[2]; len(g) != 1 || g[0] != "News" {
+		t.Fatalf("B's 5.1 got %v, want A's listings", g)
+	}
+	if len(got[4]) != 0 {
+		t.Fatal("another station on the same number got the listings")
+	}
+	if art[2] != "wtst.png" {
+		t.Fatalf("B's 5.1 logo = %q", art[2])
+	}
+}

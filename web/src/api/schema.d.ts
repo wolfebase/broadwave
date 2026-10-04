@@ -1306,6 +1306,11 @@ export interface components {
              * @description An encrypted ATSC 3.0 channel's clear 1.0 channel of the same station. Watching or recording the encrypted channel plays this one.
              */
             playsAs?: number;
+            /**
+             * Format: int64
+             * @description The row shown for this channel when another tuner on the same antenna carries it too. This row stays off the guide (guide=1) and still plays. A change to either row changes both.
+             */
+            sameAs?: number;
         };
         ChannelPatch: {
             favorite?: boolean;

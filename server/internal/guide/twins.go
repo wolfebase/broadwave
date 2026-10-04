@@ -55,3 +55,36 @@ func anyHave(have map[int64]bool, ids []int64) bool {
 	}
 	return false
 }
+
+// ShareSame gives every tuner's row of one channel the listings and logo of
+// the row the guide matched, so the row shown on the guide is listed whichever
+// tuner it comes from.
+func ShareSame(rows []store.Airing, art map[int64]string, lineup []store.Channel) []store.Airing {
+	have := map[int64]bool{}
+	for _, r := range rows {
+		have[r.ChannelID] = true
+	}
+	n := len(rows)
+	for _, ids := range store.SameChannels(lineup) {
+		var from int64
+		for _, id := range ids {
+			if have[id] {
+				from = id
+				break
+			}
+		}
+		if from == 0 {
+			continue
+		}
+		for _, to := range ids {
+			if have[to] {
+				continue
+			}
+			rows = copyRows(rows, n, from, to)
+			if art != nil && art[to] == "" && art[from] != "" {
+				art[to] = art[from]
+			}
+		}
+	}
+	return rows
+}

@@ -566,7 +566,7 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 		var art map[int64]string
 		rows, art, pullErr = guide.Parse(raw, antenna)
 		if pullErr == nil {
-			rows = guide.ShareTwins(rows, art, antenna)
+			rows = guide.ShareSame(guide.ShareTwins(rows, art, antenna), art, antenna)
 			_ = s.Store.SetChannelArt(ctx, art)
 			_ = s.Store.SetNetworks(ctx, guide.Networks(raw, antenna))
 			rows = guide.FillImages(ctx, tmdbKey, rows)
@@ -589,13 +589,13 @@ func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
 		lineup = strings.TrimSpace(os.Getenv("SD_LINEUP"))
 	}
 	if extra, _, err := guide.SchedulesDirect(ctx, antenna, user, pass, lineup); err == nil && len(extra) > 0 {
-		extra = guide.ShareTwins(extra, nil, antenna)
+		extra = guide.ShareSame(guide.ShareTwins(extra, nil, antenna), nil, antenna)
 		rows = s.fillUnlisted(ctx, rows, tagGuideSource(extra, "schedules-direct"))
 	}
 	if rawURL := strings.TrimSpace(settings["guideUrl"]); rawURL != "" {
 		if body, err := guide.PullURL(ctx, rawURL); err == nil {
 			if extra, extraArt, err := guide.Parse(body, antenna); err == nil && len(extra) > 0 {
-				extra = guide.ShareTwins(extra, extraArt, antenna)
+				extra = guide.ShareSame(guide.ShareTwins(extra, extraArt, antenna), extraArt, antenna)
 				_ = s.Store.SetChannelArt(ctx, extraArt)
 				_ = s.Store.SetNetworks(ctx, guide.Networks(body, antenna))
 				extra = guide.FillImages(ctx, tmdbKey, extra)
