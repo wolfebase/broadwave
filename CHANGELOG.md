@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.14 — 2026-10-04
+
+### Added
+
+- Settings › Tuners and channels can remove a tuner or playlist that is gone for good. Its channels leave the guide; a favorite, custom name, or pass moves to the same channel on another tuner when there is one. Recordings and their files stay. Broadwave refuses while something plays or records from it.
+- A page for people installing Broadwave describes multiview: the layouts, which tile has the sound, picture sizes, and tuners.
+
+### Fixed
+
+- An iPhone, iPad, or Apple TV multiview link that names the hidden half of a 1.0/3.0 pair now plays the half on the guide, and an encrypted 3.0 station plays its regular broadcast with a note. That tile used to be dropped.
+
 ## 0.12.13 — 2026-10-04
 
 ### Fixed
