@@ -161,3 +161,13 @@ private func planned(skipped: Bool = false, reason: String? = nil, later: Sugges
     #expect(play.count == 2)
     #expect(play.markers?.first?.recordingId == 7)
 }
+
+@Test func aRecordingWhoseFileIsGoneDecodesAsMissing() throws {
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let gone = try decoder.decode(Recording.self, from: Data(#"{"id":4,"channelId":1,"guideNumber":"4.1","title":"Show","status":"complete","startedAt":"2026-09-23T19:58:31Z","missing":true}"#.utf8))
+    #expect(gone.isMissing)
+    #expect(gone.durationSec == nil)
+    let kept = try decoder.decode(Recording.self, from: Data(#"{"id":5,"channelId":1,"guideNumber":"4.1","title":"Show","status":"complete","startedAt":"2026-09-23T19:58:31Z","bytes":188}"#.utf8))
+    #expect(!kept.isMissing)
+}

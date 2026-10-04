@@ -131,7 +131,7 @@ struct HomeView: View {
                         }
                     }
                 }
-                let recent = store.recordings.filter { !$0.isRecording }.prefix(12)
+                let recent = store.recordings.filter { !$0.isRecording && !$0.isMissing }.prefix(12)
                 if !recent.isEmpty {
                     Shelf("Recently recorded") {
                         ForEach(Array(recent)) { rec in

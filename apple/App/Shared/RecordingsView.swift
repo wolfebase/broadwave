@@ -92,12 +92,12 @@ struct RecordingsView: View {
                 titleVisibility: .visible,
                 presenting: deleting
             ) { rec in
-                Button("Delete this file", role: .destructive) {
+                Button(rec.isMissing ? "Remove from the list" : "Delete this file", role: .destructive) {
                     act { try await store.deleteRecording(rec) }
                 }
                 Button("Cancel", role: .cancel) {}
-            } message: { _ in
-                Text("The recording and its commercial markers are removed from the server.")
+            } message: { rec in
+                Text(rec.isMissing ? "Its file is already gone." : "The recording and its commercial markers are removed from the server.")
             }
         #if os(tvOS)
             .onAppear { claimRecordingFocus() }
@@ -164,11 +164,16 @@ struct RecordingsView: View {
 
     private func row(_ rec: Recording) -> some View {
         Group {
-            #if os(tvOS)
-                Button { playing = rec } label: { rowLabel(rec) }
-            #else
-                NavigationLink(value: rec) { rowLabel(rec) }
-            #endif
+            if rec.isMissing {
+                // Nothing to play. Select offers to take it off the list.
+                Button { deleting = rec } label: { rowLabel(rec) }
+            } else {
+                #if os(tvOS)
+                    Button { playing = rec } label: { rowLabel(rec) }
+                #else
+                    NavigationLink(value: rec) { rowLabel(rec) }
+                #endif
+            }
         }
         .accessibilityLabel(recordingSpoken(rec))
         .accessibilityIdentifier("recording-row")
@@ -182,7 +187,7 @@ struct RecordingsView: View {
                 }
             }
             .swipeActions(edge: .leading) {
-                if !rec.isRecording {
+                if !rec.isRecording, !rec.isMissing {
                     Button(rec.isWatched ? "Unwatched" : "Watched", systemImage: rec.isWatched ? "eye.slash" : "eye") {
                         act { try await store.setWatched(rec, !rec.isWatched) }
                     }
@@ -227,6 +232,8 @@ struct RecordingsView: View {
             Button("Stop recording", systemImage: "stop.circle") {
                 act { try await store.stopRecording(rec) }
             }
+        } else if rec.isMissing {
+            Button("Delete", systemImage: "trash", role: .destructive) { deleting = rec }
         } else {
             Button(rec.isWatched ? "Mark unwatched" : "Mark watched", systemImage: rec.isWatched ? "eye.slash" : "eye") {
                 act { try await store.setWatched(rec, !rec.isWatched) }
@@ -244,6 +251,9 @@ struct RecordingsView: View {
 
     /// "4.1 · Stopped early · Sep 27, 8:00 PM · 2.1 GB · 1:02:00 · Watched", as the web library reads.
     private func details(_ rec: Recording) -> String {
+        if rec.isMissing {
+            return "\(rec.guideNumber) · The file is gone. It was moved or deleted outside Broadwave."
+        }
         var parts = [rec.guideNumber]
         // A recording in progress already shows the live dot.
         if !rec.isRecording, let status = rec.statusLabel {

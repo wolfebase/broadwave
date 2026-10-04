@@ -89,8 +89,8 @@ export function Home() {
   }, [channels, index, now]);
 
   const recordingNow = recordings.filter((r) => r.status === "recording");
-  const resume = recordings.filter((r) => r.status !== "recording" && (r.position ?? 0) > 30 && !r.watched).slice(0, 10);
-  const recent = recordings.filter((r) => r.status !== "recording" && !resume.includes(r)).slice(0, 12);
+  const resume = recordings.filter((r) => r.status !== "recording" && !r.missing && (r.position ?? 0) > 30 && !r.watched).slice(0, 10);
+  const recent = recordings.filter((r) => r.status !== "recording" && !r.missing && !resume.includes(r)).slice(0, 12);
 
   if (!settled && channels.length === 0) {
     return (

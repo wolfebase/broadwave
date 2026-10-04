@@ -51,6 +51,8 @@ export const copy = {
   library: {
     title: "Library",
     body: "Recordings gather here by show. The guide is the place to start.",
+    gone: "The file is gone. It was moved or deleted outside Broadwave.",
+    removeGone: "Remove from the list",
   },
   schedule: {
     title: "Schedule",

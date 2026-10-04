@@ -103,6 +103,21 @@ struct RecordingPoster: View {
     private static let posterWidth = 480
 
     var body: some View {
+        if recording.isMissing {
+            // No file, so no poster to cut from it.
+            if let art = fallback {
+                ProgramPicture(url: art.url, width: art.width, height: art.height)
+                    .background(Tokens.ColorToken.surface2)
+                    .accessibilityHidden(true)
+            } else {
+                Tokens.ColorToken.surface2.accessibilityHidden(true)
+            }
+        } else {
+            poster
+        }
+    }
+
+    private var poster: some View {
         AsyncImage(url: store.api?.posterURL(recordingID: recording.id)) { phase in
             if let image = phase.image {
                 CappedFit(image: image, nativeWidth: Self.posterWidth, nativeHeight: 0)

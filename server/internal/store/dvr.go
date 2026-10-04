@@ -100,6 +100,8 @@ type Recording struct {
 	// Health is counted from the file after the recording finishes.
 	// Nil until then, including when the file disappeared during the read.
 	Health *RecordingHealth `json:"health,omitempty"`
+	// Missing is set by the list when a finished recording's file is gone.
+	Missing bool `json:"missing,omitempty"`
 	// Season, Episode, and OriginalAir are filled from the guide when an .nfo
 	// is written. They are not stored on the recording.
 	Season      int    `json:"-"`

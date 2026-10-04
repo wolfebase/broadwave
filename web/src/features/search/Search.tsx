@@ -73,8 +73,9 @@ export function SearchPage() {
       .then((res) => {
         if (stop) return;
         setAirings(res.airings);
-        setRecordings(res.recordings);
-        setNote(res.airings.length === 0 && res.recordings.length === 0 ? "Nothing matches." : "");
+        const playable = res.recordings.filter((rec) => !rec.missing);
+        setRecordings(playable);
+        setNote(res.airings.length === 0 && playable.length === 0 ? "Nothing matches." : "");
       })
       .catch((err: unknown) => {
         if (!stop) setNote(err instanceof Error ? err.message : "Search failed.");

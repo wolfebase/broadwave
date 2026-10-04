@@ -2008,6 +2008,7 @@ components:
         position: { type: number }
         durationSec: { type: number }
         watched: { type: integer }
+        missing: { type: boolean, description: "The recording finished but its file is gone (moved or deleted outside Broadwave). It cannot play; delete removes it from the list." }
         health:
           $ref: "#/components/schemas/RecordingHealth"
     RecordingHealth:

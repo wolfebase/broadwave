@@ -141,6 +141,11 @@ public extension Recording {
         status == "recording"
     }
 
+    /// Finished, but the file was moved or deleted outside Broadwave.
+    var isMissing: Bool {
+        missing == true
+    }
+
     /// Same rule as the web library: a mark wins (1 watched, 2 unwatched),
     /// otherwise the last 15 s or 90% has played.
     var isWatched: Bool {

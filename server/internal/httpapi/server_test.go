@@ -339,8 +339,12 @@ func TestDeleteRecordingRemovesTheFile(t *testing.T) {
 
 func TestRecordingDurationRoundTrip(t *testing.T) {
 	st := testStore(t)
+	clip := filepath.Join(t.TempDir(), "clip.ts")
+	if err := os.WriteFile(clip, make([]byte, 188), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	id, err := st.CreateRecording(context.Background(), store.Recording{
-		Title: "Clip", Status: "complete", Path: filepath.Join(t.TempDir(), "clip.ts"), StartedAt: time.Now(),
+		Title: "Clip", Status: "complete", Path: clip, StartedAt: time.Now(),
 	})
 	if err != nil {
 		t.Fatal(err)
