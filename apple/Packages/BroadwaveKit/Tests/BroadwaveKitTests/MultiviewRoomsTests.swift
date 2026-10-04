@@ -70,6 +70,21 @@ private func deadSnap(_ edit: (inout TilePlaybackSnap) -> Void = { _ in }) -> Ti
     return snap
 }
 
+@Test func aDarkTileSaysTheChannelIsNotComingIn() {
+    let lost = RecoverySnap(health: true, freeTuner: false, tunerAnswers: true, online: true, signalLost: true)
+    let dark = TilePlayback.outage(lost)
+    #expect(dark.message == PlaybackOutage.noSignal)
+    #expect(dark.recovery == .signal)
+    // No signal waits for the antenna. It does not take the quiet clock.
+    #expect(PlaybackOutage.pictureRetryDelay(message: dark.message, recovery: dark.recovery, elapsed: 0) == nil)
+
+    let fine = RecoverySnap(health: true, freeTuner: true, tunerAnswers: true, online: true, signalLost: false)
+    let stopped = TilePlayback.outage(fine)
+    #expect(stopped.message == PlaybackOutage.pictureStopped)
+    #expect(stopped.recovery == nil)
+    #expect(PlaybackOutage.pictureRetryDelay(message: stopped.message, recovery: stopped.recovery, elapsed: 0) == 10)
+}
+
 @Test func aTileThatStoppedFetchingReloads() {
     #expect(TilePlayback.shouldReload(deadSnap()))
     #expect(TilePlayback.shouldReload(deadSnap { $0.rate = 0; $0.waitingToPlay = false }))

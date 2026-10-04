@@ -98,4 +98,11 @@ public enum TilePlayback {
     public static func wait(_ snap: TilePlaybackSnap) -> TimeInterval {
         snap.ended ? endedAfter : reloadAfter
     }
+
+    /// What a tile says once its picture has died. The same decision as the
+    /// one-channel player: a lost signal keeps the no-signal sentence and waits
+    /// for the antenna, and a picture with no named cause stays on the quiet retry.
+    public static func outage(_ snap: RecoverySnap) -> OutageDecision {
+        PlaybackOutage.classify(snap)
+    }
 }

@@ -200,6 +200,8 @@ export function useLiveStream(
     let primed = false;
     let stallAt = 0;
     let stuck = 0;
+    let unmovedArm = 0;
+    let unmoved = 0;
     delete video.dataset.ttff;
     delete video.dataset.moving;
     delete video.dataset.stalls;
@@ -371,6 +373,24 @@ export function useLiveStream(
         }
         if (audibleRef.current) applySound(video);
         else video.muted = true;
+        // A tile that never paints does not stall, so the waiting clock never
+        // runs. After a tune should have locked, the same check a stall uses:
+        // a lost signal is named, and a slow start that still has a lock is left alone.
+        window.clearTimeout(unmovedArm);
+        window.clearInterval(unmoved);
+        // Ten reads (20 s), then the stopped-picture clock has it: each read is five requests.
+        let reads = 0;
+        unmovedArm = window.setTimeout(() => {
+          const tick = () => {
+            if (dead || surfaced || video.dataset.moving || ++reads > 10) {
+              window.clearInterval(unmoved);
+              return;
+            }
+            void noteOutage(false);
+          };
+          tick();
+          unmoved = window.setInterval(tick, 2000);
+        }, stuckMs);
         // Only a refused autoplay is tried again, muted. A play() cut off by a
         // torn-down stream would wait forever on no source, and the next restart
         // waits for this one to finish.
@@ -563,6 +583,8 @@ export function useLiveStream(
       ctrl.abort();
       window.clearInterval(frozenTimer);
       window.clearTimeout(stuck);
+      window.clearTimeout(unmovedArm);
+      window.clearInterval(unmoved);
       stopPoll();
       window.clearTimeout(quietTimer);
       window.clearTimeout(startTimer);

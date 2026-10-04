@@ -323,6 +323,10 @@ final class TilePlayer {
     private var endedItem: ObjectIdentifier?
     private var endWatch: Task<Void, Never>?
     private var reloads = 0
+    /// The last read of why this dead picture stopped. Nil until that read returns.
+    private var namedCause: OutageDecision?
+    private var namingCause = false
+    private var causeGen = 0
     private var tileTuning = false
     /// A watch started while the old picture played on, for the next start to use.
     private var preparedSession: WatchSession?
@@ -366,6 +370,9 @@ final class TilePlayer {
         deadSince = nil
         primed = false
         reloads = 0
+        namedCause = nil
+        namingCause = false
+        causeGen += 1
         await stop(endPicture: !quiet)
         guard !Task.isCancelled, token == startToken else { return }
         guard let api = store.api else { return }
@@ -593,13 +600,23 @@ final class TilePlayer {
         } else {
             deadSince = nil
         }
+        // A sync hold looks like a pause, so the stall clock never reads the
+        // signal. Ask once the picture has actually died. A named cause (no
+        // signal, the tuner, the server) is the same decision as one channel.
+        // Anything else keeps reloading, then the quiet retry.
+        if TilePlayback.isDead(snap), namedCause == nil {
+            askWhyDead()
+        }
+        if let namedCause, namedCause.recovery != nil || namedCause.message == PlaybackOutage.noSignal {
+            outage.fail(namedCause)
+            return
+        }
         if TilePlayback.shouldReload(snap) {
             reloadItem()
             return
         }
-        // Out of reloads, the picture is stopped and the outage clock says so.
         if TilePlayback.isDead(snap), snap.deadFor >= TilePlayback.wait(snap) {
-            outage.fail(OutageDecision(message: PlaybackOutage.pictureStopped, recovery: nil))
+            outage.fail(namedCause ?? OutageDecision(message: PlaybackOutage.pictureStopped, recovery: nil))
         }
         guard TilePlayback.isStuck(snap) else {
             stuckSince = nil
@@ -630,6 +647,9 @@ final class TilePlayer {
         deadSince = nil
         primed = false
         stuckSince = nil
+        namedCause = nil
+        namingCause = false
+        causeGen += 1
         let item = AVPlayerItem(url: api.url(session.playlist))
         PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: tileTuning)
         // Through nil, as start() does: the layer's ready flag only reports a
@@ -643,6 +663,21 @@ final class TilePlayer {
         player.playImmediately(atRate: 1)
         let id = channelID ?? 0
         Self.tileLog.notice("tile reload channel=\(id, privacy: .public)")
+    }
+
+    /// One read per dead stretch. A reload starts the stretch over.
+    private func askWhyDead() {
+        guard !namingCause, namedCause == nil, let client = api, let id = channelID else { return }
+        namingCause = true
+        let token = startToken
+        let gen = causeGen
+        let playlist = session?.playlist
+        Task {
+            let reading = await playbackSnap(api: client, channelID: id, assumeLost: false, playlist: playlist)
+            guard token == startToken, gen == causeGen else { return }
+            namedCause = TilePlayback.outage(reading)
+            namingCause = false
+        }
     }
 
     private func watchEnd(_ item: AVPlayerItem) {
