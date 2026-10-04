@@ -3,6 +3,7 @@ import type { Channel, Device, TunerStatus } from "../../types";
 import { addFree, addPlaylistFile, addSource, checkSignals, findFree, getSignals, getTuners, lookHarder, sourceStatuses, startScan, type ChannelSignal, type FreeFeed, type SourceAdded, type SourceStatus } from "../../api";
 import { copy } from "../../strings";
 import { lastSeenPhrase } from "../../time";
+import { deviceScans, showFirmware } from "./deviceCard";
 export function Sources({
   devices,
   channels,
@@ -33,6 +34,7 @@ export function Sources({
   const [findingFree, setFindingFree] = useState(false);
   const [tuners, setTuners] = useState<TunerStatus[]>([]);
   const [statuses, setStatuses] = useState<SourceStatus[]>([]);
+  const [sourcesReady, setSourcesReady] = useState(false);
   const [encoder, setEncoder] = useState("");
   useEffect(() => {
     let stop = false;
@@ -43,9 +45,15 @@ export function Sources({
         setTuners(res.tuners ?? []);
         setEncoder(res.encoder ?? "");
         const sources = await sourceStatuses();
-        if (!stop) setStatuses(sources.sources ?? []);
+        if (!stop) {
+          setStatuses(sources.sources ?? []);
+          setSourcesReady(true);
+        }
       } catch {
-        if (!stop) setTuners([]);
+        if (!stop) {
+          setTuners([]);
+          setSourcesReady(true);
+        }
       }
     }
     void load();
@@ -215,6 +223,8 @@ export function Sources({
           const status = statuses.find((item) => item.deviceId === device.deviceId);
           const name = device.friendlyName || device.modelNumber || device.deviceId;
           const offline = Boolean(status?.health);
+          const scans = sourcesReady && deviceScans(status ? status.kind : undefined);
+          const facts = [device.modelNumber, device.tunerCount > 0 ? `${device.tunerCount} ${copy.sources.tuners}` : ""].filter(Boolean).join(" · ");
           const scan = (
             <button
               key="scan"
@@ -246,20 +256,20 @@ export function Sources({
           return (
             <article key={device.deviceId} className="device-card">
               <h3>{device.friendlyName || device.modelNumber}</h3>
-              <p>
-                {device.modelNumber} · {device.tunerCount} {copy.sources.tuners}
-              </p>
+              {facts ? <p>{facts}</p> : null}
               {device.note ? <p className="hint">{device.note}</p> : null}
-              <p className="hint">
-                {copy.sources.firmware} {device.firmwareVersion}
-                {device.upgradeAvailable
-                  ? `. A newer build, ${device.upgradeAvailable}, is published. This app will not install it.`
-                  : "."}
-              </p>
+              {showFirmware(device.firmwareVersion) ? (
+                <p className="hint">
+                  {copy.sources.firmware} {device.firmwareVersion}
+                  {device.upgradeAvailable
+                    ? `. A newer build, ${device.upgradeAvailable}, is published. This app will not install it.`
+                    : "."}
+                </p>
+              ) : null}
               {offline ? <p className="hint">{copy.sources.offline(lastSeenPhrase(device.lastSeen))}</p> : null}
               {status?.streamLimit ? <p className="hint">{copy.sources.streams(status.streamsInUse ?? 0, status.streamLimit)}</p> : null}
               {offline ? remove : null}
-              {scan}
+              {scans ? scan : null}
               {offline ? null : remove}
             </article>
           );

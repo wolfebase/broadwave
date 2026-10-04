@@ -86,6 +86,7 @@ export function addFree(feed: { kind?: string; addr?: string; playlist?: string;
 
 export type SourceStatus = {
   id: number;
+  kind?: string;
   name: string;
   deviceId?: string;
   health?: string;
