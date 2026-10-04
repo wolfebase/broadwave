@@ -9,7 +9,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const evidence = path.resolve(here, "../../.evidence/lane/l27");
 
 type Channel = { id: number; number: string; name: string };
-type Harness = { base: string; control: string };
+type Harness = { base: string; control: string; admin: string };
 type Tuner = { index: number; guide?: string; viewers?: number; ours?: boolean };
 type Tile = { channel: string; muted: boolean; moving: boolean; alert: string };
 
@@ -360,5 +360,45 @@ test.describe("a restarted server", () => {
         await post(`${control}/start`).catch(() => undefined);
       }
     });
+  }
+});
+
+const noSignal = "This channel isn't coming in. Check the antenna.";
+
+test("a quad tile with no signal says so and the others keep playing", async ({ page }) => {
+  const { admin } = harness();
+  const kbwv = channel("KBWV");
+  const kbwv2 = channel("KBWV2");
+  const wtst = channel("WTST");
+  const shotDir = path.resolve(here, "../../.evidence/lane/l89");
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await post(`${admin}/dark?channel=${encodeURIComponent(wtst.number)}`);
+    // Each channel with no stored frequency costs its own tuner. Playing 4.1
+    // stores 4.1 and 4.2, so a two-tuner server can put the dark 5.1 on the grid.
+    await openMultiview(page, [kbwv.id, kbwv2.id], "quad", kbwv.id);
+    await expect
+      .poll(async () => (await tiles(page)).filter((tile) => tile.moving).length, { timeout: 45_000, intervals: [500] })
+      .toBe(2);
+    await page.goto(`/multiview?ch=${kbwv.id},${kbwv2.id},${wtst.id}&layout=quad&focus=${kbwv.id}`);
+    await settle(page);
+    await expect(page.getByRole("region", { name: "Quad" })).toBeVisible();
+    const dark = page.getByRole("group", { name: `${wtst.number} ${wtst.name}`, exact: true });
+    await expect(dark.getByRole("alert")).toContainText(noSignal, { timeout: 20_000 });
+    await expect
+      .poll(
+        async () => {
+          const rows = await tiles(page);
+          const others = rows.filter((tile) => tile.channel !== String(wtst.id));
+          return others.length === 2 && others.every((tile) => tile.moving && tile.alert === "");
+        },
+        { timeout: 20_000, intervals: [500] },
+      )
+      .toBe(true);
+    await expect(page.getByRole("alert").filter({ hasText: noSignal })).toHaveCount(1);
+    mkdirSync(shotDir, { recursive: true });
+    await page.screenshot({ path: path.join(shotDir, "desktop.jpg"), animations: "disabled" });
+  } finally {
+    await post(`${admin}/light?channel=${encodeURIComponent(wtst.number)}`).catch(() => undefined);
   }
 });
