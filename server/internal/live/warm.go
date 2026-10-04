@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"maps"
 	"time"
 
 	"broadwave/internal/store"
@@ -157,13 +156,7 @@ func (h *Hub) openAuto(ctx context.Context, ch store.SourceChannel, guess bool) 
 	h.mu.Lock()
 	used := h.usedTunersLocked(hostOf(ch.BaseURL))
 	replaced := h.guessGuidesLocked()
-	held := maps.Clone(h.reserved)
-	if held == nil {
-		held = map[int]bool{}
-	}
-	if h.hold > 0 {
-		maps.Copy(held, HoldBack(tuners, h.hold))
-	}
+	held := h.heldLocked(hostOf(ch.BaseURL), tuners)
 	h.mu.Unlock()
 	free, idle := 0, 0
 	for _, t := range tuners {

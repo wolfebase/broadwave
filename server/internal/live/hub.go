@@ -183,6 +183,11 @@ type Hub struct {
 	// h.mu. Another watch of it waits for that open instead of taking a
 	// second tuner, which would leave a third viewer with none.
 	opening map[int64]chan struct{}
+	// tuning holds a frequency openTuned is tuning outside h.mu. A sibling
+	// subchannel waits for it and joins its mux instead of taking a tuner.
+	tuning map[int]chan struct{}
+	// pending is a tuner openTuned is opening, by host and index.
+	pending map[string]bool
 	hold    int
 	// statusDown is when a device whose status read failed is asked again.
 	statusDown map[string]time.Time
@@ -502,23 +507,42 @@ func (h *Hub) WatchAt(ctx context.Context, channelID int64, want Rendition, alte
 	}
 	h.serve(candidates[0], ch)
 	var auto *autoGuess
+	var tune *tuned
 	opener := false
 	if res == nil {
 		h.mu.Lock()
-		_, tuned := h.channels[ch.ID]
+		_, isTuned := h.channels[ch.ID]
 		wait := h.opening[ch.ID]
-		if !tuned && wait == nil {
+		if !isTuned && wait == nil {
 			h.beginOpenLocked(ch.ID)
 			opener = true
 		}
 		h.mu.Unlock()
 		if opener {
-			auto = h.openAuto(ctx, ch, false)
+			if auto = h.openAuto(ctx, ch, false); auto == nil {
+				tune = h.openTuned(ctx, ch)
+			}
 		} else if wait != nil {
 			select {
 			case <-wait:
 			case <-ctx.Done():
 				return Session{}, ctx.Err()
+			}
+		}
+		// A sibling's open that failed leaves this watch to tune for itself,
+		// still without h.mu. Two waits at most, then the locked path.
+		for i := 0; tune != nil && tune.wait != nil; i++ {
+			select {
+			case <-tune.wait:
+			case <-ctx.Done():
+				h.mu.Lock()
+				h.endOpenLocked(ch.ID)
+				h.mu.Unlock()
+				return Session{}, ctx.Err()
+			}
+			tune = nil
+			if i < 2 {
+				tune = h.openTuned(ctx, ch)
 			}
 		}
 	}
@@ -533,6 +557,11 @@ func (h *Hub) WatchAt(ctx context.Context, channelID int64, want Rendition, alte
 			auto.body.Close()
 		} else {
 			f = h.attachAutoLocked(ch, auto)
+		}
+	}
+	if tune != nil {
+		if f, err = h.attachTunedLocked(tune); err != nil {
+			return Session{}, err
 		}
 	}
 	if f == nil {
@@ -658,16 +687,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 		return nil, ErrTunerSilent
 	}
 	status := time.Now()
-	held := h.reserved
-	if h.hold > 0 && len(devices) > 0 {
-		held = map[int]bool{}
-		for k, v := range h.reserved {
-			held[k] = v
-		}
-		for k, v := range HoldBack(devices[0].Tuners, h.hold) {
-			held[k] = v
-		}
-	}
+	held := h.heldLocked(devices[0].Host, devices[0].Tuners)
 	need := NeedFor(ch.VideoCodec, ch.AudioCodec, ch.ATSC3)
 	picked, tuner, ok := PickTuner(devices, h.usedTunersLocked(devices[0].Host), held, need)
 	// A 1.0 channel would rather take a 1.0 tuner on another device than
