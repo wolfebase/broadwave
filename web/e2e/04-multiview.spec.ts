@@ -366,7 +366,7 @@ test.describe("a restarted server", () => {
 const noSignal = "This channel isn't coming in. Check the antenna.";
 
 test("a quad tile with no signal says so and the other keeps playing", async ({ page }) => {
-  const { admin } = harness();
+  const { admin, base } = harness();
   const kbwv = channel("KBWV");
   const kbwv2 = channel("KBWV2");
   const wtst = channel("WTST");
@@ -381,6 +381,12 @@ test("a quad tile with no signal says so and the other keeps playing", async ({ 
     await expect
       .poll(async () => (await tiles(page)).filter((tile) => tile.moving).length, { timeout: 45_000, intervals: [500] })
       .toBe(2);
+    // A navigation does not always deliver pagehide, and a picture the old
+    // quad still holds would turn the dark tile away before it tunes.
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })));
+    await expect
+      .poll(async () => (await ourViewers(base)).reduce((sum, row) => sum + (row.viewers ?? 0), 0), { timeout: 30_000, intervals: [500], message: "the first quad let its pictures go" })
+      .toBe(0);
     await page.goto(`/multiview?ch=${kbwv.id},${wtst.id}&layout=quad&focus=${kbwv.id}`);
     await settle(page);
     await expect(page.getByRole("region", { name: "Quad" })).toBeVisible();
