@@ -20,6 +20,8 @@ export const copy = {
     scan: "Scan channels",
     scanning: "Scanning for channels.",
     remove: "Remove",
+    offline: (when: string) => (when ? `Offline. Last seen ${when}.` : "Offline."),
+    streams: (used: number, limit: number) => `${used} of ${limit} streams`,
     removeLabel: (name: string) => `Remove ${name}`,
     removeConfirm: (name: string) =>
       `Remove ${name}? Its channels leave the lineup. Favorites and passes move to another tuner with the same channel, and the other passes go. Recordings stay.`,
