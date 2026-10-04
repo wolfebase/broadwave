@@ -1,6 +1,7 @@
 package live
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -228,4 +229,23 @@ func wantPick(t *testing.T, name string, devices []DeviceTuners, need Need, host
 			t.Fatalf("got %s tuner %d ok %v, want %s tuner %d ok %v", gotHost, gotN, gotOK, host, tuner, ok)
 		}
 	})
+}
+
+func TestAnAutoStreamMarksItsTunerOurs(t *testing.T) {
+	h := New(nil, t.TempDir(), "ffmpeg", "libx264")
+	h.muxes[-1] = &mux{freq: -1, tuner: -1, host: "10.0.0.2", feeds: map[string]*feed{"104.1": {channel: store.SourceChannel{Channel: store.Channel{GuideNumber: "104.1"}}}}}
+	h.muxes[-2] = &mux{freq: -2, tuner: -1, host: "10.0.0.9", feeds: map[string]*feed{"119.1": {channel: store.SourceChannel{Channel: store.Channel{GuideNumber: "119.1"}}}}}
+	raw := []tunerStatus{
+		{VctNumber: "104.1", TargetIP: "10.0.0.5"},
+		{},
+		{VctNumber: "119.1", TargetIP: "10.0.0.5"},
+		{VctNumber: "104.1", TargetIP: "10.0.0.6"},
+	}
+	got := h.tunersFromLocked(context.Background(), "http://10.0.0.2", raw)
+	want := []bool{true, false, false, false}
+	for i, tuner := range got {
+		if tuner.Ours != want[i] {
+			t.Fatalf("tuner %d ours %v, want %v (another device's stream, or a second app on the same channel, is not ours)", i, tuner.Ours, want[i])
+		}
+	}
 }

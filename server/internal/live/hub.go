@@ -3040,6 +3040,29 @@ func (h *Hub) usedTunersLocked(host string) map[int]bool {
 	return used
 }
 
+// autoGuidesLocked counts the /auto streams open on one device by channel
+// number. The device picks the tuner for those, so its status row is the
+// only place that says which one: the row tuned to that number.
+func (h *Hub) autoGuidesLocked(host string) map[string]int {
+	want := hostOf(host)
+	out := map[string]int{}
+	if want == "" {
+		return out
+	}
+	for _, m := range h.muxes {
+		if m.tuner >= 0 || hostOf(m.host) != want {
+			continue
+		}
+		for _, f := range m.feeds {
+			if f != nil && f.channel.GuideNumber != "" {
+				out[f.channel.GuideNumber]++
+				break
+			}
+		}
+	}
+	return out
+}
+
 // StreamLimitMessage is what a viewer sees when a playlist has no free stream.
 func StreamLimitMessage(limit int) string {
 	return fmt.Sprintf("All %d streams from this playlist are in use. Stop one or raise the limit.", limit)
@@ -3102,11 +3125,17 @@ func (h *Hub) readTuners(ctx context.Context, host string) ([]Tuner, error) {
 // caller holds h.mu.
 func (h *Hub) tunersFromLocked(ctx context.Context, host string, raw []tunerStatus) []Tuner {
 	ours := h.usedTunersLocked(host)
+	auto := h.autoGuidesLocked(host)
 	out := make([]Tuner, 0, len(raw))
 	for i, row := range raw {
+		mine := ours[i]
+		if !mine && row.VctNumber != "" && auto[row.VctNumber] > 0 {
+			auto[row.VctNumber]--
+			mine = true
+		}
 		out = append(out, Tuner{
 			Index: i, Guide: row.VctNumber, Name: row.VctName, Target: row.TargetIP,
-			Ours: ours[i], Strength: row.SignalStrengthPercent, Quality: row.SignalQualityPercent, Symbol: row.SymbolQualityPercent,
+			Ours: mine, Strength: row.SignalStrengthPercent, Quality: row.SignalQualityPercent, Symbol: row.SymbolQualityPercent,
 			Shared: h.viewersOnTunerLocked(i),
 		})
 	}
