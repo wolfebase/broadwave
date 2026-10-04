@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.13 — 2026-10-04
+
+### Fixed
+
+- When two Broadwave servers run on the same computer, the apps' search now finds both of them. The one that started second used to be missed whenever Bonjour could not reach the app.
+- An iPhone, iPad, or Apple TV joining a channel another screen is already watching, at a quality that needs its own encode, now shows a moving picture in about 2.5 seconds instead of up to 20. Its picture starts at the room's frame.
+- An Apple screen that falls behind its room after a pause no longer stops trying to catch up for a minute when its player loses a moment while restarting.
+- On Apple TV, Up and Down in the guide's channel column now step through the channels.
+- A multiview page you return to with Back no longer sits paused on its pictures for 4 seconds or more before it plays.
+
 ## 0.12.12 — 2026-10-03
 
 ### Fixed
