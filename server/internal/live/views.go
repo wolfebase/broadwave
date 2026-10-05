@@ -154,6 +154,9 @@ type cutCache struct {
 func (c *cutCache) file(path, tag string, cut func([]byte) ([]byte, error)) ([]byte, error) {
 	info, err := os.Stat(path)
 	if err != nil {
+		if raw, ok := PartFromSegment(path); ok {
+			return cut(raw)
+		}
 		return nil, err
 	}
 	k := cutKey{path: path, tag: tag, size: info.Size(), mod: info.ModTime()}
