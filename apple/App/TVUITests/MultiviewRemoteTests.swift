@@ -4,7 +4,7 @@ import XCTest
 final class MultiviewRemoteTests: XCTestCase {
     func testSwipeClickPauseMenu() {
         let app = XCUIApplication()
-        app.launchArguments = ["-BroadwaveMultiviewTest", "YES", "-ApplePersistenceIgnoreState", "YES"]
+        app.launchArguments = ["-BroadwaveMultiviewTest", "YES", "-BroadwaveChannelNow", "YES", "-ApplePersistenceIgnoreState", "YES"]
         app.launch()
 
         let first = app.buttons["tile-1"]
@@ -31,6 +31,9 @@ final class MultiviewRemoteTests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
         XCTAssertFalse(first.exists, "Menu should leave multiview")
+        // Nothing was playing before, so Menu closes it instead of opening a tile full screen.
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        XCTAssertFalse(app.staticTexts["channel-now"].exists, "Menu opened a tile full screen")
     }
 
     func testLongPressOpensTheTileMenu() {

@@ -1095,8 +1095,10 @@ struct MultiviewScreen: View {
                 menuChannel = nil
             } else if session.guide {
                 session.guide = false
+            } else if let channel = nowPlaying.openedFrom {
+                nowPlaying.play(channel)
             } else {
-                leave()
+                nowPlaying.stop()
             }
         }
         .onAppear {

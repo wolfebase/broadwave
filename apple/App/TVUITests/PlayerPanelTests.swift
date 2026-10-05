@@ -145,6 +145,54 @@ final class PlayerPanelTests: XCTestCase {
         XCTAssertTrue(app.buttons[row].firstMatch.isHittable, "\(row) is off screen")
     }
 
+    /// Menu in a multiview opened from the player goes back to that player.
+    /// It used to open the focused tile, and a multiview opened from Home with
+    /// nothing playing closes (MultiviewRemoteTests).
+    func testMenuInMultiviewGoesBackToThePlayer() throws {
+        try XCTSkipIf(server.isEmpty, "set TEST_RUNNER_BROADWAVE_SERVER")
+        let app = try launch(["-BroadwaveTogetherTest", "YES"])
+        let started = try waitChannel(app)
+        let id = try firstChannelID()
+        let tile = app.buttons.matching(identifier: "tile-\(id)").firstMatch
+        XCTAssertTrue(tile.waitForExistence(timeout: 40), app.debugDescription)
+        shot(app, "together")
+        // One tile opens the channel strip. Add a channel on the same tune, as in the walk
+        // that found this: two tiles, focus on the new one.
+        var steps: [String] = []
+        for _ in 0 ..< 10 where !focused(app).contains("Same tune") {
+            let now = focused(app)
+            steps.append(now)
+            // Down from the tile, Left to the first layout (the channel row is shorter
+            // than the layout row), Down, then Right along the channel row.
+            let direction: XCUIRemote.Button = if now.hasPrefix("tile-") || now == " Side by side" {
+                .down
+            } else if now.dropFirst().first?.isNumber == true {
+                .right
+            } else {
+                .left
+            }
+            XCUIRemote.shared.press(direction)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        }
+        print("strip-focus \(steps)")
+        XCTAssertTrue(focused(app).contains("Same tune"), "no same-tune channel in the strip: \(focused(app))")
+        XCUIRemote.shared.press(.select)
+        let tiles = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'tile-'"))
+        XCTAssertTrue(until(10) { tiles.count == 2 }, app.debugDescription)
+        // Give the tiles their pictures, so going back can reuse the tune.
+        RunLoop.current.run(until: Date().addingTimeInterval(8))
+        shot(app, "two-tiles")
+        XCUIRemote.shared.press(.menu)
+        let pressed = Date()
+        let now = app.staticTexts["channel-now"]
+        XCTAssertTrue(until(10) { !tile.exists && now.exists }, "Menu did not go back to the player\n\(app.debugDescription)")
+        XCTAssertEqual(now.label, started)
+        let tuning = app.descendants(matching: .any)["tuning"]
+        XCTAssertTrue(until(20) { !tuning.exists }, "the player is still starting")
+        print("back-to-player picture \(String(format: "%.1f", Date().timeIntervalSince(pressed))) s")
+        shot(app, "back")
+    }
+
     private func sameFrequency(as channel: Int64) -> Int64? {
         var match: Int64?
         _ = until(10) {
@@ -176,7 +224,7 @@ final class PlayerPanelTests: XCTestCase {
         return try JSONDecoder().decode(T.self, from: Data(contentsOf: url))
     }
 
-    private func launch() throws -> XCUIApplication {
+    private func launch(_ extra: [String] = []) throws -> XCUIApplication {
         let channel = try firstChannelID()
         let app = XCUIApplication()
         app.launchArguments = [
@@ -185,7 +233,7 @@ final class PlayerPanelTests: XCTestCase {
             "-BroadwaveWatch", channel,
             "-BroadwaveChannelNow", "YES",
             "-BroadwaveSyncLog", "1",
-        ]
+        ] + extra
         app.launch()
         return app
     }

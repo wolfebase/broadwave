@@ -20,6 +20,8 @@ final class NowPlaying {
 
     /// Layout Watch together or a saved set asked for. The multiview screen applies it once.
     var openedLayout: String?
+    /// The channel the player showed when multiview opened from it. Menu goes back to it.
+    var openedFrom: Channel?
     /// A short note over the picture, such as why another channel is playing.
     var note: String?
     /// Tile channel ids that stand in for an encrypted 3.0 station.
@@ -55,12 +57,16 @@ final class NowPlaying {
         together = []
         standIns = []
         openedLayout = nil
+        openedFrom = nil
         self.channel = channel
         self.note = note
         expanded = true
     }
 
     func watchTogether(_ channels: [Channel], layout: String? = nil, standIns: Set<Int64> = []) {
+        if together.isEmpty {
+            openedFrom = channel
+        }
         var seen = Set<Int64>()
         together = channels.map(\.id).filter { seen.insert($0).inserted }
         self.standIns = standIns.intersection(seen)
@@ -81,6 +87,7 @@ final class NowPlaying {
         together = []
         standIns = []
         openedLayout = nil
+        openedFrom = nil
         expanded = false
     }
 }

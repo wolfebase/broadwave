@@ -10,6 +10,11 @@ import SwiftUI
     import UIKit
 #endif
 
+#if os(tvOS) && DEBUG
+    /// `-BroadwaveTogetherTest` opens multiview from the player only once.
+    @MainActor private var togetherTestDone = false
+#endif
+
 struct PictureStats: Equatable {
     var width = 0
     var height = 0
@@ -1004,6 +1009,16 @@ struct PlayerScreen: View {
                 // Store shots need the title on screen. The system bar hides itself.
                 if UserDefaults.standard.bool(forKey: "BroadwaveInfo") {
                     tvInfo
+                }
+                // UI tests cannot reach the transport bar's menu; this picks
+                // Multiview once, 2 s after the picture moves.
+                if UserDefaults.standard.bool(forKey: "BroadwaveTogetherTest"), !togetherTestDone, live.moving, let channel = nowPlaying.channel {
+                    Color.clear.task {
+                        try? await Task.sleep(for: .seconds(2))
+                        guard !Task.isCancelled, !togetherTestDone else { return }
+                        togetherTestDone = true
+                        nowPlaying.watchTogether([channel])
+                    }
                 }
                 // UI tests cannot reach the transport bar's menu; this presses
                 // "Back in sync" 10 s after the viewer leaves sync.
