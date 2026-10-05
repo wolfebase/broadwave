@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"broadwave/internal/disk"
 	"broadwave/internal/live"
@@ -507,12 +508,84 @@ func (s *Server) fileMedia(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if s.Hub == nil {
+		http.NotFound(w, r)
+		return
+	}
 	path := filepath.Join(s.Hub.Dir, "file", id, filepath.Base(name))
 	switch {
 	case strings.HasSuffix(name, ".m3u8"):
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		w.Header().Set("Cache-Control", "no-cache")
+		body, err := os.ReadFile(path)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		if recID, err := strconv.ParseInt(id, 10, 64); err == nil && s.Store != nil {
+			if rec, err := s.Store.Recording(r.Context(), recID); err == nil {
+				body = stampRecordingPlaylist(body, rec.StartedAt)
+			}
+		}
+		_, _ = w.Write(body)
+		return
 	case strings.HasSuffix(name, ".vtt"):
 		w.Header().Set("Content-Type", "text/vtt")
 	}
 	http.ServeFile(w, r, path)
+}
+
+// stampRecordingPlaylist sets EXT-X-PROGRAM-DATE-TIME from the recording's
+// start plus each segment's offset. ffmpeg writes the wall clock of the
+// transcode (when play was pressed) because PictureArgs asks for
+// program_date_time; AVKit reads those tags as the on-screen date.
+func stampRecordingPlaylist(body []byte, start time.Time) []byte {
+	if start.IsZero() || !strings.Contains(string(body), "#EXTINF:") {
+		return body
+	}
+	lines := strings.Split(strings.ReplaceAll(string(body), "\r\n", "\n"), "\n")
+	var out strings.Builder
+	at := start.UTC()
+	var pending []string
+	var dur float64
+	writePending := func() {
+		for _, l := range pending {
+			out.WriteString(l)
+			out.WriteByte('\n')
+		}
+		pending = pending[:0]
+		dur = 0
+	}
+	for _, line := range lines {
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, "#EXT-X-PROGRAM-DATE-TIME:") {
+			continue
+		}
+		if strings.HasPrefix(trim, "#EXTINF:") {
+			pending = append(pending, line)
+			if v, ok := strings.CutPrefix(trim, "#EXTINF:"); ok {
+				sec, err := strconv.ParseFloat(strings.SplitN(v, ",", 2)[0], 64)
+				if err == nil && sec > 0 {
+					dur += sec
+				}
+			}
+			continue
+		}
+		if trim != "" && !strings.HasPrefix(trim, "#") && len(pending) > 0 {
+			out.WriteString("#EXT-X-PROGRAM-DATE-TIME:")
+			out.WriteString(at.Format("2006-01-02T15:04:05.000Z"))
+			out.WriteByte('\n')
+			seg := dur
+			writePending()
+			out.WriteString(line)
+			out.WriteByte('\n')
+			at = at.Add(time.Duration(seg * float64(time.Second)))
+			continue
+		}
+		writePending()
+		out.WriteString(line)
+		out.WriteByte('\n')
+	}
+	writePending()
+	return []byte(out.String())
 }
