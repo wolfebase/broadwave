@@ -122,6 +122,11 @@ test("Tab cycles the player bar and the first Tab from a hidden bar shows it", a
     }
   }
 
+  // A ring left on a control still lets the bar fade, as a TV remote leaves one there.
+  await expect(page.locator(".stage.idle")).toHaveCount(1, { timeout: 6_000 });
+  await expect(page.locator(".stage:not(.mini)")).toBeFocused();
+  await tabOnce(page, false);
+
   // Options is part of the same cycle, not a way out.
   const options = page.getByRole("button", { name: "Options", exact: true });
   await options.focus();
