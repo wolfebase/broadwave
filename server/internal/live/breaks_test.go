@@ -2,6 +2,9 @@ package live
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -49,5 +52,62 @@ func TestParseBreaksNeedsThreeSpots(t *testing.T) {
 	log := blackLog([2]float64{100, 100.2}, [2]float64{130, 130.2}, [2]float64{160, 160.2}, [2]float64{171, 171.2})
 	if got := ParseBreaks(log); len(got) != 0 {
 		t.Fatalf("%+v", got)
+	}
+}
+
+// fakeComskip puts a comskip on PATH that checks it was asked for an EDL and
+// writes one where it was told to, plus the .txt it writes by default.
+func fakeComskip(t *testing.T, body string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script")
+	}
+	bin := t.TempDir()
+	script := `#!/bin/sh
+for a in "$@"; do
+  case "$a" in
+    --ini=*) ini="${a#--ini=}" ;;
+    --output=*) out="${a#--output=}" ;;
+    -*) ;;
+    *) in="$a" ;;
+  esac
+done
+grep -q '^output_edl=1$' "$ini" || exit 3
+[ -n "$out" ] || exit 4
+base=$(basename "$in" .ts)
+touch "$base.txt"
+` + body
+	if err := os.WriteFile(filepath.Join(bin, "comskip"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestComskipWritesItsEDLOutsideTheRecordings(t *testing.T) {
+	fakeComskip(t, `printf '129.11\t256.31\t0\n1500.5\t1620\t0\n' > "$out/$base.edl"
+`)
+	recs := t.TempDir()
+	path := filepath.Join(recs, "show.ts")
+	if err := os.WriteFile(path, []byte("ts"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := comskipBreaks(path)
+	if !ok || len(got) != 2 || got[0] != (Break{Start: 129.11, End: 256.31}) || got[1] != (Break{Start: 1500.5, End: 1620}) {
+		t.Fatalf("breaks %v ok %v", got, ok)
+	}
+	entries, _ := os.ReadDir(recs)
+	if len(entries) != 1 {
+		t.Fatalf("comskip left files with the recording: %v", entries)
+	}
+}
+
+func TestComskipThatFailsFallsBack(t *testing.T) {
+	fakeComskip(t, "exit 1\n")
+	path := filepath.Join(t.TempDir(), "show.ts")
+	if err := os.WriteFile(path, []byte("ts"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := comskipBreaks(path); ok {
+		t.Fatalf("a failed comskip gave %v", got)
 	}
 }
