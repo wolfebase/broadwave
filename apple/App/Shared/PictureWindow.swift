@@ -87,14 +87,53 @@ import SwiftUI
         var onRestore: (() -> Void)?
         var onClosed: (() -> Void)?
         private var restoring = false
+        /// The small window the system opened when the app left.
+        private weak var awayWindow: AVPlayerViewController?
+        private var comeBack: NSObjectProtocol?
 
-        nonisolated func playerViewControllerWillStartPictureInPicture(_: AVPlayerViewController) {
-            MainActor.assumeIsolated { self.onChange?(true) }
+        nonisolated func playerViewControllerWillStartPictureInPicture(_ vc: AVPlayerViewController) {
+            MainActor.assumeIsolated {
+                if UIApplication.shared.applicationState != .active {
+                    self.watchComeBack(vc)
+                }
+                self.onChange?(true)
+            }
+        }
+
+        private func watchComeBack(_ vc: AVPlayerViewController) {
+            awayWindow = vc
+            guard comeBack == nil else { return }
+            comeBack = NotificationCenter.default.addObserver(
+                forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.endAwayWindow() }
+            }
+        }
+
+        /// Back in the app, the picture belongs in the player again. A window
+        /// the viewer opened from inside the app stays. AVKit has no stop call
+        /// for this controller; turning the feature off and on ends the session.
+        private func endAwayWindow() {
+            guard let vc = awayWindow else { return }
+            awayWindow = nil
+            vc.allowsPictureInPicturePlayback = false
+            vc.allowsPictureInPicturePlayback = true
+        }
+
+        private func forgetAwayWindow() {
+            awayWindow = nil
+            if let comeBack {
+                NotificationCenter.default.removeObserver(comeBack)
+            }
+            comeBack = nil
         }
 
         nonisolated func playerViewController(_: AVPlayerViewController, failedToStartPictureInPictureWithError error: Error) {
             let text = error.localizedDescription
-            MainActor.assumeIsolated { self.onChange?(false) }
+            MainActor.assumeIsolated {
+                self.forgetAwayWindow()
+                self.onChange?(false)
+            }
             Logger(subsystem: "com.wolfeup.broadwave", category: "play").error("pip failed \(text, privacy: .public)")
         }
 
@@ -108,6 +147,7 @@ import SwiftUI
         ) {
             MainActor.assumeIsolated {
                 self.restoring = true
+                self.awayWindow = nil
                 self.onRestore?()
             }
             completionHandler(true)
@@ -115,6 +155,7 @@ import SwiftUI
 
         nonisolated func playerViewControllerDidStopPictureInPicture(_: AVPlayerViewController) {
             MainActor.assumeIsolated {
+                self.forgetAwayWindow()
                 let away = UIApplication.shared.applicationState != .active
                 let stop = PictureHandoff.stopWhenClosed(restored: self.restoring, away: away)
                 self.restoring = false
