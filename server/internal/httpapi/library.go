@@ -153,7 +153,7 @@ func (s *Server) detectBreaks(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
-	found, err := live.DetectBreaks(s.Hub.FFmpeg, rec.Path)
+	found, err := live.IndexBreaks(s.Hub.FFmpeg, rec.Path)
 	if err != nil {
 		writeError(w, err)
 		return

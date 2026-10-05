@@ -2,7 +2,9 @@ package live
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"os/exec"
@@ -10,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var blackLine = regexp.MustCompile(`black_start:([0-9.]+) black_end:([0-9.]+)`)
@@ -106,23 +109,55 @@ func IndexBreaks(ffmpeg, path string) ([]Break, error) {
 	return DetectBreaks(ffmpeg, path)
 }
 
+// comskipINI asks for an EDL only. Without it comskip writes a .txt and no
+// .edl, so its breaks were never read.
+const comskipINI = "output_edl=1\noutput_default=0\n"
+
+// comskipLimit stops a comskip that hangs; an hour of 1080i takes minutes.
+var comskipLimit = 2 * time.Hour
+
+// comskipBreaks runs comskip with its output in a temporary folder, so the
+// recordings folder gets no logo, log, or .txt files. It runs at low priority
+// on two threads: it starts when a recording ends, maybe while others play.
 func comskipBreaks(path string) ([]Break, bool) {
 	exe, err := exec.LookPath("comskip")
 	if err != nil {
 		return nil, false
 	}
-	cmd := exec.Command(exe, path)
-	cmd.Dir = filepath.Dir(path)
-	if err := cmd.Run(); err != nil {
+	dir, err := os.MkdirTemp("", "comskip")
+	if err != nil {
 		return nil, false
 	}
-	edl := strings.TrimSuffix(path, filepath.Ext(path)) + ".edl"
+	defer os.RemoveAll(dir)
+	ini := filepath.Join(dir, "comskip.ini")
+	if err := os.WriteFile(ini, []byte(comskipINI), 0o600); err != nil {
+		return nil, false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), comskipLimit)
+	defer cancel()
+	args := []string{"--quiet", "--threads=2", "--ini=" + ini, "--output=" + dir, path}
+	cmd := exec.CommandContext(ctx, exe, args...)
+	if nice, err := exec.LookPath("nice"); err == nil {
+		cmd = exec.CommandContext(ctx, nice, append([]string{"-n", "10", exe}, args...)...)
+	}
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		slog.Warn(fmt.Sprintf("breaks: comskip on %s: %v %s", filepath.Base(path), err, lastLine(out)))
+		return nil, false
+	}
+	edl := filepath.Join(dir, strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))+".edl")
 	body, err := os.ReadFile(edl)
 	if err != nil {
 		return nil, false
 	}
 	parsed := parseEDL(string(body))
 	return parsed, len(parsed) > 0
+}
+
+func lastLine(out []byte) string {
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	return lines[len(lines)-1]
 }
 
 func parseEDL(text string) []Break {
