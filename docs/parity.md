@@ -66,21 +66,29 @@ Settings, Channels on Apple; the lineup under Sources on the web. Every channel 
 
 The demo keeps favorites and hidden channels for the session. It does not rename a channel or take one off the guide.
 
-## Series passes
+## Passes
 
-Settings, Series passes on Apple; Schedule on the web. A pass is set from the guide on every client.
+Settings, Passes on Apple; Schedule on the web. A pass is set from the guide on every client.
 
 | Choice | Web | iPhone | iPad | Apple TV |
 | --- | --- | --- | --- | --- |
-| List with channel, episodes, keep rule, and padding | yes | yes | yes | yes |
+| List in priority order, with the web's labels (title, words, category, team, one airing) and rules | yes | yes | yes | yes |
+| New pass from the list | yes | yes, + in the toolbar | yes, + in the toolbar | yes, New pass at the top |
+| Match: title is, title contains, or category, and edit the text | yes | yes | yes | yes |
+| Channel: any or one | yes | yes | yes | yes |
+| Days of the week | yes | yes, a switch per day | yes, a switch per day | yes, a switch per day |
+| Time window (start between two times, past midnight allowed) | yes, any minute | yes, half-hour menus and any value the web set | yes, half-hour menus and any value the web set | yes, half-hour menus and any value the web set |
 | Early and after (0–30 min) | yes | yes | yes | yes |
-| Priority | yes (0–100) | yes (0–10, and any value the web set) | yes (0–10, and any value the web set) | yes (0–10, and any value the web set) |
 | Episodes: all or new only | yes | yes | yes | yes |
-| Keep: all, unwatched, or the last few | yes | yes, with how many | yes, with how many | yes, with how many |
-| Mark commercials | yes | yes | yes | yes |
+| Keep: all, unwatched, or the newest few | yes | yes, with how many | yes, with how many | yes, with how many |
+| Stop at N unwatched | yes, 0–99 | yes, no limit to 20 and any value the web set | yes, no limit to 20 and any value the web set | yes, no limit to 20 and any value the web set |
+| Record again after a delete | yes | yes | yes | yes |
+| Find commercials | yes | yes | yes | yes |
+| Order: the higher pass gets the tuner | yes, drag or Up and Down | yes, Edit and drag | yes, Edit and drag | yes, Move up and Move down in the pass |
+| Preview: what records in the next 2 weeks, what is skipped, and what it would stop | yes | yes | yes | yes |
 | Delete a pass | yes | yes | yes | yes |
 
-Apple uses menus for minutes and priority because tvOS has no stepper or number field.
+A team pass keeps its team: no match, title, episodes, or record again. A pass for one airing takes only early, after, and commercials. Apple uses menus for minutes, counts, and times because tvOS has no stepper, number field, or time picker. The demo answers the preview with nothing to record.
 
 ## Recordings
 
