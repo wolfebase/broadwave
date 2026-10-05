@@ -188,16 +188,29 @@ final class LivePlayerController: AVPlayerViewController, UIGestureRecognizerDel
         !transportShown && !infoPanelVisible
     }
 
-    /// True while an Info, Channels, or Stream page is on screen.
+    /// True while an Info, Channels, or Stream page is on screen. AVKit leaves a
+    /// closed page in the window, moved below the screen at full alpha.
     private var infoPanelVisible: Bool {
         #if os(tvOS)
             (customInfoViewControllers ?? []).contains { controller in
-                guard let view = controller.viewIfLoaded, view.window != nil else { return false }
-                return !view.isHidden && view.alpha > 0.01 && view.bounds.height > 1
+                controller.viewIfLoaded.map(Self.onScreen) ?? false
             }
         #else
             false
         #endif
+    }
+
+    private static func onScreen(_ view: UIView) -> Bool {
+        guard let window = view.window else { return false }
+        var next: UIView? = view
+        while let current = next {
+            if current.isHidden || current.alpha < 0.01 {
+                return false
+            }
+            next = current.superview
+        }
+        let frame = view.convert(view.bounds, to: window)
+        return frame.height > 1 && frame.intersection(window.bounds).height > frame.height / 2
     }
 
     private func installChannelSwipes() {

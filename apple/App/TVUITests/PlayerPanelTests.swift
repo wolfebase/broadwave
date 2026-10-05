@@ -16,6 +16,19 @@ final class PlayerPanelTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    /// Each test expects no picture running when it starts.
+    override func tearDown() {
+        if !server.isEmpty {
+            XCUIApplication().terminate()
+            for feed in (try? fetch(Diagnostics.self, "/api/v1/diagnostics").relay) ?? [] {
+                post("/api/v1/watch/\(feed.channelId)/stop")
+            }
+            // A rendition with no viewers stays up for 20 s.
+            _ = until(40) { (try? self.fetch(Diagnostics.self, "/api/v1/diagnostics").relay?.isEmpty) ?? true }
+        }
+        super.tearDown()
+    }
+
     func testPanelsAndTheTransportMenu() throws {
         try XCTSkipIf(server.isEmpty, "set TEST_RUNNER_BROADWAVE_SERVER")
         let app = try launch()
@@ -37,6 +50,8 @@ final class PlayerPanelTests: XCTestCase {
         let before = app.staticTexts["channel-now"].label
         try changeChannel(app, from: before)
         shot(app, "channel-changed")
+        // The pick closes the page and the bar. Down before the bar is back would change the channel again.
+        _ = until(10) { app.staticTexts["transportProbe"].label == "hidden" }
 
         try showContent(app, "panel-stream", tab: "Stream")
         XCTAssertTrue(app.staticTexts["Rendition"].waitForExistence(timeout: 5), app.debugDescription)
@@ -58,6 +73,30 @@ final class PlayerPanelTests: XCTestCase {
         }
         shot(app, "swipe")
         XCTAssertTrue(moved, "stayed on \(app.staticTexts["channel-now"].label)")
+    }
+
+    func testDownChangesChannelAfterAPanelWasOpen() throws {
+        try XCTSkipIf(server.isEmpty, "set TEST_RUNNER_BROADWAVE_SERVER")
+        let app = try launch()
+        let before = try waitChannel(app)
+        try showContent(app, "panel-stream", tab: "Stream")
+        let panel = app.descendants(matching: .any)["panel-stream"]
+        let probe = app.staticTexts["transportProbe"]
+        // Menu closes the page, then the bar. One more would leave the player.
+        for _ in 0 ..< 2 where panel.exists || probe.label != "hidden" {
+            XCUIRemote.shared.press(.menu)
+            _ = until(6) { !panel.exists && probe.label == "hidden" }
+        }
+        XCTAssertTrue(until(15) { probe.label == "hidden" }, "transport stayed \(probe.label)\n\(focused(app))")
+        shot(app, "after-panel")
+        // A press during the bar's closing animation goes to AVKit.
+        RunLoop.current.run(until: Date().addingTimeInterval(1.5))
+        XCUIRemote.shared.press(.down)
+        let moved = until(8) {
+            let now = app.staticTexts["channel-now"].label
+            return !now.isEmpty && now != before
+        }
+        XCTAssertTrue(moved, "stayed on \(app.staticTexts["channel-now"].label)\n\(focused(app))")
     }
 
     func testRestingOnAChannelRowStartsItsPicture() throws {
@@ -101,6 +140,16 @@ final class PlayerPanelTests: XCTestCase {
 
     private func relayFeed(_ channel: Int64) throws -> RelayFeed? {
         try fetch(Diagnostics.self, "/api/v1/diagnostics").relay?.first { $0.channelId == channel }
+    }
+
+    private func post(_ path: String) {
+        guard let url = URL(string: server + path) else { return }
+        let done = expectation(description: path)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 5
+        URLSession.shared.dataTask(with: request) { _, _, _ in done.fulfill() }.resume()
+        wait(for: [done], timeout: 8)
     }
 
     private func fetch<T: Decodable>(_: T.Type, _ path: String) throws -> T {
@@ -182,6 +231,12 @@ final class PlayerPanelTests: XCTestCase {
         let target = app.collectionViews["AVInfoMenuCollection"]
             .staticTexts.matching(NSPredicate(format: "label == %@", label))
             .firstMatch
+        // With the bar hidden, Down changes the channel. Select brings the bar back.
+        let probe = app.staticTexts["transportProbe"]
+        if probe.label != "shown" {
+            XCUIRemote.shared.press(.select)
+            _ = until(3) { probe.label == "shown" }
+        }
         for _ in 0 ..< 8 where !stripHasFocus(app) {
             XCUIRemote.shared.press(.down)
             RunLoop.current.run(until: Date().addingTimeInterval(0.4))
