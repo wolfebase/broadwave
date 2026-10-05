@@ -251,8 +251,10 @@ run_platform() {
 
   local how
   how=$(grep -ho "broadwave-e2e note discovery [a-z]*" "$dir/test.log" | tail -1 | awk '{print $4}')
-  local step
-  for step in 1 2 3 4 5 6 7; do
+  local step steps="1 2 3 4 5 6 7"
+  # Step 8, the mini player, has no Apple TV counterpart.
+  [ "$platform" = ios ] && steps="$steps 8"
+  for step in $steps; do
     local line mark=PASS
     line=$(grep -h "broadwave-e2e pass $step " "$dir/test.log" | head -1 | sed "s/.*broadwave-e2e pass $step //")
     [ -n "$line" ] || mark=FAIL
