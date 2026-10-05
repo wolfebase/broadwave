@@ -1240,10 +1240,10 @@ func (h *Hub) watchRendition(f *feed, r *rendition, cmd *exec.Cmd, encoder strin
 		return
 	}
 	early := err != nil && !respawn && time.Since(started) <= h.fallbackWindow()
-	// libx265 runs a 1080 picture far slower than real time on most CPUs, so
-	// an HEVC encode moves to the CPU only on a VAAPI start that fails.
-	toCPU := gpuEncoder(encoder) && !r.fallback && r.spec.Codec != "hevc"
-	canFall := toCPU || (vaapiFamily(encoder) && !r.fallback)
+	// A GPU encode that fails at its start moves to the CPU. libx265 runs a
+	// 1080 picture far slower than real time on most CPUs, so HEVC does only
+	// on VAAPI, as it always has.
+	canFall := !r.fallback && (vaapiFamily(encoder) || (gpuEncoder(encoder) && r.spec.Codec != "hevc"))
 	if early && len(r.extras) > 0 {
 		// A listed track that sends nothing, or something ffmpeg cannot open,
 		// stops the whole encode. The picture and main sound come first.
@@ -1261,12 +1261,6 @@ func (h *Hub) watchRendition(f *feed, r *rendition, cmd *exec.Cmd, encoder strin
 	}
 	if err != nil && !r.restarted && h.restartRenditionLocked(f, r, early && canFall) {
 		slog.Info(fmt.Sprintf("rendition %s on %s restarted after %s", r.spec.Key(), f.channel.GuideNumber, time.Since(started).Round(time.Millisecond)))
-		return
-	}
-	// A GPU encode that dies again after its rebuild moves to the CPU, so the
-	// viewers keep the picture instead of losing the tuner.
-	if err != nil && toCPU && h.restartRenditionLocked(f, r, true) {
-		slog.Warn(fmt.Sprintf("rendition %s on %s moved to the CPU after the %s encode died again after %s: %v", r.spec.Key(), f.channel.GuideNumber, encoder, time.Since(started).Round(time.Millisecond), err))
 		return
 	}
 	// The process has been waited. Don't signal a pid the OS may have reused.
