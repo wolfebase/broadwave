@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -159,5 +160,41 @@ func TestAViewerHiddenDuplicateLeavesTheOtherOnTheGuide(t *testing.T) {
 	}
 	if got := guideNumbers(t, s, ctx)["5.1"]; len(got) != 1 || got[0].ID != b51.ID {
 		t.Fatalf("5.1 = %+v, want BBB2's row", got)
+	}
+}
+
+func TestAChannelOnTwoTunersRecordsOnce(t *testing.T) {
+	s, ctx := openTwoTuners(t)
+	all, err := s.Channels(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a51, b51 := rowFor(t, all, "AAA1", "5.1"), rowFor(t, all, "BBB2", "5.1")
+	if b51.SameAs != a51.ID {
+		t.Fatalf("BBB2 5.1 sameAs = %d, want %d", b51.SameAs, a51.ID)
+	}
+	start := time.Now().Add(time.Hour).Truncate(time.Minute)
+	if err := s.InsertAirings(ctx, []Airing{
+		{ChannelID: a51.ID, Title: "News", Start: start, End: start.Add(time.Hour)},
+		{ChannelID: b51.ID, Title: "News", Start: start, End: start.Add(time.Hour)},
+		{ChannelID: b51.ID, Title: "Only here", Start: start.Add(time.Hour), End: start.Add(2 * time.Hour)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := s.RecordingAirings(ctx, start.Add(-time.Hour), start.Add(3*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int64{}
+	for _, r := range rows {
+		got[fmt.Sprintf("%s@%d", r.Title, r.ChannelID)] = r.Simulcast
+	}
+	want := map[string]int64{
+		fmt.Sprintf("News@%d", a51.ID):      0,
+		fmt.Sprintf("News@%d", b51.ID):      a51.ID,
+		fmt.Sprintf("Only here@%d", b51.ID): 0,
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("marks %v, want %v", got, want)
 	}
 }

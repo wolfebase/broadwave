@@ -324,6 +324,32 @@ func (s *Store) RecordingAirings(ctx context.Context, from, to time.Time) ([]Air
 	if err != nil {
 		return nil, err
 	}
+	// A channel two tuners carry records on the row the guide shows, when that row lists the airing too.
+	type showing struct {
+		channel int64
+		start   int64
+		title   string
+	}
+	shownAs := map[int64]int64{}
+	for _, ch := range chs {
+		if ch.SameAs != 0 {
+			shownAs[ch.ID] = ch.SameAs
+		}
+	}
+	copies := map[int]bool{}
+	if len(shownAs) > 0 {
+		listed := map[showing]bool{}
+		for _, r := range rows {
+			listed[showing{r.ChannelID, r.Start.Unix(), strings.ToLower(strings.TrimSpace(r.Title))}] = true
+		}
+		for i, r := range rows {
+			to, ok := shownAs[r.ChannelID]
+			if ok && listed[showing{to, r.Start.Unix(), strings.ToLower(strings.TrimSpace(r.Title))}] {
+				rows[i].Simulcast = to
+				copies[i] = true
+			}
+		}
+	}
 	twins, stand := Twins(chs), StandIns(chs)
 	if len(twins) == 0 && len(stand) == 0 {
 		return rows, nil
@@ -362,9 +388,9 @@ func (s *Store) RecordingAirings(ctx context.Context, from, to time.Time) ([]Air
 		title string
 	}
 	best := map[key]int64{}
-	for _, r := range rows {
+	for i, r := range rows {
 		g, ok := group[r.ChannelID]
-		if !ok {
+		if !ok || copies[i] {
 			continue
 		}
 		k := key{g, r.Start.Unix(), strings.ToLower(strings.TrimSpace(r.Title))}
@@ -374,7 +400,7 @@ func (s *Store) RecordingAirings(ctx context.Context, from, to time.Time) ([]Air
 	}
 	for i, r := range rows {
 		g, ok := group[r.ChannelID]
-		if !ok {
+		if !ok || copies[i] {
 			continue
 		}
 		if b := best[key{g, r.Start.Unix(), strings.ToLower(strings.TrimSpace(r.Title))}]; b != r.ChannelID {
