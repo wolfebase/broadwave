@@ -1328,7 +1328,13 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 	}
 	path := filepath.Join(s.Hub.Dir, "live", parts[0], key, name)
 	if _, err := os.Stat(path); err != nil {
-		http.NotFound(w, r)
+		body, ok := live.PartFromSegment(path)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", contentType)
+		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(body))
 		return
 	}
 	w.Header().Set("Content-Type", contentType)

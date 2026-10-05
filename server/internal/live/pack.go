@@ -11,7 +11,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -236,6 +238,8 @@ type packedSeg struct {
 	dur   int64
 	parts []partRef
 	gap   bool
+	// refs name the parts whose files gave way to a pointer into the segment.
+	refs []string
 }
 
 // partRef is a part of a closed segment, listed until it is three target
@@ -244,6 +248,7 @@ type partRef struct {
 	name string
 	dur  int64
 	sync bool
+	size int64
 }
 
 // partsKept reports whether a closed segment that ends this far before the
@@ -563,7 +568,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		names := make([]partRef, len(open))
 		for i, p := range open {
 			body = append(body, p.body...)
-			names[i] = partRef{name: p.name, dur: p.dur, sync: p.sync}
+			names[i] = partRef{name: p.name, dur: p.dur, sync: p.sync, size: int64(len(p.body))}
 		}
 		if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
 			return err
@@ -588,6 +593,9 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 			for _, n := range old.parts {
 				_ = os.Remove(filepath.Join(dir, n.name))
 			}
+			for _, n := range old.refs {
+				_ = os.Remove(filepath.Join(dir, n))
+			}
 		}
 		// The next playlist's target counts this segment, and lists parts
 		// by it.
@@ -595,10 +603,10 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		var fromEnd int64
 		for i := len(closed) - 1; i >= 0; i-- {
 			if _, keep := partsKept(fromEnd, target); !keep {
-				for _, n := range closed[i].parts {
-					_ = os.Remove(filepath.Join(dir, n.name))
+				if closed[i].parts != nil {
+					closed[i].refs = referParts(dir, closed[i])
+					closed[i].parts = nil
 				}
-				closed[i].parts = nil
 				if i > 0 && closed[i-1].parts == nil {
 					break
 				}
@@ -1086,4 +1094,64 @@ func firstSampleFlags(tfhd, trun []byte) (uint32, bool) {
 		return 0, false
 	}
 	return binary.BigEndian.Uint32(tfhd[off : off+4]), true
+}
+
+// A player that held an older playlist, or seeks back into one it read,
+// asks for parts that are no longer listed. AVPlayer then waits on the 404
+// until the picture is reloaded. Each part's file gives way to a pointer
+// into its segment, which holds the same bytes, for as long as the segment
+// stays. The pointer names the segment's size so that a file reused under
+// the same name is never read as the old one.
+func referParts(dir string, seg packedSeg) []string {
+	var total int64
+	for _, p := range seg.parts {
+		total += p.size
+	}
+	var refs []string
+	var off int64
+	for _, p := range seg.parts {
+		_ = os.Remove(filepath.Join(dir, p.name))
+		ref := strings.TrimSuffix(p.name, ".m4s") + ".ref"
+		line := fmt.Sprintf("%s %d %d %d\n", seg.name, off, p.size, total)
+		if p.size > 0 && os.WriteFile(filepath.Join(dir, ref), []byte(line), 0o644) == nil {
+			refs = append(refs, ref)
+		}
+		off += p.size
+	}
+	return refs
+}
+
+var partFile = regexp.MustCompile(`^part\d+\.m4s$`)
+
+// PartFromSegment reads a part whose file gave way to a pointer into its
+// segment. ok is false when path is not such a part.
+func PartFromSegment(path string) (body []byte, ok bool) {
+	if !partFile.MatchString(filepath.Base(path)) {
+		return nil, false
+	}
+	raw, err := os.ReadFile(strings.TrimSuffix(path, ".m4s") + ".ref")
+	if err != nil {
+		return nil, false
+	}
+	var seg string
+	var off, size, total int64
+	if n, err := fmt.Sscanf(string(raw), "%s %d %d %d", &seg, &off, &size, &total); err != nil || n != 4 {
+		return nil, false
+	}
+	if filepath.Base(seg) != seg || off < 0 || size <= 0 || off+size > total {
+		return nil, false
+	}
+	f, err := os.Open(filepath.Join(filepath.Dir(path), seg))
+	if err != nil {
+		return nil, false
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err != nil || info.Size() != total {
+		return nil, false
+	}
+	body = make([]byte, size)
+	if _, err := f.ReadAt(body, off); err != nil {
+		return nil, false
+	}
+	return body, true
 }

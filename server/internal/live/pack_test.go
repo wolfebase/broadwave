@@ -470,6 +470,13 @@ func TestLiveWindowKeepsNinetyMinutes(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(longDir, "seg00000.m4s")); !os.IsNotExist(err) {
 		t.Fatalf("segment past 90 minutes still on disk: %v", err)
 	}
+	refs, _ := filepath.Glob(filepath.Join(longDir, "part*.ref"))
+	for _, ref := range refs {
+		raw, _ := os.ReadFile(ref)
+		if seg := strings.Fields(string(raw))[0]; seg < "seg00003.m4s" {
+			t.Fatalf("%s points into %s, which left the window", filepath.Base(ref), seg)
+		}
+	}
 	if _, err := os.Stat(filepath.Join(longDir, "seg00003.m4s")); err != nil {
 		t.Fatal(err)
 	}
@@ -2053,5 +2060,59 @@ func TestAGroupAfterAShortKeyframeClosesWhenItArrives(t *testing.T) {
 	_ = pw.Close()
 	if err := <-packErr; err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A player that read an older playlist, or seeks back into one, asks for a
+// part that is no longer listed. Its file is gone, but the part is still
+// answered, from the segment that holds the same bytes.
+func TestAnUnlistedPartIsAnsweredFromItsSegment(t *testing.T) {
+	dir := t.TempDir()
+	pts := make([]int64, 20)
+	for i := range pts {
+		pts[i] = int64(i) * 90000
+	}
+	packKeyframes(t, dir, pts, 90000)
+	refs, _ := filepath.Glob(filepath.Join(dir, "part*.ref"))
+	if len(refs) == 0 {
+		t.Fatal("no part gave way to a pointer")
+	}
+	for _, ref := range refs {
+		part := strings.TrimSuffix(ref, ".ref") + ".m4s"
+		if _, err := os.Stat(part); !os.IsNotExist(err) {
+			t.Fatalf("%s is still on disk: %v", filepath.Base(part), err)
+		}
+		raw, err := os.ReadFile(ref)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var seg string
+		var off, size, total int64
+		if _, err := fmt.Sscanf(string(raw), "%s %d %d %d", &seg, &off, &size, &total); err != nil {
+			t.Fatal(err)
+		}
+		whole, err := os.ReadFile(filepath.Join(dir, seg))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, ok := PartFromSegment(part)
+		if !ok || !bytes.Equal(got, whole[off:off+size]) {
+			t.Fatalf("%s from %s: ok %v, %d bytes, want %d", filepath.Base(part), seg, ok, len(got), size)
+		}
+		if len(topBoxes(got)) < 2 {
+			t.Fatalf("%s is not a moof and mdat", filepath.Base(part))
+		}
+	}
+	// A segment rewritten under the same name is not read as the old one.
+	raw, _ := os.ReadFile(refs[0])
+	seg := strings.Fields(string(raw))[0]
+	if err := os.WriteFile(filepath.Join(dir, seg), []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := PartFromSegment(strings.TrimSuffix(refs[0], ".ref") + ".m4s"); ok {
+		t.Fatal("a part was read from a segment that changed")
+	}
+	if _, ok := PartFromSegment(filepath.Join(dir, "../part00000.m4s")); ok {
+		t.Fatal("a part outside the rendition was read")
 	}
 }
