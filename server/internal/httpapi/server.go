@@ -222,13 +222,34 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 	}
 	type noted struct {
 		store.Device
-		Note string `json:"note,omitempty"`
+		Note    string `json:"note,omitempty"`
+		Offline bool   `json:"offline"`
 	}
+	now := s.now()
 	out := make([]noted, 0, len(devices))
 	for _, device := range devices {
-		out = append(out, noted{Device: device, Note: hdhr.ModelNote(device.ModelNumber)})
+		out = append(out, noted{
+			Device:  device,
+			Note:    hdhr.ModelNote(device.ModelNumber),
+			Offline: deviceOffline(device, now),
+		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"devices": out})
+}
+
+// Discovery refreshes lastSeen every 5 minutes (cmd/broadwave ticker).
+// Three missed rounds means the tuner has stopped answering.
+const deviceOfflineAfter = 15 * time.Minute
+
+func deviceOffline(d store.Device, now time.Time) bool {
+	if d.TunerCount <= 0 {
+		return false
+	}
+	seen, err := time.Parse(time.RFC3339, d.LastSeen)
+	if err != nil {
+		return false
+	}
+	return now.Sub(seen) > deviceOfflineAfter
 }
 
 func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) {

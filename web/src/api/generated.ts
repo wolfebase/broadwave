@@ -110,6 +110,7 @@ export type Device = {
   priority?: number;
   lastSeen?: string;
   note?: string;
+  offline?: boolean;
 };
 
 export type DeviceHealth = {
