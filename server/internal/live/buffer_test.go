@@ -160,9 +160,12 @@ func TestRecordingWithoutAStartTimeStartsNow(t *testing.T) {
 		close(exported)
 	}()
 	time.Sleep(5 * time.Second)
-	rec, err := h.RecordMeta(context.Background(), 1, store.Recording{ChannelID: id, Title: "News"})
+	rec, err := h.RecordMeta(context.Background(), 1, store.Recording{ChannelID: id, Title: "News", PassID: 5})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if saved, err := st.Recording(context.Background(), rec.ID); err != nil || saved.PassID != 5 {
+		t.Fatalf("the recording forgot its pass: %+v %v", saved, err)
 	}
 	time.Sleep(3 * time.Second)
 	h.StopRecord(rec.ID)
