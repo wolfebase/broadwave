@@ -42,6 +42,9 @@ final class EndToEndTests: XCTestCase {
         try holdForBrowser(app, channel: channel)
         passed(7, "held channel \(channel) while the browser sampled")
 
+        #if os(iOS)
+            try minimizeAndReturn(app)
+        #endif
         try closePlayer(app)
         try record(app, "WTST", channel: channel)
         passed(6, "recording on channel \(channel)")
@@ -182,6 +185,25 @@ final class EndToEndTests: XCTestCase {
         XCTAssertTrue(locked(app), "the player left sync while the browser played: \(probe(app))")
         shot("7-synced")
     }
+
+    #if os(iOS)
+        /// The mini player keeps the watch, so the full player comes back on a moving picture.
+        private func minimizeAndReturn(_ app: XCUIApplication) throws {
+            let minimize = app.buttons["Minimize"].firstMatch
+            XCTAssertTrue(minimize.waitForExistence(timeout: 5), app.debugDescription)
+            minimize.tap()
+            let mini = app.buttons["miniPlayer"].firstMatch
+            XCTAssertTrue(mini.waitForExistence(timeout: 10), "no mini player\n\(app.debugDescription)")
+            pause(5)
+            XCTAssertEqual(mini.value as? String, "Playing", "the mini player stopped")
+            let tapped = Date()
+            mini.tap()
+            XCTAssertTrue(until(10) { self.locked(app) }, "the player came back without its picture: \(probe(app))")
+            let back = Date().timeIntervalSince(tapped)
+            XCTAssertLessThan(back, 5, "the player started over")
+            passed(8, "mini player kept the channel, back locked in \(String(format: "%.1f", back)) s")
+        }
+    #endif
 
     private func record(_ app: XCUIApplication, _ channel: String, channel id: Int) throws {
         let before = try recordings().count

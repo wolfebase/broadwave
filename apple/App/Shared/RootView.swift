@@ -24,6 +24,32 @@ final class NowPlaying {
     var note: String?
     /// Tile channel ids that stand in for an encrypted 3.0 station.
     var standIns: Set<Int64> = []
+    /// The one-channel player. It outlives the full-screen player, so the mini
+    /// player keeps the sound and its place in the room.
+    let live = LivePlayer()
+    /// Counts track changes that need a new watch. A master switches in place.
+    var trackRestarts = 0
+
+    /// Changes whenever the one-channel player needs a new watch.
+    func watchKey(even: Bool) -> String {
+        guard let channel, together.isEmpty else { return "none" }
+        return "\(channel.id) \(trackRestarts) \(even) \(live.attempt)"
+    }
+
+    /// Starts the watch the key names, or stops the player when no single channel is on.
+    func playLive(store: AppStore) async {
+        guard let channel, together.isEmpty else {
+            await live.stop()
+            return
+        }
+        #if DEBUG
+            // Layout checks must not take a tuner. -BroadwaveChrome YES skips the session.
+            if UserDefaults.standard.bool(forKey: "BroadwaveChrome") {
+                return
+            }
+        #endif
+        await live.start(channel, store: store)
+    }
 
     func play(_ channel: Channel, note: String? = nil) {
         together = []
@@ -479,6 +505,13 @@ struct RootView: View {
         }
         #endif
         .refreshable { await store.refresh() }
+        // Here rather than on the player, so minimizing keeps the picture going.
+        .task(id: nowPlaying.watchKey(even: store.prefs.even)) {
+            await nowPlaying.playLive(store: store)
+        }
+        .onDisappear {
+            Task { await nowPlaying.live.stop() }
+        }
     }
 
     private var playingCover: some View {
@@ -650,19 +683,29 @@ struct HomeArrivalBanner: View {
 
         var body: some View {
             if let channel = nowPlaying.channel {
+                let live = nowPlaying.live
                 HStack(spacing: 12) {
-                    LiveDot("")
+                    // The dot means sound is playing. The player keeps going while minimized.
+                    if live.moving {
+                        LiveDot("")
+                    } else if live.error == nil {
+                        ProgressView()
+                            .accessibilityLabel("Tuning")
+                    }
                     VStack(alignment: .leading, spacing: 0) {
                         Text(store.index.on(channel.id, at: store.now)?.title ?? channel.displayName)
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
-                        Text("\(channel.displayNumber) \(channel.displayName)")
+                        Text(live.error ?? "\(channel.displayNumber) \(channel.displayName)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                     .accessibilityElement(children: .combine)
+                    .accessibilityValue(live.moving ? "Playing" : live.error == nil ? "Tuning" : "Stopped")
                     .accessibilityAddTraits(.isButton)
                     .accessibilityHint("Opens the player")
+                    .accessibilityIdentifier("miniPlayer")
                     .accessibilityAction { nowPlaying.expanded = true }
                     Spacer()
                     Button("Close", systemImage: "xmark") { nowPlaying.stop() }

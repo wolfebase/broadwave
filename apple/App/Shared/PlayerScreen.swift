@@ -894,7 +894,10 @@ struct PlayerScreen: View {
     #if os(iOS)
         @Environment(\.verticalSizeClass) private var verticalSize
     #endif
-    @State private var live = LivePlayer()
+    private var live: LivePlayer {
+        nowPlaying.live
+    }
+
     @State private var showStream = false
     /// Fill crops the picture. Fit shows the whole frame. Pinch on iPhone switches them.
     @State private var fillPicture = false
@@ -906,8 +909,6 @@ struct PlayerScreen: View {
     @State private var transportShown = true
     /// A recording that holds this showing's start, played from Start over.
     @State private var startOverRecording: Recording?
-    /// Counts track changes that need a new watch. A master switches in place.
-    @State private var trackRestarts = 0
     @State private var lastChannelStep = Date.distantPast
     #if os(iOS)
         @State private var showGuide = false
@@ -959,8 +960,7 @@ struct PlayerScreen: View {
                 },
                 onPictureClosed: {
                     live.playLogNote("pip closed")
-                    nowPlaying.expanded = false
-                    Task { await live.stop() }
+                    nowPlaying.stop()
                 },
                 channelNumber: nowPlaying.channel?.displayNumber ?? "",
                 recording: nowPlaying.channel.flatMap { store.activeRecording(on: $0) } != nil,
@@ -1104,20 +1104,9 @@ struct PlayerScreen: View {
         #endif
         .onChange(of: store.prefs.track) { _, track in
             if live.sounds == nil {
-                trackRestarts += 1
+                nowPlaying.trackRestarts += 1
             } else if live.soundRole != (track ?? "main") {
                 live.selectSound(track ?? "main")
-            }
-        }
-        .task(id: "\(nowPlaying.channel?.id ?? 0) \(trackRestarts) \(store.prefs.even) \(live.attempt)") {
-            #if DEBUG
-                // Layout checks must not take a tuner. -BroadwaveChrome YES skips the session.
-                if UserDefaults.standard.bool(forKey: "BroadwaveChrome") {
-                    return
-                }
-            #endif
-            if let channel = nowPlaying.channel {
-                await live.start(channel, store: store)
             }
         }
         #if DEBUG
@@ -1133,11 +1122,6 @@ struct PlayerScreen: View {
             #endif
         }
         #endif
-        .onDisappear {
-            // The recording cover sits on this screen. Closing the player is what stops the watch.
-            guard startOverRecording == nil else { return }
-            Task { await live.stop() }
-        }
         .fullScreenCover(item: $startOverRecording, onDismiss: { live.retry() }, content: { recording in
             RecordingPlayerScreen(recording: recording)
                 .environment(store)
