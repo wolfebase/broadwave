@@ -345,7 +345,7 @@ struct SettingsView: View {
             Picker("Commercial breaks", selection: $breakSkip) {
                 ForEach(BreakSkip.allCases, id: \.self) { Text($0.label).tag($0) }
             }
-            Button("Series passes") { showPasses = true }
+            Button("Passes") { showPasses = true }
         } header: {
             Text("DVR")
         } footer: {

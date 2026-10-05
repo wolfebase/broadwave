@@ -31,7 +31,7 @@ struct ScheduleView: View {
                 }
             } footer: {
                 if plan?.items.contains(where: \.conflict) == true {
-                    Text("A skipped show can move to a later airing when one fits. Otherwise raise its priority in Settings, Series passes.")
+                    Text("A skipped show can move to a later airing when one fits. Otherwise move its pass up in Settings, Passes.")
                 }
             }
             Section("Activity") {

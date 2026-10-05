@@ -348,8 +348,33 @@ public struct APIClient: Sendable {
         try await send("GET", "/passes", as: PassList.self).passes
     }
 
+    /// A series pass with its rules. A rule the server refuses comes back as an `APIError` with a message for the viewer.
+    @discardableResult
+    public func addSeriesPass(_ pass: NewPass) async throws -> [Pass] {
+        try await send("POST", "/passes", body: pass, as: PassList.self).passes
+    }
+
+    /// Sends only the fields set on `pass`. The title always goes and the server ignores it; `renamePass` changes it.
     public func updatePass(_ pass: Pass) async throws -> [Pass] {
         try await send("PATCH", "/passes/\(pass.id)", body: pass, as: PassList.self).passes
+    }
+
+    /// A new title, words, or category for a series pass.
+    public func renamePass(_ id: Int64, to title: String) async throws -> [Pass] {
+        struct B: Encodable { var rename: String }
+        return try await send("PATCH", "/passes/\(id)", body: B(rename: title), as: PassList.self).passes
+    }
+
+    /// Ranks passes, first highest. Ids that are gone are skipped; a pass not named ranks last.
+    @discardableResult
+    public func orderPasses(_ ids: [Int64]) async throws -> [Pass] {
+        struct B: Encodable { var ids: [Int64] }
+        return try await send("PUT", "/passes/order", body: B(ids: ids), as: PassList.self).passes
+    }
+
+    /// What the rules would record over the next 2 weeks and what they would stop. With `id`, as an edit of that pass. Nothing is saved.
+    public func previewPass(_ pass: NewPass, id: Int64? = nil) async throws -> PassPreview {
+        try await send("POST", "/passes/preview", body: PreviewBody(pass: pass, id: id))
     }
 
     public func deletePass(_ id: Int64) async throws -> [Pass] {
@@ -704,4 +729,21 @@ extension ISO8601DateFormatter {
         f.formatOptions = [.withInternetDateTime]
         return f
     }()
+}
+
+private struct PreviewBody: Encodable {
+    var pass: NewPass
+    var id: Int64?
+
+    private enum Key: String, CodingKey { case id, rename }
+
+    /// An edit names its title as a rename; the server keeps a saved pass's title otherwise.
+    func encode(to encoder: any Encoder) throws {
+        try pass.encode(to: encoder)
+        var c = encoder.container(keyedBy: Key.self)
+        try c.encodeIfPresent(id, forKey: .id)
+        if id != nil {
+            try c.encode(pass.title, forKey: .rename)
+        }
+    }
 }

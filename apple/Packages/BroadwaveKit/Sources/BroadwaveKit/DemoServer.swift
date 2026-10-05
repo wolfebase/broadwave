@@ -348,6 +348,10 @@ public final class DemoServer: @unchecked Sendable {
             return art(path)
         case ("GET", _) where path.hasPrefix("/api/v1/channels/") && path.hasSuffix("/frame"):
             return art(path)
+        case ("PUT", "/api/v1/passes/order"):
+            return Self.ok(Data("{\"passes\":[]}".utf8))
+        case ("POST", "/api/v1/passes/preview"):
+            return Self.ok(Data("{\"tunerCount\":2,\"items\":[],\"bumps\":[],\"timeZone\":\"UTC\",\"utcOffset\":0}".utf8))
         case ("POST", "/api/v1/recordings"), ("POST", "/api/v1/passes"):
             return Self.fail(409, "demo", "The demo plays samples. It does not record.")
         default:

@@ -124,15 +124,115 @@ public extension Pass {
         }
     }
 
-    /// A series or team pass for the title. A once pass does not count.
+    /// A series or team pass for the title. A once pass, or one that matches words or a category, does not count.
     static func series(in passes: [Pass], for airing: Airing) -> Pass? {
-        passes.first { !$0.isOnce && $0.title.caseInsensitiveCompare(airing.title) == .orderedSame }
+        passes.first { p in
+            !p.isOnce && p.matchKind != "contains" && p.matchKind != "category"
+                && p.title.caseInsensitiveCompare(airing.title) == .orderedSame
+        }
     }
 
-    /// "Title · Mon 11:00 AM only" for a once pass, the title otherwise.
+    var isTeam: Bool {
+        kind == "team"
+    }
+
+    /// The same labels as the web: "Titles with “x”", "x (category)", "x games", "Title · Mon 11:00 AM only".
     var label: String {
-        guard isOnce, let start = airingStart else { return title }
-        return "\(title) · \(start.formatted(.dateTime.weekday(.abbreviated).hour().minute())) only"
+        switch isOnce || isTeam ? kind : matchKind {
+        case "once":
+            guard let start = airingStart else { return title }
+            return "\(title) · \(start.formatted(.dateTime.weekday(.abbreviated).hour().minute())) only"
+        case "team":
+            return "\(title) games"
+        case "contains":
+            return "Titles with “\(title)”"
+        case "category":
+            return "\(title) (category)"
+        default:
+            return title
+        }
+    }
+
+    /// The rules line under the label. `channel` is the channel's number and name, nil for any channel.
+    func details(channel: String?) -> String {
+        var parts: [String] = []
+        if !isOnce {
+            parts.append(channel ?? "Any channel")
+        }
+        if let days, !days.isEmpty {
+            parts.append(Self.daysLabel(days))
+        }
+        if let from = timeStart, let until = timeEnd, !from.isEmpty, !until.isEmpty {
+            parts.append("\(Self.clockLabel(from))–\(Self.clockLabel(until))")
+        }
+        if episodes == "new" {
+            parts.append("New only")
+        }
+        switch keepMode {
+        case "unwatched": parts.append("Keeps unwatched")
+        case "last": parts.append("Keeps the newest \(max(keepCount ?? 1, 1))")
+        default: break
+        }
+        if let limit = limitCount, limit > 0 {
+            parts.append("Stops at \(limit) unwatched")
+        }
+        parts.append("\(padBefore ?? 0) min early, \(padAfter ?? 0) after")
+        return parts.joined(separator: " · ")
+    }
+
+    /// Short weekday names, Sunday first, as the pass `days` count them.
+    static var dayNames: [String] {
+        var cal = Calendar(identifier: .gregorian)
+        cal.locale = .current
+        return cal.shortWeekdaySymbols
+    }
+
+    /// "Weekdays", "Weekends", "Every day", or "Mon, Wed".
+    static func daysLabel(_ days: [Int]) -> String {
+        let set = Set(days.filter { (0 ... 6).contains($0) })
+        switch set {
+        case [], [0, 1, 2, 3, 4, 5, 6]: return "Every day"
+        case [1, 2, 3, 4, 5]: return "Weekdays"
+        case [0, 6]: return "Weekends"
+        default:
+            let names = dayNames
+            return set.sorted().map { names[$0] }.joined(separator: ", ")
+        }
+    }
+
+    /// "6:30 PM" for "18:30" in the viewer's clock style; anything else as sent.
+    static func clockLabel(_ hhmm: String) -> String {
+        let bits = hhmm.split(separator: ":").compactMap { Int($0) }
+        guard bits.count == 2, let date = Calendar.current.date(bySettingHour: bits[0], minute: bits[1], second: 0, of: Date()) else {
+            return hhmm
+        }
+        return date.formatted(date: .omitted, time: .shortened)
+    }
+
+    /// What the server takes for this kind of pass: a once pass keeps its airing, a team pass its team.
+    var rules: NewPass {
+        let early = padBefore ?? 1
+        let after = padAfter ?? 2
+        let marks = commercials != false
+        if isOnce {
+            return NewPass(title: title, padBefore: early, padAfter: after, commercials: marks)
+        }
+        return NewPass(
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            channelId: channelId ?? 0,
+            padBefore: early,
+            padAfter: after,
+            matchKind: isTeam ? nil : (matchKind ?? "title"),
+            episodes: episodes ?? "all",
+            keepMode: keepMode ?? "all",
+            keepCount: keepMode == "last" ? max(keepCount ?? 5, 1) : 0,
+            limitCount: limitCount ?? 0,
+            rerecord: rerecord ?? false,
+            commercials: marks,
+            timeStart: timeStart ?? "",
+            timeEnd: timeEnd ?? "",
+            days: (days ?? []).sorted()
+        )
     }
 }
 
