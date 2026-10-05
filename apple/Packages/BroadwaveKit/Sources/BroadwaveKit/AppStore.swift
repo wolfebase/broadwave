@@ -31,6 +31,9 @@ public final class AppStore {
     /// A device that showed up after the house was already known. Nil when nothing is waiting.
     public private(set) var homeNotice: String?
     private var homeQueue: [String] = []
+    /// This screen's name as it announces itself. The server tells every screen
+    /// about a new one, the new one included.
+    public var screenName = ""
     /// Settings asks the shell to show setup again. A used catalog never sets needsSetup.
     public var presentSetup = false
 
@@ -204,12 +207,18 @@ public final class AppStore {
 
     func noteHome(_ message: String) {
         let message = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !message.isEmpty else { return }
+        guard !message.isEmpty, !Self.namesScreen(message, screenName) else { return }
         if homeNotice == nil {
             homeNotice = message
         } else {
             homeQueue.append(message)
         }
+    }
+
+    /// "New iPad found: Den iPad." on the screen named Den iPad.
+    nonisolated static func namesScreen(_ message: String, _ name: String) -> Bool {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !name.isEmpty && message.hasPrefix("New ") && message.hasSuffix(" found: \(name).")
     }
 
     public func forget() {
@@ -227,6 +236,11 @@ public final class AppStore {
     }
 
     #if DEBUG
+        /// Simulator testing: shows an arrival line as if the server had sent it.
+        public func showHomeNotice(_ message: String) {
+            noteHome(message)
+        }
+
         /// Offline tiles for the tvOS remote test. It does not open a socket or a tuner.
         public func previewLineup(_ channels: [Channel]) {
             self.channels = channels

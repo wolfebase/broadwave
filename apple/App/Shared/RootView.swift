@@ -261,19 +261,19 @@ struct RootView: View {
             }
             .background(Tokens.ColorToken.canvas.ignoresSafeArea())
             .safeAreaInset(edge: .top, spacing: 0) {
-                VStack(spacing: 0) {
-                    // The full-screen player covers this inset, so the note lives on the player then.
-                    if !playerCoversTheScreen {
-                        offlineBanner
-                    }
-                    updateBanner
-                    arrivalBanner
+                if !bannersInTabs {
+                    banners
                 }
             }
             .task(id: store.connected) {
                 guard store.connected else { return }
+                store.screenName = ScreenIdentity.name
                 store.socket?.announce(name: ScreenIdentity.name, kind: ScreenIdentity.kind)
                 #if DEBUG
+                    // Simulator testing: -BroadwaveHomeNotice "New Apple TV found: Den." shows an arrival line.
+                    if let notice = UserDefaults.standard.string(forKey: "BroadwaveHomeNotice") {
+                        store.showHomeNotice(notice)
+                    }
                     // Setup replaces the tabs, and the player with them, so a launch
                     // straight into a channel skips it.
                     let watching = UserDefaults.standard.integer(forKey: "BroadwaveWatch") > 0
@@ -463,7 +463,11 @@ struct RootView: View {
     private func stack(_ page: AppTab, @ViewBuilder content: () -> some View) -> some View {
         NavigationStack {
             #if os(iOS)
-                content().modifier(SettingsOnStack(tab: page))
+                content().modifier(SettingsOnStack(tab: page)).safeAreaInset(edge: .top, spacing: 0) {
+                    if bannersInTabs {
+                        banners
+                    }
+                }
             #else
                 content()
             #endif
@@ -490,7 +494,14 @@ struct RootView: View {
             }
             if !phoneTabs {
                 Tab("Settings", systemImage: "gearshape.fill", value: AppTab.settings) {
-                    NavigationStack { SettingsView() }.phoneTabClearance()
+                    NavigationStack {
+                        SettingsView().safeAreaInset(edge: .top, spacing: 0) {
+                            if bannersInTabs {
+                                banners
+                            }
+                        }
+                    }
+                    .phoneTabClearance()
                 }
             }
         }
@@ -609,6 +620,28 @@ struct RootView: View {
         guard url.path.hasPrefix("/wolfebase/broadwave/") else { return nil }
         guard !url.path.contains("..") else { return nil }
         return url
+    }
+
+    private var banners: some View {
+        VStack(spacing: 0) {
+            // The full-screen player covers this inset, so the note lives on the player then.
+            if !playerCoversTheScreen {
+                offlineBanner
+            }
+            updateBanner
+            arrivalBanner
+        }
+    }
+
+    /// The iPad's tab bar floats at the top over the tabs, so a line above them covers it.
+    /// There the lines go inside each tab, under the bar. The mini player holds the bottom.
+    private var bannersInTabs: Bool {
+        #if os(iOS)
+            UIDevice.current.userInterfaceIdiom == .pad && store.connected && !showSetup && !store.presentSetup
+                && Compatibility.gateApp(store.info, app: installedVersion) == nil
+        #else
+            false
+        #endif
     }
 
     private var playerCovers: Bool {
