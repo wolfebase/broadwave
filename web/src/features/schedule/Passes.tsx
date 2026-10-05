@@ -7,6 +7,7 @@ import { formatClock } from "../../time";
 const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 type Draft = Required<Omit<NewPass, "airingStart" | "priority">>;
+type Body = NewPass & { rename?: string };
 
 function draftOf(pass?: Pass): Draft {
   return {
@@ -17,7 +18,8 @@ function draftOf(pass?: Pass): Draft {
     padAfter: pass?.padAfter ?? 2,
     episodes: pass?.episodes || "all",
     keepMode: pass?.keepMode || "all",
-    keepCount: pass?.keepCount || 5,
+    // The server keeps one when "the newest" has no count.
+    keepCount: pass ? pass.keepCount || 1 : 5,
     limitCount: pass?.limitCount ?? 0,
     rerecord: pass?.rerecord ?? false,
     commercials: pass?.commercials !== false,
@@ -27,15 +29,17 @@ function draftOf(pass?: Pass): Draft {
   };
 }
 
-/** What the server takes for this kind of pass: a once pass keeps its airing, a team pass its team. */
-function payload(draft: Draft, pass?: Pass): NewPass {
+/** What the server takes for this kind of pass: a once pass keeps its airing, a team pass its team. A saved series pass changes title by rename. */
+function payload(draft: Draft, pass?: Pass): Body {
   if (pass?.kind === "once") {
     return { title: pass.title, padBefore: draft.padBefore, padAfter: draft.padAfter, commercials: draft.commercials };
   }
-  const out: NewPass = { ...draft, title: draft.title.trim(), keepCount: draft.keepMode === "last" ? draft.keepCount : 0 };
+  const out: Body = { ...draft, title: draft.title.trim(), keepCount: draft.keepMode === "last" ? draft.keepCount : 0 };
   if (pass?.kind === "team") {
     out.title = pass.title;
     delete out.matchKind;
+  } else if (pass) {
+    out.rename = out.title;
   }
   return out;
 }
@@ -50,17 +54,31 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
   const [dragId, setDragId] = useState<number | null>(null);
   const [note, setNote] = useState("");
   const dragFrom = useRef<number[]>([]);
+  const dropped = useRef(false);
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const focusAfter = useRef<{ id: number; up: boolean } | null>(null);
+  // A moved row keeps focus on its button, or on the other one at an end of the list.
+  useEffect(() => {
+    const want = focusAfter.current;
+    if (!want) return;
+    focusAfter.current = null;
+    const pick = (up: boolean) => document.querySelector<HTMLButtonElement>(`[data-pass="${want.id}"][data-move="${up ? "up" : "down"}"]`);
+    const button = pick(want.up);
+    (button && !button.disabled ? button : pick(!want.up))?.focus();
+  });
   const byId = new Map(passes.map((p) => [p.id, p]));
   const rows = order.map((id) => byId.get(id)).filter((p): p is Pass => Boolean(p));
 
-  async function saveOrder(ids: number[]) {
+  // Orders are sent one at a time, so quick presses land in the order made.
+  function saveOrder(ids: number[]) {
     setNote("");
-    try {
-      await orderPasses(ids);
-    } catch (err) {
-      setNote(err instanceof Error ? err.message : "The order could not be saved.");
-    }
-    onPasses();
+    queue.current = queue.current
+      .then(() => orderPasses(ids))
+      .then(
+        () => undefined,
+        (err: unknown) => setNote(err instanceof Error ? err.message : "The order could not be saved."),
+      );
+    void queue.current.then(onPasses);
   }
 
   function move(id: number, by: number) {
@@ -70,8 +88,9 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
     const next = [...order];
     next.splice(at, 1);
     next.splice(to, 0, id);
+    focusAfter.current = { id, up: by < 0 };
     setOrder(next);
-    void saveOrder(next);
+    saveOrder(next);
   }
 
   function dragOver(overId: number) {
@@ -86,7 +105,12 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
 
   function dragEnd() {
     setDragId(null);
-    if (dragFrom.current.join(",") !== order.join(",")) void saveOrder(order);
+    if (!dropped.current) {
+      // Let go outside the list, or Escape: put it back.
+      setLocal(null);
+      return;
+    }
+    if (dragFrom.current.join(",") !== order.join(",")) saveOrder(order);
   }
 
   return (
@@ -119,7 +143,9 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
               draggable={editing === null}
               onDragStart={(event) => {
                 event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", String(pass.id));
                 dragFrom.current = order;
+                dropped.current = false;
                 setDragId(pass.id);
               }}
               onDragOver={(event) => {
@@ -127,7 +153,10 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
                 event.preventDefault();
                 dragOver(pass.id);
               }}
-              onDrop={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                dropped.current = true;
+              }}
               onDragEnd={dragEnd}
             >
               <span className="pass-rank" aria-hidden="true">{index + 1}</span>
@@ -136,13 +165,13 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
                 <span className="codec">{passDetails(pass, channels)}</span>
               </span>
               <span className="pad pass-actions">
-                <button type="button" className="btn small" aria-label={`Move ${pass.title} up`} disabled={index === 0} onClick={() => move(pass.id, -1)}>
+                <button type="button" className="btn small" data-pass={pass.id} data-move="up" aria-label={`Move ${pass.title} up`} disabled={index === 0} onClick={() => move(pass.id, -1)}>
                   Up
                 </button>
-                <button type="button" className="btn small" aria-label={`Move ${pass.title} down`} disabled={index === rows.length - 1} onClick={() => move(pass.id, 1)}>
+                <button type="button" className="btn small" data-pass={pass.id} data-move="down" aria-label={`Move ${pass.title} down`} disabled={index === rows.length - 1} onClick={() => move(pass.id, 1)}>
                   Down
                 </button>
-                <button type="button" className="btn small" aria-expanded={editing === pass.id} onClick={() => setEditing(editing === pass.id ? null : pass.id)}>
+                <button type="button" className="btn small" aria-label={`${editing === pass.id ? "Close" : "Edit"} ${pass.title}`} aria-expanded={editing === pass.id} onClick={() => setEditing(editing === pass.id ? null : pass.id)}>
                   {editing === pass.id ? "Close" : "Edit"}
                 </button>
                 <button type="button" className="btn small" aria-label={`Remove ${pass.title}`} onClick={() => void deletePass(pass.id).then(onPasses)}>
@@ -208,7 +237,7 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
   }
 
   async function save() {
-    if (!body.title) {
+    if (!draft.title.trim() && !once && !team) {
       setError("Name a title, words, or a category.");
       return;
     }
@@ -240,7 +269,7 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
         <div className="pad">
           <label>
             Match
-            <select aria-label="Match" value={draft.matchKind} onChange={(e) => set("matchKind", e.target.value as Draft["matchKind"])}>
+            <select value={draft.matchKind} onChange={(e) => set("matchKind", e.target.value as Draft["matchKind"])}>
               <option value="title">Title is</option>
               <option value="contains">Title contains</option>
               <option value="category">Category</option>
@@ -250,7 +279,6 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
             {draft.matchKind === "category" ? "Category" : draft.matchKind === "contains" ? "Words" : "Title"}
             <input
               type="text"
-              aria-label={draft.matchKind === "category" ? "Category" : draft.matchKind === "contains" ? "Words in the title" : "Title"}
               placeholder={draft.matchKind === "category" ? "Sports" : draft.matchKind === "contains" ? "Chiefs" : "Jeopardy!"}
               value={draft.title}
               autoFocus={!pass}
@@ -264,7 +292,7 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
           <div className="pad">
             <label>
               Channel
-              <select aria-label="Channel" value={draft.channelId} onChange={(e) => set("channelId", Number(e.target.value))}>
+              <select value={draft.channelId} onChange={(e) => set("channelId", Number(e.target.value))}>
                 <option value={0}>Any channel</option>
                 {shown.map((ch) => (
                   <option key={ch.id} value={ch.id}>
@@ -276,7 +304,7 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
             {team ? null : (
               <label>
                 Episodes
-                <select aria-label="Episodes" value={draft.episodes} onChange={(e) => set("episodes", e.target.value as Draft["episodes"])}>
+                <select value={draft.episodes} onChange={(e) => set("episodes", e.target.value as Draft["episodes"])}>
                   <option value="all">All</option>
                   <option value="new">New only</option>
                 </select>
@@ -304,11 +332,11 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
           <div className="pad">
             <label>
               From
-              <input type="time" aria-label="Starts after" value={draft.timeStart} onChange={(e) => set("timeStart", e.target.value)} />
+              <input type="time" value={draft.timeStart} onChange={(e) => set("timeStart", e.target.value)} />
             </label>
             <label>
               Until
-              <input type="time" aria-label="Starts before" value={draft.timeEnd} onChange={(e) => set("timeEnd", e.target.value)} />
+              <input type="time" value={draft.timeEnd} onChange={(e) => set("timeEnd", e.target.value)} />
             </label>
             {draft.timeStart || draft.timeEnd ? (
               <button type="button" className="btn small" onClick={() => setDraft((d) => ({ ...d, timeStart: "", timeEnd: "" }))}>
@@ -321,7 +349,7 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
           <div className="pad">
             <label>
               Keep
-              <select aria-label="Keep" value={draft.keepMode} onChange={(e) => set("keepMode", e.target.value as Draft["keepMode"])}>
+              <select value={draft.keepMode} onChange={(e) => set("keepMode", e.target.value as Draft["keepMode"])}>
                 <option value="all">All</option>
                 <option value="unwatched">Unwatched</option>
                 <option value="last">The newest</option>
@@ -330,14 +358,14 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
             {draft.keepMode === "last" ? (
               <label>
                 How many
-                <input type="number" min={1} max={99} aria-label="Recordings to keep" value={draft.keepCount} onChange={(e) => set("keepCount", clamp(e.target.value, 1, 99))} />
+                <input type="number" min={1} max={99} value={draft.keepCount} onChange={(e) => set("keepCount", clamp(e.target.value, 1, 99))} />
               </label>
             ) : null}
             <label>
               Stop at
-              <input type="number" min={0} max={99} aria-label="Stop at this many unwatched, 0 for no limit" value={draft.limitCount} onChange={(e) => set("limitCount", clamp(e.target.value, 0, 99))} />
-              <span className="codec">unwatched{draft.limitCount === 0 ? " (no limit)" : ""}</span>
+              <input type="number" min={0} max={99} aria-describedby={`stop-${pass?.id ?? "new"}`} value={draft.limitCount} onChange={(e) => set("limitCount", clamp(e.target.value, 0, 99))} />
             </label>
+            <span className="codec" id={`stop-${pass?.id ?? "new"}`}>unwatched{draft.limitCount === 0 ? " (no limit)" : ""}</span>
             {team ? null : (
               <label>
                 <input type="checkbox" checked={draft.rerecord} onChange={(e) => set("rerecord", e.target.checked)} />
@@ -350,11 +378,11 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
       <div className="pad">
         <label>
           Early
-          <input type="number" min={0} max={30} aria-label="Minutes early" value={draft.padBefore} onChange={(e) => set("padBefore", clamp(e.target.value, 0, 30))} />
+          <input type="number" min={0} max={30} value={draft.padBefore} onChange={(e) => set("padBefore", clamp(e.target.value, 0, 30))} />
         </label>
         <label>
           After
-          <input type="number" min={0} max={30} aria-label="Minutes after" value={draft.padAfter} onChange={(e) => set("padAfter", clamp(e.target.value, 0, 30))} />
+          <input type="number" min={0} max={30} value={draft.padAfter} onChange={(e) => set("padAfter", clamp(e.target.value, 0, 30))} />
         </label>
         <label>
           <input type="checkbox" checked={draft.commercials} onChange={(e) => set("commercials", e.target.checked)} />
@@ -362,6 +390,9 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
         </label>
       </div>
       {body.title ? <PreviewLines preview={preview} note={previewNote} channels={channels} /> : null}
+      {preview && !once && preview.utcOffset !== -new Date().getTimezoneOffset() * 60 ? (
+        <p className="hint">Days and times are on the server's clock ({preview.timeZone}).</p>
+      ) : null}
       {error ? <p className="hint error" role="alert">{error}</p> : null}
       <div className="pad">
         <button type="submit" className="btn primary small" disabled={saving}>
@@ -394,7 +425,7 @@ function PreviewLines({ preview, note, channels }: { preview: PassPreview | null
           {preview.items.slice(0, 5).map((item) => (
             <li key={`${item.airing.channelId}-${item.airing.start}`} className="codec">
               {formatDay(item.airing.start)} · {number(item.airing.channelId)} {item.airing.title}
-              {item.skipped ? ` · ${item.conflict ? "Skipped: a higher pass has the tuner" : item.reason || "Skipped"}` : ""}
+              {item.skipped ? ` · ${item.conflict ? "Skipped: another pass has the tuner" : item.reason || "Skipped"}` : ""}
             </li>
           ))}
           {preview.items.length > 5 ? <li className="codec">and {preview.items.length - 5} more</li> : null}

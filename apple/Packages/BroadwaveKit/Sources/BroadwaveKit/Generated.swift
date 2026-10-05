@@ -474,11 +474,15 @@ public struct PassList: Codable, Sendable, Hashable {
 
 public struct PassPreview: Codable, Sendable, Hashable {
     public var tunerCount: Int
+    public var timeZone: String
+    public var utcOffset: Int
     public var items: [PlannedAiring]
     public var bumps: [PlannedAiring]
 
-    public init(tunerCount: Int, items: [PlannedAiring], bumps: [PlannedAiring]) {
+    public init(tunerCount: Int, timeZone: String, utcOffset: Int, items: [PlannedAiring], bumps: [PlannedAiring]) {
         self.tunerCount = tunerCount
+        self.timeZone = timeZone
+        self.utcOffset = utcOffset
         self.items = items
         self.bumps = bumps
     }
@@ -530,6 +534,7 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
     public var category: String?
     public var programId: String?
     public var gameId: String?
+    public var passId: Int64?
     public var status: String
     public var error: String?
     public var startedAt: Date
@@ -542,7 +547,7 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
     public var missing: Bool?
     public var health: RecordingHealth?
 
-    public init(id: Int64, channelId: Int64, guideNumber: String, title: String, subtitle: String? = nil, description: String? = nil, category: String? = nil, programId: String? = nil, gameId: String? = nil, status: String, error: String? = nil, startedAt: Date, endsAt: Date? = nil, endedAt: Date? = nil, bytes: Int64? = nil, position: Double? = nil, durationSec: Double? = nil, watched: Int? = nil, missing: Bool? = nil, health: RecordingHealth? = nil) {
+    public init(id: Int64, channelId: Int64, guideNumber: String, title: String, subtitle: String? = nil, description: String? = nil, category: String? = nil, programId: String? = nil, gameId: String? = nil, passId: Int64? = nil, status: String, error: String? = nil, startedAt: Date, endsAt: Date? = nil, endedAt: Date? = nil, bytes: Int64? = nil, position: Double? = nil, durationSec: Double? = nil, watched: Int? = nil, missing: Bool? = nil, health: RecordingHealth? = nil) {
         self.id = id
         self.channelId = channelId
         self.guideNumber = guideNumber
@@ -552,6 +557,7 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
         self.category = category
         self.programId = programId
         self.gameId = gameId
+        self.passId = passId
         self.status = status
         self.error = error
         self.startedAt = startedAt

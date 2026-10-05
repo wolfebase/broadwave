@@ -28,9 +28,21 @@ type Planned struct {
 // Plan does not move a pass onto another channel. A skipped airing stays skipped.
 // A later airing is named by AttachSuggestions, and only a title pass whose channel pin is the only mismatch moves that pin.
 func Plan(passes []store.Pass, airings []store.Airing, tunerCount int, from, to time.Time) []Planned {
-	if tunerCount < 1 {
-		tunerCount = 1
-	}
+	items := match(passes, airings, from, to)
+	resolvePriority(items, tunerCount)
+	return items
+}
+
+// PlanLibrary is Plan with the library's skips (already recorded, over the
+// limit, skipped once) applied first, so an airing that won't record never
+// takes a tuner from one that will.
+func PlanLibrary(passes []store.Pass, airings []store.Airing, tunerCount int, from, to time.Time, recs []store.Recording, seen, skips map[string]bool) []Planned {
+	items := ApplyLibrary(match(passes, airings, from, to), passes, recs, seen, skips)
+	resolvePriority(items, tunerCount)
+	return items
+}
+
+func match(passes []store.Pass, airings []store.Airing, from, to time.Time) []Planned {
 	items := make([]Planned, 0)
 	for _, airing := range airings {
 		if !airing.End.After(from) || !airing.Start.Before(to) {
@@ -48,7 +60,6 @@ func Plan(passes []store.Pass, airings []store.Airing, tunerCount int, from, to 
 		}
 		return items[i].Airing.Start.Before(items[j].Airing.Start)
 	})
-	resolvePriority(items, tunerCount)
 	return items
 }
 
@@ -174,6 +185,9 @@ func clockMinutes(value string) int {
 }
 
 func resolvePriority(items []Planned, tunerCount int) {
+	if tunerCount < 1 {
+		tunerCount = 1
+	}
 	type event struct {
 		at    time.Time
 		index int

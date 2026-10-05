@@ -1197,7 +1197,7 @@ paths:
     put:
       tags: [dvr]
       operationId: orderPasses
-      description: Rank every pass, first highest. The list must name each pass once.
+      description: Rank passes, first highest. Ids that are gone or repeated are skipped; a pass not named ranks last.
       requestBody:
         required: true
         content:
@@ -1215,12 +1215,11 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PassList" }
-        "409": { $ref: "#/components/responses/Error" }
   /passes/preview:
     post:
       tags: [dvr]
       operationId: previewPass
-      description: Plan the next 14 days as if this pass were saved. With id, the rules edit that pass; without, it is a new series pass. Nothing is saved.
+      description: Plan the next 14 days as if this pass were saved. With id, the rules edit that pass (rename for a new title); without, it is a new series pass. Nothing is saved.
       requestBody:
         required: true
         content:
@@ -1231,6 +1230,7 @@ paths:
                 - type: object
                   properties:
                     id: { type: integer, format: int64 }
+                    rename: { type: string }
       responses:
         "200":
           description: What the pass would record, and recordings of other passes it would push out
@@ -1243,13 +1243,19 @@ paths:
     patch:
       tags: [dvr]
       operationId: updatePass
+      description: Changes only the fields sent. title is ignored; rename changes a series pass's title. A time window is checked only when one is sent.
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/Pass" }
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/Pass"
+                - type: object
+                  properties:
+                    rename: { type: string, description: "New title, words, or category for a series pass" }
       responses:
         "200":
           description: Passes after the change
@@ -2046,6 +2052,7 @@ components:
         category: { type: string }
         programId: { type: string }
         gameId: { type: string, description: "Scoreboard game this recording is following. Empty when it is not a matched game." }
+        passId: { type: integer, format: int64, description: "The pass that started it; its keep and limit rules apply. Absent for one started by hand or found in a folder." }
         status: { type: string, enum: [recording, complete, failed, stopped, imported] }
         error: { type: string }
         startedAt: { type: string, format: date-time }
@@ -2124,9 +2131,11 @@ components:
           items: { type: integer, minimum: 0, maximum: 6 }
     PassPreview:
       type: object
-      required: [tunerCount, items, bumps]
+      required: [tunerCount, items, bumps, timeZone, utcOffset]
       properties:
         tunerCount: { type: integer }
+        timeZone: { type: string, description: "The server's time zone, which days and times are read in" }
+        utcOffset: { type: integer, description: "Seconds the server's clock is ahead of UTC now" }
         items:
           type: array
           description: Airings the pass matches, with skipped ones marked

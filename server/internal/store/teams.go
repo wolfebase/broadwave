@@ -94,15 +94,23 @@ func (s *Store) SetTeamNotice(ctx context.Context, id int64, notice string) erro
 
 func (s *Store) syncTeamPass(ctx context.Context, team TeamFollow) error {
 	label := teamPassLabel(team)
-	if err := s.deleteTeamPass(ctx, team.Name, team.Short); err != nil {
-		return err
-	}
 	if !team.Record || label == "" {
-		return nil
+		return s.deleteTeamPass(ctx, team.Name, team.Short)
+	}
+	// A pass already under this label keeps its rank and rules.
+	var others []string
+	for _, name := range []string{team.Name, team.Short} {
+		if !strings.EqualFold(strings.TrimSpace(name), label) {
+			others = append(others, name)
+		}
+	}
+	if err := s.deleteTeamPass(ctx, others...); err != nil {
+		return err
 	}
 	_, err := s.db.ExecContext(ctx, `
 INSERT INTO passes (title, channel_id, kind, pad_before, pad_after, match_kind)
-VALUES (?, 0, 'team', 1, 2, 'team')`, label)
+SELECT ?, 0, 'team', 1, 2, 'team'
+WHERE NOT EXISTS (SELECT 1 FROM passes WHERE kind = 'team' AND lower(title) = lower(?))`, label, label)
 	return err
 }
 

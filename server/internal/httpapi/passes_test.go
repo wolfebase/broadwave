@@ -53,7 +53,7 @@ func TestAKeywordPassKeepsItsRules(t *testing.T) {
 		t.Fatalf("rules not kept: %+v", p)
 	}
 	passes = passList(t, sendJSON(t, h, http.MethodPatch, fmt.Sprintf("/api/v1/passes/%d", p.ID),
-		`{"title":"Chiefs","matchKind":"title","days":[],"timeStart":"","timeEnd":""}`))
+		`{"title":"ignored","rename":"Chiefs","matchKind":"title","days":[],"timeStart":"","timeEnd":""}`))
 	if p := passes[0]; p.Title != "Chiefs" || p.MatchKind != "title" || len(p.Days) != 0 || p.TimeStart != "" || p.KeepCount != 3 {
 		t.Fatalf("edit: %+v", p)
 	}
@@ -118,17 +118,20 @@ func TestOrderingPassesSetsTheirPriority(t *testing.T) {
 	if strings.Join(got, " ") != "C3 A2 B1" {
 		t.Fatalf("order %v", got)
 	}
-	for _, body := range []string{
-		fmt.Sprintf(`{"ids":[%d,%d]}`, ids["A"], ids["B"]),
-		fmt.Sprintf(`{"ids":[%d,%d,%d]}`, ids["A"], ids["A"], ids["B"]),
-		fmt.Sprintf(`{"ids":[%d,%d,999]}`, ids["A"], ids["B"]),
-	} {
-		if rec := sendJSON(t, h, http.MethodPut, "/api/v1/passes/order", body); rec.Code != http.StatusConflict {
-			t.Errorf("%s: %d", body, rec.Code)
-		}
+	// Ids that are gone or repeated are skipped; a pass not named ranks last.
+	passes = passList(t, sendJSON(t, h, http.MethodPut, "/api/v1/passes/order",
+		fmt.Sprintf(`{"ids":[%d,999,%d,%d]}`, ids["B"], ids["B"], ids["A"])))
+	got = nil
+	for _, p := range passes {
+		got = append(got, fmt.Sprintf("%s%d", p.Title, p.Priority))
 	}
-	if got := passList(t, get(t, h, "/api/v1/passes")); got[0].Title != "C" || got[0].Priority != 3 {
-		t.Fatalf("a refused order changed priorities: %+v", got)
+	if strings.Join(got, " ") != "B3 A2 C1" {
+		t.Fatalf("order %v", got)
+	}
+	// A once pass asked for later ranks above them all.
+	once := passList(t, postJSON(t, h, "/api/v1/passes", `{"title":"Special","channelId":3,"airingStart":"2030-01-01T20:00:00Z"}`))
+	if once[0].Kind != "once" || once[0].Priority != 4 {
+		t.Fatalf("once pass %+v", once[0])
 	}
 }
 
@@ -179,7 +182,7 @@ func TestPreviewNamesWhatAPassWouldPushOut(t *testing.T) {
 		t.Fatalf("%+v", one)
 	}
 	// An edit previews in place of the saved pass, and nothing is saved.
-	edit := read(fmt.Sprintf(`{"id":%d,"title":"Game Night"}`, news.ID))
+	edit := read(fmt.Sprintf(`{"id":%d,"rename":"Game Night"}`, news.ID))
 	if len(edit.Items) != 1 || edit.Items[0].Airing.Title != "Game Night" || edit.Items[0].PassID != news.ID {
 		t.Fatalf("edit preview %+v", edit)
 	}
@@ -191,5 +194,23 @@ func TestPreviewNamesWhatAPassWouldPushOut(t *testing.T) {
 	}
 	if rec := postJSON(t, h, "/api/v1/passes/preview", `{"id":999}`); rec.Code != http.StatusNotFound {
 		t.Fatalf("missing pass: %d", rec.Code)
+	}
+}
+
+func TestAnOldWindowDoesNotBlockOtherChanges(t *testing.T) {
+	ctx := context.Background()
+	st := testStore(t)
+	h := (&Server{Store: st}).Handler()
+	p := passList(t, postJSON(t, h, "/api/v1/passes", `{"title":"News"}`))[0]
+	p.TimeStart = "8:00"
+	if err := st.UpdatePassRules(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	got := passList(t, sendJSON(t, h, http.MethodPatch, fmt.Sprintf("/api/v1/passes/%d", p.ID), `{"id":1,"title":"Old title","padAfter":9}`))
+	if got[0].PadAfter != 9 || got[0].Title != "News" {
+		t.Fatalf("a pads change: %+v", got[0])
+	}
+	if rec := sendJSON(t, h, http.MethodPatch, fmt.Sprintf("/api/v1/passes/%d", p.ID), `{"timeEnd":"10:00"}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("a window sent now is checked: %d", rec.Code)
 	}
 }

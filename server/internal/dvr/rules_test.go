@@ -1,6 +1,7 @@
 package dvr
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -71,5 +72,69 @@ func TestKeepLast(t *testing.T) {
 	got := KeepVictims(pass, recs)
 	if len(got) != 1 || got[0] != 1 {
 		t.Fatalf("keep last 2, drop the oldest finished: %v", got)
+	}
+}
+
+func TestKeepRulesCoverOnlyWhatAPassRecorded(t *testing.T) {
+	day := time.Date(2026, 9, 22, 20, 0, 0, 0, time.UTC)
+	rec := func(id int64, pass int64, title, category string, daysAgo int) store.Recording {
+		return store.Recording{ID: id, PassID: pass, Title: title, Category: category, Status: "complete", StartedAt: day.AddDate(0, 0, -daysAgo)}
+	}
+	recs := []store.Recording{
+		rec(1, 7, "Bears at Bills", "Sports", 3),
+		rec(2, 7, "Chiefs at Raiders", "Sports", 1),
+		rec(3, 0, "Lakers at Celtics", "Sports", 5), // recorded by hand, or a library file
+		rec(4, 9, "Royals at Twins", "Sports", 6),   // another pass's
+		rec(5, 0, "News", "News", 4),                // a title pass's, before recordings named their pass
+		rec(6, 0, "News", "News", 2),
+		rec(7, 7, "News", "Sports", 8),
+	}
+	sports := store.Pass{ID: 7, Title: "Sports", MatchKind: "category", KeepMode: "last", KeepCount: 1}
+	if got := KeepVictims(sports, recs); fmt.Sprint(got) != "[1 7]" {
+		t.Fatalf("category pass removes %v, want only its own older ones [1 7]", got)
+	}
+	news := store.Pass{ID: 8, Title: "News", KeepMode: "last", KeepCount: 1}
+	if got := KeepVictims(news, recs); fmt.Sprint(got) != "[5]" {
+		t.Fatalf("title pass removes %v, want the older untagged News [5]", got)
+	}
+	words := store.Pass{ID: 10, Title: "at", MatchKind: "contains", KeepMode: "unwatched", LimitCount: 1}
+	if got := KeepVictims(words, recs); len(got) != 0 {
+		t.Fatalf("a words pass that recorded nothing removes %v", got)
+	}
+	if n := unwatchedCount(recs, words); n != 0 {
+		t.Fatalf("a words pass that recorded nothing counts %d toward its limit", n)
+	}
+}
+
+func TestAnAiringThatWontRecordLeavesItsTuner(t *testing.T) {
+	start := time.Date(2026, 9, 22, 19, 0, 0, 0, time.UTC)
+	passes := []store.Pass{
+		{ID: 1, Title: "Rerun", Priority: 5},
+		{ID: 2, Title: "News", Priority: 1},
+	}
+	airings := []store.Airing{
+		{ID: 1, ChannelID: 1, Title: "Rerun", ProgramID: "EP1", Start: start, End: start.Add(time.Hour)},
+		{ID: 2, ChannelID: 2, Title: "News", Start: start, End: start.Add(time.Hour)},
+	}
+	recs := []store.Recording{{ID: 1, Title: "Rerun", ProgramID: "EP1", Status: "complete", PassID: 1}}
+	got := PlanLibrary(passes, airings, 1, start.Add(-time.Minute), start.Add(2*time.Hour), recs, nil, nil)
+	if len(got) != 2 || !got[0].Skipped || got[0].Reason != "Already recorded" || got[1].Skipped {
+		t.Fatalf("the recorded rerun held the tuner: %+v", got)
+	}
+}
+
+func TestAKeepRuleLeavesFilesOutsideTheRecordingsFolder(t *testing.T) {
+	root := "/config/work/recordings"
+	for path, want := range map[string]bool{
+		"/config/work/recordings/a.ts":     true,
+		"/config/work/recordings/sub/a.ts": true,
+		"/media/library/a.ts":              false,
+		"/config/work/recordings/../a.ts":  false,
+		"/config/work/recordings":          false,
+		"":                                 false,
+	} {
+		if got := insideDir(root, path); got != want {
+			t.Errorf("%q: %v, want %v", path, got, want)
+		}
 	}
 }

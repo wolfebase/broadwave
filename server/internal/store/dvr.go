@@ -95,6 +95,8 @@ type Recording struct {
 	Category    string     `json:"category,omitempty"`
 	ProgramID   string     `json:"programId,omitempty"`
 	GameID      string     `json:"gameId,omitempty"`
+	// PassID is the pass that started the recording; 0 for one started by hand or found in a folder.
+	PassID int64 `json:"passId,omitempty"`
 	// Watched is 0 when inferred from the playhead, 1 when marked watched, 2 when marked unwatched.
 	Watched int `json:"watched,omitempty"`
 	// Health is counted from the file after the recording finishes.
@@ -421,10 +423,10 @@ func (s *Store) CreateRecording(ctx context.Context, rec Recording) (int64, erro
 		ends = rec.EndsAt.UTC().Format(time.RFC3339)
 	}
 	res, err := s.db.ExecContext(ctx, `
-INSERT INTO recordings (channel_id, guide_number, title, path, status, started_at, ends_at, subtitle, description, category, program_id, watched, game_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+INSERT INTO recordings (channel_id, guide_number, title, path, status, started_at, ends_at, subtitle, description, category, program_id, watched, game_id, pass_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rec.ChannelID, rec.GuideNumber, rec.Title, rec.Path, rec.Status,
-		rec.StartedAt.UTC().Format(time.RFC3339), ends, rec.Subtitle, rec.Description, rec.Category, rec.ProgramID, rec.Watched, rec.GameID)
+		rec.StartedAt.UTC().Format(time.RFC3339), ends, rec.Subtitle, rec.Description, rec.Category, rec.ProgramID, rec.Watched, rec.GameID, rec.PassID)
 	if err != nil {
 		return 0, err
 	}
@@ -456,7 +458,7 @@ func (s *Store) Recordings(ctx context.Context) ([]Recording, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, channel_id, guide_number, title, path, status, error, started_at, ends_at, ended_at, duration_sec,
 	subtitle, description, category, program_id, watched, game_id,
-	continuity_errors, transport_errors, sync_losses, packets
+	continuity_errors, transport_errors, sync_losses, packets, pass_id
 FROM recordings ORDER BY id DESC`)
 	if err != nil {
 		return nil, err
@@ -467,7 +469,7 @@ FROM recordings ORDER BY id DESC`)
 		var rec Recording
 		var start, ends, ended string
 		var continuity, transport, syncLoss, packets sql.NullInt64
-		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID, &continuity, &transport, &syncLoss, &packets); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID, &continuity, &transport, &syncLoss, &packets, &rec.PassID); err != nil {
 			return nil, err
 		}
 		rec.StartedAt, _ = time.Parse(time.RFC3339, start)
@@ -618,8 +620,9 @@ func DaysOf(mask int) []int {
 // AddOncePass records the one airing starting at start on the channel. Asking
 // twice for the same airing keeps one pass.
 func (s *Store) AddOncePass(ctx context.Context, title string, channelID int64, start time.Time, padBefore, padAfter int) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO passes (title, channel_id, kind, pad_before, pad_after, airing_start)
-		SELECT ?, ?, 'once', ?, ?, ?
+	// Asked for by name, it ranks above every pass there is.
+	_, err := s.db.ExecContext(ctx, `INSERT INTO passes (title, channel_id, kind, pad_before, pad_after, airing_start, priority)
+		SELECT ?, ?, 'once', ?, ?, ?, (SELECT COALESCE(MAX(priority), 0) + 1 FROM passes)
 		WHERE NOT EXISTS (SELECT 1 FROM passes WHERE kind = 'once' AND channel_id = ? AND airing_start = ?)`,
 		title, channelID, padBefore, padAfter, start.Unix(), channelID, start.Unix())
 	return err
@@ -646,7 +649,7 @@ func (s *Store) UpdatePass(ctx context.Context, id int64, padBefore, padAfter, p
 func (s *Store) Passes(ctx context.Context) ([]Pass, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, title, channel_id, kind, pad_before, pad_after, priority,
 	episodes, keep_mode, keep_count, limit_count, rerecord, commercials, time_start, time_end, match_kind, airing_start, days
-	FROM passes ORDER BY priority DESC, title, id`)
+	FROM passes ORDER BY priority DESC, title COLLATE NOCASE, id`)
 	if err != nil {
 		return nil, err
 	}

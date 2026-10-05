@@ -28,15 +28,15 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 			lead = extra
 		}
 	}
-	rows, err := st.Airings(ctx, now.Add(-time.Minute), now.Add(lead))
+	// The other copy of a simulcast, or of a channel two tuners carry, is recorded once.
+	rows, err := st.RecordingAirings(ctx, now.Add(-time.Minute), now.Add(lead))
 	if err != nil {
 		return
 	}
 	active, _ := st.Recordings(ctx)
 	seen, _ := st.SeenDeleted(ctx)
 	skips, _ := st.Skips(ctx)
-	planned := Plan(passes, rows, countTuners(ctx, st), now.Add(-time.Minute), now.Add(lead))
-	planned = ApplyLibrary(planned, passes, active, seen, skips)
+	planned := PlanLibrary(passes, rows, countTuners(ctx, st), now.Add(-time.Minute), now.Add(lead), active, seen, skips)
 	hold := 0
 	for _, item := range planned {
 		if item.Skipped || already(active, item.Airing) {
@@ -59,7 +59,7 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 		if _, err := hub.RecordMeta(ctx, minutes, store.Recording{
 			ChannelID: item.Airing.ChannelID, Title: item.Airing.Title, Subtitle: item.Airing.Subtitle,
 			Description: item.Airing.Description, Category: item.Airing.Category, ProgramID: item.Airing.ProgramID, GameID: item.Airing.GameID,
-			StartedAt: item.Airing.Start.Add(-time.Duration(pass.PadBefore) * time.Minute),
+			StartedAt: item.Airing.Start.Add(-time.Duration(pass.PadBefore) * time.Minute), PassID: pass.ID,
 		}); err != nil {
 			slog.Error(fmt.Sprintf("pass record: %v", err))
 		}

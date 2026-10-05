@@ -286,7 +286,7 @@ export function orderPasses(ids: number[]) {
 }
 
 /** What the pass would record over the next 14 days, saved or not. With id, it edits that pass. */
-export function previewPass(pass: NewPass & { id?: number }, signal?: AbortSignal) {
+export function previewPass(pass: NewPass & { id?: number; rename?: string }, signal?: AbortSignal) {
   return request<PassPreview>("/api/v1/passes/preview", {
     method: "POST",
     body: JSON.stringify(pass),
@@ -294,7 +294,8 @@ export function previewPass(pass: NewPass & { id?: number }, signal?: AbortSigna
   });
 }
 
-export function updatePass(id: number, patch: Partial<Pass>) {
+/** Sends only what changed; rename changes a series pass's title. */
+export function updatePass(id: number, patch: Partial<Pass> & { rename?: string }) {
   return request<{ passes: Pass[] }>(`/api/v1/passes/${id}`, {
     method: "PATCH",
     body: JSON.stringify(patch),

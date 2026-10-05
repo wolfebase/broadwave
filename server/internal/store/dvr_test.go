@@ -136,3 +136,48 @@ func TestRestoreFromABackupWithoutTheOnceColumn(t *testing.T) {
 		t.Fatalf("layout %q", settings["layout"])
 	}
 }
+
+func TestATeamPassKeepsItsRulesWhenFollowedAgain(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	team := TeamFollow{Name: "Kansas City Chiefs", Short: "Chiefs", Record: true}
+	if err := st.FollowTeam(ctx, team); err != nil {
+		t.Fatal(err)
+	}
+	passes, err := st.Passes(ctx)
+	if err != nil || len(passes) != 1 {
+		t.Fatalf("%+v %v", passes, err)
+	}
+	p := passes[0]
+	p.PadAfter, p.KeepMode, p.KeepCount, p.Priority = 30, "last", 2, 4
+	if err := st.UpdatePassRules(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.FollowTeam(ctx, team); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := st.Passes(ctx)
+	if len(again) != 1 || again[0].ID != p.ID || again[0].PadAfter != 30 || again[0].KeepCount != 2 || again[0].Priority != 4 {
+		t.Fatalf("following again reset the pass: %+v", again)
+	}
+	team.Record = false
+	if err := st.FollowTeam(ctx, team); err != nil {
+		t.Fatal(err)
+	}
+	if gone, _ := st.Passes(ctx); len(gone) != 0 {
+		t.Fatalf("not recording left %+v", gone)
+	}
+}
+
+func TestARecordingNamesThePassThatStartedIt(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	id, err := st.CreateRecording(ctx, Recording{Title: "News", Status: "recording", StartedAt: time.Now(), PassID: 12})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := st.Recording(ctx, id)
+	if err != nil || rec.PassID != 12 {
+		t.Fatalf("%+v %v", rec, err)
+	}
+}
