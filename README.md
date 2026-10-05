@@ -65,7 +65,7 @@ Three people watching the game in three rooms use **one** tuner, not three — a
 | | |
 | --- | --- |
 | **Watch** | Live TV on every screen, in sync · one tune shared by everyone on a channel · true 60 fps, film restored to 24p · hardware transcoding on Intel and AMD graphics · 5.1 surround with a picker for languages and described video · ATSC 3.0 where the tuner receives it · buffers tuned for phones, desktops, and TVs · a stream panel that shows exactly what's happening |
-| **Record** | Shows, series, or every game for your team · the untouched broadcast, in original quality · games keep recording until they're final · a tuner held back for recordings · a heads-up before live TV would take a recording's tuner · a later airing suggested when one can't record · nightly backups with one-tap restore |
+| **Record** | Shows, series, or every game for your team · the untouched broadcast, in original quality · games keep recording until they're final · a tuner held back for recordings · a heads-up before live TV would take a recording's tuner · a later airing suggested when one can't record · nightly backups with one-tap restore. [How recordings work](docs/recordings.md) |
 | **Guide** | Up to 14 days of listings · guide data from your tuner's provider, Schedules Direct, XMLTV, or the broadcast itself · artwork, seasons, premieres, and finales · search across the guide and your recordings · antenna and signal tools that say *Great, OK, Weak,* or *Lost* |
 | **Multiview** | Side by side, one-big-plus-three, quad, and picture-in-picture · sound and 60 fps follow the tile you pick · a Game Switcher that moves the big tile to the game that matters · saved layouts |
 | **Sports** | Live scores for twelve leagues · follow teams and record every game · spoiler-safe scores you can hide |
@@ -236,6 +236,11 @@ Without an updater, the web app says when a new release is out.
 <details>
 <summary><b>Which tuner should I get?</b></summary>
 <br>Any current HDHomeRun works out of the box, and Broadwave finds it on its own. Other network tuners work by address. [How tuners are found](docs/tuners.md). A FLEX 4K also receives ATSC 3.0 on two of its four tuners. [How that works](docs/atsc3.md).
+</details>
+
+<details>
+<summary><b>Where do recordings go?</b></summary>
+<br>In the recordings folder you mounted. Each one is the broadcast itself, with a small file beside it for the title and another for commercial marks. [How recordings work](docs/recordings.md).
 </details>
 
 <details>
