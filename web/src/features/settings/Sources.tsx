@@ -222,7 +222,7 @@ export function Sources({
         {devices.map((device) => {
           const status = statuses.find((item) => item.deviceId === device.deviceId);
           const name = device.friendlyName || device.modelNumber || device.deviceId;
-          const offline = Boolean(status?.health);
+          const offline = Boolean(status?.health) || Boolean(device.offline);
           const scans = sourcesReady && deviceScans(status ? status.kind : undefined);
           const facts = [device.modelNumber, device.tunerCount > 0 ? `${device.tunerCount} ${copy.sources.tuners}` : ""].filter(Boolean).join(" · ");
           const scan = (

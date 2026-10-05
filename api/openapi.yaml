@@ -1661,6 +1661,9 @@ components:
         priority: { type: integer }
         lastSeen: { type: string }
         note: { type: string }
+        offline:
+          type: boolean
+          description: True when a tuner has missed three discovery rounds (15 minutes). Playlists use source health instead.
     DeviceHealth:
       type: object
       required: [deviceId, model, firmwareVersion, tuners]

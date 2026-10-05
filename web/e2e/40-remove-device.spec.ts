@@ -1,5 +1,5 @@
 // A tuner or playlist that is gone for good can be removed from Settings.
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,8 +12,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const evidence = path.resolve(here, "../../.evidence/j082");
 const offlineShots = path.resolve(here, "../../.evidence/lane/l85");
 const playlistShots = path.resolve(here, "../../.evidence/l87");
+const tunerOfflineShots = path.resolve(here, "../../.evidence/lane/l90");
 
-type Device = { deviceId: string; friendlyName?: string; lastSeen?: string };
+type Device = { deviceId: string; friendlyName?: string; lastSeen?: string; offline?: boolean };
 
 function harness() {
   return JSON.parse(readFileSync(path.join(here, ".run/server.json"), "utf8")) as { base: string; db: string; config: string };
@@ -153,5 +154,82 @@ test("a playlist card skips scan and firmware", async ({ page }) => {
   } finally {
     await fetch(`${base}/api/v1/devices/${encodeURIComponent(list?.deviceId ?? "")}`, { method: "DELETE" });
     rmSync(file, { force: true });
+  }
+});
+
+function startSecondTuner(): Promise<{ base: string; child: ChildProcess }> {
+  const child = spawn(path.join(here, ".run/fakehdhr"), ["-realtime", "-ts", path.join(here, ".run/sample.ts"), "-profile", "HDHR3-US"], {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  return new Promise((resolve, reject) => {
+    let out = "";
+    let started = false;
+    const timer = setTimeout(() => {
+      if (started) return;
+      child.kill("SIGKILL");
+      reject(new Error(`second fake tuner did not start\n${out}`));
+    }, 10_000);
+    const take = (chunk: Buffer) => {
+      out += chunk.toString();
+      const base = out.match(/^BASE=(.+)$/m)?.[1]?.trim();
+      if (base && out.includes("CONTROL_PORT=") && !started) {
+        started = true;
+        clearTimeout(timer);
+        resolve({ base, child });
+      }
+    };
+    child.stdout?.on("data", take);
+    child.stderr?.on("data", take);
+    child.on("exit", (code) => {
+      if (started) return;
+      clearTimeout(timer);
+      reject(new Error(`second fake tuner exited ${code}\n${out}`));
+    });
+  });
+}
+
+test("a tuner that stopped answering says so on its card", async ({ page }) => {
+  const { base } = harness();
+  const fake = await startSecondTuner();
+  const host = fake.base.replace(/^https?:\/\//, "");
+  let id = "";
+  try {
+    const added = await fetch(`${base}/api/v1/sources/discover`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ip: host }),
+    });
+    expect(added.ok, await added.clone().text()).toBe(true);
+    const box = (await devices()).find((device) => device.friendlyName === "HDHomeRun DUAL");
+    expect(box, JSON.stringify(await devices())).toBeTruthy();
+    expect(box?.offline).toBe(false);
+    id = box?.deviceId ?? "";
+    fake.child.kill("SIGINT");
+    const seen = new Date(Date.now() - 16 * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    sql(`UPDATE devices SET last_seen='${seen}' WHERE device_id='${id}';`);
+    const after = (await devices()).find((device) => device.deviceId === id);
+    expect(after?.offline).toBe(true);
+    const setup = await fetch(`${base}/api/v1/settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ setupComplete: "1" }),
+    });
+    expect(setup.ok).toBe(true);
+    await page.goto("/settings#sources");
+    await settle(page);
+    const card = page.locator(".device-card", { has: page.getByRole("heading", { name: "HDHomeRun DUAL" }) });
+    const line = copy.sources.offline(lastSeenPhrase(seen));
+    await expect(card).toBeVisible();
+    await expect(card.getByText(line)).toBeVisible();
+    await expect(card.getByRole("button").first()).toHaveAccessibleName("Remove HDHomeRun DUAL");
+    const live = page.locator(".device-card", { has: page.getByRole("heading", { name: "Fake HDHomeRun" }) });
+    await expect(live.getByText(/Offline/)).toHaveCount(0);
+    mkdirSync(tunerOfflineShots, { recursive: true });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await card.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(tunerOfflineShots, "desktop.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
+  } finally {
+    fake.child.kill("SIGKILL");
+    if (id) await fetch(`${base}/api/v1/devices/${encodeURIComponent(id)}`, { method: "DELETE" });
   }
 });

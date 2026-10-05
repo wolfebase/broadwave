@@ -449,6 +449,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Listings that have not ended, on the channels the guide shows (one row per channel when
+         *     two tuners carry it): shows whose title has the words first, then the rest, each on now
+         *     first and then by start time; and matching recordings.
+         */
         get: operations["search"];
         put?: never;
         post?: never;
@@ -1219,6 +1224,8 @@ export interface components {
             priority?: number;
             lastSeen?: string;
             note?: string;
+            /** @description True when a tuner has missed three discovery rounds (15 minutes). Playlists use source health instead. */
+            offline?: boolean;
         };
         /** @description Live model, firmware version, and signal lock. Empty error means the tuner answered. */
         DeviceHealth: {
