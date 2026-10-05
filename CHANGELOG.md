@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.12.20 — 2026-10-05
+
+### Fixed
+
+- A recording no longer skips past fades and scene changes. Without comskip, every short black stretch counted as a commercial break; now a break is a run of spot-length gaps.
+- A channel with no signal says so in about 8 seconds instead of 17.
+- Settings marks a tuner that has stopped answering as offline, with when it was last seen. A tuner added by its address keeps reading as online while it answers.
+- On a Mac, or with an Intel or NVIDIA GPU, a GPU picture encode that fails as it starts falls back to the CPU instead of leaving the channel dark.
+- On iPhone and iPad, a recording has its scrubber, play and pause, and time again.
+- On iPad, the "New … found" line no longer covers the tab bar, and a device is no longer told it found itself.
+- On iPhone, the guide's filters and rows show while a channel is minimized.
+- On Apple TV, Menu in multiview goes back to the channel you came from, or closes multiview if nothing was playing.
+- On the web, Tab stays inside the full player and cycles its controls, and the first Tab while the controls are hidden shows them.
+
 ## 0.12.19 — 2026-10-04
 
 ### Fixed
