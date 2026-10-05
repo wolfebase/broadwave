@@ -21,7 +21,13 @@ struct HomeListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Your home").font(.title3.weight(.bold))
+            // The scan button takes focus on Apple TV. At the end of a long list,
+            // Settings opened scrolled down to it.
+            HStack {
+                Text("Your home").font(.title3.weight(.bold))
+                Spacer()
+                scanButton
+            }
             Text("Tuners, screens, and servers on this network. Nothing is added until you tap.")
                 .foregroundStyle(.secondary)
             if shown.isEmpty {
@@ -43,19 +49,22 @@ struct HomeListView: View {
             if !note.isEmpty {
                 Text(note).font(.caption).foregroundStyle(.secondary)
             }
-            Button("Scan again") { Task { await load() } }
-                .buttonStyle(.glass)
-                .disabled(busy)
-                .accessibilityIdentifier("home-scan")
-            #if os(tvOS)
-                .focused($scanFocused)
-            #endif
         }
         .task { await load() }
         #if os(tvOS)
             .onAppear { claimScan() }
             .onChange(of: tvSelectedTab) { _, _ in claimScan() }
             .onChange(of: busy) { _, _ in claimScan() }
+        #endif
+    }
+
+    private var scanButton: some View {
+        Button("Scan again") { Task { await load() } }
+            .buttonStyle(.glass)
+            .disabled(busy)
+            .accessibilityIdentifier("home-scan")
+        #if os(tvOS)
+            .focused($scanFocused)
         #endif
     }
 
