@@ -69,7 +69,7 @@ Three people watching the game in three rooms use **one** tuner, not three — a
 | **Guide** | Up to 14 days of listings · guide data from your tuner's provider, Schedules Direct, XMLTV, or the broadcast itself · artwork, seasons, premieres, and finales · search across the guide and your recordings · antenna and signal tools that say *Great, OK, Weak,* or *Lost* |
 | **Multiview** | Side by side, one-big-plus-three, quad, and picture-in-picture · sound and 60 fps follow the tile you pick · a Game Switcher that moves the big tile to the game that matters · saved layouts |
 | **Sports** | Live scores for twelve leagues · follow teams and record every game · spoiler-safe scores you can hide |
-| **Setup** | Finds your tuners, servers, and screens on its own · done in about 90 seconds · a setup doctor for networking, graphics, disks, time zone, and permissions · a banner when a new device shows up |
+| **Setup** | Finds your tuners, servers, and screens on its own · done in about 90 seconds · a setup doctor for networking, graphics, disks, time zone, and permissions · a banner when a new device shows up · [what each error means](docs/troubleshooting.md) |
 | **Private** | No account, no ads, no analytics · everything stays on your server · support bundles with secrets stripped out · open source, Apache 2.0 |
 
 </details>
@@ -241,6 +241,11 @@ Without an updater, the web app says when a new release is out.
 <details>
 <summary><b>Where do recordings go?</b></summary>
 <br>In the recordings folder you mounted. Each one is the broadcast itself, with a small file beside it for the title and another for commercial marks. [How recordings work](docs/recordings.md).
+</details>
+
+<details>
+<summary><b>When the picture stops</b></summary>
+<br>The line on the player says what failed and what to try. Diagnostics shows the tuners, the disk, and the recent log, and Settings can download a support bundle. [What each message means](docs/troubleshooting.md).
 </details>
 
 <details>
