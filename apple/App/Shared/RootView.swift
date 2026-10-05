@@ -202,8 +202,12 @@ final class LibraryFilter {
     }
 
     private struct PhoneTabClearance: ViewModifier {
+        @Environment(\.verticalSizeClass) private var height
+
+        /// In landscape the safe area already ends above the tab bar, and 88 more points
+        /// left the guide no room for a channel row.
         func body(content: Content) -> some View {
-            content.padding(.bottom, UIDevice.current.userInterfaceIdiom == .phone ? 88 : 0)
+            content.padding(.bottom, UIDevice.current.userInterfaceIdiom == .phone && height != .compact ? 88 : 0)
         }
     }
 #else

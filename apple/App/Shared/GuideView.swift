@@ -60,6 +60,11 @@ struct GuideView: View {
                 }
             #endif
         }
+        #if os(iOS)
+        // A scroll view that touches the top safe area grows under the navigation bar, and
+        // the bar's edge effect then hid the filter row (with the mini player up).
+        .padding(.top, 1)
+        #endif
         // On Apple TV the tab pill already says Guide; a large title only pushes the grid down.
         #if !os(tvOS)
         .navigationTitle("Guide")

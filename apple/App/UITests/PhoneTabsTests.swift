@@ -124,6 +124,66 @@
             shot(app, "ipad-sections")
         }
 
+        /// The guide's filter chips draw with the mini player up, in portrait and landscape,
+        /// and landscape has room for a channel row. The chips stayed in the accessibility
+        /// tree, hittable, while the screen showed black.
+        func testGuideFiltersDrawWithTheMiniPlayer() throws {
+            try requirePhone()
+            let server = try serverURL()
+            try finishSetup(server)
+            let app = XCUIApplication()
+            app.launchArguments = ["-BroadwaveServerURL", server, "-ApplePersistenceIgnoreState", "YES", "-BroadwaveWatch", "1"]
+            app.launch()
+            let minimize = app.buttons["Minimize"].firstMatch
+            XCTAssertTrue(minimize.waitForExistence(timeout: 30), app.debugDescription)
+            minimize.tap()
+            let guide = tabButton(app, "Guide")
+            XCTAssertTrue(guide.waitForExistence(timeout: 10), app.debugDescription)
+            guide.tap()
+            let all = app.buttons["guide-filter-all"]
+            let favorites = app.buttons["guide-filter-favorites"]
+            XCTAssertTrue(all.waitForExistence(timeout: 10), app.debugDescription)
+            RunLoop.current.run(until: Date().addingTimeInterval(1.5))
+            shot(app, "guide-mini-portrait")
+            XCTAssertGreaterThan(drawn(all), 0.05, "All is not drawn in portrait")
+            XCTAssertGreaterThan(drawn(favorites), 0.02, "Favorites is not drawn in portrait")
+            XCUIDevice.shared.orientation = .landscapeLeft
+            RunLoop.current.run(until: Date().addingTimeInterval(2))
+            shot(app, "guide-mini-landscape")
+            let filtersDrawn = drawn(all)
+            // The first channel row fits above the mini player.
+            let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH '4.1 '")).firstMatch
+            let mini = app.buttons["miniPlayer"]
+            let rowFits = row.exists && mini.exists && row.frame.minY + 44 <= mini.frame.minY && drawn(row) > 0.005
+            print("landscape row \(row.exists ? "\(row.frame)" : "-") mini \(mini.exists ? "\(mini.frame)" : "-")")
+            XCUIDevice.shared.orientation = .portrait
+            XCTAssertGreaterThan(filtersDrawn, 0.05, "All is not drawn in landscape")
+            XCTAssertTrue(rowFits, "no channel row above the mini player in landscape")
+        }
+
+        /// Share of the element's pixels that are not near black.
+        private func drawn(_ element: XCUIElement) -> Double {
+            guard element.exists, let image = element.screenshot().image.cgImage else { return 0 }
+            let width = image.width
+            let height = image.height
+            var pixels = [UInt8](repeating: 0, count: width * height * 4)
+            let drawnPixels = pixels.withUnsafeMutableBytes { buffer -> Int in
+                guard let context = CGContext(
+                    data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                    space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                ) else { return 0 }
+                context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+                var count = 0
+                for index in stride(from: 0, to: buffer.count, by: 4) where max(buffer[index], buffer[index + 1], buffer[index + 2]) > 90 {
+                    count += 1
+                }
+                return count
+            }
+            let share = Double(drawnPixels) / Double(max(width * height, 1))
+            print("drawn \(element.identifier) \(String(format: "%.3f", share))")
+            return share
+        }
+
         private func requirePhone() throws {
             if UIDevice.current.userInterfaceIdiom != .phone {
                 throw XCTSkip("iPhone")
