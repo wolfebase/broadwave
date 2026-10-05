@@ -176,6 +176,63 @@ final class GuideFocusTests: XCTestCase {
         shot(app, "guide-from-home")
     }
 
+    /// Right from a channel lands on the program on now, not one that already ended at
+    /// the left edge of the grid. Needs a guide where the first channel's earlier program
+    /// ended inside the window (the grid opens up to an hour before now).
+    func testRightFromAChannelLandsOnNow() throws {
+        try XCTSkipIf(server.isEmpty, "set TEST_RUNNER_BROADWAVE_SERVER")
+        try finishSetup()
+        let label = try firstChannelLabel()
+        let (ended, on) = try firstChannelAirings()
+        try XCTSkipIf(ended == nil || on == nil, "the first channel needs a program that ended in the last hour and one on now")
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ApplePersistenceIgnoreState", "YES",
+            "-BroadwaveServerURL", server,
+            "-BroadwaveTab", "guide",
+        ]
+        app.launch()
+        let channel = app.buttons[label].firstMatch
+        XCTAssertTrue(channel.waitForExistence(timeout: 25), app.debugDescription)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", ended ?? "")).firstMatch.waitForExistence(timeout: 15), "the ended program is not drawn")
+        XCTAssertTrue(until(10) { app.buttons["guide-now"].hasFocus }, "Now did not take focus: \(focused(app))")
+        XCUIRemote.shared.press(.down)
+        pause(0.7)
+        XCTAssertTrue(channel.hasFocus, "Down from Now did not reach \(label): \(focused(app))")
+        XCUIRemote.shared.press(.right)
+        pause(0.7)
+        let landed = focused(app)
+        shot(app, "guide-right")
+        XCTAssertTrue(landed.contains(on ?? "-"), "Right from \(label) landed on \(landed), not \(on ?? "")")
+    }
+
+    /// Titles of the first channel's program that ended in the last hour and the one on now.
+    private func firstChannelAirings() throws -> (ended: String?, on: String?) {
+        let channelsURL = try XCTUnwrap(URL(string: server + "/api/v1/channels"))
+        let page = try JSONSerialization.jsonObject(with: Data(contentsOf: channelsURL)) as? [String: Any]
+        let channels = page?["channels"] as? [[String: Any]] ?? []
+        let first = try XCTUnwrap(channels.first { ($0["enabled"] as? Bool ?? true) && !($0["hidden"] as? Bool ?? false) })
+        let id = first["id"] as? Int ?? 0
+        let from = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-3600))
+        let url = try XCTUnwrap(URL(string: server + "/api/v1/airings?channels=\(id)&from=\(from)&hours=3"))
+        let list = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+        let airings = list?["airings"] as? [[String: Any]] ?? []
+        let format = ISO8601DateFormatter()
+        let now = Date()
+        var ended: String?
+        var on: String?
+        for airing in airings {
+            guard let start = (airing["start"] as? String).flatMap(format.date(from:)),
+                  let end = (airing["end"] as? String).flatMap(format.date(from:)) else { continue }
+            if end <= now, end > now.addingTimeInterval(-1800) {
+                ended = airing["title"] as? String
+            } else if start <= now, end > now {
+                on = airing["title"] as? String
+            }
+        }
+        return (ended, on)
+    }
+
     private func finishSetup() throws {
         var request = try URLRequest(url: XCTUnwrap(URL(string: server + "/api/v1/settings")))
         request.httpMethod = "PUT"

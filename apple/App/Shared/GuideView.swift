@@ -570,6 +570,10 @@ struct GuideGrid: View {
                 .buttonStyle(GuideCellStyle())
                 #if os(tvOS)
                     .onPlayPauseCommand { nowPlaying.play(channel) }
+                    // The grid opens up to an hour before now, and Right from a channel
+                    // landed on the leftmost cell: a program that had ended, whose panel
+                    // offered only Record series.
+                    .disabled(airing.end <= store.now)
                 #endif
                     .offset(x: x(s))
             }
