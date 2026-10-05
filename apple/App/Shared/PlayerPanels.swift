@@ -38,6 +38,25 @@ struct ChannelListPanel: View {
     @FocusState private var focus: Int64?
 
     var body: some View {
+        ScrollViewReader { proxy in
+            list
+                // The page opened scrolled to the end, with focus on the last rows.
+                .defaultFocus($focus, nowPlaying.channel?.id)
+                .onAppear {
+                    if let id = nowPlaying.channel?.id {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
+                }
+        }
+        .onChange(of: focus) { _, id in
+            warming?.cancel()
+            guard let id, id != nowPlaying.channel?.id, let channel = store.channels.first(where: { $0.id == id }) else { return }
+            warm(channel)
+        }
+        .accessibilityIdentifier("panel-channels")
+    }
+
+    private var list: some View {
         ScrollView {
             VStack(spacing: 4) {
                 ForEach(store.channels) { channel in
@@ -50,7 +69,9 @@ struct ChannelListPanel: View {
                         HStack(spacing: 16) {
                             Text(channel.displayNumber)
                                 .font(.headline.monospacedDigit())
-                                .frame(width: 72, alignment: .leading)
+                                .lineLimit(1)
+                                .fixedSize()
+                                .frame(minWidth: 72, alignment: .leading)
                             Text(title)
                                 .lineLimit(1)
                             Spacer(minLength: 0)
@@ -71,12 +92,9 @@ struct ChannelListPanel: View {
             }
             .padding(12)
         }
-        .onChange(of: focus) { _, id in
-            warming?.cancel()
-            guard let id, id != nowPlaying.channel?.id, let channel = store.channels.first(where: { $0.id == id }) else { return }
-            warm(channel)
-        }
-        .accessibilityIdentifier("panel-channels")
+        // AVKit sizes a page to its ideal height: the whole lineup, taller than the
+        // screen, shown from its last rows, so the list never scrolled.
+        .frame(idealHeight: 432)
     }
 }
 

@@ -126,6 +126,25 @@ final class PlayerPanelTests: XCTestCase {
         XCTAssertEqual(app.staticTexts["channel-now"].label, started, "resting on a row changed the channel")
     }
 
+    /// The first move into Channels lands on the playing row, on screen. With a long
+    /// lineup the page opened scrolled to the end and Down went to the last rows.
+    func testChannelsOpensOnThePlayingChannel() throws {
+        try XCTSkipIf(server.isEmpty, "set TEST_RUNNER_BROADWAVE_SERVER")
+        let count = try fetch(ChannelPage.self, "/api/v1/channels").channels.count
+        try XCTSkipIf(count < 20, "needs a lineup longer than the page (\(count) channels)")
+        let app = try launch()
+        _ = try waitChannel(app)
+        let playing = try firstChannelID()
+        try showTabs(app)
+        try showContent(app, "panel-channels", tab: "Channels")
+        XCUIRemote.shared.press(.down)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.7))
+        shot(app, "channels-open")
+        let row = "panel-channel-\(playing)"
+        XCTAssertTrue(focused(app).hasPrefix(row + " "), "Down into Channels landed on \(focused(app)), not \(row)")
+        XCTAssertTrue(app.buttons[row].firstMatch.isHittable, "\(row) is off screen")
+    }
+
     private func sameFrequency(as channel: Int64) -> Int64? {
         var match: Int64?
         _ = until(10) {
