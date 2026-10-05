@@ -181,6 +181,12 @@ func vaapiFamily(encoder string) bool {
 	return encoder == "h264_vaapi" || encoder == "hevc_vaapi"
 }
 
+// gpuEncoder is any hardware encoder: VAAPI, QSV, VideoToolbox, or NVENC.
+// libx264 is the fallback when one fails.
+func gpuEncoder(encoder string) bool {
+	return encoder != "" && encoder != "libx264" && encoder != "libx265"
+}
+
 // OutputEncoder is the ffmpeg encoder for a delivery codec. Empty codec is H.264.
 func OutputEncoder(base, codec string) string {
 	if codec != "hevc" {
