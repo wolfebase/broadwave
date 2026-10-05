@@ -30,6 +30,12 @@ var ErrTunerRefused = errors.New("The tuner would not start this channel. Try ag
 
 var errNoLock = errors.New("no lock")
 
+// errDark is a probe whose tuner read the frequency and never locked.
+var errDark = errors.New("no signal")
+
+// darkProbe is how long a probe waits for a tuner on a frequency to lock.
+var darkProbe = 7 * time.Second
+
 // NoSignal is true when this channel's tuner has sent nothing and reports no
 // lock. A tuner that does not answer, and a feed with no tuner, are not.
 func (h *Hub) NoSignal(channelID int64) bool {

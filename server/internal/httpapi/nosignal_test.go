@@ -142,13 +142,14 @@ func tunersFree(t *testing.T, h http.Handler) bool {
 }
 
 // A FLEX tunes a channel with no signal to its frequency, never locks, and
-// answers the stream with 807 No Video Data. A watch and a recording of it
-// say it is not coming in, not that a stream is down.
+// answers the stream with 807 No Video Data about 10 s later. A watch and a
+// recording of it say it is not coming in, not that a stream is down, and
+// without waiting for the device's own answer.
 func TestADeviceWithNoVideoDataSaysItIsNotComingIn(t *testing.T) {
 	ctx := context.Background()
 	sample := filepath.Join(t.TempDir(), "sample.ts")
 	contractSample(t, sample)
-	tuner := &fake.Server{TS: sample, NoVideoData: true}
+	tuner := &fake.Server{TS: sample, NoVideoData: true, TuneDelay: 10 * time.Second}
 	base, control, err := tuner.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -179,6 +180,7 @@ func TestADeviceWithNoVideoDataSaysItIsNotComingIn(t *testing.T) {
 	tuner.Dark("5.1")
 
 	for _, path := range []string{"/api/v1/watch", "/api/v1/recordings"} {
+		began := time.Now()
 		res := postJSON(t, h, path, fmt.Sprintf(`{"channelId":%d}`, id))
 		var problem struct {
 			Code string `json:"code"`
@@ -186,6 +188,9 @@ func TestADeviceWithNoVideoDataSaysItIsNotComingIn(t *testing.T) {
 		_ = json.Unmarshal(res.Body.Bytes(), &problem)
 		if res.Code != http.StatusServiceUnavailable || problem.Code != "no_signal" {
 			t.Fatalf("%s: %d %s", path, res.Code, res.Body.String())
+		}
+		if took := time.Since(began); took > 9*time.Second {
+			t.Fatalf("%s took %v", path, took)
 		}
 		if !hub.Idle() || !tunersFree(t, h) {
 			t.Fatalf("%s kept the tuner", path)

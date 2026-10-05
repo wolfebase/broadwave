@@ -696,6 +696,9 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 		return h.openAutoLocked(ch, root, host, last, false, began, status)
 	}
 	freq, programs, err := probe(host, tuner, ch.GuideNumber)
+	if errors.Is(err, errDark) {
+		return nil, fmt.Errorf("%w (%v)", ErrNoSignal, err)
+	}
 	if err != nil {
 		return h.openAutoLocked(ch, root, host, last, errors.Is(err, errNoLock), began, status)
 	}
@@ -3556,10 +3559,17 @@ func probe(host string, tuner int, guide string) (int, []hdhr.Program, error) {
 	}
 	var status string
 	var err error
-	deadline := time.Now().Add(4 * time.Second)
-	for time.Now().Before(deadline) {
+	began := time.Now()
+	for {
 		status, err = c.Get(fmt.Sprintf("/tuner%d/status", tuner))
 		if err == nil && hdhr.FrequencyHz(status) > 0 && strings.Contains(status, "lock=8vsb") {
+			break
+		}
+		// A weak signal can take a few seconds to lock. A FLEX on a dark
+		// frequency reads lock=none the whole time and answers its /auto
+		// stream with 807 only after about 10 s more.
+		unlocked := err == nil && hdhr.FrequencyHz(status) > 0 && strings.Contains(status, "lock=none")
+		if waited := time.Since(began); waited >= darkProbe || (!unlocked && waited >= 4*time.Second) {
 			break
 		}
 		time.Sleep(250 * time.Millisecond)
@@ -3571,6 +3581,10 @@ func probe(host string, tuner int, guide string) (int, []hdhr.Program, error) {
 			return 0, nil, err
 		}
 		return 0, nil, fmt.Errorf("tuner %d did not lock %s: %w", tuner, guide, errNoLock)
+	}
+	if err == nil && strings.Contains(status, "lock=none") {
+		_, _ = c.Set(fmt.Sprintf("/tuner%d/channel", tuner), "none")
+		return 0, nil, fmt.Errorf("tuner %d found no signal for %s: %w", tuner, guide, errDark)
 	}
 	info := ""
 	infoDeadline := time.Now().Add(3 * time.Second)
