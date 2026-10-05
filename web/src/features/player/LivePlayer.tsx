@@ -143,9 +143,14 @@ export function LivePlayer({
       setBehind(Math.max(0, end - video.currentTime));
       setSpan({ at: Math.max(0, video.currentTime - start), len: Math.max(1, end - start) });
     };
+    // A paused video fires no timeupdate, and live moves on without it.
+    const paused = window.setInterval(() => {
+      if (video.paused) tick();
+    }, 1000);
     video.addEventListener("timeupdate", tick);
     video.addEventListener("seeked", tick);
     return () => {
+      window.clearInterval(paused);
       video.removeEventListener("timeupdate", tick);
       video.removeEventListener("seeked", tick);
     };

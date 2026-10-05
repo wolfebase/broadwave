@@ -184,3 +184,26 @@ test("stats, help, last channel, a typed number, sleep, volume, and theater", as
 
   expect(errors).toEqual([]);
 });
+
+test("a paused player keeps counting how far behind live it is", async ({ page }) => {
+  test.setTimeout(60_000);
+  const first = lineup().find((channel) => channel.number === "4.1");
+  expect(first).toBeTruthy();
+  await page.addInitScript(() => {
+    localStorage.setItem("ota-live", JSON.stringify({ sync: false }));
+  });
+  expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/watch?channel=${first!.id}`);
+  await settle(page);
+  await playing(page, first!.id);
+
+  await page.keyboard.press("i");
+  const behind = page.getByRole("dialog", { name: "Stats" }).locator("dt", { hasText: "Behind live" }).locator("+ dd");
+  const seconds = async () => Number((await behind.textContent())?.match(/^(\d+)s$/)?.[1] ?? NaN);
+  await expect(behind).toBeVisible();
+  await page.locator("video.stage-video").evaluate((video: HTMLVideoElement) => video.pause());
+  const from = await seconds();
+  expect(from).not.toBeNaN();
+  await expect.poll(seconds, { timeout: 8_000 }).toBeGreaterThanOrEqual(from + 3);
+});
