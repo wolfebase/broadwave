@@ -55,10 +55,10 @@ test("a search result opens, and records just that airing", async ({ page }) => 
   await page.getByRole("tab", { name: "Schedule" }).click();
   await expect(page.getByText(/^Late Local News · .+ only$/)).toBeVisible();
   // One airing takes pads, not series rules.
-  await page.getByRole("listitem").filter({ hasText: /Late Local News · .+ only/ }).getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("listitem").filter({ hasText: /Late Local News · .+ only/ }).getByRole("button", { name: "Edit Late Local News" }).click();
   const editor = page.getByRole("form", { name: "Edit Late Local News" });
-  await expect(editor.getByLabel("Minutes after")).toBeVisible();
-  await expect(editor.getByLabel("Episodes")).toHaveCount(0);
+  await expect(editor.getByLabel("After", { exact: true })).toBeVisible();
+  await expect(editor.getByRole("combobox", { name: "Episodes" })).toHaveCount(0);
   await page.goto("/search?q=Late%20Local");
   await row.click();
   await sheet.getByRole("button", { name: "Don't record" }).click();

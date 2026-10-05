@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -117,7 +118,8 @@ func (s *Server) updatePass(w http.ResponseWriter, r *http.Request) {
 // of the title, and the rest would move it. A team pass keeps its team.
 func applyPassRules(pass *store.Pass, body map[string]any) string {
 	orig := *pass
-	if v, ok := body["title"].(string); ok && strings.TrimSpace(v) != "" {
+	// A rename has its own field: Apple sends the title it last loaded with every change.
+	if v, ok := body["rename"].(string); ok && strings.TrimSpace(v) != "" {
 		pass.Title = strings.TrimSpace(v)
 	}
 	if v, ok := body["padBefore"]; ok {
@@ -159,14 +161,19 @@ func applyPassRules(pass *store.Pass, body map[string]any) string {
 	if v, ok := body["timeEnd"].(string); ok {
 		pass.TimeEnd = strings.TrimSpace(v)
 	}
-	if !validClock(pass.TimeStart) || !validClock(pass.TimeEnd) {
-		return "Times are HH:MM, from 00:00 to 23:59."
-	}
-	if (pass.TimeStart == "") != (pass.TimeEnd == "") {
-		return "Set both a start and an end time, or neither."
-	}
-	if pass.TimeStart != "" && pass.TimeStart == pass.TimeEnd {
-		return "The start and end time are the same."
+	_, hasStart := body["timeStart"]
+	_, hasEnd := body["timeEnd"]
+	// Only a window sent now is checked, so an older one doesn't block other changes.
+	if hasStart || hasEnd {
+		if !validClock(pass.TimeStart) || !validClock(pass.TimeEnd) {
+			return "Times are HH:MM, from 00:00 to 23:59."
+		}
+		if (pass.TimeStart == "") != (pass.TimeEnd == "") {
+			return "Set both a start and an end time, or neither."
+		}
+		if pass.TimeStart != "" && pass.TimeStart == pass.TimeEnd {
+			return "The start and end time are the same."
+		}
 	}
 	if v, ok := body["days"]; ok {
 		list, isList := v.([]any)
@@ -239,27 +246,25 @@ func (s *Server) orderPasses(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	// A once pass ends on its own between a list and its reorder, so ids that
+	// are gone are skipped, and a pass not named ranks last.
 	have := map[int64]bool{}
 	for _, pass := range list {
 		have[pass.ID] = true
 	}
-	named := map[int64]bool{}
+	ids := []int64{}
 	for _, id := range body.IDs {
-		if !have[id] || named[id] {
-			named = nil
-			break
+		if have[id] {
+			ids = append(ids, id)
+			delete(have, id)
 		}
-		named[id] = true
 	}
-	if named == nil || len(named) != len(have) {
-		httpError(w, "The passes changed. Reload and try again.", http.StatusConflict)
-		return
-	}
-	if err := s.Store.SetPassOrder(r.Context(), body.IDs); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			httpError(w, "The passes changed. Reload and try again.", http.StatusConflict)
-			return
+	for _, pass := range list {
+		if have[pass.ID] {
+			ids = append(ids, pass.ID)
 		}
+	}
+	if err := s.Store.SetPassOrder(r.Context(), ids); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		writeError(w, err)
 		return
 	}
@@ -349,19 +354,30 @@ func (s *Server) previewPass(w http.ResponseWriter, r *http.Request) {
 			bumps = append(bumps, item)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"tunerCount": snap.count, "items": items, "bumps": bumps})
+	zone, offset := time.Now().Zone()
+	if name := time.Local.String(); name != "Local" {
+		zone = name
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tunerCount": snap.count, "items": items, "bumps": bumps, "timeZone": zone, "utcOffset": offset})
 }
 
 func plannedKey(item dvr.Planned) string {
 	return fmt.Sprintf("%d|%d|%d", item.PassID, item.Airing.ChannelID, item.Airing.Start.Unix())
 }
 
+// sortByPriority orders passes as the store lists them: priority, then title
+// without case, then id, with an unsaved pass (id -1) after the saved ones.
 func sortByPriority(passes []store.Pass) {
-	for i := 1; i < len(passes); i++ {
-		for j := i; j > 0 && passes[j].Priority > passes[j-1].Priority; j-- {
-			passes[j], passes[j-1] = passes[j-1], passes[j]
+	sort.SliceStable(passes, func(i, j int) bool {
+		a, b := passes[i], passes[j]
+		if a.Priority != b.Priority {
+			return a.Priority > b.Priority
 		}
-	}
+		if x, y := strings.ToLower(a.Title), strings.ToLower(b.Title); x != y {
+			return x < y
+		}
+		return uint64(a.ID) < uint64(b.ID)
+	})
 }
 
 func (s *Server) passByID(ctx context.Context, id int64) (store.Pass, error) {

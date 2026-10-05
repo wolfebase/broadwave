@@ -865,7 +865,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Rank every pass, first highest. The list must name each pass once. */
+        /** @description Rank passes, first highest. Ids that are gone or repeated are skipped; a pass not named ranks last. */
         put: operations["orderPasses"];
         post?: never;
         delete?: never;
@@ -883,7 +883,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Plan the next 14 days as if this pass were saved. With id, the rules edit that pass; without, it is a new series pass. Nothing is saved. */
+        /** @description Plan the next 14 days as if this pass were saved. With id, the rules edit that pass (rename for a new title); without, it is a new series pass. Nothing is saved. */
         post: operations["previewPass"];
         delete?: never;
         options?: never;
@@ -904,6 +904,7 @@ export interface paths {
         delete: operations["deletePass"];
         options?: never;
         head?: never;
+        /** @description Changes only the fields sent. title is ignored; rename changes a series pass's title. A time window is checked only when one is sent. */
         patch: operations["updatePass"];
         trace?: never;
     };
@@ -1615,6 +1616,11 @@ export interface components {
             programId?: string;
             /** @description Scoreboard game this recording is following. Empty when it is not a matched game. */
             gameId?: string;
+            /**
+             * Format: int64
+             * @description The pass that started it; its keep and limit rules apply. Absent for one started by hand or found in a folder.
+             */
+            passId?: number;
             /** @enum {string} */
             status: "recording" | "complete" | "failed" | "stopped" | "imported";
             error?: string;
@@ -1719,6 +1725,10 @@ export interface components {
         };
         PassPreview: {
             tunerCount: number;
+            /** @description The server's time zone, which days and times are read in */
+            timeZone: string;
+            /** @description Seconds the server's clock is ahead of UTC now */
+            utcOffset: number;
             /** @description Airings the pass matches, with skipped ones marked */
             items: components["schemas"]["PlannedAiring"][];
             /** @description Airings other passes record now that this pass would push out */
@@ -3512,7 +3522,6 @@ export interface operations {
                     "application/json": components["schemas"]["PassList"];
                 };
             };
-            409: components["responses"]["Error"];
         };
     };
     previewPass: {
@@ -3527,6 +3536,7 @@ export interface operations {
                 "application/json": components["schemas"]["NewPass"] & {
                     /** Format: int64 */
                     id?: number;
+                    rename?: string;
                 };
             };
         };
@@ -3577,7 +3587,10 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Pass"];
+                "application/json": components["schemas"]["Pass"] & {
+                    /** @description New title, words, or category for a series pass */
+                    rename?: string;
+                };
             };
         };
         responses: {

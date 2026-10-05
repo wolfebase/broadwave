@@ -81,18 +81,24 @@ func SameShow(pass store.Pass, rec store.Recording) bool {
 	return sameShow(pass, rec)
 }
 
+// sameShow reports whether the pass's keep and limit rules cover the recording:
+// one the pass started, or, for a title pass, one of that exact title from
+// before recordings named their pass. Words, a category, or a team match far
+// more than the pass ever recorded, so those passes cover only their own.
 func sameShow(pass store.Pass, rec store.Recording) bool {
+	if rec.PassID != 0 {
+		return rec.PassID == pass.ID
+	}
+	if pass.Kind == "team" || pass.Kind == "once" {
+		return false
+	}
+	if kind := strings.ToLower(strings.TrimSpace(pass.MatchKind)); kind != "" && kind != "title" {
+		return false
+	}
 	if pass.ChannelID != 0 && pass.ChannelID != rec.ChannelID {
 		return false
 	}
-	switch strings.ToLower(pass.MatchKind) {
-	case "category":
-		return categoryHas(rec.Category, pass.Title)
-	case "contains":
-		return strings.Contains(strings.ToLower(rec.Title), strings.ToLower(pass.Title))
-	default:
-		return strings.EqualFold(rec.Title, pass.Title)
-	}
+	return strings.EqualFold(rec.Title, pass.Title)
 }
 
 // KeepVictims returns completed recording ids the pass's keep rule should remove.

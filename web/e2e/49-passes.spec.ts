@@ -13,27 +13,32 @@ async function passes(page: import("@playwright/test").Page) {
   return ((await (await page.request.get("/api/v1/passes")).json()) as { passes: Pass[] }).passes;
 }
 
-// The server reads pass windows in its own zone, which is this process's.
+// The server reads days and times on its own clock; the image runs in another zone than the runner.
+let offset = 0;
+function serverDate(ms: number) {
+  return new Date(ms + offset * 1000);
+}
 function clock(ms: number) {
-  const d = new Date(ms);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const d = serverDate(ms);
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
 }
 
 test("passes take keyword, category, day, and time rules, and keep an order", async ({ page }) => {
   expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBe(true);
   for (const pass of await passes(page)) await page.request.delete(`/api/v1/passes/${pass.id}`);
+  offset = ((await (await page.request.post("/api/v1/passes/preview", { data: { title: "x" } })).json()) as { utcOffset: number }).utcOffset;
   await page.goto("/schedule");
   await settle(page);
 
   // A category pass held to the hour of the basketball game: the game already on stays out.
   await page.getByRole("button", { name: "New pass" }).click();
   const draft = page.getByRole("form", { name: "New pass" });
-  await draft.getByLabel("Match").selectOption("category");
-  await draft.getByLabel("Category").fill("Sports");
+  await draft.getByRole("combobox", { name: "Match" }).selectOption("category");
+  await draft.getByLabel("Category", { exact: true }).fill("Sports");
   await expect(draft.getByRole("status")).toContainText("NFL: Bears at Bills");
   const nba = seeded + 3 * 60 * 60_000;
-  await draft.getByLabel("Starts after").fill(clock(nba - 10 * 60_000));
-  await draft.getByLabel("Starts before").fill(clock(nba + 10 * 60_000));
+  await draft.getByLabel("From", { exact: true }).fill(clock(nba - 10 * 60_000));
+  await draft.getByLabel("Until", { exact: true }).fill(clock(nba + 10 * 60_000));
   await expect(draft.getByRole("status")).toContainText("Records 1 airing in the next 2 weeks.");
   await expect(draft.getByRole("status")).toContainText("NBA: Lakers at Celtics");
   await expect(draft.getByRole("status")).not.toContainText("NFL");
@@ -41,12 +46,12 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
   await expect(page.getByText("Sports (category)")).toBeVisible();
 
   // Words in a title, on a day it doesn't air, then on its day.
-  const late = new Date(seeded + 100 * 60_000).getDay();
+  const late = serverDate(seeded + 100 * 60_000).getUTCDay();
   const other = (late + 3) % 7;
   const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   await page.getByRole("button", { name: "New pass" }).click();
-  await draft.getByLabel("Match").selectOption("contains");
-  await draft.getByLabel("Words in the title").fill("late local");
+  await draft.getByRole("combobox", { name: "Match" }).selectOption("contains");
+  await draft.getByLabel("Words", { exact: true }).fill("late local");
   await draft.getByRole("button", { name: names[other], exact: true }).click();
   await expect(draft.getByRole("button", { name: names[other], exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(draft.getByRole("status")).toContainText("Nothing in the guide matches in the next 2 weeks.");
@@ -65,22 +70,25 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
 
   // Up and Down save the order; the first pass gets the tuner.
   const rows = page.locator(".pass-row");
-  await expect(rows.nth(0)).toContainText("Sports (category)");
-  await page.getByRole("button", { name: "Move late local up" }).click();
+  // Titles sort without case until there is an order.
   await expect(rows.nth(0)).toContainText("Titles with “late local”");
-  await expect.poll(async () => (await passes(page)).map((p) => p.title)).toEqual(["late local", "Sports"]);
-  await expect(page.getByRole("button", { name: "Move late local up" })).toBeDisabled();
+  await page.getByRole("button", { name: "Move Sports up" }).click();
+  await expect(rows.nth(0)).toContainText("Sports (category)");
+  await expect.poll(async () => (await passes(page)).map((p) => p.title)).toEqual(["Sports", "late local"]);
+  await expect(page.getByRole("button", { name: "Move Sports up" })).toBeDisabled();
+  // At the top Up turns off, so focus moves to Down.
+  await expect(page.getByRole("button", { name: "Move Sports down" })).toBeFocused();
 
   // Dragging works too.
   await rows.nth(1).dragTo(rows.nth(0));
-  await expect(rows.nth(0)).toContainText("Sports (category)");
-  await expect.poll(async () => (await passes(page)).map((p) => `${p.title}:${p.priority}`)).toEqual(["Sports:2", "late local:1"]);
+  await expect(rows.nth(0)).toContainText("Titles with “late local”");
+  await expect.poll(async () => (await passes(page)).map((p) => `${p.title}:${p.priority}`)).toEqual(["late local:2", "Sports:1"]);
 
   // Edit keep rules.
-  await rows.filter({ hasText: "late local" }).getByRole("button", { name: "Edit" }).click();
+  await rows.filter({ hasText: "late local" }).getByRole("button", { name: /^Edit / }).click();
   const edit = page.getByRole("form", { name: "Edit late local" });
-  await edit.getByLabel("Keep").selectOption("last");
-  await edit.getByLabel("Recordings to keep").fill("3");
+  await edit.getByRole("combobox", { name: "Keep" }).selectOption("last");
+  await edit.getByLabel("How many", { exact: true }).fill("3");
   await edit.getByRole("button", { name: "Save" }).click();
   await expect(rows.filter({ hasText: "late local" })).toContainText("Keeps the newest 3");
   saved = await passes(page);
@@ -96,23 +104,41 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
       },
     }),
   );
-  await rows.filter({ hasText: "Sports" }).getByRole("button", { name: "Edit" }).click();
+  await rows.filter({ hasText: "Sports" }).getByRole("button", { name: /^Edit / }).click();
   const sportsEdit = page.getByRole("form", { name: "Edit Sports" });
   await expect(sportsEdit.getByRole("status")).toContainText("Matches 1 airing in the next 2 weeks, but none will record.");
-  await expect(sportsEdit.getByRole("status")).toContainText("Skipped: a higher pass has the tuner");
+  await expect(sportsEdit.getByRole("status")).toContainText("Skipped: another pass has the tuner");
   await expect(sportsEdit.getByRole("status")).toContainText("This pass would stop these from recording:");
   await expect(sportsEdit.getByRole("status")).toContainText("Late Local News");
   await page.unroute("**/api/v1/passes/preview");
   await sportsEdit.getByRole("button", { name: "Cancel" }).click();
 
+  // A rename changes the words, and the list follows.
+  await rows.filter({ hasText: "late local" }).getByRole("button", { name: /^Edit / }).click();
+  const rename = page.getByRole("form", { name: "Edit late local" });
+  await rename.getByLabel("Words", { exact: true }).fill("late local news");
+  await rename.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Titles with “late local news”")).toBeVisible();
+  expect((await passes(page)).find((p) => p.id === words.id)?.title).toBe("late local news");
+
+  // Fits a TV.
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto("/schedule?layout=tv");
+  await settle(page);
+  await rows.filter({ hasText: "late local" }).getByRole("button", { name: /^Edit / }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  await page.getByRole("form", { name: "Edit late local news" }).getByRole("button", { name: "Cancel" }).click();
+
   // Fits a phone.
   await page.setViewportSize({ width: 390, height: 844 });
-  await rows.filter({ hasText: "late local" }).getByRole("button", { name: "Edit" }).click();
+  await page.goto("/schedule");
+  await settle(page);
+  await rows.filter({ hasText: "late local" }).getByRole("button", { name: /^Edit / }).click();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
-  await page.getByRole("form", { name: "Edit late local" }).getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("form", { name: "Edit late local news" }).getByRole("button", { name: "Cancel" }).click();
 
-  await page.getByRole("button", { name: "Remove late local" }).click();
+  await page.getByRole("button", { name: "Remove late local news" }).click();
   await page.getByRole("button", { name: "Remove Sports" }).click();
   await expect(page.getByText(/A pass records every airing that matches/)).toBeVisible();
 });

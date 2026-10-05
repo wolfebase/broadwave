@@ -237,6 +237,8 @@ export type PassList = {
 
 export type PassPreview = {
   tunerCount: number;
+  timeZone: string;
+  utcOffset: number;
   items: PlannedAiring[];
   bumps: PlannedAiring[];
 };
@@ -270,6 +272,7 @@ export type Recording = {
   category?: string;
   programId?: string;
   gameId?: string;
+  passId?: number;
   status: string;
   error?: string;
   startedAt: string;

@@ -691,11 +691,10 @@ func (s *Server) planWith(ctx context.Context, passes []store.Pass) (scheduleSna
 		return scheduleSnap{}, err
 	}
 	count := s.tunerCount(ctx)
-	items := dvr.Plan(passes, airings, count, now, end)
 	recs, _ := s.Store.Recordings(ctx)
 	seen, _ := s.Store.SeenDeleted(ctx)
 	skips, _ := s.Store.Skips(ctx)
-	items = dvr.ApplyLibrary(items, passes, recs, seen, skips)
+	items := dvr.PlanLibrary(passes, airings, count, now, end, recs, seen, skips)
 	items = dvr.AttachSuggestions(items, passes, airings, count, now, end, s.guideNumbers(ctx))
 	if items == nil {
 		items = []dvr.Planned{}

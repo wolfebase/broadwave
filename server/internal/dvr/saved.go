@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"broadwave/internal/live"
 	"broadwave/internal/nfo"
@@ -52,6 +53,10 @@ func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Reco
 			if err != nil || victim.Status == "recording" {
 				continue
 			}
+			// A keep rule removes only what Broadwave recorded, never a file in a library folder.
+			if hub != nil && !insideDir(filepath.Join(hub.Dir, "recordings"), victim.Path) {
+				continue
+			}
 			if hub != nil {
 				_ = os.Remove(victim.Path)
 				base := stringsTrimExt(victim.Path)
@@ -93,6 +98,14 @@ func commercialsOn(passes []store.Pass, rec store.Recording) bool {
 		}
 	}
 	return !matched
+}
+
+func insideDir(root, path string) bool {
+	if path == "" {
+		return false
+	}
+	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path))
+	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func stringsTrimExt(path string) string {
