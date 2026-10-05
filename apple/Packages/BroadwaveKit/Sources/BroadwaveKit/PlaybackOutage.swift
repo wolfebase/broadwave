@@ -400,6 +400,9 @@ public struct FrozenPicture: Equatable, Sendable {
     public static let stoppedSeconds: TimeInterval = 1
     /// A picture that never moved and paused itself with media loaded.
     public static let unmovedSeconds: TimeInterval = 3
+    /// AVPlayer says playing, with nothing loaded at the playhead. A stall
+    /// waits instead; this item lost its media in a sync hold and never asks again.
+    public static let starvedSeconds: TimeInterval = 2
     static let settledSeconds: TimeInterval = 20
     /// After this many steps with no settled picture, the outage clock has the last word.
     static let maxSteps = 6
@@ -421,9 +424,11 @@ public struct FrozenPicture: Equatable, Sendable {
     /// `time` is the item's playhead, nil with no item. `playing` is false
     /// while the viewer or the sync engine holds the picture. `stoppedItself`
     /// is a pause AVPlayer made on its own. `primed` is an item that has had
-    /// media loaded past its playhead.
+    /// media loaded past its playhead. `starved` is AVPlayer playing with
+    /// nothing loaded at the playhead.
     public mutating func note(
-        time: Double?, playing: Bool, stoppedItself: Bool = false, ended: Bool = false, primed: Bool = false, at now: Date
+        time: Double?, playing: Bool, stoppedItself: Bool = false, ended: Bool = false, primed: Bool = false,
+        starved: Bool = false, at now: Date
     ) -> Step? {
         if ended {
             lastTime = nil
@@ -459,8 +464,9 @@ public struct FrozenPicture: Equatable, Sendable {
             return nil
         }
         let unmoved = !moved && primed && stoppedItself
-        let wait = unmoved ? Self.unmovedSeconds : stoppedItself && movedSinceStep ? Self.stoppedSeconds : Self.seconds
-        guard moved || unmoved, let start = since, now.timeIntervalSince(start) >= wait else { return nil }
+        let dry = primed && playing && starved
+        let wait = dry ? Self.starvedSeconds : unmoved ? Self.unmovedSeconds : stoppedItself && movedSinceStep ? Self.stoppedSeconds : Self.seconds
+        guard moved || unmoved || dry, let start = since, now.timeIntervalSince(start) >= wait else { return nil }
         return nextStep(at: now)
     }
 

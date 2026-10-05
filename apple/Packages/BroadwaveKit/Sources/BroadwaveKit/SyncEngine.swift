@@ -407,8 +407,9 @@ public final class SyncEngine {
             if let resumeAfter {
                 let wait = max(0.05, resumeAfter - Self.resumeLeadSeconds)
                 holdUntil = Date().addingTimeInterval(wait)
+                resetHoldIfAsked(item: item, wait: wait)
                 DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
-                    self?.player.play()
+                    self?.endHold()
                 }
                 state = .syncing
             } else {
@@ -485,6 +486,37 @@ public final class SyncEngine {
         let missed = misses, behind = Int(drift)
         Self.log.notice("sync gave up after \(missed) missed catch-ups, \(behind) ms behind")
         report(item: item, drift: drift)
+    }
+
+    /// The tvOS transport bar can seek a held item back to its pause point by
+    /// date when the bar hides. A fresh tune is held at the start of its
+    /// playlist, and a pause point a fraction early is a date the playlist
+    /// does not hold: AVPlayer drops everything it loaded and can sit on the
+    /// frame, playing nothing, until the frozen-picture reload. By the end of
+    /// the hold the room's frame is in the playlist, so a held item that lost
+    /// its media goes there.
+    private func endHold() {
+        if let item = player.currentItem, let st = room_, st.rate != 0, bufferedAhead(item) < 0.1 {
+            if logs {
+                Self.log.notice("sync hold lost its media")
+            }
+            lastSeek = .distantPast
+            seek(to: st.target(atServer: socket.serverNow()))
+        }
+        player.play()
+    }
+
+    /// `-BroadwaveHoldReset YES` replays that seek 3 s into a long hold.
+    private func resetHoldIfAsked(item: AVPlayerItem, wait: Double) {
+        guard wait > 3.5, UserDefaults.standard.bool(forKey: "BroadwaveHoldReset"),
+              let start = item.seekableTimeRanges.first?.timeRangeValue.start, let now = item.currentDate()
+        else { return }
+        let first = now.addingTimeInterval(start.seconds - item.currentTime().seconds)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self, player.currentItem === item else { return }
+            Self.log.notice("sync hold reset")
+            item.seek(to: first.addingTimeInterval(-1)) { _ in }
+        }
     }
 
     /// `-BroadwaveSyncKick <ms>` knocks a locked screen that far behind once,

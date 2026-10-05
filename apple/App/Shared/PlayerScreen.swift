@@ -819,8 +819,10 @@ final class LivePlayer {
         if RestartHandoff.bufferedAhead(player) >= 0.5 {
             itemPrimed = true
         }
+        let starved = player.timeControlStatus == .playing && RestartHandoff.bufferedAhead(player) < 0.1
         let step = frozen.note(
-            time: time, playing: !paused, stoppedItself: paused && pausedItself, ended: ended, primed: itemPrimed, at: Date()
+            time: time, playing: !paused, stoppedItself: paused && pausedItself, ended: ended, primed: itemPrimed,
+            starved: starved, at: Date()
         )
         if !frozen.reconnecting {
             reconnecting = false

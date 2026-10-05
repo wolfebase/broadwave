@@ -32,6 +32,23 @@ private func play(_ frozen: inout FrozenPicture, from time: Double, seconds: Int
     #expect(frozen.note(time: at, playing: false, stoppedItself: true, at: start.addingTimeInterval(6)) == .reload)
 }
 
+@Test func aHoldThatLostItsMediaReloadsAfterTwoSeconds() {
+    var frozen = FrozenPicture()
+    // Staging 62.1 on the TV sim: held 7 s, resumed playing at the same
+    // frame with nothing loaded, and sat there until the 8 s rule.
+    #expect(frozen.note(time: 50, playing: false, primed: true, at: start) == nil)
+    #expect(frozen.note(time: 49, playing: true, primed: true, starved: true, at: start.addingTimeInterval(1)) == nil)
+    #expect(frozen.note(time: 49, playing: true, primed: true, starved: true, at: start.addingTimeInterval(2)) == nil)
+    #expect(frozen.note(time: 49, playing: true, primed: true, starved: true, at: start.addingTimeInterval(3)) == .reload)
+}
+
+@Test func anEmptyItemThatNeverLoadedIsStillStarting() {
+    var frozen = FrozenPicture()
+    for i in 0 ... 10 {
+        #expect(frozen.note(time: 0, playing: true, starved: true, at: start.addingTimeInterval(Double(i))) == nil)
+    }
+}
+
 @Test func stepsStopAtTheCap() {
     var frozen = FrozenPicture()
     let at = play(&frozen, from: 100, seconds: 5)
