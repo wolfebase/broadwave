@@ -256,6 +256,10 @@ func (h *Hub) openTunedStream(ctx context.Context, t *tuned, tuners []Tuner) {
 		}
 	}
 	freq, programs, err := probe(t.host, t.tuner, ch.GuideNumber)
+	if errors.Is(err, errDark) {
+		t.err = fmt.Errorf("%w (%v)", ErrNoSignal, err)
+		return
+	}
 	if err != nil {
 		url := h.autoURL(ch, t.root)
 		res, openErr := openStream(url, "", "")
