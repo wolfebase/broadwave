@@ -99,5 +99,18 @@ ffmpeg
   The image carries this offer at /usr/share/doc/broadwave/ffmpeg-source-offer.txt.
   Broadwave is not linked with ffmpeg. The server runs it as a separate program.
 
-  comskip is not installed by the image. If an operator installs it, it runs
-  as its own program under the GPL.
+comskip
+
+  Both images build comskip, which finds commercial breaks in recordings,
+  from https://github.com/erikkaashoek/Comskip at commit
+  a140b6ac8bc8f596729e9052819affc779c3b377. comskip is GPL-2.0; its license
+  and that commit's source are in the image at
+  /usr/share/doc/broadwave/comskip-LICENSE and comskip-source.tar.gz.
+
+  comskip is statically linked to ffmpeg 7.1.4 built from
+  https://ffmpeg.org/releases/ffmpeg-7.1.4.tar.xz without --enable-gpl,
+  with only the MPEG-TS demuxer and the video and audio decoders it needs.
+  That ffmpeg is LGPL-2.1-or-later. comskip also uses the Debian package
+  libargtable2-0 (LGPL-2.0-or-later). It is not linked to the
+  jellyfin-ffmpeg build above, and Broadwave is not linked with comskip:
+  the server runs it as a separate program.
