@@ -25,3 +25,95 @@
   width: 100%;
   justify-content: center;
 }
+
+.passes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.pass-list {
+  padding: 0;
+  list-style: none;
+}
+
+.pass-row {
+  align-items: center;
+}
+
+.pass-row[draggable="true"] {
+  cursor: grab;
+}
+
+.pass-row.dragging {
+  opacity: 0.5;
+}
+
+.pass-rank {
+  min-width: 1.5em;
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.pass-text {
+  flex: 1 1 16rem;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pass-title {
+  font-weight: 600;
+}
+
+.pass-editor {
+  flex: 1 0 100%;
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-line);
+}
+
+.pass-editor fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.pass-editor legend {
+  float: left;
+  margin-right: var(--space-2);
+}
+
+.pass-name input {
+  min-width: 14rem;
+}
+
+.layout-phone .pass-name {
+  flex-wrap: wrap;
+}
+
+.pass-preview {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.pass-preview p {
+  margin: 0;
+}
+
+.layout-phone .pass-actions {
+  flex: 1 0 100%;
+}
+
+.layout-phone .pass-name input {
+  min-width: 0;
+  width: 100%;
+}
+
+.pass-editor label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}

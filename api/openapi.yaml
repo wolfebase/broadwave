@@ -1185,21 +1185,60 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [title]
-              properties:
-                title: { type: string }
-                channelId: { type: integer, format: int64, description: "0 records on any channel" }
-                padBefore: { type: integer, minimum: 0, maximum: 30 }
-                padAfter: { type: integer, minimum: 0, maximum: 30 }
-                airingStart: { type: string, format: date-time, description: "Record only the airing starting then on channelId (kind once). Needs channelId." }
+            schema: { $ref: "#/components/schemas/NewPass" }
       responses:
         "200":
           description: Passes after the change
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PassList" }
+        "400": { $ref: "#/components/responses/Error" }
+  /passes/order:
+    put:
+      tags: [dvr]
+      operationId: orderPasses
+      description: Rank every pass, first highest. The list must name each pass once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: Passes after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PassList" }
+        "409": { $ref: "#/components/responses/Error" }
+  /passes/preview:
+    post:
+      tags: [dvr]
+      operationId: previewPass
+      description: Plan the next 14 days as if this pass were saved. With id, the rules edit that pass; without, it is a new series pass. Nothing is saved.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/NewPass"
+                - type: object
+                  properties:
+                    id: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: What the pass would record, and recordings of other passes it would push out
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PassPreview" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /passes/{id}:
     patch:
       tags: [dvr]
@@ -2056,7 +2095,46 @@ components:
         timeStart: { type: string, description: "HH:MM local" }
         timeEnd: { type: string, description: "HH:MM local" }
         matchKind: { type: string, enum: [title, contains, category, team] }
+        days:
+          type: array
+          description: Weekdays an airing may start on, 0 Sunday to 6 Saturday; empty is every day. After midnight in a window that began the night before counts as that night.
+          items: { type: integer, minimum: 0, maximum: 6 }
         airingStart: { type: string, format: date-time, description: "Start of the one airing a once pass records" }
+    NewPass:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, description: "The title, the words a title contains, or the category" }
+        channelId: { type: integer, format: int64, description: "0 records on any channel" }
+        padBefore: { type: integer, minimum: 0, maximum: 30 }
+        padAfter: { type: integer, minimum: 0, maximum: 30 }
+        airingStart: { type: string, format: date-time, description: "Record only the airing starting then on channelId (kind once). Needs channelId; the rules below are ignored." }
+        matchKind: { type: string, enum: [title, contains, category] }
+        priority: { type: integer }
+        episodes: { type: string, enum: [all, new] }
+        keepMode: { type: string, enum: [all, unwatched, last] }
+        keepCount: { type: integer, minimum: 0, maximum: 99 }
+        limitCount: { type: integer, minimum: 0, maximum: 99 }
+        rerecord: { type: boolean }
+        commercials: { type: boolean }
+        timeStart: { type: string, description: "HH:MM local; set with timeEnd" }
+        timeEnd: { type: string, description: "HH:MM local; before timeStart crosses midnight" }
+        days:
+          type: array
+          items: { type: integer, minimum: 0, maximum: 6 }
+    PassPreview:
+      type: object
+      required: [tunerCount, items, bumps]
+      properties:
+        tunerCount: { type: integer }
+        items:
+          type: array
+          description: Airings the pass matches, with skipped ones marked
+          items: { $ref: "#/components/schemas/PlannedAiring" }
+        bumps:
+          type: array
+          description: Airings other passes record now that this pass would push out
+          items: { $ref: "#/components/schemas/PlannedAiring" }
     TeamFollow:
       type: object
       required: [name]

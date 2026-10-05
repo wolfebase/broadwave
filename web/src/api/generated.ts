@@ -191,6 +191,25 @@ export type MultiviewPlan = {
   stops?: MultiviewPlanStops[];
 };
 
+export type NewPass = {
+  title: string;
+  channelId?: number;
+  padBefore?: number;
+  padAfter?: number;
+  airingStart?: string;
+  matchKind?: string;
+  priority?: number;
+  episodes?: string;
+  keepMode?: string;
+  keepCount?: number;
+  limitCount?: number;
+  rerecord?: boolean;
+  commercials?: boolean;
+  timeStart?: string;
+  timeEnd?: string;
+  days?: number[];
+};
+
 export type Pass = {
   id: number;
   title: string;
@@ -208,11 +227,18 @@ export type Pass = {
   timeStart?: string;
   timeEnd?: string;
   matchKind?: string;
+  days?: number[];
   airingStart?: string;
 };
 
 export type PassList = {
   passes: Pass[];
+};
+
+export type PassPreview = {
+  tunerCount: number;
+  items: PlannedAiring[];
+  bumps: PlannedAiring[];
 };
 
 export type Person = {

@@ -3,7 +3,6 @@ package httpapi
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -676,12 +675,17 @@ type scheduleSnap struct {
 }
 
 func (s *Server) loadSchedule(ctx context.Context) (scheduleSnap, error) {
-	now := time.Now()
-	end := now.Add(14 * 24 * time.Hour)
 	passes, err := s.Store.Passes(ctx)
 	if err != nil {
 		return scheduleSnap{}, err
 	}
+	return s.planWith(ctx, passes)
+}
+
+// planWith plans the next 14 days for the given passes, ordered by priority as the store lists them.
+func (s *Server) planWith(ctx context.Context, passes []store.Pass) (scheduleSnap, error) {
+	now := time.Now()
+	end := now.Add(14 * 24 * time.Hour)
 	airings, err := s.Store.RecordingAirings(ctx, now.Add(-time.Minute), end)
 	if err != nil {
 		return scheduleSnap{}, err
@@ -1017,138 +1021,6 @@ func (s *Server) tunerCount(ctx context.Context) int {
 	return n
 }
 
-func (s *Server) passes(w http.ResponseWriter, r *http.Request) {
-	list, err := s.Store.Passes(r.Context())
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	if list == nil {
-		list = []store.Pass{}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"passes": list})
-}
-
-func (s *Server) addPass(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Title       string     `json:"title"`
-		ChannelID   int64      `json:"channelId"`
-		PadBefore   *int       `json:"padBefore"`
-		PadAfter    *int       `json:"padAfter"`
-		AiringStart *time.Time `json:"airingStart"`
-	}
-	if err := decodeJSON(r, &body); err != nil || strings.TrimSpace(body.Title) == "" {
-		httpError(w, "title required", http.StatusBadRequest)
-		return
-	}
-	if body.AiringStart != nil && body.ChannelID == 0 {
-		httpError(w, "channelId required to record one airing", http.StatusBadRequest)
-		return
-	}
-	before, after := 1, 2
-	if body.PadBefore != nil {
-		before = clampPad(*body.PadBefore)
-	}
-	if body.PadAfter != nil {
-		after = clampPad(*body.PadAfter)
-	}
-	var err error
-	if body.AiringStart != nil {
-		err = s.Store.AddOncePass(r.Context(), strings.TrimSpace(body.Title), body.ChannelID, *body.AiringStart, before, after)
-	} else {
-		err = s.Store.AddPass(r.Context(), strings.TrimSpace(body.Title), body.ChannelID, before, after)
-	}
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	s.passes(w, r)
-}
-
-func (s *Server) updatePass(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		httpError(w, "invalid pass", http.StatusBadRequest)
-		return
-	}
-	var body map[string]any
-	if err := decodeJSON(r, &body); err != nil {
-		httpError(w, "invalid json", http.StatusBadRequest)
-		return
-	}
-	current, err := s.passByID(r.Context(), id)
-	if err != nil {
-		httpError(w, "pass not found", http.StatusNotFound)
-		return
-	}
-	orig := current
-	if v, ok := body["padBefore"]; ok {
-		current.PadBefore = clampPad(int(num(v)))
-	}
-	if v, ok := body["padAfter"]; ok {
-		current.PadAfter = clampPad(int(num(v)))
-	}
-	if v, ok := body["priority"]; ok {
-		current.Priority = clampPriority(int(num(v)))
-	}
-	if v, ok := body["episodes"].(string); ok && v != "" {
-		current.Episodes = v
-	}
-	if v, ok := body["keepMode"].(string); ok && v != "" {
-		current.KeepMode = v
-	}
-	if v, ok := body["keepCount"]; ok {
-		current.KeepCount = int(num(v))
-	}
-	if v, ok := body["limitCount"]; ok {
-		current.LimitCount = int(num(v))
-	}
-	if v, ok := body["rerecord"].(bool); ok {
-		current.Rerecord = v
-	}
-	if v, ok := body["commercials"].(bool); ok {
-		current.Commercials = v
-	}
-	if v, ok := body["timeStart"].(string); ok {
-		current.TimeStart = v
-	}
-	if v, ok := body["timeEnd"].(string); ok {
-		current.TimeEnd = v
-	}
-	if v, ok := body["matchKind"].(string); ok && v != "" {
-		current.MatchKind = v
-	}
-	if v, ok := body["channelId"]; ok {
-		current.ChannelID = int64(num(v))
-	}
-	if orig.Kind == "once" {
-		// One airing takes pads, priority, and commercial marking. Keep rules
-		// would delete other recordings of the title, and the rest would move it.
-		edited := current
-		current = orig
-		current.PadBefore, current.PadAfter, current.Priority, current.Commercials = edited.PadBefore, edited.PadAfter, edited.Priority, edited.Commercials
-	}
-	current.ID = id
-	if err := s.Store.UpdatePassRules(r.Context(), current); err != nil {
-		httpError(w, "pass not found", http.StatusNotFound)
-		return
-	}
-	s.passes(w, r)
-}
-
-func (s *Server) passByID(ctx context.Context, id int64) (store.Pass, error) {
-	list, err := s.Store.Passes(ctx)
-	if err != nil {
-		return store.Pass{}, err
-	}
-	for _, pass := range list {
-		if pass.ID == id {
-			return pass, nil
-		}
-	}
-	return store.Pass{}, sql.ErrNoRows
-}
-
 func (s *Server) listingFor(ctx context.Context, channelID int64, title string) (store.Airing, bool) {
 	now := time.Now()
 	rows, err := s.Store.Airings(ctx, now.Add(-3*time.Hour), now.Add(8*time.Hour))
@@ -1195,8 +1067,8 @@ func clampPriority(priority int) int {
 	if priority < 0 {
 		return 0
 	}
-	if priority > 100 {
-		return 100
+	if priority > 1000 {
+		return 1000
 	}
 	return priority
 }

@@ -121,20 +121,39 @@ func categoryHas(category, want string) bool {
 }
 
 func inWindow(pass store.Pass, start time.Time) bool {
-	if strings.TrimSpace(pass.TimeStart) == "" && strings.TrimSpace(pass.TimeEnd) == "" {
-		return true
-	}
 	local := start.In(time.Local)
 	mins := local.Hour()*60 + local.Minute()
+	day := int(local.Weekday())
 	a := clockMinutes(pass.TimeStart)
 	b := clockMinutes(pass.TimeEnd)
-	if a < 0 || b < 0 {
+	if a >= 0 && b >= 0 {
+		if a <= b {
+			if mins < a || mins >= b {
+				return false
+			}
+		} else {
+			if mins < a && mins >= b {
+				return false
+			}
+			if mins < b {
+				// After midnight in a window that began the night before: that night's day counts.
+				day = (day + 6) % 7
+			}
+		}
+	}
+	return onDay(pass.Days, day)
+}
+
+func onDay(days []int, day int) bool {
+	if len(days) == 0 {
 		return true
 	}
-	if a <= b {
-		return mins >= a && mins < b
+	for _, d := range days {
+		if d == day {
+			return true
+		}
 	}
-	return mins >= a || mins < b
+	return false
 }
 
 func clockMinutes(value string) int {

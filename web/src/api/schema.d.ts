@@ -857,6 +857,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/passes/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Rank every pass, first highest. The list must name each pass once. */
+        put: operations["orderPasses"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/passes/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Plan the next 14 days as if this pass were saved. With id, the rules edit that pass; without, it is a new series pass. Nothing is saved. */
+        post: operations["previewPass"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/passes/{id}": {
         parameters: {
             query?: never;
@@ -1643,11 +1677,52 @@ export interface components {
             timeEnd?: string;
             /** @enum {string} */
             matchKind?: "title" | "contains" | "category" | "team";
+            /** @description Weekdays an airing may start on, 0 Sunday to 6 Saturday; empty is every day. After midnight in a window that began the night before counts as that night. */
+            days?: number[];
             /**
              * Format: date-time
              * @description Start of the one airing a once pass records
              */
             airingStart?: string;
+        };
+        NewPass: {
+            /** @description The title, the words a title contains, or the category */
+            title: string;
+            /**
+             * Format: int64
+             * @description 0 records on any channel
+             */
+            channelId?: number;
+            padBefore?: number;
+            padAfter?: number;
+            /**
+             * Format: date-time
+             * @description Record only the airing starting then on channelId (kind once). Needs channelId; the rules below are ignored.
+             */
+            airingStart?: string;
+            /** @enum {string} */
+            matchKind?: "title" | "contains" | "category";
+            priority?: number;
+            /** @enum {string} */
+            episodes?: "all" | "new";
+            /** @enum {string} */
+            keepMode?: "all" | "unwatched" | "last";
+            keepCount?: number;
+            limitCount?: number;
+            rerecord?: boolean;
+            commercials?: boolean;
+            /** @description HH:MM local; set with timeEnd */
+            timeStart?: string;
+            /** @description HH:MM local; before timeStart crosses midnight */
+            timeEnd?: string;
+            days?: number[];
+        };
+        PassPreview: {
+            tunerCount: number;
+            /** @description Airings the pass matches, with skipped ones marked */
+            items: components["schemas"]["PlannedAiring"][];
+            /** @description Airings other passes record now that this pass would push out */
+            bumps: components["schemas"]["PlannedAiring"][];
         };
         TeamFollow: {
             /** Format: int64 */
@@ -3397,20 +3472,33 @@ export interface operations {
         };
         requestBody: {
             content: {
+                "application/json": components["schemas"]["NewPass"];
+            };
+        };
+        responses: {
+            /** @description Passes after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PassList"];
+                };
+            };
+            400: components["responses"]["Error"];
+        };
+    };
+    orderPasses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
                 "application/json": {
-                    title: string;
-                    /**
-                     * Format: int64
-                     * @description 0 records on any channel
-                     */
-                    channelId?: number;
-                    padBefore?: number;
-                    padAfter?: number;
-                    /**
-                     * Format: date-time
-                     * @description Record only the airing starting then on channelId (kind once). Needs channelId.
-                     */
-                    airingStart?: string;
+                    ids: number[];
                 };
             };
         };
@@ -3424,6 +3512,36 @@ export interface operations {
                     "application/json": components["schemas"]["PassList"];
                 };
             };
+            409: components["responses"]["Error"];
+        };
+    };
+    previewPass: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewPass"] & {
+                    /** Format: int64 */
+                    id?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description What the pass would record, and recordings of other passes it would push out */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PassPreview"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     deletePass: {

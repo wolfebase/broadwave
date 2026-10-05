@@ -126,6 +126,8 @@ type Pass struct {
 	TimeStart   string `json:"timeStart,omitempty"`
 	TimeEnd     string `json:"timeEnd,omitempty"`
 	MatchKind   string `json:"matchKind,omitempty"`
+	// Days are the weekdays (0 Sunday … 6 Saturday) an airing may start on; none is every day.
+	Days []int `json:"days,omitempty"`
 	// AiringStart pins a kind "once" pass to the airing starting then on ChannelID.
 	AiringStart time.Time `json:"airingStart,omitzero"`
 }
@@ -558,6 +560,61 @@ func (s *Store) AddPass(ctx context.Context, title string, channelID int64, padB
 	return err
 }
 
+// AddSeriesPass saves a series pass with its rules and returns its id.
+func (s *Store) AddSeriesPass(ctx context.Context, p Pass) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `INSERT INTO passes (title, channel_id, kind, pad_before, pad_after, priority, episodes, keep_mode,
+		keep_count, limit_count, rerecord, commercials, time_start, time_end, match_kind, days)
+		VALUES (?, ?, 'series', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.Title, p.ChannelID, p.PadBefore, p.PadAfter, p.Priority, blank(p.Episodes, "all"), blank(p.KeepMode, "all"),
+		p.KeepCount, p.LimitCount, boolInt(p.Rerecord), boolInt(p.Commercials), p.TimeStart, p.TimeEnd, blank(p.MatchKind, "title"), DaysMask(p.Days))
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// SetPassOrder ranks passes in the given order, first highest. Ranks start at 1
+// so a new pass (0) lands below every ordered one.
+func (s *Store) SetPassOrder(ctx context.Context, ids []int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for i, id := range ids {
+		res, err := tx.ExecContext(ctx, `UPDATE passes SET priority = ? WHERE id = ?`, len(ids)-i, id)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return sql.ErrNoRows
+		}
+	}
+	return tx.Commit()
+}
+
+// DaysMask packs weekdays into bits, Sunday lowest; out-of-range days are dropped.
+func DaysMask(days []int) int {
+	mask := 0
+	for _, d := range days {
+		if d >= 0 && d <= 6 {
+			mask |= 1 << d
+		}
+	}
+	return mask
+}
+
+// DaysOf lists the weekdays in a mask, in order.
+func DaysOf(mask int) []int {
+	var days []int
+	for d := 0; d <= 6; d++ {
+		if mask&(1<<d) != 0 {
+			days = append(days, d)
+		}
+	}
+	return days
+}
+
 // AddOncePass records the one airing starting at start on the channel. Asking
 // twice for the same airing keeps one pass.
 func (s *Store) AddOncePass(ctx context.Context, title string, channelID int64, start time.Time, padBefore, padAfter int) error {
@@ -588,8 +645,8 @@ func (s *Store) UpdatePass(ctx context.Context, id int64, padBefore, padAfter, p
 
 func (s *Store) Passes(ctx context.Context) ([]Pass, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, title, channel_id, kind, pad_before, pad_after, priority,
-	episodes, keep_mode, keep_count, limit_count, rerecord, commercials, time_start, time_end, match_kind, airing_start
-	FROM passes ORDER BY title`)
+	episodes, keep_mode, keep_count, limit_count, rerecord, commercials, time_start, time_end, match_kind, airing_start, days
+	FROM passes ORDER BY priority DESC, title, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -599,8 +656,9 @@ func (s *Store) Passes(ctx context.Context) ([]Pass, error) {
 		var p Pass
 		var rerecord, commercials int
 		var airingStart int64
+		var days int
 		if err := rows.Scan(&p.ID, &p.Title, &p.ChannelID, &p.Kind, &p.PadBefore, &p.PadAfter, &p.Priority,
-			&p.Episodes, &p.KeepMode, &p.KeepCount, &p.LimitCount, &rerecord, &commercials, &p.TimeStart, &p.TimeEnd, &p.MatchKind, &airingStart); err != nil {
+			&p.Episodes, &p.KeepMode, &p.KeepCount, &p.LimitCount, &rerecord, &commercials, &p.TimeStart, &p.TimeEnd, &p.MatchKind, &airingStart, &days); err != nil {
 			return nil, err
 		}
 		if airingStart > 0 {
@@ -608,17 +666,18 @@ func (s *Store) Passes(ctx context.Context) ([]Pass, error) {
 		}
 		p.Rerecord = rerecord != 0
 		p.Commercials = commercials != 0
+		p.Days = DaysOf(days)
 		out = append(out, p)
 	}
 	return out, rows.Err()
 }
 
 func (s *Store) UpdatePassRules(ctx context.Context, p Pass) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE passes SET pad_before = ?, pad_after = ?, priority = ?, episodes = ?, keep_mode = ?,
-		keep_count = ?, limit_count = ?, rerecord = ?, commercials = ?, time_start = ?, time_end = ?, match_kind = ?, channel_id = ?
+	res, err := s.db.ExecContext(ctx, `UPDATE passes SET title = ?, pad_before = ?, pad_after = ?, priority = ?, episodes = ?, keep_mode = ?,
+		keep_count = ?, limit_count = ?, rerecord = ?, commercials = ?, time_start = ?, time_end = ?, match_kind = ?, channel_id = ?, days = ?
 		WHERE id = ?`,
-		p.PadBefore, p.PadAfter, p.Priority, blank(p.Episodes, "all"), blank(p.KeepMode, "all"),
-		p.KeepCount, p.LimitCount, boolInt(p.Rerecord), boolInt(p.Commercials), p.TimeStart, p.TimeEnd, blank(p.MatchKind, "title"), p.ChannelID, p.ID)
+		p.Title, p.PadBefore, p.PadAfter, p.Priority, blank(p.Episodes, "all"), blank(p.KeepMode, "all"),
+		p.KeepCount, p.LimitCount, boolInt(p.Rerecord), boolInt(p.Commercials), p.TimeStart, p.TimeEnd, blank(p.MatchKind, "title"), p.ChannelID, DaysMask(p.Days), p.ID)
 	if err != nil {
 		return err
 	}

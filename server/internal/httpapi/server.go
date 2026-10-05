@@ -159,6 +159,8 @@ func (s *Server) Handler() http.Handler {
 	api("DELETE /teams/{id}", s.unfollowTeam)
 	api("GET /passes", s.passes)
 	api("POST /passes", s.addPass)
+	api("PUT /passes/order", s.orderPasses)
+	api("POST /passes/preview", s.previewPass)
 	api("PATCH /passes/{id}", s.updatePass)
 	api("DELETE /passes/{id}", s.deletePass)
 	api("POST /recordings/{id}/play", s.playRecording)
