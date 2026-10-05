@@ -45,6 +45,10 @@ exit 1
 	if mode == "clean" {
 		first = "exit 0\n"
 	}
+	again := ""
+	if mode == "twice" {
+		again = `if [ "$n" -eq 2 ]; then echo fresh > init.mp4; printf '%s\n' "$@" > "$mark.args.$n"; exit 1; fi`
+	}
 	return "#!/bin/sh\nexec >/dev/null 2>&1\nmark=" + strconv.Quote(mark) + `
 n=0
 if [ -f "$mark.count" ]; then n=$(cat "$mark.count"); fi
@@ -53,6 +57,7 @@ echo "$n" > "$mark.count"
 if [ -f init.mp4 ]; then echo saw-init >> "$mark.log"; fi
 if [ "$n" -eq 1 ]; then
 ` + first + `fi
+` + again + `
 echo fresh > init.mp4
 printf '%s\n' "$@" > "$mark.args.$n"
 ` + stay + "\n"
@@ -201,6 +206,8 @@ func TestLateVAAPIDeathRebuildsWithoutTheOldInit(t *testing.T) {
 	}
 }
 
+// A GPU encode that keeps dying is rebuilt once, then moved to the CPU, and
+// only a CPU encode that dies too gives the tuner back.
 func TestSecondDeathReleasesTheTuner(t *testing.T) {
 	h, f, mark := restartHub(t, time.Nanosecond, "always")
 	startRendition(t, h, f, "1080.aac2.broadcast")
@@ -210,8 +217,14 @@ func TestSecondDeathReleasesTheTuner(t *testing.T) {
 		gone := h.channels[1] == nil && h.muxes[575000000] == nil
 		h.mu.Unlock()
 		if gone {
-			if markCount(t, mark) != 2 {
-				t.Fatalf("released without one rebuild, starts = %d", markCount(t, mark))
+			if markCount(t, mark) != 3 {
+				t.Fatalf("released without a rebuild and a CPU start, starts = %d", markCount(t, mark))
+			}
+			if args := waitMark(t, mark, ".args.2"); !strings.Contains(args, "h264_vaapi") {
+				t.Fatalf("the rebuild should stay on the GPU:\n%s", args)
+			}
+			if args := waitMark(t, mark, ".args.3"); !strings.Contains(args, "libx264") || strings.Contains(args, "h264_vaapi") {
+				t.Fatalf("the third start should be on the CPU:\n%s", args)
 			}
 			logBody, _ := os.ReadFile(mark + ".log")
 			if strings.Contains(string(logBody), "saw-init") {
@@ -238,7 +251,7 @@ func TestDeathDuringARecordingReleasesTheRenditionOnly(t *testing.T) {
 		held := h.channels[1] != nil && h.muxes[575000000] != nil
 		h.mu.Unlock()
 		if renditions == 0 && held {
-			if markCount(t, mark) != 2 {
+			if markCount(t, mark) != 3 {
 				t.Fatalf("starts = %d", markCount(t, mark))
 			}
 			return
@@ -330,5 +343,38 @@ func TestStoppedRenditionDoesNotRestart(t *testing.T) {
 	defer h.mu.Unlock()
 	if h.channels[1] != nil || h.muxes[575000000] != nil {
 		t.Fatal("stopping the only rendition should release the tuner")
+	}
+}
+
+// A GPU encode that dies after its rebuild, while the CPU one runs, keeps
+// the channel on the CPU encode.
+func TestGPUDeathAfterItsRebuildMovesToTheCPU(t *testing.T) {
+	h, f, mark := restartHub(t, time.Nanosecond, "twice")
+	startRendition(t, h, f, "1080.aac2.broadcast")
+	args := waitMark(t, mark, ".args.3")
+	if !strings.Contains(args, "libx264") || strings.Contains(args, "h264_vaapi") {
+		t.Fatalf("CPU args:\n%s", args)
+	}
+	h.mu.Lock()
+	r := f.renditions["1080.aac2.broadcast"]
+	held := h.channels[1] != nil && h.muxes[575000000] != nil && r != nil && r.fallback
+	h.mu.Unlock()
+	if !held {
+		t.Fatal("the channel should stay up on the CPU encode")
+	}
+}
+
+// VideoToolbox and QSV fall back like VAAPI when they fail at the start.
+func TestEarlyFallbackCoversEveryGPU(t *testing.T) {
+	for _, encoder := range []string{"h264_videotoolbox", "h264_qsv"} {
+		t.Run(encoder, func(t *testing.T) {
+			h, f, mark := restartHub(t, time.Hour, "once")
+			h.Encoder = encoder
+			startRendition(t, h, f, "1080.aac2.broadcast")
+			args := waitMark(t, mark, ".args.2")
+			if strings.Contains(args, encoder) || !strings.Contains(args, "libx264") {
+				t.Fatalf("software fallback args:\n%s", args)
+			}
+		})
 	}
 }

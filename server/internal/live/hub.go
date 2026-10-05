@@ -1248,16 +1248,22 @@ func (h *Hub) watchRendition(f *feed, r *rendition, cmd *exec.Cmd, encoder strin
 		_, r.args = h.pictureArgs(f, r.spec, nil)
 		if h.restartRenditionLocked(f, r, false) {
 			// The GPU still gets its own fallback if this start dies too.
-			if vaapiFamily(encoder) && !r.fallback {
+			if gpuEncoder(encoder) && !r.fallback {
 				r.restarted = false
 			}
 			slog.Info(fmt.Sprintf("rendition %s on %s restarted without its other sound tracks after %s", r.spec.Key(), f.channel.GuideNumber, time.Since(started).Round(time.Millisecond)))
 			return
 		}
 	}
-	software := early && vaapiFamily(encoder) && !r.fallback
-	if err != nil && !r.restarted && h.restartRenditionLocked(f, r, software) {
+	gpu := gpuEncoder(encoder) && !r.fallback
+	if err != nil && !r.restarted && h.restartRenditionLocked(f, r, early && gpu) {
 		slog.Info(fmt.Sprintf("rendition %s on %s restarted after %s", r.spec.Key(), f.channel.GuideNumber, time.Since(started).Round(time.Millisecond)))
+		return
+	}
+	// A GPU encode that dies again after its rebuild moves to the CPU, so the
+	// viewers keep the picture instead of losing the tuner.
+	if err != nil && gpu && h.restartRenditionLocked(f, r, true) {
+		slog.Warn(fmt.Sprintf("rendition %s on %s moved to the CPU after the %s encode died again after %s: %v", r.spec.Key(), f.channel.GuideNumber, encoder, time.Since(started).Round(time.Millisecond), err))
 		return
 	}
 	// The process has been waited. Don't signal a pid the OS may have reused.
