@@ -152,7 +152,7 @@ struct StreamFactsPanel: View {
 }
 
 /// The system player, plus channel swipes while the transport bar is hidden.
-final class LivePlayerController: AVPlayerViewController, UIGestureRecognizerDelegate {
+final class LivePlayerController: AVPlayerViewController {
     var onStep: ((Int) -> Void)?
     var onTransport: ((Bool) -> Void)?
     #if os(tvOS)
@@ -163,6 +163,12 @@ final class LivePlayerController: AVPlayerViewController, UIGestureRecognizerDel
     #endif
     private(set) var transportShown = true
     private var installedGestures = false
+    #if os(tvOS)
+        /// Lets the channel swipes in while the bar is hidden. A delegate of its own: AVKit
+        /// is the delegate of its own gestures, and a `gestureRecognizer(_:shouldReceive:)`
+        /// on this class replaced AVKit's, so a tap on iPhone and iPad never showed the controls.
+        private let swipeGate = SwipeGate()
+    #endif
     private var swallowedPress = false
     private var lastStep = Date.distantPast
 
@@ -202,10 +208,6 @@ final class LivePlayerController: AVPlayerViewController, UIGestureRecognizerDel
         }
     #endif
 
-    func gestureRecognizer(_: UIGestureRecognizer, shouldReceive _: UITouch) -> Bool {
-        !transportShown && !infoPanelVisible
-    }
-
     /// True while an Info, Channels, or Stream page is on screen. AVKit leaves a
     /// closed page in the window, moved below the screen at full alpha.
     private var infoPanelVisible: Bool {
@@ -235,10 +237,14 @@ final class LivePlayerController: AVPlayerViewController, UIGestureRecognizerDel
         #if os(tvOS)
             guard !installedGestures, let host = contentOverlayView else { return }
             installedGestures = true
+            swipeGate.open = { [weak self] in
+                guard let self else { return false }
+                return !transportShown && !infoPanelVisible
+            }
             for direction: UISwipeGestureRecognizer.Direction in [.up, .down] {
                 let swipe = UISwipeGestureRecognizer(target: self, action: #selector(swiped(_:)))
                 swipe.direction = direction
-                swipe.delegate = self
+                swipe.delegate = swipeGate
                 swipe.cancelsTouchesInView = true
                 host.addGestureRecognizer(swipe)
             }
@@ -292,6 +298,14 @@ final class LivePlayerController: AVPlayerViewController, UIGestureRecognizerDel
 }
 
 #if os(tvOS)
+    private final class SwipeGate: NSObject, UIGestureRecognizerDelegate {
+        var open: () -> Bool = { false }
+
+        func gestureRecognizer(_: UIGestureRecognizer, shouldReceive _: UITouch) -> Bool {
+            open()
+        }
+    }
+
     extension LivePlayerController: AVPlayerViewControllerDelegate {
         /// UIKit calls this on the main thread, off the actor.
         nonisolated func playerViewController(

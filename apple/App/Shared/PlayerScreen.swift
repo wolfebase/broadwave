@@ -1370,6 +1370,12 @@ struct PlayerScreen: View {
 
         private var overlay: some View {
             ZStack {
+                // AVKit's transport is for recordings. The live chrome has its own controls,
+                // so a tap anywhere on the live picture stays here.
+                Color.clear
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    .accessibilityHidden(true)
                 gesturePad
                 if portraitChrome {
                     portraitOverlay
