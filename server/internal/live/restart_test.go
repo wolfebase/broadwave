@@ -378,3 +378,30 @@ func TestEarlyFallbackCoversEveryGPU(t *testing.T) {
 		})
 	}
 }
+
+// An HEVC encode on VideoToolbox that keeps dying is not moved to libx265,
+// which cannot keep up with a 1080 picture on most CPUs: it is rebuilt once
+// on the GPU, then released.
+func TestHEVCGPUDeathsDoNotMoveToLibx265(t *testing.T) {
+	h, f, mark := restartHub(t, time.Nanosecond, "always")
+	h.HEVC = true
+	h.Encoder = "h264_videotoolbox"
+	startRendition(t, h, f, "1080.aac2.broadcast.hevc")
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		h.mu.Lock()
+		gone := h.channels[1] == nil
+		h.mu.Unlock()
+		if gone {
+			if n := markCount(t, mark); n != 2 {
+				t.Fatalf("starts = %d", n)
+			}
+			if args := waitMark(t, mark, ".args.2"); strings.Contains(args, "libx265") {
+				t.Fatalf("moved to libx265:\n%s", args)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("an HEVC encode that keeps dying should release the tuner")
+}
