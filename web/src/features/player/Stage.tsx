@@ -107,14 +107,12 @@ export function Stage({
 
   useEffect(() => {
     if (showChrome) return;
-    // A click focuses a button without :focus-visible, and that must still fade
-    // or the bar would stay up after Mute. Keyboard focus draws a ring, and the
-    // bar stays while that ring is on a control.
+    // The bar goes inert when it fades, which would drop keyboard focus to the
+    // page; hand it back to the stage, which still takes the keys. Remote
+    // focus fades too, or a TV would keep the bar over the picture.
     const dock = ".stage-top, .stage-dock, .player-note, .stage-fab";
     const fade = () => {
       const active = document.activeElement;
-      const held = active instanceof HTMLElement && active.matches(":focus-visible") && Boolean(active.closest(dock));
-      if (held) return;
       if (active instanceof Element && active.closest(dock)) root.current?.focus({ preventScroll: true });
       setTimedIdle(true);
     };
