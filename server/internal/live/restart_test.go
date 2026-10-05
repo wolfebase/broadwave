@@ -206,8 +206,6 @@ func TestLateVAAPIDeathRebuildsWithoutTheOldInit(t *testing.T) {
 	}
 }
 
-// A GPU encode that keeps dying is rebuilt once, then moved to the CPU, and
-// only a CPU encode that dies too gives the tuner back.
 func TestSecondDeathReleasesTheTuner(t *testing.T) {
 	h, f, mark := restartHub(t, time.Nanosecond, "always")
 	startRendition(t, h, f, "1080.aac2.broadcast")
@@ -217,14 +215,8 @@ func TestSecondDeathReleasesTheTuner(t *testing.T) {
 		gone := h.channels[1] == nil && h.muxes[575000000] == nil
 		h.mu.Unlock()
 		if gone {
-			if markCount(t, mark) != 3 {
-				t.Fatalf("released without a rebuild and a CPU start, starts = %d", markCount(t, mark))
-			}
-			if args := waitMark(t, mark, ".args.2"); !strings.Contains(args, "h264_vaapi") {
-				t.Fatalf("the rebuild should stay on the GPU:\n%s", args)
-			}
-			if args := waitMark(t, mark, ".args.3"); !strings.Contains(args, "libx264") || strings.Contains(args, "h264_vaapi") {
-				t.Fatalf("the third start should be on the CPU:\n%s", args)
+			if markCount(t, mark) != 2 {
+				t.Fatalf("released without one rebuild, starts = %d", markCount(t, mark))
 			}
 			logBody, _ := os.ReadFile(mark + ".log")
 			if strings.Contains(string(logBody), "saw-init") {
@@ -251,7 +243,7 @@ func TestDeathDuringARecordingReleasesTheRenditionOnly(t *testing.T) {
 		held := h.channels[1] != nil && h.muxes[575000000] != nil
 		h.mu.Unlock()
 		if renditions == 0 && held {
-			if markCount(t, mark) != 3 {
+			if markCount(t, mark) != 2 {
 				t.Fatalf("starts = %d", markCount(t, mark))
 			}
 			return
@@ -346,24 +338,6 @@ func TestStoppedRenditionDoesNotRestart(t *testing.T) {
 	}
 }
 
-// A GPU encode that dies after its rebuild, while the CPU one runs, keeps
-// the channel on the CPU encode.
-func TestGPUDeathAfterItsRebuildMovesToTheCPU(t *testing.T) {
-	h, f, mark := restartHub(t, time.Nanosecond, "twice")
-	startRendition(t, h, f, "1080.aac2.broadcast")
-	args := waitMark(t, mark, ".args.3")
-	if !strings.Contains(args, "libx264") || strings.Contains(args, "h264_vaapi") {
-		t.Fatalf("CPU args:\n%s", args)
-	}
-	h.mu.Lock()
-	r := f.renditions["1080.aac2.broadcast"]
-	held := h.channels[1] != nil && h.muxes[575000000] != nil && r != nil && r.fallback
-	h.mu.Unlock()
-	if !held {
-		t.Fatal("the channel should stay up on the CPU encode")
-	}
-}
-
 // VideoToolbox and QSV fall back like VAAPI when they fail at the start.
 func TestEarlyFallbackCoversEveryGPU(t *testing.T) {
 	for _, encoder := range []string{"h264_videotoolbox", "h264_qsv"} {
@@ -379,29 +353,16 @@ func TestEarlyFallbackCoversEveryGPU(t *testing.T) {
 	}
 }
 
-// An HEVC encode on VideoToolbox that keeps dying is not moved to libx265,
-// which cannot keep up with a 1080 picture on most CPUs: it is rebuilt once
-// on the GPU, then released.
-func TestHEVCGPUDeathsDoNotMoveToLibx265(t *testing.T) {
-	h, f, mark := restartHub(t, time.Nanosecond, "always")
+// An HEVC encode on VideoToolbox that fails at its start is tried again on
+// the GPU, not moved to libx265, which cannot keep up with a 1080 picture on
+// most CPUs.
+func TestAnHEVCGPUStartFailureStaysOffLibx265(t *testing.T) {
+	h, f, mark := restartHub(t, time.Hour, "once")
 	h.HEVC = true
 	h.Encoder = "h264_videotoolbox"
 	startRendition(t, h, f, "1080.aac2.broadcast.hevc")
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		h.mu.Lock()
-		gone := h.channels[1] == nil
-		h.mu.Unlock()
-		if gone {
-			if n := markCount(t, mark); n != 2 {
-				t.Fatalf("starts = %d", n)
-			}
-			if args := waitMark(t, mark, ".args.2"); strings.Contains(args, "libx265") {
-				t.Fatalf("moved to libx265:\n%s", args)
-			}
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	args := waitMark(t, mark, ".args.2")
+	if strings.Contains(args, "libx265") || !strings.Contains(args, "hevc_videotoolbox") {
+		t.Fatalf("restart args:\n%s", args)
 	}
-	t.Fatal("an HEVC encode that keeps dying should release the tuner")
 }
