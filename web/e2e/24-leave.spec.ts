@@ -218,6 +218,25 @@ test("a quad kept for Back lets every tile go and watches again", async ({ page 
   await page.screenshot({ path: path.join(evidence, "back.jpg") });
 });
 
+async function tileState(page: Page, channel: string) {
+  const video = page.locator(`video.mv-video[data-channel="${channel}"]`);
+  if ((await video.count()) === 0) return { tile: "none" };
+  return video.evaluate((el: HTMLVideoElement) => {
+    const ranges = Array.from({ length: el.buffered.length }, (_, i) => [el.buffered.start(i), el.buffered.end(i)].map((n) => Math.round(n * 10) / 10));
+    return {
+      paused: el.paused,
+      muted: el.muted,
+      readyState: el.readyState,
+      width: el.videoWidth,
+      at: Math.round(el.currentTime * 10) / 10,
+      buffered: ranges,
+      src: el.currentSrc.slice(-60),
+      data: { ...el.dataset },
+      error: document.querySelector(".mv-tile.focused .mv-error")?.textContent ?? "",
+    };
+  });
+}
+
 async function oneMoving(page: Page, channel: string): Promise<boolean> {
   const video = page.locator(`video.mv-video[data-channel="${channel}"]`);
   if ((await video.count()) === 0) return false;
@@ -284,9 +303,28 @@ test("a quad kept for Back keeps the sound tile when two pictures fit", async ({
     };
   });
   expect(kept).toEqual({ hide: true, show: true });
-  await expect
-    .poll(() => oneMoving(page, "1"), { timeout: Math.max(500, 5_000 - (Date.now() - back)), message: "the sound tile is playing again" })
-    .toBe(true);
+  const soundBack = await expect
+    .poll(() => oneMoving(page, "1"), { timeout: Math.max(500, 5_000 - (Date.now() - back)) })
+    .toBe(true)
+    .then(
+      () => true,
+      () => false,
+    );
+  if (!soundBack) {
+    // This has failed only on the CI runner. Say what the tile was doing, and
+    // whether it was slow or stuck.
+    const late = Date.now() - back;
+    const state = await tileState(page, "1");
+    const moved = await expect
+      .poll(() => oneMoving(page, "1"), { timeout: 20_000 })
+      .toBe(true)
+      .then(
+        () => Date.now() - back,
+        () => 0,
+      );
+    const detail = { late, movedMs: moved || "not in 25 s", state, asks: asks.filter((row) => row.at >= back).map((row) => ({ ...row, at: row.at - back, answered: row.answered ? row.answered - back : 0 })) };
+    throw new Error(`the sound tile is playing again ${JSON.stringify(detail)}`);
+  }
   await expect(page.locator(".mv-tile.focused .mv-error")).toHaveCount(0);
   const again = asks.filter((row) => row.at >= back);
   const sound = again.find((row) => row.channel === 1);
