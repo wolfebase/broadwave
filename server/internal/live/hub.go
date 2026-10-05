@@ -1906,7 +1906,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	id, err := h.Store.CreateRecording(ctx, store.Recording{
 		ChannelID: channelID, GuideNumber: f.channel.GuideNumber, Title: title,
 		Subtitle: meta.Subtitle, Description: meta.Description, Category: meta.Category, ProgramID: meta.ProgramID, GameID: meta.GameID,
-		Path: path, Status: "recording", StartedAt: started, EndsAt: &ends,
+		Path: path, Status: "recording", StartedAt: started, EndsAt: &ends, PassID: meta.PassID,
 	})
 	if err != nil {
 		h.dropIfUnusedLocked(f)
