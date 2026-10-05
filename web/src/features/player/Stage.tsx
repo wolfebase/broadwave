@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { focusRing } from "../../app/remote";
 import { BackIcon, CloseIcon, ExpandIcon, PauseIcon, PipIcon, PlayIcon, VolumeIcon } from "../../ui/icons";
+import { playerControls, playerTabTarget } from "./focusCycle";
 import "./player.css";
 
 export function Stage({
@@ -105,25 +107,42 @@ export function Stage({
 
   useEffect(() => {
     if (showChrome) return;
-    // The chrome goes inert when it fades, which would drop keyboard focus to
-    // the page; hand it back to the stage, which still takes the keys.
+    // A click focuses a button without :focus-visible, and that must still fade
+    // or the bar would stay up after Mute. Keyboard focus draws a ring, and the
+    // bar stays while that ring is on a control.
+    const dock = ".stage-top, .stage-dock, .player-note, .stage-fab";
     const fade = () => {
-      if (root.current?.querySelector(".stage-hud")?.contains(document.activeElement)) root.current.focus();
+      const active = document.activeElement;
+      const held = active instanceof HTMLElement && active.matches(":focus-visible") && Boolean(active.closest(dock));
+      if (held) return;
+      if (active instanceof Element && active.closest(dock)) root.current?.focus({ preventScroll: true });
       setTimedIdle(true);
     };
     let timer = window.setTimeout(fade, 3200);
     const poke = (event: Event) => {
       if (event.type === "touchstart" && idle) wake.current = performance.now();
-      // The chrome is opacity 0 while idle, so a Tab would land on a control
-      // the viewer cannot see. Show it and move to the first control instead.
-      if (event instanceof KeyboardEvent && event.key === "Tab" && idle) {
+      // The bar is opacity 0 while idle, so a Tab would land on a control the
+      // viewer cannot see. Show it and move into it. A guide or help panel that
+      // is already focused keeps its own stops.
+      const active = document.activeElement;
+      const inPanel = active instanceof Element && Boolean(active.closest(".info-panel, .mini-guide, .help-panel"));
+      if (event instanceof KeyboardEvent && event.key === "Tab" && idle && !event.defaultPrevented && !inPanel) {
         event.preventDefault();
-        setTimedIdle(false);
+        const shift = event.shiftKey;
+        // The bar drops inert in the render this key starts. Focus once that
+        // commit is on the page; one frame later if it has not landed yet.
+        const enter = () => {
+          const list = playerControls(root.current);
+          if (list.length === 0) return false;
+          focusRing(shift ? list[list.length - 1] : list[0]);
+          return true;
+        };
         window.requestAnimationFrame(() => {
-          root.current?.querySelector<HTMLElement>(".stage-hud button, .stage-hud a[href], .stage-hud input, .stage-hud select, .stage-hud textarea")?.focus();
+          if (!enter()) window.requestAnimationFrame(enter);
         });
       }
-      setTimedIdle(false);
+      // Tab inside a panel that stayed up keeps that panel. Any other input shows the bar.
+      if (!(event instanceof KeyboardEvent && event.key === "Tab" && inPanel)) setTimedIdle(false);
       window.clearTimeout(timer);
       timer = window.setTimeout(fade, 3200);
     };
@@ -168,7 +187,24 @@ export function Stage({
       ref={root}
       className={mode === "mini" ? "stage mini" : idle ? "stage idle" : "stage"}
       tabIndex={mode === "mini" ? -1 : 0}
-      onKeyDown={mode === "mini" ? undefined : onKeyDown}
+      onKeyDown={
+        mode === "mini"
+          ? undefined
+          : (event) => {
+              // Tab cycles the bar and any open panel. Past the last control it
+              // would leave for the navigation hidden under the picture.
+              if (event.key === "Tab" && !event.altKey && !event.metaKey && !event.ctrlKey) {
+                const list = playerControls(root.current);
+                const index = list.findIndex((el) => el === document.activeElement);
+                const target = playerTabTarget(list.length, index, event.shiftKey);
+                if (target != null && list[target]) {
+                  event.preventDefault();
+                  focusRing(list[target]);
+                }
+              }
+              onKeyDown?.(event);
+            }
+      }
       aria-label={mode === "mini" ? `Now playing: ${title}` : "Player"}
     >
       <video
@@ -210,11 +246,8 @@ export function Stage({
         </button>
       ) : null}
       {mode === "full" ? (
-      <div
-        className="stage-hud"
-        inert={idle ? true : undefined}
-      >
-        <header className="stage-top">
+      <div className="stage-hud">
+        <header className="stage-top" inert={idle ? true : undefined}>
           <button type="button" className="glass-icon" onClick={onBack} aria-label={backLabel}>
             <BackIcon />
           </button>
@@ -246,12 +279,12 @@ export function Stage({
           </div>
         ) : null}
         {!error && note ? (
-          <div className="player-note">
+          <div className="player-note" inert={idle ? true : undefined}>
             <p role="status">{note}</p>
             {noteAction}
           </div>
         ) : null}
-        <footer className="stage-dock glass">
+        <footer className="stage-dock glass" inert={idle ? true : undefined}>
           <div className="scrub-wrap">
             <div className="scrub-marks" aria-hidden="true">
               {(markers ?? []).map((marker) => (
