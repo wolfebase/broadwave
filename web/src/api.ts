@@ -1,4 +1,4 @@
-import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, Device, DeviceHealth, FrameList, MultiviewPlan, Pass, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, StorageShows, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
+import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, Device, DeviceHealth, FrameList, MultiviewPlan, NewPass, Pass, PassPreview, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, StorageShows, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
 
 import type { RoomState } from "./lib/events";
 
@@ -266,6 +266,31 @@ export function addPass(title: string, channelId: number, airingStart?: string) 
   return request<{ passes: Pass[] }>("/api/v1/passes", {
     method: "POST",
     body: JSON.stringify({ title, channelId, airingStart }),
+  });
+}
+
+/** A series pass with its rules: a title, words a title contains, or a category. */
+export function addSeriesPass(pass: NewPass) {
+  return request<{ passes: Pass[] }>("/api/v1/passes", {
+    method: "POST",
+    body: JSON.stringify(pass),
+  });
+}
+
+/** Ranks every pass, first highest. */
+export function orderPasses(ids: number[]) {
+  return request<{ passes: Pass[] }>("/api/v1/passes/order", {
+    method: "PUT",
+    body: JSON.stringify({ ids }),
+  });
+}
+
+/** What the pass would record over the next 14 days, saved or not. With id, it edits that pass. */
+export function previewPass(pass: NewPass & { id?: number }, signal?: AbortSignal) {
+  return request<PassPreview>("/api/v1/passes/preview", {
+    method: "POST",
+    body: JSON.stringify(pass),
+    signal,
   });
 }
 

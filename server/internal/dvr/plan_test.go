@@ -125,3 +125,35 @@ func TestASimulcastIsRecordedOnce(t *testing.T) {
 		t.Fatalf("a pass pinned to channel 1 planned %+v, want its own airing", got)
 	}
 }
+
+func TestAPassRecordsOnlyOnItsDays(t *testing.T) {
+	// Times are local; build them in time.Local so the weekday is the viewer's.
+	at := func(day, hour int) time.Time {
+		// 2026-10-04 is a Sunday.
+		return time.Date(2026, 10, 4+day, hour, 0, 0, 0, time.Local)
+	}
+	weeknights := store.Pass{ID: 1, Title: "Late Show", Days: []int{1, 2, 3, 4, 5}, TimeStart: "22:00", TimeEnd: "02:00"}
+	cases := []struct {
+		name  string
+		start time.Time
+		want  bool
+	}{
+		{"Monday night", at(1, 22), true},
+		{"after midnight on Friday night", at(6, 1), true},
+		{"after midnight on Sunday night", at(1, 1), false},
+		{"Saturday night", at(6, 23), false},
+		{"Monday afternoon", at(1, 15), false},
+	}
+	for _, tc := range cases {
+		if got := inWindow(weeknights, tc.start); got != tc.want {
+			t.Errorf("%s: %v, want %v", tc.name, got, tc.want)
+		}
+	}
+	sundays := store.Pass{ID: 2, Title: "Brunch", Days: []int{0}}
+	if !inWindow(sundays, at(0, 9)) || inWindow(sundays, at(1, 9)) {
+		t.Error("a days-only pass records on its day at any hour and no other day")
+	}
+	if !inWindow(store.Pass{ID: 3, Title: "Any"}, at(3, 3)) {
+		t.Error("a pass with no days records every day")
+	}
+}

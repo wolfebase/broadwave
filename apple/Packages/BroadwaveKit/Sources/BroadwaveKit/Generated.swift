@@ -384,6 +384,44 @@ public struct MultiviewPlan: Codable, Sendable, Hashable {
     }
 }
 
+public struct NewPass: Codable, Sendable, Hashable {
+    public var title: String
+    public var channelId: Int64?
+    public var padBefore: Int?
+    public var padAfter: Int?
+    public var airingStart: Date?
+    public var matchKind: String?
+    public var priority: Int?
+    public var episodes: String?
+    public var keepMode: String?
+    public var keepCount: Int?
+    public var limitCount: Int?
+    public var rerecord: Bool?
+    public var commercials: Bool?
+    public var timeStart: String?
+    public var timeEnd: String?
+    public var days: [Int]?
+
+    public init(title: String, channelId: Int64? = nil, padBefore: Int? = nil, padAfter: Int? = nil, airingStart: Date? = nil, matchKind: String? = nil, priority: Int? = nil, episodes: String? = nil, keepMode: String? = nil, keepCount: Int? = nil, limitCount: Int? = nil, rerecord: Bool? = nil, commercials: Bool? = nil, timeStart: String? = nil, timeEnd: String? = nil, days: [Int]? = nil) {
+        self.title = title
+        self.channelId = channelId
+        self.padBefore = padBefore
+        self.padAfter = padAfter
+        self.airingStart = airingStart
+        self.matchKind = matchKind
+        self.priority = priority
+        self.episodes = episodes
+        self.keepMode = keepMode
+        self.keepCount = keepCount
+        self.limitCount = limitCount
+        self.rerecord = rerecord
+        self.commercials = commercials
+        self.timeStart = timeStart
+        self.timeEnd = timeEnd
+        self.days = days
+    }
+}
+
 public struct Pass: Codable, Sendable, Hashable, Identifiable {
     public var id: Int64
     public var title: String
@@ -401,9 +439,10 @@ public struct Pass: Codable, Sendable, Hashable, Identifiable {
     public var timeStart: String?
     public var timeEnd: String?
     public var matchKind: String?
+    public var days: [Int]?
     public var airingStart: Date?
 
-    public init(id: Int64, title: String, channelId: Int64? = nil, kind: String? = nil, padBefore: Int? = nil, padAfter: Int? = nil, priority: Int? = nil, episodes: String? = nil, keepMode: String? = nil, keepCount: Int? = nil, limitCount: Int? = nil, rerecord: Bool? = nil, commercials: Bool? = nil, timeStart: String? = nil, timeEnd: String? = nil, matchKind: String? = nil, airingStart: Date? = nil) {
+    public init(id: Int64, title: String, channelId: Int64? = nil, kind: String? = nil, padBefore: Int? = nil, padAfter: Int? = nil, priority: Int? = nil, episodes: String? = nil, keepMode: String? = nil, keepCount: Int? = nil, limitCount: Int? = nil, rerecord: Bool? = nil, commercials: Bool? = nil, timeStart: String? = nil, timeEnd: String? = nil, matchKind: String? = nil, days: [Int]? = nil, airingStart: Date? = nil) {
         self.id = id
         self.title = title
         self.channelId = channelId
@@ -420,6 +459,7 @@ public struct Pass: Codable, Sendable, Hashable, Identifiable {
         self.timeStart = timeStart
         self.timeEnd = timeEnd
         self.matchKind = matchKind
+        self.days = days
         self.airingStart = airingStart
     }
 }
@@ -429,6 +469,18 @@ public struct PassList: Codable, Sendable, Hashable {
 
     public init(passes: [Pass]) {
         self.passes = passes
+    }
+}
+
+public struct PassPreview: Codable, Sendable, Hashable {
+    public var tunerCount: Int
+    public var items: [PlannedAiring]
+    public var bumps: [PlannedAiring]
+
+    public init(tunerCount: Int, items: [PlannedAiring], bumps: [PlannedAiring]) {
+        self.tunerCount = tunerCount
+        self.items = items
+        self.bumps = bumps
     }
 }
 

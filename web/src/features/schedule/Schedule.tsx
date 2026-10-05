@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import type { Pass, PlannedAiring, Recording } from "../../types";
-import { deletePass, fixSchedule, getEvents, getSchedule, stopRecording, updatePass } from "../../api";
+import { fixSchedule, getEvents, getSchedule, stopRecording } from "../../api";
 import { copy } from "../../strings";
 import { formatClock } from "../../time";
+import { Passes } from "./Passes";
 import "./schedule.css";
 export function Schedule({
   recordings,
@@ -82,7 +83,7 @@ export function Schedule({
       </div>
       <h3 className="section-title">Coming up</h3>
       {items.length === 0 ? (
-        <p className="empty">No series pass matches an airing in the guide.</p>
+        <p className="empty">No pass matches an airing in the guide.</p>
       ) : (
         <ul className="source-list">
           {items.map((item) => {
@@ -115,27 +116,9 @@ export function Schedule({
       )}
       {note ? <p className="hint" role="alert">{note}</p> : null}
       {items.some((item) => item.conflict) ? (
-        <p className="hint">A skipped show can move to a later airing when one fits. Otherwise raise its priority.</p>
+        <p className="hint">A skipped show can move to a later airing when one fits. Otherwise move its pass up the list.</p>
       ) : null}
-      <h3 className="section-title">Series passes</h3>
-      {passes.length === 0 ? <p className="empty">A series pass records the next airing of a title. Set one from the guide.</p> : (
-        <ul className="source-list">
-          {passes.map((pass) => (
-            <li key={pass.id} className="source-row">
-              <span>{pass.kind === "once" && pass.airingStart ? `${pass.title} · ${formatDay(new Date(pass.airingStart))} only` : pass.title}</span>
-              <PadFields
-                key={`${pass.id}:${pass.padBefore}:${pass.padAfter}:${pass.priority}:${pass.episodes}:${pass.keepMode}:${pass.commercials}`}
-                pass={pass}
-                onSave={(patch) => void updatePass(pass.id, patch).then(onPasses)}
-              />
-              <button type="button" className="btn" onClick={() => void deletePass(pass.id).then(onPasses)}>
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className="hint">Early starts the tuner before the listing. After keeps it through the credits. A new pass uses 1 minute early and 2 minutes after. A higher priority number keeps the tuner when two passes overlap.</p>
+      <Passes passes={passes} onPasses={onPasses} />
       <h3 className="section-title">Activity</h3>
       {events.length === 0 ? (
         <p className="empty">Guide updates and recordings will be listed here.</p>
@@ -151,7 +134,7 @@ export function Schedule({
       )}
       {active.length === 0 ? (
         <article className="quiet-card wide">
-          <p>Nothing is recording right now. A series pass above starts the next matching airing on its own.</p>
+          <p>Nothing is recording right now. A pass above starts the next matching airing on its own.</p>
         </article>
       ) : (
         <ul className="source-list">
@@ -184,99 +167,4 @@ function recordWindow(item: PlannedAiring) {
     start: new Date(new Date(item.airing.start).getTime() - (item.padBefore || 0) * 60_000),
     end: new Date(new Date(item.airing.end).getTime() + (item.padAfter || 0) * 60_000),
   };
-}
-
-function PadFields({ pass, onSave }: { pass: Pass; onSave: (patch: Partial<Pass>) => void }) {
-  const [before, setBefore] = useState(String(pass.padBefore ?? 0));
-  const [after, setAfter] = useState(String(pass.padAfter ?? 0));
-  const [priority, setPriority] = useState(String(pass.priority ?? 0));
-  const [episodes, setEpisodes] = useState(pass.episodes || "all");
-  const [keepMode, setKeepMode] = useState(pass.keepMode || "all");
-  const [commercials, setCommercials] = useState(pass.commercials !== false);
-  function commit(extra: Partial<Pass> = {}) {
-    const padBefore = clampMinutes(before);
-    const padAfter = clampMinutes(after);
-    const rank = clampPriority(priority);
-    setBefore(String(padBefore));
-    setAfter(String(padAfter));
-    setPriority(String(rank));
-    onSave({ padBefore, padAfter, priority: rank, episodes, keepMode, commercials, ...extra });
-  }
-  return (
-    <span className="pad">
-      <label>
-        Early
-        <input
-          type="number"
-          min={0}
-          max={30}
-          aria-label={`${pass.title} minutes early`}
-          value={before}
-          onChange={(event) => setBefore(event.target.value)}
-          onBlur={() => commit()}
-        />
-      </label>
-      <label>
-        After
-        <input
-          type="number"
-          min={0}
-          max={30}
-          aria-label={`${pass.title} minutes after`}
-          value={after}
-          onChange={(event) => setAfter(event.target.value)}
-          onBlur={() => commit()}
-        />
-      </label>
-      <label>
-        Priority
-        <input
-          type="number"
-          min={0}
-          max={100}
-          aria-label={`${pass.title} priority`}
-          value={priority}
-          onChange={(event) => setPriority(event.target.value)}
-          onBlur={() => commit()}
-        />
-      </label>
-      {pass.kind === "once" ? null : (
-        <>
-          <label>
-            Episodes
-            <select aria-label={`${pass.title} episodes`} value={episodes} onChange={(event) => { setEpisodes(event.target.value); commit({ episodes: event.target.value }); }}>
-              <option value="all">All</option>
-              <option value="new">New only</option>
-            </select>
-          </label>
-          <label>
-            Keep
-            <select aria-label={`${pass.title} keep`} value={keepMode} onChange={(event) => { setKeepMode(event.target.value); commit({ keepMode: event.target.value }); }}>
-              <option value="all">All</option>
-              <option value="unwatched">Unwatched</option>
-              <option value="last">Last few</option>
-            </select>
-          </label>
-        </>
-      )}
-      <label>
-        Commercials
-        <input type="checkbox" aria-label={`${pass.title} commercials`} checked={commercials} onChange={(event) => { setCommercials(event.target.checked); commit({ commercials: event.target.checked }); }} />
-      </label>
-    </span>
-  );
-}
-
-function clampPriority(value: string) {
-  const n = Math.round(Number(value));
-  if (!Number.isFinite(n) || n < 0) return 0;
-  if (n > 100) return 100;
-  return n;
-}
-
-function clampMinutes(value: string) {
-  const n = Math.round(Number(value));
-  if (!Number.isFinite(n) || n < 0) return 0;
-  if (n > 30) return 30;
-  return n;
 }
