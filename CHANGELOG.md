@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.12.19 — 2026-10-04
+
+### Fixed
+
+- On iPhone, a minimized player keeps playing in the mini player, and opening it again picks up at once instead of starting the channel over.
+- On iPad, Picture in Picture that started when you left the app ends when you come back, and the picture returns to the player.
+- Skipping back 10 seconds from Picture in Picture on live TV no longer freezes the picture for about 15 seconds.
+- On the web, a paused live player keeps counting how far behind live it is.
+- On Apple TV, a channel that starts can no longer sit on a still picture after the transport bar hides.
+- On Apple TV, Up and Down change the channel again after the Channels, Stream, or Audio page was opened.
+- On Apple TV, the guide no longer puts focus on a show that has already ended.
+- On Apple TV, the player's Channels page opens on the channel that is playing, and channel numbers stay on one line.
+- On Apple TV, Settings opens at the top.
+
 ## 0.12.18 — 2026-10-04
 
 ### Fixed
