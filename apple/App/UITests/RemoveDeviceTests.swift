@@ -106,6 +106,134 @@ final class RemoveDeviceTests: XCTestCase {
         shot(app, "offline")
     }
 
+    /// A discovered tuner that has stopped answering says when it was last seen, and Remove is the first control.
+    /// The tuner that still answers does not. The second fake is stopped through BROADWAVE_MARK.
+    func testOfflineTunerSaysWhenItStopped() throws {
+        executionTimeAllowance = 240
+        let server = lane("BROADWAVE_SERVER")
+        try XCTSkipIf(server.isEmpty, "set TEST_RUNNER_BROADWAVE_SERVER")
+        try XCTSkipIf(lane("BROADWAVE_MARK").isEmpty, "set TEST_RUNNER_BROADWAVE_MARK")
+        try put(server, #"{"setupComplete":"1"}"#)
+
+        let second = try startSecondTuner()
+        let host = second.replacingOccurrences(of: "http://", with: "").replacingOccurrences(of: "https://", with: "")
+        _ = try postJSON(server, "/api/v1/sources/discover", #"{"ip":"\#(host)"}"#)
+        let deviceID = try XCTUnwrap(tunerID(server, name: "HDHomeRun DUAL"), "the second tuner was not stored")
+        defer { self.deleteDevice(server, deviceID) }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        let seen = formatter.string(from: Date().addingTimeInterval(-16 * 60))
+        try markStopped(deviceID, seen: seen)
+        let listed = try deviceRow(server, deviceID)
+        XCTAssertEqual(listed["offline"] as? Bool, true, "\(listed)")
+
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ApplePersistenceIgnoreState", "YES",
+            "-BroadwaveServerURL", server,
+            "-BroadwaveTab", "settings",
+            "-BroadwaveSources", "YES",
+        ]
+        app.launch()
+
+        let row = app.descendants(matching: .any)["tuner-row-\(deviceID)"]
+        XCTAssertTrue(row.waitForExistence(timeout: 30), app.debugDescription)
+        let remove = app.descendants(matching: .any)["remove-device-\(deviceID)"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 10), app.debugDescription)
+        #if os(iOS)
+            if !row.isHittable {
+                for _ in 0 ..< 8 {
+                    app.swipeUp()
+                    if row.isHittable {
+                        break
+                    }
+                }
+            }
+        #endif
+        let stamp = try lastSeen(server, deviceID)
+        let line = LastSeen.offline(LastSeen.phrase(stamp))
+        XCTAssertTrue(row.label.contains(line), "\(row.label) wanted \(line)")
+        XCTAssertTrue(row.label.contains("HDHomeRun DUAL"), row.label)
+        XCTAssertLessThan(remove.frame.minY, row.frame.minY, "Remove should come before the offline line")
+
+        let tuners = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'tuner-row-'"))
+        var live = 0
+        for index in 0 ..< tuners.count {
+            let tuner = tuners.element(boundBy: index)
+            if tuner.identifier == "tuner-row-\(deviceID)" {
+                continue
+            }
+            live += 1
+            XCTAssertFalse(tuner.label.contains("Offline"), tuner.label)
+        }
+        XCTAssertGreaterThan(live, 0, "a tuner that answers should still be listed")
+        shot(app, "tuner")
+    }
+
+    /// The helper starts the second fake, then stops it and ages lastSeen the way the web spec writes the catalog.
+    private func startSecondTuner() throws -> String {
+        let mark = try XCTUnwrap(URL(string: lane("BROADWAVE_MARK")))
+        var request = URLRequest(url: mark)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data(#"{"op":"start"}"#.utf8)
+        let result = try exchange(request)
+        XCTAssertTrue((200 ..< 300).contains(result.status), "start \(result.status) \(result.text)")
+        guard let root = try JSONSerialization.jsonObject(with: Data(result.text.utf8)) as? [String: Any],
+              let base = root["base"] as? String, !base.isEmpty
+        else {
+            XCTFail("second tuner did not start: \(result.text)")
+            return ""
+        }
+        return base
+    }
+
+    private func markStopped(_ deviceID: String, seen: String) throws {
+        let mark = try XCTUnwrap(URL(string: lane("BROADWAVE_MARK")))
+        var request = URLRequest(url: mark)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: String] = ["op": "stop", "deviceId": deviceID, "seen": seen]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let result = try exchange(request)
+        XCTAssertTrue((200 ..< 300).contains(result.status), "mark \(result.status) \(result.text)")
+    }
+
+    private func tunerID(_ server: String, name: String) throws -> String? {
+        let result = try get(server, "/api/v1/devices")
+        guard let root = try JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any],
+              let rows = root["devices"] as? [[String: Any]]
+        else { return nil }
+        for row in rows where (row["friendlyName"] as? String) == name {
+            let id = row["deviceId"] as? String ?? ""
+            if !id.isEmpty {
+                return id
+            }
+        }
+        return nil
+    }
+
+    private func deviceRow(_ server: String, _ deviceID: String) throws -> [String: Any] {
+        let result = try get(server, "/api/v1/devices")
+        guard let root = try JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any],
+              let rows = root["devices"] as? [[String: Any]]
+        else { return [:] }
+        for row in rows where (row["deviceId"] as? String) == deviceID {
+            return row
+        }
+        return [:]
+    }
+
+    private func postJSON(_ server: String, _ path: String, _ body: String) throws -> String {
+        var request = URLRequest(url: URL(string: server + path)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data(body.utf8)
+        let result = try exchange(request)
+        XCTAssertTrue((200 ..< 300).contains(result.status), "post \(path) \(result.status) \(result.text)")
+        return result.text
+    }
+
     private func choose(_ row: XCUIElement, label: String, in app: XCUIApplication) {
         #if os(tvOS)
             let remote = XCUIRemote.shared

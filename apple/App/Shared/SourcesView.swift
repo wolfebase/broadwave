@@ -84,11 +84,20 @@ struct SourcesView: View {
                 Text("No tuner answered.").foregroundStyle(.secondary)
             }
             ForEach(devices, id: \.deviceId) { device in
+                let offline = device.offline == true
+                let name = Self.deviceName(device)
                 VStack(alignment: .leading, spacing: 6) {
+                    if offline {
+                        removeButton(id: device.deviceId, name: name)
+                    }
                     VStack(alignment: .leading, spacing: 6) {
                         Text(device.friendlyName.isEmpty ? (device.modelNumber ?? "Tuner") : device.friendlyName)
                             .font(.headline)
                         Text(Self.detail(device)).font(.caption).foregroundStyle(.secondary)
+                        if offline {
+                            Text(LastSeen.offline(LastSeen.phrase(device.lastSeen)))
+                                .font(.caption)
+                        }
                         if let note = scanNotes[device.deviceId] {
                             Text(note).font(.caption)
                         }
@@ -106,7 +115,9 @@ struct SourcesView: View {
                     #if os(iOS)
                         .buttonStyle(.borderless)
                     #endif
-                    removeButton(id: device.deviceId, name: Self.deviceName(device))
+                    if !offline {
+                        removeButton(id: device.deviceId, name: name)
+                    }
                 }
             }
         } header: {

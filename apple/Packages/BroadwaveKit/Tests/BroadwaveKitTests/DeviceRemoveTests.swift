@@ -10,6 +10,29 @@ private func fixture(_ name: String) throws -> Data {
     return try Data(contentsOf: url.appendingPathComponent("api/fixtures/\(name).json"))
 }
 
+@Test func aDeviceDecodesOfflineWhenTheServerSendsItAndWhenItDoesNot() throws {
+    let stopped = Data(#"""
+    {"deviceId":"A3E00001","friendlyName":"HDHomeRun DUAL","baseUrl":"http://127.0.0.1:1","tunerCount":2,"lastSeen":"2026-10-05T03:00:00Z","offline":true}
+    """#.utf8)
+    let gone = try APIClient.decoder.decode(Device.self, from: stopped)
+    #expect(gone.offline == true)
+    #expect(gone.deviceId == "A3E00001")
+    #expect(gone.lastSeen == "2026-10-05T03:00:00Z")
+    #expect(LastSeen.offline(LastSeen.phrase(gone.lastSeen, now: Date(timeIntervalSince1970: 1_791_170_160))) == "Offline. Last seen 16 minutes ago.")
+
+    let answering = Data(#"""
+    {"deviceId":"FAKEHDHR","friendlyName":"Fake HDHomeRun","baseUrl":"http://127.0.0.1:2","tunerCount":2,"offline":false}
+    """#.utf8)
+    let live = try APIClient.decoder.decode(Device.self, from: answering)
+    #expect(live.offline == false)
+
+    let older = Data(#"""
+    {"deviceId":"FAKEHDHR","friendlyName":"Fake HDHomeRun","baseUrl":"http://127.0.0.1:2","tunerCount":2}
+    """#.utf8)
+    let plain = try APIClient.decoder.decode(Device.self, from: older)
+    #expect(plain.offline == nil)
+}
+
 @Test func removeDeviceReadsTheDevicesLeftAndTheBusyRefusal() async throws {
     struct Devices: Decodable { var devices: [Device] }
     let left = try fixture("device-remove")
