@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"broadwave/internal/hdhr"
 	"broadwave/internal/store"
@@ -160,4 +161,59 @@ func openStore(t *testing.T) *store.Store {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	return st
+}
+
+// A tuner added by address may never answer a broadcast. The unattended pass asks
+// it where it was stored, so lastSeen stays current and it is not marked offline.
+// A stored tuner that hangs gets a few seconds, not the whole pass.
+func TestMaintainRefreshesTunersAddedByAddress(t *testing.T) {
+	t.Setenv("BROADWAVE_E2E", "1")
+	live := tunerServer(t, "AAAA1111", "Added")
+	hung := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-time.After(30 * time.Second):
+		}
+	}))
+	t.Cleanup(hung.Close)
+	st := openStore(t)
+	if _, err := Sync(t.Context(), st, nil, strings.TrimPrefix(live, "http://")); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertDevice(t.Context(), hdhr.Device{DeviceID: "BBBB2222", BaseURL: hung.URL, TunerCount: 2}, nil); err != nil {
+		t.Fatal(err)
+	}
+	before := lastSeen(t, st, "AAAA1111")
+	time.Sleep(1100 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	started := time.Now()
+	if _, err := Maintain(ctx, st, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(started); took > 10*time.Second {
+		t.Fatalf("the pass took %v behind a hung tuner", took)
+	}
+	if after := lastSeen(t, st, "AAAA1111"); !after.After(before) {
+		t.Fatalf("lastSeen %v did not move past %v", after, before)
+	}
+}
+
+func lastSeen(t *testing.T, st *store.Store, id string) time.Time {
+	t.Helper()
+	devices, err := st.Devices(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range devices {
+		if d.DeviceID == id {
+			at, err := time.Parse(time.RFC3339, d.LastSeen)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return at
+		}
+	}
+	t.Fatalf("no device %s", id)
+	return time.Time{}
 }

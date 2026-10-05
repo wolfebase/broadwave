@@ -44,6 +44,27 @@ func Maintain(ctx context.Context, st *store.Store, client *hdhr.Client, ip stri
 	if err != nil {
 		return 0, err
 	}
+	// A tuner added by address may never answer a broadcast. Asking it where it
+	// was stored keeps its lastSeen current, which is what marks a tuner offline.
+	devices, err := st.Devices(ctx)
+	if err != nil {
+		return 0, err
+	}
+	seen := map[string]bool{}
+	for _, base := range bases {
+		seen[strings.TrimRight(base, "/")] = true
+	}
+	for _, device := range devices {
+		base := strings.TrimRight(device.BaseURL, "/")
+		if device.TunerCount <= 0 || seen[base] || !strings.HasPrefix(base, "http") {
+			continue
+		}
+		if discovery.Quiet() && !loopbackHost(base) {
+			continue
+		}
+		seen[base] = true
+		bases = append(bases, base)
+	}
 	if len(bases) == 0 {
 		return 0, nil
 	}
@@ -74,8 +95,14 @@ func writeDevices(ctx context.Context, st *store.Store, client *hdhr.Client, bas
 	}
 	tookFirst := false
 	for _, base := range bases {
-		dev, err := client.FetchDevice(ctx, base)
+		// The unattended pass shares one deadline; a tuner that is gone must not use it all.
+		fetchCtx, cancel := ctx, context.CancelFunc(func() {})
+		if !addAll {
+			fetchCtx, cancel = context.WithTimeout(ctx, 5*time.Second)
+		}
+		dev, err := client.FetchDevice(fetchCtx, base)
 		if err != nil {
+			cancel()
 			if addAll {
 				return 0, err
 			}
@@ -84,9 +111,11 @@ func writeDevices(ctx context.Context, st *store.Store, client *hdhr.Client, bas
 		id := strings.ToUpper(dev.DeviceID)
 		// A box with no tuner is not the one a new install adopts.
 		if !known[id] && !addAll && (dev.TunerCount <= 0 || tuners > 0 || tookFirst) {
+			cancel()
 			continue
 		}
-		channels, err := client.FetchLineup(ctx, dev.LineupURL)
+		channels, err := client.FetchLineup(fetchCtx, dev.LineupURL)
+		cancel()
 		if err != nil {
 			if addAll {
 				return 0, err
