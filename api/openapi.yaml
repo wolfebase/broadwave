@@ -2063,6 +2063,11 @@ components:
         durationSec: { type: number }
         watched: { type: integer }
         missing: { type: boolean, description: "The recording finished but its file is gone (moved or deleted outside Broadwave). It cannot play; delete removes it from the list." }
+        season: { type: integer, description: "From the listing the recording covers, or an SxxEyy file name in a library folder. Absent when unknown." }
+        episode: { type: integer }
+        episodeLabel: { type: string, description: "The guide's own episode label when it has one (for example S2E5)." }
+        originalAir: { type: string, description: "First air date, YYYY-MM-DD, from the guide." }
+        progressAt: { type: string, format: date-time, description: "When the playhead was last saved. Absent when it was never played." }
         health:
           $ref: "#/components/schemas/RecordingHealth"
     RecordingHealth:

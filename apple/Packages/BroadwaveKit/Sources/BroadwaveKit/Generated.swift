@@ -545,9 +545,14 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
     public var durationSec: Double?
     public var watched: Int?
     public var missing: Bool?
+    public var season: Int?
+    public var episode: Int?
+    public var episodeLabel: String?
+    public var originalAir: String?
+    public var progressAt: Date?
     public var health: RecordingHealth?
 
-    public init(id: Int64, channelId: Int64, guideNumber: String, title: String, subtitle: String? = nil, description: String? = nil, category: String? = nil, programId: String? = nil, gameId: String? = nil, passId: Int64? = nil, status: String, error: String? = nil, startedAt: Date, endsAt: Date? = nil, endedAt: Date? = nil, bytes: Int64? = nil, position: Double? = nil, durationSec: Double? = nil, watched: Int? = nil, missing: Bool? = nil, health: RecordingHealth? = nil) {
+    public init(id: Int64, channelId: Int64, guideNumber: String, title: String, subtitle: String? = nil, description: String? = nil, category: String? = nil, programId: String? = nil, gameId: String? = nil, passId: Int64? = nil, status: String, error: String? = nil, startedAt: Date, endsAt: Date? = nil, endedAt: Date? = nil, bytes: Int64? = nil, position: Double? = nil, durationSec: Double? = nil, watched: Int? = nil, missing: Bool? = nil, season: Int? = nil, episode: Int? = nil, episodeLabel: String? = nil, originalAir: String? = nil, progressAt: Date? = nil, health: RecordingHealth? = nil) {
         self.id = id
         self.channelId = channelId
         self.guideNumber = guideNumber
@@ -568,6 +573,11 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
         self.durationSec = durationSec
         self.watched = watched
         self.missing = missing
+        self.season = season
+        self.episode = episode
+        self.episodeLabel = episodeLabel
+        self.originalAir = originalAir
+        self.progressAt = progressAt
         self.health = health
     }
 }

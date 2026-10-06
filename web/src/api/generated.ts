@@ -283,6 +283,11 @@ export type Recording = {
   durationSec?: number;
   watched?: number;
   missing?: boolean;
+  season?: number;
+  episode?: number;
+  episodeLabel?: string;
+  originalAir?: string;
+  progressAt?: string;
   health?: RecordingHealth;
 };
 

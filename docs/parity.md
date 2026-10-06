@@ -98,6 +98,11 @@ Recordings on every client. On Apple the actions are in each recording's menu (p
 | --- | --- | --- | --- | --- |
 | List by show, then Movies, with status, size, length, and resume point | yes | yes | yes | yes |
 | All or Unwatched | yes | yes | yes | yes |
+| Continue watching: started and not finished, last played first | yes, on Home and in Recordings | not yet | not yet | not yet |
+| A show's page: every recording by season, with episode numbers | yes | not yet | not yet | not yet |
+| Count, unwatched, and space per show | yes | not yet | not yet | not yet |
+| Sort (newest, oldest, name, size) and show only shows, movies, or sports | yes | not yet | not yet | not yet |
+| Select several to mark watched, unwatched, or delete | yes | not yet | not yet | not yet |
 | Mark watched or unwatched | yes | yes | yes | yes |
 | Stop a recording in progress | yes | yes | yes | yes |
 | Delete, with a confirmation | yes | yes | yes | yes |

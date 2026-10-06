@@ -4,13 +4,15 @@ import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { navigate } from "../../app/router";
 import { airingAt, categoryLabel, categoryOf, dayLabel, minutesLeft, nextAfter, progress, timeLabel, type Category } from "../../lib/guide";
-import type { Airing, Channel, Recording, TeamFollow } from "../../types";
+import type { Airing, Channel, TeamFollow } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
+import { continueWatching } from "../library/resume";
 import { isLayout, layoutForCount, layoutLabel, multiviewPath, savedSets } from "../multiview/storage";
 import { ArtFrame } from "../../ui/ArtFrame";
 import { useHasFrame } from "../../ui/frames";
 import { LiveFrame } from "../../ui/LiveFrame";
-import { Atsc3Tag, ChannelBadge, Empty, LiveDot, Progress, SectionHeader } from "../../ui/primitives";
+import { Atsc3Tag, ChannelBadge, Empty, LiveDot, Progress } from "../../ui/primitives";
+import { RecordingCard, Shelf } from "../../ui/shelf";
 import "./home.css";
 
 type Live = { channel: Channel; airing?: Airing; cat: Category };
@@ -89,7 +91,7 @@ export function Home() {
   }, [channels, index, now]);
 
   const recordingNow = recordings.filter((r) => r.status === "recording");
-  const resume = recordings.filter((r) => r.status !== "recording" && !r.missing && (r.position ?? 0) > 30 && !r.watched).slice(0, 10);
+  const resume = continueWatching(recordings);
   const recent = recordings.filter((r) => r.status !== "recording" && !r.missing && !resume.includes(r)).slice(0, 12);
 
   if (!settled && channels.length === 0) {
@@ -305,41 +307,5 @@ export function Home() {
         </Shelf>
       ) : null}
     </div>
-  );
-}
-
-function Shelf({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="shelf">
-      <SectionHeader title={title} action={action} />
-      <div className="shelf-row">{children}</div>
-    </section>
-  );
-}
-
-function RecordingCard({ rec }: { rec: Recording }) {
-  const pct = rec.durationSec && rec.position ? rec.position / rec.durationSec : 0;
-  return (
-    <button type="button" className="rec-card" onClick={() => navigate(`/play?recording=${rec.id}`)}>
-      <span className="rc-poster">
-        <img
-          src={`/media/poster/${rec.id}`}
-          alt=""
-          loading="lazy"
-          onError={(e) => {
-            const img = e.currentTarget;
-            if (img.dataset.fallback) {
-              img.style.visibility = "hidden";
-              return;
-            }
-            img.dataset.fallback = "1";
-            img.src = `/media/art/channel/${rec.channelId}?w=320`;
-          }}
-        />
-        {pct > 0 ? <Progress value={pct} /> : null}
-      </span>
-      <span className="rc-title">{rec.title}</span>
-      <span className="rc-sub">{rec.subtitle || new Date(rec.startedAt).toLocaleDateString([], { month: "short", day: "numeric" })}</span>
-    </button>
   );
 }
