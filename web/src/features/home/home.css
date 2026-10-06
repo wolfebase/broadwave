@@ -32,7 +32,6 @@
   isolation: isolate;
 }
 
-
 .hero-glow {
   position: absolute;
   inset: 0;
@@ -148,26 +147,6 @@
   color: #ffb3ad;
   font-weight: 600;
   font-size: var(--type-footnote-size);
-}
-
-.shelf-row {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 260px;
-  gap: var(--space-3);
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  padding-bottom: 6px;
-  scrollbar-width: none;
-}
-
-.shelf-row::-webkit-scrollbar {
-  display: none;
-}
-
-.layout-tv .shelf-row {
-  grid-auto-columns: 380px;
-  gap: var(--space-5);
 }
 
 .now-card {
@@ -286,50 +265,6 @@
 
 .sport-card .ch-badge {
   margin-top: auto;
-}
-
-.rec-card {
-  scroll-snap-align: start;
-  display: grid;
-  gap: 8px;
-  text-align: left;
-}
-
-.rc-poster {
-  position: relative;
-  display: grid;
-  place-items: center;
-  aspect-ratio: 16 / 9;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--color-surface2);
-  border: 1px solid var(--color-line);
-}
-
-.rc-poster img {
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  display: block;
-}
-
-
-.rc-poster .progress {
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 10px;
-}
-
-.rc-title {
-  font-weight: 650;
-}
-
-.rc-sub {
-  font-size: var(--type-footnote-size);
-  color: var(--color-text-secondary);
 }
 
 /* A channel with no listing yet reads as live, not as a missing title. */

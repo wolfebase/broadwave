@@ -181,3 +181,54 @@ func TestARecordingNamesThePassThatStartedIt(t *testing.T) {
 		t.Fatalf("%+v %v", rec, err)
 	}
 }
+
+func TestARecordingKeepsTheEpisodeItCovers(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	show := time.Date(2026, 10, 5, 19, 0, 0, 0, time.UTC)
+	if err := st.InsertAirings(ctx, []Airing{
+		{ChannelID: 3, Title: "Quiz Hour", Start: show.Add(-30 * time.Minute), End: show, Season: 4, Episode: 11},
+		{ChannelID: 3, Title: "Mystery Hour", Start: show, End: show.Add(time.Hour), ProgramID: "EP1", Season: 2, Episode: 5, EpisodeLabel: "S2E5", OriginalAir: "2026-01-08"},
+		{ChannelID: 4, Title: "Mystery Hour", Start: show, End: show.Add(time.Hour), ProgramID: "EP1", Season: 9, Episode: 9},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Padded a minute early, so the start lands on the show before it.
+	ends := show.Add(62 * time.Minute)
+	if _, err := st.CreateRecording(ctx, Recording{ChannelID: 3, Title: "Mystery Hour", ProgramID: "EP1", Status: "recording", StartedAt: show.Add(-time.Minute), EndsAt: &ends}); err != nil {
+		t.Fatal(err)
+	}
+	recs, err := st.Recordings(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := recs[0]; got.Season != 2 || got.Episode != 5 || got.EpisodeLabel != "S2E5" || got.OriginalAir != "2026-01-08" {
+		t.Fatalf("episode %d %d %q %q, want 2 5 S2E5 2026-01-08", got.Season, got.Episode, got.EpisodeLabel, got.OriginalAir)
+	}
+}
+
+// Keep and limit rules judge watched from the store's list, so it must carry the playhead.
+func TestTheRecordingListCarriesThePlayhead(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	id, err := st.CreateRecording(ctx, Recording{Title: "News", Status: "complete", StartedAt: time.Now().Add(-time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetDuration(ctx, id, 1800); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SaveProgress(ctx, id, 1795); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := st.Recording(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Position != 1795 || rec.ProgressAt == nil || time.Since(*rec.ProgressAt) > time.Minute {
+		t.Fatalf("position %v at %v", rec.Position, rec.ProgressAt)
+	}
+	if !rec.Played() {
+		t.Fatal("watched to the end but not played")
+	}
+}

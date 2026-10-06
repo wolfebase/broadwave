@@ -4,7 +4,6 @@ package nfo
 import (
 	"encoding/xml"
 	"strings"
-	"time"
 
 	"broadwave/internal/store"
 )
@@ -128,38 +127,10 @@ func isMovie(category string) bool {
 }
 
 // WithGuide copies season, episode, and the original air date from the listing
-// the recording covers most. A padded recording starts before its show, so the
-// start alone would land on the show before it. Empty title fields on the
-// recording are filled from that listing. A recording with no start time is
-// returned as it is.
+// the recording covers most (store.CoveringAiring). Empty title fields on the
+// recording are filled from that listing.
 func WithGuide(rec store.Recording, airings []store.Airing) store.Recording {
-	if rec.StartedAt.IsZero() {
-		return rec
-	}
-	end := rec.StartedAt.Add(time.Minute)
-	if rec.EndedAt != nil && rec.EndedAt.After(rec.StartedAt) {
-		end = *rec.EndedAt
-	} else if rec.EndsAt != nil && rec.EndsAt.After(rec.StartedAt) {
-		end = *rec.EndsAt
-	}
-	var best *store.Airing
-	var most time.Duration
-	for i := range airings {
-		air := &airings[i]
-		if rec.ChannelID != 0 && air.ChannelID != 0 && air.ChannelID != rec.ChannelID {
-			continue
-		}
-		if rec.ProgramID != "" && air.ProgramID != "" && air.ProgramID != rec.ProgramID {
-			continue
-		}
-		if (rec.ProgramID == "" || air.ProgramID == "") && rec.Title != "" && !strings.EqualFold(strings.TrimSpace(air.Title), strings.TrimSpace(rec.Title)) {
-			continue
-		}
-		overlap := minTime(end, air.End).Sub(maxTime(rec.StartedAt, air.Start))
-		if overlap > most {
-			best, most = air, overlap
-		}
-	}
+	best := store.CoveringAiring(rec, airings)
 	if best == nil {
 		return rec
 	}
@@ -174,20 +145,7 @@ func WithGuide(rec store.Recording, airings []store.Airing) store.Recording {
 	}
 	rec.Season = best.Season
 	rec.Episode = best.Episode
+	rec.EpisodeLabel = best.EpisodeLabel
 	rec.OriginalAir = best.OriginalAir
 	return rec
-}
-
-func minTime(a, b time.Time) time.Time {
-	if a.Before(b) {
-		return a
-	}
-	return b
-}
-
-func maxTime(a, b time.Time) time.Time {
-	if a.After(b) {
-		return a
-	}
-	return b
 }

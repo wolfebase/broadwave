@@ -104,11 +104,14 @@ type Recording struct {
 	Health *RecordingHealth `json:"health,omitempty"`
 	// Missing is set by the list when a finished recording's file is gone.
 	Missing bool `json:"missing,omitempty"`
-	// Season, Episode, and OriginalAir are filled from the guide when an .nfo
-	// is written. They are not stored on the recording.
-	Season      int    `json:"-"`
-	Episode     int    `json:"-"`
-	OriginalAir string `json:"-"`
+	// Season, Episode, EpisodeLabel, and OriginalAir come from the listing the
+	// recording covers, or an SxxEyy file name in a library folder.
+	Season       int    `json:"season,omitempty"`
+	Episode      int    `json:"episode,omitempty"`
+	EpisodeLabel string `json:"episodeLabel,omitempty"`
+	OriginalAir  string `json:"originalAir,omitempty"`
+	// ProgressAt is when the playhead was last saved.
+	ProgressAt *time.Time `json:"progressAt,omitempty"`
 }
 
 type Pass struct {
@@ -422,11 +425,24 @@ func (s *Store) CreateRecording(ctx context.Context, rec Recording) (int64, erro
 	if rec.EndsAt != nil {
 		ends = rec.EndsAt.UTC().Format(time.RFC3339)
 	}
+	if rec.ChannelID != 0 && rec.Season == 0 && rec.Episode == 0 && rec.EpisodeLabel == "" && rec.OriginalAir == "" && !rec.StartedAt.IsZero() {
+		to := rec.StartedAt.Add(time.Minute)
+		if rec.EndsAt != nil && rec.EndsAt.After(to) {
+			to = *rec.EndsAt
+		}
+		if airings, err := s.Airings(ctx, rec.StartedAt, to); err == nil {
+			if best := CoveringAiring(rec, airings); best != nil {
+				rec.Season, rec.Episode, rec.EpisodeLabel, rec.OriginalAir = best.Season, best.Episode, best.EpisodeLabel, best.OriginalAir
+			}
+		}
+	}
 	res, err := s.db.ExecContext(ctx, `
-INSERT INTO recordings (channel_id, guide_number, title, path, status, started_at, ends_at, subtitle, description, category, program_id, watched, game_id, pass_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+INSERT INTO recordings (channel_id, guide_number, title, path, status, started_at, ends_at, subtitle, description, category, program_id, watched, game_id, pass_id,
+	season, episode, episode_label, original_air)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rec.ChannelID, rec.GuideNumber, rec.Title, rec.Path, rec.Status,
-		rec.StartedAt.UTC().Format(time.RFC3339), ends, rec.Subtitle, rec.Description, rec.Category, rec.ProgramID, rec.Watched, rec.GameID, rec.PassID)
+		rec.StartedAt.UTC().Format(time.RFC3339), ends, rec.Subtitle, rec.Description, rec.Category, rec.ProgramID, rec.Watched, rec.GameID, rec.PassID,
+		rec.Season, rec.Episode, rec.EpisodeLabel, rec.OriginalAir)
 	if err != nil {
 		return 0, err
 	}
@@ -456,10 +472,13 @@ func (s *Store) SetRecordingEnd(ctx context.Context, id int64, ends time.Time) e
 
 func (s *Store) Recordings(ctx context.Context) ([]Recording, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, channel_id, guide_number, title, path, status, error, started_at, ends_at, ended_at, duration_sec,
-	subtitle, description, category, program_id, watched, game_id,
-	continuity_errors, transport_errors, sync_losses, packets, pass_id
-FROM recordings ORDER BY id DESC`)
+SELECT r.id, r.channel_id, r.guide_number, r.title, r.path, r.status, r.error, r.started_at, r.ends_at, r.ended_at, r.duration_sec,
+	r.subtitle, r.description, r.category, r.program_id, r.watched, r.game_id,
+	r.continuity_errors, r.transport_errors, r.sync_losses, r.packets, r.pass_id,
+	r.season, r.episode, r.episode_label, r.original_air,
+	COALESCE(p.position_sec, 0), COALESCE(p.updated_at, '')
+FROM recordings r LEFT JOIN progress p ON p.recording_id = r.id
+ORDER BY r.id DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -467,10 +486,15 @@ FROM recordings ORDER BY id DESC`)
 	var out []Recording
 	for rows.Next() {
 		var rec Recording
-		var start, ends, ended string
+		var start, ends, ended, played string
 		var continuity, transport, syncLoss, packets sql.NullInt64
-		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID, &continuity, &transport, &syncLoss, &packets, &rec.PassID); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID, &continuity, &transport, &syncLoss, &packets, &rec.PassID,
+			&rec.Season, &rec.Episode, &rec.EpisodeLabel, &rec.OriginalAir, &rec.Position, &played); err != nil {
 			return nil, err
+		}
+		if played != "" && rec.Position > 0 {
+			t, _ := time.Parse(time.RFC3339, played)
+			rec.ProgressAt = &t
 		}
 		rec.StartedAt, _ = time.Parse(time.RFC3339, start)
 		if ends != "" {
@@ -492,6 +516,55 @@ FROM recordings ORDER BY id DESC`)
 		out = append(out, rec)
 	}
 	return out, rows.Err()
+}
+
+// CoveringAiring returns the listing on the recording's channel that it covers
+// most. A padded recording starts before its show, so the start alone would land
+// on the show before it. With program ids on both sides they must match;
+// otherwise the titles must. Nil when nothing overlaps.
+func CoveringAiring(rec Recording, airings []Airing) *Airing {
+	if rec.StartedAt.IsZero() {
+		return nil
+	}
+	end := rec.StartedAt.Add(time.Minute)
+	if rec.EndedAt != nil && rec.EndedAt.After(rec.StartedAt) {
+		end = *rec.EndedAt
+	} else if rec.EndsAt != nil && rec.EndsAt.After(rec.StartedAt) {
+		end = *rec.EndsAt
+	}
+	var best *Airing
+	var most time.Duration
+	for i := range airings {
+		air := &airings[i]
+		if rec.ChannelID != 0 && air.ChannelID != 0 && air.ChannelID != rec.ChannelID {
+			continue
+		}
+		if rec.ProgramID != "" && air.ProgramID != "" && air.ProgramID != rec.ProgramID {
+			continue
+		}
+		if (rec.ProgramID == "" || air.ProgramID == "") && rec.Title != "" && !strings.EqualFold(strings.TrimSpace(air.Title), strings.TrimSpace(rec.Title)) {
+			continue
+		}
+		overlap := earlier(end, air.End).Sub(later(rec.StartedAt, air.Start))
+		if overlap > most {
+			best, most = air, overlap
+		}
+	}
+	return best
+}
+
+func earlier(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
+}
+
+func later(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
 }
 
 func (s *Store) SetDuration(ctx context.Context, id int64, seconds float64) error {

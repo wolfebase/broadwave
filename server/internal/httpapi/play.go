@@ -331,9 +331,6 @@ func (s *Server) recordings(w http.ResponseWriter, r *http.Request) {
 			list[i].Duration = 0
 			continue
 		}
-		if pos, err := s.Store.Progress(r.Context(), list[i].ID); err == nil && pos > 0 {
-			list[i].Position = pos
-		}
 		if list[i].Duration == 0 && list[i].Status != "recording" && list[i].Path != "" && s.Hub != nil {
 			if tool := live.FFProbePath(s.Hub.FFmpeg); tool != "" {
 				seconds, err := live.ProbeDuration(tool, list[i].Path)

@@ -27,8 +27,19 @@ export function RecordingsPage() {
         <h1>Recordings</h1>
       </header>
       <Library
+        key={show}
         recordings={listed}
+        show={show}
         note={note}
+        onMany={async (action, recs) => {
+          const results = await Promise.allSettled(recs.map((r) => (action === "delete" ? deleteRecording(r.id) : setWatched(r.id, action === "watched"))));
+          const failed = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+          const done = recs.length - failed.length;
+          const what = done === 1 ? "1 recording" : `${done} recordings`;
+          const said = action === "delete" ? `Deleted ${what}.` : `Marked ${what} ${action}.`;
+          setNote(failed.length === 0 ? said : `${done > 0 ? `${said} ` : ""}${failed.length} could not be changed: ${String(failed[0].reason?.message ?? failed[0].reason)}`);
+          await refresh(["recordings"]);
+        }}
         onPlay={(r) => navigate(`/play?recording=${r.id}`)}
         onWatched={(r, flag) => void setWatched(r.id, flag).then(() => refresh(["recordings"]))}
         onDelete={(r) =>

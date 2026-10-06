@@ -578,7 +578,7 @@ func scrub(v any) {
 		}
 		for k, val := range t {
 			switch k {
-			case "lastSeen":
+			case "lastSeen", "progressAt":
 				t[k] = "2026-09-24T15:00:00Z"
 			case "refresh", "lastRefresh":
 				t[k] = "2026-09-24T15:00:00Z"

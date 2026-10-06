@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"broadwave/internal/store"
@@ -27,19 +28,28 @@ func ScanMedia(root string) ([]store.Recording, error) {
 		title := strings.TrimSuffix(info.Name(), filepath.Ext(info.Name()))
 		subtitle := ""
 		category := "Movie"
-		if parent := filepath.Base(filepath.Dir(path)); parent != filepath.Base(root) && !strings.EqualFold(parent, "Season 1") && !strings.HasPrefix(strings.ToLower(parent), "season ") {
-			title = parent
+		dir := filepath.Dir(path)
+		if strings.HasPrefix(strings.ToLower(filepath.Base(dir)), "season ") && dir != root {
+			// Show/Season 2/episode: the show is the folder above.
+			dir = filepath.Dir(dir)
+		}
+		if dir != root && strings.HasPrefix(dir, root) {
+			title = filepath.Base(dir)
 			subtitle = strings.TrimSuffix(info.Name(), filepath.Ext(info.Name()))
 			category = "Series"
 		}
+		season, episode := 0, 0
 		if m := episodeFile.FindStringSubmatch(info.Name()); m != nil {
 			category = "Series"
 			if subtitle == "" {
 				subtitle = "S" + m[1] + "E" + m[2]
 			}
+			season, _ = strconv.Atoi(m[1])
+			episode, _ = strconv.Atoi(m[2])
 		}
 		out = append(out, store.Recording{
 			Title: title, Subtitle: subtitle, Category: category, Path: path, Status: "complete", GuideNumber: "Library",
+			Season: season, Episode: episode,
 		})
 		return nil
 	})
