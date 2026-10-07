@@ -1,9 +1,11 @@
 import Hls from "hls.js";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
+import { copy } from "../../strings";
 import { Stage } from "../player/Stage";
 import type { Recording } from "../../types";
+import { breakScans, idleBreakScan } from "./breaks";
 import { DownloadLink } from "./DownloadLink";
 
 type Marker = { id: number; start: number; end: number };
@@ -35,6 +37,16 @@ export function Play({
   const saveTimer = useRef(0);
   // A resume seek that lands after the viewer has already moved would undo Start over.
   const viewerSought = useRef(false);
+  const scan = useSyncExternalStore(
+    breakScans.subscribe,
+    () => breakScans.get(recording.id),
+    () => idleBreakScan,
+  );
+  const [seenScan, setSeenScan] = useState(scan);
+  if (scan !== seenScan) {
+    setSeenScan(scan);
+    if (scan.markers) setMarkers(scan.markers);
+  }
 
   useEffect(() => {
     const video = videoRef.current;
@@ -166,9 +178,11 @@ export function Play({
     setMarkers((prev) => [...prev, { id: created.id, start: created.start, end: created.end }]);
   }
 
-  async function scan() {
-    const found = await detectBreaks(recording.id);
-    setMarkers(found.markers);
+  function scanCommercials() {
+    if (!breakScans.begin(recording.id)) return;
+    void detectBreaks(recording.id)
+      .then((found) => breakScans.finish(recording.id, found.markers, copy.library.foundBreaks(found.markers.length)))
+      .catch(() => breakScans.fail(recording.id, copy.library.findFailed));
   }
 
   async function removeMarker(id: number) {
@@ -272,8 +286,17 @@ export function Play({
             <button type="button" className="btn" onClick={() => void startOver()}>Start over</button>
             <DownloadLink id={recording.id} status={recording.status} />
             <button type="button" className="btn" onClick={() => void markHere()}>Mark 3 seconds</button>
-            <button type="button" className="btn" onClick={() => void scan()}>Find black frames</button>
+            <button
+              type="button"
+              className="btn"
+              disabled={scan.running}
+              aria-busy={scan.running ? true : undefined}
+              onClick={scanCommercials}
+            >
+              {scan.running ? copy.library.findingCommercials : copy.library.findCommercials}
+            </button>
           </div>
+          {scan.note ? <p className="hint" role="status">{scan.note}</p> : null}
           {markers.length > 0 ? (
             <ul className="marker-list">
               {markers.map((marker) => (

@@ -53,6 +53,10 @@ export const copy = {
     body: "Recordings gather here by show. The guide is the place to start.",
     gone: "The file is gone. It was moved or deleted outside Broadwave.",
     removeGone: "Remove from the list",
+    findCommercials: "Find commercials",
+    findingCommercials: "Finding commercials…",
+    foundBreaks: (count: number) => (count <= 0 ? "No breaks found." : count === 1 ? "Found 1 break." : `Found ${count} breaks.`),
+    findFailed: "Could not look for commercials. Try again.",
   },
   schedule: {
     title: "Schedule",
