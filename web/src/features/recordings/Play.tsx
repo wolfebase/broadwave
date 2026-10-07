@@ -8,7 +8,12 @@ import type { Recording } from "../../types";
 import { breakScans, idleBreakScan } from "./breaks";
 import { DownloadLink } from "./DownloadLink";
 
-type Marker = { id: number; start: number; end: number };
+type Marker = { id: number; start: number; end: number; confidence?: number };
+
+// The server skips on its own from this confidence up and offers the skip
+// below it. A marker someone set, or one from an older server, is sure.
+const autoSkip = 0.7;
+const sure = (marker: Marker) => (marker.confidence ?? 1) >= autoSkip;
 
 export function Play({
   recording,
@@ -124,7 +129,7 @@ export function Play({
       }
       if (skipMode !== "auto") return;
       const hit = markerAt(markers, t);
-      if (hit) video.currentTime = hit.end;
+      if (hit && sure(hit)) video.currentTime = hit.end;
     };
     const ended = () => {
       if (autoplay) onNext();
@@ -260,7 +265,7 @@ export function Play({
       }}
       error={error}
       tools={
-        inside && skipMode === "button" ? (
+        inside && (skipMode === "button" || (skipMode === "auto" && !sure(inside))) ? (
           <button type="button" className="text-btn on" onClick={() => { if (videoRef.current) videoRef.current.currentTime = inside.end; }}>
             Skip break
           </button>
@@ -301,14 +306,16 @@ export function Play({
             <ul className="marker-list">
               {markers.map((marker) => (
                 <li key={marker.id}>
-                  <span>{marker.start.toFixed(1)}s–{marker.end.toFixed(1)}s</span>
+                  <span>
+                    {marker.start.toFixed(1)}s–{marker.end.toFixed(1)}s{sure(marker) ? "" : " · maybe"}
+                  </span>
                   <button type="button" className="btn" onClick={() => void removeMarker(marker.id)}>Remove</button>
                 </li>
               ))}
             </ul>
           ) : null}
           <p className="hint">
-            {growing ? "This show is still recording. Playback starts at the beginning and keeps going as the file grows." : "Breaks show as marks on the timeline."}
+            {growing ? "This show is still recording. Playback starts at the beginning and keeps going as the file grows." : "Breaks show as marks on the timeline. One marked maybe gets a Skip button instead of skipping on its own."}
           </p>
         </>
       }

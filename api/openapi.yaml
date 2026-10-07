@@ -2087,6 +2087,11 @@ components:
         recordingId: { type: integer, format: int64 }
         start: { type: number }
         end: { type: number }
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: How sure the break scan is. A player skips on its own from 0.7 up and offers the skip below. A marker someone set is 1.
     Pass:
       type: object
       required: [id, title]

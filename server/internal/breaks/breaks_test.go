@@ -1,7 +1,8 @@
-package live
+package breaks
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -17,8 +18,14 @@ func blackLog(spans ...[2]float64) string {
 	return b.String()
 }
 
+func findLog(log string) []Break {
+	var c Cues
+	c.readLog(strings.NewReader(log))
+	return Find(c)
+}
+
 // Three spots between black frames, a 30, a 15, and a 30, inside a show.
-func TestParseBreaksFindsARunOfSpots(t *testing.T) {
+func TestFindBlackOnlyFindsARunOfSpots(t *testing.T) {
 	log := blackLog(
 		[2]float64{12.0, 13.1}, // a fade in the show
 		[2]float64{300.0, 300.3},
@@ -27,30 +34,34 @@ func TestParseBreaksFindsARunOfSpots(t *testing.T) {
 		[2]float64{375.0, 375.4},
 		[2]float64{520.0, 521.5}, // another fade
 	)
-	got := ParseBreaks(log)
-	if len(got) != 1 || got[0].Start != 300.0 || got[0].End != 375.4 {
+	got := findLog(log)
+	if len(got) != 1 || math.Abs(got[0].Start-300.15) > 0.01 || math.Abs(got[0].End-375.2) > 0.01 {
 		t.Fatalf("%+v", got)
+	}
+	// Timing alone with three spots is offered, not skipped.
+	if got[0].Confidence >= AutoSkip {
+		t.Fatalf("confidence %v", got[0].Confidence)
 	}
 }
 
 // The black stretches a 5.2 movie clip had (recording 7 on a real tuner):
 // fades and cuts, none of them a break. They were all skipped before.
-func TestParseBreaksIgnoresFadesInAShow(t *testing.T) {
+func TestFindBlackOnlyIgnoresFadesInAShow(t *testing.T) {
 	log := blackLog(
 		[2]float64{21.454767, 24.9249}, [2]float64{30.463767, 34.667967}, [2]float64{35.168467, 35.902533},
 		[2]float64{43.777067, 44.811433}, [2]float64{49.916533, 50.6506}, [2]float64{53.2532, 54.821433},
 		[2]float64{67.100367, 68.101367}, [2]float64{77.2772, 78.111367}, [2]float64{81.514767, 82.649233},
 		[2]float64{188.2881, 190.156633}, [2]float64{198.731867, 201.434567},
 	)
-	if got := ParseBreaks(log); len(got) != 0 {
+	if got := findLog(log); len(got) != 0 {
 		t.Fatalf("%+v", got)
 	}
 }
 
 // Two spots in a row are not enough: a show's own scenes can line up that way.
-func TestParseBreaksNeedsThreeSpots(t *testing.T) {
+func TestFindBlackOnlyNeedsThreeSpots(t *testing.T) {
 	log := blackLog([2]float64{100, 100.2}, [2]float64{130, 130.2}, [2]float64{160, 160.2}, [2]float64{171, 171.2})
-	if got := ParseBreaks(log); len(got) != 0 {
+	if got := findLog(log); len(got) != 0 {
 		t.Fatalf("%+v", got)
 	}
 }

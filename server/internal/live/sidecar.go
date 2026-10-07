@@ -1,6 +1,7 @@
 package live
 
 import (
+	"broadwave/internal/breaks"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -30,7 +31,8 @@ func writeSidecar(rec store.Recording) {
 }
 
 // WriteEDL writes nothing once the recording is gone. Indexing can finish
-// after a delete, and the file it left behind was never cleaned up.
+// after a delete, and the file it left behind was never cleaned up. A break
+// the scan is unsure of is a scene marker, which players offer and do not cut.
 func WriteEDL(path string, markers []store.Marker) error {
 	if path == "" {
 		return nil
@@ -43,7 +45,11 @@ func WriteEDL(path string, markers []store.Marker) error {
 		if marker.End <= marker.Start {
 			continue
 		}
-		fmt.Fprintf(&b, "%.3f %.3f 0\n", marker.Start, marker.End)
+		action := 0
+		if marker.Confidence > 0 && marker.Confidence < breaks.AutoSkip {
+			action = 2
+		}
+		fmt.Fprintf(&b, "%.3f %.3f %d\n", marker.Start, marker.End, action)
 	}
 	side := strings.TrimSuffix(path, filepath.Ext(path)) + ".edl"
 	return os.WriteFile(side, []byte(b.String()), 0o644)
