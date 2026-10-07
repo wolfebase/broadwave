@@ -3,9 +3,17 @@ import BroadwaveUI
 import SwiftUI
 
 struct RecordingsView: View {
+    /// A show's own page: every recording of that title, by season.
+    var show: String?
     @Environment(AppStore.self) private var store
     @Environment(LibraryFilter.self) private var library
     @State private var unwatchedOnly = false
+    @State private var kind: Library.Kind = .all
+    @State private var sort: Library.Sort?
+    @State private var selecting = false
+    @State private var picked: Set<Int64> = []
+    @State private var confirmingMany = false
+    @State private var busy = false
     @State private var deleting: Recording?
     @State private var notice: String?
     @State private var detecting: Set<Int64> = []
@@ -21,29 +29,54 @@ struct RecordingsView: View {
     #endif
 
     var body: some View {
-        let groups = grouped
+        let built = Library.build(shown, sort: order)
+        let resume = show == nil && !selecting ? Library.continueWatching(listed, limit: 5) : []
         List {
-            NavigationLink {
-                ScheduleView()
-            } label: {
-                Label("Upcoming", systemImage: "calendar")
-                    .accessibilityLabel("Upcoming")
-            }
-            if !store.virtuals.isEmpty {
-                Section("Library channels") {
-                    ForEach(store.virtuals) { channel in
-                        libraryRow(channel)
+            if show == nil {
+                NavigationLink {
+                    ScheduleView()
+                } label: {
+                    Label("Upcoming", systemImage: "calendar")
+                        .accessibilityLabel("Upcoming")
+                }
+                if !store.virtuals.isEmpty {
+                    Section("Library channels") {
+                        ForEach(store.virtuals) { channel in
+                            libraryRow(channel)
+                        }
                     }
                 }
             }
-            if !store.recordings.isEmpty {
-                Picker("Show", selection: $unwatchedOnly) {
-                    Text("All").tag(false)
-                    Text("Unwatched").tag(true)
+            if !listed.isEmpty {
+                Section {
+                    Picker("Show", selection: $unwatchedOnly) {
+                        Text("All").tag(false)
+                        Text("Unwatched").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    if show == nil {
+                        Picker("Show only", selection: $kind) {
+                            ForEach(Library.Kind.allCases, id: \.self) { Text($0.label).tag($0) }
+                        }
+                        .accessibilityIdentifier("library-kind")
+                    }
+                    Picker("Sort", selection: Binding(get: { order }, set: { sort = $0 })) {
+                        ForEach(Library.Sort.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }
+                    .accessibilityIdentifier("library-sort")
+                    if selecting || !choosable.isEmpty {
+                        Button(selecting ? "Done" : "Select") { selecting ? stopSelecting() : (selecting = true) }
+                            .disabled(busy)
+                            .accessibilityIdentifier("library-select")
+                    }
+                } footer: {
+                    Text(Library.summary(listed))
                 }
-                .pickerStyle(.segmented)
             }
-            if !library.show.isEmpty {
+            if selecting {
+                selectionBar
+            }
+            if show == nil, !library.show.isEmpty {
                 Text("Showing \(library.show)")
                     .accessibilityIdentifier("recordings-filtered")
                 Button("Show all") { library.clear() }
@@ -57,24 +90,73 @@ struct RecordingsView: View {
             }
             if shown.isEmpty {
                 ContentUnavailableView(
-                    listed.isEmpty ? "No recordings yet" : "All watched",
+                    listed.isEmpty ? "No recordings yet" : unwatchedOnly ? "All watched" : "Nothing here",
                     systemImage: "record.circle",
-                    description: Text(listed.isEmpty ? "Record from the guide, or set a series to record every episode." : "Everything in the library has been watched.")
+                    description: Text(listed.isEmpty ? "Record from the guide, or set a series to record every episode." : unwatchedOnly ? "Everything here has been watched." : "Nothing here matches.")
                 )
                 #if os(tvOS)
                 .focusable()
                 .focused($emptyRecordings)
                 #endif
             }
-            ForEach(groups) { group in
-                Section(group.title) {
-                    ForEach(group.items) { rec in
-                        row(rec)
+            if !resume.isEmpty {
+                Section("Continue watching") {
+                    ForEach(resume) { rec in
+                        item(rec, resume: true)
+                    }
+                }
+            }
+            if show != nil {
+                let titled = built.shows.flatMap(\.seasons).contains { $0.season > 0 }
+                ForEach(built.shows) { item in
+                    ForEach(item.seasons) { season in
+                        Section {
+                            ForEach(season.items) { rec in
+                                self.item(rec)
+                            }
+                        } header: {
+                            if titled {
+                                Text(season.title)
+                            }
+                        } footer: {
+                            if season.id == item.seasons.last?.id {
+                                Text(item.line)
+                            }
+                        }
+                    }
+                }
+            } else {
+                ForEach(built.shows) { group in
+                    Section {
+                        ForEach(group.items.prefix(Self.preview)) { rec in
+                            item(rec)
+                        }
+                        if group.items.count > Self.preview {
+                            NavigationLink {
+                                RecordingsView(show: group.title)
+                            } label: {
+                                Text("All \(group.items.count) of \(group.title)")
+                            }
+                            .accessibilityIdentifier("show-page")
+                        }
+                    } header: {
+                        Text(group.title)
+                    } footer: {
+                        if group.items.count > 1 {
+                            Text(group.line)
+                        }
+                    }
+                }
+            }
+            if !built.movies.isEmpty {
+                Section("Movies") {
+                    ForEach(built.movies) { rec in
+                        item(rec)
                     }
                 }
             }
         }
-        .navigationTitle("Recordings")
+        .navigationTitle(show ?? "Recordings")
         #if os(tvOS)
             .fullScreenCover(item: $playing) { RecordingPlayerScreen(recording: $0).environment(store) }
             .fullScreenCover(item: $playingChannel) { RecordingPlayerScreen(channel: $0).environment(store) }
@@ -99,11 +181,26 @@ struct RecordingsView: View {
             } message: { rec in
                 Text(rec.isMissing ? "Its file is already gone." : "The recording and its commercial markers are removed from the server.")
             }
+            .confirmationDialog(
+                chosen.count == 1 ? "Delete 1 file?" : "Delete \(chosen.count) files?",
+                isPresented: $confirmingMany,
+                titleVisibility: .visible
+            ) {
+                Button(chosen.count == 1 ? "Delete 1 file" : "Delete \(chosen.count) files", role: .destructive) { runMany(.delete) }
+                Button("Keep them", role: .cancel) {}
+            } message: {
+                Text("The recordings and their commercial markers are removed from the server.")
+            }
         #if os(tvOS)
             .onAppear { claimRecordingFocus() }
             .onChange(of: tvSelectedTab) { _, _ in claimRecordingFocus() }
             .onChange(of: store.recordings.isEmpty) { _, _ in claimRecordingFocus() }
         #endif
+            .onChange(of: listed.isEmpty) { _, empty in
+                if empty {
+                    stopSelecting()
+                }
+            }
             .task {
                 async let recordings: Void = store.refreshRecordings()
                 async let channels: Void = store.refreshVirtuals()
@@ -162,7 +259,7 @@ struct RecordingsView: View {
         }
     }
 
-    private func row(_ rec: Recording) -> some View {
+    private func row(_ rec: Recording, focus: Int64) -> some View {
         Group {
             if rec.isMissing {
                 // Nothing to play. Select offers to take it off the list.
@@ -196,7 +293,7 @@ struct RecordingsView: View {
             }
         #endif
         #if os(tvOS)
-        .focused($focusedRec, equals: rec.id)
+        .focused($focusedRec, equals: focus)
         #endif
     }
 
@@ -249,12 +346,15 @@ struct RecordingsView: View {
         }
     }
 
-    /// "4.1 · Stopped early · Sep 27, 8:00 PM · 2.1 GB · 1:02:00 · Watched", as the web library reads.
+    /// "S2 E5 · 4.1 · Stopped early · Sep 27, 8:00 PM · 2.1 GB · 1:02:00 · Watched", as the web library reads.
     private func details(_ rec: Recording) -> String {
         if rec.isMissing {
             return "\(rec.guideNumber) · The file is gone. It was moved or deleted outside Broadwave."
         }
         var parts = [rec.guideNumber]
+        if let tag = rec.episodeTag {
+            parts.insert(tag, at: 0)
+        }
         // A recording in progress already shows the live dot.
         if !rec.isRecording, let status = rec.statusLabel {
             parts.append(status)
@@ -272,30 +372,114 @@ struct RecordingsView: View {
         return parts.joined(separator: " · ")
     }
 
-    /// The show filter, then Unwatched. An empty show lists every recording.
+    /// A show on the main list shows this many; its own page shows them all.
+    private static let preview = 4
+
+    private var order: Library.Sort {
+        sort ?? (show == nil ? .newest : .oldest)
+    }
+
+    /// The show filter, then the kind and Unwatched. An empty show lists every recording.
     private var listed: [Recording] {
-        store.recordings.filter { sameShowTitle($0.title, library.show) }
+        store.recordings.filter { sameShowTitle($0.title, show ?? library.show) }
     }
 
     private var shown: [Recording] {
-        unwatchedOnly ? listed.filter { !$0.isWatched } : listed
+        Library.filter(listed, kind: show == nil ? kind : .all, unwatchedOnly: unwatchedOnly)
     }
 
-    private struct Shelf: Identifiable {
-        let id: String
-        let title: String
-        let items: [Recording]
+    /// Only what the filters show, so a delete never reaches a recording nobody saw.
+    private var choosable: [Recording] {
+        shown.filter { !$0.isRecording }
     }
 
-    /// One section per show, then Movies, like the web library.
-    private var grouped: [Shelf] {
-        let movies = shown.filter(\.isMovie)
-        let shows = Dictionary(grouping: shown.filter { !$0.isMovie }) { $0.title }
-        var out = shows.keys.sorted().map { Shelf(id: "show:\($0)", title: $0, items: shows[$0] ?? []) }
-        if !movies.isEmpty {
-            out.append(Shelf(id: "movies", title: "Movies", items: movies))
+    private var chosen: [Recording] {
+        choosable.filter { picked.contains($0.id) }
+    }
+
+    private var selectionBar: some View {
+        Section {
+            Button("Select all") { picked.formUnion(choosable.map(\.id)) }
+                .disabled(chosen.count == choosable.count)
+            Button("Mark watched", systemImage: "eye") { runMany(.watched) }
+                .disabled(chosen.isEmpty || busy)
+            Button("Mark unwatched", systemImage: "eye.slash") { runMany(.unwatched) }
+                .disabled(chosen.isEmpty || busy)
+            Button("Delete", systemImage: "trash", role: .destructive) { confirmingMany = true }
+                .disabled(chosen.isEmpty || busy)
+        } header: {
+            Text(chosen.count == 1 ? "1 selected" : "\(chosen.count) selected")
+                .accessibilityIdentifier("selected-count")
         }
-        return out
+    }
+
+    /// A recording in Continue watching is also in its show, so its row there
+    /// takes focus under the negated id.
+    @ViewBuilder
+    private func item(_ rec: Recording, resume: Bool = false) -> some View {
+        if selecting {
+            pickRow(rec)
+        } else {
+            row(rec, focus: resume ? -rec.id : rec.id)
+        }
+    }
+
+    /// In Select, a row turns its mark on and off instead of playing.
+    private func pickRow(_ rec: Recording) -> some View {
+        let on = picked.contains(rec.id)
+        return Button {
+            if on {
+                picked.remove(rec.id)
+            } else {
+                picked.insert(rec.id)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: on ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(on ? Tokens.ColorToken.accent : .secondary)
+                    .accessibilityHidden(true)
+                rowLabel(rec)
+            }
+        }
+        .disabled(rec.isRecording)
+        .accessibilityLabel(recordingSpoken(rec))
+        .accessibilityAddTraits(on ? .isSelected : [])
+        .accessibilityIdentifier("recording-pick")
+        #if os(tvOS)
+            .focused($focusedRec, equals: rec.id)
+        #endif
+    }
+
+    private func stopSelecting() {
+        selecting = false
+        picked = []
+    }
+
+    private func runMany(_ action: AppStore.BulkAction) {
+        let recs = chosen
+        guard !recs.isEmpty, !busy else { return }
+        busy = true
+        Task {
+            let result = await store.apply(action, to: recs)
+            busy = false
+            let done = recs.count - result.failed
+            let what = done == 1 ? "1 recording" : "\(done) recordings"
+            let said = switch action {
+            case .watched: "Marked \(what) watched."
+            case .unwatched: "Marked \(what) unwatched."
+            case .delete: "Deleted \(what)."
+            }
+            if let error = result.error {
+                notice = (done > 0 ? said + " " : "") + "\(result.failed) could not be changed: " + PlaybackOutage.actionMessage(error)
+            } else {
+                notice = said
+            }
+            stopSelecting()
+            #if os(tvOS)
+                // The focused action is gone with the bar.
+                claimRecordingFocus()
+            #endif
+        }
     }
 
     private func act(_ work: @escaping () async throws -> Void) {
@@ -333,7 +517,13 @@ struct RecordingsView: View {
         /// A list does not take focus from the sidebar the way Settings' form does.
         private func claimRecordingFocus() {
             guard tvSelectedTab == .recordings else { return }
-            if let id = grouped.first?.items.first?.id {
+            let built = Library.build(shown, sort: order)
+            let first = show == nil && !selecting ? Library.continueWatching(listed, limit: 5).first : nil
+            // The order rows are drawn in: a show page by season, the list by show.
+            let top = show == nil ? built.shows.first?.items.first : built.shows.first?.seasons.first?.items.first
+            if let first {
+                focusedRec = -first.id
+            } else if let id = (top ?? built.movies.first)?.id {
                 focusedRec = id
             } else {
                 emptyRecordings = true

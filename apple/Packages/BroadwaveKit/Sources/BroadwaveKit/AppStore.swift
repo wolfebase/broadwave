@@ -410,6 +410,38 @@ public final class AppStore {
         }
     }
 
+    public enum BulkAction: Sendable {
+        case watched, unwatched, delete
+    }
+
+    /// Marks or deletes each recording in turn, then reads the list once.
+    /// Returns the first error and how many failed; the rest still go through.
+    @discardableResult
+    public func apply(_ action: BulkAction, to recs: [Recording]) async -> (failed: Int, error: Error?) {
+        guard let api else { return (recs.count, APIError(code: "offline", message: "Not connected to a server.", status: 0)) }
+        var failed = 0
+        var first: Error?
+        for rec in recs where !rec.isRecording {
+            do {
+                switch action {
+                case .watched, .unwatched:
+                    try await api.setWatched(recordingID: rec.id, action == .watched)
+                    if let i = recordings.firstIndex(where: { $0.id == rec.id }) {
+                        recordings[i].watched = action == .watched ? 1 : 2
+                    }
+                case .delete:
+                    try await api.deleteRecording(rec.id)
+                    recordings.removeAll { $0.id == rec.id }
+                }
+            } catch {
+                failed += 1
+                first = first ?? error
+            }
+        }
+        await refreshRecordings()
+        return (failed, first)
+    }
+
     public func stopRecording(_ rec: Recording) async throws {
         guard let api else { return }
         try await api.stopRecording(rec.id)

@@ -85,3 +85,11 @@ private func rec(
     #expect(got.episodeTag == "S2 E5")
     #expect(got.progressAt == ISO8601DateFormatter().date(from: "2026-10-05T20:00:00Z"))
 }
+
+@MainActor
+@Test func aBulkActionWithNoServerFailsEveryRecording() async {
+    let store = AppStore()
+    let result = await store.apply(.delete, to: [rec(1), rec(2)])
+    #expect(result.failed == 2)
+    #expect((result.error as? APIError)?.code == "offline")
+}
