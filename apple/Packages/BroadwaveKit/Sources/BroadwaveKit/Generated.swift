@@ -307,12 +307,14 @@ public struct Marker: Codable, Sendable, Hashable, Identifiable {
     public var recordingId: Int64?
     public var start: Double
     public var end: Double
+    public var confidence: Double?
 
-    public init(id: Int64, recordingId: Int64? = nil, start: Double, end: Double) {
+    public init(id: Int64, recordingId: Int64? = nil, start: Double, end: Double, confidence: Double? = nil) {
         self.id = id
         self.recordingId = recordingId
         self.start = start
         self.end = end
+        self.confidence = confidence
     }
 }
 

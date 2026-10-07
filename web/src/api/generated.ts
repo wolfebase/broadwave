@@ -155,6 +155,7 @@ export type Marker = {
   recordingId?: number;
   start: number;
   end: number;
+  confidence?: number;
 };
 
 export type MultiviewPlanBlocked = {

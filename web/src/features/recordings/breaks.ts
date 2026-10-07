@@ -1,4 +1,4 @@
-export type BreakMarker = { id: number; start: number; end: number };
+export type BreakMarker = { id: number; start: number; end: number; confidence?: number };
 
 /** What the player shows for one recording's commercial scan. */
 export type BreakScan = {

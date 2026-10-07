@@ -2230,6 +2230,7 @@ struct RecordingPlayerScreen: View {
     /// Where a break the viewer is marking by hand starts.
     @State private var breakStart: Double?
     @AppStorage(BreakSkip.key) private var skip = BreakSkip.auto
+    @State private var jumps = ForwardJumps()
 
     /// AVFoundation may post this off the main thread.
     private static let ended = NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification).receive(on: DispatchQueue.main)
@@ -2358,6 +2359,7 @@ struct RecordingPlayerScreen: View {
         passed = nil
         inBreak = nil
         breakStart = nil
+        jumps = ForwardJumps()
         do {
             let rec: Recording
             let found: [Marker]
@@ -2500,6 +2502,11 @@ struct RecordingPlayerScreen: View {
 
     /// Skips a break, offers the skip, or plays it, as the Settings choice says.
     private func followBreaks() async {
+        let now = player.currentTime().seconds
+        if now.isFinite, let hit = jumps.observe(now, at: Date(), markers: markers) {
+            await skipPast(hit)
+            return
+        }
         guard !markers.isEmpty, skip != .manual else {
             if inBreak != nil {
                 inBreak = nil
@@ -2513,7 +2520,7 @@ struct RecordingPlayerScreen: View {
         } else {
             hit = nil
         }
-        if let hit, skip == .auto {
+        if let hit, skip == .auto, hit.isSure {
             await skipPast(hit)
             return
         }

@@ -53,6 +53,44 @@ private func rec(status: String = "done", position: Double? = nil, duration: Dou
     #expect(BreakSkip.marker(in: [], at: 55) == nil)
 }
 
+@Test func onlyASureBreakIsSkippedWithoutAsking() throws {
+    #expect(Marker(id: 1, start: 0, end: 1, confidence: 0.95).isSure)
+    #expect(Marker(id: 1, start: 0, end: 1, confidence: 0.7).isSure)
+    #expect(!Marker(id: 1, start: 0, end: 1, confidence: 0.6).isSure)
+    // Set by hand, or from a server before break scores.
+    #expect(Marker(id: 1, start: 0, end: 1).isSure)
+    let scored = try APIClient.decoder.decode(Marker.self, from: Data(#"{"id":3,"start":60,"end":180,"confidence":0.6}"#.utf8))
+    #expect(scored.confidence == 0.6)
+}
+
+@Test func twoQuickJumpsForwardInABreakSkipIt() {
+    let markers = [Marker(id: 7, start: 100, end: 220)]
+    let start = Date()
+    var jumps = ForwardJumps()
+    #expect(jumps.observe(110, at: start, markers: markers) == nil)
+    #expect(jumps.observe(110.25, at: start + 0.25, markers: markers) == nil)
+    #expect(jumps.observe(125.25, at: start + 0.5, markers: markers) == nil) // first jump
+    #expect(jumps.observe(140.25, at: start + 1.25, markers: markers)?.id == 7) // second
+}
+
+@Test func slowOrOutsideJumpsAreJustJumps() {
+    let markers = [Marker(id: 7, start: 100, end: 220)]
+    let start = Date()
+    var slow = ForwardJumps()
+    _ = slow.observe(110, at: start, markers: markers)
+    _ = slow.observe(125, at: start + 0.25, markers: markers)
+    #expect(slow.observe(140, at: start + 3, markers: markers) == nil)
+    var outside = ForwardJumps()
+    _ = outside.observe(50, at: start, markers: markers)
+    _ = outside.observe(65, at: start + 0.25, markers: markers)
+    #expect(outside.observe(80, at: start + 0.75, markers: markers) == nil)
+    // Playing along is not a jump.
+    var playing = ForwardJumps()
+    for step in 0 ..< 20 {
+        #expect(playing.observe(110 + Double(step) * 0.25, at: start + Double(step) * 0.25, markers: markers) == nil)
+    }
+}
+
 @Test func playbackStartReadsMarkersAndOlderServers() throws {
     let now = try APIClient.decoder.decode(PlaybackStart.self, from: Data("""
     {"playlist":"/p.m3u8","position":12,"growing":false,"markers":[{"id":3,"start":60,"end":180}]}

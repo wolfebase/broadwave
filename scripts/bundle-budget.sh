@@ -5,13 +5,16 @@
 # (node zlib level 9, same compressor the build writes next to each asset):
 # JS 87653 -> 96419, CSS 7636 -> 8400.
 # CSS rebaselined 2026-09-26 for the brand layer (theme/brand.css): 8967 -> 9860.
+# JS given 200 bytes of slack 2026-10-07: the entry names every lazy chunk by
+# its content hash, so a change inside a lazy page moves the entry's gzip size
+# by a few bytes, and the entry sat exactly at its ceiling: 96419 -> 96619.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=96419
+JS_GZIP_MAX=96619
 CSS_GZIP_MAX=9860
 
 if [[ ! -f "$INDEX" ]]; then

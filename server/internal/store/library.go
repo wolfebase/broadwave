@@ -13,6 +13,8 @@ type Marker struct {
 	RecordingID int64   `json:"recordingId"`
 	Start       float64 `json:"start"`
 	End         float64 `json:"end"`
+	// Confidence is how sure the break scan is; a marker someone set is 1.
+	Confidence float64 `json:"confidence"`
 }
 
 type VirtualChannel struct {
@@ -50,11 +52,11 @@ func (s *Store) AddMarker(ctx context.Context, recordingID int64, start, end flo
 		return Marker{}, err
 	}
 	id, _ := res.LastInsertId()
-	return Marker{ID: id, RecordingID: recordingID, Start: start, End: end}, nil
+	return Marker{ID: id, RecordingID: recordingID, Start: start, End: end, Confidence: 1}, nil
 }
 
 func (s *Store) Markers(ctx context.Context, recordingID int64) ([]Marker, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, recording_id, start_sec, end_sec FROM markers WHERE recording_id = ? ORDER BY start_sec`, recordingID)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, recording_id, start_sec, end_sec, confidence FROM markers WHERE recording_id = ? ORDER BY start_sec`, recordingID)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +64,7 @@ func (s *Store) Markers(ctx context.Context, recordingID int64) ([]Marker, error
 	var out []Marker
 	for rows.Next() {
 		var m Marker
-		if err := rows.Scan(&m.ID, &m.RecordingID, &m.Start, &m.End); err != nil {
+		if err := rows.Scan(&m.ID, &m.RecordingID, &m.Start, &m.End, &m.Confidence); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -92,7 +94,11 @@ func (s *Store) ReplaceMarkers(ctx context.Context, recordingID int64, rows []Ma
 		if row.End <= row.Start {
 			continue
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO markers (recording_id, start_sec, end_sec) VALUES (?, ?, ?)`, recordingID, row.Start, row.End); err != nil {
+		confidence := row.Confidence
+		if confidence <= 0 {
+			confidence = 1
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO markers (recording_id, start_sec, end_sec, confidence) VALUES (?, ?, ?, ?)`, recordingID, row.Start, row.End, confidence); err != nil {
 			return err
 		}
 	}

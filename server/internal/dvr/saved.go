@@ -1,6 +1,7 @@
 package dvr
 
 import (
+	"broadwave/internal/breaks"
 	"context"
 	"fmt"
 	"log/slog"
@@ -27,20 +28,8 @@ func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Reco
 		return
 	}
 	if commercialsOn(passes, rec) && hub != nil && rec.Path != "" {
-		found, err := live.IndexBreaks(hub.FFmpeg, rec.Path)
-		if err != nil {
+		if _, err := IndexBreaks(ctx, st, hub.FFmpeg, rec, true); err != nil {
 			slog.Error(fmt.Sprintf("breaks: %v", err))
-		} else if _, err := st.Recording(ctx, rec.ID); err != nil {
-			// Deleted while its breaks were indexed.
-		} else if len(found) > 0 {
-			markers := make([]store.Marker, 0, len(found))
-			for _, item := range found {
-				markers = append(markers, store.Marker{Start: item.Start, End: item.End})
-			}
-			if err := st.ReplaceMarkers(ctx, rec.ID, markers); err == nil {
-				fresh, _ := st.Markers(ctx, rec.ID)
-				_ = live.WriteEDL(rec.Path, fresh)
-			}
 		}
 	}
 	recs, err := st.Recordings(ctx)
@@ -70,6 +59,56 @@ func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Reco
 			}
 		}
 	}
+}
+
+// indexFile is the break scan; tests stand in for ffmpeg and comskip.
+var indexFile = breaks.Index
+
+// IndexBreaks scans a recording for breaks and stores them as its markers,
+// with the .edl beside it. A scan someone asked for is a fresh start; one the
+// server runs on its own keeps the breaks someone marked by hand, maybe
+// while the show was still recording, and adds only what they don't cover.
+func IndexBreaks(ctx context.Context, st *store.Store, ffmpeg string, rec store.Recording, keepHand bool) ([]store.Marker, error) {
+	found, err := indexFile(ffmpeg, rec.Path)
+	if err != nil {
+		return nil, err
+	}
+	var markers []store.Marker
+	if keepHand {
+		old, err := st.Markers(ctx, rec.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range old {
+			if m.Confidence >= 1 {
+				markers = append(markers, m)
+			}
+		}
+	}
+	hand := len(markers)
+	for _, item := range found {
+		covered := false
+		for _, m := range markers[:hand] {
+			if m.Start < item.End && m.End > item.Start {
+				covered = true
+			}
+		}
+		if !covered {
+			markers = append(markers, store.Marker{Start: item.Start, End: item.End, Confidence: item.Confidence})
+		}
+	}
+	if _, err := st.Recording(ctx, rec.ID); err != nil {
+		return nil, nil // deleted while it was scanned
+	}
+	if err := st.ReplaceMarkers(ctx, rec.ID, markers); err != nil {
+		return nil, err
+	}
+	fresh, err := st.Markers(ctx, rec.ID)
+	if err != nil {
+		return nil, err
+	}
+	_ = live.WriteEDL(rec.Path, fresh)
+	return fresh, nil
 }
 
 func writeNFO(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Recording) {

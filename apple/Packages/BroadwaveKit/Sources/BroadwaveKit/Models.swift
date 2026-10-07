@@ -407,7 +407,45 @@ public enum BreakSkip: String, CaseIterable, Sendable {
     }
 }
 
+/// Two jumps forward in quick succession inside a break skip the rest of it,
+/// as on a DVR remote. Fed the playhead on every tick of the file player.
+public struct ForwardJumps: Sendable {
+    private var last: Double?
+    private var jumpedAt: Date?
+    private var jumpedFrom: Double?
+
+    /// A tick-to-tick move this far ahead is a jump, not playback.
+    static let jump = 3.0
+    /// The second jump must come this soon after the first.
+    static let window = 1.5
+
+    public init() {}
+
+    /// The break to skip past, when `time` ends the second of two quick jumps
+    /// forward and the first started inside that break.
+    public mutating func observe(_ time: Double, at now: Date, markers: [Marker]) -> Marker? {
+        defer { last = time }
+        guard let last, time - last > Self.jump else { return nil }
+        let quick = jumpedAt.map { now.timeIntervalSince($0) <= Self.window } ?? false
+        let hit = quick ? jumpedFrom.flatMap { BreakSkip.marker(in: markers, at: $0) } : nil
+        if let hit, time < hit.end {
+            jumpedAt = nil
+            jumpedFrom = nil
+            return hit
+        }
+        jumpedAt = now
+        jumpedFrom = last
+        return nil
+    }
+}
+
 public extension Marker {
+    /// Whether a player may skip this break without asking. The server scores
+    /// each break it finds; a marker someone set, or one from an older server, is sure.
+    var isSure: Bool {
+        (confidence ?? 1) >= 0.7
+    }
+
     /// "12:30–13:05", or with hours past the first hour, as the break list reads it.
     var span: String {
         "\(Self.clock(start))–\(Self.clock(end))"

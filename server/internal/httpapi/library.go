@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"broadwave/internal/dvr"
 	"context"
 	"io"
 	"mime"
@@ -154,25 +155,15 @@ func (s *Server) detectBreaks(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
-	found, err := live.IndexBreaks(s.Hub.FFmpeg, rec.Path)
+	list, err := dvr.IndexBreaks(r.Context(), s.Store, s.Hub.FFmpeg, rec, false)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	rows := make([]store.Marker, 0, len(found))
-	for _, item := range found {
-		rows = append(rows, store.Marker{Start: item.Start, End: item.End})
-	}
-	if err := s.Store.ReplaceMarkers(r.Context(), id, rows); err != nil {
-		writeError(w, err)
-		return
-	}
-	list, _ := s.Store.Markers(r.Context(), id)
 	if list == nil {
 		list = []store.Marker{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"markers": list})
-	s.writeEDL(r.Context(), id)
 }
 
 func (s *Server) deletePass(w http.ResponseWriter, r *http.Request) {
