@@ -48,7 +48,7 @@ func TestOnSavedWritesNFOOnlyInsideTheRecordingsFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	hub := &live.Hub{Store: st, Dir: dir, FFmpeg: filepath.Join(dir, "no-ffmpeg")}
-	OnSaved(ctx, st, hub, rec)
+	OnSaved(ctx, st, hub, nil, rec)
 	nfoPath := filepath.Join(root, "Evening News.nfo")
 	if _, err := os.Stat(nfoPath); !os.IsNotExist(err) {
 		t.Fatalf("wrote an nfo while the setting was off: %v", err)
@@ -56,7 +56,7 @@ func TestOnSavedWritesNFOOnlyInsideTheRecordingsFolder(t *testing.T) {
 	if err := st.PutSettings(ctx, map[string]string{"writeNfo": "1"}); err != nil {
 		t.Fatal(err)
 	}
-	OnSaved(ctx, st, hub, rec)
+	OnSaved(ctx, st, hub, nil, rec)
 	body, err := os.ReadFile(nfoPath)
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +88,7 @@ func TestOnSavedWritesNFOOnlyInsideTheRecordingsFolder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	OnSaved(ctx, st, hub, outside)
+	OnSaved(ctx, st, hub, nil, outside)
 	if _, err := os.Stat(filepath.Join(dir, "secret.nfo")); !os.IsNotExist(err) {
 		t.Fatalf("nfo left the recordings folder: %v", err)
 	}

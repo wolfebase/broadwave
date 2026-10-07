@@ -115,3 +115,21 @@ func (h *Hub) FFmpegVersion() string {
 	})
 	return versionText
 }
+
+// Watching reports whether anyone is playing live TV, through the apps or the
+// emulated tuner.
+func (h *Hub) Watching() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, f := range h.feedsLocked() {
+		if f.exports > 0 {
+			return true
+		}
+		for _, r := range f.renditions {
+			if r.viewers > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -16,8 +17,8 @@ import (
 )
 
 // OnSaved runs after a recording's file is closed. It writes an .nfo when that
-// is on, indexes commercials, applies keep rules, and then counts the file.
-func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Recording) {
+// is on, queues the break scan, applies keep rules, and then counts the file.
+func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, queue *BreakQueue, rec store.Recording) {
 	if st == nil || rec.ID == 0 {
 		return
 	}
@@ -27,10 +28,8 @@ func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Reco
 	if err != nil {
 		return
 	}
-	if commercialsOn(passes, rec) && hub != nil && rec.Path != "" {
-		if _, err := IndexBreaks(ctx, st, hub.FFmpeg, rec, true); err != nil {
-			slog.Error(fmt.Sprintf("breaks: %v", err))
-		}
+	if commercialsOn(passes, rec) && rec.Path != "" {
+		queue.Add(rec.ID)
 	}
 	recs, err := st.Recordings(ctx)
 	if err != nil {
@@ -69,10 +68,21 @@ var indexFile = breaks.Index
 // server runs on its own keeps the breaks someone marked by hand, maybe
 // while the show was still recording, and adds only what they don't cover.
 func IndexBreaks(ctx context.Context, st *store.Store, ffmpeg string, rec store.Recording, keepHand bool) ([]store.Marker, error) {
-	found, err := indexFile(ffmpeg, rec.Path)
+	library, err := st.Spots(ctx)
 	if err != nil {
 		return nil, err
 	}
+	// A scan again does not find the spots it learned here.
+	library = slices.DeleteFunc(library, func(sp store.Spot) bool { return sp.RecordingID == rec.ID })
+	known := make([]breaks.Spot, len(library))
+	for i, sp := range library {
+		known[i] = breaks.Spot{Prints: sp.Prints, Start: -1}
+	}
+	res, err := indexFile(ffmpeg, rec.Path, known)
+	if err != nil {
+		return nil, err
+	}
+	found := res.Breaks
 	var markers []store.Marker
 	if keepHand {
 		old, err := st.Markers(ctx, rec.ID)
@@ -103,12 +113,35 @@ func IndexBreaks(ctx context.Context, st *store.Store, ffmpeg string, rec store.
 	if err := st.ReplaceMarkers(ctx, rec.ID, markers); err != nil {
 		return nil, err
 	}
+	_ = st.MarkBreaksScanned(ctx, rec.ID)
+	learnSpots(ctx, st, rec.ID, library, res)
 	fresh, err := st.Markers(ctx, rec.ID)
 	if err != nil {
 		return nil, err
 	}
 	_ = live.WriteEDL(rec.Path, fresh)
 	return fresh, nil
+}
+
+// learnSpots keeps the recording's new spots and notes the known ones that
+// played again.
+func learnSpots(ctx context.Context, st *store.Store, recordingID int64, library []store.Spot, res breaks.Result) {
+	var seen []int64
+	for i, ok := range res.Seen {
+		if ok && i < len(library) {
+			seen = append(seen, library[i].ID)
+		}
+	}
+	fresh := make([][]uint64, len(res.Spots))
+	for i, sp := range res.Spots {
+		fresh[i] = sp.Prints
+	}
+	if err := st.SeeSpots(ctx, seen); err != nil {
+		slog.Warn(fmt.Sprintf("breaks: spots: %v", err))
+	}
+	if err := st.AddSpots(ctx, recordingID, fresh); err != nil {
+		slog.Warn(fmt.Sprintf("breaks: spots: %v", err))
+	}
 }
 
 func writeNFO(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Recording) {

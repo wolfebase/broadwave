@@ -112,6 +112,8 @@ type Recording struct {
 	OriginalAir  string `json:"originalAir,omitempty"`
 	// ProgressAt is when the playhead was last saved.
 	ProgressAt *time.Time `json:"progressAt,omitempty"`
+	// BreaksScanned is set once the server scanned the file for breaks.
+	BreaksScanned bool `json:"-"`
 }
 
 type Pass struct {
@@ -475,7 +477,7 @@ func (s *Store) Recordings(ctx context.Context) ([]Recording, error) {
 SELECT r.id, r.channel_id, r.guide_number, r.title, r.path, r.status, r.error, r.started_at, r.ends_at, r.ended_at, r.duration_sec,
 	r.subtitle, r.description, r.category, r.program_id, r.watched, r.game_id,
 	r.continuity_errors, r.transport_errors, r.sync_losses, r.packets, r.pass_id,
-	r.season, r.episode, r.episode_label, r.original_air,
+	r.season, r.episode, r.episode_label, r.original_air, r.breaks_scanned,
 	COALESCE(p.position_sec, 0), COALESCE(p.updated_at, '')
 FROM recordings r LEFT JOIN progress p ON p.recording_id = r.id
 ORDER BY r.id DESC`)
@@ -489,7 +491,7 @@ ORDER BY r.id DESC`)
 		var start, ends, ended, played string
 		var continuity, transport, syncLoss, packets sql.NullInt64
 		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID, &continuity, &transport, &syncLoss, &packets, &rec.PassID,
-			&rec.Season, &rec.Episode, &rec.EpisodeLabel, &rec.OriginalAir, &rec.Position, &played); err != nil {
+			&rec.Season, &rec.Episode, &rec.EpisodeLabel, &rec.OriginalAir, &rec.BreaksScanned, &rec.Position, &played); err != nil {
 			return nil, err
 		}
 		if played != "" && rec.Position > 0 {
@@ -565,6 +567,12 @@ func later(a, b time.Time) time.Time {
 		return a
 	}
 	return b
+}
+
+// MarkBreaksScanned records that the server scanned a recording for breaks.
+func (s *Store) MarkBreaksScanned(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE recordings SET breaks_scanned = 1 WHERE id = ?`, id)
+	return err
 }
 
 func (s *Store) SetDuration(ctx context.Context, id int64, seconds float64) error {

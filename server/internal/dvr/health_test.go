@@ -18,7 +18,7 @@ func TestOnSavedStoresRecordingHealth(t *testing.T) {
 
 	t.Run("continuity errors", func(t *testing.T) {
 		st, rec := finishedRecording(t, damaged)
-		OnSaved(ctx, st, nil, rec)
+		OnSaved(ctx, st, nil, nil, rec)
 		got := mustRecording(t, st, rec.ID)
 		if got.Status != "complete" || got.Error != "" {
 			t.Fatalf("status %q error %q", got.Status, got.Error)
@@ -33,7 +33,7 @@ func TestOnSavedStoresRecordingHealth(t *testing.T) {
 
 	t.Run("clean file", func(t *testing.T) {
 		st, rec := finishedRecording(t, clean)
-		OnSaved(ctx, st, nil, rec)
+		OnSaved(ctx, st, nil, nil, rec)
 		got := mustRecording(t, st, rec.ID)
 		if got.Status != "complete" || got.Error != "" {
 			t.Fatalf("status %q error %q", got.Status, got.Error)
@@ -53,7 +53,7 @@ func TestOnSavedStoresRecordingHealth(t *testing.T) {
 		healthOpen = func(path string) (io.ReadCloser, error) {
 			return &dropMidRead{path: path, rest: clean}, nil
 		}
-		OnSaved(ctx, st, nil, rec)
+		OnSaved(ctx, st, nil, nil, rec)
 		got := mustRecording(t, st, rec.ID)
 		if got.Status != "complete" || got.Error != "" {
 			t.Fatalf("status %q error %q", got.Status, got.Error)
