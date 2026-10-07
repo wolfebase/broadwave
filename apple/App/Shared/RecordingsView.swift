@@ -87,6 +87,7 @@ struct RecordingsView: View {
                 Text(notice)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("recordings-notice")
             }
             if shown.isEmpty {
                 ContentUnavailableView(
@@ -338,10 +339,11 @@ struct RecordingsView: View {
             Button("Make a channel", systemImage: "tv") {
                 makeChannel(rec)
             }
-            Button("Find commercials", systemImage: "forward.end") {
+            Button(detecting.contains(rec.id) ? CommercialScan.finding : "Find commercials", systemImage: "forward.end") {
                 findBreaks(rec)
             }
             .disabled(detecting.contains(rec.id))
+            .accessibilityIdentifier("find-commercials")
             Button("Delete", systemImage: "trash", role: .destructive) { deleting = rec }
         }
     }
@@ -495,20 +497,22 @@ struct RecordingsView: View {
 
     private func findBreaks(_ rec: Recording) {
         guard let api = store.api else { return }
-        let name = rec.subtitle ?? rec.title
-        detecting.insert(rec.id)
-        notice = "Looking for commercials in \(name)…"
+        guard CommercialScan.start(rec.id, running: &detecting) else { return }
+        notice = CommercialScan.finding
         Task {
             defer { detecting.remove(rec.id) }
+            #if DEBUG
+                // A UI test holds the scan open so it can read the working line. Release builds do not.
+                let hold = UserDefaults.standard.double(forKey: "BroadwaveDetectHold")
+                if hold > 0 {
+                    try? await Task.sleep(nanoseconds: UInt64(hold * 1_000_000_000))
+                }
+            #endif
             do {
                 let found = try await api.detectBreaks(recordingID: rec.id)
-                notice = switch found.count {
-                case 0: "No commercials found in \(name)."
-                case 1: "Found 1 commercial break in \(name)."
-                default: "Found \(found.count) commercial breaks in \(name)."
-                }
+                notice = CommercialScan.found(found.count)
             } catch {
-                notice = PlaybackOutage.actionMessage(error)
+                notice = CommercialScan.failed
             }
         }
     }
