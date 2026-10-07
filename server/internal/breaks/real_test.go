@@ -91,14 +91,40 @@ func TestRealLogo(t *testing.T) {
 }
 
 func TestRealScore(t *testing.T) {
+	cues := map[string]Cues{}
+	for name := range realTruth {
+		cues[name] = loadReal(t, name)
+	}
 	for name, truth := range realTruth {
-		c := loadReal(t, name)
-		found := Find(c)
-		t.Logf("%s: %s", name, score(truth, found, c.Length))
-		for _, b := range found {
-			t.Logf("  %7.1f %7.1f %.2f %s", b.Start, b.End, b.Confidence, hitMark(truth, b))
+		// Alone, then after the other recording was scanned.
+		var other []Spot
+		for o := range realTruth {
+			if o != name {
+				other = score(cues[o], nil, nil, false).Spots
+				for i := range other {
+					other[i].Start = -1
+				}
+			}
+		}
+		for _, known := range [][]Spot{nil, other} {
+			res := score(cues[name], known, nil, false)
+			t.Logf("%s, %d known spots: %s; sure only: %s; new spots %d", name, len(known),
+				measure(truth, res.Breaks, cues[name].Length), measure(truth, sure(res.Breaks), cues[name].Length), len(res.Spots))
+			for _, b := range res.Breaks {
+				t.Logf("  %7.1f %7.1f %.2f %s", b.Start, b.End, b.Confidence, hitMark(truth, b))
+			}
 		}
 	}
+}
+
+func sure(found []Break) []Break {
+	var out []Break
+	for _, b := range found {
+		if b.Confidence >= AutoSkip {
+			out = append(out, b)
+		}
+	}
+	return out
 }
 
 func hitMark(truth []span, b Break) string {
@@ -110,9 +136,9 @@ func hitMark(truth []span, b Break) string {
 	return "FALSE"
 }
 
-// score reads like the J0.136 measurement: per-second recall and
+// measure reads like the J0.136 measurement: per-second recall and
 // precision, show seconds skipped, and breaks found.
-func score(truth []span, found []Break, length float64) string {
+func measure(truth []span, found []Break, length float64) string {
 	var tp, ad, det int
 	for t := 0.0; t < length; t++ {
 		a := inside(truth, t)

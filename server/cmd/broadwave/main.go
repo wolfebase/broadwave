@@ -164,8 +164,10 @@ func main() {
 	}); err != nil {
 		slog.Error(fmt.Sprintf("recording: %v", err))
 	}
+	breakQueue := dvr.NewBreakQueue(st, hub)
+	go breakQueue.Run(context.Background())
 	hub.OnSaved = func(rec store.Recording) {
-		dvr.OnSaved(context.Background(), st, hub, rec)
+		dvr.OnSaved(context.Background(), st, hub, breakQueue, rec)
 	}
 	slog.Info(fmt.Sprintf("encoder: %s deint: %s smooth: %s", encoder, hub.DeintBroadcast, hub.DeintSmooth))
 	bus := realtime.NewBus()

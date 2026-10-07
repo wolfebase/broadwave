@@ -27,6 +27,8 @@ type Cues struct {
 	Logo []bool
 	// Prints are a 64-bit picture hash per second, for repeated spots.
 	Prints []uint64
+	// Known are the stretches where a spot seen in a sure break plays.
+	Known  []span
 	Length float64
 }
 

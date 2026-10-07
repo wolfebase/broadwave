@@ -53,6 +53,13 @@ func Find(c Cues) []Break {
 	for _, chain := range spotChains(chainCuts) {
 		spans = append(spans, logoOffSpots(c.Logo, chain)...)
 	}
+	// A known spot under the logo is the show (a recap, a teaser), and must
+	// not stretch a break next to it.
+	for _, k := range c.Known {
+		if c.Logo == nil || offShare(c.Logo, k.Start, k.End) > 0.5 {
+			spans = append(spans, Break{Start: k.Start, End: k.End})
+		}
+	}
 	var out []Break
 	for _, b := range merge(spans) {
 		b.Confidence = confidence(c, cuts, b)
@@ -305,15 +312,20 @@ func merge(spans []Break) []Break {
 }
 
 // confidence weighs a span's evidence: how much of it has the logo off,
-// and how many of its boundaries are a spot apart.
+// how many of its boundaries are a spot apart, and how much of it is spots
+// seen before.
 func confidence(c Cues, cuts []boundary, b Break) float64 {
+	// A spot seen before counts toward it. Without the logo to agree it
+	// counts as one more spot: three spots and a known ad skip, two are
+	// offered.
+	known := knownShare(c.Known, b)
 	if c.Logo == nil {
 		// Black-frame timing alone: three spots are offered, four or more skip.
-		return round2(math.Min(0.8, 0.3+0.1*float64(spotsWithin(strong(cuts), b))))
+		return round2(math.Min(0.8, 0.3+0.1*float64(spotsWithin(strong(cuts), b))+0.1*known))
 	}
 	spots := float64(spotsWithin(cuts, b))
 	away := offShare(c.Logo, b.Start, b.End)
-	return round2(math.Min(0.99, 0.05+0.55*away+0.4*math.Min(spots/6, 1)))
+	return round2(math.Min(0.99, 0.05+0.55*away+0.4*math.Min(spots/6, 1)+0.3*known))
 }
 
 // spotsWithin counts the spot-length gaps of the longest chain inside a span.

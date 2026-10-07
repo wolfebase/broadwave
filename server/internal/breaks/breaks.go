@@ -16,23 +16,81 @@ import (
 	"time"
 )
 
+// Result is what a scan of one recording finds.
+type Result struct {
+	Breaks []Break
+	// Spots are the spots of its sure breaks that matched no known one.
+	Spots []Spot
+	// Seen tells, per known spot, whether it played in this recording.
+	Seen []bool
+}
+
 // Index finds a recording's breaks with comskip, when it is installed, and
-// with its own scan, and scores each break by how well the two agree. It does
-// not modify the file.
-func Index(ffmpeg, path string) ([]Break, error) {
+// with its own scan, and scores each break by how well the two agree. Known
+// spots, and the spots of its own sure breaks, mark breaks where they play
+// again. It does not modify the file.
+func Index(ffmpeg, path string, known []Spot) (Result, error) {
 	if _, err := os.Stat(path); err != nil {
-		return nil, err
+		return Result{}, err
 	}
 	cues, err := Scan(ffmpeg, path)
 	if err != nil {
-		return nil, err
+		return Result{}, err
 	}
-	own := Find(cues)
 	skipped, ok := comskipBreaks(path)
-	if !ok {
-		return own, nil
+	return score(cues, known, skipped, ok), nil
+}
+
+func score(cues Cues, known []Spot, skipped []Break, comskip bool) Result {
+	var res Result
+	// Spots are learned only from breaks sure on this recording's own cues,
+	// so a spot that once slipped in cannot vouch for itself later.
+	base := Find(cues)
+	if comskip {
+		base = combine(skipped, base)
 	}
-	return combine(skipped, own), nil
+	learned := spotsOf(cues, base)
+	var library []span
+	library, res.Seen = matchSpots(cues.Prints, known)
+	again, _ := matchSpots(cues.Prints, learned)
+	cues.Known = append(library, again...)
+	found := Find(cues)
+	if comskip {
+		found = combine(skipped, found)
+	}
+	res.Breaks = found
+	for _, s := range learned {
+		if overlapsAny(library, float64(s.Start), float64(s.Start+len(s.Prints))) {
+			continue
+		}
+		// An ad that ran twice is kept once.
+		if sameAd(s, res.Spots) {
+			continue
+		}
+		res.Spots = append(res.Spots, s)
+	}
+	return res
+}
+
+// sameAd is a spot that one of spots plays in, or that plays in one of them.
+func sameAd(s Spot, spots []Spot) bool {
+	for _, o := range spots {
+		if _, seen := matchSpots(s.Prints, asOther([]Spot{o})); seen[0] {
+			return true
+		}
+		if _, seen := matchSpots(o.Prints, asOther([]Spot{s})); seen[0] {
+			return true
+		}
+	}
+	return false
+}
+
+func asOther(spots []Spot) []Spot {
+	out := make([]Spot, len(spots))
+	for i, s := range spots {
+		out[i] = Spot{Prints: s.Prints, Start: -1}
+	}
+	return out
 }
 
 // Confidence of comskip's breaks. On real news it was right about 99 % of the
