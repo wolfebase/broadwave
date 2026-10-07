@@ -121,9 +121,17 @@ test("the library groups seasons, resumes, filters, and changes many at once", a
   await expect.poll(async () => (await recordings()).filter((rec) => [ids["A New Town"], ids["The Lighthouse"]].includes(rec.id)).map((rec) => rec.watched)).toEqual([1, 1]);
   await expect(page.getByRole("checkbox")).toHaveCount(0);
 
+  // Select all takes only what the filter shows: 2 of the 5 are unwatched now.
+  const bar = page.getByRole("toolbar", { name: "Selected recordings" });
+  await page.getByRole("tab", { name: "Unwatched" }).click();
+  await page.getByRole("button", { name: "Select" }).click();
+  await bar.getByRole("button", { name: "Select all" }).click();
+  await expect(bar).toContainText("2 selected");
+  await page.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("tab", { name: "All" }).click();
+
   // Delete asks in place, then removes every file of the show.
   await page.getByRole("button", { name: "Select" }).click();
-  const bar = page.getByRole("toolbar", { name: "Selected recordings" });
   await bar.getByRole("button", { name: "Select all" }).click();
   await expect(bar).toContainText("5 selected");
   await bar.getByRole("button", { name: "Delete", exact: true }).click();

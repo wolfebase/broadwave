@@ -48,7 +48,8 @@ export function Library({
   const shown = filterRecordings(recordings, show ? "all" : kind, libraryFilter === "unwatched");
   const { shows, movies } = buildLibrary(shown, sort);
   const resume = show ? [] : continueWatching(recordings);
-  const choosable = recordings.filter((rec) => rec.status !== "recording");
+  // Only what the filters show, so a delete never reaches a recording nobody saw.
+  const choosable = shown.filter((rec) => rec.status !== "recording");
   const chosen = choosable.filter((rec) => picked.has(rec.id));
   useEffect(() => {
     const previous = armedWas.current;
@@ -150,7 +151,7 @@ export function Library({
             <option value="largest">Largest first</option>
           </select>
         </label>
-        {choosable.length > 0 ? (
+        {choosable.length > 0 || selecting ? (
           <button type="button" className="btn" aria-pressed={selecting} onClick={() => (selecting ? stopSelecting() : setSelecting(true))}>
             {selecting ? "Done" : "Select"}
           </button>
