@@ -1760,8 +1760,9 @@ struct SystemPlayer: UIViewControllerRepresentable {
     var onTogether: () -> Void = {}
     /// Set while this screen has left sync; the menu offers the way back.
     var rejoin: (() -> Void)?
-    /// Set while a recording is in a commercial break the viewer skips by hand.
-    var skipBreak: (() -> Void)?
+    /// A recording's buttons over the picture: Skip break, Skip intro, or Up next. Apple TV only;
+    /// iPhone and iPad draw their own.
+    var actions: [FileMenuEntry] = []
     /// A recording has no channels, audio picks, stream panel, or side by side.
     var liveMenu = true
     /// A recording's own entries, shown instead of the live menu.
@@ -1868,14 +1869,19 @@ struct SystemPlayer: UIViewControllerRepresentable {
             context.coordinator.start(vc)
             context.coordinator.noteHint(hint, on: vc)
             context.coordinator.sample(vc)
-            // The action calls the newest closure, so moving from one break to the next skips the right one.
+            // Each action calls the newest closure, so moving from one break to the next skips the right one.
+            // The buttons are replaced only when a title changes, as the Up next countdown does once a second.
             let coordinator = context.coordinator
-            coordinator.skip = skipBreak
-            if (skipBreak != nil) != coordinator.skipShown {
-                coordinator.skipShown = skipBreak != nil
-                vc.contextualActions = skipBreak == nil ? [] : [
-                    UIAction(title: "Skip break", image: UIImage(systemName: "forward.end")) { [weak coordinator] _ in coordinator?.skip?() },
-                ]
+            coordinator.actions = Dictionary(actions.map { ($0.id, $0.action) }) { _, last in last }
+            let actionKey = actions.map { "\($0.id) \($0.title)" }
+            if actionKey != coordinator.actionKey {
+                coordinator.actionKey = actionKey
+                vc.contextualActions = actions.map { entry in
+                    let id = entry.id
+                    let item = UIAction(title: entry.title, image: UIImage(systemName: entry.symbol)) { [weak coordinator] _ in coordinator?.actions[id]?() }
+                    item.accessibilityLabel = entry.spoken
+                    return item
+                }
             }
             guard liveMenu else {
                 let key = fileMenu.flatMap { entry in ["\(entry.id) \(entry.title)"] + entry.children.map { "\($0.id) \($0.title)" } }
@@ -1934,8 +1940,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
         #endif
         #if os(tvOS)
             var menuKey: [String] = []
-            var skipShown = false
-            var skip: (() -> Void)?
+            var actionKey: [String] = []
+            var actions: [String: () -> Void] = [:]
             private var infoPanels: [UIViewController] = []
             private var task: Task<Void, Never>?
             private var match = DisplayMatch()
@@ -2231,6 +2237,14 @@ struct RecordingPlayerScreen: View {
     @State private var breakStart: Double?
     @AppStorage(BreakSkip.key) private var skip = BreakSkip.auto
     @State private var jumps = ForwardJumps()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// For one recording: the episode that took over from it in this screen.
+    @State private var episode: Recording?
+    /// Every recording, for the show's next episode and the newest intro and credits times.
+    @State private var library: [Recording] = []
+    @State private var inIntro = false
+    @State private var upNext = UpNext()
+    @State private var upNextStep = UpNext.Step.none
 
     /// AVFoundation may post this off the main thread.
     private static let ended = NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification).receive(on: DispatchQueue.main)
@@ -2265,7 +2279,7 @@ struct RecordingPlayerScreen: View {
     }
 
     var body: some View {
-        SystemPlayer(player: player, skipBreak: inBreak.map { marker in { Task { await skipPast(marker) } } }, liveMenu: false, fileMenu: menu)
+        SystemPlayer(player: player, actions: actions, liveMenu: false, fileMenu: menu)
             .ignoresSafeArea()
             .overlay {
                 if let error {
@@ -2275,24 +2289,38 @@ struct RecordingPlayerScreen: View {
             .overlay(alignment: .top) { PlayerNote(text: note) }
         #if os(iOS)
             .overlay(alignment: .bottomTrailing) {
-                if let marker = inBreak {
-                    Button("Skip break", systemImage: "forward.end") {
-                        Task { await skipPast(marker) }
+                Group {
+                    if let marker = inBreak {
+                        Button("Skip break", systemImage: "forward.end") {
+                            Task { await skipPast(marker) }
+                        }
+                        .buttonStyle(.glass)
+                    } else if inIntro {
+                        Button("Skip intro", systemImage: "forward.end") {
+                            Task { await skipIntro() }
+                        }
+                        .buttonStyle(.glass)
+                        .accessibilityIdentifier("recording-skip-intro")
+                    } else if case let .card(left) = upNextStep, let next = nextEpisode {
+                        UpNextCard(next: next, left: left, reduceMotion: reduceMotion, play: { playEpisode(next) }, dismiss: dismissUpNext)
                     }
-                    .buttonStyle(.glass)
-                    .padding(.trailing, 24)
-                    .padding(.bottom, 110)
                 }
+                .padding(.trailing, 24)
+                .padding(.bottom, 110)
             }
             .toolbar { fileToolbar }
         #endif
-            .task(id: index) {
+            .task {
+                await loadLibrary()
+            }
+            .task(id: [Int64(index), episode?.id ?? 0]) {
                 guard await load() else { return }
                 #if DEBUG
                     var ticks = 0
                 #endif
                 while await (try? Task.sleep(for: .milliseconds(250))) != nil {
                     await followBreaks()
+                    followEpisode()
                     #if DEBUG
                         ticks += 1
                         debugReport(ticks)
@@ -2307,16 +2335,23 @@ struct RecordingPlayerScreen: View {
                 }
             }
             .onReceive(Self.ended) { sent in
-                // A library channel goes on to its next recording, as the web does. The last one stays.
-                guard case .library = source, (sent.object as? AVPlayerItem) === player.currentItem, index + 1 < count else { return }
-                index += 1
+                guard (sent.object as? AVPlayerItem) === player.currentItem else { return }
+                switch source {
+                case .library:
+                    // A library channel goes on to its next recording, as the web does. The last one stays.
+                    if index + 1 < count {
+                        index += 1
+                    }
+                case .recording:
+                    // One recording goes on to the show's next episode when the setting says so.
+                    if let next = nextEpisode, upNext.ended(hasNext: true) {
+                        playEpisode(next)
+                    }
+                }
             }
             .onDisappear {
-                let pos = player.currentTime().seconds
                 player.pause()
-                if case let .recording(rec) = source, let api = store.api, pos.isFinite, pos > 0 {
-                    Task { await api.saveProgress(recordingID: rec.id, position: pos) }
-                }
+                saveProgress()
             }
         #if os(iOS)
             .toolbarVisibility(.hidden, for: .tabBar)
@@ -2360,6 +2395,9 @@ struct RecordingPlayerScreen: View {
         inBreak = nil
         breakStart = nil
         jumps = ForwardJumps()
+        inIntro = false
+        upNext = UpNext(autoplay: upNext.autoplay)
+        upNextStep = .none
         do {
             let rec: Recording
             let found: [Marker]
@@ -2367,7 +2405,8 @@ struct RecordingPlayerScreen: View {
             var position = 0.0
             var total = 1
             switch source {
-            case let .recording(one):
+            case let .recording(first):
+                let one = episode ?? first
                 let start = try await api.play(recordingID: one.id)
                 (rec, found, playlist, position) = (one, start.markers ?? [], start.playlist, start.position)
             case let .library(channel):
@@ -2529,6 +2568,94 @@ struct RecordingPlayerScreen: View {
         }
     }
 
+    /// The recording on screen as the newest library list has it, with the server's latest intro and credits.
+    private var shown: Recording? {
+        current.map { rec in library.first { $0.id == rec.id } ?? rec }
+    }
+
+    /// The show's next episode, for one recording. A library channel has its own order.
+    private var nextEpisode: Recording? {
+        guard case .recording = source, let rec = shown, !rec.isRecording, !library.isEmpty else { return nil }
+        return Library.nextEpisode(after: rec, in: library)
+    }
+
+    /// Skip break, Skip intro, or Up next over the picture on Apple TV. Break wins; intro and credits never overlap.
+    private var actions: [FileMenuEntry] {
+        if let marker = inBreak {
+            return [FileMenuEntry(id: "skip-break", title: "Skip break", symbol: "forward.end") { Task { await skipPast(marker) } }]
+        }
+        if inIntro {
+            return [FileMenuEntry(id: "skip-intro", title: "Skip intro", symbol: "forward.end") { Task { await skipIntro() } }]
+        }
+        if case let .card(left) = upNextStep, let next = nextEpisode {
+            let label = next.upNextLabel
+            let title = left.map { "Up next: \(label) · \($0) s" } ?? "Up next: \(label)"
+            let spoken = left.map { "Up next, \(label). Playing in \($0) seconds." } ?? "Up next, \(label). Play now."
+            return [FileMenuEntry(id: "up-next", title: title, symbol: "play.fill", spoken: spoken) { playEpisode(next) }]
+        }
+        return []
+    }
+
+    /// The recordings list and the "Play the next episode" setting. One recording only.
+    private func loadLibrary() async {
+        guard case .recording = source, let api = store.api else { return }
+        if let values = try? await api.settings() {
+            upNext.autoplay = values["autoplay"] != "0"
+        }
+        if let list = try? await api.recordings() {
+            library = list
+        }
+    }
+
+    /// Offers Skip intro inside the intro, and the next episode at the credits.
+    private func followEpisode() {
+        guard case .recording = source, let rec = shown else { return }
+        let time = player.currentTime().seconds
+        guard time.isFinite else { return }
+        let intro = rec.showsSkipIntro(at: time)
+        if intro != inIntro {
+            inIntro = intro
+        }
+        var length = player.currentItem?.duration.seconds ?? 0
+        if !length.isFinite || length <= 0 {
+            length = rec.durationSec ?? 0
+        }
+        let next = nextEpisode
+        let step = upNext.observe(time, duration: length, creditsStart: rec.creditsStart, hasNext: next != nil)
+        if step != upNextStep {
+            upNextStep = step
+        }
+        if step == .play, let next {
+            playEpisode(next)
+        }
+    }
+
+    private func skipIntro() async {
+        guard let intro = shown?.intro else { return }
+        inIntro = false
+        await player.seek(to: CMTime(seconds: intro.upperBound, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
+    /// Plays the show's next episode in this screen, keeping where the last one stopped.
+    private func playEpisode(_ next: Recording) {
+        upNext.played()
+        upNextStep = .none
+        saveProgress()
+        episode = next
+    }
+
+    private func dismissUpNext() {
+        upNext.dismiss()
+        upNextStep = .none
+    }
+
+    private func saveProgress() {
+        let pos = player.currentTime().seconds
+        if case .recording = source, let rec = current, let api = store.api, pos.isFinite, pos > 0 {
+            Task { await api.saveProgress(recordingID: rec.id, position: pos) }
+        }
+    }
+
     private func skipPast(_ marker: Marker) async {
         passed = marker.id
         inBreak = nil
@@ -2539,6 +2666,64 @@ struct RecordingPlayerScreen: View {
         await player.seek(to: CMTime(seconds: end, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
     }
 }
+
+#if os(iOS)
+    /// The show's next episode over the end of a recording, with a countdown when it plays by itself.
+    private struct UpNextCard: View {
+        let next: Recording
+        let left: Int?
+        let reduceMotion: Bool
+        let play: () -> Void
+        let dismiss: () -> Void
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Up next")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(next.upNextLabel)
+                    .font(.headline)
+                    .lineLimit(1)
+                if let subtitle = next.subtitle, !subtitle.isEmpty, subtitle != next.upNextLabel {
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                if let left {
+                    HStack(spacing: 8) {
+                        if !reduceMotion {
+                            Circle()
+                                .trim(from: 0, to: Double(left) / UpNext.countdown)
+                                .stroke(.tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                                .rotationEffect(.degrees(-90))
+                                .frame(width: 16, height: 16)
+                                .animation(.linear(duration: 1), value: left)
+                                .accessibilityHidden(true)
+                        }
+                        Text("Playing in \(left) s")
+                            .font(.subheadline.monospacedDigit())
+                            .accessibilityLabel("Playing in \(left) seconds")
+                    }
+                }
+                HStack(spacing: 10) {
+                    Button("Play now", systemImage: "play.fill", action: play)
+                        .buttonStyle(.glassProminent)
+                        .accessibilityIdentifier("recording-up-next-play")
+                    Button("Not now", action: dismiss)
+                        .buttonStyle(.glass)
+                        .accessibilityIdentifier("recording-up-next-dismiss")
+                }
+                .padding(.top, 4)
+            }
+            .padding(16)
+            .frame(maxWidth: 320, alignment: .leading)
+            .glassEffect(in: .rect(cornerRadius: 20))
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Up next")
+        }
+    }
+#endif
 
 /// Covers the player from a new watch until the picture moves, as the web
 /// player does, so the frame a new room holds at its start does not look frozen.

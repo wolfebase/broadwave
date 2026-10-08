@@ -114,6 +114,17 @@ public enum Library {
         return (shows, movies)
     }
 
+    /// The show's next episode in air order, or nil after the last one. Recordings still
+    /// recording or whose file is gone are passed over.
+    public static func nextEpisode(after rec: Recording, in recordings: [Recording]) -> Recording? {
+        let show = rec.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let before = { (a: Recording, b: Recording) in aired(a, b) ?? (a.id < b.id) }
+        return recordings
+            .filter { $0.id != rec.id && !$0.isRecording && !$0.isMissing && $0.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == show }
+            .sorted(by: before)
+            .first { before(rec, $0) }
+    }
+
     public static func totalBytes(_ recordings: [Recording]) -> Int64 {
         recordings.reduce(0) { $0 + ($1.bytes ?? 0) }
     }

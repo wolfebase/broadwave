@@ -35,6 +35,7 @@ export function Stage({
   onTogglePlay,
   loading,
   onSound,
+  hold,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   rootRef?: RefObject<HTMLElement | null>;
@@ -68,6 +69,8 @@ export function Stage({
   loading?: ReactNode;
   /** The viewer changed volume or mute. Live TV remembers it. */
   onSound?: () => void;
+  /** Keeps the chrome and the note up, for a note that asks something. */
+  hold?: boolean;
 }) {
   const [paused, setPaused] = useState(false);
   const [timedIdle, setTimedIdle] = useState(false);
@@ -97,7 +100,7 @@ export function Stage({
     };
   }, [videoRef]);
 
-  const showChrome = paused || open || mode === "mini" || Boolean(error) || Boolean(loading);
+  const showChrome = paused || open || mode === "mini" || Boolean(error) || Boolean(loading) || Boolean(hold);
   const idle = !showChrome && timedIdle;
   const [seenShow, setSeenShow] = useState(showChrome);
   if (seenShow !== showChrome) {
