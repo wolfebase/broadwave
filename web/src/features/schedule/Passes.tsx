@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Channel, NewPass, Pass, PassPreview } from "../../types";
 import { addSeriesPass, deletePass, orderPasses, previewPass, updatePass } from "../../api";
 import { useData } from "../../app/data";
+import { focusRing } from "../../app/remote";
 import { formatClock } from "../../time";
 
 const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -57,6 +58,11 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
   const dropped = useRef(false);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const focusAfter = useRef<{ id: number; up: boolean } | null>(null);
+  const [removing, setRemoving] = useState<number | null>(null);
+  const [removeError, setRemoveError] = useState("");
+  const [removeBusy, setRemoveBusy] = useState(false);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const restoreRemove = useRef<number | null>(null);
   // A moved row keeps focus on its button, or on the other one at an end of the list.
   useEffect(() => {
     const want = focusAfter.current;
@@ -66,6 +72,60 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
     const button = pick(want.up);
     (button && !button.disabled ? button : pick(!want.up))?.focus();
   });
+  // The ask puts focus on Cancel. Leaving it returns to that row's Remove.
+  useEffect(() => {
+    if (removing != null) {
+      focusRing(cancelRef.current);
+      return;
+    }
+    const id = restoreRemove.current;
+    if (id == null) return;
+    restoreRemove.current = null;
+    focusRing(document.querySelector<HTMLButtonElement>(`[data-pass-remove="${id}"]`));
+  }, [removing]);
+  // Escape and Backspace cancel the ask. They would otherwise leave the page.
+  useEffect(() => {
+    if (removing == null) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" && event.key !== "Backspace") return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      event.preventDefault();
+      restoreRemove.current = removing;
+      setRemoving(null);
+      setRemoveError("");
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [removing]);
+
+  function askRemove(id: number) {
+    setEditing(null);
+    setRemoveError("");
+    setRemoving(id);
+  }
+
+  function cancelRemove() {
+    if (removing != null) restoreRemove.current = removing;
+    setRemoving(null);
+    setRemoveError("");
+  }
+
+  async function confirmRemove(id: number) {
+    setRemoveBusy(true);
+    setRemoveError("");
+    try {
+      await deletePass(id);
+      restoreRemove.current = null;
+      setRemoving(null);
+      onPasses();
+    } catch (err) {
+      setRemoveError(err instanceof Error ? err.message : "The pass could not be removed.");
+    } finally {
+      setRemoveBusy(false);
+    }
+  }
   const byId = new Map(passes.map((p) => [p.id, p]));
   const rows = order.map((id) => byId.get(id)).filter((p): p is Pass => Boolean(p));
 
@@ -140,7 +200,7 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
             <li
               key={pass.id}
               className={`source-row pass-row${dragId === pass.id ? " dragging" : ""}`}
-              draggable={editing === null}
+              draggable={editing === null && removing !== pass.id}
               onDragStart={(event) => {
                 event.dataTransfer.effectAllowed = "move";
                 event.dataTransfer.setData("text/plain", String(pass.id));
@@ -164,20 +224,38 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
                 <span className="pass-title">{passLabel(pass)}</span>
                 <span className="codec">{passDetails(pass, channels)}</span>
               </span>
-              <span className="pad pass-actions">
-                <button type="button" className="btn small" data-pass={pass.id} data-move="up" aria-label={`Move ${pass.title} up`} disabled={index === 0} onClick={() => move(pass.id, -1)}>
-                  Up
-                </button>
-                <button type="button" className="btn small" data-pass={pass.id} data-move="down" aria-label={`Move ${pass.title} down`} disabled={index === rows.length - 1} onClick={() => move(pass.id, 1)}>
-                  Down
-                </button>
-                <button type="button" className="btn small" aria-label={`${editing === pass.id ? "Close" : "Edit"} ${pass.title}`} aria-expanded={editing === pass.id} onClick={() => setEditing(editing === pass.id ? null : pass.id)}>
-                  {editing === pass.id ? "Close" : "Edit"}
-                </button>
-                <button type="button" className="btn small" aria-label={`Remove ${pass.title}`} onClick={() => void deletePass(pass.id).then(onPasses)}>
-                  Remove
-                </button>
-              </span>
+              {removing === pass.id ? (
+                <span className="pad pass-actions">
+                  <span>Remove {passLabel(pass)}?</span>
+                  <span className="codec">Recordings it made stay.</span>
+                  <button type="button" className="btn small" disabled={removeBusy} onClick={() => void confirmRemove(pass.id)}>
+                    Remove
+                  </button>
+                  <button ref={cancelRef} type="button" className="btn small" disabled={removeBusy} onClick={cancelRemove}>
+                    Cancel
+                  </button>
+                  {removeError ? (
+                    <span className="hint error" role="alert">
+                      {removeError}
+                    </span>
+                  ) : null}
+                </span>
+              ) : (
+                <span className="pad pass-actions">
+                  <button type="button" className="btn small" data-pass={pass.id} data-move="up" aria-label={`Move ${pass.title} up`} disabled={index === 0} onClick={() => move(pass.id, -1)}>
+                    Up
+                  </button>
+                  <button type="button" className="btn small" data-pass={pass.id} data-move="down" aria-label={`Move ${pass.title} down`} disabled={index === rows.length - 1} onClick={() => move(pass.id, 1)}>
+                    Down
+                  </button>
+                  <button type="button" className="btn small" aria-label={`${editing === pass.id ? "Close" : "Edit"} ${pass.title}`} aria-expanded={editing === pass.id} onClick={() => setEditing(editing === pass.id ? null : pass.id)}>
+                    {editing === pass.id ? "Close" : "Edit"}
+                  </button>
+                  <button type="button" className="btn small" data-pass-remove={pass.id} aria-label={`Remove ${pass.title}`} onClick={() => askRemove(pass.id)}>
+                    Remove
+                  </button>
+                </span>
+              )}
               {editing === pass.id ? (
                 <PassEditor
                   key={pass.id}
