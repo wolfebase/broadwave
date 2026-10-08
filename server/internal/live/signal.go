@@ -62,7 +62,7 @@ func (h *Hub) DropDark(channelID int64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	f := h.channels[channelID]
-	if f == nil || f.recording != nil || f.exports > 0 {
+	if f == nil || f.recording != nil || f.heldOutside() {
 		return
 	}
 	for _, r := range f.renditions {

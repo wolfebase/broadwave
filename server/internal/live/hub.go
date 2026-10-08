@@ -176,6 +176,7 @@ type Hub struct {
 	mu       sync.Mutex
 	muxes    map[int]*mux
 	channels map[int64]*feed
+	mosaics  map[string]*mosaic
 	// long holds each channel ID whose station sends groups of pictures past
 	// longGroup. Packagers write it, so it is not under mu.
 	long sync.Map
@@ -292,6 +293,8 @@ type feed struct {
 	headerOrder string
 	// exports counts raw MPEG-TS readers such as Plex or Jellyfin using the emulated tuner.
 	exports int
+	// mosaics counts the mosaics this channel is a picture in.
+	mosaics int
 	// captions follows the channel's CEA-608 captions while it has a rendition.
 	captions   *captionTrack
 	captionSub *pipeSub
@@ -416,7 +419,7 @@ func New(st *store.Store, dir, ffmpeg, encoder string) *Hub {
 		Store: st, Dir: dir, FFmpeg: ffmpeg, Encoder: encoder, HEVC: ProbeHEVC(ffmpeg, encoder),
 		DeintBroadcast: broadcast, DeintSmooth: smooth,
 		RenditionIdle: 20 * time.Second,
-		muxes:         map[int]*mux{}, channels: map[int64]*feed{}, reserved: map[int]bool{},
+		muxes:         map[int]*mux{}, channels: map[int64]*feed{}, mosaics: map[string]*mosaic{}, reserved: map[int]bool{},
 	}
 }
 
@@ -1138,6 +1141,7 @@ func (h *Hub) releaseIdleTranscodesLocked(asking *feed, now time.Time) {
 		}
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].seen.Before(list[j].seen) })
+	defer h.releaseIdleMosaicsLocked(now, 1)
 	for _, item := range list {
 		if h.Host.Tiles > 0 && h.transcodesLocked() < h.Host.Tiles {
 			return
@@ -1179,13 +1183,13 @@ func (h *Hub) Pictures() (used, limit int, running map[int64]bool) {
 		}
 		seen[f] = true
 	}
-	return used, h.Host.Tiles, running
+	return used + h.mosaicPicturesLocked(), h.Host.Tiles, running
 }
 
 func (h *Hub) transcodesLocked() int {
 	// Two channel ids can share one feed. Count that picture once.
 	seen := map[*feed]bool{}
-	n := 0
+	n := h.mosaicPicturesLocked()
 	for _, f := range h.channels {
 		if seen[f] {
 			continue
@@ -1783,6 +1787,7 @@ func (h *Hub) ReleaseAbandoned(maxAge time.Duration) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	now := time.Now()
+	h.releaseAbandonedMosaicsLocked(now, maxAge)
 	for _, f := range h.feedsLocked() {
 		for key, r := range f.renditions {
 			if r.viewers == 0 || now.Sub(r.seen) < maxAge {
@@ -1990,6 +1995,9 @@ func rawRecording(ch store.SourceChannel) bool {
 // running or a tuner locked.
 func (h *Hub) Shutdown() {
 	h.mu.Lock()
+	for _, mo := range h.mosaics {
+		h.stopMosaicLocked(mo)
+	}
 	for _, f := range h.feedsLocked() {
 		if f.recording != nil {
 			h.finishRecordingLocked(f, "complete", "")
@@ -2881,16 +2889,21 @@ func (h *Hub) stopRenditionLocked(f *feed, key string) {
 	h.changed()
 }
 
+// heldOutside is a feed something other than a live rendition or a
+// recording is reading: an export or a mosaic.
+func (f *feed) heldOutside() bool { return f.exports > 0 || f.mosaics > 0 }
+
 // dropIfUnusedLocked releases the feed, and the tuner with the last feed, once
 // nobody is watching or recording it.
 func (h *Hub) dropIfUnusedLocked(f *feed) {
-	if len(f.renditions) > 0 || f.recording != nil || f.probing || f.exports > 0 {
+	if len(f.renditions) > 0 || f.recording != nil || f.probing || f.heldOutside() {
 		return
 	}
 	h.stopFeedLocked(f)
 }
 
 func (h *Hub) stopFeedLocked(f *feed) {
+	h.endMosaicsOnLocked(f)
 	for key := range f.renditions {
 		h.stopRenditionLocked(f, key)
 	}
@@ -3091,7 +3104,7 @@ func (h *Hub) freeWarmTunerLocked(host string) (int, string, bool) {
 func warmSince(m *mux) (time.Time, bool) {
 	var last time.Time
 	for _, f := range m.feeds {
-		if f.recording != nil || f.probing || f.exports > 0 {
+		if f.recording != nil || f.probing || f.heldOutside() {
 			return time.Time{}, false
 		}
 		for _, r := range f.renditions {

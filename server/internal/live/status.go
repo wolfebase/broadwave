@@ -122,7 +122,7 @@ func (h *Hub) Watching() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, f := range h.feedsLocked() {
-		if f.exports > 0 {
+		if f.heldOutside() {
 			return true
 		}
 		for _, r := range f.renditions {

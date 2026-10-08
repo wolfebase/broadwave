@@ -48,6 +48,12 @@ else
     -c:v libx264 -preset ultrafast -g 30 -pix_fmt yuv420p -c:a ac3 \
     -f mpegts -listen 1 "http://127.0.0.1:$SRC_PORT/live.ts" >"$T/src.log" 2>&1 &
   SRC=$!
+  # A second broadcast, for the mosaic.
+  ffmpeg -hide_banner -loglevel error -re \
+    -f lavfi -i "testsrc=size=1920x1080:rate=30000/1001" -f lavfi -i "sine=frequency=900" \
+    -c:v libx264 -preset ultrafast -g 30 -pix_fmt yuv420p -c:a ac3 \
+    -f mpegts -listen 1 "http://127.0.0.1:$((SRC_PORT + 1))/live.ts" >"$T/src2.log" 2>&1 &
+  SRC="$SRC $!"
   sleep 1
   "$BIN" -config "$T" -addr "127.0.0.1:$PORT" -hdhr 127.0.0.1:1 -bonjour=false >"$T/log.txt" 2>&1 &
 fi
@@ -57,8 +63,11 @@ sleep 2
 API="http://127.0.0.1:$PORT/api/v1"
 if [ "${FAKE:-}" != 1 ]; then
   curl -s -XPOST "$API/sources" -d "{\"kind\":\"link\",\"name\":\"Smoke Broadcast\",\"url\":\"http://127.0.0.1:$SRC_PORT/live.ts\"}" >/dev/null
+  curl -s -XPOST "$API/sources" -d "{\"kind\":\"link\",\"name\":\"Smoke Second\",\"url\":\"http://127.0.0.1:$((SRC_PORT + 1))/live.ts\"}" >/dev/null
 fi
 ID=$(curl -s "$API/channels" | python3 -c "import sys,json; print([c['id'] for c in json.load(sys.stdin)['channels'] if c['displayName']=='$NAME'][0])")
+# Another channel for the mosaic: the second link, or the fake's next subchannel.
+ID2=$(curl -s "$API/channels" | python3 -c "import sys,json; print([c['id'] for c in json.load(sys.stdin)['channels'] if c['id']!=$ID][0])")
 fail=0
 check() { if eval "$2"; then echo "PASS $1"; else echo "FAIL $1"; fail=1; fi; }
 
@@ -130,6 +139,23 @@ curl -s -m 10 "http://127.0.0.1:$PORT/export/stream/$ID" -o "$T/export.ts"
 SZ=$(stat -f%z "$T/export.ts" 2>/dev/null || stat -c%s "$T/export.ts")
 check "export stream carries video ($SZ bytes)" "[ ${SZ:-0} -gt 100000 ]"
 check "m3u export lists the channel" "curl -s http://127.0.0.1:$PORT/export/lineup.m3u | grep -q '$NAME'"
+# A mosaic: both channels side by side in one encode, the first one's sound.
+MO=$(curl -s -m 30 -XPOST "$API/mosaic" -d "{\"channelIds\":[$ID,$ID2]}")
+MKEY=$(echo "$MO" | python3 -c "import sys,json;print(json.load(sys.stdin).get('key',''))" 2>/dev/null)
+check "a 2-up mosaic starts ($MKEY)" "[ '$MKEY' = '$ID-$ID2' ]"
+M="http://127.0.0.1:$PORT/media/mosaic/$MKEY"
+sleep 4
+PL=$(curl -s "$M/index.m3u8")
+check "mosaic playlist has program date-times" '[[ "$PL" == *PROGRAM-DATE-TIME* ]]'
+check "mosaic is CMAF with init segment" '[[ "$PL" == *EXT-X-MAP* && "$PL" == *seg00000* ]]'
+{ curl -s "$M/init.mp4"; curl -s "$M/seg00000.m4s"; } >"$T/mosaic.mp4"
+MS=$(ffprobe -v error -show_entries stream=codec_name,width,height -of csv=p=0 "$T/mosaic.mp4" | tr '\n' ' ')
+check "mosaic is one 1920x1080 picture with sound ($MS)" '[[ "$MS" == *h264,1920,1080* && "$MS" == *aac* ]]'
+curl -s -m 10 "http://127.0.0.1:$PORT/export/mosaic/$MKEY" -o "$T/mosaic.ts"
+MZ=$(stat -f%z "$T/mosaic.ts" 2>/dev/null || stat -c%s "$T/mosaic.ts")
+MV=$(ffprobe -v error -show_entries stream=codec_name,width -of csv=p=0 "$T/mosaic.ts" 2>/dev/null | tr '\n' ' ')
+check "mosaic export is MPEG-TS with the picture ($MZ bytes, $MV)" '[ "${MZ:-0}" -gt 100000 ] && [[ "$MV" == *h264,1920* ]]'
+curl -s -XPOST "$API/mosaic/$MKEY/stop" -d '{}' >/dev/null
 curl -s -XPOST "$API/watch/$ID/stop" -d '{}' >/dev/null
 # A hosted runner keeps nothing from $T; show the server's side of a failure.
 if [ "$fail" != 0 ]; then

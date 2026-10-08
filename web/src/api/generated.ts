@@ -168,6 +168,14 @@ export type Marker = {
   confidence?: number;
 };
 
+export type MosaicSession = {
+  key: string;
+  playlist: string;
+  channelIds: number[];
+  encoder: string;
+  viewers: number;
+};
+
 export type MultiviewPlanBlocked = {
   channelId: number;
   holders: string[];
