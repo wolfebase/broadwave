@@ -101,6 +101,8 @@ test("auto skips a sure break, and only a sure one", async ({ page }) => {
   await pause();
   const skip = page.getByRole("button", { name: "Skip break" });
   await expect(skip).toBeVisible();
+  // On a first play the playlist still grows; a jump past its end stops there.
+  await ready(page, 46);
   await skip.click();
   await expect.poll(() => at(page)).toBeGreaterThanOrEqual(44.5);
 
