@@ -576,6 +576,7 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		"writeNfo":          true,
 		"deleteWatchedDays": true,
 		"makeRoom":          true,
+		"folderLayout":      true,
 		"pictureMode":       true,
 		"autoplay":          true,
 		"hdhrEmulate":       true,
@@ -627,6 +628,9 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		}
 		if k == "makeRoom" && v != "0" && v != "1" {
 			return fmt.Errorf("makeRoom must be 0 or 1")
+		}
+		if k == "folderLayout" && v != "shows" && v != "flat" {
+			return fmt.Errorf("folderLayout must be shows or flat")
 		}
 		if k == "writeNfo" && v != "0" && v != "1" {
 			return fmt.Errorf("writeNfo must be 0 or 1")

@@ -6,13 +6,23 @@ A recording is the broadcast itself, saved on your server. Watching it later doe
 
 Recordings live in the recordings folder. In Docker and on Unraid that folder is the one you mount at `/config/work/recordings`. Settings › Recordings folder shows the path. To keep them on another disk, mount that disk there, or point `BROADWAVE_RECORDINGS` (or `-recordings` on a Mac or Linux install) at it. Recordings already made stay where they are; move them yourself if you change it.
 
-Each recording is one MPEG-TS file:
+Each recording is one MPEG-TS file, filed by show in the layout Plex and Jellyfin read:
+
+```text
+TV/Harbor Watch/Season 01/Harbor Watch - S01E02 - The Lighthouse.ts
+TV/Evening News/Evening News - 2026-10-05 - Storm Coverage.ts
+Movies/Night Flight (1999)/Night Flight (1999).ts
+```
+
+The season and episode come from the guide. A show the guide gives no episode number goes in its show folder by date, with the episode's name, or the start time (`1930`) when it has none. A movie gets the year it came out when the guide has it. To watch them in Plex or Jellyfin, add a TV library on the `TV` folder and a movie library on `Movies`. A recording with no guide listing is filed under its channel's name.
+
+Settings › Recording folders › All in one folder puts new recordings straight in the recordings folder instead, named by start time, channel number, and channel name:
 
 ```text
 20261005_193000_4.1_KBWV.ts
 ```
 
-The name is the time it started, the channel number, and the channel's name. A character a file name cannot hold becomes a hyphen. Two recordings that start in the same second get `-2`, `-3`, and so on.
+Changing it moves nothing; recordings already made stay where they are. Either way, a character a file name can't hold becomes a hyphen, a name never starts with a dot, and a long title is cut. Two recordings that would get the same name get `-2`, `-3`, and so on. Deleting the last recording in a show or season folder removes the emptied folder.
 
 The file is the station's program, copied, not re-encoded. A clear ATSC 3.0 channel with AC-4 sound is the program's own packets, so the picture, every sound track, and the captions stay as the tuner sent them. Any other channel is that program's picture and its first sound track, still the original encoding.
 

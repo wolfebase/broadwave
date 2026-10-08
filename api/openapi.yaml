@@ -2366,6 +2366,7 @@ components:
         writeNfo: { type: string, enum: ["0", "1"], description: "1 writes a .nfo file beside each finished recording for Plex, Jellyfin, and Kodi. 0 leaves them off. Missing means off." }
         deleteWatchedDays: { type: string, description: "Days a watched recording stays before it is deleted, 0 to 3650; 0 keeps them. Recordings kept forever and files in library folders stay." }
         makeRoom: { type: string, enum: ["0", "1"], description: "1 deletes the oldest watched recordings when free space falls under the reserve, before a recording is refused. 0 only refuses. Missing means off." }
+        folderLayout: { type: string, enum: [shows, flat], description: "Where new recordings go. shows (the default) uses the layout Plex and Jellyfin read: TV/Show/Season 01/Show - S01E02 - Episode.ts, TV/Show/Show - 2026-10-08 - Episode.ts when the guide has no episode number, and Movies/Title (1999)/Title (1999).ts. flat puts every recording in the recordings folder, named by start time and channel. Recordings already made stay where they are." }
         pictureMode: { $ref: "#/components/schemas/PictureMode" }
         autoplay: { type: string, enum: ["0", "1"] }
         hdhrEmulate: { type: string, enum: ["0", "1"] }

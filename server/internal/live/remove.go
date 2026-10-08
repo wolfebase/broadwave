@@ -11,7 +11,8 @@ import (
 
 // RemoveRecordingFiles deletes a recording's file and the files beside it
 // (.edl, .json, .nfo) when they sit inside the recordings folder, plus its
-// poster and file-playback work. A file in a library folder is left alone.
+// poster and file-playback work, and the show and season folders it empties.
+// A file in a library folder is left alone.
 func (h *Hub) RemoveRecordingFiles(rec store.Recording) {
 	root := h.Recordings()
 	workDir := h.Dir
@@ -20,6 +21,7 @@ func (h *Hub) RemoveRecordingFiles(rec store.Recording) {
 	removeInside(root, base+".edl")
 	removeInside(root, base+".json")
 	removeInside(root, base+".nfo")
+	h.pruneEmpty(filepath.Dir(rec.Path))
 	_ = os.Remove(filepath.Join(workDir, "posters", strconv.FormatInt(rec.ID, 10)+".jpg"))
 	_ = os.RemoveAll(filepath.Join(workDir, "file", strconv.FormatInt(rec.ID, 10)))
 }

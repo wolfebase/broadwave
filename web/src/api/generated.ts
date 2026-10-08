@@ -380,6 +380,7 @@ export type Settings = {
   writeNfo?: string;
   deleteWatchedDays?: string;
   makeRoom?: string;
+  folderLayout?: string;
   pictureMode?: PictureMode;
   autoplay?: string;
   hdhrEmulate?: string;

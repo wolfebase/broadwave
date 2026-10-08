@@ -352,6 +352,7 @@ type rendition struct {
 
 type recording struct {
 	id    int64
+	path  string
 	cmd   *exec.Cmd
 	stdin io.WriteCloser
 	sub   *pipeSub
@@ -1853,6 +1854,8 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	if err := h.ensureSpace(ctx); err != nil {
 		return store.Recording{}, err
 	}
+	values, _ := h.Store.Settings(ctx)
+	byShow := FoldersByShow(values)
 	ch, err := h.Store.SourceChannel(ctx, channelID)
 	if err != nil {
 		return store.Recording{}, err
@@ -1899,8 +1902,6 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	if backfill {
 		started = at
 	}
-	name := fmt.Sprintf("%s_%s_%s.ts", started.Format("20060102_150405"), f.channel.GuideNumber, sanitize(f.channel.DisplayName))
-	path := uniquePath(filepath.Join(dir, name))
 	ends := time.Now().Add(time.Duration(minutes) * time.Minute)
 	if title == "" {
 		title = f.channel.DisplayName
@@ -1908,11 +1909,20 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	if meta.GameID == "" {
 		meta.GameID = h.Store.AiringGame(ctx, channelID, title, time.Now())
 	}
-	id, err := h.Store.CreateRecording(ctx, store.Recording{
+	row := h.Store.WithEpisode(ctx, store.Recording{
 		ChannelID: channelID, GuideNumber: f.channel.GuideNumber, Title: title,
 		Subtitle: meta.Subtitle, Description: meta.Description, Category: meta.Category, ProgramID: meta.ProgramID, GameID: meta.GameID,
-		Path: path, Status: "recording", StartedAt: started, EndsAt: &ends, PassID: meta.PassID,
+		Status: "recording", StartedAt: started, EndsAt: &ends, PassID: meta.PassID,
 	})
+	row.Path = h.recordingPath(row, f.channel, byShow)
+	// A recording that fails to start leaves no empty show folder behind.
+	startedOK := false
+	defer func() {
+		if !startedOK {
+			h.pruneEmptyLocked(filepath.Dir(row.Path))
+		}
+	}()
+	id, err := h.Store.CreateRecording(ctx, row)
 	if err != nil {
 		h.dropIfUnusedLocked(f)
 		return store.Recording{}, err
@@ -1927,6 +1937,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	}
 	var cmd *exec.Cmd
 	var stdin io.WriteCloser
+	path := row.Path
 	if input == "pipe:0" && rawRecording(f.channel) {
 		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if err != nil {
@@ -1950,7 +1961,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 		}
 		NotePID(h.Dir, cmd.Process.Pid)
 	}
-	rec := &recording{id: id, cmd: cmd, stdin: stdin, ends: ends}
+	rec := &recording{id: id, path: path, cmd: cmd, stdin: stdin, ends: ends}
 	f.recording = rec
 	if stdin != nil && backfill {
 		rec.backfilling = true
@@ -1962,6 +1973,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 		rec.timer = time.AfterFunc(time.Duration(minutes)*time.Minute, func() { h.StopRecord(id) })
 	}
 	h.changed()
+	startedOK = true
 	return h.Store.Recording(ctx, id)
 }
 
@@ -1991,18 +2003,62 @@ func (h *Hub) Shutdown() {
 	h.grabbers.Wait()
 }
 
+// recordingPath picks a free file for a new recording: by show (Plex and
+// Jellyfin) or flat by start time and channel. A show folder that can't be
+// made, or that a link takes outside the recordings folder, falls back to flat.
+//
+// Called with h.mu held. A recording in progress counts as taken even
+// before ffmpeg makes its file: two games on two channels at noon share a
+// show name.
+func (h *Hub) recordingPath(rec store.Recording, ch store.SourceChannel, byShow bool) string {
+	root := h.Recordings()
+	var busy []string
+	for _, f := range h.feedsLocked() {
+		if f.recording != nil && !f.recording.finished {
+			busy = append(busy, f.recording.path)
+		}
+	}
+	taken := func(path string) bool {
+		for _, other := range busy {
+			if strings.EqualFold(filepath.Clean(other), filepath.Clean(path)) {
+				return true
+			}
+		}
+		return false
+	}
+	if byShow {
+		path := filepath.Join(root, showName(rec, ch.DisplayName, rec.StartedAt)+".ts")
+		if err := insideReal(root, filepath.Dir(path)); err == nil {
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err == nil && insideReal(root, filepath.Dir(path)) == nil {
+				return freePath(path, taken)
+			}
+		}
+	}
+	name := fmt.Sprintf("%s_%s_%s.ts", rec.StartedAt.Format("20060102_150405"), ch.GuideNumber, sanitize(ch.DisplayName))
+	return freePath(filepath.Join(root, name), taken)
+}
+
 // uniquePath adds -2, -3, ... when a recording file already exists. Names are
 // per second, and ffmpeg refuses to overwrite, so two recordings of one channel
 // started in the same second would otherwise lose the second one.
 func uniquePath(path string) string {
-	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+	return freePath(path, func(string) bool { return false })
+}
+
+// freePath is uniquePath that also passes over names taken reports in use.
+func freePath(path string, taken func(string) bool) string {
+	free := func(candidate string) bool {
+		_, err := os.Lstat(candidate)
+		return errors.Is(err, os.ErrNotExist) && !taken(candidate)
+	}
+	if free(path) {
 		return path
 	}
 	ext := filepath.Ext(path)
 	base := strings.TrimSuffix(path, ext)
 	for i := 2; ; i++ {
 		candidate := fmt.Sprintf("%s-%d%s", base, i, ext)
-		if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
+		if free(candidate) {
 			return candidate
 		}
 	}

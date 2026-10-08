@@ -1965,6 +1965,11 @@ export interface components {
              * @enum {string}
              */
             makeRoom?: "0" | "1";
+            /**
+             * @description Where new recordings go. shows (the default) uses the layout Plex and Jellyfin read: TV/Show/Season 01/Show - S01E02 - Episode.ts, TV/Show/Show - 2026-10-08 - Episode.ts when the guide has no episode number, and Movies/Title (1999)/Title (1999).ts. flat puts every recording in the recordings folder, named by start time and channel. Recordings already made stay where they are.
+             * @enum {string}
+             */
+            folderLayout?: "shows" | "flat";
             pictureMode?: components["schemas"]["PictureMode"];
             /** @enum {string} */
             autoplay?: "0" | "1";

@@ -74,7 +74,7 @@ func Movie(rec store.Recording) []byte {
 
 // Document picks a movie file when the category says so, and an episode otherwise.
 func Document(rec store.Recording) []byte {
-	if isMovie(rec.Category) {
+	if IsMovie(rec.Category) {
 		return Movie(rec)
 	}
 	return Episode(rec)
@@ -116,7 +116,8 @@ func genres(category string) []string {
 	return out
 }
 
-func isMovie(category string) bool {
+// IsMovie reports whether a guide category names a movie.
+func IsMovie(category string) bool {
 	for _, part := range genres(category) {
 		switch strings.ToLower(part) {
 		case "movie", "movies":
