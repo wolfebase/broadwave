@@ -302,6 +302,26 @@ public struct Game: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
+public struct GameAlert: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var kind: String
+    public var gameId: String
+    public var channelId: Int64
+    public var channel: String
+    public var text: String
+    public var detail: String?
+
+    public init(id: String, kind: String, gameId: String, channelId: Int64, channel: String, text: String, detail: String? = nil) {
+        self.id = id
+        self.kind = kind
+        self.gameId = gameId
+        self.channelId = channelId
+        self.channel = channel
+        self.text = text
+        self.detail = detail
+    }
+}
+
 public struct Marker: Codable, Sendable, Hashable, Identifiable {
     public var id: Int64
     public var recordingId: Int64?
@@ -691,6 +711,7 @@ public struct Settings: Codable, Sendable, Hashable {
     public var deleteWatchedDays: String?
     public var makeRoom: String?
     public var folderLayout: String?
+    public var gameAlerts: String?
     public var pictureMode: PictureMode?
     public var autoplay: String?
     public var hdhrEmulate: String?
@@ -712,7 +733,7 @@ public struct Settings: Codable, Sendable, Hashable {
     public var sportsdbKey: String?
     public var sportsdbKeySet: String?
 
-    public init(layout: String? = nil, profile: String? = nil, audio: String? = nil, encoder: String? = nil, watermarkGB: String? = nil, bufferMinutes: String? = nil, writeNfo: String? = nil, deleteWatchedDays: String? = nil, makeRoom: String? = nil, folderLayout: String? = nil, pictureMode: PictureMode? = nil, autoplay: String? = nil, hdhrEmulate: String? = nil, setupComplete: String? = nil, needsSetup: String? = nil, lastGuidePull: Date? = nil, nextGuidePull: Date? = nil, lastManualGuidePull: Date? = nil, hideScores: String? = nil, liveScores: String? = nil, checkUpdates: String? = nil, sdUser: String? = nil, sdPassword: String? = nil, sdLineup: String? = nil, sdPasswordSet: String? = nil, guideUrl: String? = nil, tmdbKey: String? = nil, tmdbKeySet: String? = nil, sportsdbKey: String? = nil, sportsdbKeySet: String? = nil) {
+    public init(layout: String? = nil, profile: String? = nil, audio: String? = nil, encoder: String? = nil, watermarkGB: String? = nil, bufferMinutes: String? = nil, writeNfo: String? = nil, deleteWatchedDays: String? = nil, makeRoom: String? = nil, folderLayout: String? = nil, gameAlerts: String? = nil, pictureMode: PictureMode? = nil, autoplay: String? = nil, hdhrEmulate: String? = nil, setupComplete: String? = nil, needsSetup: String? = nil, lastGuidePull: Date? = nil, nextGuidePull: Date? = nil, lastManualGuidePull: Date? = nil, hideScores: String? = nil, liveScores: String? = nil, checkUpdates: String? = nil, sdUser: String? = nil, sdPassword: String? = nil, sdLineup: String? = nil, sdPasswordSet: String? = nil, guideUrl: String? = nil, tmdbKey: String? = nil, tmdbKeySet: String? = nil, sportsdbKey: String? = nil, sportsdbKeySet: String? = nil) {
         self.layout = layout
         self.profile = profile
         self.audio = audio
@@ -723,6 +744,7 @@ public struct Settings: Codable, Sendable, Hashable {
         self.deleteWatchedDays = deleteWatchedDays
         self.makeRoom = makeRoom
         self.folderLayout = folderLayout
+        self.gameAlerts = gameAlerts
         self.pictureMode = pictureMode
         self.autoplay = autoplay
         self.hdhrEmulate = hdhrEmulate

@@ -191,6 +191,20 @@ export function SettingsScreen({
         </select>
         <span className="hint">{copy.settings.hideScoresHint}</span>
       </label>
+      <label className="field">
+        Game alerts
+        <select
+          value={settings.gameAlerts === "teams" || settings.gameAlerts === "off" ? settings.gameAlerts : "all"}
+          onChange={(event) => onChange({ gameAlerts: event.target.value as Settings["gameAlerts"] })}
+        >
+          <option value="all">Your teams and close games</option>
+          <option value="teams">Your teams only</option>
+          <option value="off">Off</option>
+        </select>
+        <span className="hint">
+          A note when a team you follow starts playing, or a game on your channels comes down to the last minutes. A game you&apos;re recording and haven&apos;t watched gets no score and no close-game note.
+        </span>
+      </label>
       <h3 className="section-title">DVR</h3>
       <label className="field">
         Play the next episode

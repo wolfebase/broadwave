@@ -45,6 +45,35 @@ func TestCacheRefreshesLiveGamesSooner(t *testing.T) {
 	}
 }
 
+func TestCacheLooksAgainWhenTheNextGameStarts(t *testing.T) {
+	now := time.Date(2026, 9, 23, 19, 0, 0, 0, time.UTC)
+	src := &fake{games: []Game{{ID: "1", State: "pre", Start: now.Add(20 * time.Minute)}, {ID: "2", State: "post"}}}
+	cache := NewCache(src)
+	cache.now = func() time.Time { return now }
+	read := func(after time.Duration) {
+		t.Helper()
+		now = now.Add(after)
+		if _, err := cache.Scoreboard(t.Context(), "nfl", now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read(0)
+	read(19 * time.Minute)
+	if src.calls != 1 {
+		t.Fatalf("calls %d, the board is fresh until the game starts", src.calls)
+	}
+	read(time.Minute)
+	if src.calls != 2 {
+		t.Fatalf("calls %d, the board should refresh once the game starts", src.calls)
+	}
+	// A game past its start that still reads pre (a delay) is asked about
+	// as often as a live one.
+	read(30 * time.Second)
+	if src.calls != 3 {
+		t.Fatalf("calls %d, a late start should refresh after 30s", src.calls)
+	}
+}
+
 func TestCacheKeepsTheLastBoardWhenTheFeedFails(t *testing.T) {
 	now := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
 	src := &fake{games: []Game{{ID: "9", State: "pre", Name: "Bears at Bills"}}}

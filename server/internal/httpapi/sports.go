@@ -143,7 +143,8 @@ func (s *Server) boardsAround(ctx context.Context, now time.Time) []sports.Game 
 	}
 	seen := map[string]bool{}
 	var games []sports.Game
-	for _, day := range []time.Time{now, now.Add(24 * time.Hour), now.Add(48 * time.Hour)} {
+	// Yesterday too: a game that started late is on its own day's board.
+	for _, day := range []time.Time{now, now.Add(-24 * time.Hour), now.Add(24 * time.Hour), now.Add(48 * time.Hour)} {
 		part, err := board.Boards(ctx, day)
 		if err != nil {
 			slog.Error(fmt.Sprintf("sports: %v", err))

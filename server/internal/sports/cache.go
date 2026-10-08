@@ -16,7 +16,7 @@ const (
 
 // Cache keeps a scoreboard and asks the provider again only when it is stale.
 // A league with a game in progress refreshes every 30 seconds. A quiet board
-// waits two hours. A failed fetch backs off and serves the last good board.
+// waits until its next game starts, at most two hours. A failed fetch backs off and serves the last good board.
 type Cache struct {
 	Provider Provider
 	now      func() time.Time
@@ -81,6 +81,11 @@ func (c *Cache) Scoreboard(ctx context.Context, league string, day time.Time) ([
 		if game.Live() {
 			ttl = liveTTL
 			break
+		}
+		// A board with nothing live goes stale when its next game starts,
+		// so the start shows within a minute, not hours later.
+		if game.State == "pre" && !game.Start.IsZero() {
+			ttl = min(ttl, max(liveTTL, game.Start.Sub(c.now())))
 		}
 	}
 	c.items[key] = cached{games: games, at: c.now(), ttl: ttl}

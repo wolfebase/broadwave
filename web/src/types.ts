@@ -7,6 +7,7 @@ export type {
   Device,
   DeviceHealth,
   FrameList,
+  GameAlert,
   MultiviewPlan,
   NewPass,
   Pass,

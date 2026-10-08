@@ -150,6 +150,16 @@ export type Game = {
   situation?: string;
 };
 
+export type GameAlert = {
+  id: string;
+  kind: string;
+  gameId: string;
+  channelId: number;
+  channel: string;
+  text: string;
+  detail?: string;
+};
+
 export type Marker = {
   id: number;
   recordingId?: number;
@@ -381,6 +391,7 @@ export type Settings = {
   deleteWatchedDays?: string;
   makeRoom?: string;
   folderLayout?: string;
+  gameAlerts?: string;
   pictureMode?: PictureMode;
   autoplay?: string;
   hdhrEmulate?: string;

@@ -275,6 +275,13 @@ func main() {
 		}
 	}()
 	go func() {
+		tick := time.NewTicker(time.Minute)
+		defer tick.Stop()
+		for range tick.C {
+			api.GameAlerts(context.Background())
+		}
+	}()
+	go func() {
 		time.Sleep(20 * time.Second)
 		if !*staging {
 			api.BroadcastScan(context.Background())

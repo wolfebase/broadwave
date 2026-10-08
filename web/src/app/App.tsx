@@ -17,6 +17,7 @@ const RecordingsPage = lazy(() => import("../features/pages").then((m) => ({ def
 const SchedulePage = lazy(() => import("../features/pages").then((m) => ({ default: m.SchedulePage })));
 const SettingsPage = lazy(() => import("../features/pages").then((m) => ({ default: m.SettingsPage })));
 const AboutPage = lazy(() => import("../features/settings/About").then((m) => ({ default: m.AboutPage })));
+const GameAlerts = lazy(() => import("../features/sports/GameAlerts").then((m) => ({ default: m.GameAlerts })));
 const PlayPage = lazy(() => import("../features/pages").then((m) => ({ default: m.PlayPage })));
 const Setup = lazy(() => import("../features/setup/Setup").then((m) => ({ default: m.Setup })));
 const DiagnosticsPage = lazy(() => import("../features/setup/Diagnostics").then((m) => ({ default: m.DiagnosticsPage })));
@@ -204,6 +205,11 @@ function Shell() {
         ) : null}
         {!booting && notices[0] && !immersive && !fullPlayer ? (
           <HomeNotice key={`${notices.length}:${notices[0]}`} message={notices[0]} onDismiss={dismissNotice} />
+        ) : null}
+        {!booting ? (
+          <Suspense fallback={null}>
+            <GameAlerts held={immersive || fullPlayer || Boolean(notices[0])} />
+          </Suspense>
         ) : null}
         {!booting ? (
           <Suspense fallback={null}>

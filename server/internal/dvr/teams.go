@@ -17,7 +17,7 @@ func TeamNotice(team store.TeamFollow, airings []store.Airing, now time.Time) (s
 		if !airing.Start.After(now) || airing.Start.After(now.Add(36*time.Hour)) {
 			continue
 		}
-		if !teamOn(team, airing) {
+		if !TeamOn(team, airing) {
 			continue
 		}
 		if !found || airing.Start.Before(best.Start) {
@@ -40,7 +40,8 @@ func TeamNotice(team store.TeamFollow, airings []store.Airing, now time.Time) (s
 	return best, fmt.Sprintf("%s is on at %s.", name, label), true
 }
 
-func teamOn(team store.TeamFollow, airing store.Airing) bool {
+// TeamOn reports whether a listing names a followed team.
+func TeamOn(team store.TeamFollow, airing store.Airing) bool {
 	text := airing.Title + " " + airing.Subtitle
 	if team.Short != "" && sports.Mentions(text, team.Short) {
 		return true

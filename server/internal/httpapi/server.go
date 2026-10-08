@@ -84,6 +84,10 @@ type Server struct {
 	sportsKey string
 	sportsDB  *sports.Cache
 
+	alertMu   sync.Mutex
+	alertPrev map[string]sports.Game
+	alertSent map[string]bool
+
 	homeMu    sync.Mutex
 	finishMu  sync.Mutex
 	finishRun *finishStatus
@@ -539,6 +543,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if values["folderLayout"] != "flat" {
 		values["folderLayout"] = "shows"
+	}
+	if values["gameAlerts"] != "teams" && values["gameAlerts"] != "off" {
+		values["gameAlerts"] = "all"
 	}
 	if values["pictureMode"] == "" {
 		values["pictureMode"] = "broadcast"
