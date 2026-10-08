@@ -18,7 +18,7 @@ function channel(name: string): Channel {
 }
 
 test("a multiview added to other apps is one channel in the exports", async ({ page, baseURL }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const a = channel("KBWV");
   const b = channel("WTST");
   const key = `${b.id}-${a.id}`;
@@ -37,13 +37,15 @@ test("a multiview added to other apps is one channel in the exports", async ({ p
   expect(m3u).toContain(`${baseURL}/export/mosaic/${key}\n`);
 
   // A small server has room for two pictures, which the tiles hold; a
-  // mosaic takes two. Leave the multiview so its tiles let go first.
+  // mosaic takes two. Leave the multiview so its tiles let go first. A
+  // tile whose watch was answered as the page left is only let go when
+  // it has fetched nothing for 45 s.
   await page.goto("/settings");
   await expect
     .poll(async () => {
       const { tuners } = (await (await fetch(`${baseURL}/api/v1/tuners`)).json()) as { tuners: { viewers?: number }[] };
       return tuners.reduce((sum, t) => sum + (t.viewers ?? 0), 0);
-    }, { timeout: 30_000 })
+    }, { timeout: 60_000 })
     .toBe(0);
 
   // What Plex or Jellyfin would read: one 1920x1080 picture with sound.
