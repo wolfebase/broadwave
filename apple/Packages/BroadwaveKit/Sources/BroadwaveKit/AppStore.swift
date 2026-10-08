@@ -82,6 +82,10 @@ public final class AppStore {
         if remembered.isEmpty, let saved: FoundServer = Self.load("server") {
             remembered = RememberedServers.upsert(remembered, saved)
         }
+        // Keychain items outlive the app, so a reinstall must not leave the old address for the Top Shelf.
+        if server == nil || server?.id == "demo" {
+            SharedServer.save(nil)
+        }
         clock = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
@@ -158,6 +162,8 @@ public final class AppStore {
         socket.connect()
         self.socket = socket
         save(server, "server")
+        // The demo lives inside the app, where the Top Shelf cannot reach it.
+        SharedServer.save(server.id == "demo" ? nil : server.url)
         remembered = RememberedServers.upsert(remembered, server)
         save(remembered, "servers")
         frameIDs = []
@@ -233,6 +239,7 @@ public final class AppStore {
         homeNotice = nil
         homeQueue = []
         UserDefaults.standard.removeObject(forKey: "server")
+        SharedServer.save(nil)
     }
 
     #if DEBUG

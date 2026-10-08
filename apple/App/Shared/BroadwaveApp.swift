@@ -2,10 +2,14 @@ import AVFoundation
 import BroadwaveKit
 import BroadwaveUI
 import SwiftUI
+#if os(tvOS)
+    import TVServices
+#endif
 
 @main
 struct BroadwaveApp: App {
     @State private var store = AppStore()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         #if os(iOS)
@@ -21,5 +25,13 @@ struct BroadwaveApp: App {
                 .preferredColorScheme(.dark)
                 .tint(Tokens.ColorToken.accent)
         }
+        #if os(tvOS)
+        // What is on now has changed by the time the viewer is back on the home screen.
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
+                TVTopShelfContentProvider.topShelfContentDidChange()
+            }
+        }
+        #endif
     }
 }

@@ -204,6 +204,10 @@ struct RecordingsView: View {
                     stopSelecting()
                 }
             }
+        #if os(tvOS)
+            .onChange(of: library.recording, initial: true) { _, _ in openLinked() }
+            .onChange(of: store.recordings.count) { _, _ in openLinked() }
+        #endif
             .task {
                 async let recordings: Void = store.refreshRecordings()
                 async let channels: Void = store.refreshVirtuals()
@@ -218,6 +222,17 @@ struct RecordingsView: View {
                 #endif
             }
     }
+
+    #if os(tvOS)
+        /// Plays the recording a link named (the Top Shelf's Continue watching).
+        private func openLinked() {
+            guard show == nil, let id = library.recording, !store.recordings.isEmpty else { return }
+            library.recording = nil
+            if let rec = store.recordings.first(where: { $0.id == id }) {
+                playing = rec
+            }
+        }
+    #endif
 
     /// The row in one sentence, with the same facts it shows: status, date, size, length, Watched.
     private func recordingSpoken(_ rec: Recording) -> String {

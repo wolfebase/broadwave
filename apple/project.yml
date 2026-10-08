@@ -64,10 +64,13 @@ targets:
   BroadwaveTV:
     templates: [App]
     platform: tvOS
+    dependencies:
+      - target: BroadwaveTopShelf
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.broadwave
         TARGETED_DEVICE_FAMILY: "3"
+        CODE_SIGN_ENTITLEMENTS: App/BroadwaveTV.entitlements
     info:
       path: App/Info-tvOS.plist
       properties:
@@ -86,6 +89,36 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.wolfeup.broadwave
             CFBundleURLSchemes: [broadwave]
+        BroadwaveKeychainGroup: $(AppIdentifierPrefix)com.wolfeup.broadwave.shared
+  BroadwaveTopShelf:
+    type: tv-app-extension
+    platform: tvOS
+    sources:
+      - path: App/TopShelf
+    dependencies:
+      - package: BroadwaveKit
+      - sdk: TVServices.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.broadwave.topshelf
+        TARGETED_DEVICE_FAMILY: "3"
+        # The tv-app-extension type links _TVExtensionMain, which returns at once on tvOS 27.
+        LD_ENTRY_POINT: _NSExtensionMain
+        CODE_SIGN_ENTITLEMENTS: App/BroadwaveTV.entitlements
+    info:
+      path: App/TopShelf/Info.plist
+      properties:
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleDisplayName: Broadwave
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.tv-top-shelf
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ContentProvider
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
+        NSLocalNetworkUsageDescription: Broadwave finds your TV server on your home network.
+        BroadwaveKeychainGroup: $(AppIdentifierPrefix)com.wolfeup.broadwave.shared
   BroadwaveUITests:
     type: bundle.ui-testing
     platform: iOS

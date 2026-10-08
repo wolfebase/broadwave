@@ -127,6 +127,9 @@ final class LibraryFilter {
         openToken += 1
     }
 
+    /// A recording a link asked to play. The Recordings tab plays it and clears it.
+    var recording: Int64?
+
     func clear() {
         show = ""
     }
@@ -373,7 +376,7 @@ struct RootView: View {
     #endif
 
     /// broadwave://connect?url=, broadwave://watch/<channel id>,
-    /// broadwave://multiview?ch=<id>,<id>, broadwave://guide, broadwave://sports.
+    /// broadwave://multiview?ch=<id>,<id>, broadwave://recording/<id>, broadwave://guide, broadwave://sports.
     private var installedVersion: String {
         if let raw = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, !raw.isEmpty {
             return raw
@@ -420,6 +423,9 @@ struct RootView: View {
         case "search": show(.search)
         case "sports": show(.sports)
         case "recordings": show(.recordings)
+        case "recording":
+            libraryFilter.recording = Int64(url.lastPathComponent)
+            show(.recordings)
         default: show(.home)
         }
     }
