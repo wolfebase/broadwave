@@ -1,7 +1,9 @@
 package store
 
 import (
+	"context"
 	"database/sql"
+	"database/sql/driver"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -85,22 +87,43 @@ func Migrate(db *sql.DB) error {
 		if applied[m.version] {
 			continue
 		}
-		tx, err := db.Begin()
-		if err != nil {
+		if err := apply(db, m); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(m.sql); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("migration %04d_%s: %w", m.version, m.name, err)
+	}
+	return nil
+}
+
+// apply runs one migration under BEGIN IMMEDIATE. A deferred transaction
+// that reads first (CREATE TABLE IF NOT EXISTS) fails at once with
+// SQLITE_BUSY when another program wrote meanwhile; taking the write lock up
+// front waits out the busy timeout instead.
+func apply(db *sql.DB, m migration) error {
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, `BEGIN IMMEDIATE`); err != nil {
+		return fmt.Errorf("migration %04d_%s: %w", m.version, m.name, err)
+	}
+	rollback := func(err error) error {
+		if _, rbErr := conn.ExecContext(ctx, `ROLLBACK`); rbErr != nil {
+			// Never hand the pool a connection still inside a transaction.
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 		}
-		if _, err := tx.Exec(`INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)`,
-			m.version, m.name, time.Now().UTC().Format(time.RFC3339)); err != nil {
-			_ = tx.Rollback()
-			return err
-		}
-		if err := tx.Commit(); err != nil {
-			return err
-		}
+		return fmt.Errorf("migration %04d_%s: %w", m.version, m.name, err)
+	}
+	if _, err := conn.ExecContext(ctx, m.sql); err != nil {
+		return rollback(err)
+	}
+	if _, err := conn.ExecContext(ctx, `INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)`,
+		m.version, m.name, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		return rollback(err)
+	}
+	if _, err := conn.ExecContext(ctx, `COMMIT`); err != nil {
+		return rollback(err)
 	}
 	return nil
 }
