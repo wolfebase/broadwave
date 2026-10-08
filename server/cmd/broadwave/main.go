@@ -169,6 +169,17 @@ func main() {
 	hub.OnSaved = func(rec store.Recording) {
 		dvr.OnSaved(context.Background(), st, hub, breakQueue, rec)
 	}
+	// A test harness shares one server across specs; nothing there deletes.
+	if !*staging && os.Getenv("BROADWAVE_E2E") != "1" {
+		hub.MakeRoom = func(ctx context.Context, need uint64) { dvr.MakeRoom(ctx, st, hub, need) }
+		go func() {
+			time.Sleep(time.Minute)
+			for {
+				dvr.Tidy(context.Background(), st, hub, time.Now())
+				time.Sleep(time.Hour)
+			}
+		}()
+	}
 	slog.Info(fmt.Sprintf("encoder: %s deint: %s smooth: %s", encoder, hub.DeintBroadcast, hub.DeintSmooth))
 	bus := realtime.NewBus()
 	bus.MediaStart = hub.EarliestMedia

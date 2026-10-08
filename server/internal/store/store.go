@@ -567,29 +567,31 @@ func (s *Store) Settings(ctx context.Context) (map[string]string, error) {
 
 func (s *Store) PutSettings(ctx context.Context, values map[string]string) error {
 	allowed := map[string]bool{
-		"layout":         true,
-		"profile":        true,
-		"audio":          true,
-		"encoder":        true,
-		"watermarkGB":    true,
-		"bufferMinutes":  true,
-		"writeNfo":       true,
-		"pictureMode":    true,
-		"autoplay":       true,
-		"hdhrEmulate":    true,
-		"hideScores":     true,
-		"liveScores":     true,
-		"checkUpdates":   true,
-		"setupComplete":  true,
-		"sdUser":         true,
-		"sdPassword":     true,
-		"sdLineup":       true,
-		"guideUrl":       true,
-		"sdPasswordSet":  true,
-		"tmdbKey":        true,
-		"tmdbKeySet":     true,
-		"sportsdbKey":    true,
-		"sportsdbKeySet": true,
+		"layout":            true,
+		"profile":           true,
+		"audio":             true,
+		"encoder":           true,
+		"watermarkGB":       true,
+		"bufferMinutes":     true,
+		"writeNfo":          true,
+		"deleteWatchedDays": true,
+		"makeRoom":          true,
+		"pictureMode":       true,
+		"autoplay":          true,
+		"hdhrEmulate":       true,
+		"hideScores":        true,
+		"liveScores":        true,
+		"checkUpdates":      true,
+		"setupComplete":     true,
+		"sdUser":            true,
+		"sdPassword":        true,
+		"sdLineup":          true,
+		"guideUrl":          true,
+		"sdPasswordSet":     true,
+		"tmdbKey":           true,
+		"tmdbKeySet":        true,
+		"sportsdbKey":       true,
+		"sportsdbKeySet":    true,
 	}
 	cleaned := map[string]string{}
 	for k, v := range values {
@@ -615,6 +617,16 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		}
 		if k == "bufferMinutes" && v != "0" && v != "30" && v != "60" && v != "120" && v != "240" {
 			return fmt.Errorf("bufferMinutes must be 0, 30, 60, 120, or 240")
+		}
+		if k == "deleteWatchedDays" {
+			n, err := strconv.Atoi(strings.TrimSpace(v))
+			if err != nil || n < 0 || n > 3650 {
+				return fmt.Errorf("deleteWatchedDays must be a whole number of days from 0 to 3650")
+			}
+			v = strconv.Itoa(n)
+		}
+		if k == "makeRoom" && v != "0" && v != "1" {
+			return fmt.Errorf("makeRoom must be 0 or 1")
 		}
 		if k == "writeNfo" && v != "0" && v != "1" {
 			return fmt.Errorf("writeNfo must be 0 or 1")

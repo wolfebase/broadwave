@@ -232,3 +232,39 @@ func TestTheRecordingListCarriesThePlayhead(t *testing.T) {
 		t.Fatal("watched to the end but not played")
 	}
 }
+
+func TestWatchedAndKeepAreStored(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	id, err := s.CreateRecording(ctx, Recording{Title: "Finale", Status: "complete", StartedAt: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := time.Now().Add(-time.Second)
+	if err := s.SetWatched(ctx, id, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetKeep(ctx, id, true); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := s.Recording(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.WatchedAt == nil || rec.WatchedAt.Before(before) || !rec.Keep {
+		t.Fatalf("watched at %v keep %v", rec.WatchedAt, rec.Keep)
+	}
+	if err := s.SetWatched(ctx, id, 2); err != nil {
+		t.Fatal(err)
+	}
+	if rec, _ = s.Recording(ctx, id); rec.WatchedAt != nil || !rec.WatchedSince().IsZero() {
+		t.Fatalf("marked unwatched kept watched at %v", rec.WatchedAt)
+	}
+	if err := s.SetKeep(ctx, 999, true); err == nil {
+		t.Fatal("kept a recording that does not exist")
+	}
+}

@@ -184,3 +184,21 @@ func TestAKeepRuleLeavesFilesOutsideTheRecordingsFolder(t *testing.T) {
 		}
 	}
 }
+
+func TestKeepRulesSkipAKeptRecording(t *testing.T) {
+	pass := store.Pass{Title: "News", KeepMode: "last", KeepCount: 1}
+	day := time.Date(2026, 10, 1, 18, 0, 0, 0, time.UTC)
+	recs := []store.Recording{
+		{ID: 1, Title: "News", Status: "complete", StartedAt: day, Keep: true},
+		{ID: 2, Title: "News", Status: "complete", StartedAt: day.Add(24 * time.Hour)},
+		{ID: 3, Title: "News", Status: "complete", StartedAt: day.Add(48 * time.Hour)},
+	}
+	if got := KeepVictims(pass, recs); fmt.Sprint(got) != "[2]" {
+		t.Fatalf("last 1: %v", got)
+	}
+	watched := store.Pass{Title: "News", KeepMode: "unwatched"}
+	recs[0].Watched = 1
+	if got := KeepVictims(watched, recs); len(got) != 0 {
+		t.Fatalf("unwatched: %v", got)
+	}
+}

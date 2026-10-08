@@ -126,6 +126,9 @@ type Hub struct {
 	DeintBroadcast string
 	DeintSmooth    string
 	OnSaved        func(store.Recording)
+	// MakeRoom, when set, may delete watched recordings to bring free space
+	// in the recordings folder up to need bytes before a recording is refused.
+	MakeRoom func(ctx context.Context, need uint64)
 	// NoAC4 is set when ffmpeg cannot decode AC-4: an ATSC 3.0 channel then
 	// plays its picture without sound instead of not at all.
 	NoAC4 bool
@@ -2938,6 +2941,12 @@ func (h *Hub) ensureSpace(ctx context.Context) error {
 	space, err := disk.Stat(dir)
 	if err != nil {
 		return nil
+	}
+	if disk.BelowReserve(space.Free, reserve) && h.MakeRoom != nil {
+		h.MakeRoom(ctx, reserve)
+		if again, err := disk.Stat(dir); err == nil {
+			space = again
+		}
 	}
 	if disk.BelowReserve(space.Free, reserve) {
 		_ = h.Store.AddEvent(ctx, "disk", "Refused a recording because free space is under the reserve")

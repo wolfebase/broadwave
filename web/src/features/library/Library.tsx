@@ -23,6 +23,7 @@ export function Library({
   onVirtual,
   onDelete,
   onWatched,
+  onKeep,
   onStop,
   onMany,
 }: {
@@ -33,6 +34,7 @@ export function Library({
   onVirtual: (recording: Recording) => void;
   onDelete: (recording: Recording) => void;
   onWatched: (recording: Recording, watched: boolean) => void;
+  onKeep: (recording: Recording, keep: boolean) => void;
   onStop: (recording: Recording) => void;
   onMany: (action: Many, recordings: Recording[]) => Promise<void>;
 }) {
@@ -96,6 +98,7 @@ export function Library({
       onVirtual={onVirtual}
       onDelete={onDelete}
       onWatched={onWatched}
+      onKeep={onKeep}
       onStop={onStop}
     />
   );
@@ -263,6 +266,7 @@ function LibraryRow({
   onVirtual,
   onDelete,
   onWatched,
+  onKeep,
   onStop,
 }: {
   rec: Recording;
@@ -275,6 +279,7 @@ function LibraryRow({
   onVirtual: (recording: Recording) => void;
   onDelete: (recording: Recording) => void;
   onWatched: (recording: Recording, watched: boolean) => void;
+  onKeep: (recording: Recording, keep: boolean) => void;
   onStop: (recording: Recording) => void;
 }) {
   const seen = watched(rec);
@@ -326,6 +331,7 @@ function LibraryRow({
             {rec.durationSec ? ` · ${formatClockPoint(rec.durationSec)}` : ""}
             {(rec.position ?? 0) > 1 ? ` · resume ${formatClockPoint(rec.position ?? 0)}` : ""}
             {seen ? " · Watched" : ""}
+            {rec.keep ? " · Kept forever" : ""}
             {rec.error ? ` · ${rec.error}` : ""}
           </span>
         )}
@@ -350,6 +356,11 @@ function LibraryRow({
             {rec.status !== "recording" ? (
               <button type="button" className="btn" onClick={() => onWatched(rec, !seen)}>
                 {seen ? "Mark unwatched" : "Mark watched"}
+              </button>
+            ) : null}
+            {rec.status !== "recording" ? (
+              <button type="button" className="btn" aria-pressed={rec.keep === true} onClick={() => onKeep(rec, !rec.keep)}>
+                Keep forever
               </button>
             ) : null}
             {rec.status !== "recording" ? (

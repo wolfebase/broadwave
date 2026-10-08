@@ -283,6 +283,7 @@ export type Recording = {
   position?: number;
   durationSec?: number;
   watched?: number;
+  keep?: boolean;
   missing?: boolean;
   season?: number;
   episode?: number;
@@ -376,6 +377,8 @@ export type Settings = {
   watermarkGB?: string;
   bufferMinutes?: string;
   writeNfo?: string;
+  deleteWatchedDays?: string;
+  makeRoom?: string;
   pictureMode?: PictureMode;
   autoplay?: string;
   hdhrEmulate?: string;

@@ -726,6 +726,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/recordings/{id}/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Keep a recording forever (no keep rule, watched clean-up, or low-space clean-up removes it), or let clean-up see it again. */
+        put: operations["setKeep"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/recordings/{id}/file": {
         parameters: {
             query?: never;
@@ -1652,6 +1669,8 @@ export interface components {
             position?: number;
             durationSec?: number;
             watched?: number;
+            /** @description Kept forever: no clean-up removes it. */
+            keep?: boolean;
             /** @description The recording finished but its file is gone (moved or deleted outside Broadwave). It cannot play; delete removes it from the list. */
             missing?: boolean;
             /** @description From the listing the recording covers, or an SxxEyy file name in a library folder. Absent when unknown. */
@@ -1920,6 +1939,13 @@ export interface components {
              * @enum {string}
              */
             writeNfo?: "0" | "1";
+            /** @description Days a watched recording stays before it is deleted, 0 to 3650; 0 keeps them. Recordings kept forever and files in library folders stay. */
+            deleteWatchedDays?: string;
+            /**
+             * @description 1 deletes the oldest watched recordings when free space falls under the reserve, before a recording is refused. 0 only refuses. Missing means off.
+             * @enum {string}
+             */
+            makeRoom?: "0" | "1";
             pictureMode?: components["schemas"]["PictureMode"];
             /** @enum {string} */
             autoplay?: "0" | "1";
@@ -3286,6 +3312,26 @@ export interface operations {
             content: {
                 "application/json": {
                     watched: boolean;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Ok"];
+        };
+    };
+    setKeep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    keep: boolean;
                 };
             };
         };

@@ -146,6 +146,10 @@ type Recording struct {
 	CreditsStart float64 `json:"creditsStart,omitempty"`
 	// Listened is set once the server printed the sound of its ends.
 	Listened bool `json:"-"`
+	// Keep is set when the viewer keeps it forever: no clean-up removes it.
+	Keep bool `json:"keep,omitempty"`
+	// WatchedAt is when it was marked watched; nil when it was not.
+	WatchedAt *time.Time `json:"-"`
 }
 
 type Pass struct {
@@ -511,7 +515,7 @@ SELECT r.id, r.channel_id, r.guide_number, r.title, r.path, r.status, r.error, r
 	r.continuity_errors, r.transport_errors, r.sync_losses, r.packets, r.pass_id, r.gaps, COALESCE(r.lost_seconds, 0),
 	r.season, r.episode, r.episode_label, r.original_air, r.breaks_scanned,
 	r.intro_start, r.intro_end, r.credits_start, EXISTS (SELECT 1 FROM episode_prints e WHERE e.recording_id = r.id),
-	COALESCE(p.position_sec, 0), COALESCE(p.updated_at, '')
+	r.keep, r.watched_at, COALESCE(p.position_sec, 0), COALESCE(p.updated_at, '')
 FROM recordings r LEFT JOIN progress p ON p.recording_id = r.id
 ORDER BY r.id DESC`)
 	if err != nil {
@@ -521,18 +525,21 @@ ORDER BY r.id DESC`)
 	var out []Recording
 	for rows.Next() {
 		var rec Recording
-		var start, ends, ended, played string
+		var start, ends, ended, played, watchedAt string
 		var continuity, transport, syncLoss, packets sql.NullInt64
 		var gaps sql.NullInt64
 		var lost float64
 		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID, &continuity, &transport, &syncLoss, &packets, &rec.PassID, &gaps, &lost,
 			&rec.Season, &rec.Episode, &rec.EpisodeLabel, &rec.OriginalAir, &rec.BreaksScanned,
-			&rec.IntroStart, &rec.IntroEnd, &rec.CreditsStart, &rec.Listened, &rec.Position, &played); err != nil {
+			&rec.IntroStart, &rec.IntroEnd, &rec.CreditsStart, &rec.Listened, &rec.Keep, &watchedAt, &rec.Position, &played); err != nil {
 			return nil, err
 		}
 		if played != "" && rec.Position > 0 {
 			t, _ := time.Parse(time.RFC3339, played)
 			rec.ProgressAt = &t
+		}
+		if t, err := time.Parse(time.RFC3339, watchedAt); err == nil && rec.Watched == 1 {
+			rec.WatchedAt = &t
 		}
 		rec.StartedAt, _ = time.Parse(time.RFC3339, start)
 		if ends != "" {
@@ -820,7 +827,11 @@ func (s *Store) SetWatched(ctx context.Context, id int64, watched int) error {
 	if watched < 0 || watched > 2 {
 		watched = 0
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE recordings SET watched = ? WHERE id = ?`, watched, id)
+	at := ""
+	if watched == 1 {
+		at = time.Now().UTC().Format(time.RFC3339)
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE recordings SET watched = ?, watched_at = ? WHERE id = ?`, watched, at, id)
 	if err != nil {
 		return err
 	}
@@ -829,6 +840,36 @@ func (s *Store) SetWatched(ctx context.Context, id int64, watched int) error {
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+// SetKeep keeps a recording forever, or lets clean-up see it again.
+func (s *Store) SetKeep(ctx context.Context, id int64, keep bool) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE recordings SET keep = ? WHERE id = ?`, boolInt(keep), id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// WatchedSince is when a played recording was last watched: when it was
+// marked watched or its playhead was saved, whichever is later. Playing it
+// again starts the clock over. Zero when it is not played.
+func (r Recording) WatchedSince() time.Time {
+	if !r.Played() {
+		return time.Time{}
+	}
+	var at time.Time
+	if r.Watched == 1 && r.WatchedAt != nil {
+		at = *r.WatchedAt
+	}
+	if r.ProgressAt != nil && r.ProgressAt.After(at) {
+		at = *r.ProgressAt
+	}
+	return at
 }
 
 func (s *Store) RememberSeen(ctx context.Context, key string, deleted bool) error {
