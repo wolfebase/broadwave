@@ -2,6 +2,7 @@ package dvr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -14,12 +15,14 @@ import (
 
 // BreakQueue scans recordings for breaks one at a time, while nobody watches
 // live TV: a scan reads the whole file and takes a couple of CPU cores that a
-// small server needs for the screens that are playing.
+// small server needs for the screens that are playing. It also listens to
+// the ends of every recording for its intro and end titles.
 type BreakQueue struct {
-	st   *store.Store
-	scan func(context.Context, store.Recording) error
-	busy func() bool
-	add  chan int64
+	st     *store.Store
+	scan   func(context.Context, store.Recording) error
+	listen func(context.Context, store.Recording) error
+	busy   func() bool
+	add    chan int64
 	// root is the recordings folder. The backfill leaves library folders alone;
 	// Find commercials still scans a file there when asked.
 	root string
@@ -37,14 +40,16 @@ func NewBreakQueue(st *store.Store, hub *live.Hub) *BreakQueue {
 	q := newBreakQueue(st, func(ctx context.Context, rec store.Recording) error {
 		_, err := IndexBreaks(ctx, st, hub.FFmpeg, rec, true)
 		return err
+	}, func(ctx context.Context, rec store.Recording) error {
+		return FindEpisodeEnds(ctx, st, hub.FFmpeg, rec)
 	}, hub.Watching)
 	q.root = filepath.Join(hub.Dir, "recordings")
 	return q
 }
 
-func newBreakQueue(st *store.Store, scan func(context.Context, store.Recording) error, busy func() bool) *BreakQueue {
+func newBreakQueue(st *store.Store, scan, listen func(context.Context, store.Recording) error, busy func() bool) *BreakQueue {
 	return &BreakQueue{
-		st: st, scan: scan, busy: busy, add: make(chan int64, 256),
+		st: st, scan: scan, listen: listen, busy: busy, add: make(chan int64, 256),
 		poll: 30 * time.Second, patience: 3 * time.Hour, backfill: 6 * time.Hour,
 	}
 }
@@ -97,7 +102,15 @@ func (q *BreakQueue) Run(ctx context.Context) {
 		if err != nil || rec.Status != "complete" {
 			continue
 		}
-		if err := q.scan(ctx, rec); err != nil {
+		passes, err := q.st.Passes(ctx)
+		if err != nil {
+			continue
+		}
+		scan, listen := wants(rec, passes)
+		if !scan && !listen {
+			continue
+		}
+		if err := q.work(ctx, rec, scan, listen); err != nil {
 			if ctx.Err() != nil {
 				return
 			}
@@ -109,8 +122,50 @@ func (q *BreakQueue) Run(ctx context.Context) {
 			if _, statErr := os.Stat(rec.Path); statErr == nil && failed[id] < 3 {
 				continue
 			}
+			q.giveUp(ctx, id)
 		}
+	}
+}
+
+// wants is what a recording still needs: a break scan when its pass wants
+// breaks found, and its ends listened to.
+func wants(rec store.Recording, passes []store.Pass) (scan, listen bool) {
+	return !rec.BreaksScanned && commercialsOn(passes, rec), !rec.Listened
+}
+
+// work scans first, so the intro search knows the breaks, and listens even
+// when the scan failed. What succeeded is not done again on a retry.
+func (q *BreakQueue) work(ctx context.Context, rec store.Recording, scan, listen bool) error {
+	var errs []error
+	if scan {
+		if err := q.scan(ctx, rec); err != nil {
+			errs = append(errs, err)
+		} else {
+			_ = q.st.MarkBreaksScanned(ctx, rec.ID)
+		}
+	}
+	if listen && q.listen != nil && ctx.Err() == nil {
+		errs = append(errs, q.listen(ctx, rec))
+	}
+	return errors.Join(errs...)
+}
+
+// giveUp marks what a recording still wanted as done.
+func (q *BreakQueue) giveUp(ctx context.Context, id int64) {
+	rec, err := q.st.Recording(ctx, id)
+	if err != nil {
+		return
+	}
+	passes, err := q.st.Passes(ctx)
+	if err != nil {
+		return
+	}
+	scan, listen := wants(rec, passes)
+	if scan {
 		_ = q.st.MarkBreaksScanned(ctx, id)
+	}
+	if listen {
+		_ = q.st.SaveEpisodePrints(ctx, id, store.EpisodePrints{})
 	}
 }
 
@@ -131,7 +186,7 @@ func (q *BreakQueue) waitQuiet(ctx context.Context, push func(int64)) bool {
 }
 
 // queueUnscanned queues finished recordings in the recordings folder that were
-// never scanned and whose pass wants breaks found.
+// never listened to, or never scanned while their pass wants breaks found.
 func (q *BreakQueue) queueUnscanned(ctx context.Context, push func(int64)) {
 	recs, err := q.st.Recordings(ctx)
 	if err != nil {
@@ -144,7 +199,7 @@ func (q *BreakQueue) queueUnscanned(ctx context.Context, push func(int64)) {
 	// Oldest first: the list is newest first.
 	for i := len(recs) - 1; i >= 0; i-- {
 		rec := recs[i]
-		if rec.BreaksScanned || rec.Status != "complete" || rec.Path == "" || !commercialsOn(passes, rec) {
+		if scan, listen := wants(rec, passes); (!scan && !listen) || rec.Status != "complete" || rec.Path == "" {
 			continue
 		}
 		if q.root != "" && !insideDir(q.root, rec.Path) {

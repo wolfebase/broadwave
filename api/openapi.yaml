@@ -2068,6 +2068,9 @@ components:
         episodeLabel: { type: string, description: "The guide's own episode label when it has one (for example S2E5)." }
         originalAir: { type: string, description: "First air date, YYYY-MM-DD, from the guide." }
         progressAt: { type: string, format: date-time, description: "When the playhead was last saved. Absent when it was never played." }
+        introStart: { type: number, description: "Seconds into the file where the show's intro starts, found by comparing its sound with other recordings of the show. Absent when 0." }
+        introEnd: { type: number, description: "Seconds into the file where the intro ends. Absent when no intro was found." }
+        creditsStart: { type: number, description: "Seconds into the file where the end titles start, or where the show ends before the late padding. Absent when unknown." }
         health:
           $ref: "#/components/schemas/RecordingHealth"
     RecordingHealth:

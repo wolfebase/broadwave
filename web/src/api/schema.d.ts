@@ -1637,6 +1637,24 @@ export interface components {
             watched?: number;
             /** @description The recording finished but its file is gone (moved or deleted outside Broadwave). It cannot play; delete removes it from the list. */
             missing?: boolean;
+            /** @description From the listing the recording covers, or an SxxEyy file name in a library folder. Absent when unknown. */
+            season?: number;
+            episode?: number;
+            /** @description The guide's own episode label when it has one (for example S2E5). */
+            episodeLabel?: string;
+            /** @description First air date, YYYY-MM-DD, from the guide. */
+            originalAir?: string;
+            /**
+             * Format: date-time
+             * @description When the playhead was last saved. Absent when it was never played.
+             */
+            progressAt?: string;
+            /** @description Seconds into the file where the show's intro starts, found by comparing its sound with other recordings of the show. Absent when 0. */
+            introStart?: number;
+            /** @description Seconds into the file where the intro ends. Absent when no intro was found. */
+            introEnd?: number;
+            /** @description Seconds into the file where the end titles start, or where the show ends before the late padding. Absent when unknown. */
+            creditsStart?: number;
             health?: components["schemas"]["RecordingHealth"];
         };
         /** @description Damage counted in the recording file after it finishes. Absent until then. Zeros mean the file was clean. */
@@ -1657,6 +1675,8 @@ export interface components {
             recordingId?: number;
             start: number;
             end: number;
+            /** @description How sure the break scan is. A player skips on its own from 0.7 up and offers the skip below. A marker someone set is 1. */
+            confidence?: number;
         };
         Pass: {
             /** Format: int64 */
