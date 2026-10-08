@@ -595,12 +595,18 @@ public struct RecordingHealth: Codable, Sendable, Hashable {
     public var transportErrors: Int64
     public var syncLosses: Int64
     public var packets: Int64
+    public var gaps: Int64?
+    public var lostSeconds: Double?
+    public var damaged: Bool?
 
-    public init(continuityErrors: Int64, transportErrors: Int64, syncLosses: Int64, packets: Int64) {
+    public init(continuityErrors: Int64, transportErrors: Int64, syncLosses: Int64, packets: Int64, gaps: Int64? = nil, lostSeconds: Double? = nil, damaged: Bool? = nil) {
         self.continuityErrors = continuityErrors
         self.transportErrors = transportErrors
         self.syncLosses = syncLosses
         self.packets = packets
+        self.gaps = gaps
+        self.lostSeconds = lostSeconds
+        self.damaged = damaged
     }
 }
 

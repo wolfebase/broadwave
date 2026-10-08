@@ -279,3 +279,59 @@ func packet(pid uint16, cc int, payload, disc, tei bool) []byte {
 	}
 	return p
 }
+
+// pcrPacket carries only a clock: an adaptation field with a PCR base in 90 kHz ticks.
+func pcrPacket(pid uint16, ticks uint64, disc bool) []byte {
+	pkt := make([]byte, Packet)
+	pkt[0] = syncByte
+	pkt[1] = byte(pid >> 8)
+	pkt[2] = byte(pid)
+	pkt[3] = 0x20 // adaptation field only
+	pkt[4] = Packet - 5
+	pkt[5] = 0x10
+	if disc {
+		pkt[5] |= 0x80
+	}
+	pkt[6] = byte(ticks >> 25)
+	pkt[7] = byte(ticks >> 17)
+	pkt[8] = byte(ticks >> 9)
+	pkt[9] = byte(ticks >> 1)
+	pkt[10] = byte(ticks<<7) | 0x7e
+	for i := 11; i < Packet; i++ {
+		pkt[i] = 0xff
+	}
+	return pkt
+}
+
+// A clock that jumps ahead across lost packets is time the tuner never sent.
+// One flagged as a discontinuity, a step back, a wrap of the 33-bit clock, a
+// jump with nothing lost, a damaged packet's clock, and an hours-long jump
+// are not.
+func TestGapsCountLostTime(t *testing.T) {
+	var c Counter
+	write := func(pkts ...[]byte) {
+		for _, p := range pkts {
+			_, _ = c.Write(p)
+		}
+	}
+	write(pcrPacket(0x100, 0, false), pcrPacket(0x100, 9000, false), pcrPacket(0x100, 18000, false))
+	// The signal drops: the video PID loses packets, the clock is 5 s on.
+	write(series(0x101, 0, 1, 2)...)
+	write(series(0x101, 9)...)
+	write(pcrPacket(0x100, 18000+5*90000, false), pcrPacket(0x100, 18000+5*90000+9000, false))
+	// A splice that forgot its flag: ahead, but nothing lost.
+	write(pcrPacket(0x100, 90000*100, false))
+	write(pcrPacket(0x100, 90000*1000, true), pcrPacket(0x100, 90000*999, false))
+	write(pcrPacket(0x100, 1<<33-9000, true), pcrPacket(0x100, 9000, false))
+	// A damaged packet's clock is ignored, and so is an hours-long jump.
+	broken := pcrPacket(0x100, 90000*20000, false)
+	broken[1] |= 0x80
+	write(series(0x101, 3, 7)...)
+	write(broken, pcrPacket(0x100, 90000*5000, false))
+	// A second program's clock counts only if it ticks more.
+	write(pcrPacket(0x200, 0, false), pcrPacket(0x200, 90000*60, false))
+	s := c.Summary()
+	if s.Gaps != 1 || s.LostSeconds < 5 || s.LostSeconds > 5.01 {
+		t.Fatalf("%+v", s)
+	}
+}

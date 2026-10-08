@@ -17,6 +17,8 @@ struct RecordingsView: View {
     @State private var deleting: Recording?
     @State private var notice: String?
     @State private var detecting: Set<Int64> = []
+    @State private var scheduling: Set<Int64> = []
+    @State private var scheduled: Set<Int64> = []
     #if os(tvOS)
         /// A cover, like live TV: a pushed player would keep the sidebar's handle on the picture.
         @State private var playing: Recording?
@@ -344,6 +346,14 @@ struct RecordingsView: View {
             }
             .disabled(detecting.contains(rec.id))
             .accessibilityIdentifier("find-commercials")
+            if RecordAgain.offered(rec), !scheduled.contains(rec.id) {
+                Button(RecordAgain.label, systemImage: "arrow.clockwise.circle") {
+                    recordAgain(rec)
+                }
+                .disabled(scheduling.contains(rec.id))
+                .accessibilityLabel(RecordAgain.label)
+                .accessibilityIdentifier("record-again")
+            }
             Button("Delete", systemImage: "trash", role: .destructive) { deleting = rec }
         }
     }
@@ -513,6 +523,24 @@ struct RecordingsView: View {
                 notice = CommercialScan.found(found.count)
             } catch {
                 notice = CommercialScan.failed
+            }
+        }
+    }
+
+    private func recordAgain(_ rec: Recording) {
+        guard !scheduling.contains(rec.id) else { return }
+        scheduling.insert(rec.id)
+        Task {
+            defer { scheduling.remove(rec.id) }
+            do {
+                if let airing = try await store.recordAgain(rec) {
+                    scheduled.insert(rec.id)
+                    notice = RecordAgain.scheduled(airing.start)
+                } else {
+                    notice = RecordAgain.noAiring
+                }
+            } catch {
+                notice = RecordAgain.failed
             }
         }
     }

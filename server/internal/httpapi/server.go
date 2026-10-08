@@ -167,6 +167,7 @@ func (s *Server) Handler() http.Handler {
 	api("PUT /recordings/{id}/progress", s.saveProgress)
 	api("PUT /recordings/{id}/watched", s.setWatched)
 	api("GET /recordings/{id}/markers", s.markers)
+	api("GET /recordings/{id}/again", s.recordAgain)
 	api("POST /recordings/{id}/markers", s.addMarker)
 	api("DELETE /markers/{id}", s.deleteMarker)
 	api("POST /recordings/{id}/detect", s.detectBreaks)

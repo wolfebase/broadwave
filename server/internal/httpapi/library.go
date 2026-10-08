@@ -89,6 +89,50 @@ func (s *Server) saveProgress(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"position": body.Position})
 }
 
+// recordAgain names the next airing of a recording's episode in the guide,
+// for Record it again on a damaged copy. Airing is null when the guide has
+// none, or the episode has no id or name to match.
+func (s *Server) recordAgain(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		httpError(w, "invalid recording", http.StatusBadRequest)
+		return
+	}
+	rec, err := s.Store.Recording(r.Context(), id)
+	if err != nil {
+		httpError(w, "recording not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"airing": s.nextAiring(r.Context(), rec, time.Now())})
+}
+
+func (s *Server) nextAiring(ctx context.Context, rec store.Recording, now time.Time) *store.Airing {
+	key := store.EpisodeKey(rec.ProgramID, rec.Title, rec.Subtitle, rec.ChannelID)
+	if key == "" {
+		return nil
+	}
+	airings, err := s.Store.RecordingAirings(ctx, now, now.Add(15*24*time.Hour))
+	if err != nil {
+		return nil
+	}
+	chs, err := s.Store.Channels(ctx, false)
+	if err != nil {
+		return nil
+	}
+	off := map[int64]bool{}
+	for _, ch := range chs {
+		off[ch.ID] = !ch.Enabled
+	}
+	// A simulcast copy records on its other channel; that row is in the list too.
+	for i := range airings {
+		air := airings[i]
+		if air.Start.After(now) && air.Simulcast == 0 && !off[air.ChannelID] && store.EpisodeKey(air.ProgramID, air.Title, air.Subtitle, air.ChannelID) == key {
+			return &air
+		}
+	}
+	return nil
+}
+
 func (s *Server) markers(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {

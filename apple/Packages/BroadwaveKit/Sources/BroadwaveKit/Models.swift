@@ -279,6 +279,10 @@ public extension Recording {
     /// A line when the finished file was damaged. Nil when it was clean or not counted yet.
     var signalLine: String? {
         guard let health else { return nil }
+        let lost = Int((health.lostSeconds ?? 0).rounded())
+        if lost >= 1 {
+            return "Signal dropped for \(lost) s"
+        }
         let times = health.continuityErrors + health.transportErrors + health.syncLosses
         if times <= 0 {
             return nil
@@ -287,6 +291,11 @@ public extension Recording {
             return "Signal broke up once"
         }
         return "Signal broke up \(times) times"
+    }
+
+    /// Worth recording again: the server counted enough lost signal.
+    var isDamaged: Bool {
+        health?.damaged == true
     }
 }
 

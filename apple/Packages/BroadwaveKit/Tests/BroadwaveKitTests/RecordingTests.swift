@@ -33,6 +33,96 @@ private func rec(status: String = "done", position: Double? = nil, duration: Dou
     #expect(clean.signalLine == nil)
 }
 
+@Test func lostSecondsOutrankBreakupsInTheSignalLine() {
+    var dropped = rec()
+    dropped.health = RecordingHealth(continuityErrors: 30, transportErrors: 0, syncLosses: 2, packets: 40, gaps: 3, lostSeconds: 11.6, damaged: true)
+    #expect(dropped.signalLine == "Signal dropped for 12 s")
+    var brief = rec()
+    brief.health = RecordingHealth(continuityErrors: 2, transportErrors: 0, syncLosses: 0, packets: 40, gaps: 1, lostSeconds: 0.4, damaged: false)
+    #expect(brief.signalLine == "Signal broke up 2 times")
+    var older = rec()
+    older.health = RecordingHealth(continuityErrors: 1, transportErrors: 0, syncLosses: 0, packets: 8)
+    #expect(older.signalLine == "Signal broke up once")
+}
+
+@Test func onlyADamagedFinishedRecordingOffersRecordItAgain() {
+    var damaged = rec()
+    damaged.health = RecordingHealth(continuityErrors: 0, transportErrors: 0, syncLosses: 0, packets: 40, lostSeconds: 6, damaged: true)
+    #expect(damaged.isDamaged)
+    // Nothing names the episode, so there is no airing to find.
+    #expect(!RecordAgain.offered(damaged))
+    damaged.subtitle = "The Lighthouse"
+    #expect(RecordAgain.offered(damaged))
+    var running = damaged
+    running.status = "recording"
+    #expect(!RecordAgain.offered(running))
+    var gone = damaged
+    gone.missing = true
+    #expect(!RecordAgain.offered(gone))
+    var fine = rec()
+    fine.health = RecordingHealth(continuityErrors: 3, transportErrors: 0, syncLosses: 0, packets: 40, damaged: false)
+    #expect(!fine.isDamaged)
+    #expect(!RecordAgain.offered(fine))
+    #expect(!rec().isDamaged)
+}
+
+@Test func recordAgainReadsTheNextAiringOrNone() throws {
+    var url = URL(fileURLWithPath: #filePath)
+    for _ in 0 ..< 6 {
+        url.deleteLastPathComponent()
+    }
+    let none = try APIClient.decoder.decode(RecordAgain.Answer.self, from: Data(contentsOf: url.appendingPathComponent("api/fixtures/again.json")))
+    #expect(none.airing == nil)
+    let next = try APIClient.decoder.decode(RecordAgain.Answer.self, from: Data("""
+    {"airing":{"id":9,"channelId":5,"title":"News","start":"2026-10-08T23:00:00Z","end":"2026-10-09T00:00:00Z"}}
+    """.utf8))
+    #expect(next.airing?.channelId == 5)
+    #expect(next.airing?.start == Date(timeIntervalSince1970: 1_791_500_400))
+}
+
+@Test func recordAgainAsksForTheRecordingsNextAiring() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [AgainStub.self]
+    let api = try APIClient(base: #require(URL(string: "http://stub.invalid")), session: URLSession(configuration: config))
+    let airing = try await api.recordAgain(recordingID: 42)
+    #expect(AgainStub.lastRequest == "GET /api/v1/recordings/42/again")
+    #expect(airing?.channelId == 5)
+    #expect(airing?.title == "News")
+}
+
+private final class AgainStub: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var lastRequest: String?
+
+    override static func canInit(with _: URLRequest) -> Bool {
+        true
+    }
+
+    override static func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        Self.lastRequest = "\(request.httpMethod ?? "") \(request.url?.path ?? "")"
+        let json = #"{"airing":{"id":9,"channelId":5,"title":"News","start":"2026-10-08T23:00:00Z","end":"2026-10-09T00:00:00Z"}}"#
+        let res = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: res, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(json.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+@Test func recordAgainSaysWhenItRecords() {
+    // Thursday 2026-10-08 19:00 UTC.
+    let start = Date(timeIntervalSince1970: 1_791_486_000)
+    let said = RecordAgain.scheduled(start, now: start.addingTimeInterval(-86400), locale: Locale(identifier: "en_US"), timeZone: .gmt)
+    #expect(said.replacingOccurrences(of: "\u{202F}", with: " ") == "Records again Thu 7:00 PM.")
+    // Past six days out, the weekday alone could be either week.
+    let far = RecordAgain.scheduled(start, now: start.addingTimeInterval(-8 * 86400), locale: Locale(identifier: "en_US"), timeZone: .gmt)
+    #expect(far.replacingOccurrences(of: "\u{202F}", with: " ").contains("Oct 8"))
+}
+
 @Test func aRecordingSaysWhatHappenedOnlyWhenItIsNotPlainlyDone() {
     #expect(rec().statusLabel == nil)
     #expect(rec(status: "recording").statusLabel == "Recording")

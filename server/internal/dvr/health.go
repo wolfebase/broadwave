@@ -35,7 +35,11 @@ func measureHealth(ctx context.Context, st *store.Store, rec store.Recording) {
 		}
 		return
 	}
-	if err := st.SetRecordingHealth(ctx, rec.ID, int64(sum.ContinuityErrors), int64(sum.TransportErrors), int64(sum.SyncLosses), int64(sum.Packets)); err != nil {
+	h := store.RecordingHealth{
+		ContinuityErrors: int64(sum.ContinuityErrors), TransportErrors: int64(sum.TransportErrors), SyncLosses: int64(sum.SyncLosses),
+		Packets: int64(sum.Packets), Gaps: int64(sum.Gaps), LostSeconds: sum.LostSeconds,
+	}
+	if err := st.SetRecordingHealth(ctx, rec.ID, h); err != nil {
 		slog.Error("recording health: " + err.Error())
 	}
 }

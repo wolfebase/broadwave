@@ -481,6 +481,13 @@ public final class AppStore {
         passes = try await api.addPass(title: airing.title, channelID: airing.channelId, airingStart: airing.start)
     }
 
+    /// Records the next airing of a damaged recording's episode. Nil when the guide has none.
+    public func recordAgain(_ rec: Recording) async throws -> Airing? {
+        guard let api, let airing = try await api.recordAgain(recordingID: rec.id) else { return nil }
+        passes = try await api.addPass(title: rec.title, channelID: airing.channelId, airingStart: airing.start)
+        return airing
+    }
+
     public func removePass(_ id: Int64) async throws {
         guard let api else { return }
         passes = try await api.deletePass(id)

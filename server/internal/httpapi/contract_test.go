@@ -185,6 +185,7 @@ func TestContractFixtures(t *testing.T) {
 		{"tuners", "GET", "/api/v1/tuners", "", 0},
 		{"recordings", "GET", "/api/v1/recordings", "", 0},
 		{"markers", "GET", "/api/v1/recordings/1/markers", "", 0},
+		{"again", "GET", "/api/v1/recordings/1/again", "", 0},
 		{"passes", "GET", "/api/v1/passes", "", 0},
 		{"teams", "GET", "/api/v1/teams", "", 0},
 		{"events", "GET", "/api/v1/events", "", 0},

@@ -279,6 +279,11 @@ public struct APIClient: Sendable {
         return try await send("POST", "/recordings/\(recordingID)/detect", body: [String: String](), timeout: 600, as: R.self).markers
     }
 
+    /// The next airing of the recording's episode in the guide. Nil when the guide has none.
+    public func recordAgain(recordingID: Int64) async throws -> Airing? {
+        try await send("GET", "/recordings/\(recordingID)/again", as: RecordAgain.Answer.self).airing
+    }
+
     public func addMarker(recordingID: Int64, start: Double, end: Double) async throws -> Marker {
         struct B: Encodable { var start: Double; var end: Double }
         return try await send("POST", "/recordings/\(recordingID)/markers", body: B(start: start, end: end))

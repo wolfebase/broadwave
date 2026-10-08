@@ -1033,6 +1033,23 @@ paths:
           content:
             video/mp2t:
               schema: { type: string, format: binary }
+  /recordings/{id}/again:
+    get:
+      tags: [recordings]
+      operationId: recordAgain
+      description: The next airing of the recording's episode in the guide, for Record it again. Record it with POST /passes (kind once, airingStart).
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: The next airing; airing is null when the guide has none.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  airing: { $ref: "#/components/schemas/Airing" }
+        "404": { $ref: "#/components/responses/Error" }
   /recordings/{id}/markers:
     get:
       tags: [recordings]
@@ -2082,6 +2099,9 @@ components:
         transportErrors: { type: integer, format: int64 }
         syncLosses: { type: integer, format: int64 }
         packets: { type: integer, format: int64 }
+        gaps: { type: integer, format: int64, description: "Times the stream stopped (the signal dropped), read from the broadcast clock." }
+        lostSeconds: { type: number, description: "Seconds of the show lost to those gaps." }
+        damaged: { type: boolean, description: "Worth recording again: 5 s or more lost, or 60 or more broken packets. A damaged copy does not keep a pass from recording the next airing of its episode." }
     Marker:
       type: object
       required: [id, start, end]

@@ -7,6 +7,7 @@ import { navigate } from "../../app/router";
 import { RecordingCard, Shelf } from "../../ui/shelf";
 import { DownloadLink } from "../recordings/DownloadLink";
 import { signalLine } from "./health";
+import { RecordAgain, recordAgainOffered } from "./RecordAgain";
 import { buildLibrary, continueWatching, episodeTag, filterRecordings, totalBytes, watched, type Kind, type Show, type Sort } from "./model";
 
 export type Many = "watched" | "unwatched" | "delete";
@@ -357,6 +358,7 @@ function LibraryRow({
               </button>
             ) : null}
             <DownloadLink id={rec.id} status={rec.status} />
+            {recordAgainOffered(rec) ? <RecordAgain rec={rec} /> : null}
             {rec.status === "recording" ? (
               <button type="button" className="btn" onClick={() => onStop(rec)}>
                 Stop recording
