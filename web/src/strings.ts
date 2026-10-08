@@ -1,3 +1,5 @@
+import { encryptedBroadcast } from "./strings/notice.ts";
+
 export const copy = {
   sources: {
     title: "Sources",
@@ -114,7 +116,7 @@ export const copy = {
     profile: "Profile",
   },
   player: {
-    encrypted: "The 3.0 version is encrypted. Showing the regular broadcast.",
+    encrypted: encryptedBroadcast,
     stats: "Stats",
     delayApple: "An Apple device is watching, so this channel stays at Balanced.",
     playing: "Playing",
