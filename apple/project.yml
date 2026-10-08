@@ -35,9 +35,12 @@ targets:
   Broadwave:
     templates: [App]
     platform: iOS
+    dependencies:
+      - target: BroadwaveWidgets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.broadwave
+        CODE_SIGN_ENTITLEMENTS: App/Keychain.entitlements
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
     info:
@@ -63,6 +66,34 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.wolfeup.broadwave
             CFBundleURLSchemes: [broadwave]
+        BroadwaveKeychainGroup: $(AppIdentifierPrefix)com.wolfeup.broadwave.shared
+  BroadwaveWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: App/Widgets
+    dependencies:
+      - package: BroadwaveKit
+      - package: BroadwaveUI
+      - sdk: WidgetKit.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.broadwave.widgets
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_ENTITLEMENTS: App/Keychain.entitlements
+    info:
+      path: App/Widgets/Info.plist
+      properties:
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleDisplayName: Broadwave
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
+        NSLocalNetworkUsageDescription: Broadwave finds your TV server on your home network.
+        BroadwaveKeychainGroup: $(AppIdentifierPrefix)com.wolfeup.broadwave.shared
   BroadwaveTV:
     templates: [App]
     platform: tvOS
@@ -72,7 +103,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.broadwave
         TARGETED_DEVICE_FAMILY: "3"
-        CODE_SIGN_ENTITLEMENTS: App/BroadwaveTV.entitlements
+        CODE_SIGN_ENTITLEMENTS: App/Keychain.entitlements
     info:
       path: App/Info-tvOS.plist
       properties:
@@ -106,7 +137,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "3"
         # The tv-app-extension type links _TVExtensionMain, which returns at once on tvOS 27.
         LD_ENTRY_POINT: _NSExtensionMain
-        CODE_SIGN_ENTITLEMENTS: App/BroadwaveTV.entitlements
+        CODE_SIGN_ENTITLEMENTS: App/Keychain.entitlements
     info:
       path: App/TopShelf/Info.plist
       properties:

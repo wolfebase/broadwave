@@ -59,12 +59,7 @@ struct HomeView: View {
                     }
                 }
                 let games = store.sports()
-                let yours = games.filter { pair in
-                    teams.contains { team in
-                        let name = team.short.flatMap { $0.isEmpty ? nil : $0 } ?? team.name
-                        return name.count >= 4 && (pair.1.title.localizedCaseInsensitiveContains(name) || (pair.1.subtitle ?? "").localizedCaseInsensitiveContains(name))
-                    }
-                }
+                let yours = games.filter { WidgetFeed.followed($0.1, teams) }
                 if !yours.isEmpty {
                     Shelf("Your teams") {
                         ForEach(yours.prefix(12), id: \.1.id) { channel, airing in

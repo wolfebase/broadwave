@@ -24,12 +24,17 @@ public enum TopShelf {
         public var recordings: [Recording]
         /// Channels with a fresh preview frame (`GET /frames`).
         public var framed: Set<Int64>
+        /// What the DVR plans to record (`GET /schedule`).
+        public var plan: [PlannedAiring]
 
-        public init(channels: [Channel], airings: [Airing] = [], recordings: [Recording] = [], framed: Set<Int64> = []) {
+        public init(
+            channels: [Channel], airings: [Airing] = [], recordings: [Recording] = [], framed: Set<Int64> = [], plan: [PlannedAiring] = []
+        ) {
             self.channels = channels
             self.airings = airings
             self.recordings = recordings
             self.framed = framed
+            self.plan = plan
         }
     }
 

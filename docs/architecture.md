@@ -96,6 +96,8 @@ The apps browse Bonjour `_broadwave._tcp` (TXT `id`, `name`, `version`, `api`, `
 
 The tvOS Top Shelf is an app extension (`App/TopShelf`). It has no Bonjour or sync of its own: the app writes the current server's URL to a keychain group the two share (`SharedServer`, no App Group), and the extension reads `/channels`, the airings on now, `/recordings`, and `/frames` when the system asks. It shows games on now, favorite channels, and recordings to finish (`TopShelf.sections`), linking to `broadwave://watch/<id>` and `broadwave://recording/<id>`. The app asks the system to reload it whenever the app leaves the foreground.
 
+The iPhone and iPad widgets (`App/Widgets`, WidgetKit) read the same keychain item: On now (favorite channels, or every channel on now without favorites), Your teams (followed teams' games with the scoreboard line), Recording now, and Up next (the schedule; conflicts stay listed, since the server marks them skipped). A row whose airing is recording or already planned says so instead of offering Record. Their rows come from `WidgetFeed`, and a timeline asks again at the next listing edge, at most 15 minutes out. A Record button runs `RecordIntent` in the extension, which adds a one-airing pass (the app's Record once), so a game keeps recording until it is final. The app reloads the widgets when it leaves the foreground.
+
 ## Design tokens (`design/`)
 
 `tokens.json` generates CSS variables for the web app and a Swift theme for the Apple apps, so both clients share one visual language.
