@@ -820,6 +820,55 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/MultiviewPlan" }
         "400": { $ref: "#/components/responses/Error" }
+  /mosaic:
+    post:
+      tags: [live]
+      operationId: watchMosaic
+      description: |
+        One stream of 2 to 4 channels side by side (2) or in a grid (3 or 4), on a
+        1920x1080 picture at 59.94, with the first channel's sound. It is for screens
+        that take one stream: AirPlay, older devices, and other apps. Each channel
+        rides its channel's shared tune. A mosaic takes two pictures of the server's
+        picture budget. The answer comes once the playlist has its first segment.
+        Viewers of the same channels in the same order share one encode. Send
+        `POST /mosaic/{key}/stop` when done; a mosaic nobody fetches stops on its own.
+        The same stream is MPEG-TS at `GET /export/mosaic/{key}`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channelIds]
+              properties:
+                channelIds:
+                  type: array
+                  minItems: 2
+                  maxItems: 4
+                  items: { type: integer, format: int64 }
+                  description: Different channels, the sound channel first.
+      responses:
+        "200":
+          description: The running mosaic
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MosaicSession" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /mosaic/{key}/stop:
+    post:
+      tags: [live]
+      operationId: stopMosaic
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+          description: The `key` from the mosaic answer.
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
   /signals:
     get:
       tags: [live]
@@ -1997,6 +2046,17 @@ components:
         picture: { $ref: "#/components/schemas/PictureMode" }
         track: { type: string, enum: [main, language, described], description: "Which broadcast audio mix to play. Empty is main. With `caps.alternates`, a watch plays the main encode when that encode carries this mix as an alternate, and the player selects it from the master." }
         even: { type: boolean, description: "Level the volume. Off keeps the original mix." }
+    MosaicSession:
+      type: object
+      required: [key, playlist, channelIds, encoder, viewers]
+      properties:
+        key: { type: string, description: "The channels joined by dashes, for example 4-12." }
+        playlist: { type: string, description: "HLS playlist, relative to the server." }
+        channelIds:
+          type: array
+          items: { type: integer, format: int64 }
+        encoder: { type: string }
+        viewers: { type: integer }
     MultiviewPlan:
       type: object
       required: [playable, blocked, tunersNeeded, tunersFree]

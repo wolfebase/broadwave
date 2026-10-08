@@ -338,6 +338,22 @@ public struct Marker: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
+public struct MosaicSession: Codable, Sendable, Hashable {
+    public var key: String
+    public var playlist: String
+    public var channelIds: [Int64]
+    public var encoder: String
+    public var viewers: Int
+
+    public init(key: String, playlist: String, channelIds: [Int64], encoder: String, viewers: Int) {
+        self.key = key
+        self.playlist = playlist
+        self.channelIds = channelIds
+        self.encoder = encoder
+        self.viewers = viewers
+    }
+}
+
 public struct MultiviewPlanBlocked: Codable, Sendable, Hashable {
     public var channelId: Int64
     public var holders: [String]

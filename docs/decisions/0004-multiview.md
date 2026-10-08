@@ -16,7 +16,7 @@ Watch two or more live channels at once, aligned to the same wall-clock moment, 
 
 **Apple tiles are player layers.** Each tile is its own `AVPlayer`, not its own player controller. Mute, network priority, and `AVRoutingPlaybackArbiter` follow focus, so AirPlay takes the tile you are listening to. `AVPlaybackCoordinationMedium` is not attached: it seeks every player onto one timeline, and these are different live edges. The shared room already pauses them together.
 
-**Mosaic later.** A single ffmpeg `xstack` of several channels (`mosaic:<ids>:<layout>`) is for AirPlay and older devices. It waits until the tiles themselves are solid, because a mosaic is a delivery shortcut, not the way the apps watch.
+**Mosaic for one-stream screens.** A single ffmpeg `xstack` of 2 to 4 channels, keyed by its channel ids with the sound channel first (`4-12`), is for AirPlay, older devices, and other apps through the exports. It is a delivery shortcut, not the way the apps watch: tiles stay separate players with their own sync rooms. The mosaic reads each channel's shared tune like an export, so it costs no tuner a channel already has; it costs two pictures of the budget (software decode of every input and one 1080p60 encode). Its inputs drop their broadcast timestamps (no `-copyts`), since stations' clocks are unrelated and only arrival lines them up; tiles can sit up to one group of pictures apart.
 
 ## Consequences
 
