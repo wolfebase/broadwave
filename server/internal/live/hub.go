@@ -1122,6 +1122,12 @@ const stalePicture = 15 * time.Second
 // flip back. The tuner goes too unless it is the feed asking. The caller
 // holds h.mu.
 func (h *Hub) releaseIdleTranscodesLocked(asking *feed, now time.Time) {
+	h.releaseIdlePicturesLocked(asking, now, 1)
+}
+
+// releaseIdlePicturesLocked frees pictures nobody watches, oldest first,
+// until need more fit the budget.
+func (h *Hub) releaseIdlePicturesLocked(asking *feed, now time.Time, need int) {
 	type idle struct {
 		f    *feed
 		key  string
@@ -1141,9 +1147,9 @@ func (h *Hub) releaseIdleTranscodesLocked(asking *feed, now time.Time) {
 		}
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].seen.Before(list[j].seen) })
-	defer h.releaseIdleMosaicsLocked(now, 1)
+	defer h.releaseIdleMosaicsLocked(now, need)
 	for _, item := range list {
-		if h.Host.Tiles > 0 && h.transcodesLocked() < h.Host.Tiles {
+		if h.Host.Tiles > 0 && h.transcodesLocked()+need <= h.Host.Tiles {
 			return
 		}
 		if r := item.f.renditions[item.key]; r != nil && r.viewers > 0 {
