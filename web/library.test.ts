@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildLibrary, continueWatching, episodeTag, filterRecordings, watched } from "./src/features/library/model.ts";
+import { buildLibrary, continueWatching, episodeTag, filterRecordings, nextEpisode, watched } from "./src/features/library/model.ts";
 import type { Recording } from "./src/types.ts";
 
 function rec(id: number, extra: Partial<Recording> = {}): Recording {
@@ -66,4 +66,22 @@ test("episode tags", () => {
   assert.equal(episodeTag(rec(1, { episode: 5 })), "E5");
   assert.equal(episodeTag(rec(1, { episodeLabel: "Part 2" })), "Part 2");
   assert.equal(episodeTag(rec(1)), "");
+});
+
+test("the next episode is the next one aired of the same show", () => {
+  const list = [
+    rec(1, { season: 1, episode: 2 }),
+    rec(2, { season: 2, episode: 1 }),
+    rec(3, { season: 1, episode: 1 }),
+    rec(4, { season: 1, episode: 3, status: "recording" }),
+    rec(5, { season: 1, episode: 4, missing: true }),
+    rec(6, { title: "Other Show", season: 1, episode: 3 }),
+    rec(7, { title: " mystery hour ", season: 1, episode: 5 }),
+  ];
+  const next = (id: number) => nextEpisode(list, list.find((r) => r.id === id)!)?.id;
+  assert.equal(next(3), 1);
+  assert.equal(next(1), 7);
+  assert.equal(next(7), 2);
+  // None after the last one.
+  assert.equal(next(2), undefined);
 });

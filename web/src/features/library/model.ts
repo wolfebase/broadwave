@@ -57,6 +57,15 @@ function airOrder(a: Recording, b: Recording) {
   return (a.season ?? 0) - (b.season ?? 0) || (a.episode ?? 0) - (b.episode ?? 0) || (Date.parse(a.startedAt) || 0) - (Date.parse(b.startedAt) || 0);
 }
 
+/** The recording of the same show that airs after this one, or none after the last. */
+export function nextEpisode(recordings: Recording[], current: Recording) {
+  const show = current.title.trim().toLocaleLowerCase();
+  return recordings
+    .filter((rec) => rec.id !== current.id && rec.status !== "recording" && !rec.missing && rec.title.trim().toLocaleLowerCase() === show)
+    .sort((a, b) => airOrder(a, b) || a.id - b.id)
+    .find((rec) => (airOrder(rec, current) || rec.id - current.id) > 0);
+}
+
 export function filterRecordings(recordings: Recording[], kind: Kind, unwatchedOnly: boolean) {
   return recordings.filter((rec) => (kind === "all" || kindOf(rec) === kind) && (!unwatchedOnly || !watched(rec)));
 }

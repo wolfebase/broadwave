@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createVirtual, deleteRecording, getServer, setWatched, stopRecording } from "../api";
 import { useData } from "../app/data";
 import { gateFeature } from "../lib/compat";
 import { navigate, useRoute } from "../app/router";
 import type { ServerInfo } from "../types";
 import { Library } from "./library/Library";
+import { nextEpisode } from "./library/model";
 import { Play } from "./recordings/Play";
 import { VirtualPlay } from "./recordings/Virtual";
 import { Schedule } from "./schedule/Schedule";
@@ -85,6 +86,10 @@ export function PlayPage() {
   const { recordings, settings } = useData();
   const id = Number(params.get("recording") || 0);
   const rec = recordings.find((r) => r.id === id);
+  const next = useMemo(() => (rec ? nextEpisode(recordings, rec) : undefined), [recordings, rec]);
+  const onNext = useCallback(() => {
+    if (next) navigate(`/play?recording=${next.id}`, true);
+  }, [next]);
   if (!rec) return null;
   return (
     <div className="play-page">
@@ -92,11 +97,8 @@ export function PlayPage() {
         recording={rec}
         pictureMode={settings.pictureMode ?? "broadcast"}
         autoplay={settings.autoplay !== "0"}
-        onNext={() => {
-          const later = recordings.filter((r) => r.title === rec.title && r.id !== rec.id && r.status !== "recording").sort((a, b) => a.startedAt.localeCompare(b.startedAt));
-          const next = later.find((r) => r.startedAt > rec.startedAt) ?? later[0];
-          if (next) navigate(`/play?recording=${next.id}`, true);
-        }}
+        next={next}
+        onNext={onNext}
         onBack={() => window.history.back()}
       />
     </div>

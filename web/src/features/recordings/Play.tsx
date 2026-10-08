@@ -5,8 +5,10 @@ import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type P
 import { copy } from "../../strings";
 import { Stage } from "../player/Stage";
 import type { Recording } from "../../types";
+import { episodeTag } from "../library/model";
 import { breakScans, idleBreakScan } from "./breaks";
 import { DownloadLink } from "./DownloadLink";
+import { introSkip, upNext } from "./ends";
 
 type Marker = { id: number; start: number; end: number; confidence?: number };
 
@@ -19,12 +21,15 @@ export function Play({
   recording,
   pictureMode,
   autoplay,
+  next,
   onNext,
   onBack,
 }: {
   recording: Recording;
   pictureMode: PictureMode;
   autoplay: boolean;
+  /** The episode Up next offers; onNext plays it. */
+  next?: Recording;
   onNext: () => void;
   onBack: () => void;
 }) {
@@ -51,6 +56,13 @@ export function Play({
   if (scan !== seenScan) {
     setSeenScan(scan);
     if (scan.markers) setMarkers(scan.markers);
+  }
+  // Not now holds for the rest of this recording, its end included.
+  const [dismissed, setDismissed] = useState(false);
+  const [seenId, setSeenId] = useState(recording.id);
+  if (seenId !== recording.id) {
+    setSeenId(recording.id);
+    setDismissed(false);
   }
 
   useEffect(() => {
@@ -132,7 +144,7 @@ export function Play({
       if (hit && sure(hit)) video.currentTime = hit.end;
     };
     const ended = () => {
-      if (autoplay) onNext();
+      if (autoplay && !dismissed) onNext();
     };
     video.addEventListener("timeupdate", tick);
     video.addEventListener("ended", ended);
@@ -141,7 +153,7 @@ export function Play({
       video.removeEventListener("ended", ended);
       window.clearTimeout(saveTimer.current);
     };
-  }, [markers, skipMode, recording.id, autoplay, onNext]);
+  }, [markers, skipMode, recording.id, autoplay, dismissed, onNext]);
 
   function chooseZoom(next: Zoom) {
     setZoom(next);
@@ -239,6 +251,21 @@ export function Play({
   // A finished recording plays from a playlist that grows while it transcodes,
   // so the player's own duration starts at a few seconds.
   const total = growing ? length : Math.max(length, recording.durationSec || 0);
+  const introEnd = inside ? null : introSkip(recording, where);
+  const card = next && !dismissed && !growing ? upNext(where, total, recording.creditsStart, autoplay) : null;
+  const left = card?.left;
+  // Only a count the viewer saw plays the next one: a resume or a scrub that
+  // lands past it leaves this one playing to its end.
+  const counted = useRef(false);
+  useEffect(() => {
+    if (left == null) counted.current = false;
+    else if (left > 0) counted.current = true;
+    else if (counted.current) {
+      counted.current = false;
+      onNext();
+    }
+  }, [left, onNext]);
+  const nextLabel = next ? [episodeTag(next), next.subtitle].filter(Boolean).join(" · ") || next.title : "";
 
   return (
     <Stage
@@ -264,10 +291,37 @@ export function Play({
         else back(-delta);
       }}
       error={error}
+      note={card ? `Up next: ${nextLabel}` : undefined}
+      noteAction={
+        card ? (
+          <>
+            {card.left !== null ? <p className="hint" aria-hidden="true">Playing in {card.left} s</p> : null}
+            <div className="sheet-actions">
+              <button type="button" className="btn" onClick={onNext}>Play now</button>
+              <button type="button" className="btn" onClick={() => setDismissed(true)}>Not now</button>
+            </div>
+          </>
+        ) : null
+      }
+      hold={Boolean(card)}
       tools={
         inside && (skipMode === "button" || (skipMode === "auto" && !sure(inside))) ? (
           <button type="button" className="text-btn on" onClick={() => { if (videoRef.current) videoRef.current.currentTime = inside.end; }}>
             Skip break
+          </button>
+        ) : introEnd !== null ? (
+          <button
+            type="button"
+            className="text-btn on"
+            onClick={() => {
+              sought();
+              const video = videoRef.current;
+              if (!video) return;
+              const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : introEnd;
+              video.currentTime = Math.min(introEnd, end);
+            }}
+          >
+            Skip intro
           </button>
         ) : null
       }
