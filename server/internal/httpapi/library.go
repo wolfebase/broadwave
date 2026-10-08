@@ -37,6 +37,10 @@ func (s *Server) playRecording(w http.ResponseWriter, r *http.Request) {
 		Picture string `json:"pictureMode"`
 	}
 	_ = decodeJSON(r, &body)
+	if _, ok := recordingInside(s.downloadRoots(r.Context()), rec.Path); !ok {
+		httpError(w, "recording not found", http.StatusNotFound)
+		return
+	}
 	codec, mode, order := s.playbackChoice(r.Context(), rec.ChannelID, body.Picture)
 	var playlist string
 	if rec.Status == "recording" {
@@ -267,11 +271,21 @@ var downloadTypes = map[string]string{
 }
 
 func (s *Server) downloadRoots(ctx context.Context) []string {
+	return mediaRoots(ctx, s.Store, s.Hub)
+}
+
+// mediaRoots are the folders a recording's file may be opened from: the
+// recordings folder, the default one recordings made before it was moved
+// stay in, and each library folder source.
+func mediaRoots(ctx context.Context, st *store.Store, hub *live.Hub) []string {
 	var roots []string
-	if s.Hub != nil && s.Hub.Dir != "" {
-		roots = append(roots, s.Hub.Recordings())
+	if hub != nil && hub.Dir != "" {
+		roots = append(roots, hub.Recordings())
+		if old := filepath.Join(hub.Dir, "recordings"); old != hub.Recordings() {
+			roots = append(roots, old)
+		}
 	}
-	sources, _ := s.Store.Sources(ctx)
+	sources, _ := st.Sources(ctx)
 	for _, src := range sources {
 		if src.Kind == "folder" && strings.TrimSpace(src.URL) != "" {
 			roots = append(roots, strings.TrimSpace(src.URL))
@@ -345,6 +359,10 @@ func (s *Server) playVirtual(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, err := s.Store.Recording(r.Context(), channel.Recordings[body.Index])
 	if err != nil {
+		httpError(w, "recording not found", http.StatusNotFound)
+		return
+	}
+	if _, ok := recordingInside(s.downloadRoots(r.Context()), rec.Path); !ok {
 		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
@@ -472,7 +490,11 @@ func (s *Server) poster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rec, err := s.Store.Recording(r.Context(), id)
-	if err != nil || rec.Path == "" {
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if _, ok := recordingInside(s.downloadRoots(r.Context()), rec.Path); !ok {
 		http.NotFound(w, r)
 		return
 	}
