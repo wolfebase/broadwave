@@ -197,7 +197,8 @@ func TestAGrabStoppedAfterItsStillsLandedWorked(t *testing.T) {
 	}
 	h.FFmpeg = script
 	// The test mux sends nothing, so the stdin copy only ends with the context.
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	// The shell must start and write within it on a loaded machine.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if err := h.grabFrames(ctx, m); err != nil {
 		t.Fatalf("every still landed: %v", err)
