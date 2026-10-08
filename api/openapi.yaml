@@ -2442,6 +2442,7 @@ components:
         pictureMode: { $ref: "#/components/schemas/PictureMode" }
         autoplay: { type: string, enum: ["0", "1"] }
         hdhrEmulate: { type: string, enum: ["0", "1"] }
+        exportMosaics: { type: string, description: "Mosaics listed as channels of their own in the M3U, XMLTV, and HDHomeRun exports: mosaic keys joined by commas, for example 4-12,1-2-3 (at most 8). They are numbered 990.1 and up in this order; a mosaic with a channel no longer in the lineup is left out." }
         setupComplete: { type: string, enum: ["0", "1"] }
         needsSetup: { type: string, enum: ["0", "1"], description: "1 when this catalog should show the setup wizard. Set by the server; ignored on write." }
         lastGuidePull: { type: string, format: date-time, description: "When listings last loaded. Set by the server." }

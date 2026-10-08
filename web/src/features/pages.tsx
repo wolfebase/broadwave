@@ -122,7 +122,7 @@ export function VirtualPage() {
 }
 
 export function SettingsPage() {
-  const { settings, storage, saveSettings, devices, allChannels, error, rediscover, forgetDevice, editChannel, server: known } = useData();
+  const { settings, storage, saveSettings, devices, channels, allChannels, error, rediscover, forgetDevice, editChannel, server: known } = useData();
   const [busy, setBusy] = useState(false);
   const [fetched, setFetched] = useState<ServerInfo | null>(null);
   const server = fetched ?? known;
@@ -132,6 +132,18 @@ export function SettingsPage() {
   const origin = window.location.origin;
   const host = window.location.hostname;
   const hdhrNote = gateFeature(server, "hdhrEmulation");
+  const mosaics = (settings.exportMosaics ?? "").split(",");
+  const mosaicName = (key: string) =>
+    key
+      .split("-")
+      .map((id) => allChannels.find((c) => c.id === Number(id))?.displayName ?? id)
+      .join(" + ");
+  const listed = (key: string) => key.split("-").every((id) => channels.some((c) => c.id === Number(id)));
+  const removeMosaic = (list: string[], key: string) => {
+    const next = list.map((k) => (k === key ? "" : k));
+    while (next.length && next[next.length - 1] === "") next.pop();
+    return next.join(",");
+  };
   return (
     <div className="page-wrap settings-page">
       <header className="page-header">
@@ -204,6 +216,26 @@ export function SettingsPage() {
             <code>{origin}/export/guide.xml</code>
           </dd>
         </dl>
+        <h3 className="section-title">Multiview channels</h3>
+        {mosaics.some(Boolean) ? (
+          <ul className="share-mosaics">
+            {mosaics.map((key, i) =>
+              key ? (
+                <li key={key}>
+                  <span>
+                    990.{i + 1} · Multiview: {mosaicName(key)}
+                    {listed(key) ? null : <span className="hint"> Not listed: a channel in it is hidden or gone.</span>}
+                  </span>
+                  <button type="button" className="btn small" aria-label={`Remove Multiview: ${mosaicName(key)}`} onClick={() => void saveSettings({ exportMosaics: removeMosaic(mosaics, key) })}>
+                    Remove
+                  </button>
+                </li>
+              ) : null,
+            )}
+          </ul>
+        ) : (
+          <p className="hint">Other apps can show 2 to 4 channels at once as one channel. Open a multiview and choose Add to other apps.</p>
+        )}
       </section>
     </div>
   );

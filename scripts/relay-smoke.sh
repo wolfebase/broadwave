@@ -151,6 +151,9 @@ check "mosaic is CMAF with init segment" '[[ "$PL" == *EXT-X-MAP* && "$PL" == *s
 { curl -s "$M/init.mp4"; curl -s "$M/seg00000.m4s"; } >"$T/mosaic.mp4"
 MS=$(ffprobe -v error -show_entries stream=codec_name,width,height -of csv=p=0 "$T/mosaic.mp4" | tr '\n' ' ')
 check "mosaic is one 1920x1080 picture with sound ($MS)" '[[ "$MS" == *h264,1920,1080* && "$MS" == *aac* ]]'
+# Other apps get the mosaics the exports list.
+curl -s -XPUT "$API/settings" -d "{\"exportMosaics\":\"$MKEY\"}" >/dev/null
+check "the m3u export lists the mosaic" "curl -s http://127.0.0.1:$PORT/export/lineup.m3u | grep -q '/export/mosaic/$MKEY'"
 curl -s -m 10 "http://127.0.0.1:$PORT/export/mosaic/$MKEY" -o "$T/mosaic.ts"
 MZ=$(stat -f%z "$T/mosaic.ts" 2>/dev/null || stat -c%s "$T/mosaic.ts")
 MV=$(ffprobe -v error -show_entries stream=codec_name,width -of csv=p=0 "$T/mosaic.ts" 2>/dev/null | tr '\n' ' ')

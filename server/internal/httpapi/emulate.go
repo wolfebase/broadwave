@@ -102,6 +102,14 @@ func (h *emuHandler) lineup(w http.ResponseWriter, r *http.Request) {
 			rows = append(rows, row)
 		}
 	}
+	for _, mo := range sharedMosaics(r.Context(), h.store) {
+		rows = append(rows, map[string]any{
+			"GuideNumber": mo.number,
+			"GuideName":   mo.name,
+			"URL":         "http://" + r.Host + "/auto/m" + mo.key,
+			"HD":          1,
+		})
+	}
 	if list, err := h.store.Virtuals(r.Context()); err == nil {
 		for _, item := range list {
 			rows = append(rows, map[string]any{
@@ -123,6 +131,15 @@ func (h *emuHandler) stream(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		exportChannel(w, r, h.hub, channelID)
+		return
+	}
+	if key, ok := strings.CutPrefix(rest, "m"); ok {
+		ids, err := live.ParseMosaicKey(key)
+		if err != nil || h.hub == nil || !isShared(r.Context(), h.store, key) {
+			http.NotFound(w, r)
+			return
+		}
+		exportMosaicTo(w, r, h.hub, ids)
 		return
 	}
 	h.streamVirtual(w, r, strings.TrimPrefix(rest, "v"))

@@ -7,6 +7,7 @@ import { focusRing } from "../../app/remote";
 import { inAppDepth, navigate, useRoute } from "../../app/router";
 import { airingAt } from "../../lib/guide";
 import { events } from "../../lib/events";
+import { addMosaic, mosaicKey, mosaicShareMax, sharedMosaics } from "../../lib/mosaic";
 import { copy } from "../../strings";
 import type { Channel, MultiviewPlan } from "../../types";
 import { CloseIcon, VolumeIcon } from "../../ui/icons";
@@ -56,7 +57,8 @@ function scheduleStop(stops: { at: string; channelId: number }[], selected: numb
 }
 
 export function Multiview() {
-  const { channels, allChannels, ready, index, now, record } = useData();
+  const { channels, allChannels, ready, index, now, record, settings, saveSettings } = useData();
+  const [shareNote, setShareNote] = useState<{ key: string; text: string } | null>(null);
   const { params } = useRoute();
   const layoutMode = useLayout();
   const player = usePlayer();
@@ -135,6 +137,10 @@ export function Multiview() {
   const ordered = layout === "2up" || layout === "quad" ? visible : [visible.find((c) => c.id === focus) ?? visible[0], ...visible.filter((c) => c.id !== focus)].filter((c): c is Channel => !!c);
   const dropped = (plan?.blocked ?? []).filter((item) => !held.has(item.channelId));
   const notice = warning || dropped[0]?.reason || plan?.note || "";
+  const shared = sharedMosaics(settings.exportMosaics);
+  const shareable = ordered.length >= 2 && ordered.length <= 4;
+  const shareFull = !shared.includes("") && shared.length >= mosaicShareMax;
+  const shareKey = shareable ? mosaicKey(ordered.some((c) => c.id === focus) ? focus : ordered[0].id, ordered.map((c) => c.id)) : "";
   const cachedScores = useScoreMap();
   const [auto, setAuto] = useState(() => savedAuto());
   const [holdUntil, setHoldUntil] = useState(0);
@@ -448,7 +454,23 @@ export function Multiview() {
         >
           Save
         </button>
+        <button
+          type="button"
+          className="btn"
+          title={shareFull ? `Other apps can list ${mosaicShareMax}. Remove one in Settings.` : "Plex, Jellyfin, and Channels see these channels as one"}
+          disabled={!shareable || shared.includes(shareKey) || shareFull}
+          onClick={() => {
+            const added = addMosaic(shared, shareKey);
+            void saveSettings({ exportMosaics: added.slots.join(",") }).then(
+              () => setShareNote({ key: shareKey, text: `Other apps list this as channel 990.${added.slot + 1}. Settings has the list.` }),
+              () => setShareNote({ key: shareKey, text: "That did not save. Try again." }),
+            );
+          }}
+        >
+          {shared.includes(shareKey) ? "In other apps" : "Add to other apps"}
+        </button>
       </header>
+      {shareNote?.key === shareKey ? <p className="mv-note" role="status">{shareNote.text}</p> : null}
       {banner ? <p className="mv-banner" role="status">{banner}</p> : null}
       {hint ? <p className="mv-note">Select a tile to hear it.</p> : null}
       {notice ? <p className="mv-note" role="status">{notice}</p> : null}

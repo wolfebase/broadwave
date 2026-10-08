@@ -781,6 +781,21 @@ th {
   margin: 0;
 }
 
+.share-mosaics {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.share-mosaics li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 /* ---- UI polish (reviewer-owned) ---- */
 
 /* Guide: time labels sit low in the header and the "now" pill sits high,
