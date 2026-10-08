@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "./fixture";
@@ -7,6 +7,7 @@ import { settle } from "./snap";
 type Pass = { id: number; title: string; kind: string; matchKind?: string; priority?: number; days?: number[]; timeStart?: string; timeEnd?: string; keepMode?: string; keepCount?: number };
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const evidence = path.resolve(here, "../../.evidence/l100");
 const seeded = (JSON.parse(readFileSync(path.join(here, ".run/runtime.json"), "utf8")) as { now: number }).now;
 
 async function passes(page: import("@playwright/test").Page) {
@@ -138,7 +139,59 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
   expect(overflow).toBeLessThanOrEqual(0);
   await page.getByRole("form", { name: "Edit late local news" }).getByRole("button", { name: "Cancel" }).click();
 
-  await page.getByRole("button", { name: "Remove late local news" }).click();
+  // Removing asks first. Escape and Cancel keep the pass; Remove deletes it.
+  mkdirSync(evidence, { recursive: true });
+  const ask = page.getByText("Remove Titles with “late local news”?");
+  const stay = page.getByText("Recordings it made stay.");
+
+  async function openAsk() {
+    await page.getByRole("button", { name: "Remove late local news" }).click();
+    await expect(ask).toBeVisible();
+    await expect(stay).toBeVisible();
+    await expect(page.getByRole("button", { name: "Cancel" })).toBeFocused();
+  }
+
+  await openAsk();
+  await page.screenshot({ path: path.join(evidence, "confirm-390.jpg"), type: "jpeg", quality: 60 });
+  await page.keyboard.press("Escape");
+  await expect(ask).toHaveCount(0);
+  expect((await passes(page)).map((p) => p.title).sort()).toEqual(["Sports", "late local news"]);
+
+  await openAsk();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(ask).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Remove late local news" })).toBeFocused();
+  expect((await passes(page)).find((p) => p.id === words.id)?.title).toBe("late local news");
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/schedule");
+  await settle(page);
+  await openAsk();
+  await page.screenshot({ path: path.join(evidence, "confirm-1440.jpg"), type: "jpeg", quality: 60 });
+  await page.getByRole("button", { name: "Cancel" }).click();
+
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto("/schedule?layout=tv");
+  await settle(page);
+  await openAsk();
+  await page.screenshot({ path: path.join(evidence, "confirm-1920.jpg"), type: "jpeg", quality: 60 });
+
+  await page.route("**/api/v1/passes/*", (route) => {
+    if (route.request().method() !== "DELETE") return route.continue();
+    return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ code: "not_found", message: "pass not found" }) });
+  });
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveText("pass not found");
+  expect((await passes(page)).find((p) => p.id === words.id)?.title).toBe("late local news");
+  await page.unroute("**/api/v1/passes/*");
+
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(page.getByText("Titles with “late local news”")).toHaveCount(0);
+  expect((await passes(page)).map((p) => p.title)).toEqual(["Sports"]);
+
   await page.getByRole("button", { name: "Remove Sports" }).click();
+  await expect(page.getByText("Remove Sports (category)?")).toBeVisible();
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
   await expect(page.getByText(/A pass records every airing that matches/)).toBeVisible();
+  expect(await passes(page)).toEqual([]);
 });
