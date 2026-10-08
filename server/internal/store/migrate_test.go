@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestMigrationsAreNumberedAndUnique(t *testing.T) {
@@ -135,5 +136,51 @@ INSERT INTO sources (id, kind, name, url) VALUES (3, 'm3u', 'Playlist', 'http://
 	}
 	if playlistKey != "src:3" {
 		t.Fatalf("playlist key = %s", playlistKey)
+	}
+}
+
+// Another program writing the catalog while the server migrates it (a setup
+// script, a backup tool) is waited for. A migration that read first in a
+// deferred transaction failed at once with SQLITE_BUSY when that program
+// committed; it now takes the write lock before it starts.
+func TestMigrateWaitsForAnotherWriter(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "broadwave.db")
+	dsn := "file:" + filepath.ToSlash(path) + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL);
+CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	other, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	writer, err := other.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Close()
+	if _, err := writer.ExecContext(ctx, `BEGIN IMMEDIATE; INSERT INTO settings (key, value) VALUES ('quiet', '1')`); err != nil {
+		t.Fatal(err)
+	}
+	committed := make(chan error, 1)
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		_, err := writer.ExecContext(ctx, `COMMIT`)
+		committed <- err
+	}()
+	err = apply(db, migration{version: 99, name: "settings_note", sql: `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+INSERT INTO settings (key, value) VALUES ('note', 'x')`})
+	if err := <-committed; err != nil {
+		t.Fatal(err)
+	}
+	if err != nil {
+		t.Fatal(err)
 	}
 }
