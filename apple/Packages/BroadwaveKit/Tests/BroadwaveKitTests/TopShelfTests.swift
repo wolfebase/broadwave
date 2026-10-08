@@ -41,7 +41,7 @@ private func rec(_ id: Int64, title: String, subtitle: String? = nil, position: 
     #expect(sections[1].items.map(\.title) == ["5.1 · Evening News"])
     #expect(sections[0].items[0].link == URL(string: "broadwave://watch/4"))
     // A live frame first, then the listing's art, then nothing.
-    #expect(sections[0].items[0].image == URL(string: "http://tv.local:8477/api/v1/channels/4/frame?w=1280"))
+    #expect(sections[0].items[0].image == URL(string: "http://tv.local:8477/api/v1/channels/4/frame?w=1280&t=\(Int(now.timeIntervalSince1970) / 60)"))
     #expect(sections[0].items[1].image == URL(string: "http://tv.local:8477/media/art/airing/3?w=1280"))
     #expect(sections[1].items[0].image == nil)
     let resume = sections[2].items

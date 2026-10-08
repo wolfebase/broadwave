@@ -140,7 +140,7 @@ import Testing
 @Test func demoAnswersOrderAndPreview() async throws {
     let server = DemoServer()
     let port = UInt16.random(in: 20000 ... 45000)
-    let origin = try #require(await server.prepare(port: port))
+    let origin = try #require(await server.prepare(port: port, media: demoMedia))
     defer { server.stop() }
     let client = APIClient(base: origin)
     #expect(try await client.orderPasses([]).isEmpty)

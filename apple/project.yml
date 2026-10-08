@@ -26,6 +26,8 @@ targetTemplates:
     type: application
     sources:
       - path: App/Shared
+      - path: App/DemoMedia
+        type: folder
     dependencies:
       - package: BroadwaveKit
       - package: BroadwaveUI

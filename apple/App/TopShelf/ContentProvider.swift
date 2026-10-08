@@ -23,9 +23,12 @@ final class ContentProvider: TVTopShelfContentProvider {
 
     private static func sections() async -> [TopShelf.Section]? {
         guard let base = SharedServer.load() else { return nil }
+        // A cap on each whole request. APIClient's own 30 s request timeout only limits idle time.
         let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 8
-        let api = APIClient(base: base, session: URLSession(configuration: config))
+        config.timeoutIntervalForResource = 10
+        let session = URLSession(configuration: config)
+        defer { session.finishTasksAndInvalidate() }
+        let api = APIClient(base: base, session: session)
         let now = Date()
         async let channels = try? api.channels()
         async let airings = try? api.airings(from: now, to: now.addingTimeInterval(60))

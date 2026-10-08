@@ -2421,16 +2421,25 @@ struct RecordingPlayerScreen: View {
             current = rec
             markers = found
             count = total
-            let item = AVPlayerItem(url: api.url(playlist))
-            PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
-            item.externalMetadata = metadata(rec)
-            player.replaceCurrentItem(with: item)
-            if position > 5, await Self.reach(item, position) {
-                await player.seek(to: CMTime(seconds: position, preferredTimescale: 600))
+            var failure: (any Error)?
+            // A playlist the server is still writing can fail an item while it loads
+            // (a changed discontinuity count). A fresh item reads it again once.
+            for _ in 0 ..< 2 {
+                let item = AVPlayerItem(url: api.url(playlist))
+                PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
+                item.externalMetadata = metadata(rec)
+                player.replaceCurrentItem(with: item)
+                if position > 5, await Self.reach(item, position) {
+                    await player.seek(to: CMTime(seconds: position, preferredTimescale: 600))
+                }
+                guard !Task.isCancelled else { return false }
+                guard item.status == .failed else {
+                    player.play()
+                    return true
+                }
+                failure = item.error
             }
-            guard !Task.isCancelled else { return false }
-            player.play()
-            return true
+            throw failure ?? URLError(.cannotLoadFromNetwork)
         } catch {
             guard !Task.isCancelled else { return false }
             // Nothing half loaded stays behind the message: no picture, breaks, or menu.
@@ -2446,7 +2455,7 @@ struct RecordingPlayerScreen: View {
     /// and a seek past the end plays from 0. Waits as long as the web player does.
     private static func reach(_ item: AVPlayerItem, _ position: Double) async -> Bool {
         let deadline = Date().addingTimeInterval(8)
-        while !Task.isCancelled {
+        while !Task.isCancelled, item.status != .failed {
             let end = item.seekableTimeRanges.last.map { CMTimeRangeGetEnd($0.timeRangeValue).seconds }
             if ResumeReach.reached(seekableEnd: end, position: position) {
                 return true

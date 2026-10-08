@@ -206,7 +206,11 @@ struct RecordingsView: View {
             }
         #if os(tvOS)
             .onChange(of: library.recording, initial: true) { _, _ in openLinked() }
-            .onChange(of: store.recordings.count) { _, _ in openLinked() }
+            .onChange(of: library.closeToken) { _, _ in
+                playing = nil
+                playingChannel = nil
+            }
+            .onChange(of: playing != nil || playingChannel != nil) { _, up in library.playing = up }
         #endif
             .task {
                 async let recordings: Void = store.refreshRecordings()
@@ -225,12 +229,11 @@ struct RecordingsView: View {
 
     #if os(tvOS)
         /// Plays the recording a link named (the Top Shelf's Continue watching).
+        /// The link sets it only once the recording is in a fresh list.
         private func openLinked() {
-            guard show == nil, let id = library.recording, !store.recordings.isEmpty else { return }
+            guard show == nil, let id = library.recording else { return }
             library.recording = nil
-            if let rec = store.recordings.first(where: { $0.id == id }) {
-                playing = rec
-            }
+            playing = store.recordings.first { $0.id == id }
         }
     #endif
 

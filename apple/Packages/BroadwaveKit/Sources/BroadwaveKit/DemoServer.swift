@@ -134,12 +134,9 @@ public final class DemoServer: @unchecked Sendable {
         return URL(string: "http://127.0.0.1:\(port)")
     }
 
+    /// The films ship in the app, not in this package, so the app's extensions do not carry them.
     static func bundledMedia() -> URL? {
-        let bundled = Bundle.module.resourceURL?.appendingPathComponent("DemoMedia")
-        if let bundled, FileManager.default.fileExists(atPath: bundled.path) {
-            return bundled
-        }
-        return Bundle.module.url(forResource: "DemoMedia", withExtension: nil)
+        Bundle.main.url(forResource: "DemoMedia", withExtension: nil)
     }
 
     private func accept(_ conn: NWConnection) {

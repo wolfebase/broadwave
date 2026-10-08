@@ -129,6 +129,10 @@ final class LibraryFilter {
 
     /// A recording a link asked to play. The Recordings tab plays it and clears it.
     var recording: Int64?
+    /// Whether a recording player covers the screen (Apple TV).
+    var playing = false
+    /// Bumped to close the recording player before a link opens another.
+    var closeToken = 0
 
     func clear() {
         show = ""
@@ -398,6 +402,10 @@ struct RootView: View {
         case "watch":
             let id = Int64(url.lastPathComponent) ?? 0
             Task {
+                if libraryFilter.playing {
+                    libraryFilter.closeToken += 1
+                    await coverGone()
+                }
                 if store.channels.isEmpty {
                     await store.refresh()
                 }
@@ -424,10 +432,30 @@ struct RootView: View {
         case "sports": show(.sports)
         case "recordings": show(.recordings)
         case "recording":
-            libraryFilter.recording = Int64(url.lastPathComponent)
-            show(.recordings)
+            #if os(tvOS)
+                guard let id = Int64(url.lastPathComponent) else { return }
+                Task {
+                    // The cached list can be older than the Top Shelf that sent the link.
+                    await store.refreshRecordings()
+                    let busy = libraryFilter.playing || nowPlaying.channel != nil
+                    libraryFilter.closeToken += 1
+                    show(.recordings)
+                    guard store.recordings.contains(where: { $0.id == id }) else { return }
+                    if busy {
+                        await coverGone()
+                    }
+                    libraryFilter.recording = id
+                }
+            #else
+                show(.recordings)
+            #endif
         default: show(.home)
         }
+    }
+
+    /// A full-screen cover asked for while another is still closing is dropped.
+    private func coverGone() async {
+        try? await Task.sleep(for: .milliseconds(700))
     }
 
     /// A page link closes the player, which would otherwise cover the page.

@@ -2,8 +2,8 @@ import Foundation
 import Security
 
 /// The server address, kept where the app's extensions can read it.
-/// The app and the Top Shelf share one keychain group, named in each Info.plist
-/// as BroadwaveKeychainGroup. An address can carry a password, so it is not a default.
+/// The app and its extensions share one keychain group, named in each Info.plist
+/// as BroadwaveKeychainGroup, so no App Group is needed.
 public enum SharedServer {
     static let service = "com.wolfeup.broadwave.server"
 
@@ -30,13 +30,14 @@ public enum SharedServer {
             SecItemDelete(base as CFDictionary)
             return
         }
-        let data = Data(url.absoluteString.utf8)
-        let update: [String: Any] = [kSecValueData as String: data]
+        // The system runs extensions before anyone opens the app, and an address
+        // belongs to this home, so it never moves to another device.
+        let update: [String: Any] = [
+            kSecValueData as String: Data(url.absoluteString.utf8),
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
         if SecItemUpdate(base as CFDictionary, update as CFDictionary) == errSecItemNotFound {
-            var add = base
-            add[kSecValueData as String] = data
-            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-            SecItemAdd(add as CFDictionary, nil)
+            SecItemAdd(base.merging(update) { _, new in new } as CFDictionary, nil)
         }
     }
 

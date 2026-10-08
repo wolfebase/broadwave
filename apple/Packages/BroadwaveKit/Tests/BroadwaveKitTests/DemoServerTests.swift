@@ -3,10 +3,16 @@ import Foundation
 import Network
 import Testing
 
+/// The films the app bundles (`apple/App/DemoMedia`).
+let demoMedia = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    .deletingLastPathComponent().deletingLastPathComponent()
+    .appendingPathComponent("App/DemoMedia")
+
 @Test func demoServerAnswersOnLoopback() async throws {
     let server = DemoServer()
     let port = UInt16.random(in: 20000 ... 45000)
-    let origin = try #require(await server.prepare(port: port))
+    let origin = try #require(await server.prepare(port: port, media: demoMedia))
     defer { server.stop() }
     #expect(origin.host == "127.0.0.1")
 
@@ -78,7 +84,7 @@ import Testing
 @Test func demoSettingsRoundTrip() async throws {
     let server = DemoServer()
     let port = UInt16.random(in: 20000 ... 45000)
-    let origin = try #require(await server.prepare(port: port))
+    let origin = try #require(await server.prepare(port: port, media: demoMedia))
     defer { server.stop() }
     let client = APIClient(base: origin)
     let before = try await client.settings()
@@ -132,7 +138,7 @@ import Testing
 @Test func demoHiddenChannelLeavesTheGuideOnly() async throws {
     let server = DemoServer()
     let port = UInt16.random(in: 20000 ... 45000)
-    let origin = try #require(await server.prepare(port: port))
+    let origin = try #require(await server.prepare(port: port, media: demoMedia))
     defer { server.stop() }
     let client = APIClient(base: origin)
     let hidden = try await client.patchChannel(3, ChannelPatch(hidden: true))
@@ -149,7 +155,7 @@ import Testing
 @Test func demoRoomCountsBothScreens() async throws {
     let server = DemoServer()
     let port = UInt16.random(in: 45001 ... 49151)
-    let origin = try #require(await server.prepare(port: port))
+    let origin = try #require(await server.prepare(port: port, media: demoMedia))
     defer { server.stop() }
     var comps = try #require(URLComponents(url: origin, resolvingAgainstBaseURL: false))
     comps.scheme = "ws"
@@ -179,8 +185,8 @@ import Testing
     #expect(members == 2)
 }
 
-@Test func demoFilmsStayUnder25MB() throws {
-    let root = try #require(DemoServer.bundledMedia())
+@Test func demoFilmsStayUnder25MB() {
+    let root = demoMedia
     var total: Int64 = 0
     let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.fileSizeKey])
     while let url = files?.nextObject() as? URL {
@@ -284,7 +290,7 @@ private final class RefusedOnce: @unchecked Sendable {
 @Test func demoHasNothingComingUp() async throws {
     let server = DemoServer()
     let port = UInt16.random(in: 20000 ... 45000)
-    let origin = try #require(await server.prepare(port: port))
+    let origin = try #require(await server.prepare(port: port, media: demoMedia))
     defer { server.stop() }
     let client = APIClient(base: origin)
     let plan = try await client.schedule()
@@ -308,7 +314,7 @@ private final class RefusedOnce: @unchecked Sendable {
     // connection can hold when the second server binds the same port.
     let port = UInt16.random(in: 45001 ... 49151)
     let first = DemoServer()
-    let origin = try #require(await first.prepare(port: port))
+    let origin = try #require(await first.prepare(port: port, media: demoMedia))
     let socket = EventSocket(base: origin)
     defer { socket.disconnect() }
     var seen: [String] = []
@@ -328,7 +334,7 @@ private final class RefusedOnce: @unchecked Sendable {
     try await waitFor { !socket.connected }
     members = 0
     let second = DemoServer()
-    _ = try #require(await second.prepare(port: port))
+    _ = try #require(await second.prepare(port: port, media: demoMedia))
     defer { second.stop() }
     let back = Date()
     try await waitFor(seconds: 8) { socket.connected && members == 1 }

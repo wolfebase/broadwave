@@ -43,7 +43,7 @@ public enum TopShelf {
 
         func live(_ channel: Channel) -> Item {
             let airing = current[channel.id]
-            let image = api.frameURL(channelID: channel.id, width: 1280, listed: framed)
+            let image = api.frameURL(channelID: channel.id, width: 1280, listed: framed).map { fresh($0, now) }
                 ?? airing.flatMap { a in a.imageUrl?.isEmpty == false ? api.artURL(kind: "airing", id: a.id, width: 1280) : nil }
                 ?? (channel.artUrl?.isEmpty == false ? api.artURL(kind: "channel", id: channel.id, width: 320) : nil)
             let title = airing.map { "\(channel.displayNumber) · \($0.title)" } ?? "\(channel.displayNumber) \(channel.displayName)"
@@ -70,6 +70,12 @@ public enum TopShelf {
             Section(title: "Continue watching", items: resume),
         ]
         return all.filter { !$0.items.isEmpty }
+    }
+
+    /// The home screen keeps a shelf image by its URL, and a channel's frame URL never changes.
+    /// The minute makes a new one; the server ignores it.
+    static func fresh(_ url: URL, _ now: Date) -> URL {
+        url.appending(queryItems: [URLQueryItem(name: "t", value: String(Int(now.timeIntervalSince1970) / 60))])
     }
 
     public static func watchLink(_ channelID: Int64) -> URL {
