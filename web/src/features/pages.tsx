@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createVirtual, deleteRecording, getServer, setWatched, stopRecording } from "../api";
+import { createVirtual, deleteRecording, getServer, setKeep, setWatched, stopRecording } from "../api";
 import { useData } from "../app/data";
 import { gateFeature } from "../lib/compat";
 import { navigate, useRoute } from "../app/router";
@@ -43,6 +43,12 @@ export function RecordingsPage() {
         }}
         onPlay={(r) => navigate(`/play?recording=${r.id}`)}
         onWatched={(r, flag) => void setWatched(r.id, flag).then(() => refresh(["recordings"]))}
+        onKeep={(r, keep) =>
+          void setKeep(r.id, keep).then(
+            () => refresh(["recordings"]),
+            (err: unknown) => setNote(err instanceof Error ? err.message : String(err)),
+          )
+        }
         onDelete={(r) =>
           void deleteRecording(r.id).then(() => {
             setNote(`Deleted ${r.title}.`);

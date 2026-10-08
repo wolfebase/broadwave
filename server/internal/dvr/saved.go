@@ -5,10 +5,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	"broadwave/internal/live"
@@ -47,12 +45,7 @@ func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, queue *BreakQu
 				continue
 			}
 			if hub != nil {
-				_ = os.Remove(victim.Path)
-				base := stringsTrimExt(victim.Path)
-				_ = os.Remove(base + ".edl")
-				_ = os.Remove(base + ".json")
-				_ = os.Remove(base + ".nfo")
-				_ = os.Remove(filepath.Join(hub.Dir, "posters", strconv.FormatInt(victim.ID, 10)+".jpg"))
+				live.RemoveRecordingFiles(hub.Dir, victim)
 			}
 			if err := st.DeleteRecording(ctx, id); err == nil {
 				_ = st.AddEvent(ctx, "delete", "Keep rule removed "+victim.Title)
@@ -179,12 +172,4 @@ func insideDir(root, path string) bool {
 	}
 	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path))
 	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
-func stringsTrimExt(path string) string {
-	ext := filepath.Ext(path)
-	if ext == "" {
-		return path
-	}
-	return path[:len(path)-len(ext)]
 }

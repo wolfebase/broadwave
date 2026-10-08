@@ -83,7 +83,7 @@ jobs:
       # The budget is pinned to two pictures (3.1x, what three cores bench).
       # A slow runner benched one picture once and failed every two-tile
       # check.
-      - run: npx playwright test --config e2e/playwright.config.ts 01-setup 02-browse 03-player-sync 04-multiview 14-recording 23-image 27-live-captions 31-audio-switch 36-quiet 40-remove-device 41-missing-file 42-guide-order 43-mini-guide 44-help-panel 45-home-notice 46-tv-focus 47-guide-now 49-passes 50-library 50-detect 51-episode-ends 53-record-again 54-start-over --grep-invert "quad plays again"
+      - run: npx playwright test --config e2e/playwright.config.ts 01-setup 02-browse 03-player-sync 04-multiview 14-recording 23-image 27-live-captions 31-audio-switch 36-quiet 40-remove-device 41-missing-file 42-guide-order 43-mini-guide 44-help-panel 45-home-notice 46-tv-focus 47-guide-now 49-passes 50-library 50-detect 51-episode-ends 53-record-again 54-start-over 55-storage --grep-invert "quad plays again"
         working-directory: web
         env:
           E2E_IMAGE: broadwave:ci

@@ -314,6 +314,13 @@ export function setWatched(id: number, watched: boolean) {
   });
 }
 
+export function setKeep(id: number, keep: boolean) {
+  return request<{ ok: boolean }>(`/api/v1/recordings/${id}/keep`, {
+    method: "PUT",
+    body: JSON.stringify({ keep }),
+  });
+}
+
 export function addSource(kind: string, name: string, url: string, xmltvUrl = "", groups = "", keep = "", username = "", password = "") {
   return request<SourceAdded>(`/api/v1/sources`, {
     method: "POST",

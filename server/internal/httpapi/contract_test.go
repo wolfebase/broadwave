@@ -216,6 +216,7 @@ func TestContractFixtures(t *testing.T) {
 		{"schedule-skip", "POST", "/api/v1/schedule/skip", `{"programId":"EP1","title":"Jeopardy!","subtitle":"Semifinals","channelId":1,"start":"2026-09-24T15:00:00Z"}`, 0},
 		{"recording-progress", "PUT", "/api/v1/recordings/1/progress", `{"position":12.5}`, 0},
 		{"recording-watched", "PUT", "/api/v1/recordings/1/watched", `{"watched":true}`, 0},
+		{"recording-keep", "PUT", "/api/v1/recordings/1/keep", `{"keep":true}`, 0},
 		{"recording-play", "POST", "/api/v1/recordings/1/play", `{}`, 0},
 		{"recording-file", "GET", "/api/v1/recordings/1/file", "", 0},
 		{"marker-create", "POST", "/api/v1/recordings/1/markers", `{"start":90,"end":120}`, 0},

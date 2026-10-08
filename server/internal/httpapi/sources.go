@@ -428,6 +428,26 @@ func (s *Server) setWatched(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "watched": body.Watched})
 }
 
+func (s *Server) setKeep(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		httpError(w, "invalid recording", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Keep bool `json:"keep"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		httpError(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if err := s.Store.SetKeep(r.Context(), id, body.Keep); err != nil {
+		httpError(w, "recording not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "keep": body.Keep})
+}
+
 func (s *Server) skipAiring(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		ProgramID string `json:"programId"`

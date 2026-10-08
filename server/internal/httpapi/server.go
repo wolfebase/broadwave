@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"broadwave/internal/discovery"
+	"broadwave/internal/dvr"
 	"broadwave/internal/guide"
 	"broadwave/internal/hdhr"
 	"broadwave/internal/live"
@@ -166,6 +167,7 @@ func (s *Server) Handler() http.Handler {
 	api("POST /recordings/{id}/play", s.playRecording)
 	api("PUT /recordings/{id}/progress", s.saveProgress)
 	api("PUT /recordings/{id}/watched", s.setWatched)
+	api("PUT /recordings/{id}/keep", s.setKeep)
 	api("GET /recordings/{id}/markers", s.markers)
 	api("GET /recordings/{id}/again", s.recordAgain)
 	api("POST /recordings/{id}/markers", s.addMarker)
@@ -529,6 +531,10 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if values["writeNfo"] != "1" {
 		values["writeNfo"] = "0"
+	}
+	values["deleteWatchedDays"] = strconv.Itoa(dvr.WatchedDays(values["deleteWatchedDays"]))
+	if values["makeRoom"] != "1" {
+		values["makeRoom"] = "0"
 	}
 	if values["pictureMode"] == "" {
 		values["pictureMode"] = "broadcast"

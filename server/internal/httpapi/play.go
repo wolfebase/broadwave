@@ -366,7 +366,7 @@ func (s *Server) deleteRecording(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.Hub != nil {
 		s.Hub.StopRecord(id)
-		removeRecordingFiles(s.Hub.Dir, rec)
+		live.RemoveRecordingFiles(s.Hub.Dir, rec)
 	}
 	if err := s.Store.DeleteRecording(r.Context(), id); err != nil {
 		writeError(w, err)
@@ -386,29 +386,6 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		list = []store.Event{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"events": list})
-}
-
-func removeRecordingFiles(workDir string, rec store.Recording) {
-	root := filepath.Join(workDir, "recordings")
-	removeInside(root, rec.Path)
-	base := strings.TrimSuffix(rec.Path, filepath.Ext(rec.Path))
-	removeInside(root, base+".edl")
-	removeInside(root, base+".json")
-	removeInside(root, base+".nfo")
-	_ = os.Remove(filepath.Join(workDir, "posters", strconv.FormatInt(rec.ID, 10)+".jpg"))
-	_ = os.RemoveAll(filepath.Join(workDir, "file", strconv.FormatInt(rec.ID, 10)))
-}
-
-func removeInside(root, path string) {
-	if path == "" {
-		return
-	}
-	clean := filepath.Clean(path)
-	rel, err := filepath.Rel(filepath.Clean(root), clean)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return
-	}
-	_ = os.Remove(clean)
 }
 
 func (s *Server) airings(w http.ResponseWriter, r *http.Request) {

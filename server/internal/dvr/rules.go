@@ -111,11 +111,12 @@ func sameShow(pass store.Pass, rec store.Recording) bool {
 	return strings.EqualFold(rec.Title, pass.Title)
 }
 
-// KeepVictims returns completed recording ids the pass's keep rule should remove.
+// KeepVictims returns completed recording ids the pass's keep rule should
+// remove. A recording kept forever is neither removed nor counted.
 func KeepVictims(pass store.Pass, recs []store.Recording) []int64 {
 	var mine []store.Recording
 	for _, rec := range recs {
-		if rec.Status == "recording" || rec.Status == "failed" || !sameShow(pass, rec) {
+		if rec.Keep || rec.Status == "recording" || rec.Status == "failed" || !sameShow(pass, rec) {
 			continue
 		}
 		mine = append(mine, rec)

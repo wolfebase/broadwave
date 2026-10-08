@@ -218,6 +218,8 @@ func TestDiskReserveBlocksRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 	hub := &live.Hub{Store: st, Dir: dir, FFmpeg: filepath.Join(dir, "missing-ffmpeg")}
+	var asked uint64
+	hub.MakeRoom = func(_ context.Context, need uint64) { asked = need }
 	h := (&Server{Store: st, Hub: hub, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Broadwave")}}}).Handler()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/recordings", bytes.NewBufferString(`{"channelId":1,"minutes":5,"title":"Nope"}`))
@@ -225,6 +227,9 @@ func TestDiskReserveBlocksRecording(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusInsufficientStorage || !bytes.Contains(rec.Body.Bytes(), []byte("in reserve")) {
 		t.Fatalf("reserve %d %s", rec.Code, rec.Body.String())
+	}
+	if asked != 999999*1000*1000*1000 {
+		t.Fatalf("make room asked for %d bytes before refusing", asked)
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/api/recordings/"+strconv.FormatInt(recID, 10)+"/markers", bytes.NewBufferString(`{"start":1.5,"end":4}`))
@@ -244,6 +249,54 @@ func TestDiskReserveBlocksRecording(t *testing.T) {
 	res := get(t, h, "/api/storage")
 	if !bytes.Contains(res.Body.Bytes(), []byte(`"watermarkGB":999999`)) {
 		t.Fatalf("storage %s", res.Body.String())
+	}
+}
+
+func TestKeepForeverAndCleanUpSettings(t *testing.T) {
+	st := testStore(t)
+	ctx := context.Background()
+	id, err := st.CreateRecording(ctx, store.Recording{Title: "Finale", GuideNumber: "4.1", Status: "complete", Path: "/x/finale.ts", StartedAt: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Broadwave")}}}).Handler()
+	put := func(path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPut, path, bytes.NewBufferString(body))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := put("/api/recordings/"+strconv.FormatInt(id, 10)+"/keep", `{"keep":true}`); rec.Code != http.StatusOK {
+		t.Fatalf("keep %d %s", rec.Code, rec.Body.String())
+	}
+	if res := get(t, h, "/api/recordings"); !bytes.Contains(res.Body.Bytes(), []byte(`"keep":true`)) {
+		t.Fatalf("list %s", res.Body.String())
+	}
+	if rec := put("/api/recordings/"+strconv.FormatInt(id, 10)+"/keep", `{"keep":false}`); rec.Code != http.StatusOK {
+		t.Fatalf("unkeep %d", rec.Code)
+	}
+	if res := get(t, h, "/api/recordings"); bytes.Contains(res.Body.Bytes(), []byte(`"keep"`)) {
+		t.Fatalf("still kept %s", res.Body.String())
+	}
+	if rec := put("/api/recordings/999/keep", `{"keep":true}`); rec.Code != http.StatusNotFound {
+		t.Fatalf("missing recording %d", rec.Code)
+	}
+
+	res := get(t, h, "/api/settings")
+	if !bytes.Contains(res.Body.Bytes(), []byte(`"deleteWatchedDays":"0"`)) || !bytes.Contains(res.Body.Bytes(), []byte(`"makeRoom":"0"`)) {
+		t.Fatalf("defaults %s", res.Body.String())
+	}
+	if rec := put("/api/settings", `{"deleteWatchedDays":" 14","makeRoom":"1"}`); rec.Code != http.StatusOK {
+		t.Fatalf("save %d %s", rec.Code, rec.Body.String())
+	}
+	res = get(t, h, "/api/settings")
+	if !bytes.Contains(res.Body.Bytes(), []byte(`"deleteWatchedDays":"14"`)) || !bytes.Contains(res.Body.Bytes(), []byte(`"makeRoom":"1"`)) {
+		t.Fatalf("saved %s", res.Body.String())
+	}
+	for _, body := range []string{`{"deleteWatchedDays":"-1"}`, `{"deleteWatchedDays":"week"}`, `{"deleteWatchedDays":"3651"}`, `{"makeRoom":"yes"}`} {
+		if rec := put("/api/settings", body); rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s saved with %d", body, rec.Code)
+		}
 	}
 }
 

@@ -245,6 +245,25 @@ export function SettingsScreen({
       </label>
       <ReserveField value={settings.watermarkGB || "10"} storage={storage} onSave={(watermarkGB) => onChange({ watermarkGB })} />
       <label className="field">
+        When space runs low
+        <select value={settings.makeRoom === "1" ? "1" : "0"} onChange={(event) => onChange({ makeRoom: event.target.value === "1" ? "1" : "0" })}>
+          <option value="0">Skip new recordings</option>
+          <option value="1">Delete the oldest watched</option>
+        </select>
+        <span className="hint">Delete makes room before a new recording is skipped, oldest watched first. Unwatched and kept recordings stay.</span>
+      </label>
+      <label className="field">
+        Delete watched recordings
+        <select value={watchedDays(settings.deleteWatchedDays)} onChange={(event) => onChange({ deleteWatchedDays: event.target.value })}>
+          {watchedChoices(settings.deleteWatchedDays).map((days) => (
+            <option key={days} value={days}>
+              {days === "0" ? "Never" : days === "1" ? "After 1 day" : `After ${days} days`}
+            </option>
+          ))}
+        </select>
+        <span className="hint">Counts from when a recording was played to its end or marked watched. Recordings you keep forever stay.</span>
+      </label>
+      <label className="field">
         {copy.settings.buffer}
         <select
           value={settings.bufferMinutes ?? "60"}
@@ -478,6 +497,18 @@ function ReserveField({ value, storage, onSave }: { value: string; storage: Stor
       </span>
     </label>
   );
+}
+
+function watchedDays(raw: string | undefined) {
+  const n = Math.round(Number(raw ?? "0"));
+  return Number.isFinite(n) && n > 0 ? String(n) : "0";
+}
+
+/** The usual choices, plus a value saved from elsewhere. */
+function watchedChoices(raw: string | undefined) {
+  const choices = ["0", "1", "3", "7", "14", "30", "60", "90"];
+  const now = watchedDays(raw);
+  return choices.includes(now) ? choices : [...choices, now].sort((a, b) => Number(a) - Number(b));
 }
 
 function storageLine(storage: StorageInfo) {

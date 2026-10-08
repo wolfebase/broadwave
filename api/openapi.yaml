@@ -1021,6 +1021,24 @@ paths:
                 watched: { type: boolean }
       responses:
         "200": { $ref: "#/components/responses/Ok" }
+  /recordings/{id}/keep:
+    put:
+      tags: [recordings]
+      operationId: setKeep
+      description: Keep a recording forever (no keep rule, watched clean-up, or low-space clean-up removes it), or let clean-up see it again.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keep]
+              properties:
+                keep: { type: boolean }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
   /recordings/{id}/file:
     get:
       tags: [recordings]
@@ -2079,6 +2097,7 @@ components:
         position: { type: number }
         durationSec: { type: number }
         watched: { type: integer }
+        keep: { type: boolean, description: "Kept forever: no clean-up removes it." }
         missing: { type: boolean, description: "The recording finished but its file is gone (moved or deleted outside Broadwave). It cannot play; delete removes it from the list." }
         season: { type: integer, description: "From the listing the recording covers, or an SxxEyy file name in a library folder. Absent when unknown." }
         episode: { type: integer }
@@ -2315,6 +2334,8 @@ components:
         watermarkGB: { type: string, description: "Free-space reserve in GB; 0 turns it off" }
         bufferMinutes: { type: string, enum: ["0", "30", "60", "120", "240"], description: "Minutes of each tuned channel kept on disk, so a recording of a show already on starts from its beginning; 0 turns it off" }
         writeNfo: { type: string, enum: ["0", "1"], description: "1 writes a .nfo file beside each finished recording for Plex, Jellyfin, and Kodi. 0 leaves them off. Missing means off." }
+        deleteWatchedDays: { type: string, description: "Days a watched recording stays before it is deleted, 0 to 3650; 0 keeps them. Recordings kept forever and files in library folders stay." }
+        makeRoom: { type: string, enum: ["0", "1"], description: "1 deletes the oldest watched recordings when free space falls under the reserve, before a recording is refused. 0 only refuses. Missing means off." }
         pictureMode: { $ref: "#/components/schemas/PictureMode" }
         autoplay: { type: string, enum: ["0", "1"] }
         hdhrEmulate: { type: string, enum: ["0", "1"] }

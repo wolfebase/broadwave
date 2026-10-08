@@ -546,6 +546,7 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
     public var position: Double?
     public var durationSec: Double?
     public var watched: Int?
+    public var keep: Bool?
     public var missing: Bool?
     public var season: Int?
     public var episode: Int?
@@ -557,7 +558,7 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
     public var creditsStart: Double?
     public var health: RecordingHealth?
 
-    public init(id: Int64, channelId: Int64, guideNumber: String, title: String, subtitle: String? = nil, description: String? = nil, category: String? = nil, programId: String? = nil, gameId: String? = nil, passId: Int64? = nil, status: String, error: String? = nil, startedAt: Date, endsAt: Date? = nil, endedAt: Date? = nil, bytes: Int64? = nil, position: Double? = nil, durationSec: Double? = nil, watched: Int? = nil, missing: Bool? = nil, season: Int? = nil, episode: Int? = nil, episodeLabel: String? = nil, originalAir: String? = nil, progressAt: Date? = nil, introStart: Double? = nil, introEnd: Double? = nil, creditsStart: Double? = nil, health: RecordingHealth? = nil) {
+    public init(id: Int64, channelId: Int64, guideNumber: String, title: String, subtitle: String? = nil, description: String? = nil, category: String? = nil, programId: String? = nil, gameId: String? = nil, passId: Int64? = nil, status: String, error: String? = nil, startedAt: Date, endsAt: Date? = nil, endedAt: Date? = nil, bytes: Int64? = nil, position: Double? = nil, durationSec: Double? = nil, watched: Int? = nil, keep: Bool? = nil, missing: Bool? = nil, season: Int? = nil, episode: Int? = nil, episodeLabel: String? = nil, originalAir: String? = nil, progressAt: Date? = nil, introStart: Double? = nil, introEnd: Double? = nil, creditsStart: Double? = nil, health: RecordingHealth? = nil) {
         self.id = id
         self.channelId = channelId
         self.guideNumber = guideNumber
@@ -577,6 +578,7 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
         self.position = position
         self.durationSec = durationSec
         self.watched = watched
+        self.keep = keep
         self.missing = missing
         self.season = season
         self.episode = episode
@@ -684,6 +686,8 @@ public struct Settings: Codable, Sendable, Hashable {
     public var watermarkGB: String?
     public var bufferMinutes: String?
     public var writeNfo: String?
+    public var deleteWatchedDays: String?
+    public var makeRoom: String?
     public var pictureMode: PictureMode?
     public var autoplay: String?
     public var hdhrEmulate: String?
@@ -705,7 +709,7 @@ public struct Settings: Codable, Sendable, Hashable {
     public var sportsdbKey: String?
     public var sportsdbKeySet: String?
 
-    public init(layout: String? = nil, profile: String? = nil, audio: String? = nil, encoder: String? = nil, watermarkGB: String? = nil, bufferMinutes: String? = nil, writeNfo: String? = nil, pictureMode: PictureMode? = nil, autoplay: String? = nil, hdhrEmulate: String? = nil, setupComplete: String? = nil, needsSetup: String? = nil, lastGuidePull: Date? = nil, nextGuidePull: Date? = nil, lastManualGuidePull: Date? = nil, hideScores: String? = nil, liveScores: String? = nil, checkUpdates: String? = nil, sdUser: String? = nil, sdPassword: String? = nil, sdLineup: String? = nil, sdPasswordSet: String? = nil, guideUrl: String? = nil, tmdbKey: String? = nil, tmdbKeySet: String? = nil, sportsdbKey: String? = nil, sportsdbKeySet: String? = nil) {
+    public init(layout: String? = nil, profile: String? = nil, audio: String? = nil, encoder: String? = nil, watermarkGB: String? = nil, bufferMinutes: String? = nil, writeNfo: String? = nil, deleteWatchedDays: String? = nil, makeRoom: String? = nil, pictureMode: PictureMode? = nil, autoplay: String? = nil, hdhrEmulate: String? = nil, setupComplete: String? = nil, needsSetup: String? = nil, lastGuidePull: Date? = nil, nextGuidePull: Date? = nil, lastManualGuidePull: Date? = nil, hideScores: String? = nil, liveScores: String? = nil, checkUpdates: String? = nil, sdUser: String? = nil, sdPassword: String? = nil, sdLineup: String? = nil, sdPasswordSet: String? = nil, guideUrl: String? = nil, tmdbKey: String? = nil, tmdbKeySet: String? = nil, sportsdbKey: String? = nil, sportsdbKeySet: String? = nil) {
         self.layout = layout
         self.profile = profile
         self.audio = audio
@@ -713,6 +717,8 @@ public struct Settings: Codable, Sendable, Hashable {
         self.watermarkGB = watermarkGB
         self.bufferMinutes = bufferMinutes
         self.writeNfo = writeNfo
+        self.deleteWatchedDays = deleteWatchedDays
+        self.makeRoom = makeRoom
         self.pictureMode = pictureMode
         self.autoplay = autoplay
         self.hdhrEmulate = hdhrEmulate
