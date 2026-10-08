@@ -595,8 +595,8 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 	}
 	cleaned := map[string]string{}
 	for k, v := range values {
-		// Older apps still send it. Recordings go to the folder mounted at
-		// work/recordings, and a path typed in an app never moved them.
+		// Older apps still send it. The recordings folder is set where the
+		// server starts, and a path typed in an app never moved them.
 		if k == "recordingsPath" {
 			continue
 		}

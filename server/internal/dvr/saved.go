@@ -41,11 +41,11 @@ func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, queue *BreakQu
 				continue
 			}
 			// A keep rule removes only what Broadwave recorded, never a file in a library folder.
-			if hub != nil && !insideDir(filepath.Join(hub.Dir, "recordings"), victim.Path) {
+			if hub != nil && !insideDir(hub.Recordings(), victim.Path) {
 				continue
 			}
 			if hub != nil {
-				live.RemoveRecordingFiles(hub.Dir, victim)
+				hub.RemoveRecordingFiles(victim)
 			}
 			if err := st.DeleteRecording(ctx, id); err == nil {
 				_ = st.AddEvent(ctx, "delete", "Keep rule removed "+victim.Title)
@@ -146,7 +146,7 @@ func writeNFO(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Rec
 	if err != nil || values["writeNfo"] != "1" {
 		return
 	}
-	root := filepath.Join(hub.Dir, "recordings")
+	root := hub.Recordings()
 	if _, err := nfo.Write(root, RecordingNFO(ctx, st, rec)); err != nil {
 		slog.Error(fmt.Sprintf("nfo: %v", err))
 	}

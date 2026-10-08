@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"net/http"
-	"path/filepath"
 
 	"broadwave/internal/dvr"
 	"broadwave/internal/nfo"
@@ -30,7 +29,7 @@ func (s *Server) refreshNFOs(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	root := filepath.Join(s.Hub.Dir, "recordings")
+	root := s.Hub.Recordings()
 	ready := make([]store.Recording, 0, len(list))
 	for _, rec := range list {
 		if rec.Status != "complete" || !pathInside(root, rec.Path) {

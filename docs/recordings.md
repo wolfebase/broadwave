@@ -4,7 +4,7 @@ A recording is the broadcast itself, saved on your server. Watching it later doe
 
 ## Where they go
 
-Recordings live in the recordings folder. In Docker and on Unraid that folder is the one you mount at `/config/work/recordings`. Settings › Recordings folder shows the path. To keep them on another disk, mount that disk there.
+Recordings live in the recordings folder. In Docker and on Unraid that folder is the one you mount at `/config/work/recordings`. Settings › Recordings folder shows the path. To keep them on another disk, mount that disk there, or point `BROADWAVE_RECORDINGS` (or `-recordings` on a Mac or Linux install) at it. Recordings already made stay where they are; move them yourself if you change it.
 
 Each recording is one MPEG-TS file:
 
@@ -59,6 +59,12 @@ Settings › Keep this much free is the reserve, 10 GB unless you change it. Zer
 A new recording is refused while free space is under that reserve. The message is "The recordings disk has <free> free, and Broadwave keeps <reserve> in reserve. Free some space or lower the reserve in Settings." A disk with no room left says "The recordings disk is full. Free some space, then try again." A show that is already recording keeps going.
 
 The live buffer is what uses space first, and what gives it up first. It may hold at most half the free space. On the same disk as the recordings it also leaves the reserve, and another 4 GB. Under that floor it drops its oldest pieces and waits until there is room. Recordings are not deleted to make that room. A keep rule removes older episodes of one show only after a new episode of that show finishes.
+
+Settings › When space runs low is "Skip new recordings" unless you change it. "Delete the oldest watched" deletes watched recordings, the one watched longest ago first, before a new recording would be skipped, and checks once an hour too. It stops once the reserve is back. If deleting every watched recording would not be enough, it deletes none and the recording is skipped.
+
+Settings › Delete watched recordings deletes a recording a number of days after it was watched. It is off unless you pick a number.
+
+Both count a recording as watched once it was played to its last seconds or marked watched. Stopping a few minutes early does not count. A recording played in the last 6 hours stays, and playing one again starts its days over. Neither touches an unwatched recording, one still recording, a file outside the recordings folder, or a recording you chose to keep forever (Keep forever on its row). A keep rule skips a kept recording too, and doesn't count it among the episodes it keeps. Each deletion is in Activity.
 
 ## Playing one
 

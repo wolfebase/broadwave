@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -80,7 +79,7 @@ func MakeRoom(ctx context.Context, st *store.Store, hub *live.Hub, need uint64) 
 	if err != nil || values["makeRoom"] != "1" {
 		return
 	}
-	space, err := diskStat(filepath.Join(hub.Dir, "recordings"))
+	space, err := diskStat(hub.Recordings())
 	if err != nil || !disk.BelowReserve(space.Free, need) {
 		return
 	}
@@ -148,7 +147,7 @@ func finished(rec store.Recording) bool {
 // cleanable is what a clean-up may remove: finished recordings inside the
 // recordings folder that nobody kept forever or played in the last hours.
 func cleanable(hub *live.Hub, recs []store.Recording, now time.Time) []store.Recording {
-	root := filepath.Join(hub.Dir, "recordings")
+	root := hub.Recordings()
 	var out []store.Recording
 	for _, rec := range recs {
 		if rec.Keep || rec.Status != "complete" || !finished(rec) || !insideDir(root, rec.Path) {
@@ -169,7 +168,7 @@ func remove(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Recor
 	if err != nil || len(cleanable(hub, []store.Recording{fresh}, now)) == 0 {
 		return false
 	}
-	live.RemoveRecordingFiles(hub.Dir, fresh)
+	hub.RemoveRecordingFiles(fresh)
 	if err := st.DeleteRecording(ctx, fresh.ID); err != nil {
 		slog.Warn(fmt.Sprintf("storage: delete %d: %v", fresh.ID, err))
 		return false

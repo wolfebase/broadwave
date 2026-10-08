@@ -274,7 +274,7 @@ func (s *Server) startRecording(w http.ResponseWriter, r *http.Request) {
 	meta := store.Recording{ChannelID: body.ChannelID, Title: strings.TrimSpace(body.Title)}
 	minutes := body.Minutes
 	if s.Hub != nil && s.Hub.Dir != "" {
-		if err := disk.Writable(filepath.Join(s.Hub.Dir, "recordings")); err != nil {
+		if err := disk.Writable(s.Hub.Recordings()); err != nil {
 			writeError(w, err)
 			return
 		}
@@ -366,7 +366,7 @@ func (s *Server) deleteRecording(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.Hub != nil {
 		s.Hub.StopRecord(id)
-		live.RemoveRecordingFiles(s.Hub.Dir, rec)
+		s.Hub.RemoveRecordingFiles(rec)
 	}
 	if err := s.Store.DeleteRecording(r.Context(), id); err != nil {
 		writeError(w, err)

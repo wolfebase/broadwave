@@ -3,7 +3,6 @@ package httpapi
 import (
 	"net/http"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -43,7 +42,7 @@ func (s *Server) storageShows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"shows": groupShows(filepath.Join(s.Hub.Dir, "recordings"), recs, passes),
+		"shows": groupShows(s.Hub.Recordings(), recs, passes),
 	})
 }
 
