@@ -1,14 +1,19 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"broadwave/internal/live"
+	"broadwave/internal/store"
 )
 
 // mosaicReady is how long a mosaic watch waits for the first segment, so a
@@ -122,16 +127,21 @@ func (s *Server) mosaicMedia(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, path)
 }
 
-// exportMosaic is the mosaic as MPEG-TS, for apps that take a stream URL.
+// exportMosaic is a mosaic the exports list, as MPEG-TS, for apps that take
+// a stream URL.
 func (s *Server) exportMosaic(w http.ResponseWriter, r *http.Request) {
 	ids, err := live.ParseMosaicKey(r.PathValue("key"))
-	if err != nil || s.Hub == nil {
+	if err != nil || s.Hub == nil || !isShared(r.Context(), s.Store, r.PathValue("key")) {
 		http.NotFound(w, r)
 		return
 	}
+	exportMosaicTo(w, r, s.Hub, ids)
+}
+
+func exportMosaicTo(w http.ResponseWriter, r *http.Request, hub *live.Hub, ids []int64) {
 	w.Header().Set("Content-Type", "video/mp2t")
 	out := &wroteWriter{w: flushWriter{w}}
-	err = s.Hub.ExportMosaic(r.Context(), ids, out)
+	err := hub.ExportMosaic(r.Context(), ids, out)
 	if err == nil {
 		return
 	}
@@ -160,4 +170,111 @@ func (o *wroteWriter) Write(p []byte) (int, error) {
 		o.wrote = true
 	}
 	return o.w.Write(p)
+}
+
+// mosaicShareMax is how many mosaics the exports can list.
+const mosaicShareMax = 8
+
+// mosaicList cleans the exportMosaics setting: mosaic keys joined by commas,
+// each once. A slot's place is its channel number (990.1 is the first), so a
+// removed mosaic leaves an empty slot and the ones after it keep their
+// numbers in Plex and Channels. Empty slots at the end are dropped.
+func mosaicList(raw string) (string, error) {
+	var keys []string
+	for _, key := range strings.Split(raw, ",") {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			if _, err := live.ParseMosaicKey(key); err != nil {
+				return "", fmt.Errorf("%q is not a mosaic: %w", key, err)
+			}
+			if slices.Contains(keys, key) {
+				key = ""
+			}
+		}
+		keys = append(keys, key)
+	}
+	for len(keys) > 0 && keys[len(keys)-1] == "" {
+		keys = keys[:len(keys)-1]
+	}
+	if len(keys) > mosaicShareMax {
+		return "", fmt.Errorf("other apps can list at most %d mosaics", mosaicShareMax)
+	}
+	return strings.Join(keys, ","), nil
+}
+
+// sharedMosaic is a mosaic the exports list as a channel of its own.
+type sharedMosaic struct {
+	key    string
+	number string
+	name   string
+	about  string
+}
+
+// sharedMosaics are the mosaics in the exportMosaics setting whose channels
+// are all still in the lineup, numbered 990 dot their slot.
+func sharedMosaics(ctx context.Context, st *store.Store) []sharedMosaic {
+	settings, err := st.Settings(ctx)
+	if err != nil || settings["exportMosaics"] == "" {
+		return nil
+	}
+	channels, err := st.Channels(ctx, true)
+	if err != nil {
+		return nil
+	}
+	byID := map[int64]store.Channel{}
+	for _, ch := range channels {
+		byID[ch.ID] = ch
+	}
+	var out []sharedMosaic
+	for slot, key := range strings.Split(settings["exportMosaics"], ",") {
+		ids, err := live.ParseMosaicKey(key)
+		if err != nil {
+			continue
+		}
+		var names, about []string
+		for _, id := range ids {
+			ch, ok := byID[id]
+			if !ok {
+				names = nil
+				break
+			}
+			names = append(names, ch.DisplayName)
+			about = append(about, ch.DisplayNumber+" "+ch.DisplayName)
+		}
+		if names == nil {
+			continue
+		}
+		out = append(out, sharedMosaic{
+			key:    key,
+			number: "990." + strconv.Itoa(slot+1),
+			name:   "Multiview: " + strings.Join(names, " + "),
+			about:  strings.Join(about, ", ") + ", side by side. The sound is " + about[0] + ".",
+		})
+	}
+	return out
+}
+
+// isShared is whether the exports list this mosaic. The export routes play
+// only those, so an app on the network cannot start any mix it likes.
+func isShared(ctx context.Context, st *store.Store, key string) bool {
+	for _, mo := range sharedMosaics(ctx, st) {
+		if mo.key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// m3uText keeps a name inside its M3U attribute and line: players read
+// tvg-name up to the next double quote and know no escapes.
+func m3uText(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '"':
+			return '\''
+		case r < ' ':
+			return -1
+		}
+		return r
+	}, s)
 }

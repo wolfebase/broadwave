@@ -30,9 +30,14 @@ func (s *Server) exportLineup(w http.ResponseWriter, r *http.Request) {
 	b.WriteString(fmt.Sprintf("#EXTM3U url-tvg=\"%s/export/guide.xml\"\n", base))
 	for _, ch := range channels {
 		id := strconv.FormatInt(ch.ID, 10)
-		b.WriteString(fmt.Sprintf("#EXTINF:-1 tvg-id=\"%s\" tvg-chno=\"%s\" tvg-name=%q channel-id=\"%s\",%s\n",
-			xmltvChannelID(ch), ch.DisplayNumber, ch.DisplayName, ch.DisplayNumber, ch.DisplayName))
+		b.WriteString(fmt.Sprintf("#EXTINF:-1 tvg-id=\"%s\" tvg-chno=\"%s\" tvg-name=\"%s\" channel-id=\"%s\",%s\n",
+			xmltvChannelID(ch), m3uText(ch.DisplayNumber), m3uText(ch.DisplayName), m3uText(ch.DisplayNumber), m3uText(ch.DisplayName)))
 		b.WriteString(base + "/export/stream/" + id + "\n")
+	}
+	for _, mo := range sharedMosaics(r.Context(), s.Store) {
+		b.WriteString(fmt.Sprintf("#EXTINF:-1 tvg-id=\"mosaic.%s\" tvg-chno=\"%s\" tvg-name=\"%s\" channel-id=\"%s\" group-title=\"Multiview\",%s\n",
+			mo.key, mo.number, m3uText(mo.name), mo.number, m3uText(mo.name)))
+		b.WriteString(base + "/export/mosaic/" + mo.key + "\n")
 	}
 	w.Header().Set("Content-Type", "audio/x-mpegurl; charset=utf-8")
 	_, _ = w.Write([]byte(b.String()))
@@ -102,6 +107,16 @@ func (s *Server) exportGuide(w http.ResponseWriter, r *http.Request) {
 		doc.Channels = append(doc.Channels, xmltvChannel{ID: id, Display: []string{ch.DisplayName, ch.DisplayNumber}})
 	}
 	const layout = "20060102150405 -0700"
+	// A mosaic has no listings of its own. Two-hour blocks say what it shows,
+	// so apps that hide a channel with no guide still list it.
+	from := time.Now().Truncate(2 * time.Hour)
+	for _, mo := range sharedMosaics(r.Context(), s.Store) {
+		id := "mosaic." + mo.key
+		doc.Channels = append(doc.Channels, xmltvChannel{ID: id, Display: []string{mo.name, mo.number}})
+		for at := from; at.Before(from.Add(14 * 24 * time.Hour)); at = at.Add(2 * time.Hour) {
+			doc.Programmes = append(doc.Programmes, xmltvProgram{Start: at.Format(layout), Stop: at.Add(2 * time.Hour).Format(layout), Channel: id, Title: "Multiview", Desc: mo.about})
+		}
+	}
 	for _, a := range airings {
 		id, ok := ids[a.ChannelID]
 		if !ok {

@@ -608,6 +608,14 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
+	if raw, ok := body["exportMosaics"]; ok {
+		list, err := mosaicList(raw)
+		if err != nil {
+			httpError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		body["exportMosaics"] = list
+	}
 	if err := s.Store.PutSettings(r.Context(), body); err != nil {
 		httpError(w, err.Error(), http.StatusBadRequest)
 		return

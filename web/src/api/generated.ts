@@ -403,6 +403,7 @@ export type Settings = {
   pictureMode?: PictureMode;
   autoplay?: string;
   hdhrEmulate?: string;
+  exportMosaics?: string;
   setupComplete?: string;
   needsSetup?: string;
   lastGuidePull?: string;

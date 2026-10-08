@@ -581,6 +581,7 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		"pictureMode":       true,
 		"autoplay":          true,
 		"hdhrEmulate":       true,
+		"exportMosaics":     true,
 		"hideScores":        true,
 		"liveScores":        true,
 		"checkUpdates":      true,
@@ -607,6 +608,9 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		}
 		if k == "layout" && v != "auto" && v != "desktop" && v != "tv" && v != "phone" {
 			return fmt.Errorf("layout must be auto, desktop, tv, or phone")
+		}
+		if k == "exportMosaics" && (len(v) > 256 || strings.Trim(v, "0123456789,-") != "") {
+			return fmt.Errorf("exportMosaics is a list of mosaic keys such as 4-12,1-2-3")
 		}
 		if k == "pictureMode" && v != "broadcast" && v != "smooth" && v != "film" {
 			return fmt.Errorf("pictureMode must be broadcast, smooth, or film")
