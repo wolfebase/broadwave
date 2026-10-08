@@ -777,6 +777,8 @@ export function useLiveStream(
     [alternates, quality, audio, picture, track, even],
   );
 
+  // Stable, so an effect can read the broadcast clock without starting over each render.
+  const mediaNow = useCallback(() => syncRef.current?.mediaNow() ?? null, []);
   return {
     session: session?.channelId === channelId ? session : null,
     warm,
@@ -806,7 +808,7 @@ export function useLiveStream(
       syncRef.current = null;
     },
     command: (action: "play" | "pause" | "seek" | "live", mediaTime?: number) => syncRef.current?.command(action, mediaTime),
-    mediaNow: () => syncRef.current?.mediaNow() ?? null,
+    mediaNow,
   };
 }
 

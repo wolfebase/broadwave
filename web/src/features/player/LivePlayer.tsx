@@ -17,6 +17,7 @@ import { isLayout, multiviewPath } from "../multiview/storage";
 import { useScoreMap } from "../sports/scores";
 import { listingNote } from "./outage";
 import { soundFor } from "./sounds";
+import { recordingHoldingStart, startOverChoice } from "./startOver";
 import { Stage } from "./Stage";
 import { groupRoom, peopleSentence, personLabel, useGroup } from "./together";
 import { useLiveStream } from "./useLiveStream";
@@ -90,6 +91,8 @@ export function LivePlayer({
   if (listing.id !== channel.id) setListing({ id: channel.id, checks: 0, checking: false });
   const playback = usePlaybackStats(videoRef, panel === "info");
   const [behind, setBehind] = useState(0);
+  // The broadcast time the live window starts at, for Start over.
+  const [windowFrom, setWindowFrom] = useState<number | null>(null);
   const [span, setSpan] = useState({ at: 0, len: 1 });
   const matchedRow = Math.max(0, channels.findIndex((c) => c.id === channel.id));
   const [guideRow, setGuideRow] = useState(matchedRow);
@@ -131,6 +134,9 @@ export function LivePlayer({
   const tuning = useFirstFrame(videoRef, `${channel.id}:${opts.quality}:${opts.audio}:${stream.sounds ? "" : opts.track}:${opts.even}:${picture}`);
   const scores = useScoreMap();
   const active = recordings.find((r) => r.status === "recording" && r.channelId === channel.id);
+  const { mediaNow } = stream;
+  const held = airing ? recordingHoldingStart(airing, recordings) : undefined;
+  const startOverFrom = startOverChoice(airing ? Date.parse(airing.start) : undefined, windowFrom, held ? Date.parse(held.startedAt) : undefined);
 
   useEffect(() => localStorage.setItem("ota-live", JSON.stringify(opts)), [opts]);
 
@@ -142,6 +148,8 @@ export function LivePlayer({
       const start = video.seekable.length ? video.seekable.start(0) : 0;
       setBehind(Math.max(0, end - video.currentTime));
       setSpan({ at: Math.max(0, video.currentTime - start), len: Math.max(1, end - start) });
+      const media = mediaNow();
+      setWindowFrom(media === null || !video.seekable.length ? null : Math.round((media - (video.currentTime - start) * 1000) / 1000) * 1000);
     };
     // A paused video fires no timeupdate, and live moves on without it.
     const paused = window.setInterval(() => {
@@ -154,7 +162,7 @@ export function LivePlayer({
       video.removeEventListener("timeupdate", tick);
       video.removeEventListener("seeked", tick);
     };
-  }, [channel.id]);
+  }, [channel.id, mediaNow]);
 
   useEffect(() => {
     if (!sleepUntil) return;
@@ -272,6 +280,25 @@ export function LivePlayer({
     if (together) return stream.command("live");
     if (!opts.sync) return setOpts((o) => ({ ...o, sync: true }));
     if (video.seekable.length) video.currentTime = video.seekable.end(video.seekable.length - 1) - 10;
+    void video.play();
+  }
+
+  // Plays the show on now from its start: in the live window when it still
+  // holds it, else from a recording of this showing.
+  function startOver() {
+    if (!airing) return;
+    if (startOverFrom === "recording" && held) {
+      navigate(`/play?recording=${held.id}`);
+      return;
+    }
+    const video = videoRef.current;
+    const media = stream.mediaNow();
+    if (startOverFrom !== "live" || !video || media === null || !video.seekable.length) return;
+    // Read before detaching: the sync engine holds the broadcast clock.
+    const target = Math.max(video.seekable.start(0) + 0.5, video.currentTime + (Date.parse(airing.start) - media) / 1000);
+    if (together) return seekTogether(target);
+    detachSync();
+    video.currentTime = target;
     void video.play();
   }
 
@@ -528,6 +555,11 @@ export function LivePlayer({
           >
             <SideBySideIcon />
           </button>
+          {startOverFrom ? (
+            <button type="button" className="text-btn" onClick={startOver}>
+              Start over
+            </button>
+          ) : null}
           <button type="button" className={active ? "record-btn on" : "record-btn"} onClick={() => void toggleRecord()} aria-pressed={!!active}>
             <RecordIcon />
             {active ? "Recording" : "Record"}
