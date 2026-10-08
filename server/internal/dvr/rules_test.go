@@ -60,6 +60,52 @@ func TestSkipDuplicateUnlessRerecord(t *testing.T) {
 	}
 }
 
+// A copy the signal ruined does not stop the next airing; a clean one does.
+func TestADamagedCopyRecordsAgain(t *testing.T) {
+	start := time.Date(2026, 9, 22, 20, 0, 0, 0, time.UTC)
+	pass := store.Pass{ID: 1, Title: "Show"}
+	airing := store.Airing{ID: 9, ChannelID: 1, Title: "Show", Subtitle: "Pilot", ProgramID: "EP1", Start: start, End: start.Add(time.Hour)}
+	key := store.EpisodeKey("EP1", "Show", "Pilot", 1)
+	seen := map[string]bool{key: false}
+	broken := &store.RecordingHealth{LostSeconds: 40}
+	broken.Judge(1800)
+	recs := []store.Recording{{ID: 3, ChannelID: 1, Title: "Show", Subtitle: "Pilot", ProgramID: "EP1", Status: "complete", Health: broken}}
+	if got := ApplyLibrary([]Planned{{PassID: 1, Airing: airing}}, []store.Pass{pass}, recs, seen, nil); got[0].Skipped {
+		t.Fatalf("damaged copy: %+v", got[0])
+	}
+	clean := append(recs, store.Recording{ID: 4, ChannelID: 1, Title: "Show", Subtitle: "Pilot", ProgramID: "EP1", Status: "complete", Health: &store.RecordingHealth{}})
+	if got := ApplyLibrary([]Planned{{PassID: 1, Airing: airing}}, []store.Pass{pass}, clean, seen, nil); !got[0].Skipped {
+		t.Fatalf("clean copy: %+v", got[0])
+	}
+	// A second damaged copy: the station comes in that way, so stop.
+	twice := append(recs, store.Recording{ID: 5, ChannelID: 1, Title: "Show", Subtitle: "Pilot", ProgramID: "EP1", Status: "complete", Health: broken})
+	if got := ApplyLibrary([]Planned{{PassID: 1, Airing: airing}}, []store.Pass{pass}, twice, seen, nil); !got[0].Skipped {
+		t.Fatalf("two damaged copies: %+v", got[0])
+	}
+}
+
+func TestDamagedIsLostTimeOrManyBreakups(t *testing.T) {
+	for _, c := range []struct {
+		h      store.RecordingHealth
+		length float64
+		want   bool
+	}{
+		{store.RecordingHealth{}, 1800, false},
+		{store.RecordingHealth{ContinuityErrors: 12, Gaps: 1, LostSeconds: 2.5}, 1800, false},
+		{store.RecordingHealth{Gaps: 2, LostSeconds: 6}, 1800, true},
+		{store.RecordingHealth{ContinuityErrors: 60}, 1800, true},
+		// Packets in error are not breakups: one fade flags hundreds.
+		{store.RecordingHealth{ContinuityErrors: 5, TransportErrors: 400}, 1800, false},
+		// A long game breaks up more before it counts as damaged.
+		{store.RecordingHealth{ContinuityErrors: 100}, 4 * 3600, false},
+	} {
+		c.h.Judge(c.length)
+		if c.h.Damaged != c.want {
+			t.Fatalf("%+v", c.h)
+		}
+	}
+}
+
 func TestKeepLast(t *testing.T) {
 	pass := store.Pass{Title: "News", KeepMode: "last", KeepCount: 2}
 	start := time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC)

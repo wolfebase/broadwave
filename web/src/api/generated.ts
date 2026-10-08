@@ -300,6 +300,9 @@ export type RecordingHealth = {
   transportErrors: number;
   syncLosses: number;
   packets: number;
+  gaps?: number;
+  lostSeconds?: number;
+  damaged?: boolean;
 };
 
 export type RoomState = {

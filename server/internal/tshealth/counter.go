@@ -4,6 +4,14 @@
 // and one lost lock is one event until the next lock.
 package tshealth
 
+// A PCR that moves ahead by more than gapTicks (90 kHz) with no discontinuity
+// flag, across packets lost on the way, is time the tuner never delivered:
+// the signal dropped. A jump past maxGapTicks is a damaged clock, not a gap.
+const (
+	gapTicks    = 2 * 90000
+	maxGapTicks = 10 * 60 * 90000
+)
+
 // Packet is the MPEG-TS packet size.
 const Packet = 188
 
@@ -24,6 +32,10 @@ type Summary struct {
 	WorstPID         uint16
 	WorstContinuity  int
 	WorstTransport   int
+	// Gaps are the times the stream stopped and LostSeconds how long in all,
+	// read from the clock (PCR) of the PID that carries it most.
+	Gaps        int
+	LostSeconds float64
 }
 
 type pidStat struct {
@@ -33,6 +45,12 @@ type pidStat struct {
 	have    bool
 	cc      int
 	dup     bool // one repeat of cc is allowed; a second is an error
+	pcrs    int
+	pcr     uint64
+	gaps    int
+	lost    uint64
+	// lostAt is the counter's continuity errors at this PID's last PCR.
+	lostAt int
 }
 
 // Counter counts continuity-counter errors, transport-error packets, and lost
@@ -44,6 +62,8 @@ type Counter struct {
 	notedLoss bool
 	syncLoss  int
 	pids      map[uint16]*pidStat
+	// ccErrs counts continuity errors on every PID, for the clock's gaps.
+	ccErrs int
 }
 
 // Write implements io.Writer. It always accepts the bytes.
@@ -63,10 +83,16 @@ func (c *Counter) Write(p []byte) (int, error) {
 func (c *Counter) Summary() Summary {
 	var s Summary
 	s.SyncLosses = c.syncLoss
+	clock, clockPID := 0, uint16(0)
 	for pid, st := range c.pids {
 		s.Packets += st.packets
 		s.ContinuityErrors += st.ccErr
 		s.TransportErrors += st.tei
+		// The PID whose clock ticked most tells; a tie goes to the lower PID.
+		if st.pcrs > clock || (st.pcrs == clock && st.pcrs > 0 && pid < clockPID) {
+			clock, clockPID = st.pcrs, pid
+			s.Gaps, s.LostSeconds = st.gaps, float64(st.lost)/90000
+		}
 		if st.ccErr == 0 && st.tei == 0 {
 			continue
 		}
@@ -157,7 +183,8 @@ func (c *Counter) packet(pkt []byte) {
 		c.pids[pid] = st
 	}
 	st.packets++
-	if pkt[1]&0x80 != 0 {
+	damaged := pkt[1]&0x80 != 0
+	if damaged {
 		st.tei++
 	}
 	if pid == nullPID {
@@ -168,6 +195,10 @@ func (c *Counter) packet(pkt []byte) {
 	disc := false
 	if afc&2 == 2 && pkt[4] > 0 {
 		disc = pkt[5]&0x80 != 0
+		// A packet flagged in error carries a clock no one can trust.
+		if pkt[4] >= 7 && pkt[5]&0x10 != 0 && !damaged {
+			c.clock(st, pkt[6:11], disc)
+		}
 	}
 	if !payload {
 		if disc {
@@ -187,6 +218,7 @@ func (c *Counter) packet(pkt []byte) {
 		// The stream may repeat one packet. The next one still follows the first.
 		if st.dup {
 			st.ccErr++
+			c.ccErrs++
 			return
 		}
 		st.dup = true
@@ -194,7 +226,25 @@ func (c *Counter) packet(pkt []byte) {
 	}
 	if cc != (st.cc+1)&0x0f {
 		st.ccErr++
+		c.ccErrs++
 	}
 	st.cc = cc
 	st.dup = false
+}
+
+// clock reads a PCR base and counts a jump ahead as lost time when packets
+// went missing since the last one. A jump back, a jump with nothing lost (a
+// splice that forgot its flag), and one too long to be a dropout are not.
+func (c *Counter) clock(st *pidStat, b []byte, disc bool) {
+	pcr := uint64(b[0])<<25 | uint64(b[1])<<17 | uint64(b[2])<<9 | uint64(b[3])<<1 | uint64(b[4])>>7
+	if st.pcrs > 0 && !disc && c.ccErrs > st.lostAt {
+		ahead := (pcr - st.pcr) & (1<<33 - 1)
+		if ahead > gapTicks && ahead <= maxGapTicks {
+			st.gaps++
+			st.lost += ahead
+		}
+	}
+	st.pcrs++
+	st.pcr = pcr
+	st.lostAt = c.ccErrs
 }

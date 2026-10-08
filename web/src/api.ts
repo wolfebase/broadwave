@@ -261,6 +261,11 @@ export function getPasses() {
   return request<{ passes: Pass[] }>("/api/v1/passes");
 }
 
+/** The next airing of a recording's episode in the guide, or null. */
+export function getRecordAgain(id: number) {
+  return request<{ airing: Airing | null }>(`/api/v1/recordings/${id}/again`);
+}
+
 /** With airingStart, records only the airing that starts then on the channel. */
 export function addPass(title: string, channelId: number, airingStart?: string) {
   return request<{ passes: Pass[] }>("/api/v1/passes", {

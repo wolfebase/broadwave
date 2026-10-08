@@ -74,6 +74,31 @@ type RecordingHealth struct {
 	TransportErrors  int64 `json:"transportErrors"`
 	SyncLosses       int64 `json:"syncLosses"`
 	Packets          int64 `json:"packets"`
+	// Gaps are the times the stream stopped; LostSeconds how long in all.
+	Gaps        int64   `json:"gaps"`
+	LostSeconds float64 `json:"lostSeconds"`
+	// Damaged is set by Judge: worth recording again.
+	Damaged bool `json:"damaged"`
+}
+
+// A clean broadcast breaks up a handful of times an hour; a recording that
+// lost damagedSeconds, or broke up damagedPerHour times an hour, is worth
+// another airing. Transport errors count packets, not breakups, so they don't
+// decide it.
+const (
+	damagedSeconds = 5
+	damagedPerHour = 60
+)
+
+// Judge sets Damaged from the counts and the recording's length in seconds.
+func (h *RecordingHealth) Judge(length float64) {
+	hours := max(1, length/3600)
+	h.Damaged = h.LostSeconds >= damagedSeconds || float64(h.ContinuityErrors) >= damagedPerHour*hours
+}
+
+// Damaged is a finished recording whose file was read and found damaged.
+func (r Recording) Damaged() bool {
+	return r.Health != nil && r.Health.Damaged
 }
 
 type Recording struct {
@@ -467,10 +492,10 @@ UPDATE recordings SET status = ?, error = ?, ended_at = ? WHERE id = ?`,
 
 // SetRecordingHealth stores the damage counted in a finished file.
 // A row that was deleted while the file was read is left alone.
-func (s *Store) SetRecordingHealth(ctx context.Context, id, continuity, transport, syncLoss, packets int64) error {
+func (s *Store) SetRecordingHealth(ctx context.Context, id int64, h RecordingHealth) error {
 	_, err := s.db.ExecContext(ctx, `
-UPDATE recordings SET continuity_errors = ?, transport_errors = ?, sync_losses = ?, packets = ?
-WHERE id = ?`, continuity, transport, syncLoss, packets, id)
+UPDATE recordings SET continuity_errors = ?, transport_errors = ?, sync_losses = ?, packets = ?, gaps = ?, lost_seconds = ?
+WHERE id = ?`, h.ContinuityErrors, h.TransportErrors, h.SyncLosses, h.Packets, h.Gaps, h.LostSeconds, id)
 	return err
 }
 
@@ -483,7 +508,7 @@ func (s *Store) Recordings(ctx context.Context) ([]Recording, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT r.id, r.channel_id, r.guide_number, r.title, r.path, r.status, r.error, r.started_at, r.ends_at, r.ended_at, r.duration_sec,
 	r.subtitle, r.description, r.category, r.program_id, r.watched, r.game_id,
-	r.continuity_errors, r.transport_errors, r.sync_losses, r.packets, r.pass_id,
+	r.continuity_errors, r.transport_errors, r.sync_losses, r.packets, r.pass_id, r.gaps, COALESCE(r.lost_seconds, 0),
 	r.season, r.episode, r.episode_label, r.original_air, r.breaks_scanned,
 	r.intro_start, r.intro_end, r.credits_start, EXISTS (SELECT 1 FROM episode_prints e WHERE e.recording_id = r.id),
 	COALESCE(p.position_sec, 0), COALESCE(p.updated_at, '')
@@ -498,7 +523,9 @@ ORDER BY r.id DESC`)
 		var rec Recording
 		var start, ends, ended, played string
 		var continuity, transport, syncLoss, packets sql.NullInt64
-		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID, &continuity, &transport, &syncLoss, &packets, &rec.PassID,
+		var gaps sql.NullInt64
+		var lost float64
+		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID, &continuity, &transport, &syncLoss, &packets, &rec.PassID, &gaps, &lost,
 			&rec.Season, &rec.Episode, &rec.EpisodeLabel, &rec.OriginalAir, &rec.BreaksScanned,
 			&rec.IntroStart, &rec.IntroEnd, &rec.CreditsStart, &rec.Listened, &rec.Position, &played); err != nil {
 			return nil, err
@@ -522,6 +549,13 @@ ORDER BY r.id DESC`)
 				TransportErrors:  transport.Int64,
 				SyncLosses:       syncLoss.Int64,
 				Packets:          packets.Int64,
+				Gaps:             gaps.Int64,
+				LostSeconds:      lost,
+			}
+			// Health read before gaps were counted is not judged: every old
+			// recording would turn damaged at once and record again.
+			if gaps.Valid {
+				rec.Health.Judge(rec.Duration)
 			}
 		}
 		out = append(out, rec)

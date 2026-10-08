@@ -44,14 +44,24 @@ func ApplyLibrary(items []Planned, passes []store.Pass, recs []store.Recording, 
 	return items
 }
 
+// maxDamaged is how many damaged copies of an episode end the retries.
+const maxDamaged = 2
+
 func haveEpisode(pass store.Pass, recs []store.Recording, seen map[string]bool, key string) bool {
+	damaged := 0
 	for _, rec := range recs {
-		if rec.Status == "failed" {
+		if rec.Status == "failed" || store.EpisodeKey(rec.ProgramID, rec.Title, rec.Subtitle, rec.ChannelID) != key {
 			continue
 		}
-		if store.EpisodeKey(rec.ProgramID, rec.Title, rec.Subtitle, rec.ChannelID) == key {
+		if !rec.Damaged() {
 			return true
 		}
+		damaged++
+	}
+	// One damaged copy: the next airing records it again. A second one says
+	// the station comes in this way; stop there.
+	if damaged > 0 {
+		return damaged >= maxDamaged
 	}
 	deleted, ok := seen[key]
 	if !ok {

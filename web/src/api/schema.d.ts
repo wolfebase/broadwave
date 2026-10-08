@@ -742,6 +742,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/recordings/{id}/again": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The next airing of the recording's episode in the guide, for Record it again. Record it with POST /passes (kind once, airingStart). */
+        get: operations["recordAgain"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/recordings/{id}/markers": {
         parameters: {
             query?: never;
@@ -1667,6 +1684,15 @@ export interface components {
             syncLosses: number;
             /** Format: int64 */
             packets: number;
+            /**
+             * Format: int64
+             * @description Times the stream stopped (the signal dropped), read from the broadcast clock.
+             */
+            gaps?: number;
+            /** @description Seconds of the show lost to those gaps. */
+            lostSeconds?: number;
+            /** @description Worth recording again: 5 s or more lost, or 60 or more broken packets. A damaged copy does not keep a pass from recording the next airing of its episode. */
+            damaged?: boolean;
         };
         Marker: {
             /** Format: int64 */
@@ -3287,6 +3313,31 @@ export interface operations {
                     "video/mp2t": string;
                 };
             };
+        };
+    };
+    recordAgain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The next airing; airing is null when the guide has none. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        airing?: components["schemas"]["Airing"];
+                    };
+                };
+            };
+            404: components["responses"]["Error"];
         };
     };
     listMarkers: {
