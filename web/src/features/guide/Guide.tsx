@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { focusRing } from "../../app/remote";
@@ -23,9 +23,11 @@ import type { Airing, Channel } from "../../types";
 import { SearchIcon, StarIcon } from "../../ui/icons";
 import { Atsc3Tag, ChannelBadge, Chip, Empty, Progress, RecDot } from "../../ui/primitives";
 import { useScoreMap } from "../sports/scores";
-import { ProgramSheet } from "./ProgramSheet";
 import { LiveFrame } from "../../ui/LiveFrame";
 import "./guide.css";
+
+// The sheet opens after a cell is chosen, so it stays out of the first script.
+const ProgramSheet = lazy(() => import("./ProgramSheet").then((m) => ({ default: m.ProgramSheet })));
 
 type Filter = "all" | "favorites" | Category | "recording";
 const MIN = 60_000;
@@ -380,7 +382,11 @@ export function Guide() {
             );
           })}
         </ul>
-        {sheet ? <ProgramSheet {...sheet} onClose={() => setSheet(null)} onWatch={watch} /> : null}
+        {sheet ? (
+          <Suspense fallback={null}>
+            <ProgramSheet {...sheet} onClose={() => setSheet(null)} onWatch={watch} />
+          </Suspense>
+        ) : null}
       </div>
     );
   }
@@ -562,7 +568,11 @@ export function Guide() {
           Now
         </button>
       )}
-      {sheet ? <ProgramSheet {...sheet} onClose={() => setSheet(null)} onWatch={watch} /> : null}
+      {sheet ? (
+        <Suspense fallback={null}>
+          <ProgramSheet {...sheet} onClose={() => setSheet(null)} onWatch={watch} />
+        </Suspense>
+      ) : null}
     </div>
   );
 }
