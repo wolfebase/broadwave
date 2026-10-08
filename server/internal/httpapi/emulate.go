@@ -178,7 +178,7 @@ func (h *emuHandler) streamVirtual(w http.ResponseWriter, r *http.Request, numbe
 			}
 		}
 	}
-	if path == "" {
+	if _, ok := recordingInside(mediaRoots(r.Context(), h.store, h.hub), path); !ok {
 		http.NotFound(w, r)
 		return
 	}

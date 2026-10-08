@@ -346,6 +346,69 @@ func TestMoveARecording(t *testing.T) {
 	}
 }
 
+func TestARecordingOutsideItsFoldersIsNotOpened(t *testing.T) {
+	st := testStore(t)
+	ctx := context.Background()
+	secret := filepath.Join(t.TempDir(), "secret.ts")
+	if err := os.WriteFile(secret, []byte{0x47}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	id, err := st.CreateRecording(ctx, store.Recording{Title: "Planted", GuideNumber: "4.1", Status: "complete", Path: secret, StartedAt: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateVirtual(ctx, "9001", "Planted", []int64{id}); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	hub := &live.Hub{Store: st, Dir: dir, FFmpeg: filepath.Join(dir, "missing-ffmpeg")}
+	h := (&Server{Store: st, Hub: hub, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Broadwave")}}}).Handler()
+	ids := strconv.FormatInt(id, 10)
+	// A poster made earlier would be served without reading the file.
+	if err := os.MkdirAll(filepath.Join(dir, "posters"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "posters", ids+".jpg"), []byte("jpg"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ method, path string }{
+		{http.MethodPost, "/api/recordings/" + ids + "/play"},
+		{http.MethodGet, "/media/poster/" + ids},
+		{http.MethodGet, "/api/recordings/" + ids + "/file"},
+	} {
+		req := httptest.NewRequest(c.method, c.path, bytes.NewBufferString(`{}`))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("%s %s: %d %s", c.method, c.path, rec.Code, rec.Body.String())
+		}
+	}
+	// A recording made before the recordings folder moved still opens.
+	hub.RecordingsDir = filepath.Join(t.TempDir(), "moved")
+	earlier := filepath.Join(dir, "recordings", "earlier.ts")
+	if err := os.MkdirAll(filepath.Dir(earlier), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(earlier, []byte{0x47}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old, err := st.CreateRecording(ctx, store.Recording{Title: "Earlier", GuideNumber: "4.1", Status: "complete", Path: earlier, StartedAt: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := get(t, h, "/api/recordings/"+strconv.FormatInt(old, 10)+"/file"); res.Code != http.StatusOK {
+		t.Fatalf("earlier recording: %d", res.Code)
+	}
+	// The HDHomeRun emulator would serve the file as is when there is no ffmpeg.
+	hub.FFmpeg = ""
+	emu := &emuHandler{store: st, hub: hub}
+	rec := httptest.NewRecorder()
+	emu.streamVirtual(rec, httptest.NewRequest(http.MethodGet, "/auto/v9001", nil), "9001")
+	if rec.Code != http.StatusNotFound || rec.Body.Len() > 20 {
+		t.Fatalf("emulator: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
 func TestUnwritableRecordingsAreRefused(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root can write a mode 0555 directory")
