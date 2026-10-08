@@ -20,6 +20,7 @@ struct PassesView: View {
             #if os(tvOS)
                 Section {
                     Button("New pass") { adding = true }
+                        .accessibilityIdentifier("new-pass")
                 }
             #endif
             Section {
@@ -40,6 +41,7 @@ struct PassesView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .accessibilityIdentifier("pass-row-\(pass.id)")
                 }
                 #if os(iOS)
                 .onMove(perform: move)
@@ -62,6 +64,7 @@ struct PassesView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("New pass", systemImage: "plus") { adding = true }
+                        .accessibilityIdentifier("new-pass")
                 }
             }
         #endif
@@ -188,10 +191,12 @@ struct PassEditView: View {
                     Section {
                         Button("Add pass") { Task { await add() } }
                             .disabled(adding)
+                            .accessibilityIdentifier("add-pass")
                     }
                 } else {
                     Section {
                         Button("Delete pass", role: .destructive) { confirmDelete = true }
+                            .accessibilityIdentifier("delete-pass")
                     } footer: {
                         Text("Recordings it already made stay.")
                     }
@@ -217,8 +222,9 @@ struct PassEditView: View {
             .toolbar {
                 if isNew {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Add") { Task { await add() } }
+                        Button("Add pass") { Task { await add() } }
                             .disabled(adding || text.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .accessibilityIdentifier("add-pass")
                     }
                 }
             }
@@ -270,6 +276,8 @@ struct PassEditView: View {
             .focused($typing)
             .onSubmit(commitTitle)
             .autocorrectionDisabled()
+            .accessibilityIdentifier("pass-title")
+            .accessibilityLabel(fieldName)
     }
 
     private var fieldName: String {
@@ -282,7 +290,7 @@ struct PassEditView: View {
 
     private var fieldPrompt: String {
         switch pass.matchKind {
-        case "contains": "Chiefs"
+        case "contains": "Bears"
         case "category": "Sports"
         default: "Jeopardy!"
         }
@@ -327,6 +335,7 @@ struct PassEditView: View {
                         }
                     }
                 ))
+                .accessibilityIdentifier("pass-day-\(day)")
             }
         } header: {
             Text("Days")
@@ -355,6 +364,7 @@ struct PassEditView: View {
                 Text("Any time").tag("")
                 ForEach(Self.withValue(Self.slots, from), id: \.self) { Text(Pass.clockLabel($0)).tag($0) }
             }
+            .accessibilityIdentifier("pass-time-from")
             if !from.isEmpty {
                 Picker("Until", selection: Binding(
                     get: { until },
@@ -392,6 +402,7 @@ struct PassEditView: View {
                     picker("How many", \.keepCount, Self.keepCounts, fallback: 5) { "\($0)" }
                 }
                 picker("Stop at", \.limitCount, Self.limits, fallback: 0) { $0 == 0 ? "No limit" : "\($0) unwatched" }
+                    .accessibilityIdentifier("pass-stop-at")
                 if series {
                     Toggle("Record again after a delete", isOn: Binding(
                         get: { pass.rerecord == true },
@@ -427,8 +438,10 @@ struct PassEditView: View {
             return Section {
                 Button("Move up") { Task { await move(-1) } }
                     .disabled(at == 0)
+                    .accessibilityIdentifier("pass-move-up")
                 Button("Move down") { Task { await move(1) } }
                     .disabled(at >= passes.count - 1)
+                    .accessibilityIdentifier("pass-move-down")
             } header: {
                 Text("Order")
             } footer: {
