@@ -82,7 +82,7 @@ export interface paths {
          * @description WebSocket for live updates and Whole-Home Sync. Every frame is `{"type", "data"}`.
          *
          *     Server to client: `hello` {serverTime, boot} (boot names the server process; a new one means it restarted and every watch and room is gone), `clock` {t0, t1}, `activity` (Event),
-         *     `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `error` {code, message}.
+         *     `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `error` {code, message}.
          *
          *     Client to server: `clock` {t0}, `sync.join` {room, channelId, latency}, `sync.leave` {room},
          *     `sync.command` {room, action: play|pause|seek|live|latency|stalled, mediaTime, latency}. `stalled` steps a one-screen room or a multiview 2 s further from live, never past its latency target.
@@ -1938,6 +1938,24 @@ export interface components {
             /** Format: int64 */
             bytes: number;
         };
+        GameAlert: {
+            /** @description The game id and kind; each is sent once. */
+            id: string;
+            /** @enum {string} */
+            kind: "start" | "close";
+            gameId: string;
+            /**
+             * Format: int64
+             * @description The channel to watch it on.
+             */
+            channelId: number;
+            /** @description That channel's number. */
+            channel: string;
+            /** @description "Starting now: CHI at LV" or "Close game: BUF at MIA". */
+            text: string;
+            /** @description The score and clock of a close finish. A game this home is recording and has not watched gets no close alert at all. */
+            detail?: string;
+        };
         Settings: {
             /** @enum {string} */
             layout?: "auto" | "desktop" | "tv" | "phone";
@@ -1970,6 +1988,11 @@ export interface components {
              * @enum {string}
              */
             folderLayout?: "shows" | "flat";
+            /**
+             * @description Which game alerts the server sends as game.alert events. all (the default) is followed teams' games starting and close finishes; teams is followed teams only; off sends none. Live scores off sends none either.
+             * @enum {string}
+             */
+            gameAlerts?: "all" | "teams" | "off";
             pictureMode?: components["schemas"]["PictureMode"];
             /** @enum {string} */
             autoplay?: "0" | "1";

@@ -4,6 +4,7 @@
   "bufferMinutes": "60",
   "deleteWatchedDays": "0",
   "folderLayout": "shows",
+  "gameAlerts": "all",
   "hdhrEmulate": "0",
   "hideScores": "1",
   "layout": "auto",

@@ -32,6 +32,7 @@ const defaults: Settings = {
   bufferMinutes: "60",
   writeNfo: "0",
   folderLayout: "shows",
+  gameAlerts: "all",
   pictureMode: "broadcast",
   autoplay: "1",
   hdhrEmulate: "0",

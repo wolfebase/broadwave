@@ -109,7 +109,7 @@ paths:
         WebSocket for live updates and Whole-Home Sync. Every frame is `{"type", "data"}`.
 
         Server to client: `hello` {serverTime, boot} (boot names the server process; a new one means it restarted and every watch and room is gone), `clock` {t0, t1}, `activity` (Event),
-        `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `error` {code, message}.
+        `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `error` {code, message}.
 
         Client to server: `clock` {t0}, `sync.join` {room, channelId, latency}, `sync.leave` {room},
         `sync.command` {room, action: play|pause|seek|live|latency|stalled, mediaTime, latency}. `stalled` steps a one-screen room or a multiview 2 s further from live, never past its latency target.
@@ -2354,6 +2354,17 @@ components:
         kind: { type: string, enum: [daily, weekly, version] }
         takenAt: { type: string, format: date-time }
         bytes: { type: integer, format: int64 }
+    GameAlert:
+      type: object
+      required: [id, kind, gameId, channelId, channel, text]
+      properties:
+        id: { type: string, description: "The game id and kind; each is sent once." }
+        kind: { type: string, enum: [start, close] }
+        gameId: { type: string }
+        channelId: { type: integer, format: int64, description: "The channel to watch it on." }
+        channel: { type: string, description: "That channel's number." }
+        text: { type: string, description: "\"Starting now: CHI at LV\" or \"Close game: BUF at MIA\"." }
+        detail: { type: string, description: "The score and clock of a close finish. A game this home is recording and has not watched gets no close alert at all." }
     Settings:
       type: object
       properties:
@@ -2367,6 +2378,7 @@ components:
         deleteWatchedDays: { type: string, description: "Days a watched recording stays before it is deleted, 0 to 3650; 0 keeps them. Recordings kept forever and files in library folders stay." }
         makeRoom: { type: string, enum: ["0", "1"], description: "1 deletes the oldest watched recordings when free space falls under the reserve, before a recording is refused. 0 only refuses. Missing means off." }
         folderLayout: { type: string, enum: [shows, flat], description: "Where new recordings go. shows (the default) uses the layout Plex and Jellyfin read: TV/Show/Season 01/Show - S01E02 - Episode.ts, TV/Show/Show - 2026-10-08 - Episode.ts when the guide has no episode number, and Movies/Title (1999)/Title (1999).ts. flat puts every recording in the recordings folder, named by start time and channel. Recordings already made stay where they are." }
+        gameAlerts: { type: string, enum: [all, teams, off], description: "Which game alerts the server sends as game.alert events. all (the default) is followed teams' games starting and close finishes; teams is followed teams only; off sends none. Live scores off sends none either." }
         pictureMode: { $ref: "#/components/schemas/PictureMode" }
         autoplay: { type: string, enum: ["0", "1"] }
         hdhrEmulate: { type: string, enum: ["0", "1"] }
