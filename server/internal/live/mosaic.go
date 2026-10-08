@@ -257,9 +257,7 @@ func (h *Hub) mosaicFitsLocked() bool {
 		return true
 	}
 	if h.transcodesLocked()+mosaicCost > h.Host.Tiles {
-		now := time.Now()
-		h.releaseIdleTranscodesLocked(nil, now)
-		h.releaseIdleMosaicsLocked(now, mosaicCost)
+		h.releaseIdlePicturesLocked(nil, time.Now(), mosaicCost)
 	}
 	return h.transcodesLocked()+mosaicCost <= h.Host.Tiles
 }

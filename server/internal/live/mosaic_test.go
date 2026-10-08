@@ -253,3 +253,33 @@ func TestALostTuneEndsItsMosaic(t *testing.T) {
 	}
 	h.ReleaseMosaic(s.Key)
 }
+
+func TestIdleTilesMakeRoomForAMosaic(t *testing.T) {
+	h, st := mosaicHub(t)
+	ctx := context.Background()
+	a, c := idOf(t, st, "4.1"), idOf(t, st, "5.1")
+	h.Host.Tiles = 2
+	h.RenditionIdle = time.Minute
+	// A multiview just closed: both tiles still encode, nobody watches.
+	for _, id := range []int64{a, c} {
+		s, err := h.Watch(ctx, id, Rendition{Video: "540", Audio: "none"}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.Release(id, s.Rendition)
+	}
+	if used, _, _ := h.Pictures(); used != 0 {
+		t.Fatalf("idle tiles count %d pictures", used)
+	}
+	h.mu.Lock()
+	running := h.transcodesLocked()
+	h.mu.Unlock()
+	if running != 2 {
+		t.Fatalf("%d encodes running, want the 2 idle tiles", running)
+	}
+	s, err := h.WatchMosaic(ctx, []int64{a, c})
+	if err != nil {
+		t.Fatalf("two idle tiles kept a mosaic out: %v", err)
+	}
+	h.ReleaseMosaic(s.Key)
+}

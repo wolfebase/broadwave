@@ -36,6 +36,16 @@ test("a multiview added to other apps is one channel in the exports", async ({ p
   expect(m3u).toContain(`tvg-chno="990.1" tvg-name="Multiview: WTST + KBWV"`);
   expect(m3u).toContain(`${baseURL}/export/mosaic/${key}\n`);
 
+  // A small server has room for two pictures, which the tiles hold; a
+  // mosaic takes two. Leave the multiview so its tiles let go first.
+  await page.goto("/settings");
+  await expect
+    .poll(async () => {
+      const { tuners } = (await (await fetch(`${baseURL}/api/v1/tuners`)).json()) as { tuners: { viewers?: number }[] };
+      return tuners.reduce((sum, t) => sum + (t.viewers ?? 0), 0);
+    }, { timeout: 30_000 })
+    .toBe(0);
+
   // What Plex or Jellyfin would read: one 1920x1080 picture with sound.
   const probe = spawnSync("ffprobe", ["-v", "error", "-rw_timeout", "30000000", "-show_entries", "stream=codec_type,width", "-of", "csv=p=0", `${baseURL}/export/mosaic/${key}`], {
     encoding: "utf8",
@@ -44,7 +54,6 @@ test("a multiview added to other apps is one channel in the exports", async ({ p
   expect(probe.stdout).toContain("video,1920");
   expect(probe.stdout).toContain("audio");
 
-  await page.goto("/settings");
   const row = page.getByText("990.1 · Multiview: WTST + KBWV");
   await expect(row).toBeVisible();
   await page.getByRole("button", { name: "Remove Multiview: WTST + KBWV" }).click();
