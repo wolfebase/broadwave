@@ -303,8 +303,10 @@ test("a quad kept for Back keeps the sound tile when two pictures fit", async ({
     };
   });
   expect(kept).toEqual({ hide: true, show: true });
+  // Poll often: the default intervals grow to 1 s, so a tile moving at 4.5 s
+  // was last checked at 3.9 s and failed a 5 s budget it met.
   const soundBack = await expect
-    .poll(() => oneMoving(page, "1"), { timeout: Math.max(500, 5_000 - (Date.now() - back)) })
+    .poll(() => oneMoving(page, "1"), { timeout: Math.max(500, 5_000 - (Date.now() - back)), intervals: [100] })
     .toBe(true)
     .then(
       () => true,
@@ -316,7 +318,7 @@ test("a quad kept for Back keeps the sound tile when two pictures fit", async ({
     const late = Date.now() - back;
     const state = await tileState(page, "1");
     const moved = await expect
-      .poll(() => oneMoving(page, "1"), { timeout: 20_000 })
+      .poll(() => oneMoving(page, "1"), { timeout: 20_000, intervals: [100] })
       .toBe(true)
       .then(
         () => Date.now() - back,
