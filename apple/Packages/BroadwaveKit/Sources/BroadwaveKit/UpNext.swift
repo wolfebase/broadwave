@@ -101,3 +101,11 @@ public struct UpNext: Sendable {
         done = true
     }
 }
+
+/// Whether a recording's playlist reaches the place to resume. A seek past its end plays from 0.
+public enum ResumeReach {
+    public static func reached(seekableEnd: Double?, position: Double) -> Bool {
+        guard let end = seekableEnd, end.isFinite else { return false }
+        return end + 0.25 >= position
+    }
+}

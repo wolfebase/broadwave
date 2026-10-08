@@ -2425,9 +2425,10 @@ struct RecordingPlayerScreen: View {
             PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
             item.externalMetadata = metadata(rec)
             player.replaceCurrentItem(with: item)
-            if position > 5 {
+            if position > 5, await Self.reach(item, position) {
                 await player.seek(to: CMTime(seconds: position, preferredTimescale: 600))
             }
+            guard !Task.isCancelled else { return false }
             player.play()
             return true
         } catch {
@@ -2439,6 +2440,23 @@ struct RecordingPlayerScreen: View {
             self.error = PlaybackOutage.viewerMessage(error.localizedDescription)
             return false
         }
+    }
+
+    /// The first play of a recording grows its playlist while the server transcodes it,
+    /// and a seek past the end plays from 0. Waits as long as the web player does.
+    private static func reach(_ item: AVPlayerItem, _ position: Double) async -> Bool {
+        let deadline = Date().addingTimeInterval(8)
+        while !Task.isCancelled {
+            let end = item.seekableTimeRanges.last.map { CMTimeRangeGetEnd($0.timeRangeValue).seconds }
+            if ResumeReach.reached(seekableEnd: end, position: position) {
+                return true
+            }
+            if Date() >= deadline {
+                return false
+            }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        return false
     }
 
     private func metadata(_ rec: Recording) -> [AVMetadataItem] {

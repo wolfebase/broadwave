@@ -93,3 +93,11 @@ private func rec(
     #expect(result.failed == 2)
     #expect((result.error as? APIError)?.code == "offline")
 }
+
+@Test func aResumeWaitsForTheGrowingPlaylistToReachIt() {
+    #expect(!ResumeReach.reached(seekableEnd: nil, position: 40))
+    #expect(!ResumeReach.reached(seekableEnd: 2.002, position: 40))
+    #expect(!ResumeReach.reached(seekableEnd: .nan, position: 40))
+    #expect(ResumeReach.reached(seekableEnd: 39.8, position: 40))
+    #expect(ResumeReach.reached(seekableEnd: 65.3, position: 40))
+}
