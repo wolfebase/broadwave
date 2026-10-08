@@ -3,6 +3,7 @@
   "autoplay": "1",
   "bufferMinutes": "60",
   "deleteWatchedDays": "0",
+  "folderLayout": "shows",
   "hdhrEmulate": "0",
   "hideScores": "0",
   "layout": "auto",

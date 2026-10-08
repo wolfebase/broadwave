@@ -537,6 +537,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	if values["makeRoom"] != "1" {
 		values["makeRoom"] = "0"
 	}
+	if values["folderLayout"] != "flat" {
+		values["folderLayout"] = "shows"
+	}
 	if values["pictureMode"] == "" {
 		values["pictureMode"] = "broadcast"
 	}

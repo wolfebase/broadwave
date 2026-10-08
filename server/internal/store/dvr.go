@@ -461,22 +461,30 @@ func (s *Store) AiringGame(ctx context.Context, channelID int64, title string, n
 	return current
 }
 
+// WithEpisode fills a new recording's season, episode, label, and original
+// air date from the listing it covers most, when it has none of them.
+func (s *Store) WithEpisode(ctx context.Context, rec Recording) Recording {
+	if rec.ChannelID == 0 || rec.Season != 0 || rec.Episode != 0 || rec.EpisodeLabel != "" || rec.OriginalAir != "" || rec.StartedAt.IsZero() {
+		return rec
+	}
+	to := rec.StartedAt.Add(time.Minute)
+	if rec.EndsAt != nil && rec.EndsAt.After(to) {
+		to = *rec.EndsAt
+	}
+	if airings, err := s.Airings(ctx, rec.StartedAt, to); err == nil {
+		if best := CoveringAiring(rec, airings); best != nil {
+			rec.Season, rec.Episode, rec.EpisodeLabel, rec.OriginalAir = best.Season, best.Episode, best.EpisodeLabel, best.OriginalAir
+		}
+	}
+	return rec
+}
+
 func (s *Store) CreateRecording(ctx context.Context, rec Recording) (int64, error) {
 	ends := ""
 	if rec.EndsAt != nil {
 		ends = rec.EndsAt.UTC().Format(time.RFC3339)
 	}
-	if rec.ChannelID != 0 && rec.Season == 0 && rec.Episode == 0 && rec.EpisodeLabel == "" && rec.OriginalAir == "" && !rec.StartedAt.IsZero() {
-		to := rec.StartedAt.Add(time.Minute)
-		if rec.EndsAt != nil && rec.EndsAt.After(to) {
-			to = *rec.EndsAt
-		}
-		if airings, err := s.Airings(ctx, rec.StartedAt, to); err == nil {
-			if best := CoveringAiring(rec, airings); best != nil {
-				rec.Season, rec.Episode, rec.EpisodeLabel, rec.OriginalAir = best.Season, best.Episode, best.EpisodeLabel, best.OriginalAir
-			}
-		}
-	}
+	rec = s.WithEpisode(ctx, rec)
 	res, err := s.db.ExecContext(ctx, `
 INSERT INTO recordings (channel_id, guide_number, title, path, status, started_at, ends_at, subtitle, description, category, program_id, watched, game_id, pass_id,
 	season, episode, episode_label, original_air)

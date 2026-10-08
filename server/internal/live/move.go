@@ -94,12 +94,10 @@ func (h *Hub) MoveRecording(rec store.Recording, name string) (string, error) {
 			return target, fmt.Errorf("moved the recording, but not its %s file: %w", suffix, err)
 		}
 	}
-	// A folder the move emptied goes; never the recordings folder or a link.
-	if dir := filepath.Dir(rec.Path); filepath.Clean(dir) != filepath.Clean(root) {
-		if info, err := os.Lstat(dir); err == nil && info.IsDir() {
-			_ = os.Remove(dir)
-		}
-	}
+	// Folders the move emptied go; never the recordings folder or a link.
+	h.mu.Lock()
+	h.pruneEmptyLocked(filepath.Dir(rec.Path))
+	h.mu.Unlock()
 	return target, nil
 }
 

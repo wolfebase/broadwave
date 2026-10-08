@@ -1,7 +1,7 @@
 // A finished recording gets a .nfo beside it when the setting is on.
 // The file stays in the recordings folder and leaves with the recording.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "./fixture";
@@ -14,7 +14,7 @@ type Channel = { id: number; number: string; name: string };
 type Rec = { id: number; title: string; status: string; bytes?: number };
 
 function harness() {
-  return JSON.parse(readFileSync(path.join(here, ".run/server.json"), "utf8")) as { base: string; db: string };
+  return JSON.parse(readFileSync(path.join(here, ".run/server.json"), "utf8")) as { base: string; db: string; config: string };
 }
 
 function newsChannel(): Channel {
@@ -74,6 +74,10 @@ test("a finished recording writes an nfo and delete removes it", async ({ page }
 
     const filePath = sql(harness().db, `SELECT path FROM recordings WHERE id = ${id};`);
     expect(filePath.endsWith(".ts"), filePath).toBe(true);
+    // By show, the layout Plex and Jellyfin read: TV/Show/Show - date - episode.
+    const showDir = path.join(harness().config, "work", "recordings", "TV", "Evening News");
+    expect(path.dirname(filePath), filePath).toBe(showDir);
+    expect(path.basename(filePath)).toMatch(/^Evening News - \d{4}-\d{2}-\d{2} - .+\.ts$/);
     const nfoPath = `${filePath.slice(0, -3)}.nfo`;
     let xml = "";
     await expect
@@ -103,6 +107,8 @@ test("a finished recording writes an nfo and delete removes it", async ({ page }
     expect(removed.ok()).toBeTruthy();
     expect(() => readFileSync(nfoPath)).toThrow();
     expect(() => readFileSync(filePath)).toThrow();
+    // An earlier spec may have left an episode of the same show beside it.
+    expect(!existsSync(showDir) || readdirSync(showDir).length > 0, "an emptied show folder goes").toBe(true);
   } finally {
     await page.request.post(`/api/v1/recordings/${id}/stop`).catch(() => undefined);
     await page.request.delete(`/api/v1/recordings/${id}`).catch(() => undefined);

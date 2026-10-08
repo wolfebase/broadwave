@@ -233,6 +233,19 @@ export function SettingsScreen({
       </label>
       <ShowSpace />
       <label className="field">
+        Recording folders
+        <select
+          value={settings.folderLayout === "flat" ? "flat" : "shows"}
+          onChange={(event) => onChange({ folderLayout: event.target.value === "flat" ? "flat" : "shows" })}
+        >
+          <option value="shows">By show, for Plex and Jellyfin</option>
+          <option value="flat">All in one folder</option>
+        </select>
+        <span className="hint">
+          By show puts new recordings in TV/Show/Season 01 and Movies/Title (Year). Point a TV library at TV and a movie library at Movies.
+        </span>
+      </label>
+      <label className="field">
         {copy.settings.nfo}
         <select
           value={settings.writeNfo === "1" ? "1" : "0"}

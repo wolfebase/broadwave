@@ -283,17 +283,19 @@ func TestKeepForeverAndCleanUpSettings(t *testing.T) {
 	}
 
 	res := get(t, h, "/api/settings")
-	if !bytes.Contains(res.Body.Bytes(), []byte(`"deleteWatchedDays":"0"`)) || !bytes.Contains(res.Body.Bytes(), []byte(`"makeRoom":"0"`)) {
+	if !bytes.Contains(res.Body.Bytes(), []byte(`"deleteWatchedDays":"0"`)) || !bytes.Contains(res.Body.Bytes(), []byte(`"makeRoom":"0"`)) ||
+		!bytes.Contains(res.Body.Bytes(), []byte(`"folderLayout":"shows"`)) {
 		t.Fatalf("defaults %s", res.Body.String())
 	}
-	if rec := put("/api/settings", `{"deleteWatchedDays":" 14","makeRoom":"1"}`); rec.Code != http.StatusOK {
+	if rec := put("/api/settings", `{"deleteWatchedDays":" 14","makeRoom":"1","folderLayout":"flat"}`); rec.Code != http.StatusOK {
 		t.Fatalf("save %d %s", rec.Code, rec.Body.String())
 	}
 	res = get(t, h, "/api/settings")
-	if !bytes.Contains(res.Body.Bytes(), []byte(`"deleteWatchedDays":"14"`)) || !bytes.Contains(res.Body.Bytes(), []byte(`"makeRoom":"1"`)) {
+	if !bytes.Contains(res.Body.Bytes(), []byte(`"deleteWatchedDays":"14"`)) || !bytes.Contains(res.Body.Bytes(), []byte(`"makeRoom":"1"`)) ||
+		!bytes.Contains(res.Body.Bytes(), []byte(`"folderLayout":"flat"`)) {
 		t.Fatalf("saved %s", res.Body.String())
 	}
-	for _, body := range []string{`{"deleteWatchedDays":"-1"}`, `{"deleteWatchedDays":"week"}`, `{"deleteWatchedDays":"3651"}`, `{"makeRoom":"yes"}`} {
+	for _, body := range []string{`{"deleteWatchedDays":"-1"}`, `{"deleteWatchedDays":"week"}`, `{"deleteWatchedDays":"3651"}`, `{"makeRoom":"yes"}`, `{"folderLayout":"../x"}`} {
 		if rec := put("/api/settings", body); rec.Code != http.StatusBadRequest {
 			t.Fatalf("%s saved with %d", body, rec.Code)
 		}
