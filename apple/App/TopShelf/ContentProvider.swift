@@ -1,27 +1,24 @@
 import BroadwaveKit
 import Foundation
-import TVServices
+@preconcurrency import TVServices
 
 /// Fills the Top Shelf when Broadwave sits in the top row of the Apple TV home screen.
 final class ContentProvider: TVTopShelfContentProvider {
     override func loadTopShelfContent(completionHandler: @escaping ((any TVTopShelfContent)?) -> Void) {
-        // The system takes the answer on any thread; the async override cannot hand back a non-Sendable value.
-        let reply = Reply(send: completionHandler)
+        // The system takes the answer on any thread. The async override cannot hand back a
+        // non-Sendable value, and Xcode 26's isolation checker fails on a Sendable wrapper.
+        nonisolated(unsafe) let reply = completionHandler
         Task {
             guard let sections = await Self.sections() else {
-                reply.send(nil)
+                reply(nil)
                 return
             }
-            reply.send(TVTopShelfSectionedContent(sections: sections.map { section in
+            reply(TVTopShelfSectionedContent(sections: sections.map { section in
                 let collection = TVTopShelfItemCollection(items: section.items.map(Self.item))
                 collection.title = section.title
                 return collection
             }))
         }
-    }
-
-    private struct Reply: @unchecked Sendable {
-        let send: ((any TVTopShelfContent)?) -> Void
     }
 
     private static func sections() async -> [TopShelf.Section]? {
