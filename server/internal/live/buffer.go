@@ -113,7 +113,7 @@ func (h *Hub) ringRoom(dir string) func(held int64) int64 {
 			return 1 << 62
 		}
 		floor := uint64(ringFloor)
-		if h.Store != nil && disk.SameDevice(dir, filepath.Join(h.Dir, "recordings")) {
+		if h.Store != nil && disk.SameDevice(dir, h.Recordings()) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			values, err := h.Store.Settings(ctx)
 			cancel()

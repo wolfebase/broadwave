@@ -68,7 +68,7 @@ export const copy = {
     layout: "Layout",
     layoutHint: "Auto follows the window. TV uses the large guide you can drive with arrows.",
     recordings: "Recordings folder",
-    recordingsHint: "The original broadcast files. To keep them somewhere else, mount that folder at /config/work/recordings.",
+    recordingsHint: "The original broadcast files. To keep them somewhere else, mount that folder at /config/work/recordings or set BROADWAVE_RECORDINGS.",
     byShow: "Space by show",
     byShowEmpty: "No finished recordings yet.",
     byShowFailed: "Could not load space by show.",

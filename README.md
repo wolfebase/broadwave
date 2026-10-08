@@ -166,6 +166,7 @@ One image, `ghcr.io/wolfebase/broadwave`, for x86-64 and ARM64. It carries its o
 | `PUID`, `PGID` | The user and group that own the config folder and recordings. Broadwave starts as root, hands the config folder to them, and then runs as them. Leave them out to run as root. |
 | `UMASK` | Permissions for new files, such as `002` so the group can write. Default `022`. |
 | `HDHR_HOST` | The tuner's address, when discovery can't reach it. |
+| `BROADWAVE_RECORDINGS` | The recordings folder, when it is not `/config/work/recordings`. Outside Docker, `-recordings <folder>` does the same. |
 | `BROADWAVE_ENCODER` | `gpu` or `software` to skip the automatic choice (the GPU when it has a low-power encoder, else the processor when it is fast enough). |
 | `BROADWAVE_HOSTS` | Public names the server answers to, comma-separated, such as `tv.example.com` (a leading dot covers subdomains). Addresses, one-word names, `.local`, `.lan`, and other home names always work, and so does a browser behind an HTTPS reverse proxy. Any other public name is refused, so a web page can't reach the server by pointing its own name at your server's address. |
 | `BROADWAVE_ALTERNATES` | `0` carries only the chosen sound track in each live encode. By default a full-size encode also carries the channel's other languages and descriptions, so players switch between them without a restart. |

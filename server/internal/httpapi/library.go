@@ -269,7 +269,7 @@ var downloadTypes = map[string]string{
 func (s *Server) downloadRoots(ctx context.Context) []string {
 	var roots []string
 	if s.Hub != nil && s.Hub.Dir != "" {
-		roots = append(roots, filepath.Join(s.Hub.Dir, "recordings"))
+		roots = append(roots, s.Hub.Recordings())
 	}
 	sources, _ := s.Store.Sources(ctx)
 	for _, src := range sources {
@@ -423,7 +423,7 @@ func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "player is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	dir := filepath.Join(s.Hub.Dir, "recordings")
+	dir := s.Hub.Recordings()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		writeError(w, err)
 		return

@@ -233,3 +233,17 @@ func TestRoomOrderIsWatchedLongestAgoFirst(t *testing.T) {
 		t.Fatalf("order %v", ids)
 	}
 }
+
+func TestCleanUpFollowsTheRecordingsFolder(t *testing.T) {
+	r := newStorageRig(t, map[string]string{"deleteWatchedDays": "1"})
+	r.hub.RecordingsDir = filepath.Join(t.TempDir(), "elsewhere")
+	r.add(t, "default folder", 1, false, "")
+	moved := r.add(t, "elsewhere", 1, false, filepath.Join(r.hub.RecordingsDir, "elsewhere.ts"))
+	Tidy(context.Background(), r.st, r.hub, time.Now().Add(2*24*time.Hour))
+	if got := r.left(t); !slices.Equal(got, []string{"default folder"}) {
+		t.Fatalf("left %v", got)
+	}
+	if _, err := os.Stat(moved.Path); !os.IsNotExist(err) {
+		t.Fatalf("file still there (%v)", err)
+	}
+}

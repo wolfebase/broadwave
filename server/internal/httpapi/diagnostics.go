@@ -4,7 +4,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -62,7 +61,7 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 		out["encoder"] = encoder
 		out["relay"] = s.Hub.Status()
 		out["starts"] = s.Hub.RecentStarts()
-		if space, err := disk.Stat(filepath.Join(s.Hub.Dir, "recordings")); err == nil {
+		if space, err := disk.Stat(s.Hub.Recordings()); err == nil {
 			out["storage"] = space
 		}
 	}
@@ -153,7 +152,7 @@ func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {
 	path := ""
 	var free int64
 	if s.Hub != nil {
-		path = filepath.Join(s.Hub.Dir, "recordings")
+		path = s.Hub.Recordings()
 		if space, err := disk.Stat(path); err == nil {
 			free = int64(space.Free)
 		}

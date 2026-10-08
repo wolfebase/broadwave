@@ -160,9 +160,13 @@ func TestRecordingWithoutAStartTimeStartsNow(t *testing.T) {
 		close(exported)
 	}()
 	time.Sleep(5 * time.Second)
+	h.RecordingsDir = filepath.Join(t.TempDir(), "elsewhere")
 	rec, err := h.RecordMeta(context.Background(), 1, store.Recording{ChannelID: id, Title: "News", PassID: 5})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if filepath.Dir(rec.Path) != h.RecordingsDir {
+		t.Fatalf("recorded to %s, not the recordings folder %s", rec.Path, h.RecordingsDir)
 	}
 	if saved, err := st.Recording(context.Background(), rec.ID); err != nil || saved.PassID != 5 {
 		t.Fatalf("the recording forgot its pass: %+v %v", saved, err)

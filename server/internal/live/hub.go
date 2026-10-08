@@ -126,6 +126,8 @@ type Hub struct {
 	DeintBroadcast string
 	DeintSmooth    string
 	OnSaved        func(store.Recording)
+	// RecordingsDir is where recordings go; empty means Dir/recordings.
+	RecordingsDir string
 	// MakeRoom, when set, may delete watched recordings to bring free space
 	// in the recordings folder up to need bytes before a recording is refused.
 	MakeRoom func(ctx context.Context, need uint64)
@@ -1886,7 +1888,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	if f.recording != nil {
 		return h.Store.Recording(ctx, f.recording.id)
 	}
-	dir := filepath.Join(h.Dir, "recordings")
+	dir := h.Recordings()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		h.dropIfUnusedLocked(f)
 		return store.Recording{}, err
@@ -2934,7 +2936,7 @@ func (h *Hub) ensureSpace(ctx context.Context) error {
 	if reserve == 0 {
 		return nil
 	}
-	dir := filepath.Join(h.Dir, "recordings")
+	dir := h.Recordings()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -2953,6 +2955,14 @@ func (h *Hub) ensureSpace(ctx context.Context) error {
 		return &disk.LowError{Free: space.Free, Need: reserve}
 	}
 	return nil
+}
+
+// Recordings is the folder recordings are written to and cleaned up in.
+func (h *Hub) Recordings() string {
+	if h.RecordingsDir != "" {
+		return h.RecordingsDir
+	}
+	return filepath.Join(h.Dir, "recordings")
 }
 
 func (h *Hub) changed() {

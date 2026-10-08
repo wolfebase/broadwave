@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -298,7 +297,7 @@ func (s *Server) stepFolder(ctx context.Context) {
 		}
 	}
 	if s.Hub != nil && s.Hub.Dir != "" {
-		dir := filepath.Join(s.Hub.Dir, "recordings")
+		dir := s.Hub.Recordings()
 		if space, err := disk.Stat(dir); err == nil && space.Free > 0 {
 			s.setFinish("folder", "done", formatFree(space.Free))
 			return

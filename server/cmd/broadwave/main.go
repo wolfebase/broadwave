@@ -47,6 +47,7 @@ func main() {
 	addr := flag.String("addr", ":8477", "listen address")
 	configDir := flag.String("config", "data", "directory for the catalog database")
 	dev := flag.Bool("dev", false, "allow a local Vite dev server to call the API")
+	recordings := flag.String("recordings", os.Getenv("BROADWAVE_RECORDINGS"), "folder for recordings (default <config>/work/recordings)")
 	hdhrHost := flag.String("hdhr", os.Getenv("HDHR_HOST"), "tuner address when the container cannot hear broadcast discovery")
 	bonjour := flag.Bool("bonjour", true, "advertise this server to the apps over Bonjour")
 	healthcheck := flag.Bool("healthcheck", false, "check a running server on -addr and exit (for container health checks)")
@@ -64,7 +65,7 @@ func main() {
 		os.Exit(code)
 	}
 	logbuf.Install(os.Stderr)
-	if err := doctor.ApplyIdentity(*configDir, filepath.Join(*configDir, "work", "recordings")); err != nil {
+	if err := doctor.ApplyIdentity(*configDir, recordingsDir(*configDir, *recordings)); err != nil {
 		slog.Error(fmt.Sprintf("identity: %v", err))
 		os.Exit(1)
 	}
@@ -138,6 +139,7 @@ func main() {
 	}
 	live.Reap(work)
 	hub := live.New(st, work, ffmpegPath, encoder)
+	hub.RecordingsDir = recordingsDir(*configDir, *recordings)
 	if hub.NoAC4 = live.MissingAC4(ffmpegPath); hub.NoAC4 {
 		slog.Warn("ffmpeg has no AC-4 decoder: ATSC 3.0 channels play without sound (the Docker image's ffmpeg has one)")
 	}
@@ -455,4 +457,16 @@ func debounce(d time.Duration, fn func()) func() {
 
 func execLook(name string) (string, error) {
 	return exec.LookPath(name)
+}
+
+// recordingsDir is the -recordings folder made absolute, or the one inside
+// the config folder.
+func recordingsDir(configDir, flagged string) string {
+	if strings.TrimSpace(flagged) == "" {
+		return filepath.Join(configDir, "work", "recordings")
+	}
+	if abs, err := filepath.Abs(flagged); err == nil {
+		return abs
+	}
+	return flagged
 }

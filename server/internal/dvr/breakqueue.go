@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"time"
 
 	"broadwave/internal/live"
@@ -43,7 +42,7 @@ func NewBreakQueue(st *store.Store, hub *live.Hub) *BreakQueue {
 	}, func(ctx context.Context, rec store.Recording) error {
 		return FindEpisodeEnds(ctx, st, hub.FFmpeg, rec)
 	}, hub.Watching)
-	q.root = filepath.Join(hub.Dir, "recordings")
+	q.root = hub.Recordings()
 	return q
 }
 
