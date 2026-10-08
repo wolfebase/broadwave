@@ -228,6 +228,7 @@ func TestContractFixtures(t *testing.T) {
 		{"pass-delete", "DELETE", "/api/v1/passes/3", "", 0},
 		{"team-unfollow", "DELETE", "/api/v1/teams/1", "", 0},
 		{"virtual-create", "POST", "/api/v1/virtuals", `{"number":"9001","name":"News","recordings":[1]}`, 0},
+		{"recording-move", "POST", "/api/v1/recordings/1/move", `{"name":"Jeopardy/Semifinals"}`, 0},
 	}
 	for _, tc := range cases {
 		if tc.name == "recording-play" || tc.name == "recording-file" || tc.name == "recording-detect" {

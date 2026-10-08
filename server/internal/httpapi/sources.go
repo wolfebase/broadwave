@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"broadwave/internal/discovery"
 	"broadwave/internal/dvr"
 	"broadwave/internal/guide"
+	"broadwave/internal/live"
 	"broadwave/internal/source"
 	"broadwave/internal/store"
 )
@@ -426,6 +428,61 @@ func (s *Server) setWatched(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "watched": body.Watched})
+}
+
+func (s *Server) moveRecording(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		httpError(w, "invalid recording", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		httpError(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if s.Hub == nil {
+		httpError(w, "recordings are not set up on this server", http.StatusServiceUnavailable)
+		return
+	}
+	rec, err := s.Store.Recording(r.Context(), id)
+	if err != nil {
+		httpError(w, "recording not found", http.StatusNotFound)
+		return
+	}
+	if rec.Status == "recording" {
+		httpError(w, "stop the recording before moving it", http.StatusConflict)
+		return
+	}
+	path, err := s.Hub.MoveRecording(rec, body.Name)
+	for _, refusal := range []struct {
+		err    error
+		status int
+		say    string
+	}{
+		{live.ErrMoveName, http.StatusBadRequest, "Use a name inside the recordings folder, such as Show/Episode."},
+		{live.ErrMoveChars, http.StatusBadRequest, `A name can't hold : * ? " < > |.`},
+		{live.ErrMoveTaken, http.StatusConflict, "A file with that name is already there."},
+		{live.ErrMoveOutside, http.StatusConflict, "Only recordings in the recordings folder can be moved."},
+	} {
+		if errors.Is(err, refusal.err) {
+			httpError(w, refusal.say, refusal.status)
+			return
+		}
+	}
+	if path != "" && path != rec.Path {
+		if serr := s.Store.SetRecordingPath(r.Context(), id, path); serr != nil {
+			writeError(w, serr)
+			return
+		}
+	}
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "file": s.Hub.RecordingName(path)})
 }
 
 func (s *Server) setKeep(w http.ResponseWriter, r *http.Request) {

@@ -84,6 +84,12 @@ A clear 3.0 recording is the program's own packets when the sound is AC-4, as [A
 
 An encrypted 3.0 station records the regular broadcast. Scheduling it, or opening one of its shows, records and plays that broadcast. The player says "The 3.0 version is encrypted. Showing the regular broadcast."
 
+## Renaming and moving
+
+Rename file on a finished recording's row renames it inside the recordings folder. A slash makes a folder: `Harbor Watch/S01E02` puts it in `Harbor Watch`, which is made if needed. The `.json`, `.edl`, and `.nfo` beside it move too, and an emptied folder goes. A name that leaves the recordings folder, starts with a dot, or holds `: * ? " < > |` is refused, and so is a name another file already has. A recording still in progress, or a file in a library folder, can't be renamed here.
+
+A recording you move or rename by hand inside the recordings folder is found again within the hour, as long as its `.json` moved with it and kept its name: the id, title, and start time in that file must match. Activity says where it was found.
+
 ## Deleting
 
 Stop a recording before you delete it. Delete, then "Delete this file", removes that recording. Inside the recordings folder it removes the `.ts`, the `.json`, the `.edl`, and the `.nfo`, plus the poster and the temporary files playback made. A file that is not in the recordings folder is left where it is. A keep rule removes the same files when it drops an older episode.

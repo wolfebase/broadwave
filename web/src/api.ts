@@ -314,6 +314,13 @@ export function setWatched(id: number, watched: boolean) {
   });
 }
 
+export function moveRecording(id: number, name: string) {
+  return request<{ ok: boolean; file: string }>(`/api/v1/recordings/${id}/move`, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
 export function setKeep(id: number, keep: boolean) {
   return request<{ ok: boolean }>(`/api/v1/recordings/${id}/keep`, {
     method: "PUT",

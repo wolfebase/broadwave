@@ -300,6 +300,52 @@ func TestKeepForeverAndCleanUpSettings(t *testing.T) {
 	}
 }
 
+func TestMoveARecording(t *testing.T) {
+	st := testStore(t)
+	ctx := context.Background()
+	hub := &live.Hub{Store: st, Dir: t.TempDir()}
+	if err := os.MkdirAll(hub.Recordings(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(hub.Recordings(), "20261005_193000_4.1_KBWV.ts")
+	if err := os.WriteFile(path, []byte{0x47}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	id, err := st.CreateRecording(ctx, store.Recording{Title: "Harbor Watch", GuideNumber: "4.1", Status: "complete", Path: path, StartedAt: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st, Hub: hub, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Broadwave")}}}).Handler()
+	move := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/recordings/"+strconv.FormatInt(id, 10)+"/move", bytes.NewBufferString(body))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := move(`{"name":"../escape"}`); rec.Code != http.StatusBadRequest || !bytes.Contains(rec.Body.Bytes(), []byte("inside the recordings folder")) {
+		t.Fatalf("escape %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := move(`{"name":"Harbor Watch/S01E02"}`); rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte(`"file":"Harbor Watch/S01E02.ts"`)) {
+		t.Fatalf("move %d %s", rec.Code, rec.Body.String())
+	}
+	if res := get(t, h, "/api/recordings"); !bytes.Contains(res.Body.Bytes(), []byte(`"file":"Harbor Watch/S01E02.ts"`)) || bytes.Contains(res.Body.Bytes(), []byte(`"missing":true`)) {
+		t.Fatalf("list %s", res.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(hub.Recordings(), "Harbor Watch", "S01E02.ts")); err != nil {
+		t.Fatal(err)
+	}
+	busy, err := st.CreateRecording(ctx, store.Recording{Title: "News", Status: "recording", Path: filepath.Join(hub.Recordings(), "news.ts"), StartedAt: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/recordings/"+strconv.FormatInt(busy, 10)+"/move", bytes.NewBufferString(`{"name":"later"}`))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("moved a recording in progress: %d", rec.Code)
+	}
+}
+
 func TestUnwritableRecordingsAreRefused(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root can write a mode 0555 directory")
