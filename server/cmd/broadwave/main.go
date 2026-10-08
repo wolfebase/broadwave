@@ -177,6 +177,7 @@ func main() {
 		go func() {
 			time.Sleep(time.Minute)
 			for {
+				dvr.Refind(context.Background(), st, hub)
 				dvr.Tidy(context.Background(), st, hub, time.Now())
 				time.Sleep(time.Hour)
 			}

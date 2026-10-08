@@ -146,6 +146,9 @@ type Recording struct {
 	CreditsStart float64 `json:"creditsStart,omitempty"`
 	// Listened is set once the server printed the sound of its ends.
 	Listened bool `json:"-"`
+	// File is the file's name inside the recordings folder, set by the list;
+	// empty for a file elsewhere.
+	File string `json:"file,omitempty"`
 	// Keep is set when the viewer keeps it forever: no clean-up removes it.
 	Keep bool `json:"keep,omitempty"`
 	// WatchedAt is when it was marked watched; nil when it was not.
@@ -832,6 +835,19 @@ func (s *Store) SetWatched(ctx context.Context, id int64, watched int) error {
 		at = time.Now().UTC().Format(time.RFC3339)
 	}
 	res, err := s.db.ExecContext(ctx, `UPDATE recordings SET watched = ?, watched_at = ? WHERE id = ?`, watched, at, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// SetRecordingPath points a recording at its file after a move.
+func (s *Store) SetRecordingPath(ctx context.Context, id int64, path string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE recordings SET path = ? WHERE id = ?`, path, id)
 	if err != nil {
 		return err
 	}

@@ -743,6 +743,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/recordings/{id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Rename a finished recording, or move it into a folder, inside the recordings folder. Its .edl, .json, and .nfo go with it. The extension stays the recording's own. */
+        post: operations["moveRecording"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/recordings/{id}/file": {
         parameters: {
             query?: never;
@@ -1671,6 +1688,8 @@ export interface components {
             watched?: number;
             /** @description Kept forever: no clean-up removes it. */
             keep?: boolean;
+            /** @description The file's name inside the recordings folder, with forward slashes. Missing for a file in a library folder. */
+            file?: string;
             /** @description The recording finished but its file is gone (moved or deleted outside Broadwave). It cannot play; delete removes it from the list. */
             missing?: boolean;
             /** @description From the listing the recording covers, or an SxxEyy file name in a library folder. Absent when unknown. */
@@ -3337,6 +3356,40 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["Ok"];
+        };
+    };
+    moveRecording: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Path inside the recordings folder, such as Harbor Watch/S01E02. Subfolders are made as needed. */
+                    name: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Moved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        ok: boolean;
+                        file: string;
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     downloadRecording: {

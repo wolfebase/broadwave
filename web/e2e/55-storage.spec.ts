@@ -1,6 +1,6 @@
 // Storage clean-up settings save, and a recording can be kept forever.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "./fixture";
@@ -70,6 +70,23 @@ test("clean-up settings save and a recording is kept forever", async ({ page }) 
   await keep.click();
   await expect(card).not.toContainText("Kept forever");
   await expect(keep).toHaveAttribute("aria-pressed", "false");
+
+  // Rename the file into a show folder; a name that leaves the folder is refused.
+  await card.getByRole("button", { name: "Rename file" }).click();
+  const field = card.getByLabel("File name in the recordings folder");
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue("keepsake");
+  await field.fill("../outside");
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(card.getByRole("alert")).toHaveText("Use a name inside the recordings folder, such as Show/Episode.");
+  await field.fill("Harbor Watch/The Keepsake");
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(card.getByRole("button", { name: "Rename file" })).toBeVisible();
+  const moved = path.join(harness().config, "work", "recordings", "Harbor Watch", "The Keepsake.ts");
+  expect(existsSync(moved)).toBe(true);
+  expect(existsSync(file)).toBe(false);
+  const after = await api<{ recordings: { id: number; file?: string }[] }>("/recordings");
+  expect(after.recordings.find((r) => r.id === id)?.file).toBe("Harbor Watch/The Keepsake.ts");
 
   await page.goto("/settings");
   await page.getByLabel("When space runs low").selectOption("0");

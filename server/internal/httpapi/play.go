@@ -323,6 +323,9 @@ func (s *Server) recordings(w http.ResponseWriter, r *http.Request) {
 		list = []store.Recording{}
 	}
 	for i := range list {
+		if s.Hub != nil {
+			list[i].File = s.Hub.RecordingName(list[i].Path)
+		}
 		if info, err := os.Stat(list[i].Path); err == nil {
 			list[i].Bytes = info.Size()
 		} else if fileGone(list[i]) {

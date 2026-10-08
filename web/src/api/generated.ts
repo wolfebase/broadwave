@@ -284,6 +284,7 @@ export type Recording = {
   durationSec?: number;
   watched?: number;
   keep?: boolean;
+  file?: string;
   missing?: boolean;
   season?: number;
   episode?: number;

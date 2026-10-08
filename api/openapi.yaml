@@ -1039,6 +1039,35 @@ paths:
                 keep: { type: boolean }
       responses:
         "200": { $ref: "#/components/responses/Ok" }
+  /recordings/{id}/move:
+    post:
+      tags: [recordings]
+      operationId: moveRecording
+      description: Rename a finished recording, or move it into a folder, inside the recordings folder. Its .edl, .json, and .nfo go with it. The extension stays the recording's own.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, description: "Path inside the recordings folder, such as Harbor Watch/S01E02. Subfolders are made as needed." }
+      responses:
+        "200":
+          description: Moved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, file]
+                properties:
+                  ok: { type: boolean }
+                  file: { type: string }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /recordings/{id}/file:
     get:
       tags: [recordings]
@@ -2098,6 +2127,7 @@ components:
         durationSec: { type: number }
         watched: { type: integer }
         keep: { type: boolean, description: "Kept forever: no clean-up removes it." }
+        file: { type: string, description: "The file's name inside the recordings folder, with forward slashes. Missing for a file in a library folder." }
         missing: { type: boolean, description: "The recording finished but its file is gone (moved or deleted outside Broadwave). It cannot play; delete removes it from the list." }
         season: { type: integer, description: "From the listing the recording covers, or an SxxEyy file name in a library folder. Absent when unknown." }
         episode: { type: integer }
