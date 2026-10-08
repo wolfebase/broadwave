@@ -289,6 +289,9 @@ export type Recording = {
   episodeLabel?: string;
   originalAir?: string;
   progressAt?: string;
+  introStart?: number;
+  introEnd?: number;
+  creditsStart?: number;
   health?: RecordingHealth;
 };
 

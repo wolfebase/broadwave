@@ -17,7 +17,8 @@ import (
 )
 
 // OnSaved runs after a recording's file is closed. It writes an .nfo when that
-// is on, queues the break scan, applies keep rules, and then counts the file.
+// is on, queues the break scan and the intro search, applies keep rules, and
+// then counts the file.
 func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, queue *BreakQueue, rec store.Recording) {
 	if st == nil || rec.ID == 0 {
 		return
@@ -28,7 +29,7 @@ func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, queue *BreakQu
 	if err != nil {
 		return
 	}
-	if commercialsOn(passes, rec) && rec.Path != "" {
+	if rec.Path != "" {
 		queue.Add(rec.ID)
 	}
 	recs, err := st.Recordings(ctx)

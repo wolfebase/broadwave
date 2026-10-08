@@ -114,6 +114,13 @@ type Recording struct {
 	ProgressAt *time.Time `json:"progressAt,omitempty"`
 	// BreaksScanned is set once the server scanned the file for breaks.
 	BreaksScanned bool `json:"-"`
+	// IntroStart and IntroEnd are where the intro plays; CreditsStart is where
+	// the end titles start, or the show ends. 0 when not found.
+	IntroStart   float64 `json:"introStart,omitempty"`
+	IntroEnd     float64 `json:"introEnd,omitempty"`
+	CreditsStart float64 `json:"creditsStart,omitempty"`
+	// Listened is set once the server printed the sound of its ends.
+	Listened bool `json:"-"`
 }
 
 type Pass struct {
@@ -478,6 +485,7 @@ SELECT r.id, r.channel_id, r.guide_number, r.title, r.path, r.status, r.error, r
 	r.subtitle, r.description, r.category, r.program_id, r.watched, r.game_id,
 	r.continuity_errors, r.transport_errors, r.sync_losses, r.packets, r.pass_id,
 	r.season, r.episode, r.episode_label, r.original_air, r.breaks_scanned,
+	r.intro_start, r.intro_end, r.credits_start, EXISTS (SELECT 1 FROM episode_prints e WHERE e.recording_id = r.id),
 	COALESCE(p.position_sec, 0), COALESCE(p.updated_at, '')
 FROM recordings r LEFT JOIN progress p ON p.recording_id = r.id
 ORDER BY r.id DESC`)
@@ -491,7 +499,8 @@ ORDER BY r.id DESC`)
 		var start, ends, ended, played string
 		var continuity, transport, syncLoss, packets sql.NullInt64
 		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID, &continuity, &transport, &syncLoss, &packets, &rec.PassID,
-			&rec.Season, &rec.Episode, &rec.EpisodeLabel, &rec.OriginalAir, &rec.BreaksScanned, &rec.Position, &played); err != nil {
+			&rec.Season, &rec.Episode, &rec.EpisodeLabel, &rec.OriginalAir, &rec.BreaksScanned,
+			&rec.IntroStart, &rec.IntroEnd, &rec.CreditsStart, &rec.Listened, &rec.Position, &played); err != nil {
 			return nil, err
 		}
 		if played != "" && rec.Position > 0 {
@@ -614,6 +623,7 @@ func (s *Store) DeleteRecording(ctx context.Context, id int64) error {
 	defer func() { _ = tx.Rollback() }()
 	for _, query := range []string{
 		`DELETE FROM markers WHERE recording_id = ?`,
+		`DELETE FROM episode_prints WHERE recording_id = ?`,
 		`DELETE FROM progress WHERE recording_id = ?`,
 		`DELETE FROM virtual_items WHERE recording_id = ?`,
 		`DELETE FROM recordings WHERE id = ?`,

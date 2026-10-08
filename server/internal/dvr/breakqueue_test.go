@@ -16,6 +16,7 @@ type queueRig struct {
 	st      *store.Store
 	q       *BreakQueue
 	scanned chan string
+	heard   chan string
 	busy    atomic.Bool
 }
 
@@ -26,13 +27,16 @@ func newQueueRig(t *testing.T, fail string) *queueRig {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	r := &queueRig{st: st, scanned: make(chan string, 16)}
+	r := &queueRig{st: st, scanned: make(chan string, 16), heard: make(chan string, 16)}
 	r.q = newBreakQueue(st, func(_ context.Context, rec store.Recording) error {
 		r.scanned <- rec.Title
 		if rec.Title == fail {
 			return errors.New("unreadable")
 		}
 		return nil
+	}, func(ctx context.Context, rec store.Recording) error {
+		r.heard <- rec.Title
+		return st.SaveEpisodePrints(ctx, rec.ID, store.EpisodePrints{Head: []uint32{1}})
 	}, r.busy.Load)
 	r.q.root = "/data/recordings"
 	r.q.poll = 10 * time.Millisecond
@@ -165,5 +169,111 @@ func TestBreakQueueWaitsWhileSomeoneWatches(t *testing.T) {
 	r2.q.Add(r2.add(t, "Movie", "/data/recordings/movie.ts", "complete"))
 	if got := r2.next(t); got != "Movie" {
 		t.Fatalf("scanned %s", got)
+	}
+}
+
+// Every finished recording in the recordings folder is listened to for its
+// intro, after its break scan, whether or not its pass wants breaks.
+func TestBreakQueueListensToEveryRecording(t *testing.T) {
+	ctx := context.Background()
+	r := newQueueRig(t, "")
+	done := r.add(t, "Done", "/data/recordings/done.ts", "complete")
+	if err := r.st.MarkBreaksScanned(ctx, done); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.st.AddSeriesPass(ctx, store.Pass{Title: "Quiz Show", Commercials: false}); err != nil {
+		t.Fatal(err)
+	}
+	quiz := r.add(t, "Quiz Show", "/data/recordings/quiz.ts", "complete")
+	heard := r.add(t, "Heard", "/data/recordings/heard.ts", "complete")
+	if err := r.st.MarkBreaksScanned(ctx, heard); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.st.SaveEpisodePrints(ctx, heard, store.EpisodePrints{}); err != nil {
+		t.Fatal(err)
+	}
+	r.add(t, "Library Movie", "/media/movies/movie.ts", "complete")
+	r.run(t)
+	for _, want := range []string{"Done", "Quiz Show"} {
+		select {
+		case got := <-r.heard:
+			if got != want {
+				t.Fatalf("listened to %s, want %s", got, want)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s was not listened to", want)
+		}
+	}
+	r.none(t, 100*time.Millisecond)
+	select {
+	case got := <-r.heard:
+		t.Fatalf("listened to %s", got)
+	default:
+	}
+	// Listening is no break scan: turning breaks on later still finds them.
+	if rec, _ := r.st.Recording(ctx, quiz); rec.BreaksScanned || !rec.Listened {
+		t.Fatalf("%+v", rec)
+	}
+}
+
+// A scan that worked is not run again when listening failed, and a scan that
+// failed does not keep the recording from being listened to.
+func TestBreakQueueKeepsWhatWorked(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	path := filepath.Join(t.TempDir(), "show.ts")
+	if err := os.WriteFile(path, []byte{0x47}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var scans, listens atomic.Int32
+	q := newBreakQueue(st, func(context.Context, store.Recording) error {
+		scans.Add(1)
+		return nil
+	}, func(context.Context, store.Recording) error {
+		listens.Add(1)
+		return errors.New("share away")
+	}, func() bool { return false })
+	q.poll = 10 * time.Millisecond
+	id, err := st.CreateRecording(ctx, store.Recording{Title: "Show", Path: path, Status: "complete", StartedAt: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		q.Run(runCtx)
+		close(done)
+	}()
+	defer func() {
+		cancel()
+		<-done
+	}()
+	waitFor := func(what string, ok func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for !ok() {
+			if time.Now().After(deadline) {
+				t.Fatal(what)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	waitFor("not listened", func() bool { return listens.Load() == 1 })
+	q.Add(id)
+	waitFor("not listened again", func() bool { return listens.Load() == 2 })
+	q.Add(id)
+	waitFor("not given up", func() bool {
+		rec, _ := st.Recording(ctx, id)
+		return rec.Listened
+	})
+	if scans.Load() != 1 {
+		t.Fatalf("scanned %d times", scans.Load())
+	}
+	if rec, _ := st.Recording(ctx, id); !rec.BreaksScanned {
+		t.Fatal("a scan that worked was not marked")
 	}
 }
