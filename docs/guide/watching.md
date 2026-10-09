@@ -8,7 +8,7 @@ Open `http://<your-server>:8477`. There is nothing to install. The page is the g
 
 The player picks a picture the browser can play. A broadcast the browser already understands is passed through. Anything else is encoded for that browser. Settings, Live delay, is how far behind live a channel starts: Lowest is about 6 seconds, Balanced is 16, Stable is 20.
 
-The player shows Synced while Whole-Home Sync is on, or the number of other screens on that channel. [Sync](sync.md) covers that control and Watch together.
+While Whole-Home Sync is on, the player shows Synced when this screen is the only one, the number of screens on that channel when others are there, and Together while you are watching together. [Sync](sync.md) covers that control and Watch together.
 
 ## iPhone, iPad, and Apple TV
 

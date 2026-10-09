@@ -20,7 +20,7 @@ Look harder checks this network for tuners and other servers. If nothing answers
 
 Each tuner keeps its own channels. One tune of a station is shared by everyone watching it, and by a recording of it. Subchannels of that station share the tune.
 
-When the same channel number is on two tuners, Broadwave plays it from the tuner that channel belongs to. If that tuner does not answer, or has no free tuner that can take the channel, it tries the others that carry that number. A lower priority is tried first. A tuner you add starts at priority 0, the same as the others, so two at 0 follow device-id order. A regular channel would rather use a tuner that is not receiving ATSC 3.0, on another device, than take a 3.0 tuner on its own.
+When the same channel number is on two tuners, Broadwave plays it from the tuner that channel belongs to. If that tuner does not answer, or has no free tuner that can take the channel, it tries the others that carry that number. A lower priority is tried first. A tuner you add starts at priority 0, the same as the others, so two at 0 follow device-id order. A regular channel uses a tuner that cannot receive ATSC 3.0 when one is free, on this device or another, and uses a 3.0 tuner only when none of those are free.
 
 Two tuners on one antenna carry the same channels, and the guide lists each channel once: the row of a tuner that still answers, then the one with the lowest priority. Both rows get the channel's listings. The other tuner's row stays in Settings and plays the same way. Favorite, hide, and a custom name or number apply to both rows.
 

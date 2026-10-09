@@ -23,7 +23,7 @@ At any server time `T`, the target media time is `anchorMediaTime + (T - anchorS
 
 **Clients.**
 
-- Apple: start with `AVPlayer.setRate(1, time: target, atHostTime: hostTime)` for a frame-accurate start. Then hold sync by nudging `rate` by 2 percent when drift exceeds 60 ms, and seek when it exceeds 400 ms. The nudge is relative to the room's own rate. The `BroadwaveKit` sync engine owns this logic.
+- Apple: start with play, then hold sync by nudging rate by 2 percent of the room's own rate when drift exceeds 60 ms (a trim ends inside 20 ms). Past 400 ms, a screen that is ahead pauses for the drift, and a screen that is behind seeks to 2 seconds past the target. The BroadwaveKit sync engine owns this logic.
 - Web: map `video.currentTime` to program date-time through the playlist's segments (both directions), trim `playbackRate` up to 3% under 400 ms of drift, and above that pause for exactly the drift when ahead or seek forward when behind. Backward seeks in a live buffer stall hls.js, so the engine never makes them outside group rewinds, and it seeks at most every 2 s.
 
 Measured on a real ATSC broadcast (2026-09-22): two browser screens locked 15 ms apart, each within 5 ms of the room target.

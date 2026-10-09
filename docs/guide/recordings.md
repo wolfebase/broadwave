@@ -15,7 +15,7 @@ Movies/Night Flight (1999)/Night Flight (1999).ts
 
 The file is the station's program, copied, not re-encoded. A clear ATSC 3.0 channel with AC-4 sound keeps the program's own packets, so every sound track and the captions stay as the tuner sent them.
 
-When the recording ends, a `.json` file with the same name sits beside it, with the title and the times. Commercial breaks, when any are found, go in a matching `.edl`. The Docker image includes comskip, which looks after the file is closed. A server without comskip, such as one on a Mac, looks for black frames instead, and finds fewer breaks.
+When the recording ends, a `.json` file with the same name sits beside it, with the title and the times. Commercial breaks, when any are found, go in a matching `.edl`. The Docker image includes comskip, which runs after the file is closed, along with Broadwave's own scan for black frames, scene cuts, and silence. A server without comskip still runs that scan.
 
 Turn on "Write .nfo files for Plex, Jellyfin, and Kodi" and a finished recording also gets an `.nfo` beside it. The switch is off until you turn it on.
 
@@ -45,6 +45,6 @@ Settings, Delete watched recordings, deletes a recording a number of days after 
 
 Open a recording from Recordings or from Home. It starts again where you left off. While it is still recording, you watch the file as it grows. Download, on the web, appears after the recording has finished and saves the MPEG-TS.
 
-Delete removes the recording and the files beside it inside the recordings folder. Stop it first if it is still recording. A file that was moved or deleted outside Broadwave stays in the list with the line "The file is gone. It was moved or deleted outside Broadwave." Remove from the list drops that row. There is no file left to delete.
+Delete removes the recording and the files beside it inside the recordings folder. Stop it first if it is still recording. A file that was moved or deleted outside Broadwave stays in the list. On the web the line is "The file is gone. It was moved or deleted outside Broadwave." On iPhone, iPad, and Apple TV the channel number comes first. Remove from the list drops that row. There is no file left to delete.
 
 The folder layout, pass rules, rename, and the `.edl` format are in [How recordings are stored](../recordings.md).

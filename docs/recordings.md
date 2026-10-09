@@ -28,7 +28,7 @@ The file is the station's program, copied, not re-encoded. A clear ATSC 3.0 chan
 
 When the recording ends, a `.json` file with the same name sits beside it. It holds the id, title, channel number, status, and the start and end times.
 
-Commercial breaks, when any are found, go in a matching `.edl`. Each line is a start and an end, in seconds. Broadwave looks after the file is closed, with comskip, which the Docker image includes. A server without comskip, such as one on a Mac, looks for black frames between ads instead, which finds far fewer breaks. A series pass looks unless Commercials is off on that pass. A recording with no pass looks too. comskip's own notes stay in a temporary folder. The recordings folder gets the `.edl` only.
+Commercial breaks, when any are found, go in a matching `.edl`. Each line is a start and an end, in seconds. Broadwave looks after the file is closed. The Docker image includes comskip, which runs along with Broadwave's own scan for black frames, scene cuts, and silence. A server without comskip still runs that scan. A series pass looks unless Commercials is off on that pass. A recording with no pass looks too. comskip's own notes stay in a temporary folder. The recordings folder gets the `.edl` only.
 
 Turn on "Write .nfo files for Plex, Jellyfin, and Kodi" and a finished recording also gets an `.nfo` in that same folder, with the title and description. The switch is off until you turn it on. Those files are never written outside the recordings folder.
 
@@ -84,7 +84,7 @@ On iPhone, iPad, and Apple TV the same lists open the player. It resumes when yo
 
 Playback is a stream the device can play. The file in the recordings folder stays the broadcast.
 
-A finished recording whose file was moved or deleted outside Broadwave stays in the list. The line is "The file is gone. It was moved or deleted outside Broadwave." Remove from the list drops that row. There is no file left to delete.
+A finished recording whose file was moved or deleted outside Broadwave stays in the list. On the web the line is "The file is gone. It was moved or deleted outside Broadwave." On iPhone, iPad, and Apple TV the channel number comes first. Remove from the list drops that row. There is no file left to delete.
 
 When the picture broke up, the row says how many times. A clean recording says nothing.
 

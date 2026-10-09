@@ -16,13 +16,13 @@ The web app, iPad, and Apple TV share these layouts.
 
 iPhone offers Side by side and Small over big. A link that asks for a quad opens side by side there. In a phone browser, Side by side stacks the two pictures, and the other layouts stay available.
 
-Click or tap a tile to hear it. With a remote, move to the tile and press Enter or the clickpad. The page says "Select a tile to hear it" until you do. In the layouts with one large picture, the tile you hear is the large one.
+Click or tap a tile to hear it. With a remote, move to the tile and press Enter or the clickpad. The page says "Select a tile to hear it." until you do. In the layouts with one large picture, the tile you hear is the large one.
 
 ## How big the pictures are
 
-A quad is 360p on every tile. The large-tile size comes from a short encode the server runs at startup. Diagnostics prints the result, for example "720p60 on a large tile, 4 pictures at once."
+A quad is 360p on every tile. The large-tile size comes from a short encode the server runs at startup. Diagnostics prints the result, for example "Intel GPU found: 1080p60 at 5.4x real time. 720p60 on a large tile, 4 pictures at once."
 
-On an Intel GPU using its low-power encoder, a fast startup encode allows six pictures, so a quad fits beside two full screens. Other machines stay at four in that case.
+On an Intel GPU using its low-power encoder, a fast startup encode allows six pictures, so a quad fits beside two full screens. A fast GPU stays at four. A software encoder needs a faster result than that to reach four.
 
 Another picture past the limit stays off. The player says "This server can play 4 pictures at once. Stop one." With room for one picture, it says "This server can play 1 picture at once. Stop it to watch another."
 
