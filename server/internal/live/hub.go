@@ -2099,8 +2099,12 @@ func (h *Hub) recordingPath(rec store.Recording, ch store.SourceChannel, byShow 
 			}
 		}
 	}
-	name := fmt.Sprintf("%s_%s_%s.ts", rec.StartedAt.Format("20060102_150405"), ch.GuideNumber, sanitize(ch.DisplayName))
-	return freePath(filepath.Join(root, name), taken)
+	name := fmt.Sprintf("%s_%s_%s.ts", rec.StartedAt.Format("20060102_150405"), sanitize(ch.GuideNumber), sanitize(ch.DisplayName))
+	path := freePath(filepath.Join(root, name), taken)
+	if _, ok := inside(root, path); !ok {
+		path = freePath(filepath.Join(root, rec.StartedAt.Format("20060102_150405")+"_channel.ts"), taken)
+	}
+	return path
 }
 
 // uniquePath adds -2, -3, ... when a recording file already exists. Names are
