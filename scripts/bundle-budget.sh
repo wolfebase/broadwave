@@ -10,13 +10,15 @@
 # by a few bytes, and the entry sat exactly at its ceiling: 96419 -> 96619.
 # JS lowered 2026-10-08: the copy table and the guide's program sheet load with
 # the page that needs them. Measured entry gzip 92847, plus 300 bytes of slack.
+# JS raised 2026-10-09: the entry sends a device token and opens the pair screen
+# on 401. Measured entry gzip 93733, plus 300 bytes of slack.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=93147
+JS_GZIP_MAX=94033
 CSS_GZIP_MAX=9860
 
 if [[ ! -f "$INDEX" ]]; then

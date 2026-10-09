@@ -10,6 +10,7 @@ import { Play } from "./recordings/Play";
 import { VirtualPlay } from "./recordings/Virtual";
 import { Schedule } from "./schedule/Schedule";
 import { HomeList } from "./setup/HomeList";
+import { PairedDevices } from "./settings/PairedDevices";
 import { SettingsScreen } from "./settings/Settings";
 import { Sources } from "./settings/Sources";
 
@@ -194,6 +195,9 @@ export function SettingsPage() {
       <section className="settings-section">
         <h2>Playback and recording</h2>
         <SettingsScreen settings={settings} storage={storage} features={server?.features} tunerCount={server?.tunerCount} onChange={(v) => void saveSettings(v)} />
+      </section>
+      <section className="settings-section">
+        <PairedDevices deviceAuth={settings.deviceAuth ?? "0"} onChange={(v) => void saveSettings(v)} />
       </section>
       <section className="settings-section">
         <h2>Share with other apps</h2>

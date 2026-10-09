@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { authHeaders } from "../../lib/deviceToken";
 
 export type ScoreTeam = {
   name: string;
@@ -30,7 +31,7 @@ const cache: { at: number; games: ScoreGame[] } = { at: 0, games: [] };
 let pending: Promise<ScoreGame[]> | null = null;
 
 export function refreshScores(): Promise<ScoreGame[]> {
-  return fetch("/api/v1/sports/scoreboard")
+  return fetch("/api/v1/sports/scoreboard", { headers: authHeaders() })
     .then((res) => (res.ok ? res.json() : { games: [] }))
     .then((body: { games?: ScoreGame[] }) => {
       cache.games = body.games ?? [];
@@ -43,7 +44,7 @@ export function refreshScores(): Promise<ScoreGame[]> {
 export function loadScores(): Promise<ScoreGame[]> {
   if (Date.now() - cache.at < 30_000) return Promise.resolve(cache.games);
   if (!pending) {
-    pending = fetch("/api/v1/sports/scoreboard")
+    pending = fetch("/api/v1/sports/scoreboard", { headers: authHeaders() })
       .then((res) => (res.ok ? res.json() : { games: [] }))
       .then((body: { games?: ScoreGame[] }) => {
         cache.games = body.games ?? [];

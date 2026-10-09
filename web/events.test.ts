@@ -51,6 +51,31 @@ function latest() {
   return FakeSocket.all[FakeSocket.all.length - 1];
 }
 
+test("the socket carries a stored device token", () => {
+  FakeSocket.all = [];
+  const saved = new Map<string, string>([["bw.deviceToken", "bw_a b"]]);
+  const prior = "localStorage" in globalThis ? globalThis.localStorage : undefined;
+  globalThis.localStorage = {
+    getItem: (key: string) => (saved.has(key) ? (saved.get(key) ?? null) : null),
+    setItem: (key: string, value: string) => {
+      saved.set(key, value);
+    },
+    removeItem: (key: string) => {
+      saved.delete(key);
+    },
+    clear: () => saved.clear(),
+    key: () => null,
+    length: 0,
+  };
+  try {
+    new EventSocket();
+    assert.equal(latest().url, "ws://tv.local:8477/api/v1/ws?access_token=bw_a%20b");
+  } finally {
+    saved.clear();
+    if (prior) globalThis.localStorage = prior;
+  }
+});
+
 test("reconnect waits back off with jitter and never past 5 s", () => {
   assert.equal(reconnectWait(0, () => 0), 250);
   assert.equal(reconnectWait(0, () => 1), 500);

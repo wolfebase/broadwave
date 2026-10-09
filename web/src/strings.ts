@@ -112,7 +112,7 @@ export const copy = {
     updates: "Check for updates",
     updatesHint: "Once a day. Nothing else is sent.",
     passwordTitle: "This server is for the home network",
-    passwordBody: "A password is required before remote access.",
+    passwordBody: "Device sign-in is in Devices, and it stays off until you turn it on.",
     profile: "Profile",
   },
   player: {

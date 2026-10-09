@@ -24,6 +24,7 @@ const DiagnosticsPage = lazy(() => import("../features/setup/Diagnostics").then(
 const VirtualPage = lazy(() => import("../features/pages").then((m) => ({ default: m.VirtualPage })));
 const Multiview = lazy(() => import("../features/multiview/Multiview").then((m) => ({ default: m.Multiview })));
 const SearchPage = lazy(() => import("../features/search/Search").then((m) => ({ default: m.SearchPage })));
+const PairScreen = lazy(() => import("../features/settings/PairScreen").then((m) => ({ default: m.PairScreen })));
 
 /** The recording player arrives after the page that opened it is gone, so nothing else is focused. */
 function PlayClaim() {
@@ -75,7 +76,7 @@ export function App() {
 function Shell() {
   const { path, params } = useRoute();
   const layout = useLayout();
-  const { ready, booting, error, recordings, settings, notices, dismissNotice, update, server, freshAt } = useData();
+  const { ready, booting, error, recordings, settings, notices, dismissNotice, update, server, freshAt, needsPair, notePaired } = useData();
   useEffect(() => {
     if (layout !== "tv") return;
     return installTvRemote();
@@ -148,7 +149,8 @@ function Shell() {
 
   const active = (p: string) => (p === "/" ? path === "/" : path.startsWith(p));
   let page: React.ReactNode;
-  if (path === "/diagnostics") page = <DiagnosticsPage />;
+  if (needsPair || path === "/pair") page = <PairScreen onPaired={() => { notePaired(); navigate("/"); }} />;
+  else if (path === "/diagnostics") page = <DiagnosticsPage />;
   else if (path === "/setup" || firstRun) page = <Setup />;
   else if (path === "/guide") page = <Guide />;
   else if (path === "/search") page = <SearchPage />;

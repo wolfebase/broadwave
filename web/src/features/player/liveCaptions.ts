@@ -1,4 +1,5 @@
 import type Hls from "hls.js";
+import { authHeaders } from "../../lib/deviceToken.ts";
 
 // Live captions ride beside the video playlist instead of through a
 // multivariant one: hls.js loads no media playlist from a multivariant URL
@@ -180,7 +181,7 @@ export function followCaptions(hls: Hls, events: typeof Hls.Events, video: HTMLV
   const load = async (key: string, sn: number, cc: number, segUrl: string) => {
     loading.add(key);
     try {
-      const res = await fetch(segUrl, { cache: "no-store", signal: abort.signal });
+      const res = await fetch(segUrl, { cache: "no-store", signal: abort.signal, headers: authHeaders() });
       if (res.ok) waiting.set(key, { sn, cc, vtt: parseVtt(await res.text()), at: performance.now() });
     } finally {
       loading.delete(key);
@@ -190,7 +191,7 @@ export function followCaptions(hls: Hls, events: typeof Hls.Events, video: HTMLV
   const tick = async () => {
     let wait = 2000;
     try {
-      const res = await fetch(url, { cache: "no-store", signal: abort.signal });
+      const res = await fetch(url, { cache: "no-store", signal: abort.signal, headers: authHeaders() });
       if (res.ok) {
         const list = parseCaptionPlaylist(await res.text(), url);
         wait = Math.min(4000, Math.max(1000, (list.target * 1000) / 2));

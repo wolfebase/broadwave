@@ -1,4 +1,5 @@
-import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, Device, DeviceHealth, FrameList, MultiviewPlan, NewPass, Pass, PassPreview, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, StorageShows, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
+import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, ClientDevice, Device, DeviceHealth, FrameList, MultiviewPlan, NewPass, PairGrant, PairPoll, PairTicket, Pass, PassPreview, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, StorageShows, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
+import { authHeaders } from "./lib/deviceToken.ts";
 
 import type { RoomState } from "./lib/events";
 
@@ -28,6 +29,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders(),
       ...(init?.headers ?? {}),
     },
   });
@@ -179,6 +181,34 @@ export function putSettings(values: Partial<Settings>) {
     method: "PUT",
     body: JSON.stringify(values),
   });
+}
+
+export function listClients() {
+  return request<{ devices: ClientDevice[] }>("/api/v1/clients");
+}
+
+export function revokeClient(id: string) {
+  return request<{ devices: ClientDevice[] }>(`/api/v1/clients/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function startPair(body: { name: string; kind: string; scopes: string[] }) {
+  return request<PairTicket>("/api/v1/pair", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function createPairCode(body: { kind?: string; scopes: string[] }) {
+  return request<PairTicket>("/api/v1/pair/code", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function approvePair(body: { code: string; scopes?: string[] }) {
+  return request<{ device: ClientDevice }>("/api/v1/pair/approve", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function claimPair(body: { code: string; name: string; kind: string }) {
+  return request<PairGrant>("/api/v1/pair/claim", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function pollPair(id: string, secret: string) {
+  return request<PairPoll>(`/api/v1/pair/${encodeURIComponent(id)}?secret=${encodeURIComponent(secret)}`);
 }
 
 // room is the sync room a player that starts on the room's frame joins.
@@ -350,7 +380,7 @@ export function addPlaylistFile(name: string, groups: string, file: File, keep =
   body.set("groups", groups);
   body.set("keep", keep);
   body.set("file", file);
-  return fetch("/api/v1/sources", { method: "POST", body }).then(async (res) => {
+  return fetch("/api/v1/sources", { method: "POST", body, headers: authHeaders() }).then(async (res) => {
     const text = await res.text();
     if (!res.ok) {
       let message = "";

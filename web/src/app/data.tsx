@@ -19,6 +19,7 @@ import {
   startRecording,
   stopRecording,
 } from "../api";
+import { isForbidden, isUnauthorized, writeToken } from "../lib/deviceToken";
 import { events } from "../lib/events";
 import { indexAirings, sortChannels, type AiringIndex } from "../lib/guide";
 import { hasSnapshotFlag, loadSnapshot, saveSnapshot } from "../lib/snapshot";
@@ -36,6 +37,7 @@ const defaults: Settings = {
   pictureMode: "broadcast",
   autoplay: "1",
   hdhrEmulate: "0",
+  deviceAuth: "0",
 };
 
 type Data = {
@@ -61,6 +63,9 @@ type Data = {
   favorite: (channel: Channel) => Promise<void>;
   editChannel: (channel: Channel, patch: ChannelPatch) => Promise<void>;
   saveSettings: (values: Partial<Settings>) => Promise<void>;
+  /** True when the server asked this browser to pair. */
+  needsPair: boolean;
+  notePaired: () => void;
   record: (channel: Channel, title: string) => Promise<void>;
   stopRecord: (id: number) => Promise<void>;
   recordSeries: (title: string, channel: Channel) => Promise<void>;
@@ -124,6 +129,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [planned, setPlanned] = useState<PlannedAiring[]>([]);
   const [virtuals, setVirtuals] = useState<VirtualChannel[]>([]);
   const [settings, setSettings] = useState<Settings>(defaults);
+  const [needsPair, setNeedsPair] = useState(false);
   const [storage, setStorage] = useState<StorageInfo | null>(null);
   const [update, setUpdate] = useState<ServerInfo["update"]>();
   const [server, setServer] = useState<ServerInfo | null>(null);
@@ -143,7 +149,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }),
       );
     }
-    if (all || want.has("devices")) jobs.push(getDevices().then((r) => setDevices(r.devices)));
+    if (all || want.has("devices")) {
+      jobs.push(
+        getDevices()
+          .then((r) => setDevices(r.devices))
+          .catch((err) => {
+            if (!isForbidden(err) && !isUnauthorized(err)) throw err;
+          }),
+      );
+    }
     if (all || want.has("airings")) jobs.push(getAirings().then((r) => setAirings(r.airings)));
     if (all || want.has("recordings")) jobs.push(getRecordings().then((r) => setRecordings(r.recordings)));
     if (all || want.has("passes")) {
@@ -152,7 +166,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     if (all || want.has("virtuals")) jobs.push(getVirtuals().then((r) => setVirtuals(r.virtuals)));
     if (all) {
-      jobs.push(getSettings().then(setSettings));
+      jobs.push(
+        getSettings()
+          .then((next) => {
+            setSettings(next);
+            setNeedsPair(false);
+          })
+          .catch((err) => {
+            if (isUnauthorized(err)) setNeedsPair(true);
+            else if (!isForbidden(err)) throw err;
+          }),
+      );
       jobs.push(
         getServer()
           .then((info) => {
@@ -182,7 +206,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setBooting(false);
           setReady(true);
         }
-        const [nextSettings, info] = await Promise.all([getSettings(), getServer().catch(() => null)]);
+        let nextSettings: Settings;
+        try {
+          nextSettings = await getSettings();
+          setNeedsPair(false);
+        } catch (err) {
+          if (isUnauthorized(err)) {
+            setNeedsPair(true);
+            setError("");
+            setReady(true);
+            setSettled(true);
+            setBooting(false);
+            return;
+          }
+          if (!isForbidden(err)) throw err;
+          nextSettings = defaults;
+        }
+        const info = await getServer().catch(() => null);
         setSettings(nextSettings);
         if (info) {
           setServer(info);
@@ -246,6 +286,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
           })();
         });
       } catch (err) {
+        if (isUnauthorized(err)) {
+          setNeedsPair(true);
+          setError("");
+          setReady(true);
+          setSettled(true);
+          setBooting(false);
+          return;
+        }
         setError(err instanceof Error ? err.message : "The server could not be reached.");
         loadFailed.current = true;
         setReady(true);
@@ -320,6 +368,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       planned,
       virtuals,
       settings,
+      needsPair,
+      notePaired: () => {
+        setNeedsPair(false);
+        void refresh();
+      },
       storage,
       refresh,
       setError,
@@ -332,7 +385,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh(["channels"]);
       },
       saveSettings: async (values) => {
-        setSettings(await putSettings(values));
+        const next = await putSettings(values);
+        if (next.deviceToken) writeToken(next.deviceToken);
+        const stored = { ...next };
+        delete stored.deviceToken;
+        setSettings(stored);
+        setNeedsPair(false);
         setStorage(await getStorage().catch(() => null));
         if ("checkUpdates" in values) {
           const info = await getServer().catch(() => null);
@@ -403,7 +461,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh(["channels", "passes"]);
       },
     }),
-    [ready, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, storage, refresh, notices, dismissNotice, update, server, freshAt],
+    [ready, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, needsPair, storage, refresh, notices, dismissNotice, update, server, freshAt],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

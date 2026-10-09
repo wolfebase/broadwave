@@ -11,7 +11,8 @@
     "virtualChannels",
     "commercialDetection",
     "hdhrEmulation",
-    "export"
+    "export",
+    "devicePairing"
   ],
   "id": "contract-server",
   "minAppVersion": "1.0",

@@ -1,5 +1,17 @@
 // One socket per tab for live updates, clock sync, and Whole-Home Sync rooms.
 
+// Same key as web/src/lib/deviceToken.ts. This file stays free of imports so the
+// node test can load it without a bundler.
+const deviceTokenKey = "bw.deviceToken";
+
+function storedDeviceToken(): string {
+  try {
+    return globalThis.localStorage?.getItem(deviceTokenKey) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export type RoomState = {
   room: string;
   channelId: number;
@@ -63,7 +75,9 @@ export class EventSocket {
   private connect() {
     window.clearTimeout(this.retryTimer);
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${location.host}/api/v1/ws`);
+    const token = storedDeviceToken();
+    const auth = token ? `?access_token=${encodeURIComponent(token)}` : "";
+    const ws = new WebSocket(`${proto}://${location.host}/api/v1/ws${auth}`);
     this.ws = ws;
     ws.onopen = () => {
       this.connected = true;

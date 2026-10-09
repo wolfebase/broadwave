@@ -23,6 +23,7 @@ tags:
   - name: dvr
   - name: virtuals
   - name: settings
+  - name: pairing
 paths:
   /health:
     get:
@@ -1556,6 +1557,195 @@ paths:
                   markers:
                     type: array
                     items: { $ref: "#/components/schemas/Marker" }
+  /pair:
+    post:
+      tags: [pairing]
+      operationId: startPair
+      description: |
+        A new device asks to be paired and shows the code. Poll `GET /pair/{id}` with the
+        poll secret until an admin approves it. The code lasts 10 minutes. Sign-in is not required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 63 }
+                kind: { type: string, enum: [phone, tv, web, other] }
+                scopes:
+                  type: array
+                  items: { type: string, enum: [watch, record, admin] }
+      responses:
+        "201":
+          description: Code for the device to show
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PairTicket" }
+        "400": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /pair/code:
+    post:
+      tags: [pairing]
+      operationId: createPairCode
+      description: |
+        An admin shows a code for another device to enter. While device sign-in is off, anyone
+        on the home network may call this. While it is on, the caller needs admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 63 }
+                kind: { type: string, enum: [phone, tv, web, other] }
+                scopes:
+                  type: array
+                  items: { type: string, enum: [watch, record, admin] }
+      responses:
+        "201":
+          description: Code for the other device to enter
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PairTicket" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /pair/approve:
+    post:
+      tags: [pairing]
+      operationId: approvePair
+      description: |
+        Approves a code a device is showing. The token is delivered to that device's next poll,
+        not in this response. Scopes here replace the ones the device asked for.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, description: "Six digits. Spaces and dashes are ignored." }
+                scopes:
+                  type: array
+                  items: { type: string, enum: [watch, record, admin] }
+      responses:
+        "200":
+          description: The device that may now sign in
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [device]
+                properties:
+                  device: { $ref: "#/components/schemas/ClientDevice" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /pair/claim:
+    post:
+      tags: [pairing]
+      operationId: claimPair
+      description: |
+        A device enters a code an admin is showing and receives its token once.
+        The response also sets the `bw_token` cookie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name]
+              properties:
+                code: { type: string }
+                name: { type: string, minLength: 1, maxLength: 63 }
+                kind: { type: string, enum: [phone, tv, web, other] }
+      responses:
+        "201":
+          description: Token for this device
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PairGrant" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /pair/{id}:
+    get:
+      tags: [pairing]
+      operationId: pollPair
+      description: |
+        The device that called `POST /pair` polls with its poll secret.
+        `token` is present on the poll that finds the pairing approved, and not again.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: secret
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Pending, approved, expired, or denied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PairPoll" }
+        "404": { $ref: "#/components/responses/Error" }
+  /clients:
+    get:
+      tags: [pairing]
+      operationId: listClients
+      description: Paired phones, TVs, and browsers. Tuner hardware stays on `/devices`. Tokens are not included.
+      responses:
+        "200":
+          description: Devices that have not been revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [devices]
+                properties:
+                  devices:
+                    type: array
+                    items: { $ref: "#/components/schemas/ClientDevice" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /clients/me:
+    get:
+      tags: [pairing]
+      operationId: getClient
+      description: The device for the token on this request. With no token, `device` is null and `auth` says whether sign-in is on.
+      responses:
+        "200":
+          description: This device, or an empty seat
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientSeat" }
+  /clients/{id}:
+    delete:
+      tags: [pairing]
+      operationId: revokeClient
+      description: Revokes a device. Its token stops working immediately.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The devices that remain
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [devices]
+                properties:
+                  devices:
+                    type: array
+                    items: { $ref: "#/components/schemas/ClientDevice" }
+        "404": { $ref: "#/components/responses/Error" }
   /settings:
     get:
       tags: [settings]
@@ -1735,6 +1925,47 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    ClientDevice:
+      type: object
+      required: [id, name, kind, scopes, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { type: string, enum: [phone, tv, web, other] }
+        scopes:
+          type: array
+          items: { type: string, enum: [watch, record, admin] }
+        createdAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time }
+    PairTicket:
+      type: object
+      required: [id, code, expiresAt]
+      properties:
+        id: { type: string }
+        code: { type: string, description: "Six digits." }
+        expiresAt: { type: string, format: date-time }
+        pollSecret: { type: string, description: "Present when the device shows the code. Send it as secret on the poll." }
+    PairGrant:
+      type: object
+      required: [token, device]
+      properties:
+        token: { type: string }
+        device: { $ref: "#/components/schemas/ClientDevice" }
+    PairPoll:
+      type: object
+      required: [state]
+      properties:
+        state: { type: string, enum: [pending, approved, expired, denied] }
+        expiresAt: { type: string, format: date-time }
+        token: { type: string }
+        device: { $ref: "#/components/schemas/ClientDevice" }
+    ClientSeat:
+      type: object
+      required: [auth]
+      properties:
+        auth: { type: string, enum: [local-open, device] }
+        device: { $ref: "#/components/schemas/ClientDevice" }
     Error:
       type: object
       required: [code, message]
@@ -2442,6 +2673,8 @@ components:
         pictureMode: { $ref: "#/components/schemas/PictureMode" }
         autoplay: { type: string, enum: ["0", "1"] }
         hdhrEmulate: { type: string, enum: ["0", "1"] }
+        deviceAuth: { type: string, enum: ["0", "1"], description: "1 requires a device token on the API and on /media. 0, the default, leaves the home network open. A presented token is still recognized while this is off." }
+        deviceToken: { type: string, description: "Returned once, on the response that turns deviceAuth on, when the request did not already use an admin token. Not stored. Not returned by GET." }
         exportMosaics: { type: string, description: "Mosaics listed as channels of their own in the M3U, XMLTV, and HDHomeRun exports: mosaic keys joined by commas, for example 4-12,1-2-3 (at most 8). They are numbered 990.1 and up in this order; a mosaic with a channel no longer in the lineup is left out." }
         setupComplete: { type: string, enum: ["0", "1"] }
         needsSetup: { type: string, enum: ["0", "1"], description: "1 when this catalog should show the setup wizard. Set by the server; ignored on write." }

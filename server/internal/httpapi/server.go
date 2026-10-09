@@ -96,6 +96,15 @@ type Server struct {
 	homeFound []discovery.Found
 	arrivals  *discovery.Arrivals
 
+	// seenAt limits last-seen writes to one a minute per device.
+	seenMu sync.Mutex
+	seenAt map[string]time.Time
+	// pairHits and pairTokens stay in memory. A catalog backup must not
+	// contain a live pairing token.
+	pairMu     sync.Mutex
+	pairHits   map[string][]time.Time
+	pairTokens map[string]heldToken
+
 	routes []string
 }
 
@@ -136,6 +145,14 @@ func (s *Server) Handler() http.Handler {
 	api("GET /channels/{id}/frame", s.frame)
 	api("GET /settings", s.getSettings)
 	api("PUT /settings", s.putSettings)
+	api("POST /pair", s.startPair)
+	api("POST /pair/code", s.createPairCode)
+	api("POST /pair/approve", s.approvePair)
+	api("POST /pair/claim", s.claimPair)
+	api("GET /pair/{id}", s.pollPair)
+	api("GET /clients", s.listClients)
+	api("GET /clients/me", s.clientMe)
+	api("DELETE /clients/{id}", s.revokeClient)
 	api("POST /setup/finish", s.postSetupFinish)
 	api("GET /setup/finish", s.getSetupFinish)
 	api("POST /watch", s.watch)
@@ -204,12 +221,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /media/art/{kind}/{id}", s.art)
 	mux.HandleFunc("GET /", s.ui)
 	if s.Dev {
-		return s.withHostCheck(s.withDevCORS(mux))
+		return s.withHostCheck(s.withDevCORS(s.withDeviceAuth(mux)))
 	}
-	// The LAN API has no sign-in, so a page on another site must not be able
-	// to post to it: a restore from any tab would replace the catalog. The
-	// apps and curl send no Origin and pass.
-	return s.withHostCheck(http.NewCrossOriginProtection().Handler(mux))
+	// The LAN API has no sign-in until device sign-in is turned on, so a page
+	// on another site must not be able to post to it: a restore from any tab
+	// would replace the catalog. The apps and curl send no Origin and pass.
+	return s.withHostCheck(s.withDeviceAuth(http.NewCrossOriginProtection().Handler(mux)))
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
@@ -217,11 +234,17 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) profile(w http.ResponseWriter, r *http.Request) {
+	auth := "local-open"
+	note := "A password is required before this server is opened beyond your home network. That arrives with accounts."
+	if on, err := s.deviceAuthOn(r.Context()); err == nil && on {
+		auth = "device"
+		note = "Devices sign in with a pairing code."
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id":   1,
 		"name": "Home",
-		"auth": "local-open",
-		"note": "A password is required before this server is opened beyond your home network. That arrives with accounts.",
+		"auth": auth,
+		"note": note,
 	})
 }
 
@@ -517,10 +540,18 @@ func (s *Server) patchChannel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
-	values, err := s.Store.Settings(r.Context())
+	values, err := s.settingsValues(r)
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	writeCachedJSON(w, r, http.StatusOK, values)
+}
+
+func (s *Server) settingsValues(r *http.Request) (map[string]string, error) {
+	values, err := s.Store.Settings(r.Context())
+	if err != nil {
+		return nil, err
 	}
 	if values["layout"] == "" {
 		values["layout"] = "auto"
@@ -560,6 +591,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	if values["hdhrEmulate"] == "" {
 		values["hdhrEmulate"] = "0"
 	}
+	if values[store.SettingDeviceAuth] != "1" {
+		values[store.SettingDeviceAuth] = "0"
+	}
 	if values["hideScores"] == "" {
 		values["hideScores"] = "0"
 	}
@@ -590,8 +624,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	delete(values, store.SettingUpdateChecked)
 	needs, err := s.Store.ApplySetupDefault(r.Context(), s.now())
 	if err != nil {
-		writeError(w, err)
-		return
+		return nil, err
 	}
 	if needs {
 		values["needsSetup"] = "1"
@@ -599,7 +632,8 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		values["needsSetup"] = "0"
 		values["setupComplete"] = "1"
 	}
-	writeCachedJSON(w, r, http.StatusOK, values)
+	delete(values, "deviceToken")
+	return values, nil
 }
 
 func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
@@ -608,6 +642,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
+	prev, err := s.Store.Settings(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	wasOn := prev[store.SettingDeviceAuth] == "1"
 	if raw, ok := body["exportMosaics"]; ok {
 		list, err := mosaicList(raw)
 		if err != nil {
@@ -619,6 +659,14 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if err := s.Store.PutSettings(r.Context(), body); err != nil {
 		httpError(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	var minted string
+	if body[store.SettingDeviceAuth] == "1" && !wasOn {
+		minted, err = s.mintBrowserAdmin(r)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
 	}
 	// Turning the check back on looks now. A check that already ran today is reused.
 	if body["checkUpdates"] == "1" && s.Updates != nil {
@@ -632,7 +680,19 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 	}
-	s.getSettings(w, r)
+	if minted == "" {
+		s.getSettings(w, r)
+		return
+	}
+	values, err := s.settingsValues(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	values["deviceToken"] = minted
+	setDeviceCookie(w, minted)
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, values)
 }
 
 func (s *Server) ui(w http.ResponseWriter, r *http.Request) {
@@ -740,8 +800,8 @@ func (s *Server) withDevCORS(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 		if strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:") {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, If-None-Match")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, If-None-Match, Authorization")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Expose-Headers", "ETag")
 		}
 		if r.Method == http.MethodOptions {

@@ -1,3 +1,5 @@
+import { authHeaders } from "./lib/deviceToken";
+
 export type Zoom = "fit" | "fill" | "zoom";
 export type SkipMode = "auto" | "button" | "manual";
 export type PictureMode = "broadcast" | "smooth" | "film";
@@ -28,7 +30,13 @@ export function liveHlsConfig(profile: BufferProfile = "desktop") {
     // No interstitials here. Their controller starts loading at the live edge
     // on its own, which undid a start on the room's frame.
     interstitialsController: undefined,
+    xhrSetup: authorizeMedia,
   };
+}
+
+function authorizeMedia(xhr: XMLHttpRequest) {
+  const value = authHeaders().Authorization;
+  if (value) xhr.setRequestHeader("Authorization", value);
 }
 
 export function fileHlsConfig(start: number) {
@@ -36,6 +44,7 @@ export function fileHlsConfig(start: number) {
     startPosition: start > 2 ? start : -1,
     maxBufferHole: 0.5,
     stretchShortVideoTrack: true,
+    xhrSetup: authorizeMedia,
   };
 }
 

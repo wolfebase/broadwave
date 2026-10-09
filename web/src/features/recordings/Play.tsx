@@ -1,6 +1,7 @@
 import Hls from "hls.js";
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
+import { mediaURL } from "../../lib/deviceToken";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
 import { copy } from "../../strings";
 import { Stage } from "../player/Stage";
@@ -105,14 +106,14 @@ export function Play({
             if (data.fatal) setError(`${data.type}: ${data.details}`);
           });
         } else {
-          video.src = next.playlist;
+          video.src = mediaURL(next.playlist);
           video.addEventListener("loadedmetadata", place);
         }
         video.addEventListener("progress", place);
         const track = document.createElement("track");
         track.kind = "captions";
         track.label = "Captions";
-        track.src = `/media/file/${recording.id}/captions.vtt`;
+        track.src = mediaURL(`/media/file/${recording.id}/captions.vtt`);
         video.appendChild(track);
         await video.play().catch(() => undefined);
         place();

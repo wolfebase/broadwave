@@ -86,7 +86,7 @@ func (s *Server) renameServer(w http.ResponseWriter, r *http.Request) {
 
 // features lets clients light up UI only for what this server build supports.
 func (s *Server) features() []string {
-	return []string{"live", "renditions", "wholeHomeSync", "events", "dvr", "passes", "virtualChannels", "commercialDetection", "hdhrEmulation", "export"}
+	return []string{"live", "renditions", "wholeHomeSync", "events", "dvr", "passes", "virtualChannels", "commercialDetection", "hdhrEmulation", "export", "devicePairing"}
 }
 
 // clock gives clients the server time (Unix ms) for a first offset estimate;

@@ -9,6 +9,7 @@ import Hls, {
   type LoaderContext,
 } from "hls.js";
 import { soundsOf, type Sound } from "../features/player/sounds";
+import { authHeaders } from "./deviceToken";
 import type { Frag } from "./roomStart";
 
 type Body = { data: string; start: number; first: number; end: number };
@@ -20,7 +21,7 @@ const key = (url: string) => new URL(url, window.location.href).href;
 
 async function load(url: string, signal?: AbortSignal): Promise<Body> {
   const start = performance.now();
-  const res = await fetch(url, { signal, cache: "no-store" });
+  const res = await fetch(url, { signal, cache: "no-store", headers: authHeaders() });
   const first = performance.now();
   if (!res.ok) throw new Error(`${res.status} ${url}`);
   const data = await res.text();

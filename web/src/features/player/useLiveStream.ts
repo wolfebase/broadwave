@@ -1,6 +1,7 @@
 import Hls from "hls.js";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { getDeviceHealth, getSignals, getTuners, stopWatch, warmChannel, watchChannel, type ApiFailure } from "../../api";
+import { authHeaders } from "../../lib/deviceToken";
 import { events } from "../../lib/events";
 import { livePlaylistLoader, masterConfig, primeLevel } from "../../lib/primeLevel";
 import { startOnRoom, SyncEngine, type SyncStatus } from "../../lib/sync";
@@ -818,7 +819,7 @@ async function classifyPlayback(channelId: number, playlist: string): Promise<{ 
   const snap = await readRecoverySnap(channelId, false);
   if (snap.health && playlist) {
     try {
-      snap.watchGone = (await fetch(playlist, { cache: "no-store" })).status === 404;
+      snap.watchGone = (await fetch(playlist, { cache: "no-store", headers: authHeaders() })).status === 404;
     } catch {
       snap.watchGone = false;
     }

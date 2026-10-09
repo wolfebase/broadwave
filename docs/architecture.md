@@ -78,11 +78,13 @@ Scores come from the public ESPN scoreboard for twelve leagues. F1 and NASCAR ar
 
 ### Store (`internal/store`)
 
-SQLite (WAL) through `modernc.org/sqlite`. Tables: devices, channels, airings, recordings, passes, markers, virtual channels, progress, settings, events, sources.
+SQLite (WAL) through `modernc.org/sqlite`. Tables: devices, channels, airings, recordings, passes, markers, virtual channels, progress, settings, events, sources, client_devices, pairings.
 
 ### HTTP (`internal/httpapi`)
 
 JSON under `/api`, HLS under `/media`, the SPA at `/`. The optional HDHomeRun emulator on `:8478` exposes channels to other apps. The contract lives in `api/openapi.yaml`.
+
+Device sign-in is off until Settings turns it on (`deviceAuth`). While it is off, the home network stays open. While it is on, `/api` and `/media` take a per-device token with scope watch, record, or admin. Pairing, health, server identity, the web app's files, `/export`, and the emulator stay open. Tokens are stored as hashes. The design is `docs/design/pairing.md`.
 
 ## Web app (`web/`)
 

@@ -581,6 +581,8 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		"pictureMode":       true,
 		"autoplay":          true,
 		"hdhrEmulate":       true,
+		"deviceAuth":        true,
+		"deviceToken":       true,
 		"exportMosaics":     true,
 		"hideScores":        true,
 		"liveScores":        true,
@@ -661,8 +663,11 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		if k == "sdPassword" && strings.TrimSpace(v) == "" {
 			continue
 		}
-		if k == "sdPasswordSet" || k == "tmdbKeySet" || k == "sportsdbKeySet" {
+		if k == "sdPasswordSet" || k == "tmdbKeySet" || k == "sportsdbKeySet" || k == "deviceToken" {
 			continue
+		}
+		if k == "deviceAuth" && v != "0" && v != "1" {
+			return fmt.Errorf("deviceAuth must be 0 or 1")
 		}
 		if k == "tmdbKey" && strings.TrimSpace(v) == "" {
 			continue

@@ -97,6 +97,21 @@ export type ChannelSignal = {
   checkedAt?: string;
 };
 
+export type ClientDevice = {
+  id: string;
+  name: string;
+  kind: string;
+  scopes: string[];
+  createdAt: string;
+  lastSeenAt?: string;
+  revokedAt?: string;
+};
+
+export type ClientSeat = {
+  auth: string;
+  device?: ClientDevice;
+};
+
 export type Device = {
   deviceId: string;
   friendlyName: string;
@@ -227,6 +242,25 @@ export type NewPass = {
   timeStart?: string;
   timeEnd?: string;
   days?: number[];
+};
+
+export type PairGrant = {
+  token: string;
+  device: ClientDevice;
+};
+
+export type PairPoll = {
+  state: string;
+  expiresAt?: string;
+  token?: string;
+  device?: ClientDevice;
+};
+
+export type PairTicket = {
+  id: string;
+  code: string;
+  expiresAt: string;
+  pollSecret?: string;
 };
 
 export type Pass = {
@@ -403,6 +437,8 @@ export type Settings = {
   pictureMode?: PictureMode;
   autoplay?: string;
   hdhrEmulate?: string;
+  deviceAuth?: string;
+  deviceToken?: string;
   exportMosaics?: string;
   setupComplete?: string;
   needsSetup?: string;

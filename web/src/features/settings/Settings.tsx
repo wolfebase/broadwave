@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { CatalogBackup, Settings, StorageInfo, StorageShow } from "../../types";
 import { getEvents, getStorageShows, getTuners, listBackups, restoreBackup } from "../../api";
 import { navigate } from "../../app/router";
+import { authHeaders } from "../../lib/deviceToken";
 import { gateFeature } from "../../lib/compat";
 import { copy } from "../../strings";
 import { formatBytes } from "../../lib/format";
@@ -316,7 +317,7 @@ export function SettingsScreen({
           const input = event.currentTarget.elements.namedItem("backup") as HTMLInputElement;
           const file = input.files?.[0];
           if (!file) return;
-          void fetch("/api/v1/backup", { method: "POST", body: file }).then((res) => {
+          void fetch("/api/v1/backup", { method: "POST", body: file, headers: authHeaders() }).then((res) => {
             if (!res.ok) throw new Error("Restore failed");
             window.location.reload();
           });

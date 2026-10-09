@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { authHeaders } from "../../lib/deviceToken";
 import type { TunerStatus } from "../../types";
 
 export type Diagnostics = {
@@ -28,7 +29,7 @@ export function useDiagnostics(key?: unknown, every = 5000): Diagnostics | null 
   useEffect(() => {
     let dead = false;
     const load = () =>
-      fetch("/api/v1/diagnostics")
+      fetch("/api/v1/diagnostics", { headers: authHeaders() })
         .then((r) => r.json() as Promise<Diagnostics>)
         .then((d) => !dead && setDiag(d))
         .catch(() => undefined);

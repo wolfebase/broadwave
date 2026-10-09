@@ -101,6 +101,10 @@ func codeFor(status int) string {
 		return "disk_low"
 	case http.StatusServiceUnavailable:
 		return "unavailable"
+	case http.StatusTooManyRequests:
+		return "rate_limited"
+	case http.StatusGone:
+		return "expired"
 	default:
 		if status >= 500 {
 			return "internal"
