@@ -37,6 +37,10 @@ type programPipe struct {
 	cc      byte
 	hold    []byte
 	rest    []byte
+	// pktBuf and filtBuf are refilled on every write. The writer copies
+	// before Write returns (a pipe or a file), so the next write may reuse them.
+	pktBuf  []byte
+	filtBuf []byte
 	clocks  map[int]*pesClock
 	warned  time.Time
 	// onBreak, when set, is told about a real backwards break in the picture
@@ -225,7 +229,7 @@ func syncOffset(data []byte, n int) int {
 // and half another. The last two packets wait for the next write.
 func (p *programPipe) packets() []byte {
 	data := p.rest
-	var out []byte
+	out := p.pktBuf[:0]
 	off := 0
 	for off+376 < len(data) {
 		if data[off] != 0x47 || data[off+188] != 0x47 || data[off+376] != 0x47 {
@@ -241,6 +245,7 @@ func (p *programPipe) packets() []byte {
 	} else {
 		p.rest = append(data[:0], data[off:]...)
 	}
+	p.pktBuf = out
 	return out
 }
 
@@ -383,7 +388,7 @@ func (p *programPipe) useMap(sec []byte) bool {
 }
 
 func (p *programPipe) filter(data []byte) []byte {
-	var out []byte
+	out := p.filtBuf[:0]
 	for off := 0; off+188 <= len(data); off += 188 {
 		pkt := data[off : off+188]
 		pid := int(pkt[1]&0x1f)<<8 | int(pkt[2])
@@ -407,9 +412,13 @@ func (p *programPipe) filter(data []byte) []byte {
 		}
 		if pid == p.pmtPID && pkt[1]&0x40 != 0 {
 			// A station can move a stream to a new PID; follow its new map.
-			for _, sec := range sections(pkt, pid) {
-				if len(sec) > 5 && sec[0] == 0x02 && int(sec[5]>>1)&0x1f != p.pmtVer {
-					p.useMap(sec)
+			// The version sits in the section header, so an unchanged map
+			// does not build a section copy on every repeat.
+			if ver, ok := pmtVersion(pkt); !ok || ver != p.pmtVer {
+				for _, sec := range sections(pkt, pid) {
+					if len(sec) > 5 && sec[0] == 0x02 && int(sec[5]>>1)&0x1f != p.pmtVer {
+						p.useMap(sec)
+					}
 				}
 			}
 		}
@@ -417,6 +426,7 @@ func (p *programPipe) filter(data []byte) []byte {
 			if p.broken {
 				p.tail = append(append(p.pending, data[off+188:]...), p.rest...)
 				p.rest, p.pending, p.catching = nil, nil, false
+				p.filtBuf = out
 				return out
 			}
 			continue
@@ -427,7 +437,23 @@ func (p *programPipe) filter(data []byte) []byte {
 			out[at+3] = out[at+3]&0xf0 | (pkt[3]-c.shift)&0x0f
 		}
 	}
+	p.filtBuf = out
 	return out
+}
+
+// pmtVersion is the version of a program map that starts in this packet.
+// False means the header is not in this packet, and the caller parses it.
+func pmtVersion(pkt []byte) (int, bool) {
+	payload := tsPayload(pkt)
+	if len(payload) < 7 {
+		return 0, false
+	}
+	pointer := int(payload[0])
+	off := 1 + pointer
+	if off+6 > len(payload) || payload[off] != 0x02 {
+		return 0, false
+	}
+	return int(payload[off+5]>>1) & 0x1f, true
 }
 
 // keepPES drops a PES whose timestamp is off its stream's timeline, and the

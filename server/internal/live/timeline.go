@@ -1,7 +1,6 @@
 package live
 
 import (
-	"bufio"
 	"bytes"
 	"io"
 	"os"
@@ -218,6 +217,14 @@ type playlistStamper struct {
 	// listed while its segment is open and for a while after; anchoring it
 	// again would drop the shift a silence added.
 	broke map[string]bool
+	// lastSrc and lastOut are the previous playlist and the bytes handed
+	// out for it. A reload of the same file skips the rebuild. They stay
+	// empty when a part or segment had no timestamp yet, so the next reload
+	// can date it once its file is on disk. lastTimed is whether that rebuild
+	// had a timeline: a dated playlist is not an answer for an undated one.
+	lastSrc   []byte
+	lastOut   []byte
+	lastTimed bool
 }
 
 // reset forgets segment times. A restarted encode reuses seg00001.m4s for a
@@ -227,12 +234,18 @@ func (p *playlistStamper) reset() {
 	p.cache = nil
 	p.walls = nil
 	p.broke = nil
+	p.lastSrc = nil
+	p.lastOut = nil
+	p.lastTimed = false
 	p.mu.Unlock()
 }
 
 func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.lastOut != nil && p.lastTimed == (tl != nil) && bytes.Equal(p.lastSrc, src) {
+		return p.lastOut
+	}
 	if p.cache == nil {
 		p.cache = map[string]int64{}
 	}
@@ -249,6 +262,9 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 	var lastEnd time.Time
 	var haveEnd bool
 	var breakNext bool
+	// missed is a part or segment the timeline still cannot date. Caching
+	// that playlist would keep the date off after the file shows up.
+	missed := false
 	noteBreak := func(pts int64) {
 		if breakNext && haveEnd && tl != nil {
 			tl.Reanchor(pts, lastEnd)
@@ -273,6 +289,9 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 						pts, ok = v, true
 						p.cache[name] = v
 					}
+				}
+				if tl != nil && !ok {
+					missed = true
 				}
 				// The part anchors the clock. A date on every part is not written:
 				// the tag belongs to the next media segment.
@@ -327,6 +346,8 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 					lastEnd = wall.Add(d)
 					haveEnd = true
 				}
+			} else if tl != nil {
+				missed = true
 			}
 			for _, l := range pending {
 				out.WriteString(l + "\n")
@@ -353,7 +374,16 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 			delete(p.broke, name)
 		}
 	}
-	return out.Bytes()
+	body := out.Bytes()
+	if missed {
+		return body
+	}
+	p.lastSrc = make([]byte, len(src))
+	copy(p.lastSrc, src)
+	p.lastOut = make([]byte, len(body))
+	copy(p.lastOut, body)
+	p.lastTimed = tl != nil
+	return p.lastOut
 }
 
 func pendingDur(lines []string) time.Duration {
@@ -401,10 +431,7 @@ func partName(line string) string {
 
 // readPlaylist is split out so tests can stamp a playlist without ffmpeg.
 func readPlaylist(path string) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	return io.ReadAll(bufio.NewReader(f))
+	// A buffered reader would allocate a 4 KiB block on top of the file
+	// itself, and a live playlist is read again for every viewer.
+	return os.ReadFile(path)
 }

@@ -2,6 +2,7 @@ package live
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -59,6 +60,55 @@ func TestProgramFilterDropsASiblingWithoutAPicture(t *testing.T) {
 	if len(listed) != 1 || listed[0] != 1 {
 		t.Fatalf("pat programs %v", listed)
 	}
+}
+
+// Chunked writes have to emit the same bytes as one write. The filter reuses
+// its buffers, and a short write must not change what the next one keeps.
+func TestProgramFilterChunksMatchOneWrite(t *testing.T) {
+	var raw []byte
+	for range 30 {
+		raw = append(raw, twoProgramTS(1, 0x1000, 0x110, 0x111, 2, 0x1001, 0x210)...)
+	}
+	var one bytes.Buffer
+	w := newProgramPipe(&closeBuf{&one}, 1)
+	if _, err := w.Write(raw); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []int{188, 188 * 3, 188*7 + 50, 1000, 188*49 + 17} {
+		var got bytes.Buffer
+		w := newProgramPipe(&closeBuf{&got}, 1)
+		for off := 0; off < len(raw); off += n {
+			end := min(off+n, len(raw))
+			if _, err := w.Write(raw[off:end]); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if msg := sameProgram(got.Bytes(), one.Bytes()); msg != "" {
+			t.Fatalf("chunks of %d: %s", n, msg)
+		}
+	}
+}
+
+// sameProgram reports how two filtered streams differ, ignoring the
+// continuity counter on program-table packets. A chunk boundary can count
+// that table before the stream has started, which moves only that counter.
+func sameProgram(a, b []byte) string {
+	if len(a) != len(b) || len(a)%188 != 0 {
+		return fmt.Sprintf("%d bytes vs %d", len(a), len(b))
+	}
+	for off := 0; off < len(a); off += 188 {
+		pid := int(a[off+1]&0x1f)<<8 | int(a[off+2])
+		for i := 0; i < 188; i++ {
+			if a[off+i] == b[off+i] {
+				continue
+			}
+			if pid == 0 && i == 3 {
+				continue
+			}
+			return fmt.Sprintf("packet %d pid %d off %d: %02x vs %02x", off/188, pid, i, a[off+i], b[off+i])
+		}
+	}
+	return ""
 }
 
 func TestProgramFilterLearnsAcrossWrites(t *testing.T) {
