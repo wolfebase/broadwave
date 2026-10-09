@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { unreadBody } from "./src/api.ts";
-import { aTunerAnswers, aTunerIsFree, channelDidNotStart, classifySnap, connectionDropped, FrozenPicture, frozenMs, holdPictureMessage, listingNote, noListing, noListingChecked, noSignal, outageAtWatchStart, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, requestFailed, restartDelayMs, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage } from "./src/features/player/outage.ts";
+import { aTunerAnswers, aTunerIsFree, autoplayRetry, channelDidNotStart, classifySnap, connectionDropped, FrozenPicture, frozenMs, holdPictureMessage, listingNote, noListing, noListingChecked, noSignal, outageAtWatchStart, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, requestFailed, restartDelayMs, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage, watchResolution } from "./src/features/player/outage.ts";
 
 test("checking for listings says so when nothing comes back", () => {
   assert.equal(listingNote(false), noListing);
@@ -206,4 +206,20 @@ test("a new watch drops the previous failure, and a quiet retune keeps it", () =
   assert.deepEqual(outageAtWatchStart(false, prev), { error: "", recovery: "", needsConfirm: false });
   assert.deepEqual(outageAtWatchStart(true, prev), prev);
   assert.equal(outageAtWatchStart(true, prev), prev);
+});
+
+test("a watch that resolves after teardown does not mark the next attempt", () => {
+  const prev = { channel: 4, n: 2 };
+  const late = watchResolution(true, 4, prev);
+  assert.equal(late.publish, false);
+  assert.deepEqual(late.autoTries, prev);
+  assert.equal(late.release, true);
+  assert.deepEqual(watchResolution(false, 4, prev), { publish: true, autoTries: { channel: 4, n: 0 }, release: false });
+});
+
+test("a torn-down watch does not mute and play again", () => {
+  assert.equal(autoplayRetry(true, "NotAllowedError"), "return");
+  assert.equal(autoplayRetry(false, "NotAllowedError"), "mute-and-play");
+  assert.equal(autoplayRetry(false, "AbortError"), "return");
+  assert.equal(autoplayRetry(false, undefined), "return");
 });

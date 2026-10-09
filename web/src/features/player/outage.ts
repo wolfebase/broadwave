@@ -165,6 +165,26 @@ export function outageAtWatchStart(
   if (quiet) return prev;
   return { error: "", recovery: "", needsConfirm: false };
 }
+
+/**
+ * A watch that answers after this effect has stopped must not mark the next
+ * attempt as already playing, or restart its retry count. It still releases
+ * the viewer it added.
+ */
+export function watchResolution(
+  dead: boolean,
+  channel: number,
+  prev: { channel: number; n: number },
+): { publish: boolean; autoTries: { channel: number; n: number }; release: boolean } {
+  if (dead) return { publish: false, autoTries: prev, release: true };
+  return { publish: true, autoTries: { channel, n: 0 }, release: false };
+}
+
+/** A refused autoplay is tried again, muted. A watch that already stopped is left alone. */
+export function autoplayRetry(dead: boolean, name: string | undefined): "return" | "mute-and-play" {
+  if (dead || name !== "NotAllowedError") return "return";
+  return "mute-and-play";
+}
 const settledMs = 20_000;
 // After this many steps with no settled picture, the outage clock has the last word.
 const maxFrozenSteps = 6;
