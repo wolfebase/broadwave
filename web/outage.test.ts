@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { unreadBody } from "./src/api.ts";
-import { aTunerAnswers, aTunerIsFree, autoplayRetry, channelDidNotStart, classifySnap, connectionDropped, FrozenPicture, frozenMs, holdPictureMessage, listingNote, noListing, noListingChecked, noSignal, outageAtWatchStart, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, requestFailed, restartDelayMs, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage, watchResolution } from "./src/features/player/outage.ts";
+import { aTunerAnswers, aTunerIsFree, autoplayRetry, channelDidNotStart, classifySnap, connectionDropped, FrozenPicture, frozenMs, holdPictureMessage, listingNote, liveFatalStep, noListing, noListingChecked, noSignal, outageAtWatchStart, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, requestFailed, restartDelayMs, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage, watchResolution } from "./src/features/player/outage.ts";
 
 test("checking for listings says so when nothing comes back", () => {
   assert.equal(listingNote(false), noListing);
@@ -222,4 +222,25 @@ test("a torn-down watch does not mute and play again", () => {
   assert.equal(autoplayRetry(false, "NotAllowedError"), "mute-and-play");
   assert.equal(autoplayRetry(false, "AbortError"), "return");
   assert.equal(autoplayRetry(false, undefined), "return");
+});
+
+test("a fatal live error recovers once per kind before the viewer sees it", () => {
+  const tried = { network: false, media: false };
+  const quiet = { on: false, recovered: false };
+  assert.equal(liveFatalStep("networkError", quiet, tried), "start-load");
+  assert.equal(liveFatalStep("networkError", quiet, tried), "outage");
+  assert.equal(liveFatalStep("mediaError", quiet, tried), "recover-media");
+  assert.equal(liveFatalStep("mediaError", quiet, tried), "outage");
+  assert.equal(liveFatalStep("muxError", { on: false, recovered: false }, { network: false, media: false }), "outage");
+});
+
+test("coming back from a hidden tab still holds a fatal that is not the one stale-buffer media error", () => {
+  const tried = { network: false, media: false };
+  assert.equal(liveFatalStep("mediaError", { on: true, recovered: false }, tried), "recover-quiet");
+  assert.equal(tried.media, false);
+  assert.equal(liveFatalStep("mediaError", { on: true, recovered: true }, tried), "hold-quiet");
+  assert.equal(liveFatalStep("networkError", { on: true, recovered: false }, tried), "hold-quiet");
+  assert.equal(tried.network, false);
+  // The quiet window does not spend the recovery the picture gets once it is back.
+  assert.equal(liveFatalStep("networkError", { on: false, recovered: false }, tried), "start-load");
 });

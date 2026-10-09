@@ -185,6 +185,31 @@ export function autoplayRetry(dead: boolean, name: string | undefined): "return"
   if (dead || name !== "NotAllowedError") return "return";
   return "mute-and-play";
 }
+
+export type LiveFatalStep = "recover-quiet" | "hold-quiet" | "start-load" | "recover-media" | "outage";
+
+/**
+ * A fatal hls.js error while the picture is up. Coming back from a hidden tab
+ * still allows one media recovery and holds anything else until that window
+ * ends. Otherwise the watch gets one network reload and one media recovery;
+ * the next fatal of that kind is the outage the viewer sees.
+ */
+export function liveFatalStep(
+  type: string,
+  quiet: { on: boolean; recovered: boolean },
+  tried: { network: boolean; media: boolean },
+): LiveFatalStep {
+  if (quiet.on) return type === "mediaError" && !quiet.recovered ? "recover-quiet" : "hold-quiet";
+  if (type === "networkError" && !tried.network) {
+    tried.network = true;
+    return "start-load";
+  }
+  if (type === "mediaError" && !tried.media) {
+    tried.media = true;
+    return "recover-media";
+  }
+  return "outage";
+}
 const settledMs = 20_000;
 // After this many steps with no settled picture, the outage clock has the last word.
 const maxFrozenSteps = 6;

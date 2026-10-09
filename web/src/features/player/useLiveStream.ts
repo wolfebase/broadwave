@@ -21,6 +21,7 @@ import {
   holdPictureMessage,
   pictureRetryDelay,
   pictureRetryEveryMs,
+  liveFatalStep,
   outageAtWatchStart,
   pictureStopped,
   recoveryReady,
@@ -271,6 +272,9 @@ export function useLiveStream(
     let outageGen = 0;
     let recovered = false;
     let heldFatal = false;
+    // One network reload and one media recovery for this watch. A second fatal
+    // of that kind is the outage; a quiet return keeps its own media recovery.
+    const triedFatal = { network: false, media: false };
     let quietTimer = 0;
     let playlist = "";
     let startTimer = 0;
@@ -373,13 +377,24 @@ export function useLiveStream(
             // hls.js cancels a fragment it no longer needs, as on a sound switch.
             if (data.details !== Hls.ErrorDetails.INTERNAL_ABORTED) video.dataset.hlsError = `${data.type}:${data.details}${data.fatal ? ":fatal" : ""}`;
             if (!data.fatal) return;
-            if (resumeQuiet) {
+            const step = liveFatalStep(data.type, { on: resumeQuiet, recovered }, triedFatal);
+            if (step === "recover-quiet") {
+              recovered = true;
+              hls?.recoverMediaError();
+              return;
+            }
+            if (step === "hold-quiet") {
               // One media error from the stale buffer is expected; anything
               // else is named when the quiet window ends.
-              if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !recovered) {
-                recovered = true;
-                hls?.recoverMediaError();
-              } else heldFatal = true;
+              heldFatal = true;
+              return;
+            }
+            if (step === "start-load") {
+              hls?.startLoad();
+              return;
+            }
+            if (step === "recover-media") {
+              hls?.recoverMediaError();
               return;
             }
             void noteOutage(true);
