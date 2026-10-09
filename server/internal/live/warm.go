@@ -190,7 +190,7 @@ func (h *Hub) guessGuidesLocked() map[string]bool {
 			continue
 		}
 		for g, f := range m.feeds {
-			if f.recording != nil || f.probing || f.heldOutside() || len(f.renditions) == 0 {
+			if f.recording != nil || f.tuneHeld() || f.heldOutside() || len(f.renditions) == 0 {
 				continue
 			}
 			guess := true

@@ -285,8 +285,12 @@ type feed struct {
 	stored []AudioTrack
 	// plain is set once an encode died with extras. The rest of this tune's
 	// encodes carry one sound.
-	plain   bool
+	plain bool
+	// probing is a guide dwell or measure. probes is ffprobe still reading
+	// this tune. Either one keeps the tuner; clearing the probe must not
+	// release a tune the guide is still holding.
 	probing bool
+	probes  int
 	// headerOrder is the scan read from this tune's packets. Soft 3:2 is film
 	// here even when the stored field order says progressive. ffprobe must not
 	// overwrite it: its field_order calls those pictures progressive.
@@ -2973,10 +2977,13 @@ func (h *Hub) stopRenditionLocked(f *feed, key string) {
 // recording is reading: an export or a mosaic.
 func (f *feed) heldOutside() bool { return f.exports > 0 || f.mosaics > 0 }
 
+// tuneHeld is a guide dwell or an ffprobe that is still reading this tune.
+func (f *feed) tuneHeld() bool { return f.probing || f.probes > 0 }
+
 // dropIfUnusedLocked releases the feed, and the tuner with the last feed, once
 // nobody is watching or recording it.
 func (h *Hub) dropIfUnusedLocked(f *feed) {
-	if len(f.renditions) > 0 || f.recording != nil || f.probing || f.heldOutside() {
+	if len(f.renditions) > 0 || f.recording != nil || f.tuneHeld() || f.heldOutside() {
 		return
 	}
 	h.stopFeedLocked(f)
@@ -3184,7 +3191,7 @@ func (h *Hub) freeWarmTunerLocked(host string) (int, string, bool) {
 func warmSince(m *mux) (time.Time, bool) {
 	var last time.Time
 	for _, f := range m.feeds {
-		if f.recording != nil || f.probing || f.heldOutside() {
+		if f.recording != nil || f.tuneHeld() || f.heldOutside() {
 			return time.Time{}, false
 		}
 		for _, r := range f.renditions {

@@ -110,7 +110,7 @@ func (h *Hub) probeFieldOrderLocked(m *mux, f *feed) {
 		return
 	}
 	sub := h.attachPipeLocked(m, stdin)
-	f.probing = true
+	f.probes++
 	channelID, program := f.channel.ID, f.program
 	go func() {
 		defer cancel()
@@ -120,7 +120,7 @@ func (h *Hub) probeFieldOrderLocked(m *mux, f *feed) {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		m.detach(sub)
-		f.probing = false
+		f.probes--
 		if h.channels[channelID] == f {
 			if len(f.tracks) > 0 {
 				audio = ""
@@ -177,7 +177,7 @@ func (h *Hub) probeInputLocked(m *mux, f *feed) {
 		cancel()
 		return
 	}
-	f.probing = true
+	f.probes++
 	channelID, program := f.channel.ID, f.program
 	input := m.input
 	ua, ref := f.source.UserAgent, f.source.Referrer
@@ -199,8 +199,8 @@ func (h *Hub) probeInputLocked(m *mux, f *feed) {
 		}
 		h.mu.Lock()
 		defer h.mu.Unlock()
+		f.probes--
 		if cur := h.channels[channelID]; cur == f {
-			f.probing = false
 			if h.learnCodecsLocked(f, video, audio) {
 				h.rebuildRenditionsLocked(f)
 			}
