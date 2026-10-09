@@ -10,13 +10,16 @@
 # by a few bytes, and the entry sat exactly at its ceiling: 96419 -> 96619.
 # JS lowered 2026-10-08: the copy table and the guide's program sheet load with
 # the page that needs them. Measured entry gzip 92847, plus 300 bytes of slack.
+# JS raised 2026-10-09: a guide cell, a favorite, and the recordings tab say
+# their state in the entry, which loads the guide up front. Measured 93273,
+# plus 200 bytes of slack for lazy-chunk hashes.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=93147
+JS_GZIP_MAX=93473
 CSS_GZIP_MAX=9860
 
 if [[ ! -f "$INDEX" ]]; then
