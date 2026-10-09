@@ -428,7 +428,10 @@ func (p *programPipe) filter(data []byte) []byte {
 		}
 		at := len(out)
 		out = append(out, pkt...)
-		if c := p.clocks[pid]; c != nil && c.shift != 0 && pkt[3]&0x10 != 0 {
+		// Adaptation-only packets repeat the previous counter. They have to
+		// move with the payloads that were dropped, or ffmpeg marks the
+		// open frame corrupt. They do not themselves advance the counter.
+		if c := p.clocks[pid]; c != nil && c.shift != 0 && pkt[3]&0x30 != 0 {
 			out[at+3] = out[at+3]&0xf0 | (pkt[3]-c.shift)&0x0f
 		}
 	}
