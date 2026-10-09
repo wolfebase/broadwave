@@ -42,7 +42,7 @@ test("a search result opens, and records just that airing", async ({ page }) => 
   await expect(sheet).toBeVisible();
   await expect(sheet.getByRole("button", { name: "Watch", exact: true })).toHaveCount(0);
 
-  await sheet.getByRole("button", { name: "Record", exact: true }).click();
+  await sheet.getByRole("button", { name: "Record Late Local News", exact: true }).click();
   await expect(sheet.getByRole("button", { name: "Don't record" })).toBeVisible();
   const once = (await passes(page)).filter((pass) => pass.kind === "once");
   expect(once).toHaveLength(1);
@@ -62,15 +62,15 @@ test("a search result opens, and records just that airing", async ({ page }) => 
   await page.goto("/search?q=Late%20Local");
   await row.click();
   await sheet.getByRole("button", { name: "Don't record" }).click();
-  await expect(sheet.getByRole("button", { name: "Record", exact: true })).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Record Late Local News", exact: true })).toBeVisible();
   expect((await passes(page)).filter((pass) => pass.kind === "once")).toHaveLength(0);
 
   // Under a series pass, removing the one airing would change nothing.
-  await sheet.getByRole("button", { name: "Record", exact: true }).click();
+  await sheet.getByRole("button", { name: "Record Late Local News", exact: true }).click();
   await sheet.getByRole("button", { name: "Record series" }).click();
   await expect(sheet.getByRole("button", { name: "Series is recording" })).toBeDisabled();
   await expect(sheet.getByRole("button", { name: "Don't record" })).toHaveCount(0);
-  await expect(sheet.getByRole("button", { name: "Record", exact: true })).toHaveCount(0);
+  await expect(sheet.getByRole("button", { name: "Record Late Local News", exact: true })).toHaveCount(0);
   for (const pass of await passes(page)) {
     if (pass.title === "Late Local News") expect((await page.request.delete(`/api/v1/passes/${pass.id}`)).ok()).toBe(true);
   }

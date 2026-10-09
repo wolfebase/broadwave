@@ -1,11 +1,12 @@
 import Hls from "hls.js";
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
+import { actionName } from "../../lib/actionName";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
 import { copy } from "../../strings";
 import { Stage } from "../player/Stage";
 import type { Recording } from "../../types";
-import { episodeTag } from "../library/model";
+import { episodeTag, recordingSubject } from "../library/model";
 import { breakScans, idleBreakScan } from "./breaks";
 import { DownloadLink } from "./DownloadLink";
 import { introSkip, upNext } from "./ends";
@@ -307,7 +308,7 @@ export function Play({
           <>
             {card.left !== null ? <p className="hint" aria-hidden="true">Playing in {card.left} s</p> : null}
             <div className="sheet-actions">
-              <button type="button" className="btn" onClick={onNext}>Play now</button>
+              <button type="button" className="btn" aria-label={nextLabel ? actionName("Play now", nextLabel) : undefined} onClick={onNext}>Play now</button>
               <button type="button" className="btn" onClick={() => setDismissed(true)}>Not now</button>
             </div>
           </>
@@ -316,7 +317,7 @@ export function Play({
       hold={Boolean(card)}
       tools={
         inside && (skipMode === "button" || (skipMode === "auto" && !sure(inside))) ? (
-          <button type="button" className="text-btn on" onClick={() => { if (videoRef.current) videoRef.current.currentTime = inside.end; }}>
+          <button type="button" className="text-btn on" aria-label={actionName("Skip break", `${Math.round(inside.start)}s`)} onClick={() => { if (videoRef.current) videoRef.current.currentTime = inside.end; }}>
             Skip break
           </button>
         ) : introEnd !== null ? (
@@ -379,8 +380,8 @@ export function Play({
             </div>
           ) : null}
           <div className="sheet-actions">
-            <button type="button" className="btn" onClick={() => void startOver()}>Start over</button>
-            <DownloadLink id={recording.id} status={recording.status} />
+            <button type="button" className="btn" aria-label={actionName("Start over", recordingSubject(recording))} onClick={() => void startOver()}>Start over</button>
+            <DownloadLink id={recording.id} status={recording.status} name={recordingSubject(recording)} />
             <button type="button" className="btn" onClick={() => void markHere()}>Mark 3 seconds</button>
             <button
               type="button"
@@ -400,7 +401,7 @@ export function Play({
                   <span>
                     {marker.start.toFixed(1)}s–{marker.end.toFixed(1)}s{sure(marker) ? "" : " · maybe"}
                   </span>
-                  <button type="button" className="btn" onClick={() => void removeMarker(marker.id)}>Remove</button>
+                  <button type="button" className="btn" aria-label={actionName("Remove", `break ${marker.start.toFixed(0)}–${marker.end.toFixed(0)}s`)} onClick={() => void removeMarker(marker.id)}>Remove</button>
                 </li>
               ))}
             </ul>
