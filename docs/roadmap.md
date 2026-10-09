@@ -66,4 +66,4 @@ Phases run roughly in order. Later phases can start when their dependencies are 
 
 ## Later
 
-Secure remote access and downloads; Apple Watch (remote, scores, recording alerts); Mac and visionOS.
+Secure remote access and downloads; Mac and visionOS.
