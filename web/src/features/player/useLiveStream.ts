@@ -15,6 +15,7 @@ import { awayBeforeSeekMs, comeBackAction, resumePlan } from "./resume";
 import {
   aTunerAnswers,
   aTunerIsFree,
+  autoplayRetry,
   classifySnap,
   FrozenPicture,
   holdPictureMessage,
@@ -27,6 +28,7 @@ import {
   startAttempts,
   startRetryMs,
   viewerFailure,
+  watchResolution,
   type Recovery,
   type RecoverySnap,
 } from "./outage";
@@ -320,12 +322,13 @@ export function useLiveStream(
         if (!dead) order?.answered(id);
         joined = next.rendition;
         boot = next.boot ?? "";
-        watching.current = true;
-        autoTries.current = { channel: id, n: 0 };
-        if (dead) {
+        const settled = watchResolution(dead, id, autoTries.current);
+        if (!settled.publish) {
           release();
           return;
         }
+        watching.current = true;
+        autoTries.current = settled.autoTries;
         // A master is played only once its picture playlist is in hand, so the
         // start can land on the room's frame. Otherwise the plain playlist,
         // which carries the main sound, plays as before.
@@ -410,7 +413,7 @@ export function useLiveStream(
         // torn-down stream would wait forever on no source, and the next restart
         // waits for this one to finish.
         await video.play().catch(async (err: unknown) => {
-          if ((err as { name?: string } | null)?.name !== "NotAllowedError") return;
+          if (autoplayRetry(dead, (err as { name?: string } | null)?.name) === "return") return;
           video.muted = true;
           await video.play().catch(() => undefined);
         });
