@@ -11,7 +11,7 @@ import { applySound } from "./extras";
 import { followCaptions, watchTimeline } from "./liveCaptions";
 import type { StartGate } from "./quietStart";
 import { soundFor, type Sound } from "./sounds";
-import { awayBeforeSeekMs, resumePlan } from "./resume";
+import { awayBeforeSeekMs, comeBackAction, resumePlan } from "./resume";
 import {
   aTunerAnswers,
   aTunerIsFree,
@@ -20,6 +20,7 @@ import {
   holdPictureMessage,
   pictureRetryDelay,
   pictureRetryEveryMs,
+  outageAtWatchStart,
   pictureStopped,
   recoveryReady,
   restartDelayMs,
@@ -147,13 +148,20 @@ export function useLiveStream(
     // clock. An automatic retry names its channel before bumping attempt; the
     // name stays until that watch answers, so a rerun of this effect keeps it.
     const quiet = quietRetry.current != null && quietRetry.current === channelId;
-    if (!quiet && pictureStopAtRef.current) {
-      pictureStopAtRef.current = 0;
-      setPictureStopAt(0);
+    const opened = outageAtWatchStart(quiet, { error: "kept", recovery: "server", needsConfirm: true });
+    if (!opened.error) {
+      if (pictureStopAtRef.current) {
+        pictureStopAtRef.current = 0;
+        setPictureStopAt(0);
+      }
+      setError("");
+      setRecovery("");
+      setNeedsConfirm(false);
     }
     const video = videoRef.current;
     if (!video || !channelId) return;
     let dead = false;
+    let tornDown = false;
     let hls: Hls | null = null;
     const id = channelId;
     if (frozen.current.channel !== id) frozen.current = { channel: id, picture: new FrozenPicture() };
@@ -290,7 +298,10 @@ export function useLiveStream(
       if (!fatal && !mapped.recovery) return;
       surfaced = true;
       rememberOutage(mapped.message, mapped.recovery);
-      if (mapped.recovery) hls?.destroy();
+      if (mapped.recovery) {
+        tornDown = true;
+        hls?.destroy();
+      }
     };
     video.addEventListener("playing", onPlaying);
     video.addEventListener("waiting", onWaiting);
@@ -477,11 +488,17 @@ export function useLiveStream(
       if (dead || document.visibilityState === "hidden") return;
       const away = leftAt ? performance.now() - leftAt : 0;
       leftAt = 0;
-      if (away < awayBeforeSeekMs) {
-        if (video.paused && syncing.current) void video.play().catch(() => undefined);
+      const action = comeBackAction({
+        tornDown,
+        awayMs: away,
+        syncing: syncing.current,
+        paused: video.paused,
+      });
+      if (action === "ignore") return;
+      if (action === "play") {
+        void video.play().catch(() => undefined);
         return;
       }
-      if (!syncing.current && video.paused) return;
       resumeQuiet = true;
       recovered = false;
       heldFatal = false;
@@ -579,6 +596,8 @@ export function useLiveStream(
       } else if (step === "retune") {
         retrying.current = true;
         setAttempt((n) => n + 1);
+      } else if (step === "stopped") {
+        rememberOutage(pictureStopped, "");
       }
     }, 1000);
     window.addEventListener("pagehide", beacon);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { unreadBody } from "./src/api.ts";
-import { aTunerAnswers, aTunerIsFree, channelDidNotStart, classifySnap, connectionDropped, holdPictureMessage, listingNote, noListing, noListingChecked, noSignal, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, requestFailed, restartDelayMs, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage } from "./src/features/player/outage.ts";
+import { aTunerAnswers, aTunerIsFree, channelDidNotStart, classifySnap, connectionDropped, FrozenPicture, frozenMs, holdPictureMessage, listingNote, noListing, noListingChecked, noSignal, outageAtWatchStart, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, requestFailed, restartDelayMs, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage } from "./src/features/player/outage.ts";
 
 test("checking for listings says so when nothing comes back", () => {
   assert.equal(listingNote(false), noListing);
@@ -161,4 +161,49 @@ test("a full picture budget is asked again while the last layout's encodes free 
 
 test("a restart that fails at once waits longer each time", () => {
   assert.deepEqual([0, 1, 2, 3, 4, 5, 500].map(restartDelayMs), [0, 1000, 2000, 4000, 8000, 10_000, 10_000]);
+});
+
+test("six frozen steps still alternate, then the outage clock is told once", () => {
+  const picture = new FrozenPicture();
+  const got: Array<ReturnType<FrozenPicture["note"]>> = [];
+  let now = 0;
+  let time = 10;
+  picture.note(time, true, now);
+  now += 1000;
+  time += 1;
+  picture.note(time, true, now);
+  const take = (n: number) => {
+    for (let i = 0; i < n; i++) {
+      now += 1000;
+      const step = picture.note(time, true, now);
+      if (step) got.push(step);
+    }
+  };
+  take(20);
+  picture.note(null, false, (now += 1000));
+  take(50);
+  assert.deepEqual(got, ["reload", "retune", "reload", "retune", "reload", "retune", "stopped"]);
+  assert.equal(picture.reconnecting, false);
+  const fresh = new FrozenPicture();
+  assert.equal(fresh.note(5, true, 0), null);
+  assert.equal(fresh.note(5, true, 60_000), null);
+
+  // 20s of motion is the private settled window. A shorter run must not start over.
+  for (let i = 0; i < 20; i++) {
+    now += 1000;
+    time += 1;
+    assert.equal(picture.note(time, true, now), null);
+  }
+  now += 1000;
+  time += 1;
+  picture.note(time, true, now);
+  now += frozenMs;
+  assert.equal(picture.note(time, true, now), "reload");
+});
+
+test("a new watch drops the previous failure, and a quiet retune keeps it", () => {
+  const prev = { error: pictureStopped, recovery: "" as const, needsConfirm: true };
+  assert.deepEqual(outageAtWatchStart(false, prev), { error: "", recovery: "", needsConfirm: false });
+  assert.deepEqual(outageAtWatchStart(true, prev), prev);
+  assert.equal(outageAtWatchStart(true, prev), prev);
 });
