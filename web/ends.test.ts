@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { introSkip, takeUpNext, upNext } from "./src/features/recordings/ends.ts";
+import { endedAdvances, introSkip, takeUpNext, upNext } from "./src/features/recordings/ends.ts";
 import type { Recording } from "./src/types.ts";
 
 const rec = (extra: Partial<Recording> = {}): Recording => ({ id: 1, channelId: 1, guideNumber: "4.1", title: "Mystery Hour", status: "complete", startedAt: "2026-10-01T19:00:00Z", ...extra });
@@ -33,6 +33,14 @@ test("up next plays only a countdown the viewer saw", () => {
   assert.deepEqual(takeUpNext(true, 0), { counted: false, play: true });
   // A new episode that is already at its end has not counted down.
   assert.deepEqual(takeUpNext(false, 0), { counted: false, play: false });
+});
+
+test("ended advances only after Up next was on screen", () => {
+  // A seek or a resume that opens already at the end has not counted down.
+  assert.equal(endedAdvances(false, true, false), false);
+  assert.equal(endedAdvances(true, true, false), true);
+  assert.equal(endedAdvances(true, true, true), false);
+  assert.equal(endedAdvances(true, false, false), false);
 });
 
 test("up next falls back to the last seconds", () => {

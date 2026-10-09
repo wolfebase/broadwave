@@ -21,6 +21,11 @@ export function takeUpNext(counted: boolean, left: number | null | undefined): {
   return { counted: false, play: true };
 }
 
+/** `ended` also fires for a seek straight to the end. Advance only after Up next was on screen. */
+export function endedAdvances(counted: boolean, autoplay: boolean, dismissed: boolean): boolean {
+  return autoplay && !dismissed && takeUpNext(counted, 0).play;
+}
+
 /**
  * Up next shows from the end titles, or the last seconds without them. With
  * autoplay the next episode plays once the playhead is upNextCountdown

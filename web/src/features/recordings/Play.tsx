@@ -9,7 +9,7 @@ import type { Recording } from "../../types";
 import { episodeTag } from "../library/model";
 import { breakScans, idleBreakScan } from "./breaks";
 import { DownloadLink } from "./DownloadLink";
-import { introSkip, takeUpNext, upNext } from "./ends";
+import { endedAdvances, introSkip, takeUpNext, upNext } from "./ends";
 
 type Marker = { id: number; start: number; end: number; confidence?: number };
 
@@ -193,7 +193,7 @@ export function Play({
     };
     const ended = () => {
       if (!samePlayback(generation, fileGen.current)) return;
-      if (autoplay && !dismissed) onNext();
+      if (endedAdvances(counted.current, autoplay, dismissed)) onNext();
     };
     video.addEventListener("timeupdate", tick);
     video.addEventListener("ended", ended);
