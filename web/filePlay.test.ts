@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bindFilePlayback, progressSaveAction, progressToStore, releaseFileVideo, samePlayback, takeFileFatal } from "./src/features/recordings/filePlay.ts";
+import { bindFilePlayback, progressSaveAction, progressToStore, releaseFileVideo, samePlayback, storedPlayhead, takeFileFatal } from "./src/features/recordings/filePlay.ts";
 
 function fakeVideo() {
   const listeners = new Map<string, Set<() => void>>();
@@ -80,6 +80,16 @@ test("playback arms one save and keeps it while the picture moves", () => {
   assert.equal(progressToStore(40), 40);
   assert.equal(progressToStore(1), null);
   assert.equal(progressToStore(0), null);
+  // The file is still in its lead-in. The resume seek has not landed.
+  assert.equal(progressToStore(4, 1200, false), null);
+  assert.equal(progressToStore(4, 1200, true), 4);
+  assert.equal(progressToStore(1205, 1200, false), 1205);
+  assert.equal(progressToStore(4, 0, false), 4);
+  assert.equal(storedPlayhead(4, { at: 0, known: false }, false), null);
+  assert.equal(storedPlayhead(4, { at: 1200, known: true }, false), null);
+  assert.equal(storedPlayhead(4, { at: 1200, known: true }, true), 4);
+  assert.equal(storedPlayhead(30, { at: 0, known: true }, false), 30);
+  assert.equal(storedPlayhead(1200, { at: 1200, known: true }, false), 1200);
 });
 
 test("a tick from the previous file does not count for this one", () => {

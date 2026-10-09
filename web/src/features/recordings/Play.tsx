@@ -2,7 +2,7 @@ import Hls from "hls.js";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
-import { bindFilePlayback, progressSaveAction, progressToStore, releaseFileVideo, samePlayback, takeFileFatal } from "./filePlay";
+import { bindFilePlayback, progressSaveAction, releaseFileVideo, samePlayback, storedPlayhead, takeFileFatal, type ResumeGate } from "./filePlay";
 import { copy } from "../../strings";
 import { Stage } from "../player/Stage";
 import type { Recording } from "../../types";
@@ -48,6 +48,9 @@ export function Play({
   const saveTimer = useRef(0);
   // A resume seek that lands after the viewer has already moved would undo Start over.
   const viewerSought = useRef(false);
+  // The lead-in must not be stored until this seek has landed. The save timer
+  // lives in another effect, so it reads the gate from here.
+  const resumeGate = useRef<ResumeGate>({ at: 0, known: false });
   // Only a countdown the viewer saw plays the next episode.
   const counted = useRef(false);
   // Bumped when the recording changes, so a tick still in flight from the
@@ -93,7 +96,10 @@ export function Play({
     let hls: Hls | null = null;
     let unbind: (() => void) | null = null;
     let resumeAt = 0;
-    let placed = false;
+    // done stops retrying the resume seek. Giving up does not mean the playhead
+    // reached it, so a lead-in is still not stored over the old place.
+    let done = false;
+    resumeGate.current = { at: 0, known: false };
     const tried = { network: false, media: false };
     let gaveUp = false;
     void (async () => {
@@ -103,20 +109,25 @@ export function Play({
         setMarkers(next.markers);
         setGrowing(next.growing);
         resumeAt = next.position;
+        resumeGate.current = { at: next.position, known: true };
         const started = performance.now();
         const place = () => {
-          if (viewerSought.current || placed || resumeAt < 2) {
-            placed = true;
+          if (done || viewerSought.current) {
+            done = true;
+            return;
+          }
+          if (resumeAt < 2) {
+            done = true;
             return;
           }
           if (performance.now() - started > 8000) {
-            placed = true;
+            done = true;
             return;
           }
           const end = video.seekable.length > 0 ? video.seekable.end(video.seekable.length - 1) : 0;
           if (end + 0.25 >= resumeAt) {
             video.currentTime = resumeAt;
-            placed = true;
+            done = true;
           }
         };
         const track = document.createElement("track");
@@ -160,10 +171,10 @@ export function Play({
       unbind?.();
       // Read the playhead before releaseFileVideo reloads the element. A
       // timeupdate from that reload would otherwise report the start.
-      const at = whereRef.current;
+      const at = storedPlayhead(whereRef.current, resumeGate.current, viewerSought.current);
       hls?.destroy();
       releaseFileVideo(video);
-      if (at > 1) void saveProgress(recording.id, at);
+      if (at != null) void saveProgress(recording.id, at);
     };
   }, [recording.id, pictureMode]);
 
@@ -182,7 +193,7 @@ export function Play({
         const timer = window.setTimeout(() => {
           if (saveTimer.current === timer) saveTimer.current = 0;
           if (!samePlayback(generation, fileGen.current)) return;
-          const at = progressToStore(whereRef.current);
+          const at = storedPlayhead(whereRef.current, resumeGate.current, viewerSought.current);
           if (at != null) void saveProgress(recording.id, at);
         }, 4000);
         saveTimer.current = timer;
@@ -353,7 +364,7 @@ export function Play({
       hold={Boolean(card)}
       tools={
         inside && (skipMode === "button" || (skipMode === "auto" && !sure(inside))) ? (
-          <button type="button" className="text-btn on" onClick={() => { if (videoRef.current) videoRef.current.currentTime = inside.end; }}>
+          <button type="button" className="text-btn on" onClick={() => { sought(); if (videoRef.current) videoRef.current.currentTime = inside.end; }}>
             Skip break
           </button>
         ) : introEnd !== null ? (

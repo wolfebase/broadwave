@@ -69,9 +69,25 @@ export function progressSaveAction(armed: boolean, time: number): "arm" | "keep"
   return armed ? "keep" : "arm";
 }
 
-/** Positions at the start are not a resume point. Writing them would wipe one. */
-export function progressToStore(time: number): number | null {
-  return time > 1 ? time : null;
+/**
+ * Positions at the start are not a resume point. A file still playing its
+ * lead-in is not one either: saving it would wipe a place the seek has not reached.
+ */
+export function progressToStore(time: number, resumeAt = 0, sought = false): number | null {
+  if (!(time > 1)) return null;
+  if (!sought && resumeAt > time) return null;
+  return time;
+}
+
+export type ResumeGate = { at: number; known: boolean };
+
+/**
+ * The playhead to store. Until the server's resume point is known, or while
+ * the playhead is still behind it, only a seek the viewer made is stored.
+ */
+export function storedPlayhead(time: number, gate: ResumeGate, sought: boolean): number | null {
+  if (!gate.known && !sought) return null;
+  return progressToStore(time, gate.known ? gate.at : 0, sought);
 }
 
 /** A listener or save from an earlier file must not run against the one on screen. */
