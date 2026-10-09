@@ -20,7 +20,7 @@ import {
   stopRecording,
 } from "../api";
 import { events } from "../lib/events";
-import { beginSave, commitSave, followUpRead, LatestReads, type SaveSeq } from "../lib/latest";
+import { LatestReads, type SaveSeq } from "../lib/latest";
 import { guideSpan, indexAirings, keptGuideWindow, sortChannels, type AiringIndex } from "../lib/guide";
 import { hasSnapshotFlag, loadSnapshot, saveSnapshot } from "../lib/snapshot";
 import type { Airing, Channel, ChannelPatch, Device, Pass, PlannedAiring, Recording, ServerInfo, Settings, StorageInfo, VirtualChannel } from "../types";
@@ -366,23 +366,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh(["channels"]);
       },
       saveSettings: async (values) => {
-        const mine = beginSave(saveSeq.current);
-        // Drops a GET that already started. commitSave drops one that starts during the PUT.
-        reads.current.start(["settings", "storage", "server"]);
-        const committed = commitSave(saveSeq.current, mine, await putSettings(values), reads.current, ["settings", "storage", "server"]);
-        if (!committed) return;
-        setSettings(committed.saved);
-        // still() is after the await. A save that starts during the read must win.
+        const seq = saveSeq.current;
+        const mine = ++seq.n;
+        const clock = reads.current;
+        const keys = ["settings", "storage", "server"] as const;
+        // Same rules as beginSave / commitSave / followUpRead. A stale save returns
+        // before the second start, so it does not bump the clock or clear storage.
+        clock.start(keys);
+        const saved = await putSettings(values);
+        if (mine !== seq.n) return;
+        const still = clock.start(keys);
+        setSettings(saved);
         const disk = await getStorage().catch(() => null);
-        const nextDisk = followUpRead(saveSeq.current, mine, committed.still("storage"), disk);
-        if (nextDisk) setStorage(nextDisk);
-        if ("checkUpdates" in values) {
-          const info = await getServer().catch(() => null);
-          const nextServer = followUpRead(saveSeq.current, mine, committed.still("server"), info);
-          if (nextServer) {
-            setServer(nextServer);
-            setUpdate(nextServer.update);
-          }
+        if (disk != null && still("storage")) setStorage(disk);
+        if (!("checkUpdates" in values)) return;
+        const info = await getServer().catch(() => null);
+        if (info != null && still("server")) {
+          setServer(info);
+          setUpdate(info.update);
         }
       },
       record: async (channel, title) => {
