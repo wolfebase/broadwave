@@ -96,3 +96,44 @@ import Testing
     let other = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedString()
     #expect(!FinderPacket.accepts(sig, nonce: nonce, url: url, id: id, key: other))
 }
+
+@Test @MainActor func aStaleClockSampleAfterAWakeIsIgnored() throws {
+    let base = try #require(URL(string: "http://10.1.2.3:18940"))
+    let socket = EventSocket(base: base)
+    let burst = EventSocket.nowMS()
+    socket.beginClockBurst(at: burst)
+    let stale = #"{"type":"clock","data":{"t0":\#(burst - 5000),"t1":\#(burst - 5000)}}"#
+    socket.applyFrame(Data(stale.utf8))
+    #expect(socket.offset == 0)
+
+    let t0 = EventSocket.nowMS()
+    let fresh = #"{"type":"clock","data":{"t0":\#(t0),"t1":\#(t0 + 40)}}"#
+    socket.applyFrame(Data(fresh.utf8))
+    #expect(abs(socket.offset - 40) < 30)
+}
+
+@Test @MainActor func aRestartedServerDropsTheRoomSnapshot() throws {
+    let base = try #require(URL(string: "http://10.1.2.3:18940"))
+    let socket = EventSocket(base: base)
+    socket.applyFrame(Data(#"{"type":"sync.state","data":{"room":"den","rate":1}}"#.utf8))
+    #expect(socket.roomState("den") != nil)
+    socket.applyFrame(Data(#"{"type":"hello","data":{"boot":"a"}}"#.utf8))
+    #expect(socket.roomState("den") != nil)
+    socket.applyFrame(Data(#"{"type":"hello","data":{"boot":"a"}}"#.utf8))
+    #expect(socket.roomState("den") != nil)
+    socket.applyFrame(Data(#"{"type":"hello","data":{"boot":"b"}}"#.utf8))
+    #expect(socket.roomState("den") == nil)
+}
+
+@Test @MainActor func aCommandWhileTheSocketIsDownWaitsAFewSeconds() throws {
+    let base = try #require(URL(string: "http://10.1.2.3:18940"))
+    let socket = EventSocket(base: base)
+    socket.command(room: "group:den", action: "pause")
+    let now = EventSocket.nowMS()
+    let waiting = socket.pendingCommandTexts(at: now)
+    #expect(waiting.count == 1)
+    #expect(waiting[0].contains("\"pause\""))
+    #expect(socket.pendingCommandTexts(at: now + 3000).isEmpty)
+    #expect(EventSocket.freshCommands([(text: "{\"type\":\"sync.command\"}", at: now - 3000)], at: now).isEmpty)
+    #expect(EventSocket.freshCommands([(text: "keep", at: now - 2999)], at: now) == ["keep"])
+}
