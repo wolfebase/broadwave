@@ -1,8 +1,10 @@
 package fetchguard
 
 import (
+	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -106,6 +108,80 @@ func TestDoFollowsALoopbackRedirectAndStopsAtMetadata(t *testing.T) {
 		res.Body.Close()
 	}
 	if !errors.Is(err, ErrRefused) {
+		t.Fatal(err)
+	}
+}
+
+func TestReachableLiteralSkipsLookup(t *testing.T) {
+	called := false
+	prev := lookupIP
+	t.Cleanup(func() { lookupIP = prev })
+	lookupIP = func(context.Context, string) ([]net.IP, error) {
+		called = true
+		return nil, errors.New("lookup")
+	}
+	if err := Reachable(context.Background(), "http://127.0.0.1/live.m3u8"); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Fatal("looked up a literal address")
+	}
+}
+
+func TestReachableRefusesLinkLocalAnswer(t *testing.T) {
+	prev := lookupIP
+	t.Cleanup(func() { lookupIP = prev })
+	lookupIP = func(context.Context, string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("169.254.169.254")}, nil
+	}
+	err := Reachable(context.Background(), "http://tv.example/live.m3u8")
+	if !errors.Is(err, ErrRefused) {
+		t.Fatal(err)
+	}
+	if strings.Contains(err.Error(), "tv.example") {
+		t.Fatal(err)
+	}
+}
+
+func TestReachableAllowsPublicAnswer(t *testing.T) {
+	prev := lookupIP
+	t.Cleanup(func() { lookupIP = prev })
+	lookupIP = func(context.Context, string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("192.0.2.10")}, nil
+	}
+	if err := Reachable(context.Background(), "http://tv.example/live.m3u8"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReachableLookupErrorHidesHost(t *testing.T) {
+	prev := lookupIP
+	t.Cleanup(func() { lookupIP = prev })
+	lookupIP = func(_ context.Context, host string) ([]net.IP, error) {
+		return nil, errors.New("lookup " + host + ": no such host")
+	}
+	err := Reachable(context.Background(), "http://tv.example/live.m3u8")
+	if !errors.Is(err, ErrRefused) {
+		t.Fatal(err)
+	}
+	if strings.Contains(err.Error(), "tv.example") {
+		t.Fatal(err)
+	}
+}
+
+func TestReachableCanceledContext(t *testing.T) {
+	prev := lookupIP
+	t.Cleanup(func() { lookupIP = prev })
+	lookupIP = func(context.Context, string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("192.0.2.10")}, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := Reachable(ctx, "http://tv.example/live.m3u8")
+	if !errors.Is(err, context.Canceled) || errors.Is(err, ErrRefused) {
+		t.Fatal(err)
+	}
+	if err := Reachable(ctx, "http://127.0.0.1/live.m3u8"); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 }

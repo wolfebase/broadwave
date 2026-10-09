@@ -585,7 +585,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 		return h.addFeedLocked(h.streamMuxLocked(ch, stream.Body, "stream"), ch), nil
 	}
 	if hlsStream(ch) {
-		if err := fetchguard.Allowed(ch.StreamURL); err != nil {
+		if err := fetchguard.Reachable(ctx, ch.StreamURL); err != nil {
 			return nil, fmt.Errorf("%w (%w)", ErrStreamDown, err)
 		}
 		return h.addFeedLocked(h.hlsMuxLocked(ch), ch), nil
