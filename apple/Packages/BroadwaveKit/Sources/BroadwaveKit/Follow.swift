@@ -68,4 +68,21 @@ public enum RememberedServers {
         }
         return next
     }
+
+    /// What a refresh should store. Nil when nothing about this server changed.
+    public static func refreshed(_ current: FoundServer, id: String, name: String, key: String?) -> FoundServer? {
+        let pending = current.id == "pending" || current.id.isEmpty
+        let same = current.id == id
+        guard pending || same else { return nil }
+        let needKey = current.key?.isEmpty != false && key?.isEmpty == false
+        let rename = !name.isEmpty && name != current.name
+        let rotated = key?.isEmpty == false && key != current.key
+        guard pending || needKey || rename || rotated else { return nil }
+        return FoundServer(
+            id: id,
+            name: name.isEmpty ? current.name : name,
+            url: current.url,
+            key: key?.isEmpty == false ? key : current.key
+        )
+    }
 }

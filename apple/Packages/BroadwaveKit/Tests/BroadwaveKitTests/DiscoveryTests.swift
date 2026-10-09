@@ -130,6 +130,24 @@ private func signedServer(id: String, url: String, privateKey: Curve25519.Signin
     #expect(again.signedURL == nil)
 }
 
+@Test func aRefreshFollowsARenameAndANewKey() throws {
+    let url = try #require(URL(string: "http://10.0.0.5:8477"))
+    let saved = FoundServer(id: "abc", name: "Kitchen", url: url, key: "stored-key")
+    let renamed = try #require(RememberedServers.refreshed(saved, id: "abc", name: "Living Room", key: "stored-key"))
+    #expect(renamed.name == "Living Room")
+    #expect(renamed.key == "stored-key")
+    let rotated = try #require(RememberedServers.refreshed(saved, id: "abc", name: "Kitchen", key: "new-key"))
+    #expect(rotated.key == "new-key")
+    #expect(RememberedServers.refreshed(saved, id: "abc", name: "Kitchen", key: "stored-key") == nil)
+    #expect(RememberedServers.refreshed(saved, id: "abc", name: "", key: "stored-key") == nil)
+    #expect(RememberedServers.refreshed(saved, id: "other", name: "Living Room", key: "new-key") == nil)
+    let pending = FoundServer(id: "pending", name: "Kitchen", url: url)
+    let ready = try #require(RememberedServers.refreshed(pending, id: "abc", name: "", key: "stored-key"))
+    #expect(ready.id == "abc")
+    #expect(ready.name == "Kitchen")
+    #expect(ready.key == "stored-key")
+}
+
 @Test func aMoveWithoutAKeyKeepsTheStoredKey() throws {
     let old = try FoundServer(id: "abc", name: "Living Room", url: #require(URL(string: "http://10.0.0.5:8477")), key: "stored-key")
     let moved = try FoundServer(id: "abc", name: "Living Room", url: #require(URL(string: "http://10.0.0.9:8477")))
