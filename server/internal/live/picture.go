@@ -161,6 +161,9 @@ func pictureSize(profile string, field bool) (int, int, string) {
 	}
 }
 
+// fieldFrameRate is one frame per field of a 29.97 interlaced broadcast.
+const fieldFrameRate = "60000/1001"
+
 // pictureRate is the output frame rate, or "" to keep the source rate.
 // Interlaced video at field rate is 59.94; a progressive source keeps its own
 // rate so 720p60 stays 60. Small pictures cap at 29.97 to save bandwidth.
@@ -169,7 +172,7 @@ func pictureRate(g Graph, field bool) (string, int) {
 		return "24000/1001", 48
 	}
 	if field {
-		return "60000/1001", 120
+		return fieldFrameRate, 120
 	}
 	if smallPicture(g) {
 		return "30000/1001", 60
@@ -312,6 +315,40 @@ func videoFilter(g Graph, vaapiDeint string, interlaced, field bool, width, heig
 		vf += ",hwupload"
 	}
 	return vf
+}
+
+// weaveFieldKey keeps one keyframe per source group on a field-doubled
+// deinterlace. bwdif send_field copies the source key flag onto both fields,
+// and -force_key_frames source turns each flag into an IDR one field apart.
+// No stock filter clears that flag. The flag branch drops the second field
+// (send_field emits the two fields as an even frame then an odd one) and
+// minterpolate fills the hole without copying the flag onto it. That leaves
+// the remaining flag one field early. overlay puts the real field pictures
+// back on those timestamps, so both fields are kept and the group has one key.
+// A plain fps filter clones the last key to finish a finite input, which
+// brings the pair back at the end of a tune, so the rate stays on minterpolate.
+// Returns false when vf is not that deinterlace. input is the filtergraph
+// input without brackets, such as "0:v:0".
+func weaveFieldKey(vf, input string) (string, bool) {
+	const mark = "bwdif=mode=send_field"
+	i := strings.Index(vf, mark)
+	if i < 0 {
+		return "", false
+	}
+	rest := vf[i+len(mark):]
+	bwdif := mark
+	suffix := ""
+	if comma := strings.IndexByte(rest, ','); comma >= 0 {
+		bwdif += rest[:comma]
+		suffix = rest[comma:]
+	} else if rest != "" {
+		bwdif += rest
+	}
+	suffix = strings.Replace(suffix, ",fps="+fieldFrameRate, "", 1)
+	graph := "[" + input + "]" + vf[:i] + bwdif + ",split[pix][kf];" +
+		"[kf]select='not(eq(key\\,1)*eq(mod(n\\,2)\\,1))',minterpolate=fps=" + fieldFrameRate + ":mi_mode=dup:scd=none[flags];" +
+		"[flags][pix]overlay=eof_action=pass:shortest=1" + suffix + "[v]"
+	return graph, true
 }
 
 // lowPower holds the VAAPI encoders that run on the GPU's fixed-function

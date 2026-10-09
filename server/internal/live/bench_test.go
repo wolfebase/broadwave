@@ -102,16 +102,19 @@ func TestProgressWriterStampsEachFrameTime(t *testing.T) {
 func TestLiveBenchMatchesTheLiveRendition(t *testing.T) {
 	live := renditionArgs(0, Source{VideoCodec: "MPEG2", HD: true}, Rendition{Video: "1080", Audio: "aac2"}, "libx264", "", "pipe:0")
 	bench := liveBenchArgs(true)
-	vf := func(args []string) string {
+	graph := func(args []string) string {
 		for i, a := range args {
-			if a == "-vf" {
+			if a == "-filter_complex" {
 				return args[i+1]
 			}
 		}
 		return ""
 	}
-	if got, want := vf(bench), "tinterlace=mode=interleave_top,setfield=tff,"+vf(live); got != want || !strings.Contains(got, "bwdif=mode=send_field") {
-		t.Fatalf("bench filter %q\nlive filter %q", got, want)
+	const laced = "tinterlace=mode=interleave_top,setfield=tff,"
+	liveBody := strings.TrimPrefix(graph(live), "[0:v:0]")
+	benchBody := strings.TrimPrefix(graph(bench), "[0:v]"+laced)
+	if liveBody == "" || liveBody != benchBody || !strings.Contains(benchBody, "bwdif=mode=send_field") {
+		t.Fatalf("bench filter %q\nlive filter %q", graph(bench), graph(live))
 	}
 	_, codec := liveBenchGraph()
 	if !strings.Contains(strings.Join(live, " "), strings.Join(codec, " ")) || !strings.Contains(strings.Join(bench, " "), strings.Join(codec, " ")) {

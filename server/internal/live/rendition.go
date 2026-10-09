@@ -468,7 +468,9 @@ func renditionProfile(video string) string {
 // openingKeyframes puts a transcode keyframe wherever the source has one.
 // A fixed interval drifts off that group of pictures, so a copy and a
 // transcode would close their segments at different frames. Counting
-// n_forced*2 drifts off the broadcast clock the same way.
+// n_forced*2 drifts off the broadcast clock the same way. A field-doubled
+// deinterlace copies the source flag onto both fields; weaveFieldKey keeps
+// one of them before this mode turns flags into IDRs.
 const openingKeyframes = "source"
 
 // sourceKeyint is only a ceiling. -g still inserts an IDR when it is shorter
@@ -542,7 +544,37 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 	if src.AudioPID > 0 {
 		audioMap = fmt.Sprintf("0:i:%d", src.AudioPID)
 	}
-	if program > 0 {
+	var fieldGraph, vf, rate, fps string
+	var field bool
+	var gop int
+	if transcode {
+		mode := r.Mode
+		if src.Film && NormalizeMode(mode) == "broadcast" {
+			mode = "film"
+		}
+		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: r.FullRate}
+		interlaced := fieldDoubled(src.VideoCodec, g.Mode, src.Progressive, src.Lace)
+		field = interlaced && !smallPicture(g)
+		width, height, bitrate := outputSize(g, field)
+		rate = bitrate
+		fps, gop = pictureRate(g, field)
+		vf = videoFilter(g, vaapiDeintMode(g, interlaced), interlaced, field, width, height, fps)
+		if src.HD {
+			// Tagging the frames first keeps ffmpeg from converting an
+			// untagged picture it would assume is BT.601.
+			vf = "setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709," + vf
+		}
+		inputLabel := "0:v:0"
+		if program > 0 {
+			inputLabel = fmt.Sprintf("0:p:%d:v:0", program)
+		}
+		if graph, ok := weaveFieldKey(vf, inputLabel); ok {
+			fieldGraph = graph
+		}
+	}
+	if fieldGraph != "" {
+		args = append(args, "-map", "[v]")
+	} else if program > 0 {
 		args = append(args, "-map", fmt.Sprintf("0:p:%d:v:0", program))
 	} else {
 		args = append(args, "-map", "0:v:0")
@@ -554,22 +586,11 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		}
 	}
 	if transcode {
-		mode := r.Mode
-		if src.Film && NormalizeMode(mode) == "broadcast" {
-			mode = "film"
+		if fieldGraph != "" {
+			args = append(args, "-filter_complex", fieldGraph)
+		} else {
+			args = append(args, "-vf", vf)
 		}
-		g := Graph{VideoCodec: src.VideoCodec, Profile: renditionProfile(r.Video), Encoder: outEnc, Mode: mode, Deint: deint, Progressive: src.Progressive, FullRate: r.FullRate}
-		interlaced := fieldDoubled(src.VideoCodec, g.Mode, src.Progressive, src.Lace)
-		field := interlaced && !smallPicture(g)
-		width, height, rate := outputSize(g, field)
-		fps, gop := pictureRate(g, field)
-		vf := videoFilter(g, vaapiDeintMode(g, interlaced), interlaced, field, width, height, fps)
-		if src.HD {
-			// Tagging the frames first keeps ffmpeg from converting an
-			// untagged picture it would assume is BT.601.
-			vf = "setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709," + vf
-		}
-		args = append(args, "-vf", vf)
 		// A graph that drops frames (a film pulldown, a half-rate tile) can drop
 		// the frame that carried the source keyframe, and the segment then runs
 		// until one survives: 20 s on a 60p channel, a 63 s hold-back. Four

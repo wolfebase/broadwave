@@ -2,46 +2,38 @@
 
 ## J0.74 field-doubled encodes write two keyframes per group
 
-Blocked on this lane. Stock ffmpeg cannot keep one IDR per source group of pictures on a field-doubled encode without drifting off the broadcast clock. The double keyframe is reproduced below. No Broadwave argv change fixes it.
+Fixed on the software field-rate path (`weaveFieldKey` in `server/internal/live/picture.go`). `bwdif=mode=send_field` still copies the source key flag onto both fields, and no stock filter clears that flag. The live graph keeps a second branch that drops the odd field of each key pair, fills the hole with `minterpolate=mi_mode=dup` (the filler does not inherit the flag), and overlays the real field pictures back on. `-force_key_frames source` then writes one IDR per source group. Pictures and timestamps stay on the field clock. The remaining flag sits one field (16.7 ms) before the source key. A plain `fps` filter is not appended: it clones the last key to finish a finite input, and the pair comes back at the tail.
 
-### What happens
+Not changed: VAAPI `deinterlace_vaapi=rate=field` (no device here to measure it), and `PictureArgs`, which forces keyframes on a clock (`expr:gte(t,n_forced*2)`) instead of `source`. A finite encode ends about two frames short because the hole at the tail is not padded. The packager's 17 ms minimum part stays, because a VAAPI field deinterlace can still emit the pair.
+
+### What was wrong
 
 `bwdif=mode=send_field` (and `yadif`, `w3fdif`, and `estdif` the same way) copies `AV_FRAME_FLAG_KEY` onto both output fields. `return_frame` in `libavfilter/yadif_common.c` calls `av_frame_copy_props` for the second field and clears only `AV_FRAME_FLAG_INTERLACED`.
 
-Live renditions then pass `-force_key_frames source` (`openingKeyframes` in `server/internal/live/rendition.go`). In ffmpeg 8.0.1 `forced_kf_apply` (`fftools/ffmpeg_enc.c`) that mode sets `pict_type` to I whenever the flag is set, and sets every other frame's `pict_type` to none. libx264 turns pict_type I into an IDR. The second field is one field later (16.683 ms at 60000/1001).
+Live renditions pass `-force_key_frames source` (`openingKeyframes` in `server/internal/live/rendition.go`). In ffmpeg 8.0.1 `forced_kf_apply` sets `pict_type` to I whenever the flag is set, and sets every other frame's `pict_type` to none. libx264 turns pict_type I into an IDR. The second field is one field later (16.683 ms at 60000/1001).
 
-Copy and transcode are meant to close on the same broadcast frames. A fixed interval (`expr:gte(t,n_forced*2)` and the same family) drifts off the source group, which is why the live path uses `source`. That comment still holds. Do not switch field-doubled encodes to a fixed interval.
+Copy and transcode are meant to close on the same broadcast frames. A fixed interval (`expr:gte(t,n_forced*2)`) drifts off the source group, which is why the live path uses `source`. `-g 600` is only a ceiling. `-keyint_min` does not suppress an IDR that ffmpeg forced.
 
-`-g 600` is only a ceiling. `-keyint_min` does not suppress an IDR that ffmpeg forced. Without `-force_key_frames`, the same graph writes a single opening I-frame in a 2 second clip, because `forced_kf_apply` clears pict_type when it is not forcing. The key flag is the whole signal.
-
-VAAPI `deinterlace_vaapi=rate=field` was not measured here (no device). A software filter inserted only on the bwdif branch would not change that graph.
-
-### Proof
-
-ffmpeg 8.0.1, libx264, synthetic interlaced MPEG-2 (lavfi `testsrc2`, `tinterlace=mode=interleave_top`, `-g 15 -bf 2 -sc_threshold 1000000000 -flags +ildct+ilme`). After
+On a synthetic interlaced MPEG-2 (lavfi `testsrc2`, `tinterlace`, `-g 15`) the old graph
 
 `bwdif=mode=send_field:parity=auto:deint=interlaced,fps=60000/1001,format=yuv420p`
 
-with `-force_key_frames source -g 600 -sc_threshold 0`, ffprobe keyframes land in pairs:
+with `-force_key_frames source -g 600 -sc_threshold 0` wrote pairs at 0 / 0.016683, 0.500500 / 0.517183, 1.001000 / 1.017683, 1.501500 / 1.518183, and 1.968633 / 1.985317.
 
-- 0.000000 and 0.016683
-- 0.500500 and 0.517183
-- 1.001000 and 1.017683
-- 1.501500 and 1.518183
-- 1.968633 and 1.985317
+### What the graph does
 
-About 120 frames, `r_frame_rate` 60000/1001. The packager already holds a 17 ms keyframe fragment so a player does not see an empty audio part (`TestNoPartIsOneField`). That workaround is a symptom. Leave it in place.
+`renditionArgs` builds this when the filter is `bwdif=mode=send_field` and the encode uses `-force_key_frames source`:
 
-### Approaches that do not work
+```
+[0:v:0]bwdif=mode=send_field:parity=auto:deint=interlaced,split[pix][kf];
+[kf]select='not(eq(key,1)*eq(mod(n,2),1))',minterpolate=fps=60000/1001:mi_mode=dup:scd=none[flags];
+[flags][pix]overlay=eof_action=pass:shortest=1,scale=…,setsar=1,format=yuv420p[v]
+```
 
-No filter in current libavfilter clears `AV_FRAME_FLAG_KEY`. The flag is only read, or set by sources (`testsrc`, gradients). A sweep of stock filters (scale, fps, geq, lut, tblend, framerate, minterpolate, and others) kept the flag on a frame that arrived with it. `tblend` holds the first frame and copies props from the current frame; an `iskey:1` then `iskey:0` reading was a one-frame shift, not a cleared flag.
+Commas inside the select expression are escaped (`\,`), the same way `halfRate` escapes its select. `send_field` emits the two fields as an even frame then an odd one, so the select drops the second key field. `minterpolate` fills that hole and does not copy the flag onto the filler, which moves the surviving flag one field earlier. `overlay` puts the real bwdif pictures back on those timestamps. showinfo against plain bwdif matched every checksum. Opening frame 0 is not flagged; libx264 still emits the opening IDR.
 
-Dropping the second key field with `select='not(eq(key,1)*mod(n,2))'` removes it until `fps` or `framerate` runs. Those filters clone the remaining keyframe into the 16.7 ms hole, and the encode has the pairs again. Closing the hole with `setpts` runs the transcode clock fast against the copy rendition (one field per source group). `minterpolate=mi_mode=dup` either keeps a shifted pair or, after `send_frame`, clears every key flag and duplicates pictures. `send_frame` plus a rate doubler is 29.97 repeated, not a field-rate picture.
+`scd_metadata` would tag one field, but ffmpeg 8.0.1 rejects it, and the release image is jellyfin-ffmpeg 7.1. Rewriting the second IDR in the bitstream is not safe (the slice still needs `idr_pic_id` removed, `frame_num` renumbered, and DPB refs fixed). The same graph covers VideoToolbox, which deinterlaces in software and then encodes with `h264_videotoolbox`.
 
-`-force_key_frames` expression variables are only `n`, `n_forced`, `prev_forced_n`, `prev_forced_t`, and `t`. There is no `key`, and source mode cannot be combined with a minimum gap. `scd_metadata` (force a key when `lavfi.scd.time` is set) is on ffmpeg master and would allow a split/select/metadata graph to tag only the first field. ffmpeg 8.0.1 rejects that mode (`Invalid keyframe time: scd_metadata`). The release image is jellyfin-ffmpeg 7.1, which is older. `metadata`'s `enable` expression cannot see `key`, so it cannot tag only the first field of a source key for any mode this ffmpeg implements.
+### Still open
 
-A bitstream rewrite of the second IDR into a non-IDR slice would still be an intra frame, and it would be a different parser for libx264 and VideoToolbox. Not a fix.
-
-### What would actually fix it
-
-One line in ffmpeg, not in this repo: in `return_frame`, when `is_second` is set, clear `AV_FRAME_FLAG_KEY` on the output frame. `-force_key_frames source` would then IDR the first field of each source key and leave the second field unforced. Frame count and timestamps stay field-rate, and the cut still lands on the source key. The same clear belongs on any other field-rate deinterlacer that copies props onto both fields.
+VAAPI field rate was not measured. Mosaic uses `yadif` with a fixed keyframe interval, not `source`. A progressive frame inside `deint=interlaced` flips field parity, so `mod(n,2)` can drop the other field of that pair; the group still has one key. The upstream fix is still one line in `return_frame`: when `is_second` is set, clear `AV_FRAME_FLAG_KEY`. That would let this graph go away.

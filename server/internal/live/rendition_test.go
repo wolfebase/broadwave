@@ -349,7 +349,9 @@ func TestHDEncodesSayBT709WithoutConverting(t *testing.T) {
 		for _, video := range []string{"360", "1080"} {
 			src := sourceOf(store.SourceChannel{Channel: store.Channel{VideoCodec: "MPEG2", AudioCodec: "AC3", HD: true}})
 			line := strings.Join(RenditionArgs(0, src, Rendition{Video: video, Audio: "none", Mode: "broadcast"}, enc, "motion_adaptive"), " ")
-			if !strings.Contains(line, "-vf setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709,") {
+			tagged := strings.Contains(line, "-vf setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709,") ||
+				strings.Contains(line, "setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709,bwdif")
+			if !tagged {
 				t.Errorf("%s %s: frames must be tagged before any filter: %s", enc, video, line)
 			}
 			if !strings.Contains(line, tag) {

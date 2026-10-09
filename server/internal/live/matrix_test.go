@@ -48,11 +48,15 @@ func TestScanMatrixPicture(t *testing.T) {
 		for _, enc := range encoders {
 			t.Run(tc.name+"/"+enc, func(t *testing.T) {
 				out := filepath.Join(dir, tc.name+"-"+enc+".mp4")
-				vf := filterOf(RenditionArgs(0, tc.source, Rendition{Video: "1080", Audio: "none"}, enc, "motion_adaptive"))
-				cmd := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error", "-i", in, "-an", "-vf", vf, "-c:v", enc, "-t", "1", out)
+				rendition := RenditionArgs(0, tc.source, Rendition{Video: "1080", Audio: "none"}, enc, "motion_adaptive")
+				cmdArgs := []string{"-hide_banner", "-loglevel", "error", "-i", in, "-an"}
+				cmdArgs = append(cmdArgs, videoGraphArgs(rendition)...)
+				cmdArgs = append(cmdArgs, "-c:v", enc)
 				if enc == "h264_videotoolbox" {
-					cmd = exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error", "-i", in, "-an", "-vf", vf, "-c:v", enc, "-a53cc", "0", "-t", "1", out)
+					cmdArgs = append(cmdArgs, "-a53cc", "0")
 				}
+				cmdArgs = append(cmdArgs, "-t", "1", out)
+				cmd := exec.Command("ffmpeg", cmdArgs...)
 				if msg, err := cmd.CombinedOutput(); err != nil {
 					t.Fatalf("encode: %v %s", err, msg)
 				}
@@ -132,6 +136,23 @@ func filterOf(args []string) string {
 		}
 	}
 	return ""
+}
+
+// videoGraphArgs is the -vf or -filter_complex piece of a rendition. A
+// field-doubled encode is a split graph, which -vf cannot run.
+func videoGraphArgs(args []string) []string {
+	for i, a := range args {
+		if i+1 >= len(args) {
+			break
+		}
+		if a == "-vf" {
+			return []string{"-vf", args[i+1]}
+		}
+		if a == "-filter_complex" {
+			return []string{"-filter_complex", args[i+1], "-map", "[v]"}
+		}
+	}
+	return nil
 }
 
 func measure(t *testing.T, path string) (float64, int) {

@@ -183,23 +183,29 @@ func softwareBenchArgs(fine bool) []string {
 }
 
 func liveBenchArgs(fine bool) []string {
-	vf, codec := liveBenchGraph()
+	graph, codec := liveBenchGraph()
 	args := append(progressArgs(fine),
 		"-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=60000/1001:duration=4",
-		"-vf", "tinterlace=mode=interleave_top,setfield=tff,"+vf,
+		"-filter_complex", graph,
+		"-map", "[v]",
 	)
 	args = append(args, codec...)
 	return append(args, "-f", "null", "-")
 }
 
 // liveBenchGraph is the video filter and encoder renditionArgs builds for a
-// 1080 transcode of an HD MPEG-2 broadcast on libx264.
+// 1080 transcode of an HD MPEG-2 broadcast on libx264. The lavfi source is
+// progressive, so tinterlace makes the interlaced frames the live path is fed.
 func liveBenchGraph() (string, []string) {
 	g := Graph{VideoCodec: "MPEG2", Profile: renditionProfile("1080"), Encoder: "libx264"}
 	width, height, rate := outputSize(g, true)
 	fps, _ := pictureRate(g, true)
-	vf := "setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709," + videoFilter(g, "", true, true, width, height, fps)
-	return vf, videoCodec("libx264", rate, sourceKeyint)
+	vf := "tinterlace=mode=interleave_top,setfield=tff,setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709," + videoFilter(g, "", true, true, width, height, fps)
+	graph, ok := weaveFieldKey(vf, "0:v")
+	if !ok {
+		graph = vf
+	}
+	return graph, videoCodec("libx264", rate, sourceKeyint)
 }
 
 type progressSample struct {
