@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"broadwave/internal/disk"
@@ -374,13 +375,14 @@ type recording struct {
 const pipeQueueCap = 32 << 20
 
 type pipeSub struct {
-	w      io.WriteCloser
-	ch     chan []byte
-	done   chan struct{}
-	once   sync.Once
-	queued atomic.Int64
-	lost   int64 // readLoop only
-	logged time.Time
+	w        io.WriteCloser
+	ch       chan []byte
+	done     chan struct{}
+	once     sync.Once
+	queued   atomic.Int64
+	lost     int64 // readLoop only
+	logged   time.Time
+	diskFull atomic.Bool // a write hit a full disk; a later close must not clear it
 }
 
 // offer queues chunk, or drops it when this reader is too far behind, so one
@@ -2397,6 +2399,9 @@ func (m *mux) deliver(sub *pipeSub) {
 			}
 			sub.queued.Add(-int64(len(chunk)))
 			if _, err := w.Write(chunk); err != nil {
+				if errors.Is(err, syscall.ENOSPC) {
+					sub.diskFull.Store(true)
+				}
 				return
 			}
 		}
@@ -2967,6 +2972,12 @@ func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 		case <-done:
 		case <-time.After(3 * time.Second):
 			_ = rec.cmd.Process.Kill()
+		}
+	}
+	if status == "complete" && rec.sub != nil && rec.sub.diskFull.Load() {
+		status = "failed"
+		if errText == "" {
+			errText = (&disk.WriteError{Full: true}).Error()
 		}
 	}
 	f.recording = nil

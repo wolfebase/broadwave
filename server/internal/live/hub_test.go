@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -442,6 +443,93 @@ func TestRecordingThatCannotStartIsMarkedFailed(t *testing.T) {
 	}
 	if _, ok := h.channels[1]; ok {
 		t.Fatal("a recording that did not start should release the tuner")
+	}
+}
+
+type failWriter struct {
+	err    error
+	once   sync.Once
+	closed chan struct{}
+}
+
+func (w *failWriter) Write([]byte) (int, error) { return 0, w.err }
+func (w *failWriter) Close() error {
+	w.once.Do(func() { close(w.closed) })
+	return nil
+}
+
+func stopAfterWrite(t *testing.T, h *Hub, m *mux, f *feed, id int64, path string, w *failWriter) {
+	t.Helper()
+	h.mu.Lock()
+	sub := h.attachPipeLocked(m, w)
+	f.recording = &recording{id: id, path: path, stdin: w, sub: sub, ends: time.Now().Add(time.Hour)}
+	h.mu.Unlock()
+	sub.ch <- []byte{0x47}
+	select {
+	case <-w.closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("write did not finish")
+	}
+	h.StopRecord(id)
+}
+
+func TestRecordingThatHitsENOSPCIsNotComplete(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	h := &Hub{Dir: dir, Store: st, RenditionIdle: time.Hour, channels: map[int64]*feed{}, muxes: map[int]*mux{}, reserved: map[int]bool{}}
+	m := &mux{freq: 1, tuner: -1, feeds: map[string]*feed{}, cancel: func() {}, body: fakeBody{}}
+	h.muxes[m.freq] = m
+	f := addTestFeed(h, m, 1, "4.1")
+	ends := time.Now().Add(time.Hour)
+	id, err := st.CreateRecording(context.Background(), store.Recording{
+		ChannelID: 1, GuideNumber: "4.1", Title: "News", Path: dir + "/news.ts",
+		Status: "recording", StartedAt: time.Now(), EndsAt: &ends,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := &failWriter{err: syscall.ENOSPC, closed: make(chan struct{})}
+	stopAfterWrite(t, h, m, f, id, dir+"/news.ts", w)
+	got, err := st.Recording(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "failed" || got.Error != "The recordings disk is full. Free some space, then try again." {
+		t.Fatalf("status %s error %q", got.Status, got.Error)
+	}
+}
+
+func TestRecordingStopWithAClosedPipeStaysComplete(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	h := &Hub{Dir: dir, Store: st, RenditionIdle: time.Hour, channels: map[int64]*feed{}, muxes: map[int]*mux{}, reserved: map[int]bool{}}
+	m := &mux{freq: 1, tuner: -1, feeds: map[string]*feed{}, cancel: func() {}, body: fakeBody{}}
+	h.muxes[m.freq] = m
+	f := addTestFeed(h, m, 1, "4.1")
+	ends := time.Now().Add(time.Hour)
+	id, err := st.CreateRecording(context.Background(), store.Recording{
+		ChannelID: 1, GuideNumber: "4.1", Title: "News", Path: dir + "/news.ts",
+		Status: "recording", StartedAt: time.Now(), EndsAt: &ends,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := &failWriter{err: io.ErrClosedPipe, closed: make(chan struct{})}
+	stopAfterWrite(t, h, m, f, id, dir+"/news.ts", w)
+	got, err := st.Recording(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "complete" {
+		t.Fatalf("a closed pipe ended %s (%q)", got.Status, got.Error)
 	}
 }
 
