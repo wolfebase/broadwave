@@ -117,7 +117,8 @@ func (s *Server) socket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A page on another site could pause a group room through the socket.
-	if !s.Dev && crossSite(r) {
+	// -dev still allows the Vite origin, whose port is not this server's.
+	if crossSite(r) && !(s.Dev && localDevOrigin(r.Header.Get("Origin"))) {
 		httpError(w, "Live updates are only for this server's own pages and apps.", http.StatusForbidden)
 		return
 	}
