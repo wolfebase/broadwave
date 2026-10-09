@@ -385,6 +385,9 @@ type recording struct {
 	// gen is the stop timer currently armed. A callback from an older timer
 	// does not finish the recording. Touched only under h.mu.
 	gen uint64
+	// exited is closed by watchRecording after Wait, and before that watch
+	// takes h.mu. Nil when this recording writes the broadcast itself.
+	exited chan struct{}
 }
 
 // pipeQueueCap bounds how far one encode or recording can fall behind the
@@ -2030,7 +2033,13 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 		NotePID(h.Dir, cmd.Process.Pid)
 	}
 	rec := &recording{id: id, path: path, cmd: cmd, stdin: stdin, ends: ends}
+	if cmd != nil {
+		rec.exited = make(chan struct{})
+	}
 	f.recording = rec
+	if cmd != nil {
+		go h.watchRecording(f, rec, cmd)
+	}
 	if stdin != nil && backfill {
 		rec.backfilling = true
 		go h.backfill(muxOf(h, f), rec, from)
@@ -3014,9 +3023,31 @@ func (h *Hub) stopFeedLocked(f *feed) {
 	}
 }
 
+// watchRecording reaps the copy. It is the only Wait on that process. An
+// exit before the recording was stopped fails the row and lets the tuner go.
+// exited closes before the hub lock so a stop that already holds the lock
+// can observe it.
+func (h *Hub) watchRecording(f *feed, rec *recording, cmd *exec.Cmd) {
+	pid := 0
+	if cmd.Process != nil {
+		pid = cmd.Process.Pid
+	}
+	err := cmd.Wait()
+	ForgetPID(h.Dir, pid)
+	close(rec.exited)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if f.recording != rec || rec.finished {
+		return
+	}
+	slog.Error(fmt.Sprintf("recording %d on %s stopped early: %v", rec.id, f.channel.GuideNumber, err))
+	h.finishRecordingLocked(f, "failed", "The recording stopped early.")
+	h.dropIfUnusedLocked(f)
+}
+
 func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 	rec := f.recording
-	if rec == nil {
+	if rec == nil || rec.finished {
 		return
 	}
 	stopTimer(&rec.timer)
@@ -3025,13 +3056,15 @@ func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 	if rec.stdin != nil {
 		_ = rec.stdin.Close()
 	}
-	if rec.cmd != nil && rec.cmd.Process != nil {
-		ForgetPID(h.Dir, rec.cmd.Process.Pid)
-		done := make(chan struct{})
-		go func() { _ = rec.cmd.Wait(); close(done) }()
+	// watchRecording owns Wait. This runs under h.mu, so it gives the copy
+	// three seconds to finish the file and does not wait past the kill: a
+	// process stuck on a network share can outlive SIGKILL.
+	if rec.cmd != nil && rec.cmd.Process != nil && rec.exited != nil {
+		timer := time.NewTimer(3 * time.Second)
 		select {
-		case <-done:
-		case <-time.After(3 * time.Second):
+		case <-rec.exited:
+			timer.Stop()
+		case <-timer.C:
 			_ = rec.cmd.Process.Kill()
 		}
 	}
