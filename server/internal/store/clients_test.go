@@ -2,9 +2,11 @@ package store
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -230,6 +232,102 @@ func TestScopeAllows(t *testing.T) {
 	}
 	if ScopeAllows([]string{"watch"}, ScopeRecord) || ScopeAllows(nil, ScopeWatch) || ScopeAllows([]string{"watch"}, "owner") {
 		t.Fatal("scope check accepted too much")
+	}
+}
+
+func TestEnableDeviceAuthRollsBackWhenTheTokenCannotBeSaved(t *testing.T) {
+	ctx := context.Background()
+	st := openClients(t)
+	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	if _, err := st.db.Exec(`CREATE TRIGGER client_devices_block BEFORE INSERT ON client_devices
+BEGIN
+	SELECT RAISE(ABORT, 'mint failed');
+END`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.EnableDeviceAuth(ctx, map[string]string{"deviceAuth": "1", "pictureMode": "film"}, now); err == nil {
+		t.Fatal("mint succeeded")
+	}
+	values, err := st.Settings(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values["deviceAuth"] == "1" || values["pictureMode"] == "film" {
+		t.Fatalf("settings saved with the failed mint: %v", values)
+	}
+	var n int
+	if err := st.db.QueryRow(`SELECT COUNT(*) FROM client_devices`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("devices %d", n)
+	}
+	if _, err := st.db.Exec(`DROP TRIGGER client_devices_block`); err != nil {
+		t.Fatal(err)
+	}
+	token, err := st.EnableDeviceAuth(ctx, map[string]string{"deviceAuth": "1", "pictureMode": "film"}, now)
+	if err != nil || !strings.HasPrefix(token, "bw_") {
+		t.Fatalf("enable %q %v", token, err)
+	}
+	values, err = st.Settings(ctx)
+	if err != nil || values["deviceAuth"] != "1" || values["pictureMode"] != "film" {
+		t.Fatalf("settings %v err %v", values, err)
+	}
+}
+
+func TestPendingPairingCodesCannotCollide(t *testing.T) {
+	ctx := context.Background()
+	st := openClients(t)
+	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	_, code, _, _, err := st.StartPairing(ctx, "claim", "", "other", []string{"watch"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stamp := now.UTC().Format(time.RFC3339)
+	_, err = st.db.Exec(`INSERT INTO pairings (id, mode, code_hash, scopes, created_at, expires_at, state)
+VALUES ('dup', 'claim', ?, 'watch', ?, ?, 'pending')`, hashSecret(code), stamp, now.Add(time.Minute).UTC().Format(time.RFC3339))
+	if err == nil {
+		t.Fatal("two pending rows stored one code")
+	}
+}
+
+func TestStartPairingStopsAtTwentyWaitingCodes(t *testing.T) {
+	ctx := context.Background()
+	st := openClients(t)
+	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	okN, fullN := 0, 0
+	var other []string
+	codes := map[string]int{}
+	for range 40 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, code, _, _, err := st.StartPairing(ctx, "claim", "", "other", nil, now)
+			mu.Lock()
+			defer mu.Unlock()
+			if err == nil {
+				okN++
+				codes[code]++
+				return
+			}
+			if errors.Is(err, ErrPairFull) {
+				fullN++
+				return
+			}
+			other = append(other, err.Error())
+		}()
+	}
+	wg.Wait()
+	if len(other) > 0 {
+		t.Fatal(other)
+	}
+	if okN != pairPendingMax || fullN != 20 {
+		t.Fatalf("started %d full %d", okN, fullN)
+	}
+	if len(codes) != okN {
+		t.Fatalf("duplicate codes %+v", codes)
 	}
 }
 
