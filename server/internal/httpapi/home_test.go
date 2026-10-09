@@ -97,6 +97,33 @@ func TestHomeListsTunersServersAndScreens(t *testing.T) {
 	}
 }
 
+func TestHomeTunerAddressBracketsIPv6(t *testing.T) {
+	st := testStore(t)
+	s := &Server{Store: st, HomeScan: func(context.Context) []discovery.Found { return nil }}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/home", nil)
+	req.Host = "[2001:db8::1]:8477"
+	rec := httptest.NewRecorder()
+	s.home(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	var body struct {
+		TunerAddress string `json:"tunerAddress"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.TunerAddress != "[2001:db8::1]:8478" {
+		t.Fatalf("address %q", body.TunerAddress)
+	}
+	if got := tunerShareHost("tuner.example:8477"); got != "tuner.example:8478" {
+		t.Fatalf("name %s", got)
+	}
+	if got := tunerShareHost("2001:db8::2"); got != "[2001:db8::2]:8478" {
+		t.Fatalf("bare %s", got)
+	}
+}
+
 func TestLaterArrivalBannersOnce(t *testing.T) {
 	st := testStore(t)
 	flex := false

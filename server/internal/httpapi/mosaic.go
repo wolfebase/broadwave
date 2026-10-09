@@ -139,6 +139,10 @@ func (s *Server) exportMosaic(w http.ResponseWriter, r *http.Request) {
 }
 
 func exportMosaicTo(w http.ResponseWriter, r *http.Request, hub *live.Hub, ids []int64) {
+	if r.Method == http.MethodHead {
+		writeStreamProbe(w)
+		return
+	}
 	w.Header().Set("Content-Type", "video/mp2t")
 	out := &wroteWriter{w: flushWriter{w}}
 	err := hub.ExportMosaic(r.Context(), ids, out)

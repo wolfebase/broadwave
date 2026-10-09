@@ -83,7 +83,9 @@ func newEmulatorMux(st *store.Store, hub *live.Hub) http.Handler {
 	// /tuner0/v4.1 keeps the index in the same segment as "tuner", which a
 	// ServeMux wildcard cannot match. /tuners.html is a different page.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && tunerStreamPath(r.URL.Path) {
+		// ServeMux matches HEAD to a registered GET pattern. This path is not
+		// one, so a probe would 404 unless HEAD is accepted here.
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && tunerStreamPath(r.URL.Path) {
 			h.stream(w, r)
 			return
 		}
@@ -151,16 +153,18 @@ func hexDeviceID(s string) bool {
 }
 
 func (h *emuHandler) lineupStatus(w http.ResponseWriter, r *http.Request) {
-	// ScanPossible stays 0. A scan would take a real tuner, and the lineup is
-	// already the one this server shows.
+	// ScanPossible is 1 because Plex will not add a tuner that reports 0.
+	// The scan itself does nothing: ScanInProgress stays 0, and no tuner is
+	// taken. The lineup is already the one this server shows.
 	writeJSON(w, http.StatusOK, struct {
 		ScanInProgress int      `json:"ScanInProgress"`
 		ScanPossible   int      `json:"ScanPossible"`
 		Source         string   `json:"Source"`
 		SourceList     []string `json:"SourceList"`
 	}{
-		Source:     "Antenna",
-		SourceList: []string{"Antenna"},
+		ScanPossible: 1,
+		Source:       "Antenna",
+		SourceList:   []string{"Antenna"},
 	})
 }
 
@@ -446,7 +450,20 @@ func (h *emuHandler) lookup(ctx context.Context, rest string) (streamHit, bool) 
 	return streamHit{}, false
 }
 
+// writeStreamProbe answers a client that only wants the stream type.
+// Jellyfin's playlist tuner sends HEAD before it plays. Starting the tune
+// here would take a tuner for a request that never reads video.
+func writeStreamProbe(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "video/mp2t")
+	w.Header().Set("Content-Length", "0")
+	w.WriteHeader(http.StatusOK)
+}
+
 func exportChannel(w http.ResponseWriter, r *http.Request, hub *live.Hub, channelID int64) {
+	if r.Method == http.MethodHead {
+		writeStreamProbe(w)
+		return
+	}
 	w.Header().Set("Content-Type", "video/mp2t")
 	out := &wroteWriter{w: flushWriter{w}}
 	err := hub.Export(r.Context(), channelID, out)
@@ -507,6 +524,10 @@ func (h *emuHandler) streamVirtual(w http.ResponseWriter, r *http.Request, numbe
 	}
 	if _, ok := recordingInside(mediaRoots(r.Context(), h.store, h.hub), path); !ok {
 		writeHDHRError(w, http.StatusNotFound, "801 Unknown Channel")
+		return
+	}
+	if r.Method == http.MethodHead {
+		writeStreamProbe(w)
 		return
 	}
 	w.Header().Set("Content-Type", "video/mp2t")

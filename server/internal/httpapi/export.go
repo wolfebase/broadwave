@@ -25,7 +25,7 @@ func (s *Server) exportLineup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	base := "http://" + r.Host
+	base := publicBase(r)
 	encoder := ""
 	if s.Hub != nil {
 		encoder = s.Hub.Encoder
@@ -41,6 +41,7 @@ func (s *Server) exportLineup(w http.ResponseWriter, r *http.Request) {
 			m3uAttr("tvg-id", xmltvChannelID(ch)),
 			m3uAttr("tvg-chno", m3uText(ch.DisplayNumber)),
 			m3uAttr("tvg-name", m3uText(ch.DisplayName)),
+			m3uAttr("tvg-logo", channelLogo(base, ch)),
 			m3uAttr("channel-id", xmltvChannelID(ch)),
 			m3uAttr("channel-number", m3uText(ch.DisplayNumber)),
 			m3uAttr("tvc-stream-vcodec", channelsStreamCodec(ch.VideoCodec)),
@@ -84,9 +85,14 @@ type xmltvDoc struct {
 	Programmes []xmltvProgram `xml:"programme"`
 }
 
+type xmltvIcon struct {
+	Src string `xml:"src,attr"`
+}
+
 type xmltvChannel struct {
-	ID      string   `xml:"id,attr"`
-	Display []string `xml:"display-name"`
+	ID      string     `xml:"id,attr"`
+	Display []string   `xml:"display-name"`
+	Icon    *xmltvIcon `xml:"icon,omitempty"`
 }
 
 type xmltvProgram struct {
@@ -96,6 +102,7 @@ type xmltvProgram struct {
 	Title    string         `xml:"title"`
 	SubTitle string         `xml:"sub-title,omitempty"`
 	Desc     string         `xml:"desc,omitempty"`
+	Icon     *xmltvIcon     `xml:"icon,omitempty"`
 	Category []string       `xml:"category,omitempty"`
 	Date     string         `xml:"date,omitempty"`
 	Series   *xmltvSeriesID `xml:"series-id,omitempty"`
@@ -127,11 +134,16 @@ func (s *Server) exportGuide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	doc := xmltvDoc{Generator: "Broadwave"}
+	base := publicBase(r)
 	ids := map[int64]string{}
 	for _, ch := range channels {
 		id := xmltvChannelID(ch)
 		ids[ch.ID] = id
-		doc.Channels = append(doc.Channels, xmltvChannel{ID: id, Display: []string{ch.DisplayName, ch.DisplayNumber}})
+		row := xmltvChannel{ID: id, Display: []string{ch.DisplayName, ch.DisplayNumber}}
+		if src := channelLogo(base, ch); src != "" {
+			row.Icon = &xmltvIcon{Src: src}
+		}
+		doc.Channels = append(doc.Channels, row)
 	}
 	const layout = "20060102150405 -0700"
 	// A mosaic has no listings of its own. Two-hour blocks say what it shows,
@@ -150,6 +162,9 @@ func (s *Server) exportGuide(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		p := xmltvProgram{Start: a.Start.Format(layout), Stop: a.End.Format(layout), Channel: id, Title: a.Title, SubTitle: a.Subtitle, Desc: a.Description}
+		if src := airingArt(base, a); src != "" {
+			p.Icon = &xmltvIcon{Src: src}
+		}
 		p.Category = xmltvCategories(a.Category)
 		p.Date = strings.ReplaceAll(a.OriginalAir, "-", "")
 		if a.SeriesID != "" {
@@ -169,6 +184,37 @@ func (s *Server) exportGuide(w http.ResponseWriter, r *http.Request) {
 	enc := xml.NewEncoder(w)
 	enc.Indent("", " ")
 	_ = enc.Encode(doc)
+}
+
+// publicBase is the address other apps fetch. A reverse proxy says https
+// with X-Forwarded-Proto. The HDHomeRun port is a different listener and
+// stays plain http.
+func publicBase(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	} else if fwd := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]); fwd == "https" || fwd == "http" {
+		scheme = fwd
+	}
+	return scheme + "://" + r.Host
+}
+
+// channelLogo is this server's picture for the channel. Apps that store the
+// guide keep that address, so the picture is not the upstream link.
+func channelLogo(base string, ch store.Channel) string {
+	raw := strings.TrimSpace(ch.ArtURL)
+	if !strings.HasPrefix(raw, "https://") && !strings.HasPrefix(raw, "http://") {
+		return ""
+	}
+	return base + "/media/art/channel/" + strconv.FormatInt(ch.ID, 10)
+}
+
+func airingArt(base string, a store.Airing) string {
+	raw := strings.TrimSpace(a.ImageURL)
+	if a.ID <= 0 || (!strings.HasPrefix(raw, "https://") && !strings.HasPrefix(raw, "http://")) {
+		return ""
+	}
+	return base + "/media/art/airing/" + strconv.FormatInt(a.ID, 10)
 }
 
 func m3uAttr(key, value string) string {
@@ -257,6 +303,8 @@ func xmltvEpisodes(a store.Airing) []xmltvEpNum {
 	switch {
 	case a.Season > 0 && a.Episode > 0:
 		out = append(out, xmltvEpNum{System: "onscreen", Value: fmt.Sprintf("S%02dE%02d", a.Season, a.Episode)})
+		// xmltv_ns is zero-based. Jellyfin and Plex read it and skip the on-screen label.
+		out = append(out, xmltvEpNum{System: "xmltv_ns", Value: fmt.Sprintf("%d.%d.", a.Season-1, a.Episode-1)})
 	case a.EpisodeLabel != "":
 		out = append(out, xmltvEpNum{System: "onscreen", Value: a.EpisodeLabel})
 	}

@@ -17,15 +17,21 @@ Settings lists a copyable row of each for Plex, Jellyfin, Emby, and Channels.
 
 ## What to give each app
 
-Plex, Jellyfin, and Emby take the HDHomeRun address. Channels takes that address too, or the playlist and the guide together as a custom channel source. In the playlist, the channel id is the same id the guide uses. The channel number is the one on screen.
+Plex, Jellyfin, and Emby take the HDHomeRun address. Channels takes that address too, or the playlist and the guide together as a custom channel source. In the playlist, the channel id is the same id the guide uses. The channel number is the one on screen. When you open this server with https, the playlist and the guide use https too.
 
 Jellyfin and Emby play the stream address in the lineup. Channels and Plex often ask for `/auto/v` and the channel number instead, and ignore the address written in the lineup. Both reach the channel.
+
+Jellyfin checks a playlist stream before it plays. That check gets the stream type and does not take a tuner.
+
+The guide gives each show a season and episode in the form Plex and Jellyfin read. A channel with a logo includes it, and so does a show that has artwork.
+
+A virtual channel is on the HDHomeRun lineup. The playlist lists broadcast channels and multiview channels.
 
 ## What this tuner tells them
 
 It introduces itself as a tuner that does not transcode. The stream is the broadcast, and it runs until the app disconnects. There is no DeviceAuth, and there is no SiliconDust guide. Use the XMLTV guide.
 
-A channel scan from the app does nothing. The lineup is the one Broadwave already shows. A hidden channel stays off it. An encrypted channel stays off it until you show that channel. The lineup then marks it protected, and a request to play it is refused.
+A channel scan finishes at once and does not take a tuner. The lineup stays the one Broadwave already shows. A hidden channel stays off it. An encrypted channel stays off it until you show that channel. The lineup then marks it protected, and a request to play it is refused.
 
 The apps are told they may open several streams. The limit is still the tuners in the house. When those are busy, the stream says all tuners are in use.
 
