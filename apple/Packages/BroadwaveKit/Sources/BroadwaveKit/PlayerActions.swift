@@ -37,7 +37,9 @@ public enum ShowRecording {
         let earliest = airing.start.addingTimeInterval(-4 * 60 * 60)
         return recordings
             .filter { rec in
-                guard rec.channelId == airing.channelId, rec.title.caseInsensitiveCompare(airing.title) == .orderedSame else {
+                let show = airing.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let name = rec.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard rec.channelId == airing.channelId, !rec.isMissing, name.caseInsensitiveCompare(show) == .orderedSame else {
                     return false
                 }
                 if let ended = rec.endedAt, ended < airing.start {
