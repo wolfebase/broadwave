@@ -8,8 +8,15 @@
 }
 
 /* The picture fills the screen, so an outer ring sits off it. */
-html[data-layout="tv"] .stage:focus-visible {
+html .stage:focus-visible {
   box-shadow: inset 0 0 0 4px var(--brand-blue);
+}
+
+html .stage.mini:focus-visible {
+  box-shadow:
+    inset 0 0 0 4px var(--brand-blue),
+    0 24px 60px rgba(0, 0, 0, 0.6),
+    0 0 0 1px var(--color-glass-stroke);
 }
 
 .stage-video {
@@ -147,7 +154,8 @@ html[data-layout="tv"] .stage:focus-visible {
 }
 
 .live-pill.on {
-  background: var(--color-tally);
+  /* White on the tally red is 3.5:1. The same mix the guide uses for "Now" clears 4.5:1. */
+  background: color-mix(in srgb, var(--color-tally) 78%, #000);
   color: #fff;
 }
 
@@ -293,7 +301,8 @@ html[data-layout="tv"] .stage:focus-visible {
 }
 
 .record-btn.on {
-  background: var(--color-tally);
+  background: color-mix(in srgb, var(--color-tally) 78%, #000);
+  color: #fff;
 }
 
 .record-btn.on svg {
