@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { awayBeforeSeekMs, comeBackAction, edgeCaughtUp, resumePlan, resumeSeek } from "./src/features/player/resume.ts";
+import { awayBeforeSeekMs, comeBackAction, edgeCaughtUp, playOnShortReturn, resumePlan, resumeSeek, returnHeld } from "./src/features/player/resume.ts";
 
 test("a tab that was only gone a moment keeps its playhead", () => {
   assert.equal(resumeSeek({ current: 10, liveSync: 40, awayMs: 800, held: false }), null);
@@ -59,4 +59,20 @@ test("coming back leaves a named outage that already destroyed the player", () =
   assert.equal(comeBackAction({ tornDown: true, awayMs: 500, syncing: true, paused: true }), "ignore");
   assert.equal(comeBackAction({ tornDown: false, awayMs: awayBeforeSeekMs, syncing: false, paused: true }), "ignore");
   assert.equal(comeBackAction({ tornDown: false, awayMs: awayBeforeSeekMs, syncing: false, paused: false }), "resume");
+});
+
+test("a paused room stays paused when the tab comes back", () => {
+  // A short return while syncing still answers "play". A room at rate 0 does not take it.
+  assert.equal(comeBackAction({ tornDown: false, awayMs: 1000, syncing: true, paused: true }), "play");
+  assert.equal(returnHeld(true, true, 0), true);
+  assert.equal(returnHeld(true, false, 0), true);
+  assert.equal(playOnShortReturn("play", true), false);
+  assert.equal(returnHeld(true, true, 1), false);
+  assert.equal(playOnShortReturn("play", false), true);
+  // A rate left over after this screen left the room does not pin it.
+  assert.equal(returnHeld(false, false, 0), false);
+  assert.equal(returnHeld(false, true, null), true);
+  assert.deepEqual(resumePlan({ current: 10, liveSync: 400, awayMs: 10_000, held: returnHeld(true, true, 0), waitedMs: 0, edgeAtLeave: 12, driftMs: null }), {
+    action: "ignore",
+  });
 });
