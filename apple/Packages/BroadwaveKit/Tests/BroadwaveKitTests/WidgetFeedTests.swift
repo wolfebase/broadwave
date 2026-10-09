@@ -93,6 +93,27 @@ private func planned(_ airing: Airing, skipped: Bool = false, conflict: Bool = f
     #expect(airing(2, on: 4, title: "College Football: Tigers vs. Bears").kind == .sports)
 }
 
+@Test func aFutureGameIsNotRecordingBecauseTheCurrentShowStillIs() {
+    let game = airing(1, on: 4, title: "Harbor at Valley", category: "Sports event", from: 600, to: 7200)
+    let night = Recording(
+        id: 1, channelId: 4, guideNumber: "4.1", title: "Night Desk", status: "recording",
+        startedAt: now.addingTimeInterval(-1800), endsAt: now.addingTimeInterval(720)
+    )
+    let snap = TopShelf.Snapshot(
+        channels: [channel(4)], airings: [game], recordings: [night], plan: [planned(game)]
+    )
+    let rows = WidgetFeed.teams(snap, follows: [TeamFollow(name: "Harbor")], scores: [], now: now)
+    #expect(rows.map(\.title) == ["Harbor at Valley"])
+    #expect(rows[0].detail == "Set to record")
+    #expect(rows[0].record == nil)
+    let open = WidgetFeed.teams(
+        TopShelf.Snapshot(channels: [channel(4)], airings: [game], recordings: [night]),
+        follows: [TeamFollow(name: "Harbor")], scores: [], now: now
+    )
+    #expect(open[0].detail == "")
+    #expect(open[0].record == WidgetFeed.RecordAsk(channelID: 4, title: "Harbor at Valley", start: now.addingTimeInterval(600)))
+}
+
 @Test func anOverlapKeepsTheShowThatStartedFirst() {
     let earlier = airing(1, on: 4, title: "Harbor Report", from: -1200, to: 600)
     let later = airing(2, on: 4, title: "Valley News", from: -60, to: 1800)

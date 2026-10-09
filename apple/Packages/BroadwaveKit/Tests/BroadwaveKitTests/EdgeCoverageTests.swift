@@ -148,9 +148,12 @@ private func healthySnap() -> RecoverySnap {
     #expect(seek.observe(3593, duration: 3600, creditsStart: nil, hasNext: true) == .card(left: 10))
 }
 
-@Test func aShortTeamNameDoesNotMatchAndAnEmptyOneUsesTheFullName() {
+@Test func aShortNicknameStillTriesTheFullNameAsItsOwnWord() {
     let harbor = airing(1, on: 4, title: "Harbor", from: 0, to: 3600)
-    #expect(!WidgetFeed.followed(harbor, [TeamFollow(name: "Harbor", short: "Har")]))
+    // A short name under 4 letters is ignored. The full name still counts, as its own word.
+    #expect(WidgetFeed.followed(harbor, [TeamFollow(name: "Harbor", short: "Har")]))
+    #expect(!WidgetFeed.followed(airing(5, on: 4, title: "Harborfest", from: 0, to: 3600), [TeamFollow(name: "Harbor", short: "Harbor")]))
+    #expect(WidgetFeed.followed(airing(6, on: 4, title: "Harbor's Game", from: 0, to: 3600), [TeamFollow(name: "Harbor")]))
     #expect(WidgetFeed.followed(harbor, [TeamFollow(name: "Harbor", short: "")]))
     #expect(WidgetFeed.followed(airing(2, on: 4, title: "Harbor at Valley", from: 0, to: 3600), [TeamFollow(name: "Valley")]))
     #expect(WidgetFeed.followed(airing(3, on: 4, title: "Evening News", from: 0, to: 3600), [TeamFollow(name: "Evening News", short: "News")]))

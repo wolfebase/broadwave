@@ -50,7 +50,7 @@ public enum WidgetFeed {
                 start: airing?.start, end: airing?.end, link: TopShelf.watchLink(channel.id)
             )
             if let airing {
-                mark(&row, airing, snap)
+                mark(&row, airing, snap, now: now)
             }
             return row
         }
@@ -75,7 +75,7 @@ public enum WidgetFeed {
                 id: "game-\(airing.id)", number: channel.displayNumber, title: airing.title,
                 start: airing.start, end: airing.end, link: TopShelf.watchLink(channel.id)
             )
-            mark(&row, airing, snap)
+            mark(&row, airing, snap, now: now)
             if let score = airing.gameId.flatMap({ byID[$0]?.line }) {
                 row.detail = row.detail.isEmpty ? score : "\(score) · \(row.detail)"
             }
@@ -85,8 +85,9 @@ public enum WidgetFeed {
 
     /// Recording, set to record, or a Record button. The button adds a once pass,
     /// so after a tap the reloaded widget reads "Set to record".
-    private static func mark(_ row: inout Row, _ airing: Airing, _ snap: TopShelf.Snapshot) {
-        let recording = snap.recordings.contains { rec in
+    private static func mark(_ row: inout Row, _ airing: Airing, _ snap: TopShelf.Snapshot, now: Date) {
+        // "Recording" is only the show on now. A pad that runs into the next listing is still the previous show.
+        let recording = airing.isOn(at: now) && snap.recordings.contains { rec in
             rec.isRecording && rec.channelId == airing.channelId && (rec.endsAt ?? .distantFuture) > airing.start
                 && rec.startedAt < airing.end
         }
@@ -102,13 +103,34 @@ public enum WidgetFeed {
         }
     }
 
-    /// The Home shelf's rule: a followed team's short name (4 letters or more) in the title or subtitle.
+    /// The Home shelf's rule: the short name and the full name, each only at 4 letters
+    /// or more, and only as its own word in the title or subtitle.
     public static func followed(_ airing: Airing, _ follows: [TeamFollow]) -> Bool {
-        follows.contains { team in
-            let name = team.short.flatMap { $0.isEmpty ? nil : $0 } ?? team.name
-            return name.count >= 4 && (airing.title.localizedCaseInsensitiveContains(name)
-                || (airing.subtitle ?? "").localizedCaseInsensitiveContains(name))
+        let text = "\(airing.title) \(airing.subtitle ?? "")"
+        return follows.contains { team in
+            [team.short, team.name].contains { mentions(text, $0) }
         }
+    }
+
+    /// A letter or digit on either side does not count. The same test as the home shelf's `\b`.
+    private static func mentions(_ text: String, _ name: String?) -> Bool {
+        guard let name, name.count >= 4 else { return false }
+        var from = text.startIndex
+        let locale = Locale(identifier: "en_US_POSIX")
+        while let range = text.range(of: name, options: .caseInsensitive, range: from ..< text.endIndex, locale: locale) {
+            let left = range.lowerBound == text.startIndex || !wordChar(text[text.index(before: range.lowerBound)])
+            let right = range.upperBound == text.endIndex || !wordChar(text[range.upperBound])
+            if left, right {
+                return true
+            }
+            from = text.index(after: range.lowerBound)
+        }
+        return false
+    }
+
+    private static func wordChar(_ character: Character) -> Bool {
+        guard let value = character.asciiValue else { return false }
+        return (48 ... 57).contains(value) || (65 ... 90).contains(value) || (97 ... 122).contains(value) || value == 95
     }
 
     public static func recordingNow(_ recordings: [Recording], limit: Int = 4) -> [Row] {
