@@ -504,6 +504,9 @@ func exportChannel(w http.ResponseWriter, r *http.Request, hub *live.Hub, channe
 	if err == nil || out.wrote {
 		return
 	}
+	if refuseFullExport(w, err) {
+		return
+	}
 	var busy *live.BusyError
 	if asBusy(err, &busy) {
 		writeHDHRError(w, http.StatusServiceUnavailable, "805 All Tuners In Use")

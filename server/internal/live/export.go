@@ -9,10 +9,29 @@ import (
 	"time"
 )
 
+// exportCap is how many app streams may copy a broadcast at once.
+// Each one is its own ffmpeg. Viewers of the original picture are not counted.
+const exportCap = 32
+
+// ExportLimitError is every app-stream copy already running.
+type ExportLimitError struct {
+	Limit int
+}
+
+func (e *ExportLimitError) Error() string {
+	return fmt.Sprintf("All %d app streams are in use. Stop one.", e.Limit)
+}
+
 // Export writes a channel's original broadcast as MPEG-TS to w until ctx ends.
 // It rides the shared tune, so other apps can watch through this server
 // without taking another tuner.
 func (h *Hub) Export(ctx context.Context, channelID int64, w io.Writer) error {
+	h.mu.Lock()
+	if h.exportCopies >= exportCap {
+		h.mu.Unlock()
+		return &ExportLimitError{Limit: exportCap}
+	}
+	h.mu.Unlock()
 	ch, err := h.Store.SourceChannel(ctx, channelID)
 	if err != nil {
 		return err
@@ -33,6 +52,11 @@ func (h *Hub) Export(ctx context.Context, channelID int64, w io.Writer) error {
 		h.mu.Unlock()
 		return err
 	}
+	if h.exportCopies >= exportCap {
+		h.dropIfUnusedLocked(f)
+		h.mu.Unlock()
+		return &ExportLimitError{Limit: exportCap}
+	}
 	cmd := exec.CommandContext(ctx, h.FFmpeg, exportCopyArgs(f.program, ch.AudioCodec)...)
 	cmd.Stdout = w
 	logCommand(cmd)
@@ -49,6 +73,7 @@ func (h *Hub) Export(ctx context.Context, channelID int64, w io.Writer) error {
 	}
 	sub := h.attachExportLocked(muxOf(h, f), stdin)
 	f.exports++
+	h.exportCopies++
 	h.mu.Unlock()
 
 	err = cmd.Wait()
@@ -59,6 +84,9 @@ func (h *Hub) Export(ctx context.Context, channelID int64, w io.Writer) error {
 		m.detach(sub)
 	}
 	f.exports--
+	if h.exportCopies > 0 {
+		h.exportCopies--
+	}
 	h.dropIfUnusedLocked(f)
 	if ctx.Err() != nil {
 		return nil
