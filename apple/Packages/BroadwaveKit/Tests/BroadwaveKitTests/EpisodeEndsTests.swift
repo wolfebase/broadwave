@@ -84,9 +84,18 @@ private func rec(
     #expect(UpNext.cardTime(duration: 3600, creditsStart: nil) == 3590)
     #expect(UpNext.cardTime(duration: 3600, creditsStart: 0) == 3590)
     #expect(UpNext.cardTime(duration: 3600, creditsStart: 3600) == 3590)
-    #expect(UpNext.cardTime(duration: 6, creditsStart: nil) == 0)
+    #expect(UpNext.cardTime(duration: 6, creditsStart: nil) == nil)
     #expect(UpNext.cardTime(duration: 0, creditsStart: 10) == nil)
     #expect(UpNext.cardTime(duration: .nan, creditsStart: 10) == nil)
+}
+
+@Test func aShortRecordingDoesNotOfferTheNextEpisode() {
+    // Twenty seconds is too short to count down over, even when the end titles are inside it.
+    #expect(UpNext.cardTime(duration: 20, creditsStart: 8) == nil)
+    #expect(UpNext.cardTime(duration: 21, creditsStart: nil) == 11)
+    var next = UpNext(autoplay: true)
+    #expect(next.observe(15, duration: 20, creditsStart: 8, hasNext: true) == .none)
+    #expect(next.observe(11, duration: 21, creditsStart: nil, hasNext: true) == .card(left: 10))
 }
 
 /// The steps an UpNext takes at each playhead time, in order.

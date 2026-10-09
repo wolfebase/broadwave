@@ -55,7 +55,8 @@ public struct UpNext: Sendable {
 
     /// The end titles when the server found them inside the file, else ten seconds before the end.
     public static func cardTime(duration: Double, creditsStart: Double?) -> Double? {
-        guard duration.isFinite, duration > 0 else { return nil }
+        // A clip of twenty seconds or less is too short to count down over.
+        guard duration.isFinite, duration > countdown * 2 else { return nil }
         if let creditsStart, creditsStart > 0, creditsStart < duration {
             return creditsStart
         }
