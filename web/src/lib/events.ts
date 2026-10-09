@@ -66,6 +66,7 @@ export class EventSocket {
     const ws = new WebSocket(`${proto}://${location.host}/api/v1/ws`);
     this.ws = ws;
     ws.onopen = () => {
+      if (this.ws !== ws) return;
       this.connected = true;
       this.retry = 0;
       this.raw("here", { name: browserName(), kind: "web" });
@@ -105,19 +106,20 @@ export class EventSocket {
     if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
       this.retry = 0;
       this.connect();
-      return;
-    }
-    if (ws.readyState === WebSocket.OPEN) this.burst();
+    } else if (ws.readyState === WebSocket.OPEN) this.burst();
     // A socket that went quiet across a sleep can look open and be dead.
-    // One still connecting can stay that way until the browser gives up.
+    // One we just opened can stay connecting until the browser gives up.
+    const current = this.ws;
+    if (!current) return;
     const heard = this.heard;
     window.setTimeout(() => {
-      if (this.ws !== ws) return;
-      if (ws.readyState !== WebSocket.OPEN || this.heard === heard) this.drop(ws);
+      if (this.ws !== current) return;
+      if (current.readyState !== WebSocket.OPEN || this.heard === heard) this.drop(current);
     }, 4_000);
   }
 
   private drop(ws: WebSocket) {
+    ws.onopen = null;
     ws.onclose = null;
     ws.onmessage = null;
     ws.close();

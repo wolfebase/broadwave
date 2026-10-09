@@ -132,6 +132,24 @@ test("waking with a socket that went quiet opens a new one", () => {
   assert.equal(bus.connected, true);
 });
 
+test("waking a closed socket replaces the new one if it never opens", () => {
+  FakeSocket.all = [];
+  const bus = new EventSocket();
+  const first = latest();
+  first.open();
+  first.lose();
+  bus.wake();
+  const next = latest();
+  assert.notEqual(next, first);
+  assert.equal(next.readyState, 0);
+  mock.timers.tick(3999);
+  assert.equal(latest(), next);
+  mock.timers.tick(2);
+  assert.notEqual(latest(), next);
+  assert.equal(next.onopen, null);
+  assert.equal(bus.connected, false);
+});
+
 test("waking while the socket is still connecting replaces it when it never opens", () => {
   FakeSocket.all = [];
   const bus = new EventSocket();
