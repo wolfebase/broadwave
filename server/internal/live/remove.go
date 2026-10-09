@@ -31,8 +31,15 @@ func removeInside(root, path string) {
 		return
 	}
 	clean := filepath.Clean(path)
-	rel, err := filepath.Rel(filepath.Clean(root), clean)
-	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	if _, ok := inside(root, clean); !ok {
+		return
+	}
+	// Lstat does not follow the final name. A link inside the folder is
+	// removed. A parent link that leaves the folder is not.
+	if _, err := os.Lstat(clean); err != nil {
+		return
+	}
+	if err := insideReal(root, filepath.Dir(clean)); err != nil {
 		return
 	}
 	_ = os.Remove(clean)
