@@ -131,7 +131,8 @@ type Hub struct {
 	RecordingsDir string
 	// MakeRoom, when set, may delete watched recordings to bring free space
 	// in the recordings folder up to need bytes before a recording is refused.
-	MakeRoom func(ctx context.Context, need uint64)
+	// It reports how many bytes of recording files were actually removed.
+	MakeRoom func(ctx context.Context, need uint64) uint64
 	// NoAC4 is set when ffmpeg cannot decode AC-4: an ATSC 3.0 channel then
 	// plays its picture without sound instead of not at all.
 	NoAC4 bool
@@ -3024,6 +3025,9 @@ func (h *Hub) rememberDuration(rec store.Recording) {
 	_ = h.Store.SetDuration(context.Background(), rec.ID, seconds)
 }
 
+// diskStat reads free space. Tests stand in for a disk that reports a delete late.
+var diskStat = disk.Stat
+
 func (h *Hub) ensureSpace(ctx context.Context) error {
 	if h.Store == nil || h.Dir == "" {
 		return nil
@@ -3040,17 +3044,23 @@ func (h *Hub) ensureSpace(ctx context.Context) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	space, err := disk.Stat(dir)
+	space, err := diskStat(dir)
 	if err != nil {
 		return nil
 	}
+	var freed uint64
 	if disk.BelowReserve(space.Free, reserve) && h.MakeRoom != nil {
-		h.MakeRoom(ctx, reserve)
-		if again, err := disk.Stat(dir); err == nil {
+		freed = h.MakeRoom(ctx, reserve)
+		if again, err := diskStat(dir); err == nil {
 			space = again
 		}
 	}
 	if disk.BelowReserve(space.Free, reserve) {
+		// A filesystem can report the old free space for a few seconds after
+		// a delete. Bytes that were actually unlinked still count.
+		if freed >= reserve-space.Free {
+			return nil
+		}
 		_ = h.Store.AddEvent(ctx, "disk", "Refused a recording because free space is under the reserve")
 		return &disk.LowError{Free: space.Free, Need: reserve}
 	}

@@ -173,7 +173,7 @@ func main() {
 	}
 	// A test harness shares one server across specs; nothing there deletes.
 	if !*staging && os.Getenv("BROADWAVE_E2E") != "1" {
-		hub.MakeRoom = func(ctx context.Context, need uint64) { dvr.MakeRoom(ctx, st, hub, need) }
+		hub.MakeRoom = func(ctx context.Context, need uint64) uint64 { return dvr.MakeRoom(ctx, st, hub, need) }
 		go func() {
 			time.Sleep(time.Minute)
 			for {

@@ -70,25 +70,25 @@ func Tidy(ctx context.Context, st *store.Store, hub *live.Hub, now time.Time) {
 // has need bytes free, when makeRoom is on. Unwatched and kept recordings
 // are never removed. When the watched ones can't free enough, it removes
 // nothing: the recording is refused either way.
-func MakeRoom(ctx context.Context, st *store.Store, hub *live.Hub, need uint64) {
+func MakeRoom(ctx context.Context, st *store.Store, hub *live.Hub, need uint64) uint64 {
 	if st == nil || hub == nil || hub.Dir == "" {
-		return
+		return 0
 	}
 	ctx = context.WithoutCancel(ctx)
 	values, err := st.Settings(ctx)
 	if err != nil || values["makeRoom"] != "1" {
-		return
+		return 0
 	}
 	space, err := diskStat(hub.Recordings())
 	if err != nil || !disk.BelowReserve(space.Free, need) {
-		return
+		return 0
 	}
 	short := need - space.Free
 	tidyMu.Lock()
 	defer tidyMu.Unlock()
 	recs, err := st.Recordings(ctx)
 	if err != nil {
-		return
+		return 0
 	}
 	now := time.Now()
 	victims := RoomOrder(cleanable(hub, recs, now))
@@ -98,20 +98,19 @@ func MakeRoom(ctx context.Context, st *store.Store, hub *live.Hub, need uint64) 
 	}
 	if could < short {
 		_ = st.AddEvent(ctx, "disk", "Free space is under the reserve, and deleting every watched recording would not free enough")
-		return
+		return 0
 	}
 	// Freed bytes are counted, not read back: some filesystems report the
-	// space a few seconds after a delete.
+	// space a few seconds after a delete. A file that is still on disk
+	// does not count, and its row stays so a later pass can try again.
 	var freed uint64
 	for _, rec := range victims {
 		if freed >= short {
-			return
+			return freed
 		}
-		size := fileSize(rec.Path)
-		if remove(ctx, st, hub, rec, now, "Made room: removed "+rec.Title+", already watched") {
-			freed += size
-		}
+		freed += remove(ctx, st, hub, rec, now, "Made room: removed "+rec.Title+", already watched")
 	}
+	return freed
 }
 
 // RoomOrder is the watched recordings in the order making room removes
@@ -162,19 +161,25 @@ func cleanable(hub *live.Hub, recs []store.Recording, now time.Time) []store.Rec
 }
 
 // remove deletes a recording the clean-up chose, after reading it again:
-// someone may have kept it or marked it unwatched since.
-func remove(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Recording, now time.Time, why string) bool {
+// someone may have kept it or marked it unwatched since. It returns the
+// bytes of the recording file that were unlinked. The row stays when the
+// file cannot be removed.
+func remove(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Recording, now time.Time, why string) uint64 {
 	fresh, err := st.Recording(ctx, rec.ID)
 	if err != nil || len(cleanable(hub, []store.Recording{fresh}, now)) == 0 {
-		return false
+		return 0
 	}
-	hub.RemoveRecordingFiles(fresh)
+	size := fileSize(fresh.Path)
+	if err := hub.RemoveRecordingFiles(fresh); err != nil {
+		slog.Warn(fmt.Sprintf("storage: remove %d: %v", fresh.ID, err))
+		return 0
+	}
 	if err := st.DeleteRecording(ctx, fresh.ID); err != nil {
 		slog.Warn(fmt.Sprintf("storage: delete %d: %v", fresh.ID, err))
-		return false
+		return size
 	}
 	_ = st.AddEvent(ctx, "delete", why)
-	return true
+	return size
 }
 
 func fileSize(path string) uint64 {
