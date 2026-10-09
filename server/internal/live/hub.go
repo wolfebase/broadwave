@@ -371,6 +371,9 @@ type recording struct {
 	// finished is set under the hub lock when the recording ends. A backfill
 	// that attaches after that lets go at once.
 	finished bool
+	// gen is the stop timer currently armed. A callback from an older timer
+	// does not finish the recording. Touched only under h.mu.
+	gen uint64
 }
 
 // pipeQueueCap bounds how far one encode or recording can fall behind the
@@ -2081,7 +2084,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 		if stdin != nil {
 			rec.sub = h.attachPipe(muxOf(h, f), stdin, true)
 		}
-		rec.timer = time.AfterFunc(time.Duration(minutes)*time.Minute, func() { h.StopRecord(id) })
+		h.armRecordingStopLocked(rec)
 	}
 	h.changed()
 	startedOK = true
@@ -2204,8 +2207,7 @@ func (h *Hub) ExtendRecording(ctx context.Context, id int64, until time.Time) er
 		}
 		f.recording.ends = until
 		if !f.recording.backfilling {
-			stopTimer(&f.recording.timer)
-			f.recording.timer = time.AfterFunc(time.Until(until), func() { h.StopRecord(id) })
+			h.armRecordingStopLocked(f.recording)
 		}
 		return h.Store.SetRecordingEnd(ctx, id, until)
 	}
@@ -3157,6 +3159,37 @@ func stopTimer(t **time.Timer) {
 	if *t != nil {
 		(*t).Stop()
 		*t = nil
+	}
+}
+
+// armRecordingStopLocked starts the stop timer from rec.ends. The caller
+// holds h.mu. A callback already running from the timer this replaces
+// does not finish the recording.
+func (h *Hub) armRecordingStopLocked(rec *recording) {
+	stopTimer(&rec.timer)
+	rec.gen++
+	gen, id := rec.gen, rec.id
+	rec.timer = time.AfterFunc(time.Until(rec.ends), func() {
+		h.finishRecordingGen(id, gen)
+	})
+}
+
+// finishRecordingGen stops the recording when gen is still the armed timer.
+// A user stop does not come through here.
+func (h *Hub) finishRecordingGen(id int64, gen uint64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, f := range h.feedsLocked() {
+		rec := f.recording
+		if rec == nil || rec.id != id {
+			continue
+		}
+		if rec.gen != gen {
+			return
+		}
+		h.finishRecordingLocked(f, "complete", "")
+		h.dropIfUnusedLocked(f)
+		return
 	}
 }
 
