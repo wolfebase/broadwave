@@ -11,6 +11,10 @@ test("Tab stays inside a dialog and wraps at the ends", () => {
   assert.equal(trapTab(list, "outside", false), "close");
   assert.equal(trapTab(list, null, true), "record");
   assert.equal(trapTab([], "watch", false), null);
+  assert.equal(trapTab(["close"], "close", false), "close");
+  assert.equal(trapTab(["close"], "close", true), "close");
+  assert.equal(trapTab(list, "close", false), null);
+  assert.equal(trapTab(list, "record", true), null);
 });
 
 test("Backspace edits a text field and leaves a checkbox or a slider", () => {
