@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { TOKEN_KEY, authHeaders, formatPairCode, isForbidden, isUnauthorized, kindLabel, mediaURL, normalizePairCode, pairPollStep, readToken, scopeLabel, writeToken } from "./src/lib/deviceToken.ts";
+import { TOKEN_KEY, authHeaders, canEditSignIn, codeAfterPoll, formatPairCode, isForbidden, isUnauthorized, kindLabel, mediaURL, normalizePairCode, noteIfUnauthorized, onUnauthorized, pairPollStep, readToken, scopeLabel, scopesForAccess, settingsForWatcher, writeToken } from "./src/lib/deviceToken.ts";
 
 test("a pair code is six digits, with spaces and dashes ignored", () => {
   assert.equal(normalizePairCode("482913"), "482913");
@@ -120,6 +120,60 @@ test("one approved poll with no token keeps waiting", () => {
   assert.equal(step.action, "miss");
   assert.equal(pairPollStep("expired", undefined, false).action, "expired");
   assert.equal(pairPollStep("denied", undefined, false).action, "denied");
+});
+
+test("an access choice is the scopes the server stores", () => {
+  assert.deepEqual(scopesForAccess("watch"), ["watch"]);
+  assert.deepEqual(scopesForAccess("record"), ["watch", "record"]);
+  assert.deepEqual(scopesForAccess("admin"), ["watch", "record", "admin"]);
+  assert.equal(scopesForAccess("other"), null);
+  assert.equal(scopesForAccess(""), null);
+});
+
+test("a missed, expired, or denied code leaves the screen", () => {
+  assert.equal(codeAfterPoll("miss", "482913"), "");
+  assert.equal(codeAfterPoll("expired", "482913"), "");
+  assert.equal(codeAfterPoll("denied", "482913"), "");
+  assert.equal(codeAfterPoll("wait", "482913"), "482913");
+  assert.equal(codeAfterPoll("ready", "482913"), "482913");
+});
+
+test("a watch seat keeps the house picture choices and cannot edit sign-in", () => {
+  const base = { pictureMode: "broadcast", autoplay: "1", layout: "auto", deviceAuth: "0", guideUrl: "http://example.test/guide" };
+  const watched = settingsForWatcher(base, { pictureMode: "film", autoplay: "0", layout: "tv" }, "device");
+  assert.equal(watched.pictureMode, "film");
+  assert.equal(watched.autoplay, "0");
+  assert.equal(watched.layout, "tv");
+  assert.equal(watched.deviceAuth, "1");
+  assert.equal(watched.guideUrl, "http://example.test/guide");
+  const open = settingsForWatcher(base, null, "local-open");
+  assert.equal(open.pictureMode, "broadcast");
+  assert.equal(open.deviceAuth, "0");
+  const blank = settingsForWatcher(base, { pictureMode: "", autoplay: "", layout: "" }, "");
+  assert.equal(blank.pictureMode, "broadcast");
+  assert.equal(blank.autoplay, "1");
+  assert.equal(canEditSignIn(null), true);
+  assert.equal(canEditSignIn({ auth: "local-open" }), true);
+  assert.equal(canEditSignIn({ auth: "device", device: { scopes: ["watch"] } }), false);
+  assert.equal(canEditSignIn({ auth: "device", device: { scopes: ["watch", "record"] } }), false);
+  assert.equal(canEditSignIn({ auth: "device", device: { scopes: ["watch", "record", "admin"] } }), true);
+  assert.equal(canEditSignIn({ auth: "device", device: null }), false);
+});
+
+test("a 401 from any request opens pairing, and a 403 does not", () => {
+  const seen: string[] = [];
+  const stop = onUnauthorized(() => seen.push("open"));
+  try {
+    noteIfUnauthorized(403);
+    noteIfUnauthorized(200);
+    assert.deepEqual(seen, []);
+    noteIfUnauthorized(401);
+    assert.deepEqual(seen, ["open"]);
+  } finally {
+    stop();
+  }
+  noteIfUnauthorized(401);
+  assert.deepEqual(seen, ["open"]);
 });
 
 test("a 401 is unauthorized and anything else is not", () => {

@@ -215,13 +215,21 @@ func pairPollPath(path string) bool {
 func watchScope(method, path string) (string, bool) {
 	if method == http.MethodGet {
 		switch path {
-		case "/clock", "/groups", "/channels", "/frames", "/airings", "/schedule", "/events",
+		case "/clock", "/groups", "/channels", "/frames", "/airings", "/schedule", "/playback",
 			"/search", "/sports/scoreboard", "/teams", "/passes", "/recordings", "/virtuals",
 			"/virtuals/schedule", "/ws":
 			return store.ScopeWatch, true
 		}
-		if tail, ok := strings.CutPrefix(path, "/channels/"); ok && strings.HasSuffix(tail, "/frame") && !strings.Contains(strings.TrimSuffix(tail, "/frame"), "/") {
-			return store.ScopeWatch, true
+		if tail, ok := strings.CutPrefix(path, "/channels/"); ok {
+			action := ""
+			if strings.HasSuffix(tail, "/frame") {
+				action = "/frame"
+			} else if strings.HasSuffix(tail, "/reception") {
+				action = "/reception"
+			}
+			if action != "" && !strings.Contains(strings.TrimSuffix(tail, action), "/") {
+				return store.ScopeWatch, true
+			}
 		}
 		if id, action, ok := recordingAction(path); ok && id != "" {
 			switch action {
@@ -263,6 +271,9 @@ func watchScope(method, path string) (string, bool) {
 }
 
 func recordScope(method, path string) (string, bool) {
+	if method == http.MethodGet && path == "/events" {
+		return store.ScopeRecord, true
+	}
 	if method == http.MethodPost {
 		switch path {
 		case "/recordings", "/schedule/skip", "/schedule/fix", "/passes", "/passes/preview", "/virtuals":

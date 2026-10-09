@@ -315,6 +315,18 @@ export type PlannedAiring = {
   suggestion?: Suggestion;
 };
 
+export type Playback = {
+  pictureMode: PictureMode;
+  autoplay: string;
+  layout: string;
+};
+
+export type Reception = {
+  freeTuner: boolean;
+  tunerAnswers: boolean;
+  signalLost: boolean;
+};
+
 export type Recording = {
   id: number;
   channelId: number;

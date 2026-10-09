@@ -37,13 +37,15 @@ A token has one or more of `watch`, `record`, and `admin`. A higher scope includ
 
 | Scope | What it may do |
 | --- | --- |
-| watch | Guide, playback, the realtime socket, `/media`, progress, and marking a recording watched. |
-| record | Watch, plus recordings, passes, markers, teams, and schedule changes. |
+| watch | Guide, playback, picture mode, autoplay, layout, whether a stall is the tuner or the signal, the realtime socket, `/media`, progress, and marking a recording watched. |
+| record | Watch, plus recordings, passes, markers, teams, schedule changes, and the activity log. |
 | admin | Record, plus settings, sources, tuners, backups, setup, channel edits, and pairing approval. |
 
 Storage, diagnostics, metrics, and the support bundle are admin. They name paths and versions.
 
 `GET /passes` is watch (the schedule is on screen while you watch). Creating or deleting a pass is record.
+
+`GET /settings` stays admin. It carries the guide address and which keys are saved. A watch token reads `GET /playback` for picture mode, autoplay, and layout. `GET /channels/{id}/reception` answers whether a tuner is free, whether a tuner answered, and whether this channel's signal is lost. It does not include tuner addresses, firmware, or frequency. Those stay on `GET /tuners`, `GET /devices/health`, and `GET /signals`, which are admin. `GET /events` is record, because the activity log names recordings and source errors.
 
 ## Tokens
 

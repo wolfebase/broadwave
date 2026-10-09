@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { unreadBody } from "./src/api.ts";
-import { aTunerAnswers, aTunerIsFree, autoplayRetry, channelDidNotStart, classifySnap, connectionDropped, FrozenPicture, frozenMs, holdPictureMessage, listingNote, liveFatalStep, noListing, noListingChecked, noSignal, outageTearsDown, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryEdge, recoveryReady, requestFailed, restartDelayMs, restartFollowUp, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage, watchResolution } from "./src/features/player/outage.ts";
+import { aTunerAnswers, aTunerIsFree, autoplayRetry, channelDidNotStart, classifySnap, connectionDropped, frozenMs, FrozenPicture, hiddenInventory, holdPictureMessage, inventoryHidden, listingNote, liveFatalStep, noListing, noListingChecked, noSignal, outageTearsDown, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryEdge, recoveryReady, requestFailed, restartDelayMs, restartFollowUp, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage, watchResolution } from "./src/features/player/outage.ts";
 
 test("checking for listings says so when nothing comes back", () => {
   assert.equal(listingNote(false), noListing);
@@ -84,6 +84,25 @@ test("a restart asks again only when its own check comes back, and not after the
   assert.equal(recoveryEdge(true, recoveryReady("restart", flickered)), false);
   assert.equal(restartFollowUp(false), "ask");
   assert.equal(restartFollowUp(true), "skip");
+});
+
+test("a watch token that cannot see tuners is not a tuner that stopped", () => {
+  const denied = Object.assign(new Error("This device can't do that."), { status: 403 });
+  const unsigned = Object.assign(new Error("Sign in from a paired device."), { status: 401 });
+  assert.equal(inventoryHidden(denied), true);
+  assert.equal(inventoryHidden(unsigned), true);
+  assert.equal(inventoryHidden(Object.assign(new Error("down"), { status: 500 })), false);
+  assert.equal(inventoryHidden(new Error("down")), false);
+  assert.equal(inventoryHidden(null), false);
+  const hidden = hiddenInventory(false);
+  assert.deepEqual(hidden, { freeTuner: true, tunerAnswers: true, signalLost: false });
+  assert.deepEqual(hiddenInventory(true), { freeTuner: true, tunerAnswers: true, signalLost: true });
+  const snap = classifySnap({ health: true, online: true, ...hidden });
+  assert.equal(snap.message, pictureStopped);
+  assert.notEqual(snap.message, tunerStopped);
+  assert.equal(snap.recovery, "");
+  assert.equal(recoveryReady("tuner", { health: true, online: true, ...hiddenInventory(false) }), true);
+  assert.equal(recoveryReady("busy", { health: true, online: true, ...hiddenInventory(false) }), true);
 });
 
 test("a home with only playlists never blames a tuner", () => {
