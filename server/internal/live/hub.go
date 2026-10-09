@@ -1229,6 +1229,9 @@ func (h *Hub) watchRendition(f *feed, r *rendition, cmd *exec.Cmd, encoder strin
 	done := r.packDone
 	h.mu.Unlock()
 	err := cmd.Wait()
+	// Wait has reaped this pid. Drop the break backstop before it can signal
+	// a pid the OS has already given to another process.
+	disarmLingerKill(cmd)
 	h.mu.Lock()
 	// An encode started again after a timestamp break has its own watch.
 	replaced := r.cmd != cmd
@@ -1447,8 +1450,8 @@ func (h *Hub) followBreak(f *feed, r *rendition, p *programPipe) {
 	NotePID(h.Dir, cmd.Process.Pid)
 	p.sw.give(stdin)
 	// The old encode normally ends within a second of its input closing.
-	old := r.cmd
-	time.AfterFunc(10*time.Second, func() { _ = old.Process.Kill() })
+	// The backstop is disarmed when that process is reaped.
+	armLingerKill(r.cmd)
 	r.cmd = cmd
 	r.stdin = stdin
 	r.waited.Store(false)
@@ -1464,6 +1467,54 @@ func usesPipe(args []string) bool {
 		}
 	}
 	return false
+}
+
+// lingerKill is how long a replaced encode may keep running after the next
+// one takes its input. Past that, it is killed. Once Wait has reaped it, the
+// kill is dropped: that pid may already belong to another process.
+var lingerKill = 10 * time.Second
+
+// signalProcess is what the linger backstop uses. Tests replace it.
+var signalProcess = func(p *os.Process) error { return p.Kill() }
+
+// lingerStops disarms a backstop whose encode Wait has already reaped.
+var lingerStops sync.Map // *exec.Cmd -> func()
+
+// armLingerKill kills cmd if it is still the encode we started when the
+// deadline passes. The watch that Wait returns in calls disarmLingerKill.
+func armLingerKill(cmd *exec.Cmd) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	var mu sync.Mutex
+	reaped := false
+	timer := time.AfterFunc(lingerKill, func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if reaped || cmd.Process == nil {
+			return
+		}
+		_ = signalProcess(cmd.Process)
+	})
+	lingerStops.Store(cmd, func() {
+		timer.Stop()
+		mu.Lock()
+		reaped = true
+		mu.Unlock()
+	})
+}
+
+// disarmLingerKill drops the backstop for cmd. A kill that has already
+// decided the process is still ours still runs; one that has not does not.
+func disarmLingerKill(cmd *exec.Cmd) {
+	if cmd == nil {
+		return
+	}
+	stop, ok := lingerStops.LoadAndDelete(cmd)
+	if !ok {
+		return
+	}
+	stop.(func())()
 }
 
 // LongGroups reports a channel whose station sends groups of pictures past
