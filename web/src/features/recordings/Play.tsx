@@ -1,5 +1,5 @@
 import Hls from "hls.js";
-import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
 import { copy } from "../../strings";
@@ -38,6 +38,9 @@ export function Play({
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [skipMode, setSkipMode] = useState<SkipMode>(readSkip);
   const [zoom, setZoom] = useState<Zoom>(readZoom);
+  const [captions, setCaptions] = useState<"off" | "on">("off");
+  const [captionsReady, setCaptionsReady] = useState(false);
+  const captionsLabel = useId();
   const [where, setWhere] = useState(0);
   const [length, setLength] = useState(0);
   const aheadAt = useRef(0);
@@ -63,6 +66,8 @@ export function Play({
   if (seenId !== recording.id) {
     setSeenId(recording.id);
     setDismissed(false);
+    setCaptions("off");
+    setCaptionsReady(false);
   }
 
   useEffect(() => {
@@ -113,7 +118,12 @@ export function Play({
         track.kind = "captions";
         track.label = "Captions";
         track.src = `/media/file/${recording.id}/captions.vtt`;
+        track.addEventListener("load", () => {
+          if (!dead && (track.track.cues?.length ?? 0) > 0) setCaptionsReady(true);
+        });
         video.appendChild(track);
+        // Disabled tracks are not fetched. Hidden loads the cues without showing them.
+        track.track.mode = "hidden";
         await video.play().catch(() => undefined);
         place();
       } catch (err) {
@@ -341,6 +351,33 @@ export function Play({
               </button>
             ))}
           </div>
+          {captionsReady ? (
+            <div className="option-row">
+              <span className="option-label" id={captionsLabel}>
+                Captions
+              </span>
+              <div className="segmented" role="group" aria-labelledby={captionsLabel}>
+                {(["off", "on"] as const).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    className={captions === item ? "seg on" : "seg"}
+                    aria-pressed={captions === item}
+                    onClick={() => {
+                      setCaptions(item);
+                      const video = videoRef.current;
+                      if (!video) return;
+                      for (const text of video.textTracks) {
+                        if (text.kind === "captions" || text.kind === "subtitles") text.mode = item === "on" ? "showing" : "hidden";
+                      }
+                    }}
+                  >
+                    {item === "off" ? "Off" : "On"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="sheet-actions">
             <button type="button" className="btn" onClick={() => void startOver()}>Start over</button>
             <DownloadLink id={recording.id} status={recording.status} />
