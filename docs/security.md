@@ -10,7 +10,7 @@ The tuner interface this server offers to other apps uses that same host check.
 
 ## Fetches
 
-Playlists, guides, artwork, and tuner requests use http or https. Other schemes are refused. A path to a file on this machine is not a playlist address; upload the file instead. Link-local addresses, and the well-known cloud metadata names and addresses, are refused. A hex spelling of an address is refused too. A tuner on a private network address still works. A tuner that answers only on a link-local address does not.
+Playlists, guides, artwork, scoreboards, the release check, and tuner requests use http or https. Other schemes are refused. A path to a file on this machine is not a playlist address; upload the file instead. Link-local addresses, and the well-known cloud metadata names and addresses, are refused. A hex spelling of an address is refused too. A tuner on a private network address still works. A tuner that answers only on a link-local address does not.
 
 When ffmpeg or ffprobe opens a URL, the input is limited to http and https. A playlist cannot hand either program a file on this machine. A recording on disk is still opened as a file.
 
@@ -22,7 +22,7 @@ A channel number from a playlist is cleaned before it becomes a recording's file
 
 A playlist upload, a picture, and a guide each stop at a fixed size. A picture whose header claims a huge width or height is not decoded. A compressed guide that expands past the cap is refused, and xz is held to a memory limit while it expands. An event socket keeps its message cap. The server holds a fixed number of those sockets and closes the next one.
 
-Playlist text, guide XML, and the tables inside a broadcast are read with their own caps.
+Playlist text, guide XML, and the tables inside a broadcast are read with their own caps. A fragment that claims a huge sample count and no per-sample fields is dropped. A guide request longer than 15 days is refused.
 
 ## Secrets
 
@@ -36,9 +36,7 @@ On plain http, a page on another site can still open an export or a tuner URL. A
 
 The encoder's command line still shows the stream address it was given. The log of its progress does not.
 
-ffmpeg looks up a name on its own after Broadwave has checked the first address. A name can change where it points.
-
-A stream that starts on an allowed address can later ask for a segment or a key on a link-local address.
+An HLS name is resolved before the tune. If any answer is link-local or a metadata address, the tune is refused. The encoder resolves that name again, and a later segment or key can still ask for a blocked address.
 
 A tuner that uses only a link-local address is refused.
 

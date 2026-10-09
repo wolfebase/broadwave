@@ -2,12 +2,15 @@ package update
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"broadwave/internal/fetchguard"
 )
 
 func TestReleaseFeed(t *testing.T) {
@@ -214,4 +217,21 @@ func TestReleaseFeed(t *testing.T) {
 			t.Fatalf("reloaded %+v", got)
 		}
 	})
+}
+
+func TestFeedURLRefusesLinkLocal(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	c := &Checker{
+		Current:  "0.6.0",
+		FeedURL:  "http://169.254.169.254/",
+		Interval: 0,
+	}
+	n, err := c.Check(ctx)
+	if !errors.Is(err, fetchguard.ErrRefused) {
+		t.Fatal(err)
+	}
+	if n != nil {
+		t.Fatalf("notice %+v", n)
+	}
 }

@@ -119,3 +119,26 @@ func TestTheSportsDBUsesItsOwnClient(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestTheSportsDBRedirectStaysOnTheHost(t *testing.T) {
+	const key = "sports-fixture-key"
+	var followed int
+	other := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		followed++
+	}))
+	t.Cleanup(other.Close)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+"/eventsday.php", http.StatusFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	provider := NewTheSportsDB(key)
+	provider.Base = srv.URL
+	_, err := provider.Scoreboard(t.Context(), "nfl", time.Date(2026, 9, 25, 0, 0, 0, 0, time.UTC))
+	if err == nil || strings.Contains(err.Error(), key) {
+		t.Fatal(err)
+	}
+	if followed != 0 {
+		t.Fatalf("followed %d", followed)
+	}
+}
