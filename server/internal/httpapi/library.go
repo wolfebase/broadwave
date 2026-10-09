@@ -55,7 +55,10 @@ func (s *Server) playRecording(w http.ResponseWriter, r *http.Request) {
 			return curErr == nil && cur.Status == "recording"
 		})
 	} else {
-		if rec.Duration <= 0 {
+		// Zero is unknown, so play measures the file and remembers it. A
+		// negative length means a probe already failed; the list stores -1
+		// and play must not replace that on the way out.
+		if rec.Duration == 0 {
 			if dur := recordingDuration(s.Hub, rec); dur > 0 {
 				rec.Duration = dur
 				_ = s.Store.SetDuration(r.Context(), id, dur)

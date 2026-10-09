@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -111,6 +112,107 @@ func TestPlayOfAGrowingRecordingResumesInsideIt(t *testing.T) {
 	}
 	if strings.TrimSpace(string(off)) != "40.000" {
 		t.Fatalf("offset %q", off)
+	}
+}
+
+// playScript is an ffmpeg stand-in that writes a one-segment playlist and exits.
+// Duration probes use the real ffprobe, not this binary.
+func playScript(t *testing.T, dir string) string {
+	t.Helper()
+	bin := filepath.Join(dir, "ffmpeg")
+	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\ncat > index.m3u8 << 'EOF'\n#EXTM3U\n#EXTINF:2.000,\nseg00000.ts\nEOF\necho x > seg00000.ts\n;;\nesac\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin
+}
+
+// oneSecondRecording is a real file so ffprobe can report a length.
+func oneSecondRecording(t *testing.T, dir string) string {
+	t.Helper()
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "recordings", "clip.ts")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "testsrc2=size=32x18:rate=10:duration=1",
+		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=8000:duration=1",
+		"-c:v", "mpeg2video", "-c:a", "mp2", "-shortest", "-f", "mpegts", path)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("sample: %v %s", err, out)
+	}
+	return path
+}
+
+func playDuration(t *testing.T, h http.Handler, id int64) float64 {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/recordings/"+strconv.FormatInt(id, 10)+"/play", strings.NewReader(`{}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatal(rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Recording struct {
+			Duration float64 `json:"durationSec"`
+		} `json:"recording"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	return body.Recording.Duration
+}
+
+func TestPlayKeepsAFailedDurationProbe(t *testing.T) {
+	st := testStore(t)
+	dir := t.TempDir()
+	path := oneSecondRecording(t, dir)
+	id, err := st.CreateRecording(t.Context(), store.Recording{
+		Title: "Night Shift", Status: "complete", Path: path, StartedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetDuration(t.Context(), id, -1); err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st, Hub: &live.Hub{Store: st, Dir: dir, Encoder: "libx264", FFmpeg: playScript(t, dir)}}).Handler()
+	if got := playDuration(t, h, id); got != -1 {
+		t.Fatalf("duration %v, want the stored -1", got)
+	}
+	saved, err := st.Recording(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Duration != -1 {
+		t.Fatalf("stored duration %v", saved.Duration)
+	}
+}
+
+func TestPlayFillsInAMissingDuration(t *testing.T) {
+	st := testStore(t)
+	dir := t.TempDir()
+	path := oneSecondRecording(t, dir)
+	id, err := st.CreateRecording(t.Context(), store.Recording{
+		Title: "Night Shift", Status: "complete", Path: path, StartedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st, Hub: &live.Hub{Store: st, Dir: dir, Encoder: "libx264", FFmpeg: playScript(t, dir)}}).Handler()
+	got := playDuration(t, h, id)
+	if got < 0.5 || got > 5 {
+		t.Fatalf("duration %v, want the file", got)
+	}
+	saved, err := st.Recording(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Duration != got {
+		t.Fatalf("stored %v, response %v", saved.Duration, got)
 	}
 }
 
