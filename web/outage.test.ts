@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { unreadBody } from "./src/api.ts";
-import { aTunerAnswers, aTunerIsFree, autoplayRetry, channelDidNotStart, classifySnap, connectionDropped, FrozenPicture, frozenMs, holdPictureMessage, listingNote, liveFatalStep, noListing, noListingChecked, noSignal, outageAtWatchStart, outageTearsDown, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, requestFailed, restartDelayMs, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage, watchResolution } from "./src/features/player/outage.ts";
+import { aTunerAnswers, aTunerIsFree, autoplayRetry, channelDidNotStart, classifySnap, connectionDropped, FrozenPicture, frozenMs, holdPictureMessage, listingNote, liveFatalStep, noListing, noListingChecked, noSignal, outageAtWatchStart, outageTearsDown, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryEdge, recoveryReady, requestFailed, restartDelayMs, restartFollowUp, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage, watchResolution } from "./src/features/player/outage.ts";
 
 test("checking for listings says so when nothing comes back", () => {
   assert.equal(listingNote(false), noListing);
@@ -69,6 +69,21 @@ test("a named outage or a confirm prompt keeps the screen when the tab comes bac
   assert.equal(outageTearsDown("", true), true);
   // An unnamed stop leaves the player up, so a return may resume it.
   assert.equal(outageTearsDown("", false), false);
+});
+
+test("a restart asks again only when its own check comes back, and not after the picture is up", () => {
+  assert.equal(recoveryEdge(false, false), false);
+  assert.equal(recoveryEdge(false, true), true);
+  assert.equal(recoveryEdge(true, true), false);
+  assert.equal(recoveryEdge(true, false), false);
+  // The server is up. A tuner probe flipping does not make a new edge.
+  const up = { health: true, freeTuner: false, tunerAnswers: true, online: true, signalLost: false };
+  const flickered = { ...up, freeTuner: true, tunerAnswers: false };
+  assert.equal(recoveryReady("restart", up), true);
+  assert.equal(recoveryReady("restart", flickered), true);
+  assert.equal(recoveryEdge(true, recoveryReady("restart", flickered)), false);
+  assert.equal(restartFollowUp(false), "ask");
+  assert.equal(restartFollowUp(true), "skip");
 });
 
 test("a home with only playlists never blames a tuner", () => {

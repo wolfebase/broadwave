@@ -25,8 +25,10 @@ import {
   outageAtWatchStart,
   outageTearsDown,
   pictureStopped,
+  recoveryEdge,
   recoveryReady,
   restartDelayMs,
+  restartFollowUp,
   startAttempts,
   startRetryMs,
   viewerFailure,
@@ -706,7 +708,11 @@ export function useLiveStream(
     const off = events().on("restarted", () => {
       window.clearTimeout(later);
       if (watching.current) again();
-      else later = window.setTimeout(again, restartAskLastMs);
+      else
+        later = window.setTimeout(() => {
+          if (restartFollowUp(watching.current) === "skip") return;
+          again();
+        }, restartAskLastMs);
     });
     return () => {
       off();
@@ -718,7 +724,7 @@ export function useLiveStream(
     if (!recovery) return;
     let dead = false;
     let ticking = false;
-    const seen = { key: "" };
+    const seen = { ready: false };
     const lastAsk = recovery === "server" || recovery === "restart";
     let readyAt = 0;
     const tick = async () => {
@@ -727,18 +733,26 @@ export function useLiveStream(
       try {
         const snap = await readRecoverySnap(channelId, recovery === "signal");
         if (dead || retrying.current) return;
-        const key = `${snap.health}:${snap.freeTuner}:${snap.tunerAnswers}:${snap.online}:${snap.signalLost}`;
-        if (!recoveryReady(recovery, snap)) {
-          seen.key = key;
+        const ready = recoveryReady(recovery, snap);
+        if (!ready) {
+          seen.ready = false;
           readyAt = 0;
           return;
         }
-        if (key === seen.key) return;
+        // A tuner list that flickers is not this outage coming back.
+        if (!recoveryEdge(seen.ready, ready)) return;
         if (lastAsk && !watching.current) {
           readyAt ||= performance.now();
           if (performance.now() - readyAt < restartAskLastMs) return;
         }
-        seen.key = key;
+        // The wait was for a player with no picture. One that came up stays.
+        if (lastAsk && readyAt !== 0 && restartFollowUp(watching.current) === "skip") {
+          seen.ready = true;
+          readyAt = 0;
+          return;
+        }
+        seen.ready = true;
+        readyAt = 0;
         retrying.current = true;
         if (recovery === "restart") {
           quietRetry.current = channelId;

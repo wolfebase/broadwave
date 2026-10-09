@@ -117,6 +117,22 @@ export function recoveryReady(kind: Recovery, snap: RecoverySnap): boolean {
   return false;
 }
 
+/**
+ * Ask again only when this outage's own check comes back.
+ * A tuner list that flickers is not a server that just returned.
+ */
+export function recoveryEdge(wasReady: boolean, ready: boolean): boolean {
+  return ready && !wasReady;
+}
+
+/**
+ * A restart noticed before the watch answered waits, then asks only if that
+ * watch never came up. A picture that is already up stays up.
+ */
+export function restartFollowUp(watchingNow: boolean): "ask" | "skip" {
+  return watchingNow ? "skip" : "ask";
+}
+
 // A full picture budget often still holds the layout just left, and those
 // encodes free one at a time. A page that left before its watch answered holds
 // one until the server sees nobody fetching it (15 s), so ask for 20 s. Same
