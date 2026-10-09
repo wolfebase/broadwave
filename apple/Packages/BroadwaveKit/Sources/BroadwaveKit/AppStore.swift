@@ -49,6 +49,8 @@ public final class AppStore {
     private var frameTick = 0
     private var announced = false
     private var relocateAfter = Date.distantPast
+    /// Bumped on connect and forget, so a move that started earlier cannot undo them.
+    private var generation = 0
 
     public init() {
         prefs = Self.load("prefs") ?? Prefs()
@@ -129,6 +131,16 @@ public final class AppStore {
     }
 
     public func connect(_ server: FoundServer) {
+        generation += 1
+        if Self.dropCatalog(previousID: self.server?.id, nextID: server.id) {
+            channels = []
+            index = GuideIndex([])
+            recordings = []
+            passes = []
+            virtuals = []
+            freshAt = nil
+            error = nil
+        }
         socket?.disconnect()
         // Down until the first message, so a server that is off at launch gets the banner.
         noteConnection(false)
@@ -185,9 +197,13 @@ public final class AppStore {
         guard Date() >= relocateAfter else { return }
         relocateAfter = Date().addingTimeInterval(5)
         guard let saved = server, let key = saved.key, !key.isEmpty else { return }
+        let savedID = saved.id
+        let started = generation
         let found = await Task.detached { LANProbe.collect(timeout: 1.2) }.value
-        guard server?.id == saved.id, let next = ServerFollow.updated(saved, found: found) else { return }
+        guard Self.shouldApplyMove(savedID: savedID, currentID: server?.id, epoch: generation, captured: started),
+              let next = ServerFollow.updated(saved, found: found) else { return }
         guard let proven = await proven(next, key: key) else { return }
+        guard Self.shouldApplyMove(savedID: savedID, currentID: server?.id, epoch: generation, captured: started) else { return }
         NSLog("broadwave followed %@", proven.url.absoluteString)
         connect(proven)
     }
@@ -228,18 +244,35 @@ public final class AppStore {
     }
 
     public func forget() {
+        generation += 1
         socket?.disconnect()
         socket = nil
         api = nil
         server = nil
         info = nil
         channels = []
+        index = GuideIndex([])
         recordings = []
+        passes = []
+        virtuals = []
         frameIDs = []
+        freshAt = nil
+        error = nil
         homeNotice = nil
         homeQueue = []
         UserDefaults.standard.removeObject(forKey: "server")
         SharedServer.save(nil)
+    }
+
+    /// A probe that started before Forget, or before another server was chosen, must not connect.
+    public nonisolated static func shouldApplyMove(savedID: String, currentID: String?, epoch: Int, captured: Int) -> Bool {
+        currentID == savedID && epoch == captured
+    }
+
+    /// A cold launch has no previous server, so the cached lineup stays until refresh.
+    public nonisolated static func dropCatalog(previousID: String?, nextID: String) -> Bool {
+        guard let previousID else { return false }
+        return previousID != nextID
     }
 
     #if DEBUG

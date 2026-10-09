@@ -196,6 +196,26 @@ public final class Discovery {
         return gone.subtracting(staying).subtracting(probed)
     }
 
+    /// What a resolve does when the connection reaches a terminal state.
+    /// The handler is dropped so it cannot keep the connection alive.
+    struct ResolveAction: Equatable {
+        var resumeWithAddress: Bool
+        var dropHandler: Bool
+    }
+
+    enum ResolveEvent {
+        case ready, failed, cancelled
+    }
+
+    nonisolated static func closeResolve(_ event: ResolveEvent) -> ResolveAction {
+        switch event {
+        case .ready:
+            ResolveAction(resumeWithAddress: true, dropHandler: true)
+        case .failed, .cancelled:
+            ResolveAction(resumeWithAddress: false, dropHandler: true)
+        }
+    }
+
     /// Opens a connection to learn the address the service lives at.
     /// IPv4 first: a server on a Mac also answers on its IPv6 link-local
     /// address, and a URL cannot carry that address's interface.
@@ -230,26 +250,33 @@ public final class Discovery {
             let conn = NWConnection(to: endpoint, using: params)
             let once = OnceBox()
             conn.stateUpdateHandler = { state in
+                let event: ResolveEvent
                 switch state {
-                case .ready:
-                    var url: URL?
-                    if case let .hostPort(host, _) = conn.currentPath?.remoteEndpoint {
-                        url = serverURL(host: "\(host)", port: port)
-                    }
-                    conn.cancel()
-                    if once.claim() {
-                        cont.resume(returning: url)
-                    }
-                case .failed, .cancelled:
-                    if once.claim() {
-                        cont.resume(returning: nil)
-                    }
-                default:
-                    break
+                case .ready: event = .ready
+                case .failed: event = .failed
+                case .cancelled: event = .cancelled
+                default: return
+                }
+                let action = Self.closeResolve(event)
+                var url: URL?
+                if action.resumeWithAddress, case let .hostPort(host, _) = conn.currentPath?.remoteEndpoint {
+                    url = serverURL(host: "\(host)", port: port)
+                }
+                let won = once.claim()
+                // Clear the handler before cancel. The handler retains the connection,
+                // and a cancel delivered on this stack must not resume with nil after
+                // the address was already taken.
+                if action.dropHandler {
+                    conn.stateUpdateHandler = nil
+                }
+                conn.cancel()
+                if won {
+                    cont.resume(returning: url)
                 }
             }
             conn.start(queue: .global())
             DispatchQueue.global().asyncAfter(deadline: .now() + 4) {
+                conn.stateUpdateHandler = nil
                 conn.cancel()
                 if once.claim() {
                     cont.resume(returning: nil)
