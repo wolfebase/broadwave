@@ -568,6 +568,36 @@ func TestHLSProbeTargetDropsASingleSlashFile(t *testing.T) {
 	}
 }
 
+func TestHLSProbeTargetDropsAConcatFile(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "#EXTM3U\n#EXTINF:1.0,\nconcat:/etc/passwd\n")
+	}))
+	defer srv.Close()
+	if got := hlsProbeTarget(srv.URL+"/live.m3u8", "", ""); got != "" {
+		t.Fatalf("concat target %q", got)
+	}
+	mixed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "#EXTM3U\n#EXTINF:1.0,\nconcat:http://example/a.ts|/etc/passwd\n")
+	}))
+	defer mixed.Close()
+	if got := hlsProbeTarget(mixed.URL+"/live.m3u8", "", ""); got != "" {
+		t.Fatalf("mixed concat target %q", got)
+	}
+	base := "http://example/a/live.m3u8"
+	if got := resolveMedia(base, "concat:/etc/passwd"); got != "" {
+		t.Fatalf("concat ref %q", got)
+	}
+	if got := resolveMedia(base, "file:/etc/passwd"); got != "" {
+		t.Fatalf("file ref %q", got)
+	}
+	if got := resolveMedia(base, "/etc/passwd"); got != "http://example/etc/passwd" {
+		t.Fatalf("absolute path ref %q", got)
+	}
+	if got := allowedProbeTarget("concat:http://example/a.ts|/etc/passwd"); got != "" {
+		t.Fatalf("mixed target %q", got)
+	}
+}
+
 func TestInputProbeStoresProgressive(t *testing.T) {
 	if _, err := exec.LookPath("ffprobe"); err != nil {
 		t.Skip("ffprobe not on PATH")

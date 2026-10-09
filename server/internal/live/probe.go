@@ -255,23 +255,54 @@ func ffprobeFieldOrder(ctx context.Context, tool, input, userAgent, referrer str
 // A playlist probe omits it. A transport-stream segment has it, and an fMP4
 // playlist needs the init segment in front of the first media segment.
 func hlsProbeTarget(raw, userAgent, referrer string) string {
-	return allowedProbeTarget(hlsProbeTargetDepth(raw, userAgent, referrer, 0))
+	target := allowedProbeTarget(hlsProbeTargetDepth(raw, userAgent, referrer, 0))
+	if target == "" {
+		return ""
+	}
+	// A remote playlist's probe target has to be http or https too.
+	// concat:/etc/passwd has no scheme after the wrapper is removed.
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return target
+	}
+	for _, part := range strings.Split(target, "|") {
+		part = strings.TrimPrefix(part, "concat:")
+		if fetchguard.Allowed(part) != nil {
+			return ""
+		}
+	}
+	return target
 }
 
 // allowedProbeTarget drops a target ffmpeg would open with a scheme other
-// than http or https. A remote playlist can name a file on this machine.
+// than http or https, and a list that mixes a remote URL with a local path.
+// A remote playlist can name a file on this machine. A recording's own
+// init-plus-segment concat stays, because both parts are local paths.
 func allowedProbeTarget(raw string) string {
 	if raw == "" {
 		return ""
 	}
+	sawRemote := false
+	sawLocal := false
 	for _, part := range strings.Split(raw, "|") {
 		part = strings.TrimPrefix(part, "concat:")
+		if part == "" {
+			return ""
+		}
 		if inputHasScheme(part) && !strings.Contains(part, "://") {
 			return ""
 		}
-		if strings.Contains(part, "://") && fetchguard.Allowed(part) != nil {
-			return ""
+		if strings.Contains(part, "://") {
+			if fetchguard.Allowed(part) != nil {
+				return ""
+			}
+			sawRemote = true
+			continue
 		}
+		sawLocal = true
+	}
+	if sawRemote && sawLocal {
+		return ""
 	}
 	return raw
 }
@@ -347,10 +378,14 @@ func resolveMedia(base, ref string) string {
 	if ref == "" {
 		return ""
 	}
+	u, err := url.Parse(base)
+	if err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" {
+		return resolveRemoteMedia(u, ref)
+	}
 	if strings.Contains(ref, "://") {
 		return ref
 	}
-	if u, err := url.Parse(base); err == nil && u.Scheme != "" && u.Host != "" {
+	if err == nil && u.Scheme != "" && u.Host != "" {
 		r, err := url.Parse(ref)
 		if err != nil {
 			return ""
@@ -361,6 +396,29 @@ func resolveMedia(base, ref string) string {
 		return ref
 	}
 	return filepath.Join(filepath.Dir(base), filepath.FromSlash(ref))
+}
+
+// resolveRemoteMedia resolves a segment against an http playlist.
+// concat: and file: are ffmpeg protocols. A remote playlist must not name one.
+func resolveRemoteMedia(base *url.URL, ref string) string {
+	if strings.ContainsAny(ref, "|\r\n") {
+		return ""
+	}
+	r, err := url.Parse(ref)
+	if err != nil {
+		return ""
+	}
+	if r.Scheme != "" && r.Scheme != "http" && r.Scheme != "https" {
+		return ""
+	}
+	resolved := base.ResolveReference(r)
+	if resolved.Scheme != "http" && resolved.Scheme != "https" {
+		return ""
+	}
+	if fetchguard.Allowed(resolved.String()) != nil {
+		return ""
+	}
+	return resolved.String()
 }
 
 func readProbePlaylist(raw, userAgent, referrer string) (string, error) {
