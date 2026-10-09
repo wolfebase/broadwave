@@ -56,6 +56,8 @@ private func stuckSnap(_ edit: (inout TilePlaybackSnap) -> Void = { _ in }) -> T
     #expect(!TilePlayback.shouldReplay(stuckSnap { $0.hasItem = false }))
     #expect(!TilePlayback.shouldReplay(stuckSnap { $0.waitingToPlay = true }))
     #expect(!TilePlayback.shouldReplay(stuckSnap { $0.viewerPaused = true }))
+    // Play never reopens an item that already ended. Reload does, after a second.
+    #expect(!TilePlayback.shouldReplay(stuckSnap { $0.ended = true; $0.stuckFor = 10 }))
 }
 
 private func deadSnap(_ edit: (inout TilePlaybackSnap) -> Void = { _ in }) -> TilePlaybackSnap {
