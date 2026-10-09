@@ -51,6 +51,7 @@ targets:
         CFBundleDisplayName: Broadwave
         UILaunchScreen: {}
         UIBackgroundModes: [audio]
+        NSSupportsLiveActivities: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

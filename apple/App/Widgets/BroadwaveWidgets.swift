@@ -11,6 +11,7 @@ struct BroadwaveWidgets: WidgetBundle {
         TeamsWidget()
         RecordingWidget()
         UpNextWidget()
+        LiveActivityWidget()
     }
 }
 

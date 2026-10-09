@@ -48,6 +48,8 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Broadwave finds your TV server on your home network.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

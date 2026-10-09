@@ -35,6 +35,10 @@ struct SettingsView: View {
     @State private var sdLineup = ""
     @State private var guideURL = ""
     @AppStorage(BreakSkip.key) private var breakSkip = BreakSkip.auto
+    #if os(iOS)
+        @AppStorage(LiveActivities.recordingsKey) private var activityRecordings = true
+        @AppStorage(LiveActivities.gamesKey) private var activityGames = true
+    #endif
     @State private var reserve = "10"
     @State private var bufferMinutes = "60"
     @State private var loadedBuffer = "60"
@@ -107,6 +111,9 @@ struct SettingsView: View {
             }
             sportsSection
             dvrSection
+            #if os(iOS)
+                activitiesSection.id("activities")
+            #endif
             sourcesSection
             syncSection(store)
             if !demo {
@@ -358,6 +365,21 @@ struct SettingsView: View {
             Text("On asks your server for the scoreboard. Off sends nothing. A key is optional and never included.")
         }
     }
+
+    #if os(iOS)
+        private var activitiesSection: some View {
+            Section {
+                Toggle("Recordings in progress", isOn: $activityRecordings)
+                    .accessibilityIdentifier("activity-recordings")
+                Toggle("Your teams' games", isOn: $activityGames)
+                    .accessibilityIdentifier("activity-games")
+            } header: {
+                Text("Live Activities")
+            } footer: {
+                Text("On the Lock Screen and in the Dynamic Island, updated while Broadwave is open or playing. A game you're recording shows no score.")
+            }
+        }
+    #endif
 
     private var dvrSection: some View {
         Section {
