@@ -458,3 +458,34 @@ Fix: one save at a time for that channel. Apply a response only when no newer sa
 The kit now drops a recording list that started before a delete, a stop, a watch mark, or a bulk change on this server. This screen still needs the error and the empty copy.
 
 Fix: show the error, and the empty copy only after a fetch has succeeded with no rows.
+
+### A recording plays on top of live TV, and the tuner stays taken
+
+`RecordingsView.swift` 167 and `HomeView.swift` 133. On iPhone those open `RecordingPlayerScreen` with a navigation push. `RootView.swift` 548 keeps the mini player while `nowPlaying.channel` is set, and the task at 565 keeps `playLive` running. The recording screen (`PlayerScreen.swift` 2352–2354) pauses its own player on disappear and never stops `NowPlaying.live`. Start over does stop the watch first (`PlayerScreen.swift` 1261). Both pictures can play, and the live watch holds the tuner until Close.
+
+Fix: when the recording screen appears, stop the live watch and leave `nowPlaying.channel` set. When it disappears, start that watch again if the channel is still current and multiview is empty. Do not call `retry()`.
+
+### The slower connect wins
+
+`ConnectView.swift` 157–159 and 197–214. Saved-server buttons stay enabled while `checking` is true, and `check` keeps no task. Tap one server, then another. Whichever `server()` or `locate()` finishes last calls `store.connect`. A late failure still writes `problem` after the other server connected.
+
+Fix: one task, cancelled at the start of every `check` and `tryDemo`. Disable the server buttons while a check is in flight. After each await, return if that attempt was cancelled. Set `problem` only for the attempt that is still current.
+
+### Backgrounding a recording does not save the playhead
+
+`PlayerScreen.swift` 2352–2354 and 2679–2683. `saveProgress()` runs from `onDisappear` and when the next episode starts. `BroadwaveApp.swift` 31–38 reloads widgets and the Top Shelf when the scene leaves `.active`, and does not save. Home or a phone call leaves the screen up. If the process then ends, the next open uses the last position from a previous leave.
+
+Fix: save the current recording and playhead when the scene becomes background, and again every few seconds while the file is playing. Leave the last good position if the save fails.
+
+### A slower pass reorder puts the list back
+
+`PassesView.swift` 88–101 and `load` 104–107. Each move starts its own task and assigns `passes` from that response. Move a pass twice before the first `orderPasses` returns. If the first response arrives last, the list snaps back to the order after only the first move. A failed move calls `load()`, and that older reload can replace a newer order.
+
+Fix: a generation at the start of `move` and `load`. Assign `passes` only while that generation is still current.
+
+### Home does not say when a favorite or a series record fails
+
+`HomeView.swift` 507–512. “Record series” and “Record every airing” use `try?`, so a failure closes the menu and changes nothing. “Add favorite” calls `toggleFavorite`. A failure now sets `store.error` and leaves the star as it was. Nothing on Home reads `store.error`. Hide channel writes the same property (519) and it is not shown either.
+
+Fix: show `store.error` on Home, and await the series record the same way the guide’s Record series shows `problem`.
+
