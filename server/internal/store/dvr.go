@@ -545,9 +545,13 @@ ORDER BY r.id DESC`)
 			&rec.IntroStart, &rec.IntroEnd, &rec.CreditsStart, &rec.Listened, &rec.Keep, &watchedAt, &rec.Position, &played); err != nil {
 			return nil, err
 		}
-		if played != "" && rec.Position > 0 {
-			t, _ := time.Parse(time.RFC3339, played)
-			rec.ProgressAt = &t
+		// Position 0 still counts: someone who starts a recording over saves
+		// the playhead at the beginning, and that time keeps clean-up from
+		// deleting it while they watch.
+		if played != "" {
+			if t, err := time.Parse(time.RFC3339, played); err == nil {
+				rec.ProgressAt = &t
+			}
 		}
 		if t, err := time.Parse(time.RFC3339, watchedAt); err == nil && rec.Watched == 1 {
 			rec.WatchedAt = &t
