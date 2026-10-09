@@ -21,3 +21,20 @@ export function ignoreHeldKey(
   if (k === "c" && (event.metaKey || event.ctrlKey || event.altKey)) return true;
   return event.repeat && held.has(k);
 }
+
+/** Focus selects the row the pointer would select. Out of range keeps the old row. */
+export function guideRowOnFocus(index: number, count: number, current: number): number {
+  if (!Number.isInteger(index) || index < 0 || index >= count) return current;
+  return index;
+}
+
+/** Close keys inside the open mini-guide. A repeated g must not undo the open. */
+export function guideListAction(key: string, repeat: boolean): "close" | "up" | "down" | "tune" | "ignore" {
+  const k = key.toLowerCase();
+  if (k === "g" && repeat) return "ignore";
+  if (k === "escape" || k === "backspace" || k === "g") return "close";
+  if (k === "arrowup") return "up";
+  if (k === "arrowdown") return "down";
+  if (k === "enter") return "tune";
+  return "ignore";
+}
