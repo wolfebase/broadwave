@@ -37,8 +37,8 @@ public enum Compatibility {
     }
 
     private static func parts(_ version: String) -> [Int] {
-        version.split(separator: ".").map { piece in
-            let digits = piece.prefix { $0.isNumber }
+        version.split(separator: ".", omittingEmptySubsequences: false).map { piece in
+            let digits = piece.trimmingCharacters(in: .whitespaces).prefix { $0.isNumber }
             return Int(digits) ?? 0
         }
     }
