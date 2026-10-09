@@ -18,6 +18,13 @@ private func airing(_ title: String, category: String) -> Airing {
     #expect(airing("Game Day", category: "Special").kind == .series)
 }
 
+@Test func uppercaseVersusIsNotAMatchup() {
+    #expect(airing("NFL: NORTH AT SOUTH", category: "Special").kind == .series)
+    #expect(airing("NBA: North Vs. South", category: "").kind == .other)
+    #expect(airing("MLS: EAST VS WEST", category: "Special").kind == .series)
+    #expect(airing("NFL: North at South", category: "Special").kind == .sports)
+}
+
 @Test func minutesLeftRoundsTheSameWayAsTheWeb() {
     let start = Date(timeIntervalSince1970: 1_000_000)
     let show = Airing(id: 1, channelId: 9, title: "Evening News", start: start, end: start.addingTimeInterval(3600))
