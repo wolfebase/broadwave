@@ -76,6 +76,11 @@ function prop(css: string, selector: string, name: string) {
   return found[1].trim();
 }
 
+function maybeProp(css: string, selector: string, name: string) {
+  const found = rules(css).find((rule) => rule.selector === selector);
+  return found?.body.match(new RegExp(`${name}\\s*:\\s*([^;]+)`))?.[1].trim() ?? null;
+}
+
 function token(name: string) {
   const fromBase = base.match(new RegExp(`${name}\\s*:\\s*([^;]+)`));
   const fromTokens = tokens.match(new RegExp(`${name}\\s*:\\s*([^;]+)`));
@@ -276,6 +281,23 @@ test("player chrome stays at least 4.5:1 on a white frame", () => {
   const bar = stops(linear(player, ".mini-bar", "180deg"));
   const mini = over({ rgb: [0, 0, 0], alpha: alphaAt(bar, 32, "px") }, WHITE);
   atLeast("mini eyebrow", paint(parseColor(prop(player, ".mini-eyebrow", "color")), mini));
+});
+
+test("channel names and tuning text stay at least 4.5:1 on a white picture", () => {
+  const glass = over(token("--color-glass-fill"), WHITE);
+  atLeast("channel name", paint(parseColor(prop(player, ".mg-name", "color")), glass));
+  atLeast("stats label", paint(parseColor(prop(player, ".info-panel dt", "color")), glass));
+  // A white poster through brightness() is the bright case. No plate means the ink sits on that poster.
+  const filter = prop(player, ".tuning-art", "filter");
+  const bright = filter.match(/brightness\(\s*([\d.]+)\s*\)/);
+  assert.ok(bright, filter);
+  const art = mix(WHITE, [0, 0, 0], Number(bright[1]));
+  const plateRaw = maybeProp(player, ".tuning-card", "background");
+  const plate = plateRaw ? parseColor(plateRaw) : { rgb: [0, 0, 0] as RGB, alpha: 0 };
+  const card = over(plate, art);
+  atLeast("tuning name", paint(token("--color-text-secondary"), card));
+  atLeast("tuning step", paint(parseColor(prop(player, ".tuning-step", "color")), card));
+  atLeast("tuning show", paint(token("--color-text"), card));
 });
 
 test("artwork text stays at least 4.5:1 on a white poster", () => {
