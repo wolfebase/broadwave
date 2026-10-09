@@ -8,6 +8,7 @@ import { navigate, useRoute } from "../../app/router";
 import { actionName } from "../../lib/actionName";
 import { cappedCss } from "../../lib/art";
 import { dayLabel, searchRows, spanLabel } from "../../lib/guide";
+import { noteAfterRecord, searchFieldValue } from "./field";
 import type { Recording, SearchAiring } from "../../types";
 import { SearchIcon } from "../../ui/icons";
 import { Atsc3Tag } from "../../ui/primitives";
@@ -62,6 +63,7 @@ export function SearchPage() {
   const openChannel = open ? allChannels.find((channel) => channel.id === open.channelId) : undefined;
   const initial = params.get("q") ?? "";
   const [draft, setDraft] = useState(initial);
+  const [shownQ, setShownQ] = useState(initial);
   const [airings, setAirings] = useState<SearchAiring[]>([]);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [note, setNote] = useState("");
@@ -73,12 +75,22 @@ export function SearchPage() {
   const layout = useLayout();
 
   const q = initial.trim();
+  // The address changed (Back, Forward, or another search). Show that query.
+  if (shownQ !== initial) {
+    setShownQ(initial);
+    setDraft(searchFieldValue(initial, draft, true));
+  }
+
+  // Drop a pending replace so a half-typed word cannot overwrite Back or a new search.
+  useEffect(() => {
+    window.clearTimeout(typing.current);
+    return () => window.clearTimeout(typing.current);
+  }, [initial]);
+
   const active = q.length >= 2;
   const listed = searchRows<SearchAiring, Recording>(
     active && q === resultQuery ? { status: "done", airings, recordings } : { status: "pending" },
   );
-
-  useEffect(() => () => window.clearTimeout(typing.current), []);
 
   // A browser autofocus does not match :focus-visible, so a TV would open Search with no ring.
   useEffect(() => {
@@ -186,12 +198,15 @@ export function SearchPage() {
                   type="button"
                   className="btn"
                   aria-label={actionName("Record every airing", airing.title)}
-                  onClick={() =>
-                    void addPass(airing.title, airing.channelId).then(() => {
-                      setNote(`Recording every ${airing.title}.`);
+                  onClick={() => {
+                    const asked = q;
+                    const title = airing.title;
+                    void addPass(title, airing.channelId).then(() => {
+                      const current = (new URLSearchParams(window.location.search).get("q") ?? "").trim();
+                      setNote((existing) => noteAfterRecord(asked, current, title, existing));
                       return refresh(["passes"]);
-                    })
-                  }
+                    });
+                  }}
                 >
                   Record every airing
                 </button>
