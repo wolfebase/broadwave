@@ -4,14 +4,15 @@ import { usePlayer } from "../../app/player";
 import { useDialogFocus } from "../../ui/useDialogFocus";
 import { navigate } from "../../app/router";
 import { actionName } from "../../lib/actionName";
-import { categoryLabel, categoryOf, guideSourceLine, isRecording, minutesLeft, progress, recordingKeys, spanLabel, dayLabel } from "../../lib/guide";
+import { categoryLabel, categoryOf, guideSourceLine, isRecording, liveChannel, minutesLeft, progress, recordingKeys, spanLabel, dayLabel } from "../../lib/guide";
 import type { Airing, Channel } from "../../types";
 import { CloseIcon, PlayIcon, RecordIcon, StarIcon } from "../../ui/icons";
 import { ArtFrame } from "../../ui/ArtFrame";
 import { ChannelBadge, LiveDot, Progress } from "../../ui/primitives";
 
 export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: Channel; airing?: Airing; onClose: () => void; onWatch: (c: Channel) => void }) {
-  const { now, planned, recordings, passes, record, recordSeries, recordOnce, removePass, favorite, stopRecord } = useData();
+  const { now, planned, recordings, passes, record, recordSeries, recordOnce, removePass, favorite, stopRecord, allChannels } = useData();
+  const shown = liveChannel(allChannels, channel);
   const player = usePlayer();
   const ref = useRef<HTMLDivElement>(null);
   useDialogFocus(ref, onClose);
@@ -68,7 +69,7 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
           {guideSourceLine(airing?.guideSource) ? <p className="ps-sub">{guideSourceLine(airing?.guideSource)}</p> : null}
           <div className="ps-actions">
             {onNow ? (
-              <button type="button" className="btn primary" onClick={() => onWatch(channel)}>
+              <button type="button" className="btn primary" onClick={() => onWatch(shown)}>
                 <PlayIcon /> Watch
               </button>
             ) : null}
@@ -114,8 +115,8 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
                 {hasPass ? "Series is recording" : cat === "sports" ? "Record every airing" : "Record series"}
               </button>
             ) : null}
-            <button type="button" className="btn ghost" onClick={() => void favorite(channel)} aria-pressed={channel.favorite} aria-label={actionName(channel.favorite ? "Favorite" : "Add favorite", channel.displayName)}>
-              <StarIcon filled={channel.favorite} /> {channel.favorite ? "Favorite" : "Add favorite"}
+            <button type="button" className="btn ghost" onClick={() => void favorite(shown)} aria-pressed={shown.favorite} aria-label={actionName(shown.favorite ? "Favorite" : "Add favorite", shown.displayName)}>
+              <StarIcon filled={shown.favorite} /> {shown.favorite ? "Favorite" : "Add favorite"}
             </button>
           </div>
         </div>
