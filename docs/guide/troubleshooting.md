@@ -24,15 +24,17 @@ The line on the screen is the whole message. It names what failed and what to tr
 
 ## Diagnostics
 
-Open Diagnostics from Settings. It is a snapshot of this server: the version, the tuners and who holds them, whether each tuner is locked, what is tuned right now, how long the last channels took to start, the encoder, free space, how much of the guide is filled, and the recent log.
+Open Diagnostics from Settings. On the web it shows the version, the tuners and who holds them, whether each tuner is locked, what is tuned right now, how long the last channels took to start, the encoder, free space, how much of the guide is filled, and the recent log. Fix these is one line per thing to change, and on the web it is absent when nothing needs a change.
 
-Fix these is one line per thing to change, and it is absent when nothing needs a change. One of those lines is "Broadwave can't see your tuner from inside Docker. Switch the container to host networking." Another is "Less than 20 GB is free. Free some space before a long recording."
+On iPhone, iPad, and Apple TV it shows Fix these, guide depth, tuner health, and antenna readings. Fix these stays when nothing needs a change, and the line is "Nothing needs attention."
+
+One Fix these line is "Broadwave can't see your tuner from inside Docker. Switch the container to host networking." Another is "Less than 20 GB is free. Free some space before a long recording."
 
 When this ffmpeg cannot decode AC-4, Diagnostics says "This ffmpeg can't decode AC-4, so ATSC 3.0 channels play without sound." The Docker image includes that decoder.
 
 ## Logs and a bug report
 
-The server writes its log to the process's standard error. Diagnostics shows the recent lines.
+The server writes its log to the process's standard error. On the web, Diagnostics shows the recent lines.
 
 - **Docker.** `docker logs broadwave`, using the container name from the install command.
 - **Unraid.** Open the Broadwave container from the Docker tab and choose Logs.

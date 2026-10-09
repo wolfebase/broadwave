@@ -42,7 +42,7 @@ A series pass records the show whose title matches, on one channel or any. A pas
 
 Record this airing is a one-time pass for that channel and that start time. It wins over a series pass for the same showing, and it records even when that episode is already in the library. The one-time pass is removed a day after the showing starts.
 
-Record every game follows a team on any channel. The listing matches when the title or the episode name mentions the team. It starts one minute early and runs two minutes past the listing. The other channel of a simulcast is not recorded again.
+Record every game follows a team on any channel. The listing matches when the title or the episode name mentions the team. It is set for one minute before the listing and two minutes after. The file includes that early minute when the buffer still holds it. The other channel of a simulcast is not recorded again.
 
 When two shows overlap and there are not enough tuners, the pass lower in the list is skipped. Drag passes, or use Up and Down, to change the order. The schedule offers "Record the later airing" when the same show has a later showing that fits. "Skipped once" is a showing you already moved. "Already recorded" and "Limit reached" are the library rules.
 
@@ -54,7 +54,7 @@ A show that is already on can still be recorded from its beginning, when the cha
 
 A recording of a channel shares that channel's tune with everyone watching it. Subchannels of the same station share it too.
 
-A pass claims its tuner 90 seconds before the listing. Padding starts it earlier only when that padding is longer than 90 seconds. While that claim is waiting, the same number of free tuners are held back from a new channel, so the recording still has one.
+A pass claims its tuner 90 seconds before the listing. Padding starts it earlier only when that padding is longer than 90 seconds. About two minutes before a recording, that many free tuners are held back from a new channel, so the recording still has one. Longer padding holds them back earlier.
 
 Watching inside that window asks first only when the tune would leave a recording without a tuner. With a spare tuner the channel plays and Broadwave does not ask. The line is "<title> starts at <time>. Watching stops when that recording starts." Several recordings at once name the count. Watch anyway plays the channel now. The recording still takes the tuner when it starts.
 
@@ -68,7 +68,7 @@ Settings › Keep this much free is the reserve, 10 GB unless you change it. Zer
 
 A new recording is refused while free space is under that reserve. The message is "The recordings disk has <free> free, and Broadwave keeps <reserve> in reserve. Free some space or lower the reserve in Settings." A disk with no room left says "The recordings disk is full. Free some space, then try again." A show that is already recording keeps going.
 
-The live buffer is what uses space first, and what gives it up first. It may hold at most half the free space. On the same disk as the recordings it also leaves the reserve, and another 4 GB. Under that floor it drops its oldest pieces and waits until there is room. Recordings are not deleted to make that room. A keep rule removes older episodes of one show only after a new episode of that show finishes.
+The live buffer is what uses space first, and what gives it up first. It may hold at most half the free space, and it always leaves another 4 GB. On the same disk as the recordings it also leaves the reserve. Under that floor it drops its oldest pieces and waits until there is room. Recordings are not deleted to make that room. A keep rule removes older episodes of one show only after a new episode of that show finishes.
 
 Settings › When space runs low is "Skip new recordings" unless you change it. "Delete the oldest watched" deletes watched recordings, the one watched longest ago first, before a new recording would be skipped, and checks once an hour too. It stops once the reserve is back. If deleting every watched recording would not be enough, it deletes none and the recording is skipped.
 

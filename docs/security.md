@@ -20,7 +20,7 @@ A refused request answers with the name it saw, and tells you to set `BROADWAVE_
 
 Channels, the guide, recordings, and watch history stay in the database on the machine that runs Broadwave.
 
-The tuner's `DeviceAuth` value is read when a guide request needs it and is not written to the database or the log. A Schedules Direct password, a playlist password, and a guide or artwork key are stored so the server can refresh those sources. Settings shows a password masked. The log keeps those values out.
+The tuner's `DeviceAuth` value is read when a guide request needs it and is not written to the database or the log. A Schedules Direct password, a playlist password, and a guide or artwork key are stored so the server can refresh those sources. Settings does not show a saved password. The field stays blank and says Saved. The log keeps those values out.
 
 ## Support bundle
 

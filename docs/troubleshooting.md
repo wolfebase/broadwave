@@ -39,7 +39,7 @@ The phone or the computer itself is offline. The picture comes back when that co
 
 "The picture stopped. Trying again usually fixes it."
 
-The server is up, the tuner answers, and nothing else names a cause. A playlist whose stream died uses this same line. The player starts the channel again on its own, about every 10 seconds for two minutes. The message stays until the picture moves. After that, Try again is there.
+The server is up, the tuner answers, and nothing else names a cause. A playlist whose stream died uses this same line. Try again is on screen with that message from the start. The player also starts the channel again on its own, about every 10 seconds for two minutes. The message and the button both go away when the picture moves.
 
 "The picture stopped. Starting it again."
 
@@ -87,7 +87,7 @@ Enter the tuner's address, or run Search the network from Settings › Tuners an
 
 ## A few more lines
 
-"This channel did not start. The server log says why." The start failed for a reason the log has. Diagnostics shows the recent lines, and the support bundle includes them.
+"This channel did not start. The server log says why." The start failed for a reason the log has. On the web, Diagnostics shows the recent lines, and the support bundle includes them.
 
 "This channel did not start. Try again." The answer was a status page or a system message.
 
@@ -105,22 +105,24 @@ Enter the tuner's address, or run Search the network from Settings › Tuners an
 
 ## Diagnostics
 
-Open Diagnostics from Settings. The page is a snapshot of this server:
+Open Diagnostics from Settings. On the web, the page is a snapshot of this server:
 
 - The server name, version, and how many apps are connected.
 - Tuners. Each one is Free, or it names the channel, who tuned it, the signal, and how many people are watching.
 - Tuner health. Model, firmware, and whether each tuner is locked. "This app does not install firmware." When none answer: "No tuner answered."
-- Relay. What is tuned right now, including "Nothing is tuned right now." A full buffer reads "Buffer paused: the disk is nearly full."
+- Relay. What is tuned right now, including "Nothing is tuned right now." A full buffer reads "Buffer paused: the disk is nearly full".
 - Channel starts. How long the last channels took to reach a picture. "No channel has started since the server did."
 - Encoding and storage. The encoder, ffmpeg, free space, and how much of the guide is filled. When this ffmpeg cannot decode AC-4: "This ffmpeg can't decode AC-4, so ATSC 3.0 channels play without sound."
-- Fix these. One line per thing to change. It is absent when nothing needs a change. The lines include "Broadwave can't see your tuner from inside Docker. Switch the container to host networking." and "Less than 20 GB is free. Free some space before a long recording."
+- Fix these. One line per thing to change. On the web it is absent when nothing needs a change. The lines include "Broadwave can't see your tuner from inside Docker. Switch the container to host networking." and "Less than 20 GB is free. Free some space before a long recording."
 - Feeds. Channels on now, who is watching, and how many ffmpeg processes.
 - Logs. The recent log lines. "No log lines yet." before the server has written any.
 - Recent activity. Recordings, sources, and other events, with the time.
 
+On iPhone, iPad, and Apple TV, Diagnostics shows Fix these, guide depth, tuner health, and antenna readings. Fix these stays when nothing needs a change, and the line is "Nothing needs attention."
+
 ## Where the logs are
 
-The server writes its log to the process's standard error. Diagnostics shows the recent lines. The support bundle carries the same lines.
+The server writes its log to the process's standard error. On the web, Diagnostics shows the recent lines. The support bundle carries the same lines.
 
 - **Docker.** `docker logs broadwave`, using the container name from the install command. On Docker Desktop for Mac, that is the same command.
 - **Unraid.** Open the Broadwave container from the Docker tab and choose Logs. That is the same stream.
