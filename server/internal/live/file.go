@@ -111,13 +111,18 @@ func playlistFresh(dir, stamp string) bool {
 }
 
 // PlayFile transcodes a finished recording into an HLS playlist and returns when the first segment exists.
-func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string) (string, error) {
+// at is where playback resumes, in seconds. The encode input-seeks there when that
+// spot is far enough in, and the served playlist keeps the recording's clock.
+func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string, at float64) (string, error) {
+	if at < resumeMin {
+		at = 0
+	}
 	dir := filepath.Join(h.Dir, "file", fmt.Sprintf("%d", id))
 	g := h.fileGraphFor(path, videoCodec, mode, fieldOrder)
 	g.Live = false
 	stamp := graphStamp(g)
 	playlist := filepath.Join(dir, "index.m3u8")
-	if playlistFresh(dir, stamp) {
+	if playlistFresh(dir, stamp) && filePlaylistCovers(dir, at) {
 		return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
 	}
 	_ = os.RemoveAll(dir)
@@ -129,6 +134,10 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string) (str
 		return "", err
 	}
 	g.Input = abs
+	g.Start = at
+	if err := writeFileOffset(dir, at); err != nil {
+		return "", err
+	}
 	cmd := exec.Command(h.FFmpeg, PictureArgs(g)...)
 	cmd.Dir = dir
 	cmd.Stderr = os.Stderr
