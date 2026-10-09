@@ -124,6 +124,21 @@ export function holdShown(held: ReadonlySet<number>, ids: number[], blocked: Rea
   return next ?? held;
 }
 
+/** A slower plan must not replace the one that started later, and a failure clears only that latest plan. */
+export function settlePlan<T>(
+  mine: number,
+  latest: number,
+  result: { ok: true; plan: T } | { ok: false },
+): { apply: false } | { apply: true; plan: T | null } {
+  if (mine !== latest) return { apply: false };
+  return { apply: true, plan: result.ok ? result.plan : null };
+}
+
+/** Auto must not focus a tile that has no sound. soundTo would send it straight back. */
+export function autoCandidates<T extends { id: number }>(channels: readonly T[], failed: ReadonlySet<number>): T[] {
+  return channels.filter((channel) => !failed.has(channel.id));
+}
+
 export function roomId() {
   let id = sessionStorage.getItem("broadwave-mv-room");
   if (!id) {

@@ -16,7 +16,7 @@ import { pageFitsTiles, StartGate } from "../player/quietStart";
 import { useLiveStream } from "../player/useLiveStream";
 import { refreshScores, scoreLine, useScoreMap, type ScoreGame } from "../sports/scores";
 import { clearBroadcast, fromStillOn, resolveClear, standInIds } from "./clear";
-import { channelsOnScreen, holdShown, layoutChoices, layoutFromParam, layoutLabel, rememberAuto, rememberLayout, roomId, saveSet, savedAuto, savedLayout, slotsFor, yieldsSound, type MvLayout } from "./storage";
+import { autoCandidates, channelsOnScreen, holdShown, layoutChoices, layoutFromParam, layoutLabel, rememberAuto, rememberLayout, roomId, saveSet, savedAuto, savedLayout, settlePlan, slotsFor, yieldsSound, type MvLayout } from "./storage";
 import { pickFocus } from "./switcher";
 import "./multiview.css";
 
@@ -152,7 +152,7 @@ export function Multiview() {
   const live: { channelId: number; game: ScoreGame }[] = [];
   if (auto && holdUntil === 0) {
     const seen = new Set<string>();
-    for (const channel of visible) {
+    for (const channel of autoCandidates(visible, failed)) {
       const gameId = airingAt(index, channel.id, now)?.gameId ?? "";
       if (!gameId || seen.has(gameId)) continue;
       const game = board.find((item) => item.id === gameId && item.state === "in");
@@ -172,17 +172,19 @@ export function Multiview() {
   useEffect(() => {
     const list = parseIds(chKey);
     let dead = false;
+    // A refresh can still be in flight when the next one starts. The later one wins.
+    let ticket = 0;
     const load = () => {
+      const mine = ++ticket;
+      const finish = (result: { ok: true; plan: MultiviewPlan } | { ok: false }) => {
+        const settled = settlePlan(mine, ticket, result);
+        if (dead || !settled.apply) return;
+        setPlan(settled.plan);
+        setPlanFor(chKey);
+      };
       void planMultiview(list)
-        .then((next) => {
-          if (!dead) setPlan(next);
-        })
-        .catch(() => {
-          if (!dead) setPlan(null);
-        })
-        .finally(() => {
-          if (!dead) setPlanFor(chKey);
-        });
+        .then((next) => finish({ ok: true, plan: next }))
+        .catch(() => finish({ ok: false }));
     };
     load();
     const timer = window.setInterval(load, 20000);
