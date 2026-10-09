@@ -98,13 +98,35 @@ public enum WidgetFeed {
         }
     }
 
-    /// The Home shelf's rule: a followed team's short name (4 letters or more) in the title or subtitle.
+    /// The Home shelf's rule: a short name or a full name of 4 letters or more,
+    /// as its own word. A short name under 4 letters does not hide the full name,
+    /// and "Pines" does not match "Porcupines".
     public static func followed(_ airing: Airing, _ follows: [TeamFollow]) -> Bool {
-        follows.contains { team in
-            let name = team.short.flatMap { $0.isEmpty ? nil : $0 } ?? team.name
-            return name.count >= 4 && (airing.title.localizedCaseInsensitiveContains(name)
-                || (airing.subtitle ?? "").localizedCaseInsensitiveContains(name))
+        let text = "\(airing.title) \(airing.subtitle ?? "")"
+        return follows.contains { team in
+            names(team).contains { mentions(text, $0) }
         }
+    }
+
+    /// Short and full name, each only when it is long enough to be its own word.
+    static func names(_ team: TeamFollow) -> [String] {
+        var out: [String] = []
+        if let short = team.short, short.count >= 4 {
+            out.append(short)
+        }
+        if team.name.count >= 4 {
+            out.append(team.name)
+        }
+        return out
+    }
+
+    /// `name` as its own word, case aside. The same boundary the home shelf uses.
+    static func mentions(_ text: String, _ name: String) -> Bool {
+        let escaped = NSRegularExpression.escapedPattern(for: name)
+        guard let re = try? NSRegularExpression(pattern: "\\b\(escaped)\\b", options: [.caseInsensitive]) else {
+            return false
+        }
+        return re.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
 
     public static func recordingNow(_ recordings: [Recording], limit: Int = 4) -> [Row] {
