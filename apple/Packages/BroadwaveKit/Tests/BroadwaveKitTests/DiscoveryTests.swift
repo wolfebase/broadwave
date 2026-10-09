@@ -111,6 +111,23 @@ private func signedServer(id: String, url: String, privateKey: Curve25519.Signin
     #expect(ServerFollow.updated(saved, found: [again]) == nil)
 }
 
+@Test func aLaterUnsignedReplyDoesNotReplaceASignedOne() throws {
+    let signed = try FoundServer(
+        id: "abc", name: "Harbor", url: #require(URL(string: "http://127.0.0.1:19050")),
+        signature: "signed", signedURL: "http://127.0.0.1:19050"
+    )
+    let unsigned = try FoundServer(id: "abc", name: "Harbor", url: #require(URL(string: "http://127.0.0.1:19051")))
+    let kept = LANProbe.keeping(unsigned, insteadOf: signed)
+    #expect(kept.url.port == 19050)
+    #expect(kept.signature == "signed")
+    let newer = try FoundServer(
+        id: "abc", name: "Harbor", url: #require(URL(string: "http://127.0.0.1:19052")),
+        signature: "again"
+    )
+    #expect(LANProbe.keeping(newer, insteadOf: signed).url.port == 19052)
+    #expect(LANProbe.keeping(unsigned, insteadOf: nil).url.port == 19051)
+}
+
 @Test func aDemoServerIsNotFollowed() throws {
     let saved = try FoundServer(id: "demo", name: "Demo", url: #require(URL(string: "http://127.0.0.1:18649")))
     let moved = try FoundServer(id: "demo", name: "Demo", url: #require(URL(string: "http://127.0.0.1:18650")))
