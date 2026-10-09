@@ -276,7 +276,7 @@ make dev      # API with CORS for Vite; then: cd web && npm run dev
 make test
 ```
 
-Server flags: `-addr :8477`, `-config data`, `-hdhr <tuner address>` (or `HDHR_HOST`). [`docs/architecture.md`](docs/architecture.md) explains how it works, and [`docs/decisions/`](docs/decisions) records why.
+Server flags: `-addr :8477`, `-config data`, `-hdhr <tuner address>` (or `HDHR_HOST`). [`docs/architecture.md`](docs/architecture.md) explains how it works, [`docs/security.md`](docs/security.md) covers the boundaries, and [`docs/decisions/`](docs/decisions) records why.
 
 ## License
 
