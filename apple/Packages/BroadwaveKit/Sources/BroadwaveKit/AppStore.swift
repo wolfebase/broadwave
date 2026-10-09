@@ -591,9 +591,15 @@ public final class AppStore {
         guard let api else { return }
         let started = generation
         let base = api.base
-        guard let updated = try? await api.setFavorite(channel, !channel.favorite), sameSession(started, base) else { return }
-        if let i = channels.firstIndex(where: { $0.id == updated.id }) {
-            channels[i] = updated
+        do {
+            let updated = try await api.setFavorite(channel, !channel.favorite)
+            guard sameSession(started, base) else { return }
+            if let i = channels.firstIndex(where: { $0.id == updated.id }) {
+                channels[i] = updated
+            }
+        } catch {
+            guard sameSession(started, base) else { return }
+            self.error = error.localizedDescription
         }
     }
 
