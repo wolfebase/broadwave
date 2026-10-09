@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { TunerStatus } from "../../types";
+import { applyDiagnostics } from "../settings/sourcePoll";
 
 export type Diagnostics = {
   version: string;
@@ -26,16 +27,21 @@ export type ChannelStart = { at: string; channelId: number; guideNumber: string;
 export function useDiagnostics(key?: unknown, every = 5000): Diagnostics | null {
   const [diag, setDiag] = useState<Diagnostics | null>(null);
   useEffect(() => {
-    let dead = false;
-    const load = () =>
+    let ticket = 0;
+    const load = () => {
+      const mine = ++ticket;
       fetch("/api/v1/diagnostics")
         .then((r) => r.json() as Promise<Diagnostics>)
-        .then((d) => !dead && setDiag(d))
+        .then((d) => {
+          const body = applyDiagnostics(mine, ticket, d);
+          if (body != null) setDiag(body);
+        })
         .catch(() => undefined);
+    };
     void load();
     const id = window.setInterval(load, every);
     return () => {
-      dead = true;
+      ticket += 1;
       window.clearInterval(id);
     };
   }, [key, every]);
