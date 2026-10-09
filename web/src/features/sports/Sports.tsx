@@ -9,6 +9,7 @@ import { PlayIcon, RecordIcon } from "../../ui/icons";
 import { ArtFrame } from "../../ui/ArtFrame";
 import { ChannelBadge, Chip, Empty, LiveDot, Progress, RecDot } from "../../ui/primitives";
 import { layoutForCount, multiviewPath } from "../multiview/storage";
+import { cardLabel, matchup } from "./matchup";
 import { scoreLine, useScoreboard, type ScoreGame, type ScoreTeam } from "./scores";
 import "./sports.css";
 
@@ -39,15 +40,6 @@ function TeamMark({ name, team }: { name: string; team?: ScoreTeam }) {
       {team?.score && team.score !== "0" ? <span className="team-score">{team.score}</span> : null}
     </span>
   );
-}
-
-/** Splits "Bears at Bills" or "Lakers vs. Celtics" into a matchup. */
-export function matchup(a: Airing): [string, string] | null {
-  const text = a.subtitle && / (at|vs\.?|@) /i.test(a.subtitle) ? a.subtitle : a.title;
-  const m = text.match(/^(.*?)\s+(?:at|vs\.?|@)\s+(.*)$/i);
-  if (!m) return null;
-  const clean = (s: string) => s.replace(/^.*?:\s*/, "").trim();
-  return [clean(m[1]), clean(m[2])];
 }
 
 function league(a: Airing): string {
@@ -168,7 +160,7 @@ export function Sports() {
                         </button>
                       ) : null}
                       {liveNow && !rec ? (
-                        <button type="button" className="btn small" onClick={() => void record(channel, airing.title)} aria-label={`Record ${airing.title}`}>
+                        <button type="button" className="btn small" onClick={() => void record(channel, airing.title)} aria-label={`Record ${cardLabel(airing)}`}>
                           <RecordIcon className="tally" />
                         </button>
                       ) : null}
