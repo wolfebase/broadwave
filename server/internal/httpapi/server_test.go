@@ -225,11 +225,11 @@ func TestDiskReserveBlocksRecording(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/recordings", bytes.NewBufferString(`{"channelId":1,"minutes":5,"title":"Nope"}`))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusInsufficientStorage || !bytes.Contains(rec.Body.Bytes(), []byte("in reserve")) {
-		t.Fatalf("reserve %d %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("missing channel %d %s", rec.Code, rec.Body.String())
 	}
-	if asked != 999999*1000*1000*1000 {
-		t.Fatalf("make room asked for %d bytes before refusing", asked)
+	if asked != 0 {
+		t.Fatalf("MakeRoom ran for a channel that is not in the lineup (%d bytes)", asked)
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/api/recordings/"+strconv.FormatInt(recID, 10)+"/markers", bytes.NewBufferString(`{"start":1.5,"end":4}`))

@@ -1864,9 +1864,6 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	if minutes <= 0 {
 		minutes = 60
 	}
-	if err := h.ensureSpace(ctx); err != nil {
-		return store.Recording{}, err
-	}
 	values, _ := h.Store.Settings(ctx)
 	byShow := FoldersByShow(values)
 	ch, err := h.Store.SourceChannel(ctx, channelID)
@@ -1908,6 +1905,23 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		h.dropIfUnusedLocked(f)
 		return store.Recording{}, err
+	}
+	// Free space only once this start will create a row. Doing it earlier
+	// deletes files and then fails the tune, and the next attempt deletes more.
+	// The hub lock stays free while files are removed.
+	h.mu.Unlock()
+	spaceErr := h.ensureSpace(ctx)
+	h.mu.Lock()
+	if spaceErr != nil {
+		h.dropIfUnusedLocked(f)
+		return store.Recording{}, spaceErr
+	}
+	if f.recording != nil {
+		return h.Store.Recording(ctx, f.recording.id)
+	}
+	if h.channels[channelID] != f {
+		h.dropIfUnusedLocked(f)
+		return store.Recording{}, fmt.Errorf("the channel stopped before the recording started")
 	}
 	// A show already on starts from its beginning when the buffer holds it.
 	started := time.Now()
