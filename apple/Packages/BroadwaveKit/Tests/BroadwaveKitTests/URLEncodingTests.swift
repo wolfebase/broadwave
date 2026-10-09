@@ -19,6 +19,13 @@ import Testing
     let percent = try #require(QueryStub.lastURL)
     #expect(URLComponents(url: percent, resolvingAgainstBaseURL: false)?.queryItems?.first?.value == "100%")
 
+    // queryItems turns %2B back into +, so the wire string is what the server reads.
+    _ = try await api.search("C++")
+    #expect(QueryStub.lastURL?.absoluteString.hasSuffix("q=C%2B%2B") == true)
+
+    _ = try await api.search("a;b")
+    #expect(QueryStub.lastURL?.absoluteString.hasSuffix("q=a%3Bb") == true)
+
     try await api.startScan(deviceID: "ab/cd")
     #expect(QueryStub.lastURL?.absoluteString == "http://stub.invalid/api/v1/devices/ab%2Fcd/scan")
     #expect(QueryStub.lastMethod == "POST")

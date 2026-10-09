@@ -138,11 +138,14 @@ public struct APIClient: Sendable {
     }
 
     public func search(_ query: String) async throws -> SearchResult {
-        // urlQueryAllowed leaves & + = # in the value. The server splits on &
-        // and reads + as a space, so a search for those never matches.
+        // percentEncodedQuery still leaves + and ;. The server reads + as a
+        // space and drops a query that contains ;, so those never match.
         var parts = URLComponents()
         parts.queryItems = [URLQueryItem(name: "q", value: query)]
-        return try await send("GET", "/search?\(parts.percentEncodedQuery ?? "")")
+        let encoded = (parts.percentEncodedQuery ?? "")
+            .replacingOccurrences(of: "+", with: "%2B")
+            .replacingOccurrences(of: ";", with: "%3B")
+        return try await send("GET", "/search?\(encoded)")
     }
 
     public func airings(hours: Int = 48) async throws -> [Airing] {
