@@ -73,6 +73,41 @@ func TestARecordingPlayedLaterKeepsItsBroadcastDates(t *testing.T) {
 	}
 }
 
+func TestAGrowingRecordingPlaylistIsOneAVPlayerCanOpen(t *testing.T) {
+	st := testStore(t)
+	start := time.Date(2026, 10, 5, 1, 26, 54, 0, time.UTC)
+	id, err := st.CreateRecording(t.Context(), store.Recording{
+		Title: "Night Shift", Status: "complete", Path: "shift.ts", StartedAt: start,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	playDir := filepath.Join(dir, "file", strconv.FormatInt(id, 10))
+	if err := os.MkdirAll(playDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// The first playlist ffmpeg publishes for a field-rate recording.
+	src := "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:EVENT\n" +
+		"#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-DISCONTINUITY\n#EXTINF:2.002,\n" +
+		"#EXT-X-PROGRAM-DATE-TIME:2026-10-09T15:26:10.119-0500\nseg00000.ts\n"
+	if issues := live.CheckRecordingPlaylist([]byte(src), ""); len(issues) == 0 {
+		t.Fatal("fixture should fail the AVPlayer rules before it is served")
+	}
+	if err := os.WriteFile(filepath.Join(playDir, "index.m3u8"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st, Hub: &live.Hub{Dir: dir}}).Handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/media/file/"+strconv.FormatInt(id, 10)+"/index.m3u8", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatal(rec.Code, rec.Body.String())
+	}
+	if issues := live.CheckRecordingPlaylist(rec.Body.Bytes(), ""); len(issues) != 0 {
+		t.Fatalf("%v\n%s", issues, rec.Body.String())
+	}
+}
+
 func TestResumePlaylistKeepsTheRecordingClock(t *testing.T) {
 	st := testStore(t)
 	start := time.Date(2026, 10, 5, 1, 26, 54, 0, time.UTC)
