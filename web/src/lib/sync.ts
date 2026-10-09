@@ -1,9 +1,10 @@
 import Hls from "hls.js";
-import { events, type RoomState } from "./events";
-import { holeEnd } from "./bufferHole";
-import { fragTime, roomStart, roomTarget, type Frag } from "./roomStart";
-import { nextSeekLead } from "./seekLead";
-import { SETTLE_MS, newSettle, settleDue } from "./settle";
+import { events, type RoomState } from "./events.ts";
+import { holeEnd } from "./bufferHole.ts";
+import { fragTime, roomStart, roomTarget, type Frag } from "./roomStart.ts";
+import { nextSeekLead } from "./seekLead.ts";
+import { PauseHold } from "./pauseHold.ts";
+import { SETTLE_MS, newSettle, settleDue } from "./settle.ts";
 
 export type SyncStatus = {
   state: "off" | "waiting" | "syncing" | "locked";
@@ -61,14 +62,20 @@ export class SyncEngine {
   private resumeExpect = 0;
   private stepped = false;
   private lastStallReport = 0;
+  private pauses = new PauseHold();
+  private video: HTMLVideoElement;
+  private hls: Hls | null;
+  private room: string;
+  private channelId: number;
+  private onStatus: (s: SyncStatus) => void;
 
-  constructor(
-    private video: HTMLVideoElement,
-    private hls: Hls | null,
-    private room: string,
-    private channelId: number,
-    private onStatus: (s: SyncStatus) => void,
-  ) {}
+  constructor(video: HTMLVideoElement, hls: Hls | null, room: string, channelId: number, onStatus: (s: SyncStatus) => void) {
+    this.video = video;
+    this.hls = hls;
+    this.room = room;
+    this.channelId = channelId;
+    this.onStatus = onStatus;
+  }
 
   start() {
     const bus = events();
@@ -108,6 +115,7 @@ export class SyncEngine {
   };
 
   stop() {
+    this.pauses.stop();
     window.clearInterval(this.timer);
     this.video.removeEventListener("waiting", this.onWaiting);
     this.unsubscribe?.();
@@ -196,11 +204,11 @@ export class SyncEngine {
       this.holdUntil = now + hold;
       this.rateProbe = null;
       this.video.pause();
-      window.setTimeout(() => {
+      this.pauses.arm(hold, () => {
         this.holdUntil = 0;
         this.resumeAt = performance.now();
         void this.video.play().catch(() => undefined);
-      }, hold);
+      });
       return;
     }
     this.seekTo(target, true);
