@@ -4,7 +4,7 @@
 
 ### Added
 
-- iPhone and iPad have four home screen widgets, in small, medium, and large: On now, Your teams, Recording now, and Up next. On now, Your teams, and Recording now open that channel. Up next opens Recordings. Record on an airing sets it to record once, and a game keeps going until it is final. A row that is already recording, or set to record, says so. The teams widget asks only for games, so a large guide does not make it say it cannot reach the server, and a game still on the scoreboard stays through overtime.
+- iPhone and iPad have four home screen widgets, in small, medium, and large: On now, Your teams, Recording now, and Up next. On now, Your teams, and Recording now open that channel. Up next opens Recordings. Record on an airing sets it to record once, and a game keeps going until it is final. A row that is already recording, or set to record, says so. The teams widget lists your teams' games from a full day of the guide, and a game leaves when its listing ends.
 - On Apple TV, with Broadwave in the top row of the home screen, the Top Shelf lists games on now, favorite channels and what they are showing, and recordings you have started and not finished. Choosing one plays it. A recording made since the app last ran still opens, a player that is already up closes first, and a slow server holds the shelf for at most 10 seconds. A picture that fails while the recording is still being prepared is tried once more and then says why. If the place you left off is not in the file yet, it plays from the start.
 - On the web, Add to other apps on a multiview shares those channels with Plex, Jellyfin, and Channels as one channel. They list it from 990.1 up, named Multiview plus the channel names, with the sound channel first. The guide fills it with two-hour blocks that say what it shows. Settings › Share with other apps can remove one, and the others keep their numbers. If one of its channels is hidden or gone, that shared channel is left out.
 - On the web, a note appears when a team you follow starts playing, or a game on your channels comes down to the last minutes, with Watch and Not now. It waits while the player is up and then goes away. Settings › Game alerts is your teams and close games, your teams only, or off. A game you are recording, or a recording you have not marked watched, gets no score and no close-game note. Playing it does not show the score. Neither does any game while scores are hidden. A start note never includes a score. A team you followed from a listing counts.
@@ -16,6 +16,7 @@
 - Skip intro and Up next on a recording, on the web, iPhone, iPad, and Apple TV, once that show's intro and end titles have been picked out from its other episodes. Skip intro is offered during the intro. From the end titles, or the last 10 seconds, Up next names the next episode in the order they aired, with Play now and Not now. With Play the next episode on, it plays after 10 seconds; off, it waits.
 - A recording the signal ruined offers Record it again on the web, iPhone, iPad, and Apple TV, when that episode has a name. The row says how many seconds the signal dropped, or how many times it broke up. That records the episode the next time it airs. A series pass does the same on its own, and stops after a second ruined copy. Recordings from before this change are not marked.
 - On the web, live TV has Start over. While the live window still holds the start of the show on now, it jumps there, and a group moves with you. Otherwise a recording of this showing that has the start opens, and it picks up where you left off.
+- A handbook covers install, the first run, tuners, the guide, watching, multiview, recordings, sync, troubleshooting, and security. It opens in a browser with no server, and it is published with the site.
 
 ### Changed
 
@@ -30,6 +31,7 @@
 
 ### Fixed
 
+- Updating the database no longer stops the server when something else is writing the catalog.
 - On iPhone, iPad, and Apple TV, the first play of a recording resumes where you left it once the file has reached that spot. It used to start over while the playlist was still being built.
 - On the web, Up next follows the order episodes aired and stops after the last one. It used to wrap from the newest back to the oldest. On iPhone, iPad, and Apple TV, Play the next episode is honored. The player used to ignore it.
 - A channel that two tuners carry is recorded once. An airing that will not be recorded no longer takes a tuner from one that will. Recording one showing ranks above every pass. Following a team again keeps that pass and its rules.
@@ -37,7 +39,7 @@
 - On iPhone, iPad, and Apple TV, the time on a recording follows when it aired, not the moment you pressed play.
 - Playing, downloading, or sending a recording to another app opens a file only from the recordings folder or a library folder. A file stored somewhere else is not served. One left in the default recordings folder still opens after that folder is pointed somewhere else.
 - A channel name with a quotation mark no longer cuts the line short in an M3U shared with another app.
-- Leaving a multiview while a tile is still tuning no longer drops the sound tile's picture, so coming back does not start that tile over and wait. On a server with room for only a couple of pictures, sharing a multiview no longer comes up empty while one you just closed is still winding down.
+- On a server with room for only a couple of pictures, sharing a multiview no longer comes up empty while one you just closed is still winding down.
 - On iPhone, iPad, and Apple TV, a tuner found on the network that has stopped answering says it is offline, with when it was last seen, and Remove is the first control.
 
 ## 0.12.20 — 2026-10-05

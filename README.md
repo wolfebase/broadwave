@@ -242,7 +242,7 @@ Without an updater, the web app says when a new release is out.
 
 <details>
 <summary><b>Where do recordings go?</b></summary>
-<br>In the recordings folder you mounted, filed by show the way Plex and Jellyfin read them. Each one is the broadcast itself, with a small file beside it for the title and another for commercial marks. [How recordings work](docs/recordings.md).
+<br>In the recordings folder you mounted. By default they are filed by show for Plex and Jellyfin, and Settings can put them all in one folder. Each recording is the broadcast file, with a small file beside it for the title, channel, and times. A break scan can leave a commercial-marks file beside it, and a title file is written only when "Write .nfo files for Plex, Jellyfin, and Kodi" is on. [How recordings work](docs/recordings.md).
 </details>
 
 <details>

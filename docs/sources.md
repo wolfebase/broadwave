@@ -2,15 +2,15 @@
 
 What Broadwave can take in, how it is found, and how it is played. Decision: [0009](decisions/0009-sources-and-discovery.md). Checked against vendor docs on 2026-09-23.
 
-HDHomeRun on a new install is added when it is found. Everything else waits for one tap. A "Look harder" probe runs only when asked, and only on local subnets.
+HDHomeRun on a new install is added when it is found, including a server that answers the same broadcast or an HDHomeRun SSDP reply. Everything else waits for one tap. A "Look harder" probe runs only when asked, and only on local subnets.
 
 Your home is a separate read-only scan in setup and in Settings. It lists tuners already found, plus screens and servers on the local subnet: Chromecast (`_googlecast._tcp`), AirPlay (`_airplay._tcp`), Fire TV and Android TV (DIAL), smart TVs (UPnP MediaRenderer), Plex (GDM), Jellyfin and Emby (UDP 7359), and Channels DVR (`_channels_dvr._tcp`). iPhone, iPad, and Apple TV apps announce themselves on the event socket. The only actions are Add for a tuner that is not in the lineup yet, and Use as tuner for Plex, Jellyfin, Emby, and Channels, which copies this server's HDHomeRun address. Nothing else is contacted or changed.
 
 | Source | Found by | Stream | Guide | Status |
 | --- | --- | --- | --- | --- |
-| HDHomeRun (FLEX, CONNECT, PRIME) | UDP 65001 and an HDHomeRun SSDP reply. `hdhomerun.local` only when both come back empty. | Full mux on port 5004. This server uses `/tunerN/ch<freq>`. Docs also describe `/auto/ch<rf>`. | Device XMLTV, then another guide for the gaps | Supported. Auto-added. |
-| HDHomeRun-compatible (tvheadend, Antennas, Threadfin, xTeVe, ErsatzTV, Dispatcharr) | Address, or SSDP / the app's HDHomeRun announce | HDHomeRun URLs, or the app's M3U | The app's XMLTV, or none | Supported once confirmed. Not auto-added. |
-| M3U playlist | Pasted URL or text. Header `url-tvg` / `x-tvg-url` | MPEG-TS or HLS. Attributes `tvg-id`, `tvg-chno`, `tvg-logo`, `group-title` | That playlist's XMLTV only, by `tvg-id`, then station id, then name | Supported. Stream limit per playlist. |
+| HDHomeRun (FLEX, CONNECT, PRIME) | UDP 65001 and an HDHomeRun SSDP reply. `hdhomerun.local` only when both come back empty. | Full mux on port 5004 (`/tunerN/ch<freq>`). An ATSC 3.0 channel, or a tune that cannot open that multiplex, uses `/auto/v<guide number>`. Docs also describe `/auto/ch<rf>`. | Device XMLTV, then another guide for the gaps | Supported. Auto-added. |
+| HDHomeRun-compatible (tvheadend, Antennas, Threadfin, xTeVe, ErsatzTV, Dispatcharr) | Address, or SSDP / the app's HDHomeRun announce | HDHomeRun URLs, or the app's M3U | The app's XMLTV, or none | Supported. Adopted on an empty lineup when it answers as an HDHomeRun. Otherwise added from an address or Look harder. |
+| M3U playlist | Pasted URL or text. Header `url-tvg` / `x-tvg-url` | MPEG-TS or HLS. Attributes `tvg-id`, `tvg-chno`, `tvg-logo`, `group-title` | That playlist's XMLTV only. The guide key is `tvg-id` when the line has one, and the station id otherwise, then the channel number, the name, and the call sign | Supported. Stream limit per playlist. |
 | Xtream Codes | Server, username, password | `/live/user/pass/id.ts`. Panel `player_api.php` | `xmltv.php` | Supported. Password stored apart from the URL and masked. |
 | Channels DVR server | mDNS `_channels_dvr._tcp` port 8089 | `/devices/ANY/channels.m3u?format=ts&codec=copy` | `/devices/ANY/guide/xmltv` | Supported. Uses that server's tuners. Host networking, or the DVR answers 403. |
 | tvheadend | mDNS `_htsp._tcp`, web 9981 | This server asks for `/playlist/channels`. Discovery also looks for `/playlist/channels.m3u`. | `/xmltv/channels` | Supported. Web calls need an account or they return 403. |

@@ -10,7 +10,7 @@ From your antenna. Broadwave does not provide, host, or stream any channels of i
 
 ## Which tuner should I get?
 
-Any current HDHomeRun works, and Broadwave finds it on the network. A FLEX 4K receives ATSC 3.0 on two of its four tuners. FLEX DUO, FLEX QUATRO, and CONNECT receive the regular broadcast. [Tuners](tuners.md) has the table. Other network tuners and servers that speak HDHomeRun work by address.
+Any current HDHomeRun works, and Broadwave finds it on the network. A FLEX 4K receives ATSC 3.0 on two of its four tuners, and so does any other model whose name contains 4K. FLEX DUO, FLEX QUATRO, and a CONNECT whose name does not contain 4K receive the regular broadcast. [Tuners](tuners.md) has the table. Other network tuners and servers that speak HDHomeRun work by address.
 
 ## What do I watch on?
 
@@ -30,7 +30,7 @@ No. Everyone on one channel shares one tune, including a recording of that chann
 
 ## Where do recordings go?
 
-In the recordings folder you mounted, filed by show the way Plex and Jellyfin read them. Each one is the broadcast itself. [Recordings and storage](recordings.md) covers passes, games that run long, and the disk reserve.
+In the recordings folder you mounted. By default they are filed by show for Plex and Jellyfin, and Settings can put them all in one folder. Each one is the broadcast itself. [Recordings and storage](recordings.md) covers passes, games that run long, and the disk reserve.
 
 ## Some channels have no guide.
 

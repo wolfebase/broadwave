@@ -46,6 +46,6 @@ An encrypted station does not offer the choice. It always uses the regular broad
 | Tuner | What it receives |
 | --- | --- |
 | FLEX 4K | Four tuners. Two of them receive ATSC 3.0. A 3.0 channel will not tune on the other two. |
-| FLEX DUO, FLEX QUATRO, CONNECT | The regular broadcast only. |
+| FLEX DUO, FLEX QUATRO, CONNECT | The regular broadcast only. A model name that contains 4K marks the first two tuners as ATSC 3.0. |
 
 A 3.0 channel takes a tuner that can receive it. A regular channel takes a tuner that cannot, when one is free, so a NextGen tune stays available. Everyone watching one channel still shares that one tune. A 3.0 channel is its own frequency. It does not ride the station's regular multiplex.

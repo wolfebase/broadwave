@@ -10,7 +10,7 @@ This stops a web page from calling your server by pointing the page's own name a
 
 ## Secrets
 
-The tuner's `DeviceAuth` value is not stored and is not written to the log. Passwords for a guide account or a playlist are stored so the server can refresh them, and Settings shows them masked.
+The tuner's `DeviceAuth` value is not stored and is not written to the log. Passwords for a guide account or a playlist are stored so the server can refresh them, and Settings does not show a saved password. The field stays blank and says Saved.
 
 A support bundle leaves passwords and tuner credentials out. Settings calls the button "Download a support bundle". The hint under it is "Logs, versions, and settings. Passwords are left out."
 

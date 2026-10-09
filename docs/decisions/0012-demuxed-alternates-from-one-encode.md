@@ -25,7 +25,7 @@ The third option.
 - `master.m3u8` puts the picture and those tracks in one audio group, named from the program map. The default is that encode's main sound. A master is handed only to a watch that sends `caps.alternates`, and only for an encode that carries another sound and has no track of its own. A `.lang` or `.vi` encode would otherwise advertise the other mix as the default, so it keeps its one-sound playlist. A watch for another language or for described video that sends the cap joins the main encode when that encode carries the track, or when the channel has no such track.
 - The web player fetches the master and its picture playlist before playback. hls.js loads no picture playlist from a master until it is told to start, and a join on the room's frame needs those fragments first. A playlist loader answers hls.js's first two requests with the same bodies. A later choice uses hls.js's audio option (`setAudioOption`). Assigning `hls.audioTrack` drops the buffered sound and is not used. The web player does not load the master's subtitle group. Captions stay on their own track, still derived from the stamped index.
 - The iPhone and Apple TV apps send the cap for a full-screen watch and switch with AVPlayer's media selection, which keeps the picture and the buffer. A choice is kept for the next channel. A track the channel lacks plays the main mix.
-- Recordings, exports, and the multiplex kept on disk stay the original transport stream. Multiview tiles stay on the one-sound playlist.
+- An export copies one program, every stream it carries. A recording copies that program's picture and its first sound track, still the original encoding. A clear ATSC 3.0 channel with AC-4 sound keeps the program's own packets, so every sound track and the captions stay. The multiplex kept on disk for the live buffer stays the unfiltered tune. Multiview tiles stay on the one-sound playlist.
 
 ## Consequences
 
@@ -35,4 +35,4 @@ The first tune of a channel has no stored track list. When the scan is already k
 
 An extra stereo AAC track was measured at about one percent of a core, and a 5.1 track at about three. Cutting a view is a copy of a fragment already on disk. A second language no longer takes a second picture slot.
 
-A master here lists the sound tracks of one encode. It is not a choice of picture size, and it is not a surround-or-stereo toggle. Recordings still play as the original transport stream.
+A master here lists the sound tracks of one encode. It is not a choice of picture size, and it is not a surround-or-stereo toggle. Playing a recording builds a separate HLS playlist and does not rewrite the MPEG-TS file.

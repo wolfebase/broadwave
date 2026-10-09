@@ -62,7 +62,7 @@ Phases run roughly in order. Later phases can start when their dependencies are 
 
 - [x] Name, icon, and the App Store
 - [ ] Unraid Community Apps
-- [ ] Docs site
+- [x] Docs site (`docs/guide/`, built by `docs/sitegen/`)
 
 ## Later
 

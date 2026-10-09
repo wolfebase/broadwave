@@ -6,7 +6,7 @@ Broadwave plays the channels on an HDHomeRun, or on a server that answers the sa
 
 Three ways. A broadcast on the local network, an address you type, and SiliconDust's discovery list when the network search finds nothing.
 
-With no address, the server broadcasts for HDHomeRun devices and also listens for an HDHomeRun announcement and for the name `hdhomerun.local`. A reply counts only when it comes from this network. The address inside the packet is ignored. The address that answered is the one used.
+With no address, the server broadcasts for HDHomeRun devices and reads an HDHomeRun SSDP reply, and it looks up `hdhomerun.local` only when both come back empty. A reply counts only when it comes from this network. The address inside the packet is ignored. The address that answered is the one used.
 
 The first time the lineup is empty, that search adopts one tuner. About every five minutes it refreshes tuners already in the lineup. It does not add a second one on its own.
 
