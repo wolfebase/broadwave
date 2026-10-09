@@ -112,6 +112,21 @@ func TestRecordingPathPicksTheLayout(t *testing.T) {
 	}
 }
 
+func TestFlatRecordingPathStaysInTheFolder(t *testing.T) {
+	h := &Hub{Dir: t.TempDir()}
+	root := h.Recordings()
+	ch := store.SourceChannel{Channel: store.Channel{GuideNumber: "../../../../../../../../tmp/owned", DisplayName: "News"}}
+	rec := store.Recording{StartedAt: time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)}
+	got := h.recordingPath(rec, ch, false)
+	rel, err := filepath.Rel(root, got)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		t.Fatalf("left the folder: %s", got)
+	}
+	if filepath.Dir(got) != root {
+		t.Fatalf("not a flat name: %s", got)
+	}
+}
+
 func TestRemovingTheLastEpisodeTakesItsEmptyFolders(t *testing.T) {
 	h := &Hub{Dir: t.TempDir()}
 	root := h.Recordings()

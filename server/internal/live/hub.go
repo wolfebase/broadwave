@@ -2052,7 +2052,12 @@ func (h *Hub) recordingPath(rec store.Recording, ch store.SourceChannel, byShow 
 			}
 		}
 	}
-	name := fmt.Sprintf("%s_%s_%s.ts", rec.StartedAt.Format("20060102_150405"), ch.GuideNumber, sanitize(ch.DisplayName))
+	number := ch.GuideNumber
+	if number != "" {
+		// A playlist channel number is a file name, not a path.
+		number = sanitize(number)
+	}
+	name := fmt.Sprintf("%s_%s_%s.ts", rec.StartedAt.Format("20060102_150405"), number, sanitize(ch.DisplayName))
 	return freePath(filepath.Join(root, name), taken)
 }
 
