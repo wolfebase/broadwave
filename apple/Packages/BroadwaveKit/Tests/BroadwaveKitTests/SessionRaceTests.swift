@@ -3,7 +3,7 @@ import Foundation
 import Testing
 
 @MainActor
-@Test func aLateReplyDoesNotReplaceTheServerYouJustChose() async {
+@Test func aLateReplyDoesNotReplaceTheServerYouJustChose() async throws {
     let store = stallStore()
     defer { retire(store) }
     CatalogStall.gate.hold(19054, "/api/v1/channels")
@@ -47,6 +47,20 @@ import Testing
     await latePasses.value
     #expect(store.server?.id == "inland")
     #expect(!store.passes.contains { $0.title == "Harbor News" })
+
+    store.forget()
+    CatalogStall.gate.finishAll()
+    store.connect(server(19054, "harbor", "Harbor"))
+    #expect(await until { store.recordings.first?.title == "Harbor News" && !store.loading })
+    let marked = try #require(store.recordings.first)
+    CatalogStall.gate.hold(19054, "/api/v1/recordings")
+    let staleList = Task { await store.refreshRecordings() }
+    #expect(await until { CatalogStall.gate.isParked(19054, "/api/v1/recordings") })
+    try await store.setWatched(marked, true)
+    #expect(store.recordings.first?.watched == 1)
+    CatalogStall.gate.release(19054, "/api/v1/recordings")
+    await staleList.value
+    #expect(store.recordings.first?.watched == 1)
 }
 
 @MainActor

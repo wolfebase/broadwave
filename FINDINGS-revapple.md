@@ -453,6 +453,8 @@ Fix: one save at a time for that channel. Apply a response only when no newer sa
 
 ### A failed library load looks like you have no recordings
 
-`RecordingsView.swift` 94–98 and the task at 215–218. The empty copy is `listed.isEmpty`. `refreshRecordings` uses `try?` and sets nothing on failure, and the screen never reads `store.error`. After a server change the list is cleared. If that fetch fails, the screen says “No recordings yet”. The same fetch has no epoch for this server: delete a recording, or mark it watched, and an older GET that is still in flight can assign the previous list. The deleted recording comes back.
+`RecordingsView.swift` 94–98 and the task at 215–218. The empty copy is `listed.isEmpty`. `refreshRecordings` uses `try?` and sets nothing on failure, and the screen never reads `store.error`. After a server change the list is cleared. If that fetch fails, the screen says “No recordings yet”.
 
-Fix: show the error, and the empty copy only after a fetch has succeeded with no rows. Bump an epoch when a recording is deleted, stopped, or marked, and assign `recordings` only when the fetch started on that epoch.
+The kit now drops a recording list that started before a delete, a stop, a watch mark, or a bulk change on this server. This screen still needs the error and the empty copy.
+
+Fix: show the error, and the empty copy only after a fetch has succeeded with no rows.
