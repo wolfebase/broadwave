@@ -379,11 +379,11 @@ Fix: `task(id: store.api?.base)`. On failure or cancel, leave `scores` as it was
 
 ### A slow pass reload puts Record back, and live Record hides the error
 
-`GuideView.swift` 863 and 870–879, and the live button at 812–818. `refreshPasses` now ignores a list from a server you left. It still applies an older list from this server. Open an upcoming program (passes start empty, so the button says Record). Tap Record before the GET returns. `recordOnce` shows “Don’t record”. The GET then finishes with the list from before the tap and the button says Record again. `act` starts a new task per tap and writes `problem` with no token, so an older failure can replace a newer success.
+`GuideView.swift` 863 and 870–879, and the live button at 812–818. The kit now drops a pass list that started before a record or a remove on this server. `act` still starts a new task per tap and writes `problem` with no token, so an older failure can replace a newer success.
 
 The live Record button calls `toggleRecord`, which stores the failure on `store.error`. Nothing on the guide reads `store.error`. The button stays “Record”.
 
-Fix: a pass epoch bumped by record and remove, checked before `refreshPasses` assigns. One `act` task, and drop a result that is not the latest. Route the live button through `act`.
+Fix: one `act` task, and drop a result that is not the latest. Route the live button through `act`.
 
 ### The portrait mini-guide does not say which channel is on
 

@@ -61,6 +61,22 @@ import Testing
     CatalogStall.gate.release(19054, "/api/v1/recordings")
     await staleList.value
     #expect(store.recordings.first?.watched == 1)
+
+    store.forget()
+    CatalogStall.gate.finishAll()
+    store.connect(server(19054, "harbor", "Harbor"))
+    #expect(await until { store.channels.first?.displayName == "Harbor News" && !store.loading })
+    await store.refreshPasses()
+    let pass = try #require(store.passes.first)
+    #expect(pass.title == "Harbor News")
+    CatalogStall.gate.hold(19054, "/api/v1/passes")
+    let stalePasses = Task { await store.refreshPasses() }
+    #expect(await until { CatalogStall.gate.isParked(19054, "/api/v1/passes") })
+    try await store.removePass(pass.id)
+    #expect(!store.passes.contains { $0.title == "Harbor News" })
+    CatalogStall.gate.release(19054, "/api/v1/passes")
+    await stalePasses.value
+    #expect(!store.passes.contains { $0.title == "Harbor News" })
 }
 
 @MainActor
@@ -293,6 +309,9 @@ private final class CatalogStall: URLProtocol, @unchecked Sendable {
         }
         if path.hasSuffix("/recordings") {
             return #"{"recordings":[{"id":\#(channel),"channelId":\#(channel),"guideNumber":"11.1","title":"\#(name)","status":"finished","startedAt":"2026-10-09T00:00:00Z"}]}"#
+        }
+        if path.contains("/passes/") {
+            return #"{"passes":[]}"#
         }
         if path.hasSuffix("/passes") {
             return #"{"passes":[{"id":\#(channel),"title":"\#(name)"}]}"#

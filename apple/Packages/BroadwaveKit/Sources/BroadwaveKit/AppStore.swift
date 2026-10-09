@@ -53,6 +53,8 @@ public final class AppStore {
     private var generation = 0
     /// Bumped when this screen changes a recording, so an older list does not undo it.
     private var recordingsEpoch = 0
+    /// Bumped when this screen changes a pass, so an older list does not undo it.
+    private var passesEpoch = 0
     /// Lineup and event calls share this session. Tests pass their own.
     private let session: URLSession
     #if DEBUG
@@ -612,7 +614,8 @@ public final class AppStore {
         guard let api else { return }
         let started = generation
         let base = api.base
-        guard let list = try? await api.passes(), sameSession(started, base) else { return }
+        let listedAt = passesEpoch
+        guard let list = try? await api.passes(), sameSession(started, base), listedAt == passesEpoch else { return }
         passes = list
     }
 
@@ -622,6 +625,7 @@ public final class AppStore {
         let base = api.base
         let list = try await api.addPass(title: airing.title, channelID: airing.channelId)
         guard sameSession(started, base) else { return }
+        passesEpoch += 1
         passes = list
     }
 
@@ -631,6 +635,7 @@ public final class AppStore {
         let base = api.base
         let list = try await api.addPass(title: airing.title, channelID: airing.channelId, airingStart: airing.start)
         guard sameSession(started, base) else { return }
+        passesEpoch += 1
         passes = list
     }
 
@@ -643,6 +648,7 @@ public final class AppStore {
         guard sameSession(started, base) else { return airing }
         let list = try await api.addPass(title: rec.title, channelID: airing.channelId, airingStart: airing.start)
         guard sameSession(started, base) else { return airing }
+        passesEpoch += 1
         passes = list
         return airing
     }
@@ -653,6 +659,7 @@ public final class AppStore {
         let base = api.base
         let list = try await api.deletePass(id)
         guard sameSession(started, base) else { return }
+        passesEpoch += 1
         passes = list
     }
 
