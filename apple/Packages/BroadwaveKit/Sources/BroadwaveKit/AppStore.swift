@@ -62,6 +62,8 @@ public final class AppStore {
     private var relocateAfter = Date.distantPast
     /// Bumped on connect and forget, so a move that started earlier cannot undo them.
     private var generation = 0
+    /// Bumped when this screen changes a recording, so an older list does not undo it.
+    private var recordingsEpoch = 0
     /// Lineup and event calls share this session. Tests pass their own.
     private let session: URLSession
     #if DEBUG
@@ -446,6 +448,7 @@ public final class AppStore {
         guard let api else { return }
         let started = generation
         let base = api.base
+        let listedAt = recordingsEpoch
         await refreshFrames()
         guard sameSession(started, base) else { return }
         loading = true
@@ -492,7 +495,9 @@ public final class AppStore {
             let horizon = moment.addingTimeInterval(4 * 3600)
             let near = GuideMerge.listings(previous: index.allAirings(), window: window, tail: nil, horizon: horizon)
             index = GuideIndex(near)
-            recordings = nextRecordings
+            if listedAt == recordingsEpoch {
+                recordings = nextRecordings
+            }
             now = Date()
             freshAt = now
             error = nil
@@ -535,7 +540,8 @@ public final class AppStore {
         guard let api else { return }
         let started = generation
         let base = api.base
-        guard let list = try? await api.recordings(), sameSession(started, base) else { return }
+        let listedAt = recordingsEpoch
+        guard let list = try? await api.recordings(), sameSession(started, base), listedAt == recordingsEpoch else { return }
         recordings = list
     }
 
@@ -588,6 +594,7 @@ public final class AppStore {
                 _ = try await api.record(channelID: channel.id, title: index.on(channel.id, at: Date())?.title ?? channel.displayName)
             }
             guard sameSession(started, base) else { return }
+            recordingsEpoch += 1
             await refreshRecordings()
         } catch {
             guard sameSession(started, base) else { return }
@@ -602,6 +609,7 @@ public final class AppStore {
         let base = api.base
         try await api.deleteRecording(rec.id)
         guard sameSession(started, base) else { return }
+        recordingsEpoch += 1
         recordings.removeAll { $0.id == rec.id }
         await refreshRecordings()
     }
@@ -612,6 +620,7 @@ public final class AppStore {
         let base = api.base
         try await api.setWatched(recordingID: rec.id, watched)
         guard sameSession(started, base) else { return }
+        recordingsEpoch += 1
         if let i = recordings.firstIndex(where: { $0.id == rec.id }) {
             recordings[i].watched = watched ? 1 : 2
         }
@@ -638,6 +647,7 @@ public final class AppStore {
         guard let api else { return (recs.count, APIError(code: "offline", message: "Not connected to a server.", status: 0)) }
         let started = generation
         let base = api.base
+        recordingsEpoch += 1
         var failed = 0
         var first: Error?
         for rec in recs where !rec.isRecording {
@@ -670,6 +680,7 @@ public final class AppStore {
         let base = api.base
         try await api.stopRecording(rec.id)
         guard sameSession(started, base) else { return }
+        recordingsEpoch += 1
         await refreshRecordings()
     }
 
