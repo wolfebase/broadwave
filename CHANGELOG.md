@@ -38,6 +38,7 @@
 - Playing, downloading, or sending a recording to another app opens a file only from the recordings folder or a library folder. A file stored somewhere else is not served. One left in the default recordings folder still opens after that folder is pointed somewhere else.
 - A channel name with a quotation mark no longer cuts the line short in an M3U shared with another app.
 - Leaving a multiview while a tile is still tuning no longer drops the sound tile's picture, so coming back does not start that tile over and wait. On a server with room for only a couple of pictures, sharing a multiview no longer comes up empty while one you just closed is still winding down.
+- On iPhone, iPad, and Apple TV, a tuner found on the network that has stopped answering says it is offline, with when it was last seen, and Remove is the first control.
 
 ## 0.12.20 — 2026-10-05
 
@@ -115,8 +116,8 @@
 ### Fixed
 
 - A channel with no signal no longer stops every other channel. Its tune takes about 17 seconds to fail, and the server used to hold everything else while it tried, so a multiview with one dead channel froze the good tiles too, and other screens' pictures stalled. A viewer's tune now runs beside the others.
-- The picture budget on a server without a GPU no longer changes from one restart to the next. The startup encode is now timed from its first frame, and the number of pictures at once is set from what real tile encodes cost on the processor. A six-core server holds four; three cores hold two at 540p60.
-- A two-core server keeps one 720p picture instead of dropping that picture to 540p.
+- The picture budget on a server without a GPU no longer changes from one restart to the next. The startup encode is timed from its first frame, and the number of pictures follows how fast that 1080p60 encode ran. At about 5.5 times real time or faster, four pictures fit. From about 3.8 times up to that, two 1080p pictures fit. From about 2.7 times up to 3.8, two pictures fit and the large tile is 540p.
+- An encode from about 1.9 times real time up to 2.7 keeps one 720p picture. Below that, down to about 1.4 times, the picture is 540p.
 
 ## 0.12.14 — 2026-10-04
 
@@ -263,7 +264,7 @@ ATSC 3.0 channels, and a picture that never stays frozen.
 - Two screens that open the same 3.0 channel at once share one tuner, and a warm 3.0 channel gives its tuner to a new one.
 - A tuner set to none is freed at once. An unplugged tuner no longer slows the tuner list or every channel start.
 - Guide access is asked of every tuner, not only the first one, and program times stay right after a tuner goes quiet.
-- A web page can no longer reach the server by pointing its own name at your server's address, and a page on another site can no longer join a room's live updates. A browser behind an HTTPS reverse proxy needs nothing; set `BROADWAVE_HOSTS` for any other public name you reach the server by.
+- A web page can no longer reach the server by pointing its own name at your server's address, and a page on another site can no longer join a room's live updates. A browser that reaches the server by HTTPS on port 443 needs nothing extra. Set `BROADWAVE_HOSTS` for any other public name or port.
 
 ## 0.12.0 — 2026-09-29
 
@@ -276,7 +277,7 @@ Live captions, every sound track in one stream, Watch together, a choice of live
 - Watch together in the browser: see who is watching the same channel, join or leave, and a pause, rewind, or seek moves everyone in the group.
 - Live delay: Lowest, Balanced, or Stable, per room from the player's Options, with a default for each device in Settings. On iPhone, iPad, and Apple TV too.
 - The server keeps the last hour of each tuned channel on disk while it is tuned, using at most half the free space and always leaving 4 GB. Record a show you are already watching and the recording starts from the beginning of the show. A series pass that finds its show already on, on a channel someone has been watching since it began, records it from the beginning. Settings can make it 30 minutes, 2 or 4 hours, or turn it off, and Diagnostics shows what each tuned channel holds.
-- Channel changes are faster: the channel you just left stays warm for 20 seconds, and on Apple TV the channel the remote rests on in the Channels panel starts before you press. Diagnostics lists the last channel starts and how long each step took.
+- Channel changes are faster: the channel you just left stays warm for 20 seconds, and on Apple TV the channel the remote rests on in the Channels panel starts before you press. On the web, resting on a row in the player's Channels list starts that picture when its frequency is already tuned and a picture slot is free. That guess never tunes a new frequency, never stops another picture, and it stops after 20 seconds. Diagnostics lists the last channel starts and how long each step took.
 - Web player extras: a stats overlay (`i`), keyboard help (`?`), last channel (`L`), a sleep timer, volume memory, and theater mode (`t`). A typed channel number can skip the dot, so 51 is 5.1. A TV remote can walk the guide, the player, and setup.
 - Apple TV info panels (Info, Channels, Stream), Record, Start over, and Multiview in the player's menu, and clickpad up and down to change channel. On iPhone, swipe to change channel and pinch to fill the screen.
 - On iPhone, Previous and Next change the channel, and a tap that shows the controls does not pause. Settings opens from the gear on Home, so Recordings stays on the tab bar.
@@ -286,7 +287,7 @@ Live captions, every sound track in one stream, Watch together, a choice of live
 - Download a finished recording from the web. A `.nfo` file can be written beside each recording for Plex, Jellyfin, and Kodi.
 - Settings lists how much space each show uses. Recordings lists what records next, including on iPhone and Apple TV, and a conflict can record the later airing instead.
 - A recording that finishes counts the signal damage it carries.
-- Manage recordings, skip commercial breaks, and record one airing from the guide in the Apple apps.
+- Manage recordings, skip commercial breaks, and record one airing from the guide in the Apple apps. On the web, the program sheet offers Record and Don't record for one upcoming airing, and a search result shows the day and opens that sheet.
 - The web app installs as a standalone app.
 
 ### Fixed
@@ -318,6 +319,11 @@ Live captions, every sound track in one stream, Watch together, a choice of live
 - Diagnostics no longer says the time zone is unset on a normal host clock, shows the last failed guide pull, and no longer prints a channel number twice.
 - A picture nobody is fetching stops holding a slot, so the next layout does not wait about a minute for it.
 - VoiceOver reads a channel, a recording, and the mini player as one sentence.
+- On the web, a click on Mute or Info no longer leaves the player controls up. Focus inside fading controls returns to the picture, and Tab on a faded player still brings the controls back.
+- The guide's Now button scrolls to half an hour before the current show, then puts the cursor on the show that is on.
+- Start over, skip back, and the slider are no longer undone by the saved resume point. A seek you just made wins.
+- Right after setup, Back from the player opens the guide, because the page under the player is still the wizard.
+- On Apple TV, Diagnostics no longer leaves the sidebar open. The first Fix these row takes focus, including after the notes load.
 
 ### Changed
 
@@ -340,7 +346,7 @@ Live TV keeps playing when Plex or another app is busy on the same GPU.
 
 ### Fixed
 
-- On a server where Plex, Jellyfin, or Channels DVR transcodes on the same Intel GPU, a 1080i channel could encode slower than real time. Apple TVs drained their buffer, paused under the progress bar, and the broadcast broke up. Broadwave now measures the CPU at startup and runs live TV on it when it has room to spare (about 2.5 cores for 1080p60), leaving the GPU to the other apps. Set `BROADWAVE_ENCODER=gpu` or `software` to choose yourself.
+- On a server where Plex, Jellyfin, or Channels DVR transcodes on the same Intel GPU, a 1080i channel could encode slower than real time. Apple TVs drained their buffer, paused under the progress bar, and the broadcast broke up. Broadwave now measures the CPU at startup and runs live TV on it when a 1080p60 encode runs at about 2.5 times real time or faster, leaving the GPU to the other apps. Set `BROADWAVE_ENCODER=gpu` or `software` to choose yourself.
 - An Apple TV that fell half a second behind the others seeked every two seconds and froze each time. A seek that doesn't land now waits a minute and the TV plays on (with the next app update).
 - An Apple TV that sat a quarter second behind the others jumped every 15 seconds trying to close a gap it could not. It now plays on, and seeks only when it is much further behind.
 - A channel with no signal says it isn't coming in, in about 6 seconds when the channel is already known and about 10 the first time, and gives the tuner back. It used to spin for about 17 seconds and then say the picture stopped.
