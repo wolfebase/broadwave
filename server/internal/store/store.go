@@ -566,6 +566,14 @@ func (s *Store) Settings(ctx context.Context) (map[string]string, error) {
 }
 
 func (s *Store) PutSettings(ctx context.Context, values map[string]string) error {
+	cleaned, err := cleanSettings(values)
+	if err != nil {
+		return err
+	}
+	return s.writeSettings(ctx, cleaned)
+}
+
+func cleanSettings(values map[string]string) (map[string]string, error) {
 	allowed := map[string]bool{
 		"layout":            true,
 		"profile":           true,
@@ -606,58 +614,58 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 			continue
 		}
 		if !allowed[k] {
-			return fmt.Errorf("unknown setting %q", k)
+			return nil, fmt.Errorf("unknown setting %q", k)
 		}
 		if k == "layout" && v != "auto" && v != "desktop" && v != "tv" && v != "phone" {
-			return fmt.Errorf("layout must be auto, desktop, tv, or phone")
+			return nil, fmt.Errorf("layout must be auto, desktop, tv, or phone")
 		}
 		if k == "exportMosaics" && (len(v) > 256 || strings.Trim(v, "0123456789,-") != "") {
-			return fmt.Errorf("exportMosaics is a list of mosaic keys such as 4-12,1-2-3")
+			return nil, fmt.Errorf("exportMosaics is a list of mosaic keys such as 4-12,1-2-3")
 		}
 		if k == "pictureMode" && v != "broadcast" && v != "smooth" && v != "film" {
-			return fmt.Errorf("pictureMode must be broadcast, smooth, or film")
+			return nil, fmt.Errorf("pictureMode must be broadcast, smooth, or film")
 		}
 		if k == "watermarkGB" {
 			n, err := strconv.Atoi(strings.TrimSpace(v))
 			if err != nil || n < 0 || n > 1000000 {
-				return fmt.Errorf("watermarkGB must be a whole number of gigabytes from 0 to 1000000")
+				return nil, fmt.Errorf("watermarkGB must be a whole number of gigabytes from 0 to 1000000")
 			}
 		}
 		if k == "bufferMinutes" && v != "0" && v != "30" && v != "60" && v != "120" && v != "240" {
-			return fmt.Errorf("bufferMinutes must be 0, 30, 60, 120, or 240")
+			return nil, fmt.Errorf("bufferMinutes must be 0, 30, 60, 120, or 240")
 		}
 		if k == "deleteWatchedDays" {
 			n, err := strconv.Atoi(strings.TrimSpace(v))
 			if err != nil || n < 0 || n > 3650 {
-				return fmt.Errorf("deleteWatchedDays must be a whole number of days from 0 to 3650")
+				return nil, fmt.Errorf("deleteWatchedDays must be a whole number of days from 0 to 3650")
 			}
 			v = strconv.Itoa(n)
 		}
 		if k == "makeRoom" && v != "0" && v != "1" {
-			return fmt.Errorf("makeRoom must be 0 or 1")
+			return nil, fmt.Errorf("makeRoom must be 0 or 1")
 		}
 		if k == "folderLayout" && v != "shows" && v != "flat" {
-			return fmt.Errorf("folderLayout must be shows or flat")
+			return nil, fmt.Errorf("folderLayout must be shows or flat")
 		}
 		if k == "gameAlerts" && v != "all" && v != "teams" && v != "off" {
-			return fmt.Errorf("gameAlerts must be all, teams, or off")
+			return nil, fmt.Errorf("gameAlerts must be all, teams, or off")
 		}
 		if k == "writeNfo" && v != "0" && v != "1" {
-			return fmt.Errorf("writeNfo must be 0 or 1")
+			return nil, fmt.Errorf("writeNfo must be 0 or 1")
 		}
 		if k == "hideScores" && v != "0" && v != "1" {
-			return fmt.Errorf("hideScores must be 0 or 1")
+			return nil, fmt.Errorf("hideScores must be 0 or 1")
 		}
 		if k == "liveScores" && v != "0" && v != "1" {
-			return fmt.Errorf("liveScores must be 0 or 1")
+			return nil, fmt.Errorf("liveScores must be 0 or 1")
 		}
 		if k == "checkUpdates" && v != "0" && v != "1" {
-			return fmt.Errorf("checkUpdates must be 0 or 1")
+			return nil, fmt.Errorf("checkUpdates must be 0 or 1")
 		}
 		if k == "guideUrl" {
 			v = strings.TrimSpace(v)
 			if v != "" && !strings.HasPrefix(v, "https://") && !strings.HasPrefix(v, "http://") {
-				return fmt.Errorf("the guide address needs to start with http")
+				return nil, fmt.Errorf("the guide address needs to start with http")
 			}
 		}
 		if k == "sdPassword" && strings.TrimSpace(v) == "" {
@@ -667,7 +675,7 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 			continue
 		}
 		if k == "deviceAuth" && v != "0" && v != "1" {
-			return fmt.Errorf("deviceAuth must be 0 or 1")
+			return nil, fmt.Errorf("deviceAuth must be 0 or 1")
 		}
 		if k == "tmdbKey" && strings.TrimSpace(v) == "" {
 			continue
@@ -677,7 +685,7 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 		}
 		cleaned[k] = v
 	}
-	return s.writeSettings(ctx, cleaned)
+	return cleaned, nil
 }
 
 func (s *Store) writeSettings(ctx context.Context, values map[string]string) error {

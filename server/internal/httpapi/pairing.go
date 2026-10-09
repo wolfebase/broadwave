@@ -131,7 +131,9 @@ func (s *Server) pollPair(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, body)
 		return
 	}
-	held, ok := s.peekPairToken(id)
+	// Take the token before writing. Two polls can both pass a peek that
+	// leaves it in the map, and both would then return the raw token.
+	held, ok := s.takePairToken(id)
 	if !ok {
 		// Already handed over, or the process restarted before the handoff.
 		// The device row stays until someone revokes it. A second poll must
@@ -153,9 +155,9 @@ func (s *Server) pollPair(w http.ResponseWriter, r *http.Request) {
 	body["token"] = held.token
 	body["device"] = held.device
 	if err := writeJSONBody(w, http.StatusOK, body); err != nil {
+		s.restorePairToken(id, held)
 		return
 	}
-	s.dropPairToken(id)
 }
 
 func writeJSONBody(w http.ResponseWriter, status int, v any) error {
@@ -220,17 +222,26 @@ func (s *Server) revokeClient(w http.ResponseWriter, r *http.Request) {
 	s.listClients(w, r)
 }
 
-func (s *Server) peekPairToken(id string) (heldToken, bool) {
+func (s *Server) takePairToken(id string) (heldToken, bool) {
 	s.pairMu.Lock()
 	defer s.pairMu.Unlock()
 	held, ok := s.pairTokens[id]
+	if ok {
+		delete(s.pairTokens, id)
+	}
 	return held, ok
 }
 
-func (s *Server) dropPairToken(id string) {
+func (s *Server) restorePairToken(id string, held heldToken) {
 	s.pairMu.Lock()
 	defer s.pairMu.Unlock()
-	delete(s.pairTokens, id)
+	if s.pairTokens == nil {
+		s.pairTokens = map[string]heldToken{}
+	}
+	if _, exists := s.pairTokens[id]; exists {
+		return
+	}
+	s.pairTokens[id] = held
 }
 
 func (s *Server) pairOpen(w http.ResponseWriter, r *http.Request) bool {
@@ -269,13 +280,4 @@ func errString(err error) string {
 		return "invalid json"
 	}
 	return err.Error()
-}
-
-// mintBrowserAdmin creates the admin token returned once when sign-in is turned on.
-func (s *Server) mintBrowserAdmin(r *http.Request) (string, error) {
-	if dev, ok := clientFrom(r.Context()); ok && store.ScopeAllows(dev.Scopes, store.ScopeAdmin) {
-		return "", nil
-	}
-	_, token, err := s.Store.InsertClient(r.Context(), "This browser", "web", []string{store.ScopeAdmin}, s.now())
-	return token, err
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -273,6 +274,48 @@ func (f *failBody) Header() http.Header {
 func (f *failBody) WriteHeader(code int) { f.code = code }
 
 func (f *failBody) Write([]byte) (int, error) { return 0, errors.New("broken pipe") }
+
+func TestOverlappingPollsDeliverTheTokenOnce(t *testing.T) {
+	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	h := (&Server{Store: testStore(t), Clock: func() time.Time { return now }}).Handler()
+	shown := call(t, h, http.MethodPost, "/api/v1/pair", `{"name":"Den","kind":"tv"}`, "")
+	if shown.Code != http.StatusCreated {
+		t.Fatalf("show %d %s", shown.Code, shown.Body.String())
+	}
+	secret := jsonField(t, shown.Body.Bytes(), "pollSecret")
+	pairID := jsonField(t, shown.Body.Bytes(), "id")
+	code := jsonField(t, shown.Body.Bytes(), "code")
+	if got := call(t, h, http.MethodPost, "/api/v1/pair/approve", `{"code":"`+code+`"}`, ""); got.Code != http.StatusOK {
+		t.Fatalf("approve %d %s", got.Code, got.Body.String())
+	}
+	poll := "/api/v1/pair/" + pairID + "?secret=" + secret
+	const n = 8
+	var wg sync.WaitGroup
+	bodies := make([]string, n)
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, poll, nil))
+			bodies[i] = rec.Body.String()
+		}()
+	}
+	wg.Wait()
+	got := 0
+	for _, body := range bodies {
+		if strings.Contains(body, "bw_") {
+			got++
+		}
+	}
+	if got != 1 {
+		t.Fatalf("token delivered %d times\n%s", got, strings.Join(bodies, "\n"))
+	}
+	again := call(t, h, http.MethodGet, poll, "", "")
+	if strings.Contains(again.Body.String(), "bw_") {
+		t.Fatalf("later poll %s", again.Body.String())
+	}
+}
 
 func TestPairingRateLimit(t *testing.T) {
 	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)

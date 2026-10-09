@@ -104,7 +104,7 @@ func (s *Store) InsertClient(ctx context.Context, name, kind string, scopes []st
 		return ClientDevice{}, "", err
 	}
 	defer func() { _ = tx.Rollback() }()
-	dev, token, err := insertClientTx(ctx, tx, name, kind, scopes, now)
+	dev, token, err := insertClientExec(ctx, tx, name, kind, scopes, now)
 	if err != nil {
 		return ClientDevice{}, "", err
 	}
@@ -112,6 +112,46 @@ func (s *Store) InsertClient(ctx context.Context, name, kind string, scopes []st
 		return ClientDevice{}, "", err
 	}
 	return dev, token, nil
+}
+
+// EnableDeviceAuth stores the settings and the first admin token together.
+// A failed mint rolls the setting back, so sign-in cannot turn on with no token.
+func (s *Store) EnableDeviceAuth(ctx context.Context, values map[string]string, now time.Time) (string, error) {
+	cleaned, err := cleanSettings(values)
+	if err != nil {
+		return "", err
+	}
+	cleaned[SettingDeviceAuth] = "1"
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return "", err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_, _ = conn.ExecContext(context.Background(), "ROLLBACK")
+		}
+	}()
+	for k, v := range cleaned {
+		if _, err := conn.ExecContext(ctx, `
+INSERT INTO settings (key, value) VALUES (?, ?)
+ON CONFLICT(key) DO UPDATE SET value=excluded.value`, k, v); err != nil {
+			return "", err
+		}
+	}
+	_, token, err := insertClientExec(ctx, conn, "This browser", "web", []string{ScopeAdmin}, now)
+	if err != nil {
+		return "", err
+	}
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		return "", err
+	}
+	committed = true
+	return token, nil
 }
 
 // ClientByToken finds the device for a raw bearer token.
@@ -207,8 +247,43 @@ func (s *Store) StartPairing(ctx context.Context, mode, name, kind string, scope
 	if err := s.expirePairings(ctx, now); err != nil {
 		return "", "", "", time.Time{}, err
 	}
+	// A unique index rejects a code another start stored first. Try another.
+	var last error
+	for range 5 {
+		id, code, pollSecret, expires, err = s.insertPendingPairing(ctx, mode, name, kind, scopes, now)
+		if err == nil {
+			return id, code, pollSecret, expires, nil
+		}
+		if !pairingUnique(err) {
+			return "", "", "", time.Time{}, err
+		}
+		last = err
+	}
+	if last != nil {
+		return "", "", "", time.Time{}, ErrPairFull
+	}
+	return "", "", "", time.Time{}, last
+}
+
+// insertPendingPairing counts and inserts under a reserved lock, so two
+// starts cannot both pass the waiting-list cap or both take one code.
+func (s *Store) insertPendingPairing(ctx context.Context, mode, name, kind string, scopes []string, now time.Time) (id, code, pollSecret string, expires time.Time, err error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return "", "", "", time.Time{}, err
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return "", "", "", time.Time{}, err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_, _ = conn.ExecContext(context.Background(), "ROLLBACK")
+		}
+	}()
 	var pending int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pairings WHERE state = 'pending' AND expires_at > ?`,
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM pairings WHERE state = 'pending' AND expires_at > ?`,
 		now.UTC().Format(time.RFC3339)).Scan(&pending); err != nil {
 		return "", "", "", time.Time{}, err
 	}
@@ -219,7 +294,7 @@ func (s *Store) StartPairing(ctx context.Context, mode, name, kind string, scope
 	if err != nil {
 		return "", "", "", time.Time{}, err
 	}
-	code, err = uniqueCode(ctx, s, now)
+	code, err = uniqueCode(ctx, conn, now)
 	if err != nil {
 		return "", "", "", time.Time{}, err
 	}
@@ -232,7 +307,7 @@ func (s *Store) StartPairing(ctx context.Context, mode, name, kind string, scope
 		secretHash = hashSecret(pollSecret)
 	}
 	expires = now.UTC().Add(pairTTL)
-	_, err = s.db.ExecContext(ctx, `INSERT INTO pairings (
+	_, err = conn.ExecContext(ctx, `INSERT INTO pairings (
 id, mode, code_hash, poll_secret_hash, name, kind, scopes, created_at, expires_at, state
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
 		id, mode, hashSecret(code), secretHash, name, kind, joinScopes(scopes),
@@ -240,7 +315,15 @@ id, mode, code_hash, poll_secret_hash, name, kind, scopes, created_at, expires_a
 	if err != nil {
 		return "", "", "", time.Time{}, err
 	}
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		return "", "", "", time.Time{}, err
+	}
+	committed = true
 	return id, code, pollSecret, expires, nil
+}
+
+func pairingUnique(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE")
 }
 
 // ApproveShow matches a code a device is showing, saves the device, and
@@ -372,7 +455,7 @@ FROM pairings WHERE mode = ? AND state IN ('pending', 'denied', 'expired')`, mod
 	if n == 0 {
 		return Pairing{}, ClientDevice{}, "", ErrPairCode
 	}
-	dev, token, err := insertClientTx(ctx, tx, storedName, storedKind, scopes, now)
+	dev, token, err := insertClientExec(ctx, tx, storedName, storedKind, scopes, now)
 	if err != nil {
 		return Pairing{}, ClientDevice{}, "", err
 	}
@@ -445,7 +528,15 @@ func scanClientRow(rows scanner) (ClientDevice, error) {
 	return dev, nil
 }
 
-func insertClientTx(ctx context.Context, tx *sql.Tx, name, kind string, scopes []string, now time.Time) (ClientDevice, string, error) {
+type sqlExec interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+type rowQuery interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func insertClientExec(ctx context.Context, tx sqlExec, name, kind string, scopes []string, now time.Time) (ClientDevice, string, error) {
 	id, err := newID()
 	if err != nil {
 		return ClientDevice{}, "", err
@@ -464,14 +555,17 @@ func insertClientTx(ctx context.Context, tx *sql.Tx, name, kind string, scopes [
 	return ClientDevice{ID: id, Name: name, Kind: cleanKind(kind), Scopes: append([]string(nil), scopes...), CreatedAt: created}, token, nil
 }
 
-func uniqueCode(ctx context.Context, s *Store, now time.Time) (string, error) {
+// pairingCode is the digit source. Tests replace it to force a collision.
+var pairingCode = sixDigits
+
+func uniqueCode(ctx context.Context, q rowQuery, now time.Time) (string, error) {
 	for range 5 {
-		code, err := sixDigits()
+		code, err := pairingCode()
 		if err != nil {
 			return "", err
 		}
 		var n int
-		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pairings WHERE code_hash = ? AND state = 'pending' AND expires_at > ?`,
+		if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM pairings WHERE code_hash = ? AND state = 'pending' AND expires_at > ?`,
 			hashSecret(code), now.UTC().Format(time.RFC3339)).Scan(&n); err != nil {
 			return "", err
 		}

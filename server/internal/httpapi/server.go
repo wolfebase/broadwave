@@ -656,17 +656,22 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		body["exportMosaics"] = list
 	}
-	if err := s.Store.PutSettings(r.Context(), body); err != nil {
-		httpError(w, err.Error(), http.StatusBadRequest)
-		return
-	}
 	var minted string
-	if body[store.SettingDeviceAuth] == "1" && !wasOn {
-		minted, err = s.mintBrowserAdmin(r)
+	turningOn := body[store.SettingDeviceAuth] == "1" && !wasOn
+	alreadyAdmin := false
+	if dev, ok := clientFrom(r.Context()); ok && store.ScopeAllows(dev.Scopes, store.ScopeAdmin) {
+		alreadyAdmin = true
+	}
+	if turningOn && !alreadyAdmin {
+		// The setting and the token commit together. A failed mint leaves sign-in off.
+		minted, err = s.Store.EnableDeviceAuth(r.Context(), body, s.now())
 		if err != nil {
-			writeError(w, err)
+			httpError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+	} else if err := s.Store.PutSettings(r.Context(), body); err != nil {
+		httpError(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 	// Turning the check back on looks now. A check that already ran today is reused.
 	if body["checkUpdates"] == "1" && s.Updates != nil {
