@@ -316,6 +316,7 @@ struct RootView: View {
                 }
             }
             .onOpenURL(perform: open)
+            .spotlightLinks(open)
         #if DEBUG
             .task {
                 if UserDefaults.standard.bool(forKey: "BroadwaveDemo"), store.server?.id != "demo" {

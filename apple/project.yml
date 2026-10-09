@@ -35,6 +35,8 @@ targets:
   Broadwave:
     templates: [App]
     platform: iOS
+    sources:
+      - path: App/Intents
     dependencies:
       - target: BroadwaveWidgets
     settings:
@@ -73,6 +75,7 @@ targets:
     platform: iOS
     sources:
       - path: App/Widgets
+      - path: App/Intents
     dependencies:
       - package: BroadwaveKit
       - package: BroadwaveUI

@@ -12,6 +12,7 @@ struct BroadwaveWidgets: WidgetBundle {
         RecordingWidget()
         UpNextWidget()
         LiveActivityWidget()
+        WatchControl()
     }
 }
 

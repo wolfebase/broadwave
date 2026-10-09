@@ -30,6 +30,20 @@ struct BroadwaveApp: App {
             let live = store.recordings.filter(\.isRecording).map { String($0.id) }.joined(separator: ",")
             return "\(store.server?.id ?? "") \(store.channels.isEmpty) \(live) \(activityRecordings) \(activityGames) \(scenePhase == .active)"
         }
+
+        private var lineupKey: String {
+            var hasher = Hasher()
+            for channel in store.channels {
+                hasher.combine(channel.id)
+                hasher.combine(channel.displayName)
+                hasher.combine(channel.hidden)
+            }
+            for rec in store.recordings where !rec.isRecording {
+                hasher.combine(rec.id)
+                hasher.combine(rec.title)
+            }
+            return "\(store.server?.id ?? "") \(hasher.finalize())"
+        }
     #endif
 
     var body: some Scene {
@@ -46,6 +60,11 @@ struct BroadwaveApp: App {
                         let wait = await activities.sync(store, options: options, active: scenePhase == .active)
                         try? await Task.sleep(for: wait)
                     }
+                }
+                // Siri's channel names and Spotlight follow the lineup and the recordings.
+                .task(id: lineupKey) {
+                    await Spotlight.index(server: store.server, channels: store.channels, recordings: store.recordings)
+                    BroadwaveShortcuts.updateAppShortcutParameters()
                 }
             #endif
         }
