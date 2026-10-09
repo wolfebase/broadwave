@@ -167,6 +167,7 @@ func (h *Hub) probeInputLocked(m *mux, f *feed) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	args := []string{"-v", "error", "-probesize", "2000000", "-analyzeduration", "1500000"}
+	args = urlProtocols(args, m.input)
 	args = append(args, headerArgs(f.source.UserAgent, f.source.Referrer)...)
 	args = append(args,
 		"-show_entries", probeEntries,
@@ -265,6 +266,9 @@ func allowedProbeTarget(raw string) string {
 	}
 	for _, part := range strings.Split(raw, "|") {
 		part = strings.TrimPrefix(part, "concat:")
+		if inputHasScheme(part) && !strings.Contains(part, "://") {
+			return ""
+		}
 		if strings.Contains(part, "://") && fetchguard.Allowed(part) != nil {
 			return ""
 		}

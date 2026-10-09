@@ -11,12 +11,30 @@ import (
 )
 
 // urlProtocols limits a remote ffmpeg input to http and https.
-// A local path and a pipe are left alone.
+// A local path and a pipe are left alone. file:/path has a scheme and no
+// double slash, and it is limited too.
 func urlProtocols(args []string, input string) []string {
-	if strings.Contains(input, "://") {
+	if inputHasScheme(input) {
 		return append(args, "-protocol_whitelist", fetchguard.FFmpegProtocols)
 	}
 	return args
+}
+
+func inputHasScheme(input string) bool {
+	for _, part := range strings.Split(input, "|") {
+		part = strings.TrimPrefix(part, "concat:")
+		// pipe:0 is the tuner. It is not a URL.
+		if part == "pipe:0" || strings.HasPrefix(part, "pipe:") {
+			continue
+		}
+		if strings.Contains(part, "://") {
+			return true
+		}
+		if i := strings.Index(part, ":"); i > 1 && !strings.Contains(part[:i], "/") {
+			return true
+		}
+	}
+	return false
 }
 
 func DetectEncoder(ffmpeg string) string {

@@ -551,6 +551,23 @@ func TestHLSProbeTargetDropsAFileURL(t *testing.T) {
 	}
 }
 
+func TestHLSProbeTargetDropsASingleSlashFile(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "#EXTM3U\n#EXTINF:1.0,\nfile:/etc/passwd\n")
+	}))
+	defer srv.Close()
+	if got := hlsProbeTarget(srv.URL+"/live.m3u8", "", ""); got != "" {
+		t.Fatalf("file target %q", got)
+	}
+	if got := allowedProbeTarget("concat:file:/etc/passwd|file:/etc/shadow"); got != "" {
+		t.Fatalf("concat file target %q", got)
+	}
+	local := "concat:/tmp/a.ts|/tmp/b.ts"
+	if got := allowedProbeTarget(local); got != local {
+		t.Fatalf("local concat %q", got)
+	}
+}
+
 func TestInputProbeStoresProgressive(t *testing.T) {
 	if _, err := exec.LookPath("ffprobe"); err != nil {
 		t.Skip("ffprobe not on PATH")

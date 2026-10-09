@@ -121,6 +121,20 @@ func TestHLSInputReconnects(t *testing.T) {
 	}
 }
 
+func TestURLProtocolsCoversASingleSlashFile(t *testing.T) {
+	got := strings.Join(urlProtocols(nil, "file:/etc/passwd"), " ")
+	if !strings.Contains(got, "-protocol_whitelist http,https,tcp,tls,crypto") {
+		t.Fatal(got)
+	}
+	if local := urlProtocols(nil, "/tmp/a.ts"); len(local) != 0 {
+		t.Fatalf("local path %v", local)
+	}
+	pipe := urlProtocols(nil, "pipe:0")
+	if len(pipe) != 0 {
+		t.Fatalf("pipe %v", pipe)
+	}
+}
+
 func TestHeaderArgsStayOneLine(t *testing.T) {
 	got := strings.Join(headerArgs("Agent\r\nX-Evil: 1", "http://ok.example/\nSet-Cookie: a"), "\n")
 	if strings.Contains(got, "\nX-Evil") || strings.Contains(got, "\nSet-Cookie") {
