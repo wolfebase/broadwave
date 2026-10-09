@@ -927,6 +927,7 @@ func (h *Hub) rebuildRenditionsLocked(f *feed) {
 		spec    Rendition
 		viewers int
 		seen    time.Time
+		guess   bool
 	}
 	var list []kept
 	for key, r := range f.renditions {
@@ -937,7 +938,7 @@ func (h *Hub) rebuildRenditionsLocked(f *feed) {
 		if slices.Equal(r.args, next) {
 			continue
 		}
-		list = append(list, kept{key, r.spec, r.viewers, r.seen})
+		list = append(list, kept{key, r.spec, r.viewers, r.seen, r.guess})
 		h.stopRenditionLocked(f, key)
 	}
 	// Two old keys can land on one encode, or on one already running.
@@ -945,6 +946,7 @@ func (h *Hub) rebuildRenditionsLocked(f *feed) {
 	for _, r := range f.renditions {
 		had[r] = true
 	}
+	touched := map[*rendition]struct{}{}
 	for _, k := range list {
 		r, err := h.ensureRenditionLocked(f, k.spec)
 		if err != nil {
@@ -956,10 +958,15 @@ func (h *Hub) rebuildRenditionsLocked(f *feed) {
 			if k.seen.After(r.seen) {
 				r.seen = k.seen
 			}
+			// A watch on either encode means this one is no longer a guess.
+			if k.viewers > 0 || !k.guess {
+				r.guess = false
+			}
 		} else {
-			r.viewers, r.seen = k.viewers, k.seen
+			r.viewers, r.seen, r.guess = k.viewers, k.seen, k.guess
 			had[r] = true
 		}
+		touched[r] = struct{}{}
 		if now := r.spec.Key(); now != k.key {
 			if f.moved == nil {
 				f.moved = map[string]string{}
@@ -967,6 +974,18 @@ func (h *Hub) rebuildRenditionsLocked(f *feed) {
 			f.moved[k.key] = now
 			delete(f.moved, now)
 		}
+	}
+	// stopRenditionLocked already cancelled the old timer. A replacement
+	// nobody is watching has to arm idle on the key it runs under now.
+	for r := range touched {
+		if r.viewers == 0 {
+			h.idleLocked(f.channel.ID, r.spec.Key(), r)
+		} else {
+			stopTimer(&r.idle)
+		}
+	}
+	if len(list) > 0 {
+		h.dropIfUnusedLocked(f)
 	}
 }
 
