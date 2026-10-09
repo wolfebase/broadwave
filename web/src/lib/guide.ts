@@ -142,3 +142,47 @@ export function dayLabel(iso: string, now: number): string {
   if (diff === 1) return "Tomorrow";
   return d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
 }
+
+export type GuideFocus = { row: number; id: number };
+
+// id 0 means the keyboard has not adopted a channel yet. A later render
+// clamps the index and takes that row's id. Any other id is followed when
+// the row list shrinks; a missing id keeps the clamped index and adopts it.
+export function keptRow(rows: readonly { id: number }[], focus: GuideFocus): GuideFocus {
+  if (rows.length === 0) return { row: 0, id: focus.id };
+  const match = focus.id === 0 ? -1 : rows.findIndex((row) => row.id === focus.id);
+  if (match >= 0) return { row: match, id: focus.id };
+  const row = Math.max(0, Math.min(rows.length - 1, focus.row));
+  return { row, id: rows[row].id };
+}
+
+/** Phone portrait is the on-now list. Phone landscape uses the same grid as desktop and tv. */
+export function guideShowsGrid(layout: "desktop" | "tv" | "phone", landscape: boolean): boolean {
+  return layout !== "phone" || landscape;
+}
+
+export type GuideBox = { top: number; left: number; height: number; width: number };
+
+/** A measure after cleanup, or on a node React has already detached, must not write the viewport. */
+export function guideViewBox(
+  el: { isConnected: boolean; scrollTop: number; scrollLeft: number; clientHeight: number; clientWidth: number } | null,
+  alive: boolean,
+): GuideBox | null {
+  if (!alive || !el?.isConnected) return null;
+  return { top: el.scrollTop, left: el.scrollLeft, height: el.clientHeight, width: el.clientWidth };
+}
+
+/** The row from the latest list. The object the sheet opened with is only the fallback. */
+export function liveChannel<T extends { id: number }>(channels: readonly T[], channel: T): T {
+  return channels.find((row) => row.id === channel.id) ?? channel;
+}
+
+export type SearchRows<A, R> = { airings: A[]; recordings: R[] };
+
+/** Pending and failed searches show no rows. The previous list is not an argument, so it cannot be kept. */
+export function searchRows<A, R>(
+  next: { status: "pending" | "error" } | { status: "done"; airings: A[]; recordings: R[] },
+): SearchRows<A, R> {
+  if (next.status !== "done") return { airings: [], recordings: [] };
+  return { airings: next.airings, recordings: next.recordings };
+}

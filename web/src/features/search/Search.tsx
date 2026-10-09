@@ -4,7 +4,7 @@ import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { navigate, useRoute } from "../../app/router";
 import { cappedCss } from "../../lib/art";
-import { dayLabel, spanLabel } from "../../lib/guide";
+import { dayLabel, searchRows, spanLabel } from "../../lib/guide";
 import type { Recording, SearchAiring } from "../../types";
 import { SearchIcon } from "../../ui/icons";
 import { Atsc3Tag } from "../../ui/primitives";
@@ -62,10 +62,16 @@ export function SearchPage() {
   const [airings, setAirings] = useState<SearchAiring[]>([]);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [note, setNote] = useState("");
+  // The query those rows belong to. A newer query shows nothing until its own request finishes.
+  const [resultQuery, setResultQuery] = useState("");
 
   const typing = useRef(0);
 
-  const active = initial.trim().length >= 2;
+  const q = initial.trim();
+  const active = q.length >= 2;
+  const listed = searchRows<SearchAiring, Recording>(
+    active && q === resultQuery ? { status: "done", airings, recordings } : { status: "pending" },
+  );
 
   useEffect(() => () => window.clearTimeout(typing.current), []);
 
@@ -76,13 +82,20 @@ export function SearchPage() {
     search(q)
       .then((res) => {
         if (stop) return;
-        setAirings(res.airings);
         const playable = res.recordings.filter((rec) => !rec.missing);
-        setRecordings(playable);
-        setNote(res.airings.length === 0 && playable.length === 0 ? "Nothing matches." : "");
+        const next = searchRows({ status: "done", airings: res.airings, recordings: playable });
+        setAirings(next.airings);
+        setRecordings(next.recordings);
+        setNote(next.airings.length === 0 && next.recordings.length === 0 ? "Nothing matches." : "");
+        setResultQuery(q);
       })
       .catch((err: unknown) => {
-        if (!stop) setNote(err instanceof Error ? err.message : "Search failed.");
+        if (stop) return;
+        const next = searchRows<SearchAiring, Recording>({ status: "error" });
+        setAirings(next.airings);
+        setRecordings(next.recordings);
+        setNote(err instanceof Error ? err.message : "Search failed.");
+        setResultQuery(q);
       });
     return () => {
       stop = true;
@@ -119,12 +132,12 @@ export function SearchPage() {
           onChange={(event) => type(event.target.value)}
         />
       </form>
-      {active && note ? <p className="hint">{note}</p> : null}
-      {active && airings.length > 0 ? (
+      {active && q === resultQuery && note ? <p className="hint">{note}</p> : null}
+      {listed.airings.length > 0 ? (
         <section>
           <h2 className="section-title">Guide</h2>
           <ul className="search-list">
-            {airings.map((airing) => (
+            {listed.airings.map((airing) => (
               <li key={airing.id}>
                 <button
                   type="button"
@@ -168,11 +181,11 @@ export function SearchPage() {
           </ul>
         </section>
       ) : null}
-      {active && recordings.length > 0 ? (
+      {listed.recordings.length > 0 ? (
         <section>
           <h2 className="section-title">Recordings</h2>
           <ul className="search-list">
-            {recordings.map((rec) => (
+            {listed.recordings.map((rec) => (
               <li key={rec.id}>
                 <button type="button" className="search-rec" onClick={() => navigate(`/play?recording=${rec.id}`)}>
                   <SearchArt src={`/media/poster/${rec.id}`} boxW={84} boxH={48} fallback={`/media/art/channel/${rec.channelId}?w=320`} />

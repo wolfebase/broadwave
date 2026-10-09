@@ -1,16 +1,17 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { focusRing } from "../../app/remote";
 import { navigate } from "../../app/router";
-import { categoryLabel, categoryOf, guideSourceLine, isRecording, minutesLeft, progress, recordingKeys, spanLabel, dayLabel } from "../../lib/guide";
+import { categoryLabel, categoryOf, guideSourceLine, isRecording, liveChannel, minutesLeft, progress, recordingKeys, spanLabel, dayLabel } from "../../lib/guide";
 import type { Airing, Channel } from "../../types";
 import { CloseIcon, PlayIcon, RecordIcon, StarIcon } from "../../ui/icons";
 import { ArtFrame } from "../../ui/ArtFrame";
 import { ChannelBadge, LiveDot, Progress } from "../../ui/primitives";
 
 export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: Channel; airing?: Airing; onClose: () => void; onWatch: (c: Channel) => void }) {
-  const { now, planned, recordings, passes, record, recordSeries, recordOnce, removePass, favorite, stopRecord } = useData();
+  const { now, planned, recordings, passes, record, recordSeries, recordOnce, removePass, favorite, stopRecord, allChannels } = useData();
+  const shown = liveChannel(allChannels, channel);
   const player = usePlayer();
   const ref = useRef<HTMLDivElement>(null);
   const cat = categoryOf(airing);
@@ -23,9 +24,18 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
     : undefined;
   const upcoming = airing ? Date.parse(airing.start) > now : false;
 
+  const onCloseRef = useRef(onClose);
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
+  useEffect(() => {
+    const prev = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => focusRing(prev);
+  }, []);
+
   useEffect(() => {
     const root = ref.current;
-    const prev = document.activeElement as HTMLElement | null;
     const items = () =>
       [...(root?.querySelectorAll<HTMLElement>("button, a[href], input, select, textarea") ?? [])].filter((el) => !el.hidden && !el.hasAttribute("disabled"));
     const list = items();
@@ -33,7 +43,7 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== "Tab" || !root) return;
@@ -56,9 +66,8 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
-      focusRing(prev);
     };
-  }, [onClose]);
+  }, [channel.id, airing?.id]);
 
   return (
     <div className="sheet-layer" onClick={onClose}>
@@ -101,7 +110,7 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
           {guideSourceLine(airing?.guideSource) ? <p className="ps-sub">{guideSourceLine(airing?.guideSource)}</p> : null}
           <div className="ps-actions">
             {onNow ? (
-              <button type="button" className="btn primary" onClick={() => onWatch(channel)}>
+              <button type="button" className="btn primary" onClick={() => onWatch(shown)}>
                 <PlayIcon /> Watch
               </button>
             ) : null}
@@ -146,8 +155,8 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
                 {hasPass ? "Series is recording" : cat === "sports" ? "Record every airing" : "Record series"}
               </button>
             ) : null}
-            <button type="button" className="btn ghost" onClick={() => void favorite(channel)} aria-pressed={channel.favorite}>
-              <StarIcon filled={channel.favorite} /> {channel.favorite ? "Favorite" : "Add favorite"}
+            <button type="button" className="btn ghost" onClick={() => void favorite(shown)} aria-pressed={shown.favorite}>
+              <StarIcon filled={shown.favorite} /> {shown.favorite ? "Favorite" : "Add favorite"}
             </button>
           </div>
         </div>

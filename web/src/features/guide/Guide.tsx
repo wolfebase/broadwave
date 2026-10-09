@@ -10,7 +10,10 @@ import {
   categoryOf,
   emptyGuideLabel,
   guideCellId,
+  guideShowsGrid,
+  guideViewBox,
   isRecording,
+  keptRow,
   nextAfter,
   primeTime,
   progress,
@@ -67,7 +70,7 @@ export function Guide() {
   const [query, setQuery] = useState("");
   const [when, setWhen] = useState<"now" | "tonight">("now");
   const [sheet, setSheet] = useState<{ channel: Channel; airing?: Airing } | null>(null);
-  const [focus, setFocus] = useState<{ row: number; at: number }>({ row: 0, at: now });
+  const [focus, setFocus] = useState<{ row: number; at: number; id: number }>({ row: 0, at: now, id: 0 });
   const scrollRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ top: 0, left: 0, height: 800, width: 1200 });
   const [order, setOrder] = useState<number[]>(loadOrder);
@@ -75,6 +78,7 @@ export function Guide() {
   const scores = useScoreMap();
 
   const tv = layout === "tv";
+  const grid = guideShowsGrid(layout, landscape);
   const rowH = tv ? 96 : 68;
   const pxPerMin = tv ? 9.6 : 6.4;
   const channelW = tv ? 280 : 220;
@@ -123,6 +127,9 @@ export function Guide() {
     });
   }, [ordered, index, filter, query, now, keys]);
 
+  const kept = keptRow(rows, focus);
+  if (kept.row !== focus.row || kept.id !== focus.id) setFocus({ ...focus, row: kept.row, id: kept.id });
+
   const counts = useMemo(() => {
     const windowEnd = now + 4 * 60 * MIN;
     const out: Partial<Record<Category, number>> = {};
@@ -147,21 +154,28 @@ export function Guide() {
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const measure = () => setView({ top: el.scrollTop, left: el.scrollLeft, height: el.clientHeight, width: el.clientWidth });
+    let alive = true;
+    const measure = () => {
+      const box = guideViewBox(el, alive);
+      if (box) setView(box);
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     el.addEventListener("scroll", measure, { passive: true });
     return () => {
+      alive = false;
       ro.disconnect();
       el.removeEventListener("scroll", measure);
     };
-  }, [layout]);
+  }, [layout, grid]);
 
   useEffect(() => {
+    if (!grid) return;
     scrollToTime(now - 30 * MIN, "auto");
-    // Only on first mount and layout changes.
-  }, [layout]); // eslint-disable-line react-hooks/exhaustive-deps
+    // The scroller exists only while the grid is mounted. Layout still matters:
+    // desktop and tv share the grid but use different pixels per minute.
+  }, [layout, grid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // On a TV, back from the player the keys pick up on the channel that is playing.
   const placed = useRef(false);
@@ -227,7 +241,7 @@ export function Guide() {
   function move(row: number, at: number) {
     const r = Math.max(0, Math.min(rows.length - 1, row));
     const t = Math.max(origin, Math.min(end - MIN, at));
-    setFocus({ row: r, at: t });
+    setFocus({ row: r, at: t, id: rows[r]?.id ?? focus.id });
     const el = scrollRef.current;
     // A scroller that has not been laid out reports 0. Writing scrollLeft from that
     // parks the cursor off to the side, and nothing later puts it back.
@@ -244,7 +258,10 @@ export function Guide() {
     const target = e.target;
     if (!(target instanceof HTMLElement) || !target.closest(".guide-canvas")) return;
     const row = rows[focus.row];
-    if (!row) return;
+    if (!row) {
+      move(focus.row, focus.at);
+      return;
+    }
     const cur = airingAt(index, row.id, focus.at);
     const handled = () => e.preventDefault();
     switch (e.key) {
@@ -339,7 +356,7 @@ export function Guide() {
     if (dy !== 0) el.scrollTop += dy;
   }, [activeId, focus.row, focus.at, layout, view.width, view.height, channelW, headH]);
 
-  if (layout === "phone" && !landscape) {
+  if (!grid) {
     return (
       <div className="guide-page phone">
         <h1 className="sr-only">Guide</h1>
@@ -522,7 +539,7 @@ export function Guide() {
                       data-cat={cat}
                       style={{ left, width: w, paddingLeft: 14 + inset, ["--p" as string]: onNow ? progress(a, now) : 0 }}
                       onClick={() => {
-                        setFocus({ row: r, at: Math.max(now, Date.parse(a.start)) });
+                        setFocus({ row: r, at: Math.max(now, Date.parse(a.start)), id: c.id });
                         open(c, a);
                       }}
                       aria-label={`${a.title}, ${spanLabel(a)}, ${c.displayName}`}
