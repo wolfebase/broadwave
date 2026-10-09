@@ -31,17 +31,19 @@ public struct APIClient: Sendable {
         self.session = session
     }
 
-    static let decoder: JSONDecoder = {
-        let d = JSONDecoder()
-        d.dateDecodingStrategy = .custom { decoder in
+    /// A new decoder each call. JSONDecoder is not safe to share across tasks,
+    /// and the guide reload decodes on more than one.
+    static var decoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
             let raw = try decoder.singleValueContainer().decode(String.self)
             if let date = ISO8601DateFormatter.fractional.date(from: raw) ?? ISO8601DateFormatter.plain.date(from: raw) {
                 return date
             }
             throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Bad date \(raw)"))
         }
-        return d
-    }()
+        return decoder
+    }
 
     public func url(_ path: String) -> URL {
         URL(string: path, relativeTo: base)?.absoluteURL ?? base
@@ -138,7 +140,10 @@ public struct APIClient: Sendable {
     }
 
     public func search(_ query: String) async throws -> SearchResult {
-        let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        // urlQueryAllowed keeps & = + # ?, which would split the query or end it.
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&=+#?")
+        let q = query.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
         return try await send("GET", "/search?q=\(q)")
     }
 
@@ -303,6 +308,12 @@ public struct APIClient: Sendable {
     public func virtuals() async throws -> [VirtualChannel] {
         struct R: Decodable { var virtuals: [VirtualChannel] }
         return try await send("GET", "/virtuals", as: R.self).virtuals
+    }
+
+    /// Library channels with the slots they play over the next 48 hours.
+    public func virtualSchedule() async throws -> [ScheduledVirtual] {
+        struct R: Decodable { var virtuals: [ScheduledVirtual] }
+        return try await send("GET", "/virtuals/schedule", as: R.self).virtuals
     }
 
     public func createVirtual(number: String, name: String, recordings: [Int64]) async throws -> VirtualChannel {
@@ -607,13 +618,11 @@ public struct APIClient: Sendable {
 
     public func startScan(deviceID: String) async throws {
         struct R: Decodable { var scanning: Bool }
-        let id = deviceID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? deviceID
-        _ = try await send("POST", "/devices/\(id)/scan", body: [String: String](), as: R.self)
+        _ = try await send("POST", "/devices/\(Self.pathSegment(deviceID))/scan", body: [String: String](), as: R.self)
     }
 
     public func scanStatus(deviceID: String) async throws -> ScanProgress {
-        let id = deviceID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? deviceID
-        return try await send("GET", "/devices/\(id)/scan")
+        try await send("GET", "/devices/\(Self.pathSegment(deviceID))/scan")
     }
 
     public func storage() async throws -> StorageInfo {
@@ -718,26 +727,51 @@ public struct APIClient: Sendable {
         APIError(code: "http_\(status)", message: PlaybackOutage.requestFailed, status: status)
     }
 
-    /// One URL path segment. Backup names are filenames; a slash would address a different route.
+    /// One URL path segment. A slash, or a segment that is only `.` or `..`,
+    /// resolves onto a different route before the request leaves the device.
+    /// A normal filename keeps its dots, so `nightly.db` stays `nightly.db`.
     private static func pathSegment(_ name: String) -> String {
         var allowed = CharacterSet.urlPathAllowed
         allowed.remove(charactersIn: "/")
-        return name.addingPercentEncoding(withAllowedCharacters: allowed) ?? name
+        let encoded = name.addingPercentEncoding(withAllowedCharacters: allowed) ?? name
+        if encoded == "." || encoded == ".." {
+            return encoded.replacingOccurrences(of: ".", with: "%2E")
+        }
+        return encoded
     }
 }
 
 extension ISO8601DateFormatter {
-    nonisolated(unsafe) static let fractional: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
+    /// One formatter is not safe to share across tasks. Parsing and formatting lock.
+    static let fractional = LockedServerDate(fractionalSeconds: true)
+    static let plain = LockedServerDate(fractionalSeconds: false)
+}
 
-    nonisolated(unsafe) static let plain: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
-    }()
+/// ISO8601DateFormatter keeps mutable state. The kit parses dates on whatever
+/// task decoded the response, so each formatter takes a lock.
+final class LockedServerDate: @unchecked Sendable {
+    private let lock = NSLock()
+    private let formatter: ISO8601DateFormatter
+
+    init(fractionalSeconds: Bool) {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = fractionalSeconds
+            ? [.withInternetDateTime, .withFractionalSeconds]
+            : [.withInternetDateTime]
+        self.formatter = formatter
+    }
+
+    func date(from raw: String) -> Date? {
+        lock.lock()
+        defer { lock.unlock() }
+        return formatter.date(from: raw)
+    }
+
+    func string(from date: Date) -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return formatter.string(from: date)
+    }
 }
 
 private struct PreviewBody: Encodable {

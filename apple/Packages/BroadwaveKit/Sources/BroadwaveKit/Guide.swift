@@ -33,11 +33,11 @@ private func matches(_ re: NSRegularExpression, _ s: String) -> Bool {
 public extension Airing {
     /// The same rules as the web guide, so both clients tint and filter alike.
     var kind: Category {
-        let c = category ?? ""
+        let c = (category ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if matches(sportsWords, c) || (matches(sportsWords, title) && matches(versus, title)) {
             return .sports
         }
-        if c.localizedCaseInsensitiveContains("news") || title.localizedCaseInsensitiveContains("news") {
+        if c.localizedCaseInsensitiveContains("news") || title.range(of: #"\bnews\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
             return .news
         }
         if c.localizedCaseInsensitiveContains("movie") || c.localizedCaseInsensitiveContains("film") {
@@ -49,22 +49,29 @@ public extension Airing {
         return c.isEmpty ? .other : .series
     }
 
-    /// "Bears at Bills" as a matchup, when the listing names one.
+    /// "Harbor at Valley" as a matchup, when the listing names one.
+    /// A league prefix before a colon is dropped on either side, as the web does.
     var matchup: (String, String)? {
         let text = (subtitle.map { $0.range(of: #" (at|vs\.?|@) "#, options: [.regularExpression, .caseInsensitive]) != nil } ?? false) ? subtitle! : title
-        guard let r = text.range(of: #"\s+(at|vs\.?|@)\s+"#, options: [.regularExpression, .caseInsensitive]) else { return nil }
-        let clean: (Substring) -> String = { s in
-            let str = String(s)
-            if let colon = str.lastIndex(of: ":") {
-                return str[str.index(after: colon)...].trimmingCharacters(in: .whitespaces)
-            }
-            return str.trimmingCharacters(in: .whitespaces)
+        guard let re = try? NSRegularExpression(pattern: #"^(.*?)\s+(?:at|vs\.?|@)\s+(.*)$"#, options: [.caseInsensitive]),
+              let hit = re.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              hit.numberOfRanges == 3,
+              let left = Range(hit.range(at: 1), in: text),
+              let right = Range(hit.range(at: 2), in: text)
+        else { return nil }
+        return (Self.side(String(text[left])), Self.side(String(text[right])))
+    }
+
+    /// Drops a "NFL: " style prefix. The first colon wins, so a second one stays in the name.
+    private static func side(_ raw: String) -> String {
+        guard let range = raw.range(of: #"^.*?:\s*"#, options: .regularExpression) else {
+            return raw.trimmingCharacters(in: .whitespaces)
         }
-        return (clean(text[..<r.lowerBound]), clean(text[r.upperBound...]))
+        return String(raw[range.upperBound...]).trimmingCharacters(in: .whitespaces)
     }
 
     func minutesLeft(at date: Date) -> String {
-        let m = max(0, Int(end.timeIntervalSince(date) / 60))
+        let m = max(0, Int((end.timeIntervalSince(date) / 60).rounded()))
         return m >= 60 ? "\(m / 60)h \(m % 60)m left" : "\(m)m left"
     }
 }

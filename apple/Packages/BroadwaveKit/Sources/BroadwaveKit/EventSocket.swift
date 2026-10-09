@@ -59,6 +59,20 @@ public final class EventSocket {
         return ceiling / 2 + random * ceiling / 2
     }
 
+    /// Server clock minus local clock, in milliseconds, from one sample.
+    /// `best` is the shortest round trip kept so far and starts at infinity.
+    /// A round trip of zero, or a negative or huge one, means the local clock
+    /// did not move while the sample was out, so it is ignored. Keeping a zero
+    /// would pin `best` there, and a later sample could never replace it.
+    /// `best` still eases up, and a later sample can replace one that will not repeat.
+    nonisolated static func clockOffset(t0: Double, t1: Double, t2: Double, best: inout Double) -> Double? {
+        let rtt = t2 - t0
+        defer { best *= 1.01 }
+        guard rtt > 0, rtt < 10000, rtt <= best * 1.2 else { return nil }
+        best = min(rtt, best)
+        return t1 - (t0 + t2) / 2
+    }
+
     public static func nowMS() -> Double {
         Date().timeIntervalSince1970 * 1000
     }
@@ -294,14 +308,9 @@ public final class EventSocket {
             }
         }
         if type == "clock", let d = obj["data"] as? [String: Any], let t0 = d["t0"] as? Double, let t1 = d["t1"] as? Double {
-            let t2 = Self.nowMS()
-            let rtt = t2 - t0
-            // A negative or huge round trip means the local clock moved while the sample was out.
-            if rtt >= 0, rtt < 10000, rtt <= bestRTT * 1.2 {
-                bestRTT = min(rtt, bestRTT)
-                offset = t1 - (t0 + t2) / 2
+            if let next = Self.clockOffset(t0: t0, t1: t1, t2: Self.nowMS(), best: &bestRTT) {
+                offset = next
             }
-            bestRTT *= 1.01
         }
         handlers[type]?.values.forEach { $0(payload) }
     }
