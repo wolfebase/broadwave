@@ -13,6 +13,7 @@ import { readZoom, saveZoom, type PictureMode, type Zoom } from "../../picture";
 import { copy } from "../../strings";
 import type { Channel } from "../../types";
 import { saveSound, sleepDue, sleepSentence, sleepUntilFrom } from "./extras";
+import { ignoreHeldKey } from "./keys";
 import { ChevronIcon, InfoIcon, ListIcon, RecordIcon, SideBySideIcon, SyncIcon } from "../../ui/icons";
 import { Progress } from "../../ui/primitives";
 import { useDialogFocus } from "../../ui/useDialogFocus";
@@ -454,8 +455,7 @@ export function LivePlayer({
     };
     const fn = actions[k] ?? actions[k.toLowerCase()];
     if (!fn) return;
-    // A held C would flip twice, and Ctrl+C is Copy.
-    if (k.toLowerCase() === "c" && (event.repeat || event.metaKey || event.ctrlKey || event.altKey)) return;
+    if (ignoreHeldKey(k, event)) return;
     event.preventDefault();
     fn();
   }
