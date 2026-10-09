@@ -291,7 +291,7 @@ export function Play({
         else back(-delta);
       }}
       error={error}
-      note={card ? `Up next: ${nextLabel}` : undefined}
+      note={card ? `Up next: ${nextLabel}. Plays on its own.` : undefined}
       noteAction={
         card ? (
           <>
@@ -329,14 +329,14 @@ export function Play({
         <>
           <div className="segmented" role="group" aria-label="Picture size">
             {(["fit", "fill", "zoom"] as const).map((item) => (
-              <button key={item} type="button" className={zoom === item ? "seg on" : "seg"} onClick={() => chooseZoom(item)}>
+              <button key={item} type="button" className={zoom === item ? "seg on" : "seg"} aria-pressed={zoom === item} onClick={() => chooseZoom(item)}>
                 {item === "fit" ? "Fit" : item === "fill" ? "Fill" : "Zoom"}
               </button>
             ))}
           </div>
           <div className="segmented" role="group" aria-label="Break skipping">
             {(["auto", "button", "manual"] as const).map((item) => (
-              <button key={item} type="button" className={skipMode === item ? "seg on" : "seg"} onClick={() => chooseSkip(item)}>
+              <button key={item} type="button" className={skipMode === item ? "seg on" : "seg"} aria-pressed={skipMode === item} onClick={() => chooseSkip(item)}>
                 {item === "auto" ? "Skip auto" : item === "button" ? "Skip button" : "Manual"}
               </button>
             ))}
