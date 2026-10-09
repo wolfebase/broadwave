@@ -67,7 +67,8 @@ public extension Airing {
     }
 
     func minutesLeft(at date: Date) -> String {
-        let m = max(0, Int(end.timeIntervalSince(date) / 60))
+        // The web guide rounds. Truncating showed "0m left" for the last half-minute.
+        let m = max(0, Int((end.timeIntervalSince(date) / 60).rounded()))
         return m >= 60 ? "\(m / 60)h \(m % 60)m left" : "\(m)m left"
     }
 }
