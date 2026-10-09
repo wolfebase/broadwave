@@ -113,6 +113,25 @@ public struct GuideIndex: Sendable {
         let titled = list.filter { $0.title == recording.title && hasArt($0) }
         return closest(titled, to: recording.startedAt)
     }
+
+    func allAirings() -> [Airing] {
+        Array(byChannel.values.joined())
+    }
+}
+
+/// The 4-hour window plus either the 14-day tail, or the far listings already loaded when that tail does not arrive.
+enum GuideMerge {
+    static func listings(previous: [Airing], window: [Airing], tail: [Airing]?, horizon: Date) -> [Airing] {
+        var seen = Set(window.map(\.id))
+        var merged = window
+        // A missing tail is a failed fetch. Keep far listings already loaded. An empty tail is the server saying nothing is on later.
+        let extra = tail ?? previous.filter { $0.start >= horizon }
+        for airing in extra where !seen.contains(airing.id) {
+            seen.insert(airing.id)
+            merged.append(airing)
+        }
+        return merged
+    }
 }
 
 private func hasArt(_ airing: Airing) -> Bool {

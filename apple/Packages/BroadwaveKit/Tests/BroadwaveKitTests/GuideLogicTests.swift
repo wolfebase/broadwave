@@ -101,3 +101,15 @@ private func airing(_ title: String, category: String? = nil, subtitle: String? 
     #expect(abs(written.timeIntervalSinceNow) < 30)
     #expect(CatalogCache.load(serverID: "../outside", directory: dir)?.channels.isEmpty == true)
 }
+
+@Test func aFailedGuideTailKeepsListingsPastTheWindow() {
+    let now = Date(timeIntervalSince1970: 1_790_500_000)
+    let horizon = now.addingTimeInterval(4 * 3600)
+    let near = Airing(id: 1, channelId: 4, title: "Harbor Report", start: now, end: now.addingTimeInterval(1800))
+    let far = Airing(id: 2, channelId: 4, title: "Valley News", start: horizon.addingTimeInterval(3600), end: horizon.addingTimeInterval(7200))
+    let gone = Airing(id: 3, channelId: 4, title: "Night Desk", start: horizon.addingTimeInterval(-60), end: horizon.addingTimeInterval(1800))
+    let kept = GuideMerge.listings(previous: [near, far, gone], window: [near], tail: nil, horizon: horizon)
+    #expect(kept.map(\.id) == [1, 2])
+    let cleared = GuideMerge.listings(previous: [near, far], window: [near], tail: [], horizon: horizon)
+    #expect(cleared.map(\.id) == [1])
+}
