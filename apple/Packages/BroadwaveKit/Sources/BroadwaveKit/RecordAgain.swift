@@ -8,13 +8,19 @@ public enum RecordAgain: Sendable {
 
     /// "Records again Thu 7:00 PM.", with the date ("Thu, Oct 15") past six days out.
     public static func scheduled(_ start: Date, now: Date = Date(), locale: Locale = .current, timeZone: TimeZone = .current) -> String {
-        var style = Date.FormatStyle.dateTime.weekday(.abbreviated).hour().minute()
-        if start.timeIntervalSince(now) > 6 * 86400 {
-            style = style.month(.abbreviated).day()
+        // One format puts "at" between a date and a clock. The web joins them
+        // with a space.
+        let far = start.timeIntervalSince(now) > 6 * 86400
+        var day = Date.FormatStyle.dateTime.weekday(.abbreviated)
+        if far {
+            day = day.month(.abbreviated).day()
         }
-        style.locale = locale
-        style.timeZone = timeZone
-        return "Records again \(start.formatted(style))."
+        var clock = Date.FormatStyle.dateTime.hour().minute()
+        day.locale = locale
+        day.timeZone = timeZone
+        clock.locale = locale
+        clock.timeZone = timeZone
+        return "Records again \(start.formatted(day)) \(start.formatted(clock))."
     }
 
     /// Offered on a finished recording that lost enough signal, still has its

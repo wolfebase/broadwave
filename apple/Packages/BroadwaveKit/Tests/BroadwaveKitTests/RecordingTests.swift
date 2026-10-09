@@ -118,9 +118,10 @@ private final class AgainStub: URLProtocol, @unchecked Sendable {
     let start = Date(timeIntervalSince1970: 1_791_486_000)
     let said = RecordAgain.scheduled(start, now: start.addingTimeInterval(-86400), locale: Locale(identifier: "en_US"), timeZone: .gmt)
     #expect(said.replacingOccurrences(of: "\u{202F}", with: " ") == "Records again Thu 7:00 PM.")
-    // Past six days out, the weekday alone could be either week.
+    // Past six days out, the weekday alone could be either week. The web joins
+    // the date and the clock with a space, and does not insert "at".
     let far = RecordAgain.scheduled(start, now: start.addingTimeInterval(-8 * 86400), locale: Locale(identifier: "en_US"), timeZone: .gmt)
-    #expect(far.replacingOccurrences(of: "\u{202F}", with: " ").contains("Oct 8"))
+    #expect(far.replacingOccurrences(of: "\u{202F}", with: " ") == "Records again Thu, Oct 8 7:00 PM.")
 }
 
 @Test func aRecordingSaysWhatHappenedOnlyWhenItIsNotPlainlyDone() {
