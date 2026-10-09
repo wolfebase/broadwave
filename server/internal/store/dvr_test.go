@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -166,6 +167,36 @@ func TestATeamPassKeepsItsRulesWhenFollowedAgain(t *testing.T) {
 	}
 	if gone, _ := st.Passes(ctx); len(gone) != 0 {
 		t.Fatalf("not recording left %+v", gone)
+	}
+}
+
+func TestRecordingLooksUpItsRow(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	first, err := st.CreateRecording(ctx, Recording{Title: "Morning", Status: "complete", StartedAt: time.Now().Add(-2 * time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateRecording(ctx, Recording{Title: "Evening", Status: "complete", StartedAt: time.Now().Add(-time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetDuration(ctx, first, 1800); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SaveProgress(ctx, first, 40); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.Recording(ctx, first)
+	if err != nil || got.Title != "Morning" || got.Position != 40 || got.Duration != 1800 {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if _, err := st.Recording(ctx, first+100); err != sql.ErrNoRows {
+		t.Fatalf("missing recording: %v", err)
+	}
+	plan := queryPlan(t, st, recordingSelect+`
+WHERE r.id = ?`, first)
+	if !strings.Contains(plan, "PRIMARY KEY") || strings.Contains(plan, "SCAN") {
+		t.Fatalf("lookup scanned the library:\n%s", plan)
 	}
 }
 
