@@ -5,6 +5,7 @@ import { actionName } from "../../lib/actionName";
 import { copy } from "../../strings";
 import { lastSeenPhrase } from "../../time";
 import { deviceScans, showFirmware } from "./deviceCard";
+import { applySignalPoll, applyTunerPoll } from "./sourcePoll";
 export function Sources({
   devices,
   channels,
@@ -38,29 +39,34 @@ export function Sources({
   const [sourcesReady, setSourcesReady] = useState(false);
   const [encoder, setEncoder] = useState("");
   useEffect(() => {
-    let stop = false;
+    let ticket = 0;
+    let shown: TunerStatus[] = [];
     async function load() {
+      const mine = ++ticket;
+      let got: TunerStatus[] | null = null;
+      let encoderName: string | null = null;
+      let reported: SourceStatus[] | null;
       try {
         const res = await getTuners();
-        if (stop) return;
-        setTuners(res.tuners ?? []);
-        setEncoder(res.encoder ?? "");
+        got = res.tuners ?? [];
+        encoderName = res.encoder ?? "";
         const sources = await sourceStatuses();
-        if (!stop) {
-          setStatuses(sources.sources ?? []);
-          setSourcesReady(true);
-        }
+        reported = sources.sources ?? [];
       } catch {
-        if (!stop) {
-          setTuners([]);
-          setSourcesReady(true);
-        }
+        reported = null;
       }
+      const next = applyTunerPoll(mine, ticket, shown, got, reported);
+      if (!next) return;
+      shown = next.tuners;
+      setTuners(next.tuners);
+      if (encoderName != null) setEncoder(encoderName);
+      if (next.statuses != null) setStatuses(next.statuses);
+      setSourcesReady(true);
     }
     void load();
     const id = window.setInterval(() => void load(), 5000);
     return () => {
-      stop = true;
+      ticket += 1;
       window.clearInterval(id);
     };
   }, []);
@@ -509,18 +515,28 @@ function SignalCheck() {
   const [rows, setRows] = useState<ChannelSignal[]>([]);
   const [running, setRunning] = useState(false);
   const [note, setNote] = useState("");
-  const load = () => {
-    void getSignals()
-      .then((res) => {
-        setRows(res.channels ?? []);
-        setRunning(res.running);
-      })
-      .catch((err: Error) => setNote(err.message));
-  };
   useEffect(() => {
+    let ticket = 0;
+    const load = () => {
+      const mine = ++ticket;
+      void getSignals()
+        .then((res) => {
+          const next = applySignalPoll(mine, ticket, res.running, res.channels ?? []);
+          if (!next) return;
+          setRows(next.rows);
+          setRunning(next.running);
+        })
+        .catch((err: Error) => {
+          if (mine !== ticket) return;
+          setNote(err.message);
+        });
+    };
     load();
     const timer = window.setInterval(load, running ? 2000 : 15000);
-    return () => window.clearInterval(timer);
+    return () => {
+      ticket += 1;
+      window.clearInterval(timer);
+    };
   }, [running]);
   return (
     <div>
