@@ -568,6 +568,12 @@ const mosaicWait = 20 * time.Second
 // Jellyfin, and other apps that take one stream per channel. It copies the
 // mosaic's own segments, so every export shares the one encode.
 func (h *Hub) ExportMosaic(ctx context.Context, ids []int64, w io.Writer) error {
+	h.mu.Lock()
+	if h.exportCopies >= exportCap {
+		h.mu.Unlock()
+		return &ExportLimitError{Limit: exportCap}
+	}
+	h.mu.Unlock()
 	s, err := h.WatchMosaic(ctx, ids)
 	if err != nil {
 		return err
@@ -605,6 +611,20 @@ func (h *Hub) ExportMosaic(ctx context.Context, ids []int64, w io.Writer) error 
 				h.mosaicOut(s.Key)
 			}
 		}
+	}()
+	h.mu.Lock()
+	if h.exportCopies >= exportCap {
+		h.mu.Unlock()
+		return &ExportLimitError{Limit: exportCap}
+	}
+	h.exportCopies++
+	h.mu.Unlock()
+	defer func() {
+		h.mu.Lock()
+		if h.exportCopies > 0 {
+			h.exportCopies--
+		}
+		h.mu.Unlock()
 	}()
 	cmd := exec.CommandContext(ctx, h.FFmpeg, "-hide_banner", "-loglevel", "error",
 		"-live_start_index", "-2", "-i", playlist, "-map", "0", "-c", "copy", "-f", "mpegts", "pipe:1")
