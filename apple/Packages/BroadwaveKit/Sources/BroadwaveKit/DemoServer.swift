@@ -19,6 +19,7 @@ public final class DemoServer: @unchecked Sendable {
     private var favorites: [Int64: Bool] = [:]
     private var hidden: [Int64: Bool] = [:]
     private var settings: [String: String] = [:]
+    private var kept: [Int64: Bool] = [:]
     private var sockets: [ObjectIdentifier: DemoSocket] = [:]
     private var rooms: [String: DemoRoom] = [:]
 
@@ -310,7 +311,9 @@ public final class DemoServer: @unchecked Sendable {
         case ("GET", "/api/v1/airings"):
             return Self.ok(Self.json(["airings": airings(query: query)]))
         case ("GET", "/api/v1/recordings"):
-            return Self.ok(Data("{\"recordings\":[]}".utf8))
+            return Self.ok(Self.json(["recordings": keptRecordings()]))
+        case ("PUT", _) where path.hasPrefix("/api/v1/recordings/") && path.hasSuffix("/keep"):
+            return putKeep(path, body)
         case ("GET", "/api/v1/settings"):
             return Self.ok(Self.json(currentSettings()))
         case ("PUT", "/api/v1/settings"):
@@ -367,6 +370,8 @@ public final class DemoServer: @unchecked Sendable {
         "pictureMode": "broadcast",
         "bufferMinutes": "60",
         "writeNfo": "0",
+        "deleteWatchedDays": "0",
+        "makeRoom": "0",
     ]
 
     private func currentSettings() -> [String: String] {
@@ -417,9 +422,75 @@ public final class DemoServer: @unchecked Sendable {
             }
         case "bufferMinutes":
             value == "0" || value == "30" || value == "60" || value == "120" || value == "240"
+        case "makeRoom":
+            value == "0" || value == "1"
+        case "deleteWatchedDays":
+            if let n = Int(value), (0 ... 3650).contains(n), String(n) == value {
+                true
+            } else {
+                false
+            }
         default:
             false
         }
+    }
+
+    private struct KeptRow: Encodable {
+        var id: Int64
+        var channelId: Int64 = 1
+        var guideNumber = "4.1"
+        var title = "Kept"
+        var status = "complete"
+        var startedAt = "2026-10-09T12:00:00Z"
+        var keep: Bool?
+
+        /// A cleared flag is omitted, the same as the server's list.
+        func encode(to encoder: Encoder) throws {
+            var box = encoder.container(keyedBy: CodingKeys.self)
+            try box.encode(id, forKey: .id)
+            try box.encode(channelId, forKey: .channelId)
+            try box.encode(guideNumber, forKey: .guideNumber)
+            try box.encode(title, forKey: .title)
+            try box.encode(status, forKey: .status)
+            try box.encode(startedAt, forKey: .startedAt)
+            if keep == true {
+                try box.encode(true, forKey: .keep)
+            }
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, channelId, guideNumber, title, status, startedAt, keep
+        }
+    }
+
+    private func keptRecordings() -> [KeptRow] {
+        lock.lock()
+        let rows = kept
+        lock.unlock()
+        return rows.keys.sorted().map { id in
+            KeptRow(id: id, keep: rows[id] == true ? true : nil)
+        }
+    }
+
+    private func putKeep(_ path: String, _ body: Data) -> Data {
+        let prefix = "/api/v1/recordings/"
+        let suffix = "/keep"
+        guard path.hasPrefix(prefix), path.hasSuffix(suffix) else {
+            return Self.fail(404, "missing", "That recording is not in the list.")
+        }
+        let idText = path.dropFirst(prefix.count).dropLast(suffix.count)
+        guard let id = Int64(idText), id > 0 else {
+            return Self.fail(400, "bad", "That recording is not in the list.")
+        }
+        guard let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let keep = obj["keep"] as? Bool
+        else {
+            return Self.fail(400, "bad", "Say whether to keep it.")
+        }
+        lock.lock()
+        kept[id] = keep
+        lock.unlock()
+        return Self.ok(Self.json(["ok": true, "keep": keep]))
     }
 
     private func channels() -> [Channel] {

@@ -133,6 +133,33 @@ let demoMedia = URL(fileURLWithPath: #filePath)
     #expect(try await (client.settings())["writeNfo"] == "1")
     try await client.saveSettings(["writeNfo": "yes"])
     #expect(try await (client.settings())["writeNfo"] == "1")
+    #expect(before["makeRoom"] == "0")
+    #expect(before["deleteWatchedDays"] == "0")
+    try await client.saveSettings(["makeRoom": "1", "deleteWatchedDays": "14"])
+    let room = try await client.settings()
+    #expect(room["makeRoom"] == "1")
+    #expect(room["deleteWatchedDays"] == "14")
+    try await client.saveSettings(["makeRoom": "yes", "deleteWatchedDays": "week"])
+    let refused = try await client.settings()
+    #expect(refused["makeRoom"] == "1")
+    #expect(refused["deleteWatchedDays"] == "14")
+    try await client.saveSettings(["deleteWatchedDays": "3651"])
+    #expect(try await client.settings()["deleteWatchedDays"] == "14")
+}
+
+@Test func demoKeepRoundTrip() async throws {
+    let server = DemoServer()
+    let port = UInt16.random(in: 20000 ... 45000)
+    let origin = try #require(await server.prepare(port: port, media: demoMedia))
+    defer { server.stop() }
+    let client = APIClient(base: origin)
+    #expect(try await client.setKeep(recordingID: 7, true))
+    let listed = try await client.recordings()
+    #expect(listed.first { $0.id == 7 }?.keep == true)
+    #expect(listed.first { $0.id == 7 }?.title == "Kept")
+    #expect(try await client.setKeep(recordingID: 7, false) == false)
+    let again = try await client.recordings()
+    #expect(again.first { $0.id == 7 }?.keep == nil)
 }
 
 @Test func demoHiddenChannelLeavesTheGuideOnly() async throws {

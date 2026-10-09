@@ -417,6 +417,16 @@ public final class AppStore {
         }
     }
 
+    /// A kept recording is left out of watched clean-up and low-space clean-up.
+    /// False clears the flag; the server omits it on the next list.
+    public func setKeep(_ rec: Recording, _ keep: Bool) async throws {
+        guard let api else { return }
+        _ = try await api.setKeep(recordingID: rec.id, keep)
+        if let i = recordings.firstIndex(where: { $0.id == rec.id }) {
+            recordings[i].keep = keep ? true : nil
+        }
+    }
+
     public enum BulkAction: Sendable {
         case watched, unwatched, delete
     }

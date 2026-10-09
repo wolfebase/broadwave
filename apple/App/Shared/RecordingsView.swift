@@ -237,7 +237,7 @@ struct RecordingsView: View {
         }
     #endif
 
-    /// The row in one sentence, with the same facts it shows: status, date, size, length, Watched.
+    /// The row in one sentence, with the same facts it shows: status, date, size, length, Watched, Kept forever.
     private func recordingSpoken(_ rec: Recording) -> String {
         var parts: [String] = []
         if rec.isRecording {
@@ -356,6 +356,12 @@ struct RecordingsView: View {
             Button(rec.isWatched ? "Mark unwatched" : "Mark watched", systemImage: rec.isWatched ? "eye.slash" : "eye") {
                 act { try await store.setWatched(rec, !rec.isWatched) }
             }
+            // A toggle, so the menu shows a check on a kept recording instead of a second tap un-keeping it unseen.
+            Toggle("Keep forever", systemImage: "pin", isOn: Binding(
+                get: { rec.keep == true },
+                set: { on in act { try await store.setKeep(rec, on) } }
+            ))
+            .accessibilityIdentifier("keep-forever")
             Button("Make a channel", systemImage: "tv") {
                 makeChannel(rec)
             }
@@ -398,6 +404,9 @@ struct RecordingsView: View {
         }
         if !rec.isRecording, rec.isWatched {
             parts.append("Watched")
+        }
+        if !rec.isRecording, rec.keep == true {
+            parts.append("Kept forever")
         }
         return parts.joined(separator: " · ")
     }

@@ -37,6 +37,12 @@ struct SettingsView: View {
     @State private var bufferMinutes = "60"
     @State private var loadedBuffer = "60"
     @State private var bufferKnown = false
+    @State private var makeRoom = "0"
+    @State private var loadedMakeRoom = "0"
+    @State private var roomKnown = false
+    @State private var deleteWatchedDays = "0"
+    @State private var loadedDays = "0"
+    @State private var daysKnown = false
     @State private var sdPassword = ""
     @State private var tmdbKey = ""
     @State private var passwordSaved = false
@@ -427,6 +433,39 @@ struct SettingsView: View {
                 #endif
                     .onSubmit { flushServerText() }
             }
+            Picker("When space runs low", selection: Binding(
+                get: { makeRoom },
+                set: { next in
+                    guard roomKnown, next != makeRoom else { return }
+                    makeRoom = next
+                    flushServerText()
+                }
+            )) {
+                Text("Skip new recordings").tag("0")
+                Text("Delete the oldest watched").tag("1")
+            }
+            .disabled(!roomKnown)
+            .accessibilityIdentifier("make-room")
+            Text("Delete makes room before a new recording is skipped, oldest watched first. Unwatched and kept recordings stay.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Picker("Delete watched recordings", selection: Binding(
+                get: { deleteWatchedDays },
+                set: { days in
+                    guard daysKnown, days != deleteWatchedDays else { return }
+                    deleteWatchedDays = days
+                    flushServerText()
+                }
+            )) {
+                ForEach(Self.dayChoices(deleteWatchedDays), id: \.self) { days in
+                    Text(Self.dayLabel(days)).tag(days)
+                }
+            }
+            .disabled(!daysKnown)
+            .accessibilityIdentifier("delete-watched")
+            Text("Counts from when a recording was played to its end or marked watched. Recordings you keep forever stay.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Picker("Keep for recording from the start", selection: Binding(
                 get: { bufferMinutes },
                 set: { minutes in
@@ -599,6 +638,10 @@ struct SettingsView: View {
             let minutes = values["bufferMinutes"] ?? "60"
             bufferMinutes = Self.bufferChoices.contains(minutes) ? minutes : "60"
             loadedBuffer = bufferMinutes
+            makeRoom = values["makeRoom"] == "1" ? "1" : "0"
+            loadedMakeRoom = makeRoom
+            deleteWatchedDays = Self.watchedDays(values["deleteWatchedDays"])
+            loadedDays = deleteWatchedDays
             loadedUser = sdUser
             loadedLineup = sdLineup
             loadedGuide = guideURL
@@ -607,6 +650,8 @@ struct SettingsView: View {
             artSaved = values["tmdbKeySet"] == "1"
             guideKnown = true
             bufferKnown = true
+            roomKnown = true
+            daysKnown = true
         }
         guard !demo else { return }
         storage = try? await store.api?.storage()
@@ -651,6 +696,14 @@ struct SettingsView: View {
         if bufferMinutes != loadedBuffer, Self.bufferChoices.contains(bufferMinutes) {
             values["bufferMinutes"] = bufferMinutes
             loadedBuffer = bufferMinutes
+        }
+        if roomKnown, makeRoom != loadedMakeRoom, makeRoom == "0" || makeRoom == "1" {
+            values["makeRoom"] = makeRoom
+            loadedMakeRoom = makeRoom
+        }
+        if daysKnown, deleteWatchedDays != loadedDays, Self.watchedDays(deleteWatchedDays) == deleteWatchedDays {
+            values["deleteWatchedDays"] = deleteWatchedDays
+            loadedDays = deleteWatchedDays
         }
         let guide = guideURL.trimmingCharacters(in: .whitespacesAndNewlines)
         if guide != loadedGuide {
@@ -799,6 +852,30 @@ struct SettingsView: View {
 
 private extension SettingsView {
     static let bufferChoices = ["0", "30", "60", "120", "240"]
+
+    /// A saved day count, or "0" when the value is missing or not a whole number of days.
+    static func watchedDays(_ raw: String?) -> String {
+        guard let raw, let n = Int(raw), (0 ... 3650).contains(n), String(n) == raw else { return "0" }
+        return raw
+    }
+
+    /// The usual choices, plus a count saved from somewhere else, oldest first.
+    static func dayChoices(_ raw: String?) -> [String] {
+        let usual = ["0", "1", "3", "7", "14", "30", "60", "90"]
+        let now = watchedDays(raw)
+        if usual.contains(now) {
+            return usual
+        }
+        return (usual + [now]).sorted { (Int($0) ?? 0) < (Int($1) ?? 0) }
+    }
+
+    static func dayLabel(_ days: String) -> String {
+        switch days {
+        case "0": "Never"
+        case "1": "After 1 day"
+        default: "After \(days) days"
+        }
+    }
 }
 
 func storageSummary(_ info: APIClient.StorageInfo) -> String {

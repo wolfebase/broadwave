@@ -276,6 +276,15 @@ public struct APIClient: Sendable {
         _ = try await send("PUT", "/recordings/\(recordingID)/watched", body: B(watched: watched), as: Ok.self)
     }
 
+    /// Keeps a recording out of clean-up, or lets clean-up see it again.
+    /// The answer's `keep` is what the server stored.
+    @discardableResult
+    public func setKeep(recordingID: Int64, _ keep: Bool) async throws -> Bool {
+        struct B: Encodable { var keep: Bool }
+        struct Ok: Decodable { var keep: Bool }
+        return try await send("PUT", "/recordings/\(recordingID)/keep", body: B(keep: keep), as: Ok.self).keep
+    }
+
     /// Runs commercial detection and returns every marker the recording has after it.
     /// The server answers when detection ends, which takes minutes for a long recording.
     public func detectBreaks(recordingID: Int64) async throws -> [Marker] {

@@ -10,6 +10,17 @@ private func rec(status: String = "done", position: Double? = nil, duration: Dou
     )
 }
 
+@Test func aKeptRecordingDecodesAndAClearedOneOmitsKeep() throws {
+    let kept = try APIClient.decoder.decode(Recording.self, from: Data("""
+    {"id":4,"channelId":1,"guideNumber":"4.1","title":"Harbor Watch","status":"complete","startedAt":"2026-10-08T18:00:00Z","keep":true}
+    """.utf8))
+    #expect(kept.keep == true)
+    let clear = try APIClient.decoder.decode(Recording.self, from: Data("""
+    {"id":4,"channelId":1,"guideNumber":"4.1","title":"Harbor Watch","status":"complete","startedAt":"2026-10-08T18:00:00Z"}
+    """.utf8))
+    #expect(clear.keep == nil)
+}
+
 @Test func aRecordingIsWatchedLikeTheWebLibrary() {
     #expect(!rec().isWatched)
     #expect(!rec(position: 600, duration: 3600).isWatched)
