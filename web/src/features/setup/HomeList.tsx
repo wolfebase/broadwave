@@ -93,14 +93,14 @@ function PlaceAction({
 }) {
   if (place.action === "add") {
     return (
-      <button type="button" className="btn" disabled={busy} onClick={onAdd}>
+      <button type="button" className="btn" disabled={busy} aria-label={`Add ${place.name}`} onClick={onAdd}>
         Add
       </button>
     );
   }
   if (place.action === "use") {
     return (
-      <button type="button" className="btn" onClick={onUse}>
+      <button type="button" className="btn" aria-label={`Use ${place.name} as tuner`} onClick={onUse}>
         Use as tuner
       </button>
     );

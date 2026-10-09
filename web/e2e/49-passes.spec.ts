@@ -180,18 +180,18 @@ test("passes take keyword, category, day, and time rules, and keep an order", as
     if (route.request().method() !== "DELETE") return route.continue();
     return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ code: "not_found", message: "pass not found" }) });
   });
-  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await page.getByRole("button", { name: "Remove Titles with “late local news”", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveText("pass not found");
   expect((await passes(page)).find((p) => p.id === words.id)?.title).toBe("late local news");
   await page.unroute("**/api/v1/passes/*");
 
-  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await page.getByRole("button", { name: "Remove Titles with “late local news”", exact: true }).click();
   await expect(page.getByText("Titles with “late local news”")).toHaveCount(0);
   expect((await passes(page)).map((p) => p.title)).toEqual(["Sports"]);
 
   await page.getByRole("button", { name: "Remove Sports" }).click();
   await expect(page.getByText("Remove Sports (category)?")).toBeVisible();
-  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await page.getByRole("button", { name: "Remove Sports (category)", exact: true }).click();
   await expect(page.getByText(/A pass records every airing that matches/)).toBeVisible();
   expect(await passes(page)).toEqual([]);
 });
