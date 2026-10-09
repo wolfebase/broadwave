@@ -4,6 +4,7 @@ import { addSeriesPass, deletePass, orderPasses, previewPass, updatePass } from 
 import { useData } from "../../app/data";
 import { focusRing } from "../../app/remote";
 import { formatClock } from "../../time";
+import { reloadAfterOrder } from "./plan";
 
 const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -57,6 +58,7 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
   const dragFrom = useRef<number[]>([]);
   const dropped = useRef(false);
   const queue = useRef<Promise<void>>(Promise.resolve());
+  const orderN = useRef(0);
   const focusAfter = useRef<{ id: number; up: boolean } | null>(null);
   const [removing, setRemoving] = useState<number | null>(null);
   const [removeError, setRemoveError] = useState("");
@@ -130,7 +132,9 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
   const rows = order.map((id) => byId.get(id)).filter((p): p is Pass => Boolean(p));
 
   // Orders are sent one at a time, so quick presses land in the order made.
+  // The list is read back only after the last one, or the earlier read snaps the rows backward.
   function saveOrder(ids: number[]) {
+    const mine = ++orderN.current;
     setNote("");
     queue.current = queue.current
       .then(() => orderPasses(ids))
@@ -138,7 +142,9 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
         () => undefined,
         (err: unknown) => setNote(err instanceof Error ? err.message : "The order could not be saved."),
       );
-    void queue.current.then(onPasses);
+    void queue.current.then(() => {
+      if (reloadAfterOrder(mine, orderN.current)) onPasses();
+    });
   }
 
   function move(id: number, by: number) {

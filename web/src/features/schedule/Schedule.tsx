@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Pass, PlannedAiring, Recording } from "../../types";
 import { fixSchedule, getEvents, getSchedule, stopRecording } from "../../api";
 import { copy } from "../../strings";
 import { formatClock } from "../../time";
 import { Passes } from "./Passes";
+import { takeScheduleRead, takeScheduleWrite } from "./plan";
 import "./schedule.css";
 export function Schedule({
   recordings,
@@ -22,18 +23,21 @@ export function Schedule({
   const [events, setEvents] = useState<{ id: number; at: string; message: string }[]>([]);
   const [fixing, setFixing] = useState("");
   const [note, setNote] = useState("");
+  const planN = useRef(0);
+  const writeN = useRef(0);
   useEffect(() => {
-    let cancel = false;
+    const mine = ++planN.current;
+    const writeAt = writeN.current;
     void getSchedule()
       .then((res) => {
-        if (!cancel) {
-          setItems(res.items);
-          setTunerCount(res.tunerCount);
-        }
+        const next = takeScheduleRead(mine, planN.current, writeAt, writeN.current, res.items, res.tunerCount);
+        if (!next) return;
+        setItems(next.items);
+        setTunerCount(next.tunerCount);
       })
       .catch(() => undefined);
     return () => {
-      cancel = true;
+      planN.current += 1;
     };
   }, [passes, recordings]);
   useEffect(() => {
@@ -49,9 +53,10 @@ export function Schedule({
   }, [passes, recordings]);
   async function recordLater(item: PlannedAiring) {
     const alt = item.suggestion;
-    if (!alt) return;
-    const key = `${item.passId}-${item.airing.channelId}-${item.airing.start}`;
-    setFixing(key);
+    if (!alt || fixing) return;
+    const mine = ++writeN.current;
+    planN.current += 1;
+    setFixing("1");
     setNote("");
     try {
       const res = await fixSchedule({
@@ -61,19 +66,23 @@ export function Schedule({
         suggestionChannelId: alt.channelId,
         suggestionStart: alt.start,
       });
-      setItems(res.items);
-      setTunerCount(res.tunerCount);
-      onPasses();
+      const next = takeScheduleWrite(mine, writeN.current, res.items, res.tunerCount);
+      if (next) {
+        setItems(next.items);
+        setTunerCount(next.tunerCount);
+        onPasses();
+      }
     } catch (err) {
       // The later airing may have stopped fitting; show what fits now.
       const fresh = await getSchedule().catch(() => undefined);
-      if (fresh) {
-        setItems(fresh.items);
-        setTunerCount(fresh.tunerCount);
+      const next = takeScheduleWrite(mine, writeN.current, fresh?.items ?? null, fresh?.tunerCount ?? tunerCount);
+      if (next) {
+        setItems(next.items);
+        setTunerCount(next.tunerCount);
       }
-      setNote(err instanceof Error ? err.message : "That airing could not be scheduled.");
+      if (mine === writeN.current) setNote(err instanceof Error ? err.message : "That airing could not be scheduled.");
     } finally {
-      setFixing("");
+      if (mine === writeN.current) setFixing("");
     }
   }
   return (
@@ -87,7 +96,6 @@ export function Schedule({
       ) : (
         <ul className="source-list">
           {items.map((item) => {
-            const fixKey = `${item.passId}-${item.airing.channelId}-${item.airing.start}`;
             return (
               <li key={`${item.passId}-${item.airing.id}`} className="source-row">
                 <span className="ch-num">{formatDay(new Date(item.airing.start))}</span>
@@ -102,7 +110,7 @@ export function Schedule({
                     <button
                       type="button"
                       className="btn small schedule-fix"
-                      disabled={fixing === fixKey}
+                      disabled={fixing !== ""}
                       onClick={() => void recordLater(item)}
                     >
                       Record the later airing

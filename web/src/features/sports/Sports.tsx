@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { followTeam, getTeams } from "../../api";
+import { takeTeams } from "./follow";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { navigate } from "../../app/router";
@@ -62,9 +63,18 @@ export function Sports() {
   const [range, setRange] = useState<Range>("today");
   const [leagueFilter, setLeague] = useState("all");
   const [teams, setTeams] = useState<TeamFollow[]>([]);
+  const teamN = useRef(0);
   const board = useScoreboard();
   useEffect(() => {
-    getTeams().then((r) => setTeams(r.teams)).catch(() => setTeams([]));
+    const mine = ++teamN.current;
+    getTeams()
+      .then((r) => {
+        const next = takeTeams(mine, teamN.current, r.teams);
+        if (next) setTeams(next);
+      })
+      .catch(() => {
+        if (mine === teamN.current) setTeams([]);
+      });
   }, []);
   const keys = useMemo(() => recordingKeys(planned, recordings), [planned, recordings]);
 
@@ -182,13 +192,35 @@ export function Sports() {
                         if (mine?.record) return <span key={side} className="dim">Every {side} game</span>;
                         if (mine) {
                           return (
-                            <button key={side} type="button" className="btn small ghost" onClick={() => void followTeam({ ...mine, record: true }).then((r) => setTeams(r.teams))}>
+                            <button
+                              key={side}
+                              type="button"
+                              className="btn small ghost"
+                              onClick={() => {
+                                const mineN = ++teamN.current;
+                                void followTeam({ ...mine, record: true }).then((r) => {
+                                  const next = takeTeams(mineN, teamN.current, r.teams);
+                                  if (next) setTeams(next);
+                                });
+                              }}
+                            >
                               Record every {side} game
                             </button>
                           );
                         }
                         return (
-                          <button key={side} type="button" className="btn small ghost" onClick={() => void followTeam({ name: side, short: side, league: league(airing) }).then((r) => setTeams(r.teams))}>
+                          <button
+                            key={side}
+                            type="button"
+                            className="btn small ghost"
+                            onClick={() => {
+                              const mineN = ++teamN.current;
+                              void followTeam({ name: side, short: side, league: league(airing) }).then((r) => {
+                                const next = takeTeams(mineN, teamN.current, r.teams);
+                                if (next) setTeams(next);
+                              });
+                            }}
+                          >
                             Follow {side}
                           </button>
                         );
