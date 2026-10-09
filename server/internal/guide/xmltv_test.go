@@ -84,6 +84,37 @@ func TestPullURLReadsGzip(t *testing.T) {
 	}
 }
 
+func TestGuideInflateStopsAtTheCap(t *testing.T) {
+	prev := maxGuide
+	maxGuide = 64
+	t.Cleanup(func() { maxGuide = prev })
+
+	var gz bytes.Buffer
+	zw := gzip.NewWriter(&gz)
+	if _, err := zw.Write([]byte(strings.Repeat("x", 200))); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := inflateGuide(gz.Bytes(), "gzip", "guide.xml.gz"); err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Fatal(err)
+	}
+
+	if _, err := exec.LookPath("xz"); err != nil {
+		t.Skip("xz is not installed")
+	}
+	cmd := exec.Command("xz", "-c")
+	cmd.Stdin = strings.NewReader(strings.Repeat("a", 200))
+	payload, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := inflateXZ(payload); err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Fatal(err)
+	}
+}
+
 func TestPullURLReadsXZ(t *testing.T) {
 	if _, err := exec.LookPath("xz"); err != nil {
 		t.Skip("xz is not installed")

@@ -244,6 +244,10 @@ func (b *Bus) Clients() int {
 	return len(b.clients)
 }
 
+// maxClients is how many event sockets one server keeps. Past this the
+// next socket is closed, so one browser cannot pin the process.
+var maxClients = 128
+
 // ServeHTTP upgrades to the event socket.
 func (b *Bus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// The HTTP layer refuses other sites; a proxy may rewrite Host, so the
@@ -255,6 +259,10 @@ func (b *Bus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer conn.CloseNow()
 	c := &client{send: make(chan []byte, 64), rooms: map[string]bool{}, here: Presence{Addr: hostOnly(r.RemoteAddr)}}
 	b.mu.Lock()
+	if len(b.clients) >= maxClients {
+		b.mu.Unlock()
+		return
+	}
 	b.clients[c] = struct{}{}
 	b.mu.Unlock()
 	defer func() {

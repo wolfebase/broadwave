@@ -141,6 +141,9 @@ func fetchArt(ctx context.Context, rawURL string, width int) ([]byte, string, in
 	if err != nil {
 		return nil, "", 0, 0, err
 	}
+	if artTooLarge(cfg.Width, cfg.Height) {
+		return nil, "", 0, 0, fmt.Errorf("this picture is too large")
+	}
 	img, _, err := image.Decode(bytes.NewReader(raw))
 	if err != nil {
 		return nil, "", 0, 0, err
@@ -157,6 +160,17 @@ func fetchArt(ctx context.Context, rawURL string, width int) ([]byte, string, in
 		return nil, "", 0, 0, err
 	}
 	return buf.Bytes(), "image/jpeg", cfg.Width, cfg.Height, nil
+}
+
+// A picture header can claim a huge size in a few bytes. Decoding that
+// allocates width times height, so refuse it first.
+func artTooLarge(w, h int) bool {
+	const maxSide = 8192
+	const maxPixels = 8 << 20
+	if w < 1 || h < 1 || w > maxSide || h > maxSide {
+		return true
+	}
+	return int64(w)*int64(h) > maxPixels
 }
 
 func fitWidth(src image.Image, maxW int) image.Image {
