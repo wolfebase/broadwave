@@ -413,21 +413,21 @@ func (s *Server) setWatched(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Watched bool `json:"watched"`
+		Watched *bool `json:"watched"`
 	}
-	if err := decodeJSON(r, &body); err != nil && err != io.EOF {
+	if err := decodeJSON(r, &body); err != nil || body.Watched == nil {
 		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 	flag := 2
-	if body.Watched {
+	if *body.Watched {
 		flag = 1
 	}
 	if err := s.Store.SetWatched(r.Context(), id, flag); err != nil {
 		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "watched": body.Watched})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "watched": *body.Watched})
 }
 
 func (s *Server) moveRecording(w http.ResponseWriter, r *http.Request) {
@@ -492,17 +492,17 @@ func (s *Server) setKeep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Keep bool `json:"keep"`
+		Keep *bool `json:"keep"`
 	}
-	if err := decodeJSON(r, &body); err != nil {
+	if err := decodeJSON(r, &body); err != nil || body.Keep == nil {
 		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
-	if err := s.Store.SetKeep(r.Context(), id, body.Keep); err != nil {
+	if err := s.Store.SetKeep(r.Context(), id, *body.Keep); err != nil {
 		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "keep": body.Keep})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "keep": *body.Keep})
 }
 
 func (s *Server) skipAiring(w http.ResponseWriter, r *http.Request) {

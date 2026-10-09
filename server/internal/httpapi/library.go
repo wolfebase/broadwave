@@ -76,9 +76,9 @@ func (s *Server) saveProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Position float64 `json:"position"`
+		Position *float64 `json:"position"`
 	}
-	if err := decodeJSON(r, &body); err != nil || body.Position < 0 {
+	if err := decodeJSON(r, &body); err != nil || body.Position == nil || *body.Position < 0 {
 		httpError(w, "position required", http.StatusBadRequest)
 		return
 	}
@@ -86,11 +86,11 @@ func (s *Server) saveProgress(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
-	if err := s.Store.SaveProgress(r.Context(), id, body.Position); err != nil {
+	if err := s.Store.SaveProgress(r.Context(), id, *body.Position); err != nil {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"position": body.Position})
+	writeJSON(w, http.StatusOK, map[string]any{"position": *body.Position})
 }
 
 // recordAgain names the next airing of a recording's episode in the guide,

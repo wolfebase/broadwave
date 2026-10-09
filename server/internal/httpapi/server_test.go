@@ -302,6 +302,66 @@ func TestKeepForeverAndCleanUpSettings(t *testing.T) {
 	}
 }
 
+func TestOmittedRecordingFieldsAreRejected(t *testing.T) {
+	st := testStore(t)
+	ctx := context.Background()
+	id, err := st.CreateRecording(ctx, store.Recording{
+		Title: "Finale", GuideNumber: "4.1", Status: "complete",
+		Path: filepath.Join(t.TempDir(), "finale.ts"), StartedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetKeep(ctx, id, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SaveProgress(ctx, id, 40); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetWatched(ctx, id, 1); err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Broadwave")}}}).Handler()
+	put := func(path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPut, "/api/recordings/"+strconv.FormatInt(id, 10)+path, bytes.NewBufferString(body))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	for _, path := range []string{"/keep", "/progress", "/watched"} {
+		rec := put(path, `{}`)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s %d %s", path, rec.Code, rec.Body.String())
+		}
+	}
+	if rec := put("/watched", ``); rec.Code != http.StatusBadRequest {
+		t.Fatalf("empty watched %d %s", rec.Code, rec.Body.String())
+	}
+	got, err := st.Recording(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Keep || got.Position != 40 || got.Watched != 1 {
+		t.Fatalf("stored keep %v position %v watched %d", got.Keep, got.Position, got.Watched)
+	}
+	if rec := put("/keep", `{"keep":false}`); rec.Code != http.StatusOK {
+		t.Fatalf("clear keep %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := put("/progress", `{"position":0}`); rec.Code != http.StatusOK {
+		t.Fatalf("rewind %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := put("/watched", `{"watched":false}`); rec.Code != http.StatusOK {
+		t.Fatalf("unwatched %d %s", rec.Code, rec.Body.String())
+	}
+	got, err = st.Recording(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Keep || got.Position != 0 || got.Watched != 2 {
+		t.Fatalf("explicit values keep %v position %v watched %d", got.Keep, got.Position, got.Watched)
+	}
+}
+
 func TestMoveARecording(t *testing.T) {
 	st := testStore(t)
 	ctx := context.Background()
