@@ -18,7 +18,7 @@ Every live channel currently gets one ffmpeg transcode to H.264 and AAC. When on
 - Segments are CMAF (fMP4) with `-copyts`, so every rendition keeps the broadcast's timestamps. Browsers play fMP4 without transmuxing; with MPEG-TS, hls.js mis-mapped broadcast timestamps partway into a stream. The server reads each segment's first video time from its `tfdt`/`trun` boxes and stamps `EXT-X-PROGRAM-DATE-TIME` from one per-channel timeline, identical across renditions.
 - ffmpeg writes fragmented MP4, one fragment per keyframe, and the server packages it. A segment starts on a keyframe and runs at least half a second. A transcode is forced to the source's keyframes, and its keyframe interval is only a ceiling, so a copy of the same broadcast closes on the same frames. The newest fragment is listed as a part using that fragment's own duration. The first segment is served. The playlist advertises blocking reload and a skip boundary, and the server waits for the requested part.
 - VideoToolbox (Mac hosts) runs with `-a53cc 0`; its embedded caption SEI makes segments undecodable.
-- Captions (CEA-608/708) are preserved in every rendition.
+- Captions are decoded from the broadcast's CEA-608 (CC1) and served as WebVTT beside each rendition, including encodes that drop the caption SEI.
 
 ## Consequences
 

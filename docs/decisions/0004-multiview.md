@@ -8,7 +8,7 @@ Watch two or more live channels at once, aligned to the same wall-clock moment, 
 
 ## Design
 
-**Tiles are renditions.** An unfocused tile asks for `tile` (540p) or `360` (360p) and `audio: none`. Those renditions keep `-copyts`, 2-second keyframes, and CMAF, so they sit on the same timeline as the full channel. The focused tile uses the normal decision, including the original picture when the device can play it. Adding a tile starts a rendition; it does not restart the others.
+**Tiles are renditions.** An unfocused tile asks for `tile` (540p) or `360` (360p) and `audio: none`. Those renditions keep `-copyts` and CMAF, and they close on the broadcast's keyframes (`-force_key_frames source`), so they sit on the same timeline as the full channel. The focused tile uses the normal decision, including the original picture when the device can play it. Adding a tile starts a rendition; it does not restart the others.
 
 **Tuner budget.** `POST /api/v1/multiview/plan` takes channel ids and returns which ones fit. A known frequency costs one tuner no matter how many subchannels are in the set. A channel whose frequency has not been learned costs a tuner of its own. A frequency this server already has tuned is free. A link or a file does not take an antenna tuner. The blocked reason names what is already on.
 
@@ -16,7 +16,7 @@ Watch two or more live channels at once, aligned to the same wall-clock moment, 
 
 **Apple tiles are player layers.** Each tile is its own `AVPlayer`, not its own player controller. Mute, network priority, and `AVRoutingPlaybackArbiter` follow focus, so AirPlay takes the tile you are listening to. `AVPlaybackCoordinationMedium` is not attached: it seeks every player onto one timeline, and these are different live edges. The shared room already pauses them together.
 
-**Mosaic for one-stream screens.** A single ffmpeg `xstack` of 2 to 4 channels, keyed by its channel ids with the sound channel first (`4-12`), is for AirPlay, older devices, and other apps through the exports. It is a delivery shortcut, not the way the apps watch: tiles stay separate players with their own sync rooms. The mosaic reads each channel's shared tune like an export, so it costs no tuner a channel already has; it costs two pictures of the budget (software decode of every input and one 1080p60 encode). Its inputs drop their broadcast timestamps (no `-copyts`), since stations' clocks are unrelated and only arrival lines them up; tiles can sit up to one group of pictures apart.
+**Mosaic for one-stream screens.** A single ffmpeg `xstack` of 2 to 4 channels, keyed by its channel ids with the sound channel first (`4-12`), is for AirPlay, older devices, and other apps through the exports. It is a delivery shortcut, not the way the apps watch: tiles stay separate players in one multiview room. The mosaic reads each channel's shared tune like an export, so it costs no tuner a channel already has; it costs two pictures of the budget (software decode of every input and one 1080p60 encode). Its inputs drop their broadcast timestamps (no `-copyts`), since stations' clocks are unrelated and only arrival lines them up; tiles can sit up to one group of pictures apart.
 
 ## Consequences
 

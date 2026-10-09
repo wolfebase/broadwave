@@ -61,7 +61,7 @@ The recording finished, and the file is no longer in the recordings folder. It s
 
 The station's 3.0 channel is encrypted, so Broadwave plays and records the regular broadcast. Search, a link, and a multiview tile that name the encrypted channel all do this. The encrypted channel stays off the guide.
 
-In Settings the row reads "Encrypted (ATSC 3.0 DRM). Plays and records 5.1, the same station in ATSC 1.0." The number is that station's regular channel. A station with no regular broadcast reads "Encrypted (ATSC 3.0 DRM). Only the tuner maker's app can play it."
+On the web, Settings reads "Encrypted (ATSC 3.0 DRM). Plays and records 5.1, the same station in ATSC 1.0." The number is that station's regular channel. On iPhone, iPad, and Apple TV the same row reads "Encrypted (ATSC 3.0 DRM). It plays and records the same station in ATSC 1.0." A station with no regular broadcast reads "Encrypted (ATSC 3.0 DRM). Only the tuner maker's app can play it." on every client.
 
 ## A tuner that stopped answering
 

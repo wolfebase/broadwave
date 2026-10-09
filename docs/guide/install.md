@@ -48,7 +48,7 @@ curl -fsSLO https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/do
 docker compose pull && docker compose up -d
 ```
 
-Set `TZ` in `compose.yaml` first. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Remove the `devices` lines when `/dev/dri` is missing. On Unraid, leave `PUID` at 99 and `PGID` at 100.
+Set `TZ` in `compose.yaml` first. That file uses host networking, which is right on Linux. On Docker Desktop, use the published-port command above. Remove the `devices` lines when `/dev/dri` is missing. The file sets `PUID` to 99 and `PGID` to 100, which is right on Unraid. On another Linux host, set them to a user that exists there, or remove them to run as root.
 
 ## Unraid
 
@@ -64,7 +64,7 @@ To update by hand, pull the new image and recreate the container with the same f
 
 | Setting | What it does |
 | --- | --- |
-| `PUID`, `PGID` | The user and group that own the config folder and recordings. Leave them out to run as root. |
+| `PUID`, `PGID` | The user and group that own the config folder and recordings. The Compose file sets 99 and 100. Leave them out of a plain `docker run` to run as root. |
 | `UMASK` | Permissions for new files. Default `022`. |
 | `BROADWAVE_RECORDINGS` | The recordings folder, when it is not `/config/work/recordings`. |
 | `BROADWAVE_ENCODER` | `gpu` or `software`, to skip the automatic choice. |

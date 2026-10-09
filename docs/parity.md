@@ -2,13 +2,13 @@
 
 What each client can do. A cell that only the web has says why.
 
-iPad runs the iPhone app with the iPad's own layout, so its column matches iPhone's.
+iPad runs the iPhone app with the iPad's own layout. Where a column matches iPhone, the control is the same screen. Multiview is the exception: iPad shows four pictures, and iPhone shows two.
 
 ## Multiview
 
 Five layouts: Side by side and Small over big (2 pictures), One big and two (3), One big and three and Quad (4).
 
-Captured 2026-09-25 on staging `v0.8.0-33-g8ccb3e1-dirty`, encoder `h264_vaapi`. 5.1 and 62.1 share 533 MHz. 38.1 and 41.1 share 605 MHz. Four pictures, two tuners. Shots and clips are in `.evidence/mv6/` (not committed).
+Captured 2026-09-25 on staging `v0.8.0-33-g8ccb3e1-dirty`, encoder `h264_vaapi`. Four pictures on two tuners, with two subchannels sharing each frequency. Shots and clips are in `.evidence/mv6/` (not committed).
 
 | Layout | Web phone | Web desktop | Web TV | iPhone | iPad | Apple TV |
 | --- | --- | --- | --- | --- | --- | --- |
