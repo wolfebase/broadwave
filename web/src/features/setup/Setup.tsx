@@ -6,6 +6,7 @@ import { navigate } from "../../app/router";
 import { actionName } from "../../lib/actionName";
 import { copy } from "../../strings";
 import { ChevronIcon } from "../../ui/icons";
+import { noteAfterFetch } from "./fetchNote";
 import { HomeList } from "./HomeList";
 import "./setup.css";
 
@@ -177,8 +178,9 @@ export function Setup() {
                   .then((res) => {
                     setFeeds(res.found ?? []);
                     setFreeGuide(res.found?.length ? "" : res.guide);
+                    setNote((n) => noteAfterFetch(n, true, "No free-channel server answered."));
                   })
-                  .catch(() => setNote("No free-channel server answered."))
+                  .catch(() => setNote((n) => noteAfterFetch(n, false, "No free-channel server answered.")))
                   .finally(() => setBusy(false));
               }}
             >
