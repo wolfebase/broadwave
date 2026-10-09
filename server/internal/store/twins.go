@@ -320,6 +320,11 @@ func (s *Store) RecordingAirings(ctx context.Context, from, to time.Time) ([]Air
 	if err != nil {
 		return nil, err
 	}
+	return s.markSimulcasts(ctx, rows)
+}
+
+// markSimulcasts sets Simulcast on each copy that should not record.
+func (s *Store) markSimulcasts(ctx context.Context, rows []Airing) ([]Airing, error) {
 	chs, err := s.Channels(ctx, false)
 	if err != nil {
 		return nil, err

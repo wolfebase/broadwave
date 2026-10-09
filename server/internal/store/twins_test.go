@@ -214,6 +214,46 @@ func TestASimulcastRecordsOnTheShownChannel(t *testing.T) {
 	}
 }
 
+func TestATitlePassMarksTheSimulcastCopy(t *testing.T) {
+	s, ctx := openTwins(t)
+	got := byNumber(t, s, ctx)
+	c3, c1 := got["104.1"][0].ID, got["4.1"][0].ID
+	start := time.Now().Add(time.Hour).Truncate(time.Minute)
+	if err := s.InsertAirings(ctx, []Airing{
+		{ChannelID: c1, Title: "Football", Start: start, End: start.Add(3 * time.Hour)},
+		{ChannelID: c3, Title: "Football", Start: start, End: start.Add(3 * time.Hour)},
+		{ChannelID: c3, Title: "Only on 3.0", Start: start.Add(3 * time.Hour), End: start.Add(4 * time.Hour)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	from, to := start.Add(-time.Hour), start.Add(5*time.Hour)
+	wide, err := s.RecordingAirings(ctx, from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	narrow, err := s.RecordingAiringsFor(ctx, from, to, []Pass{{Title: "Football", Kind: "series", MatchKind: "title"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mark := map[int64]int64{}
+	for _, row := range wide {
+		if row.Title == "Football" {
+			mark[row.ChannelID] = row.Simulcast
+		}
+	}
+	if len(narrow) != 2 || len(mark) != 2 {
+		t.Fatalf("narrow %d wide football %d", len(narrow), len(mark))
+	}
+	for _, row := range narrow {
+		if row.Title != "Football" || row.Simulcast != mark[row.ChannelID] {
+			t.Fatalf("narrow %+v, wide %v", row, mark)
+		}
+	}
+	if mark[c1] == 0 && mark[c3] == 0 {
+		t.Fatal("neither copy was marked")
+	}
+}
+
 // The lineup names an encrypted 3.0 channel by its bare call sign and its 1.0
 // twin in each of the forms tuners use.
 func TestEachEncryptedChannelPlaysItsClearTwin(t *testing.T) {

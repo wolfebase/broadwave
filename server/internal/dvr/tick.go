@@ -29,7 +29,7 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 		}
 	}
 	// The other copy of a simulcast, or of a channel two tuners carry, is recorded once.
-	rows, err := st.RecordingAirings(ctx, now.Add(-time.Minute), now.Add(lead))
+	rows, err := st.RecordingAiringsFor(ctx, now.Add(-time.Minute), now.Add(lead), passes)
 	if err != nil {
 		return
 	}

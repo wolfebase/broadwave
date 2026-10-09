@@ -391,19 +391,36 @@ func (s *Store) Airings(ctx context.Context, from, to time.Time) ([]Airing, erro
 	return s.QueryAirings(ctx, AiringQuery{From: from, To: to})
 }
 
-// AiringQuery is one guide window. Channels and Teams narrow it. With neither
-// set, the result is every listing in the window, which is what
-// GET /airings?from&to has always returned.
+// AiringQuery is one guide window. Channels, Teams, and Titles narrow it.
+// With none of them set, the result is every listing in the window, which is
+// what GET /airings?from&to has always returned. Titles compare with NOCASE,
+// which folds ASCII letters only.
 type AiringQuery struct {
 	From, To time.Time
 	Channels []int64
 	Teams    []string
+	Titles   []string
 }
 
 // QueryAirings reads a guide window. A channel list uses airings_channel_start.
 // Team names use the airing_search FTS index, on the title and subtitle only,
 // so a day of listings is not scanned or returned to find one club's games.
 func (s *Store) QueryAirings(ctx context.Context, q AiringQuery) ([]Airing, error) {
+	// An OR of titles is planned on airings_starts and reads the whole window.
+	// One equality per query seeks airings_title_start.
+	if len(q.Titles) > 1 {
+		var rows []Airing
+		for _, title := range q.Titles {
+			one := q
+			one.Titles = []string{title}
+			got, err := s.QueryAirings(ctx, one)
+			if err != nil {
+				return nil, err
+			}
+			rows = append(rows, got...)
+		}
+		return dedupeAirings(rows), nil
+	}
 	sqlText, args, ok := airingSelect(q)
 	if !ok {
 		return []Airing{}, nil
@@ -413,6 +430,10 @@ func (s *Store) QueryAirings(ctx context.Context, q AiringQuery) ([]Airing, erro
 		return nil, err
 	}
 	defer rows.Close()
+	return scanAirings(rows)
+}
+
+func scanAirings(rows *sql.Rows) ([]Airing, error) {
 	var out []Airing
 	for rows.Next() {
 		var row Airing
@@ -460,7 +481,26 @@ func airingSelect(q AiringQuery) (string, []any, bool) {
 		}
 		where = append(where, "a.channel_id IN ("+strings.Join(marks, ",")+")")
 	}
-	return `SELECT ` + airingColumns + ` FROM ` + table + ` WHERE ` + strings.Join(where, " AND ") + ` ORDER BY a.starts_at`, args, true
+	// One title seeks airings_title_start. An OR of titles is planned on
+	// airings_starts instead, so QueryAirings asks for one title at a time.
+	// ORDER BY starts_at would do the same: the window index would answer
+	// the sort. Rows come back in index order, and the caller sorts a merge.
+	order := " ORDER BY a.starts_at"
+	if len(q.Titles) > 0 {
+		parts := make([]string, len(q.Titles))
+		for i, title := range q.Titles {
+			parts[i] = "a.title = ? COLLATE NOCASE"
+			args = append(args, title)
+		}
+		where = append(where, "("+strings.Join(parts, " OR ")+")")
+		order = ""
+	}
+	return `SELECT ` + airingColumns + ` FROM ` + table + ` WHERE ` + strings.Join(where, " AND ") + order, args, true
+}
+
+// airingAtSelect names the listing a once pass recorded: that channel, that start.
+func airingAtSelect() string {
+	return `SELECT ` + airingColumns + ` FROM airings a WHERE a.channel_id = ? AND a.starts_at = ?`
 }
 
 // SetAiringGames writes game ids for listings in the window and clears the rest of that window.

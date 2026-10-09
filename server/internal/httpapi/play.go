@@ -666,7 +666,7 @@ func (s *Server) loadSchedule(ctx context.Context) (scheduleSnap, error) {
 func (s *Server) planWith(ctx context.Context, passes []store.Pass) (scheduleSnap, error) {
 	now := time.Now()
 	end := now.Add(14 * 24 * time.Hour)
-	airings, err := s.Store.RecordingAirings(ctx, now.Add(-time.Minute), end)
+	airings, err := s.Store.RecordingAiringsFor(ctx, now.Add(-time.Minute), end, passes)
 	if err != nil {
 		return scheduleSnap{}, err
 	}
@@ -942,7 +942,7 @@ func (s *Server) upcomingSoon(ctx context.Context, watch store.SourceChannel, tu
 	}
 	from := now.Add(-time.Minute)
 	to := now.Add(31 * time.Minute)
-	airings, err := s.Store.RecordingAirings(ctx, from, to)
+	airings, err := s.Store.RecordingAiringsFor(ctx, from, to, passes)
 	if err != nil {
 		return nil
 	}
