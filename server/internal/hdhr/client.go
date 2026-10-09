@@ -3,6 +3,7 @@ package hdhr
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -199,7 +200,7 @@ func (c *Client) postScan(ctx context.Context, baseURL, action string) error {
 	}
 	res, err := c.httpClient().Do(req)
 	if err != nil {
-		return err
+		return dropRequest(err)
 	}
 	defer res.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 1<<20))
@@ -272,18 +273,28 @@ func (c *Client) getJSON(ctx context.Context, rawURL string, dest any) error {
 	}
 	res, err := c.httpClient().Do(req)
 	if err != nil {
-		return err
+		return dropRequest(err)
 	}
 	defer res.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(res.Body, 8<<20))
 	if err != nil {
-		return err
+		return dropRequest(err)
 	}
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s returned %s", rawURL, res.Status)
+		return fmt.Errorf("tuner returned %s", res.Status)
 	}
 	if err := json.Unmarshal(body, dest); err != nil {
-		return fmt.Errorf("%s: %w", rawURL, err)
+		return fmt.Errorf("tuner returned an unreadable response")
 	}
 	return nil
+}
+
+// dropRequest removes the request address. A lineup URL can carry DeviceAuth,
+// and the error is shown to the client and stored.
+func dropRequest(err error) error {
+	var uerr *url.Error
+	if errors.As(err, &uerr) && uerr.Err != nil {
+		return uerr.Err
+	}
+	return err
 }
