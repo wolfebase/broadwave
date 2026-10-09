@@ -95,6 +95,15 @@ func TestAiringSelectUsesTheIndex(t *testing.T) {
 	if plan := queryPlan(t, st, sqlText, args...); !strings.Contains(plan, "airings_channel_start") {
 		t.Fatalf("channel plan did not use the channel index:\n%s", plan)
 	}
+	q = AiringQuery{From: from, To: from.Add(time.Hour)}
+	sqlText, args, ok = airingSelect(q)
+	if !ok {
+		t.Fatal("expected a query")
+	}
+	plan := queryPlan(t, st, sqlText, args...)
+	if !strings.Contains(plan, "airings_starts") || strings.Contains(plan, "TEMP B-TREE") {
+		t.Fatalf("open window left the start index:\n%s", plan)
+	}
 }
 
 func queryPlan(t *testing.T, st *Store, query string, args ...any) string {
