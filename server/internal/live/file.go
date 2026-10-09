@@ -102,6 +102,13 @@ func graphStamp(g Graph) string {
 	return strings.Join(parts, "|")
 }
 
+// playStart is how long playback waits for the recording playlist.
+// A test shortens it. The encode is stopped when the wait ends.
+var playStart = 20 * time.Second
+
+// captionSpan bounds the sidecar caption pass.
+var captionSpan = 2 * time.Minute
+
 func playlistFresh(dir, stamp string) bool {
 	body, err := os.ReadFile(filepath.Join(dir, "graph.txt"))
 	if err != nil || strings.TrimSpace(string(body)) != stamp {
@@ -157,8 +164,17 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string, at f
 		h.dropFileEncode(id, cmd)
 		close(done)
 	}()
-	go extractCaptions(h.FFmpeg, abs, filepath.Join(dir, "captions.vtt"))
-	return waitPlaylistFile(playlist, id)
+	capCtx, capCancel := context.WithTimeout(context.Background(), captionSpan)
+	go func() {
+		defer capCancel()
+		extractCaptions(capCtx, h.FFmpeg, abs, filepath.Join(dir, "captions.vtt"))
+	}()
+	url, err := waitPlaylistFile(playlist, id)
+	if err != nil {
+		capCancel()
+		h.stopFileEncode(id)
+	}
+	return url, err
 }
 
 // PlayFollow transcodes a recording that is still being written.
@@ -217,15 +233,18 @@ func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, at
 		h.dropFileEncode(id, cmd)
 		close(done)
 	}()
-	return waitPlaylistFile(playlist, id)
+	url, err := waitPlaylistFile(playlist, id)
+	if err != nil {
+		// The follow copy sees the encode is no longer current and stops.
+		h.stopFileEncode(id)
+	}
+	return url, err
 }
 
-func extractCaptions(ffmpeg, path, dest string) {
-	if ffmpeg == "" || path == "" {
+func extractCaptions(ctx context.Context, ffmpeg, path, dest string) {
+	if ffmpeg == "" || path == "" || ctx.Err() != nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
 	cmd := exec.CommandContext(ctx, ffmpeg, "-hide_banner", "-loglevel", "error", "-i", path, "-map", "0:s:0", "-f", "webvtt", dest)
 	_ = cmd.Run()
 }
@@ -299,12 +318,19 @@ func (h *Hub) stopFileEncode(id int64) {
 }
 
 func waitPlaylistFile(playlist string, id int64) (string, error) {
-	deadline := time.Now().Add(20 * time.Second)
+	appeared := func() bool {
+		info, err := os.Stat(playlist)
+		return err == nil && info.Size() > 0
+	}
+	deadline := time.Now().Add(playStart)
 	for time.Now().Before(deadline) {
-		if info, err := os.Stat(playlist); err == nil && info.Size() > 0 {
+		if appeared() {
 			return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
 		}
 		time.Sleep(200 * time.Millisecond)
+	}
+	if appeared() {
+		return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
 	}
 	return "", fmt.Errorf("recording player did not start")
 }
