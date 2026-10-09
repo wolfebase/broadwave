@@ -31,6 +31,30 @@ func ResumeAt(position, duration float64) float64 {
 	return position
 }
 
+// ExportResume is where an export of a recording starts, in seconds.
+// A finished file seeks to the schedule point, clamped so the seek stays on
+// a picture. A growing file can be seeked only through media already on disk:
+// past that point ffmpeg finds nothing and the export ends empty. The copy
+// starts a moment behind the last byte so a picture is already there.
+func ExportResume(offset, written float64, growing bool) float64 {
+	if math.IsNaN(offset) || math.IsInf(offset, 0) || offset < resumeMin {
+		return 0
+	}
+	if !growing {
+		return ResumeAt(offset, written)
+	}
+	if math.IsNaN(written) || math.IsInf(written, 0) || written <= resumeMin {
+		return 0
+	}
+	if offset > written-resumeMin {
+		offset = written - resumeMin
+	}
+	if offset < resumeMin {
+		return 0
+	}
+	return offset
+}
+
 func writeFileOffset(dir string, at float64) error {
 	return os.WriteFile(filepath.Join(dir, "offset.txt"), []byte(strconv.FormatFloat(at, 'f', 3, 64)+"\n"), 0o644)
 }

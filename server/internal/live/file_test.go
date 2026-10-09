@@ -27,7 +27,7 @@ func TestFollowFileReadsBytesWrittenLater(t *testing.T) {
 	still.Store(true)
 	done := make(chan struct{})
 	go func() {
-		followFile(path, &buf, still.Load, 0)
+		followFile(path, &buf, still.Load, 0, nil)
 		close(done)
 	}()
 	time.Sleep(150 * time.Millisecond)
@@ -67,7 +67,7 @@ func TestFollowFileStartsAtTheResume(t *testing.T) {
 	still.Store(true)
 	done := make(chan struct{})
 	go func() {
-		followFile(path, &buf, still.Load, 10)
+		followFile(path, &buf, still.Load, 10, nil)
 		close(done)
 	}()
 	time.Sleep(150 * time.Millisecond)
@@ -90,6 +90,127 @@ func TestFollowFileStartsAtTheResume(t *testing.T) {
 	want := append(append(pcrTS(0x100, 10*90000), pcrTS(0x100, 15*90000)...), later...)
 	if !bytes.Equal(buf.Bytes(), want) {
 		t.Fatalf("copied %d bytes, want the resume and what was appended (%d)", buf.Len(), len(want))
+	}
+}
+
+// A splice resets the PCR. The backward step is not the end of the resume,
+// or the copy would start at the break instead of ten seconds into the file.
+func TestAClockResetDoesNotEndTheResume(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "show.ts")
+	reset := pcrTS(0x100, 0)
+	reset[5] |= 0x80
+	var raw []byte
+	raw = append(raw, pcrTS(0x100, 5*60*90000)...)
+	raw = append(raw, reset...)
+	raw = append(raw, pcrTS(0x100, 10*90000)...)
+	raw = append(raw, pcrTS(0x100, 12*90000)...)
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var buf bufferCloser
+	var still atomic.Bool
+	still.Store(true)
+	done := make(chan struct{})
+	go func() {
+		followFile(path, &buf, still.Load, 10, nil)
+		close(done)
+	}()
+	time.Sleep(200 * time.Millisecond)
+	still.Store(false)
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("follower did not finish")
+	}
+	want := append(pcrTS(0x100, 10*90000), pcrTS(0x100, 12*90000)...)
+	if !bytes.Equal(buf.Bytes(), want) {
+		t.Fatalf("copied %d bytes, want the clock after the reset (%d)", buf.Len(), len(want))
+	}
+}
+
+// A byte in front of the first sync hides every PCR when the reader stays on
+// a 188-byte grid from offset 0. The resume still starts at the clock.
+func TestAResumeSkipsAByteBeforeTheFirstPacket(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "show.ts")
+	raw := []byte{0x00}
+	raw = append(raw, pcrTS(0x100, 0)...)
+	raw = append(raw, pcrTS(0x100, 10*90000)...)
+	raw = append(raw, pcrTS(0x100, 12*90000)...)
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var buf bufferCloser
+	var still atomic.Bool
+	still.Store(true)
+	done := make(chan struct{})
+	go func() {
+		followFile(path, &buf, still.Load, 10, nil)
+		close(done)
+	}()
+	time.Sleep(200 * time.Millisecond)
+	still.Store(false)
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("follower did not finish")
+	}
+	want := append(pcrTS(0x100, 10*90000), pcrTS(0x100, 12*90000)...)
+	if !bytes.Equal(buf.Bytes(), want) {
+		t.Fatalf("copied %d bytes, want the resume (%d)", buf.Len(), len(want))
+	}
+}
+
+// The recording stopped before the resume clock. Playing those bytes under
+// the old offset would show the start of the show at the resume time.
+func TestAResumePastTheWrittenClockStartsAtTheBeginning(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "show.ts")
+	var raw []byte
+	raw = append(raw, pcrTS(0x100, 0)...)
+	raw = append(raw, pcrTS(0x100, 90000)...)
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var buf bufferCloser
+	var still atomic.Bool
+	var missed atomic.Bool
+	done := make(chan struct{})
+	go func() {
+		followFile(path, &buf, still.Load, 30, func() { missed.Store(true) })
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("follower did not finish")
+	}
+	if !missed.Load() {
+		t.Fatal("resume offset was left past the end of the file")
+	}
+	if !bytes.Equal(buf.Bytes(), raw) {
+		t.Fatalf("copied %d bytes, want the file from the start (%d)", buf.Len(), len(raw))
+	}
+}
+
+func TestMediaWrittenUsesTheFileClock(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "show.ts")
+	var raw []byte
+	for _, tick := range []uint64{0, 10 * 90000, 40 * 60 * 90000} {
+		raw = append(raw, pcrTS(0x100, tick)...)
+	}
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 9, 0, 50, 0, 0, time.UTC)
+	// Fifty minutes on the wall and forty on the file. Elapsed time alone
+	// would be 3000 and must not pass for the span.
+	started := now.Add(-50 * time.Minute)
+	if got := MediaWritten(path, started, now); got < 2390 || got > 2410 {
+		t.Fatalf("span %v, want the 40 minutes in the file", got)
+	}
+	// A clock reset looks like a day-long file a few minutes after the start.
+	if got := MediaWritten(path, now.Add(-2*time.Minute), now); got < 90 || got > 150 {
+		t.Fatalf("reset clock %v, want the two minutes it has been recording", got)
 	}
 }
 
