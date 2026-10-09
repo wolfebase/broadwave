@@ -1176,6 +1176,44 @@ func TestDeltaPlaylistSkipsTheHead(t *testing.T) {
 	}
 }
 
+// A part between two segments stays in the delta, and a discontinuity
+// sequence is not a break. The bytes are the contract for a scan that does
+// not rebuild the playlist as text.
+func TestDeltaPlaylistBytes(t *testing.T) {
+	in := "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:2\n" +
+		"#EXT-X-DISCONTINUITY-SEQUENCE:3\n#EXT-X-MEDIA-SEQUENCE:10\n" +
+		"#EXT-X-MAP:URI=\"init.mp4\"\n" +
+		"#EXT-X-PROGRAM-DATE-TIME:2026-10-09T12:00:00.000Z\n#EXTINF:2.000,\nseg0.m4s\n" +
+		"#EXT-X-PART:DURATION=0.500,URI=\"partA.m4s\"\n" +
+		"#EXT-X-DISCONTINUITY\n#EXT-X-PROGRAM-DATE-TIME:2026-10-09T12:00:02.000Z\n#EXTINF:2.000,\nseg1.m4s\n" +
+		"#EXT-X-PROGRAM-DATE-TIME:2026-10-09T12:00:04.000Z\n#EXTINF:2.000,\nseg2.m4s\n" +
+		"#EXT-X-PROGRAM-DATE-TIME:2026-10-09T12:00:06.000Z\n#EXTINF:2.000,\nseg3.m4s\n" +
+		"#EXT-X-PART:DURATION=0.500,URI=\"partOpen.m4s\"\n"
+	want := "#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:2\n" +
+		"#EXT-X-DISCONTINUITY-SEQUENCE:3\n#EXT-X-MEDIA-SEQUENCE:10\n" +
+		"#EXT-X-SKIP:SKIPPED-SEGMENTS=1\n#EXT-X-MAP:URI=\"init.mp4\"\n" +
+		"#EXT-X-PART:DURATION=0.500,URI=\"partA.m4s\"\n" +
+		"#EXT-X-DISCONTINUITY\n#EXT-X-PROGRAM-DATE-TIME:2026-10-09T12:00:02.000Z\n#EXTINF:2.000,\nseg1.m4s\n" +
+		"#EXT-X-PROGRAM-DATE-TIME:2026-10-09T12:00:04.000Z\n#EXTINF:2.000,\nseg2.m4s\n" +
+		"#EXT-X-PROGRAM-DATE-TIME:2026-10-09T12:00:06.000Z\n#EXTINF:2.000,\nseg3.m4s\n" +
+		"#EXT-X-PART:DURATION=0.500,URI=\"partOpen.m4s\"\n"
+	if got := string(DeltaPlaylist([]byte(in))); got != want {
+		t.Fatalf("delta bytes:\n%s", got)
+	}
+	if got := string(DeltaPlaylist([]byte(in + "\n"))); got != want {
+		t.Fatalf("trailing newline changed the delta:\n%s", got)
+	}
+	noSeq := strings.Replace(in, "#EXT-X-MEDIA-SEQUENCE:10\n", "", 1)
+	if got := string(DeltaPlaylist([]byte(noSeq))); got != noSeq {
+		t.Fatalf("missing media sequence must be unchanged:\n%s", got)
+	}
+	short := "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:0.500,\nseg00000.m4s\n"
+	raw := []byte(short)
+	if got := DeltaPlaylist(raw); string(got) != short || len(got) != len(raw) || &got[0] != &raw[0] {
+		t.Fatalf("a short playlist was copied:\n%s", got)
+	}
+}
+
 // A broadcast join often has sound before the first picture. ffmpeg keeps that
 // lead only in edit lists, which hls.js and Chrome ignore (sound played that
 // much late) and Safari honors (its buffer sat hours from the playhead). The

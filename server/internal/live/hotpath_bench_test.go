@@ -112,4 +112,30 @@ func BenchmarkStampSegmentTime(b *testing.B) {
 	b.Run("Tag", func(b *testing.B) { run(b, tagged) })
 }
 
+// BenchmarkDeltaPlaylist skips the head of a 90-minute playlist, which is
+// what a low-latency reload asks for on every part.
+func BenchmarkDeltaPlaylist(b *testing.B) {
+	const n = 2700
+	var src []byte
+	src = append(src, "#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:2\n"+
+		"#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES,CAN-SKIP-UNTIL=12.000\n"+
+		"#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"init.mp4\"\n"...)
+	for i := range n {
+		src = append(src, fmt.Sprintf(
+			"#EXT-X-PROGRAM-DATE-TIME:2026-10-09T12:%02d:%02d.000Z\n#EXTINF:2.000,\nseg%05d.m4s\n",
+			(i/30)%60, i%60, i)...)
+	}
+	if !bytes.Contains(DeltaPlaylist(src), []byte("#EXT-X-SKIP:")) {
+		b.Fatal("no skip")
+	}
+	b.ReportAllocs()
+	b.SetBytes(int64(len(src)))
+	b.ResetTimer()
+	for b.Loop() {
+		if len(DeltaPlaylist(src)) == 0 {
+			b.Fatal("empty")
+		}
+	}
+}
+
 var _ io.WriteCloser = discardCloser{}
