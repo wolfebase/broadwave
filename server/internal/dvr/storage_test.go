@@ -2,6 +2,7 @@ package dvr
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,11 +18,13 @@ type storageRig struct {
 	st  *store.Store
 	hub *live.Hub
 	dir string
+	cfg string
 }
 
 func newStorageRig(t *testing.T, settings map[string]string) *storageRig {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))
+	cfg := filepath.Join(t.TempDir(), "cfg")
+	st, err := store.Open(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +37,7 @@ func newStorageRig(t *testing.T, settings map[string]string) *storageRig {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return &storageRig{st: st, hub: &live.Hub{Dir: work}, dir: dir}
+	return &storageRig{st: st, hub: &live.Hub{Dir: work}, dir: dir, cfg: cfg}
 }
 
 // add makes a finished recording with a 100-byte file and .edl/.json beside it.
@@ -147,6 +150,31 @@ func TestWatchedRecordingsStayWhenTheSettingIsOff(t *testing.T) {
 	Tidy(context.Background(), r.st, r.hub, time.Now().Add(400*24*time.Hour))
 	if got := r.left(t); len(got) != 1 {
 		t.Fatalf("left %v", got)
+	}
+}
+
+func TestRewatchingFromTheStartIsKept(t *testing.T) {
+	r := newStorageRig(t, map[string]string{"deleteWatchedDays": "7"})
+	rec := r.add(t, "rewatching", 1, false, "")
+	ctx := context.Background()
+	marked := time.Now().Add(-10 * 24 * time.Hour).UTC().Format(time.RFC3339)
+	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(filepath.Join(r.cfg, "broadwave.db"))+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE recordings SET watched_at = ? WHERE id = ?`, marked, rec.ID); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.st.SaveProgress(ctx, rec.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	Tidy(ctx, r.st, r.hub, time.Now())
+	if got := r.left(t); !slices.Contains(got, "rewatching") {
+		t.Fatalf("started over from the beginning and was removed: %v", got)
 	}
 }
 

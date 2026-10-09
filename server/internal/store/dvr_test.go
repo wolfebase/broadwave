@@ -233,6 +233,40 @@ func TestTheRecordingListCarriesThePlayhead(t *testing.T) {
 	}
 }
 
+// Starting a recording over saves the playhead at 0. That save is still a play,
+// and clean-up reads it from this list.
+func TestRestartingAtTheBeginningKeepsThePlayTime(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	id, err := st.CreateRecording(ctx, Recording{Title: "Movie", Status: "complete", StartedAt: time.Now().Add(-2 * time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetDuration(ctx, id, 5400); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetWatched(ctx, id, 1); err != nil {
+		t.Fatal(err)
+	}
+	marked := time.Now().Add(-10 * 24 * time.Hour).UTC()
+	if _, err := st.db.ExecContext(ctx, `UPDATE recordings SET watched_at = ? WHERE id = ?`, marked.Format(time.RFC3339), id); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SaveProgress(ctx, id, 0); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := st.Recording(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Position != 0 || rec.ProgressAt == nil || time.Since(*rec.ProgressAt) > time.Minute {
+		t.Fatalf("position %v at %v", rec.Position, rec.ProgressAt)
+	}
+	if got := rec.WatchedSince(); !got.Equal(*rec.ProgressAt) || !got.After(marked) {
+		t.Fatalf("watched since %v, want the restart %v after the old mark %v", got, rec.ProgressAt, marked)
+	}
+}
+
 func TestWatchedAndKeepAreStored(t *testing.T) {
 	s, err := Open(t.TempDir())
 	if err != nil {
