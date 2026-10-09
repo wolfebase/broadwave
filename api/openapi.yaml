@@ -588,6 +588,12 @@ paths:
           name: hours
           schema: { type: integer, minimum: 1, maximum: 168, default: 48 }
           description: How far ahead to return listings when to is omitted. Kept for older clients.
+        - in: query
+          name: kind
+          schema: { type: string, enum: [sports] }
+          description: |
+            Only listings of this kind. sports is the apps' rule: a sports word in the category, or in a
+            title that names a matchup (vs, at, @). A server that predates it returns every kind.
       responses:
         "200":
           description: Guide listings in the window

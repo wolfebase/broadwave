@@ -561,6 +561,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mosaic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description One stream of 2 to 4 channels side by side (2) or in a grid (3 or 4), on a
+         *     1920x1080 picture at 59.94, with the first channel's sound. It is for screens
+         *     that take one stream: AirPlay, older devices, and other apps. Each channel
+         *     rides its channel's shared tune. A mosaic takes two pictures of the server's
+         *     picture budget. The answer comes once the playlist has its first segment.
+         *     Viewers of the same channels in the same order share one encode. Send
+         *     `POST /mosaic/{key}/stop` when done; a mosaic nobody fetches stops on its own.
+         *     The same stream is MPEG-TS at `GET /export/mosaic/{key}`.
+         */
+        post: operations["watchMosaic"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mosaic/{key}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["stopMosaic"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/signals": {
         parameters: {
             query?: never;
@@ -1561,6 +1603,15 @@ export interface components {
             /** @description Level the volume. Off keeps the original mix. */
             even?: boolean;
         };
+        MosaicSession: {
+            /** @description The channels joined by dashes, for example 4-12. */
+            key: string;
+            /** @description HLS playlist, relative to the server. */
+            playlist: string;
+            channelIds: number[];
+            encoder: string;
+            viewers: number;
+        };
         MultiviewPlan: {
             playable: {
                 /** Format: int64 */
@@ -1998,6 +2049,8 @@ export interface components {
             autoplay?: "0" | "1";
             /** @enum {string} */
             hdhrEmulate?: "0" | "1";
+            /** @description Mosaics listed as channels of their own in the M3U, XMLTV, and HDHomeRun exports: mosaic keys joined by commas, for example 4-12,1-2-3 (at most 8). They are numbered 990.1 and up in this order; a mosaic with a channel no longer in the lineup is left out. */
+            exportMosaics?: string;
             /** @enum {string} */
             setupComplete?: "0" | "1";
             /**
@@ -2807,6 +2860,11 @@ export interface operations {
                 channels?: string;
                 /** @description How far ahead to return listings when to is omitted. Kept for older clients. */
                 hours?: number;
+                /**
+                 * @description Only listings of this kind. sports is the apps' rule: a sports word in the category, or in a
+                 *     title that names a matchup (vs, at, @). A server that predates it returns every kind.
+                 */
+                kind?: "sports";
             };
             header?: never;
             path?: never;
@@ -3094,6 +3152,52 @@ export interface operations {
                 };
             };
             400: components["responses"]["Error"];
+        };
+    };
+    watchMosaic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Different channels, the sound channel first. */
+                    channelIds: number[];
+                };
+            };
+        };
+        responses: {
+            /** @description The running mosaic */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MosaicSession"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            503: components["responses"]["Error"];
+        };
+    };
+    stopMosaic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The `key` from the mosaic answer. */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Ok"];
         };
     };
     listSignals: {
