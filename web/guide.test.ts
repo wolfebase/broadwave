@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { guideCellId, guideShowsGrid, guideViewBox, keptRow, liveChannel, primeTime, searchRows } from "./src/lib/guide.ts";
+import { guideCellId, guideShowsGrid, guideSpan, guideViewBox, keptGuideWindow, keptRow, liveChannel, primeTime, searchRows } from "./src/lib/guide.ts";
 
 test("tonight is 8 PM, and the next day after that", () => {
   const afternoon = new Date(2026, 8, 26, 15, 0, 0).getTime();
@@ -72,6 +72,15 @@ test("liveChannel uses the refreshed row, including one the guide list hides", (
   assert.equal(liveChannel(all, opened).favorite, true);
   assert.equal(liveChannel(guide, opened), opened);
   assert.equal(liveChannel(all, { id: 9, favorite: false, hidden: false }).id, 9);
+});
+
+test("a refresh keeps the two weeks the guide already loaded", () => {
+  const now = Date.UTC(2026, 0, 15, 12, 0, 0);
+  const span = guideSpan(now);
+  assert.equal(span.from, new Date(now - 30 * 60_000).toISOString());
+  assert.equal(span.to, new Date(now + 4 * 60 * 60_000).toISOString());
+  assert.equal(span.restTo, new Date(now + 14 * 24 * 60 * 60_000).toISOString());
+  assert.deepEqual(keptGuideWindow(now), { from: span.from, to: span.restTo });
 });
 
 test("a search that is loading or failed does not keep rows", () => {

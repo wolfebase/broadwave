@@ -177,6 +177,21 @@ export function liveChannel<T extends { id: number }>(channels: readonly T[], ch
   return channels.find((row) => row.id === channel.id) ?? channel;
 }
 
+/** The near window paints first. The rest of the two weeks fills in after. */
+export function guideSpan(now = Date.now()) {
+  return {
+    from: new Date(now - 30 * 60_000).toISOString(),
+    to: new Date(now + 4 * 60 * 60_000).toISOString(),
+    restTo: new Date(now + 14 * 24 * 60 * 60_000).toISOString(),
+  };
+}
+
+/** A refresh keeps those two weeks. With no window the server returns two days. */
+export function keptGuideWindow(now = Date.now()): { from: string; to: string } {
+  const span = guideSpan(now);
+  return { from: span.from, to: span.restTo };
+}
+
 export type SearchRows<A, R> = { airings: A[]; recordings: R[] };
 
 /** Pending and failed searches show no rows. The previous list is not an argument, so it cannot be kept. */

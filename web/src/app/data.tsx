@@ -20,7 +20,8 @@ import {
   stopRecording,
 } from "../api";
 import { events } from "../lib/events";
-import { indexAirings, sortChannels, type AiringIndex } from "../lib/guide";
+import { LatestReads } from "../lib/latest";
+import { guideSpan, indexAirings, keptGuideWindow, sortChannels, type AiringIndex } from "../lib/guide";
 import { hasSnapshotFlag, loadSnapshot, saveSnapshot } from "../lib/snapshot";
 import type { Airing, Channel, ChannelPatch, Device, Pass, PlannedAiring, Recording, ServerInfo, Settings, StorageInfo, VirtualChannel } from "../types";
 
@@ -40,6 +41,8 @@ const defaults: Settings = {
 
 type Data = {
   ready: boolean;
+  /** This visit's channel list has arrived. A saved copy can be missing a channel added since. */
+  channelsReady: boolean;
   /** True once a cached snapshot or the first network window is on screen. */
   settled: boolean;
   /** Full-screen boot. Only the very first visit, before any snapshot exists. */
@@ -88,14 +91,6 @@ export function useData(): Data {
   return v;
 }
 
-function guideWindow(now = Date.now()) {
-  return {
-    from: new Date(now - 30 * 60_000).toISOString(),
-    to: new Date(now + 4 * 60 * 60_000).toISOString(),
-    restTo: new Date(now + 14 * 24 * 60 * 60_000).toISOString(),
-  };
-}
-
 function mergeAirings(current: Airing[], more: Airing[]): Airing[] {
   const seen = new Set(current.map((airing) => airing.id));
   const out = current.slice();
@@ -107,6 +102,7 @@ function mergeAirings(current: Airing[], more: Airing[]): Airing[] {
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
+  const [channelsReady, setChannelsReady] = useState(false);
   const [settled, setSettled] = useState(false);
   const [booting, setBooting] = useState(() => !hasSnapshotFlag());
   const [error, setError] = useState("");
@@ -130,38 +126,52 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const loading = useRef(false);
   const [freshAt, setFreshAt] = useState(0);
   const loadFailed = useRef(false);
+  // A slow read must not put a list back after a newer read has replaced it.
+  const reads = useRef(new LatestReads());
 
   const refresh = useCallback<Data["refresh"]>(async (what) => {
     const all = !what;
     const want = new Set(what ?? []);
+    const keys: string[] = [];
+    if (all || want.has("channels")) keys.push("channels");
+    if (all || want.has("devices")) keys.push("devices");
+    if (all || want.has("airings")) keys.push("airings");
+    if (all || want.has("recordings")) keys.push("recordings");
+    if (all || want.has("passes")) keys.push("passes", "planned");
+    if (all || want.has("virtuals")) keys.push("virtuals");
+    if (all) keys.push("settings", "server", "storage");
+    const still = reads.current.start(keys);
     const jobs: Promise<unknown>[] = [];
     if (all || want.has("channels")) {
       jobs.push(
         Promise.all([getChannels(true), getChannels(false)]).then(([g, a]) => {
+          if (!still("channels")) return;
           setChannels(sortChannels(g.channels));
           setAllChannels(sortChannels(a.channels));
+          setChannelsReady(true);
         }),
       );
     }
-    if (all || want.has("devices")) jobs.push(getDevices().then((r) => setDevices(r.devices)));
-    if (all || want.has("airings")) jobs.push(getAirings().then((r) => setAirings(r.airings)));
-    if (all || want.has("recordings")) jobs.push(getRecordings().then((r) => setRecordings(r.recordings)));
+    if (all || want.has("devices")) jobs.push(getDevices().then((r) => still("devices") && setDevices(r.devices)));
+    if (all || want.has("airings")) jobs.push(getAirings(keptGuideWindow()).then((r) => still("airings") && setAirings(r.airings)));
+    if (all || want.has("recordings")) jobs.push(getRecordings().then((r) => still("recordings") && setRecordings(r.recordings)));
     if (all || want.has("passes")) {
-      jobs.push(getPasses().then((r) => setPasses(r.passes)));
-      jobs.push(getSchedule().then((r) => setPlanned(r.items)).catch(() => undefined));
+      jobs.push(getPasses().then((r) => still("passes") && setPasses(r.passes)));
+      jobs.push(getSchedule().then((r) => still("planned") && setPlanned(r.items)).catch(() => undefined));
     }
-    if (all || want.has("virtuals")) jobs.push(getVirtuals().then((r) => setVirtuals(r.virtuals)));
+    if (all || want.has("virtuals")) jobs.push(getVirtuals().then((r) => still("virtuals") && setVirtuals(r.virtuals)));
     if (all) {
-      jobs.push(getSettings().then(setSettings));
+      jobs.push(getSettings().then((next) => still("settings") && setSettings(next)));
       jobs.push(
         getServer()
           .then((info) => {
+            if (!still("server")) return;
             setServer(info);
             setUpdate(info.update);
           })
           .catch(() => undefined),
       );
-      jobs.push(getStorage().then(setStorage).catch(() => undefined));
+      jobs.push(getStorage().then((next) => still("storage") && setStorage(next)).catch(() => undefined));
     }
     await Promise.all(jobs);
   }, []);
@@ -182,19 +192,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setBooting(false);
           setReady(true);
         }
+        // Taken before the awaits, so a favorite or a reconnect during boot is not overwritten.
+        const stillBoot = reads.current.start(["settings", "server", "channels", "airings", "recordings"]);
         const [nextSettings, info] = await Promise.all([getSettings(), getServer().catch(() => null)]);
-        setSettings(nextSettings);
-        if (info) {
+        if (stillBoot("settings")) setSettings(nextSettings);
+        if (info && stillBoot("server")) {
           setServer(info);
           setUpdate(info.update);
         }
         if (nextSettings.needsSetup === "1") {
           setReady(true);
+          setChannelsReady(true);
           setSettled(true);
           setBooting(false);
           return;
         }
-        const span = guideWindow();
+        const span = guideSpan();
         const [guideChannels, everyChannel, windowed, recs] = await Promise.all([
           getChannels(true),
           getChannels(false),
@@ -203,44 +216,61 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ]);
         const channelsNow = sortChannels(guideChannels.channels);
         const allNow = sortChannels(everyChannel.channels);
-        setChannels(channelsNow);
-        setAllChannels(allNow);
-        setAirings(windowed.airings);
-        setRecordings(recs.recordings);
-        setFreshAt(Date.now());
+        const wroteChannels = stillBoot("channels");
+        const wroteAirings = stillBoot("airings");
+        const wroteRecordings = stillBoot("recordings");
+        if (wroteChannels) {
+          setChannels(channelsNow);
+          setAllChannels(allNow);
+          setChannelsReady(true);
+        }
+        if (wroteAirings) setAirings(windowed.airings);
+        if (wroteRecordings) setRecordings(recs.recordings);
+        if (wroteChannels || wroteAirings || wroteRecordings) setFreshAt(Date.now());
         setSettled(true);
         setReady(true);
         setBooting(false);
-        void saveSnapshot({
-          channels: channelsNow,
-          allChannels: allNow,
-          airings: windowed.airings,
-          recordings: recs.recordings,
-          savedAt: Date.now(),
-        });
+        if (wroteChannels && wroteAirings && wroteRecordings) {
+          void saveSnapshot({
+            channels: channelsNow,
+            allChannels: allNow,
+            airings: windowed.airings,
+            recordings: recs.recordings,
+            savedAt: Date.now(),
+          });
+        }
         const idle = window.requestIdleCallback ?? ((cb: IdleRequestCallback) => window.setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 0 } as IdleDeadline), 400));
         idle(() => {
           void (async () => {
+            const airingsGen = reads.current.generation("airings");
             const rest = await getAirings({ from: span.to, to: span.restTo }).catch(() => null);
-            if (rest) {
+            if (rest && reads.current.generation("airings") === airingsGen) {
               setAirings((current) => {
                 const merged = mergeAirings(current, rest.airings);
-                void saveSnapshot({
-                  channels: channelsNow,
-                  allChannels: allNow,
-                  airings: merged,
-                  recordings: recs.recordings,
-                  savedAt: Date.now(),
-                });
+                if (wroteChannels && wroteRecordings) {
+                  void saveSnapshot({
+                    channels: channelsNow,
+                    allChannels: allNow,
+                    airings: merged,
+                    recordings: recs.recordings,
+                    savedAt: Date.now(),
+                  });
+                }
                 return merged;
               });
             }
             await refresh(["devices", "passes", "virtuals"]);
-            void getStorage().then(setStorage).catch(() => undefined);
+            const devicesGen = reads.current.generation("devices");
+            const storageGen = reads.current.generation("storage");
+            void getStorage()
+              .then((next) => {
+                if (reads.current.generation("storage") === storageGen) setStorage(next);
+              })
+              .catch(() => undefined);
             const found = await getDevices().catch(() => null);
-            if (found && found.devices.length === 0) {
+            if (found && reads.current.generation("devices") === devicesGen && found.devices.length === 0) {
               const again = await discover().catch(() => null);
-              if (again) setDevices(again.devices);
+              if (again && reads.current.generation("devices") === devicesGen) setDevices(again.devices);
               await refresh(["channels"]);
             }
           })();
@@ -249,6 +279,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setError(err instanceof Error ? err.message : "The server could not be reached.");
         loadFailed.current = true;
         setReady(true);
+        setChannelsReady(true);
         setSettled(true);
         setBooting(false);
       }
@@ -306,6 +337,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Data>(
     () => ({
       ready,
+      channelsReady,
       settled,
       booting,
       error,
@@ -332,6 +364,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh(["channels"]);
       },
       saveSettings: async (values) => {
+        reads.current.start(["settings", "storage", "server"]);
         setSettings(await putSettings(values));
         setStorage(await getStorage().catch(() => null));
         if ("checkUpdates" in values) {
@@ -383,6 +416,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       server,
       freshAt,
       rediscover: async (ip) => {
+        reads.current.start(["devices"]);
         try {
           const res = await discover(ip);
           setDevices(res.devices);
@@ -393,6 +427,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh(["channels"]);
       },
       forgetDevice: async (deviceId) => {
+        reads.current.start(["devices"]);
         try {
           const res = await removeDevice(deviceId);
           setDevices(res.devices);
@@ -403,7 +438,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh(["channels", "passes"]);
       },
     }),
-    [ready, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, storage, refresh, notices, dismissNotice, update, server, freshAt],
+    [ready, channelsReady, settled, booting, error, now, channels, allChannels, devices, airings, recordings, passes, planned, virtuals, settings, storage, refresh, notices, dismissNotice, update, server, freshAt],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
