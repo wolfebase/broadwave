@@ -18,4 +18,4 @@ Fill listings the tuner guide does not have, using the guide carried in the broa
 
 ## Consequences
 
-An antenna scan on 2026-09-24 found the channels the tuner can receive now. 14.1–14.16, 9.4, 43.3, and 46.7 were in an older lineup and were not found again, so they stay without a broadcast listing.
+An antenna scan on 2026-09-24 found the channels the tuner could receive then. Channels that were only in an older lineup were not found again, so they stay without a broadcast listing.

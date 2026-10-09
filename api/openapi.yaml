@@ -6,8 +6,8 @@ info:
     Live TV and DVR server for HDHomeRun tuners. This document is the contract for the
     web app and the iOS and tvOS apps; generated clients come from it.
 
-    Every route is served under `/api/v1`. The same routes are also mounted under `/api`
-    for the current web app and will be removed once it moves to `/api/v1`.
+    Every route is served under `/api/v1`. The same routes are also mounted under `/api`.
+    The web app and the Apple apps call `/api/v1`.
 
     Errors use one envelope: `{"code": "tuners_busy", "message": "...", ...details}`.
     Tuner stream URLs and tuner DeviceAuth are never returned.

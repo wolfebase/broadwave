@@ -28,13 +28,13 @@ Published input frame rates are 24p, 25p, 30p, 50p, and 60p. Field-rate output h
 
 Published HLS audio includes AAC, MP3, DTS, Dolby Digital, and Dolby Digital Plus. AC-3 and E-AC-3 are passthrough and the page says that path is device-specific. The same page says an app must always include an AAC stereo track beside any Dolby track, because some devices do not decode AC-3. A Broadwave rendition carries one audio codec. An AC-3-only playlist does not meet that sentence, so the first profile should not claim AC-3. The AAC stereo rendition is 160 kbps, inside the published 32–256 kbps range. The AAC column lists 2.0 only, and the page says multichannel AAC is not on every model, so do not ask for the 5.1 AAC rendition. The sample rate is not pinned in the rendition arguments. Unknown whether it is always 48 kHz, one of the two published rates (44.1 and 48).
 
-Two further notes on the segments we already write. The page recommends HLS chunks of 4 to 6 seconds. A footnote says live segments should be under 5 seconds, constant, and start on an IDR, and that matching media in other variants should line up. Ours are a constant 2 seconds and open on a keyframe. That matches the footnote and is shorter than the 4-to-6 recommendation. Unknown whether 2-second segments cause trouble. For live streams the page also says the app must stay at least 30 seconds away from the live edge. Seeking at live, for trick play, is described as a seek to 999999 seconds that the player clips to the current window. Our room targets are 6, 10, and 20 seconds behind real time (`lowest`, `balanced`, `stable`). All three are closer than 30 seconds. Unknown whether that line is enforced.
+Two further notes on the segments we already write. The page recommends HLS chunks of 4 to 6 seconds. A footnote says live segments should be under 5 seconds, constant, and start on an IDR, and that matching media in other variants should line up. Ours open on a keyframe and run at least half a second, one segment per group of pictures. Most stations send a group about a second long, which is shorter than the 4-to-6 recommendation. A station that sends a group longer than 1.5 seconds advertises a target of at least 4 seconds, and never lowers it. Unknown whether segments that short cause trouble. For live streams the page also says the app must stay at least 30 seconds away from the live edge. Seeking at live, for trick play, is described as a seek to 999999 seconds that the player clips to the current window. Our room targets are 6, 16, and 20 seconds behind real time (`lowest`, `balanced`, `stable`). All three are closer than 30 seconds. Unknown whether that line is enforced.
 
-Captions are not part of a first player. The HLS subtitle row does list WebVTT, which is the format the later caption work plans to add. A Roku player should not depend on captions until that exists.
+Captions already ship as WebVTT beside the video playlist. They are not part of a first Roku player, and that player should not depend on them until one is tried.
 
 ## Whole-Home Sync
 
-A sync room has one target. At server time T the screen should show anchor media time plus (T minus anchor server time) times the rate. Media time is the program date-time of the frame. The default room sits 10 seconds behind real time. Clients measure their offset from the server on the events WebSocket. The web and Apple engines nudge rate by up to 3 percent when drift is under a few hundred milliseconds. Past that, a client that is ahead pauses for the drift, and one that is behind seeks forward. They do not seek backward in a live buffer. The bar on a home network is about 50 milliseconds.
+A sync room has one target. At server time T the screen should show anchor media time plus (T minus anchor server time) times the rate. Media time is the program date-time of the frame. The default room is balanced, 16 seconds behind real time. Clients measure their offset from the server on the events WebSocket. The web engine nudges rate by up to 3 percent, and the Apple engine by 2 percent, when drift is under a few hundred milliseconds. Past that, a client that is ahead pauses for the drift, and one that is behind seeks forward. They do not seek backward in a live buffer. The bar on a home network is about 50 milliseconds.
 
 A Roku channel should not promise that.
 
@@ -44,9 +44,9 @@ What is documented on the Video node: `control` can pause and resume. `position`
 
 What blocks a lock:
 
-- Every current room target is inside the published 30-second gap from the live edge. A player that holds the Roku 30 seconds back cannot show the frame a screen at 10 seconds is showing. Pulling the whole room back to suit one Roku would make every other screen later. Do not do that without a measurement.
+- Every current room target is inside the published 30-second gap from the live edge. A player that holds the Roku 30 seconds back cannot show the frame a screen at 16 seconds is showing. Pulling the whole room back to suit one Roku would make every other screen later. Do not do that without a measurement.
 - The Video node reference does not document a playback-rate field. The few-percent trim the other engines use has no published equivalent. Do not invent one.
-- A forward seek in the default mode snaps to the previous keyframe. Keyframes are 2 seconds apart, so the miss can be almost 2 seconds. That cannot hold 50 milliseconds. Whether `accurate` works on this live HLS is unknown.
+- A forward seek in the default mode snaps to the previous keyframe. Groups of pictures are about a second apart on most stations, and longer on some, so the miss can be about that long. That cannot hold 50 milliseconds. Whether `accurate` works on this live HLS is unknown.
 - The "ahead" correction on the other clients is a pause, not a backward seek. Pause and resume exist. Whether a short pause on a live stream holds the timeline, jumps toward live, or drops media is unknown. The pause-buffer fields include an overflow flag, so a live pause is not guaranteed to keep what it had.
 - Whether `position` or `positionInfo` equals our program date-time is unknown. If the number is seconds from the start of the current window, the app cannot compute drift. The live-edge seek of 999999 seconds is a third clock. How to turn a program date-time into a `seek` value is unknown.
 - A half-second position tick cannot steer a 50-millisecond lock. How small `notificationInterval` can be, and whether the sample time is accurate when it arrives, is unknown.
@@ -67,7 +67,7 @@ Also leave recordings, group mode, captions, trick-play thumbnails, and channel-
 Unknown, and not to be filled in by guessing:
 
 - Whether the current muxed fMP4 playlist plays at all.
-- Whether 2-second segments, or 59.94, 29.97, and 23.976, are accepted.
+- Whether segments of about a second, or 59.94, 29.97, and 23.976, are accepted.
 - Whether an encode at or above the published 10 Mbps AVC cap is rejected.
 - The H.264 level our encodes write, and the AAC sample rate they write.
 - Whether AC-3 in this fMP4 plays on a device that can passthrough Dolby, given the playlist has no second AAC track.

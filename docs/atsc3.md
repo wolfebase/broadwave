@@ -21,7 +21,7 @@ A recording of a clear 3.0 channel keeps the broadcast's own packets. The Docker
 
 Some NextGen stations encrypt the broadcast (A3SA). The tuner marks those channels and will not send the stream. The license stays in the tuner maker's app, so Broadwave cannot decrypt them and does not try.
 
-When that station also sends a regular broadcast, Broadwave plays and records the regular one. The encrypted channel stays off the guide. Opening one of its shows from search, or the channel from a link, starts that broadcast, and the player says "The 3.0 version is encrypted. Showing the regular broadcast." In Settings the row reads "Encrypted (ATSC 3.0 DRM). Plays and records 5.1, the same station in ATSC 1.0." WTST on 115.1 is that kind of row: it plays and records as 5.1.
+When that station also sends a regular broadcast, Broadwave plays and records the regular one. The encrypted channel stays off the guide. Opening one of its shows from search, or the channel from a link, starts that broadcast, and the player says "The 3.0 version is encrypted. Showing the regular broadcast." On the web, Settings reads "Encrypted (ATSC 3.0 DRM). Plays and records 5.1, the same station in ATSC 1.0." On iPhone, iPad, and Apple TV the same row reads "Encrypted (ATSC 3.0 DRM). It plays and records the same station in ATSC 1.0." WTST on 115.1 is that kind of row: it plays and records as 5.1.
 
 A scheduled recording on the encrypted channel records the regular broadcast too.
 
