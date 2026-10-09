@@ -32,6 +32,9 @@ apple/Packages/*/.swiftpm/
 .ssh/
 __pycache__/
 
+# Generated docs site (docs/sitegen writes it).
+docs/sitegen/dist/
+
 # Picture-lab captures and stills are broadcast video. The results table is committed.
 docs/lab/samples/
 docs/lab/stills/
