@@ -388,11 +388,27 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 }
 
 func (s *Store) Airings(ctx context.Context, from, to time.Time) ([]Airing, error) {
-	rows, err := s.db.QueryContext(ctx, `
-SELECT id, channel_id, title, subtitle, description, category, starts_at, ends_at, program_id, is_new, image_url,
-	image_width, image_height, season, episode, episode_label, original_air, series_id, is_live, is_premiere, is_finale, rating, cast_list, game_id, guide_source
-FROM airings WHERE ends_at > ? AND starts_at < ? ORDER BY starts_at`,
-		from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
+	return s.QueryAirings(ctx, AiringQuery{From: from, To: to})
+}
+
+// AiringQuery is one guide window. Channels and Teams narrow it. With neither
+// set, the result is every listing in the window, which is what
+// GET /airings?from&to has always returned.
+type AiringQuery struct {
+	From, To time.Time
+	Channels []int64
+	Teams    []string
+}
+
+// QueryAirings reads a guide window. A channel list uses airings_channel_start.
+// Team names use the airing_search FTS index, on the title and subtitle only,
+// so a day of listings is not scanned or returned to find one club's games.
+func (s *Store) QueryAirings(ctx context.Context, q AiringQuery) ([]Airing, error) {
+	sqlText, args, ok := airingSelect(q)
+	if !ok {
+		return []Airing{}, nil
+	}
+	rows, err := s.db.QueryContext(ctx, sqlText, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -416,6 +432,35 @@ FROM airings WHERE ends_at > ? AND starts_at < ? ORDER BY starts_at`,
 		out = append(out, row)
 	}
 	return out, rows.Err()
+}
+
+const airingColumns = `a.id, a.channel_id, a.title, a.subtitle, a.description, a.category, a.starts_at, a.ends_at, a.program_id, a.is_new, a.image_url,
+	a.image_width, a.image_height, a.season, a.episode, a.episode_label, a.original_air, a.series_id, a.is_live, a.is_premiere, a.is_finale, a.rating, a.cast_list, a.game_id, a.guide_source`
+
+// airingSelect builds the guide query. ok is false when every team name was
+// too short to search: that must not fall through to the whole window.
+func airingSelect(q AiringQuery) (string, []any, bool) {
+	args := []any{q.From.UTC().Format(time.RFC3339), q.To.UTC().Format(time.RFC3339)}
+	where := []string{"a.ends_at > ?", "a.starts_at < ?"}
+	table := "airings a"
+	if len(q.Teams) > 0 {
+		match := teamMatch(q.Teams)
+		if match == "" {
+			return "", nil, false
+		}
+		table = "airing_search JOIN airings a ON a.id = airing_search.rowid"
+		where = append(where, "airing_search MATCH ?")
+		args = append(args, match)
+	}
+	if len(q.Channels) > 0 {
+		marks := make([]string, len(q.Channels))
+		for i, id := range q.Channels {
+			marks[i] = "?"
+			args = append(args, id)
+		}
+		where = append(where, "a.channel_id IN ("+strings.Join(marks, ",")+")")
+	}
+	return `SELECT ` + airingColumns + ` FROM ` + table + ` WHERE ` + strings.Join(where, " AND ") + ` ORDER BY a.starts_at`, args, true
 }
 
 // SetAiringGames writes game ids for listings in the window and clears the rest of that window.
