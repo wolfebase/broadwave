@@ -39,8 +39,13 @@ func TestExportResumeStaysOnMediaThatExists(t *testing.T) {
 	if got := ExportResume(17*60, 30*60, false); got != 17*60 {
 		t.Fatalf("finished file %v", got)
 	}
-	if got := ExportResume(17*60, 5*60, false); got != 298 {
+	// The schedule point is not in this file. The last two seconds would
+	// end the export immediately, so it starts at the beginning.
+	if got := ExportResume(17*60, 5*60, false); got != 0 {
 		t.Fatalf("finished file shorter than the schedule %v", got)
+	}
+	if got := ExportResume(299, 5*60, false); got != 298 {
+		t.Fatalf("near the end of the file %v", got)
 	}
 	// Seventeen minutes into a show that has forty minutes on disk.
 	if got := ExportResume(17*60, 40*60, true); got != 17*60 {
