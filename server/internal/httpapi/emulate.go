@@ -45,6 +45,15 @@ type Emulator struct {
 
 var lineEmulator Emulator
 
+func emulatorServer(hosts []string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              emulatorPort,
+		Handler:           rejectForeignHost(hosts, handler),
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
+}
+
 func SyncEmulator(st *store.Store, hub *live.Hub, hosts []string) {
 	if st == nil {
 		return
@@ -65,7 +74,7 @@ func SyncEmulator(st *store.Store, hub *live.Hub, hosts []string) {
 	if lineEmulator.srv != nil {
 		return
 	}
-	srv := &http.Server{Addr: emulatorPort, Handler: rejectForeignHost(hosts, newEmulatorMux(st, hub))}
+	srv := emulatorServer(hosts, newEmulatorMux(st, hub))
 	lineEmulator.srv = srv
 	go func() { _ = srv.ListenAndServe() }()
 }
