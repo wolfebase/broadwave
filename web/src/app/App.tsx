@@ -86,7 +86,7 @@ function Shell() {
   const player = usePlayer();
   const [online, setOnline] = useState(true);
   const recordingCount = recordings.filter((r) => r.status === "recording").length;
-  const fullPlayer = path === "/watch" && player.mode === "full" && !!player.channel;
+  const fullPlayer = !needsPair && path === "/watch" && player.mode === "full" && !!player.channel;
   const firstRun = ready && settings.needsSetup === "1";
   const immersive = path === "/play" || path === "/multiview" || (path === "/watch" && params.has("virtual")) || path === "/setup" || (firstRun && path !== "/diagnostics");
 

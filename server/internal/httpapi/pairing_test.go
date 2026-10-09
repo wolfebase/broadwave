@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -317,6 +318,81 @@ func TestOverlappingPollsDeliverTheTokenOnce(t *testing.T) {
 	}
 }
 
+func TestWatchTokenSeesPlaybackAndNotTheHouse(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	st := testStore(t)
+	if err := st.PutSettings(ctx, map[string]string{"pictureMode": "film", "autoplay": "0", "layout": "tv"}); err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st, Clock: func() time.Time { return now }}).Handler()
+	// Sign-in is off, so the house network can read playback with no token.
+	openPlay := call(t, h, http.MethodGet, "/api/v1/playback", "", "")
+	if openPlay.Code != http.StatusOK || !strings.Contains(openPlay.Body.String(), `"pictureMode":"film"`) {
+		t.Fatalf("open playback %d %s", openPlay.Code, openPlay.Body.String())
+	}
+	openSnap := call(t, h, http.MethodGet, "/api/v1/channels/4/reception", "", "")
+	if openSnap.Code != http.StatusOK {
+		t.Fatalf("open reception %d %s", openSnap.Code, openSnap.Body.String())
+	}
+	turned := call(t, h, http.MethodPut, "/api/v1/settings", `{"deviceAuth":"1"}`, "")
+	if turned.Code != http.StatusOK {
+		t.Fatalf("enable %d %s", turned.Code, turned.Body.String())
+	}
+	admin := jsonField(t, turned.Body.Bytes(), "deviceToken")
+	watchCode := call(t, h, http.MethodPost, "/api/v1/pair/code", `{"scopes":["watch"],"kind":"phone"}`, admin)
+	watch := jsonField(t, call(t, h, http.MethodPost, "/api/v1/pair/claim", `{"code":"`+jsonField(t, watchCode.Body.Bytes(), "code")+`","name":"Pocket","kind":"phone"}`, "").Body.Bytes(), "token")
+	recordCode := call(t, h, http.MethodPost, "/api/v1/pair/code", `{"scopes":["record"]}`, admin)
+	record := jsonField(t, call(t, h, http.MethodPost, "/api/v1/pair/claim", `{"code":"`+jsonField(t, recordCode.Body.Bytes(), "code")+`","name":"DVR","kind":"other"}`, "").Body.Bytes(), "token")
+
+	if got := call(t, h, http.MethodGet, "/api/v1/playback", "", ""); got.Code != http.StatusUnauthorized {
+		t.Fatalf("playback without a token %d", got.Code)
+	}
+	play := call(t, h, http.MethodGet, "/api/v1/playback", "", watch)
+	if play.Code != http.StatusOK || !strings.Contains(play.Body.String(), `"pictureMode":"film"`) || !strings.Contains(play.Body.String(), `"autoplay":"0"`) || !strings.Contains(play.Body.String(), `"layout":"tv"`) {
+		t.Fatalf("playback %d %s", play.Code, play.Body.String())
+	}
+	if strings.Contains(play.Body.String(), "guideUrl") || strings.Contains(play.Body.String(), "deviceAuth") || strings.Contains(play.Body.String(), "sdPassword") {
+		t.Fatalf("playback leaked settings %s", play.Body.String())
+	}
+	if got := call(t, h, http.MethodGet, "/api/v1/settings", "", watch); got.Code != http.StatusForbidden {
+		t.Fatalf("settings %d", got.Code)
+	}
+	for _, path := range []string{"/api/v1/tuners", "/api/v1/devices/health", "/api/v1/signals", "/api/v1/events"} {
+		if got := call(t, h, http.MethodGet, path, "", watch); got.Code != http.StatusForbidden {
+			t.Fatalf("%s %d", path, got.Code)
+		}
+	}
+	got := call(t, h, http.MethodGet, "/api/v1/channels/4/reception", "", watch)
+	if got.Code != http.StatusOK {
+		t.Fatalf("reception %d %s", got.Code, got.Body.String())
+	}
+	var snap struct {
+		FreeTuner    bool `json:"freeTuner"`
+		TunerAnswers bool `json:"tunerAnswers"`
+		SignalLost   bool `json:"signalLost"`
+	}
+	if err := json.Unmarshal(got.Body.Bytes(), &snap); err != nil {
+		t.Fatal(err)
+	}
+	if snap.FreeTuner || !snap.TunerAnswers || snap.SignalLost {
+		t.Fatalf("snap %+v", snap)
+	}
+	raw := got.Body.String()
+	for _, leak := range []string{"frequency", "firmware", "baseUrl", "target", "http://"} {
+		if strings.Contains(raw, leak) {
+			t.Fatalf("reception leaked %s in %s", leak, raw)
+		}
+	}
+	if bad := call(t, h, http.MethodGet, "/api/v1/channels/nope/reception", "", watch); bad.Code != http.StatusBadRequest {
+		t.Fatalf("bad id %d", bad.Code)
+	}
+	events := call(t, h, http.MethodGet, "/api/v1/events", "", record)
+	if events.Code != http.StatusOK || !strings.Contains(events.Body.String(), `"events"`) {
+		t.Fatalf("record events %d %s", events.Code, events.Body.String())
+	}
+}
+
 func TestPairingRateLimit(t *testing.T) {
 	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
 	h := (&Server{Store: testStore(t), Clock: func() time.Time { return now }}).Handler()
@@ -356,6 +432,21 @@ func TestRequiredScopeFailsClosed(t *testing.T) {
 	}
 	if got := requiredScope(http.MethodGet, "/api/v1/tuners"); got != store.ScopeAdmin {
 		t.Fatalf("tuners %s", got)
+	}
+	if got := requiredScope(http.MethodGet, "/api/v1/events"); got != store.ScopeRecord {
+		t.Fatalf("events %s", got)
+	}
+	if got := requiredScope(http.MethodGet, "/api/v1/playback"); got != store.ScopeWatch {
+		t.Fatalf("playback %s", got)
+	}
+	if got := requiredScope(http.MethodGet, "/api/v1/channels/4/reception"); got != store.ScopeWatch {
+		t.Fatalf("reception %s", got)
+	}
+	if got := requiredScope(http.MethodGet, "/api/v1/channels/4/extra/reception"); got != store.ScopeAdmin {
+		t.Fatalf("nested reception %s", got)
+	}
+	if got := requiredScope(http.MethodGet, "/api/v1/settings"); got != store.ScopeAdmin {
+		t.Fatalf("settings get %s", got)
 	}
 	if got := requiredScope(http.MethodPost, "/api/v1/virtuals"); got != store.ScopeRecord {
 		t.Fatalf("virtuals %s", got)

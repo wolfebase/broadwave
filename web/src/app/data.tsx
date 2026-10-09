@@ -10,6 +10,8 @@ import {
   getPasses,
   getRecordings,
   getSchedule,
+  getClientMe,
+  getPlayback,
   getServer,
   getSettings,
   getStorage,
@@ -19,7 +21,8 @@ import {
   startRecording,
   stopRecording,
 } from "../api";
-import { isForbidden, isUnauthorized, writeToken } from "../lib/deviceToken";
+import { isForbidden, isUnauthorized, onUnauthorized, settingsForWatcher, writeToken } from "../lib/deviceToken";
+import { navigate } from "./router";
 import { events } from "../lib/events";
 import { indexAirings, sortChannels, type AiringIndex } from "../lib/guide";
 import { hasSnapshotFlag, loadSnapshot, saveSnapshot } from "../lib/snapshot";
@@ -39,6 +42,11 @@ const defaults: Settings = {
   hdhrEmulate: "0",
   deviceAuth: "0",
 };
+
+async function watcherSettings(): Promise<Settings> {
+  const [playback, seat] = await Promise.all([getPlayback().catch(() => null), getClientMe().catch(() => null)]);
+  return settingsForWatcher(defaults, playback, seat?.auth ?? "");
+}
 
 type Data = {
   ready: boolean;
@@ -130,6 +138,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [virtuals, setVirtuals] = useState<VirtualChannel[]>([]);
   const [settings, setSettings] = useState<Settings>(defaults);
   const [needsPair, setNeedsPair] = useState(false);
+  useEffect(
+    () =>
+      onUnauthorized(() => {
+        setNeedsPair(true);
+        navigate("/pair");
+      }),
+    [],
+  );
   const [storage, setStorage] = useState<StorageInfo | null>(null);
   const [update, setUpdate] = useState<ServerInfo["update"]>();
   const [server, setServer] = useState<ServerInfo | null>(null);
@@ -172,9 +188,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
             setSettings(next);
             setNeedsPair(false);
           })
-          .catch((err) => {
+          .catch(async (err) => {
             if (isUnauthorized(err)) setNeedsPair(true);
-            else if (!isForbidden(err)) throw err;
+            else if (isForbidden(err)) setSettings(await watcherSettings());
+            else throw err;
           }),
       );
       jobs.push(
@@ -220,7 +237,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             return;
           }
           if (!isForbidden(err)) throw err;
-          nextSettings = defaults;
+          nextSettings = await watcherSettings();
         }
         const info = await getServer().catch(() => null);
         setSettings(nextSettings);

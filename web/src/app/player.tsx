@@ -27,7 +27,7 @@ export function usePlayer(): Player {
  * mini player, and one video element carries playback between the two.
  */
 export function PlayerProvider({ children }: { children: ReactNode }) {
-  const { channels, allChannels, ready } = useData();
+  const { channels, allChannels, ready, needsPair } = useData();
   const { path, params } = useRoute();
   const [channel, setChannel] = useState<Channel | null>(null);
   const back = useRef("/guide");
@@ -90,7 +90,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={value}>
       {children}
-      {playing && path !== "/multiview" ? (
+      {playing && path !== "/multiview" && !needsPair ? (
         <Suspense fallback={null}>
         <LivePlayer
           key="live"

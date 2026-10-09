@@ -1429,7 +1429,7 @@ paths:
       operationId: listEvents
       responses:
         "200":
-          description: Recent activity
+          description: Recent activity. Record scope. Rows can name a recording or a source error.
           content:
             application/json:
               schema:
@@ -1746,6 +1746,36 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/ClientDevice" }
         "404": { $ref: "#/components/responses/Error" }
+  /playback:
+    get:
+      tags: [settings]
+      operationId: getPlayback
+      summary: Picture choices a watching device may see.
+      description: |
+        pictureMode, autoplay, and layout. The guide address and sign-in stay on GET /settings, which is for an admin.
+      responses:
+        "200":
+          description: Playback choices, with the same defaults as settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Playback" }
+  /channels/{id}/reception:
+    get:
+      tags: [channels]
+      operationId: channelReception
+      summary: Why a picture stalled, without tuner inventory.
+      description: |
+        Whether a tuner is free, whether a tuner answered, and whether this channel's signal is lost.
+        Tuner addresses, firmware, and frequency stay on the admin routes.
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Three yes or no answers
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reception" }
+        "400": { $ref: "#/components/responses/Error" }
   /settings:
     get:
       tags: [settings]
@@ -2221,6 +2251,20 @@ components:
       type: string
       enum: [broadcast, smooth, film]
       description: broadcast rebuilds interlaced video at 60 frames a second; smooth uses motion-compensated deinterlacing; film recovers 24p.
+    Playback:
+      type: object
+      required: [pictureMode, autoplay, layout]
+      properties:
+        pictureMode: { $ref: "#/components/schemas/PictureMode" }
+        autoplay: { type: string, enum: ["0", "1"] }
+        layout: { type: string, enum: [auto, desktop, tv, phone] }
+    Reception:
+      type: object
+      required: [freeTuner, tunerAnswers, signalLost]
+      properties:
+        freeTuner: { type: boolean, description: "A tuner has no channel on it." }
+        tunerAnswers: { type: boolean, description: "An HDHomeRun answered, or this house has none." }
+        signalLost: { type: boolean, description: "This channel is tuned right now and the tuner locked nothing." }
     Tuner:
       type: object
       required: [index, ours]

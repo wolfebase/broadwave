@@ -197,7 +197,7 @@ export function SettingsPage() {
         <SettingsScreen settings={settings} storage={storage} features={server?.features} tunerCount={server?.tunerCount} onChange={(v) => void saveSettings(v)} />
       </section>
       <section className="settings-section">
-        <PairedDevices deviceAuth={settings.deviceAuth ?? "0"} onChange={(v) => void saveSettings(v)} />
+        <PairedDevices deviceAuth={settings.deviceAuth ?? "0"} onChange={saveSettings} />
       </section>
       <section className="settings-section">
         <h2>Share with other apps</h2>

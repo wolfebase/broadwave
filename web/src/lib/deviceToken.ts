@@ -94,6 +94,51 @@ export function isForbidden(err: unknown): boolean {
   return statusOf(err) === 403;
 }
 
+type Denied = () => void;
+let onDenied: Denied | null = null;
+
+/** The app registers one listener. A 401 from any request opens pairing. */
+export function onUnauthorized(fn: Denied): () => void {
+  onDenied = fn;
+  return () => {
+    if (onDenied === fn) onDenied = null;
+  };
+}
+
+export function noteUnauthorized() {
+  onDenied?.();
+}
+
+export function noteIfUnauthorized(status: number) {
+  if (status === 401) noteUnauthorized();
+}
+
+export function scopesForAccess(access: string): string[] | null {
+  if (access === "watch") return ["watch"];
+  if (access === "record") return ["watch", "record"];
+  if (access === "admin") return ["watch", "record", "admin"];
+  return null;
+}
+
+export function canEditSignIn(seat: { auth?: string; device?: { scopes?: string[] } | null } | null): boolean {
+  if (!seat || seat.auth !== "device") return true;
+  return (seat.device?.scopes ?? []).includes("admin");
+}
+
+export function settingsForWatcher<T extends { pictureMode?: string; autoplay?: string; layout?: string; deviceAuth?: string }>(
+  base: T,
+  playback: { pictureMode?: string; autoplay?: string; layout?: string } | null,
+  auth: string,
+): T {
+  return {
+    ...base,
+    pictureMode: playback?.pictureMode || base.pictureMode,
+    autoplay: playback?.autoplay || base.autoplay,
+    layout: playback?.layout || base.layout,
+    deviceAuth: auth === "device" ? "1" : base.deviceAuth,
+  };
+}
+
 export type PairPollStep = {
   action: "wait" | "ready" | "miss" | "expired" | "denied";
   /** True after an approved poll that did not include the token. */
@@ -108,4 +153,10 @@ export function pairPollStep(state: string, token: string | undefined, missed: b
   if (state === "expired") return { action: "expired", missed };
   if (state === "denied") return { action: "denied", missed };
   return { action: "wait", missed: false };
+}
+
+/** A missed, expired, or denied code must leave the screen. The digits are already dead. */
+export function codeAfterPoll(action: PairPollStep["action"], issued: string): string {
+  if (action === "miss" || action === "expired" || action === "denied") return "";
+  return issued;
 }

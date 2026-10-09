@@ -1,6 +1,6 @@
 import Hls from "hls.js";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { getDeviceHealth, getSignals, getTuners, stopWatch, warmChannel, watchChannel, type ApiFailure } from "../../api";
+import { getDeviceHealth, getReception, getSignals, getTuners, stopWatch, warmChannel, watchChannel, type ApiFailure } from "../../api";
 import { authHeaders } from "../../lib/deviceToken";
 import { events } from "../../lib/events";
 import { livePlaylistLoader, masterConfig, primeLevel } from "../../lib/primeLevel";
@@ -17,6 +17,8 @@ import {
   aTunerAnswers,
   aTunerIsFree,
   classifySnap,
+  hiddenInventory,
+  inventoryHidden,
   FrozenPicture,
   holdPictureMessage,
   pictureRetryDelay,
@@ -836,19 +838,27 @@ async function readRecoverySnap(channelId: number, assumeLost: boolean): Promise
     health = false;
   }
   if (!health) return { health: false, freeTuner: false, tunerAnswers: false, online, signalLost: false };
+  try {
+    const body = await getReception(channelId);
+    return { health, freeTuner: body.freeTuner, tunerAnswers: body.tunerAnswers, online, signalLost: body.signalLost };
+  } catch (err) {
+    // A watch token cannot see tuner inventory. Falling through would call the
+    // admin routes and treat the refusal as a tuner that is off.
+    if (inventoryHidden(err)) return { health, online, ...hiddenInventory(assumeLost) };
+  }
   let freeTuner: boolean;
   let tunerAnswers: boolean;
   try {
     const body = await getTuners();
     freeTuner = aTunerIsFree(body.tuners ?? []);
-  } catch {
-    freeTuner = false;
+  } catch (err) {
+    freeTuner = inventoryHidden(err);
   }
   try {
     const body = await getDeviceHealth();
     tunerAnswers = aTunerAnswers(body.devices ?? []);
-  } catch {
-    tunerAnswers = false;
+  } catch (err) {
+    tunerAnswers = inventoryHidden(err);
   }
   let signalLost: boolean;
   try {

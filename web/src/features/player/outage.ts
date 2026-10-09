@@ -101,6 +101,17 @@ export function aTunerAnswers(devices: { error?: string }[]): boolean {
   return devices.length === 0 || devices.some((device) => !device.error);
 }
 
+/** A watch token is not allowed to see tuner inventory. That is not a dead tuner. */
+export function inventoryHidden(err: unknown): boolean {
+  if (typeof err !== "object" || err === null || !("status" in err)) return false;
+  const status = (err as { status: unknown }).status;
+  return status === 401 || status === 403;
+}
+
+export function hiddenInventory(assumeLost: boolean): { freeTuner: boolean; tunerAnswers: boolean; signalLost: boolean } {
+  return { freeTuner: true, tunerAnswers: true, signalLost: assumeLost };
+}
+
 export function recoveryReady(kind: Recovery, snap: RecoverySnap): boolean {
   if (kind === "server" || kind === "restart") return snap.health && snap.online;
   if (kind === "busy") return snap.freeTuner;

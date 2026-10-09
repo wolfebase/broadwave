@@ -630,6 +630,30 @@ public struct PlannedAiring: Codable, Sendable, Hashable {
     }
 }
 
+public struct Playback: Codable, Sendable, Hashable {
+    public var pictureMode: PictureMode
+    public var autoplay: String
+    public var layout: String
+
+    public init(pictureMode: PictureMode, autoplay: String, layout: String) {
+        self.pictureMode = pictureMode
+        self.autoplay = autoplay
+        self.layout = layout
+    }
+}
+
+public struct Reception: Codable, Sendable, Hashable {
+    public var freeTuner: Bool
+    public var tunerAnswers: Bool
+    public var signalLost: Bool
+
+    public init(freeTuner: Bool, tunerAnswers: Bool, signalLost: Bool) {
+        self.freeTuner = freeTuner
+        self.tunerAnswers = tunerAnswers
+        self.signalLost = signalLost
+    }
+}
+
 public struct Recording: Codable, Sendable, Hashable, Identifiable {
     public var id: Int64
     public var channelId: Int64

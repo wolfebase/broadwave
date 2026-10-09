@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { claimPair, pollPair, startPair, unreadBody } from "../../api";
-import { formatPairCode, normalizePairCode, pairPollStep, writeToken } from "../../lib/deviceToken";
+import { codeAfterPoll, formatPairCode, normalizePairCode, pairPollStep, writeToken } from "../../lib/deviceToken";
 
 type Kind = "web" | "phone" | "tv";
 
@@ -30,10 +30,11 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
     let paired = false;
     let missed = false;
     let timer = 0;
-    const finish = (notice: string) => {
+    const finish = (notice: string, action: "miss" | "expired" | "denied") => {
       stop = true;
       window.clearInterval(timer);
       setSession(null);
+      setIssued((current) => codeAfterPoll(action, current));
       setError(notice);
     };
     const tick = () => {
@@ -57,11 +58,11 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
           }
           if (stop) return;
           if (step.action === "miss") {
-            finish("The code was approved, but this screen missed the token. Show a new code.");
+            finish("The code was approved, but this screen missed the token. Show a new code.", "miss");
             return;
           }
           if (step.action === "expired" || step.action === "denied") {
-            finish(step.action === "expired" ? "This code expired. Show a new code." : "This code was denied.");
+            finish(step.action === "expired" ? "This code expired. Show a new code." : "This code was denied.", step.action);
             return;
           }
           setError("");

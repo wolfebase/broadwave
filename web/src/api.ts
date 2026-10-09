@@ -1,5 +1,5 @@
 import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, ClientDevice, Device, DeviceHealth, FrameList, MultiviewPlan, NewPass, PairGrant, PairPoll, PairTicket, Pass, PassPreview, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, StorageShows, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
-import { authHeaders } from "./lib/deviceToken.ts";
+import { authHeaders, noteIfUnauthorized } from "./lib/deviceToken.ts";
 
 import type { RoomState } from "./lib/events";
 
@@ -34,6 +34,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!res.ok) {
+    noteIfUnauthorized(res.status);
     throw apiFailure(res.status, await res.text());
   }
   return res.json() as Promise<T>;
@@ -155,6 +156,18 @@ export function patchChannel(id: number, patch: ChannelPatch) {
 
 export function getSettings() {
   return request<Settings>("/api/v1/settings");
+}
+
+export function getPlayback() {
+  return request<{ pictureMode: string; autoplay: string; layout: string }>("/api/v1/playback");
+}
+
+export function getReception(channelId: number) {
+  return request<{ freeTuner: boolean; tunerAnswers: boolean; signalLost: boolean }>(`/api/v1/channels/${channelId}/reception`);
+}
+
+export function getClientMe() {
+  return request<{ auth: string; device: ClientDevice | null }>("/api/v1/clients/me");
 }
 
 export function getStorage() {

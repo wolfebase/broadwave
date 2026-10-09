@@ -1264,6 +1264,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/playback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Picture choices a watching device may see.
+         * @description pictureMode, autoplay, and layout. The guide address and sign-in stay on GET /settings, which is for an admin.
+         */
+        get: operations["getPlayback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/channels/{id}/reception": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Why a picture stalled, without tuner inventory.
+         * @description Whether a tuner is free, whether a tuner answered, and whether this channel's signal is lost.
+         *     Tuner addresses, firmware, and frequency stay on the admin routes.
+         */
+        get: operations["channelReception"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/settings": {
         parameters: {
             query?: never;
@@ -1736,6 +1777,21 @@ export interface components {
          * @enum {string}
          */
         PictureMode: "broadcast" | "smooth" | "film";
+        Playback: {
+            pictureMode: components["schemas"]["PictureMode"];
+            /** @enum {string} */
+            autoplay: "0" | "1";
+            /** @enum {string} */
+            layout: "auto" | "desktop" | "tv" | "phone";
+        };
+        Reception: {
+            /** @description A tuner has no channel on it. */
+            freeTuner: boolean;
+            /** @description An HDHomeRun answered, or this house has none. */
+            tunerAnswers: boolean;
+            /** @description This channel is tuned right now and the tuner locked nothing. */
+            signalLost: boolean;
+        };
         Tuner: {
             index: number;
             guide?: string;
@@ -4174,7 +4230,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Recent activity */
+            /** @description Recent activity. Record scope. Rows can name a recording or a source error. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4548,6 +4604,49 @@ export interface operations {
                 };
             };
             404: components["responses"]["Error"];
+        };
+    };
+    getPlayback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Playback choices, with the same defaults as settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Playback"];
+                };
+            };
+        };
+    };
+    channelReception: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Three yes or no answers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reception"];
+                };
+            };
+            400: components["responses"]["Error"];
         };
     };
     getSettings: {

@@ -145,6 +145,8 @@ func (s *Server) Handler() http.Handler {
 	api("GET /channels/{id}/frame", s.frame)
 	api("GET /settings", s.getSettings)
 	api("PUT /settings", s.putSettings)
+	api("GET /playback", s.playback)
+	api("GET /channels/{id}/reception", s.reception)
 	api("POST /pair", s.startPair)
 	api("POST /pair/code", s.createPairCode)
 	api("POST /pair/approve", s.approvePair)
@@ -537,6 +539,19 @@ func (s *Server) patchChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, withNetworks([]store.Channel{ch})[0])
+}
+
+func (s *Server) playback(w http.ResponseWriter, r *http.Request) {
+	values, err := s.settingsValues(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"pictureMode": values["pictureMode"],
+		"autoplay":    values["autoplay"],
+		"layout":      values["layout"],
+	})
 }
 
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
