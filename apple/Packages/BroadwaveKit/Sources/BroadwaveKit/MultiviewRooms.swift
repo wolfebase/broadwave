@@ -72,8 +72,9 @@ public enum TilePlayback {
         snap.hasItem && snap.syncWaiting && snap.rate == 0 && !snap.itemFailed && !snap.waitingToPlay && !snap.viewerPaused
     }
 
+    /// Play does not open an item that already ended. Reload does.
     public static func shouldReplay(_ snap: TilePlaybackSnap) -> Bool {
-        isStuck(snap) && snap.stuckFor >= replayAfter
+        !snap.ended && isStuck(snap) && snap.stuckFor >= replayAfter
     }
 
     public static let reloadAfter: TimeInterval = 5
