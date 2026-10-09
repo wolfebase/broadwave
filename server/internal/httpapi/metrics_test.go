@@ -59,6 +59,9 @@ func TestMetricsLeavesOutSecrets(t *testing.T) {
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
+	if err := st.AddEvent(t.Context(), "source", "Fetched "+playlist+" DeviceAuth="+auth); err != nil {
+		t.Fatal(err)
+	}
 	prevLog := log.Writer()
 	prevSlog := slog.Default()
 	t.Cleanup(func() {
@@ -98,7 +101,14 @@ func TestMetricsLeavesOutSecrets(t *testing.T) {
 		t.Fatalf("ring %s", logbuf.Text())
 	}
 
+	devs := get(t, api.Handler(), "/api/v1/devices")
+	if strings.Contains(devs.Body.String(), auth) || strings.Contains(devs.Body.String(), "DeviceAuth") || !strings.Contains(devs.Body.String(), "HDHomeRun") {
+		t.Fatalf("devices %s", devs.Body.String())
+	}
 	diag := get(t, api.Handler(), "/api/v1/diagnostics")
+	if raw := diag.Body.String(); strings.Contains(raw, password) || strings.Contains(raw, auth) || strings.Contains(raw, "DeviceAuth") {
+		t.Fatalf("diagnostics %s", raw)
+	}
 	var payload struct {
 		Logs  []string        `json:"logs"`
 		Feeds []live.FeedStat `json:"feeds"`

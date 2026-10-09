@@ -256,7 +256,7 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 	}
 	now := s.now()
 	out := make([]noted, 0, len(devices))
-	for _, device := range devices {
+	for _, device := range redactDevices(devices) {
 		out = append(out, noted{
 			Device:  device,
 			Note:    hdhr.ModelNote(device.ModelNumber),
@@ -390,7 +390,7 @@ func (s *Server) discover(w http.ResponseWriter, r *http.Request) {
 	if devices == nil {
 		devices = []store.Device{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"devices": devices, "found": n})
+	writeJSON(w, http.StatusOK, map[string]any{"devices": redactDevices(devices), "found": n})
 }
 
 func (s *Server) look(w http.ResponseWriter, r *http.Request) {
@@ -587,6 +587,9 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		values["sdPasswordSet"] = "0"
 	}
 	delete(values, "sdPassword")
+	if v := strings.TrimSpace(values["guideUrl"]); v != "" {
+		values["guideUrl"] = redactURL(v)
+	}
 	if strings.TrimSpace(values["tmdbKey"]) != "" {
 		values["tmdbKeySet"] = "1"
 	} else {
@@ -630,6 +633,18 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		body["exportMosaics"] = list
+	}
+	if submitted, ok := body["guideUrl"]; ok {
+		stored, err := s.Store.Settings(r.Context())
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		// The settings page sends back the address it was shown. That copy
+		// has the password removed, so saving it must not replace the stored one.
+		if submitted == redactURL(stored["guideUrl"]) {
+			delete(body, "guideUrl")
+		}
 	}
 	if err := s.Store.PutSettings(r.Context(), body); err != nil {
 		httpError(w, err.Error(), http.StatusBadRequest)

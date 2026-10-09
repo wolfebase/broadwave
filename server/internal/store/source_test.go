@@ -281,6 +281,27 @@ func TestMaskedSourceFetchesWithItsLogin(t *testing.T) {
 	}
 }
 
+func TestDeviceAuthRoundTripsThroughTheStoredSource(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	const auth = "tuner-fixture-auth"
+	raw := "http://tuner.example/lineup.json?DeviceAuth=" + auth
+	item, err := st.AddSource(ctx, "m3u", "Tuner", raw, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(item.URL, auth) {
+		t.Fatalf("stored %s", item.URL)
+	}
+	if got := st.FetchURL(ctx, item.ID, item.URL); got != raw {
+		t.Fatalf("fetch %q", got)
+	}
+	again, err := st.Sources(ctx)
+	if err != nil || len(again) != 1 || strings.Contains(again[0].URL, auth) {
+		t.Fatalf("%+v %v", again, err)
+	}
+}
+
 func TestMaskURLMatchesTheStoredForm(t *testing.T) {
 	raw := "http://ops3user:ops3-fixture-password@playlist.example/pl.m3u?password=ops3-fixture-password"
 	public, secret := maskURL(raw)

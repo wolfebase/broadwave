@@ -326,7 +326,7 @@ func (h *Hub) startMosaicLocked(mo *mosaic) error {
 	cmd := exec.Command(h.FFmpeg, args...)
 	cmd.Dir = dir
 	cmd.ExtraFiles = readers
-	cmd.Stderr = os.Stderr
+	logCommand(cmd)
 	stdout, gate, done, err := packOutput(cmd)
 	if err != nil {
 		closeAll()
@@ -609,7 +609,7 @@ func (h *Hub) ExportMosaic(ctx context.Context, ids []int64, w io.Writer) error 
 	cmd := exec.CommandContext(ctx, h.FFmpeg, "-hide_banner", "-loglevel", "error",
 		"-live_start_index", "-2", "-i", playlist, "-map", "0", "-c", "copy", "-f", "mpegts", "pipe:1")
 	cmd.Stdout = w
-	cmd.Stderr = os.Stderr
+	logCommand(cmd)
 	if err := cmd.Run(); err != nil && ctx.Err() == nil {
 		return err
 	}

@@ -30,11 +30,12 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 		out["server"] = id
 	}
 	devices, _ := s.Store.Devices(ctx)
-	out["devices"] = devices
+	out["devices"] = redactDevices(devices)
+	secrets := s.hiddenSecrets(ctx)
 	if s.Hub != nil {
 		tuners, err := s.Hub.Tuners(ctx)
 		if err != nil {
-			out["tunerError"] = err.Error()
+			out["tunerError"] = scrubBody(err.Error(), secrets)
 		}
 		if tuners == nil {
 			tuners = []live.Tuner{}
@@ -113,7 +114,7 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if msg, at, err := s.Store.GuideError(ctx); err == nil && msg != "" {
-		guideInfo["lastError"] = scrubBody(msg, s.hiddenSecrets(ctx))
+		guideInfo["lastError"] = scrubBody(msg, secrets)
 		if !at.IsZero() {
 			guideInfo["lastErrorAt"] = at
 		}
@@ -123,9 +124,11 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 		out["connectedApps"] = s.Bus.Clients()
 	}
 	events, _ := s.Store.Events(ctx, 20)
+	for i := range events {
+		events[i].Message = scrubBody(events[i].Message, secrets)
+	}
 	out["recentActivity"] = events
 	out["doctor"] = s.doctorNotes(devices)
-	secrets := s.hiddenSecrets(ctx)
 	feeds := s.feedStats()
 	for i := range feeds {
 		feeds[i].GuideNumber = scrubBody(feeds[i].GuideNumber, secrets)

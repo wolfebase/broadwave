@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"os/exec"
 	"time"
 )
@@ -36,7 +35,7 @@ func (h *Hub) Export(ctx context.Context, channelID int64, w io.Writer) error {
 	}
 	cmd := exec.CommandContext(ctx, h.FFmpeg, exportCopyArgs(f.program, ch.AudioCodec)...)
 	cmd.Stdout = w
-	cmd.Stderr = os.Stderr
+	logCommand(cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		h.dropIfUnusedLocked(f)
