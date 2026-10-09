@@ -1,5 +1,17 @@
 const held = new Set([" ", "r", "c", "i", "t", "m", "g", "l", "?"]);
 
+/** A channel number typed on the full player must not tune after it docks. */
+export function pendingTuneFires(mode: string): boolean {
+  return mode === "full";
+}
+
+/** Escape while the stage is fullscreen only leaves fullscreen. */
+export function escapeAction(fullscreen: boolean, panelOpen: boolean): "exit-fullscreen" | "close-panel" | "minimize" {
+  if (fullscreen) return "exit-fullscreen";
+  if (panelOpen) return "close-panel";
+  return "minimize";
+}
+
 /** A held toggle would flip twice. Arrows keep repeating. Ctrl/Cmd/Alt+C is Copy. */
 export function ignoreHeldKey(
   key: string,
