@@ -9,10 +9,7 @@ Every live channel currently gets one ffmpeg transcode to H.264 and AAC. When on
 ## Decision
 
 - Clients use the platform players: AVPlayer on Apple devices, hls.js or native HLS on the web. We don't embed a software decoder in the apps. System PiP, AirPlay, SharePlay, captions, and battery life are worth more than client-side MPEG-2 decoding.
-- Each feed publishes a **master playlist** of independent renditions, started lazily and stopped when unused:
-  - `direct`: H.264 channels remuxed without transcoding, with AC-3 5.1 passed through. For Apple clients.
-  - `hevc-1080`: hardware HEVC for MPEG-2 channels on Apple clients.
-  - `h264-1080`, `h264-720`, `h264-540`: for browsers, cellular, and weak Wi-Fi.
+- Each watch gets one rendition, started lazily and stopped when unused. Names are `copy`, `1080`, `720`, `540`, and `360`, with audio `copy`, `ac3`, `aac2`, `aac6`, or `none`, and an optional `hevc` suffix. Viewers who need the same form share one encode. `master.m3u8` lists the sound tracks of that one encode, not a ladder of picture sizes.
 - Deinterlacing modes (Broadcast 60p, Smooth, Film 24p) are part of the transcoded rendition key.
 - Clients send a capability profile (codecs, audio, display, network) and the server chooses the starting rendition. It reports the reason in `streamInfo`, and a user override always wins.
 - Segments are CMAF (fMP4) with `-copyts`, so every rendition keeps the broadcast's timestamps. Browsers play fMP4 without transmuxing; with MPEG-TS, hls.js mis-mapped broadcast timestamps partway into a stream. The server reads each segment's first video time from its `tfdt`/`trun` boxes and stamps `EXT-X-PROGRAM-DATE-TIME` from one per-channel timeline, identical across renditions.

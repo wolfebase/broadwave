@@ -20,7 +20,7 @@ A page link looks like `/multiview?ch=12,34&layout=2up`. The apps use `broadwave
 
 ## Sound
 
-Click or tap a tile to hear it. With a remote, move to the tile and press Enter or the clickpad. The page says "Select a tile to hear it" until you do.
+Click or tap a tile to hear it. With a remote, move to the tile and press Enter or the clickpad. The page says "Select a tile to hear it." until you do.
 
 In One big and two, One big and three, and Small over big, the tile you hear is the large one. Side by side and Quad stay the same size when the sound moves.
 
@@ -30,7 +30,7 @@ A quad is 360p on every tile.
 
 Side by side uses the large-tile size for both pictures. In the other layouts, the tile with the sound is that size and the quiet tiles beside it are 540p, or 360p when the large tile is 360p. Small over big uses 360p for the small picture.
 
-The large-tile size comes from a short encode the server runs at startup. Diagnostics prints the result, for example "720p60 on a large tile, 4 pictures at once."
+The large-tile size comes from a short encode the server runs at startup. Diagnostics prints the result, for example "Intel GPU found: 1080p60 at 5.4x real time. 720p60 on a large tile, 4 pictures at once."
 
 | Startup encode of 1080p60 on a GPU | On the processor | Large tile | Pictures at once |
 | --- | --- | --- | --- |
@@ -45,7 +45,7 @@ The large-tile size comes from a short encode the server runs at startup. Diagno
 
 The two columns are timed differently, and on the processor each picture also decodes and deinterlaces its own broadcast. [Hardware](hardware.md) has the measurements.
 
-On an Intel GPU using its low-power encoder, a startup encode of 4 times real time or faster allows six pictures: a quad and two full screens. AMD, NVIDIA, Apple, and the processor stay at four in that row. A slower result stays on the table above, including on that Intel encoder.
+On an Intel GPU using its low-power encoder, a startup encode of 4 times real time or faster allows six pictures: a quad and two full screens. AMD, NVIDIA, and Apple stay at four in that row. The processor stays at two until its encode is 5.5 times real time or faster. A slower result stays on the table above, including on that Intel encoder.
 
 Side by side, and a quiet tile beside a large one, can keep a clear 1080 HEVC picture as the station sent it. A quad stays 360p.
 

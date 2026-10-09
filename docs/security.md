@@ -24,7 +24,7 @@ The tuner's `DeviceAuth` value is read when a guide request needs it and is not 
 
 ## Support bundle
 
-Settings calls the download "Download a support bundle." The hint under the button is "Logs, versions, and settings. Passwords are left out." The same zip is at `http://<your-server>:8477/api/v1/support`.
+Settings calls the download "Download a support bundle". The hint under the button is "Logs, versions, and settings. Passwords are left out." The same zip is at `http://<your-server>:8477/api/v1/support`.
 
 The zip holds `versions.json`, `doctor.json`, `config.json`, and `logs.txt`. Passwords, tuner credentials, and `DeviceAuth` are removed before the file is saved.
 
