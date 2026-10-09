@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { moveRecording } from "../../api";
 import { useData } from "../../app/data";
 import { focusRing } from "../../app/remote";
+import { actionName } from "../../lib/actionName";
 import type { Recording } from "../../types";
+import { recordingSubject } from "./model";
 
 /** Renames a recording's file, or moves it into a folder, with the files beside it. */
 export function MoveFile({ rec }: { rec: Recording }) {
@@ -46,6 +48,7 @@ export function MoveFile({ rec }: { rec: Recording }) {
         ref={opener}
         type="button"
         className="btn"
+        aria-label={actionName("Rename file", recordingSubject(rec))}
         onClick={() => {
           setName(current);
           setError("");

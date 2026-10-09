@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Channel, Device, TunerStatus } from "../../types";
 import { addFree, addPlaylistFile, addSource, checkSignals, findFree, getSignals, getTuners, lookHarder, sourceStatuses, startScan, type ChannelSignal, type FreeFeed, type SourceAdded, type SourceStatus } from "../../api";
+import { actionName } from "../../lib/actionName";
 import { copy } from "../../strings";
 import { lastSeenPhrase } from "../../time";
 import { deviceScans, showFirmware } from "./deviceCard";
@@ -151,6 +152,7 @@ export function Sources({
                 type="button"
                 className="btn"
                 disabled={busy}
+                aria-label={actionName(copy.sources.add, feed.name)}
                 onClick={() => {
                   setFreeNote("");
                   void addFree(feed)
@@ -174,7 +176,7 @@ export function Sources({
             <li key={`${hit.kind}-${hit.addr}`} className="source-row">
               <span>{hit.name}</span>
               <span className="codec">{hit.addr}</span>
-              <button type="button" className="btn" disabled={busy} onClick={() => onLookup(hit.addr)}>
+              <button type="button" className="btn" disabled={busy} aria-label={actionName(copy.sources.add, hit.name)} onClick={() => onLookup(hit.addr)}>
                 {copy.sources.add}
               </button>
             </li>
@@ -231,6 +233,7 @@ export function Sources({
               type="button"
               className="btn"
               disabled={busy || scanning === device.deviceId}
+              aria-label={actionName(scanning === device.deviceId ? copy.sources.scanning : copy.sources.scan, name)}
               onClick={() => {
                 setScanning(device.deviceId);
                 void startScan(device.deviceId).finally(() => setScanning(""));
@@ -348,6 +351,7 @@ export function Sources({
                   <input
                     type="checkbox"
                     checked={channel.enabled}
+                    aria-label={`${copy.sources.enabled}, ${channel.displayNumber} ${channel.displayName}`}
                     onChange={(event) => onPatch(channel, { enabled: event.target.checked })}
                   />
                   {copy.sources.enabled}
@@ -356,6 +360,7 @@ export function Sources({
                   <input
                     type="checkbox"
                     checked={channel.hidden}
+                    aria-label={`${copy.sources.hidden}, ${channel.displayNumber} ${channel.displayName}`}
                     onChange={(event) => onPatch(channel, { hidden: event.target.checked })}
                   />
                   {copy.sources.hidden}

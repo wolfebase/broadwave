@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { addFree, addPlaylistFile, addSource, findFree, lookHarder, setupFinish, startSetupFinish, type FreeFeed, type SetupFinish } from "../../api";
 import { useData } from "../../app/data";
 import { navigate } from "../../app/router";
+import { actionName } from "../../lib/actionName";
 import { copy } from "../../strings";
 import { ChevronIcon } from "../../ui/icons";
 import { HomeList } from "./HomeList";
@@ -190,7 +191,7 @@ export function Setup() {
                 <li key={`${hit.kind}-${hit.addr}`}>
                   <strong>{hit.name}</strong>
                   <span className="dim">{hit.addr}</span>
-                  <button type="button" className="btn" onClick={() => void addHit(hit, rediscover, setNote, refresh)}>
+                  <button type="button" className="btn" aria-label={actionName("Add", hit.name)} onClick={() => void addHit(hit, rediscover, setNote, refresh)}>
                     Add
                   </button>
                 </li>
@@ -203,6 +204,7 @@ export function Setup() {
               <button
                 type="button"
                 className="btn"
+                aria-label={actionName("Add", feed.name)}
                 onClick={() => {
                   setBusy(true);
                   void addFree(feed)

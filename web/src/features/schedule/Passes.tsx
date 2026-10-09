@@ -228,7 +228,7 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
                 <span className="pad pass-actions">
                   <span>Remove {passLabel(pass)}?</span>
                   <span className="codec">Recordings it made stay.</span>
-                  <button type="button" className="btn small" disabled={removeBusy} onClick={() => void confirmRemove(pass.id)}>
+                  <button type="button" className="btn small" disabled={removeBusy} aria-label={`Remove ${passLabel(pass)}`} onClick={() => void confirmRemove(pass.id)}>
                     Remove
                   </button>
                   <button ref={cancelRef} type="button" className="btn small" disabled={removeBusy} onClick={cancelRemove}>
