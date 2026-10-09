@@ -17,11 +17,12 @@ public enum Category: String, Sendable, CaseIterable {
 
 private let sportsWords = regex(#"\b(sports?|football|basketball|baseball|hockey|soccer|golf|tennis|racing|nascar|motorsports?|boxing|mma|ufc|wrestling|olympics?|nfl|nba|mlb|nhl|mls|wnba|ncaa|bowl|playoffs?|pregame|postgame|game day)\b"#)
 private let newsWord = regex(#"\bnews\b"#)
-private let versus = regex(#"\b(vs\.?|at|@)\b"#)
+private let versus = regex(#"\b(vs\.?|at|@)\b"#, caseInsensitive: false)
 
-private func regex(_ pattern: String) -> NSRegularExpression {
+private func regex(_ pattern: String, caseInsensitive: Bool = true) -> NSRegularExpression {
     // Patterns above are fixed; a mistake is a programmer error, not a listing error.
-    guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+    let options: NSRegularExpression.Options = caseInsensitive ? [.caseInsensitive] : []
+    guard let re = try? NSRegularExpression(pattern: pattern, options: options) else {
         fatalError("bad pattern")
     }
     return re
@@ -33,6 +34,7 @@ private func matches(_ re: NSRegularExpression, _ s: String) -> Bool {
 
 public extension Airing {
     /// The same rules as the web guide, so both clients tint and filter alike.
+    /// Versus is case-sensitive there, so "AT" and "VS" are not a matchup.
     var kind: Category {
         let c = category ?? ""
         if matches(sportsWords, c) || (matches(sportsWords, title) && matches(versus, title)) {
