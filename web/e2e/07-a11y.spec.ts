@@ -16,9 +16,6 @@ type Hit = { where: string; impact: string; id: string; target: string; help: st
 // axe to see, and adding an empty one would claim captions that are not there.
 const playerRulesOff = ["video-caption"];
 
-// White on the tally red is the brand live pill. Filed for the reviewer.
-const brandContrast = new Set([".live-pill"]);
-
 async function serious(page: Page, where: string, disable: string[] = []): Promise<Hit[]> {
   let builder = new AxeBuilder({ page });
   if (disable.length > 0) builder = builder.disableRules(disable);
@@ -28,7 +25,6 @@ async function serious(page: Page, where: string, disable: string[] = []): Promi
     if (violation.impact !== "serious" && violation.impact !== "critical") continue;
     for (const node of violation.nodes) {
       const target = node.target.join(" ");
-      if (violation.id === "color-contrast" && brandContrast.has(target)) continue;
       hits.push({
         where,
         impact: violation.impact ?? "",
@@ -66,9 +62,51 @@ async function letMotionFinish(page: Page) {
   });
 }
 
+/**
+ * 1920×1080 is the TV layout: a coarse pointer at that width. Narrower sizes stay
+ * phone or desktop. The match list's `matches` follows the window, and the layout
+ * store only re-reads it when the list fires.
+ */
+async function wideIsTv(page: Page) {
+  await page.addInitScript(() => {
+    const orig = window.matchMedia.bind(window);
+    const listeners = new Set<() => void>();
+    const list = {
+      get matches() {
+        return window.innerWidth >= 1800;
+      },
+      media: "(pointer: coarse) and (min-width: 1100px)",
+      onchange: null as ((this: MediaQueryList, ev: MediaQueryListEvent) => void) | null,
+      addEventListener(_type: string, fn: () => void) {
+        listeners.add(fn);
+      },
+      removeEventListener(_type: string, fn: () => void) {
+        listeners.delete(fn);
+      },
+      addListener(fn: () => void) {
+        listeners.add(fn);
+      },
+      removeListener(fn: () => void) {
+        listeners.delete(fn);
+      },
+      dispatchEvent() {
+        return false;
+      },
+    };
+    window.matchMedia = (query: string) => {
+      if (String(query).includes("pointer") && String(query).includes("coarse")) return list as unknown as MediaQueryList;
+      return orig(query);
+    };
+    (window as unknown as { __bwFireTv?: () => void }).__bwFireTv = () => {
+      for (const fn of listeners) fn();
+    };
+  });
+}
+
 async function at(page: Page, size: (typeof sizes)[number]) {
   await page.setViewportSize({ width: size.width, height: size.height });
-  const layout = size.width <= 760 ? "phone" : "desktop";
+  await page.evaluate(() => (window as unknown as { __bwFireTv?: () => void }).__bwFireTv?.());
+  const layout = size.width <= 760 ? "phone" : size.width >= 1800 ? "tv" : "desktop";
   await expect(page.locator("html")).toHaveAttribute("data-layout", layout);
 }
 
@@ -98,6 +136,7 @@ async function browsing(page: Page) {
 test.describe.configure({ timeout: 240_000 });
 
 test("first run", async ({ page }) => {
+  await wideIsTv(page);
   await holdClock(page);
   await page.goto("/setup");
   await settle(page);
@@ -119,6 +158,7 @@ test("first run", async ({ page }) => {
 });
 
 test("home", async ({ page }) => {
+  await wideIsTv(page);
   await browsing(page);
   await holdClock(page);
   await page.goto("/");
@@ -130,6 +170,7 @@ test("home", async ({ page }) => {
 });
 
 test("guide and program sheet", async ({ page }) => {
+  await wideIsTv(page);
   await browsing(page);
   await holdClock(page);
   await page.goto("/guide");
@@ -158,6 +199,7 @@ test("guide and program sheet", async ({ page }) => {
 });
 
 test("search", async ({ page }) => {
+  await wideIsTv(page);
   await browsing(page);
   await holdClock(page);
   await page.goto("/search");
@@ -171,6 +213,7 @@ test("search", async ({ page }) => {
 });
 
 test("sports", async ({ page }) => {
+  await wideIsTv(page);
   await browsing(page);
   await holdClock(page);
   await page.goto("/sports");
@@ -182,6 +225,7 @@ test("sports", async ({ page }) => {
 });
 
 test("recordings", async ({ page }) => {
+  await wideIsTv(page);
   await browsing(page);
   await holdClock(page);
   await page.goto("/recordings");
@@ -193,6 +237,7 @@ test("recordings", async ({ page }) => {
 });
 
 test("settings", async ({ page }) => {
+  await wideIsTv(page);
   await browsing(page);
   await holdClock(page);
   await page.goto("/settings");
@@ -204,6 +249,7 @@ test("settings", async ({ page }) => {
 });
 
 test("diagnostics", async ({ page }) => {
+  await wideIsTv(page);
   await browsing(page);
   await holdClock(page);
   await page.goto("/diagnostics");
@@ -217,6 +263,7 @@ test("diagnostics", async ({ page }) => {
 
 test("player", async ({ page }) => {
   test.setTimeout(240_000);
+  await wideIsTv(page);
   await browsing(page);
   await holdClock(page);
   await page.goto("/");
