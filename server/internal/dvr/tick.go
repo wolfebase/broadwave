@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"broadwave/internal/disk"
 	"broadwave/internal/live"
 	"broadwave/internal/store"
 )
@@ -56,6 +57,13 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 		}
 		// A recording that starts late begins at the airing, padding
 		// included, when the tuner's buffer still holds it.
+		// Refuse before a tuner is taken when the folder cannot hold a file.
+		if hub.Dir != "" {
+			if err := disk.Writable(hub.Recordings()); err != nil {
+				slog.Error(fmt.Sprintf("pass record: %v", err))
+				continue
+			}
+		}
 		if _, err := hub.RecordMeta(ctx, minutes, store.Recording{
 			ChannelID: item.Airing.ChannelID, Title: item.Airing.Title, Subtitle: item.Airing.Subtitle,
 			Description: item.Airing.Description, Category: item.Airing.Category, ProgramID: item.Airing.ProgramID, GameID: item.Airing.GameID,

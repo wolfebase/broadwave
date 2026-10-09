@@ -3034,19 +3034,24 @@ func (h *Hub) ensureSpace(ctx context.Context) error {
 	}
 	values, err := h.Store.Settings(ctx)
 	if err != nil {
-		return nil
-	}
-	reserve := disk.WatermarkBytes(values["watermarkGB"])
-	if reserve == 0 {
-		return nil
+		return err
 	}
 	dir := h.Recordings()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	// A reserve of zero still has to be a folder a file can be created in.
+	// The check is the same one a recording started from the app already does.
+	if err := disk.Writable(dir); err != nil {
+		return err
+	}
+	reserve := disk.WatermarkBytes(values["watermarkGB"])
+	if reserve == 0 {
+		return nil
+	}
 	space, err := diskStat(dir)
 	if err != nil {
-		return nil
+		return err
 	}
 	var freed uint64
 	if disk.BelowReserve(space.Free, reserve) && h.MakeRoom != nil {

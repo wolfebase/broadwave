@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"syscall"
@@ -649,6 +650,107 @@ func TestEnsureSpaceStillRefusesWhenFreedBytesFallShort(t *testing.T) {
 	}
 	if low.Free != 1000 || low.Need != 1_000_000_000 {
 		t.Fatalf("free %d need %d", low.Free, low.Need)
+	}
+}
+
+func TestEnsureSpaceReportsASettingsFailure(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.PutSettings(context.Background(), map[string]string{"watermarkGB": "0"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	h := &Hub{Dir: dir, Store: st}
+	if err := h.ensureSpace(context.Background()); err == nil {
+		t.Fatal("a settings failure let the recording start")
+	}
+}
+
+func TestEnsureSpaceReportsAStatFailure(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.PutSettings(context.Background(), map[string]string{"watermarkGB": "1"}); err != nil {
+		t.Fatal(err)
+	}
+	orig := diskStat
+	t.Cleanup(func() { diskStat = orig })
+	diskStat = func(string) (disk.Space, error) {
+		return disk.Space{}, errors.New("stat failed")
+	}
+	h := &Hub{Dir: dir, Store: st}
+	err = h.ensureSpace(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "stat failed") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestEnsureSpaceSkipsTheReserveWhenItIsOff(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.PutSettings(context.Background(), map[string]string{"watermarkGB": "0"}); err != nil {
+		t.Fatal(err)
+	}
+	orig := diskStat
+	t.Cleanup(func() { diskStat = orig })
+	var stats int
+	diskStat = func(string) (disk.Space, error) {
+		stats++
+		return disk.Space{}, errors.New("stat failed")
+	}
+	h := &Hub{Dir: dir, Store: st}
+	if err := h.ensureSpace(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if stats != 0 {
+		t.Fatalf("measured free space %d times with no reserve", stats)
+	}
+}
+
+func TestEnsureSpaceRefusesAnUnwritableFolder(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can write a mode 0555 directory")
+	}
+	dir := t.TempDir()
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.PutSettings(context.Background(), map[string]string{"watermarkGB": "0"}); err != nil {
+		t.Fatal(err)
+	}
+	h := &Hub{Dir: dir, Store: st}
+	recDir := h.Recordings()
+	if err := os.MkdirAll(recDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(recDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(recDir, 0o755) })
+	if f, err := os.CreateTemp(recDir, ".probe-*"); err == nil {
+		name := f.Name()
+		_ = f.Close()
+		_ = os.Remove(name)
+		t.Skip("this user can still write a mode 0555 directory")
+	}
+	err = h.ensureSpace(context.Background())
+	var blocked *disk.WriteError
+	if !errors.As(err, &blocked) || blocked.Full {
+		t.Fatalf("got %v", err)
 	}
 }
 
