@@ -400,26 +400,23 @@ public final class AppStore {
             }
             guard self.api?.base == base else { return }
             let window = try await fetchedAirings
-            index = GuideIndex(window)
+            let horizon = moment.addingTimeInterval(4 * 3600)
+            let near = GuideMerge.listings(previous: index.allAirings(), window: window, tail: nil, horizon: horizon)
+            index = GuideIndex(near)
             recordings = try await fetchedRecordings
             guard self.api?.base == base else { return }
             now = Date()
             freshAt = now
             error = nil
             if let id = server?.id {
-                CatalogCache.save(CatalogSnapshot(channels: channels, airings: window, recordings: recordings), serverID: id)
+                CatalogCache.save(CatalogSnapshot(channels: channels, airings: near, recordings: recordings), serverID: id)
                 if id != "demo" {
                     shareLineup()
                 }
             }
-            if let rest = try? await api.airings(from: moment.addingTimeInterval(4 * 3600), to: moment.addingTimeInterval(14 * 24 * 3600)) {
+            if let rest = try? await api.airings(from: horizon, to: moment.addingTimeInterval(14 * 24 * 3600)) {
                 guard self.api?.base == base else { return }
-                var seen = Set(window.map(\.id))
-                var merged = window
-                for airing in rest where !seen.contains(airing.id) {
-                    seen.insert(airing.id)
-                    merged.append(airing)
-                }
+                let merged = GuideMerge.listings(previous: [], window: window, tail: rest, horizon: horizon)
                 index = GuideIndex(merged)
                 if let id = server?.id {
                     CatalogCache.save(CatalogSnapshot(channels: channels, airings: merged, recordings: recordings), serverID: id)
