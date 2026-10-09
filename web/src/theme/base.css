@@ -273,7 +273,12 @@ html[data-layout="tv"] :focus-visible {
 
 .chip-count {
   font-variant-numeric: tabular-nums;
-  opacity: 0.6;
+  /* Secondary at 0.6 is 4.0:1 on the chip. This gray clears 4.5:1. */
+  color: #7a8290;
+}
+
+.chip.on .chip-count {
+  color: var(--color-canvas);
 }
 
 .chip-swatch {

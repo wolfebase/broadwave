@@ -83,6 +83,27 @@ test("the guide sheet keeps Tab inside and returns focus", async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.goto("/guide");
   await settle(page);
+  // Past and filtered-out cells may sit outside the first window. The rule is what keeps them readable.
+  await expect.poll(() => page.evaluate(() => {
+    for (const sheet of document.styleSheets) {
+      let rules: CSSRuleList;
+      try {
+        rules = sheet.cssRules;
+      } catch {
+        continue;
+      }
+      for (const rule of rules) {
+        if (rule instanceof CSSStyleRule && rule.selectorText.includes(".guide-cell.past")) return rule.style.opacity;
+      }
+    }
+    return "";
+  })).toBe("0.72");
+  const count = page.locator(".chip:not(.on) .chip-count").first();
+  if ((await count.count()) > 0) {
+    await expect(count).toHaveCSS("opacity", "1");
+    await expect(count).toHaveCSS("color", "rgb(122, 130, 144)");
+  }
+  await expect(page.locator(".guide-cell.now .cell-sub").first()).toHaveCSS("color", "rgb(193, 200, 211)");
   const grid = page.getByRole("grid", { name: "TV guide" });
   await grid.focus();
   await page.keyboard.press("Enter");
