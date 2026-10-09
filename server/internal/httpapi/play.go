@@ -122,6 +122,10 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	// A rendition the player named is played as named.
 	session, err := s.Hub.WatchAt(r.Context(), body.ChannelID, decision.Rendition, alternates && !chosen, frame)
 	if err != nil {
+		// The page left; nobody reads the answer.
+		if r.Context().Err() != nil {
+			return
+		}
 		watchError(w, err)
 		return
 	}

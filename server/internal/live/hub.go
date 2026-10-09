@@ -522,6 +522,12 @@ func (h *Hub) WatchAt(ctx context.Context, channelID int64, want Rendition, alte
 	if err != nil {
 		return Session{}, err
 	}
+	// A page that left while this tuned would get a picture freed from a
+	// tile it just left, often its own sound tile, which then starts cold.
+	if err := ctx.Err(); err != nil {
+		h.dropIfUnusedLocked(f)
+		return Session{}, err
+	}
 	if alternates && want.Track != "" {
 		main := want
 		main.Track = ""
