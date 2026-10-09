@@ -118,15 +118,23 @@ func (s *Store) DeletePass(ctx context.Context, id int64) error {
 }
 
 func (s *Store) CreateVirtual(ctx context.Context, number, name string, recordingIDs []int64) (VirtualChannel, error) {
-	res, err := s.db.ExecContext(ctx, `INSERT INTO virtual_channels (number, name) VALUES (?, ?)`, number, name)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return VirtualChannel{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `INSERT INTO virtual_channels (number, name) VALUES (?, ?)`, number, name)
 	if err != nil {
 		return VirtualChannel{}, err
 	}
 	id, _ := res.LastInsertId()
 	for i, rec := range recordingIDs {
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO virtual_items (virtual_id, recording_id, position) VALUES (?, ?, ?)`, id, rec, i); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO virtual_items (virtual_id, recording_id, position) VALUES (?, ?, ?)`, id, rec, i); err != nil {
 			return VirtualChannel{}, err
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		return VirtualChannel{}, err
 	}
 	return s.virtualByID(ctx, id)
 }
@@ -185,18 +193,26 @@ func (s *Store) UpdateVirtual(ctx context.Context, id int64, orderMode, ruleTitl
 	if orderMode == "" {
 		orderMode = "custom"
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE virtual_channels SET order_mode = ?, rule_title = ? WHERE id = ?`, orderMode, ruleTitle, id); err != nil {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return VirtualChannel{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `UPDATE virtual_channels SET order_mode = ?, rule_title = ? WHERE id = ?`, orderMode, ruleTitle, id); err != nil {
 		return VirtualChannel{}, err
 	}
 	if recordingIDs != nil {
-		if _, err := s.db.ExecContext(ctx, `DELETE FROM virtual_items WHERE virtual_id = ?`, id); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM virtual_items WHERE virtual_id = ?`, id); err != nil {
 			return VirtualChannel{}, err
 		}
 		for i, rec := range recordingIDs {
-			if _, err := s.db.ExecContext(ctx, `INSERT INTO virtual_items (virtual_id, recording_id, position) VALUES (?, ?, ?)`, id, rec, i); err != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO virtual_items (virtual_id, recording_id, position) VALUES (?, ?, ?)`, id, rec, i); err != nil {
 				return VirtualChannel{}, err
 			}
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		return VirtualChannel{}, err
 	}
 	return s.virtualByID(ctx, id)
 }
