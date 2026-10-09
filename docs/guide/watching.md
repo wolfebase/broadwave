@@ -24,9 +24,9 @@ A recording remembers where you stopped, once you were more than a few seconds i
 
 ## Picture and sound
 
-The server decides direct play, bitrate, and audio for each device. You can pin a choice per device or per channel. Languages and described video, when the broadcast carries them, are a picker on the player. A full-size encode keeps the other languages so the switch does not restart the picture. Set `BROADWAVE_ALTERNATES` to `0` to send only the chosen track.
+The server decides direct play, bitrate, and audio for each device. Quality and sound are saved on that device. Languages and described video, when the broadcast carries them, are a picker on the player. A full-size encode keeps the other languages so the switch does not restart the picture. Set `BROADWAVE_ALTERNATES` to `0` to send only the chosen track.
 
-5.1 is passed through where the device plays Dolby Digital. Everywhere else the sound is stereo.
+Auto passes through a 5.1 mix the device can play. AC-4 is sent as Dolby Digital instead. Data saver is stereo. Surround sends 5.1 AAC when the device cannot play the station's mix.
 
 Diagnostics names the encoder and how many pictures this server can play at once. A server that is at that limit says "This server can play 4 pictures at once. Stop one." The number is this server's limit.
 

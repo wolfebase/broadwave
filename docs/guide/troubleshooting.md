@@ -18,7 +18,7 @@ The line on the screen is the whole message. It names what failed and what to tr
 
 **A tuner that stopped answering.** While you are watching: "This tuner did not answer. Check that it is on." On its card in Settings: "Offline. Last seen 15 minutes ago." Remove is the first button. A tuner added by its address keeps reading as online while it answers.
 
-**Setup finds nothing.** "No tuner answered yet" while it is idle, and "Searching…" while it looks. An address that does not answer says "No HDHomeRun answered at that address. Add the port if it is not 80." On Docker Desktop, set `HDHR_HOST`. [Install](install.md) has the command.
+**Setup finds nothing.** The first look says "No tuner answered yet." "Searching…" shows while Add by address, Look harder, Add free channels, or adding a playlist is running. An address that does not answer says "No HDHomeRun answered at that address. Add the port if it is not 80." On Docker Desktop, set `HDHR_HOST`. [Install](install.md) has the command.
 
 **The disk.** "The recordings disk has 4.2 GB free, and Broadwave keeps 10 GB in reserve. Free some space or lower the reserve in Settings." Those two numbers are this server's. A show already recording is left alone.
 

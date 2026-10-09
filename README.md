@@ -169,7 +169,7 @@ One image, `ghcr.io/wolfebase/broadwave`, for x86-64 and ARM64. It carries its o
 | `HDHR_HOST` | The tuner's address, when discovery can't reach it. |
 | `BROADWAVE_RECORDINGS` | The recordings folder, when it is not `/config/work/recordings`. Outside Docker, `-recordings <folder>` does the same. |
 | `BROADWAVE_ENCODER` | `gpu` or `software` to skip the automatic choice (the GPU when it has a low-power encoder, else the processor when it is fast enough). |
-| `BROADWAVE_HOSTS` | Public names the server answers to, comma-separated, such as `tv.example.com` (a leading dot covers subdomains). Addresses, one-word names, `.local`, `.lan`, and other home names always work, and so does a browser behind an HTTPS reverse proxy. Any other public name is refused, so a web page can't reach the server by pointing its own name at your server's address. |
+| `BROADWAVE_HOSTS` | Public names the server answers to, comma-separated, such as `tv.example.com` (a leading dot covers subdomains). Addresses, one-word names, `.local`, `.lan`, and other home names always work, and so does a browser that reaches the server by HTTPS on port 443. Any other public name or port is refused, so a web page can't reach the server by pointing its own name at your server's address. |
 | `BROADWAVE_ALTERNATES` | `0` carries only the chosen sound track in each live encode. By default a full-size encode also carries the channel's other languages and descriptions, so players switch between them without a restart. |
 
 Graphics, for smoother transcoding:

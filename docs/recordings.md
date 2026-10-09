@@ -40,7 +40,7 @@ Record this airing, record the series, or record every game.
 
 A series pass records the show whose title matches, on one channel or any. A pass can also match words anywhere in a title ("Chiefs") or a guide category ("Sports"). It can be limited to new episodes, to days of the week, and to a time of day; a window that runs past midnight counts as the night it began. While you set a pass up, the schedule shows what it would record in the next two weeks and anything it would stop from recording. Padding is in minutes before the listing and after it. A new pass keeps every episode. You can keep only the ones you have not watched, or the last few: when a new episode finishes, older finished ones of that show are removed. Watched, for that rule, means you marked it watched, played to the last 15 seconds, or played through 90% of it. Marking it unwatched keeps it. The last few, with no number set, keeps the newest one. A recording that is still in progress is left alone. An episode already in the library is not recorded again, unless you deleted it and the pass is set to record it again. A limit stops new ones once that many are unwatched.
 
-Record this airing is a one-time pass for that channel and that start time. It wins over a series pass for the same showing, and it records even when that episode is already in the library. The one-time pass is removed a day after the showing ends.
+Record this airing is a one-time pass for that channel and that start time. It wins over a series pass for the same showing, and it records even when that episode is already in the library. The one-time pass is removed a day after the showing starts.
 
 Record every game follows a team on any channel. The listing matches when the title or the episode name mentions the team. It starts one minute early and runs two minutes past the listing. The other channel of a simulcast is not recorded again.
 
@@ -54,9 +54,9 @@ A show that is already on can still be recorded from its beginning, when the cha
 
 A recording of a channel shares that channel's tune with everyone watching it. Subchannels of the same station share it too.
 
-A pass claims its tuner 90 seconds before the listing, or earlier when the pass has padding. While that claim is waiting, the same number of free tuners are held back from a new channel, so the recording still has one.
+A pass claims its tuner 90 seconds before the listing. Padding starts it earlier only when that padding is longer than 90 seconds. While that claim is waiting, the same number of free tuners are held back from a new channel, so the recording still has one.
 
-Watching inside that window asks first. The line is "<title> starts at <time>. Watching stops when that recording starts." Several recordings at once name the count. Watch anyway plays the channel now. The recording still takes the tuner when it starts.
+Watching inside that window asks first only when the tune would leave a recording without a tuner. With a spare tuner the channel plays and Broadwave does not ask. The line is "<title> starts at <time>. Watching stops when that recording starts." Several recordings at once name the count. Watch anyway plays the channel now. The recording still takes the tuner when it starts.
 
 If every tuner is in use when the recording starts, it takes one that only has people watching, and those channels stop. The schedule records "<number> stops at <time>. <title> is recording." Multiview shows that same line on the tile that will be taken. A tuner that is already recording is not taken.
 

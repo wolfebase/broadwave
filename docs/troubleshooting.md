@@ -17,7 +17,7 @@ A multiview tile that cannot start names what is already on:
 
 The rest of that line names the channels that are on, such as "Both tuners are busy. 4.1 and 5.1 are on."
 
-A signal check uses that same sentence while a tuner is busy, while something is recording, or while a recording starts within 30 minutes.
+A signal check answers "Every tuner is busy. Stop a recording or watch something already on." while a tuner is in use, while something is recording, or while a recording starts within 30 minutes. It does not name the channels.
 
 ## This channel isn't coming in
 

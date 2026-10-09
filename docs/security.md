@@ -12,7 +12,7 @@ These names work without any extra setting:
 - A one-word name.
 - A name ending in `.local` or `.lan`, and the home names `.home.arpa`, `.fritz.box`, and `.attlocal.net`.
 
-Set `BROADWAVE_HOSTS` to any other name you use, comma-separated. A leading dot covers the subdomains of that name, such as `.example.com`. A browser that reaches the server through an HTTPS reverse proxy is allowed. The README lists the same rule under image options.
+Set `BROADWAVE_HOSTS` to any other name you use, comma-separated. A leading dot covers the subdomains of that name, such as `.example.com`. A browser that reaches the server by HTTPS on port 443 is allowed. Any other public name or port needs `BROADWAVE_HOSTS`. The README lists the same rule under image options.
 
 A refused request answers with the name it saw, and tells you to set `BROADWAVE_HOSTS` to that name.
 

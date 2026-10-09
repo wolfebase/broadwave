@@ -16,7 +16,7 @@ Movies/Night Flight (1999)/Night Flight (1999).ts
 
 A season folder is used when the guide has both a season and an episode number. Otherwise the file stays in the show folder, named with the date and the episode name, or the start time when it has none. A movie gets the year when the guide has it.
 
-The file is the station's program, copied, not re-encoded. A clear ATSC 3.0 channel with AC-4 sound keeps the program's own packets, so every sound track and the captions stay as the tuner sent them.
+The picture and the first sound track are copied, not re-encoded. A clear ATSC 3.0 channel with AC-4 sound keeps the program's own packets, so every sound track and the captions stay as the tuner sent them.
 
 When the recording ends, a `.json` file with the same name sits beside it, with the title and the times. Commercial breaks, when any are found, go in a matching `.edl`. The Docker image includes comskip, which runs after the file is closed, along with Broadwave's own scan for black frames, scene cuts, and silence. A server without comskip still runs that scan.
 
@@ -32,7 +32,7 @@ A game that is matched to a live score keeps recording until the game is over, i
 
 A show that is already on can still be recorded from its beginning, when the channel has been tuned and the buffer still holds the start. Settings, Keep for recording from the start, is how long that buffer is. The choices are Off, 30 minutes, 1 hour, 2 hours, and 4 hours. One hour is the usual choice.
 
-A pass claims its tuner 90 seconds before the listing, or earlier when the pass has padding. Watching inside that window asks first. The recording still takes the tuner when it starts, unless that tuner is already recording something else.
+A pass claims its tuner 90 seconds before the listing. Padding starts it earlier only when that padding is longer than 90 seconds. Watching inside that window asks first only when the tune would leave a recording without a tuner. With a spare tuner the channel plays and Broadwave does not ask. The recording still takes the tuner when it starts. A tuner that is already recording is left alone.
 
 ## Disk space
 
