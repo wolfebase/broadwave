@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { discover, getHome, type HomePlace } from "../../api";
 import { useData } from "../../app/data";
+import { noteAfterFetch } from "./fetchNote";
 import "./setup.css";
+
+const networkSilent = "This network did not answer.";
 
 /** Tuners, screens, and servers on this network. One action each. Nothing is added until a tap. */
 export function HomeList({ hideAdded = false, heading: Heading = "h3" }: { hideAdded?: boolean; heading?: "h2" | "h3" }) {
@@ -12,16 +15,25 @@ export function HomeList({ hideAdded = false, heading: Heading = "h3" }: { hideA
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const scanN = useRef(0);
 
   function load(fresh: boolean) {
+    const mine = ++scanN.current;
     return getHome(fresh)
       .then((res) => {
+        if (mine !== scanN.current) return;
         setPlaces(res.places ?? []);
         setTunerAddress(res.tunerAddress);
         setSharing(res.sharing);
+        setNote((n) => noteAfterFetch(n, true, networkSilent));
       })
-      .catch(() => setNote("This network did not answer."))
-      .finally(() => setReady(true));
+      .catch(() => {
+        if (mine !== scanN.current) return;
+        setNote((n) => noteAfterFetch(n, false, networkSilent));
+      })
+      .finally(() => {
+        if (mine === scanN.current) setReady(true);
+      });
   }
 
   useEffect(() => {
