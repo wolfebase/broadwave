@@ -36,6 +36,27 @@ type captionTrack struct {
 	held []heldPicture
 	// age is the media time read so far, in 90 kHz ticks, across timelines.
 	age int64
+	// encoders are the packagers reading this channel. Each one learns an
+	// encode's caption line when that line is committed, which is later than
+	// the filter's break: the reader holds pictures back for display order.
+	encoders []*captionEncode
+}
+
+// captionLineKeep bounds lines waiting for an encode to take them.
+const captionLineKeep = 64
+
+// captionEncode is one packager's caption lines. base is the line when the
+// packager was bound, and it belongs to the first encode. Later encodes take
+// lines in the order the filter accepted their breaks.
+type captionEncode struct {
+	track     *captionTrack
+	mu        sync.Mutex
+	base      int
+	took      bool
+	strict    bool
+	waiting   int
+	unmatched int
+	lines     []int
 }
 
 type keptCue struct {
@@ -101,6 +122,7 @@ func (c *captionTrack) picture(pts int64, pairs []byte) {
 	c.keep()
 	if ptsDelta(c.held[0].pts, c.last) < 0 {
 		c.line++
+		c.noteLine(c.line)
 	}
 	c.dec = captions.NewDecoder()
 	held := c.held
@@ -131,6 +153,83 @@ func (c *captionTrack) keep() {
 	for _, cue := range c.dec.Take() {
 		c.cues = append(c.cues, keptCue{Cue: cue, line: c.line, at: c.age})
 	}
+}
+
+// noteLine runs under c.mu, from picture, after a backward break commits.
+func (c *captionTrack) noteLine(line int) {
+	for _, e := range c.encoders {
+		e.commit(line)
+	}
+}
+
+// bindEncoder registers a packager. next is each encode's line, in order.
+// expect is called when the filter accepts a backward break, before the
+// reader has emitted the new pictures. drop unregisters the packager.
+func (c *captionTrack) bindEncoder() (next func() int, expect func(), drop func()) {
+	c.mu.Lock()
+	e := &captionEncode{track: c, base: c.line}
+	c.encoders = append(c.encoders, e)
+	c.mu.Unlock()
+	return e.next, e.expect, func() { c.dropEncoder(e) }
+}
+
+func (c *captionTrack) dropEncoder(e *captionEncode) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i, have := range c.encoders {
+		if have == e {
+			c.encoders = append(c.encoders[:i], c.encoders[i+1:]...)
+			return
+		}
+	}
+}
+
+func (e *captionEncode) expect() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.strict = true
+	if e.unmatched > 0 {
+		e.unmatched--
+		return
+	}
+	e.waiting++
+}
+
+func (e *captionEncode) commit(line int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	// A break the filter follows in the same encode has no encode waiting
+	// for it. Once a real break has been reserved, those lines are not queued.
+	if e.strict && e.waiting == 0 {
+		return
+	}
+	if e.waiting > 0 {
+		e.waiting--
+	} else {
+		e.unmatched++
+	}
+	if len(e.lines) >= captionLineKeep {
+		return
+	}
+	e.lines = append(e.lines, line)
+}
+
+func (e *captionEncode) next() int {
+	e.mu.Lock()
+	if !e.took {
+		e.took = true
+		n := e.base
+		e.mu.Unlock()
+		return n
+	}
+	if len(e.lines) > 0 {
+		n := e.lines[0]
+		e.lines = e.lines[1:]
+		e.mu.Unlock()
+		return n
+	}
+	e.mu.Unlock()
+	return e.track.timeline()
 }
 
 // timeline is the broadcast timeline the captions are on now.
@@ -240,13 +339,21 @@ func (h *Hub) startCaptionsLocked(f *feed) {
 	f.captionSub = h.attachPipe(m, f.captions, true)
 }
 
-// captionLine reads the feed's caption timeline for a packager. The caller
-// holds h.mu; the packager calls it later without.
-func captionLine(f *feed) func() int {
-	if f.captions == nil {
-		return nil
+// bindCaption reserves caption lines for one packager. next is each encode's
+// line. expect is told from the filter's break. drop unregisters the packager
+// when it stops. The caller holds h.mu; the packager calls next later without.
+func bindCaption(f *feed) (next func() int, expect func(), drop func()) {
+	if f == nil || f.captions == nil {
+		return nil, nil, nil
 	}
-	return f.captions.timeline
+	return f.captions.bindEncoder()
+}
+
+// captionLine is a packager's line function when the caller does not keep the
+// registration. The hub uses bindCaption so the packager can drop it.
+func captionLine(f *feed) func() int {
+	next, _, _ := bindCaption(f)
+	return next
 }
 
 // stopCaptionsLocked runs when the last rendition stops. A recording alone

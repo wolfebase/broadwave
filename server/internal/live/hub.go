@@ -1082,7 +1082,8 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 		h.startCaptionsLocked(f)
 	}
 	h.seedLong(f, gate)
-	packIn := startPack(dir, stdout, gate, done, captionLine(f))
+	next, expect, drop := bindCaption(f)
+	packIn := startPack(dir, stdout, gate, done, next, expect, drop)
 	NotePID(h.Dir, cmd.Process.Pid)
 	now := time.Now()
 	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: now, began: now, args: args, extras: extras, gate: gate, packDone: done, input: packIn}
@@ -1381,7 +1382,14 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 		return false
 	}
 	h.seedLong(f, gate)
-	r.input = startPack(r.dir, stdout, gate, done, captionLine(f))
+	// The break that reached this restart already reserved its caption line on
+	// the packager being replaced. A new registration would give the first
+	// segment the line from before that break.
+	next, expect, drop := r.input.releaseHooks()
+	if drop == nil {
+		next, expect, drop = bindCaption(f)
+	}
+	r.input = startPack(r.dir, stdout, gate, done, next, expect, drop)
 	NotePID(h.Dir, cmd.Process.Pid)
 	r.cmd = cmd
 	r.stdin = stdin
@@ -1408,7 +1416,14 @@ func (h *Hub) renditionPipe(f *feed, r *rendition, stdin io.WriteCloser) io.Writ
 	w := newProgramPipe(markWriter{stdin, &r.fed}, program)
 	if p, ok := w.(*programPipe); ok {
 		p.sw = &pipeSwitch{}
-		p.onBreak = func() { go h.followBreak(f, r, p) }
+		// Reserve the caption line here, on the filter's goroutine. followBreak
+		// can return for the whole respawn gap, and by then the reader has
+		// committed the next break's line as well.
+		in := r.input
+		p.onBreak = func() {
+			in.expectBreak()
+			go h.followBreak(f, r, p)
+		}
 		r.filter = p
 	}
 	return w

@@ -294,9 +294,9 @@ func newPackPipe(cmd *exec.Cmd) (*packPipe, error) {
 	return &packPipe{File: r, w: w}, nil
 }
 
-func startPack(dir string, stdout *packPipe, gate *playlistGate, done chan struct{}, line func() int) *packInput {
+func startPack(dir string, stdout *packPipe, gate *playlistGate, done chan struct{}, line func() int, expect, drop func()) *packInput {
 	stdout.started()
-	in := &packInput{cur: stdout, line: line}
+	in := &packInput{cur: stdout, line: line, expect: expect, drop: drop}
 	go func() {
 		defer close(done)
 		defer in.close()
@@ -322,10 +322,13 @@ type packInput struct {
 	known   bool
 	encodes int
 	startOK bool
-	// line is the captions' timeline when an encode writes its first
-	// segment. Nil without captions.
-	line  func() int
-	spans []encodeSpan
+	// line is each encode's caption line, in order. Nil without captions.
+	// expect is told at the filter's break, before the reader has emitted
+	// the new pictures. drop unregisters the packager.
+	line   func() int
+	expect func()
+	drop   func()
+	spans  []encodeSpan
 	// firstRead is when the first encode first wrote.
 	firstRead stamp
 }
@@ -354,9 +357,9 @@ func (in *packInput) noteEncodeStart(first float64, ok bool) {
 }
 
 // noteFirstSegment is told the sequence number of the segment the latest
-// encode's first fragment opens.
-// A second backward break within respawnGap can move the captions on before
-// a queued encode writes, and that encode's segments then get no cues.
+// encode's first fragment opens. The line is the one this encode started on.
+// A later break inside respawnGap can move the live caption line before this
+// segment is written; that line was reserved when the filter accepted the break.
 func (in *packInput) noteFirstSegment(seq int) {
 	// line never changes; it takes the caption track's lock, not this one.
 	n := 0
@@ -512,7 +515,36 @@ func (r *readAhead) Read(b []byte) (int, error) {
 
 func (r *readAhead) Close() error { return r.src.Close() }
 
+// expectBreak reserves the next caption line for the encode this break starts.
+// The filter calls it. The reader commits the line later.
+func (in *packInput) expectBreak() {
+	if in == nil || in.expect == nil {
+		return
+	}
+	in.expect()
+}
+
+// releaseHooks keeps this packager's caption registration for the encode that
+// replaces it. The old packager's close then leaves that registration in place.
+func (in *packInput) releaseHooks() (line func() int, expect, drop func()) {
+	if in == nil {
+		return nil, nil, nil
+	}
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	line, expect, drop = in.line, in.expect, in.drop
+	in.drop = nil
+	return line, expect, drop
+}
+
 func (in *packInput) close() {
+	in.mu.Lock()
+	drop := in.drop
+	in.drop = nil
+	in.mu.Unlock()
+	if drop != nil {
+		drop()
+	}
 	in.mu.Lock()
 	defer in.mu.Unlock()
 	in.done = true

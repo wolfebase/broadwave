@@ -339,7 +339,7 @@ func (h *Hub) startMosaicLocked(mo *mosaic) error {
 	for _, r := range readers {
 		_ = r.Close()
 	}
-	packIn := startPack(dir, stdout, gate, done, nil)
+	packIn := startPack(dir, stdout, gate, done, nil, nil, nil)
 	NotePID(h.Dir, cmd.Process.Pid)
 	now := time.Now()
 	out := &rendition{dir: dir, cmd: cmd, seen: now, began: now, args: args, gate: gate, packDone: done, input: packIn, fallback: mo.software}

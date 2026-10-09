@@ -218,6 +218,113 @@ func TestCaptionSegmentUsesTheSegmentsOwnStart(t *testing.T) {
 	}
 }
 
+// A second backward break inside respawnGap commits another caption line
+// before the encode queued for the first break writes a segment.
+// That encode's pictures are the first break's timeline.
+func TestSecondBreakDuringRespawnGapKeepsTheQueuedEncodeLine(t *testing.T) {
+	c := newCaptionTrack(0)
+	f := &feed{captions: c}
+	in := &packInput{line: captionLine(f)}
+
+	popOn(c, 5_000_000, "OPENING")
+	in.noteEncodeStart(float64(5_000_000)/90000, true)
+	in.noteFirstSegment(0)
+	if got, ok := in.encodeAt(0); !ok || got.line != 0 {
+		t.Fatalf("opening encode line %d, ok %v", got.line, ok)
+	}
+
+	harborEnd := popOn(c, 1_000_000, "HARBOR")
+	if c.timeline() != 1 {
+		t.Fatalf("line %d after the queued encode's break", c.timeline())
+	}
+	lanternEnd := popOn(c, 90_000, "LANTERN")
+	if c.timeline() != 2 {
+		t.Fatalf("line %d after the break inside respawnGap", c.timeline())
+	}
+
+	in.noteEncodeStart(float64(1_000_000)/90000, true)
+	in.noteFirstSegment(7)
+	got, ok := in.encodeAt(7)
+	if !ok {
+		t.Fatal("queued encode has no caption line")
+	}
+	if got.line != 1 || texts(c.span(got.line, 1_000_000, harborEnd-1_000_000, 0)) != "HARBOR" {
+		t.Fatalf("queued encode line %d text %q, want line 1 HARBOR", got.line, texts(c.span(got.line, 1_000_000, harborEnd-1_000_000, 0)))
+	}
+
+	in.noteEncodeStart(float64(90_000)/90000, true)
+	in.noteFirstSegment(11)
+	later, ok := in.encodeAt(11)
+	if !ok || later.line != 2 || texts(c.span(later.line, 90_000, lanternEnd-90_000, 0)) != "LANTERN" {
+		t.Fatalf("later encode line %d text %q, want line 2 LANTERN", later.line, texts(c.span(later.line, 90_000, lanternEnd-90_000, 0)))
+	}
+}
+
+// A restart after a break keeps the line that break reserved. Binding a new
+// registration would date the new encode with the line from before the break.
+func TestRestartKeepsTheCaptionLineReservedForTheBreak(t *testing.T) {
+	c := newCaptionTrack(0)
+	f := &feed{captions: c}
+	next, expect, drop := bindCaption(f)
+	in := &packInput{line: next, expect: expect, drop: drop}
+	popOn(c, 5_000_000, "OPENING")
+	in.noteEncodeStart(float64(5_000_000)/90000, true)
+	in.noteFirstSegment(0)
+
+	in.expectBreak()
+	line, expect2, drop2 := in.releaseHooks()
+	defer drop2()
+	restarted := &packInput{line: line, expect: expect2, drop: drop2}
+	// The reader commits the line after the replacement encode is bound.
+	harborEnd := popOn(c, 1_000_000, "HARBOR")
+	restarted.noteEncodeStart(float64(1_000_000)/90000, true)
+	restarted.noteFirstSegment(4)
+	got, ok := restarted.encodeAt(4)
+	if !ok || got.line != 1 || texts(c.span(got.line, 1_000_000, harborEnd-1_000_000, 0)) != "HARBOR" {
+		t.Fatalf("restarted encode line %d text %q, want line 1 HARBOR", got.line, texts(c.span(got.line, 1_000_000, harborEnd-1_000_000, 0)))
+	}
+}
+
+// The filter reserves a line when it accepts a break. A break it follows in
+// the same encode is not reserved, so the next encode keeps the line from the
+// break that started it.
+func TestFilterBreakKeepsTheLineOfTheEncodeItStarted(t *testing.T) {
+	c := newCaptionTrack(0)
+	f := &feed{program: 1, captions: c}
+	next, expect, drop := bindCaption(f)
+	defer drop()
+	in := &packInput{line: next, expect: expect}
+	r := &rendition{input: in}
+	w := (&Hub{}).renditionPipe(f, r, &nopWriter{})
+	p, ok := w.(*programPipe)
+	if !ok || p.onBreak == nil {
+		t.Fatal("rendition pipe has no break handler")
+	}
+
+	popOn(c, 5_000_000, "OPENING")
+	in.noteEncodeStart(float64(5_000_000)/90000, true)
+	in.noteFirstSegment(0)
+
+	p.onBreak()
+	harborEnd := popOn(c, 1_000_000, "HARBOR")
+	popOn(c, 90_000, "LANTERN")
+	p.onBreak()
+	pierEnd := popOn(c, 40_000, "PIER")
+
+	in.noteEncodeStart(float64(1_000_000)/90000, true)
+	in.noteFirstSegment(7)
+	got, ok := in.encodeAt(7)
+	if !ok || got.line != 1 || texts(c.span(got.line, 1_000_000, harborEnd-1_000_000, 0)) != "HARBOR" {
+		t.Fatalf("queued encode line %d text %q, want line 1 HARBOR", got.line, texts(c.span(got.line, 1_000_000, harborEnd-1_000_000, 0)))
+	}
+	in.noteEncodeStart(float64(40_000)/90000, true)
+	in.noteFirstSegment(11)
+	later, ok := in.encodeAt(11)
+	if !ok || later.line != 3 || texts(c.span(later.line, 40_000, pierEnd-40_000, 0)) != "PIER" {
+		t.Fatalf("later encode line %d text %q, want line 3 PIER", later.line, texts(c.span(later.line, 40_000, pierEnd-40_000, 0)))
+	}
+}
+
 // After a timestamp break the next encode writes on with its own offset and
 // the captions' new timeline. A rewind to the first encode keeps its cues.
 func TestCaptionSegmentsAfterABreakUseTheirOwnEncode(t *testing.T) {
