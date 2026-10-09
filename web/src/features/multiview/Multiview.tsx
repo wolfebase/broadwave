@@ -6,6 +6,7 @@ import { usePlayer } from "../../app/player";
 import { focusRing } from "../../app/remote";
 import { inAppDepth, navigate, useRoute } from "../../app/router";
 import { actionName } from "../../lib/actionName";
+import { authHeaders } from "../../lib/deviceToken";
 import { airingAt } from "../../lib/guide";
 import { menuStep } from "../../lib/menuStep";
 import { events } from "../../lib/events";
@@ -415,7 +416,7 @@ export function Multiview() {
   const [pictures, setPictures] = useState<ReadonlySet<number>>(() => new Set());
   useEffect(() => {
     let dead = false;
-    fetch("/api/v1/diagnostics")
+    fetch("/api/v1/diagnostics", { headers: authHeaders() })
       .then((res) => res.json() as Promise<{ encoder?: { tiles?: number } }>)
       .then((body) => {
         const count = body.encoder?.tiles;

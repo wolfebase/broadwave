@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { authHeaders } from "../../lib/deviceToken";
 import type { TunerStatus } from "../../types";
 import { applyDiagnostics } from "../settings/sourcePoll";
 
@@ -30,7 +31,7 @@ export function useDiagnostics(key?: unknown, every = 5000): Diagnostics | null 
     let ticket = 0;
     const load = () => {
       const mine = ++ticket;
-      fetch("/api/v1/diagnostics")
+      fetch("/api/v1/diagnostics", { headers: authHeaders() })
         .then((r) => r.json() as Promise<Diagnostics>)
         .then((d) => {
           const body = applyDiagnostics(mine, ticket, d);

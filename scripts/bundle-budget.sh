@@ -18,6 +18,7 @@
 # refresh keeps the two weeks already loaded, and a settings save drops an older
 # save's response and a failed disk read. Measured entry gzip 94636, plus 300
 # bytes of slack for lazy-chunk hashes.
+# The entry also sends a device token and opens the pair screen on 401.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

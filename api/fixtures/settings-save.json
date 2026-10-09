@@ -3,6 +3,7 @@
   "autoplay": "1",
   "bufferMinutes": "60",
   "deleteWatchedDays": "0",
+  "deviceAuth": "0",
   "folderLayout": "shows",
   "gameAlerts": "all",
   "hdhrEmulate": "0",
