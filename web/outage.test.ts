@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { unreadBody } from "./src/api.ts";
-import { aTunerAnswers, aTunerIsFree, autoplayRetry, channelDidNotStart, classifySnap, connectionDropped, FrozenPicture, frozenMs, holdPictureMessage, listingNote, liveFatalStep, noListing, noListingChecked, noSignal, outageAtWatchStart, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, requestFailed, restartDelayMs, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage, watchResolution } from "./src/features/player/outage.ts";
+import { aTunerAnswers, aTunerIsFree, autoplayRetry, channelDidNotStart, classifySnap, connectionDropped, FrozenPicture, frozenMs, holdPictureMessage, listingNote, liveFatalStep, noListing, noListingChecked, noSignal, outageAtWatchStart, outageTearsDown, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryReady, requestFailed, restartDelayMs, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage, watchResolution } from "./src/features/player/outage.ts";
 
 test("checking for listings says so when nothing comes back", () => {
   assert.equal(listingNote(false), noListing);
@@ -58,6 +58,17 @@ test("a dropped connection, and a channel with no signal, each wait for their ow
   assert.equal(lost.recovery, "signal");
   assert.equal(recoveryReady("signal", { health: true, freeTuner: false, tunerAnswers: true, online: true, signalLost: true }), false);
   assert.equal(recoveryReady("signal", { health: true, freeTuner: false, tunerAnswers: true, online: true, signalLost: false }), true);
+});
+
+test("a named outage or a confirm prompt keeps the screen when the tab comes back", () => {
+  assert.equal(outageTearsDown("server", false), true);
+  assert.equal(outageTearsDown("tuner", false), true);
+  assert.equal(outageTearsDown("busy", false), true);
+  assert.equal(outageTearsDown("signal", false), true);
+  assert.equal(outageTearsDown("restart", false), true);
+  assert.equal(outageTearsDown("", true), true);
+  // An unnamed stop leaves the player up, so a return may resume it.
+  assert.equal(outageTearsDown("", false), false);
 });
 
 test("a home with only playlists never blames a tuner", () => {
