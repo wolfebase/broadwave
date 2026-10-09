@@ -107,12 +107,13 @@ export class EventSocket {
       this.connect();
       return;
     }
-    if (ws.readyState !== WebSocket.OPEN) return;
-    this.burst();
+    if (ws.readyState === WebSocket.OPEN) this.burst();
     // A socket that went quiet across a sleep can look open and be dead.
+    // One still connecting can stay that way until the browser gives up.
     const heard = this.heard;
     window.setTimeout(() => {
-      if (this.ws === ws && this.heard === heard) this.drop(ws);
+      if (this.ws !== ws) return;
+      if (ws.readyState !== WebSocket.OPEN || this.heard === heard) this.drop(ws);
     }, 4_000);
   }
 
