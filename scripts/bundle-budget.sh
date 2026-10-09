@@ -12,13 +12,16 @@
 # the page that needs them. Measured entry gzip 92847, plus 300 bytes of slack.
 # JS raised 2026-10-09: the entry sends a device token and opens the pair screen
 # on 401. Measured entry gzip 93733, plus 300 bytes of slack.
+# JS raised again 2026-10-09: a 401 from any request opens pairing, and a watch
+# token loads picture settings from the entry. Measured entry gzip 94105, plus
+# 300 bytes of slack.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=94033
+JS_GZIP_MAX=94405
 CSS_GZIP_MAX=9860
 
 if [[ ! -f "$INDEX" ]]; then
