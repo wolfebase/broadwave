@@ -11,7 +11,7 @@ Any current HDHomeRun works. Broadwave finds it on the network.
 | FLEX 4K | Four tuners. Two of them receive ATSC 3.0. A 3.0 channel will not tune on the other two. |
 | FLEX DUO, FLEX QUATRO, CONNECT | The regular broadcast only. |
 
-A clear ATSC 3.0 channel is an HEVC picture and AC-4 sound. Phones, TVs, and browsers do not decode AC-4, so the server sends Dolby Digital where the device plays it, and stereo AAC everywhere else. Apple TV, iPhone, iPad, and Safari can take the HEVC picture as the station sent it. A browser that cannot play HEVC gets H.264.
+A clear ATSC 3.0 channel is an HEVC picture and AC-4 sound. Phones, TVs, and browsers do not decode AC-4, so the server sends Dolby Digital where the device plays it, and stereo AAC everywhere else. Apple TV 4K, a recent iPhone or iPad, and Safari can take the HEVC picture as the station sent it. Apple TV HD and an older iPhone or iPad get H.264. A browser that cannot play HEVC gets H.264.
 
 Some NextGen stations encrypt the broadcast. Broadwave cannot decrypt them. When that station also sends a regular broadcast, Broadwave plays and records the regular one, and the player says "The 3.0 version is encrypted. Showing the regular broadcast." A station with no regular broadcast stays in Settings and does not play.
 

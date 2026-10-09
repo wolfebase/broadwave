@@ -28,7 +28,7 @@ In One big and two, One big and three, and Small over big, the tile you hear is 
 
 A quad is 360p on every tile.
 
-Side by side uses the large-tile size for both pictures. In the other layouts, the tile with the sound is that size and the quiet tiles beside it are 540p, or 360p when the large tile is 360p. Small over big uses 360p for the small picture.
+Side by side uses the large-tile size for both pictures. In the other layouts, the tile with the sound is that size and the quiet tiles beside it are 540p, or 360p when the large tile is 360p or 360p60. Small over big uses 360p for the small picture.
 
 The large-tile size comes from a short encode the server runs at startup. Diagnostics prints the result, for example "Intel GPU found: 1080p60 at 5.4x real time. 720p60 on a large tile, 4 pictures at once."
 
