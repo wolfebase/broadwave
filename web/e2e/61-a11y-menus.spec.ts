@@ -23,7 +23,15 @@ test("captions and audio are labelled and a remote can change them", async ({ pa
   await settle(page);
   await expect(page.locator("html")).toHaveAttribute("data-layout", "tv");
   await page.getByRole("button", { name: "Watch", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Player" })).toBeVisible();
+  const stage = page.getByRole("region", { name: "Player" });
+  await expect(stage).toBeVisible();
+  await stage.evaluate((el: HTMLElement) => el.focus({ focusVisible: true } as FocusOptions));
+  await expect.poll(() =>
+    stage.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return el.matches(":focus-visible") && style.outlineStyle === "solid" && Number.parseFloat(style.outlineWidth) >= 4 && Number.parseFloat(style.outlineOffset) < 0;
+    }),
+  ).toBe(true);
   const video = page.locator("video.stage-video");
   await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.videoWidth > 0), { timeout: 45_000 }).toBe(true);
   await video.evaluate((el: HTMLVideoElement) => el.pause());
@@ -65,6 +73,11 @@ test("captions and audio are labelled and a remote can change them", async ({ pa
   await expect(captions.getByRole("button", { name: "On" })).toHaveAttribute("aria-pressed", "true");
   await expect(captions.getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "false");
 
+  await page.keyboard.press("Escape");
+  await expect(options).toBeFocused();
+  await expect(options).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("region", { name: "Options" })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/watch/);
   await page.keyboard.press("Escape");
   await expect(page).not.toHaveURL(/\/watch/);
 });

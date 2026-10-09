@@ -80,6 +80,9 @@ test("c toggles captions and the mini player shows a cue", async ({ page }) => {
   await expect.poll(() => captionReqs.length, { timeout: 20_000 }).toBeGreaterThan(0);
 
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Options" })).toHaveAttribute("aria-expanded", "false");
+  await expect(page).toHaveURL(/\/watch/);
+  await page.keyboard.press("Escape");
   const mini = page.getByRole("region", { name: /Now playing/ });
   await expect(mini).toBeVisible();
   await expect.poll(() => captionMode(page)).toBe("showing");

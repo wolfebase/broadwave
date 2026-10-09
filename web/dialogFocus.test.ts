@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isTextField, trapTab } from "./src/lib/dialogFocus.ts";
+import { dismissesLayer, isTextField, trapTab } from "./src/lib/dialogFocus.ts";
 
 test("Tab stays inside a dialog and wraps at the ends", () => {
   const list = ["close", "watch", "record"];
@@ -26,4 +26,14 @@ test("Backspace edits a text field and leaves a checkbox or a slider", () => {
   assert.equal(isTextField({ tagName: "INPUT", type: "range" }), false);
   assert.equal(isTextField({ tagName: "BUTTON" }), false);
   assert.equal(isTextField(null), false);
+});
+
+test("Escape closes a layer, and Backspace does too unless it is editing text", () => {
+  const field = { tagName: "INPUT", type: "text" };
+  const button = { tagName: "BUTTON" };
+  assert.equal(dismissesLayer("Escape", field), true);
+  assert.equal(dismissesLayer("Escape", button), true);
+  assert.equal(dismissesLayer("Backspace", field), false);
+  assert.equal(dismissesLayer("Backspace", button), true);
+  assert.equal(dismissesLayer("Enter", button), false);
 });
