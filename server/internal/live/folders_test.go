@@ -152,3 +152,23 @@ func TestRemovingTheLastEpisodeTakesItsEmptyFolders(t *testing.T) {
 		t.Fatalf("the folder of a recording in progress went: %v", err)
 	}
 }
+
+func TestARecordingThatCannotBeRemovedKeepsItsSidecars(t *testing.T) {
+	h := &Hub{Dir: t.TempDir()}
+	root := h.Recordings()
+	// A non-empty directory at the recording's path cannot be removed.
+	path := filepath.Join(root, "News.ts")
+	if err := os.MkdirAll(filepath.Join(path, "inside"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	edl := filepath.Join(root, "News.edl")
+	if err := os.WriteFile(edl, []byte("1.000 2.000 0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.RemoveRecordingFiles(store.Recording{ID: 1, Path: path}); err == nil {
+		t.Fatal("no error for a file that stayed")
+	}
+	if _, err := os.Stat(edl); err != nil {
+		t.Fatalf("markers went with a recording that stayed: %v", err)
+	}
+}

@@ -219,7 +219,7 @@ func TestDiskReserveBlocksRecording(t *testing.T) {
 	}
 	hub := &live.Hub{Store: st, Dir: dir, FFmpeg: filepath.Join(dir, "missing-ffmpeg")}
 	var asked uint64
-	hub.MakeRoom = func(_ context.Context, need uint64) { asked = need }
+	hub.MakeRoom = func(_ context.Context, need uint64) uint64 { asked = need; return 0 }
 	h := (&Server{Store: st, Hub: hub, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Broadwave")}}}).Handler()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/recordings", bytes.NewBufferString(`{"channelId":1,"minutes":5,"title":"Nope"}`))

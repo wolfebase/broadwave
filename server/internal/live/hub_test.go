@@ -548,7 +548,7 @@ func TestRecordMetaDoesNotMakeRoomWithoutAChannel(t *testing.T) {
 	}
 	var calls int
 	h := &Hub{Dir: dir, Store: st}
-	h.MakeRoom = func(context.Context, uint64) { calls++ }
+	h.MakeRoom = func(context.Context, uint64) uint64 { calls++; return 0 }
 	_, err = h.RecordMeta(context.Background(), 5, store.Recording{ChannelID: 99999, Title: "Nope"})
 	if err == nil {
 		t.Fatal("a missing channel started a recording")
@@ -571,7 +571,7 @@ func TestEnsureSpaceRefusesWhenNothingWasFreed(t *testing.T) {
 	}
 	var calls int
 	h := &Hub{Dir: dir, Store: st}
-	h.MakeRoom = func(context.Context, uint64) { calls++ }
+	h.MakeRoom = func(context.Context, uint64) uint64 { calls++; return 0 }
 	err = h.ensureSpace(context.Background())
 	var low *disk.LowError
 	if !errors.As(err, &low) {
@@ -582,6 +582,73 @@ func TestEnsureSpaceRefusesWhenNothingWasFreed(t *testing.T) {
 	}
 	if low.Need != 999999*1000*1000*1000 {
 		t.Fatalf("need %d", low.Need)
+	}
+}
+
+// Free space can stay at the old reading for a few seconds after a delete.
+// Bytes that were actually removed still let the recording start.
+func TestEnsureSpaceAllowsAStaleRestat(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.PutSettings(context.Background(), map[string]string{"watermarkGB": "1"}); err != nil {
+		t.Fatal(err)
+	}
+	orig := diskStat
+	t.Cleanup(func() { diskStat = orig })
+	diskStat = func(string) (disk.Space, error) {
+		return disk.Space{Free: 1000, Total: 10000}, nil
+	}
+	var calls int
+	h := &Hub{Dir: dir, Store: st}
+	h.MakeRoom = func(context.Context, uint64) uint64 {
+		calls++
+		return 1_000_000_000 - 1000
+	}
+	if err := h.ensureSpace(context.Background()); err != nil {
+		t.Fatalf("stale free space refused the recording after the shortfall was freed: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("MakeRoom ran %d times", calls)
+	}
+	events, err := st.Events(context.Background(), 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ev := range events {
+		if ev.Message == "Refused a recording because free space is under the reserve" {
+			t.Fatal("refused after the shortfall was freed")
+		}
+	}
+}
+
+func TestEnsureSpaceStillRefusesWhenFreedBytesFallShort(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.PutSettings(context.Background(), map[string]string{"watermarkGB": "1"}); err != nil {
+		t.Fatal(err)
+	}
+	orig := diskStat
+	t.Cleanup(func() { diskStat = orig })
+	diskStat = func(string) (disk.Space, error) {
+		return disk.Space{Free: 1000, Total: 10000}, nil
+	}
+	h := &Hub{Dir: dir, Store: st}
+	h.MakeRoom = func(context.Context, uint64) uint64 { return 10 }
+	err = h.ensureSpace(context.Background())
+	var low *disk.LowError
+	if !errors.As(err, &low) {
+		t.Fatalf("got %v", err)
+	}
+	if low.Free != 1000 || low.Need != 1_000_000_000 {
+		t.Fatalf("free %d need %d", low.Free, low.Need)
 	}
 }
 
