@@ -16,6 +16,7 @@ func TestAllowedKeepsLANAndRefusesMetadata(t *testing.T) {
 		"http://127.0.0.1:8477/discover.json",
 		"https://203.0.113.9/guide.xml",
 		"http://[::1]/status.json",
+		"http://tv.local/live.m3u8",
 	}
 	for _, raw := range ok {
 		if err := Allowed(raw); err != nil {
@@ -38,6 +39,11 @@ func TestAllowedKeepsLANAndRefusesMetadata(t *testing.T) {
 		"http://0x7f000001/",
 		"http://127.1/",
 		"http://0177.0.0.1/",
+		"http://169.0xfea9fe/latest/meta-data",
+		"http://169.254.0xa9fe/latest/meta-data",
+		"http://169.254.169.0xfe/latest/meta-data",
+		"http://169.254.169.0XFE/latest/meta-data",
+		"http://169.0xfe.0xa9.0xfe/",
 		"",
 	}
 	for _, raw := range bad {

@@ -132,6 +132,8 @@ func metadataName(host string) bool {
 
 // ambiguous is a numeric host some clients treat as an address and Go does not,
 // such as a decimal, hex, or octal form of a metadata address.
+// A label written 0x is hex. ffmpeg and glibc read 169.254.169.0xfe as
+// 169.254.169.254. A name with an ordinary letter, such as tv.local, is not.
 func ambiguous(host string) bool {
 	if strings.Contains(host, ":") {
 		return false
@@ -145,22 +147,59 @@ func ambiguous(host string) bool {
 		_, err := strconv.ParseUint(host, 10, 64)
 		return err == nil
 	}
-	digits := 0
+	hexLabel := false
 	for _, label := range labels {
 		if label == "" {
 			return true
 		}
-		for _, c := range label {
-			if c < '0' || c > '9' {
-				return false
+		switch numericLabel(label) {
+		case numDecimal:
+			if len(label) > 1 && label[0] == '0' {
+				return true
 			}
-		}
-		digits++
-		if len(label) > 1 && label[0] == '0' {
-			return true
+		case numHex:
+			hexLabel = true
+		default:
+			return false
 		}
 	}
-	return digits != 4
+	if hexLabel {
+		return true
+	}
+	return len(labels) != 4
+}
+
+const (
+	numOther = iota
+	numDecimal
+	numHex
+)
+
+// numericLabel reports whether one dotted label is decimal or 0x hex.
+// 0x with no digits, and a word that merely contains 0x, are neither.
+func numericLabel(label string) int {
+	if label == "" {
+		return numOther
+	}
+	low := strings.ToLower(label)
+	if strings.HasPrefix(low, "0x") {
+		rest := low[2:]
+		if rest == "" {
+			return numOther
+		}
+		for _, c := range rest {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+				return numOther
+			}
+		}
+		return numHex
+	}
+	for _, c := range label {
+		if c < '0' || c > '9' {
+			return numOther
+		}
+	}
+	return numDecimal
 }
 
 func ipBlocked(ip net.IP) bool {
