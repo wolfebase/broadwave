@@ -70,8 +70,9 @@ func filePlaylistCovers(dir string, at float64) bool {
 	if from+fileSpan(path)+0.05 >= at {
 		return true
 	}
-	// Still encoding from the start, or from this resume point.
-	return from == 0 || at-from <= resumeMin
+	// Still encoding from this resume. An encode that started earlier has not
+	// reached here, so a deep resume would wait out the prefix.
+	return at-from <= resumeMin
 }
 
 func playlistEnded(path string) bool {

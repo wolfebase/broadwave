@@ -207,3 +207,49 @@ func TestPlayFileKeepsAFinishedEncode(t *testing.T) {
 		t.Fatal("a finished encode from the start was started again")
 	}
 }
+
+// An encode that is still growing from the start has not reached a resume
+// deep in the file. Reusing it makes that viewer wait for the prefix.
+func TestAnOpenEncodeDoesNotCoverADeepResume(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "show.ts")
+	if err := os.WriteFile(path, mpeg2TS(1, true), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(dir, "ffmpeg")
+	argsPath := filepath.Join(dir, "args")
+	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\nprintf '%s\\n' \"$@\" > " + argsPath + "\ncat > index.m3u8 << 'EOF'\n#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2.000,\nseg00000.ts\nEOF\necho x > seg00000.ts\n;;\nesac\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := &Hub{Dir: dir, Encoder: "libx264", FFmpeg: bin}
+	play := filepath.Join(dir, "file", "9")
+	if err := os.MkdirAll(play, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	g := h.fileGraphFor(path, "mpeg2video", "broadcast", "progressive")
+	g.Live = false
+	if err := os.WriteFile(filepath.Join(play, "graph.txt"), []byte(graphStamp(g)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	body := "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2.000,\nseg00000.ts\n#EXTINF:2.000,\nseg00001.ts\n"
+	if err := os.WriteFile(filepath.Join(play, "index.m3u8"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(play, "offset.txt"), []byte("0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if filePlaylistCovers(play, 40) {
+		t.Fatal("an open encode from the start covered a resume at 40s")
+	}
+	if _, err := h.PlayFile(9, path, "mpeg2video", "broadcast", "progressive", 40); err != nil {
+		t.Fatal(err)
+	}
+	args, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !inputSeek(string(args), "40.000") {
+		t.Fatalf("args:\n%s", args)
+	}
+}
