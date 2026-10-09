@@ -11,7 +11,7 @@ import { readZoom, saveZoom, type PictureMode, type Zoom } from "../../picture";
 import { copy } from "../../strings";
 import type { Channel } from "../../types";
 import { saveSound, sleepDue, sleepSentence, sleepUntilFrom } from "./extras";
-import { ignoreHeldKey } from "./keys";
+import { escapeAction, ignoreHeldKey, pendingTuneFires } from "./keys";
 import { ChevronIcon, InfoIcon, ListIcon, RecordIcon, SideBySideIcon, SyncIcon } from "../../ui/icons";
 import { Progress } from "../../ui/primitives";
 import { isLayout, multiviewPath } from "../multiview/storage";
@@ -136,7 +136,13 @@ export function LivePlayer({
   const [theater, setTheater] = useState(false);
   const typed = useRef("");
   const typedTimer = useRef(0);
+  const modeRef = useRef(mode);
   const [entry, setEntry] = useState("");
+  const [entryMode, setEntryMode] = useState(mode);
+  if (entryMode !== mode) {
+    setEntryMode(mode);
+    if (!pendingTuneFires(mode)) setEntry("");
+  }
   const previous = useRef<Channel | null>(null);
   const shown = useRef(channel.id);
   useEffect(() => {
@@ -252,6 +258,12 @@ export function LivePlayer({
     setPanel("guide");
   }
 
+  useEffect(() => {
+    modeRef.current = mode;
+    if (pendingTuneFires(mode)) return;
+    window.clearTimeout(typedTimer.current);
+    typed.current = "";
+  }, [mode]);
   useEffect(() => () => window.clearTimeout(typedTimer.current), []);
 
   function detachSync() {
@@ -388,7 +400,9 @@ export function LivePlayer({
       const next = typed.current.slice(0, -1);
       typed.current = next;
       setEntry(next);
-      if (next) typedTimer.current = window.setTimeout(() => tuneTyped(typed.current), 1500);
+      if (next) typedTimer.current = window.setTimeout(() => {
+        if (pendingTuneFires(modeRef.current)) tuneTyped(typed.current);
+      }, 1500);
       return;
     }
     // Wait for the whole number: tuning on each digit would take a tuner for 4.1 on the way to 41.1.
@@ -400,7 +414,9 @@ export function LivePlayer({
       if (typedChannel(channels, next, false)) return tuneTyped(next);
       typed.current = next;
       setEntry(next);
-      typedTimer.current = window.setTimeout(() => tuneTyped(typed.current), 1500);
+      typedTimer.current = window.setTimeout(() => {
+        if (pendingTuneFires(modeRef.current)) tuneTyped(typed.current);
+      }, 1500);
       return;
     }
     if (k === "Enter" && typed.current) {
@@ -435,7 +451,15 @@ export function LivePlayer({
     const arrows = k === "ArrowLeft" || k === "ArrowRight" || k === "ArrowUp" || k === "ArrowDown";
     if (layout === "tv" && arrows && (!(target instanceof Element) || !target.closest(".stage") || target.closest(".stage-hud"))) return;
     const actions: Record<string, () => void> = {
-      Escape: () => (panel !== "none" ? setPanel("none") : onMinimize()),
+      Escape: () => {
+        const action = escapeAction(document.fullscreenElement != null, panel !== "none");
+        if (action === "exit-fullscreen") {
+          void document.exitFullscreen();
+          return;
+        }
+        if (action === "close-panel") setPanel("none");
+        else onMinimize();
+      },
       // A TV remote's Back arrives as Backspace, so it leaves the player like Escape.
       Backspace: () => (panel !== "none" ? setPanel("none") : onMinimize()),
       " ": togglePlay,
