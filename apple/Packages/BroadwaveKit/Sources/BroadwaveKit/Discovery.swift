@@ -74,12 +74,23 @@ public final class Discovery {
         }
         browser.stateUpdateHandler = { [weak self] state in
             Task { @MainActor in
+                guard let self else { return }
+                let notice: BrowseNotice
                 switch state {
-                case .ready:
-                    self?.searching = true
-                    self?.probeIfTheFirstMissed()
-                case .failed, .cancelled: self?.searching = false
-                default: break
+                case .ready: notice = .ready
+                case .failed: notice = .failed
+                case .cancelled: notice = .cancelled
+                default: return
+                }
+                let step = Self.browse(after: notice, holding: self.browser != nil)
+                self.searching = step.searching
+                if notice == .ready {
+                    self.probeIfTheFirstMissed()
+                }
+                // A failure leaves the browser set, and start() then does nothing.
+                if !step.holding, self.browser != nil {
+                    self.browser?.cancel()
+                    self.browser = nil
                 }
             }
         }
@@ -205,6 +216,28 @@ public final class Discovery {
 
     enum ResolveEvent {
         case ready, failed, cancelled
+    }
+
+    /// After a browse failure the browser must be dropped, or the next start()
+    /// sees it and returns. Cancel is stop()'s own clear.
+    struct BrowseStep: Equatable {
+        var searching: Bool
+        var holding: Bool
+    }
+
+    enum BrowseNotice {
+        case ready, failed, cancelled
+    }
+
+    nonisolated static func browse(after notice: BrowseNotice, holding: Bool) -> BrowseStep {
+        switch notice {
+        case .ready:
+            BrowseStep(searching: true, holding: holding)
+        case .failed:
+            BrowseStep(searching: false, holding: false)
+        case .cancelled:
+            BrowseStep(searching: false, holding: holding)
+        }
     }
 
     nonisolated static func closeResolve(_ event: ResolveEvent) -> ResolveAction {
