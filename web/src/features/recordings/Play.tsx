@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore, type Keyboard
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
 import { actionName } from "../../lib/actionName";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
+import { releaseFileVideo, takeFileFatal } from "./filePlay";
 import { copy } from "../../strings";
 import { Stage } from "../player/Stage";
 import type { Recording } from "../../types";
@@ -82,6 +83,7 @@ export function Play({
     const video = videoRef.current;
     if (!video) return;
     viewerSought.current = false;
+    setError("");
     let dead = false;
     let gen = 0;
     let hls: Hls | null = null;
@@ -116,6 +118,8 @@ export function Play({
       }
       let resumeAt = 0;
       let placed = false;
+      const tried = { network: false, media: false };
+      let gaveUp = false;
       try {
         const next = await playRecording(recording.id, pictureMode);
         if (dead || mine !== gen) return;
@@ -146,7 +150,18 @@ export function Play({
           hls.attachMedia(video);
           hls.on(Hls.Events.MANIFEST_PARSED, place);
           hls.on(Hls.Events.ERROR, (_e, data) => {
-            if (data.fatal && mine === gen) setError(`${data.type}: ${data.details}`);
+            if (!data.fatal || dead || mine !== gen || gaveUp) return;
+            const action = takeFileFatal(data.type, tried);
+            if (action === "startLoad") {
+              hls?.startLoad();
+              return;
+            }
+            if (action === "recoverMedia") {
+              hls?.recoverMediaError();
+              return;
+            }
+            gaveUp = true;
+            setError(`${data.type}: ${data.details}`);
           });
         } else {
           video.src = next.playlist;
@@ -176,9 +191,13 @@ export function Play({
       gen += 1;
       relocate.current = () => {};
       detach?.();
+      // Read the playhead before releaseFileVideo reloads the element. A
+      // timeupdate from that reload would otherwise report the start.
+      const at = whereRef.current;
       hls?.destroy();
       track.remove();
-      if (whereRef.current > 1) void saveProgress(recording.id, whereRef.current);
+      releaseFileVideo(video);
+      if (at > 1) void saveProgress(recording.id, at);
     };
   }, [recording.id, pictureMode]);
 
