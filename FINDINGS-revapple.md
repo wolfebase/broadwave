@@ -354,11 +354,3 @@ Fix: Watch only when `airing.isOn(at: store.now)`. Otherwise open the airing, as
 `isOffline` is “`health` is non-empty”. The health sentence is never drawn. `healthWord`’s “Needs attention” branch sits inside `if !offline`, so it never runs. A disabled source with an empty health string shows “Off” in `Tokens.ColorToken.success`.
 
 Fix: show the health string when it is non-empty and not a URL. Don’t use the success color for “Off”.
-
-### Forget leaves the offline timer running
-
-`AppStore.swift` 246–265 and 376–386.
-
-`forget()` drops the socket and does not cancel `offlineWait`. `noteConnection` sleeps with `try?`, then sets `offline = true` unless that task was cancelled. Leave a server while its socket is down. Three seconds later `offline` becomes true with no server. The next `connect` calls `noteConnection(false)`, which does not clear `offline`. `api` is already set, so `connected` is true, and the banner at `RootView.swift` 600 shows until the new socket opens.
-
-Fix: in `forget()`, cancel `offlineWait` and set `offline = false`.

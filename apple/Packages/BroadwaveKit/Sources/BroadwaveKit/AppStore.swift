@@ -51,8 +51,21 @@ public final class AppStore {
     private var relocateAfter = Date.distantPast
     /// Bumped on connect and forget, so a move that started earlier cannot undo them.
     private var generation = 0
+    /// Lineup and event calls share this session. Tests pass their own.
+    private let session: URLSession
+    #if DEBUG
+        /// When set, a saved demo waits on this instead of the loopback player.
+        var prepareDemo: (@MainActor () async -> URL?)?
+        /// A test connect must not write the process-wide server list.
+        var persistServers = true
+    #endif
 
-    public init() {
+    public convenience init() {
+        self.init(session: .shared)
+    }
+
+    init(session: URLSession) {
+        self.session = session
         prefs = Self.load("prefs") ?? Prefs()
         syncEnabled = UserDefaults.standard.object(forKey: "sync") as? Bool ?? true
         remembered = Self.load("servers") ?? []
@@ -75,7 +88,7 @@ public final class AppStore {
             }
             if saved.id == "demo" {
                 server = saved
-                api = APIClient(base: saved.url)
+                api = APIClient(base: saved.url, session: session)
                 resumeDemo = saved
             } else {
                 connect(saved)
@@ -100,15 +113,32 @@ public final class AppStore {
             }
         }
         if let resumeDemo {
-            Task { @MainActor in
-                guard await DemoServer.shared.prepare() != nil else {
-                    self.error = "The demo did not start."
-                    self.forget()
-                    return
-                }
-                self.connect(resumeDemo)
-            }
+            let started = generation
+            Task { await self.resumeSavedDemo(resumeDemo, started: started) }
         }
+    }
+
+    /// The saved demo starts after the player is up. A server chosen in that gap wins.
+    func resumeSavedDemo(_ server: FoundServer, started: Int) async {
+        let url: URL?
+        #if DEBUG
+            if let prepareDemo {
+                url = await prepareDemo()
+            } else {
+                url = await DemoServer.shared.prepare()
+            }
+        #else
+            url = await DemoServer.shared.prepare()
+        #endif
+        // Forget or a real server during prepare must stick. A failed player
+        // only wipes the demo that was waiting, not the server chosen since.
+        guard generation == started else { return }
+        guard url != nil else {
+            forget()
+            error = "The demo did not start."
+            return
+        }
+        connect(server)
     }
 
     public var connected: Bool {
@@ -142,11 +172,13 @@ public final class AppStore {
             error = nil
         }
         socket?.disconnect()
+        // A new server is not the previous one's outage. The banner waits out a short drop.
+        offline = false
         // Down until the first message, so a server that is off at launch gets the banner.
         noteConnection(false)
         announced = false
         self.server = server
-        let api = APIClient(base: server.url)
+        let api = APIClient(base: server.url, session: session)
         self.api = api
         let socket = EventSocket(base: server.url)
         socket.onFailure = { [weak self] in
@@ -212,7 +244,7 @@ public final class AppStore {
     /// before any event socket or saved settings go there.
     private func proven(_ candidate: FoundServer, key: String) async -> FoundServer? {
         guard FinderPacket.isLocal(candidate.url) else { return nil }
-        guard let info = try? await APIClient(base: candidate.url).server() else { return nil }
+        guard let info = try? await APIClient(base: candidate.url, session: session).server() else { return nil }
         guard info.id == candidate.id, info.discoveryKey == key else { return nil }
         let name = info.name.isEmpty ? candidate.name : info.name
         return FoundServer(id: info.id, name: name, url: candidate.url, key: key)
@@ -245,6 +277,10 @@ public final class AppStore {
 
     public func forget() {
         generation += 1
+        offlineWait?.cancel()
+        offlineWait = nil
+        offline = false
+        loading = false
         socket?.disconnect()
         socket = nil
         api = nil
@@ -260,8 +296,19 @@ public final class AppStore {
         error = nil
         homeNotice = nil
         homeQueue = []
-        UserDefaults.standard.removeObject(forKey: "server")
+        #if DEBUG
+            if persistServers {
+                UserDefaults.standard.removeObject(forKey: "server")
+            }
+        #else
+            UserDefaults.standard.removeObject(forKey: "server")
+        #endif
         SharedServer.save(nil)
+    }
+
+    /// A fetch that started on another server, or before Forget, must not land here.
+    private func sameSession(_ started: Int, _ base: URL) -> Bool {
+        generation == started && api?.base == base
     }
 
     /// A probe that started before Forget, or before another server was chosen, must not connect.
@@ -286,7 +333,7 @@ public final class AppStore {
             self.channels = channels
             let url = URL(string: "http://127.0.0.1:9")!
             server = FoundServer(id: "preview", name: "Preview", url: url)
-            api = APIClient(base: url)
+            api = APIClient(base: url, session: session)
         }
     #endif
 
@@ -297,10 +344,16 @@ public final class AppStore {
             }
         #endif
         guard let api else { return }
+        let started = generation
         let base = api.base
         await refreshFrames()
+        guard sameSession(started, base) else { return }
         loading = true
-        defer { loading = false }
+        defer {
+            if generation == started {
+                loading = false
+            }
+        }
         do {
             let moment = Date()
             async let fetchedInfo = api.server()
@@ -308,7 +361,7 @@ public final class AppStore {
             async let fetchedAirings = api.airings(from: moment.addingTimeInterval(-30 * 60), to: moment.addingTimeInterval(4 * 3600))
             async let fetchedRecordings = api.recordings()
             let info = try await fetchedInfo
-            guard self.api?.base == base else { return }
+            guard sameSession(started, base) else { return }
             if let current = server, current.id != "pending", current.id != "demo", !current.id.isEmpty, current.id != info.id {
                 error = "A different server answered at this address."
                 socket?.disconnect()
@@ -340,13 +393,15 @@ public final class AppStore {
                 NSLog("broadwave ready %@ %@", current.id, current.url.absoluteString)
             }
             if lineup || channels.isEmpty {
-                channels = try await fetchedChannels.sorted(by: Channel.guideOrder)
+                let nextChannels = try await fetchedChannels
+                guard sameSession(started, base) else { return }
+                channels = nextChannels.sorted(by: Channel.guideOrder)
             }
-            guard self.api?.base == base else { return }
             let window = try await fetchedAirings
+            let nextRecordings = try await fetchedRecordings
+            guard sameSession(started, base) else { return }
             index = GuideIndex(window)
-            recordings = try await fetchedRecordings
-            guard self.api?.base == base else { return }
+            recordings = nextRecordings
             now = Date()
             freshAt = now
             error = nil
@@ -354,7 +409,7 @@ public final class AppStore {
                 CatalogCache.save(CatalogSnapshot(channels: channels, airings: window, recordings: recordings), serverID: id)
             }
             if let rest = try? await api.airings(from: moment.addingTimeInterval(4 * 3600), to: moment.addingTimeInterval(14 * 24 * 3600)) {
-                guard self.api?.base == base else { return }
+                guard sameSession(started, base) else { return }
                 var seen = Set(window.map(\.id))
                 var merged = window
                 for airing in rest where !seen.contains(airing.id) {
@@ -367,7 +422,7 @@ public final class AppStore {
                 }
             }
         } catch {
-            guard self.api?.base == base else { return }
+            guard sameSession(started, base) else { return }
             self.error = error.localizedDescription
         }
     }
@@ -379,31 +434,43 @@ public final class AppStore {
             offline = false
             return
         }
+        let started = generation
         offlineWait = Task { [weak self] in
             try? await Task.sleep(for: .seconds(3))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, self?.generation == started else { return }
             self?.offline = true
         }
     }
 
     public func refreshRecordings() async {
-        guard let api, let list = try? await api.recordings() else { return }
+        guard let api else { return }
+        let started = generation
+        let base = api.base
+        guard let list = try? await api.recordings(), sameSession(started, base) else { return }
         recordings = list
     }
 
     public func refreshVirtuals() async {
-        guard let api, let list = try? await api.virtuals() else { return }
+        guard let api else { return }
+        let started = generation
+        let base = api.base
+        guard let list = try? await api.virtuals(), sameSession(started, base) else { return }
         virtuals = list
     }
 
     /// Makes a library channel that plays one recording, numbered like the web does it.
     public func makeChannel(from recording: Recording) async throws -> VirtualChannel {
         guard let api else { throw APIError(code: "offline", message: "Not connected to a server.", status: 0) }
+        let started = generation
+        let base = api.base
         // The server does not keep numbers unique, so a stale list could hand out 900 twice.
-        virtuals = try await api.virtuals()
+        let existing = try await api.virtuals()
+        guard sameSession(started, base) else { throw APIError(code: "offline", message: "Not connected to a server.", status: 0) }
+        virtuals = existing
         let made = try await api.createVirtual(
             number: VirtualChannel.nextNumber(after: virtuals), name: "\(recording.title) channel", recordings: [recording.id]
         )
+        guard sameSession(started, base) else { return made }
         await refreshVirtuals()
         return made
     }
@@ -411,8 +478,9 @@ public final class AppStore {
     /// Channels with a preview newer than ten minutes. A miss keeps the last list.
     func refreshFrames() async {
         guard let api else { return }
+        let started = generation
         let base = api.base
-        guard let list = try? await api.frames(), self.api?.base == base else { return }
+        guard let list = try? await api.frames(), sameSession(started, base) else { return }
         frameIDs = Set(list.channels)
     }
 
@@ -422,14 +490,18 @@ public final class AppStore {
 
     public func toggleRecord(_ channel: Channel) async {
         guard let api else { return }
+        let started = generation
+        let base = api.base
         do {
             if let active = activeRecording(on: channel) {
                 try await api.stopRecording(active.id)
             } else {
                 _ = try await api.record(channelID: channel.id, title: index.on(channel.id, at: Date())?.title ?? channel.displayName)
             }
+            guard sameSession(started, base) else { return }
             await refreshRecordings()
         } catch {
+            guard sameSession(started, base) else { return }
             self.error = error.localizedDescription
         }
     }
@@ -437,14 +509,20 @@ public final class AppStore {
     /// Deletes the file and its markers on the server, then reloads the list.
     public func deleteRecording(_ rec: Recording) async throws {
         guard let api else { return }
+        let started = generation
+        let base = api.base
         try await api.deleteRecording(rec.id)
+        guard sameSession(started, base) else { return }
         recordings.removeAll { $0.id == rec.id }
         await refreshRecordings()
     }
 
     public func setWatched(_ rec: Recording, _ watched: Bool) async throws {
         guard let api else { return }
+        let started = generation
+        let base = api.base
         try await api.setWatched(recordingID: rec.id, watched)
+        guard sameSession(started, base) else { return }
         if let i = recordings.firstIndex(where: { $0.id == rec.id }) {
             recordings[i].watched = watched ? 1 : 2
         }
@@ -459,18 +537,23 @@ public final class AppStore {
     @discardableResult
     public func apply(_ action: BulkAction, to recs: [Recording]) async -> (failed: Int, error: Error?) {
         guard let api else { return (recs.count, APIError(code: "offline", message: "Not connected to a server.", status: 0)) }
+        let started = generation
+        let base = api.base
         var failed = 0
         var first: Error?
         for rec in recs where !rec.isRecording {
+            guard sameSession(started, base) else { break }
             do {
                 switch action {
                 case .watched, .unwatched:
                     try await api.setWatched(recordingID: rec.id, action == .watched)
+                    guard sameSession(started, base) else { break }
                     if let i = recordings.firstIndex(where: { $0.id == rec.id }) {
                         recordings[i].watched = action == .watched ? 1 : 2
                     }
                 case .delete:
                     try await api.deleteRecording(rec.id)
+                    guard sameSession(started, base) else { break }
                     recordings.removeAll { $0.id == rec.id }
                 }
             } catch {
@@ -484,12 +567,18 @@ public final class AppStore {
 
     public func stopRecording(_ rec: Recording) async throws {
         guard let api else { return }
+        let started = generation
+        let base = api.base
         try await api.stopRecording(rec.id)
+        guard sameSession(started, base) else { return }
         await refreshRecordings()
     }
 
     public func toggleFavorite(_ channel: Channel) async {
-        guard let api, let updated = try? await api.setFavorite(channel, !channel.favorite) else { return }
+        guard let api else { return }
+        let started = generation
+        let base = api.base
+        guard let updated = try? await api.setFavorite(channel, !channel.favorite), sameSession(started, base) else { return }
         if let i = channels.firstIndex(where: { $0.id == updated.id }) {
             channels[i] = updated
         }
@@ -499,38 +588,61 @@ public final class AppStore {
     /// renaming shows everywhere at once.
     public func editChannel(_ id: Int64, _ patch: ChannelPatch) async throws -> Channel {
         guard let api else { throw APIError(code: "offline", message: "Not connected to a server.", status: 0) }
+        let started = generation
+        let base = api.base
         let updated = try await api.patchChannel(id, patch)
-        if let list = try? await api.channels(), self.api?.base == api.base {
+        if let list = try? await api.channels(), sameSession(started, base) {
             channels = list.sorted(by: Channel.guideOrder)
         }
         return updated
     }
 
     public func refreshPasses() async {
-        guard let api, let list = try? await api.passes() else { return }
+        guard let api else { return }
+        let started = generation
+        let base = api.base
+        guard let list = try? await api.passes(), sameSession(started, base) else { return }
         passes = list
     }
 
     public func recordSeries(_ airing: Airing) async throws {
         guard let api else { return }
-        passes = try await api.addPass(title: airing.title, channelID: airing.channelId)
+        let started = generation
+        let base = api.base
+        let list = try await api.addPass(title: airing.title, channelID: airing.channelId)
+        guard sameSession(started, base) else { return }
+        passes = list
     }
 
     public func recordOnce(_ airing: Airing) async throws {
         guard let api else { return }
-        passes = try await api.addPass(title: airing.title, channelID: airing.channelId, airingStart: airing.start)
+        let started = generation
+        let base = api.base
+        let list = try await api.addPass(title: airing.title, channelID: airing.channelId, airingStart: airing.start)
+        guard sameSession(started, base) else { return }
+        passes = list
     }
 
     /// Records the next airing of a damaged recording's episode. Nil when the guide has none.
     public func recordAgain(_ rec: Recording) async throws -> Airing? {
-        guard let api, let airing = try await api.recordAgain(recordingID: rec.id) else { return nil }
-        passes = try await api.addPass(title: rec.title, channelID: airing.channelId, airingStart: airing.start)
+        guard let api else { return nil }
+        let started = generation
+        let base = api.base
+        guard let airing = try await api.recordAgain(recordingID: rec.id) else { return nil }
+        guard sameSession(started, base) else { return airing }
+        let list = try await api.addPass(title: rec.title, channelID: airing.channelId, airingStart: airing.start)
+        guard sameSession(started, base) else { return airing }
+        passes = list
         return airing
     }
 
     public func removePass(_ id: Int64) async throws {
         guard let api else { return }
-        passes = try await api.deletePass(id)
+        let started = generation
+        let base = api.base
+        let list = try await api.deletePass(id)
+        guard sameSession(started, base) else { return }
+        passes = list
     }
 
     /// What most likely deserves the big spot: sports first, then favorites.
@@ -579,6 +691,11 @@ public final class AppStore {
     }
 
     private func save(_ value: some Encodable, _ key: String) {
+        #if DEBUG
+            if !persistServers {
+                return
+            }
+        #endif
         if let data = try? JSONEncoder().encode(value) {
             UserDefaults.standard.set(data, forKey: key)
         }
