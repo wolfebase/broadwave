@@ -3,6 +3,7 @@ package live
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -136,5 +137,53 @@ func TestAStartDatesTheFirstPictureUnlessSeeded(t *testing.T) {
 	seeded.Start(arrived)
 	if got := seeded.Wall(90000); !got.Equal(arrived.Add(time.Second)) {
 		t.Fatalf("seeded first picture at %v, want the seed's %v", got, arrived.Add(time.Second))
+	}
+}
+
+// A segment that is not on disk yet stays undated, and the next reload of
+// the same playlist dates it once the file is there.
+func TestStampRetriesASegmentThatWasNotOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	src := []byte("#EXTM3U\n#EXTINF:1.0,\nseg00000.ts\n")
+	fixed := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	tl := NewTimeline()
+	tl.now = func() time.Time { return fixed }
+	var p playlistStamper
+	first := string(p.stamp(dir, src, tl))
+	if strings.Contains(first, "PROGRAM-DATE-TIME") {
+		t.Fatalf("dated a segment that is not on disk:\n%s", first)
+	}
+	pes := []byte{0x00, 0x00, 0x01, 0xE0, 0x00, 0x00, 0x80, 0x80, 0x05, 0x21, 0x00, 0x01, 0x00, 0x01}
+	if err := os.WriteFile(filepath.Join(dir, "seg00000.ts"), tsPacket(0x100, true, pes), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	second := string(p.stamp(dir, src, tl))
+	if !strings.Contains(second, "PROGRAM-DATE-TIME") {
+		t.Fatalf("a segment on disk was left undated:\n%s", second)
+	}
+}
+
+// An unchanged playlist keeps its dates. A different playlist, and a stamp
+// after the encode restarts, do not reuse that answer.
+func TestStampKeepsAnUnchangedPlaylist(t *testing.T) {
+	src := []byte("#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:2.0,\nseg00000.m4s\n")
+	when := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	var p playlistStamper
+	p.cache = map[string]int64{"seg00000.m4s": 0}
+	p.walls = map[string]time.Time{"seg00000.m4s": when}
+	tl := NewTimeline()
+	tl.now = func() time.Time { return when }
+	a := string(p.stamp(t.TempDir(), src, tl))
+	b := string(p.stamp(t.TempDir(), src, tl))
+	if a != b || !strings.Contains(a, "PROGRAM-DATE-TIME") {
+		t.Fatalf("second stamp changed:\n%s\n%s", a, b)
+	}
+	later := []byte("#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1\n#EXTINF:2.0,\nseg00001.m4s\n")
+	if got := string(p.stamp(t.TempDir(), later, tl)); !strings.Contains(got, "MEDIA-SEQUENCE:1") {
+		t.Fatalf("a new playlist reused the old one:\n%s", got)
+	}
+	p.reset()
+	if got := string(p.stamp(t.TempDir(), src, tl)); strings.Contains(got, "PROGRAM-DATE-TIME") {
+		t.Fatalf("reset kept a date:\n%s", got)
 	}
 }
