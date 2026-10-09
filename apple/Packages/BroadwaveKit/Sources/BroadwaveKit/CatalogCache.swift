@@ -34,7 +34,9 @@ public enum CatalogCache {
 
     private static func file(_ serverID: String, _ directory: URL?) -> URL {
         let dir = directory ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        let safe = String(serverID.filter { $0.isLetter || $0.isNumber })
+        // Letters and digits alone map "abc-123" and "abc123" onto one file,
+        // and a case-insensitive volume does the same for "Ab" and "ab".
+        let safe = Data(serverID.utf8).map { String(format: "%02x", $0) }.joined()
         return dir.appendingPathComponent("broadwave-\(safe).json")
     }
 
