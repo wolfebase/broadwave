@@ -276,6 +276,12 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 		switch {
 		case strings.HasPrefix(trimmed, "#EXT-X-PROGRAM-DATE-TIME"):
 			continue
+		case strings.HasPrefix(trimmed, "#EXT-X-PTS:"):
+			// The packer already measured this fragment. The line is not served.
+			if name, pts, ok := packedPTS(trimmed); ok {
+				p.cache[ownName(name)] = pts
+			}
+			continue
 		case strings.HasPrefix(trimmed, "#EXT-X-PART:"):
 			for _, l := range pending {
 				out.WriteString(l + "\n")
@@ -403,6 +409,24 @@ func pendingDur(lines []string) time.Duration {
 		return time.Duration(f * float64(time.Second))
 	}
 	return 0
+}
+
+// packedPTS is the start time the packer wrote for one part or segment,
+// in 90 kHz ticks. The name is the file, with no directory.
+func packedPTS(line string) (string, int64, bool) {
+	rest, ok := strings.CutPrefix(strings.TrimSpace(line), "#EXT-X-PTS:")
+	if !ok {
+		return "", 0, false
+	}
+	name, raw, ok := strings.Cut(rest, ":")
+	if !ok || name == "" || strings.Contains(name, "/") || strings.Contains(name, "..") {
+		return "", 0, false
+	}
+	pts, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return "", 0, false
+	}
+	return name, pts, true
 }
 
 // ownName copies a token out of the playlist text. playlistStamper stores

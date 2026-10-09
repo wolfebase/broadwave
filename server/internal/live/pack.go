@@ -230,6 +230,8 @@ type packedPart struct {
 	dur  int64
 	body []byte
 	sync bool
+	// timed is set when pts was read from the fragment. Zero is a real start.
+	timed bool
 }
 
 type packedSeg struct {
@@ -238,6 +240,7 @@ type packedSeg struct {
 	dur   int64
 	parts []partRef
 	gap   bool
+	timed bool
 	// refs name the parts whose files gave way to a pointer into the segment.
 	refs []string
 }
@@ -245,10 +248,12 @@ type packedSeg struct {
 // partRef is a part of a closed segment, listed until it is three target
 // durations from the end of the playlist.
 type partRef struct {
-	name string
-	dur  int64
-	sync bool
-	size int64
+	name  string
+	dur   int64
+	sync  bool
+	size  int64
+	pts   int64
+	timed bool
 }
 
 // partsKept reports whether a closed segment that ends this far before the
@@ -568,7 +573,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		names := make([]partRef, len(open))
 		for i, p := range open {
 			body = append(body, p.body...)
-			names[i] = partRef{name: p.name, dur: p.dur, sync: p.sync, size: int64(len(p.body))}
+			names[i] = partRef{name: p.name, dur: p.dur, sync: p.sync, size: int64(len(p.body)), pts: p.pts, timed: p.timed}
 		}
 		if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
 			return err
@@ -577,7 +582,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		if dur <= 0 {
 			dur = partTicks
 		}
-		closed = append(closed, packedSeg{name: name, pts: open[0].pts, dur: dur, parts: names, gap: segGap})
+		closed = append(closed, packedSeg{name: name, pts: open[0].pts, dur: dur, parts: names, gap: segGap, timed: open[0].timed})
 		segGap = false
 		msn++
 		open = nil
@@ -680,7 +685,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		if err := os.WriteFile(filepath.Join(dir, name), frag, 0o644); err != nil {
 			return err
 		}
-		open = append(open, packedPart{name: name, pts: pts, dur: dur, body: frag, sync: sync})
+		open = append(open, packedPart{name: name, pts: pts, dur: dur, body: frag, sync: sync, timed: true})
 		// Fragments are cut at keyframes, so this one ends where the next
 		// group starts. Closing there now, once the segment is long enough,
 		// is the cut the next group would make, a group sooner: a source that
@@ -988,15 +993,18 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 		}
 		if listed, _ := partsKept(fromEnd[i], target); listed {
 			for _, p := range s.parts {
+				b = appendPackedPTS(b, p.name, p.pts, p.timed)
 				partLine(p.name, p.dur, p.sync)
 			}
 		}
+		b = appendPackedPTS(b, s.name, s.pts, s.timed)
 		b = append(b, "#EXTINF:"+fmtDur(s.dur)+",\n"+s.name+"\n"...)
 	}
 	if segGap && len(open) > 0 {
 		b = append(b, "#EXT-X-DISCONTINUITY\n"...)
 	}
 	for _, p := range open {
+		b = appendPackedPTS(b, p.name, p.pts, p.timed)
 		partLine(p.name, p.dur, p.sync)
 	}
 	tmp := filepath.Join(dir, "index.m3u8.tmp")
@@ -1015,6 +1023,20 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 		gate.publish(origin, origin+len(closed), len(open), recent...)
 	}
 	return nil
+}
+
+// appendPackedPTS records a fragment's start so stamp does not read the
+// file back. Stamp drops the line; a player never sees it. A start that was
+// not read (timed false) is left out, including a zero that was never measured.
+func appendPackedPTS(b []byte, name string, pts int64, timed bool) []byte {
+	if !timed || name == "" {
+		return b
+	}
+	b = append(b, "#EXT-X-PTS:"...)
+	b = append(b, name...)
+	b = append(b, ':')
+	b = append(b, strconv.FormatInt(pts, 10)...)
+	return append(b, '\n')
 }
 
 func fmtDur(ticks int64) string {

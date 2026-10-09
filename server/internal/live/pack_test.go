@@ -1101,6 +1101,44 @@ func TestALongGroupStationStartsLongAfterARestart(t *testing.T) {
 	}
 }
 
+// An open group shows its first frames before the keyframe. The tag has to
+// be that presentation time, the same one a read of the file would return,
+// or the dates walk off the broadcast.
+func TestPackedStartMatchesTheFile(t *testing.T) {
+	dir := t.TempDir()
+	raw := append(videoInit(), gopFragment(900000, 30, true)...)
+	if err := Pack(dir, bytes.NewReader(raw), nil); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	for _, line := range strings.Split(string(b), "\n") {
+		name, pts, ok := packedPTS(line)
+		if !ok {
+			continue
+		}
+		n++
+		got, found := segmentStart(dir, name)
+		if !found || got != pts {
+			t.Fatalf("%s tag %d file %d found %v", name, pts, got, found)
+		}
+	}
+	if n == 0 {
+		t.Fatalf("no start tags:\n%s", b)
+	}
+	fixed := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	tl := NewTimeline()
+	tl.now = func() time.Time { return fixed }
+	var p playlistStamper
+	stamped := string(p.stamp(dir, b, tl))
+	if strings.Contains(stamped, "EXT-X-PTS") || !strings.Contains(stamped, "PROGRAM-DATE-TIME") {
+		t.Fatalf("served playlist:\n%s", stamped)
+	}
+}
+
 func TestDeltaPlaylistSkipsTheHead(t *testing.T) {
 	var b strings.Builder
 	b.WriteString("#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:1\n")
