@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type R
 import { focusRing } from "../../app/remote";
 import { BackIcon, CloseIcon, ExpandIcon, PauseIcon, PipIcon, PlayIcon, VolumeIcon } from "../../ui/icons";
 import { playerControls, playerTabTarget } from "./focusCycle";
+import { swallowWakeClick } from "./startOver";
 import "./player.css";
 
 export function Stage({
@@ -78,9 +79,11 @@ export function Stage({
   const [muted, setMuted] = useState(false);
   const ownRoot = useRef<HTMLElement>(null);
   const root = rootRef ?? ownRoot;
-  // A tap that brings the chrome back. The click that follows must not pause:
-  // a paused picture keeps the chrome up.
+  // A tap that brings the chrome back. The click that follows must not pause
+  // or press the control that fades in under the finger.
   const wake = useRef(0);
+  const wakeSwallow = useRef<(() => void) | null>(null);
+  useEffect(() => () => wakeSwallow.current?.(), []);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -121,7 +124,10 @@ export function Stage({
     };
     let timer = window.setTimeout(fade, 3200);
     const poke = (event: Event) => {
-      if (event.type === "touchstart" && idle) wake.current = performance.now();
+      if (swallowWakeClick(idle, event.type)) {
+        wake.current = performance.now();
+        armWakeSwallow(wakeSwallow);
+      }
       // The bar is opacity 0 while idle, so a Tab would land on a control the
       // viewer cannot see. Show it and move into it. A guide or help panel that
       // is already focused keeps its own stops.
@@ -370,4 +376,23 @@ function formatClock(seconds: number) {
   const s = total % 60;
   if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/** The click after a wake tap never reaches the control that fades in. */
+function armWakeSwallow(slot: { current: (() => void) | null }) {
+  slot.current?.();
+  let swallowTimer = 0;
+  function cancel() {
+    window.removeEventListener("click", listener, true);
+    window.clearTimeout(swallowTimer);
+    if (slot.current === cancel) slot.current = null;
+  }
+  function listener(click: Event) {
+    click.preventDefault();
+    click.stopPropagation();
+    cancel();
+  }
+  swallowTimer = window.setTimeout(cancel, 700);
+  slot.current = cancel;
+  window.addEventListener("click", listener, true);
 }

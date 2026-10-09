@@ -18,7 +18,7 @@ import { isLayout, multiviewPath } from "../multiview/storage";
 import { useScoreMap } from "../sports/scores";
 import { listingNote } from "./outage";
 import { soundFor } from "./sounds";
-import { liveWindowFrom, recordingHoldingStart, startOverAt, startOverChoice, type DatedFrag } from "./startOver";
+import { livePlayhead, liveWindowFrom, recordingHoldingStart, scrubHold, shownScrub, startOverAt, startOverChoice, type DatedFrag } from "./startOver";
 import { Stage } from "./Stage";
 import { groupRoom, peopleSentence, personLabel, useGroup } from "./together";
 import { useLiveStream } from "./useLiveStream";
@@ -44,6 +44,13 @@ function datedFrags(video: HTMLVideoElement): DatedFrag[] {
   if (!levels?.length) return [];
   const level = levels[Math.max(0, hls?.currentLevel ?? hls?.loadLevel ?? 0)] ?? levels[0];
   return level?.details?.fragments ?? [];
+}
+
+/** Program time at time zero. Safari's native HLS sets this; hls.js leaves it unset. */
+function nativeStartMs(video: HTMLVideoElement): number | null {
+  const native = (video as HTMLVideoElement & { getStartDate?: () => Date }).getStartDate?.();
+  if (!native || Number.isNaN(native.getTime())) return null;
+  return native.getTime();
 }
 const delayLabels: Record<LiveDelay, string> = { lowest: "Lowest", balanced: "Balanced", stable: "Stable" };
 
@@ -147,6 +154,17 @@ export function LivePlayer({
   const held = airing ? recordingHoldingStart(airing, recordings) : undefined;
   const startOverFrom = startOverChoice(airing ? Date.parse(airing.start) : undefined, windowFrom, held ? Date.parse(held.startedAt) : undefined);
 
+  // Held while a drag is ahead of the playhead. The ref is what the tick reads.
+  const [scrubAt, setScrubAt] = useState<number | null>(null);
+  const scrubAtRef = useRef<number | null>(null);
+  const scrubTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(scrubTimer.current), []);
+  function holdScrub(value: number | null) {
+    if (scrubAtRef.current === value) return;
+    scrubAtRef.current = value;
+    setScrubAt(value);
+  }
+
   useEffect(() => localStorage.setItem("ota-live", JSON.stringify(opts)), [opts]);
 
   useEffect(() => {
@@ -155,9 +173,18 @@ export function LivePlayer({
     const tick = () => {
       const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : video.currentTime;
       const start = video.seekable.length ? video.seekable.start(0) : 0;
+      const at = Math.max(0, video.currentTime - start);
       setBehind(Math.max(0, end - video.currentTime));
-      setSpan({ at: Math.max(0, video.currentTime - start), len: Math.max(1, end - start) });
-      setWindowFrom(liveWindowFrom({ seekable: video.seekable.length > 0, seekStart: start, currentTime: video.currentTime, media: mediaNow(), frags: datedFrags(video) }));
+      setSpan({ at, len: Math.max(1, end - start) });
+      const frags = datedFrags(video);
+      const media = livePlayhead(mediaNow(), frags.length, nativeStartMs(video), video.currentTime);
+      setWindowFrom(liveWindowFrom({ seekable: video.seekable.length > 0, seekStart: start, currentTime: video.currentTime, media, frags }));
+      // A timeupdate while the seek is still behind keeps the drag. Arriving drops it.
+      const next = scrubHold(scrubAtRef.current, at);
+      if (next !== scrubAtRef.current) {
+        scrubAtRef.current = next;
+        setScrubAt(next);
+      }
     };
     // A paused video fires no timeupdate, and live moves on without it.
     const paused = window.setInterval(() => {
@@ -257,16 +284,13 @@ export function LivePlayer({
   }
 
   // A drag on the scrubber is one seek for the group, sent when it rests.
-  const [scrubAt, setScrubAt] = useState<number | null>(null);
-  const scrubTimer = useRef(0);
-  useEffect(() => () => window.clearTimeout(scrubTimer.current), []);
   function scrubTogether(value: number) {
-    setScrubAt(value);
+    holdScrub(value);
     window.clearTimeout(scrubTimer.current);
     scrubTimer.current = window.setTimeout(() => {
       const video = videoRef.current;
       if (video?.seekable.length) seekTogether(video.seekable.start(0) + value);
-      scrubTimer.current = window.setTimeout(() => setScrubAt(null), 1000);
+      scrubTimer.current = window.setTimeout(() => holdScrub(null), 1000);
     }, 250);
   }
 
@@ -302,7 +326,8 @@ export function LivePlayer({
     const video = videoRef.current;
     if (startOverFrom !== "live" || !video || !video.seekable.length) return;
     const seekStart = video.seekable.start(0);
-    const media = stream.mediaNow();
+    const frags = datedFrags(video);
+    const media = livePlayhead(stream.mediaNow(), frags.length, nativeStartMs(video), video.currentTime);
     // The room clock is read before a local seek drops it. After that, the
     // window stored from the playlist still names the show's start.
     const target =
@@ -494,12 +519,13 @@ export function LivePlayer({
       onClose={onClose}
       liveLabel={liveLabel}
       onLive={goLive}
-      position={scrubAt ?? span.at}
+      position={shownScrub(scrubAt, span.at)}
       duration={span.len}
       onSeek={(value) => {
         const video = videoRef.current;
         if (!video || !video.seekable.length) return;
         if (together) return scrubTogether(value);
+        holdScrub(value);
         detachSync();
         video.currentTime = video.seekable.start(0) + value;
       }}

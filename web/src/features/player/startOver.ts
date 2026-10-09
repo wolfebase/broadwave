@@ -48,6 +48,43 @@ export function liveWindowFrom(input: {
   return windowFromFragments(input.seekStart, input.frags);
 }
 
+/**
+ * Broadcast time of the playhead. The room clock wins. With sync off, Safari
+ * dates the window from getStartDate, which is the program time at time zero.
+ */
+export function playheadMedia(room: number | null, startDateMs: number | null, currentTime: number): number | null {
+  if (room !== null && Number.isFinite(room)) return room;
+  if (startDateMs === null || !Number.isFinite(startDateMs) || !Number.isFinite(currentTime)) return null;
+  return startDateMs + currentTime * 1000;
+}
+
+/**
+ * What the live window is dated from. Dated fragments cover a local seek, so a
+ * start date must not override them. With no fragments, Safari's getStartDate
+ * is the program time at time zero.
+ */
+export function livePlayhead(room: number | null, fragCount: number, startDateMs: number | null, currentTime: number): number | null {
+  if (fragCount > 0) return room !== null && Number.isFinite(room) ? room : null;
+  return playheadMedia(room, startDateMs, currentTime);
+}
+
+/** The thumb stays where the drag is until that seek lands. */
+export function shownScrub(held: number | null, playhead: number): number {
+  return held == null ? playhead : held;
+}
+
+/** Drop the drag once the playhead is on it, so a seek that never ends cannot freeze the thumb. */
+export function scrubHold(held: number | null, playhead: number): number | null {
+  if (held == null) return null;
+  if (!Number.isFinite(playhead) || Math.abs(held - playhead) >= 0.5) return held;
+  return null;
+}
+
+/** A tap that wakes a hidden bar must not also press the control that appears under the finger. */
+export function swallowWakeClick(idle: boolean, type: string): boolean {
+  return idle && type === "touchstart";
+}
+
 /** Playhead for the show's start, inside the seekable window. */
 export function startOverAt(showStart: number, windowFrom: number | null, seekStart: number, seekEnd: number): number | null {
   if (windowFrom === null || !(windowFrom <= showStart)) return null;
