@@ -94,6 +94,17 @@ private func steps(_ next: inout UpNext, _ times: [Double], credits: Double? = n
     times.map { next.observe($0, duration: 3600, creditsStart: credits, hasNext: hasNext) }
 }
 
+@Test func upNextDoesNotSkipWhenTheFirstLookIsPastTheCountdown() {
+    var next = UpNext(autoplay: true)
+    let landed = next.observe(3560, duration: 3600, creditsStart: 3540, hasNext: true)
+    let later = next.observe(3570, duration: 3600, creditsStart: 3540, hasNext: true)
+    #expect(landed == .card(left: nil))
+    #expect(later == .card(left: nil))
+    #expect(!next.done)
+    let atEnd = next.ended(hasNext: true)
+    #expect(atEnd)
+}
+
 @Test func upNextCountsDownTenSecondsThenPlays() {
     var next = UpNext(autoplay: true)
     let got = steps(&next, [3539, 3545, 3548.2, 3554.9, 3555, 3556], credits: 3540)

@@ -73,6 +73,12 @@ public struct UpNext: Sendable {
             shownAt = nil
             return .card(left: nil)
         }
+        // A resume or scrub that is already past the autoplay point must not
+        // start a fresh countdown and skip the ending. The web leaves that
+        // episode playing until the file ends.
+        if shownAt == nil, time >= from + Self.countdown {
+            return .card(left: nil)
+        }
         let start = shownAt ?? time
         shownAt = start
         let left = Self.countdown - (time - start)
