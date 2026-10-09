@@ -208,7 +208,10 @@ type Hub struct {
 	// AVPlayer drops the item when a reload changes the target duration or
 	// the discontinuity count, so the next response keeps that prefix.
 	fileList map[string][]byte
-	ringSeq  int
+	// fileEnc is the ffmpeg writing a recording playlist. A new resume stops
+	// it before deleting the segments it is still writing.
+	fileEnc map[int64]*fileEncode
+	ringSeq int
 	// cuts keeps recent view cuts, so screens on one view share one copy.
 	cuts cutCache
 	// starts are the last pictures a watch started, newest last. Under mu.

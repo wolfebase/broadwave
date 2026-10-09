@@ -348,6 +348,13 @@ func (s *Server) recordings(w http.ResponseWriter, r *http.Request) {
 		if list[i].Duration < 0 {
 			list[i].Duration = 0
 		}
+		// A recording still in progress has no probed length. The run so far
+		// is the scrubber's duration; the file's own clock is not known yet.
+		if list[i].Status == "recording" && list[i].Duration <= 0 && !list[i].StartedAt.IsZero() {
+			if elapsed := time.Since(list[i].StartedAt).Seconds(); elapsed > 0 {
+				list[i].Duration = elapsed
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"recordings": list})
 }

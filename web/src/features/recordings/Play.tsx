@@ -248,9 +248,10 @@ export function Play({
   }
 
   const inside = markers.find((marker) => where >= marker.start && where < marker.end);
-  // A finished recording plays from a playlist that grows while it transcodes,
-  // so the player's own duration starts at a few seconds.
-  const total = growing ? length : Math.max(length, recording.durationSec || 0);
+  // The playlist grows while the recording transcodes, so the player's own
+  // duration starts at a few seconds. The recording's length is the file,
+  // including a show that is still being recorded.
+  const total = Math.max(length, recording.durationSec || 0);
   const introEnd = inside ? null : introSkip(recording, where);
   const card = next && !dismissed && !growing ? upNext(where, total, recording.creditsStart, autoplay) : null;
   const left = card?.left;
@@ -369,7 +370,7 @@ export function Play({
             </ul>
           ) : null}
           <p className="hint">
-            {growing ? "This show is still recording. Playback starts at the beginning and keeps going as the file grows." : "Breaks show as marks on the timeline. One marked maybe gets a Skip button instead of skipping on its own."}
+            {growing ? "This show is still recording. It keeps playing as the file grows." : "Breaks show as marks on the timeline. One marked maybe gets a Skip button instead of skipping on its own."}
           </p>
         </>
       }

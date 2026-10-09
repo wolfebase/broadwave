@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -26,7 +27,7 @@ func TestFollowFileReadsBytesWrittenLater(t *testing.T) {
 	still.Store(true)
 	done := make(chan struct{})
 	go func() {
-		followFile(path, &buf, still.Load)
+		followFile(path, &buf, still.Load, 0)
 		close(done)
 	}()
 	time.Sleep(150 * time.Millisecond)
@@ -47,6 +48,119 @@ func TestFollowFileReadsBytesWrittenLater(t *testing.T) {
 	}
 	if buf.String() != "aaabbb" {
 		t.Fatalf("read %q", buf.String())
+	}
+}
+
+// A resume into a file that is still growing starts at that clock, then
+// keeps the bytes that arrive after it. The packets before it are not sent.
+func TestFollowFileStartsAtTheResume(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "show.ts")
+	var raw []byte
+	for _, tick := range []uint64{0, 5 * 90000, 10 * 90000, 15 * 90000} {
+		raw = append(raw, pcrTS(0x100, tick)...)
+	}
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var buf bufferCloser
+	var still atomic.Bool
+	still.Store(true)
+	done := make(chan struct{})
+	go func() {
+		followFile(path, &buf, still.Load, 10)
+		close(done)
+	}()
+	time.Sleep(150 * time.Millisecond)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	later := pcrTS(0x100, 20*90000)
+	if _, err := f.Write(later); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	time.Sleep(400 * time.Millisecond)
+	still.Store(false)
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("follower did not finish")
+	}
+	want := append(append(pcrTS(0x100, 10*90000), pcrTS(0x100, 15*90000)...), later...)
+	if !bytes.Equal(buf.Bytes(), want) {
+		t.Fatalf("copied %d bytes, want the resume and what was appended (%d)", buf.Len(), len(want))
+	}
+}
+
+func pcrTS(pid uint16, ticks uint64) []byte {
+	pkt := make([]byte, 188)
+	pkt[0] = 0x47
+	pkt[1] = byte(pid >> 8)
+	pkt[2] = byte(pid)
+	pkt[3] = 0x20
+	pkt[4] = 188 - 5
+	pkt[5] = 0x10
+	pkt[6] = byte(ticks >> 25)
+	pkt[7] = byte(ticks >> 17)
+	pkt[8] = byte(ticks >> 9)
+	pkt[9] = byte(ticks >> 1)
+	pkt[10] = byte(ticks<<7) | 0x7e
+	for i := 11; i < len(pkt); i++ {
+		pkt[i] = 0xff
+	}
+	return pkt
+}
+
+// Replacing an encode deletes its segments. The process that was writing
+// them has to be gone first, or the new seg00000 is the old picture.
+func TestPlayFileStopsTheEncodeItReplaces(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "show.ts")
+	if err := os.WriteFile(path, mpeg2TS(1, true), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(dir, "ffmpeg")
+	pidPath := filepath.Join(dir, "pid")
+	argsPath := filepath.Join(dir, "args")
+	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\necho $$ > " + pidPath + "\nprintf '%s\\n' \"$@\" >> " + argsPath + "\ncat > index.m3u8 << 'EOF'\n#EXTM3U\n#EXTINF:2.000,\nseg00000.ts\nEOF\necho x > seg00000.ts\nexec sleep 60\n;;\nesac\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		body, err := os.ReadFile(pidPath)
+		if err != nil {
+			return
+		}
+		pid, _ := strconv.Atoi(strings.TrimSpace(string(body)))
+		if pid > 0 {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
+	})
+	h := &Hub{Dir: dir, Encoder: "libx264", FFmpeg: bin}
+	if _, err := h.PlayFile(4, path, "mpeg2video", "broadcast", "progressive", 0); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := strconv.Atoi(strings.TrimSpace(string(body)))
+	if err != nil || first <= 0 {
+		t.Fatalf("pid %q", body)
+	}
+	if _, err := h.PlayFile(4, path, "mpeg2video", "broadcast", "progressive", 40); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Kill(first, 0); err == nil {
+		t.Fatalf("first encode %d still running", first)
+	}
+	args, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !inputSeek(string(args), "40.000") {
+		t.Fatalf("args:\n%s", args)
 	}
 }
 

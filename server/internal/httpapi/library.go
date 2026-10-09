@@ -45,12 +45,23 @@ func (s *Server) playRecording(w http.ResponseWriter, r *http.Request) {
 	position, _ := s.Store.Progress(r.Context(), id)
 	var playlist string
 	if rec.Status == "recording" {
-		playlist, err = s.Hub.PlayFollow(id, rec.Path, codec, mode, order, func() bool {
+		if rec.Duration <= 0 && !rec.StartedAt.IsZero() {
+			if elapsed := time.Since(rec.StartedAt).Seconds(); elapsed > 0 {
+				rec.Duration = elapsed
+			}
+		}
+		playlist, err = s.Hub.PlayFollow(id, rec.Path, codec, mode, order, live.ResumeAt(position, rec.Duration), func() bool {
 			cur, curErr := s.Store.Recording(context.Background(), id)
 			return curErr == nil && cur.Status == "recording"
 		})
 	} else {
-		playlist, err = s.Hub.PlayFile(id, rec.Path, codec, mode, order, live.ResumeAt(position, recordingDuration(s.Hub, rec)))
+		if rec.Duration <= 0 {
+			if dur := recordingDuration(s.Hub, rec); dur > 0 {
+				rec.Duration = dur
+				_ = s.Store.SetDuration(r.Context(), id, dur)
+			}
+		}
+		playlist, err = s.Hub.PlayFile(id, rec.Path, codec, mode, order, live.ResumeAt(position, rec.Duration))
 	}
 	if err != nil {
 		writeError(w, err)
@@ -635,6 +646,10 @@ func (s *Server) fileMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	case strings.HasSuffix(name, ".vtt"):
 		w.Header().Set("Content-Type", "text/vtt")
+	}
+	if strings.HasPrefix(name, "seg") && strings.HasSuffix(name, ".ts") {
+		// A new resume replaces seg00000. A cached copy would be the previous picture.
+		w.Header().Set("Cache-Control", "no-cache")
 	}
 	http.ServeFile(w, r, path)
 }

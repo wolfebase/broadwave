@@ -125,6 +125,7 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string, at f
 	if playlistFresh(dir, stamp) && filePlaylistCovers(dir, at) {
 		return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
 	}
+	h.stopFileEncode(id)
 	_ = os.RemoveAll(dir)
 	h.forgetRecordingPlaylist(dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -148,71 +149,64 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string, at f
 	if err := cmd.Start(); err != nil {
 		return "", err
 	}
-	go func() { _ = cmd.Wait() }()
+	done := h.trackFileEncode(id, cmd)
+	go func() {
+		_ = cmd.Wait()
+		h.dropFileEncode(id, cmd)
+		close(done)
+	}()
 	go extractCaptions(h.FFmpeg, abs, filepath.Join(dir, "captions.vtt"))
-	deadline := time.Now().Add(20 * time.Second)
-	for time.Now().Before(deadline) {
-		if info, err := os.Stat(playlist); err == nil && info.Size() > 0 {
-			return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	return "", fmt.Errorf("recording player did not start")
+	return waitPlaylistFile(playlist, id)
 }
 
-// PlayFollow transcodes a recording that is still being written. Playback starts at the beginning of the file.
-func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, still func() bool) (string, error) {
+// PlayFollow transcodes a recording that is still being written.
+// at is where playback resumes, in seconds. The pipe cannot be seeked, so the
+// bytes before at are dropped and the playlist's clock still starts there.
+func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, at float64, still func() bool) (string, error) {
+	if at < resumeMin {
+		at = 0
+	}
 	dir := filepath.Join(h.Dir, "file", fmt.Sprintf("%d", id))
 	g := h.fileGraphFor(path, videoCodec, mode, fieldOrder)
 	g.Input = "pipe:0"
 	g.Live = false
 	stamp := graphStamp(g)
 	playlist := filepath.Join(dir, "index.m3u8")
-	if playlistFresh(dir, stamp) {
+	if playlistFresh(dir, stamp) && filePlaylistCovers(dir, at) {
 		return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
 	}
-	h.playMu.Lock()
-	if h.plays == nil {
-		h.plays = map[int64]struct{}{}
-	}
-	if _, running := h.plays[id]; running {
-		h.playMu.Unlock()
-		return waitPlaylistFile(playlist, id)
-	}
-	h.plays[id] = struct{}{}
-	h.playMu.Unlock()
-
+	h.stopFileEncode(id)
 	_ = os.RemoveAll(dir)
 	h.forgetRecordingPlaylist(dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		h.clearPlay(id)
 		return "", err
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
-		h.clearPlay(id)
+		return "", err
+	}
+	if err := writeFileOffset(dir, at); err != nil {
 		return "", err
 	}
 	cmd := exec.Command(h.FFmpeg, PictureArgs(g)...)
 	cmd.Dir = dir
 	cmd.Stderr = os.Stderr
 	if err := os.WriteFile(filepath.Join(dir, "graph.txt"), []byte(stamp), 0o644); err != nil {
-		h.clearPlay(id)
 		return "", err
 	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		h.clearPlay(id)
 		return "", err
 	}
 	if err := cmd.Start(); err != nil {
-		h.clearPlay(id)
 		return "", err
 	}
+	done := h.trackFileEncode(id, cmd)
 	go func() {
-		followFile(abs, stdin, still)
+		followFile(abs, stdin, still, at)
 		_ = cmd.Wait()
-		h.clearPlay(id)
+		h.dropFileEncode(id, cmd)
+		close(done)
 	}()
 	return waitPlaylistFile(playlist, id)
 }
@@ -227,10 +221,54 @@ func extractCaptions(ffmpeg, path, dest string) {
 	_ = cmd.Run()
 }
 
-func (h *Hub) clearPlay(id int64) {
+// fileEncode is one ffmpeg process writing a recording's playlist.
+type fileEncode struct {
+	cmd  *exec.Cmd
+	done chan struct{}
+}
+
+func (h *Hub) trackFileEncode(id int64, cmd *exec.Cmd) chan struct{} {
+	done := make(chan struct{})
 	h.playMu.Lock()
+	if h.fileEnc == nil {
+		h.fileEnc = map[int64]*fileEncode{}
+	}
+	h.fileEnc[id] = &fileEncode{cmd: cmd, done: done}
+	if h.plays == nil {
+		h.plays = map[int64]struct{}{}
+	}
+	h.plays[id] = struct{}{}
+	h.playMu.Unlock()
+	return done
+}
+
+func (h *Hub) dropFileEncode(id int64, cmd *exec.Cmd) {
+	h.playMu.Lock()
+	if cur := h.fileEnc[id]; cur != nil && cur.cmd == cmd {
+		delete(h.fileEnc, id)
+		delete(h.plays, id)
+	}
+	h.playMu.Unlock()
+}
+
+// stopFileEncode kills the ffmpeg writing this recording and waits until it
+// has exited, so the next encode is not replacing files that process still has open.
+func (h *Hub) stopFileEncode(id int64) {
+	h.playMu.Lock()
+	enc := h.fileEnc[id]
+	delete(h.fileEnc, id)
 	delete(h.plays, id)
 	h.playMu.Unlock()
+	if enc == nil {
+		return
+	}
+	if enc.cmd != nil && enc.cmd.Process != nil {
+		_ = enc.cmd.Process.Kill()
+	}
+	select {
+	case <-enc.done:
+	case <-time.After(3 * time.Second):
+	}
 }
 
 func waitPlaylistFile(playlist string, id int64) (string, error) {
@@ -244,8 +282,10 @@ func waitPlaylistFile(playlist string, id int64) (string, error) {
 	return "", fmt.Errorf("recording player did not start")
 }
 
-// followFile copies a growing recording into ffmpeg until the recording has stopped and no new bytes arrive.
-func followFile(path string, dst io.WriteCloser, still func() bool) {
+// followFile copies a growing recording into ffmpeg until the recording has
+// stopped and no new bytes arrive. skip is how many seconds of the file to
+// leave out, measured from the first PCR. A pipe has no index to seek.
+func followFile(path string, dst io.WriteCloser, still func() bool, skip float64) {
 	defer dst.Close()
 	var file *os.File
 	deadline := time.Now().Add(15 * time.Second)
@@ -261,6 +301,9 @@ func followFile(path string, dst io.WriteCloser, still func() bool) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	defer file.Close()
+	if skip >= resumeMin && !discardPrefix(file, skip, still) {
+		return
+	}
 	buf := make([]byte, 64*1024)
 	quiet := 0
 	for {
@@ -285,4 +328,63 @@ func followFile(path string, dst io.WriteCloser, still func() bool) {
 			return
 		}
 	}
+}
+
+// discardPrefix drops packets until the PCR clock, measured from the first
+// PCR, reaches skip. The file is left at that packet. A file with no clock
+// is rewound and copied whole once the recording has stopped.
+func discardPrefix(file *os.File, skip float64, still func() bool) bool {
+	want := int64(skip*90000 + 0.5)
+	buf := make([]byte, 188)
+	var base int64
+	var have bool
+	start, err := file.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return false
+	}
+	quiet := 0
+	for {
+		off, err := file.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return false
+		}
+		_, err = io.ReadFull(file, buf)
+		if err != nil {
+			if _, serr := file.Seek(off, io.SeekStart); serr != nil {
+				return false
+			}
+			if !still() {
+				quiet++
+				if quiet >= 2 {
+					_, serr := file.Seek(start, io.SeekStart)
+					return serr == nil
+				}
+			} else {
+				quiet = 0
+			}
+			time.Sleep(300 * time.Millisecond)
+			continue
+		}
+		quiet = 0
+		pcr, ok := readPCR(buf)
+		if !ok {
+			continue
+		}
+		if !have {
+			base = pcr
+			have = true
+		}
+		if (pcr-base)&(1<<33-1) >= want {
+			_, err = file.Seek(-188, io.SeekCurrent)
+			return err == nil
+		}
+	}
+}
+
+func readPCR(pkt []byte) (int64, bool) {
+	if len(pkt) < 12 || pkt[0] != 0x47 || pkt[3]&0x20 == 0 || pkt[4] < 7 || pkt[5]&0x10 == 0 {
+		return 0, false
+	}
+	base := int64(pkt[6])<<25 | int64(pkt[7])<<17 | int64(pkt[8])<<9 | int64(pkt[9])<<1 | int64(pkt[10]>>7)
+	return base, true
 }
