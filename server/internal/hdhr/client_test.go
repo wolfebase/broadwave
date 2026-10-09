@@ -9,6 +9,28 @@ import (
 	"testing"
 )
 
+func TestTunerErrorDropsTheAddress(t *testing.T) {
+	const auth = "tuner-fixture-auth"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "no", http.StatusBadGateway)
+	}))
+	defer srv.Close()
+	raw := srv.URL + "/lineup.json?DeviceAuth=" + auth
+	err := (&Client{HTTP: srv.Client()}).getJSON(context.Background(), raw, &map[string]any{})
+	if err == nil || strings.Contains(err.Error(), auth) || strings.Contains(err.Error(), "DeviceAuth") || strings.Contains(err.Error(), srv.URL) {
+		t.Fatal(err)
+	}
+	if !strings.Contains(err.Error(), "502") {
+		t.Fatal(err)
+	}
+	gone := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	gone.Close()
+	err = (&Client{HTTP: gone.Client()}).getJSON(context.Background(), gone.URL+"/discover.json?DeviceAuth="+auth, &map[string]any{})
+	if err == nil || strings.Contains(err.Error(), auth) || strings.Contains(err.Error(), gone.URL) {
+		t.Fatal(err)
+	}
+}
+
 func TestFetchDropsDeviceAuth(t *testing.T) {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

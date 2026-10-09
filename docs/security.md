@@ -26,7 +26,7 @@ Playlist text, guide XML, and the tables inside a broadcast are read with their 
 
 ## Secrets
 
-A password in a playlist or guide address, and a tuner DeviceAuth, are masked before they are shown or written into diagnostics and the support bundle. The settings page shows the guide address with the password removed. Saving that page again keeps the password that was already stored. The process log drops those values, and ffmpeg progress goes to that log.
+A password in a playlist or guide address, and a tuner DeviceAuth, are masked before they are shown or written into diagnostics and the support bundle. The name of the password field is matched either way, and a password in an Xtream-style stream path (`/live/<user>/<password>/<id>`) is masked too. The settings page shows the guide address with the password removed. Saving that page again keeps the password that was already stored. The process log drops those values, and ffmpeg progress goes to that log. A tuner request that fails does not repeat the address.
 
 ## Limits to know
 

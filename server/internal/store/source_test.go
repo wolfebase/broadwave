@@ -302,6 +302,39 @@ func TestDeviceAuthRoundTripsThroughTheStoredSource(t *testing.T) {
 	}
 }
 
+func TestMaskURLHidesThePasswordHoweverItIsWritten(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	query := "http://listing.example/xmltv.xml?Password=guide-fixture-password"
+	public, secret := maskURL(query)
+	if strings.Contains(public, "guide-fixture-password") || secret != query || MaskURL(public) != public {
+		t.Fatalf("query public %s secret %s", public, secret)
+	}
+	item, err := st.AddSource(ctx, "m3u", "Guide", query, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.FetchURL(ctx, item.ID, item.URL); got != query {
+		t.Fatalf("query fetch %q", got)
+	}
+
+	stream := "http://playlist.example/live/viewer/panel-fixture-password/9.ts"
+	public, secret = maskURL(stream)
+	if strings.Contains(public, "panel-fixture-password") || secret != stream || MaskURL(public) != public {
+		t.Fatalf("path public %s secret %s", public, secret)
+	}
+	item, err = st.AddSource(ctx, "m3u", "Live", stream, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.FetchURL(ctx, item.ID, item.URL); got != stream {
+		t.Fatalf("path fetch %q", got)
+	}
+	if plain, _ := maskURL("http://playlist.example/live/news.ts"); plain != "http://playlist.example/live/news.ts" {
+		t.Fatalf("short path %s", plain)
+	}
+}
+
 func TestMaskURLMatchesTheStoredForm(t *testing.T) {
 	raw := "http://ops3user:ops3-fixture-password@playlist.example/pl.m3u?password=ops3-fixture-password"
 	public, secret := maskURL(raw)

@@ -982,23 +982,52 @@ func maskURL(raw string) (public, secret string) {
 		}
 	}
 	q := u.Query()
-	for _, key := range []string{"password", "pass", "token", "secret"} {
-		if q.Get(key) != "" {
-			q.Set(key, "••••")
-			changed = true
+	for key, vals := range q {
+		if !secretQuery(key) {
+			continue
+		}
+		for _, v := range vals {
+			if v != "" {
+				q.Set(key, "••••")
+				changed = true
+				break
+			}
 		}
 	}
-	for key := range q {
-		if strings.EqualFold(key, "DeviceAuth") && q.Get(key) != "" {
-			q.Set(key, "••••")
-			changed = true
-		}
+	if masked, ok := maskStreamPath(u.Path); ok {
+		u.Path = masked
+		changed = true
 	}
 	if !changed {
 		return raw, ""
 	}
 	u.RawQuery = q.Encode()
 	return u.String(), raw
+}
+
+func secretQuery(key string) bool {
+	switch strings.ToLower(key) {
+	case "password", "pass", "token", "secret", "deviceauth":
+		return true
+	default:
+		return false
+	}
+}
+
+// maskStreamPath hides the password in an Xtream-style path,
+// /live/<user>/<password>/<id>. A shorter path is left alone.
+func maskStreamPath(path string) (string, bool) {
+	parts := strings.Split(path, "/")
+	if len(parts) < 5 || parts[0] != "" || parts[3] == "" {
+		return path, false
+	}
+	switch strings.ToLower(parts[1]) {
+	case "live", "movie", "series", "hls":
+	default:
+		return path, false
+	}
+	parts[3] = "••••"
+	return strings.Join(parts, "/"), true
 }
 
 // MaskURL is the form of a URL that is safe to show.
