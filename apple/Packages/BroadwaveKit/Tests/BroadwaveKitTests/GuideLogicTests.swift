@@ -93,9 +93,10 @@ private func airing(_ title: String, category: String? = nil, subtitle: String? 
     defer { try? FileManager.default.removeItem(at: dir) }
     let snap = CatalogSnapshot(channels: [], airings: [], recordings: [])
     CatalogCache.save(snap, serverID: "../outside", directory: dir)
-    let inside = dir.appendingPathComponent("broadwave-outside.json")
-    let escaped = dir.deletingLastPathComponent().appendingPathComponent("broadwave-outside.json")
+    let inside = CatalogCache.file("../outside", dir)
+    #expect(inside.deletingLastPathComponent().standardizedFileURL == dir.standardizedFileURL)
     #expect(FileManager.default.fileExists(atPath: inside.path))
+    let escaped = dir.deletingLastPathComponent().appendingPathComponent(inside.lastPathComponent)
     #expect(!FileManager.default.fileExists(atPath: escaped.path))
     let written = try #require(CatalogCache.savedAt(serverID: "../outside", directory: dir))
     #expect(abs(written.timeIntervalSinceNow) < 30)

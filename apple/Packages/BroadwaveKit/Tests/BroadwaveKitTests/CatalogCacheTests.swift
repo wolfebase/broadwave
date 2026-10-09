@@ -24,6 +24,30 @@ import Testing
     #expect(CatalogCache.load(serverID: "other", directory: dir) == nil)
 }
 
+@Test func catalogCacheKeepsDistinctServerIds() {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let start = Date(timeIntervalSince1970: 1_700_000_000)
+    func snap(_ name: String) -> CatalogSnapshot {
+        let channel = Channel(
+            id: 1, deviceId: "d", guideNumber: "11.1", guideName: "ALP",
+            displayNumber: "11.1", displayName: name, hd: true, favorite: false,
+            enabled: true, hidden: false, present: true
+        )
+        let airing = Airing(id: 1, channelId: 1, title: name, start: start, end: start.addingTimeInterval(1800))
+        return CatalogSnapshot(channels: [channel], airings: [airing], recordings: [])
+    }
+    CatalogCache.save(snap("Alpha"), serverID: "abc-123", directory: dir)
+    CatalogCache.save(snap("Beta"), serverID: "abc123", directory: dir)
+    #expect(CatalogCache.load(serverID: "abc-123", directory: dir)?.channels.first?.displayName == "Alpha")
+    #expect(CatalogCache.load(serverID: "abc123", directory: dir)?.channels.first?.displayName == "Beta")
+
+    CatalogCache.save(snap("Alpha"), serverID: "Ab", directory: dir)
+    CatalogCache.save(snap("Beta"), serverID: "ab", directory: dir)
+    #expect(CatalogCache.load(serverID: "Ab", directory: dir)?.channels.first?.displayName == "Alpha")
+    #expect(CatalogCache.load(serverID: "ab", directory: dir)?.channels.first?.displayName == "Beta")
+}
+
 @Test func artLayoutMatchesPictureSize() {
     #expect(ArtLayout.choose(width: 1920, height: 1080, slot: 1400) == "bleed")
     #expect(ArtLayout.choose(width: 1280, height: 720, slot: 1920) == "composed")

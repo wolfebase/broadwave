@@ -143,9 +143,7 @@ private func retire(_ store: AppStore) {
     store.forget()
     CatalogStall.gate.finishAll()
     for id in ["harbor", "inland", "demo"] {
-        let safe = String(id.filter { $0.isLetter || $0.isNumber })
-        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        try? FileManager.default.removeItem(at: dir.appendingPathComponent("broadwave-\(safe).json"))
+        try? FileManager.default.removeItem(at: CatalogCache.file(id, nil))
     }
 }
 
