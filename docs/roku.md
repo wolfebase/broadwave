@@ -34,7 +34,7 @@ Captions already ship as WebVTT beside the video playlist. They are not part of 
 
 ## Whole-Home Sync
 
-A sync room has one target. At server time T the screen should show anchor media time plus (T minus anchor server time) times the rate. Media time is the program date-time of the frame. The default room is balanced, 16 seconds behind real time. Clients measure their offset from the server on the events WebSocket. The web engine nudges rate by up to 3 percent, and the Apple engine by 2 percent, when drift is under a few hundred milliseconds. Past that, a client that is ahead pauses for the drift, and one that is behind seeks forward. They do not seek backward in a live buffer. The bar on a home network is about 50 milliseconds.
+A sync room has one target. At server time T the screen should show anchor media time plus (T minus anchor server time) times the rate. Media time is the program date-time of the frame. The default room is balanced, 16 seconds behind real time. Clients measure their offset from the server on the events WebSocket. The web engine nudges rate by up to 3 percent, and the Apple engine by 2 percent, when drift is under a few hundred milliseconds. Past that, a client that is ahead pauses for the drift, and one that is behind seeks forward. Drift correction does not seek backward in a live buffer. A group rewind does. The bar on a home network is about 50 milliseconds.
 
 A Roku channel should not promise that.
 
