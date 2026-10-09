@@ -18,6 +18,12 @@ public final class EventSocket {
     private var refs: [String: Int] = [:]
     private var latest: [String: Data] = [:]
     private var bestRTT = Double.infinity
+    /// Local time of the last clock burst. A reply whose t0 is older was in
+    /// flight across a wake, and with best reset it would otherwise be kept.
+    private var clockNotBefore: Double = 0
+    /// Commands asked for while the socket was down. Sent on the next open if
+    /// they are still only a few seconds old.
+    private var pendingCommands: [(text: String, at: Double)] = []
     private var retry = 0
     private var clockTimer: Timer?
     private var screenName = ""
@@ -102,6 +108,7 @@ public final class EventSocket {
         for (room, channel) in rooms {
             send("sync.join", ["room": room, "channelId": channel, "latency": LiveDelay.saved.rawValue])
         }
+        flushCommands()
     }
 
     /// Tells the server which screen this app is. Sent again after each reconnect.
@@ -143,6 +150,7 @@ public final class EventSocket {
 
     public func disconnect() {
         stopped = true
+        pendingCommands.removeAll()
         retryWork?.cancel()
         observers.forEach(NotificationCenter.default.removeObserver)
         observers = []
@@ -171,7 +179,7 @@ public final class EventSocket {
     }
 
     private func burst() {
-        bestRTT = .infinity
+        beginClockBurst(at: Self.nowMS())
         for i in 0 ..< 5 {
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200 + i * 300)) { [weak self] in self?.sampleClock() }
         }
@@ -244,10 +252,43 @@ public final class EventSocket {
     }
 
     private func send(_ type: String, _ data: [String: Any]) {
-        guard let task else { return }
         let frame: [String: Any] = ["type": type, "data": data]
         guard let json = try? JSONSerialization.data(withJSONObject: frame), let text = String(data: json, encoding: .utf8) else { return }
+        guard let task else {
+            if type == "sync.command" {
+                pendingCommands.append((text: text, at: Self.nowMS()))
+            }
+            return
+        }
         task.send(.string(text)) { _ in }
+    }
+
+    /// A command from a few seconds ago still belongs to this reconnect. An older
+    /// one would move the room somewhere nobody is asking for now.
+    private func flushCommands() {
+        guard let task else { return }
+        let due = Self.freshCommands(pendingCommands, at: Self.nowMS())
+        pendingCommands.removeAll()
+        for text in due {
+            task.send(.string(text)) { _ in }
+        }
+    }
+
+    static func freshCommands(_ pending: [(text: String, at: Double)], at now: Double) -> [String] {
+        pending.filter { now - $0.at < 3000 }.map(\.text)
+    }
+
+    func beginClockBurst(at now: Double) {
+        bestRTT = .infinity
+        clockNotBefore = now
+    }
+
+    func applyFrame(_ data: Data) {
+        dispatch(data)
+    }
+
+    func pendingCommandTexts(at now: Double) -> [String] {
+        Self.freshCommands(pendingCommands, at: now)
     }
 
     private func receive(_ task: URLSessionWebSocketTask) {
@@ -304,10 +345,11 @@ public final class EventSocket {
             let restarted = !boot.isEmpty && next != boot
             boot = next
             if restarted {
+                latest.removeAll()
                 emit("restarted")
             }
         }
-        if type == "clock", let d = obj["data"] as? [String: Any], let t0 = d["t0"] as? Double, let t1 = d["t1"] as? Double {
+        if type == "clock", let d = obj["data"] as? [String: Any], let t0 = d["t0"] as? Double, let t1 = d["t1"] as? Double, t0 >= clockNotBefore {
             if let next = Self.clockOffset(t0: t0, t1: t1, t2: Self.nowMS(), best: &bestRTT) {
                 offset = next
             }
