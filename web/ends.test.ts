@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { introSkip, upNext } from "./src/features/recordings/ends.ts";
+import { introSkip, takeUpNext, upNext } from "./src/features/recordings/ends.ts";
 import type { Recording } from "./src/types.ts";
 
 const rec = (extra: Partial<Recording> = {}): Recording => ({ id: 1, channelId: 1, guideNumber: "4.1", title: "Mystery Hour", status: "complete", startedAt: "2026-10-01T19:00:00Z", ...extra });
@@ -23,6 +23,16 @@ test("up next counts down from the end titles with autoplay", () => {
   assert.deepEqual(upNext(1761, 1800, 1750, true), { left: 0 });
   // Without autoplay it offers the next one and waits.
   assert.deepEqual(upNext(1761, 1800, 1750, false), { left: null });
+});
+
+test("up next plays only a countdown the viewer saw", () => {
+  assert.deepEqual(takeUpNext(false, null), { counted: false, play: false });
+  assert.deepEqual(takeUpNext(false, undefined), { counted: false, play: false });
+  assert.deepEqual(takeUpNext(false, 8), { counted: true, play: false });
+  assert.deepEqual(takeUpNext(true, 1), { counted: true, play: false });
+  assert.deepEqual(takeUpNext(true, 0), { counted: false, play: true });
+  // A new episode that is already at its end has not counted down.
+  assert.deepEqual(takeUpNext(false, 0), { counted: false, play: false });
 });
 
 test("up next falls back to the last seconds", () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { releaseFileVideo, takeFileFatal } from "./src/features/recordings/filePlay.ts";
+import { progressSaveAction, progressToStore, releaseFileVideo, takeFileFatal } from "./src/features/recordings/filePlay.ts";
 
 test("a fatal file error recovers once per kind, then shows", () => {
   const tried = { network: false, media: false };
@@ -17,6 +17,20 @@ test("a shown fatal does not spend the recovery for a kind that has not failed",
   assert.equal(takeFileFatal("keySystemError", tried), "show");
   assert.equal(takeFileFatal("mediaError", tried), "recoverMedia");
   assert.equal(takeFileFatal("networkError", tried), "startLoad");
+});
+
+test("playback arms one save and keeps it while the picture moves", () => {
+  let armed = false;
+  const actions: string[] = [];
+  for (const time of [0.2, 5, 5.25, 5.5, 40, 1, 0]) {
+    const action = progressSaveAction(armed, time);
+    actions.push(action);
+    if (action === "arm") armed = true;
+  }
+  assert.deepEqual(actions, ["idle", "arm", "keep", "keep", "keep", "idle", "idle"]);
+  assert.equal(progressToStore(40), 40);
+  assert.equal(progressToStore(1), null);
+  assert.equal(progressToStore(0), null);
 });
 
 test("releasing a file pauses it and reloads the element with no src", () => {

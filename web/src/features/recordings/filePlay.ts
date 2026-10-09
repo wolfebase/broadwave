@@ -32,3 +32,18 @@ export function releaseFileVideo(video: FileVideo) {
   video.removeAttribute("src");
   video.load();
 }
+
+/**
+ * A playing file saves on a cadence. Resetting the wait on every timeupdate
+ * would never fire while the picture is moving. `armed` is true while a save
+ * is already waiting.
+ */
+export function progressSaveAction(armed: boolean, time: number): "arm" | "keep" | "idle" {
+  if (!(time > 1)) return "idle";
+  return armed ? "keep" : "arm";
+}
+
+/** Positions at the start are not a resume point. Writing them would wipe one. */
+export function progressToStore(time: number): number | null {
+  return time > 1 ? time : null;
+}

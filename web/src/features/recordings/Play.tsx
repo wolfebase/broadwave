@@ -1,16 +1,16 @@
 import Hls from "hls.js";
-import { useEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
 import { actionName } from "../../lib/actionName";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
-import { releaseFileVideo, takeFileFatal } from "./filePlay";
+import { progressSaveAction, progressToStore, releaseFileVideo, takeFileFatal } from "./filePlay";
 import { copy } from "../../strings";
 import { Stage } from "../player/Stage";
 import type { Recording } from "../../types";
 import { episodeTag, recordingSubject } from "../library/model";
 import { breakScans, idleBreakScan } from "./breaks";
 import { DownloadLink } from "./DownloadLink";
-import { introSkip, upNext } from "./ends";
+import { introSkip, takeUpNext, upNext } from "./ends";
 import { planRecordingSeek } from "./seek";
 
 type Marker = { id: number; start: number; end: number; confidence?: number };
@@ -53,6 +53,8 @@ export function Play({
   const saveTimer = useRef(0);
   // A resume seek that lands after the viewer has already moved would undo Start over.
   const viewerSought = useRef(false);
+  // Only a countdown the viewer saw plays the next episode.
+  const counted = useRef(false);
   // Where this encode started. The playlist before that is gap, not the picture.
   const encodedStart = useRef(0);
   const relocate = useRef<(to: number) => void>(() => {});
@@ -77,11 +79,22 @@ export function Play({
     setDismissed(false);
     setCaptions("off");
     setCaptionsReady(false);
+    setWhere(0);
+    setLength(0);
   }
+
+  // Before the Up next effect, so the previous file's countdown does not play
+  // past an episode that opens at its end.
+  useLayoutEffect(() => {
+    counted.current = false;
+  }, [recording.id]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    // The previous file's cleanup already stored its playhead. Leaving this one
+    // before it plays must not store that position on this id.
+    whereRef.current = 0;
     viewerSought.current = false;
     setError("");
     let dead = false;
@@ -209,9 +222,14 @@ export function Play({
       whereRef.current = t;
       setWhere(t);
       if (Number.isFinite(video.duration)) setLength(video.duration);
-      if (t > 1) {
-        window.clearTimeout(saveTimer.current);
-        saveTimer.current = window.setTimeout(() => void saveProgress(recording.id, t), 4000);
+      // Arm once. Resetting the wait on every timeupdate never fires while the picture moves.
+      if (progressSaveAction(saveTimer.current !== 0, t) === "arm") {
+        const timer = window.setTimeout(() => {
+          if (saveTimer.current === timer) saveTimer.current = 0;
+          const at = progressToStore(whereRef.current);
+          if (at != null) void saveProgress(recording.id, at);
+        }, 4000);
+        saveTimer.current = timer;
       }
       if (skipMode !== "auto") return;
       const hit = markerAt(markers, t);
@@ -226,6 +244,7 @@ export function Play({
       video.removeEventListener("timeupdate", tick);
       video.removeEventListener("ended", ended);
       window.clearTimeout(saveTimer.current);
+      saveTimer.current = 0;
     };
   }, [markers, skipMode, recording.id, autoplay, dismissed, onNext]);
 
@@ -299,6 +318,8 @@ export function Play({
 
   async function startOver() {
     sought();
+    window.clearTimeout(saveTimer.current);
+    saveTimer.current = 0;
     const video = videoRef.current;
     const end = video && video.seekable.length ? video.seekable.end(video.seekable.length - 1) : 0;
     if (planRecordingSeek(0, encodedStart.current, end).action === "reload") {
@@ -310,6 +331,7 @@ export function Play({
       video.currentTime = 0;
     }
     whereRef.current = 0;
+    setWhere(0);
     await saveProgress(recording.id, 0);
   }
 
@@ -351,16 +373,10 @@ export function Play({
   const introEnd = inside ? null : introSkip(recording, where);
   const card = next && !dismissed && !growing ? upNext(where, total, recording.creditsStart, autoplay) : null;
   const left = card?.left;
-  // Only a count the viewer saw plays the next one: a resume or a scrub that
-  // lands past it leaves this one playing to its end.
-  const counted = useRef(false);
   useEffect(() => {
-    if (left == null) counted.current = false;
-    else if (left > 0) counted.current = true;
-    else if (counted.current) {
-      counted.current = false;
-      onNext();
-    }
+    const step = takeUpNext(counted.current, left ?? null);
+    counted.current = step.counted;
+    if (step.play) onNext();
   }, [left, onNext]);
   const nextLabel = next ? [episodeTag(next), next.subtitle].filter(Boolean).join(" · ") || next.title : "";
 
