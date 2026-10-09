@@ -19,6 +19,7 @@ import {
   timeLabel,
   type Category,
 } from "../../lib/guide";
+import { scrollBehavior } from "../../lib/motion";
 import type { Airing, Channel } from "../../types";
 import { SearchIcon, StarIcon } from "../../ui/icons";
 import { Atsc3Tag, ChannelBadge, Chip, Empty, Progress, RecDot } from "../../ui/primitives";
@@ -176,7 +177,8 @@ export function Guide() {
   function scrollToTime(t: number, behavior: ScrollBehavior = "smooth") {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTo({ left: Math.max(0, ((t - origin) / MIN) * pxPerMin), behavior });
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollTo({ left: Math.max(0, ((t - origin) / MIN) * pxPerMin), behavior: scrollBehavior(reduced, behavior) });
   }
 
   // Now keeps half an hour of what just aired on the left and moves the cursor
