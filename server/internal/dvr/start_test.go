@@ -57,15 +57,41 @@ func TestJoinDecisionNeedsTheBufferFromTheStart(t *testing.T) {
 func TestAttemptedCountsEveryRecordingOfTheAiring(t *testing.T) {
 	start := time.Date(2026, 9, 28, 19, 0, 0, 0, time.UTC)
 	airing := store.Airing{ChannelID: 1, Title: "News", Start: start, End: start.Add(time.Hour)}
+	pass := store.Pass{}
 	stopped := store.Recording{ChannelID: 1, Title: "news", Status: "complete", StartedAt: start.Add(-time.Minute)}
-	if !attempted([]store.Recording{stopped}, airing) {
+	if !attempted([]store.Recording{stopped}, pass, airing) {
 		t.Fatal("a recording the viewer stopped must not be joined again")
 	}
 	yesterday := stopped
 	yesterday.StartedAt = start.Add(-24 * time.Hour)
 	other := stopped
 	other.ChannelID = 2
-	if attempted([]store.Recording{yesterday, other}, airing) {
+	if attempted([]store.Recording{yesterday, other}, pass, airing) {
 		t.Fatal("another airing or channel does not count")
+	}
+}
+
+func TestAFinishedEpisodeDoesNotBlockTheNextOne(t *testing.T) {
+	first := time.Date(2026, 9, 28, 19, 0, 0, 0, time.UTC)
+	secondStart := first.Add(30 * time.Minute)
+	second := store.Airing{ChannelID: 1, Title: "News", Start: secondStart, End: secondStart.Add(30 * time.Minute)}
+	pass := store.Pass{PadBefore: 1, PadAfter: 2}
+	done := store.Recording{
+		ChannelID: 1, Title: "News", Status: "complete",
+		StartedAt: first.Add(-time.Minute),
+	}
+	now := secondStart.Add(2 * time.Minute)
+	held := first.Add(-time.Minute)
+	start, _ := StartDecision(pass, second, now)
+	if !start && !attempted([]store.Recording{done}, pass, second) {
+		start, _ = JoinDecision(pass, second, now, held)
+	}
+	if !start {
+		t.Fatal("second episode was not started")
+	}
+	open := done
+	open.Status = "recording"
+	if !already([]store.Recording{open}, second) {
+		t.Fatal("a recording still in progress must block the next start")
 	}
 }

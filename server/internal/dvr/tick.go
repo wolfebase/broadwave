@@ -47,7 +47,7 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 			continue
 		}
 		start, minutes := StartDecision(pass, item.Airing, now)
-		if !start && !attempted(active, item.Airing) {
+		if !start && !attempted(active, pass, item.Airing) {
 			start, minutes = JoinDecision(pass, item.Airing, now, hub.BufferedSince(ctx, item.Airing.ChannelID))
 		}
 		if !start {
@@ -88,10 +88,17 @@ func findPass(passes []store.Pass, airing store.Airing) (store.Pass, bool) {
 
 // attempted reports a recording of this airing in any state, so a show the
 // viewer stopped, or one that failed, is not joined again from the buffer.
-func attempted(recs []store.Recording, airing store.Airing) bool {
+// The window is the same lead StartDecision uses. An earlier episode of the
+// same title started before that lead, and must not count as this one.
+func attempted(recs []store.Recording, pass store.Pass, airing store.Airing) bool {
+	lead := recordLead
+	if extra := time.Duration(pass.PadBefore) * time.Minute; extra > lead {
+		lead = extra
+	}
+	floor := airing.Start.Add(-lead)
 	for _, rec := range recs {
 		if rec.ChannelID == airing.ChannelID && strings.EqualFold(rec.Title, airing.Title) &&
-			rec.StartedAt.Before(airing.End) && !rec.StartedAt.Before(airing.Start.Add(-time.Hour)) {
+			rec.StartedAt.Before(airing.End) && !rec.StartedAt.Before(floor) {
 			return true
 		}
 	}
