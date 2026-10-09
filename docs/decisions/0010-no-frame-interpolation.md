@@ -19,7 +19,7 @@ jellyfin-ffmpeg 7.1.4 on the Unraid UHD 770, fed at real time. The picture was 4
 | `vpp_qsv=framerate=60` | drop or repeat, and only if QSV starts | device init failed (MFX session -3) | — | no |
 | VAAPI | no interpolation filter in this ffmpeg | — | — | field deinterlace only |
 
-`libx264` at 1080p60 was about 240% of one core for duplicate, blend, and framerate alike, so the encoder, not the blend, was the cost. Blend does fit in one core once encode is on the GPU. It still looks worse: the invented frame has a pale trail on each side of a moving edge (`docs/lab/pb4/blend-box.jpg`, `rate-box.jpg`). The duplicated frame stays sharp (`dup-box.jpg`).
+`libx264` at 1080p60 was about 240% of one core for duplicate, blend, and framerate alike, so the encoder, not the blend, was the cost. Blend does fit in one core once encode is on the GPU. It still looks worse: the invented frame has a pale trail on each side of a moving edge. The duplicated frame stays sharp.
 
 FFmpeg 7.1 has no VAAPI filter that invents progressive frames. `deinterlace_vaapi=rate=field` rebuilds 59.94 from interlaced fields. That path stays.
 

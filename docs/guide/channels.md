@@ -11,7 +11,7 @@ Broadwave tries listings in this order:
 - An XMLTV address you paste under Guide address. The hint is "An XMLTV link for channels the tuner guide skips."
 - The broadcast itself fills times none of those already list.
 
-With no guide key, a channel matches on its number, then its name, then its call sign. A trailing DT or HD still counts. Guide match, on the channel in Settings, pins a listing when the names differ. Leave it blank to use the number and call sign.
+With no guide key, a channel matches on its number, then its name, then its call sign. A trailing DT, DT1, HD, TV, or LD still counts. Guide match, on the channel in Settings, pins a listing when the names differ. Leave it blank to use the number, the name, and the call sign.
 
 Logos and episode art are kept on the server. Movie artwork, in Settings, fills posters the guide left blank.
 
