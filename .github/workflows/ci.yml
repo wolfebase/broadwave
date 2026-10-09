@@ -69,6 +69,14 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg sqlite3
+      # Docker Hub refuses anonymous pulls from busy runner addresses (429).
+      # Google's mirror serves the same official images; Docker Hub stays the fallback.
+      - run: |
+          f=/etc/docker/daemon.json
+          if [ -s "$f" ]; then sudo jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' "$f" > /tmp/daemon.json
+          else echo '{"registry-mirrors": ["https://mirror.gcr.io"]}' > /tmp/daemon.json; fi
+          sudo mv /tmp/daemon.json "$f" && sudo systemctl restart docker
+          docker info --format '{{.RegistryConfig.Mirrors}}'
       - run: docker build -f deploy/docker/Dockerfile -t broadwave:ci .
       - run: npm ci
         working-directory: web
