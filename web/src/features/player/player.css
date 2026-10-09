@@ -435,7 +435,8 @@ html:root[data-layout="tv"] section.stage.mini:focus-visible {
 
 .mg-name {
   font-size: var(--type-caption-size);
-  color: rgba(255, 255, 255, 0.6);
+  /* White at 0.6 is 3.49:1 on glass over a white frame. */
+  color: #e8ecf2;
   font-weight: 700;
 }
 
@@ -484,7 +485,8 @@ html:root[data-layout="tv"] section.stage.mini:focus-visible {
 }
 
 .info-panel dt {
-  color: rgba(255, 255, 255, 0.6);
+  /* Same glass-over-white case as the channel name. */
+  color: #e8ecf2;
 }
 
 .info-panel dd {
@@ -689,7 +691,10 @@ html:root[data-layout="tv"] section.stage.mini:focus-visible {
   display: grid;
   justify-items: center;
   gap: 10px;
-  padding: 0 24px;
+  padding: 16px 28px;
+  border-radius: var(--radius-xl);
+  /* brightness(0.45) of a white poster is about #737373. Secondary text there is 2.3:1. */
+  background: rgba(0, 0, 0, 0.72);
   text-align: center;
   max-width: min(640px, 90vw);
 }
