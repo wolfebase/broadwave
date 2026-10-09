@@ -1963,6 +1963,44 @@ func TestMergedPartSpansBothFragmentsWhenTheNextStartsEarlier(t *testing.T) {
 	}
 }
 
+// The held keyframe is stored ahead of the pictures shown before it.
+// The part's duration already covers both. The date has to start at the
+// earlier picture too. Dated from the keyframe, this segment's end is past
+// the next one, and every later date steps forward by that lead.
+func TestMergedPartIsDatedFromItsFirstPicture(t *testing.T) {
+	for _, c := range []struct {
+		seg0, short, next, first int64
+	}{
+		{0, 200_000, 170_000, 170_000},
+		{ptsWrap - 180_000, ptsWrap - 20_000, ptsWrap - 50_000, ptsWrap - 50_000},
+	} {
+		dir := t.TempDir()
+		raw := append(append(videoInit(),
+			keyframeFragment(c.seg0, 90_000)...),
+			keyframeFragment(c.short, 8_000)...)
+		raw = append(raw, keyframeFragment(c.next, 2_000)...)
+		if err := Pack(dir, bytes.NewReader(raw), nil); err != nil {
+			t.Fatal(err)
+		}
+		body, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		tl := NewTimeline()
+		tl.now = func() time.Time { return time.Date(2026, 10, 9, 18, 0, 0, 0, time.UTC) }
+		var st playlistStamper
+		dates := dateWalls(t, string(st.stamp(dir, body, tl)))
+		if len(dates) != 2 {
+			t.Fatalf("segment %d: %d program dates:\n%s", c.seg0, len(dates), body)
+		}
+		got := dates[1].Sub(dates[0])
+		want := time.Duration(ptsDiff(c.first, c.seg0)) * time.Second / 90000
+		if d := got - want; d > 2*time.Millisecond || d < -2*time.Millisecond {
+			t.Errorf("segment %d: merged part is %v after the first, want %v", c.seg0, got, want)
+		}
+	}
+}
+
 // soundSamples counts track 2's samples in every fragment of b.
 func soundSamples(b []byte) int {
 	n := 0
