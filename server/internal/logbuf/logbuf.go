@@ -1,7 +1,7 @@
 // Package logbuf keeps a short tail of process logs for the support bundle.
 // Install sends the standard logger and slog to one writer and keeps a redacted
-// copy of recent lines. A URL password uses store.MaskURL, a password or token
-// assignment is dropped, and tuner DeviceAuth is dropped.
+// copy of recent lines. A URL password or key uses store.MaskURL, a password,
+// token, or key assignment is dropped, and tuner DeviceAuth is dropped.
 package logbuf
 
 import (
@@ -112,7 +112,7 @@ func Tail(n int) []string {
 var (
 	urlRE          = regexp.MustCompile(`https?://[^\s"'<>]+`)
 	deviceAuthRE   = regexp.MustCompile(`(?i)"?DeviceAuth"?\s*[:=]\s*"?[^\s"',}&]+"?`)
-	secretAssignRE = regexp.MustCompile(`(?i)\b(?:password|pass|token|secret)\b\s*[:=]\s*"?[^\s"',}&]+"?`)
+	secretAssignRE = regexp.MustCompile(`(?i)\b(?:access_token|api_key|apikey|passwd|password|pass|pwd|token|secret)\b\s*[:=]\s*"?[^\s"',}&]+"?`)
 )
 
 // Redact masks passwords inside URLs and removes tuner DeviceAuth and secret assignments.
@@ -185,7 +185,7 @@ func scrubAttr(a slog.Attr) slog.Attr {
 
 func secretAttr(key string) bool {
 	switch strings.ToLower(key) {
-	case "password", "pass", "token", "secret", "deviceauth", "sdpassword", "tmdbkey", "sportsdbkey", "authorization":
+	case "password", "pass", "passwd", "pwd", "token", "access_token", "secret", "deviceauth", "api_key", "apikey", "sdpassword", "tmdbkey", "sportsdbkey", "authorization":
 		return true
 	default:
 		return false

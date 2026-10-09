@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -27,6 +28,23 @@ func TestTunerErrorDropsTheAddress(t *testing.T) {
 	gone.Close()
 	err = (&Client{HTTP: gone.Client()}).getJSON(context.Background(), gone.URL+"/discover.json?DeviceAuth="+auth, &map[string]any{})
 	if err == nil || strings.Contains(err.Error(), auth) || strings.Contains(err.Error(), gone.URL) {
+		t.Fatal(err)
+	}
+}
+
+func TestDiscoverErrorOmitsTheAddress(t *testing.T) {
+	const auth = "tuner-fixture-auth"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"FriendlyName":"Lab"}`))
+	}))
+	defer srv.Close()
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.User = url.UserPassword("tuner", auth)
+	_, err = (&Client{HTTP: srv.Client()}).FetchDevice(context.Background(), u.String())
+	if err == nil || !strings.Contains(err.Error(), "missing a device id") || strings.Contains(err.Error(), auth) || strings.Contains(err.Error(), srv.URL) {
 		t.Fatal(err)
 	}
 }
