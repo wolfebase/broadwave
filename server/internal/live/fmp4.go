@@ -242,31 +242,45 @@ func videoTrack(init []byte) (uint32, uint32, bool) {
 	return 0, 0, false
 }
 
-// fragmentStart is the earliest video presentation time in a fragment, in
-// 90 kHz ticks. In an open group of pictures the keyframe comes first and the
-// two B-frames decoded after it are shown before it, so the keyframe's time is
-// two frames late there and on time after a scene cut closes a group. Dated by
-// the keyframe, every closed group overlapped the open one before it; the
-// stamper pinned it to that segment's end, and the channel's dates ran 67 ms
-// further ahead of its timestamps each time.
+// fragmentStart is the earliest video presentation time in a segment, in
+// 90 kHz ticks. A segment is every fragment the packager wrote into it.
+// In one fragment the keyframe is decoded first and shown after the B-frames.
+// A held keyframe is stored first and the pictures shown before it follow,
+// so the first fragment's time is not the first picture. Dated from the
+// keyframe, the duration runs past the next segment and the stamper moves
+// that segment forward.
 func fragmentStart(seg []byte, track, scale uint32) (int64, bool) {
-	for _, t := range boxes(child(seg, "moof")) {
-		if t.kind != "traf" {
-			continue
-		}
-		r, ok := parseRun(t.body)
-		if !ok || r.id != track || len(r.samples) == 0 || scale == 0 {
-			continue
-		}
-		dts := r.decodeTime()
-		start := dts + r.cts(r.samples[0])
-		for _, sample := range r.samples {
-			start = min(start, dts+r.cts(sample))
-			dts += r.sampleDur(sample)
-		}
-		return start * 90000 / int64(scale), true
+	if scale == 0 {
+		return 0, false
 	}
-	return fragmentPTS(seg, track, scale)
+	var best int64
+	seen := false
+	for _, top := range boxes(seg) {
+		if top.kind != "moof" {
+			continue
+		}
+		for _, t := range boxes(top.body) {
+			if t.kind != "traf" {
+				continue
+			}
+			r, ok := runTiming(t.body)
+			if !ok || r.id != track || len(r.samples) == 0 {
+				continue
+			}
+			dts := r.decodeTime()
+			for _, s := range r.samples {
+				pts := dts + r.cts(s)
+				if !seen || ptsDiff(pts, best) < 0 {
+					best, seen = pts, true
+				}
+				dts += r.sampleDur(s)
+			}
+		}
+	}
+	if !seen {
+		return fragmentPTS(seg, track, scale)
+	}
+	return best * 90000 / int64(scale), true
 }
 
 // fragmentPTS returns the first video sample's presentation time in 90 kHz ticks.
