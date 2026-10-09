@@ -161,6 +161,21 @@ private func play(_ frozen: inout FrozenPicture, from time: Double, seconds: Int
     #expect(frozen.note(time: edge, playing: false, stoppedItself: true, at: start.addingTimeInterval(15)) == .retune)
 }
 
+/// Twenty seconds already played, then the item ends. One second of the
+/// replacement is not a settled picture, so the next stall retunes.
+@Test func aShortRunAfterAnEndedItemDoesNotCountAsSettled() {
+    var frozen = FrozenPicture()
+    let at = play(&frozen, from: 100, seconds: 25)
+    #expect(frozen.note(time: at, playing: true, ended: true, at: start.addingTimeInterval(26)) == .reload)
+    let edge = at + 30
+    #expect(frozen.note(time: edge, playing: true, at: start.addingTimeInterval(27)) == nil)
+    #expect(frozen.note(time: edge + 1, playing: true, at: start.addingTimeInterval(28)) == nil)
+    for i in 29 ... 35 {
+        #expect(frozen.note(time: edge + 1, playing: true, at: start.addingTimeInterval(Double(i))) == nil)
+    }
+    #expect(frozen.note(time: edge + 1, playing: true, at: start.addingTimeInterval(36)) == .retune)
+}
+
 @Test func anEndedItemIsAStepAtOnce() {
     var frozen = FrozenPicture()
     // It never moved: the sync engine held its first frame when it died.
