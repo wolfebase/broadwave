@@ -82,7 +82,7 @@ func TestSharedMosaicsAreChannelsInTheExports(t *testing.T) {
 	}
 	m3u := httptest.NewRecorder()
 	h.ServeHTTP(m3u, httptest.NewRequest(http.MethodGet, "/export/lineup.m3u", nil))
-	want := `tvg-chno="990.1" tvg-name="Multiview: KBWV + WTST" channel-id="990.1" group-title="Multiview",Multiview: KBWV + WTST` + "\nhttp://example.com/export/mosaic/" + a + "-" + b + "\n"
+	want := `tvg-chno="990.1" tvg-name="Multiview: KBWV + WTST" channel-id="mosaic.` + a + `-` + b + `" channel-number="990.1" tvc-stream-vcodec="h264" tvc-stream-acodec="aac" group-title="Multiview",Multiview: KBWV + WTST` + "\nhttp://example.com/export/mosaic/" + a + "-" + b + "\n"
 	if !strings.Contains(m3u.Body.String(), want) || strings.Contains(m3u.Body.String(), "9998") {
 		t.Fatalf("m3u:\n%s", m3u.Body)
 	}
@@ -94,7 +94,7 @@ func TestSharedMosaicsAreChannelsInTheExports(t *testing.T) {
 	emu := &emuHandler{store: st}
 	lineup := httptest.NewRecorder()
 	emu.lineup(lineup, httptest.NewRequest(http.MethodGet, "/lineup.json", nil))
-	if !strings.Contains(lineup.Body.String(), `"GuideName":"Multiview: KBWV + WTST","GuideNumber":"990.1","HD":1,"URL":"http://example.com/auto/m`+a+`-`+b+`"`) {
+	if !strings.Contains(lineup.Body.String(), `"GuideNumber":"990.1","GuideName":"Multiview: KBWV + WTST","HD":1,"VideoCodec":"H264","AudioCodec":"AAC","URL":"http://example.com/auto/v990.1"`) {
 		t.Fatalf("lineup: %s", lineup.Body)
 	}
 	for _, path := range []string{"/auto/m1", "/auto/m" + b + "-" + a} {
