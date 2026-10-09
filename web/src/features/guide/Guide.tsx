@@ -15,6 +15,7 @@ import {
   isRecording,
   keptRow,
   nextAfter,
+  reorderChannels,
   primeTime,
   progress,
   recordingKeys,
@@ -217,14 +218,12 @@ export function Guide() {
   }
 
   function reorder(fromId: number, toId: number) {
-    const ids = rows.map((c) => c.id);
-    const from = ids.indexOf(fromId);
-    const to = ids.indexOf(toId);
-    if (from < 0 || to < 0 || from === to) return;
-    const [moved] = ids.splice(from, 1);
-    ids.splice(to, 0, moved);
-    const rest = channels.map((c) => c.id).filter((id) => !ids.includes(id));
-    const next = [...ids, ...rest];
+    const next = reorderChannels(
+      ordered.map((c) => c.id),
+      fromId,
+      toId,
+    );
+    if (!next) return;
     localStorage.setItem(ORDER_KEY, JSON.stringify(next));
     setOrder(next);
   }

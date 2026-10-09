@@ -177,6 +177,21 @@ export function liveChannel<T extends { id: number }>(channels: readonly T[], ch
   return channels.find((row) => row.id === channel.id) ?? channel;
 }
 
+/**
+ * Move one channel within the full order. A drag on a filtered guide must
+ * not rebuild the order from the rows on screen.
+ */
+export function reorderChannels(orderedIds: readonly number[], fromId: number, toId: number): number[] | null {
+  if (fromId === toId) return null;
+  const ids = orderedIds.slice();
+  const from = ids.indexOf(fromId);
+  const to = ids.indexOf(toId);
+  if (from < 0 || to < 0) return null;
+  const [moved] = ids.splice(from, 1);
+  ids.splice(to, 0, moved);
+  return ids;
+}
+
 /** The near window paints first. The rest of the two weeks fills in after. */
 export function guideSpan(now = Date.now()) {
   return {
