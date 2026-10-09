@@ -26,10 +26,11 @@ func TestSupportBundleLeavesOutSecrets(t *testing.T) {
 		auth      = "ops3-device-auth-token"
 		tmdbKey   = "ops3-tmdb-key-value"
 		sportsKey = "ops3-sportsdb-key-value"
+		apiKey    = "ops3-api-key-value"
 	)
 	playlist := "http://ops3user:" + password + "@playlist.example/pl.m3u?password=" + password
-	guide := "http://playlist.example/xmltv.php?username=ops3user&password=" + password
-	guidePage := "http://ops3user:" + password + "@guides.example/xmltv?DeviceAuth=" + auth
+	guide := "http://playlist.example/xmltv.php?username=ops3user&password=" + password + "&api_key=" + apiKey
+	guidePage := "http://ops3user:" + password + "@guides.example/xmltv?DeviceAuth=" + auth + "&access_token=" + apiKey
 	item, err := st.AddSource(ctx, "xtream", "IPTV", playlist, guide)
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +57,7 @@ func TestSupportBundleLeavesOutSecrets(t *testing.T) {
 	if list[0].URL != store.MaskURL(playlist) || strings.Contains(list[0].URL, password) {
 		t.Fatalf("list url %s", list[0].URL)
 	}
-	if list[0].XMLTV != store.MaskURL(guide) || strings.Contains(list[0].XMLTV, password) {
+	if list[0].XMLTV != store.MaskURL(guide) || strings.Contains(list[0].XMLTV, password) || strings.Contains(list[0].XMLTV, apiKey) {
 		t.Fatalf("list guide %s", list[0].XMLTV)
 	}
 	if got := st.FetchURL(ctx, item.ID, list[0].URL); got != playlist {
@@ -67,7 +68,7 @@ func TestSupportBundleLeavesOutSecrets(t *testing.T) {
 	}
 
 	logbuf.Install(os.Stderr)
-	log.Printf("source %s DeviceAuth=%s", playlist, auth)
+	log.Printf("source %s DeviceAuth=%s api_key=%s", playlist, auth, apiKey)
 
 	api := &Server{Store: st, Version: "dev"}
 	rec := get(t, api.Handler(), "/api/v1/support")
@@ -78,10 +79,10 @@ func TestSupportBundleLeavesOutSecrets(t *testing.T) {
 		t.Fatal(rec.Header().Get("Content-Disposition"))
 	}
 	body := rec.Body.Bytes()
-	if bytes.Contains(body, []byte(password)) || bytes.Contains(body, []byte(auth)) || bytes.Contains(body, []byte(tmdbKey)) || bytes.Contains(body, []byte(sportsKey)) || bytes.Contains(body, []byte("DeviceAuth")) {
+	if bytes.Contains(body, []byte(password)) || bytes.Contains(body, []byte(auth)) || bytes.Contains(body, []byte(tmdbKey)) || bytes.Contains(body, []byte(sportsKey)) || bytes.Contains(body, []byte(apiKey)) || bytes.Contains(body, []byte("DeviceAuth")) {
 		t.Fatal("bundle bytes contain a secret")
 	}
-	if text := logbuf.Text(); strings.Contains(text, password) || strings.Contains(text, auth) || strings.Contains(text, "DeviceAuth") {
+	if text := logbuf.Text(); strings.Contains(text, password) || strings.Contains(text, auth) || strings.Contains(text, apiKey) || strings.Contains(text, "DeviceAuth") {
 		t.Fatal("log ring kept a secret")
 	}
 
@@ -103,7 +104,7 @@ func TestSupportBundleLeavesOutSecrets(t *testing.T) {
 		}
 		entries[f.Name] = string(data)
 		names = append(names, f.Name)
-		if bytes.Contains(data, []byte(password)) || bytes.Contains(data, []byte(auth)) || bytes.Contains(data, []byte(tmdbKey)) || bytes.Contains(data, []byte(sportsKey)) || bytes.Contains(data, []byte("DeviceAuth")) {
+		if bytes.Contains(data, []byte(password)) || bytes.Contains(data, []byte(auth)) || bytes.Contains(data, []byte(tmdbKey)) || bytes.Contains(data, []byte(sportsKey)) || bytes.Contains(data, []byte(apiKey)) || bytes.Contains(data, []byte("DeviceAuth")) {
 			t.Fatalf("%s contains a secret", f.Name)
 		}
 	}
@@ -144,7 +145,7 @@ func TestSupportBundleLeavesOutSecrets(t *testing.T) {
 	if _, ok := cfg.Settings["sportsdbKey"]; ok {
 		t.Fatal("settings included sportsdbKey")
 	}
-	if !strings.Contains(cfg.Settings["guideUrl"], "guides.example") || strings.Contains(cfg.Settings["guideUrl"], password) || strings.Contains(cfg.Settings["guideUrl"], auth) {
+	if !strings.Contains(cfg.Settings["guideUrl"], "guides.example") || strings.Contains(cfg.Settings["guideUrl"], password) || strings.Contains(cfg.Settings["guideUrl"], auth) || strings.Contains(cfg.Settings["guideUrl"], apiKey) {
 		t.Fatalf("guide url %s", cfg.Settings["guideUrl"])
 	}
 	if len(cfg.Sources) != 1 || cfg.Sources[0].URL != list[0].URL || cfg.Sources[0].XMLTV != list[0].XMLTV {

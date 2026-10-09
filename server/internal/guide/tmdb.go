@@ -3,6 +3,7 @@ package guide
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -67,7 +68,7 @@ func tmdbPoster(ctx context.Context, client *http.Client, base, key, title strin
 	req.Header.Set("User-Agent", "Broadwave/0.1")
 	res, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", dropPoster(err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
@@ -87,6 +88,15 @@ func tmdbPoster(ctx context.Context, client *http.Client, base, key, title strin
 		}
 	}
 	return "", nil
+}
+
+// dropPoster removes the request address. The artwork URL carries the key.
+func dropPoster(err error) error {
+	var uerr *url.Error
+	if errors.As(err, &uerr) && uerr.Err != nil {
+		return uerr.Err
+	}
+	return err
 }
 
 type statusError int

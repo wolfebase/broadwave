@@ -333,6 +333,16 @@ func TestMaskURLHidesThePasswordHoweverItIsWritten(t *testing.T) {
 	if plain, _ := maskURL("http://playlist.example/live/news.ts"); plain != "http://playlist.example/live/news.ts" {
 		t.Fatalf("short path %s", plain)
 	}
+	for _, key := range []string{"api_key", "apikey", "access_token", "passwd", "pwd"} {
+		raw := "http://listing.example/xmltv.xml?" + key + "=guide-fixture-password"
+		public, secret := maskURL(raw)
+		if strings.Contains(public, "guide-fixture-password") || secret != raw || MaskURL(public) != public {
+			t.Fatalf("%s public %s secret %s", key, public, secret)
+		}
+	}
+	if plain, secret := maskURL("http://listing.example/xmltv.xml?key=guide-fixture-password"); secret != "" || !strings.Contains(plain, "guide-fixture-password") {
+		t.Fatalf("bare key public %s secret %s", plain, secret)
+	}
 }
 
 func TestMaskURLMatchesTheStoredForm(t *testing.T) {

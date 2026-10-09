@@ -290,7 +290,7 @@ func secretPieces(values []string) []string {
 
 func secretKey(key string) bool {
 	switch strings.ToLower(key) {
-	case "password", "pass", "token", "secret", "deviceauth":
+	case "password", "pass", "passwd", "pwd", "token", "access_token", "secret", "deviceauth", "api_key", "apikey":
 		return true
 	default:
 		return false

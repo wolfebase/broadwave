@@ -92,7 +92,7 @@ func (c *Client) FetchDevice(ctx context.Context, baseURL string) (Device, error
 		return Device{}, err
 	}
 	if raw.DeviceID == "" {
-		return Device{}, fmt.Errorf("discover.json from %s is missing a device id", baseURL)
+		return Device{}, fmt.Errorf("discover.json is missing a device id")
 	}
 	// The document's own BaseURL and LineupURL are used only when they name
 	// the host we asked. Anything else is ignored, including a redirect target.

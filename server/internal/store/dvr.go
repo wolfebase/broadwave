@@ -1007,7 +1007,7 @@ func maskURL(raw string) (public, secret string) {
 
 func secretQuery(key string) bool {
 	switch strings.ToLower(key) {
-	case "password", "pass", "token", "secret", "deviceauth":
+	case "password", "pass", "passwd", "pwd", "token", "access_token", "secret", "deviceauth", "api_key", "apikey":
 		return true
 	default:
 		return false

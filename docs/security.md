@@ -26,11 +26,15 @@ Playlist text, guide XML, and the tables inside a broadcast are read with their 
 
 ## Secrets
 
-A password in a playlist or guide address, and a tuner DeviceAuth, are masked before they are shown or written into diagnostics and the support bundle. The name of the password field is matched either way, and a password in an Xtream-style stream path (`/live/<user>/<password>/<id>`) is masked too. The settings page shows the guide address with the password removed. Saving that page again keeps the password that was already stored. The process log drops those values, and ffmpeg progress goes to that log. A tuner request that fails does not repeat the address.
+A password, token, secret, or key in a playlist or guide address, and a tuner DeviceAuth, are masked before they are shown or written into diagnostics and the support bundle. The field names are password, token, secret, api_key, apikey, access_token, passwd, and pwd, matched either way. A password in an Xtream-style stream path (`/live/<user>/<password>/<id>`) is masked too. The settings page shows the guide address with the password removed. Saving that page again keeps the password that was already stored. The process log drops those values, and ffmpeg progress goes to that log. A tuner request that fails does not repeat the address. An artwork lookup that fails does not repeat the key.
 
 ## Limits to know
 
 Anyone on the network can use the server until accounts exist.
+
+On plain http, a page on another site can still open an export or a tuner URL. A cookie on those addresses would stop other players that fetch them with no browser cookie of their own.
+
+The encoder's command line still shows the stream address it was given. The log of its progress does not.
 
 ffmpeg looks up a name on its own after Broadwave has checked the first address. A name can change where it points.
 

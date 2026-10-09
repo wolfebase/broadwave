@@ -68,6 +68,19 @@ func TestTailKeepsTheNewestLines(t *testing.T) {
 	}
 }
 
+func TestRedactDropsKeySpellings(t *testing.T) {
+	const secret = "ops3-api-key-value"
+	line := "api_key=" + secret + " apikey=" + secret + " access_token=" + secret + " passwd=" + secret + " pwd=" + secret +
+		" http://listing.example/xmltv.xml?api_key=" + secret + " channel=news"
+	got := Redact(line)
+	if strings.Contains(got, secret) {
+		t.Fatalf("%s", got)
+	}
+	if !strings.Contains(got, "listing.example") || !strings.Contains(got, "channel=news") {
+		t.Fatalf("%s", got)
+	}
+}
+
 func TestSlogDropsPasswordAndDeviceAuth(t *testing.T) {
 	prev := shared
 	shared = &ring{max: 20}
@@ -83,10 +96,10 @@ func TestSlogDropsPasswordAndDeviceAuth(t *testing.T) {
 	const password = "ops3-fixture-password"
 	const auth = "ops3-device-auth-token"
 	slog.Info("source http://ops3user:" + password + "@playlist.example/pl.m3u?password=" + password + " DeviceAuth=" + auth)
-	slog.Info("login", "password", password, "DeviceAuth", auth)
+	slog.Info("login", "password", password, "DeviceAuth", auth, "api_key", "ops3-api-key-value", "access_token", "ops3-api-key-value")
 	slog.Info("password=" + password)
 	got := dst.String() + "\n" + Text()
-	if strings.Contains(got, password) || strings.Contains(got, auth) || strings.Contains(got, "DeviceAuth") {
+	if strings.Contains(got, password) || strings.Contains(got, auth) || strings.Contains(got, "DeviceAuth") || strings.Contains(got, "ops3-api-key-value") {
 		t.Fatalf("%s", got)
 	}
 	if !strings.Contains(Text(), "playlist.example") || !strings.Contains(Text(), "level=INFO") {

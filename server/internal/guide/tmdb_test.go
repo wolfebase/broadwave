@@ -3,6 +3,7 @@ package guide
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"broadwave/internal/store"
@@ -33,5 +34,15 @@ func TestFillImagesUsesPoster(t *testing.T) {
 	}
 	if got := FillImages(t.Context(), "", rows); got[0].Title != "Jeopardy!" {
 		t.Fatal("empty key should leave the rows alone")
+	}
+}
+
+func TestPosterErrorOmitsTheKey(t *testing.T) {
+	const key = "poster-fixture-key"
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	srv.Close()
+	_, err := tmdbPoster(t.Context(), srv.Client(), srv.URL, key, "News")
+	if err == nil || strings.Contains(err.Error(), key) || strings.Contains(err.Error(), "api_key") || strings.Contains(err.Error(), srv.URL) {
+		t.Fatal(err)
 	}
 }
