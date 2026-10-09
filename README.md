@@ -15,6 +15,7 @@
 </h3>
 
 <p align="center">
+  <a href="docs/guide/index.md"><b>Docs</b></a> &nbsp;·&nbsp;
   <a href="#-install-in-one-command"><b>Install</b></a> &nbsp;·&nbsp;
   <a href="#-one-tuner-every-screen-the-same-frame"><b>How it works</b></a> &nbsp;·&nbsp;
   <a href="#-everything-it-does"><b>Features</b></a> &nbsp;·&nbsp;
