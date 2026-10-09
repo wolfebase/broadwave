@@ -20,7 +20,7 @@ import {
   stopRecording,
 } from "../api";
 import { events } from "../lib/events";
-import { LatestReads } from "../lib/latest";
+import { beginSave, commitSave, followUpRead, LatestReads, type SaveSeq } from "../lib/latest";
 import { guideSpan, indexAirings, keptGuideWindow, sortChannels, type AiringIndex } from "../lib/guide";
 import { hasSnapshotFlag, loadSnapshot, saveSnapshot } from "../lib/snapshot";
 import type { Airing, Channel, ChannelPatch, Device, Pass, PlannedAiring, Recording, ServerInfo, Settings, StorageInfo, VirtualChannel } from "../types";
@@ -128,6 +128,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const loadFailed = useRef(false);
   // A slow read must not put a list back after a newer read has replaced it.
   const reads = useRef(new LatestReads());
+  // One number per settings save. A later save makes an earlier response stale.
+  const saveSeq = useRef<SaveSeq>({ n: 0 });
 
   const refresh = useCallback<Data["refresh"]>(async (what) => {
     const all = !what;
@@ -364,14 +366,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh(["channels"]);
       },
       saveSettings: async (values) => {
+        const mine = beginSave(saveSeq.current);
+        // Drops a GET that already started. commitSave drops one that starts during the PUT.
         reads.current.start(["settings", "storage", "server"]);
-        setSettings(await putSettings(values));
-        setStorage(await getStorage().catch(() => null));
+        const committed = commitSave(saveSeq.current, mine, await putSettings(values), reads.current, ["settings", "storage", "server"]);
+        if (!committed) return;
+        setSettings(committed.saved);
+        // still() is after the await. A save that starts during the read must win.
+        const disk = await getStorage().catch(() => null);
+        const nextDisk = followUpRead(saveSeq.current, mine, committed.still("storage"), disk);
+        if (nextDisk) setStorage(nextDisk);
         if ("checkUpdates" in values) {
           const info = await getServer().catch(() => null);
-          if (info) {
-            setServer(info);
-            setUpdate(info.update);
+          const nextServer = followUpRead(saveSeq.current, mine, committed.still("server"), info);
+          if (nextServer) {
+            setServer(nextServer);
+            setUpdate(nextServer.update);
           }
         }
       },
