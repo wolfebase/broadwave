@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { addPass, search } from "../../api";
 import { useData } from "../../app/data";
+import { useLayout } from "../../app/layout";
 import { usePlayer } from "../../app/player";
+import { focusRing } from "../../app/remote";
 import { navigate, useRoute } from "../../app/router";
 import { cappedCss } from "../../lib/art";
 import { dayLabel, spanLabel } from "../../lib/guide";
@@ -64,10 +66,21 @@ export function SearchPage() {
   const [note, setNote] = useState("");
 
   const typing = useRef(0);
+  const field = useRef<HTMLInputElement>(null);
+  const layout = useLayout();
 
   const active = initial.trim().length >= 2;
 
   useEffect(() => () => window.clearTimeout(typing.current), []);
+
+  // A browser autofocus does not match :focus-visible, so a TV would open Search with no ring.
+  useEffect(() => {
+    if (initial) return;
+    const input = field.current;
+    if (!input) return;
+    if (layout === "tv") focusRing(input);
+    else input.focus();
+  }, [initial, layout]);
 
   useEffect(() => {
     const q = initial.trim();
@@ -111,15 +124,19 @@ export function SearchPage() {
       <form className="search-form" onSubmit={submit}>
         <SearchIcon />
         <input
+          ref={field}
           type="search"
-          autoFocus={!initial}
           value={draft}
           placeholder="Shows, people, recordings"
           aria-label="Search shows, people, and recordings"
           onChange={(event) => type(event.target.value)}
         />
       </form>
-      {active && note ? <p className="hint">{note}</p> : null}
+      {active && note ? (
+        <p className="hint" role={note === "Nothing matches." || note.startsWith("Recording every ") ? "status" : "alert"}>
+          {note}
+        </p>
+      ) : null}
       {active && airings.length > 0 ? (
         <section>
           <h2 className="section-title">Guide</h2>

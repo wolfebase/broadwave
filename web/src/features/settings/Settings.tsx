@@ -73,6 +73,7 @@ export function SettingsScreen({
               key={item}
               type="button"
               className={settings.pictureMode === item ? "seg on" : "seg"}
+              aria-pressed={settings.pictureMode === item}
               onClick={() => onChange({ pictureMode: item })}
             >
               {item === "broadcast" ? "Broadcast" : item === "smooth" ? "Smooth" : "Film"}

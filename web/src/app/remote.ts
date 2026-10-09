@@ -1,3 +1,4 @@
+import { isTextField } from "../lib/dialogFocus";
 import { firstBelow, nearest, type Box, type Direction } from "../lib/remote";
 import { inAppDepth } from "./router";
 
@@ -71,7 +72,7 @@ export function focusRing(el: HTMLElement | null | undefined) {
 }
 
 function editing(target: HTMLElement | null) {
-  return Boolean(target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable));
+  return isTextField(target);
 }
 
 /** One level back. A text field keeps Backspace so it can delete a character. */
