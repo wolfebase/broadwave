@@ -3,12 +3,13 @@ import { test } from "node:test";
 import { mediaTime, parseCaptionPlaylist, parseVtt } from "./src/features/player/liveCaptions.ts";
 
 test("a server segment gives its 90 kHz start and cues in local seconds", () => {
-  const body = "WEBVTT\nX-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:900000\n\n00:00:00.500 --> 00:00:01.500\nHello &amp; bye\n\n00:01.600 --> 00:02.000 line:90%\nTwo\nrows\n";
+  const body = "WEBVTT\nX-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:900000\n\n00:00:00.500 --> 00:00:01.500\nHello &amp; bye\n\n00:01.600 --> 00:02.000 line:90%\nTwo\nrows\n\n00:02.000 --> 00:03.000\n&lt;Stay&gt; &amp;lt;\n";
   const got = parseVtt(body);
   assert.equal(got.mpegts, 900000);
   assert.deepEqual(got.cues, [
-    { start: 0.5, end: 1.5, text: "Hello &amp; bye", settings: "" },
+    { start: 0.5, end: 1.5, text: "Hello & bye", settings: "" },
     { start: 1.6, end: 2, text: "Two\nrows", settings: "line:90%" },
+    { start: 2, end: 3, text: "<Stay> &lt;", settings: "" },
   ]);
 });
 

@@ -15,6 +15,10 @@ function vttTime(value: string): number | null {
   return Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number(m[4]) / 1000;
 }
 
+export function unescapeVtt(text: string): string {
+  return text.replace(/&(?:amp|lt|gt);/g, (entity) => (entity === "&amp;" ? "&" : entity === "&lt;" ? "<" : ">"));
+}
+
 /** One WebVTT segment: the 90 kHz time its local zero maps to, and its cues in local seconds. */
 export function parseVtt(body: string): { mpegts: number; cues: VttCue[] } {
   let mpegts = 0;
@@ -37,7 +41,7 @@ export function parseVtt(body: string): { mpegts: number; cues: VttCue[] } {
     const [to = "", ...settings] = rest.trim().split(/\s+/);
     const start = vttTime(from);
     const end = vttTime(to);
-    const text = lines.slice(at + 1).join("\n").trim();
+    const text = unescapeVtt(lines.slice(at + 1).join("\n").trim());
     if (start == null || end == null || end <= start || !text) continue;
     cues.push({ start: start - local, end: end - local, text, settings: settings.join(" ") });
   }
