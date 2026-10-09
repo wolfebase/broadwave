@@ -53,18 +53,9 @@ func (s *Server) nextUnlisted(ctx context.Context, seen map[int]bool, tried map[
 		return store.Channel{}, false
 	}
 	now := time.Now()
-	rows, err := s.Store.Airings(ctx, now.Add(-time.Minute), now.Add(6*time.Hour))
+	current, err := s.Store.ListingDepth(ctx, now)
 	if err != nil {
 		return store.Channel{}, false
-	}
-	current := map[int64]int{}
-	for _, row := range rows {
-		if row.Start.Before(now.Add(time.Minute)) && row.End.After(now) {
-			current[row.ChannelID]++
-		}
-		if row.Start.After(now) {
-			current[row.ChannelID]++
-		}
 	}
 	for _, ch := range channels {
 		if ch.Hidden || !ch.Present || tried[ch.ID] {

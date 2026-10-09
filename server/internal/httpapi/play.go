@@ -1002,7 +1002,9 @@ func (s *Server) tunerCount(ctx context.Context) int {
 
 func (s *Server) listingFor(ctx context.Context, channelID int64, title string) (store.Airing, bool) {
 	now := time.Now()
-	rows, err := s.Store.Airings(ctx, now.Add(-3*time.Hour), now.Add(8*time.Hour))
+	rows, err := s.Store.QueryAirings(ctx, store.AiringQuery{
+		From: now.Add(-3 * time.Hour), To: now.Add(8 * time.Hour), Channels: []int64{channelID},
+	})
 	if err != nil {
 		return store.Airing{}, false
 	}

@@ -123,3 +123,72 @@ func TestSearchFindsAnEncryptedStationsShowOnce(t *testing.T) {
 		t.Fatalf("hits %v, want the show both list once on 5.1 and the one only 105.1 lists", seen)
 	}
 }
+
+// A show whose title matches stays ahead of an earlier listing that only
+// mentions those words, and a hidden channel is not searched.
+func TestSearchNamesTheShowBeforeAMention(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if err := s.UpsertDevice(ctx, hdhr.Device{DeviceID: "D", FriendlyName: "Duo", BaseURL: "http://127.0.0.1", TunerCount: 2}, []hdhr.Channel{
+		{GuideNumber: "4.1", GuideName: "Harbor"},
+		{GuideNumber: "4.2", GuideName: "Cedar"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := byNumber(t, s, ctx)
+	harbor, cedar := got["4.1"][0], got["4.2"][0]
+	hide := true
+	if _, err := s.PatchChannel(ctx, cedar.ID, ChannelPatch{Hidden: &hide}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 9, 18, 0, 0, 0, time.UTC)
+	rows := []Airing{
+		{ChannelID: harbor.ID, Title: "Wolves", Description: "Quiz Night is tomorrow", Start: now.Add(-30 * time.Minute), End: now.Add(30 * time.Minute)},
+		{ChannelID: harbor.ID, Title: "Quiz Night", Start: now.Add(time.Hour), End: now.Add(90 * time.Minute)},
+		{ChannelID: cedar.ID, Title: "Quiz Night", Start: now.Add(time.Hour), End: now.Add(90 * time.Minute)},
+	}
+	base := now.Add(2 * time.Hour)
+	for i := range 45 {
+		rows = append(rows, Airing{
+			ChannelID: harbor.ID, Title: "Quiz Night",
+			Start: base.Add(time.Duration(i) * time.Minute), End: base.Add(time.Duration(i+1) * time.Minute),
+		})
+	}
+	if err := s.ReplaceAirings(ctx, rows); err != nil {
+		t.Fatal(err)
+	}
+	hits, _, err := s.Search(ctx, "quiz night", now, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) < 2 || hits[0].GuideNumber != "4.1" || hits[0].Title != "Quiz Night" || hits[1].Title != "Quiz Night" {
+		t.Fatalf("hits %+v", titles(hits))
+	}
+	for _, hit := range hits {
+		if hit.GuideNumber == "4.2" || hit.Title == "Wolves" {
+			t.Fatalf("hidden channel or a mention sorted in: %+v", titles(hits))
+		}
+	}
+	early, _, err := s.Search(ctx, "quiz night", now, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(early) != 2 || early[0].Title != "Quiz Night" || !early[0].Start.Before(early[1].Start) || early[0].Title == "Wolves" {
+		t.Fatalf("earliest titles %+v", titles(early))
+	}
+	capped, _, err := s.Search(ctx, "quiz night", now, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(capped) != 40 {
+		t.Fatalf("default cap %d", len(capped))
+	}
+}
+
+func titles(hits []AiringHit) []string {
+	out := make([]string, len(hits))
+	for i, hit := range hits {
+		out[i] = hit.GuideNumber + " " + hit.Title
+	}
+	return out
+}

@@ -16,7 +16,11 @@ func RecordingNFO(ctx context.Context, st *store.Store, rec store.Recording) sto
 	}
 	from := rec.StartedAt.Add(-12 * time.Hour)
 	to := rec.StartedAt.Add(12 * time.Hour)
-	airings, err := st.Airings(ctx, from, to)
+	q := store.AiringQuery{From: from, To: to}
+	if rec.ChannelID != 0 {
+		q.Channels = []int64{rec.ChannelID}
+	}
+	airings, err := st.QueryAirings(ctx, q)
 	if err != nil {
 		return rec
 	}

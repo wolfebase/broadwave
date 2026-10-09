@@ -487,7 +487,9 @@ func (s *Store) SetAiringGames(ctx context.Context, from, to time.Time, ids map[
 
 // AiringGame is the scoreboard id of the listing on this channel now, if it is a game.
 func (s *Store) AiringGame(ctx context.Context, channelID int64, title string, now time.Time) string {
-	rows, err := s.Airings(ctx, now.Add(-6*time.Hour), now.Add(15*time.Minute))
+	rows, err := s.QueryAirings(ctx, AiringQuery{
+		From: now.Add(-6 * time.Hour), To: now.Add(15 * time.Minute), Channels: []int64{channelID},
+	})
 	if err != nil {
 		return ""
 	}
@@ -516,7 +518,7 @@ func (s *Store) WithEpisode(ctx context.Context, rec Recording) Recording {
 	if rec.EndsAt != nil && rec.EndsAt.After(to) {
 		to = *rec.EndsAt
 	}
-	if airings, err := s.Airings(ctx, rec.StartedAt, to); err == nil {
+	if airings, err := s.QueryAirings(ctx, AiringQuery{From: rec.StartedAt, To: to, Channels: []int64{rec.ChannelID}}); err == nil {
 		if best := CoveringAiring(rec, airings); best != nil {
 			rec.Season, rec.Episode, rec.EpisodeLabel, rec.OriginalAir = best.Season, best.Episode, best.EpisodeLabel, best.OriginalAir
 		}

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"time"
 )
 
 var errTeamName = errors.New("a team needs a name")
@@ -90,6 +91,16 @@ func (s *Store) UnfollowTeam(ctx context.Context, id int64) error {
 func (s *Store) SetTeamNotice(ctx context.Context, id int64, notice string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE team_follows SET last_notice = ? WHERE id = ?`, notice, id)
 	return err
+}
+
+// TeamAirings is the listings in the window whose title or subtitle names one
+// of these teams. A name with no searchable word reads the whole window, so a
+// one-letter name still sees its games.
+func (s *Store) TeamAirings(ctx context.Context, from, to time.Time, names []string) ([]Airing, error) {
+	if teamMatch(names) == "" {
+		return s.Airings(ctx, from, to)
+	}
+	return s.QueryAirings(ctx, AiringQuery{From: from, To: to, Teams: names})
 }
 
 func (s *Store) syncTeamPass(ctx context.Context, team TeamFollow) error {

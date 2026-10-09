@@ -72,7 +72,16 @@ func (s *Server) ApplyBroadcast(ctx context.Context, g psip.Guide) (int, error) 
 	if len(incoming) == 0 {
 		return 0, nil
 	}
-	have, err := s.Store.Airings(ctx, from, to)
+	ids := make([]int64, 0, len(incoming))
+	seenID := map[int64]bool{}
+	for _, row := range incoming {
+		if seenID[row.ChannelID] {
+			continue
+		}
+		seenID[row.ChannelID] = true
+		ids = append(ids, row.ChannelID)
+	}
+	have, err := s.Store.QueryAirings(ctx, store.AiringQuery{From: from, To: to, Channels: ids})
 	if err != nil {
 		return 0, err
 	}
