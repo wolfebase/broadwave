@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { channelsOnScreen, holdShown, layoutForCount, layoutFromParam, layoutLabel, multiviewPath, rememberAuto, saveSet, savedAuto, savedSets, yieldsSound } from "./src/features/multiview/storage.ts";
+import { autoCandidates, channelsOnScreen, holdShown, layoutForCount, layoutFromParam, layoutLabel, multiviewPath, rememberAuto, saveSet, savedAuto, savedSets, settlePlan, yieldsSound } from "./src/features/multiview/storage.ts";
 
 test("a tile that already showed a picture keeps the sound", () => {
   assert.equal(yieldsSound("", false), false);
@@ -79,6 +79,20 @@ test("auto stays off until this browser turns it on", () => {
   assert.equal(savedAuto(), true);
   rememberAuto(false);
   assert.equal(savedAuto(), false);
+});
+
+test("a slower plan does not replace the one that started later", () => {
+  assert.deepEqual(settlePlan(1, 2, { ok: true, plan: { stations: [4, 9] } }), { apply: false });
+  const plan = { stations: [4, 9] };
+  assert.deepEqual(settlePlan(3, 3, { ok: true, plan }), { apply: true, plan });
+  assert.deepEqual(settlePlan(3, 3, { ok: false }), { apply: true, plan: null });
+});
+
+test("auto skips a tile that has no sound", () => {
+  const river = { id: 4, name: "River" };
+  const hill = { id: 9, name: "Hill" };
+  const pier = { id: 12, name: "Pier" };
+  assert.deepEqual(autoCandidates([river, hill, pier], new Set([9])), [river, pier]);
 });
 
 test("one big and two survives the query string", () => {
