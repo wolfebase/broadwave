@@ -3,12 +3,15 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
+	"hash/crc32"
 	"image"
 	"image/color"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,5 +75,30 @@ func TestArtResizesAndFallsBack(t *testing.T) {
 	blank := get(t, h, "/media/art/airing/"+strconv.FormatInt(airings[0].ID, 10))
 	if blank.Code != 200 || blank.Header().Get("Content-Type") != "image/svg+xml" || !bytes.Contains(blank.Body.Bytes(), []byte("News")) {
 		t.Fatalf("%d %s %s", blank.Code, blank.Header().Get("Content-Type"), blank.Body.String())
+	}
+}
+
+func TestFetchArtRefusesAHugeHeader(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, src); err != nil {
+		t.Fatal(err)
+	}
+	raw := buf.Bytes()
+	if len(raw) < 33 || string(raw[12:16]) != "IHDR" {
+		t.Fatalf("png header %q", raw)
+	}
+	// 3000 by 3000 is past the pixel cap and still small if a decode slips through.
+	binary.BigEndian.PutUint32(raw[16:20], 3000)
+	binary.BigEndian.PutUint32(raw[20:24], 3000)
+	binary.BigEndian.PutUint32(raw[29:33], crc32.ChecksumIEEE(raw[12:29]))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(raw)
+	}))
+	defer srv.Close()
+	_, _, _, _, err := fetchArt(context.Background(), srv.URL+"/logo.png", 40)
+	if err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Fatal(err)
 	}
 }
