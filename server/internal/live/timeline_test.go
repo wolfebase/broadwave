@@ -187,3 +187,75 @@ func TestStampKeepsAnUnchangedPlaylist(t *testing.T) {
 		t.Fatalf("reset kept a date:\n%s", got)
 	}
 }
+
+// The packer writes each fragment's start into the playlist. Stamp uses that
+// and does not need the media file, and the tag is gone from the playlist a
+// player receives. A start that was never measured is not invented as zero.
+func TestStampUsesThePackedStart(t *testing.T) {
+	dir := t.TempDir()
+	if err := writePacked(dir, []byte("init"), []packedSeg{{
+		name: "seg00000.m4s", pts: 900000, dur: 90000, timed: true,
+	}}, nil, 0, true, false, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "#EXT-X-PTS:seg00000.m4s:900000\n") {
+		t.Fatalf("playlist has no start:\n%s", raw)
+	}
+	untimed := t.TempDir()
+	if err := writePacked(untimed, []byte("init"), []packedSeg{{
+		name: "seg00000.m4s", dur: 90000,
+	}}, nil, 0, true, false, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	plain, err := os.ReadFile(filepath.Join(untimed, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(plain), "EXT-X-PTS") {
+		t.Fatalf("an unmeasured start was written:\n%s", plain)
+	}
+	fixed := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	tl := NewTimeline()
+	tl.now = func() time.Time { return fixed }
+	var p playlistStamper
+	stamped := string(p.stamp(dir, raw, tl))
+	if strings.Contains(stamped, "EXT-X-PTS") {
+		t.Fatalf("the start tag was served:\n%s", stamped)
+	}
+	walls := dateWalls(t, stamped)
+	if len(walls) != 1 || !walls[0].Equal(fixed.Add(-4*time.Second)) {
+		t.Fatalf("segment dated %v", walls)
+	}
+	if got := tl.Wall(990000).Sub(walls[0]); got != time.Second {
+		t.Fatalf("anchor moved the clock by %v", got)
+	}
+
+	partDir := t.TempDir()
+	if err := writePacked(partDir, []byte("init"), nil, []packedPart{{
+		name: "part00000.m4s", pts: 990000, dur: 45000, sync: true, timed: true,
+	}}, 0, true, false, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	partRaw, err := os.ReadFile(filepath.Join(partDir, "index.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(partRaw), "#EXT-X-PTS:part00000.m4s:990000\n") {
+		t.Fatalf("open part has no start:\n%s", partRaw)
+	}
+	tl = NewTimeline()
+	tl.now = func() time.Time { return fixed }
+	p = playlistStamper{}
+	// A part anchors the clock. Its date is written on the next segment, not on the part.
+	if out := string(p.stamp(partDir, partRaw, tl)); strings.Contains(out, "EXT-X-PTS") {
+		t.Fatalf("the part start was served:\n%s", out)
+	}
+	pts, _, ok := tl.Anchor()
+	if !ok || pts != 990000 {
+		t.Fatalf("open part anchored at %d %v", pts, ok)
+	}
+}
