@@ -5,7 +5,7 @@ import { copy } from "../../strings";
 import { lastSeenPhrase } from "../../time";
 import { deviceScans, showFirmware } from "./deviceCard";
 import { applySignalPoll, applyTunerPoll } from "./sourcePoll";
-import { hitsAfterLook } from "../setup/lookHits";
+import { guideAfterFree, hitsAfterLook } from "../setup/lookHits";
 export function Sources({
   devices,
   channels,
@@ -28,6 +28,7 @@ export function Sources({
   const [ip, setIp] = useState("");
   const [looking, setLooking] = useState(false);
   const lookN = useRef(0);
+  const freeN = useRef(0);
   const [scanning, setScanning] = useState("");
   const [looked, setLooked] = useState(false);
   const [hits, setHits] = useState<{ kind: string; name: string; addr: string }[]>([]);
@@ -86,20 +87,22 @@ export function Sources({
           className="btn"
           disabled={busy || looking || findingFree}
           onClick={() => {
+            const mine = ++freeN.current;
             setFindingFree(true);
-            setFreeNote("");
-            setFreeGuide("");
             void findFree()
               .then((res) => {
-                setFreeFeeds(res.found ?? []);
-                setFreeGuide(res.found?.length ? "" : res.guide);
+                if (mine !== freeN.current) return;
+                setFreeFeeds((shown) => hitsAfterLook(mine, freeN.current, shown, true, res.found) ?? shown);
+                const guide = guideAfterFree(true, res.found, res.guide);
+                if (guide != null) setFreeGuide(guide);
+                setFreeNote("");
               })
               .catch(() => {
-                setFreeFeeds([]);
-                setFreeGuide("");
-                setFreeNote(copy.sources.freeEmpty);
+                setFreeFeeds((shown) => hitsAfterLook(mine, freeN.current, shown, false, undefined) ?? shown);
               })
-              .finally(() => setFindingFree(false));
+              .finally(() => {
+                if (mine === freeN.current) setFindingFree(false);
+              });
           }}
         >
           {copy.sources.free}

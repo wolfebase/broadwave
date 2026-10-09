@@ -6,7 +6,7 @@ import { navigate } from "../../app/router";
 import { copy } from "../../strings";
 import { ChevronIcon } from "../../ui/icons";
 import { noteAfterFetch } from "./fetchNote";
-import { hitsAfterLook } from "./lookHits";
+import { guideAfterFree, hitsAfterLook } from "./lookHits";
 import { HomeList } from "./HomeList";
 import "./setup.css";
 
@@ -32,6 +32,7 @@ export function Setup() {
   const [progress, setProgress] = useState<SetupFinish | null>(null);
   const hold = useRef(false);
   const lookN = useRef(0);
+  const freeN = useRef(0);
 
   useEffect(() => {
     if (window.location.pathname !== "/setup") navigate("/setup", true);
@@ -180,16 +181,23 @@ export function Setup() {
               className="btn"
               disabled={busy}
               onClick={() => {
+                const mine = ++freeN.current;
                 setBusy(true);
-                setFreeGuide("");
                 void findFree()
                   .then((res) => {
-                    setFeeds(res.found ?? []);
-                    setFreeGuide(res.found?.length ? "" : res.guide);
+                    if (mine !== freeN.current) return;
+                    setFeeds((shown) => hitsAfterLook(mine, freeN.current, shown, true, res.found) ?? shown);
+                    const guide = guideAfterFree(true, res.found, res.guide);
+                    if (guide != null) setFreeGuide(guide);
                     setNote((n) => noteAfterFetch(n, true, "No free-channel server answered."));
                   })
-                  .catch(() => setNote((n) => noteAfterFetch(n, false, "No free-channel server answered.")))
-                  .finally(() => setBusy(false));
+                  .catch(() => {
+                    setFeeds((shown) => hitsAfterLook(mine, freeN.current, shown, false, undefined) ?? shown);
+                    if (mine === freeN.current) setNote((n) => noteAfterFetch(n, false, "No free-channel server answered."));
+                  })
+                  .finally(() => {
+                    if (mine === freeN.current) setBusy(false);
+                  });
               }}
             >
               Add free channels

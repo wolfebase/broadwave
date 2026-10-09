@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hitsAfterLook } from "./src/features/setup/lookHits.ts";
+import { guideAfterFree, hitsAfterLook } from "./src/features/setup/lookHits.ts";
 
 const shown = [
   { kind: "tuner", name: "one", addr: "a" },
@@ -29,4 +29,12 @@ test("a current success with found:[] returns []", () => {
 
 test("a current success replaces the list", () => {
   assert.deepEqual(hitsAfterLook(2, 2, shown, true, next), next);
+});
+
+test("a failed free-channel look keeps the guide text", () => {
+  assert.equal(guideAfterFree(false, undefined, "one"), null);
+  assert.equal(guideAfterFree(false, [], "one"), null);
+  assert.equal(guideAfterFree(true, next, "one"), "");
+  assert.equal(guideAfterFree(true, [], "one"), "one");
+  assert.equal(guideAfterFree(true, null, undefined), "");
 });
