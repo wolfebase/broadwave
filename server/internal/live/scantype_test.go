@@ -592,6 +592,94 @@ func TestInputProbeStoresProgressive(t *testing.T) {
 	}
 }
 
+// The guide holds a tune for the whole dwell. ffprobe finishing on that
+// tune must not clear the hold and release the tuner.
+func TestProbeFinishDoesNotDropAGuideHold(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "ffmpeg")
+	probe := filepath.Join(dir, "ffprobe")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := `#!/bin/sh
+printf '%s\n' '{"programs":[{"program_num":1,"streams":[{"codec_type":"video","codec_name":"h264","field_order":"progressive"}]}]}'
+`
+	if err := os.WriteFile(probe, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h, m := testHub(t)
+	h.FFmpeg = bin
+	m.input = filepath.Join(dir, "sample.ts")
+	ch := store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "4.1"}, FrequencyHz: m.freq}
+	f := &feed{channel: ch, source: sourceOf(ch), renditions: map[string]*rendition{}}
+	m.feeds[ch.GuideNumber] = f
+	h.channels[ch.ID] = f
+	h.mu.Lock()
+	f.probing = true
+	h.probeInputLocked(m, f)
+	h.mu.Unlock()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		h.mu.Lock()
+		gone := h.channels[1] != f
+		order := f.channel.FieldOrder
+		held := f.probing
+		h.mu.Unlock()
+		if gone {
+			t.Fatal("ffprobe finished and dropped a tune the guide still holds")
+		}
+		if order == "progressive" && held && !h.Idle() {
+			return
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	t.Fatal("probe did not finish while the guide held the tune")
+}
+
+// A probe is not itself a reason to keep the tuner. Once it finishes, a tune
+// nobody is watching or holding is released.
+func TestProbeFinishReleasesATuneNobodyHolds(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "ffmpeg")
+	probe := filepath.Join(dir, "ffprobe")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := `#!/bin/sh
+printf '%s\n' '{"programs":[{"program_num":1,"streams":[{"codec_type":"video","codec_name":"h264","field_order":"progressive"}]}]}'
+`
+	if err := os.WriteFile(probe, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h, m := testHub(t)
+	h.FFmpeg = bin
+	m.input = filepath.Join(dir, "sample.ts")
+	ch := store.SourceChannel{Channel: store.Channel{ID: 1, GuideNumber: "4.1"}, FrequencyHz: m.freq}
+	f := &feed{channel: ch, source: sourceOf(ch), renditions: map[string]*rendition{}}
+	m.feeds[ch.GuideNumber] = f
+	h.channels[ch.ID] = f
+	h.mu.Lock()
+	h.probeInputLocked(m, f)
+	h.mu.Unlock()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		h.mu.Lock()
+		gone := h.channels[1] == nil && len(h.muxes) == 0
+		order := f.channel.FieldOrder
+		h.mu.Unlock()
+		if gone && order == "progressive" {
+			if !h.Idle() {
+				t.Fatal("an idle server still reports a tune")
+			}
+			return
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	t.Fatal("a finished probe left the tuner up")
+}
+
 func writeUntil(ctx context.Context, w io.Writer, payload []byte) {
 	tick := time.NewTicker(10 * time.Millisecond)
 	defer tick.Stop()
