@@ -3,7 +3,9 @@ package httpapi
 import (
 	"broadwave/internal/dvr"
 	"context"
+	"errors"
 	"io"
+	"io/fs"
 	"mime"
 	"net/http"
 	"os"
@@ -205,6 +207,10 @@ func (s *Server) detectBreaks(w http.ResponseWriter, r *http.Request) {
 	}
 	list, err := dvr.IndexBreaks(r.Context(), s.Store, s.Hub.FFmpeg, rec, false)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			httpError(w, "recording not found", http.StatusNotFound)
+			return
+		}
 		writeError(w, err)
 		return
 	}

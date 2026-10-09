@@ -95,6 +95,40 @@ func TestIndexBreaksLearnsSpots(t *testing.T) {
 	}
 }
 
+func TestIndexBreaksDoesNotMarkAFileStillRecording(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	path := filepath.Join(t.TempDir(), "news.ts")
+	if err := os.WriteFile(path, []byte{0x47}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	id, err := st.CreateRecording(ctx, store.Recording{
+		Title: "News", Path: path, Status: "recording", StartedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := st.Recording(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanFinds(t, breaks.Break{Start: 10, End: 40, Confidence: 0.9})
+	if _, err := IndexBreaks(ctx, st, "", rec, false); err != nil {
+		t.Fatal(err)
+	}
+	rec, err = st.Recording(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.BreaksScanned {
+		t.Fatal("detect while recording set breaks_scanned")
+	}
+}
+
 // Scanning a recording again does not match it against its own spots.
 func TestIndexBreaksSkipsItsOwnSpots(t *testing.T) {
 	ctx := context.Background()

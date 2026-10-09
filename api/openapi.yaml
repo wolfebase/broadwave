@@ -1269,6 +1269,7 @@ paths:
                   markers:
                     type: array
                     items: { $ref: "#/components/schemas/Marker" }
+        "404": { $ref: "#/components/responses/Error" }
   /markers/{id}:
     delete:
       tags: [recordings]
