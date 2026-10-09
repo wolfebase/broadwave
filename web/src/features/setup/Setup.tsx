@@ -7,6 +7,7 @@ import { actionName } from "../../lib/actionName";
 import { copy } from "../../strings";
 import { ChevronIcon } from "../../ui/icons";
 import { noteAfterFetch } from "./fetchNote";
+import { hitsAfterLook } from "./lookHits";
 import { HomeList } from "./HomeList";
 import "./setup.css";
 
@@ -31,6 +32,7 @@ export function Setup() {
   const [xtreamPass, setXtreamPass] = useState("");
   const [progress, setProgress] = useState<SetupFinish | null>(null);
   const hold = useRef(false);
+  const lookN = useRef(0);
 
   useEffect(() => {
     if (window.location.pathname !== "/setup") navigate("/setup", true);
@@ -158,11 +160,18 @@ export function Setup() {
               className="btn"
               disabled={busy}
               onClick={() => {
+                const mine = ++lookN.current;
                 setBusy(true);
                 void lookHarder()
-                  .then((res) => setHits(res.found ?? []))
-                  .catch(() => setHits([]))
-                  .finally(() => setBusy(false));
+                  .then((res) => {
+                    setHits((shown) => hitsAfterLook(mine, lookN.current, shown, true, res.found) ?? shown);
+                  })
+                  .catch(() => {
+                    setHits((shown) => hitsAfterLook(mine, lookN.current, shown, false, undefined) ?? shown);
+                  })
+                  .finally(() => {
+                    if (mine === lookN.current) setBusy(false);
+                  });
               }}
             >
               Look harder
