@@ -285,22 +285,11 @@ public final class AppStore {
                 return
             }
             self.info = info
-            if let current = server {
-                let pending = current.id == "pending" || current.id.isEmpty
-                let same = current.id == info.id
-                let needKey = current.key?.isEmpty != false && info.discoveryKey?.isEmpty == false
-                if pending || same, pending || needKey {
-                    let fixed = FoundServer(
-                        id: info.id,
-                        name: info.name.isEmpty ? current.name : info.name,
-                        url: current.url,
-                        key: info.discoveryKey ?? current.key
-                    )
-                    server = fixed
-                    save(fixed, "server")
-                    remembered = RememberedServers.upsert(remembered, fixed)
-                    save(remembered, "servers")
-                }
+            if let current = server, let fixed = RememberedServers.refreshed(current, id: info.id, name: info.name, key: info.discoveryKey) {
+                server = fixed
+                save(fixed, "server")
+                remembered = RememberedServers.upsert(remembered, fixed)
+                save(remembered, "servers")
             }
             if !announced, let current = server {
                 announced = true
