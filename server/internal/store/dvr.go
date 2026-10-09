@@ -669,7 +669,9 @@ func (r Recording) Played() bool {
 }
 
 func (s *Store) DeleteRecording(ctx context.Context, id int64) error {
-	if rec, err := s.Recording(ctx, id); err == nil {
+	if rec, err := s.Recording(ctx, id); err == nil && rec.Status != "failed" {
+		// A recording that never started is not an episode the viewer chose
+		// to drop. Marking it deleted would skip the next airing.
 		_ = s.RememberSeen(ctx, EpisodeKey(rec.ProgramID, rec.Title, rec.Subtitle, rec.ChannelID), true)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)

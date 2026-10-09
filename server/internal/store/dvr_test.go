@@ -302,3 +302,48 @@ func TestWatchedAndKeepAreStored(t *testing.T) {
 		t.Fatal("kept a recording that does not exist")
 	}
 }
+
+func TestDeletingAFailedRecordingLeavesTheEpisodeOpen(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	started := time.Now().Add(-time.Hour)
+	failed, err := st.CreateRecording(ctx, Recording{
+		ChannelID: 1, Title: "Show", Subtitle: "Pilot", ProgramID: "EP1",
+		Status: "failed", Path: "a.ts", StartedAt: started,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := EpisodeKey("EP1", "Show", "Pilot", 1)
+	// A start remembers the episode before the file is known to be open.
+	if err := st.RememberSeen(ctx, key, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteRecording(ctx, failed); err != nil {
+		t.Fatal(err)
+	}
+	seen, err := st.SeenDeleted(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted, ok := seen[key]; ok && deleted {
+		t.Fatal("deleting a recording that failed marked the episode done")
+	}
+	done, err := st.CreateRecording(ctx, Recording{
+		ChannelID: 1, Title: "Show", Subtitle: "Pilot", ProgramID: "EP1",
+		Status: "complete", Path: "b.ts", StartedAt: started,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteRecording(ctx, done); err != nil {
+		t.Fatal(err)
+	}
+	seen, err = st.SeenDeleted(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !seen[key] {
+		t.Fatal("deleting a finished recording left the episode unmarked")
+	}
+}

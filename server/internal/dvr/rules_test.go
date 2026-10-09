@@ -84,6 +84,24 @@ func TestADamagedCopyRecordsAgain(t *testing.T) {
 	}
 }
 
+// Starting a recording remembers the episode before the file is open. A failed
+// row plus that flag is not a copy, so the next airing still records.
+func TestAFailedStartRecordsAgain(t *testing.T) {
+	start := time.Date(2026, 9, 22, 20, 0, 0, 0, time.UTC)
+	pass := store.Pass{ID: 1, Title: "Show"}
+	airing := store.Airing{ID: 9, ChannelID: 1, Title: "Show", Subtitle: "Pilot", ProgramID: "EP1", Start: start, End: start.Add(time.Hour)}
+	key := store.EpisodeKey("EP1", "Show", "Pilot", 1)
+	seen := map[string]bool{key: false}
+	failed := []store.Recording{{ID: 3, ChannelID: 1, Title: "Show", Subtitle: "Pilot", ProgramID: "EP1", Status: "failed"}}
+	if got := ApplyLibrary([]Planned{{PassID: 1, Airing: airing}}, []store.Pass{pass}, failed, seen, nil); got[0].Skipped {
+		t.Fatalf("failed start: %+v", got[0])
+	}
+	done := []store.Recording{{ID: 4, ChannelID: 1, Title: "Show", Subtitle: "Pilot", ProgramID: "EP1", Status: "complete"}}
+	if got := ApplyLibrary([]Planned{{PassID: 1, Airing: airing}}, []store.Pass{pass}, done, seen, nil); !got[0].Skipped {
+		t.Fatalf("finished copy: %+v", got[0])
+	}
+}
+
 func TestDamagedIsLostTimeOrManyBreakups(t *testing.T) {
 	for _, c := range []struct {
 		h      store.RecordingHealth
