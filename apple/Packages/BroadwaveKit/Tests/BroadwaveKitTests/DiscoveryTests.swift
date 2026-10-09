@@ -130,6 +130,16 @@ private func signedServer(id: String, url: String, privateKey: Curve25519.Signin
     #expect(again.signedURL == nil)
 }
 
+@Test func aMoveWithoutAKeyKeepsTheStoredKey() throws {
+    let old = try FoundServer(id: "abc", name: "Living Room", url: #require(URL(string: "http://10.0.0.5:8477")), key: "stored-key")
+    let moved = try FoundServer(id: "abc", name: "Living Room", url: #require(URL(string: "http://10.0.0.9:8477")))
+    let list = RememberedServers.upsert([old], moved)
+    #expect(list[0].url.host() == "10.0.0.9")
+    #expect(list[0].key == "stored-key")
+    let rotated = try FoundServer(id: "abc", name: "Living Room", url: #require(URL(string: "http://10.0.0.9:8477")), key: "new-key")
+    #expect(RememberedServers.upsert(list, rotated)[0].key == "new-key")
+}
+
 @Test func rememberedServersKeepTheNewestAddress() throws {
     let first = try FoundServer(id: "abc", name: "Living Room", url: #require(URL(string: "http://10.0.0.5:8477")))
     let other = try FoundServer(id: "zzz", name: "Den", url: #require(URL(string: "http://10.0.0.8:8477")))

@@ -56,8 +56,13 @@ public enum ConnectLink {
 public enum RememberedServers {
     public static func upsert(_ list: [FoundServer], _ server: FoundServer) -> [FoundServer] {
         guard server.id != "demo", server.id != "pending", !server.id.isEmpty else { return list }
+        // A connect link has no key. Replacing the saved one would stop follow after the server moves.
+        var incoming = server
+        if incoming.key?.isEmpty != false, let kept = list.first(where: { $0.id == server.id })?.key, !kept.isEmpty {
+            incoming.key = kept
+        }
         var next = list.filter { $0.id != server.id }
-        next.insert(server, at: 0)
+        next.insert(incoming, at: 0)
         if next.count > 8 {
             next.removeLast(next.count - 8)
         }
