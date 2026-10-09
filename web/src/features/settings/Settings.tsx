@@ -7,6 +7,7 @@ import { copy } from "../../strings";
 import { formatBytes } from "../../lib/format";
 import { readLiveDelay, saveLiveDelay, type LiveDelay } from "../../lib/events";
 import { tunerLine as describeTuners } from "./deviceCard";
+import { settingTextCommit, settingTextDraft, shownSettingText } from "./field";
 export function SettingsScreen({
   settings,
   storage,
@@ -102,16 +103,13 @@ export function SettingsScreen({
         <span className="hint">{copy.settings.liveDelayHint}</span>
       </div>
       <h3 className="section-title">Guide</h3>
-      <label className="field">
-        {copy.settings.guideAccount}
-        <input
-          value={settings.sdUser ?? ""}
-          autoComplete="username"
-          spellCheck={false}
-          onChange={(event) => onChange({ sdUser: event.target.value })}
-        />
-        <span className="hint">{copy.settings.guideAccountHint}</span>
-      </label>
+      <GuideText
+        label={copy.settings.guideAccount}
+        value={settings.sdUser ?? ""}
+        hint={copy.settings.guideAccountHint}
+        autoComplete="username"
+        onSave={(sdUser) => onChange({ sdUser })}
+      />
       <label className="field">
         Password
         <input
@@ -125,24 +123,18 @@ export function SettingsScreen({
           }}
         />
       </label>
-      <label className="field">
-        {copy.settings.guideLineup}
-        <input
-          value={settings.sdLineup ?? ""}
-          spellCheck={false}
-          onChange={(event) => onChange({ sdLineup: event.target.value })}
-        />
-      </label>
-      <label className="field">
-        {copy.settings.guideAddress}
-        <input
-          value={settings.guideUrl ?? ""}
-          spellCheck={false}
-          placeholder="https://"
-          onChange={(event) => onChange({ guideUrl: event.target.value })}
-        />
-        <span className="hint">{copy.settings.guideAddressHint}</span>
-      </label>
+      <GuideText
+        label={copy.settings.guideLineup}
+        value={settings.sdLineup ?? ""}
+        onSave={(sdLineup) => onChange({ sdLineup })}
+      />
+      <GuideText
+        label={copy.settings.guideAddress}
+        value={settings.guideUrl ?? ""}
+        hint={copy.settings.guideAddressHint}
+        placeholder="https://"
+        onSave={(guideUrl) => onChange({ guideUrl })}
+      />
       <label className="field">
         {copy.settings.movieArt}
         <input
@@ -491,13 +483,48 @@ function backupWhen(value: string) {
   return date.toLocaleString();
 }
 
+function GuideText({
+  label,
+  value,
+  hint,
+  autoComplete,
+  placeholder,
+  onSave,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  autoComplete?: string;
+  placeholder?: string;
+  onSave: (value: string) => void;
+}) {
+  const [typed, setTyped] = useState<string | null>(null);
+  const draft = settingTextDraft(value, typed);
+  if (draft !== typed) setTyped(draft);
+  return (
+    <label className="field">
+      {label}
+      <input
+        value={shownSettingText(value, draft)}
+        autoComplete={autoComplete}
+        spellCheck={false}
+        placeholder={placeholder}
+        onChange={(event) => setTyped(event.target.value)}
+        onBlur={(event) => {
+          const commit = settingTextCommit(value, event.target.value);
+          if (commit != null) onSave(commit);
+        }}
+      />
+      {hint ? <span className="hint">{hint}</span> : null}
+    </label>
+  );
+}
+
 function ReserveField({ value, storage, onSave }: { value: string; storage: StorageInfo | null; onSave: (value: string) => void }) {
-  const [text, setText] = useState(value);
-  const [seen, setSeen] = useState(value);
-  if (value !== seen) {
-    setSeen(value);
-    setText(value);
-  }
+  const [typed, setTyped] = useState<string | null>(null);
+  const draft = settingTextDraft(value, typed);
+  if (draft !== typed) setTyped(draft);
+  const text = shownSettingText(value, draft);
   return (
     <label className="field">
       {copy.settings.reserve}
@@ -507,15 +534,16 @@ function ReserveField({ value, storage, onSave }: { value: string; storage: Stor
         max={1000000}
         aria-label="Gigabytes to keep free"
         value={text}
-        onChange={(event) => setText(event.target.value)}
+        onChange={(event) => setTyped(event.target.value)}
         onBlur={() => {
           const next = Math.round(Number(text));
           if (!Number.isFinite(next) || next < 0 || next > 1000000) {
-            setText(value);
+            setTyped(null);
             return;
           }
-          setText(String(next));
-          if (String(next) !== value) onSave(String(next));
+          const rounded = String(next);
+          setTyped(rounded);
+          if (rounded !== value) onSave(rounded);
         }}
       />
       <span className="hint">

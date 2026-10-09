@@ -35,3 +35,37 @@ export function takeGames<T>(
   board.at = now;
   return games;
 }
+
+/** One number per settings save. A later save makes an earlier response stale. */
+export type SaveSeq = { n: number };
+
+export function beginSave(seq: SaveSeq): number {
+  seq.n += 1;
+  return seq.n;
+}
+
+type ReadClock = {
+  start(keys: readonly string[]): (key: string) => boolean;
+};
+
+/**
+ * Apply this save only if no later save has started.
+ * Bumping the read clock here drops a GET that started while the PUT was in flight.
+ * A failed write (null) is not applied and does not bump. A stale write does not bump either.
+ */
+export function commitSave<T>(
+  seq: SaveSeq,
+  mine: number,
+  saved: T | null,
+  reads: ReadClock,
+  keys: readonly string[],
+): { saved: T; still: (key: string) => boolean } | null {
+  if (saved == null || mine !== seq.n) return null;
+  return { saved, still: reads.start(keys) };
+}
+
+/** Null means do not write. An older save, a stale read, or a failed read keeps what is on screen. */
+export function followUpRead<T>(seq: SaveSeq, mine: number, still: boolean, incoming: T | null): T | null {
+  if (!still || mine !== seq.n || incoming == null) return null;
+  return incoming;
+}
