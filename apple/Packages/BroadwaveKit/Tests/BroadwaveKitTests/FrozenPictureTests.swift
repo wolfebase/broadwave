@@ -170,6 +170,16 @@ private func play(_ frozen: inout FrozenPicture, from time: Double, seconds: Int
     #expect(frozen.note(time: nil, playing: false, ended: true, at: start.addingTimeInterval(2)) == .retune)
 }
 
+@Test func anEndedReloadIsNotForgottenAfterALongRun() {
+    var frozen = FrozenPicture()
+    let at = play(&frozen, from: 100, seconds: 21)
+    #expect(frozen.note(time: at, playing: true, ended: true, at: start.addingTimeInterval(22)) == .reload)
+    // One second on the new item. Counting the run that just died would wipe the reload.
+    #expect(frozen.note(time: 400, playing: true, at: start.addingTimeInterval(23)) == nil)
+    #expect(frozen.note(time: 401, playing: true, at: start.addingTimeInterval(24)) == nil)
+    #expect(frozen.note(time: 401, playing: true, at: start.addingTimeInterval(32)) == .retune)
+}
+
 @Test func aReloadThatPlaysGetsTheShortWaitBack() {
     var frozen = FrozenPicture()
     var at = play(&frozen, from: 100, seconds: 5)

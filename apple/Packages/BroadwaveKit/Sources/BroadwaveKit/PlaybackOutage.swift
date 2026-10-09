@@ -432,6 +432,8 @@ public struct FrozenPicture: Equatable, Sendable {
     ) -> Step? {
         if ended {
             lastTime = nil
+            // The run that just died must not count as picture on the next item.
+            movingSince = nil
             return nextStep(at: now)
         }
         guard let time, time.isFinite, playing || stoppedItself else {
