@@ -389,6 +389,11 @@ func (p *programPipe) filter(data []byte) []byte {
 		pid := int(pkt[1]&0x1f)<<8 | int(pkt[2])
 		if p.catching {
 			p.pending = append(p.pending, pkt...)
+			// The cap also lives on the off-timeline header path. Packets
+			// with no timestamp, such as nulls, never reach that check.
+			if len(p.pending) > tailCap {
+				p.catching, p.pending = false, nil
+			}
 		}
 		if pid == 0 {
 			pat := p.pat
