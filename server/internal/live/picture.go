@@ -122,10 +122,13 @@ func PictureArgs(g Graph) []string {
 			"-hls_flags", "delete_segments+independent_segments+omit_endlist+program_date_time",
 		)
 	} else {
+		// No append_list. That flag marks the first segment with a discontinuity
+		// even when the encode is new, and AVPlayer fails the item when a
+		// reload's discontinuity count does not match.
 		args = append(args,
 			"-hls_list_size", "0",
 			"-hls_playlist_type", "event",
-			"-hls_flags", "independent_segments+append_list+program_date_time",
+			"-hls_flags", "independent_segments+program_date_time",
 		)
 	}
 	args = append(args, "index.m3u8")

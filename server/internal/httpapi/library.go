@@ -623,12 +623,14 @@ func (s *Server) fileMedia(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		body = live.OffsetPlaylist(body, live.FileOffset(filepath.Dir(path)))
+		dir := filepath.Dir(path)
+		body = live.OffsetPlaylist(body, live.FileOffset(dir))
 		if recID, err := strconv.ParseInt(id, 10, 64); err == nil && s.Store != nil {
 			if rec, err := s.Store.Recording(r.Context(), recID); err == nil {
 				body = stampRecordingPlaylist(body, rec.StartedAt)
 			}
 		}
+		body = s.Hub.StableRecordingPlaylist(dir, body)
 		_, _ = w.Write(body)
 		return
 	case strings.HasSuffix(name, ".vtt"):

@@ -204,7 +204,11 @@ type Hub struct {
 	scanToken  *struct{}
 	playMu     sync.Mutex
 	plays      map[int64]struct{}
-	ringSeq    int
+	// fileList is the recording playlist last served for a play directory.
+	// AVPlayer drops the item when a reload changes the target duration or
+	// the discontinuity count, so the next response keeps that prefix.
+	fileList map[string][]byte
+	ringSeq  int
 	// cuts keeps recent view cuts, so screens on one view share one copy.
 	cuts cutCache
 	// starts are the last pictures a watch started, newest last. Under mu.

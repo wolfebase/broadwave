@@ -34,6 +34,9 @@ func TestRecordingPlaybackStaysMPEGTS(t *testing.T) {
 	if !strings.Contains(line, "-hls_segment_filename seg%05d.ts") || !strings.Contains(line, "-hls_list_size 0") || !strings.Contains(line, "-hls_playlist_type event") {
 		t.Fatalf("a recording keeps the whole MPEG-TS event playlist: %s", line)
 	}
+	if strings.Contains(line, "append_list") {
+		t.Fatalf("append_list marks the first segment with a fake discontinuity: %s", line)
+	}
 	if strings.Contains(line, "pipe:1") || strings.Contains(line, ".m4s") {
 		t.Fatalf("recording playback does not use the live packager: %s", line)
 	}

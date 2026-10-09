@@ -126,6 +126,7 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string, at f
 		return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
 	}
 	_ = os.RemoveAll(dir)
+	h.forgetRecordingPlaylist(dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
@@ -182,6 +183,7 @@ func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, st
 	h.playMu.Unlock()
 
 	_ = os.RemoveAll(dir)
+	h.forgetRecordingPlaylist(dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		h.clearPlay(id)
 		return "", err
