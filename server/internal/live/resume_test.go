@@ -29,6 +29,10 @@ func TestResumeAtStaysInsideTheFile(t *testing.T) {
 	if got := ResumeAt(40, -1); got != 0 {
 		t.Fatalf("unprobed length %v", got)
 	}
+	// Seventeen minutes into a five-minute file stays on the last picture.
+	if got := ResumeAt(17*60, 5*60); got != 298 {
+		t.Fatalf("17 min into a 5 min file %v", got)
+	}
 }
 
 func TestInputSeekPrecedesTheFile(t *testing.T) {

@@ -282,6 +282,12 @@ func waitPlaylistFile(playlist string, id int64) (string, error) {
 	return "", fmt.Errorf("recording player did not start")
 }
 
+// FollowFile copies a growing recording into dst until still is false and no
+// new bytes arrive. The copy starts at the first byte. A pipe has no index.
+func FollowFile(path string, dst io.WriteCloser, still func() bool) {
+	followFile(path, dst, still, 0)
+}
+
 // followFile copies a growing recording into ffmpeg until the recording has
 // stopped and no new bytes arrive. skip is how many seconds of the file to
 // leave out, measured from the first PCR. A pipe has no index to seek.
