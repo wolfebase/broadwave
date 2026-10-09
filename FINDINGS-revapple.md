@@ -215,3 +215,150 @@ Fix: store `ready` in a lock (or hop the KVO callback to the main actor) and rea
 `comeBack` is removed in `forgetAwayWindow`, which runs from a failed start and from `didStop`. `endAwayWindow` (116–121) clears `awayWindow` and does not remove the observer. The block uses `[weak self]`, so this is not a cycle. If the delegate is released while the away window is up and `didStop` does not run, the observer stays for the process.
 
 Fix: remove `comeBack` in `deinit` as well as in `forgetAwayWindow`.
+
+## Second pass
+
+Verified by reading the code. No Xcode build.
+
+### Turning one day off makes the pass record every day
+
+`PassesView.swift` 324–335, 351–360, 386–394, and 555–564. Server: `server/internal/dvr/plan.go` 158–160 and `server/internal/httpapi/passes.go` 178–191.
+
+`update` runs the same closure twice. The first call edits the pass on screen. The second builds the PATCH from `Pass(id:title)`, whose `days`, `timeEnd`, and `keepCount` are nil. `updatePass` encodes only the fields that are set.
+
+A day toggle copies `p.days`. On the blank patch that is nil, so the set starts empty. Turning Wednesday off sends `"days": []`. `onDay` treats an empty list as every day, and the response replaces the toggles. Turning a day on sends only that day.
+
+The From picker does the same with `timeEnd`. The blank patch looks empty, so an existing end is replaced with three hours after the new start. Choosing “The newest” sees `keepCount == nil` and sends `keepCount: 5`.
+
+`save` also assigns `passes = list` when `mine != saves` (584–592). A slower PATCH then puts the list back to that response.
+
+Fix: diff the edited pass against the pass from before this change and send those fields. Do not run the closure on a blank `Pass`. Apply `passes` and `pass` only when `mine == saves`.
+
+### The one-channel player never uses the picture budget
+
+`PlayerScreen.swift` 120 and 273–280. `PlaybackOutage.startAttempts` asks for a full picture budget ten times, about two seconds apart, and a refused tuner once more. The web player does that (`useLiveStream.ts` around 422). `LivePlayer.start` has no attempt loop.
+
+First tune, watch returns `pictures_full`. `retry` is false, so the server sentence is shown at once. The same channel again (`Try again`, a frozen retune, a prefs change) has `retry` true. `holdPictureMessage` is true for that sentence, so it becomes “The picture stopped” and the slow quiet clock. `no_signal` is the only unnamed error that stays put.
+
+Fix: after `decision.recovery == nil`, if this burst is still under `startAttempts(code:message:)`, sleep 2 seconds and call `start` again with the burst still counting as the first tune. On the last miss, show `decision.message`. Fold into `pictureStopped` only for a real `stream_down`, not for every `retry`. Use `try await Task.sleep` and return if that task is cancelled.
+
+### A multiview tile gives up that budget on the second try
+
+`MultiviewScreen.swift` 363, 380, and 486–501.
+
+The tile does count attempts, but the recursive call never reaches them. `retry` is captured before `stop()`, and a failed attempt has already set `channelID` (line 380). The next `start` takes the “same channel” branch. `pictures_full` and `tuner_refused` hit line 491 and become `pictureStopped`. A tile whose watch returns `pictures_full` nine more times should keep asking. Today the second miss is the stopped-picture message.
+
+The sleep is `try?`, and `stop()` (808–830) does not bump `startToken`. A cancelled retry continues. If `channelID` is still set, it calls `start()`, which bumps the token and `stop()`s whatever watch replaced it. `start()` does check cancellation after that `stop()`, so the cancelled task itself does not open a new watch.
+
+Fix: pass a burst flag into the recursive `start` and treat `retry` as false while it is set. Reset `attempts` at the start of a non-burst `start`. Sleep with `try await` and return on cancel. Bump `startToken` at the top of `stop()`.
+
+### A channel note is wiped when its timer is cancelled, and a new channel keeps the old one
+
+`PlayerScreen.swift` 1098–1112. The recording note at 2330–2335 checks `Task.isCancelled`. This one does not.
+
+```swift
+.task(id: note) {
+    try? await Task.sleep(for: .seconds(10))
+    if nowPlaying.note == note {
+        nowPlaying.note = nil
+    }
+}
+```
+
+`try?` treats cancel as a finished sleep. Minimizing destroys `PlayerScreen` and cancels the task, but `NowPlaying` lives on `RootView`, so the note is cleared at once. The same happens when `live.reconnecting` or an error replaces that branch.
+
+`PlayerPanels.swift` 65–67 sets `nowPlaying.channel` and does not change `note`. `play` is what clears it. Open an encrypted 3.0 station, then choose another row in Channels within those 10 seconds. The new station plays under the old sentence until the sleep ends.
+
+Fix: `try await Task.sleep`, and clear the note only when this task is not cancelled. Set `nowPlaying.note = nil` when the channels row changes the channel.
+
+### Leaving the player puts the broadcast frame rate back
+
+`PlayerScreen.swift` 1813–1815 and 1963–2006. tvOS only.
+
+`dismantleUIViewController` calls `stop()` and then sets `preferredDisplayCriteria = nil`. `stop()` cancels the refresh loop and nils `task` while `refresh` can still be inside `videoPicture` (`try?` on the loads). That call does not look at cancellation, and it always `apply`s. The apply can write the broadcast mode back onto the window after dismantle cleared it.
+
+`stop()` also nils `task` before the loop has exited. A later `start` sees `task == nil` and starts a second loop.
+
+Fix: set a stopped flag in `stop()`, and return before `apply` when the task is cancelled or that flag is set. Do not start a new loop until the old one has exited.
+
+### A deep link finishes after a newer one
+
+`RootView.swift` 391–458.
+
+`open` starts a `Task` and does not keep it. `watch`, `multiview`, `connect`, and the tvOS `recording` link all await the network or `coverGone` (700 ms), then write `NowPlaying` or `libraryFilter.recording` with no token. `coverGone` uses `try?`, so a later cancel would not stop the write either.
+
+Open `broadwave://watch/4` while the lineup is empty, so the task is inside `refresh()` or `allChannels()`. A second link, `broadwave://watch/9`, starts. Whichever await returns last calls `play`. The same task still calls `play` after you switch tabs or after Forget. A failed `server()` or `allChannels()` is `try?`, so a connect link or a hidden channel does nothing and shows no error.
+
+Fix: keep one task and cancel it at the start of `open`. Capture a token. After every await, including the sleep in `coverGone`, return if the task is cancelled or the token is stale. On a failed connect or lineup fetch, show the error.
+
+### A settings edit is saved before the server accepts it
+
+`SettingsView.swift` 544–553, 631–669, and 684–691. The sports key and the saved secrets are already filed. The Check for updates toggle is the same `try?`: it never sets `saveError` and does not put the switch back.
+
+`flushServerText` copies the field into `loadedUser`, `loadedLineup`, `loadedGuide`, `loadedReserve`, or `loadedBuffer` before `save`. Each `save` is a new `Task`. Change Picture from Broadcast to Film, then to Smooth before the first PUT finishes. If the Film request completes last, the picker shows Smooth and `saveError` stays empty, while the server keeps Film. A failed guide-address save has already moved `loadedGuide`, so leaving the screen does not send it again. `store.api?.saveSettings` on a nil client does not throw.
+
+Fix: one save task, cancelled and replaced by the next change. Apply `loaded*` and clear `saveError` only after a successful save. In `catch`, put the control back. Await Check for updates the same way.
+
+### Settings you type before the load returns are thrown away
+
+`SettingsView.swift` 578–610.
+
+The guide fields are editable immediately. `load` is `.task { await load() }` and applies whatever `settings()` returns, with no check that the fields are still untouched. Open Settings, type a Schedules Direct user, and submit. `flushServerText` returns immediately because `guideKnown` is still false, so the submit does nothing. The load then assigns `sdUser` and replaces what you typed. If `settings()` throws, `try?` leaves Live scores, Check for updates, and Play the next episode showing their default On, disabled, with no error.
+
+Fix: disable the fields until a load succeeds. Ignore a finished load if the task is cancelled or the user has edited. On failure, show the error and do not present the defaults as the current settings.
+
+### A failed support download says nothing
+
+`SettingsView.swift` 759–765 and 710–718.
+
+`downloadBackup` sets `backupError` when `downloadFile` returns nil. `downloadSupport` does not. The button stops spinning. On Apple TV, `present` sets `savedNote = "backup"`. A later failed backup download sets `backupError` and leaves that line up, so the section shows both the error and “Saved on this Apple TV.” `downloadSupport` does clear `savedNote` first, and still shows no error.
+
+Fix: give the support button the same error text as the backup download. Clear `savedNote` at the start of either download and set it only after the file is written.
+
+### A failed schedule looks like the show is not set to record
+
+`BroadwaveWidgets.swift` 49–67. `WidgetFeed.mark` treats an empty plan as not planned.
+
+`api.schedule()` and `api.scoreboard()` use `try?`. The channels and airings calls do not. If the schedule request fails and the others succeed, `plan` is `[]` and the row shows a Record button for a show that is already set to record. A failed scoreboard shows the game with no score.
+
+Fix: if `schedule()` throws, do not build rows with an empty plan. Surface “Can’t reach your server.” or keep the previous timeline. Do not call `mark` with a plan that never loaded.
+
+### An On now card does not say how much is left
+
+`apple/Packages/BroadwaveUI/Sources/BroadwaveUI/Components.swift` 177–206, used from `HomeView.swift`.
+
+`minutesLeft` and `AiringProgress` are on the card. `.accessibilityLabel(Self.spoken(...))` replaces the children. `spoken` is the channel number, name, ATSC 3.0, and title. The time left and the percent aired are visible and silent. This is not the On now row already filed.
+
+Fix: add the minutes-left string, and the percent aired when there is an airing, to `spoken`.
+
+### Every iPhone is named “iPhone”
+
+`ScreenIdentity.swift` 5–7. No entitlement file under `apple/` contains `com.apple.developer.device-information.user-assigned-device-name`. `RootView.swift` sends this name with `announce`.
+
+On current iOS, `UIDevice.current.name` is a generic name (“iPhone”, “iPad”) without that entitlement. The home lists every phone as “iPhone”, and the arrival line is “New iPhone found: iPhone.” `AppStore.namesScreen` then hides any notice ending in `found: iPhone.` on every phone, because they all have that name.
+
+Fix: add the entitlement if the home list should show the name from Settings. Until then, do not use the generic name as the only label for that screen.
+
+### Search starts live TV for a listing that is not on
+
+`SearchView.swift` 52–60 and 116–121. The guide sheet shows Watch only when the airing is on (`GuideView.swift` 791). Search shows Watch for every hit and `watch` always calls `nowPlaying.play`. A later listing tunes to whatever is on that channel now. The button label is only “Watch”, so the title and time beside it are not the focused control.
+
+Recording hits (68–81) are an `HStack` with no button. The search stack has no recording destination. Select does nothing. The web row opens the recording.
+
+Fix: Watch only when `airing.isOn(at: store.now)`. Otherwise open the airing, as the guide does. Put the title and start time in those button labels. Play a recording hit the same way `RecordingsView` does.
+
+### A source error is only “Offline.”
+
+`SourcesView.swift` 143–155 and 259–269. The web row (`web/src/features/settings/Sources.tsx` 211–214) says Offline and then the health sentence when it is not a URL.
+
+`isOffline` is “`health` is non-empty”. The health sentence is never drawn. `healthWord`’s “Needs attention” branch sits inside `if !offline`, so it never runs. A disabled source with an empty health string shows “Off” in `Tokens.ColorToken.success`.
+
+Fix: show the health string when it is non-empty and not a URL. Don’t use the success color for “Off”.
+
+### Forget leaves the offline timer running
+
+`AppStore.swift` 246–265 and 376–386.
+
+`forget()` drops the socket and does not cancel `offlineWait`. `noteConnection` sleeps with `try?`, then sets `offline = true` unless that task was cancelled. Leave a server while its socket is down. Three seconds later `offline` becomes true with no server. The next `connect` calls `noteConnection(false)`, which does not clear `offline`. `api` is already set, so `connected` is true, and the banner at `RootView.swift` 600 shows until the new socket opens.
+
+Fix: in `forget()`, cancel `offlineWait` and set `offline = false`.
