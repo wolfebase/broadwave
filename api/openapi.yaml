@@ -1006,7 +1006,7 @@ paths:
     post:
       tags: [recordings]
       operationId: startRecording
-      description: Record a channel now. When the guide has the current airing, the recording runs to its end plus padding.
+      description: Record a channel now. When the guide has the current airing, the recording runs to its end plus padding, for a day at most.
       requestBody:
         required: true
         content:
@@ -1016,7 +1016,7 @@ paths:
               required: [channelId]
               properties:
                 channelId: { type: integer, format: int64 }
-                minutes: { type: integer }
+                minutes: { type: integer, description: "How long to record, in minutes. Blank or 0 records for an hour, or until the current listing ends when that is longer. A day at most." }
                 title: { type: string }
       responses:
         "200":
