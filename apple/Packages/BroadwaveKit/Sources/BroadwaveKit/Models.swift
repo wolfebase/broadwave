@@ -480,6 +480,29 @@ public struct VirtualPlayback: Codable, Sendable, Hashable {
     public var markers: [Marker]?
 }
 
+/// A library channel plus the slots it plays over the next 48 hours.
+/// GET /virtuals/schedule returns each channel with a `slots` array. The list
+/// endpoint does not, so this stays separate from `VirtualChannel`.
+public struct ScheduledVirtual: Codable, Sendable, Hashable, Identifiable {
+    public var id: Int64
+    public var number: String
+    public var name: String
+    public var orderMode: String?
+    public var ruleTitle: String?
+    public var recordings: [Int64]
+    public var slots: [Slot]
+
+    public init(id: Int64, number: String, name: String, orderMode: String? = nil, ruleTitle: String? = nil, recordings: [Int64], slots: [Slot]) {
+        self.id = id
+        self.number = number
+        self.name = name
+        self.orderMode = orderMode
+        self.ruleTitle = ruleTitle
+        self.recordings = recordings
+        self.slots = slots
+    }
+}
+
 public extension VirtualChannel {
     /// The first free number from 900, as the web picks it.
     static func nextNumber(after taken: [VirtualChannel]) -> String {

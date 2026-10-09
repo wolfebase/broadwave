@@ -26,7 +26,7 @@ public enum CatalogCache {
     }
 
     public static func save(_ snapshot: CatalogSnapshot, serverID: String, directory: URL? = nil) {
-        guard let data = try? encoder.encode(snapshot) else { return }
+        guard let data = try? makeEncoder().encode(snapshot) else { return }
         let url = file(serverID, directory)
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: url, options: .atomic)
@@ -38,12 +38,12 @@ public enum CatalogCache {
         return dir.appendingPathComponent("broadwave-\(safe).json")
     }
 
-    private static let encoder: JSONEncoder = {
+    private static func makeEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .custom { date, enc in
             var box = enc.singleValueContainer()
             try box.encode(ISO8601DateFormatter.plain.string(from: date))
         }
         return encoder
-    }()
+    }
 }
