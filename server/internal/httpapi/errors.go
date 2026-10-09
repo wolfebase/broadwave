@@ -9,6 +9,7 @@ import (
 
 	"broadwave/internal/disk"
 	"broadwave/internal/live"
+	"broadwave/internal/source"
 )
 
 // apiError writes the error envelope every client reads: {"code", "message", ...details}.
@@ -80,6 +81,8 @@ func errorFor(err error) (int, string, string, map[string]any) {
 		return http.StatusServiceUnavailable, "tuner_refused", live.ErrTunerRefused.Error(), nil
 	case errors.Is(err, sql.ErrNoRows):
 		return http.StatusNotFound, "not_found", "Not found.", nil
+	case errors.Is(err, source.ErrPlaylistAddress):
+		return http.StatusBadRequest, "bad_request", err.Error(), nil
 	default:
 		return http.StatusInternalServerError, "internal", err.Error(), nil
 	}

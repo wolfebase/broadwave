@@ -10,7 +10,7 @@ The tuner interface this server offers to other apps uses that same host check.
 
 ## Fetches
 
-Playlists, guides, artwork, and tuner requests use http or https. Other schemes are refused. Link-local addresses, and the well-known cloud metadata names and addresses, are refused. A tuner on a private network address still works. A tuner that answers only on a link-local address does not.
+Playlists, guides, artwork, and tuner requests use http or https. Other schemes are refused. A path to a file on this machine is not a playlist address; upload the file instead. Link-local addresses, and the well-known cloud metadata names and addresses, are refused. A tuner on a private network address still works. A tuner that answers only on a link-local address does not.
 
 When ffmpeg or ffprobe opens a URL, the input is limited to http and https. A playlist cannot hand either program a file on this machine. A recording on disk is still opened as a file.
 

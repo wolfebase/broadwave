@@ -27,7 +27,7 @@ func TestReadPlaylistStopsAtTheCap(t *testing.T) {
 	if err := os.WriteFile(small, []byte("#EXTM3U\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	body, err := ReadPlaylist(t.Context(), small)
+	body, err := readLocalPlaylist(small)
 	if err != nil || string(body) != "#EXTM3U\n" {
 		t.Fatalf("small playlist %q %v", body, err)
 	}
@@ -35,7 +35,7 @@ func TestReadPlaylistStopsAtTheCap(t *testing.T) {
 	if err := os.WriteFile(big, []byte(strings.Repeat("x", 64)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ReadPlaylist(t.Context(), big); err == nil {
+	if _, err := readLocalPlaylist(big); err == nil {
 		t.Fatal("a playlist past the cap was read")
 	}
 }

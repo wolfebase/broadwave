@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -144,9 +145,35 @@ func TestRenumberAndReadAGzipFile(t *testing.T) {
 	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	body, err := ReadPlaylist(t.Context(), path)
+	raw, err := readLocalPlaylist(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := UnpackPlaylist(raw)
 	if err != nil || !strings.Contains(string(body), "News") {
 		t.Fatal(err, string(body))
+	}
+}
+
+func TestReadPlaylistRefusesAFilePath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "secret.m3u")
+	const marker = "marker-not-a-channel"
+	playlist := "#EXTM3U\n#EXTINF:-1,News\nhttp://example/" + marker + ".ts\n"
+	if err := os.WriteFile(path, []byte(playlist), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{path, "/etc/passwd", "file:///etc/passwd", "file:/etc/passwd"} {
+		got, err := ReadPlaylist(t.Context(), raw)
+		if err == nil || got != nil {
+			t.Fatalf("%s returned %q", raw, got)
+		}
+		if !errors.Is(err, ErrPlaylistAddress) {
+			t.Fatalf("%s: %v", raw, err)
+		}
+		if strings.Contains(err.Error(), marker) || strings.Contains(string(got), marker) {
+			t.Fatalf("error repeats the file: %v", err)
+		}
 	}
 }
 

@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -354,17 +356,19 @@ func Renumber(entries []Entry, start int) []Entry {
 	return out
 }
 
-// ReadPlaylist loads a playlist from an http address or a file on this machine.
-// A gzip file is unpacked.
+// ErrPlaylistAddress is a playlist location that is not http or https.
+// A path on this machine is not opened. Upload the file instead.
+var ErrPlaylistAddress = errors.New("The playlist address should start with http:// or https://.")
+
+// ReadPlaylist downloads a playlist from an http or https address.
+// A gzip body is unpacked.
 func ReadPlaylist(ctx context.Context, raw string) ([]byte, error) {
 	raw = strings.TrimSpace(raw)
-	var body []byte
-	var err error
-	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
-		body, err = FetchText(ctx, raw)
-	} else {
-		body, err = readLocalPlaylist(raw)
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return nil, ErrPlaylistAddress
 	}
+	body, err := FetchText(ctx, raw)
 	if err != nil {
 		return nil, err
 	}
