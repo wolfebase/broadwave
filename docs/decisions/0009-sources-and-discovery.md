@@ -14,12 +14,12 @@ Every source a Channels DVR user already has can be added here, and an HDHomeRun
 
 **Follow the device, not the address.** A tuner or a server is remembered by its id. When DHCP moves it, the address updates and the channels stay put.
 
-**The full mux is the tune.** Playback and recording open the tuner's unfiltered stream (`/tunerN/ch<freq>` on the CONNECT DUO; SiliconDust's docs also describe `/auto/ch<rf>`). `/auto/v<channel>` is one program and is the wrong stream for the shared relay. A filtered stream rebuilds the PAT and drops PSIP.
+**The full mux is the tune.** A known frequency opens `/tunerN/ch<frequency>`. An ATSC 3.0 channel, or a tune that cannot open that multiplex, uses `/auto/v<guide number>`. SiliconDust's docs also describe `/auto/ch<rf>`. A program-filtered stream rebuilds the PAT and drops PSIP.
 
-**Playlists stay with their guide.** An M3U's `url-tvg` or an XMLTV URL fills only that source, matched by `tvg-id`, then `tvc-guide-stationid`, then name. Xtream is the same idea with `player_api.php`, `/live/…`, and `xmltv.php`. Passwords and tokens are stored apart from the URL and shown as `••••` in the API, logs, and Diagnostics.
+**Playlists stay with their guide.** An M3U's `url-tvg` or an XMLTV URL fills only that source. The stored guide key is `tvg-id` when the line has one, and the station id otherwise. Matching tries that key, then the channel number, then the name, then the call sign. Xtream is the same idea with `player_api.php`, `/live/…`, and `xmltv.php`. Passwords and tokens are stored apart from the URL. The settings answer leaves them out, and the log replaces them with `••••`.
 
 **What we will not pretend to support.** AirTV, Fire TV Recast, and TV Everywhere have no open API. Tablo Gen 4 needs Tablo's cloud. Pluto has no static playlist. Legacy Tablo (Gen 1–3) has an unofficial local API. Broadwave does not add one. Look harder only notices a page on port 8885 that says tablo. The matrix is `docs/sources.md`.
 
 ## Consequences
 
-Setup for an antenna is a tuner appearing, then a channel playing. A playlist or another server is one confirmation. A source we cannot speak to is named in the matrix with the reason, not offered as a button that fails.
+Setup for an antenna is a tuner appearing, then a channel playing. A playlist or another server is one confirmation. A source we cannot speak to is named in the matrix with the reason. Look harder can still show Add for one, including a page on port 8885 that says tablo, and that Add leaves the lineup unchanged.

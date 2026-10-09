@@ -8,7 +8,7 @@ Watch two or more live channels at once, aligned to the same wall-clock moment, 
 
 ## Design
 
-**Tiles are renditions.** An unfocused tile asks for `tile` (540p) or `360` (360p) and `audio: none`. Those renditions keep `-copyts` and CMAF, and they close on the broadcast's keyframes (`-force_key_frames source`), so they sit on the same timeline as the full channel. The focused tile uses the normal decision, including the original picture when the device can play it. Adding a tile starts a rendition; it does not restart the others.
+**Tiles are renditions.** Side by side, every tile asks for the large-tile picture with stereo. A quad asks for 360p with stereo on every tile. A small tile beside a large one, including the small picture-in-picture tile, asks for `tile` (540p) or `360` (360p) and `audio: none`. Those renditions keep `-copyts` and CMAF, and they close on the broadcast's keyframes (`-force_key_frames source`), so they sit on the same timeline as the full channel. The focused tile in a layout with one large picture uses the normal decision, including the original picture when the device can play it. Adding a tile starts a rendition; it does not restart the others.
 
 **Tuner budget.** `POST /api/v1/multiview/plan` takes channel ids and returns which ones fit. A known frequency costs one tuner no matter how many subchannels are in the set. A channel whose frequency has not been learned costs a tuner of its own. A frequency this server already has tuned is free. A link or a file does not take an antenna tuner. The blocked reason names what is already on.
 
@@ -20,4 +20,4 @@ Watch two or more live channels at once, aligned to the same wall-clock moment, 
 
 ## Consequences
 
-Small tiles cost a video transcode and no audio transcode. Four tiles on four frequencies need four tuners; four subchannels of one frequency need one. Clients mute every tile except the focused one even when a tile has audio, so a late rendition change never leaves two games audible.
+A small tile beside a large picture costs a video transcode and no audio transcode. A quad's 360p tiles transcode stereo as well. Four tiles on four frequencies need four tuners; four subchannels of one frequency need one. Clients mute every tile except the focused one even when a tile has audio, so a late rendition change never leaves two games audible.
