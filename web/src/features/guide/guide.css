@@ -327,12 +327,10 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
   background: linear-gradient(90deg, color-mix(in srgb, var(--cat-color) 10%, transparent), color-mix(in srgb, var(--cat-color) 22%, transparent));
 }
 
-.guide-cell.past {
-  opacity: 0.45;
-}
-
+/* Fading the whole cell to 0.45 or 0.25 drops the subtitle under 4.5:1. */
+.guide-cell.past,
 .guide-cell.dim {
-  opacity: 0.25;
+  opacity: 0.72;
 }
 
 .guide-cell:hover {
@@ -398,6 +396,11 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
   text-overflow: ellipsis;
 }
 
+/* The aired wash on a kids or sports show darkens this line. Secondary then falls under 4.5:1. */
+.guide-cell.now .cell-sub {
+  color: #c1c8d3;
+}
+
 .cell-score {
   margin-left: 6px;
   font-variant-numeric: tabular-nums;
@@ -410,7 +413,7 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #9cbcff;
+  color: #aec8ff;
 }
 
 .library-channels {
