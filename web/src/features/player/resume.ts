@@ -20,6 +20,20 @@ export function comeBackAction(input: {
   return "resume";
 }
 
+/**
+ * A room sitting at rate 0 is paused for everyone. Coming back must not play
+ * this screen. A rate left over from a room this screen has left does not.
+ */
+export function returnHeld(syncing: boolean, paused: boolean, roomRate: number | null): boolean {
+  if (syncing && roomRate === 0) return true;
+  return !syncing && paused;
+}
+
+/** comeBackAction still says "play" for a short pause while syncing. A held room does not take it. */
+export function playOnShortReturn(action: ComeBackAction, held: boolean): boolean {
+  return action === "play" && !held;
+}
+
 /** How long to wait for a playlist that still shows the old edge. */
 export const resumeWaitMs = 2200;
 
