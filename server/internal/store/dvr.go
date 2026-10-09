@@ -575,11 +575,19 @@ const recordingColumns = `r.id, r.channel_id, r.guide_number, r.title, r.path, r
 	r.intro_start, r.intro_end, r.credits_start, EXISTS (SELECT 1 FROM episode_prints e WHERE e.recording_id = r.id),
 	r.keep, r.watched_at, COALESCE(p.position_sec, 0), COALESCE(p.updated_at, '')`
 
+// recordingSelect is one recording, joined to its playhead. The library
+// orders by id. One recording adds WHERE r.id = ?, which is the primary key.
+const recordingSelect = `
+SELECT ` + recordingColumns + `
+FROM recordings r LEFT JOIN progress p ON p.recording_id = r.id`
+
 func (s *Store) Recordings(ctx context.Context) ([]Recording, error) {
-	rows, err := s.db.QueryContext(ctx, `
-SELECT `+recordingColumns+`
-FROM recordings r LEFT JOIN progress p ON p.recording_id = r.id
+	return s.queryRecordings(ctx, recordingSelect+`
 ORDER BY r.id DESC`)
+}
+
+func (s *Store) queryRecordings(ctx context.Context, query string, args ...any) ([]Recording, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -753,16 +761,15 @@ func (s *Store) DeleteRecording(ctx context.Context, id int64) error {
 }
 
 func (s *Store) Recording(ctx context.Context, id int64) (Recording, error) {
-	all, err := s.Recordings(ctx)
+	rows, err := s.queryRecordings(ctx, recordingSelect+`
+WHERE r.id = ?`, id)
 	if err != nil {
 		return Recording{}, err
 	}
-	for _, rec := range all {
-		if rec.ID == id {
-			return rec, nil
-		}
+	if len(rows) == 0 {
+		return Recording{}, sql.ErrNoRows
 	}
-	return Recording{}, sql.ErrNoRows
+	return rows[0], nil
 }
 
 func (s *Store) AddPass(ctx context.Context, title string, channelID int64, padBefore, padAfter int) error {
