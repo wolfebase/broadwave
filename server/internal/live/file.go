@@ -151,7 +151,7 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string, at f
 	}
 	cmd := exec.Command(h.FFmpeg, PictureArgs(g)...)
 	cmd.Dir = dir
-	cmd.Stderr = os.Stderr
+	logCommand(cmd)
 	if err := os.WriteFile(filepath.Join(dir, "graph.txt"), []byte(stamp), 0o644); err != nil {
 		return "", err
 	}
@@ -209,7 +209,7 @@ func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, at
 	}
 	cmd := exec.Command(h.FFmpeg, PictureArgs(g)...)
 	cmd.Dir = dir
-	cmd.Stderr = os.Stderr
+	logCommand(cmd)
 	if err := os.WriteFile(filepath.Join(dir, "graph.txt"), []byte(stamp), 0o644); err != nil {
 		return "", err
 	}
