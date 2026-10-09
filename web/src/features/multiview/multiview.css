@@ -159,7 +159,8 @@ html:root[data-layout="tv"] section.mv:focus-visible {
   gap: 8px;
   padding: 4px 8px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.55);
+  /* 0.55 leaves the gold note at 3.3:1 on a white frame. */
+  background: rgba(0, 0, 0, 0.72);
   font-size: 0.85rem;
   pointer-events: none;
 }
@@ -169,7 +170,7 @@ html:root[data-layout="tv"] section.mv:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  opacity: 0.85;
+  opacity: 1;
 }
 
 .mv-audio {
@@ -180,7 +181,7 @@ html:root[data-layout="tv"] section.mv:focus-visible {
 .mv-detail {
   margin-left: auto;
   font-size: 0.75rem;
-  opacity: 0.75;
+  opacity: 1;
 }
 
 .mv-empty,
