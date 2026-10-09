@@ -1,5 +1,44 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- iPhone and iPad have four home screen widgets, in small, medium, and large: On now, Your teams, Recording now, and Up next. A row opens that channel. Record on an airing sets it to record once, and a game keeps going until it is final. A row that is already recording, or set to record, says so. The teams widget asks only for games, so a large guide does not make it say it cannot reach the server, and a game still on the scoreboard stays through overtime.
+- On Apple TV, with Broadwave in the top row of the home screen, the Top Shelf lists games on now, favorite channels and what they are showing, and recordings you have started and not finished. Choosing one plays it. A recording made since the app last ran still opens, a player that is already up closes first, and a slow server holds the shelf for at most 10 seconds. If a recording cannot find where you left off, it tries once more and then says why.
+- On the web, Add to other apps on a multiview shares those channels with Plex, Jellyfin, and Channels as one channel. They list it from 990 up, named Multiview, with the sound channel first. The guide fills it with two-hour blocks that say what it shows. Settings › Share with other apps can remove one, and the others keep their numbers. A channel that is hidden or gone is left out.
+- On the web, a note appears when a team you follow starts playing, or a game on your channels comes down to the last minutes, with Watch and Not now. It waits while the player is up and then goes away. Settings › Game alerts is your teams and close games, your teams only, or off. A game you are recording and have not watched gets no score and no close-game note, and neither does any game while scores are hidden. A start note never includes a score. A team you followed from a listing counts.
+- Recordings on the web, iPhone, iPad, and Apple TV open on Continue watching, then each show with how many recordings it has, how many are unwatched, and how much space it uses. A show's page groups episodes by season. Sort by newest, oldest, name, or size, and show only shows, movies, or sports. Select marks several watched or unwatched, or deletes them after you confirm, including with the remote. Select all takes only what the filters show. A file already in a library folder takes its show, season, and episode from its folders and its name.
+- A pass can match a title, words in a title, or a category, on chosen days and in a time of day. A window that runs past midnight counts as the night it began. On the web, Schedule edits a pass and shows the next two weeks of what it would record, skip, and push aside. Passes on iPhone, iPad, and Apple TV do the same. The Apple screen is called Passes. Drag to reorder on iPhone and iPad; on Apple TV, move a pass up or down. When two passes need the same tuner, the higher one records.
+- On the web, Rename file moves a recording inside the recordings folder and takes the files beside it. A finished recording you move by hand inside that folder is found again and plays from its new place.
+- The recordings folder can be any folder you name with `BROADWAVE_RECORDINGS`, or with `-recordings` outside Docker. Recordings already made stay where they are.
+- On the web, a recording can be marked Keep forever. Clean-up leaves it alone, and a pass's "keep the newest" does not count it. Settings can delete recordings you have watched after a number of days and, when space runs low, delete the oldest watched ones so a new recording still fits. Both are off until you turn them on. Played to the end, or marked watched, counts; stopping short of the end does not. Playing it again starts the clock over. One you played in the last 6 hours stays, and so does anything outside the recordings folder.
+- Skip intro and Up next on a recording, on the web, iPhone, iPad, and Apple TV, once that show's intro and end titles have been picked out from its other episodes. Skip intro is offered during the intro. From the end titles, or the last 10 seconds, Up next names the next episode in the order they aired, with Play now and Not now. With Play the next episode on, it plays after 10 seconds; off, it waits.
+- A recording the signal ruined says how many seconds the signal dropped and offers Record it again, on the web, iPhone, iPad, and Apple TV. That records the episode the next time it airs. A series pass does the same on its own, and stops after a second ruined copy. Recordings from before this change are not marked.
+- On the web, live TV has Start over. While the live window still holds the start of the show on now, it jumps there, and a group moves with you. Otherwise a recording of this showing that has the start opens from the beginning.
+
+### Changed
+
+- The Docker image includes comskip. Find commercials and the scan after a recording use it when it is there, and comskip's own files stay out of the recordings folder. Without it, the server still finds breaks itself.
+- A break is skipped on its own only when the server is sure. A less sure break still has Skip, and is not marked as a cut for other apps. On iPhone, iPad, and Apple TV, two quick jumps forward inside a break skip the rest of it, as on the web.
+- The commercial scan waits until nobody is watching live TV and runs one recording at a time, or starts after three hours. A spot that plays again can mark a later break. The show, the station logo, a still picture, and black are not learned as ads.
+- Find commercials stays disabled and says it is working until that scan finishes, on the web and on Apple, including if you leave and come back. Then it says how many breaks it found.
+- New recordings are filed by show, the way Plex and Jellyfin read them: under TV, then the show, then a season when the guide has an episode number, or the date when it does not. Movies go under their title and year. Settings › Recording folders › All in one folder keeps every new file in one folder. Recordings already made stay put. An emptied season or show folder is removed.
+- A pass's keep and limit rules touch the recordings that pass made, not every recording with a similar name. A title pass also covers older recordings of that same title. A keep rule does not delete a file outside the recordings folder. A recording a pass starts is tied to that pass, so those rules cover it. One you played to the end now counts as watched for "keep unwatched".
+- On the web, removing a pass asks first and says the recordings it made stay. Cancel, Escape, or Back keeps the pass.
+- The Sports page picks up a kickoff within about a minute when nothing else is live, instead of waiting up to two hours. A game that started before midnight still matches its listing, so a recording of it can keep going.
+
+### Fixed
+
+- On iPhone, iPad, and Apple TV, the first play of a recording resumes where you left it. It used to start over while the playlist was still being built.
+- On the web, Up next follows the order episodes aired and stops after the last one. It used to wrap from the newest back to the oldest. On iPhone, iPad, and Apple TV, Play the next episode is honored. The player used to ignore it.
+- A channel that two tuners carry is recorded once. An airing that will not be recorded no longer takes a tuner from one that will. Recording one showing ranks above every pass. Following a team again keeps that pass and its rules.
+- Two recordings that start together no longer write the same file.
+- On iPhone, iPad, and Apple TV, the time on a recording follows when it aired, not the moment you pressed play.
+- Playing, downloading, or sending a recording to another app opens a file only from the recordings folder or a library folder. A file stored somewhere else is not served. A recording made before the folder was moved still opens.
+- A channel name with a quotation mark no longer cuts the line short in an M3U shared with another app.
+- Leaving a multiview while a tile is still tuning no longer drops the sound tile's picture, so coming back does not start that tile over and wait. On a server with room for only a couple of pictures, sharing a multiview no longer comes up empty while one you just closed is still winding down.
+
 ## 0.12.20 — 2026-10-05
 
 ### Fixed
@@ -7,12 +46,13 @@
 - A recording no longer skips past fades and scene changes. Without comskip, every short black stretch counted as a commercial break; now a break is a run of spot-length gaps.
 - A channel with no signal says so in about 8 seconds instead of 17.
 - Settings marks a tuner that has stopped answering as offline, with when it was last seen. A tuner added by its address keeps reading as online while it answers.
-- On a Mac, or with an Intel or NVIDIA GPU, a GPU picture encode that fails as it starts falls back to the CPU instead of leaving the channel dark.
+- On a Mac, or with an Intel, AMD, or NVIDIA GPU, an H.264 picture encode that fails as it starts falls back to the CPU instead of leaving the channel dark. One that dies after the picture is already going is tried once more on that GPU, and let go if it dies again. An HEVC encode is tried again on the GPU the same way, except a VAAPI start, which still tries the CPU.
 - On iPhone and iPad, a recording has its scrubber, play and pause, and time again.
 - On iPad, the "New … found" line no longer covers the tab bar, and a device is no longer told it found itself.
 - On iPhone, the guide's filters and rows show while a channel is minimized.
 - On Apple TV, Menu in multiview goes back to the channel you came from, or closes multiview if nothing was playing.
 - On the web, Tab stays inside the full player and cycles its controls, and the first Tab while the controls are hidden shows them.
+- On a TV browser, the player bar fades again after a button press. A focus ring used to hold it up.
 
 ## 0.12.19 — 2026-10-04
 
@@ -27,6 +67,7 @@
 - On Apple TV, the guide no longer puts focus on a show that has already ended.
 - On Apple TV, the player's Channels page opens on the channel that is playing, and channel numbers stay on one line.
 - On Apple TV, Settings opens at the top.
+- Closing Picture in Picture closes the player, instead of leaving a stopped mini player.
 
 ## 0.12.18 — 2026-10-04
 
@@ -75,6 +116,7 @@
 
 - A channel with no signal no longer stops every other channel. Its tune takes about 17 seconds to fail, and the server used to hold everything else while it tried, so a multiview with one dead channel froze the good tiles too, and other screens' pictures stalled. A viewer's tune now runs beside the others.
 - The picture budget on a server without a GPU no longer changes from one restart to the next. The startup encode is now timed from its first frame, and the number of pictures at once is set from what real tile encodes cost on the processor. A six-core server holds four; three cores hold two at 540p60.
+- A two-core server keeps one 720p picture instead of dropping that picture to 540p.
 
 ## 0.12.14 — 2026-10-04
 
@@ -104,6 +146,7 @@
 - A browser joining a channel that an iPhone, iPad, or Apple TV is already watching now shows a moving picture in about 2 seconds instead of up to 20. Its picture starts at the room's frame, so it is in step with the other screens from the start.
 - An Apple screen whose player gives up on the stream after a hiccup now reloads it by itself and comes back on the room's frame in a few seconds, where it used to sit on a still picture for up to a minute. A multiview tile does the same.
 - A reloaded Apple picture is no longer named "stopped" a few seconds after it came back.
+- In Watch together, a seek toward live stops at the room. It used to aim a few seconds from live, which an Apple screen cannot reach.
 
 ## 0.12.11 — 2026-10-03
 
@@ -138,6 +181,8 @@
 - A freshly tuned multiview tile no longer freezes for 2 seconds just after it starts. It now starts a little further back, so its first moving picture comes about 2 seconds later.
 - Starring the hidden half of a 1.0/3.0 pair now stars the channel on the guide.
 - An iPhone, iPad, or Apple TV no longer logs a bandwidth warning on every segment of a 1080 encode. Playlists declare each encode's peak rate and its average.
+- On iPhone, iPad, and Apple TV, search and a link to an encrypted 3.0 station play the regular broadcast and say why. The 3.0 mark shows on Home, the guide, and search, and you can put only the regular half on the guide.
+- A link to a channel the guide already shows opens without waiting for the whole lineup.
 
 ### Changed
 
@@ -149,10 +194,10 @@
 ### Fixed
 
 - A second screen joining an ATSC 3.0 channel that is already playing no longer waits about 12 seconds now and then. ffmpeg held the stream while it worked out the channel's caption track; it now settles that on the first packet. The same wait could hit a 3.0 multiview tile and a 3.0 channel shared to Plex or Jellyfin.
+- Search, or a link, to an encrypted 3.0 station plays the regular broadcast and says so. The note shows again the next time, not only the first open from the guide.
 
 ### Changed
 
-- Opening an encrypted ATSC 3.0 channel again shows the note that it plays the station's regular broadcast, not only the first time.
 - On a TV browser, the 3.0 tag stays inside the channel name, the encrypted note sits below the tuning card, and Left and Right change a Settings menu.
 - New page: [ATSC 3.0](docs/atsc3.md).
 
@@ -211,7 +256,10 @@ ATSC 3.0 channels, and a picture that never stays frozen.
 ### Fixed
 
 - A picture that stops moving reloads itself, then tunes again, on the web. On the server, an encode that stops writing starts again, a tuner stream that goes silent is opened again, and a recording keeps going when the tuner refuses to reopen.
-- A 5.1 channel with more than one sound track no longer stops after its first frame on iPhone, iPad, and Apple TV.
+- On iPhone, iPad, and Apple TV, a copied channel no longer stops after its first frame when a group opens on a tiny fragment with no sound.
+- Those channels no longer pause themselves a few seconds before one of those fragments.
+- On a copied 3.0 channel, Apple players no longer pause a few minutes in because a playlist reload answered before the next segment existed.
+- A second screen on a 3.0 channel that is already playing keeps that channel's other sound track.
 - Two screens that open the same 3.0 channel at once share one tuner, and a warm 3.0 channel gives its tuner to a new one.
 - A tuner set to none is freed at once. An unplugged tuner no longer slows the tuner list or every channel start.
 - Guide access is asked of every tuner, not only the first one, and program times stay right after a tuner goes quiet.
@@ -229,10 +277,14 @@ Live captions, every sound track in one stream, Watch together, a choice of live
 - Live delay: Lowest, Balanced, or Stable, per room from the player's Options, with a default for each device in Settings. On iPhone, iPad, and Apple TV too.
 - The server keeps the last hour of each tuned channel on disk while it is tuned, using at most half the free space and always leaving 4 GB. Record a show you are already watching and the recording starts from the beginning of the show. A series pass that finds its show already on, on a channel someone has been watching since it began, records it from the beginning. Settings can make it 30 minutes, 2 or 4 hours, or turn it off, and Diagnostics shows what each tuned channel holds.
 - Channel changes are faster: the channel you just left stays warm for 20 seconds, and on Apple TV the channel the remote rests on in the Channels panel starts before you press. Diagnostics lists the last channel starts and how long each step took.
-- Web player extras: a stats overlay (`i`), keyboard help (`?`), last channel (`L`), typing a channel number, a sleep timer, volume memory, and theater mode (`t`). A TV remote can walk the guide, the player, and setup.
+- Web player extras: a stats overlay (`i`), keyboard help (`?`), last channel (`L`), a sleep timer, volume memory, and theater mode (`t`). A typed channel number can skip the dot, so 51 is 5.1. A TV remote can walk the guide, the player, and setup.
 - Apple TV info panels (Info, Channels, Stream), Record, Start over, and Multiview in the player's menu, and clickpad up and down to change channel. On iPhone, swipe to change channel and pinch to fill the screen.
+- On iPhone, Previous and Next change the channel, and a tap that shows the controls does not pause. Settings opens from the gear on Home, so Recordings stays on the tab bar.
+- On iPhone and iPad, leaving the app starts Picture in Picture, and the player has AirPlay. A tap on the small window comes back to the same channel.
+- On iPhone, iPad, and Apple TV, a recording can become a library channel, and a break can be marked by hand.
+- A public page describes Broadwave and copies the install steps.
 - Download a finished recording from the web. A `.nfo` file can be written beside each recording for Plex, Jellyfin, and Kodi.
-- Settings list how much space each show uses and what records next, and a conflict can record the later airing instead.
+- Settings lists how much space each show uses. Recordings lists what records next, including on iPhone and Apple TV, and a conflict can record the later airing instead.
 - A recording that finishes counts the signal damage it carries.
 - Manage recordings, skip commercial breaks, and record one airing from the guide in the Apple apps.
 - The web app installs as a standalone app.
@@ -253,6 +305,23 @@ Live captions, every sound track in one stream, Watch together, a choice of live
 - The container switches to `PUID` and `PGID` safely.
 - A page on another website can no longer change the server or replace its catalog through a browser open on your network. The web app and the Apple apps work as before.
 - The server log no longer repeats a look around the house every 45 seconds.
+- In side by side and quad, moving the sound to another tile no longer restarts the pictures.
+- Rewinding live TV stays rewound. Go to live returns to the room.
+- Playing a recording shows the show's length, and a seek past what is ready lands at the end. On the web, Space pauses and the arrow keys skip.
+- Multiview offers another channel only when a picture is free. A tile that cannot start can be removed, and the sound moves to a tile that plays.
+- An iPhone or Apple TV found over Bonjour connects on IPv4. A link-local address used to leave that server unable to connect.
+- Home hides a shelf that has nothing on it. On Apple TV, focus no longer jumps back to Watch on every refresh.
+- A lost server shows on the picture, not only behind the player.
+- Opening the full player again keeps the picture that is already playing.
+- On Apple TV, Down from Now in the guide reaches the first channel.
+- Setup's signal check no longer says the tuners are busy while it only borrowed one for the guide.
+- Diagnostics no longer says the time zone is unset on a normal host clock, shows the last failed guide pull, and no longer prints a channel number twice.
+- A picture nobody is fetching stops holding a slot, so the next layout does not wait about a minute for it.
+- VoiceOver reads a channel, a recording, and the mini player as one sentence.
+
+### Changed
+
+- Settings shows the folder recordings actually use, and how to mount another one. A path typed in the app was ignored.
 
 ## 0.11.9 — 2026-09-27
 
@@ -261,6 +330,9 @@ Apple TVs in one room play in step.
 ### Fixed
 
 - Apple TVs in one room now land within a few hundredths of a second of each other. Whole-Home Sync plays 16 seconds behind the broadcast instead of 13: at 13 an Apple TV that started behind the room could not catch up and sat a third of a second off the others.
+- Typing a channel number waits until only one channel matches, you press Enter, or you pause. It used to tune on the first digit.
+- When one guide source does not answer, listings still come in from the others you set.
+- An Apple TV that could not speed up to catch the room tries again after a minute, not five.
 
 ## 0.11.8 — 2026-09-27
 
@@ -270,6 +342,12 @@ Live TV keeps playing when Plex or another app is busy on the same GPU.
 
 - On a server where Plex, Jellyfin, or Channels DVR transcodes on the same Intel GPU, a 1080i channel could encode slower than real time. Apple TVs drained their buffer, paused under the progress bar, and the broadcast broke up. Broadwave now measures the CPU at startup and runs live TV on it when it has room to spare (about 2.5 cores for 1080p60), leaving the GPU to the other apps. Set `BROADWAVE_ENCODER=gpu` or `software` to choose yourself.
 - An Apple TV that fell half a second behind the others seeked every two seconds and froze each time. A seek that doesn't land now waits a minute and the TV plays on (with the next app update).
+- An Apple TV that sat a quarter second behind the others jumped every 15 seconds trying to close a gap it could not. It now plays on, and seeks only when it is much further behind.
+- A channel with no signal says it isn't coming in, in about 6 seconds when the channel is already known and about 10 the first time, and gives the tuner back. It used to spin for about 17 seconds and then say the picture stopped.
+- On iPhone and Apple TV, a busy tuner, a tuner that does not answer, a dark channel, and a server that has stopped use the same words as the web, and the picture comes back when that clears.
+- With only playlists, a stall no longer says the tuner did not answer and then never tries again.
+- Diagnostics says when a container on the bridge network has a tuner the apps still cannot find.
+- A signal check no longer says both tuners are busy when the device has more than two.
 
 ## 0.11.7 — 2026-09-27
 
@@ -279,8 +357,16 @@ Apple TVs play smoothly: no freeze a few seconds into a channel, and no catch in
 
 - An Apple TV that started a channel played a few seconds, then froze for about five while the room settled. It now waits once on its first picture and plays straight through.
 - Apple TVs nudged their speed to hold sync over differences nobody could hear, and each nudge held a frame and clipped speech. They now leave anything under 60 ms alone, wait longer between nudges, and stretch sound smoothly when they do (with the next app update).
-- An Apple TV that sat a quarter second behind the others jumped every 15 seconds trying to close a gap it could not, and each jump hitched the picture and cut the sound. It now plays on (with the next app update).
 - Apple TVs report their playback health to the server log every 10 seconds, so a stutter on a real TV can be traced without a Mac attached (with the next app update).
+- When the broadcast clock steps backward, the picture keeps going. It used to freeze every screen until a channel change.
+- A short gap where a break restarted the encode no longer freezes the web picture for about 2 seconds.
+- A browser tab that was frozen or hidden comes back on the room's frame.
+- Changing channels quickly no longer waits out the tune you already left.
+- An Apple screen leaves the room only when you pause. A pause the player makes on its own no longer sticks until Back in sync.
+
+### Changed
+
+- The install notes explain the latest image tag, an Unraid install, and that an update keeps your folders.
 
 ## 0.11.6 — 2026-09-27
 
@@ -292,6 +378,8 @@ Apple TVs keep playing through a garbled broadcast, and stay together from the s
 - Apple TVs that joined a channel a browser had just started sat about a tenth of a second apart for the first few minutes. They now line up right away (with the next app update).
 - The player shows a clear message when a channel loses its signal, the recordings folder can't be written, or a phone loses its connection, and plays again on its own when that's fixed.
 - A recording that would cross the free-space reserve says how much space is left and how much Broadwave keeps.
+- Pause on iPhone and Apple TV pauses live TV. It used to start again within a quarter second. Back in sync returns that screen to the room.
+- A guide, search, sports, or recordings link while a channel is up closes the player on Apple TV and shrinks it on iPhone, so the page opens.
 
 ## 0.11.5 — 2026-09-27
 
@@ -302,10 +390,6 @@ Optional automatic updates that wait until nobody is watching or recording.
 - An optional updater for Docker Compose and Unraid keeps Broadwave on the newest release. It checks nightly at 03:30 and skips a night while someone is watching, a recording is running, or a recording starts within two hours. See "Automatic updates" in the README.
 - `broadwave -update-check` reports whether the running server is busy, for any updater that can run a check first.
 
-### Changed
-
-- The install section covers Docker Desktop, where the tuner address has to be entered by hand.
-
 ## 0.11.4 — 2026-09-27
 
 Multiview and single screens stop stalling at the live edge.
@@ -314,6 +398,10 @@ Multiview and single screens stop stalling at the live edge.
 
 - A multiview tile of a 60 frames-a-second channel could freeze for 15-20 seconds at a time. Its segments now stay short.
 - A browser alone on a channel whose picture arrives late or unevenly stalled again and again near live. After a stall, that screen and multiview now step back from live, a little at a time, until the picture holds.
+
+### Changed
+
+- The install notes cover Docker Desktop, where the tuner address has to be entered by hand. Setup asks for that address above the playlist form.
 
 ## 0.11.3 — 2026-09-27
 
@@ -328,6 +416,9 @@ Several screens on one channel stay smooth and in step, on Apple TV and in the b
 - The guide no longer lists a show twice.
 - A playlist channel learns its real codecs from the stream and has a preview picture.
 - The web player says when live TV cannot keep going, and setup actions stay on screen on a TV.
+- On Apple TV, Guide, Search, and Settings no longer leave the sidebar open over the page.
+- A browser alone on a channel stays at normal speed. Easing it back from live was dropping frames in Chrome.
+- On the phone, the guide can jump between now and tonight. Arrow keys move to the nearest control.
 
 ## 0.11.2 — 2026-09-27
 
@@ -339,6 +430,11 @@ Sound and picture line up in every browser, and Safari plays live TV again.
 - Safari showed no picture on live TV. It plays now, and the sync between screens corrects Safari by seeking instead of changing its speed, which made it stall.
 - A new screen no longer pauses and then jumps when it joins a channel.
 
+### Added
+
+- On iPhone and Apple TV, Settings can add and scan tuners and playlists, and add a link, a folder, or a playlist file.
+- Channels can be favorited, renamed, renumbered, matched to the guide, or hidden. A series pass can change its padding, priority, which episodes, and how long to keep it.
+
 ## 0.11.1 — 2026-09-26
 
 Live TV no longer freezes a few seconds after it starts.
@@ -347,6 +443,10 @@ Live TV no longer freezes a few seconds after it starts.
 
 - A few seconds into a channel the picture froze for about five seconds while the server moved everyone to the shared delay. Screens now ease onto that delay by playing a little slower for a few minutes, so nothing pauses.
 - A channel starts with a short buffer instead of at the very edge of the broadcast, which stopped the brief stalls in the first minute.
+
+### Added
+
+- On iPhone and Apple TV, Settings can save a guide account and the free-space reserve, list and restore a catalog backup, and open Diagnostics (tuner health, guide depth, and the last antenna reading). Picture, hiding scores, autoplay, and tuner sharing are there too.
 
 ## 0.11.0 — 2026-09-26
 
@@ -358,6 +458,8 @@ Live playback keeps one timeline across renditions, rewinds about ninety minutes
 - A copied broadcast and a transcode of it cut on the same pictures.
 - When the broadcast clock jumps, that segment closes and the next one continues. The time the player shows stays on the wall clock.
 - Rewind reaches about ninety minutes of the broadcast.
+- A multiview tile shows a picture as soon as it has one, instead of staying black.
+- A channel the server already knows starts before its sound scan finishes.
 - A long live session no longer keeps every earlier playlist in memory.
 - The software encoder no longer holds the first picture for one frame per processor core.
 - Each encode follows one channel, so another channel on the same broadcast cannot delay the start.
