@@ -65,6 +65,17 @@ func logRefused(name string) {
 }
 
 func (s *Server) hostAllowed(r *http.Request) bool {
+	return hostAllowed(s.Hosts, r)
+}
+
+// rejectForeignHost is the host check for a listener that is not the main
+// API, such as the tuner emulator. A public name still has to be listed.
+func rejectForeignHost(hosts []string, next http.Handler) http.Handler {
+	s := &Server{Hosts: hosts}
+	return s.withHostCheck(next)
+}
+
+func hostAllowed(hosts []string, r *http.Request) bool {
 	name, port, ok := splitHost(r.Host)
 	if !ok {
 		return false
@@ -72,7 +83,7 @@ func (s *Server) hostAllowed(r *http.Request) bool {
 	if name == "" || localName(name) {
 		return true
 	}
-	for _, h := range append(testHosts, s.Hosts...) {
+	for _, h := range append(testHosts, hosts...) {
 		h = strings.ToLower(strings.TrimRight(strings.TrimSpace(h), "."))
 		if h != "" && (name == h || strings.HasPrefix(h, ".") && strings.HasSuffix(name, h)) {
 			return true
@@ -132,9 +143,26 @@ func localName(name string) bool {
 	return !icann && !strings.Contains(suffix, ".")
 }
 
+// localDevOrigin is the Vite dev server. Its port is not the API's, so the
+// production origin check would refuse it. A page on another site cannot
+// claim this origin: browsers set Origin themselves.
+func localDevOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+		return false
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
+}
+
 // crossSite reports a browser request made by a page on another site. The
-// socket needs it because a WebSocket upgrade is a GET, which the cross-origin
-// protection lets through. Apps and curl send neither header.
+// socket and the stream exports need it because a WebSocket upgrade and a
+// video element are GETs, which the cross-origin protection lets through.
+// Apps and curl send neither header.
 func crossSite(r *http.Request) bool {
 	switch r.Header.Get("Sec-Fetch-Site") {
 	case "same-origin", "none":

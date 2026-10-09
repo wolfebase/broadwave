@@ -44,12 +44,26 @@ func (s *Server) exportLineup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) exportStream(w http.ResponseWriter, r *http.Request) {
+	if refuseBrowserStream(w, r) {
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || s.Hub == nil {
 		http.NotFound(w, r)
 		return
 	}
 	exportChannel(w, r, s.Hub, id)
+}
+
+// refuseBrowserStream rejects a page on another site. A video element is a
+// GET, so the cross-origin layer lets it through, and starting it takes a
+// tuner. Apps that play the export do not send browser site headers.
+func refuseBrowserStream(w http.ResponseWriter, r *http.Request) bool {
+	if !crossSite(r) {
+		return false
+	}
+	httpError(w, "This stream is for apps on your network, not a page on another site.", http.StatusForbidden)
+	return true
 }
 
 func xmltvChannelID(ch store.Channel) string {

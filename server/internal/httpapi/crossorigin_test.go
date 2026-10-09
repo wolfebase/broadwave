@@ -101,6 +101,99 @@ func TestARenamedHostIsRefused(t *testing.T) {
 	}
 }
 
+func TestDevModeStillRefusesAnotherSite(t *testing.T) {
+	h := (&Server{Store: testStore(t), Bus: realtime.NewBus(), Dev: true}).Handler()
+	post := func(header map[string]string) int {
+		req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8477/api/v1/backup", strings.NewReader("not a catalog"))
+		req.Header.Set("Content-Type", "text/plain")
+		for k, v := range header {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if code := post(map[string]string{"Sec-Fetch-Site": "cross-site", "Origin": "https://evil.example"}); code != http.StatusForbidden {
+		t.Fatalf("dev cross-site restore: %d", code)
+	}
+	if code := post(map[string]string{"Origin": "https://evil.example"}); code != http.StatusForbidden {
+		t.Fatalf("dev cross-origin restore: %d", code)
+	}
+	// Vite, on another port of this machine, and curl, still reach the handler.
+	for _, header := range []map[string]string{
+		{"Sec-Fetch-Site": "same-site", "Origin": "http://localhost:5173"},
+		{"Origin": "http://127.0.0.1:5173"},
+		{},
+	} {
+		if code := post(header); code == http.StatusForbidden {
+			t.Fatalf("dev %v refused", header)
+		}
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8477/api/v1/ws", nil)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.Header.Set("Origin", "https://evil.example")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("dev socket: %d", rec.Code)
+	}
+	vite := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8477/api/v1/ws", nil)
+	vite.Header.Set("Origin", "http://localhost:5173")
+	vite.Header.Set("Sec-Fetch-Site", "same-site")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, vite)
+	if rec.Code == http.StatusForbidden {
+		t.Fatal("vite socket refused")
+	}
+}
+
+func TestAnotherSiteCannotStartAStream(t *testing.T) {
+	h := (&Server{Store: testStore(t)}).Handler()
+	ask := func(path string, header map[string]string) int {
+		req := httptest.NewRequest(http.MethodGet, "http://tv.local:8477"+path, nil)
+		for k, v := range header {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Header().Get("X-Frame-Options") != "DENY" || rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+			t.Errorf("%s missing frame or sniff header: %v", path, rec.Header())
+		}
+		return rec.Code
+	}
+	foreign := map[string]string{"Sec-Fetch-Site": "cross-site", "Origin": "https://evil.example"}
+	for _, path := range []string{"/export/stream/1", "/export/mosaic/1-2"} {
+		if code := ask(path, foreign); code != http.StatusForbidden {
+			t.Errorf("%s: %d, want 403", path, code)
+		}
+		// Plex and curl send no browser site header. The channel is absent,
+		// so the handler answers 404 rather than refusing the caller.
+		if code := ask(path, nil); code == http.StatusForbidden {
+			t.Errorf("%s refused an app", path)
+		}
+	}
+	emu := rejectForeignHost(nil, http.HandlerFunc((&emuHandler{store: testStore(t)}).stream))
+	stream := func(host string, header map[string]string) int {
+		req := httptest.NewRequest(http.MethodGet, "http://"+host+"/auto/c1", nil)
+		req.Host = host
+		for k, v := range header {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		emu.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if code := stream("rebind.example.com:8478", nil); code != http.StatusMisdirectedRequest {
+		t.Fatalf("emulator public name: %d, want 421", code)
+	}
+	if code := stream("192.0.2.10:8478", foreign); code != http.StatusForbidden {
+		t.Fatalf("emulator cross-site stream: %d, want 403", code)
+	}
+	if code := stream("192.0.2.10:8478", nil); code == http.StatusForbidden || code == http.StatusMisdirectedRequest {
+		t.Fatalf("emulator app stream refused: %d", code)
+	}
+}
+
 func TestAnotherSiteCannotOpenTheSocket(t *testing.T) {
 	h := (&Server{Store: testStore(t), Bus: realtime.NewBus()}).Handler()
 	open := func(header map[string]string) int {

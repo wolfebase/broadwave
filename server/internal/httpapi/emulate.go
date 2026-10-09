@@ -27,7 +27,7 @@ type Emulator struct {
 
 var lineEmulator Emulator
 
-func SyncEmulator(st *store.Store, hub *live.Hub) {
+func SyncEmulator(st *store.Store, hub *live.Hub, hosts []string) {
 	if st == nil {
 		return
 	}
@@ -53,7 +53,7 @@ func SyncEmulator(st *store.Store, hub *live.Hub) {
 	mux.HandleFunc("GET /lineup.json", h.lineup)
 	mux.HandleFunc("GET /lineup_status.json", h.lineupStatus)
 	mux.HandleFunc("GET /auto/", h.stream)
-	srv := &http.Server{Addr: ":8478", Handler: mux}
+	srv := &http.Server{Addr: ":8478", Handler: rejectForeignHost(hosts, mux)}
 	lineEmulator.srv = srv
 	go func() { _ = srv.ListenAndServe() }()
 }
@@ -123,6 +123,9 @@ func (h *emuHandler) lineup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *emuHandler) stream(w http.ResponseWriter, r *http.Request) {
+	if refuseBrowserStream(w, r) {
+		return
+	}
 	rest := strings.TrimPrefix(r.URL.Path, "/auto/")
 	if id, ok := strings.CutPrefix(rest, "c"); ok {
 		channelID, err := strconv.ParseInt(id, 10, 64)

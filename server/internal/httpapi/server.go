@@ -203,13 +203,28 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /media/poster/{id}", s.poster)
 	mux.HandleFunc("GET /media/art/{kind}/{id}", s.art)
 	mux.HandleFunc("GET /", s.ui)
+	var handler http.Handler
 	if s.Dev {
-		return s.withHostCheck(s.withDevCORS(mux))
+		handler = s.withDevCORS(mux)
+	} else {
+		// The LAN API has no sign-in, so a page on another site must not be able
+		// to post to it: a restore from any tab would replace the catalog. The
+		// apps and curl send no Origin and pass.
+		handler = http.NewCrossOriginProtection().Handler(mux)
 	}
-	// The LAN API has no sign-in, so a page on another site must not be able
-	// to post to it: a restore from any tab would replace the catalog. The
-	// apps and curl send no Origin and pass.
-	return s.withHostCheck(http.NewCrossOriginProtection().Handler(mux))
+	return withBrowserHeaders(s.withHostCheck(handler))
+}
+
+// withBrowserHeaders keeps the admin UI out of another site's frame and stops
+// a response from being sniffed into a page.
+func withBrowserHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
@@ -738,18 +753,42 @@ func (s *Server) withDevCORS(next http.Handler) http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:") {
+		if localDevOrigin(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, If-None-Match")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Expose-Headers", "ETag")
+			w.Header().Set("Vary", "Origin")
 		}
+		// CORS headers do not stop the request. A page on another site must
+		// not post here just because -dev is on. The Vite origin is allowed.
 		if r.Method == http.MethodOptions {
+			if !localDevOrigin(origin) {
+				http.Error(w, "cross-origin request", http.StatusForbidden)
+				return
+			}
 			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if devCrossSite(r) {
+			http.Error(w, "cross-origin request", http.StatusForbidden)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// devCrossSite is the dev-server form of the production cross-origin check.
+// Safe methods stay open. A localhost origin is the Vite dev server.
+func devCrossSite(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	}
+	if localDevOrigin(r.Header.Get("Origin")) {
+		return false
+	}
+	return crossSite(r)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

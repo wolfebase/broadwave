@@ -298,7 +298,7 @@ func main() {
 			if hub != nil {
 				hub.ReleaseAbandoned(45 * time.Second)
 				if !*staging {
-					httpapi.SyncEmulator(st, hub)
+					httpapi.SyncEmulator(st, hub, api.Hosts)
 				}
 			}
 		}

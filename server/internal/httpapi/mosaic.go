@@ -130,6 +130,9 @@ func (s *Server) mosaicMedia(w http.ResponseWriter, r *http.Request) {
 // exportMosaic is a mosaic the exports list, as MPEG-TS, for apps that take
 // a stream URL.
 func (s *Server) exportMosaic(w http.ResponseWriter, r *http.Request) {
+	if refuseBrowserStream(w, r) {
+		return
+	}
 	ids, err := live.ParseMosaicKey(r.PathValue("key"))
 	if err != nil || s.Hub == nil || !isShared(r.Context(), s.Store, r.PathValue("key")) {
 		http.NotFound(w, r)
