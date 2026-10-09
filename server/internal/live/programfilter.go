@@ -459,6 +459,21 @@ func (p *programPipe) keepPES(pid int, pkt []byte) bool {
 		}
 		return true
 	}
+	// Sound can lead the picture by a second. Farther than that, it is still
+	// on the clock the picture left. The next encode copies timestamps, so
+	// this must not become the audio baseline or ffmpeg clamps every later
+	// packet to it.
+	if pid != p.video && p.clocks != nil {
+		if v := p.clocks[p.video]; v != nil && ptsDelta(ts, v.last) > pesBack {
+			if c == nil {
+				c = &pesClock{}
+				p.clocks[pid] = c
+			}
+			c.last, c.agree, c.dropping = v.last, 0, true
+			c.shift++
+			return false
+		}
+	}
 	if c == nil {
 		if p.clocks == nil {
 			p.clocks = map[int]*pesClock{}

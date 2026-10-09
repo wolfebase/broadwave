@@ -862,6 +862,76 @@ func TestProgramFilterHandsABackwardsBreakToTheNextEncode(t *testing.T) {
 	}
 }
 
+// A splice moves the picture first. Sound that is still on the old clock
+// must not become the next encode's audio baseline: that encode copies
+// timestamps, and ffmpeg then clamps every later audio packet to the high one.
+func TestProgramFilterDropsOldClockAudioAfterAVideoBreak(t *testing.T) {
+	step := int64(1500)
+	base := int64(1_000_000)
+	// Farther back than pesBack, so it is a real splice and not a reorder.
+	// The audio lead over the new picture is this plus one step.
+	back := int64(pesBack) + 90000
+	head := twoProgramTS(1, 0x1000, 0x110, 0x111, 2, 0x1001, 0x210)
+	tables := head[:3*188]
+
+	var stream []byte
+	var cc byte = 1
+	for i := range 5 {
+		ts := base + int64(i)*step
+		stream = append(stream, videoRun(0x110, []int64{ts}, &cc)...)
+		stream = append(stream, audioRun(0x111, []int64{ts})...)
+	}
+	var fresh []int64
+	for i := range 4 {
+		v := base + 4*step - back + int64(i)*step
+		// Picture has stepped back; this sound is still on the old clock.
+		stream = append(stream, videoRun(0x110, []int64{v}, &cc)...)
+		stream = append(stream, audioRun(0x111, []int64{base + int64(5+i)*step})...)
+	}
+	for i := range 4 {
+		v := base + 4*step - back + int64(4+i)*step
+		fresh = append(fresh, v)
+		stream = append(stream, videoRun(0x110, []int64{v}, &cc)...)
+		stream = append(stream, audioRun(0x111, []int64{v})...)
+	}
+
+	var breaks int
+	var old, next bytes.Buffer
+	w := newProgramPipe(&closeBuf{&old}, 1)
+	p := w.(*programPipe)
+	p.sw = &pipeSwitch{}
+	p.onBreak = func() { breaks++ }
+	if _, err := w.Write(append(head[:len(head)-2*188], stream...)); err != nil {
+		t.Fatal(err)
+	}
+	if breaks != 1 {
+		t.Fatalf("breaks %d, want 1", breaks)
+	}
+	if got := videoTimes(old.Bytes(), 0x110); len(got) != 5 || got[4] != base+4*step {
+		t.Fatalf("old encode video %v", got)
+	}
+	p.sw.give(&closeBuf{&next})
+	// The last two packets stay held until more bytes follow. A frame is
+	// exactly two packets, and so is a short table run: two nulls push them
+	// through. The new pipe also needs the tables, which are not in the tail.
+	nulls := bytes.Repeat(tsPacket(0x1fff, false, nil), 2)
+	if _, err := w.Write(append(tables, nulls...)); err != nil {
+		t.Fatal(err)
+	}
+	if got := videoTimes(next.Bytes(), 0x110); len(got) != 8 || got[0] != base+4*step-back {
+		t.Fatalf("next encode video %v", got)
+	}
+	got := videoTimes(next.Bytes(), 0x111)
+	if len(got) != len(fresh) {
+		t.Fatalf("next encode audio %v, want %v", got, fresh)
+	}
+	for i := range fresh {
+		if got[i] != fresh[i] {
+			t.Fatalf("next encode audio %v, want %v", got, fresh)
+		}
+	}
+}
+
 func TestProgramFilterDropsOneBadHeaderBack(t *testing.T) {
 	pts := []int64{1_000_000, 1_002_880, 1_005_760, 200_000, 1_008_640, 1_011_520}
 	count := 0
