@@ -14,7 +14,7 @@ TV/Evening News/Evening News - 2026-10-05 - Storm Coverage.ts
 Movies/Night Flight (1999)/Night Flight (1999).ts
 ```
 
-The season and episode come from the guide. A show the guide gives no episode number goes in its show folder by date, with the episode's name, or the start time (`1930`) when it has none. A movie gets the year it came out when the guide has it. To watch them in Plex or Jellyfin, add a TV library on the `TV` folder and a movie library on `Movies`. A recording with no guide listing is filed under its channel's name.
+The season and episode come from the guide. A season folder is used when the guide has both a season and an episode number. Otherwise the file stays in its show folder, named with the date and the episode's name, or the start time (`1930`) when it has none. A movie gets the year it came out when the guide has it. To watch them in Plex or Jellyfin, add a TV library on the `TV` folder and a movie library on `Movies`. A recording with no guide listing is filed under its channel's name.
 
 Settings › Recording folders › All in one folder puts new recordings straight in the recordings folder instead, named by start time, channel number, and channel name:
 
@@ -38,7 +38,7 @@ A poster, when there is one, is kept with the server's other artwork, not beside
 
 Record this airing, record the series, or record every game.
 
-A series pass records the show whose title matches, on one channel or any. A pass can also match words anywhere in a title ("Chiefs") or a guide category ("Sports"). It can be limited to new episodes, to days of the week, and to a time of day; a window that runs past midnight counts as the night it began. While you set a pass up, the schedule shows what it would record in the next two weeks and anything it would stop from recording. Padding is in minutes before the listing and after it. A new pass keeps every episode. You can keep only the ones you have not watched, or the last few: when a new episode finishes, older finished ones of that show are removed. The last few, with no number set, keeps the newest one. A recording that is still in progress is left alone. An episode already in the library is not recorded again, unless you deleted it and the pass is set to record it again. A limit stops new ones once that many are unwatched.
+A series pass records the show whose title matches, on one channel or any. A pass can also match words anywhere in a title ("Chiefs") or a guide category ("Sports"). It can be limited to new episodes, to days of the week, and to a time of day; a window that runs past midnight counts as the night it began. While you set a pass up, the schedule shows what it would record in the next two weeks and anything it would stop from recording. Padding is in minutes before the listing and after it. A new pass keeps every episode. You can keep only the ones you have not watched, or the last few: when a new episode finishes, older finished ones of that show are removed. Watched, for that rule, means you marked it watched, played to the last 15 seconds, or played through 90% of it. Marking it unwatched keeps it. The last few, with no number set, keeps the newest one. A recording that is still in progress is left alone. An episode already in the library is not recorded again, unless you deleted it and the pass is set to record it again. A limit stops new ones once that many are unwatched.
 
 Record this airing is a one-time pass for that channel and that start time. It wins over a series pass for the same showing, and it records even when that episode is already in the library. The one-time pass is removed a day after the showing ends.
 
@@ -74,7 +74,7 @@ Settings › When space runs low is "Skip new recordings" unless you change it. 
 
 Settings › Delete watched recordings deletes a recording a number of days after it was watched. It is off unless you pick a number.
 
-Both count a recording as watched once it was played to its last seconds or marked watched. Stopping a few minutes early does not count. A recording played in the last 6 hours stays, and playing one again starts its days over. Neither touches an unwatched recording, one still recording, a file outside the recordings folder, or a recording you chose to keep forever (Keep forever on its row). A keep rule skips a kept recording too, and doesn't count it among the episodes it keeps. Each deletion is in Activity.
+Both count a recording as watched once it was played to its last 15 seconds or marked watched. Stopping earlier does not, even through 90% of a long recording. A recording played in the last 6 hours stays, and playing one again starts its days over. Neither touches an unwatched recording, one still recording, a file outside the recordings folder, or a recording you chose to keep forever (Keep forever on its row). A keep rule skips a kept recording too, and doesn't count it among the episodes it keeps. Each deletion is in Activity.
 
 ## Playing one
 
