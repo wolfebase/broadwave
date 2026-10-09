@@ -347,3 +347,33 @@ func TestDeletingAFailedRecordingLeavesTheEpisodeOpen(t *testing.T) {
 		t.Fatal("deleting a finished recording left the episode unmarked")
 	}
 }
+
+func TestDeleteKeepsTheEpisodeWhenTheRowCannotBeRemoved(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	started := time.Now().Add(-time.Hour)
+	id, err := st.CreateRecording(ctx, Recording{
+		ChannelID: 1, Title: "Show", Subtitle: "Pilot", ProgramID: "EP1",
+		Status: "complete", Path: "show.ts", StartedAt: started,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.db.Exec(`CREATE TRIGGER reject_recording_delete BEFORE DELETE ON recordings BEGIN SELECT RAISE(ABORT, 'boom'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteRecording(ctx, id); err == nil {
+		t.Fatal("deleted a recording the database rejected")
+	}
+	if _, err := st.Recording(ctx, id); err != nil {
+		t.Fatalf("row: %v", err)
+	}
+	seen, err := st.SeenDeleted(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := EpisodeKey("EP1", "Show", "Pilot", 1)
+	if seen[key] {
+		t.Fatal("a delete that did not finish marked the episode dropped")
+	}
+}

@@ -677,16 +677,20 @@ func (r Recording) Played() bool {
 }
 
 func (s *Store) DeleteRecording(ctx context.Context, id int64) error {
-	if rec, err := s.Recording(ctx, id); err == nil && rec.Status != "failed" {
-		// A recording that never started is not an episode the viewer chose
-		// to drop. Marking it deleted would skip the next airing.
-		_ = s.RememberSeen(ctx, EpisodeKey(rec.ProgramID, rec.Title, rec.Subtitle, rec.ChannelID), true)
-	}
+	rec, recErr := s.Recording(ctx, id)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if recErr == nil && rec.Status != "failed" {
+		// A recording that never started is not an episode the viewer chose
+		// to drop. Marking it deleted would skip the next airing. The mark
+		// shares this transaction, so a delete that fails does not drop it.
+		if err := rememberSeen(ctx, tx, EpisodeKey(rec.ProgramID, rec.Title, rec.Subtitle, rec.ChannelID), true); err != nil {
+			return err
+		}
+	}
 	for _, query := range []string{
 		`DELETE FROM markers WHERE recording_id = ?`,
 		`DELETE FROM episode_prints WHERE recording_id = ?`,
@@ -911,10 +915,14 @@ func (r Recording) WatchedSince() time.Time {
 }
 
 func (s *Store) RememberSeen(ctx context.Context, key string, deleted bool) error {
+	return rememberSeen(ctx, s.db, key, deleted)
+}
+
+func rememberSeen(ctx context.Context, db sqlExec, key string, deleted bool) error {
 	if key == "" {
 		return nil
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO seen_programs (program_key, deleted) VALUES (?, ?)
+	_, err := db.ExecContext(ctx, `INSERT INTO seen_programs (program_key, deleted) VALUES (?, ?)
 		ON CONFLICT(program_key) DO UPDATE SET deleted = excluded.deleted`, key, boolInt(deleted))
 	return err
 }
