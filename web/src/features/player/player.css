@@ -7,12 +7,18 @@
   outline: none;
 }
 
-/* The picture fills the screen, so an outer ring sits off it. */
-html .stage:focus-visible {
+/* The picture fills the screen and covers an inset shadow. The outline paints on top of it. */
+html:root section.stage:focus-visible,
+html:root[data-layout="tv"] section.stage:focus-visible {
+  outline: 4px solid var(--brand-blue);
+  outline-offset: -4px;
   box-shadow: inset 0 0 0 4px var(--brand-blue);
 }
 
-html .stage.mini:focus-visible {
+html:root section.stage.mini:focus-visible,
+html:root[data-layout="tv"] section.stage.mini:focus-visible {
+  outline: 4px solid var(--brand-blue);
+  outline-offset: 4px;
   box-shadow:
     inset 0 0 0 4px var(--brand-blue),
     0 24px 60px rgba(0, 0, 0, 0.6),

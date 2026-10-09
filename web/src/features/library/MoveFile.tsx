@@ -3,6 +3,7 @@ import { moveRecording } from "../../api";
 import { useData } from "../../app/data";
 import { focusRing } from "../../app/remote";
 import { actionName } from "../../lib/actionName";
+import { dismissesLayer, isTextField } from "../../lib/dialogFocus";
 import type { Recording } from "../../types";
 import { recordingSubject } from "./model";
 
@@ -68,10 +69,11 @@ export function MoveFile({ rec }: { rec: Recording }) {
         void save();
       }}
       onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          setOpen(false);
-        }
+        if (event.key === "Backspace" && isTextField(event.target)) return;
+        if (!dismissesLayer(event.key, event.target)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setOpen(false);
       }}
     >
       <label className="field">

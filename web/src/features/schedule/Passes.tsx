@@ -3,6 +3,7 @@ import type { Channel, NewPass, Pass, PassPreview } from "../../types";
 import { addSeriesPass, deletePass, orderPasses, previewPass, updatePass } from "../../api";
 import { useData } from "../../app/data";
 import { focusRing } from "../../app/remote";
+import { dismissesLayer } from "../../lib/dialogFocus";
 import { formatClock } from "../../time";
 
 const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -63,6 +64,7 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
   const [removeBusy, setRemoveBusy] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const restoreRemove = useRef<number | null>(null);
+  const editingWas = useRef<number | "new" | null>(null);
   // A moved row keeps focus on its button, or on the other one at an end of the list.
   useEffect(() => {
     const want = focusAfter.current;
@@ -99,6 +101,30 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [removing]);
+  // Closing the editor puts focus back on New pass or that pass's Edit.
+  useEffect(() => {
+    const previous = editingWas.current;
+    editingWas.current = editing;
+    if (editing != null || previous == null) return;
+    const el =
+      previous === "new"
+        ? document.querySelector<HTMLButtonElement>("[data-pass-new]")
+        : document.querySelector<HTMLButtonElement>(`[data-pass-edit="${previous}"]`);
+    focusRing(el);
+  }, [editing]);
+  // Escape closes the editor. A title field would otherwise only blur.
+  useEffect(() => {
+    if (editing == null) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (!dismissesLayer(event.key, event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setEditing(null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [editing]);
 
   function askRemove(id: number) {
     setEditing(null);
@@ -178,7 +204,7 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
       <div className="passes-head">
         <h3 className="section-title">Passes</h3>
         {editing === "new" ? null : (
-          <button type="button" className="btn small" onClick={() => setEditing("new")}>
+          <button type="button" className="btn small" data-pass-new onClick={() => setEditing("new")}>
             New pass
           </button>
         )}
@@ -248,7 +274,7 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
                   <button type="button" className="btn small" data-pass={pass.id} data-move="down" aria-label={`Move ${pass.title} down`} disabled={index === rows.length - 1} onClick={() => move(pass.id, 1)}>
                     Down
                   </button>
-                  <button type="button" className="btn small" aria-label={`${editing === pass.id ? "Close" : "Edit"} ${pass.title}`} aria-expanded={editing === pass.id} onClick={() => setEditing(editing === pass.id ? null : pass.id)}>
+                  <button type="button" className="btn small" data-pass-edit={pass.id} aria-label={`${editing === pass.id ? "Close" : "Edit"} ${pass.title}`} aria-expanded={editing === pass.id} onClick={() => setEditing(editing === pass.id ? null : pass.id)}>
                     {editing === pass.id ? "Close" : "Edit"}
                   </button>
                   <button type="button" className="btn small" data-pass-remove={pass.id} aria-label={`Remove ${pass.title}`} onClick={() => askRemove(pass.id)}>

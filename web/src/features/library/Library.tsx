@@ -4,6 +4,7 @@ import { copy } from "../../strings";
 import { formatBytes, formatClockPoint } from "../../lib/format";
 import { focusRing } from "../../app/remote";
 import { navigate } from "../../app/router";
+import { dismissesLayer } from "../../lib/dialogFocus";
 import { RecordingCard, Shelf } from "../../ui/shelf";
 import { DownloadLink } from "../recordings/DownloadLink";
 import { signalLine } from "./health";
@@ -50,6 +51,8 @@ export function Library({
   const [busy, setBusy] = useState(false);
   const rootRef = useRef<HTMLElement>(null);
   const armedWas = useRef<number | null>(null);
+  const manyRef = useRef<HTMLButtonElement>(null);
+  const restoreDelete = useRef<number | "many" | null>(null);
   const shown = filterRecordings(recordings, show ? "all" : kind, libraryFilter === "unwatched");
   const { shows, movies } = buildLibrary(shown, sort);
   const resume = show ? [] : continueWatching(recordings);
@@ -63,6 +66,40 @@ export function Library({
     if (previous == null || recordings.some((rec) => rec.id === previous)) return;
     focusRing(rootRef.current?.querySelector<HTMLElement>("button, a[href]"));
   }, [recordings, armed]);
+  const confirming = (armed != null && !selecting) || armedMany;
+  // Escape cancels the confirm. Back would otherwise leave the library.
+  useEffect(() => {
+    if (confirming) {
+      const onKey = (event: KeyboardEvent) => {
+        if (event.metaKey || event.ctrlKey || event.altKey) return;
+        if (!dismissesLayer(event.key, event.target)) return;
+        const target = event.target;
+        if (target instanceof HTMLElement && target.closest("form")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (armed != null && !selecting) {
+          restoreDelete.current = armed;
+          setArmed(null);
+        } else {
+          restoreDelete.current = "many";
+          setArmedMany(false);
+        }
+      };
+      window.addEventListener("keydown", onKey, true);
+      return () => window.removeEventListener("keydown", onKey, true);
+    }
+    const back = restoreDelete.current;
+    if (back == null) return;
+    restoreDelete.current = null;
+    const el =
+      back === "many"
+        ? rootRef.current?.querySelector<HTMLElement>("[data-delete-many]")
+        : rootRef.current?.querySelector<HTMLElement>(`[data-delete="${back}"]`);
+    focusRing(el);
+  }, [armed, armedMany, confirming, selecting]);
+  useEffect(() => {
+    if (armedMany) focusRing(manyRef.current);
+  }, [armedMany]);
   const pick = (recs: Recording[], on: boolean) =>
     setPicked((was) => {
       const next = new Set(was);
@@ -177,15 +214,22 @@ export function Library({
           </button>
           {armedMany ? (
             <>
-              <button type="button" className="btn primary" disabled={chosen.length === 0 || busy} onClick={() => runMany("delete")}>
+              <button ref={manyRef} type="button" className="btn primary" disabled={chosen.length === 0 || busy} onClick={() => runMany("delete")}>
                 {chosen.length === 1 ? "Delete 1 file" : `Delete ${chosen.length} files`}
               </button>
-              <button type="button" className="btn" onClick={() => setArmedMany(false)}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  restoreDelete.current = "many";
+                  setArmedMany(false);
+                }}
+              >
                 Keep them
               </button>
             </>
           ) : (
-            <button type="button" className="btn" disabled={chosen.length === 0 || busy} onClick={() => setArmedMany(true)}>
+            <button type="button" className="btn" data-delete-many disabled={chosen.length === 0 || busy} onClick={() => setArmedMany(true)}>
               Delete
             </button>
           )}

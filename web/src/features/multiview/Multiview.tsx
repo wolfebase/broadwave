@@ -5,7 +5,9 @@ import { useLayout } from "../../app/layout";
 import { usePlayer } from "../../app/player";
 import { focusRing } from "../../app/remote";
 import { inAppDepth, navigate, useRoute } from "../../app/router";
+import { actionName } from "../../lib/actionName";
 import { airingAt } from "../../lib/guide";
+import { menuStep } from "../../lib/menuStep";
 import { events } from "../../lib/events";
 import { addMosaic, mosaicKey, mosaicShareMax, sharedMosaics } from "../../lib/mosaic";
 import { copy } from "../../strings";
@@ -318,16 +320,55 @@ export function Multiview() {
     else navigate("/guide");
   }
 
+  const menuWas = useRef(false);
+  useEffect(() => {
+    const tile = document.querySelector<HTMLElement>(`.mv-tile[data-channel="${focus}"]`);
+    if (menu) focusRing(tile?.querySelector<HTMLElement>("[role='menuitem']"));
+    else if (menuWas.current) focusRing(tile);
+    menuWas.current = menu;
+  }, [menu, focus]);
+
   function onKey(event: KeyboardEvent) {
     const k = event.key;
     const target = event.target;
     const control = target instanceof Element && target.closest("button, a[href], input, select, textarea");
     if (k === "Escape" || k === "Backspace") {
       event.preventDefault();
-      if (menu) return setMenu(false);
-      if (guide) return go({ add: false });
+      event.stopPropagation();
+      if (menu) {
+        const active = document.activeElement;
+        if (active instanceof Element && active.closest(".mv-menu")) {
+          focusRing(document.querySelector<HTMLElement>(`.mv-tile[data-channel="${focus}"]`));
+        }
+        setMenu(false);
+        return;
+      }
+      if (guide) {
+        const active = document.activeElement;
+        if (active instanceof Element && active.closest(".mv-guide")) {
+          focusRing(document.querySelector<HTMLElement>(`.mv-tile[data-channel="${mark}"]`));
+        }
+        go({ add: false });
+        return;
+      }
       leaveGrid();
       return;
+    }
+    if (menu && (k === "ArrowUp" || k === "ArrowDown" || k === "ArrowLeft" || k === "ArrowRight" || k === "Home" || k === "End")) {
+      const host = document.querySelector<HTMLElement>(`.mv-tile[data-channel="${focus}"] .mv-menu`);
+      const items = host ? [...host.querySelectorAll<HTMLElement>("[role='menuitem']")] : [];
+      const active = document.activeElement;
+      const index = items.findIndex((el) => el === active);
+      const here =
+        index >= 0 ||
+        (active instanceof Element && (Boolean(active.closest(".mv-menu")) || Boolean(active.closest(".mv-tile")) || active.classList.contains("mv")));
+      const next = here ? menuStep(items.length, index, k) : null;
+      if (next != null && items[next]) {
+        event.preventDefault();
+        event.stopPropagation();
+        focusRing(items[next]);
+        return;
+      }
     }
     // Buttons, links, and fields keep their own keys. Enter activates them.
     if (control && (k === "Enter" || k.startsWith("Arrow"))) return;
@@ -472,7 +513,7 @@ export function Multiview() {
       </header>
       {shareNote?.key === shareKey ? <p className="mv-note" role="status">{shareNote.text}</p> : null}
       {banner ? <p className="mv-banner" role="status">{banner}</p> : null}
-      {hint ? <p className="mv-note">Select a tile to hear it.</p> : null}
+      {hint ? <p className="mv-note" role="status">Select a tile to hear it.</p> : null}
       {notice ? <p className="mv-note" role="status">{notice}</p> : null}
       <div className="mv-fit">
       <div className={`mv-grid${layoutMode === "phone" && layout === "2up" ? " stacked" : ""}`} data-layout={layout}>
@@ -648,27 +689,29 @@ function Tile({
         <div className="mv-error" role="alert">
           <p>{stream.error}</p>
           {stream.needsConfirm ? (
-            <button type="button" className="btn small" onClick={(event) => { event.stopPropagation(); stream.confirm(); }}>
+            <button type="button" className="btn small" aria-label={`Watch ${channel.displayNumber} ${channel.displayName} anyway`} onClick={(event) => { event.stopPropagation(); stream.confirm(); }}>
               Watch anyway
             </button>
           ) : (
-            <button type="button" className="btn small" onClick={(event) => { event.stopPropagation(); stream.retry(); }}>
+            <button type="button" className="btn small" aria-label={actionName("Try again", `${channel.displayNumber} ${channel.displayName}`)} onClick={(event) => { event.stopPropagation(); stream.retry(); }}>
               Try again
             </button>
           )}
-          <button type="button" className="btn small" onClick={(event) => { event.stopPropagation(); onRemove(); }}>
+          <button type="button" className="btn small" aria-label={actionName("Remove", `${channel.displayNumber} ${channel.displayName}`)} onClick={(event) => { event.stopPropagation(); onRemove(); }}>
             Remove
           </button>
         </div>
       ) : null}
       {menu ? (
-        <div className="mv-menu" role="menu">
-          <button type="button" className="btn" onClick={(e) => { e.stopPropagation(); onFocus(); }}>Make big</button>
-          <button type="button" className="btn" onClick={(e) => { e.stopPropagation(); onRecord(); }}>Record</button>
-          <button type="button" className="btn" onClick={(e) => { e.stopPropagation(); onRemove(); }}>Remove</button>
+        <div className="mv-menu" role="menu" aria-label={`${channel.displayNumber} ${channel.displayName}`}>
+          <button type="button" role="menuitem" className="btn" aria-label={actionName("Make big", `${channel.displayNumber} ${channel.displayName}`)} onClick={(e) => { e.stopPropagation(); onFocus(); }}>Make big</button>
+          <button type="button" role="menuitem" className="btn" aria-label={actionName("Record", `${title} on ${channel.displayNumber} ${channel.displayName}`)} onClick={(e) => { e.stopPropagation(); onRecord(); }}>Record</button>
+          <button type="button" role="menuitem" className="btn" aria-label={actionName("Remove", `${channel.displayNumber} ${channel.displayName}`)} onClick={(e) => { e.stopPropagation(); onRemove(); }}>Remove</button>
           <button
             type="button"
+            role="menuitem"
             className="btn"
+            aria-label={actionName("Full screen", `${channel.displayNumber} ${channel.displayName}`)}
             onClick={(e) => {
               e.stopPropagation();
               const el = e.currentTarget.closest(".mv-tile");

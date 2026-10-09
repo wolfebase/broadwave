@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { focusRing } from "../../app/remote";
+import { dismissesLayer } from "../../lib/dialogFocus";
 import { BackIcon, CloseIcon, ExpandIcon, PauseIcon, PipIcon, PlayIcon, VolumeIcon } from "../../ui/icons";
 import { playerControls, playerTabTarget } from "./focusCycle";
 import "./player.css";
@@ -81,6 +82,7 @@ export function Stage({
   const [muted, setMuted] = useState(false);
   const ownRoot = useRef<HTMLElement>(null);
   const root = rootRef ?? ownRoot;
+  const optionsRef = useRef<HTMLButtonElement>(null);
   // A tap that brings the chrome back. The click that follows must not pause:
   // a paused picture keeps the chrome up.
   const wake = useRef(0);
@@ -119,7 +121,7 @@ export function Stage({
     const dock = ".stage-top, .stage-dock, .player-note, .stage-fab";
     const fade = () => {
       const active = document.activeElement;
-      if (active instanceof Element && active.closest(dock)) root.current?.focus({ preventScroll: true });
+      if (active instanceof Element && active.closest(dock)) root.current?.focus({ preventScroll: true, focusVisible: true } as FocusOptions);
       setTimedIdle(true);
     };
     let timer = window.setTimeout(fade, 3200);
@@ -204,6 +206,19 @@ export function Stage({
                 if (target != null && list[target]) {
                   event.preventDefault();
                   focusRing(list[target]);
+                }
+              }
+              // Options is a layer over the picture. Close it before leaving the page.
+              if (open && dismissesLayer(event.key, event.target)) {
+                const rootEl = root.current;
+                const above = rootEl?.querySelector("[role='dialog'], .mini-guide");
+                const typing = event.key === "Backspace" && rootEl?.querySelector(".typed-number");
+                if (!above && !typing) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setOpen(false);
+                  focusRing(optionsRef.current);
+                  return;
                 }
               }
               onKeyDown?.(event);
@@ -359,7 +374,7 @@ export function Stage({
               <ExpandIcon />
             </button>
             {more ? (
-              <button type="button" className={open ? "text-btn on" : "text-btn"} onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls={open ? "player-options" : undefined}>
+              <button ref={optionsRef} type="button" className={open ? "text-btn on" : "text-btn"} data-options onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls={open ? "player-options" : undefined}>
                 Options
               </button>
             ) : null}
