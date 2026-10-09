@@ -621,7 +621,7 @@ export interface paths {
         };
         get: operations["listRecordings"];
         put?: never;
-        /** @description Record a channel now. When the guide has the current airing, the recording runs to its end plus padding. */
+        /** @description Record a channel now. When the guide has the current airing, the recording runs to its end plus padding. A start is held to a day. */
         post: operations["startRecording"];
         delete?: never;
         options?: never;
@@ -3200,6 +3200,7 @@ export interface operations {
                 "application/json": {
                     /** Format: int64 */
                     channelId: number;
+                    /** @description How long to record, in minutes. Blank or 0 records for an hour, or until the current listing ends when that is longer. A start is held to a day. */
                     minutes?: number;
                     title?: string;
                 };

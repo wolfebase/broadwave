@@ -1861,15 +1861,29 @@ func (h *Hub) Record(ctx context.Context, channelID int64, minutes int, title st
 	return h.RecordMeta(ctx, minutes, store.Recording{ChannelID: channelID, Title: title})
 }
 
+// maxRecordMinutes is the longest a recording starts for. The scheduler
+// stays inside eight hours. A game that is still on is extended on its own.
+const maxRecordMinutes = 24 * 60
+
+// clampRecordMinutes turns a blank or a huge request into a length the
+// timer can hold. A day is the ceiling. Zero stays an hour.
+func clampRecordMinutes(minutes int) int {
+	if minutes <= 0 {
+		return 60
+	}
+	if minutes > maxRecordMinutes {
+		return maxRecordMinutes
+	}
+	return minutes
+}
+
 // RecordMeta records the original broadcast of a channel. It shares the tuned
 // frequency with anyone watching and starts no transcode.
 func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording) (store.Recording, error) {
 	h.preemptScan()
 	channelID := meta.ChannelID
 	title := meta.Title
-	if minutes <= 0 {
-		minutes = 60
-	}
+	minutes = clampRecordMinutes(minutes)
 	if err := h.ensureSpace(ctx); err != nil {
 		return store.Recording{}, err
 	}
