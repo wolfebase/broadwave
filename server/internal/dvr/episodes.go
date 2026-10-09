@@ -144,7 +144,14 @@ func showBounds(ctx context.Context, st *store.Store, rec store.Recording, lengt
 	if rec.StartedAt.IsZero() || length <= 0 || rec.GameID != "" {
 		return 0, 0
 	}
-	airings, err := st.Airings(ctx, rec.StartedAt.Add(-time.Hour), rec.StartedAt.Add(time.Duration(length*float64(time.Second))))
+	q := store.AiringQuery{
+		From: rec.StartedAt.Add(-time.Hour),
+		To:   rec.StartedAt.Add(time.Duration(length * float64(time.Second))),
+	}
+	if rec.ChannelID != 0 {
+		q.Channels = []int64{rec.ChannelID}
+	}
+	airings, err := st.QueryAirings(ctx, q)
 	if err != nil {
 		return 0, 0
 	}

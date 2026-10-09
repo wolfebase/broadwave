@@ -66,24 +66,20 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	channels, _ := s.Store.Channels(ctx, true)
-	airings, _ := s.Store.Airings(ctx, s.now(), s.now().Add(14*24*time.Hour))
-	listed := map[int64]bool{}
-	var last time.Time
-	for _, a := range airings {
-		listed[a.ChannelID] = true
-		if a.End.After(last) {
-			last = a.End
+	total, last, guideRows, _ := s.Store.GuideWindow(ctx, s.now(), s.now().Add(14*24*time.Hour))
+	until := map[int64]time.Time{}
+	source := map[int64]string{}
+	for _, row := range guideRows {
+		if !row.Until.IsZero() {
+			until[row.ChannelID] = row.Until
+		}
+		if row.Source != "" {
+			source[row.ChannelID] = row.Source
 		}
 	}
-	guideInfo := map[string]any{"channels": len(channels), "channelsWithListings": len(listed), "airings": len(airings)}
+	guideInfo := map[string]any{"channels": len(channels), "channelsWithListings": len(guideRows), "airings": total}
 	if !last.IsZero() {
 		guideInfo["listingsUntil"] = last
-	}
-	until := map[int64]time.Time{}
-	for _, a := range airings {
-		if a.End.After(until[a.ChannelID]) {
-			until[a.ChannelID] = a.End
-		}
 	}
 	coverage := make([]map[string]any, 0, len(channels))
 	for _, ch := range channels {
@@ -91,7 +87,7 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 		if t, ok := until[ch.ID]; ok && !t.IsZero() {
 			item["until"] = t
 		}
-		if src := sourceFor(ch.ID, airings); src != "" {
+		if src := source[ch.ID]; src != "" {
 			item["source"] = src
 		}
 		coverage = append(coverage, item)
@@ -199,15 +195,6 @@ func tunerWentQuiet(devices []store.Device, busy bool, now time.Time) bool {
 		}
 	}
 	return false
-}
-
-func sourceFor(channelID int64, airings []store.Airing) string {
-	for _, a := range airings {
-		if a.ChannelID == channelID && a.GuideSource != "" {
-			return a.GuideSource
-		}
-	}
-	return ""
 }
 
 func driPresent() bool {

@@ -484,10 +484,8 @@ func (s *Server) readyLine(ctx context.Context) (string, int64) {
 	channels = withNetworks(channels)
 	listed := map[int64]bool{}
 	now := s.now()
-	if airings, err := s.Store.Airings(ctx, now, now.Add(14*24*time.Hour)); err == nil {
-		for _, row := range airings {
-			listed[row.ChannelID] = true
-		}
+	if ids, err := s.Store.ChannelsListedBetween(ctx, now, now.Add(14*24*time.Hour)); err == nil {
+		listed = ids
 	}
 	withGuide := 0
 	var channelID int64
@@ -523,21 +521,17 @@ func (s *Server) listedChannels(ctx context.Context) int {
 		return 0
 	}
 	now := s.now()
-	airings, err := s.Store.Airings(ctx, now, now.Add(14*24*time.Hour))
+	ids, err := s.Store.ChannelsListedBetween(ctx, now, now.Add(14*24*time.Hour))
 	if err != nil {
 		return 0
 	}
-	have := map[int64]bool{}
+	listed := 0
 	for _, ch := range channels {
-		have[ch.ID] = true
-	}
-	listed := map[int64]bool{}
-	for _, row := range airings {
-		if have[row.ChannelID] {
-			listed[row.ChannelID] = true
+		if ids[ch.ID] {
+			listed++
 		}
 	}
-	return len(listed)
+	return listed
 }
 
 func (s *Server) starBigFour(ctx context.Context) ([]map[string]any, error) {

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 )
@@ -50,8 +51,7 @@ func (s *Store) searchAirings(ctx context.Context, match, title string, from tim
 		}
 	}
 	standIn := map[int64]int64{}
-	args := []any{match, from.UTC().Format(time.RFC3339)}
-	var marks []string
+	var ids []int64
 	for _, ch := range all {
 		if !shown[ch.ID] && (ch.PlaysAs == 0 || !shown[ch.PlaysAs]) {
 			continue
@@ -59,24 +59,65 @@ func (s *Store) searchAirings(ctx context.Context, match, title string, from tim
 		if !shown[ch.ID] {
 			standIn[ch.ID] = ch.PlaysAs
 		}
-		marks = append(marks, "?")
-		args = append(args, ch.ID)
+		ids = append(ids, ch.ID)
 	}
-	if len(marks) == 0 {
+	if len(ids) == 0 {
 		return []AiringHit{}, nil
 	}
+	channels, err := json.Marshal(ids)
+	if err != nil {
+		return nil, err
+	}
 	// A stand-in's duplicates are dropped below, so read a few more.
-	args = append(args, title, limit+len(standIn)*4)
-	rows, err := s.db.QueryContext(ctx, `
-SELECT a.id, a.channel_id, a.title, a.subtitle, a.description, a.category, a.starts_at, a.ends_at,
+	// Title hits come back first. The rest are read only when the title
+	// hits do not already fill that slack, so a common word in every
+	// description is not sorted ahead of the shows it names.
+	slack := limit + len(standIn)*4
+	fromArg := from.UTC().Format(time.RFC3339)
+	var hits []AiringHit
+	if title != "" {
+		hits, err = s.querySearchHits(ctx, searchTitleSQL, title, fromArg, string(channels), slack)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(hits) < slack {
+		seen, err := json.Marshal(hitIDs(hits))
+		if err != nil {
+			return nil, err
+		}
+		rest, err := s.querySearchHits(ctx, searchRestSQL, match, fromArg, string(channels), string(seen), slack-len(hits))
+		if err != nil {
+			return nil, err
+		}
+		hits = append(hits, rest...)
+	}
+	return withoutTwinRepeats(hits, standIn, limit), nil
+}
+
+const searchHitColumns = `a.id, a.channel_id, a.title, a.subtitle, a.description, a.category, a.starts_at, a.ends_at,
 	a.program_id, a.is_new, a.image_url, a.image_width, a.image_height, a.season, a.episode, a.episode_label, a.original_air, a.series_id,
-	a.is_live, a.is_premiere, a.is_finale, a.rating, a.cast_list, a.game_id, c.guide_number, c.guide_name
+	a.is_live, a.is_premiere, a.is_finale, a.rating, a.cast_list, a.game_id, c.guide_number, c.guide_name`
+
+const searchFrom = `
 FROM airing_search
 JOIN airings a ON a.id = airing_search.rowid
 JOIN channels c ON c.id = a.channel_id
-WHERE airing_search MATCH ? AND a.ends_at > ? AND a.channel_id IN (`+strings.Join(marks, ",")+`)
-ORDER BY a.id NOT IN (SELECT rowid FROM airing_search WHERE airing_search MATCH ?), a.starts_at, a.id
-LIMIT ?`, args...)
+WHERE airing_search MATCH ?
+  AND a.ends_at > ?
+  AND a.channel_id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))`
+
+const searchTitleSQL = `SELECT ` + searchHitColumns + searchFrom + `
+ORDER BY a.starts_at, a.id
+LIMIT ?`
+
+const searchRestSQL = `SELECT ` + searchHitColumns + searchFrom + `
+  AND a.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
+ORDER BY a.starts_at, a.id
+LIMIT ?`
+
+func (s *Store) querySearchHits(ctx context.Context, sqlText string, args ...any) ([]AiringHit, error) {
+	rows, err := s.db.QueryContext(ctx, sqlText, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -99,10 +140,15 @@ LIMIT ?`, args...)
 		hit.End, _ = time.Parse(time.RFC3339, end)
 		out = append(out, hit)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	return out, rows.Err()
+}
+
+func hitIDs(hits []AiringHit) []int64 {
+	ids := make([]int64, len(hits))
+	for i, hit := range hits {
+		ids[i] = hit.ID
 	}
-	return withoutTwinRepeats(out, standIn, limit), nil
+	return ids
 }
 
 // withoutTwinRepeats drops an encrypted station's listing when its clear twin
