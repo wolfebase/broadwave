@@ -584,7 +584,7 @@ func (s *Server) virtualSchedule(w http.ResponseWriter, r *http.Request) {
 }
 
 func virtualSlots(v store.VirtualChannel, recs []store.Recording, from, to time.Time) []any {
-	slots := dvr.Slots(v.OrderMode, v.Recordings, recs, from, to)
+	slots := dvr.ScheduleFrom(v.OrderMode, v.Recordings, recs, from, to)
 	out := make([]any, 0, len(slots))
 	for _, slot := range slots {
 		out = append(out, slot)

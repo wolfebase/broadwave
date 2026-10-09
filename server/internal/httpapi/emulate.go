@@ -61,6 +61,8 @@ func SyncEmulator(st *store.Store, hub *live.Hub) {
 type emuHandler struct {
 	store *store.Store
 	hub   *live.Hub
+	// now overrides the clock in tests. Nil is the wall clock.
+	now func() time.Time
 }
 
 func (h *emuHandler) discover(w http.ResponseWriter, r *http.Request) {
@@ -175,27 +177,29 @@ func (h *emuHandler) streamVirtual(w http.ResponseWriter, r *http.Request, numbe
 	}
 	recs, _ := h.store.Recordings(r.Context())
 	now := time.Now()
-	slots := dvr.Slots(chosen.OrderMode, chosen.Recordings, recs, now.Add(-6*time.Hour), now.Add(time.Hour))
-	var path string
-	offset := 0.0
-	for _, slot := range slots {
-		if !now.Before(slot.Start) && now.Before(slot.End) {
-			for _, rec := range recs {
-				if rec.ID == slot.RecordingID {
-					path = rec.Path
-					offset = now.Sub(slot.Start).Seconds()
-				}
-			}
+	if h.now != nil {
+		now = h.now()
+	}
+	id, offset, ok := dvr.Join(chosen.OrderMode, chosen.Recordings, recs, now)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	var rec store.Recording
+	found := false
+	for _, item := range recs {
+		if item.ID == id {
+			rec = item
+			found = true
+			break
 		}
 	}
-	if path == "" {
-		for _, rec := range recs {
-			if rec.ID == chosen.Recordings[0] {
-				path = rec.Path
-			}
-		}
+	if !found {
+		http.NotFound(w, r)
+		return
 	}
-	if _, ok := recordingInside(mediaRoots(r.Context(), h.store, h.hub), path); !ok {
+	path, inside := recordingInside(mediaRoots(r.Context(), h.store, h.hub), rec.Path)
+	if !inside {
 		http.NotFound(w, r)
 		return
 	}
@@ -208,14 +212,50 @@ func (h *emuHandler) streamVirtual(w http.ResponseWriter, r *http.Request, numbe
 		http.ServeFile(w, r, path)
 		return
 	}
+	if rec.Status == "recording" {
+		h.followVirtual(w, r, ffmpeg, path, rec.ID)
+		return
+	}
+	playable := rec.Duration
+	if playable == 0 {
+		playable = recordingDuration(h.hub, rec)
+	}
+	if playable < 0 {
+		playable = 0
+	}
+	at := live.ResumeAt(offset, playable)
 	args := []string{"-hide_banner", "-loglevel", "error"}
-	if offset > 1 {
-		args = append(args, "-ss", strconv.FormatFloat(offset, 'f', 1, 64))
+	if at > 0 {
+		args = append(args, "-ss", strconv.FormatFloat(at, 'f', 3, 64))
 	}
 	args = append(args, "-re", "-i", path, "-c", "copy", "-f", "mpegts", "pipe:1")
 	cmd := exec.CommandContext(r.Context(), ffmpeg, args...)
 	cmd.Stdout = flushWriter{w}
 	_ = cmd.Run()
+}
+
+// followVirtual copies a recording that is still being written. The schedule
+// point is not a seek: the file's clock starts at the first byte, and -ss on
+// a short file would make ffmpeg exit with an empty response.
+func (h *emuHandler) followVirtual(w http.ResponseWriter, r *http.Request, ffmpeg, path string, id int64) {
+	cmd := exec.CommandContext(r.Context(), ffmpeg, "-hide_banner", "-loglevel", "error", "-re", "-i", "pipe:0", "-c", "copy", "-f", "mpegts", "pipe:1")
+	cmd.Stdout = flushWriter{w}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return
+	}
+	if err := cmd.Start(); err != nil {
+		_ = stdin.Close()
+		return
+	}
+	go live.FollowFile(path, stdin, func() bool {
+		if r.Context().Err() != nil {
+			return false
+		}
+		cur, err := h.store.Recording(context.Background(), id)
+		return err == nil && cur.Status == "recording"
+	})
+	_ = cmd.Wait()
 }
 
 // flushWriter pushes each chunk to the client so live video is not held in buffers.
