@@ -134,40 +134,24 @@ func withoutTwinRepeats(hits []AiringHit, standIn map[int64]int64, limit int) []
 
 func (s *Store) searchRecordings(ctx context.Context, match string, limit int) ([]Recording, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT r.id, r.channel_id, r.guide_number, r.title, r.path, r.status, r.error, r.started_at, r.ends_at, r.ended_at, r.duration_sec,
-	r.subtitle, r.description, r.category, r.program_id, r.watched
+SELECT `+recordingColumns+`
 FROM recording_search
 JOIN recordings r ON r.id = recording_search.rowid
+LEFT JOIN progress p ON p.recording_id = r.id
 WHERE recording_search MATCH ?
 ORDER BY r.started_at DESC
 LIMIT ?`, match, limit)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []Recording
-	for rows.Next() {
-		var rec Recording
-		var started, ends, ended string
-		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &started, &ends, &ended, &rec.Duration,
-			&rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched); err != nil {
-			return nil, err
-		}
-		rec.StartedAt, _ = time.Parse(time.RFC3339, started)
-		if ends != "" {
-			t, _ := time.Parse(time.RFC3339, ends)
-			rec.EndsAt = &t
-		}
-		if ended != "" {
-			t, _ := time.Parse(time.RFC3339, ended)
-			rec.EndedAt = &t
-		}
-		out = append(out, rec)
+	out, err := scanRecordings(rows)
+	if err != nil {
+		return nil, err
 	}
 	if out == nil {
 		out = []Recording{}
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // ftsMatch turns typed words into a prefix query. Punctuation that FTS treats
