@@ -3,11 +3,63 @@ package store
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"broadwave/internal/hdhr"
 )
+
+func TestAGameIdDoesNotRewriteSearch(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var trigger string
+	if err := s.db.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'airings_search_update'`).Scan(&trigger); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(trigger, "UPDATE OF title, subtitle, description, cast_list") {
+		t.Fatalf("search trigger rewrites every column:\n%s", trigger)
+	}
+	ctx := t.Context()
+	if err := s.UpsertDevice(ctx, hdhr.Device{DeviceID: "D", FriendlyName: "Duo", BaseURL: "http://127.0.0.1", TunerCount: 1}, []hdhr.Channel{
+		{GuideNumber: "4.1", GuideName: "Harbor"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	channels, err := s.Channels(ctx, false)
+	if err != nil || len(channels) != 1 {
+		t.Fatal(err, channels)
+	}
+	start := time.Now().Add(time.Hour)
+	if err := s.ReplaceAirings(ctx, []Airing{
+		{ChannelID: channels[0].ID, Title: "Harbor Quiz", Start: start, End: start.Add(time.Hour)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := s.Airings(ctx, start.Add(-time.Minute), start.Add(2*time.Hour))
+	if err != nil || len(rows) != 1 {
+		t.Fatal(err, rows)
+	}
+	if err := s.SetAiringGames(ctx, start.Add(-time.Minute), start.Add(2*time.Hour), map[int64]string{rows[0].ID: "game-1"}); err != nil {
+		t.Fatal(err)
+	}
+	hits, _, err := s.Search(ctx, "harbor quiz", time.Now(), 10)
+	if err != nil || len(hits) != 1 || hits[0].Title != "Harbor Quiz" {
+		t.Fatalf("after a game id %+v %v", hits, err)
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE airings SET title = ? WHERE id = ?`, "Cedar Quiz", rows[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if hits, _, err = s.Search(ctx, "harbor quiz", time.Now(), 10); err != nil || len(hits) != 0 {
+		t.Fatalf("old title %+v %v", hits, err)
+	}
+	if hits, _, err = s.Search(ctx, "cedar quiz", time.Now(), 10); err != nil || len(hits) != 1 {
+		t.Fatalf("new title %+v %v", hits, err)
+	}
+}
 
 func TestSearchFindsListingsAndRecordings(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "cfg"))
