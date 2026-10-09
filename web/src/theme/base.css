@@ -1,5 +1,10 @@
 /* Base: reset, type, surfaces, controls. Values come from tokens.css. */
 
+:root {
+  /* The token #737E8F is 3.6:1 on surface3 and 4.2:1 on glass. This clears 4.5:1 on both. */
+  --color-text-tertiary: #8b97a8;
+}
+
 *,
 *::before,
 *::after {
@@ -491,6 +496,8 @@ html[data-layout="tv"] :focus-visible {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+    /* Snap still glides to a card after the scroll itself has been made instant. */
+    scroll-snap-type: none !important;
   }
 }
 
