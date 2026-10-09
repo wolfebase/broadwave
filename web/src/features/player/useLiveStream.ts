@@ -11,7 +11,7 @@ import { applySound } from "./extras";
 import { followCaptions, watchTimeline } from "./liveCaptions";
 import type { StartGate } from "./quietStart";
 import { soundFor, type Sound } from "./sounds";
-import { awayBeforeSeekMs, comeBackAction, resumePlan } from "./resume";
+import { awayBeforeSeekMs, comeBackAction, playOnShortReturn, resumePlan, returnHeld } from "./resume";
 import {
   aTunerAnswers,
   aTunerIsFree,
@@ -497,9 +497,12 @@ export function useLiveStream(
         syncing: syncing.current,
         paused: video.paused,
       });
+      const cached = events().roomState(roomRef.current ?? "") as { rate?: unknown } | undefined;
+      const roomRate = typeof cached?.rate === "number" ? cached.rate : null;
+      const held = returnHeld(syncing.current, video.paused, roomRate);
       if (action === "ignore") return;
       if (action === "play") {
-        void video.play().catch(() => undefined);
+        if (playOnShortReturn(action, held)) void video.play().catch(() => undefined);
         return;
       }
       resumeQuiet = true;
@@ -527,7 +530,7 @@ export function useLiveStream(
           current: video.currentTime,
           liveSync: hls?.liveSyncPosition ?? null,
           awayMs: away,
-          held: !syncing.current && video.paused,
+          held,
           waitedMs: performance.now() - began,
           edgeAtLeave,
           driftMs: rawDrift ? Number(rawDrift) : null,
