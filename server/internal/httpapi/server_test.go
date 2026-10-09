@@ -362,6 +362,28 @@ func TestOmittedRecordingFieldsAreRejected(t *testing.T) {
 	}
 }
 
+func TestDetectMissingFileIs404WithoutPath(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	st := testStore(t)
+	missing := filepath.Join(dir, "recordings", "gone.ts")
+	id, err := st.CreateRecording(ctx, store.Recording{
+		Title: "News", Path: missing, Status: "complete", StartedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st, Hub: &live.Hub{Store: st, Dir: dir}}).Handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/recordings/"+strconv.FormatInt(id, 10)+"/detect", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status %d, want 404: %s", rec.Code, rec.Body.Bytes())
+	}
+	if bytes.Contains(rec.Body.Bytes(), []byte(missing)) || bytes.Contains(rec.Body.Bytes(), []byte(dir)) {
+		t.Fatalf("body leaked the path: %s", rec.Body.Bytes())
+	}
+}
+
 func TestMoveARecording(t *testing.T) {
 	st := testStore(t)
 	ctx := context.Background()

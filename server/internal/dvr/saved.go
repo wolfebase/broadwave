@@ -107,7 +107,11 @@ func IndexBreaks(ctx context.Context, st *store.Store, ffmpeg string, rec store.
 	if err := st.ReplaceMarkers(ctx, rec.ID, markers); err != nil {
 		return nil, err
 	}
-	_ = st.MarkBreaksScanned(ctx, rec.ID)
+	// A file still being written has only the breaks so far. Marking it
+	// scanned would keep the queue from reading the rest when it closes.
+	if rec.Status != "recording" {
+		_ = st.MarkBreaksScanned(ctx, rec.ID)
+	}
 	learnSpots(ctx, st, rec.ID, library, res)
 	fresh, err := st.Markers(ctx, rec.ID)
 	if err != nil {

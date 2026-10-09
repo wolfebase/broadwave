@@ -37,17 +37,18 @@ func (s *Store) Spots(ctx context.Context) ([]Spot, error) {
 	return out, rows.Err()
 }
 
-// AddSpots stores a recording's new spots and drops the ones seen longest ago
-// past maxSpots.
+// AddSpots replaces a recording's spots and drops the ones seen longest ago
+// past maxSpots. An empty list clears that recording, which is a rescan that
+// found none.
 func (s *Store) AddSpots(ctx context.Context, recordingID int64, spots [][]uint64) error {
-	if len(spots) == 0 {
-		return nil
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM spots WHERE recording_id = ?`, recordingID); err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	for _, prints := range spots {
 		blob := make([]byte, 8*len(prints))
@@ -58,8 +59,10 @@ func (s *Store) AddSpots(ctx context.Context, recordingID int64, spots [][]uint6
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM spots WHERE id NOT IN (SELECT id FROM spots ORDER BY seen_at DESC, id DESC LIMIT ?)`, maxSpots); err != nil {
-		return err
+	if len(spots) > 0 {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM spots WHERE id NOT IN (SELECT id FROM spots ORDER BY seen_at DESC, id DESC LIMIT ?)`, maxSpots); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

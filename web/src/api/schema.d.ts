@@ -3542,6 +3542,7 @@ export interface operations {
                     };
                 };
             };
+            404: components["responses"]["Error"];
         };
     };
     deleteMarker: {
