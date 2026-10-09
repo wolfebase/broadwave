@@ -1,11 +1,11 @@
 import Hls from "hls.js";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { playVirtual } from "../../api";
 import { fileHlsConfig, type PictureMode } from "../../picture";
-import { releaseFileVideo, takeFileFatal } from "./filePlay";
+import { markersForPlayback, releaseFileVideo, seekableSkip, takeFileFatal } from "./filePlay";
 import { Stage } from "../player/Stage";
 
-type Marker = { id: number; start: number; end: number };
+type Marker = { id: number; recordingId?: number; start: number; end: number };
 
 export function VirtualPlay({ id, pictureMode, onBack }: { id: number; pictureMode: PictureMode; onBack: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -15,9 +15,24 @@ export function VirtualPlay({ id, pictureMode, onBack }: { id: number; pictureMo
   const [channel, setChannel] = useState("");
   const [count, setCount] = useState(0);
   const [markers, setMarkers] = useState<Marker[]>([]);
+  const [fileId, setFileId] = useState<number | null>(null);
+  const [seenIndex, setSeenIndex] = useState(index);
+  const [seenChannel, setSeenChannel] = useState(id);
+  let activeId = fileId;
+  if (seenChannel !== id || seenIndex !== index) {
+    setSeenChannel(id);
+    setSeenIndex(index);
+    setFileId(null);
+    activeId = null;
+  }
+  const shown = useMemo(() => markersForPlayback(activeId, markers), [activeId, markers]);
   const [skip, setSkip] = useState(true);
   const [where, setWhere] = useState(0);
   const [length, setLength] = useState(0);
+  const shownRef = useRef(shown);
+  useLayoutEffect(() => {
+    shownRef.current = shown;
+  }, [shown]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -38,6 +53,7 @@ export function VirtualPlay({ id, pictureMode, onBack }: { id: number; pictureMo
         setTitle(next.recording.title);
         setChannel(`${next.number} ${next.name}`);
         setCount(next.count);
+        setFileId(next.recording.id);
         setMarkers(next.markers);
         if (Hls.isSupported()) {
           hls = new Hls(fileHlsConfig(-1));
@@ -80,8 +96,11 @@ export function VirtualPlay({ id, pictureMode, onBack }: { id: number; pictureMo
       if (Number.isFinite(video.duration)) setLength(video.duration);
       if (!skip) return;
       const t = video.currentTime;
-      const hit = markers.find((marker) => t >= marker.start && t < marker.end - 0.25);
-      if (hit) video.currentTime = hit.end;
+      const hit = shownRef.current.find((marker) => t >= marker.start && t < marker.end - 0.25);
+      if (!hit) return;
+      const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : Number.NEGATIVE_INFINITY;
+      const to = seekableSkip(hit.end, end);
+      if (to != null) video.currentTime = to;
     };
     const ended = () => {
       setIndex((current) => (current + 1 < count ? current + 1 : current));
@@ -92,7 +111,7 @@ export function VirtualPlay({ id, pictureMode, onBack }: { id: number; pictureMo
       video.removeEventListener("timeupdate", tick);
       video.removeEventListener("ended", ended);
     };
-  }, [markers, skip, count]);
+  }, [skip, count]);
 
   return (
     <Stage
@@ -108,7 +127,7 @@ export function VirtualPlay({ id, pictureMode, onBack }: { id: number; pictureMo
         const video = videoRef.current;
         if (video) video.currentTime = value;
       }}
-      markers={markers}
+      markers={shown}
       onJump={(delta) => {
         const video = videoRef.current;
         if (video) video.currentTime = Math.max(0, video.currentTime + delta);

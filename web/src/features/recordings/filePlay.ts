@@ -94,3 +94,26 @@ export function storedPlayhead(time: number, gate: ResumeGate, sought: boolean):
 export function samePlayback(listenerGen: number, currentGen: number): boolean {
   return listenerGen === currentGen;
 }
+
+/** Auto-skip target. Null until the marker end is inside the seekable range. */
+export function seekableSkip(markerEnd: number, seekableEnd: number): number | null {
+  if (!Number.isFinite(markerEnd) || !Number.isFinite(seekableEnd)) return null;
+  if (seekableEnd < markerEnd) return null;
+  return markerEnd;
+}
+
+/** Markers stored for another recording. A marker with no recording id does not match. */
+export function markersForPlayback<T extends { recordingId?: number }>(recordingId: number | null, markers: readonly T[]): T[] {
+  if (recordingId == null) return [];
+  return markers.filter((marker) => marker.recordingId === recordingId);
+}
+
+/**
+ * Up next stays off while the file is still being written.
+ * reported is the play response, null until it arrives.
+ * A later status other than recording wins over a response that said true.
+ */
+export function playbackGrowing(status: string, reported: boolean | null): boolean {
+  if (status !== "recording") return false;
+  return reported !== false;
+}

@@ -1,8 +1,8 @@
 import Hls from "hls.js";
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
-import { bindFilePlayback, progressSaveAction, releaseFileVideo, samePlayback, storedPlayhead, takeFileFatal, type ResumeGate } from "./filePlay";
+import { bindFilePlayback, markersForPlayback, playbackGrowing, progressSaveAction, releaseFileVideo, samePlayback, seekableSkip, storedPlayhead, takeFileFatal, type ResumeGate } from "./filePlay";
 import { copy } from "../../strings";
 import { Stage } from "../player/Stage";
 import type { Recording } from "../../types";
@@ -11,7 +11,7 @@ import { breakScans, idleBreakScan } from "./breaks";
 import { DownloadLink } from "./DownloadLink";
 import { endedAdvances, introSkip, takeUpNext, upNext } from "./ends";
 
-type Marker = { id: number; start: number; end: number; confidence?: number };
+type Marker = { id: number; recordingId?: number; start: number; end: number; confidence?: number };
 
 // The server skips on its own from this confidence up and offers the skip
 // below it. A marker someone set, or one from an older server, is sure.
@@ -43,7 +43,7 @@ export function Play({
   const [length, setLength] = useState(0);
   const aheadAt = useRef(0);
   const aheadBreak = useRef<Marker | null>(null);
-  const [growing, setGrowing] = useState(recording.status === "recording");
+  const [reportedGrowing, setReportedGrowing] = useState<boolean | null>(null);
   const whereRef = useRef(0);
   const saveTimer = useRef(0);
   // A resume seek that lands after the viewer has already moved would undo Start over.
@@ -64,7 +64,7 @@ export function Play({
   const [seenScan, setSeenScan] = useState(scan);
   if (scan !== seenScan) {
     setSeenScan(scan);
-    if (scan.markers) setMarkers(scan.markers);
+    if (scan.markers) setMarkers(scan.markers.map((marker) => ({ ...marker, recordingId: recording.id })));
   }
   // Not now holds for the rest of this recording, its end included.
   const [dismissed, setDismissed] = useState(false);
@@ -74,7 +74,9 @@ export function Play({
     setDismissed(false);
     setWhere(0);
     setLength(0);
+    setReportedGrowing(null);
   }
+  const shown = useMemo(() => markersForPlayback(recording.id, markers), [recording.id, markers]);
 
   // Before the playback effects, so a timeupdate still queued from the previous
   // file sees the new generation and does not move this one.
@@ -107,7 +109,7 @@ export function Play({
         const next = await playRecording(recording.id, pictureMode);
         if (dead) return;
         setMarkers(next.markers);
-        setGrowing(next.growing);
+        setReportedGrowing(next.growing);
         resumeAt = next.position;
         resumeGate.current = { at: next.position, known: true };
         const started = performance.now();
@@ -199,8 +201,11 @@ export function Play({
         saveTimer.current = timer;
       }
       if (skipMode !== "auto") return;
-      const hit = markerAt(markers, t);
-      if (hit && sure(hit)) video.currentTime = hit.end;
+      const hit = markerAt(shown, t);
+      if (!hit || !sure(hit)) return;
+      const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : Number.NEGATIVE_INFINITY;
+      const to = seekableSkip(hit.end, end);
+      if (to != null) video.currentTime = to;
     };
     const ended = () => {
       if (!samePlayback(generation, fileGen.current)) return;
@@ -214,7 +219,7 @@ export function Play({
       window.clearTimeout(saveTimer.current);
       saveTimer.current = 0;
     };
-  }, [markers, skipMode, recording.id, autoplay, dismissed, onNext]);
+  }, [shown, skipMode, recording.id, autoplay, dismissed, onNext]);
 
   function chooseZoom(next: Zoom) {
     setZoom(next);
@@ -235,9 +240,11 @@ export function Play({
     const video = videoRef.current;
     if (!video) return;
     const now = Date.now();
-    const inside = markerAt(markers, video.currentTime) ?? null;
+    const inside = markerAt(shown, video.currentTime) ?? null;
     if (aheadBreak.current && now - aheadAt.current < 1200) {
-      video.currentTime = aheadBreak.current.end;
+      const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : Number.NEGATIVE_INFINITY;
+      const to = seekableSkip(aheadBreak.current.end, end);
+      if (to != null) video.currentTime = to;
       aheadBreak.current = null;
       aheadAt.current = 0;
       return;
@@ -253,7 +260,7 @@ export function Play({
     if (!video) return;
     const start = video.currentTime;
     const created = await addMarker(recording.id, start, Math.min(video.duration || start + 3, start + 3));
-    setMarkers((prev) => [...prev, { id: created.id, start: created.start, end: created.end }]);
+    setMarkers((prev) => [...prev, { id: created.id, recordingId: recording.id, start: created.start, end: created.end }]);
   }
 
   function scanCommercials() {
@@ -311,7 +318,8 @@ export function Play({
     fn();
   }
 
-  const inside = markers.find((marker) => where >= marker.start && where < marker.end);
+  const inside = shown.find((marker) => where >= marker.start && where < marker.end);
+  const growing = playbackGrowing(recording.status, reportedGrowing);
   // A finished recording plays from a playlist that grows while it transcodes,
   // so the player's own duration starts at a few seconds.
   const total = growing ? length : Math.max(length, recording.durationSec || 0);
@@ -343,7 +351,7 @@ export function Play({
         const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : value;
         video.currentTime = Math.min(value, end);
       }}
-      markers={markers}
+      markers={shown}
       onJump={(delta) => {
         if (delta > 0) ahead();
         else back(-delta);
@@ -364,7 +372,18 @@ export function Play({
       hold={Boolean(card)}
       tools={
         inside && (skipMode === "button" || (skipMode === "auto" && !sure(inside))) ? (
-          <button type="button" className="text-btn on" onClick={() => { sought(); if (videoRef.current) videoRef.current.currentTime = inside.end; }}>
+          <button
+            type="button"
+            className="text-btn on"
+            onClick={() => {
+              sought();
+              const video = videoRef.current;
+              if (!video) return;
+              const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : Number.NEGATIVE_INFINITY;
+              const to = seekableSkip(inside.end, end);
+              if (to != null) video.currentTime = to;
+            }}
+          >
             Skip break
           </button>
         ) : introEnd !== null ? (
@@ -414,9 +433,9 @@ export function Play({
             </button>
           </div>
           {scan.note ? <p className="hint" role="status">{scan.note}</p> : null}
-          {markers.length > 0 ? (
+          {shown.length > 0 ? (
             <ul className="marker-list">
-              {markers.map((marker) => (
+              {shown.map((marker) => (
                 <li key={marker.id}>
                   <span>
                     {marker.start.toFixed(1)}s–{marker.end.toFixed(1)}s{sure(marker) ? "" : " · maybe"}

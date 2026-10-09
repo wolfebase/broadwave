@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bindFilePlayback, progressSaveAction, progressToStore, releaseFileVideo, samePlayback, storedPlayhead, takeFileFatal } from "./src/features/recordings/filePlay.ts";
+import { bindFilePlayback, markersForPlayback, playbackGrowing, progressSaveAction, progressToStore, releaseFileVideo, samePlayback, seekableSkip, storedPlayhead, takeFileFatal } from "./src/features/recordings/filePlay.ts";
 
 function fakeVideo() {
   const listeners = new Map<string, Set<() => void>>();
@@ -123,4 +123,35 @@ test("releasing a file pauses it and reloads the element with no src", () => {
     },
   });
   assert.deepEqual(order, ["pause", "src", "load"]);
+});
+
+test("auto-skip waits until the marker end is seekable", () => {
+  assert.equal(seekableSkip(20, 12), null);
+  assert.equal(seekableSkip(20, 19.9), null);
+  assert.equal(seekableSkip(20, Number.NEGATIVE_INFINITY), null);
+  assert.equal(seekableSkip(Number.NaN, 30), null);
+  assert.equal(seekableSkip(20, 20), 20);
+  assert.equal(seekableSkip(20, 25), 20);
+});
+
+test("the next file does not use the previous recording's markers", () => {
+  const previous = [
+    { id: 1, recordingId: 4, start: 10, end: 20 },
+    { id: 2, recordingId: 4, start: 30, end: 45 },
+  ];
+  const next = { id: 3, recordingId: 9, start: 5, end: 8 };
+  assert.deepEqual(markersForPlayback(9, previous), []);
+  assert.deepEqual(markersForPlayback(9, [...previous, next]), [next]);
+  assert.deepEqual(markersForPlayback(4, previous), previous);
+  assert.deepEqual(markersForPlayback(null, previous), []);
+  assert.deepEqual(markersForPlayback(4, [{ id: 5, start: 1, end: 2 }]), []);
+});
+
+test("a recording that finishes during playback is not still growing", () => {
+  assert.equal(playbackGrowing("recording", null), true);
+  assert.equal(playbackGrowing("recording", true), true);
+  assert.equal(playbackGrowing("recording", false), false);
+  assert.equal(playbackGrowing("complete", true), false);
+  assert.equal(playbackGrowing("failed", true), false);
+  assert.equal(playbackGrowing("complete", null), false);
 });
