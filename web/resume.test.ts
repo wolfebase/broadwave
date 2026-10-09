@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { edgeCaughtUp, resumePlan, resumeSeek } from "./src/features/player/resume.ts";
+import { awayBeforeSeekMs, comeBackAction, edgeCaughtUp, resumePlan, resumeSeek } from "./src/features/player/resume.ts";
 
 test("a tab that was only gone a moment keeps its playhead", () => {
   assert.equal(resumeSeek({ current: 10, liveSync: 40, awayMs: 800, held: false }), null);
@@ -47,4 +47,16 @@ test("a playhead that kept up with the edge is left there", () => {
   assert.deepEqual(resumePlan({ current: 394, liveSync: 395, awayMs: 300_000, held: false, waitedMs: 0, edgeAtLeave: 100, driftMs: -20 }), {
     action: "play",
   });
+});
+
+test("coming back leaves a named outage that already destroyed the player", () => {
+  const named = { tornDown: true, awayMs: 10_000, syncing: true, paused: false };
+  assert.equal(comeBackAction(named), "ignore");
+  assert.equal(comeBackAction({ ...named, tornDown: false }), "resume");
+  assert.equal(comeBackAction({ tornDown: false, awayMs: 1000, syncing: true, paused: true }), "play");
+  assert.equal(comeBackAction({ tornDown: false, awayMs: 1000, syncing: true, paused: false }), "ignore");
+  assert.equal(comeBackAction({ tornDown: false, awayMs: 1000, syncing: false, paused: true }), "ignore");
+  assert.equal(comeBackAction({ tornDown: true, awayMs: 500, syncing: true, paused: true }), "ignore");
+  assert.equal(comeBackAction({ tornDown: false, awayMs: awayBeforeSeekMs, syncing: false, paused: true }), "ignore");
+  assert.equal(comeBackAction({ tornDown: false, awayMs: awayBeforeSeekMs, syncing: false, paused: false }), "resume");
 });

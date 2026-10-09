@@ -156,13 +156,22 @@ export function holdPictureMessage(next: { message: string; recovery: Recovery }
 // play the few seconds the server still lists, so a short run of picture does
 // not start the count over.
 export const frozenMs = 8000;
+
+/** A new watch drops the previous failure. A quiet retune keeps the one already on screen. */
+export function outageAtWatchStart(
+  quiet: boolean,
+  prev: { error: string; recovery: Recovery; needsConfirm: boolean },
+): { error: string; recovery: Recovery; needsConfirm: boolean } {
+  if (quiet) return prev;
+  return { error: "", recovery: "", needsConfirm: false };
+}
 const settledMs = 20_000;
 // After this many steps with no settled picture, the outage clock has the last word.
 const maxFrozenSteps = 6;
 // One sample is about a second apart. A larger step is a seek or a new
 // stream, not the picture playing.
 const largestStep = 3;
-export type FrozenStep = "reload" | "retune";
+export type FrozenStep = "reload" | "retune" | "stopped";
 
 export class FrozenPicture {
   private last: number | null = null;
@@ -170,6 +179,8 @@ export class FrozenPicture {
   private movingSince = 0;
   private tries = 0;
   private moved = false;
+  // The cap tells the outage clock once. Later stuck samples stay quiet.
+  private handed = false;
   // True from the first step until the picture moves again.
   reconnecting = false;
 
@@ -194,7 +205,10 @@ export class FrozenPicture {
       this.reconnecting = false;
       this.since = now;
       if (!this.movingSince) this.movingSince = now;
-      if (now - this.movingSince >= settledMs) this.tries = 0;
+      if (now - this.movingSince >= settledMs) {
+        this.tries = 0;
+        this.handed = false;
+      }
       return null;
     }
     this.movingSince = 0;
@@ -205,7 +219,9 @@ export class FrozenPicture {
     if (!this.moved || now - this.since < frozenMs) return null;
     if (this.tries >= maxFrozenSteps) {
       this.reconnecting = false;
-      return null;
+      if (this.handed) return null;
+      this.handed = true;
+      return "stopped";
     }
     this.since = now;
     this.tries++;
