@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSiteBuildsTheGuide(t *testing.T) {
@@ -272,6 +273,46 @@ func TestMarkdownTableCodeAndLink(t *testing.T) {
 		if !strings.Contains(doc.HTML, needle) {
 			t.Errorf("missing %s\n%s", needle, doc.HTML)
 		}
+	}
+}
+
+func TestDescriptionDropsMarkdown(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join(docsDir(t), "sources.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := renderMarkdown(string(body), nil)
+	if strings.Contains(doc.Description, "](") || strings.Contains(doc.Description, "[") {
+		t.Fatalf("description kept markdown: %q", doc.Description)
+	}
+	if !strings.Contains(doc.Description, "0009") {
+		t.Fatalf("description dropped the link text: %q", doc.Description)
+	}
+}
+
+func TestPipeLineWithoutTableDoesNotHang(t *testing.T) {
+	done := make(chan rendered, 1)
+	go func() {
+		done <- renderMarkdown(strings.Join([]string{
+			"# Title",
+			"",
+			"| not a table",
+			"",
+			"Still here.",
+			"",
+			"| last line",
+		}, "\n"), nil)
+	}()
+	select {
+	case doc := <-done:
+		if !strings.Contains(doc.HTML, "Still here") {
+			t.Fatalf("did not advance past the pipe line:\n%s", doc.HTML)
+		}
+		if !strings.Contains(doc.HTML, "not a table") || !strings.Contains(doc.HTML, "last line") {
+			t.Fatalf("dropped a pipe line:\n%s", doc.HTML)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("renderMarkdown hung on a pipe line that is not a table")
 	}
 }
 

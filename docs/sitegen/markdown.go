@@ -95,6 +95,19 @@ func renderMarkdown(src string, rewrite func(string) string) rendered {
 			out.WriteString("</tbody></table></div>\n")
 			continue
 		}
+		if strings.HasPrefix(trim, "|") {
+			// Not a table: the branch above requires a separator on the
+			// next line. startsBlock still treats this as a block, and
+			// the paragraph loop would break without moving i.
+			if description == "" {
+				description = clip(plainText(trim), 160)
+			}
+			out.WriteString("<p>")
+			out.WriteString(inline(trim, rewrite))
+			out.WriteString("</p>\n")
+			i++
+			continue
+		}
 		if kind, item, ok := listItem(trim); ok {
 			tag := "ul"
 			if kind == ordered {
@@ -329,9 +342,35 @@ func parseLink(s string) (text, dest string, next int, ok bool) {
 }
 
 func plainText(s string) string {
-	s = strings.ReplaceAll(s, "`", "")
-	s = strings.ReplaceAll(s, "**", "")
-	return strings.TrimSpace(s)
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		if s[i] == '`' {
+			i++
+			continue
+		}
+		if strings.HasPrefix(s[i:], "**") {
+			i += 2
+			continue
+		}
+		if s[i] == '!' && i+1 < len(s) && s[i+1] == '[' {
+			if text, _, next, ok := parseLink(s[i+1:]); ok {
+				b.WriteString(plainText(text))
+				i += 1 + next
+				continue
+			}
+		}
+		if s[i] == '[' {
+			if text, _, next, ok := parseLink(s[i:]); ok {
+				b.WriteString(plainText(text))
+				i += next
+				continue
+			}
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		b.WriteRune(r)
+		i += size
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func clip(s string, n int) string {

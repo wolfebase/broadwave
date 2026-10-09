@@ -3,9 +3,6 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths:
-      - "site/**"
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -24,8 +21,37 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: docs/sitegen/go.mod
+
+      # -out is relative to this working directory, so the tree is
+      # docs/sitegen/dist (gitignored). The same flag from the repo
+      # root would write ./dist, which is not ignored. Build replaces
+      # that output directory and nothing else.
+      - name: Build the handbook
+        working-directory: docs/sitegen
+        run: go run . -out dist
+
+      # One artifact is the whole site. site/ stays at the root.
+      # The handbook occupies docs/ only, so a marketing push cannot
+      # publish a tree that drops the handbook, and a handbook publish
+      # cannot replace index.html.
+      - name: Stage marketing site and handbook
+        run: |
+          set -euo pipefail
+          stage="${RUNNER_TEMP}/pages"
+          rm -rf "$stage"
+          mkdir -p "$stage"
+          cp -a site/. "$stage/"
+          rm -rf "$stage/docs"
+          mkdir -p "$stage/docs"
+          cp -a docs/sitegen/dist/. "$stage/docs/"
+
       - uses: actions/upload-pages-artifact@v4
         with:
-          path: site
+          path: ${{ runner.temp }}/pages
+
       - id: deployment
         uses: actions/deploy-pages@v4
