@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Channel, Device, TunerStatus } from "../../types";
 import { addFree, addPlaylistFile, addSource, checkSignals, findFree, getSignals, getTuners, lookHarder, sourceStatuses, startScan, type ChannelSignal, type FreeFeed, type SourceAdded, type SourceStatus } from "../../api";
 import { actionName } from "../../lib/actionName";
@@ -6,6 +6,7 @@ import { copy } from "../../strings";
 import { lastSeenPhrase } from "../../time";
 import { deviceScans, showFirmware } from "./deviceCard";
 import { applySignalPoll, applyTunerPoll } from "./sourcePoll";
+import { hitsAfterLook } from "../setup/lookHits";
 export function Sources({
   devices,
   channels,
@@ -27,6 +28,7 @@ export function Sources({
 }) {
   const [ip, setIp] = useState("");
   const [looking, setLooking] = useState(false);
+  const lookN = useRef(0);
   const [scanning, setScanning] = useState("");
   const [looked, setLooked] = useState(false);
   const [hits, setHits] = useState<{ kind: string; name: string; addr: string }[]>([]);
@@ -108,18 +110,21 @@ export function Sources({
           className="btn"
           disabled={busy || looking}
           onClick={() => {
+            const mine = ++lookN.current;
             setLooking(true);
             setLooked(false);
             void lookHarder()
               .then((res) => {
-                setHits(res.found ?? []);
+                if (mine !== lookN.current) return;
+                setHits((shown) => hitsAfterLook(mine, lookN.current, shown, true, res.found) ?? shown);
                 setLooked(true);
               })
               .catch(() => {
-                setHits([]);
-                setLooked(true);
+                setHits((shown) => hitsAfterLook(mine, lookN.current, shown, false, undefined) ?? shown);
               })
-              .finally(() => setLooking(false));
+              .finally(() => {
+                if (mine === lookN.current) setLooking(false);
+              });
           }}
         >
           {copy.sources.look}
