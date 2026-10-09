@@ -355,6 +355,12 @@ public struct ServerOutage: Equatable, Sendable {
         if case .surfaced = phase {
             return nil
         }
+        // A probe that started during a stall can finish after the picture
+        // resumes. That reading must not name an outage over a moving picture.
+        // A fatal failure still does: the item itself gave up.
+        if !fatal, case .playing = phase {
+            return nil
+        }
         let decision = PlaybackOutage.classify(snap)
         if fatal || decision.recovery != nil {
             phase = .surfaced
