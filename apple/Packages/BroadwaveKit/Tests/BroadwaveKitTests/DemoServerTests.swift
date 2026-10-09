@@ -318,8 +318,14 @@ private final class RefusedOnce: @unchecked Sendable {
     let socket = EventSocket(base: origin)
     defer { socket.disconnect() }
     var seen: [String] = []
+    // Data() means the handler has not run. A restart must drop the old room
+    // before that handler, or the next join follows a process that is gone.
+    var roomWhenRestarted: Data? = Data()
     socket.on("reconnected") { _ in seen.append("reconnected") }
-    socket.on("restarted") { _ in seen.append("restarted") }
+    socket.on("restarted") { _ in
+        seen.append("restarted")
+        roomWhenRestarted = MainActor.assumeIsolated { socket.roomState("channel:1") }
+    }
     var members = 0
     socket.on("sync.state") { data in
         let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -329,6 +335,7 @@ private final class RefusedOnce: @unchecked Sendable {
     socket.join(room: "channel:1", channelID: 1)
     try await waitFor { socket.connected && members == 1 }
     #expect(seen.isEmpty)
+    #expect(socket.roomState("channel:1") != nil)
 
     first.stop()
     try await waitFor { !socket.connected }
@@ -341,6 +348,7 @@ private final class RefusedOnce: @unchecked Sendable {
     #expect(Date().timeIntervalSince(back) < 7)
     try await waitFor { seen.contains("restarted") }
     #expect(seen == ["reconnected", "restarted"])
+    #expect(roomWhenRestarted == nil)
 }
 
 @MainActor

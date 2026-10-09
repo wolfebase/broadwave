@@ -290,6 +290,9 @@ public final class EventSocket {
             let restarted = !boot.isEmpty && next != boot
             boot = next
             if restarted {
+                // The old process's rooms are gone. A join that reads the cache
+                // before the next sync.state must not follow that anchor.
+                latest.removeAll()
                 emit("restarted")
             }
         }
