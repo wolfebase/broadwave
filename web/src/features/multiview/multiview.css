@@ -9,7 +9,8 @@
   outline: none;
 }
 
-html[data-layout="tv"] .mv:focus-visible {
+/* The grid fills the screen, so an outer ring sits off it. */
+html .mv:focus-visible {
   box-shadow: inset 0 0 0 4px var(--brand-blue);
 }
 
