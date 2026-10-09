@@ -226,6 +226,10 @@ export class SyncEngine {
       t = this.timeFor(media);
     }
     if (t == null) return false;
+    // The playlist can name a frame the buffer has not reached. The seconds
+    // buffered past the playhead are not that landing. Seeking there while
+    // playing stalls on the live edge. A rewind lands behind the playhead.
+    if (playing && t > this.video.currentTime && !this.buffered(t, 0.25)) return false;
     this.lastSeek = now;
     this.usedLead = lead;
     this.leadCheck = playing;
@@ -257,14 +261,26 @@ export class SyncEngine {
     const st = this.state;
     if (!st) return;
     const video = this.video;
-    if (performance.now() < this.holdUntil) return;
+    const now = performance.now();
     const local = this.mediaNow();
-    if (local == null || video.readyState < 2 || video.seeking) {
+    const ready = local != null && video.readyState >= 2 && !video.seeking;
+    const target = ready ? roomTarget(st, events().serverNow()) : null;
+    const drift = target != null && local != null ? local - target : null;
+    const groupRewind = drift != null && drift > GROUP_REWIND_MS && this.room.startsWith("group:");
+    // The resume timer calls play() when the hold ends. A group pause, or a
+    // rewind by another screen, has to cancel that and be handled on this tick.
+    if (now < this.holdUntil) {
+      if (st.rate === 0 || groupRewind) {
+        this.pauses.stop();
+        this.holdUntil = 0;
+      } else {
+        return;
+      }
+    }
+    if (local == null || target == null || drift == null) {
       this.setStatus({ ...this.status, state: "waiting", members: st.members, room: st });
       return;
     }
-    const target = roomTarget(st, events().serverNow());
-    const drift = local - target;
     video.dataset.syncOffset = String(Math.round(local - Date.now()));
     video.dataset.syncDrift = String(Math.round(drift));
     if (st.rate === 0) {
@@ -276,23 +292,27 @@ export class SyncEngine {
       return;
     }
     if (video.paused) void video.play().catch(() => undefined);
-    const now = performance.now();
-    // A resume has not shown its lag yet.
+    // A resume has not shown its lag yet. A group rewind in that window is not lag.
     if (this.resumeAt) {
       if (now - this.resumeAt < 1000) {
-        this.setStatus({ state: "syncing", drift, members: st.members, room: st });
-        return;
-      }
-      this.resumeAt = 0;
-      this.resumeLag = Math.min(MAX_RESUME_LAG_S, nextSeekLead(this.resumeLag, drift - this.resumeExpect));
-      if (this.stepped) {
-        this.stepped = false;
-        const ahead = this.forwardMedia();
-        if (drift < -SETTLE_MS && this.timeFor(target) != null && ahead >= CUSHION_S) {
-          video.dataset.syncFix = `step ${Math.round(drift)} lag ${Math.round(this.resumeLag * 1000)} lead ${Math.round(this.seekLead * 1000)}`;
-          this.correct(drift, target);
+        if (!groupRewind) {
           this.setStatus({ state: "syncing", drift, members: st.members, room: st });
           return;
+        }
+        this.resumeAt = 0;
+        this.stepped = false;
+      } else {
+        this.resumeAt = 0;
+        this.resumeLag = Math.min(MAX_RESUME_LAG_S, nextSeekLead(this.resumeLag, drift - this.resumeExpect));
+        if (this.stepped) {
+          this.stepped = false;
+          const ahead = this.forwardMedia();
+          if (drift < -SETTLE_MS && this.timeFor(target) != null && ahead >= CUSHION_S) {
+            video.dataset.syncFix = `step ${Math.round(drift)} lag ${Math.round(this.resumeLag * 1000)} lead ${Math.round(this.seekLead * 1000)}`;
+            this.correct(drift, target);
+            this.setStatus({ state: "syncing", drift, members: st.members, room: st });
+            return;
+          }
         }
       }
     }
