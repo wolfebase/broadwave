@@ -84,7 +84,7 @@ SQLite (WAL) through `modernc.org/sqlite`. Tables: devices, channels, airings, r
 
 JSON under `/api`, HLS under `/media`, the SPA at `/`. The optional HDHomeRun emulator on `:8478` exposes channels to other apps. The contract lives in `api/openapi.yaml`.
 
-Device sign-in is off until Settings turns it on (`deviceAuth`). While it is off, the home network stays open. While it is on, `/api` and `/media` take a per-device token with scope watch, record, or admin. Pairing, health, server identity, the web app's files, `/export`, and the emulator stay open. Tokens are stored as hashes. The design is `docs/design/pairing.md`.
+Device sign-in is off until Settings turns it on (`deviceAuth`). While it is off, the home network stays open. While it is on, `/api` and `/media` take a per-device token with scope watch, record, or admin. Pairing, health, server identity, the web app's files, `/export`, and the emulator stay open. Tokens are stored as hashes. The design is `docs/design/pairing.md`. IPTV apps get a per-device M3U, XMLTV, and an Xtream Codes player API on that same token; the shared playlist stays open until `exportAuth` is on. That design is `docs/design/iptv.md`. It is not built yet.
 
 ## Web app (`web/`)
 
