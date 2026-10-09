@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -101,6 +102,14 @@ func graphStamp(g Graph) string {
 	return strings.Join(parts, "|")
 }
 
+// playStart is how long playback waits for the recording playlist.
+// A test shortens it. The encode still has to exit when the wait ends.
+var playStart = 20 * time.Second
+
+// captionSpan bounds the sidecar caption pass. The play error path cancels
+// it so that process does not keep running after the player has given up.
+var captionSpan = 2 * time.Minute
+
 func playlistFresh(dir, stamp string) bool {
 	body, err := os.ReadFile(filepath.Join(dir, "graph.txt"))
 	if err != nil || strings.TrimSpace(string(body)) != stamp {
@@ -138,15 +147,19 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string) (str
 	if err := cmd.Start(); err != nil {
 		return "", err
 	}
-	go func() { _ = cmd.Wait() }()
-	go extractCaptions(h.FFmpeg, abs, filepath.Join(dir, "captions.vtt"))
-	deadline := time.Now().Add(20 * time.Second)
-	for time.Now().Before(deadline) {
-		if info, err := os.Stat(playlist); err == nil && info.Size() > 0 {
-			return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
-		}
-		time.Sleep(200 * time.Millisecond)
+	capCtx, capCancel := context.WithTimeout(context.Background(), captionSpan)
+	go func() {
+		defer capCancel()
+		extractCaptions(capCtx, h.FFmpeg, abs, filepath.Join(dir, "captions.vtt"))
+	}()
+	url := fmt.Sprintf("/media/file/%d/index.m3u8", id)
+	if waitForPlaylist(playlist) {
+		go func() { _ = cmd.Wait() }()
+		return url, nil
 	}
+	// Nothing has Waited on this encode, so Kill still names our process.
+	capCancel()
+	stopUnwatched(cmd)
 	return "", fmt.Errorf("recording player did not start")
 }
 
@@ -198,20 +211,34 @@ func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, st
 		h.clearPlay(id)
 		return "", err
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	hold := &encodeHold{cmd: cmd}
+	stopped := make(chan struct{})
 	go func() {
-		followFile(abs, stdin, still)
-		_ = cmd.Wait()
+		defer cancel()
+		followFile(ctx, abs, stdin, still)
+		_ = hold.wait()
 		h.clearPlay(id)
+		close(stopped)
 	}()
-	return waitPlaylistFile(playlist, id)
+	if waitForPlaylist(playlist) {
+		return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
+	}
+	// Kill before the copy goroutine's Wait reaps the pid, then cancel so
+	// that Wait can run and release the recording.
+	hold.kill()
+	cancel()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+	}
+	return "", fmt.Errorf("recording player did not start")
 }
 
-func extractCaptions(ffmpeg, path, dest string) {
-	if ffmpeg == "" || path == "" {
+func extractCaptions(ctx context.Context, ffmpeg, path, dest string) {
+	if ffmpeg == "" || path == "" || ctx.Err() != nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
 	cmd := exec.CommandContext(ctx, ffmpeg, "-hide_banner", "-loglevel", "error", "-i", path, "-map", "0:s:0", "-f", "webvtt", dest)
 	_ = cmd.Run()
 }
@@ -222,23 +249,74 @@ func (h *Hub) clearPlay(id int64) {
 	h.playMu.Unlock()
 }
 
-func waitPlaylistFile(playlist string, id int64) (string, error) {
-	deadline := time.Now().Add(20 * time.Second)
+func playlistAppeared(playlist string) bool {
+	info, err := os.Stat(playlist)
+	return err == nil && info.Size() > 0
+}
+
+func waitForPlaylist(playlist string) bool {
+	deadline := time.Now().Add(playStart)
 	for time.Now().Before(deadline) {
-		if info, err := os.Stat(playlist); err == nil && info.Size() > 0 {
-			return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
+		if playlistAppeared(playlist) {
+			return true
 		}
 		time.Sleep(200 * time.Millisecond)
+	}
+	return playlistAppeared(playlist)
+}
+
+func waitPlaylistFile(playlist string, id int64) (string, error) {
+	if waitForPlaylist(playlist) {
+		return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
 	}
 	return "", fmt.Errorf("recording player did not start")
 }
 
-// followFile copies a growing recording into ffmpeg until the recording has stopped and no new bytes arrive.
-func followFile(path string, dst io.WriteCloser, still func() bool) {
+// stopUnwatched kills an encode this goroutine has not Waited on, then reaps it.
+// Kill after Wait is unsafe: the pid may already belong to another process.
+func stopUnwatched(cmd *exec.Cmd) {
+	if cmd.Process != nil {
+		_ = cmd.Process.Kill()
+	}
+	_ = cmd.Wait()
+}
+
+// encodeHold is a started encode whose Wait runs on the copy goroutine.
+// kill does nothing once that Wait has reaped the pid.
+type encodeHold struct {
+	cmd    *exec.Cmd
+	mu     sync.Mutex
+	reaped bool
+}
+
+func (e *encodeHold) wait() error {
+	err := e.cmd.Wait()
+	e.mu.Lock()
+	e.reaped = true
+	e.mu.Unlock()
+	return err
+}
+
+func (e *encodeHold) kill() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.reaped || e.cmd == nil || e.cmd.Process == nil {
+		return
+	}
+	_ = e.cmd.Process.Kill()
+}
+
+// followFile copies a growing recording into ffmpeg until the recording has
+// stopped and no new bytes arrive. A cancelled context ends the copy so the
+// caller can reap the encode.
+func followFile(ctx context.Context, path string, dst io.WriteCloser, still func() bool) {
 	defer dst.Close()
 	var file *os.File
 	deadline := time.Now().Add(15 * time.Second)
 	for {
+		if ctx.Err() != nil {
+			return
+		}
 		opened, err := os.Open(path)
 		if err == nil {
 			file = opened
@@ -247,12 +325,17 @@ func followFile(path string, dst io.WriteCloser, still func() bool) {
 		if !still() || time.Now().After(deadline) {
 			return
 		}
-		time.Sleep(200 * time.Millisecond)
+		if !pauseFollow(ctx, 200*time.Millisecond) {
+			return
+		}
 	}
 	defer file.Close()
 	buf := make([]byte, 64*1024)
 	quiet := 0
 	for {
+		if ctx.Err() != nil {
+			return
+		}
 		n, err := file.Read(buf)
 		if n > 0 {
 			quiet = 0
@@ -267,11 +350,24 @@ func followFile(path string, dst io.WriteCloser, still func() bool) {
 					return
 				}
 			}
-			time.Sleep(300 * time.Millisecond)
+			if !pauseFollow(ctx, 300*time.Millisecond) {
+				return
+			}
 			continue
 		}
 		if err != nil {
 			return
 		}
+	}
+}
+
+func pauseFollow(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }

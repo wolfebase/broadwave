@@ -2,6 +2,7 @@ package live
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,7 +27,7 @@ func TestFollowFileReadsBytesWrittenLater(t *testing.T) {
 	still.Store(true)
 	done := make(chan struct{})
 	go func() {
-		followFile(path, &buf, still.Load)
+		followFile(context.Background(), path, &buf, still.Load)
 		close(done)
 	}()
 	time.Sleep(150 * time.Millisecond)
