@@ -128,11 +128,11 @@ Fix: set `note` on every failure. Keep the last plan on screen if you want, and 
 
 Fix: `try await Task.sleep`, return on `CancellationError`, and ignore the second result if the task is cancelled.
 
-### A failed Bonjour browse is not replaced
+### A failed Bonjour browse is not started again until the view is recreated
 
-`ConnectView.swift` 114–115 starts discovery in `onAppear` and stops it in `onDisappear`. `Discovery.start()` (`Discovery.swift` 67–68) returns immediately when `browser != nil`. The state handler (line 81) sets `searching = false` on `.failed` and does not release `browser`. Backgrounding does not call `onDisappear`. After a failed browse, “No server answered on this network.” (`ConnectView.swift` 98) stays until the view is recreated, and a later `start()` does nothing.
+`ConnectView.swift` 114–115 starts discovery in `onAppear` and stops it in `onDisappear`. Backgrounding does not call `onDisappear`. The kit now drops the browser on `.failed`, so a later `start()` browses again. Nothing on the connect screen calls `start()` when the scene becomes `.active`, so “No server answered on this network.” (`ConnectView.swift` 98) stays until the view is recreated.
 
-Fix: on `.failed`, cancel and nil `browser` so the next `start()` browses again. From the connect screen, call `start()` when the scene becomes `.active`. A kit test must not call `Discovery.start()` or `LANProbe.collect()`; those probe the LAN.
+Fix: from the connect screen, call `discovery.start()` when the scene becomes `.active`.
 
 ## Accessibility
 

@@ -17,6 +17,15 @@ private func signedServer(id: String, url: String, privateKey: Curve25519.Signin
     )
 }
 
+@Test func aFailedBrowseDropsTheBrowserSoStartCanRunAgain() {
+    let ready = Discovery.browse(after: .ready, holding: true)
+    #expect(ready == Discovery.BrowseStep(searching: true, holding: true))
+    let failed = Discovery.browse(after: .failed, holding: true)
+    #expect(failed == Discovery.BrowseStep(searching: false, holding: false))
+    let cancelled = Discovery.browse(after: .cancelled, holding: true)
+    #expect(cancelled == Discovery.BrowseStep(searching: false, holding: true))
+}
+
 @Test func aFinishedResolveDropsTheHandler() {
     let ready = Discovery.closeResolve(.ready)
     #expect(ready == Discovery.ResolveAction(resumeWithAddress: true, dropHandler: true))
