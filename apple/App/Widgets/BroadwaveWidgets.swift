@@ -60,7 +60,9 @@ enum Feed: String, CaseIterable {
                 throw NoTeams()
             }
             async let channels = api.channels()
-            async let airings = api.airings(from: now, to: now.addingTimeInterval(24 * 3600))
+            // Games only: a day of every listing can pass the widget's memory limit.
+            // From 4 h back, so a game in overtime past its listed end stays.
+            async let airings = api.airings(from: now.addingTimeInterval(-4 * 3600), to: now.addingTimeInterval(24 * 3600), sportsOnly: true)
             async let recordings = api.recordings()
             async let plan = try? api.schedule()
             async let scores = try? api.scoreboard()

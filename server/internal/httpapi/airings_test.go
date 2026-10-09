@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -131,6 +132,50 @@ func TestPrecompressedAsset(t *testing.T) {
 	}
 	if rec.Header().Get("Content-Type") != "text/javascript; charset=utf-8" {
 		t.Fatalf("type %s", rec.Header().Get("Content-Type"))
+	}
+}
+
+// A widget asks for games only: a day of a few thousand playlist channels
+// passed its memory limit. The rule is the apps' sports rule.
+func TestAiringsKindSports(t *testing.T) {
+	st := testStore(t)
+	err := st.UpsertDevice(context.Background(), hdhr.Device{
+		DeviceID: "10611B4C", FriendlyName: "DUO", ModelNumber: "HDHR5-2US",
+		BaseURL: "http://192.168.1.252", TunerCount: 2,
+	}, []hdhr.Channel{{GuideNumber: "4.1", GuideName: "KBWV", VideoCodec: "MPEG2", AudioCodec: "AC3"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: st}).Handler()
+	channels, err := st.Channels(context.Background(), false)
+	if err != nil || len(channels) != 1 {
+		t.Fatalf("channels %v %v", channels, err)
+	}
+	id := channels[0].ID
+	now := time.Now().UTC().Truncate(time.Second)
+	at := func(h int) time.Time { return now.Add(time.Duration(h) * time.Hour) }
+	rows := []store.Airing{
+		{ChannelID: id, Title: "NFL Football", Category: "Sports event", Start: at(0), End: at(1)},
+		{ChannelID: id, Title: "NBA Basketball: Lakers at Celtics", Start: at(1), End: at(2)},
+		{ChannelID: id, Title: "Chiefs at Bills Preview Show", Start: at(1), End: at(2)},
+		{ChannelID: id, Title: "College Football Today", Start: at(2), End: at(3)},
+		{ChannelID: id, Title: "Evening News", Category: "News", Start: at(3), End: at(4)},
+		{ChannelID: id, Title: "Game Day", Category: "Game day", Start: at(4), End: at(5)},
+	}
+	if err := st.ReplaceAirings(context.Background(), rows); err != nil {
+		t.Fatal(err)
+	}
+	got := airingTitles(t, get(t, h, "/api/v1/airings?kind=sports").Body.Bytes())
+	if strings.Join(got, "|") != "NFL Football|NBA Basketball: Lakers at Celtics|Game Day" {
+		t.Fatalf("sports %v", got)
+	}
+	if all := airingTitles(t, get(t, h, "/api/v1/airings").Body.Bytes()); len(all) != 6 {
+		t.Fatalf("without kind %v", all)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/airings?kind=movies", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("unknown kind %d", rec.Code)
 	}
 }
 

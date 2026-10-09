@@ -75,6 +75,24 @@ private func planned(_ airing: Airing, skipped: Bool = false, conflict: Bool = f
     #expect(rows[1].record == WidgetFeed.RecordAsk(channelID: 5, title: "Chiefs at Broncos", start: now.addingTimeInterval(3600)))
 }
 
+@Test func teamsKeepsAGameInOvertimeUntilTheScoreboardSaysItEnded() {
+    let snap = TopShelf.Snapshot(
+        channels: [channel(4), channel(5)],
+        airings: [
+            airing(1, on: 4, title: "Chiefs at Broncos", category: "Sports event", game: "g1", from: -14400, to: -300),
+            airing(2, on: 5, title: "Royals at Twins", category: "Sports event", game: "g2", from: -14400, to: -300),
+        ]
+    )
+    let follows = [TeamFollow(name: "Kansas City Chiefs", short: "Chiefs"), TeamFollow(name: "Kansas City Royals", short: "Royals")]
+    let scores = [ScoreGame(id: "g1", state: "in"), ScoreGame(id: "g2", state: "post")]
+    #expect(WidgetFeed.teams(snap, follows: follows, scores: scores, now: now).map(\.title) == ["Chiefs at Broncos"])
+}
+
+@Test func sportsWordsMatchTheWebGuide() {
+    #expect(airing(1, on: 4, title: "Game Day", category: "Game day").kind == .sports)
+    #expect(airing(2, on: 4, title: "College Football: Tigers vs. Bears").kind == .sports)
+}
+
 @Test func upNextKeepsConflictsAndNamesTheChannel() {
     let items = [
         planned(airing(1, on: 4, title: "Later", from: 7200, to: 9000)),

@@ -15,7 +15,7 @@ public enum Category: String, Sendable, CaseIterable {
     }
 }
 
-private let sportsWords = regex(#"\b(sports?|football|basketball|baseball|hockey|soccer|golf|tennis|racing|nascar|motorsports?|boxing|mma|ufc|wrestling|olympics?|nfl|nba|mlb|nhl|mls|wnba|ncaa|bowl|playoffs?|pregame|postgame)\b"#)
+private let sportsWords = regex(#"\b(sports?|football|basketball|baseball|hockey|soccer|golf|tennis|racing|nascar|motorsports?|boxing|mma|ufc|wrestling|olympics?|nfl|nba|mlb|nhl|mls|wnba|ncaa|college (football|basketball)|bowl|playoffs?|pregame|postgame|game day)\b"#)
 private let versus = regex(#"\b(vs\.?|at|@)\b"#)
 
 private func regex(_ pattern: String) -> NSRegularExpression {

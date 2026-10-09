@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -423,10 +424,24 @@ func (s *Server) airings(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "The guide window is backwards.", http.StatusBadRequest)
 		return
 	}
+	kind := r.URL.Query().Get("kind")
+	if kind != "" && kind != "sports" {
+		httpError(w, "kind can only be sports", http.StatusBadRequest)
+		return
+	}
 	list, err := s.Store.Airings(r.Context(), from, to)
 	if err != nil {
 		writeError(w, err)
 		return
+	}
+	if kind == "sports" {
+		games := make([]store.Airing, 0, len(list))
+		for _, row := range list {
+			if sportsListing(row) {
+				games = append(games, row)
+			}
+		}
+		list = games
 	}
 	if raw := strings.TrimSpace(r.URL.Query().Get("channels")); raw != "" {
 		want := map[int64]bool{}
@@ -450,6 +465,17 @@ func (s *Server) airings(w http.ResponseWriter, r *http.Request) {
 		list = []store.Airing{}
 	}
 	writeCachedJSON(w, r, http.StatusOK, map[string]any{"airings": list})
+}
+
+// sportsWords and versus are the apps' sports rule (categoryOf on the web,
+// Airing.kind on Apple), so a widget asking for sports gets what it would pick.
+var (
+	sportsWords = regexp.MustCompile(`(?i)\b(sports?|football|basketball|baseball|hockey|soccer|golf|tennis|racing|nascar|motorsports?|boxing|mma|ufc|wrestling|olympics?|nfl|nba|mlb|nhl|mls|wnba|ncaa|college (football|basketball)|bowl|playoffs?|pregame|postgame|game day)\b`)
+	versus      = regexp.MustCompile(`\b(vs\.?|at|@)\b`)
+)
+
+func sportsListing(a store.Airing) bool {
+	return sportsWords.MatchString(a.Category) || (sportsWords.MatchString(a.Title) && versus.MatchString(a.Title))
 }
 
 func parseGuideTime(raw string) (time.Time, error) {

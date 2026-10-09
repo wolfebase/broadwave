@@ -57,13 +57,17 @@ public enum WidgetFeed {
     }
 
     /// Games of the teams the viewer follows, on now first, then the next to start.
+    /// A game the scoreboard still has on stays past its listed end (overtime).
     public static func teams(
         _ snap: TopShelf.Snapshot, follows: [TeamFollow], scores: [ScoreGame], now: Date, limit: Int = 4
     ) -> [Row] {
         let byID = Dictionary(scores.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let channels = Dictionary(snap.channels.filter { $0.enabled && !$0.hidden }.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let games = snap.airings
-            .filter { $0.end > now && $0.kind == .sports && channels[$0.channelId] != nil && followed($0, follows) }
+            .filter { airing in
+                (airing.end > now || airing.gameId.flatMap { byID[$0]?.state } == "in") && airing.kind == .sports
+                    && channels[airing.channelId] != nil && followed(airing, follows)
+            }
             .sorted { $0.start < $1.start }
         return games.prefix(limit).compactMap { airing in
             guard let channel = channels[airing.channelId] else { return nil }
