@@ -99,14 +99,16 @@ final class AppShortcutsTests: XCTestCase {
         #endif
     }
 
-    /// Opens a link the way the system does, answering the simulator's "Open in" prompt.
-    private func follow(_ app: XCUIApplication, _ link: String) {
-        app.open(URL(string: link)!)
-        let open = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Open"]
-        if open.waitForExistence(timeout: 3) {
-            open.tap()
+    #if os(iOS)
+        /// Opens a link the way the system does, answering the simulator's "Open in" prompt.
+        private func follow(_ app: XCUIApplication, _ link: String) {
+            app.open(URL(string: link)!)
+            let open = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Open"]
+            if open.waitForExistence(timeout: 3) {
+                open.tap()
+            }
         }
-    }
+    #endif
 
     private func shot(_ name: String) {
         let screen = XCUIScreen.main.screenshot()
