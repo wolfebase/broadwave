@@ -8,7 +8,7 @@ Listings for every channel the antenna can receive, for as many days as the sour
 
 ## Design
 
-**SiliconDust first.** The tuner XMLTV feed is the default. It is two days on the free account and covers only the stations SiliconDust publishes. On this lineup that is 9 of 27 channels. The JSON guide endpoint lists the same nine, so it is not a second listing source.
+**SiliconDust first.** The tuner XMLTV feed is the default. It is two days on the free account and covers only the stations SiliconDust publishes. One lineup saw 9 of 27 channels in that feed. The JSON guide endpoint listed the same channels, so it is not a second listing source.
 
 **Another source fills the gaps.** Schedules Direct, when an account and lineup are saved in Settings, asks for fourteen days and falls back to one day if the account refuses the longer request. An XMLTV link in Settings does the same job for channels that still have no listings. Neither source replaces a channel that already has listings from the tuner feed.
 

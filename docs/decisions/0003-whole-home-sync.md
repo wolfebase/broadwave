@@ -16,14 +16,14 @@ Every screen watching the same channel shows the same frame within about 50 ms o
 
 - `anchorServerTime`: server time when the state was set
 - `anchorMediaTime`: the program date-time playing at that moment
-- `rate`: 1 when playing, 0 when paused
+- `rate`: 1 when playing, 0 when paused. A follow room can play at 0.975 while it eases back to its latency, then returns to 1.
 - `mode`: `follow` (independent controls, synced playback) or `group` (controls apply to everyone)
 
 At any server time `T`, the target media time is `anchorMediaTime + (T - anchorServerTime) * rate`. By default the anchor sits a fixed latency behind the live edge (the `Balanced` latency target), so every client aims at the same point.
 
 **Clients.**
 
-- Apple: start with `AVPlayer.setRate(1, time: target, atHostTime: hostTime)` for a frame-accurate start. Then hold sync by nudging `rate` between 0.97 and 1.03 when drift exceeds 20 ms, and seek when it exceeds 400 ms. The `BroadwaveKit` sync engine owns this logic.
+- Apple: start with `AVPlayer.setRate(1, time: target, atHostTime: hostTime)` for a frame-accurate start. Then hold sync by nudging `rate` by 2 percent when drift exceeds 60 ms, and seek when it exceeds 400 ms. The nudge is relative to the room's own rate. The `BroadwaveKit` sync engine owns this logic.
 - Web: map `video.currentTime` to program date-time through the playlist's segments (both directions), trim `playbackRate` up to 3% under 400 ms of drift, and above that pause for exactly the drift when ahead or seek forward when behind. Backward seeks in a live buffer stall hls.js, so the engine never makes them outside group rewinds, and it seeks at most every 2 s.
 
 Measured on a real ATSC broadcast (2026-09-22): two browser screens locked 15 ms apart, each within 5 ms of the room target.
