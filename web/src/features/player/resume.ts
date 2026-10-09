@@ -34,6 +34,14 @@ export function playOnShortReturn(action: ComeBackAction, held: boolean): boolea
   return action === "play" && !held;
 }
 
+/**
+ * The long-return path seeks and clears whatever is on screen. A held room
+ * stays where it is, message and quiet clock included.
+ */
+export function resumeOnReturn(action: ComeBackAction, held: boolean): boolean {
+  return action === "resume" && !held;
+}
+
 /** How long to wait for a playlist that still shows the old edge. */
 export const resumeWaitMs = 2200;
 

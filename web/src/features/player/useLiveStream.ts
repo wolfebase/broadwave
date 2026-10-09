@@ -11,7 +11,7 @@ import { applySound } from "./extras";
 import { followCaptions, watchTimeline } from "./liveCaptions";
 import type { StartGate } from "./quietStart";
 import { soundFor, type Sound } from "./sounds";
-import { awayBeforeSeekMs, comeBackAction, playOnShortReturn, resumePlan, returnHeld } from "./resume";
+import { awayBeforeSeekMs, comeBackAction, playOnShortReturn, resumeOnReturn, resumePlan, returnHeld } from "./resume";
 import {
   aTunerAnswers,
   aTunerIsFree,
@@ -23,6 +23,7 @@ import {
   pictureRetryEveryMs,
   liveFatalStep,
   outageAtWatchStart,
+  outageTearsDown,
   pictureStopped,
   recoveryReady,
   restartDelayMs,
@@ -279,6 +280,9 @@ export function useLiveStream(
     let playlist = "";
     let startTimer = 0;
     const rememberOutage = (message: string, kind: Recovery) => {
+      // A failed watch never built a player. The return path only keeps a
+      // message it knows tore the picture down.
+      if (outageTearsDown(kind, false)) tornDown = true;
       quietPending.current = false;
       setNeedsConfirm(false);
       setError(message);
@@ -443,6 +447,8 @@ export function useLiveStream(
             pictureStopAtRef.current = 0;
             setPictureStopAt(0);
           }
+          // The confirm stays until the viewer answers. A return must not clear it.
+          tornDown = outageTearsDown("", true);
           setNeedsConfirm(true);
           setRecovery("");
           setError(failed.message);
@@ -520,6 +526,8 @@ export function useLiveStream(
         if (playOnShortReturn(action, held)) void video.play().catch(() => undefined);
         return;
       }
+      // A held room does not seek, and it keeps the message and the quiet clock.
+      if (!resumeOnReturn(action, held)) return;
       resumeQuiet = true;
       recovered = false;
       heldFatal = false;

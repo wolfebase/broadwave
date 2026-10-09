@@ -101,6 +101,14 @@ export function aTunerAnswers(devices: { error?: string }[]): boolean {
   return devices.length === 0 || devices.some((device) => !device.error);
 }
 
+/**
+ * A named cause, or a confirm the viewer still owes, owns the screen.
+ * Coming back must not clear it. An unnamed stop leaves the player up.
+ */
+export function outageTearsDown(recovery: Recovery, needsConfirm: boolean): boolean {
+  return recovery !== "" || needsConfirm;
+}
+
 export function recoveryReady(kind: Recovery, snap: RecoverySnap): boolean {
   if (kind === "server" || kind === "restart") return snap.health && snap.online;
   if (kind === "busy") return snap.freeTuner;
