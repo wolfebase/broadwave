@@ -152,6 +152,15 @@ let demoMedia = URL(fileURLWithPath: #filePath)
     #expect(try await client.settings()["folderLayout"] == "flat")
     try await client.saveSettings(["folderLayout": "shows"])
     #expect(try await client.settings()["folderLayout"] == "shows")
+    #expect(before["gameAlerts"] == "all")
+    try await client.saveSettings(["gameAlerts": "teams"])
+    #expect(try await client.settings()["gameAlerts"] == "teams")
+    try await client.saveSettings(["gameAlerts": "off"])
+    #expect(try await client.settings()["gameAlerts"] == "off")
+    try await client.saveSettings(["gameAlerts": "everything"])
+    #expect(try await client.settings()["gameAlerts"] == "off")
+    try await client.saveSettings(["gameAlerts": "all"])
+    #expect(try await client.settings()["gameAlerts"] == "all")
 }
 
 @Test func demoKeepRoundTrip() async throws {

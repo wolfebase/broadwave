@@ -31,6 +31,11 @@ public final class AppStore {
     /// A device that showed up after the house was already known. Nil when nothing is waiting.
     public private(set) var homeNotice: String?
     private var homeQueue: [String] = []
+    /// The game alert on screen, if one is still worth showing.
+    public private(set) var gameAlert: GameAlert?
+    /// When that alert arrived. The banner drops it ten minutes later.
+    public private(set) var gameAlertAt: Date?
+    private var gameAlerts = GameAlerts()
     /// This screen's name as it announces itself. The server tells every screen
     /// about a new one, the new one included.
     public var screenName = ""
@@ -130,6 +135,7 @@ public final class AppStore {
 
     public func connect(_ server: FoundServer) {
         socket?.disconnect()
+        clearGameAlerts()
         // Down until the first message, so a server that is off at launch gets the banner.
         noteConnection(false)
         announced = false
@@ -158,6 +164,10 @@ public final class AppStore {
                 await self?.refreshRecordings()
                 await self?.refreshFrames()
             }
+        }
+        socket.on("game.alert") { [weak self] data in
+            guard let alert = try? JSONDecoder().decode(GameAlert.self, from: data) else { return }
+            self?.noteGameAlert(alert)
         }
         socket.connect()
         self.socket = socket
@@ -211,6 +221,40 @@ public final class AppStore {
         homeNotice = homeQueue.removeFirst()
     }
 
+    /// Queues a game alert. A repeat of the same id is ignored.
+    public func noteGameAlert(_ alert: GameAlert, now: Date = Date()) {
+        gameAlerts.receive(alert, at: now)
+        publishGameAlert(now: now)
+    }
+
+    /// Drops the one on screen. The next one comes up when it is still fresh.
+    public func dismissGameAlert(now: Date = Date()) {
+        gameAlerts.dismiss()
+        publishGameAlert(now: now)
+    }
+
+    /// Drops anything older than ten minutes and publishes what is left.
+    public func refreshGameAlerts(now: Date = Date()) {
+        publishGameAlert(now: now)
+    }
+
+    private func publishGameAlert(now: Date) {
+        let item = gameAlerts.current(at: now)
+        let next = item?.alert
+        if gameAlert != next {
+            gameAlert = next
+        }
+        if gameAlertAt != item?.at {
+            gameAlertAt = item?.at
+        }
+    }
+
+    private func clearGameAlerts() {
+        gameAlerts = GameAlerts()
+        gameAlert = nil
+        gameAlertAt = nil
+    }
+
     func noteHome(_ message: String) {
         let message = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty, !Self.namesScreen(message, screenName) else { return }
@@ -238,6 +282,7 @@ public final class AppStore {
         frameIDs = []
         homeNotice = nil
         homeQueue = []
+        clearGameAlerts()
         UserDefaults.standard.removeObject(forKey: "server")
         SharedServer.save(nil)
     }

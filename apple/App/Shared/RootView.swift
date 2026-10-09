@@ -236,6 +236,7 @@ struct RootView: View {
     @State private var tab: AppTab = .home
     @State private var showSetup = false
     @State private var dismissedUpdate = ""
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -267,6 +268,23 @@ struct RootView: View {
                 #endif
             }
             .background(Tokens.ColorToken.canvas.ignoresSafeArea())
+            .task(id: store.channels.first?.id) {
+                #if DEBUG
+                    // -BroadwaveFakeGameAlert YES shows one alert for the first channel.
+                    guard fakeGameAlert, let channel = store.channels.first else { return }
+                    let number = channel.displayNumber.isEmpty ? channel.guideNumber : channel.displayNumber
+                    print("broadwave fake game alert \(number) \(channel.id)")
+                    fflush(stdout)
+                    store.noteGameAlert(GameAlert(
+                        id: "lane:start",
+                        kind: "start",
+                        gameId: "lane",
+                        channelId: channel.id,
+                        channel: number,
+                        text: "Starting now: CHI at LV"
+                    ))
+                #endif
+            }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if !bannersInTabs {
                     banners
@@ -664,6 +682,7 @@ struct RootView: View {
             }
             updateBanner
             arrivalBanner
+            gameBanner
         }
     }
 
@@ -709,6 +728,54 @@ struct RootView: View {
             }
         }
     }
+
+    /// The full player, a recording playing, a home notice, and the background hold the alert.
+    /// It cannot take the remote from the player, because it is not on screen then.
+    private var gameHeld: Bool {
+        playerCoversTheScreen || libraryFilter.playing || showSetup || store.presentSetup || !(store.homeNotice ?? "").isEmpty || scenePhase != .active
+    }
+
+    @ViewBuilder
+    private var gameBanner: some View {
+        if store.connected, let alert = store.gameAlert, let at = store.gameAlertAt, !gameHeld, Date().timeIntervalSince(at) < GameAlerts.freshFor {
+            GameAlertBanner(alert: alert, onWatch: { watchGame(alert) }, onDismiss: { store.dismissGameAlert() })
+                .onAppear { store.refreshGameAlerts() }
+                .task(id: alert.id) {
+                    let age = Date().timeIntervalSince(at)
+                    if age >= GameAlerts.freshFor {
+                        store.refreshGameAlerts()
+                        return
+                    }
+                    let wait = min(GameAlerts.visibleFor, GameAlerts.freshFor - age)
+                    try? await Task.sleep(for: .seconds(wait))
+                    if !Task.isCancelled, store.gameAlert?.id == alert.id {
+                        store.dismissGameAlert()
+                    }
+                }
+        }
+    }
+
+    private func watchGame(_ alert: GameAlert) {
+        store.dismissGameAlert()
+        if let channel = store.channels.first(where: { $0.id == alert.channelId }) {
+            nowPlaying.play(channel)
+            return
+        }
+        if let url = URL(string: "broadwave://watch/\(alert.channelId)") {
+            open(url)
+        }
+    }
+
+    #if DEBUG
+        /// `-BroadwaveFakeGameAlert YES` injects one alert once the lineup is in.
+        private var fakeGameAlert: Bool {
+            if UserDefaults.standard.bool(forKey: "BroadwaveFakeGameAlert") {
+                return true
+            }
+            let raw = UserDefaults.standard.string(forKey: "BroadwaveFakeGameAlert") ?? ""
+            return !raw.isEmpty && raw != "0" && raw.lowercased() != "no"
+        }
+    #endif
 }
 
 /// One line when a tuner, screen, or server shows up after the house is already known.
@@ -750,6 +817,46 @@ struct HomeArrivalBanner: View {
         .padding(.vertical, 10)
         .background(.regularMaterial)
         .accessibilityElement(children: .contain)
+    }
+}
+
+/// A followed team's game starting, or a close finish, with Watch.
+/// Left out while the player is up, so it never takes that focus.
+struct GameAlertBanner: View {
+    var alert: GameAlert
+    var onWatch: () -> Void
+    var onDismiss: () -> Void
+
+    private var line: String {
+        if let detail = alert.detail, !detail.isEmpty {
+            return "\(alert.text) · \(detail)"
+        }
+        return alert.text
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(line)
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.updatesFrequently)
+                .accessibilityIdentifier("game-alert-text")
+            Button("Watch \(alert.channel)", action: onWatch)
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("game-alert-watch")
+            Button("Not now", action: onDismiss)
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("game-alert-dismiss")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.regularMaterial)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("game-alert")
+        #if os(tvOS)
+            // Its own section, so Up from the page reaches Watch without taking the player's focus.
+            .focusSection()
+        #endif
     }
 }
 

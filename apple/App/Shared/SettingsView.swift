@@ -22,6 +22,8 @@ struct SettingsView: View {
     @State private var supportBusy = false
     @State private var hideScores = false
     @State private var hideScoresKnown = false
+    @State private var gameAlerts = "all"
+    @State private var alertsKnown = false
     @State private var autoplay = true
     @State private var autoplayKnown = false
     @State private var shareTuner = false
@@ -321,6 +323,23 @@ struct SettingsView: View {
             ))
             .disabled(!hideScoresKnown)
             Text("A recorded game stays hidden until you watch it.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Picker("Game alerts", selection: Binding(
+                get: { gameAlerts },
+                set: { next in
+                    guard alertsKnown, next != gameAlerts, next == "all" || next == "teams" || next == "off" else { return }
+                    gameAlerts = next
+                    save(["gameAlerts": next])
+                }
+            )) {
+                Text("Your teams and close games").tag("all")
+                Text("Your teams only").tag("teams")
+                Text("Off").tag("off")
+            }
+            .disabled(!alertsKnown)
+            .accessibilityIdentifier("game-alerts")
+            Text("A note when a team you follow starts playing, or a game on your channels comes down to the last minutes. A game you're recording and haven't watched gets no score and no close-game note.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             SecureField("TheSportsDB key", text: $sportsKey)
@@ -642,6 +661,8 @@ struct SettingsView: View {
             sportsDB = values["sportsdbKeySet"] == "1"
             hideScores = values["hideScores"] == "1"
             hideScoresKnown = true
+            gameAlerts = Self.alertChoice(values["gameAlerts"])
+            alertsKnown = true
             autoplay = values["autoplay"] != "0"
             autoplayKnown = true
             shareTuner = values["hdhrEmulate"] == "1"
@@ -878,6 +899,14 @@ struct SettingsView: View {
 
 private extension SettingsView {
     static let bufferChoices = ["0", "30", "60", "120", "240"]
+
+    /// Anything other than the two narrower choices is every alert.
+    static func alertChoice(_ raw: String?) -> String {
+        if let raw, raw == "teams" || raw == "off" {
+            return raw
+        }
+        return "all"
+    }
 
     /// A saved day count, or "0" when the value is missing or not a whole number of days.
     static func watchedDays(_ raw: String?) -> String {
