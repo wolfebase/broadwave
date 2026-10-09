@@ -76,6 +76,17 @@ func sampleReply() []byte {
 	return pkt
 }
 
+func FuzzParseReply(f *testing.F) {
+	f.Add(sampleReply())
+	f.Add([]byte{0x00, 0x03})
+	f.Fuzz(func(t *testing.T, pkt []byte) {
+		if len(pkt) > 2048 {
+			pkt = pkt[:2048]
+		}
+		_, _ = ParseReply(pkt, "203.0.113.9:65001")
+	})
+}
+
 func TestDiscoverHostReadsALoopbackTuner(t *testing.T) {
 	conn, err := net.ListenPacket("udp4", "127.0.0.1:0")
 	if err != nil {

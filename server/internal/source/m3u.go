@@ -44,6 +44,13 @@ type Entry struct {
 	DRM           bool
 }
 
+// maxPlaylist is the most playlist text one read will hold.
+// A test lowers it. The live value matches the guide document cap.
+var maxPlaylist = 32 << 20
+
+// maxEntries stops a playlist from turning one file into an unbounded list.
+const maxEntries = 50000
+
 // ParseM3U reads an extended M3U playlist. Lines that are not channels are ignored.
 func ParseM3U(r io.Reader) []Entry {
 	var out []Entry
@@ -117,6 +124,9 @@ func ParseM3U(r io.Reader) []Entry {
 		}
 		entry.URL = line
 		entry.GuideURL = guideURL
+		if len(out) >= maxEntries {
+			return out
+		}
 		out = append(out, entry)
 		pending = Entry{}
 		have = false
@@ -353,7 +363,7 @@ func ReadPlaylist(ctx context.Context, raw string) ([]byte, error) {
 	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
 		body, err = FetchText(ctx, raw)
 	} else {
-		body, err = os.ReadFile(raw)
+		body, err = readLocalPlaylist(raw)
 	}
 	if err != nil {
 		return nil, err
@@ -369,7 +379,25 @@ func UnpackPlaylist(body []byte) ([]byte, error) {
 			return nil, err
 		}
 		defer gz.Close()
-		return io.ReadAll(io.LimitReader(gz, 32<<20))
+		return io.ReadAll(io.LimitReader(gz, int64(maxPlaylist)))
+	}
+	return body, nil
+}
+
+// readLocalPlaylist reads a file playlist and stops past maxPlaylist.
+// os.ReadFile would keep going for a file that never ends.
+func readLocalPlaylist(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	body, err := io.ReadAll(io.LimitReader(f, int64(maxPlaylist)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxPlaylist {
+		return nil, fmt.Errorf("the playlist is too large")
 	}
 	return body, nil
 }
@@ -391,7 +419,7 @@ func FetchText(ctx context.Context, rawURL string) ([]byte, error) {
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("source returned %s", res.Status)
 	}
-	return io.ReadAll(io.LimitReader(res.Body, 32<<20))
+	return io.ReadAll(io.LimitReader(res.Body, int64(maxPlaylist)))
 }
 
 // ProbeFormat reads the start of a stream and returns "hls" or "mpegts".
