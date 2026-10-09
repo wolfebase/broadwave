@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Guide } from "../features/guide/Guide";
 import { Home } from "../features/home/Home";
 import { gateApp } from "../lib/compat";
+import { recordingCountLabel } from "../lib/guide";
 import { events } from "../lib/events";
 import { formatClock } from "../time";
 import { GuideIcon, HomeIcon, RecordingsIcon, ScheduleIcon, SearchIcon, SettingsIcon, SportsIcon } from "../ui/icons";
@@ -175,7 +176,11 @@ function Shell() {
               <button key={p} type="button" role="tab" aria-selected={active(p)} className={active(p) ? "tab on" : "tab"} onClick={() => navigate(p)}>
                 <Icon className="tab-icon" />
                 <span className="tab-label">{label}</span>
-                {p === "/recordings" && recordingCount > 0 ? <span className="tab-rec" aria-label={`${recordingCount} recording`} /> : null}
+                {p === "/recordings" && recordingCount > 0 ? (
+                  <span className="tab-rec">
+                    <span className="sr-only">{recordingCountLabel(recordingCount)}</span>
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>

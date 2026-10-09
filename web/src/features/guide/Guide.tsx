@@ -8,8 +8,10 @@ import {
   airingAt,
   categoryLabel,
   categoryOf,
+  channelWatchName,
   emptyGuideLabel,
   guideCellId,
+  guideCellName,
   isRecording,
   nextAfter,
   primeTime,
@@ -465,7 +467,7 @@ export function Guide() {
                     void editChannel(c, { hidden: true });
                   }}
                   onClick={() => watch(c)}
-                  aria-label={`Watch ${c.displayNumber} ${c.displayName}${c.standard === "atsc3" ? ", ATSC 3.0" : ""}`}
+                  aria-label={channelWatchName(c.displayNumber, c.displayName, { atsc3: c.standard === "atsc3", favorite: c.favorite })}
                   title="Drag to reorder. Right-click to hide."
                 >
                   <span className="gc-num">{c.displayNumber}</span>
@@ -527,7 +529,11 @@ export function Guide() {
                         setFocus({ row: r, at: Math.max(now, Date.parse(a.start)) });
                         open(c, a);
                       }}
-                      aria-label={`${a.title}, ${spanLabel(a)}, ${c.displayName}`}
+                      aria-label={guideCellName(a.title, spanLabel(a), c.displayName, {
+                        recording: rec,
+                        fresh: a.new,
+                        score: a.gameId ? scores.get(a.gameId) : undefined,
+                      })}
                     >
                       <span className="cell-title">
                         {rec ? <RecDot scheduled={rec === "scheduled"} /> : null}
