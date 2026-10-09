@@ -1,8 +1,11 @@
 package live
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -68,6 +71,45 @@ func BenchmarkStampPlaylist(b *testing.B) {
 			b.Fatal("empty playlist")
 		}
 	}
+}
+
+// BenchmarkStampSegmentTime dates 32 segments whose files are on disk.
+// File reads each one. Tag already has the start in the playlist.
+func BenchmarkStampSegmentTime(b *testing.B) {
+	dir := b.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "init.mp4"), videoInit(), 0o644); err != nil {
+		b.Fatal(err)
+	}
+	const n = 32
+	seg := keyframeFragment(0, 90000)
+	header := []byte("#EXTM3U\n#EXT-X-VERSION:9\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n")
+	var plain, tagged []byte
+	plain = append(plain, header...)
+	tagged = append(tagged, header...)
+	for i := range n {
+		name := fmt.Sprintf("seg%05d.m4s", i)
+		if err := os.WriteFile(filepath.Join(dir, name), seg, 0o644); err != nil {
+			b.Fatal(err)
+		}
+		line := "#EXTINF:1.000,\n" + name + "\n"
+		plain = append(plain, line...)
+		tagged = append(tagged, "#EXT-X-PTS:"+name+":0\n"+line...)
+	}
+	fixed := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	run := func(b *testing.B, src []byte) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for b.Loop() {
+			var p playlistStamper
+			tl := NewTimeline()
+			tl.now = func() time.Time { return fixed }
+			if !bytes.Contains(p.stamp(dir, src, tl), []byte("PROGRAM-DATE-TIME")) {
+				b.Fatal("undated")
+			}
+		}
+	}
+	b.Run("File", func(b *testing.B) { run(b, plain) })
+	b.Run("Tag", func(b *testing.B) { run(b, tagged) })
 }
 
 var _ io.WriteCloser = discardCloser{}
