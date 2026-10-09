@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+
+	"broadwave/internal/fetchguard"
 	"strconv"
 	"strings"
 	"time"
@@ -102,24 +104,12 @@ func readCached(dir, name string) ([]byte, string, bool) {
 }
 
 func getArtBytes(ctx context.Context, rawURL string) ([]byte, error) {
-	client := &http.Client{
-		Timeout: 12 * time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) > 3 {
-				return fmt.Errorf("too many redirects")
-			}
-			if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
-				return fmt.Errorf("redirect left http")
-			}
-			return nil
-		},
-	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, fetchguard.ErrRefused
 	}
 	req.Header.Set("User-Agent", "Broadwave/0.1")
-	res, err := client.Do(req)
+	res, err := fetchguard.Do(req, 12*time.Second)
 	if err != nil {
 		return nil, err
 	}
