@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { focusRing } from "../../app/remote";
 import { dismissesLayer } from "../../lib/dialogFocus";
+import { optionArrow, optionRows } from "../../lib/optionArrow";
 import { BackIcon, CloseIcon, ExpandIcon, PauseIcon, PipIcon, PlayIcon, VolumeIcon } from "../../ui/icons";
 import { playerControls, playerTabTarget } from "./focusCycle";
 import "./player.css";
@@ -206,6 +207,22 @@ export function Stage({
                 if (target != null && list[target]) {
                   event.preventDefault();
                   focusRing(list[target]);
+                }
+              }
+              // Arrows inside the open options change the setting. They do not seek.
+              if (open && (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown")) {
+                const region = root.current?.querySelector("#player-options");
+                const current = event.target;
+                const slider = current instanceof HTMLInputElement && current.type === "range";
+                if (region && current instanceof HTMLElement && region.contains(current) && !slider) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const rows = optionRows(region);
+                  const row = rows.findIndex((items) => items.includes(current));
+                  const col = row < 0 ? -1 : rows[row].indexOf(current);
+                  const next = optionArrow(rows.map((items) => items.length), row, col, event.key);
+                  if (next) focusRing(rows[next.row]?.[next.col]);
+                  return;
                 }
               }
               // Options is a layer over the picture. Close it before leaving the page.

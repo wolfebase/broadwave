@@ -72,6 +72,10 @@ test("captions and audio are labelled and a remote can change them", async ({ pa
   await page.keyboard.press("Enter");
   await expect(captions.getByRole("button", { name: "On" })).toHaveAttribute("aria-pressed", "true");
   await expect(captions.getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.press("ArrowLeft");
+  await expect(captions.getByRole("button", { name: "Off" })).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(captions.getByRole("button", { name: "On" })).toBeFocused();
 
   await page.keyboard.press("Escape");
   await expect(options).toBeFocused();
