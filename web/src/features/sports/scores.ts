@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { takeGames } from "../../lib/latest";
+import { gamesFromScoreboard } from "./board";
 
 export type ScoreTeam = {
   name: string;
@@ -34,8 +35,10 @@ const scoreSeq = { n: 0 };
 export function refreshScores(): Promise<ScoreGame[]> {
   const mine = ++scoreSeq.n;
   return fetch("/api/v1/sports/scoreboard")
-    .then((res) => (res.ok ? res.json() : { games: [] }))
-    .then((body: { games?: ScoreGame[] }) => takeGames(scoreSeq, mine, body.games ?? [], cache, Date.now()) ?? cache.games)
+    .then(async (res) => {
+      const body = res.ok ? ((await res.json()) as { games?: ScoreGame[] }) : null;
+      return takeGames(scoreSeq, mine, gamesFromScoreboard(res.ok, body?.games), cache, Date.now()) ?? cache.games;
+    })
     .catch(() => takeGames(scoreSeq, mine, null, cache, Date.now()) ?? cache.games);
 }
 
@@ -44,8 +47,10 @@ export function loadScores(): Promise<ScoreGame[]> {
   if (!pending) {
     const mine = ++scoreSeq.n;
     pending = fetch("/api/v1/sports/scoreboard")
-      .then((res) => (res.ok ? res.json() : { games: [] }))
-      .then((body: { games?: ScoreGame[] }) => takeGames(scoreSeq, mine, body.games ?? [], cache, Date.now()) ?? cache.games)
+      .then(async (res) => {
+        const body = res.ok ? ((await res.json()) as { games?: ScoreGame[] }) : null;
+        return takeGames(scoreSeq, mine, gamesFromScoreboard(res.ok, body?.games), cache, Date.now()) ?? cache.games;
+      })
       .catch(() => takeGames(scoreSeq, mine, null, cache, Date.now()) ?? cache.games)
       .finally(() => {
         pending = null;
