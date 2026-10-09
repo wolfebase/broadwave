@@ -125,6 +125,35 @@ export function guideCellId(channelId: number, airingId?: number): string {
   return airingId ? `guide-cell-${airingId}` : `guide-empty-${channelId}`;
 }
 
+/** What a guide cell says. The label replaces the cell's contents, including the recording dot and the score. */
+export function guideCellName(
+  title: string,
+  span: string,
+  channel: string,
+  opts?: { recording?: "recording" | "scheduled" | null; fresh?: boolean; score?: string },
+): string {
+  const parts = [title];
+  if (opts?.recording === "recording") parts.push("Recording");
+  else if (opts?.recording === "scheduled") parts.push("Will record");
+  if (opts?.fresh) parts.push("New");
+  if (opts?.score) parts.push(opts.score);
+  parts.push(span, channel);
+  return parts.join(", ");
+}
+
+/** What the channel column says. The star is hidden from the name, so a favorite has to be in the label. */
+export function channelWatchName(number: string, name: string, opts?: { atsc3?: boolean; favorite?: boolean }): string {
+  let label = `Watch ${number} ${name}`;
+  if (opts?.atsc3) label += ", ATSC 3.0";
+  if (opts?.favorite) label += ", Favorite";
+  return label;
+}
+
+/** What the Recordings tab adds when something is taping. One stays singular. */
+export function recordingCountLabel(count: number): string {
+  return count === 1 ? "1 recording" : `${count} recordings`;
+}
+
 export function emptyGuideLabel(airings: Airing[], windowStart: number): string {
   if (airings.length === 0) return "No listings";
   const end = Date.parse(airings[airings.length - 1].end);

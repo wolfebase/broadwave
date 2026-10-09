@@ -30,7 +30,9 @@ export function LiveDot({ label = "Live" }: { label?: string }) {
 }
 
 export function RecDot({ scheduled }: { scheduled?: boolean }) {
-  return <span className={scheduled ? "rec-dot scheduled" : "rec-dot"} aria-label={scheduled ? "Will record" : "Recording"} title={scheduled ? "Will record" : "Recording"} />;
+  return (
+    <span className={scheduled ? "rec-dot scheduled" : "rec-dot"} role="img" aria-label={scheduled ? "Will record" : "Recording"} title={scheduled ? "Will record" : "Recording"} />
+  );
 }
 
 export function Progress({ value, category }: { value: number; category?: Category }) {
