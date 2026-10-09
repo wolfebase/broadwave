@@ -354,3 +354,105 @@ Fix: Watch only when `airing.isOn(at: store.now)`. Otherwise open the airing, as
 `isOffline` is “`health` is non-empty”. The health sentence is never drawn. `healthWord`’s “Needs attention” branch sits inside `if !offline`, so it never runs. A disabled source with an empty health string shows “Off” in `Tokens.ColorToken.success`.
 
 Fix: show the health string when it is non-empty and not a URL. Don’t use the success color for “Off”.
+
+## Third pass
+
+### Tonight and the day buttons open the start of the guide
+
+`GuideView.swift` 403–407 and 459–463. The now anchor is a real layout width (`389–394`) because `scrollTo` ignores `offset`. Each hour marker is a 1×1 view at the leading edge, then `.offset`. Tap Tonight, Tomorrow, or a weekday. `jump` becomes that time and `scrollTo(hour)` runs. Every marker’s layout frame is still the origin, so the grid jumps to the start. Now does the same: it sets `jump`, not the `"guide-now"` id.
+
+Fix: give each hour the same layout trick as `"guide-now"` (width `hour * 60 * perMinute`, id on the trailing point).
+
+### The guide slides when the clock crosses a half hour
+
+`Guide.swift` `guideOrigin` 224–231 floors to the half hour and steps back 30 minutes. `GuideView.swift` `origin` / `x` at 345–351 place every program and the now line from that date. The scroll offset (`450–453`) is not rebased, and nothing watches `origin`.
+
+Leave the guide on a show. When `store.now` crosses :00 or :30, or the first tick after a long background, origin jumps by one or more half hours. The rows move left by `30 * perMinute` points per half hour and the time at the left edge moves with them. The now pill hides once it is left of the viewport.
+
+Fix: keep one origin for the life of the grid, or on an origin change scroll by the pixel delta so the same instant stays at the leading edge.
+
+### A failed scoreboard looks like a night with no scores
+
+`GuideView.swift` 72–82. `try?` turns a failed or cancelled `scoreboard()` into `[]`, and that is stored. Cells show no score line. The task has no id, so it does not run again when the app becomes active.
+
+Fix: `task(id: store.api?.base)`. On failure or cancel, leave `scores` as it was. Refresh when the scene becomes active.
+
+### A slow pass reload puts Record back, and live Record hides the error
+
+`GuideView.swift` 863 and 870–879, and the live button at 812–818. `refreshPasses` now ignores a list from a server you left. It still applies an older list from this server. Open an upcoming program (passes start empty, so the button says Record). Tap Record before the GET returns. `recordOnce` shows “Don’t record”. The GET then finishes with the list from before the tap and the button says Record again. `act` starts a new task per tap and writes `problem` with no token, so an older failure can replace a newer success.
+
+The live Record button calls `toggleRecord`, which stores the failure on `store.error`. Nothing on the guide reads `store.error`. The button stays “Record”.
+
+Fix: a pass epoch bumped by record and remove, checked before `refreshPasses` assigns. One `act` task, and drop a result that is not the latest. Route the live button through `act`.
+
+### The portrait mini-guide does not say which channel is on
+
+`PlayerScreen.swift` 1508–1519. The current row draws a checkmark and hides it from VoiceOver. Every row’s label is the number, name, and title.
+
+Fix: when the row is the channel that is playing, add “, Playing” to its label.
+
+### Home says “Recording” on the button that stops it
+
+`HomeView.swift` 287–289. If the channel is already recording, the hero button title is “Recording” and the action is `toggleRecord`, which stops it. The portrait player uses the same word and then sets the label to “Stop recording” (`PlayerScreen.swift` 1557–1563). The hero does not.
+
+Fix: keep the visible title, and set `.accessibilityLabel` to “Stop recording” while a recording is active.
+
+### Start over can open a recording after you changed the channel
+
+`PlayerScreen.swift` `beginStartOver` 1253–1263. The recording path is an unstructured task. `live.stop()` clears the session and then waits on `stopWatching`. Nothing after that wait checks the channel or whether the player is still up. Change the channel while the stop is in flight. The task still sets `startOverRecording`, and the cover opens that recording.
+
+Fix: capture the channel id and a token before the wait. Set `startOverRecording` only if both still match.
+
+### The sync pill says “Synced” while the rooms are still catching up
+
+`PlayerScreen.swift` 1665–1678. The pill is shown for every state except `.off`, including waiting and syncing. The green tint is only when `locked`. The accessibility label is always “Synced” or “Synced with N screens”.
+
+Fix: label waiting and syncing as “Syncing”, and “Synced” only when `locked`.
+
+### A multiview tile’s Record stops a recording it does not name
+
+`MultiviewScreen.swift` 1346–1348. The menu always says Record. `toggleRecord` stops the active recording on that channel. The one-channel player labels that action “Stop recording”.
+
+Fix: “Stop recording” when `store.activeRecording(on: channel)` is set.
+
+### The iPhone audio menu does not mark the current choice
+
+`PlayerScreen.swift` 1568–1574 and 1619–1625. The current row draws a checkmark and does not set `.isSelected`. The Channels control on the same screen does (`1534`). The Apple TV audio actions set `UIAction` state `.on`.
+
+Fix: `.accessibilityAddTraits(entry.current ? .isSelected : [])` on each audio and delay row, and hide the checkmark image from VoiceOver so it is not read twice.
+
+### An old multiview plan opens the grid
+
+`MultiviewScreen.swift` 1043–1056 and `refreshPlan` 1525–1528. After `await refreshPlan()` the task does not check `Task.isCancelled` or that the ids are still `nowPlaying.together`. Add or remove a channel while the plan is in flight. The new task hides the grid. The old task then sets `planReady` and the tiles call `live.start` under the old plan. A failed plan is `try?` nil, `refreshPlan` returns without filling `blocked`, and the caller still sets `planReady`, so the grid opens with nothing blocked.
+
+Fix: return when the task is cancelled or the ids changed. On a failed plan, keep the spinner and show the error instead of opening the grid.
+
+### Closing a tile’s system picture-in-picture leaves the watch up
+
+`MultiviewScreen.swift` 1881–1883. The sound tile creates an `AVPictureInPictureController`, allows automatic start, and sets no delegate. `onDisappear` (1752–1754) does stop the watch when the tile goes away. Closing the system window while the tile is still on screen never calls `TilePlayer.stop()`, so `stopWatching` does not run. The one-channel player stops through `PictureHandoff.stopWhenClosed`.
+
+Fix: a delegate `pictureInPictureControllerDidStopPictureInPicture` that stops that tile’s watch when the window was closed and the tile is not what the viewer is watching.
+
+### A scan you just started is cancelled, and the button looks idle
+
+`SourcesView.swift` `load` 298–305, `watch` 316–318, `scan` 322–325. `load` awaits the device list, then if `scanning` is still nil it may call `watch`. Tap Scan during that await. `watch` starts a poll. `load` can then call `watch` again, which cancels the poll. The cancelled `scan` always runs `defer { scanning = nil }`, even after the new poll has set `scanning`. The button returns to “Scan channels” while the tuner is still scanning. Another tap posts `scan=start` again.
+
+Fix: a generation on `watch`. Clear `scanning` in `defer` only when it is still current. After the device await, do not start a second poll if one is already scheduled.
+
+### A slow Sources reload puts back a tuner you removed
+
+`SourcesView.swift` `load` 282–312. Nothing ties the result to the call that started it. Pull to refresh, then remove a tuner or add a playlist before that request finishes. The later `load` shows the right list. The first request lands after it and assigns `devices` and `sources`. The removed tuner is back, or the new source is gone. A late failure sets `error` over a list that already loaded.
+
+Fix: a token at the start of `load`. Write `devices`, `sources`, `seenAt`, and `error` only while that token is current.
+
+### The last channel edit wins
+
+`ChannelsView.swift` `toggle` 226–232 and `save` 263–279. Each toggle starts its own save. `save` assigns `channel = updated` for the whole channel. Turn Favorite on, then Hide on, before the first PATCH returns. The favorite response still has Hide off. If it arrives last, the Hide switch snaps off. On failure, `channel = revert` restores the snapshot from before that toggle and wipes a newer one. Backing out calls `commitText` (`207`, `245–260`), and a failed rename is stored on the editor that is already gone.
+
+Fix: one save at a time for that channel. Apply a response only when no newer save has started, and revert only the fields in the failed patch. If the editor is gone, show the error on the channel list.
+
+### A failed library load looks like you have no recordings
+
+`RecordingsView.swift` 94–98 and the task at 215–218. The empty copy is `listed.isEmpty`. `refreshRecordings` uses `try?` and sets nothing on failure, and the screen never reads `store.error`. After a server change the list is cleared. If that fetch fails, the screen says “No recordings yet”. The same fetch has no epoch for this server: delete a recording, or mark it watched, and an older GET that is still in flight can assign the previous list. The deleted recording comes back.
+
+Fix: show the error, and the empty copy only after a fetch has succeeded with no rows. Bump an epoch when a recording is deleted, stopped, or marked, and assign `recordings` only when the fetch started on that epoch.
