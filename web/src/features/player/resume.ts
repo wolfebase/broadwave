@@ -5,6 +5,21 @@
 /** Gone longer than this, the tab left the live window. */
 export const awayBeforeSeekMs = 3000;
 
+export type ComeBackAction = "ignore" | "play" | "resume";
+
+/** A named outage already destroyed hls.js. startLoad will not load, so the message stays. */
+export function comeBackAction(input: {
+  tornDown: boolean;
+  awayMs: number;
+  syncing: boolean;
+  paused: boolean;
+}): ComeBackAction {
+  if (input.tornDown) return "ignore";
+  if (!(input.awayMs >= awayBeforeSeekMs)) return input.paused && input.syncing ? "play" : "ignore";
+  if (!input.syncing && input.paused) return "ignore";
+  return "resume";
+}
+
 /** How long to wait for a playlist that still shows the old edge. */
 export const resumeWaitMs = 2200;
 
