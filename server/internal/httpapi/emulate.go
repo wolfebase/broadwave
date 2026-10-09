@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -548,6 +549,14 @@ func (h *emuHandler) streamVirtual(w http.ResponseWriter, r *http.Request, numbe
 	if !inside {
 		http.NotFound(w, r)
 		return
+	}
+	// A finished recording with no file must not answer 200 and no bytes.
+	// One that is still being written may not have created the file yet.
+	if rec.Status != "recording" {
+		if _, err := os.Stat(path); err != nil {
+			http.NotFound(w, r)
+			return
+		}
 	}
 	if r.Method == http.MethodHead {
 		writeStreamProbe(w)

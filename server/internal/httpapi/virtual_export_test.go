@@ -81,6 +81,41 @@ func tuneVirtual(t *testing.T, status string, duration float64, now time.Time) s
 	return string(body)
 }
 
+func TestAShortFileDoesNotSeekToItsLastSeconds(t *testing.T) {
+	// 12:10 into a slot. A 59-second file counts as half an hour on the
+	// guide, so the offset is 600. Seeking to the tail would end at once.
+	now := time.Date(2026, 10, 9, 12, 10, 0, 0, time.UTC)
+	args := tuneVirtual(t, "complete", 59, now)
+	if strings.Contains(args, "-ss") {
+		t.Fatalf("args %q", args)
+	}
+}
+
+func TestAMissingVirtualFileIsNotAnEmptyOK(t *testing.T) {
+	st := testStore(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "recordings", "gone.ts")
+	id, err := st.CreateRecording(t.Context(), store.Recording{
+		Title: "Night Shift", Status: "complete", Path: path, StartedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetDuration(t.Context(), id, 30*60); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateVirtual(t.Context(), "9001", "Night Shift", []int64{id}); err != nil {
+		t.Fatal(err)
+	}
+	bin, _ := ffmpegArgs(t, dir)
+	emu := &emuHandler{store: st, hub: &live.Hub{Store: st, Dir: dir, FFmpeg: bin}}
+	rec := httptest.NewRecorder()
+	emu.streamVirtual(rec, httptest.NewRequest(http.MethodGet, "/auto/v9001", nil), "9001")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status %d %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestAFinishedVirtualTuneSeeksInsideTheFile(t *testing.T) {
 	// 4:59 into a 5-minute file. The schedule offset is 299; playback stops
 	// two seconds before the end.

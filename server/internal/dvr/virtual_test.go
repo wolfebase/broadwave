@@ -79,6 +79,23 @@ func TestScheduleStartsOnTheRecordingThatIsOn(t *testing.T) {
 	}
 }
 
+func TestADayOfShortRecordingsStaysOnTheSchedule(t *testing.T) {
+	at := time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)
+	half := []store.Recording{{ID: 1, Title: "Night Shift", Duration: 30 * 60, Status: "complete"}}
+	slots := ScheduleFrom("", []int64{1}, half, at, at.Add(48*time.Hour))
+	if len(slots) < 96 {
+		t.Fatalf("half-hour slots %d, want the 48 hours", len(slots))
+	}
+	if !slots[len(slots)-1].End.After(at.Add(47 * time.Hour)) {
+		t.Fatalf("last %+v", slots[len(slots)-1])
+	}
+	minute := []store.Recording{{ID: 1, Title: "Night Shift", Duration: 60, Status: "complete"}}
+	slots = ScheduleFrom("", []int64{1}, minute, at, at.Add(48*time.Hour))
+	if len(slots) < 2800 {
+		t.Fatalf("one-minute slots %d, want the 48 hours", len(slots))
+	}
+}
+
 func TestARecordingUnderAMinuteCountsAsHalfAnHour(t *testing.T) {
 	at := time.Date(2026, 10, 9, 12, 10, 0, 0, time.UTC)
 	short := []store.Recording{{ID: 1, Title: "Night Shift", Duration: 59, Status: "complete"}}

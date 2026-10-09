@@ -41,6 +41,11 @@ func ExportResume(offset, written float64, growing bool) float64 {
 		return 0
 	}
 	if !growing {
+		// The schedule can sit past a file that is shorter than its slot.
+		// Clamping onto the last picture ends the export at once.
+		if !math.IsNaN(written) && !math.IsInf(written, 0) && written > 0 && offset >= written {
+			return 0
+		}
 		return ResumeAt(offset, written)
 	}
 	if math.IsNaN(written) || math.IsInf(written, 0) || written <= resumeMin {

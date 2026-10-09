@@ -27,17 +27,20 @@ func Slots(order string, ids []int64, recs []store.Recording, from, to time.Time
 	var out []Slot
 	cursor := from
 	i := 0
-	for cursor.Before(to) && len(out) < 500 {
+	// A day of one-minute recordings is a few thousand rows. The cap only
+	// stops a slot length of zero from spinning.
+	for cursor.Before(to) && len(out) < 4096 {
 		rec := list[i%len(list)]
-		end := cursor.Add(time.Duration(slotSeconds(rec) * float64(time.Second)))
+		dur := slotSeconds(rec)
+		if dur < 1 {
+			break
+		}
+		end := cursor.Add(time.Duration(dur * float64(time.Second)))
 		if end.After(from) {
 			out = append(out, Slot{RecordingID: rec.ID, Title: rec.Title, Start: cursor, End: end})
 		}
 		cursor = end
 		i++
-		if i > len(list)*40 {
-			break
-		}
 	}
 	return out
 }
