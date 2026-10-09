@@ -28,7 +28,7 @@ Sportradar and Stats Perform sell licensed feeds under a contract. No such contr
 
 The owner delegated the default to the reviewer on 2026-09-25. ESPN stays. These conditions are part of the decision:
 
-1. Only the user's server fetches scores. The apps do not. The cache still waits 30 seconds while a game is on and two hours when the board is quiet.
+1. Only the user's server fetches scores. The apps do not. The cache waits 30 seconds while a game is on. A quiet board waits until its next game starts, and at most two hours.
 2. Settings > Sports says where the scores come from. Live scores are on until the user turns them off, and off makes no scoreboard request.
 3. TheSportsDB is optional. It runs only with a key the user types. No key is in the binary, and nothing is bought. The settings line names TheSportsDB while that key is in use.
 4. Team marks in the apps are names and colors. A logo URL from another site is dropped before it is stored or sent. A logo this server hosts (a path with no host) can stay.

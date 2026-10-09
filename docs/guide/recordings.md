@@ -10,8 +10,11 @@ Each recording is one MPEG-TS file, filed by show in the layout Plex and Jellyfi
 
 ```text
 TV/Harbor Watch/Season 01/Harbor Watch - S01E02 - The Lighthouse.ts
+TV/Evening News/Evening News - 2026-10-05 - Storm Coverage.ts
 Movies/Night Flight (1999)/Night Flight (1999).ts
 ```
+
+A season folder is used when the guide has both a season and an episode number. Otherwise the file stays in the show folder, named with the date and the episode name, or the start time when it has none. A movie gets the year when the guide has it.
 
 The file is the station's program, copied, not re-encoded. A clear ATSC 3.0 channel with AC-4 sound keeps the program's own packets, so every sound track and the captions stay as the tuner sent them.
 
@@ -25,7 +28,7 @@ Record this airing, record the series, or record every game for a team you follo
 
 A series pass can be one channel or any channel, new episodes only, certain days, and a time of day. Padding is minutes before the listing and after it. While you set a pass up, the schedule shows what it would record in the next two weeks. Passes higher in the list win when two shows overlap and a tuner is short. The schedule offers a later airing when one fits.
 
-A game that is matched to a live score keeps recording until the game is over, in short steps, and stops a few minutes after it ends. Turning live scores off leaves the recording at the time the guide gave it.
+A game that is matched to a live score keeps recording until the game is over, in ten-minute steps, and stops eight minutes after it ends. Turning live scores off leaves the recording at the time the guide gave it.
 
 A show that is already on can still be recorded from its beginning, when the channel has been tuned and the buffer still holds the start. Settings, Keep for recording from the start, is how long that buffer is. The choices are Off, 30 minutes, 1 hour, 2 hours, and 4 hours. One hour is the usual choice.
 
@@ -39,7 +42,7 @@ A new recording is refused while free space is under that reserve. The message n
 
 Settings, When space runs low, is "Skip new recordings" unless you change it. "Delete the oldest watched" deletes watched recordings, the one watched longest ago first, before a new recording would be skipped. It does not delete an unwatched recording, one still recording, or one you marked Keep forever.
 
-Settings, Delete watched recordings, deletes a recording a number of days after it was watched. It is off unless you pick a number. Played to the end, or marked watched, counts. Stopping a few minutes early does not.
+Settings, Delete watched recordings, deletes a recording a number of days after it was watched. It is off unless you pick a number. Both of these count a recording as watched once it was played to the last 15 seconds or marked watched. Stopping earlier does not, even through 90% of a long recording. One you played in the last 6 hours stays.
 
 ## Playing and deleting
 
