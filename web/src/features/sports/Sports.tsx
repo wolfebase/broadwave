@@ -11,6 +11,7 @@ import { PlayIcon, RecordIcon } from "../../ui/icons";
 import { ArtFrame } from "../../ui/ArtFrame";
 import { ChannelBadge, Chip, Empty, LiveDot, Progress, RecDot } from "../../ui/primitives";
 import { layoutForCount, multiviewPath } from "../multiview/storage";
+import { teamScoreShown } from "./board";
 import { cardLabel, matchup } from "./matchup";
 import { scoreLine, useScoreboard, type ScoreGame, type ScoreTeam } from "./scores";
 import "./sports.css";
@@ -24,9 +25,9 @@ function Matchup({ names, game }: { names: [string, string]; game?: ScoreGame })
   return (
     <>
       <div className="gc-matchup">
-        <TeamMark name={names[0]} team={away} />
+        <TeamMark name={names[0]} team={away} state={game?.state} />
         <span className="at">at</span>
-        <TeamMark name={names[1]} team={home} />
+        <TeamMark name={names[1]} team={home} state={game?.state} />
       </div>
       {game?.state === "in" && (game.detail || game.clock) ? <p className="gc-score">{game.detail || game.clock}</p> : null}
       {line && game?.state !== "in" ? <p className="gc-score">{line}</p> : null}
@@ -34,12 +35,12 @@ function Matchup({ names, game }: { names: [string, string]; game?: ScoreGame })
   );
 }
 
-function TeamMark({ name, team }: { name: string; team?: ScoreTeam }) {
+function TeamMark({ name, team, state }: { name: string; team?: ScoreTeam; state?: string }) {
   return (
     <span className="team">
       {team?.logo ? <img className="team-logo" alt="" src={team.logo} /> : team?.color ? <span className="team-swatch" style={{ background: team.color }} /> : null}
       <span>{team?.short || name}</span>
-      {team?.score && team.score !== "0" ? <span className="team-score">{team.score}</span> : null}
+      {teamScoreShown(team?.score, state) ? <span className="team-score">{team?.score}</span> : null}
     </span>
   );
 }
