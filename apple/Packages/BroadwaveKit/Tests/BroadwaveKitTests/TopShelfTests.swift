@@ -51,6 +51,15 @@ private func rec(_ id: Int64, title: String, subtitle: String? = nil, position: 
     #expect(resume[0].image == URL(string: "http://tv.local:8477/media/poster/7"))
 }
 
+@Test func anOverlapOnTheShelfKeepsTheShowThatStartedFirst() {
+    let earlier = airing(1, on: 4, title: "Harbor Report", from: -1200, to: 600)
+    let later = airing(2, on: 4, title: "Valley News", from: -60, to: 1800)
+    let forward = TopShelf.sections(.init(channels: [channel(4, favorite: true)], airings: [earlier, later]), api: api, now: now)
+    let reversed = TopShelf.sections(.init(channels: [channel(4, favorite: true)], airings: [later, earlier]), api: api, now: now)
+    #expect(forward.first?.items.map(\.title) == ["4.1 · Harbor Report"])
+    #expect(reversed.first?.items.map(\.title) == ["4.1 · Harbor Report"])
+}
+
 @Test func topShelfLeavesOutEmptySectionsAndNamesAChannelWithNoListing() {
     let sections = TopShelf.sections(.init(channels: [channel(4, favorite: true, art: "logo.png")]), api: api, now: now)
     #expect(sections.map(\.title) == ["Favorites"])

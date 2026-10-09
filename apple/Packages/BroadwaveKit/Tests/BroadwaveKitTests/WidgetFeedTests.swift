@@ -93,6 +93,15 @@ private func planned(_ airing: Airing, skipped: Bool = false, conflict: Bool = f
     #expect(airing(2, on: 4, title: "College Football: Tigers vs. Bears").kind == .sports)
 }
 
+@Test func anOverlapKeepsTheShowThatStartedFirst() {
+    let earlier = airing(1, on: 4, title: "Harbor Report", from: -1200, to: 600)
+    let later = airing(2, on: 4, title: "Valley News", from: -60, to: 1800)
+    let forward = TopShelf.Snapshot(channels: [channel(4)], airings: [earlier, later])
+    let reversed = TopShelf.Snapshot(channels: [channel(4)], airings: [later, earlier])
+    #expect(WidgetFeed.onNow(forward, now: now).map(\.title) == ["Harbor Report"])
+    #expect(WidgetFeed.onNow(reversed, now: now).map(\.title) == ["Harbor Report"])
+}
+
 @Test func upNextKeepsConflictsAndNamesTheChannel() {
     let items = [
         planned(airing(1, on: 4, title: "Later", from: 7200, to: 9000)),
