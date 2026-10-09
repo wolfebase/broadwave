@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"broadwave/internal/fetchguard"
 )
 
 // ESPN reads the public scoreboard. It is unofficial, so callers cache it and back off.
@@ -18,7 +20,7 @@ type ESPN struct {
 }
 
 func NewESPN() *ESPN {
-	return &ESPN{Base: "https://site.api.espn.com/apis/site/v2/sports", HTTP: http.DefaultClient}
+	return &ESPN{Base: "https://site.api.espn.com/apis/site/v2/sports", HTTP: fetchguard.Client(15 * time.Second)}
 }
 
 func (e *ESPN) Scoreboard(ctx context.Context, leagueID string, day time.Time) ([]Game, error) {
@@ -32,7 +34,7 @@ func (e *ESPN) Scoreboard(ctx context.Context, leagueID string, day time.Time) (
 	}
 	client := e.HTTP
 	if client == nil {
-		client = http.DefaultClient
+		client = fetchguard.Client(15 * time.Second)
 	}
 	url := fmt.Sprintf("%s/%s/%s/scoreboard?dates=%s", strings.TrimRight(base, "/"), league.Sport, league.Slug, day.Format("20060102"))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
