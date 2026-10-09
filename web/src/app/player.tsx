@@ -1,5 +1,6 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { clearBroadcast } from "../features/multiview/clear";
+import { channelMissing } from "./lineup";
 import { encryptedBroadcast } from "../strings/notice.ts";
 import type { Channel } from "../types";
 import { useData } from "./data";
@@ -27,7 +28,7 @@ export function usePlayer(): Player {
  * mini player, and one video element carries playback between the two.
  */
 export function PlayerProvider({ children }: { children: ReactNode }) {
-  const { channels, allChannels, ready } = useData();
+  const { channels, allChannels, ready, channelsReady } = useData();
   const { path, params } = useRoute();
   const [channel, setChannel] = useState<Channel | null>(null);
   const back = useRef("/guide");
@@ -45,7 +46,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   // An encrypted 3.0 channel plays its clear 1.0 twin, and the player says why
   // for a few seconds. A link to a channel that is not in the lineup goes to the guide.
-  const unknown = ready && watchId > 0 && allChannels.length > 0 && !allChannels.some((c) => c.id === watchId);
+  const unknown = channelMissing(
+    channelsReady,
+    watchId,
+    allChannels.map((c) => c.id),
+  );
   const playsId = choice?.id ?? 0;
   const playsNote = choice?.note ?? false;
   useEffect(() => {
