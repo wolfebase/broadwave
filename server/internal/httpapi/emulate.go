@@ -45,7 +45,7 @@ type Emulator struct {
 
 var lineEmulator Emulator
 
-func SyncEmulator(st *store.Store, hub *live.Hub) {
+func SyncEmulator(st *store.Store, hub *live.Hub, hosts []string) {
 	if st == nil {
 		return
 	}
@@ -65,7 +65,7 @@ func SyncEmulator(st *store.Store, hub *live.Hub) {
 	if lineEmulator.srv != nil {
 		return
 	}
-	srv := &http.Server{Addr: emulatorPort, Handler: newEmulatorMux(st, hub)}
+	srv := &http.Server{Addr: emulatorPort, Handler: rejectForeignHost(hosts, newEmulatorMux(st, hub))}
 	lineEmulator.srv = srv
 	go func() { _ = srv.ListenAndServe() }()
 }
@@ -355,6 +355,9 @@ type streamHit struct {
 }
 
 func (h *emuHandler) stream(w http.ResponseWriter, r *http.Request) {
+	if refuseBrowserStream(w, r) {
+		return
+	}
 	// A transcode profile is an EXTEND feature. Answering with the original
 	// broadcast would lie to an app that asked for AVC. "none" asks for the
 	// broadcast as it is, which is what every stream here is.
