@@ -63,14 +63,14 @@ func haveEpisode(pass store.Pass, recs []store.Recording, seen map[string]bool, 
 	if damaged > 0 {
 		return damaged >= maxDamaged
 	}
+	// No copy that finished. A flag written when a recording starts is not
+	// one: the start can fail, and the episode should air again. A flag set
+	// because the viewer deleted a finished recording still holds.
 	deleted, ok := seen[key]
-	if !ok {
+	if !ok || !deleted {
 		return false
 	}
-	if deleted && pass.Rerecord {
-		return false
-	}
-	return true
+	return !pass.Rerecord
 }
 
 func unwatchedCount(recs []store.Recording, pass store.Pass) int {
