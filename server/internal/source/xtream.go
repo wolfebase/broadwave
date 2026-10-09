@@ -3,9 +3,12 @@ package source
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+
+	"broadwave/internal/fetchguard"
 	"net/url"
 	"strings"
 	"time"
@@ -162,8 +165,11 @@ func xtreamGet(ctx context.Context, base, user, pass, action string) ([]byte, er
 		return nil, fmt.Errorf("The server address should start with http:// or https://.")
 	}
 	req.Header.Set("User-Agent", "Broadwave/0.1")
-	res, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
+	res, err := fetchguard.Do(req, 20*time.Second)
 	if err != nil {
+		if errors.Is(err, fetchguard.ErrRefused) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("Broadwave could not reach that server. Check the address.")
 	}
 	defer res.Body.Close()

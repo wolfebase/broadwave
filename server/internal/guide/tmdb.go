@@ -6,14 +6,16 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
+	"broadwave/internal/fetchguard"
 	"broadwave/internal/store"
 )
 
 // FillImages adds a poster address to airings that have none.
 // An empty key skips the lookup. The key is not written to the log.
 func FillImages(ctx context.Context, key string, rows []store.Airing) []store.Airing {
-	return fillImages(ctx, http.DefaultClient, "https://api.themoviedb.org/3", key, rows)
+	return fillImages(ctx, fetchguard.Client(15*time.Second), "https://api.themoviedb.org/3", key, rows)
 }
 
 func fillImages(ctx context.Context, client *http.Client, base, key string, rows []store.Airing) []store.Airing {

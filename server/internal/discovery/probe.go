@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"broadwave/internal/fetchguard"
 )
 
 // ProbePort is one well-known port and the path that identifies it.
@@ -42,7 +44,7 @@ func ProbeHost(ctx context.Context, host string, ports []ProbePort) (Found, bool
 	if len(ports) == 0 {
 		ports = KnownPorts
 	}
-	client := &http.Client{Timeout: 400 * time.Millisecond}
+	client := fetchguard.Client(400 * time.Millisecond)
 	for _, port := range ports {
 		if ctx.Err() != nil {
 			return Found{}, false

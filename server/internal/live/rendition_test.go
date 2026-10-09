@@ -116,6 +116,16 @@ func TestHLSInputReconnects(t *testing.T) {
 	if !strings.Contains(line, "-reconnect 1") || !strings.Contains(line, "-i http://example/live.m3u8") || !strings.Contains(line, "aac_adtstoasc") || !strings.Contains(line, "User-Agent: Broadwave") {
 		t.Fatal(line)
 	}
+	if !strings.Contains(line, "-protocol_whitelist http,https,tcp,tls,crypto") {
+		t.Fatal(line)
+	}
+}
+
+func TestHeaderArgsStayOneLine(t *testing.T) {
+	got := strings.Join(headerArgs("Agent\r\nX-Evil: 1", "http://ok.example/\nSet-Cookie: a"), "\n")
+	if strings.Contains(got, "\nX-Evil") || strings.Contains(got, "\nSet-Cookie") {
+		t.Fatal(got)
+	}
 }
 
 func TestOpeningSegmentsAreShort(t *testing.T) {

@@ -2,12 +2,15 @@ package source
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"broadwave/internal/fetchguard"
 )
 
 // TVHeadend downloads the channel playlist. The guide address carries the login
@@ -113,8 +116,11 @@ func authedGet(ctx context.Context, raw, user, pass string) ([]byte, int, error)
 		req.SetBasicAuth(user, pass)
 	}
 	req.Header.Set("User-Agent", "Broadwave/0.1")
-	res, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
+	res, err := fetchguard.Do(req, 20*time.Second)
 	if err != nil {
+		if errors.Is(err, fetchguard.ErrRefused) {
+			return nil, 0, err
+		}
 		return nil, 0, fmt.Errorf("Broadwave could not reach that server. Check the address.")
 	}
 	defer res.Body.Close()

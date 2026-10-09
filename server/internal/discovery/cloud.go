@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"broadwave/internal/fetchguard"
 	"broadwave/internal/hdhr"
 )
 
@@ -48,7 +49,7 @@ func FetchCloud(ctx context.Context) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := fetchguard.Do(req, 0)
 	if err != nil {
 		return nil, err
 	}

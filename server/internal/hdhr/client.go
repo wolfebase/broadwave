@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"broadwave/internal/fetchguard"
 )
 
 // Device is the public discover.json document.
@@ -79,7 +81,7 @@ func (c *Client) httpClient() *http.Client {
 		return c.HTTP
 	}
 	// Discovery documents are on the tuner. A redirect would leave that host.
-	return &http.Client{Timeout: 20 * time.Second, CheckRedirect: refuseRedirect}
+	return &http.Client{Timeout: 20 * time.Second, Transport: fetchguard.Transport(), CheckRedirect: refuseRedirect}
 }
 
 func (c *Client) FetchDevice(ctx context.Context, baseURL string) (Device, error) {

@@ -87,6 +87,7 @@ func PictureArgs(g Graph) []string {
 	if g.Input == "pipe:0" {
 		args = append(args, "-probesize", "2000000", "-analyzeduration", "1500000")
 	}
+	args = urlProtocols(args, g.Input)
 	// Before -i, so ffmpeg seeks the file instead of decoding up to this point.
 	// A pipe has no index to seek.
 	if g.Start >= resumeMin && g.Input != "pipe:0" {

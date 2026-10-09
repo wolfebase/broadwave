@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"broadwave/internal/fetchguard"
 	"broadwave/internal/store"
 )
 
@@ -23,7 +24,7 @@ func SchedulesDirect(ctx context.Context, channels []store.Channel, user, pass, 
 	if user == "" || pass == "" || lineup == "" {
 		return nil, nil, nil
 	}
-	return fetchSchedules(ctx, http.DefaultClient, "https://json.schedulesdirect.org/20141201", user, pass, lineup, channels)
+	return fetchSchedules(ctx, fetchguard.Client(20*time.Second), "https://json.schedulesdirect.org/20141201", user, pass, lineup, channels)
 }
 
 func fetchSchedules(ctx context.Context, client *http.Client, base, user, pass, lineup string, channels []store.Channel) ([]store.Airing, []int64, error) {

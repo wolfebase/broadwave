@@ -62,6 +62,9 @@ func TestPullURLReadsXMLTV(t *testing.T) {
 	if _, err := PullURL(t.Context(), "ftp://example.com/guide.xml"); err == nil {
 		t.Fatal("expected a non-http address to be refused")
 	}
+	if _, err := PullURL(t.Context(), "http://169.254.169.254/latest/meta-data"); err == nil {
+		t.Fatal("expected a metadata address to be refused")
+	}
 }
 
 func TestPullURLReadsGzip(t *testing.T) {
