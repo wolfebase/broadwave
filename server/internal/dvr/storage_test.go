@@ -229,6 +229,49 @@ func TestMakeRoomRemovesNothingWhenItCannotFreeEnough(t *testing.T) {
 	}
 }
 
+func TestMakeRoomReportsBytesUnlinked(t *testing.T) {
+	r := newStorageRig(t, map[string]string{"makeRoom": "1"})
+	r.add(t, "watched", 1, false, "")
+	r.add(t, "also watched", 1, false, "")
+	orig := diskStat
+	t.Cleanup(func() { diskStat = orig })
+	diskStat = func(string) (disk.Space, error) { return disk.Space{Free: 1000, Total: 10000}, nil }
+	// Each recording file is 100 bytes. The sidecars are not counted.
+	if got := MakeRoom(context.Background(), r.st, r.hub, 1150); got != 200 {
+		t.Fatalf("freed %d, want the two recording files", got)
+	}
+}
+
+func TestMakeRoomDoesNotCreditAFileItCouldNotUnlink(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can unlink a file in a mode 0555 directory")
+	}
+	r := newStorageRig(t, map[string]string{"makeRoom": "1"})
+	rec := r.add(t, "watched", 1, false, "")
+	if err := os.Chmod(r.dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(r.dir, 0o755) })
+	if f, err := os.CreateTemp(r.dir, ".probe-*"); err == nil {
+		name := f.Name()
+		_ = f.Close()
+		_ = os.Remove(name)
+		t.Skip("this user can still write a mode 0555 directory")
+	}
+	orig := diskStat
+	t.Cleanup(func() { diskStat = orig })
+	diskStat = func(string) (disk.Space, error) { return disk.Space{Free: 1000, Total: 10000}, nil }
+	if got := MakeRoom(context.Background(), r.st, r.hub, 1050); got != 0 {
+		t.Fatalf("credited %d bytes for a file that is still there", got)
+	}
+	if _, err := os.Stat(rec.Path); err != nil {
+		t.Fatalf("file: %v", err)
+	}
+	if got := r.left(t); !slices.Contains(got, "watched") {
+		t.Fatalf("row removed: %v", got)
+	}
+}
+
 func TestMakeRoomIsOffByDefault(t *testing.T) {
 	r := newStorageRig(t, map[string]string{})
 	r.add(t, "watched", 1, false, "")
