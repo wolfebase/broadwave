@@ -88,7 +88,7 @@ func PullURL(ctx context.Context, rawURL string) ([]byte, error) {
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("guide returned %s", res.Status)
 	}
-	body, err := io.ReadAll(io.LimitReader(res.Body, 32<<20))
+	body, err := io.ReadAll(io.LimitReader(res.Body, int64(maxGuide)))
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,21 @@ func inflateGuide(body []byte, encoding, rawURL string) ([]byte, error) {
 		return nil, err
 	}
 	defer gz.Close()
-	return io.ReadAll(io.LimitReader(gz, 32<<20))
+	return readCapped(gz, maxGuide)
+}
+
+// maxGuide is the largest guide text kept after decompression.
+var maxGuide = 32 << 20
+
+func readCapped(r io.Reader, n int) ([]byte, error) {
+	out, err := io.ReadAll(io.LimitReader(r, int64(n)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(out) > n {
+		return nil, fmt.Errorf("this guide is too large")
+	}
+	return out, nil
 }
 
 func xzCompressed(body []byte, encoding, rawURL string) bool {
@@ -122,14 +136,28 @@ func xzCompressed(body []byte, encoding, rawURL string) bool {
 }
 
 func inflateXZ(body []byte) ([]byte, error) {
-	cmd := exec.Command("xz", "-dc")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "xz", "--memlimit-decompress=64MiB", "-dc")
 	cmd.Stdin = bytes.NewReader(body)
-	out, err := cmd.Output()
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("this guide is xz compressed and xz is not available")
 	}
-	if len(out) > 32<<20 {
-		out = out[:32<<20]
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("this guide is xz compressed and xz is not available")
+	}
+	out, readErr := io.ReadAll(io.LimitReader(stdout, int64(maxGuide)+1))
+	tooBig := len(out) > maxGuide
+	if tooBig && cmd.Process != nil {
+		_ = cmd.Process.Kill()
+	}
+	waitErr := cmd.Wait()
+	if tooBig {
+		return nil, fmt.Errorf("this guide is too large")
+	}
+	if readErr != nil || waitErr != nil {
+		return nil, fmt.Errorf("this guide is xz compressed and xz is not available")
 	}
 	return out, nil
 }
@@ -208,7 +236,7 @@ func Pull(ctx context.Context, client *hdhr.Client, bases ...string) ([]byte, er
 		defer gz.Close()
 		reader = gz
 	}
-	body, err := io.ReadAll(io.LimitReader(reader, 32<<20))
+	body, err := readCapped(reader, maxGuide)
 	if err != nil {
 		return nil, err
 	}

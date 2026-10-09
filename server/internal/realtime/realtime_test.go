@@ -509,6 +509,49 @@ func TestHelloNamesTheServerProcess(t *testing.T) {
 	}
 }
 
+func TestEventSocketStopsAtTheClientCap(t *testing.T) {
+	prev := maxClients
+	maxClients = 2
+	t.Cleanup(func() { maxClients = prev })
+	bus := NewBus()
+	srv := httptest.NewServer(bus)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	dial := func() *websocket.Conn {
+		c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	var held []*websocket.Conn
+	for range 2 {
+		c := dial()
+		held = append(held, c)
+		if _, _, err := c.Read(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	defer func() {
+		for _, c := range held {
+			c.CloseNow()
+		}
+	}()
+	extra := dial()
+	defer extra.CloseNow()
+	if _, _, err := extra.Read(ctx); err == nil {
+		t.Fatal("a socket past the cap stayed open")
+	}
+	deadline := time.Now().Add(time.Second)
+	for bus.Clients() > 2 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if bus.Clients() != 2 {
+		t.Fatalf("clients %d", bus.Clients())
+	}
+}
+
 func TestGroupRoomNamesWhoIsIn(t *testing.T) {
 	bus := NewBus()
 	srv := httptest.NewServer(bus)
