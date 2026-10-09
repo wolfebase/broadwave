@@ -9,6 +9,35 @@ import (
 	"broadwave/internal/hdhr"
 )
 
+func TestSearchReturnsEpisodeAndPlayhead(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := t.Context()
+	id, err := s.CreateRecording(ctx, Recording{
+		Title: "Sitcom", Status: "complete", Path: "a.ts",
+		StartedAt: time.Now().Add(-time.Hour), Season: 2, Episode: 5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetDuration(ctx, id, 100); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveProgress(ctx, id, 99); err != nil {
+		t.Fatal(err)
+	}
+	_, recs, err := s.Search(ctx, "sitcom", time.Now(), 20)
+	if err != nil || len(recs) != 1 {
+		t.Fatal(err, recs)
+	}
+	if recs[0].Season != 2 || recs[0].Episode != 5 || recs[0].Position != 99 || !recs[0].Played() {
+		t.Fatalf("%+v", recs[0])
+	}
+}
+
 func TestSearchFindsListingsAndRecordings(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "cfg"))
 	if err != nil {
