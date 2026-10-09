@@ -10,6 +10,8 @@ import {
   categoryOf,
   emptyGuideLabel,
   guideCellId,
+  guideOrigin,
+  guideRowScroll,
   guideShowsGrid,
   guideViewBox,
   isRecording,
@@ -36,13 +38,6 @@ const ProgramSheet = lazy(() => import("./ProgramSheet").then((m) => ({ default:
 type Filter = "all" | "favorites" | Category | "recording";
 const MIN = 60_000;
 const ORDER_KEY = "broadwave-guide-order";
-
-function floorHalfHour(t: number) {
-  const d = new Date(t);
-  d.setSeconds(0, 0);
-  d.setMinutes(d.getMinutes() < 30 ? 0 : 30);
-  return d.getTime();
-}
 
 function loadOrder(): number[] {
   try {
@@ -84,7 +79,7 @@ export function Guide() {
   const pxPerMin = tv ? 9.6 : 6.4;
   const channelW = tv ? 280 : 220;
   const headH = 48;
-  const origin = useMemo(() => floorHalfHour(now) - 30 * MIN, [Math.floor(now / (30 * MIN))]); // eslint-disable-line react-hooks/exhaustive-deps
+  const origin = guideOrigin(now);
   const hours = useMemo(() => {
     let latest = origin + 24 * 60 * MIN;
     for (const list of index.values()) {
@@ -245,9 +240,8 @@ export function Guide() {
     // A scroller that has not been laid out reports 0. Writing scrollLeft from that
     // parks the cursor off to the side, and nothing later puts it back.
     if (!el || el.clientWidth < 80 || el.clientHeight < 80) return;
-    const y = r * rowH;
-    if (y < el.scrollTop) el.scrollTop = y;
-    else if (y + rowH > el.scrollTop + el.clientHeight - headH) el.scrollTop = y + rowH - el.clientHeight + headH;
+    const top = guideRowScroll(el.scrollTop, r, rowH, el.clientHeight, headH);
+    if (top !== el.scrollTop) el.scrollTop = top;
     const x = ((t - origin) / MIN) * pxPerMin;
     if (x < el.scrollLeft + 40) el.scrollLeft = Math.max(0, x - 80);
     else if (x > el.scrollLeft + el.clientWidth - channelW - 120) el.scrollLeft = x - el.clientWidth + channelW + 240;
@@ -324,6 +318,15 @@ export function Guide() {
   const focusRow = rows[focus.row];
   const focusAiring = focusRow ? airingAt(index, focusRow.id, focus.at) : undefined;
   const activeId = focusRow ? guideCellId(focusRow.id, focusAiring?.id) : undefined;
+
+  // A filter can move the kept row outside the mounted slice. Scroll before the
+  // cell lookup, which returns when that row is not in the document yet.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || el.clientHeight < 80) return;
+    const top = guideRowScroll(el.scrollTop, focus.row, rowH, el.clientHeight, headH);
+    if (top !== el.scrollTop) el.scrollTop = top;
+  }, [focus.row, rowH, headH]);
 
   // The keyboard cell is the active descendant. A gap has no program block, so that
   // cell can sit past the last listing, outside the window move() aimed at the time.

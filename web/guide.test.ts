@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { guideCellId, guideShowsGrid, guideSpan, guideViewBox, keptGuideWindow, keptRow, liveChannel, primeTime, reorderChannels, searchRows } from "./src/lib/guide.ts";
+import { guideCellId, guideOrigin, guideRowScroll, guideShowsGrid, guideSpan, guideViewBox, keptGuideWindow, keptRow, liveChannel, primeTime, reorderChannels, searchRows } from "./src/lib/guide.ts";
 
 test("tonight is 8 PM, and the next day after that", () => {
   const afternoon = new Date(2026, 8, 26, 15, 0, 0).getTime();
@@ -81,6 +81,31 @@ test("a refresh keeps the two weeks the guide already loaded", () => {
   assert.equal(span.to, new Date(now + 4 * 60 * 60_000).toISOString());
   assert.equal(span.restTo, new Date(now + 14 * 24 * 60 * 60_000).toISOString());
   assert.deepEqual(keptGuideWindow(now), { from: span.from, to: span.restTo });
+});
+
+test("guide origin steps on the local half-hour inside one UTC half-hour", () => {
+  // UTC+5:45. Offset is Date#getTimezoneOffset, not hours east. Host zone is irrelevant.
+  const offset = -345;
+  const half = 30 * 60_000;
+  const at = (h: number, m: number) => Date.UTC(2026, 0, 15, h, m) - 345 * 60_000;
+  const before = at(1, 59);
+  const after = at(2, 0);
+  assert.equal(Math.floor(before / half), Math.floor(after / half));
+  assert.equal(guideOrigin(before, offset), at(1, 0));
+  assert.equal(guideOrigin(after, offset), at(1, 30));
+  assert.notEqual(guideOrigin(before, offset), guideOrigin(after, offset));
+});
+
+test("a filtered guide scrolls the kept row into view", () => {
+  const rowH = 68;
+  const headH = 48;
+  const viewH = 800;
+  // The row moved above the viewport.
+  assert.equal(guideRowScroll(80 * rowH, 2, rowH, viewH, headH), 2 * rowH);
+  // Already in view.
+  assert.equal(guideRowScroll(4 * rowH, 4, rowH, viewH, headH), 4 * rowH);
+  // The row moved below the viewport.
+  assert.equal(guideRowScroll(0, 40, rowH, viewH, headH), 40 * rowH + rowH - viewH + headH);
 });
 
 test("dragging one visible channel leaves the hidden ones where they were", () => {

@@ -192,6 +192,30 @@ export function reorderChannels(orderedIds: readonly number[], fromId: number, t
   return ids;
 }
 
+const HALF_MS = 30 * 60_000;
+
+/** Local half-hour at or before t. offsetMinutes matches Date#getTimezoneOffset. */
+export function floorHalfHour(t: number, offsetMinutes = new Date(t).getTimezoneOffset()): number {
+  const local = t - offsetMinutes * 60_000;
+  return Math.floor(local / HALF_MS) * HALF_MS + offsetMinutes * 60_000;
+}
+
+/** Left edge of the guide: one local half-hour before the floor. A UTC bucket is not this. */
+export function guideOrigin(t: number, offsetMinutes = new Date(t).getTimezoneOffset()): number {
+  return floorHalfHour(t, offsetMinutes) - HALF_MS;
+}
+
+/**
+ * scrollTop that puts the row fully under the sticky header.
+ * The row does not have to be mounted. Returns scrollTop when it already is.
+ */
+export function guideRowScroll(scrollTop: number, row: number, rowH: number, clientHeight: number, headH: number): number {
+  const y = Math.max(0, row) * rowH;
+  if (y < scrollTop) return y;
+  if (y + rowH > scrollTop + clientHeight - headH) return y + rowH - clientHeight + headH;
+  return scrollTop;
+}
+
 /** The near window paints first. The rest of the two weeks fills in after. */
 export function guideSpan(now = Date.now()) {
   return {
