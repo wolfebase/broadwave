@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"broadwave/internal/fetchguard"
 )
 
 // A source that answers with an error, or not at all, is ErrStreamDown, and
@@ -29,5 +31,15 @@ func TestOpenStreamNamesADeadSource(t *testing.T) {
 	_, err = openStream(srv.URL+"/live.ts", "", "")
 	if !errors.Is(err, ErrStreamDown) {
 		t.Fatalf("closed: got %v", err)
+	}
+}
+
+func TestOpenStreamRefusesMetadata(t *testing.T) {
+	_, err := openStream("http://169.254.169.254/latest/meta-data", "agent\r\nX-Evil: 1", "")
+	if !errors.Is(err, ErrStreamDown) || !errors.Is(err, fetchguard.ErrRefused) {
+		t.Fatal(err)
+	}
+	if strings.Contains(err.Error(), "169.254") {
+		t.Fatal(err)
 	}
 }

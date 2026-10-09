@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"broadwave/internal/fetchguard"
 	"sync"
 	"time"
 )
@@ -69,7 +71,7 @@ func FindFree(ctx context.Context, hosts []string) []Feed {
 	if len(list) == 0 {
 		return nil
 	}
-	client := &http.Client{Timeout: 700 * time.Millisecond}
+	client := fetchguard.Client(700 * time.Millisecond)
 	jobs := make(chan string)
 	out := make(chan Feed)
 	var wg sync.WaitGroup

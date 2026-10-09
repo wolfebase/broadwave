@@ -3,6 +3,7 @@ package source
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"broadwave/internal/fetchguard"
 	"broadwave/internal/store"
 )
 
@@ -145,6 +147,20 @@ func TestRenumberAndReadAGzipFile(t *testing.T) {
 	body, err := ReadPlaylist(t.Context(), path)
 	if err != nil || !strings.Contains(string(body), "News") {
 		t.Fatal(err, string(body))
+	}
+}
+
+func TestFetchTextRefusesLinkLocalAndOtherSchemes(t *testing.T) {
+	for _, raw := range []string{
+		"http://169.254.169.254/latest/meta-data",
+		"http://[fe80::1]/",
+		"file:///etc/passwd",
+		"gopher://203.0.113.9/",
+	} {
+		_, err := FetchText(t.Context(), raw)
+		if !errors.Is(err, fetchguard.ErrRefused) {
+			t.Errorf("FetchText(%s) = %v", raw, err)
+		}
 	}
 }
 

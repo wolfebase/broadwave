@@ -3,6 +3,8 @@ package live
 import (
 	"context"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -536,6 +538,16 @@ func TestHLSProbeTargetFindsTheSegment(t *testing.T) {
 	}
 	if resolveMedia("http://example/a/live.m3u8", "seg.ts") != "http://example/a/seg.ts" {
 		t.Fatal("remote segment was not resolved")
+	}
+}
+
+func TestHLSProbeTargetDropsAFileURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "#EXTM3U\n#EXTINF:1.0,\nfile:///etc/passwd\n")
+	}))
+	defer srv.Close()
+	if got := hlsProbeTarget(srv.URL+"/live.m3u8", "", ""); got != "" {
+		t.Fatalf("file target %q", got)
 	}
 }
 

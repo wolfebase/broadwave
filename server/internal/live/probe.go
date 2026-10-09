@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"broadwave/internal/fetchguard"
 	"broadwave/internal/store"
 )
 
@@ -237,6 +238,7 @@ func hlsSegmentProbeContext() (context.Context, context.CancelFunc) {
 
 func ffprobeFieldOrder(ctx context.Context, tool, input, userAgent, referrer string, program int) string {
 	args := []string{"-v", "error", "-probesize", "2000000", "-analyzeduration", "1500000"}
+	args = urlProtocols(args, input)
 	args = append(args, headerArgs(userAgent, referrer)...)
 	args = append(args,
 		"-show_entries", probeEntries,
@@ -252,7 +254,22 @@ func ffprobeFieldOrder(ctx context.Context, tool, input, userAgent, referrer str
 // A playlist probe omits it. A transport-stream segment has it, and an fMP4
 // playlist needs the init segment in front of the first media segment.
 func hlsProbeTarget(raw, userAgent, referrer string) string {
-	return hlsProbeTargetDepth(raw, userAgent, referrer, 0)
+	return allowedProbeTarget(hlsProbeTargetDepth(raw, userAgent, referrer, 0))
+}
+
+// allowedProbeTarget drops a target ffmpeg would open with a scheme other
+// than http or https. A remote playlist can name a file on this machine.
+func allowedProbeTarget(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	for _, part := range strings.Split(raw, "|") {
+		part = strings.TrimPrefix(part, "concat:")
+		if strings.Contains(part, "://") && fetchguard.Allowed(part) != nil {
+			return ""
+		}
+	}
+	return raw
 }
 
 func hlsProbeTargetDepth(raw, userAgent, referrer string, depth int) string {
@@ -351,12 +368,12 @@ func readProbePlaylist(raw, userAgent, referrer string) (string, error) {
 			return "", err
 		}
 		if userAgent != "" {
-			req.Header.Set("User-Agent", userAgent)
+			req.Header.Set("User-Agent", fetchguard.OneLine(userAgent))
 		}
 		if referrer != "" {
-			req.Header.Set("Referer", referrer)
+			req.Header.Set("Referer", fetchguard.OneLine(referrer))
 		}
-		res, err := (&http.Client{Timeout: 4 * time.Second}).Do(req)
+		res, err := fetchguard.Do(req, 4*time.Second)
 		if err != nil {
 			return "", err
 		}

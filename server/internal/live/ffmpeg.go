@@ -6,7 +6,18 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"broadwave/internal/fetchguard"
 )
+
+// urlProtocols limits a remote ffmpeg input to http and https.
+// A local path and a pipe are left alone.
+func urlProtocols(args []string, input string) []string {
+	if strings.Contains(input, "://") {
+		return append(args, "-protocol_whitelist", fetchguard.FFmpegProtocols)
+	}
+	return args
+}
 
 func DetectEncoder(ffmpeg string) string {
 	// VAAPI is probed before QSV. jellyfin-ffmpeg's QSV check succeeds on
@@ -144,6 +155,7 @@ func copyArgs(program int, input, userAgent, referrer, path string) []string {
 		"-fflags", "+genpts+discardcorrupt",
 	}
 	if strings.Contains(input, "://") {
+		args = urlProtocols(args, input)
 		args = append(args, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5")
 	}
 	args = append(args, headerArgs(userAgent, referrer)...)
@@ -158,6 +170,8 @@ func copyArgs(program int, input, userAgent, referrer, path string) []string {
 }
 
 func headerArgs(userAgent, referrer string) []string {
+	userAgent = fetchguard.OneLine(userAgent)
+	referrer = fetchguard.OneLine(referrer)
 	var b strings.Builder
 	if userAgent != "" {
 		b.WriteString("User-Agent: ")

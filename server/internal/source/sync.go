@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"broadwave/internal/discovery"
+	"broadwave/internal/fetchguard"
 	"broadwave/internal/hdhr"
 	"broadwave/internal/store"
 )
@@ -304,7 +305,7 @@ func compatible(ctx context.Context, base string) bool {
 	if err != nil {
 		return false
 	}
-	res, err := (&http.Client{Timeout: 700 * time.Millisecond}).Do(req)
+	res, err := fetchguard.Do(req, 700*time.Millisecond)
 	if err != nil {
 		return false
 	}

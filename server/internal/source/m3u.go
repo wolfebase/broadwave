@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"broadwave/internal/fetchguard"
 	"broadwave/internal/hdhr"
 	"broadwave/internal/store"
 )
@@ -374,13 +375,15 @@ func UnpackPlaylist(body []byte) ([]byte, error) {
 }
 
 // FetchText downloads a playlist or guide document.
+// A link-local address, a metadata address, and any scheme other than http
+// or https are refused. The error does not repeat the URL.
 func FetchText(ctx context.Context, rawURL string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, fetchguard.ErrRefused
 	}
 	req.Header.Set("User-Agent", "Broadwave/0.1")
-	res, err := http.DefaultClient.Do(req)
+	res, err := fetchguard.Do(req, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -405,7 +408,7 @@ func ProbeFormat(ctx context.Context, rawURL string) string {
 		return ""
 	}
 	req.Header.Set("User-Agent", "Broadwave/0.1")
-	res, err := (&http.Client{Timeout: 4 * time.Second}).Do(req)
+	res, err := fetchguard.Do(req, 4*time.Second)
 	if err != nil {
 		return ""
 	}

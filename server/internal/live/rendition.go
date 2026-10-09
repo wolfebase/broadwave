@@ -517,6 +517,7 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		input = "pipe:0"
 	}
 	if strings.Contains(input, "://") {
+		args = urlProtocols(args, input)
 		args = append(args, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5")
 	}
 	args = append(args, headerArgs(src.UserAgent, src.Referrer)...)

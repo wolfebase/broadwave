@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"broadwave/internal/fetchguard"
 	"broadwave/internal/hdhr"
 	"broadwave/internal/store"
 )
@@ -79,7 +80,7 @@ func PullURL(ctx context.Context, rawURL string) ([]byte, error) {
 	}
 	req.Header.Set("User-Agent", "Broadwave/0.1")
 	req.Header.Set("Accept-Encoding", "gzip")
-	res, err := http.DefaultClient.Do(req)
+	res, err := fetchguard.Do(req, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +180,7 @@ func Pull(ctx context.Context, client *hdhr.Client, bases ...string) ([]byte, er
 	req.Header.Set("Accept-Encoding", "gzip")
 	var res *http.Response
 	for attempt := 0; attempt < 2; attempt++ {
-		res, err = http.DefaultClient.Do(req)
+		res, err = fetchguard.Do(req, 0)
 		if err != nil {
 			return nil, requestError(err)
 		}

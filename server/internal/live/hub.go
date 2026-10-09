@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"broadwave/internal/disk"
+	"broadwave/internal/fetchguard"
 	"broadwave/internal/hdhr"
 	"broadwave/internal/psip"
 	"broadwave/internal/ring"
@@ -584,6 +585,9 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 		return h.addFeedLocked(h.streamMuxLocked(ch, stream.Body, "stream"), ch), nil
 	}
 	if hlsStream(ch) {
+		if err := fetchguard.Allowed(ch.StreamURL); err != nil {
+			return nil, fmt.Errorf("%w (%w)", ErrStreamDown, err)
+		}
 		return h.addFeedLocked(h.hlsMuxLocked(ch), ch), nil
 	}
 	host := hostOf(ch.BaseURL)
@@ -3524,7 +3528,7 @@ func fetchTunerStatus(ctx context.Context, host string) ([]tunerStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := fetchguard.Do(req, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -3571,7 +3575,7 @@ func openKept(ctx context.Context, u string) (io.ReadCloser, error) {
 		stop()
 		return nil, err
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := fetchguard.Do(req, 0)
 	if !halt() {
 		stop()
 		if res != nil {
@@ -3628,17 +3632,17 @@ func firstFree(tuners []Tuner, used, reserved map[int]bool) (int, bool) {
 func openStream(u, userAgent, referrer string) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w (%w)", ErrStreamDown, fetchguard.ErrRefused)
 	}
 	if userAgent != "" {
-		req.Header.Set("User-Agent", userAgent)
+		req.Header.Set("User-Agent", fetchguard.OneLine(userAgent))
 	}
 	if referrer != "" {
-		req.Header.Set("Referer", referrer)
+		req.Header.Set("Referer", fetchguard.OneLine(referrer))
 	}
-	res, err := (&http.Client{Timeout: 0}).Do(req)
+	res, err := fetchguard.Do(req, 0)
 	if err != nil {
-		return nil, fmt.Errorf("%w (%v)", ErrStreamDown, err)
+		return nil, fmt.Errorf("%w (%w)", ErrStreamDown, err)
 	}
 	if res.StatusCode != http.StatusOK {
 		res.Body.Close()
@@ -3770,7 +3774,7 @@ func openMux(root string, tuner, freq int) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := (&http.Client{Timeout: 0}).Do(req)
+	res, err := fetchguard.Do(req, 0)
 	if err != nil {
 		return nil, err
 	}

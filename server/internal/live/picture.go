@@ -84,6 +84,7 @@ func PictureArgs(g Graph) []string {
 	if g.Input == "pipe:0" {
 		args = append(args, "-probesize", "2000000", "-analyzeduration", "1500000")
 	}
+	args = urlProtocols(args, g.Input)
 	args = append(args, "-i", g.Input)
 	switch {
 	case g.Audio == "none" && g.Program > 0:

@@ -107,6 +107,7 @@ func mosaicArgs(inputs []mosaicInput, encoder string) []string {
 		args = append(args, "-fflags", "+genpts+discardcorrupt")
 		probeSize, probeFor := "8000000", "1000000"
 		if strings.Contains(in.input, "://") {
+			args = urlProtocols(args, in.input)
 			args = append(args, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5")
 			args = append(args, headerArgs(in.userAgent, in.referer)...)
 			probeSize, probeFor = "2000000", "1500000"

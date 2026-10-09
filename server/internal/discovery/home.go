@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"broadwave/internal/fetchguard"
 	"broadwave/internal/hdhr"
 )
 
@@ -128,7 +129,7 @@ func tunerLabel(ctx context.Context, base string) string {
 	if base == "" {
 		return "HDHomeRun"
 	}
-	dev, err := (&hdhr.Client{HTTP: &http.Client{Timeout: 400 * time.Millisecond, CheckRedirect: refuseHomeRedirect}}).FetchDevice(ctx, base)
+	dev, err := (&hdhr.Client{HTTP: &http.Client{Timeout: 400 * time.Millisecond, Transport: fetchguard.Transport(), CheckRedirect: refuseHomeRedirect}}).FetchDevice(ctx, base)
 	if err != nil {
 		return "HDHomeRun"
 	}
