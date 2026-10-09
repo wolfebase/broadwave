@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"broadwave/internal/fetchguard"
 )
 
 // FeedURL is the public GitHub releases document for this repo.
@@ -57,7 +59,7 @@ func New(current string) *Checker {
 		Current:  current,
 		FeedURL:  FeedURL,
 		Interval: 24 * time.Hour,
-		Client:   &http.Client{Timeout: 15 * time.Second},
+		Client:   fetchguard.Client(15 * time.Second),
 	}
 }
 
@@ -197,7 +199,8 @@ func (c *Checker) fetch(ctx context.Context) (*Notice, error) {
 	req.Header.Set("User-Agent", userAgent)
 	client := c.Client
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
+		// FeedURL is configurable. Link-local, metadata, and other schemes stay closed.
+		client = fetchguard.Client(15 * time.Second)
 	}
 	res, err := client.Do(req)
 	if err != nil {

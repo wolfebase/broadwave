@@ -3,12 +3,15 @@ package sports
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"broadwave/internal/fetchguard"
 )
 
 // TheSportsDB reads one day of events. It is used only with a key the user
@@ -23,8 +26,46 @@ func NewTheSportsDB(key string) *TheSportsDB {
 	return &TheSportsDB{
 		Key:  strings.TrimSpace(key),
 		Base: "https://www.thesportsdb.com/api/v1/json",
-		HTTP: http.DefaultClient,
+		HTTP: theSportsDBClient(),
 	}
+}
+
+func theSportsDBClient() *http.Client {
+	return &http.Client{Transport: fetchguard.Transport(), CheckRedirect: keyRedirect}
+}
+
+// keyRedirect keeps the key, a path segment, on the host that was asked.
+// A same-host redirect still has to pass fetchguard, and stops after five requests.
+func keyRedirect(req *http.Request, via []*http.Request) error {
+	if req == nil || req.URL == nil || len(via) == 0 || via[0] == nil || len(via) >= 5 {
+		return fetchguard.ErrRefused
+	}
+	if !sameFetchHost(via[0].URL, req.URL) {
+		return fetchguard.ErrRefused
+	}
+	return fetchguard.Allowed(req.URL.String())
+}
+
+// sameFetchHost treats a missing port as the scheme default.
+func sameFetchHost(a, b *url.URL) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	ah, bh := a.Hostname(), b.Hostname()
+	if ah == "" || bh == "" || !strings.EqualFold(ah, bh) {
+		return false
+	}
+	return fetchPort(a) == fetchPort(b)
+}
+
+func fetchPort(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		return p
+	}
+	if strings.EqualFold(u.Scheme, "https") {
+		return "443"
+	}
+	return "80"
 }
 
 func (p *TheSportsDB) Scoreboard(ctx context.Context, leagueID string, day time.Time) ([]Game, error) {
@@ -51,7 +92,7 @@ func (p *TheSportsDB) Scoreboard(ctx context.Context, leagueID string, day time.
 		day.Format("2006-01-02"), url.QueryEscape(sport))
 	client := p.HTTP
 	if client == nil {
-		client = http.DefaultClient
+		client = theSportsDBClient()
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -60,9 +101,7 @@ func (p *TheSportsDB) Scoreboard(ctx context.Context, leagueID string, day time.
 	res, err := client.Do(req)
 	if err != nil {
 		// net/http includes the request URL, and the key is a path segment.
-		msg := strings.ReplaceAll(err.Error(), url.PathEscape(p.Key), "key")
-		msg = strings.ReplaceAll(msg, p.Key, "key")
-		return nil, fmt.Errorf("scoreboard: %s", msg)
+		return nil, fmt.Errorf("scoreboard: %s", redactKey(err, p.Key))
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
@@ -73,6 +112,26 @@ func (p *TheSportsDB) Scoreboard(ctx context.Context, leagueID string, day time.
 		return nil, err
 	}
 	return parseTheSportsDB(league, day, body)
+}
+
+// redactKey drops a *url.Error URL, then any leftover copy of the key.
+func redactKey(err error, key string) string {
+	var uerr *url.Error
+	if errors.As(err, &uerr) && uerr.Err != nil {
+		if errors.Is(uerr.Err, fetchguard.ErrRefused) {
+			err = fetchguard.ErrRefused
+		} else {
+			err = uerr.Err
+		}
+	} else if errors.Is(err, fetchguard.ErrRefused) {
+		err = fetchguard.ErrRefused
+	}
+	msg := err.Error()
+	if key == "" {
+		return msg
+	}
+	msg = strings.ReplaceAll(msg, url.PathEscape(key), "key")
+	return strings.ReplaceAll(msg, key, "key")
 }
 
 func parseTheSportsDB(league League, day time.Time, body []byte) ([]Game, error) {
