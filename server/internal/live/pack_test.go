@@ -2116,3 +2116,25 @@ func TestAnUnlistedPartIsAnsweredFromItsSegment(t *testing.T) {
 		t.Fatal("a part outside the rendition was read")
 	}
 }
+
+// A trun with no per-sample fields used to append one sample per count, and
+// the count can be billions. Constant-duration audio is the same layout with
+// a small count, so that still parses.
+func TestATrunWithNoPerSampleFieldsRejectsAHugeCount(t *testing.T) {
+	traf := func(n uint32) []byte {
+		tfhd := make([]byte, 8)
+		tfhd[1] = 0x02 // default-base-is-moof
+		binary.BigEndian.PutUint32(tfhd[4:8], 1)
+		trun := make([]byte, 12) // flags 0x1: a data offset and no sample fields
+		trun[3] = 0x01
+		binary.BigEndian.PutUint32(trun[4:8], n)
+		return append(append(mp4Box("tfhd", tfhd), mp4Box("tfdt", make([]byte, 8))...), mp4Box("trun", trun)...)
+	}
+	if _, ok := parseRun(traf(uint32(maxBox + 1))); ok {
+		t.Fatal("a trun with no sample fields and more than maxBox samples was accepted")
+	}
+	r, ok := parseRun(traf(4))
+	if !ok || len(r.samples) != 4 {
+		t.Fatalf("four constant samples: ok %v, %d samples", ok, len(r.samples))
+	}
+}

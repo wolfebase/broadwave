@@ -628,7 +628,8 @@ func (r *trackRun) readTrun(b []byte) bool {
 	}
 	r.version = b[0]
 	r.flags = uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
-	n := int(binary.BigEndian.Uint32(b[4:8]))
+	count := binary.BigEndian.Uint32(b[4:8])
+	n := int(count)
 	off := 8
 	if r.flags&0x1 != 0 {
 		if off+4 > len(b) {
@@ -643,6 +644,11 @@ func (r *trackRun) readTrun(b []byte) bool {
 		}
 		r.first = binary.BigEndian.Uint32(b[off : off+4])
 		off += 4
+	}
+	// Per-sample fields are the only stride. Without them a huge count is the
+	// whole allocation; a small count is constant-duration audio.
+	if r.flags&0xF00 == 0 && count > uint32(maxBox) {
+		return false
 	}
 	for i := 0; i < n; i++ {
 		var s trunSample
