@@ -112,6 +112,25 @@ func TestRecordingPathPicksTheLayout(t *testing.T) {
 	}
 }
 
+// A guide number is a label from the tuner or a playlist. filepath.Join
+// cleans slashes in it, so the flat file can land outside the recordings folder.
+func TestFlatRecordingPathStaysInTheFolder(t *testing.T) {
+	h := &Hub{Dir: t.TempDir()}
+	root := h.Recordings()
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ch := store.SourceChannel{Channel: store.Channel{GuideNumber: "x/../../../tmp/evil", DisplayName: "City"}}
+	rec := store.Recording{Title: "Evening", StartedAt: time.Date(2026, 10, 8, 17, 30, 0, 0, time.Local)}
+	got := h.recordingPath(rec, ch, false)
+	if _, ok := inside(root, got); !ok || filepath.Dir(got) != root {
+		t.Fatalf("flat path left the recordings folder: %s", got)
+	}
+	if strings.Contains(filepath.Base(got), "/") {
+		t.Fatalf("flat name still has a separator: %s", got)
+	}
+}
+
 func TestRemovingTheLastEpisodeTakesItsEmptyFolders(t *testing.T) {
 	h := &Hub{Dir: t.TempDir()}
 	root := h.Recordings()
