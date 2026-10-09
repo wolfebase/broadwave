@@ -283,3 +283,41 @@ func TestIdleTilesMakeRoomForAMosaic(t *testing.T) {
 	}
 	h.ReleaseMosaic(s.Key)
 }
+
+// goneWhileTuning is a request whose page left while its channel tuned: it
+// reads as cancelled, but nothing selected on Done saw it go.
+type goneWhileTuning struct{ context.Context }
+
+func (goneWhileTuning) Err() error { return context.Canceled }
+
+// A quad on a two-picture server leaves while its third tile's watch tunes.
+// That watch used to free the sound tile's idle picture, so Back started the
+// sound tile cold and it waited out a fresh tile's cushion.
+func TestAWatchCancelledWhileItTunesFreesNoPicture(t *testing.T) {
+	h, st := mosaicHub(t)
+	ctx := context.Background()
+	a, b, c := idOf(t, st, "4.1"), idOf(t, st, "4.2"), idOf(t, st, "5.1")
+	h.Host.Tiles = 2
+	h.RenditionIdle = time.Minute
+	for _, id := range []int64{a, b} {
+		s, err := h.Watch(ctx, id, Rendition{Video: "540", Audio: "none"}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.Release(id, s.Rendition)
+	}
+	if _, err := h.Watch(goneWhileTuning{ctx}, c, Rendition{Video: "540", Audio: "none"}, false); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a watch for a page that left: %v", err)
+	}
+	h.mu.Lock()
+	running := h.transcodesLocked()
+	_, tuned := h.channels[c]
+	kept := h.channels[a] != nil && h.channels[b] != nil
+	h.mu.Unlock()
+	if running != 2 || !kept {
+		t.Fatalf("%d encodes running, 4.1 and 4.2 kept %v; want both idle tiles", running, kept)
+	}
+	if tuned {
+		t.Fatal("5.1 stayed tuned for a page that left")
+	}
+}
