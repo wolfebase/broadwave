@@ -22,6 +22,19 @@ private func fineSnap() -> RecoverySnap {
     #expect(!clock.shouldProbe(at: start.addingTimeInterval(30), fatal: false))
 }
 
+@Test func resumedPlaybackDropsALateStallProbe() {
+    var clock = ServerOutage()
+    let start = Date(timeIntervalSince1970: 8000)
+    clock.noteWaiting(at: start)
+    clock.notePlaying()
+    let lost = RecoverySnap(health: true, freeTuner: true, tunerAnswers: true, online: true, signalLost: true)
+    #expect(clock.resolve(at: start.addingTimeInterval(9), snap: lost, fatal: false) == nil)
+    #expect(clock.phase == .playing)
+    #expect(!clock.shouldProbe(at: start.addingTimeInterval(30), fatal: false))
+    #expect(clock.shouldProbe(at: start.addingTimeInterval(30), fatal: true))
+    #expect(clock.resolve(at: start.addingTimeInterval(9), snap: lost, fatal: true)?.recovery == .signal)
+}
+
 @Test func serverDownNamesTheOutageOnce() {
     var clock = ServerOutage()
     let start = Date(timeIntervalSince1970: 1000)
