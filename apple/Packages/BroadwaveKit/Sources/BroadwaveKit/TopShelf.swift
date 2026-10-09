@@ -41,10 +41,7 @@ public enum TopShelf {
     public static func sections(_ snap: Snapshot, api: APIClient, now: Date, limit: Int = 10) -> [Section] {
         let framed = snap.framed
         let shown = snap.channels.filter { $0.enabled && !$0.hidden }
-        var current: [Int64: Airing] = [:]
-        for airing in snap.airings where airing.start <= now && airing.end > now {
-            current[airing.channelId] = airing
-        }
+        let current = GuideIndex(snap.airings).playing(at: now)
 
         func live(_ channel: Channel) -> Item {
             let airing = current[channel.id]

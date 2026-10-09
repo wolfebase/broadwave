@@ -40,6 +40,21 @@ import Testing
     #expect(ShowRecording.holdingStart(of: airing, in: [yesterday, late, held, other])?.id == 3)
 }
 
+@Test func aMissingFileDoesNotHoldTheStart() {
+    let start = Date(timeIntervalSince1970: 1_000_000)
+    let airing = Airing(id: 1, channelId: 4, title: "Night Owls", programId: "ep-7", start: start, end: start.addingTimeInterval(3600))
+    let gone = Recording(
+        id: 5, channelId: 4, guideNumber: "4.1", title: "Night Owls", programId: "ep-7",
+        status: "complete", startedAt: start.addingTimeInterval(-90), missing: true
+    )
+    let kept = Recording(
+        id: 7, channelId: 4, guideNumber: "4.1", title: " night owls ", programId: "ep-7",
+        status: "complete", startedAt: start.addingTimeInterval(-30)
+    )
+    #expect(ShowRecording.holdingStart(of: airing, in: [gone]) == nil)
+    #expect(ShowRecording.holdingStart(of: airing, in: [gone, kept])?.id == 7)
+}
+
 @Test func episodeLinePrefersTheGuideLabel() {
     #expect(ProgramLine.episode(label: "Chapter 2", season: 1, episode: 4, subtitle: "A subtitle") == "Chapter 2")
     #expect(ProgramLine.episode(label: "  ", season: 3, episode: 12, subtitle: "Local headlines") == "Season 3, episode 12")

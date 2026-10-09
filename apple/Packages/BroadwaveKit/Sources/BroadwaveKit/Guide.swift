@@ -15,7 +15,8 @@ public enum Category: String, Sendable, CaseIterable {
     }
 }
 
-private let sportsWords = regex(#"\b(sports?|football|basketball|baseball|hockey|soccer|golf|tennis|racing|nascar|motorsports?|boxing|mma|ufc|wrestling|olympics?|nfl|nba|mlb|nhl|mls|wnba|ncaa|bowl|playoffs?|pregame|postgame)\b"#)
+private let sportsWords = regex(#"\b(sports?|football|basketball|baseball|hockey|soccer|golf|tennis|racing|nascar|motorsports?|boxing|mma|ufc|wrestling|olympics?|nfl|nba|mlb|nhl|mls|wnba|ncaa|bowl|playoffs?|pregame|postgame|game day)\b"#)
+private let newsWord = regex(#"\bnews\b"#)
 private let versus = regex(#"\b(vs\.?|at|@)\b"#)
 
 private func regex(_ pattern: String) -> NSRegularExpression {
@@ -37,7 +38,9 @@ public extension Airing {
         if matches(sportsWords, c) || (matches(sportsWords, title) && matches(versus, title)) {
             return .sports
         }
-        if c.localizedCaseInsensitiveContains("news") || title.localizedCaseInsensitiveContains("news") {
+        // The category is a substring, matching the web. The title needs the whole word,
+        // so a series whose name merely contains those letters stays a series.
+        if c.localizedCaseInsensitiveContains("news") || matches(newsWord, title) {
             return .news
         }
         if c.localizedCaseInsensitiveContains("movie") || c.localizedCaseInsensitiveContains("film") {
@@ -88,6 +91,17 @@ public struct GuideIndex: Sendable {
 
     public func on(_ channel: Int64, at date: Date) -> Airing? {
         airings(channel).first { $0.isOn(at: date) }
+    }
+
+    /// What is on now, one listing per channel. Overlaps keep the earliest start, same as `on`.
+    public func playing(at date: Date) -> [Int64: Airing] {
+        var current: [Int64: Airing] = [:]
+        for (channel, list) in byChannel {
+            if let airing = list.first(where: { $0.isOn(at: date) }) {
+                current[channel] = airing
+            }
+        }
+        return current
     }
 
     public func next(_ channel: Int64, after date: Date) -> Airing? {

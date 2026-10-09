@@ -133,11 +133,7 @@ public enum WidgetFeed {
     }
 
     private static func onAir(_ airings: [Airing], now: Date) -> [Int64: Airing] {
-        var current: [Int64: Airing] = [:]
-        for airing in airings where airing.isOn(at: now) {
-            current[airing.channelId] = airing
-        }
-        return current
+        GuideIndex(airings).playing(at: now)
     }
 
     /// When the widget should ask again: the next listing that ends or starts, at most 15 minutes out.

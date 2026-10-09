@@ -45,6 +45,15 @@ private func planned(_ airing: Airing, skipped: Bool = false, conflict: Bool = f
     #expect(rows[0].link == URL(string: "broadwave://watch/4"))
 }
 
+@Test func onNowKeepsTheListingThatStartedFirst() {
+    let early = airing(1, on: 4, title: "Early Show", from: -600, to: 600)
+    let late = airing(2, on: 4, title: "Late Show", from: -60, to: 1200)
+    let snap = TopShelf.Snapshot(channels: [channel(4, favorite: true)], airings: [early, late])
+    let rows = WidgetFeed.onNow(snap, now: now)
+    #expect(rows.map(\.title) == ["Early Show"])
+    #expect(rows[0].record?.title == "Early Show")
+}
+
 @Test func onNowWithoutFavoritesShowsWhatIsOn() {
     let snap = TopShelf.Snapshot(channels: [channel(4), channel(5)], airings: [airing(1, on: 5, title: "Quiz Night")])
     let rows = WidgetFeed.onNow(snap, now: now)

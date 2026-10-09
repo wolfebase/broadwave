@@ -37,7 +37,14 @@ public enum ShowRecording {
         let earliest = airing.start.addingTimeInterval(-4 * 60 * 60)
         return recordings
             .filter { rec in
-                guard rec.channelId == airing.channelId, rec.title.caseInsensitiveCompare(airing.title) == .orderedSame else {
+                // A deleted file must not hide a later take of the same showing.
+                // Titles are compared the way the web compares them: trimmed, any case.
+                // An empty title is not a match-all (that is sameShowTitle's rule).
+                let showTitle = airing.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let fileTitle = rec.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !rec.isMissing, rec.channelId == airing.channelId, !showTitle.isEmpty,
+                      fileTitle.localizedCaseInsensitiveCompare(showTitle) == .orderedSame
+                else {
                     return false
                 }
                 if let ended = rec.endedAt, ended < airing.start {
