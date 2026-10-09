@@ -17,7 +17,7 @@ import { isLayout, multiviewPath } from "../multiview/storage";
 import { useScoreMap } from "../sports/scores";
 import { listingNote } from "./outage";
 import { soundFor } from "./sounds";
-import { recordingHoldingStart, startOverChoice } from "./startOver";
+import { liveWindowFrom, recordingHoldingStart, startOverAt, startOverChoice, type DatedFrag } from "./startOver";
 import { Stage } from "./Stage";
 import { groupRoom, peopleSentence, personLabel, useGroup } from "./together";
 import { useLiveStream } from "./useLiveStream";
@@ -36,6 +36,14 @@ function readOptions(): Options {
 }
 
 const qualityLabels: Record<Options["quality"], string> = { auto: "Auto", original: "Original", high: "High", medium: "Medium", saver: "Data saver" };
+
+function datedFrags(video: HTMLVideoElement): DatedFrag[] {
+  const hls = (video as HTMLVideoElement & { hls?: { levels?: { details?: { fragments?: DatedFrag[] } }[]; currentLevel?: number; loadLevel?: number } }).hls;
+  const levels = hls?.levels;
+  if (!levels?.length) return [];
+  const level = levels[Math.max(0, hls?.currentLevel ?? hls?.loadLevel ?? 0)] ?? levels[0];
+  return level?.details?.fragments ?? [];
+}
 const delayLabels: Record<LiveDelay, string> = { lowest: "Lowest", balanced: "Balanced", stable: "Stable" };
 
 export function LivePlayer({
@@ -148,8 +156,7 @@ export function LivePlayer({
       const start = video.seekable.length ? video.seekable.start(0) : 0;
       setBehind(Math.max(0, end - video.currentTime));
       setSpan({ at: Math.max(0, video.currentTime - start), len: Math.max(1, end - start) });
-      const media = mediaNow();
-      setWindowFrom(media === null || !video.seekable.length ? null : Math.round((media - (video.currentTime - start) * 1000) / 1000) * 1000);
+      setWindowFrom(liveWindowFrom({ seekable: video.seekable.length > 0, seekStart: start, currentTime: video.currentTime, media: mediaNow(), frags: datedFrags(video) }));
     };
     // A paused video fires no timeupdate, and live moves on without it.
     const paused = window.setInterval(() => {
@@ -292,10 +299,16 @@ export function LivePlayer({
       return;
     }
     const video = videoRef.current;
+    if (startOverFrom !== "live" || !video || !video.seekable.length) return;
+    const seekStart = video.seekable.start(0);
     const media = stream.mediaNow();
-    if (startOverFrom !== "live" || !video || media === null || !video.seekable.length) return;
-    // Read before detaching: the sync engine holds the broadcast clock.
-    const target = Math.max(video.seekable.start(0) + 0.5, video.currentTime + (Date.parse(airing.start) - media) / 1000);
+    // The room clock is read before a local seek drops it. After that, the
+    // window stored from the playlist still names the show's start.
+    const target =
+      media !== null
+        ? Math.max(seekStart + 0.5, video.currentTime + (Date.parse(airing.start) - media) / 1000)
+        : startOverAt(Date.parse(airing.start), windowFrom, seekStart, video.seekable.end(video.seekable.length - 1));
+    if (target === null) return;
     if (together) return seekTogether(target);
     detachSync();
     video.currentTime = target;
