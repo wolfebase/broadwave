@@ -158,8 +158,9 @@ export class EventSocket {
     // The local clock moved while the sample was out.
     if (rtt < 0 || rtt > 10_000) return;
     // Keep the sample with the shortest round trip; allow drift to reset it slowly.
+    // A round trip of 0 would stick: multiplying it never lets a later sample in.
     if (rtt <= this.bestRtt * 1.2) {
-      this.bestRtt = Math.min(rtt, this.bestRtt);
+      this.bestRtt = Math.min(Math.max(rtt, 1), this.bestRtt);
       this.offset = t1 - (t0 + t2) / 2;
     }
     this.bestRtt *= 1.01;

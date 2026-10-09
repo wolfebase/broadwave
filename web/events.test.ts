@@ -153,6 +153,20 @@ test("a clock reply whose round trip is negative is ignored", () => {
   assert.equal(bus.offset, 0);
 });
 
+test("a clock sample with no round trip still lets the next one through", () => {
+  FakeSocket.all = [];
+  const bus = new EventSocket();
+  latest().open();
+  const t0 = Date.now();
+  latest().hear("clock", { t0, t1: t0 + 1000 });
+  assert.ok(Math.abs(bus.offset - 1000) < 1);
+  // One millisecond later. A stored round trip of 0 never grows, so this would be ignored.
+  mock.timers.tick(1);
+  const now = Date.now();
+  latest().hear("clock", { t0: now - 1, t1: now + 49 });
+  assert.ok(Math.abs(bus.offset - 49.5) < 1);
+});
+
 test("a room left and joined again forgets its old state", () => {
   FakeSocket.all = [];
   const bus = new EventSocket();
