@@ -11,6 +11,8 @@ import { VirtualPlay } from "./recordings/Virtual";
 import { Schedule } from "./schedule/Schedule";
 import { HomeList } from "./setup/HomeList";
 import { SettingsScreen } from "./settings/Settings";
+import { ShareLinks } from "./settings/ShareLinks";
+import { tunerAddress } from "./settings/tunerShare";
 import { Sources } from "./settings/Sources";
 
 export function RecordingsPage() {
@@ -129,9 +131,8 @@ export function SettingsPage() {
   useEffect(() => {
     void getServer().then(setFetched).catch(() => undefined);
   }, []);
-  const origin = window.location.origin;
-  const host = window.location.hostname;
   const hdhrNote = gateFeature(server, "hdhrEmulation");
+  const address = tunerAddress(window.location.href);
   const mosaics = (settings.exportMosaics ?? "").split(",");
   const mosaicName = (key: string) =>
     key
@@ -193,29 +194,21 @@ export function SettingsPage() {
       </section>
       <section className="settings-section">
         <h2>Playback and recording</h2>
-        <SettingsScreen settings={settings} storage={storage} features={server?.features} tunerCount={server?.tunerCount} onChange={(v) => void saveSettings(v)} />
+        <SettingsScreen settings={settings} storage={storage} tunerCount={server?.tunerCount} onChange={(v) => void saveSettings(v)} />
       </section>
       <section className="settings-section">
         <h2>Share with other apps</h2>
-        <p className="dim">Plex, Jellyfin, and Channels can watch through this server. They share its tuners, so they never fight over one.</p>
+        <p className="dim">Plex, Jellyfin, Emby, and Channels can watch through this server. They share its tuners, so they never fight over one.</p>
         {hdhrNote ? (
           <p className="hint" role="status">{hdhrNote}</p>
         ) : (
           <label className="switch-row">
             <input type="checkbox" checked={settings.hdhrEmulate === "1"} onChange={(e) => void saveSettings({ hdhrEmulate: e.target.checked ? "1" : "0" })} />
-            <span>Act as an HDHomeRun at {host}:8478</span>
+            <span>Act as an HDHomeRun at {address}</span>
           </label>
         )}
-        <dl className="share-urls">
-          <dt>M3U playlist</dt>
-          <dd>
-            <code>{origin}/export/lineup.m3u</code>
-          </dd>
-          <dt>XMLTV guide</dt>
-          <dd>
-            <code>{origin}/export/guide.xml</code>
-          </dd>
-        </dl>
+        {hdhrNote ? null : <p className="hint">Other apps add this address and include the port. Discovery stays quiet, so a tuner already on the network is unchanged. The change applies within a minute.</p>}
+        <ShareLinks pageURL={window.location.href} sharing={settings.hdhrEmulate === "1"} hdhr={!hdhrNote} />
         <h3 className="section-title">Multiview channels</h3>
         {mosaics.some(Boolean) ? (
           <ul className="share-mosaics">
