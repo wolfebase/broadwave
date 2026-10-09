@@ -103,6 +103,73 @@ func (s *Store) RefreshDevice(ctx context.Context, dev hdhr.Device, channels []h
 	return s.upsertDevice(ctx, dev, channels, false)
 }
 
+// lineupRow is one row of this device whose column matches value and that
+// this refresh has not already given to another lineup entry. column is
+// stream_url, guide_key, or guide_number.
+func lineupRow(ctx context.Context, tx *sql.Tx, deviceID, column, value string, claimed map[int64]bool) (int64, error) {
+	if value == "" {
+		return 0, nil
+	}
+	switch column {
+	case "stream_url", "guide_key", "guide_number":
+	default:
+		return 0, fmt.Errorf("channel match %s", column)
+	}
+	query := `SELECT id FROM channels WHERE device_id=? AND ` + column + `=?`
+	args := []any{deviceID, value}
+	if len(claimed) > 0 {
+		holders := make([]string, 0, len(claimed))
+		for id := range claimed {
+			holders = append(holders, "?")
+			args = append(args, id)
+		}
+		query += ` AND id NOT IN (` + strings.Join(holders, ",") + `)`
+	}
+	query += ` ORDER BY id LIMIT 1`
+	var id int64
+	err := tx.QueryRowContext(ctx, query, args...).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return id, err
+}
+
+// claimChannel picks the existing row for one lineup entry: the stream, then
+// the guide key, then the channel number. Zero means the entry is new.
+func claimChannel(ctx context.Context, tx *sql.Tx, deviceID string, ch hdhr.Channel, claimed map[int64]bool) (int64, error) {
+	if id, err := lineupRow(ctx, tx, deviceID, "stream_url", ch.StreamURL, claimed); id != 0 || err != nil {
+		return id, err
+	}
+	if id, err := lineupRow(ctx, tx, deviceID, "guide_key", ch.GuideKey, claimed); id != 0 || err != nil {
+		return id, err
+	}
+	return lineupRow(ctx, tx, deviceID, "guide_number", ch.GuideNumber, claimed)
+}
+
+// writeChannel copies one lineup entry onto a row. Favorite, custom name, and
+// measured audio stay as the viewer left them.
+func writeChannel(ctx context.Context, tx *sql.Tx, id int64, ch hdhr.Channel) error {
+	protect := boolInt(ch.Protected)
+	_, err := tx.ExecContext(ctx, `
+UPDATE channels SET guide_number=?, guide_name=?, stream_url=?,
+	guide_key=CASE WHEN ?!='' THEN ? ELSE guide_key END,
+	art_url=CASE WHEN ?!='' THEN ? ELSE art_url END,
+	video_codec=CASE WHEN ?!='' THEN ? ELSE video_codec END,
+	audio_codec=CASE WHEN ?!='' THEN ? ELSE audio_codec END,
+	hd=?, present=1,
+	user_agent=CASE WHEN ?!='' THEN ? ELSE user_agent END,
+	referrer=CASE WHEN ?!='' THEN ? ELSE referrer END,
+	hidden=CASE WHEN ?=1 THEN 1 ELSE hidden END,
+	protected=?
+WHERE id=?`,
+		ch.GuideNumber, ch.GuideName, ch.StreamURL,
+		ch.GuideKey, ch.GuideKey, ch.ArtURL, ch.ArtURL,
+		ch.VideoCodec, ch.VideoCodec, ch.AudioCodec, ch.AudioCodec, boolInt(ch.HD),
+		ch.UserAgent, ch.UserAgent, ch.Referrer, ch.Referrer,
+		protect, protect, id)
+	return err
+}
+
 func (s *Store) upsertDevice(ctx context.Context, dev hdhr.Device, channels []hdhr.Channel, adopt bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -145,72 +212,100 @@ ON CONFLICT(device_id) DO UPDATE SET
 	if _, err := tx.ExecContext(ctx, `UPDATE channels SET present=0 WHERE device_id=?`, dev.DeviceID); err != nil {
 		return err
 	}
+	// One lineup entry claims one row. Matching every row with the stream URL
+	// kept the old channel number and dropped a second entry that shares it.
+	// Numbers are parked before they are written: two channels can swap numbers,
+	// and the unique (device, number) constraint would reject the first write.
+	type lineupSlot struct {
+		id   int64
+		ch   hdhr.Channel
+		drop bool
+	}
+	claimed := map[int64]bool{}
+	slots := make([]lineupSlot, 0, len(channels))
+	byNum := map[string]int{}
 	for _, ch := range channels {
-		protect := boolInt(ch.Protected)
-		if ch.StreamURL != "" {
-			res, err := tx.ExecContext(ctx, `
-UPDATE channels SET guide_name=?,
-	video_codec=CASE WHEN ?!='' THEN ? ELSE video_codec END,
-	audio_codec=CASE WHEN ?!='' THEN ? ELSE audio_codec END,
-	hd=?, present=1,
-	user_agent=CASE WHEN ?!='' THEN ? ELSE user_agent END,
-	referrer=CASE WHEN ?!='' THEN ? ELSE referrer END,
-	hidden=CASE WHEN ?=1 THEN 1 ELSE hidden END,
-	protected=?
-WHERE device_id=? AND stream_url=?`,
-				ch.GuideName, ch.VideoCodec, ch.VideoCodec, ch.AudioCodec, ch.AudioCodec, boolInt(ch.HD),
-				ch.UserAgent, ch.UserAgent, ch.Referrer, ch.Referrer,
-				protect, protect, dev.DeviceID, ch.StreamURL)
-			if err != nil {
-				return err
-			}
-			if n, _ := res.RowsAffected(); n > 0 {
-				continue
-			}
-		}
-		if ch.GuideKey != "" {
-			res, err := tx.ExecContext(ctx, `
-UPDATE channels SET guide_number=?, guide_name=?, stream_url=?,
-	video_codec=CASE WHEN ?!='' THEN ? ELSE video_codec END,
-	audio_codec=CASE WHEN ?!='' THEN ? ELSE audio_codec END,
-	hd=?, present=1,
-	art_url=CASE WHEN ?!='' THEN ? ELSE art_url END,
-	user_agent=CASE WHEN ?!='' THEN ? ELSE user_agent END,
-	referrer=CASE WHEN ?!='' THEN ? ELSE referrer END,
-	hidden=CASE WHEN ?=1 THEN 1 ELSE hidden END,
-	protected=?
-WHERE device_id=? AND guide_key=?`,
-				ch.GuideNumber, ch.GuideName, ch.StreamURL, ch.VideoCodec, ch.VideoCodec, ch.AudioCodec, ch.AudioCodec, boolInt(ch.HD),
-				ch.ArtURL, ch.ArtURL, ch.UserAgent, ch.UserAgent, ch.Referrer, ch.Referrer,
-				protect, protect, dev.DeviceID, ch.GuideKey)
-			if err != nil {
-				return err
-			}
-			if n, _ := res.RowsAffected(); n > 0 {
-				continue
-			}
-		}
-		_, err := tx.ExecContext(ctx, `
-INSERT INTO channels (
-	device_id, guide_number, guide_name, stream_url, video_codec, audio_codec, hd, favorite, present, hidden, protected, guide_key, art_url, user_agent, referrer
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(device_id, guide_number) DO UPDATE SET
-	guide_name=excluded.guide_name,
-	stream_url=excluded.stream_url,
-	video_codec=CASE WHEN excluded.video_codec!='' THEN excluded.video_codec ELSE channels.video_codec END,
-	audio_codec=CASE WHEN excluded.audio_codec!='' THEN excluded.audio_codec ELSE channels.audio_codec END,
-	hd=excluded.hd,
-	present=1,
-	hidden=CASE WHEN excluded.hidden=1 THEN 1 ELSE channels.hidden END,
-	protected=excluded.protected,
-	guide_key=CASE WHEN excluded.guide_key!='' THEN excluded.guide_key ELSE channels.guide_key END,
-	art_url=CASE WHEN excluded.art_url!='' THEN excluded.art_url ELSE channels.art_url END,
-	user_agent=CASE WHEN excluded.user_agent!='' THEN excluded.user_agent ELSE channels.user_agent END,
-	referrer=CASE WHEN excluded.referrer!='' THEN excluded.referrer ELSE channels.referrer END
-`, dev.DeviceID, ch.GuideNumber, ch.GuideName, ch.StreamURL, ch.VideoCodec, ch.AudioCodec, boolInt(ch.HD), boolInt(ch.Favorite), protect, protect, ch.GuideKey, ch.ArtURL, ch.UserAgent, ch.Referrer)
+		id, err := claimChannel(ctx, tx, dev.DeviceID, ch, claimed)
 		if err != nil {
 			return err
 		}
+		if prev, ok := byNum[ch.GuideNumber]; ok && !slots[prev].drop {
+			old := &slots[prev]
+			if id == 0 {
+				id = old.id
+			} else if old.id != 0 && old.id != id {
+				delete(claimed, old.id)
+			}
+			old.drop = true
+		}
+		if id != 0 {
+			claimed[id] = true
+		}
+		byNum[ch.GuideNumber] = len(slots)
+		slots = append(slots, lineupSlot{id: id, ch: ch})
+	}
+	orig := map[int64]string{}
+	rows, err := tx.QueryContext(ctx, `SELECT id, guide_number FROM channels WHERE device_id=?`, dev.DeviceID)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var id int64
+		var number string
+		if err := rows.Scan(&id, &number); err != nil {
+			rows.Close()
+			return err
+		}
+		orig[id] = number
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	if _, err := tx.ExecContext(ctx, `UPDATE channels SET guide_number = char(1) || id WHERE device_id=?`, dev.DeviceID); err != nil {
+		return err
+	}
+	used := map[string]bool{}
+	for i := range slots {
+		sl := &slots[i]
+		if sl.drop {
+			continue
+		}
+		if sl.id == 0 {
+			protect := boolInt(sl.ch.Protected)
+			res, err := tx.ExecContext(ctx, `
+INSERT INTO channels (
+	device_id, guide_number, guide_name, stream_url, video_codec, audio_codec, hd, favorite, present, hidden, protected, guide_key, art_url, user_agent, referrer
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`,
+				dev.DeviceID, sl.ch.GuideNumber, sl.ch.GuideName, sl.ch.StreamURL, sl.ch.VideoCodec, sl.ch.AudioCodec,
+				boolInt(sl.ch.HD), boolInt(sl.ch.Favorite), protect, protect, sl.ch.GuideKey, sl.ch.ArtURL, sl.ch.UserAgent, sl.ch.Referrer)
+			if err != nil {
+				return err
+			}
+			sl.id, err = res.LastInsertId()
+			if err != nil {
+				return err
+			}
+			claimed[sl.id] = true
+			used[sl.ch.GuideNumber] = true
+			continue
+		}
+		if err := writeChannel(ctx, tx, sl.id, sl.ch); err != nil {
+			return err
+		}
+		used[sl.ch.GuideNumber] = true
+	}
+	// A channel that left the lineup keeps its number, so the next refresh
+	// still finds the same row when only the address changed.
+	for id, number := range orig {
+		if claimed[id] || used[number] {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE channels SET guide_number=? WHERE id=?`, number, id); err != nil {
+			return err
+		}
+		used[number] = true
 	}
 	if err := tx.Commit(); err != nil {
 		return err

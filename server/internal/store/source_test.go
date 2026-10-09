@@ -36,8 +36,134 @@ func TestRefreshKeepsTheChannelID(t *testing.T) {
 			kept = ch
 		}
 	}
-	if present != 1 || kept.ID != id || kept.GuideName != "News Tonight" {
+	if present != 1 || kept.ID != id || kept.GuideName != "News Tonight" || kept.GuideNumber != "900" {
 		t.Fatalf("refresh moved the channel: present %d %+v", present, channels)
+	}
+}
+
+func TestDuplicateStreamURLKeepsBothChannels(t *testing.T) {
+	st := openTestStore(t)
+	dev := hdhr.Device{DeviceID: "src-1", FriendlyName: "Playlist", BaseURL: "source"}
+	err := st.UpsertDevice(context.Background(), dev, []hdhr.Channel{
+		{GuideNumber: "801", GuideName: "News", StreamURL: "http://example/a.ts"},
+		{GuideNumber: "802", GuideName: "News HD", StreamURL: "http://example/a.ts"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.Channels(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, ch := range channels {
+		if ch.Present {
+			got[ch.GuideNumber] = ch.GuideName
+		}
+	}
+	if got["801"] != "News" || got["802"] != "News HD" || len(got) != 2 {
+		t.Fatalf("channels %+v", channels)
+	}
+}
+
+func TestSwappedNumbersFollowTheStream(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	dev := hdhr.Device{DeviceID: "src-1", FriendlyName: "Playlist", BaseURL: "source"}
+	if err := st.UpsertDevice(ctx, dev, []hdhr.Channel{
+		{GuideNumber: "801", GuideName: "News", StreamURL: "http://example/news.ts"},
+		{GuideNumber: "802", GuideName: "Sports", StreamURL: "http://example/sports.ts"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := st.Channels(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]int64{}
+	for _, ch := range before {
+		var url string
+		if err := st.db.QueryRow(`SELECT stream_url FROM channels WHERE id=?`, ch.ID).Scan(&url); err != nil {
+			t.Fatal(err)
+		}
+		ids[url] = ch.ID
+	}
+	if err := st.UpsertDevice(ctx, dev, []hdhr.Channel{
+		{GuideNumber: "802", GuideName: "News Moved", StreamURL: "http://example/news.ts"},
+		{GuideNumber: "801", GuideName: "Sports Moved", StreamURL: "http://example/sports.ts"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := st.Channels(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]Channel{}
+	for _, ch := range after {
+		if ch.Present {
+			var url string
+			if err := st.db.QueryRow(`SELECT stream_url FROM channels WHERE id=?`, ch.ID).Scan(&url); err != nil {
+				t.Fatal(err)
+			}
+			got[url] = ch
+		}
+	}
+	news, sports := got["http://example/news.ts"], got["http://example/sports.ts"]
+	if news.ID != ids["http://example/news.ts"] || news.GuideNumber != "802" || news.GuideName != "News Moved" ||
+		sports.ID != ids["http://example/sports.ts"] || sports.GuideNumber != "801" || sports.GuideName != "Sports Moved" ||
+		len(got) != 2 {
+		t.Fatalf("swap lost a channel: %+v", after)
+	}
+}
+
+func TestAChannelMissingFromOneRefreshKeepsItsNumber(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	dev := hdhr.Device{DeviceID: "src-1", FriendlyName: "Playlist", BaseURL: "source"}
+	if err := st.UpsertDevice(ctx, dev, []hdhr.Channel{
+		{GuideNumber: "801", GuideName: "News", StreamURL: "http://example/news.ts"},
+		{GuideNumber: "802", GuideName: "Sports", StreamURL: "http://example/sports.ts"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.Channels(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sportsID int64
+	for _, ch := range channels {
+		if ch.GuideNumber == "802" {
+			sportsID = ch.ID
+		}
+	}
+	if sportsID == 0 {
+		t.Fatal("sports channel missing")
+	}
+	if err := st.UpsertDevice(ctx, dev, []hdhr.Channel{
+		{GuideNumber: "801", GuideName: "News", StreamURL: "http://example/news.ts"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var number string
+	var present int
+	if err := st.db.QueryRow(`SELECT guide_number, present FROM channels WHERE id=?`, sportsID).Scan(&number, &present); err != nil {
+		t.Fatal(err)
+	}
+	if number != "802" || present != 0 {
+		t.Fatalf("absent channel number %q present %d", number, present)
+	}
+	if err := st.UpsertDevice(ctx, dev, []hdhr.Channel{
+		{GuideNumber: "801", GuideName: "News", StreamURL: "http://example/news.ts"},
+		{GuideNumber: "802", GuideName: "Sports Tonight", StreamURL: "http://example/sports-new.ts"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var name, url string
+	if err := st.db.QueryRow(`SELECT guide_number, guide_name, stream_url, present FROM channels WHERE id=?`, sportsID).Scan(&number, &name, &url, &present); err != nil {
+		t.Fatal(err)
+	}
+	if number != "802" || name != "Sports Tonight" || url != "http://example/sports-new.ts" || present != 1 {
+		t.Fatalf("comeback id %d number %q name %q url %q present %d", sportsID, number, name, url, present)
 	}
 }
 
