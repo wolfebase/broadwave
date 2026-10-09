@@ -2,6 +2,7 @@ import Hls from "hls.js";
 import { useEffect, useRef, useState } from "react";
 import { playVirtual } from "../../api";
 import { fileHlsConfig, type PictureMode } from "../../picture";
+import { releaseFileVideo, takeFileFatal } from "./filePlay";
 import { Stage } from "../player/Stage";
 
 type Marker = { id: number; start: number; end: number };
@@ -23,6 +24,8 @@ export function VirtualPlay({ id, pictureMode, onBack }: { id: number; pictureMo
     if (!video) return;
     let dead = false;
     let hls: Hls | null = null;
+    const tried = { network: false, media: false };
+    let gaveUp = false;
     setError("");
     void (async () => {
       try {
@@ -41,7 +44,18 @@ export function VirtualPlay({ id, pictureMode, onBack }: { id: number; pictureMo
           hls.loadSource(next.playlist);
           hls.attachMedia(video);
           hls.on(Hls.Events.ERROR, (_event, data) => {
-            if (data.fatal) setError(`${data.type}: ${data.details}`);
+            if (!data.fatal || dead || gaveUp) return;
+            const action = takeFileFatal(data.type, tried);
+            if (action === "startLoad") {
+              hls?.startLoad();
+              return;
+            }
+            if (action === "recoverMedia") {
+              hls?.recoverMediaError();
+              return;
+            }
+            gaveUp = true;
+            setError(`${data.type}: ${data.details}`);
           });
         } else {
           video.src = next.playlist;
@@ -54,6 +68,7 @@ export function VirtualPlay({ id, pictureMode, onBack }: { id: number; pictureMo
     return () => {
       dead = true;
       hls?.destroy();
+      releaseFileVideo(video);
     };
   }, [id, index, pictureMode]);
 

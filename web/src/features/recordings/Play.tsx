@@ -2,6 +2,7 @@ import Hls from "hls.js";
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
+import { bindFilePlayback, releaseFileVideo, takeFileFatal } from "./filePlay";
 import { copy } from "../../strings";
 import { Stage } from "../player/Stage";
 import type { Recording } from "../../types";
@@ -69,10 +70,14 @@ export function Play({
     const video = videoRef.current;
     if (!video) return;
     viewerSought.current = false;
+    setError("");
     let dead = false;
     let hls: Hls | null = null;
+    let unbind: (() => void) | null = null;
     let resumeAt = 0;
     let placed = false;
+    const tried = { network: false, media: false };
+    let gaveUp = false;
     void (async () => {
       try {
         const next = await playRecording(recording.id, pictureMode);
@@ -96,34 +101,51 @@ export function Play({
             placed = true;
           }
         };
-        if (Hls.isSupported()) {
-          hls = new Hls(fileHlsConfig(resumeAt));
-          hls.loadSource(next.playlist);
-          hls.attachMedia(video);
-          hls.on(Hls.Events.MANIFEST_PARSED, place);
-          hls.on(Hls.Events.ERROR, (_e, data) => {
-            if (data.fatal) setError(`${data.type}: ${data.details}`);
-          });
-        } else {
-          video.src = next.playlist;
-          video.addEventListener("loadedmetadata", place);
-        }
-        video.addEventListener("progress", place);
         const track = document.createElement("track");
         track.kind = "captions";
         track.label = "Captions";
         track.src = `/media/file/${recording.id}/captions.vtt`;
         video.appendChild(track);
+        const native = !Hls.isSupported();
+        // Before hls.js is constructed, so a throw still removes the track and the resume listener.
+        unbind = bindFilePlayback(video, place, { native, track });
+        if (!native) {
+          hls = new Hls(fileHlsConfig(resumeAt));
+          hls.loadSource(next.playlist);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, place);
+          hls.on(Hls.Events.ERROR, (_e, data) => {
+            if (!data.fatal || dead || gaveUp) return;
+            const action = takeFileFatal(data.type, tried);
+            if (action === "startLoad") {
+              hls?.startLoad();
+              return;
+            }
+            if (action === "recoverMedia") {
+              hls?.recoverMediaError();
+              return;
+            }
+            gaveUp = true;
+            setError(`${data.type}: ${data.details}`);
+          });
+        } else {
+          video.src = next.playlist;
+        }
         await video.play().catch(() => undefined);
-        place();
+        if (!dead) place();
       } catch (err) {
         if (!dead) setError(err instanceof Error ? err.message : "Playback did not start.");
       }
     })();
     return () => {
       dead = true;
+      unbind?.();
+      // Read the playhead before releaseFileVideo reloads the element. A
+      // timeupdate from that reload would otherwise report the start.
+      const at = whereRef.current;
       hls?.destroy();
-      if (whereRef.current > 1) void saveProgress(recording.id, whereRef.current);
+      releaseFileVideo(video);
+      if (at > 1) void saveProgress(recording.id, at);
     };
   }, [recording.id, pictureMode]);
 
