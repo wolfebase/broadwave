@@ -64,8 +64,23 @@ func TestAiringsWindowAndCompression(t *testing.T) {
 		t.Fatalf("channel filter %v", titles)
 	}
 
+	if err := st.InsertAirings(context.Background(), []store.Airing{
+		{ChannelID: lineup.Channels[1].ID, Title: "Wolves at Harbor", Start: now.Add(2 * time.Hour), End: now.Add(4 * time.Hour)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	named := get(t, h, "/api/v1/airings?from="+from+"&to="+to+"&team=Wolves")
+	titles = airingTitles(t, named.Body.Bytes())
+	if len(titles) != 1 || titles[0] != "Wolves at Harbor" {
+		t.Fatalf("team filter %v", titles)
+	}
+	still := get(t, h, "/api/v1/airings?from="+from+"&to="+to)
+	if len(airingTitles(t, still.Body.Bytes())) != 3 {
+		t.Fatalf("window after team query %v", airingTitles(t, still.Body.Bytes()))
+	}
+
 	wide := get(t, h, "/api/v1/airings")
-	if len(airingTitles(t, wide.Body.Bytes())) != 3 {
+	if len(airingTitles(t, wide.Body.Bytes())) != 4 {
 		t.Fatalf("full range %v", airingTitles(t, wide.Body.Bytes()))
 	}
 
@@ -91,7 +106,7 @@ func TestAiringsWindowAndCompression(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(airingTitles(t, plain)) != 3 {
+	if len(airingTitles(t, plain)) != 4 {
 		t.Fatalf("gzip body %s", plain)
 	}
 	if rec.Body.Len() >= len(plain) {

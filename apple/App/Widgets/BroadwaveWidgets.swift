@@ -54,13 +54,18 @@ enum Feed: String, CaseIterable {
             let snap = try await TopShelf.Snapshot(channels: channels, airings: airings, recordings: recordings, plan: plan?.items ?? [])
             return WidgetFeed.onNow(snap, now: now)
         case .teams:
-            // Nobody followed: say so, and skip a day of the whole guide.
+            // Nobody followed: say so, and skip the guide. Otherwise ask for
+            // those teams only. A day of every channel is what made this refresh slow.
             let follows = try await api.teams()
             guard !follows.isEmpty else {
                 throw NoTeams()
             }
+            let names = teamNames(follows)
+            guard !names.isEmpty else {
+                return []
+            }
             async let channels = api.channels()
-            async let airings = api.airings(from: now, to: now.addingTimeInterval(24 * 3600))
+            async let airings = api.airings(from: now, to: now.addingTimeInterval(24 * 3600), teams: names)
             async let recordings = api.recordings()
             async let plan = try? api.schedule()
             async let scores = try? api.scoreboard()
@@ -77,6 +82,15 @@ enum Feed: String, CaseIterable {
 }
 
 struct NoTeams: Error {}
+
+/// Names the guide can search for. The widget's own rule is four letters or more,
+/// the short name when the follow has one.
+func teamNames(_ follows: [TeamFollow]) -> [String] {
+    follows.compactMap { team in
+        let name = team.short.flatMap { $0.isEmpty ? nil : $0 } ?? team.name
+        return name.count >= 4 ? name : nil
+    }
+}
 
 struct FeedEntry: TimelineEntry, Sendable {
     enum State: Sendable { case rows, noServer, unreachable, noTeams }

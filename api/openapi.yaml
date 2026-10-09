@@ -583,7 +583,11 @@ paths:
         - in: query
           name: channels
           schema: { type: string }
-          description: Comma-separated channel ids. Omit for every channel.
+          description: Comma-separated channel ids. Omit for every channel. Applied in the database, on the channel and start index.
+        - in: query
+          name: team
+          schema: { type: string }
+          description: Comma-separated names. When set, only listings whose title or subtitle names one of them, using the guide search index. A name in the description does not count. Omit for every listing in the window.
         - in: query
           name: hours
           schema: { type: integer, minimum: 1, maximum: 168, default: 48 }

@@ -147,12 +147,17 @@ public struct APIClient: Sendable {
     }
 
     /// Listings in a window. The apps paint this first, then ask for the rest.
-    public func airings(from: Date, to: Date) async throws -> [Airing] {
+    /// `teams` asks the server for those names only, instead of a whole day of the guide.
+    public func airings(from: Date, to: Date, teams: [String] = []) async throws -> [Airing] {
         var parts = URLComponents()
-        parts.queryItems = [
+        var items = [
             URLQueryItem(name: "from", value: ISO8601DateFormatter.plain.string(from: from)),
             URLQueryItem(name: "to", value: ISO8601DateFormatter.plain.string(from: to)),
         ]
+        if !teams.isEmpty {
+            items.append(URLQueryItem(name: "team", value: teams.joined(separator: ",")))
+        }
+        parts.queryItems = items
         return try await airings(path: "/airings?\(parts.percentEncodedQuery ?? "")")
     }
 

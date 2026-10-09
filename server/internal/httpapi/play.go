@@ -419,28 +419,31 @@ func (s *Server) airings(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "The guide window is backwards.", http.StatusBadRequest)
 		return
 	}
-	list, err := s.Store.Airings(r.Context(), from, to)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
+	var channels []int64
 	if raw := strings.TrimSpace(r.URL.Query().Get("channels")); raw != "" {
-		want := map[int64]bool{}
 		for _, part := range strings.Split(raw, ",") {
 			id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
 			if err != nil {
 				httpError(w, "channels needs to be a list of ids", http.StatusBadRequest)
 				return
 			}
-			want[id] = true
+			channels = append(channels, id)
 		}
-		filtered := make([]store.Airing, 0, len(list))
-		for _, row := range list {
-			if want[row.ChannelID] {
-				filtered = append(filtered, row)
+	}
+	var teams []string
+	if raw := strings.TrimSpace(r.URL.Query().Get("team")); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			if name := strings.TrimSpace(part); name != "" {
+				teams = append(teams, name)
 			}
 		}
-		list = filtered
+	}
+	list, err := s.Store.QueryAirings(r.Context(), store.AiringQuery{
+		From: from, To: to, Channels: channels, Teams: teams,
+	})
+	if err != nil {
+		writeError(w, err)
+		return
 	}
 	if list == nil {
 		list = []store.Airing{}

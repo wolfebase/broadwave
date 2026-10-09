@@ -2803,8 +2803,10 @@ export interface operations {
                 from?: string;
                 /** @description End of the window. Defaults to 48 hours ahead when hours is omitted. */
                 to?: string;
-                /** @description Comma-separated channel ids. Omit for every channel. */
+                /** @description Comma-separated channel ids. Omit for every channel. Applied in the database, on the channel and start index. */
                 channels?: string;
+                /** @description Comma-separated names. When set, only listings whose title or subtitle names one of them, using the guide search index. A name in the description does not count. Omit for every listing in the window. */
+                team?: string;
                 /** @description How far ahead to return listings when to is omitted. Kept for older clients. */
                 hours?: number;
             };
