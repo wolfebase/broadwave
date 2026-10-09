@@ -372,6 +372,7 @@ public final class DemoServer: @unchecked Sendable {
         "writeNfo": "0",
         "deleteWatchedDays": "0",
         "makeRoom": "0",
+        "folderLayout": "shows",
     ]
 
     private func currentSettings() -> [String: String] {
@@ -430,6 +431,8 @@ public final class DemoServer: @unchecked Sendable {
             } else {
                 false
             }
+        case "folderLayout":
+            value == "shows" || value == "flat"
         default:
             false
         }

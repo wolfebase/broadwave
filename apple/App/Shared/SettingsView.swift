@@ -43,6 +43,9 @@ struct SettingsView: View {
     @State private var deleteWatchedDays = "0"
     @State private var loadedDays = "0"
     @State private var daysKnown = false
+    @State private var folderLayout = "shows"
+    @State private var loadedFolder = "shows"
+    @State private var folderKnown = false
     @State private var sdPassword = ""
     @State private var tmdbKey = ""
     @State private var passwordSaved = false
@@ -423,6 +426,22 @@ struct SettingsView: View {
 
     private var storageOptionsSection: some View {
         Section {
+            Picker("Recording folders", selection: Binding(
+                get: { folderLayout },
+                set: { next in
+                    guard folderKnown, next != folderLayout else { return }
+                    folderLayout = next
+                    flushServerText()
+                }
+            )) {
+                Text("By show, for Plex and Jellyfin").tag("shows")
+                Text("All in one folder").tag("flat")
+            }
+            .disabled(!folderKnown)
+            .accessibilityIdentifier("recording-folders")
+            Text("By show puts new recordings in TV/Show/Season 01 and Movies/Title (Year). Point a TV library at TV and a movie library at Movies.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             LabeledContent("Keep this much free") {
                 TextField("GB", text: $reserve)
                     .multilineTextAlignment(.trailing)
@@ -642,6 +661,8 @@ struct SettingsView: View {
             loadedMakeRoom = makeRoom
             deleteWatchedDays = Self.watchedDays(values["deleteWatchedDays"])
             loadedDays = deleteWatchedDays
+            folderLayout = values["folderLayout"] == "flat" ? "flat" : "shows"
+            loadedFolder = folderLayout
             loadedUser = sdUser
             loadedLineup = sdLineup
             loadedGuide = guideURL
@@ -652,6 +673,7 @@ struct SettingsView: View {
             bufferKnown = true
             roomKnown = true
             daysKnown = true
+            folderKnown = true
         }
         guard !demo else { return }
         storage = try? await store.api?.storage()
@@ -704,6 +726,10 @@ struct SettingsView: View {
         if daysKnown, deleteWatchedDays != loadedDays, Self.watchedDays(deleteWatchedDays) == deleteWatchedDays {
             values["deleteWatchedDays"] = deleteWatchedDays
             loadedDays = deleteWatchedDays
+        }
+        if folderKnown, folderLayout != loadedFolder, folderLayout == "shows" || folderLayout == "flat" {
+            values["folderLayout"] = folderLayout
+            loadedFolder = folderLayout
         }
         let guide = guideURL.trimmingCharacters(in: .whitespacesAndNewlines)
         if guide != loadedGuide {

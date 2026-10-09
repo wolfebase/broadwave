@@ -145,6 +145,13 @@ let demoMedia = URL(fileURLWithPath: #filePath)
     #expect(refused["deleteWatchedDays"] == "14")
     try await client.saveSettings(["deleteWatchedDays": "3651"])
     #expect(try await client.settings()["deleteWatchedDays"] == "14")
+    #expect(before["folderLayout"] == "shows")
+    try await client.saveSettings(["folderLayout": "flat"])
+    #expect(try await client.settings()["folderLayout"] == "flat")
+    try await client.saveSettings(["folderLayout": "../x"])
+    #expect(try await client.settings()["folderLayout"] == "flat")
+    try await client.saveSettings(["folderLayout": "shows"])
+    #expect(try await client.settings()["folderLayout"] == "shows")
 }
 
 @Test func demoKeepRoundTrip() async throws {
