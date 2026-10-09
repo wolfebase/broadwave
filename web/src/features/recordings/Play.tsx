@@ -2,6 +2,7 @@ import Hls from "hls.js";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
 import { actionName } from "../../lib/actionName";
+import { mediaURL } from "../../lib/deviceToken";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, subscribeZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
 import { markersForPlayback, playbackGrowing, progressSaveAction, releaseFileVideo, storedPlayhead, takeFileFatal, type ResumeGate } from "./filePlay";
 import { copy } from "../../strings";
@@ -110,7 +111,7 @@ export function Play({
     const track = document.createElement("track");
     track.kind = "captions";
     track.label = "Captions";
-    track.src = `/media/file/${recording.id}/captions.vtt`;
+    track.src = mediaURL(`/media/file/${recording.id}/captions.vtt`);
     track.addEventListener("load", () => {
       if (!dead && (track.track.cues?.length ?? 0) > 0) setCaptionsReady(true);
     });
@@ -185,7 +186,7 @@ export function Play({
             setError(`${data.type}: ${data.details}`);
           });
         } else {
-          video.src = next.playlist;
+          video.src = mediaURL(next.playlist);
           video.addEventListener("loadedmetadata", place);
         }
         video.addEventListener("progress", place);

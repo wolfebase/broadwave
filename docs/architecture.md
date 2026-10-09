@@ -78,11 +78,13 @@ Scores come from the public ESPN scoreboard for twelve leagues. A TheSportsDB ke
 
 ### Store (`internal/store`)
 
-SQLite (WAL) through `modernc.org/sqlite`. Tables include devices, channels, airings, recordings, passes, markers, virtual channels and items, progress, settings, events, sources and their secrets, team follows, guide scans, channel signals, episode prints, and spots. The numbered migrations are the full list.
+SQLite (WAL) through `modernc.org/sqlite`. Tables include devices, channels, airings, recordings, passes, markers, virtual channels and items, progress, settings, events, sources and their secrets, team follows, guide scans, channel signals, episode prints, spots, client devices, and pairings. The numbered migrations are the full list.
 
 ### HTTP (`internal/httpapi`)
 
 JSON under `/api/v1`. The same routes are also mounted under `/api`. HLS is under `/media`, and the web app is at `/`. The optional HDHomeRun emulator on `:8478` exposes channels to other apps. The contract lives in `api/openapi.yaml`.
+
+Device sign-in is off until Settings turns it on (`deviceAuth`). While it is off, the home network stays open. While it is on, `/api` and `/media` take a per-device token with scope watch, record, or admin. Pairing, health, server identity, the web app's files, `/export`, and the emulator stay open. Tokens are stored as hashes. The design is `docs/design/pairing.md`.
 
 ## Web app (`web/`)
 

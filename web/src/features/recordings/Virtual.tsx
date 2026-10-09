@@ -1,6 +1,7 @@
 import Hls from "hls.js";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { playVirtual } from "../../api";
+import { mediaURL } from "../../lib/deviceToken";
 import { fileHlsConfig, type PictureMode } from "../../picture";
 import { markersForPlayback, releaseFileVideo, seekableSkip, takeFileFatal } from "./filePlay";
 import { Stage } from "../player/Stage";
@@ -74,7 +75,7 @@ export function VirtualPlay({ id, pictureMode, onBack }: { id: number; pictureMo
             setError(`${data.type}: ${data.details}`);
           });
         } else {
-          video.src = next.playlist;
+          video.src = mediaURL(next.playlist);
         }
         await video.play().catch(() => undefined);
       } catch (err) {

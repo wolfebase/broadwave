@@ -1164,6 +1164,157 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description A new device asks to be paired and shows the code. Poll `GET /pair/{id}` with the
+         *     poll secret until an admin approves it. The code lasts 10 minutes. Sign-in is not required.
+         */
+        post: operations["startPair"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pair/code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description An admin shows a code for another device to enter. While device sign-in is off, anyone
+         *     on the home network may call this. While it is on, the caller needs admin.
+         */
+        post: operations["createPairCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pair/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Approves a code a device is showing. The token is delivered to that device's next poll,
+         *     not in this response. Scopes here replace the ones the device asked for.
+         */
+        post: operations["approvePair"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pair/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description A device enters a code an admin is showing and receives its token once.
+         *     The response also sets the `bw_token` cookie.
+         */
+        post: operations["claimPair"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pair/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description The device that called `POST /pair` polls with its poll secret.
+         *     `token` is present on the poll that finds the pairing approved, and not again.
+         */
+        get: operations["pollPair"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Paired phones, TVs, and browsers. Tuner hardware stays on `/devices`. Tokens are not included. */
+        get: operations["listClients"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The device for the token on this request. With no token, `device` is null and `auth` says whether sign-in is on. */
+        get: operations["getClient"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/clients/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Revokes a device. Its token stops working immediately. */
+        delete: operations["revokeClient"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/settings": {
         parameters: {
             query?: never;
@@ -1327,6 +1478,45 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ClientDevice: {
+            id: string;
+            name: string;
+            /** @enum {string} */
+            kind: "phone" | "tv" | "web" | "other";
+            scopes: ("watch" | "record" | "admin")[];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            lastSeenAt?: string;
+            /** Format: date-time */
+            revokedAt?: string;
+        };
+        PairTicket: {
+            id: string;
+            /** @description Six digits. */
+            code: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** @description Present when the device shows the code. Send it as secret on the poll. */
+            pollSecret?: string;
+        };
+        PairGrant: {
+            token: string;
+            device: components["schemas"]["ClientDevice"];
+        };
+        PairPoll: {
+            /** @enum {string} */
+            state: "pending" | "approved" | "expired" | "denied";
+            /** Format: date-time */
+            expiresAt?: string;
+            token?: string;
+            device?: components["schemas"]["ClientDevice"];
+        };
+        ClientSeat: {
+            /** @enum {string} */
+            auth: "local-open" | "device";
+            device?: components["schemas"]["ClientDevice"];
+        };
         Error: {
             /** @description Stable machine code, for example tuners_busy, no_signal, stream_down, tuner_refused, tuner_silent, no_source, streams_full, disk_low, not_found, bad_request, pictures_full. */
             code: string;
@@ -2111,6 +2301,13 @@ export interface components {
             autoplay?: "0" | "1";
             /** @enum {string} */
             hdhrEmulate?: "0" | "1";
+            /**
+             * @description 1 requires a device token on the API and on /media. 0, the default, leaves the home network open. A presented token is still recognized while this is off.
+             * @enum {string}
+             */
+            deviceAuth?: "0" | "1";
+            /** @description Returned once, on the response that turns deviceAuth on, when the request did not already use an admin token. Not stored. Not returned by GET. */
+            deviceToken?: string;
             /** @description Mosaics listed as channels of their own in the M3U, XMLTV, and HDHomeRun exports: mosaic keys joined by commas, for example 4-12,1-2-3 (at most 8). They are numbered 990.1 and up in this order; a mosaic with a channel no longer in the lineup is left out. */
             exportMosaics?: string;
             /** @enum {string} */
@@ -4284,6 +4481,226 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    startPair: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    /** @enum {string} */
+                    kind?: "phone" | "tv" | "web" | "other";
+                    scopes?: ("watch" | "record" | "admin")[];
+                };
+            };
+        };
+        responses: {
+            /** @description Code for the device to show */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairTicket"];
+                };
+            };
+            400: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    createPairCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name?: string;
+                    /** @enum {string} */
+                    kind?: "phone" | "tv" | "web" | "other";
+                    scopes?: ("watch" | "record" | "admin")[];
+                };
+            };
+        };
+        responses: {
+            /** @description Code for the other device to enter */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairTicket"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    approvePair: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Six digits. Spaces and dashes are ignored. */
+                    code: string;
+                    scopes?: ("watch" | "record" | "admin")[];
+                };
+            };
+        };
+        responses: {
+            /** @description The device that may now sign in */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        device: components["schemas"]["ClientDevice"];
+                    };
+                };
+            };
+            404: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    claimPair: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    code: string;
+                    name: string;
+                    /** @enum {string} */
+                    kind?: "phone" | "tv" | "web" | "other";
+                };
+            };
+        };
+        responses: {
+            /** @description Token for this device */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairGrant"];
+                };
+            };
+            404: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    pollPair: {
+        parameters: {
+            query: {
+                secret: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pending, approved, expired, or denied */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairPoll"];
+                };
+            };
+            404: components["responses"]["Error"];
+        };
+    };
+    listClients: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Devices that have not been revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        devices: components["schemas"]["ClientDevice"][];
+                    };
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    getClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description This device, or an empty seat */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientSeat"];
+                };
+            };
+        };
+    };
+    revokeClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The devices that remain */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        devices: components["schemas"]["ClientDevice"][];
+                    };
+                };
+            };
+            404: components["responses"]["Error"];
         };
     };
     getSettings: {

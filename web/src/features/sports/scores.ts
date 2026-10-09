@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { authHeaders } from "../../lib/deviceToken";
 import { takeGames } from "../../lib/latest";
 import { gamesFromScoreboard } from "./board";
 
@@ -34,7 +35,7 @@ const scoreSeq = { n: 0 };
 
 export function refreshScores(): Promise<ScoreGame[]> {
   const mine = ++scoreSeq.n;
-  return fetch("/api/v1/sports/scoreboard")
+  return fetch("/api/v1/sports/scoreboard", { headers: authHeaders() })
     .then(async (res) => {
       const body = res.ok ? ((await res.json()) as { games?: ScoreGame[] }) : null;
       return takeGames(scoreSeq, mine, gamesFromScoreboard(res.ok, body?.games), cache, Date.now()) ?? cache.games;
@@ -46,7 +47,7 @@ export function loadScores(): Promise<ScoreGame[]> {
   if (Date.now() - cache.at < 30_000) return Promise.resolve(cache.games);
   if (!pending) {
     const mine = ++scoreSeq.n;
-    pending = fetch("/api/v1/sports/scoreboard")
+    pending = fetch("/api/v1/sports/scoreboard", { headers: authHeaders() })
       .then(async (res) => {
         const body = res.ok ? ((await res.json()) as { games?: ScoreGame[] }) : null;
         return takeGames(scoreSeq, mine, gamesFromScoreboard(res.ok, body?.games), cache, Date.now()) ?? cache.games;
