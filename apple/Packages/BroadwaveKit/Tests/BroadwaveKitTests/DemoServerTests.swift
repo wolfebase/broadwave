@@ -185,6 +185,37 @@ let demoMedia = URL(fileURLWithPath: #filePath)
     #expect(members == 2)
 }
 
+@Test func demoPlayResumesThePausedFrame() async throws {
+    let server = DemoServer()
+    let port = UInt16.random(in: 45001 ... 49151)
+    let origin = try #require(await server.prepare(port: port, media: demoMedia))
+    defer { server.stop() }
+    var comps = try #require(URLComponents(url: origin, resolvingAgainstBaseURL: false))
+    comps.scheme = "ws"
+    comps.path = "/api/v1/ws"
+    let url = try #require(comps.url)
+    let task = URLSession.shared.webSocketTask(with: url)
+    task.resume()
+    defer { task.cancel(with: .goingAway, reason: nil) }
+    let room = "multiview:harbor:1"
+    try await task.send(.string("{\"type\":\"sync.join\",\"data\":{\"room\":\"\(room)\",\"channelId\":1}}"))
+    _ = try await nextRoom(task)
+    try await task.send(.string("{\"type\":\"sync.command\",\"data\":{\"room\":\"\(room)\",\"action\":\"pause\",\"mediaTime\":1000000}}"))
+    let held = try await nextRoom(task)
+    #expect(held.rate == 0)
+    #expect(held.anchorMedia == 1_000_000)
+    try await Task.sleep(for: .milliseconds(300))
+    try await task.send(.string("{\"type\":\"sync.command\",\"data\":{\"room\":\"\(room)\",\"action\":\"play\"}}"))
+    let resumed = try await nextRoom(task)
+    #expect(resumed.rate == 1)
+    #expect(abs(resumed.anchorMedia - 1_000_000) < 1)
+    try await task.send(.string("{\"type\":\"sync.command\",\"data\":{\"room\":\"\(room)\",\"action\":\"live\"}}"))
+    let live = try await nextRoom(task)
+    #expect(live.rate == 1)
+    let now = Date().timeIntervalSince1970 * 1000
+    #expect(abs(live.anchorMedia - (now - 10000)) < 2000)
+}
+
 @Test func demoFilmsStayUnder25MB() {
     let root = demoMedia
     var total: Int64 = 0
@@ -197,6 +228,26 @@ let demoMedia = URL(fileURLWithPath: #filePath)
         let initURL = root.appendingPathComponent("\(channel)/init.mp4")
         #expect(FileManager.default.fileExists(atPath: initURL.path))
     }
+}
+
+private struct RoomSnap {
+    var rate: Double
+    var anchorMedia: Double
+}
+
+private func nextRoom(_ task: URLSessionWebSocketTask) async throws -> RoomSnap {
+    for _ in 0 ..< 8 {
+        let message = try await task.receive()
+        guard case let .string(text) = message, text.contains("sync.state"),
+              let data = text.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let body = obj["data"] as? [String: Any],
+              let rate = (body["rate"] as? NSNumber)?.doubleValue,
+              let media = (body["anchorMedia"] as? NSNumber)?.doubleValue
+        else { continue }
+        return RoomSnap(rate: rate, anchorMedia: media)
+    }
+    throw URLError(.timedOut)
 }
 
 private func memberCount(_ text: String) -> Int? {

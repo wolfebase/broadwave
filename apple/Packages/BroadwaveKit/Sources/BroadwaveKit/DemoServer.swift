@@ -249,7 +249,13 @@ public final class DemoServer: @unchecked Sendable {
             room.anchorServer = now
             room.anchorMedia = at
             room.rate = 0
-        case "play", "live":
+        case "play":
+            // Rate 0 keeps target on the paused frame. Play continues there.
+            let at = room.target(at: now)
+            room.anchorServer = now
+            room.anchorMedia = at
+            room.rate = 1
+        case "live":
             room.anchorServer = now
             room.anchorMedia = now - 10000
             room.rate = 1
