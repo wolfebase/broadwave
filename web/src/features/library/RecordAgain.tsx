@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { addPass, getRecordAgain } from "../../api";
+import { actionName } from "../../lib/actionName";
 import { formatClock } from "../../time";
 import type { Recording } from "../../types";
+import { recordingSubject } from "./model";
 
 /** "Thu 7:00 PM", with the date past six days out. */
 function when(start: Date) {
@@ -41,7 +43,7 @@ export function RecordAgain({ rec }: { rec: Recording }) {
   return (
     <>
       {done ? null : (
-        <button type="button" className="btn" disabled={busy} aria-busy={busy ? true : undefined} onClick={() => void again()}>
+        <button type="button" className="btn" disabled={busy} aria-busy={busy ? true : undefined} aria-label={actionName("Record it again", recordingSubject(rec))} onClick={() => void again()}>
           Record it again
         </button>
       )}

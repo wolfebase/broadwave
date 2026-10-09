@@ -345,7 +345,7 @@ test("a remote reaches home, the guide, the player, multiview, settings, and rec
       return Boolean(row?.querySelector(`a[href="/api/v1/recordings/${id}/file"]`) && text === "Delete");
     }, recordingId), 6);
     await press(page, "Enter");
-    await expect.poll(async () => (await page.evaluate(readRing)).label).toBe("Delete this file");
+    await expect.poll(async () => (await page.evaluate(readRing)).label).toMatch(/^Delete this file /);
     await expectRing(page);
     await page.screenshot({ path: path.join(evidence, "delete.jpg"), type: "jpeg", quality: 60 });
     await press(page, "Enter");
