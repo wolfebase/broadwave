@@ -136,9 +136,13 @@ public enum WidgetFeed {
             }
     }
 
+    /// The guide's on-now pick is the listing that started first. A later row that also covers now is a long run or bad data, and it must not replace that pick.
     private static func onAir(_ airings: [Airing], now: Date) -> [Int64: Airing] {
         var current: [Int64: Airing] = [:]
         for airing in airings where airing.isOn(at: now) {
+            if let have = current[airing.channelId], have.start <= airing.start {
+                continue
+            }
             current[airing.channelId] = airing
         }
         return current

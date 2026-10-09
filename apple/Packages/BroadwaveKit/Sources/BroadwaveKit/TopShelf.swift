@@ -42,7 +42,11 @@ public enum TopShelf {
         let framed = snap.framed
         let shown = snap.channels.filter { $0.enabled && !$0.hidden }
         var current: [Int64: Airing] = [:]
-        for airing in snap.airings where airing.start <= now && airing.end > now {
+        // Same rule as the guide and the widgets: the listing that started first stays on now.
+        for airing in snap.airings where airing.isOn(at: now) {
+            if let have = current[airing.channelId], have.start <= airing.start {
+                continue
+            }
             current[airing.channelId] = airing
         }
 
