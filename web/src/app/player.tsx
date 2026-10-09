@@ -1,6 +1,6 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { clearBroadcast } from "../features/multiview/clear";
-import { channelMissing } from "./lineup";
+import { channelMissing, channelToDock } from "./lineup";
 import { encryptedBroadcast } from "../strings/notice.ts";
 import type { Channel } from "../types";
 import { useData } from "./data";
@@ -104,6 +104,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           notice={standIn && standIn !== noted && mode === "full" ? encryptedBroadcast : undefined}
           onChannel={open}
           onMinimize={() => {
+            setChannel(channelToDock(channel, playing));
             if (inAppDepth() > 0 && under.current !== "/setup") window.history.back();
             else navigate(back.current || "/guide");
           }}
