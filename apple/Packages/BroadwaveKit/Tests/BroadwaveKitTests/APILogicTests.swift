@@ -215,7 +215,13 @@ private func fixture(_ name: String) throws -> Data {
     let fromText = ISO8601DateFormatter.plain.string(from: from)
     #expect(window.url.contains("from="))
     #expect(window.url.contains("to="))
+    #expect(!window.url.contains("kind="))
     #expect(window.url.contains(fromText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? fromText))
+
+    _ = try await api.airings(from: from, to: to, sportsOnly: true)
+    let games = try #require(APILogicStub.requests().last { $0.url.contains("/api/v1/airings") })
+    #expect(games.url.contains("kind=sports"))
+    #expect(games.url.contains(fromText.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? fromText))
 
     try APILogicStub.set("/api/v1/search", body: fixture("search"))
     let found = try await api.search("a & b")
