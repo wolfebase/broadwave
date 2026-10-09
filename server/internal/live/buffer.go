@@ -183,8 +183,7 @@ func (h *Hub) endBackfill(m *mux, rec *recording, sub *pipeSub) {
 		return
 	}
 	rec.sub = sub
-	id := rec.id
-	rec.timer = time.AfterFunc(time.Until(rec.ends), func() { h.StopRecord(id) })
+	h.armRecordingStopLocked(rec)
 }
 
 // packetStart moves pos back to the start of its transport packet. The ring
