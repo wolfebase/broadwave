@@ -674,6 +674,86 @@ func TestProgramFilterDropsAFrameOffItsTimeline(t *testing.T) {
 	}
 }
 
+// An adaptation-only packet repeats the previous counter and does not advance
+// it. After a dropped frame the payload counters are rewritten, and this one
+// has to move with them. ffmpeg marks the open frame corrupt when it does not.
+func TestProgramFilterKeepsContinuityPastAnAdaptationOnlyPacket(t *testing.T) {
+	step := int64(2880)
+	base := int64(301_000_000)
+	pts := []int64{base, base + step, base + 9000*90000, base + 3*step}
+	head := twoProgramTS(1, 0x1000, 0x110, 0x111, 2, 0x1001, 0x210)
+	head = head[:len(head)-2*188]
+	var body []byte
+	cc := byte(1)
+	for i, ts := range pts {
+		for _, pkt := range [][]byte{
+			tsPacket(0x111, true, ptsPES(0xc0, ts)),
+			tsPacket(0x111, false, bytes.Repeat([]byte{0xaa}, 184)),
+		} {
+			pkt[3] = 0x10 | cc&0x0f
+			cc++
+			body = append(body, pkt...)
+		}
+		// Adaptation field only: the counter repeats the previous packet.
+		if i == 0 || i == 2 {
+			clock := tsPacket(0x111, false, nil)
+			clock[3] = 0x20 | (cc-1)&0x0f
+			clock[4] = 183
+			body = append(body, clock...)
+		}
+	}
+	var out bytes.Buffer
+	w := newProgramPipe(&closeBuf{&out}, 1)
+	if _, err := w.Write(append(append(head, body...), bytes.Repeat(tsPacket(0x1fff, false, nil), 2)...)); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var kept []int64
+	var ccs []byte
+	var payload []bool
+	clocks := 0
+	data := out.Bytes()
+	for off := 0; off+188 <= len(data); off += 188 {
+		pkt := data[off : off+188]
+		if int(pkt[1]&0x1f)<<8|int(pkt[2]) != 0x111 {
+			continue
+		}
+		ccs = append(ccs, pkt[3]&0x0f)
+		has := pkt[3]&0x10 != 0
+		payload = append(payload, has)
+		if !has {
+			clocks++
+		}
+		if ts, ok := pesTime(tsPayload(pkt)); ok && pkt[1]&0x40 != 0 {
+			kept = append(kept, ts)
+		}
+	}
+	if clocks != 2 {
+		t.Fatalf("adaptation-only packets %d, want 2", clocks)
+	}
+	for _, ts := range kept {
+		if ts == pts[2] {
+			t.Fatalf("a frame 9000 s off reached ffmpeg: %v", kept)
+		}
+	}
+	if len(kept) != 3 {
+		t.Fatalf("kept %d frames, want 3: %v", len(kept), kept)
+	}
+	// A payload counter is the previous plus one. An adaptation-only counter
+	// repeats the previous one. ffmpeg drops the open frame when it does not.
+	for i := 1; i < len(ccs); i++ {
+		want := ccs[i-1]
+		if payload[i] {
+			want = (want + 1) & 0x0f
+		}
+		if ccs[i] != want {
+			t.Fatalf("continuity at %d: got %d want %d payload %v ccs %v", i, ccs[i], want, payload, ccs)
+		}
+	}
+}
+
 func TestProgramFilterFollowsARealTimelineBreak(t *testing.T) {
 	step := int64(2880)
 	var pts []int64
