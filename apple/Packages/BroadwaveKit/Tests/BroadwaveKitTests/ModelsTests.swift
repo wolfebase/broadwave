@@ -366,6 +366,10 @@ private func fixture(_ name: String) throws -> Data {
     #expect(Capabilities.forMachine("iPad13,18").video.contains("hevc"))
     #expect(Capabilities.forMachine("iPad6,11").video == ["h264"])
     #expect(Capabilities.forMachine("iPhone8,1").audio.contains("ac3"))
+    // iPod touch (6th generation) is an A8. The 7th generation keeps HEVC.
+    #expect(Capabilities.forMachine("iPod7,1").platform == "ios")
+    #expect(Capabilities.forMachine("iPod7,1").video == ["h264"])
+    #expect(Capabilities.forMachine("iPod9,1").video == ["h264", "hevc"])
 }
 
 extension Airing {

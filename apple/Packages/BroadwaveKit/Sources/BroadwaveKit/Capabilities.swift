@@ -43,6 +43,10 @@ public enum Capabilities {
         if let gen = generation(machine, family: "iPad"), gen <= 6 {
             return Caps(platform: "ios", video: h264, audio: audio, network: network)
         }
+        // iPod7,1 is the A8 iPod touch. iPod9,1 is the A10 and keeps HEVC.
+        if let gen = generation(machine, family: "iPod"), gen <= 7 {
+            return Caps(platform: "ios", video: h264, audio: audio, network: network)
+        }
         let platform = machine.hasPrefix("iPhone") || machine.hasPrefix("iPad") || machine.hasPrefix("iPod") ? "ios" : "tvos"
         return Caps(platform: platform, video: hevc, audio: audio, network: network)
     }
