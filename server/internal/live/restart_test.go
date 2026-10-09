@@ -168,6 +168,74 @@ func TestEarlyVAAPIFallbackReplacesInit(t *testing.T) {
 	}
 }
 
+// A guess nobody joined is stopped by its idle timer. A rebuild cancels that
+// timer with the old process. The replacement has to keep the guess and arm
+// the timer on the key it runs under now, or the tuner stays on that channel.
+func TestRebuiltGuessReleasesItsTuner(t *testing.T) {
+	h, f, _ := restartHub(t, time.Hour, "hold")
+	h.mu.Lock()
+	h.NoAC4 = true
+	h.RenditionIdle = 200 * time.Millisecond
+	want := Rendition{Video: "1080", Audio: "aac2"}
+	before := want.Key()
+	r, err := h.ensureRenditionLocked(f, want)
+	if err != nil {
+		h.mu.Unlock()
+		t.Fatal(err)
+	}
+	r.guess = true
+	r.viewers = 0
+	// Progressive is already true. Setting it true again does not change the graph.
+	f.source.Progressive = false
+	f.channel.AudioCodec = "AC4"
+	f.source.AudioCodec = "AC4"
+	after := Unvoiced(f.channel.AudioCodec, want).Key()
+	if after == before {
+		h.mu.Unlock()
+		t.Fatalf("audio choice did not move the key: %s", before)
+	}
+	h.rebuildRenditionsLocked(f)
+	nr := f.renditions[after]
+	guess, idle, viewers := false, false, -1
+	if nr != nil {
+		guess, idle, viewers = nr.guess, nr.idle != nil, nr.viewers
+	}
+	oldLeft := f.renditions[before] != nil
+	moved := f.moved[before]
+	h.mu.Unlock()
+	if oldLeft || nr == nil || moved != after || !guess || !idle || viewers != 0 {
+		t.Fatalf("rebuilt guess %s -> %s (moved %s): old left %v guess %v idle %v viewers %d", before, after, moved, oldLeft, guess, idle, viewers)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		h.mu.Lock()
+		gone := h.channels[1] == nil && len(h.muxes) == 0
+		h.mu.Unlock()
+		if gone {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("a rebuilt guess kept the tuner")
+}
+
+// The old encode is already gone when the replacement fails to start. Nothing
+// is watching, so the tuner has to be released with it.
+func TestFailedRebuildReleasesAnEmptyTune(t *testing.T) {
+	h, f, _ := restartHub(t, time.Hour, "hold")
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, err := h.ensureRenditionLocked(f, Rendition{Video: "1080", Audio: "aac2"}); err != nil {
+		t.Fatal(err)
+	}
+	h.FFmpeg = filepath.Join(t.TempDir(), "no-ffmpeg")
+	f.source.Progressive = false
+	h.rebuildRenditionsLocked(f)
+	if len(f.renditions) != 0 || h.channels[1] != nil || len(h.muxes) != 0 {
+		t.Fatalf("tuner stayed up: renditions %d channel %v muxes %d", len(f.renditions), h.channels[1] != nil, len(h.muxes))
+	}
+}
+
 func TestEarlyHEVCFallbackUsesLibx265(t *testing.T) {
 	h, f, mark := restartHub(t, time.Hour, "once")
 	h.HEVC = true
