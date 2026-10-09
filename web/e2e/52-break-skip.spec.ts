@@ -71,6 +71,7 @@ async function skipMode(page: Page, name: "Skip auto" | "Skip button" | "Manual"
   const choice = page.getByRole("button", { name, exact: true });
   if (!(await choice.isVisible())) await page.getByRole("button", { name: "Options" }).click();
   await choice.click();
+  await expect(choice).toHaveAttribute("aria-pressed", "true");
 }
 
 test("auto skips a sure break, and only a sure one", async ({ page }) => {

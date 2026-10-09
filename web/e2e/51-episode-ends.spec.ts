@@ -80,7 +80,7 @@ test("skip intro, then up next plays the next episode", async ({ page }) => {
 
   // Not now holds for the rest of this one.
   await seek(page, 21);
-  await expect(page.getByText("Up next: S1 E2 · The Second Night")).toBeVisible();
+  await expect(page.getByText("Up next: S1 E2 · The Second Night. Plays on its own.")).toBeVisible();
   await page.getByRole("button", { name: "Not now" }).click();
   await expect(page.getByText(/Up next/)).toBeHidden();
   await seek(page, 25);
@@ -91,7 +91,7 @@ test("skip intro, then up next plays the next episode", async ({ page }) => {
   await page.goto(`/play?recording=${second}`);
   await expect(page.getByRole("heading", { name: "Night Owls · The Second Night" })).toBeVisible();
   await mute(page);
-  await expect(page.getByText("Up next: S1 E3 · The Third Night")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Up next: S1 E3 · The Third Night. Plays on its own.")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(/Playing in \d+ s/)).toBeVisible();
   await page.screenshot({ path: path.join(evidence, "up-next.jpg"), type: "jpeg", quality: 70 });
   await expect(page).toHaveURL(new RegExp(`recording=${third}$`), { timeout: 30_000 });

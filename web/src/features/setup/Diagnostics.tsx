@@ -33,7 +33,7 @@ export function DiagnosticsPage() {
 
       <section className="settings-section">
         <h2>Tuners</h2>
-        {d.tunerError ? <p className="warn">{d.tunerError}</p> : null}
+        {d.tunerError ? <p className="warn" role="alert">{d.tunerError}</p> : null}
         <div className="signal-row">
           {(d.tuners ?? []).map((t) => (
             <div key={t.index} className="signal">
@@ -139,7 +139,7 @@ export function DiagnosticsPage() {
           {d.guide?.lastError ? (
             <>
               <dt>Last pull</dt>
-              <dd className="warn">
+              <dd className="warn" role="alert">
                 Failed{d.guide.lastErrorAt ? ` ${shortTime(d.guide.lastErrorAt)}` : ""}: {d.guide.lastError}
               </dd>
             </>
