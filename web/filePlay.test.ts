@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bindFilePlayback, releaseFileVideo, takeFileFatal } from "./src/features/recordings/filePlay.ts";
+import { bindFilePlayback, progressSaveAction, progressToStore, releaseFileVideo, samePlayback, takeFileFatal } from "./src/features/recordings/filePlay.ts";
 
 function fakeVideo() {
   const listeners = new Map<string, Set<() => void>>();
@@ -66,6 +66,37 @@ test("a second file does not keep the first file's progress listener", () => {
   second();
   video.emit("progress");
   assert.deepEqual(seeks, [40]);
+});
+
+test("playback arms one save and keeps it while the picture moves", () => {
+  let armed = false;
+  const actions: string[] = [];
+  for (const time of [0.2, 5, 5.25, 5.5, 40, 1, 0]) {
+    const action = progressSaveAction(armed, time);
+    actions.push(action);
+    if (action === "arm") armed = true;
+  }
+  assert.deepEqual(actions, ["idle", "arm", "keep", "keep", "keep", "idle", "idle"]);
+  assert.equal(progressToStore(40), 40);
+  assert.equal(progressToStore(1), null);
+  assert.equal(progressToStore(0), null);
+});
+
+test("a tick from the previous file does not count for this one", () => {
+  assert.equal(samePlayback(1, 1), true);
+  assert.equal(samePlayback(1, 2), false);
+  assert.equal(samePlayback(2, 1), false);
+});
+
+test("a restart does not store the playhead the save was waiting on", () => {
+  const latest = { time: 80 };
+  let armed = progressSaveAction(false, latest.time) === "arm";
+  assert.equal(armed, true);
+  // Start over moves the playhead and drops the waiting save.
+  armed = false;
+  latest.time = 0;
+  assert.equal(progressSaveAction(armed, latest.time), "idle");
+  assert.equal(progressToStore(latest.time), null);
 });
 
 test("releasing a file pauses it and reloads the element with no src", () => {

@@ -1,15 +1,15 @@
 import Hls from "hls.js";
-import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
-import { bindFilePlayback, releaseFileVideo, takeFileFatal } from "./filePlay";
+import { bindFilePlayback, progressSaveAction, progressToStore, releaseFileVideo, samePlayback, takeFileFatal } from "./filePlay";
 import { copy } from "../../strings";
 import { Stage } from "../player/Stage";
 import type { Recording } from "../../types";
 import { episodeTag } from "../library/model";
 import { breakScans, idleBreakScan } from "./breaks";
 import { DownloadLink } from "./DownloadLink";
-import { introSkip, upNext } from "./ends";
+import { introSkip, takeUpNext, upNext } from "./ends";
 
 type Marker = { id: number; start: number; end: number; confidence?: number };
 
@@ -48,6 +48,11 @@ export function Play({
   const saveTimer = useRef(0);
   // A resume seek that lands after the viewer has already moved would undo Start over.
   const viewerSought = useRef(false);
+  // Only a countdown the viewer saw plays the next episode.
+  const counted = useRef(false);
+  // Bumped when the recording changes, so a tick still in flight from the
+  // previous file cannot move this one or save onto the wrong id.
+  const fileGen = useRef(0);
   const scan = useSyncExternalStore(
     breakScans.subscribe,
     () => breakScans.get(recording.id),
@@ -64,11 +69,24 @@ export function Play({
   if (seenId !== recording.id) {
     setSeenId(recording.id);
     setDismissed(false);
+    setWhere(0);
+    setLength(0);
   }
+
+  // Before the playback effects, so a timeupdate still queued from the previous
+  // file sees the new generation and does not move this one.
+  useLayoutEffect(() => {
+    counted.current = false;
+    fileGen.current += 1;
+  }, [recording.id]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    // The previous file's cleanup already stored its playhead. This one starts
+    // at zero until its own resume, so leaving immediately does not store the
+    // previous file's position on this id.
+    whereRef.current = 0;
     viewerSought.current = false;
     setError("");
     let dead = false;
@@ -152,20 +170,29 @@ export function Play({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    const generation = fileGen.current;
     const tick = () => {
+      if (!samePlayback(generation, fileGen.current)) return;
       const t = video.currentTime;
       whereRef.current = t;
       setWhere(t);
       if (Number.isFinite(video.duration)) setLength(video.duration);
-      if (t > 1) {
-        window.clearTimeout(saveTimer.current);
-        saveTimer.current = window.setTimeout(() => void saveProgress(recording.id, t), 4000);
+      // Arm once. Resetting the wait on every timeupdate never fires while the picture moves.
+      if (progressSaveAction(saveTimer.current !== 0, t) === "arm") {
+        const timer = window.setTimeout(() => {
+          if (saveTimer.current === timer) saveTimer.current = 0;
+          if (!samePlayback(generation, fileGen.current)) return;
+          const at = progressToStore(whereRef.current);
+          if (at != null) void saveProgress(recording.id, at);
+        }, 4000);
+        saveTimer.current = timer;
       }
       if (skipMode !== "auto") return;
       const hit = markerAt(markers, t);
       if (hit && sure(hit)) video.currentTime = hit.end;
     };
     const ended = () => {
+      if (!samePlayback(generation, fileGen.current)) return;
       if (autoplay && !dismissed) onNext();
     };
     video.addEventListener("timeupdate", tick);
@@ -174,6 +201,7 @@ export function Play({
       video.removeEventListener("timeupdate", tick);
       video.removeEventListener("ended", ended);
       window.clearTimeout(saveTimer.current);
+      saveTimer.current = 0;
     };
   }, [markers, skipMode, recording.id, autoplay, dismissed, onNext]);
 
@@ -231,12 +259,15 @@ export function Play({
 
   async function startOver() {
     sought();
+    window.clearTimeout(saveTimer.current);
+    saveTimer.current = 0;
     const video = videoRef.current;
     if (video) {
       video.pause();
       video.currentTime = 0;
     }
     whereRef.current = 0;
+    setWhere(0);
     await saveProgress(recording.id, 0);
   }
 
@@ -276,16 +307,10 @@ export function Play({
   const introEnd = inside ? null : introSkip(recording, where);
   const card = next && !dismissed && !growing ? upNext(where, total, recording.creditsStart, autoplay) : null;
   const left = card?.left;
-  // Only a count the viewer saw plays the next one: a resume or a scrub that
-  // lands past it leaves this one playing to its end.
-  const counted = useRef(false);
   useEffect(() => {
-    if (left == null) counted.current = false;
-    else if (left > 0) counted.current = true;
-    else if (counted.current) {
-      counted.current = false;
-      onNext();
-    }
+    const step = takeUpNext(counted.current, left ?? null);
+    counted.current = step.counted;
+    if (step.play) onNext();
   }, [left, onNext]);
   const nextLabel = next ? [episodeTag(next), next.subtitle].filter(Boolean).join(" · ") || next.title : "";
 
