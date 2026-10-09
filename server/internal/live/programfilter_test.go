@@ -790,6 +790,39 @@ func TestProgramFilterDropsOneBadHeaderBack(t *testing.T) {
 	}
 }
 
+// A candidate break keeps every following packet until the timeline settles.
+// Nulls never carry a timestamp, so they must not grow that buffer without limit.
+func TestPendingBreakStaysWithinTheCap(t *testing.T) {
+	head := twoProgramTS(1, 0x1000, 0x110, 0x111, 2, 0x1001, 0x210)
+	var cc byte = 1
+	body := videoRun(0x110, []int64{1_000_000, 1_001_500, 1_003_000}, &cc)
+	// The pipe holds its last two packets, so the jump is followed by nulls
+	// that push it through. Those nulls carry no timestamp.
+	jump := videoRun(0x110, []int64{1_003_000 - 2*90000}, &cc)
+	jump = append(jump, bytes.Repeat(tsPacket(0x1fff, false, nil), 2)...)
+	var out bytes.Buffer
+	w := newProgramPipe(&closeBuf{&out}, 1)
+	p := w.(*programPipe)
+	p.sw = &pipeSwitch{}
+	p.onBreak = func() {}
+	if _, err := w.Write(append(head[:len(head)-2*188], body...)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write(jump); err != nil {
+		t.Fatal(err)
+	}
+	if !p.catching {
+		t.Fatal("expected to be holding a candidate break")
+	}
+	nulls := bytes.Repeat(tsPacket(0x1fff, false, nil), tailCap/188+100)
+	if _, err := w.Write(nulls); err != nil {
+		t.Fatal(err)
+	}
+	if p.catching || len(p.pending) > tailCap {
+		t.Fatalf("catching=%v pending=%d cap=%d", p.catching, len(p.pending), tailCap)
+	}
+}
+
 // The copied track is where one bad header does lasting harm: with -copyts
 // ffmpeg clamps every later audio packet to the bad timestamp plus a tick.
 func TestOneBadTimestampDoesNotClampTheCopiedAudio(t *testing.T) {
