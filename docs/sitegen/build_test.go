@@ -72,13 +72,13 @@ func TestSiteBuildsTheGuide(t *testing.T) {
 		"first-run.html":        {"Let's set up your TV", "Add by address"},
 		"tuners.html":           {"HDHomeRun", "FLEX 4K", "ATSC 3.0", "reference/atsc3.html"},
 		"channels.html":         {"Schedules Direct", "XMLTV"},
-		"watching.html":         {"iPhone", "iPad", "Apple TV", "8477", "web"},
+		"watching.html":         {"iPhone", "iPad", "Apple TV", "8477", "web", "saved on that device"},
 		"multiview.html":        {"Side by side", "Quad"},
-		"recordings.html":       {"MPEG-TS", "/config/work/recordings", "Keep this much free", "last 15 seconds"},
+		"recordings.html":       {"MPEG-TS", "/config/work/recordings", "Keep this much free", "last 15 seconds", "longer than 90 seconds", "first sound track"},
 		"sync.html":             {"Whole-Home Sync", "Watch together"},
-		"troubleshooting.html":  {"isn't coming in", "Diagnostics"},
+		"troubleshooting.html":  {"isn't coming in", "Diagnostics", "No tuner answered yet"},
 		"faq.html":              {"antenna", "FLEX 4K"},
-		"security.html":         {"BROADWAVE_HOSTS", securitySentence, "reference/security.html"},
+		"security.html":         {"BROADWAVE_HOSTS", securitySentence, "reference/security.html", "port 443"},
 		"reference/tuners.html": {"Search the network"},
 		"reference/atsc3.html":  {"FLEX 4K"},
 	}
@@ -94,8 +94,11 @@ func TestSiteBuildsTheGuide(t *testing.T) {
 		t.Fatal("install page left a placeholder unescaped")
 	}
 	sources := readOut(t, out, "reference/sources.html")
-	if strings.Contains(sources, "<deviceID>") || !strings.Contains(sources, "&lt;deviceID&gt;") {
-		t.Fatal("source table did not escape <deviceID>")
+	if strings.Contains(sources, "<freq>") || !strings.Contains(sources, "&lt;freq&gt;") {
+		t.Fatal("source table did not escape <freq>")
+	}
+	if !strings.Contains(sources, "/playlist/channels") || !strings.Contains(sources, "Not a source") {
+		t.Fatal("sources page lost the tvheadend path or the Tablo status")
 	}
 	if !strings.Contains(sources, "https://github.com/wolfebase/broadwave/blob/main/docs/decisions/0009-sources-and-discovery.md") {
 		t.Fatal("decision link should point at the repository")

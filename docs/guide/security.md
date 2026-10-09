@@ -4,7 +4,7 @@ Broadwave has no accounts. Anything that can reach the server on your network ca
 
 ## Public names
 
-The server refuses a public name it was not given. Set `BROADWAVE_HOSTS` when you open it by a name such as `tv.example.com`. A leading dot covers the subdomains. Addresses, one-word names, and home names (`.local`, `.lan`, and a few others) work without that setting. A browser behind an HTTPS reverse proxy is allowed.
+The server refuses a public name it was not given. Set `BROADWAVE_HOSTS` when you open it by a name such as `tv.example.com`. A leading dot covers the subdomains. Addresses, one-word names, and home names (`.local`, `.lan`, and a few others) work without that setting. A browser that reaches the server by HTTPS on port 443 is allowed. Any other public name or port needs `BROADWAVE_HOSTS`.
 
 This stops a web page from calling your server by pointing the page's own name at your server's address.
 
