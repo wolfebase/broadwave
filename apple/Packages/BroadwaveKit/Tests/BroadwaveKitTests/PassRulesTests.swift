@@ -22,6 +22,16 @@ import Testing
     #expect(sent.body["priority"] == nil)
 }
 
+@Test func aOncePassSendsItsStartAsADateString() async throws {
+    let api = try rulesClient("once")
+    let start = Date(timeIntervalSince1970: 1_700_000_000)
+    _ = try await api.addSeriesPass(NewPass(title: "Harbor", channelId: 4, airingStart: start))
+    let sent = try RulesStub.sent("once")
+    let text = ISO8601DateFormatter.plain.string(from: start)
+    #expect(sent.body["airingStart"] as? String == text)
+    #expect(sent.body["airingStart"] as? Double == nil)
+}
+
 @Test func orderPassesNamesEveryPassFirstHighest() async throws {
     let api = try rulesClient("order")
     _ = try await api.orderPasses([3, 7])

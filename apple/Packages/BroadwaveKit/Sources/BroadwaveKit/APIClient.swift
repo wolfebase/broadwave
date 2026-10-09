@@ -31,6 +31,17 @@ public struct APIClient: Sendable {
         self.session = session
     }
 
+    /// Dates go out as RFC3339. A default encoder writes seconds since 2001, and the
+    /// server only treats a string `airingStart` as a recording of one airing.
+    static func makeEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .custom { date, enc in
+            var box = enc.singleValueContainer()
+            try box.encode(ISO8601DateFormatter.plain.string(from: date))
+        }
+        return encoder
+    }
+
     /// A new decoder each call. JSONDecoder is not safe to share across tasks,
     /// and the guide reload decodes on more than one.
     static var decoder: JSONDecoder {
@@ -55,7 +66,7 @@ public struct APIClient: Sendable {
         req.timeoutInterval = timeout
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.httpBody = try JSONEncoder().encode(body)
+            req.httpBody = try Self.makeEncoder().encode(body)
         }
         let (data, res) = try await session.data(for: req)
         let status = (res as? HTTPURLResponse)?.statusCode ?? 0
