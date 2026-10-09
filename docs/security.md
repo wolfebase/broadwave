@@ -20,7 +20,7 @@ A channel number from a playlist is cleaned before it becomes a recording's file
 
 ## Size
 
-A playlist upload, a picture, and a guide each stop at a fixed size. A picture whose header claims a huge width or height is not decoded. A compressed guide that expands past the cap is refused, and xz is held to a memory limit while it expands. An event socket keeps its message cap. The server holds a fixed number of those sockets and closes the next one.
+A playlist upload, a picture, and a guide each stop at a fixed size. An app copying the broadcast stops at 32 streams at once. A picture whose header claims a huge width or height is not decoded. A compressed guide that expands past the cap is refused, and xz is held to a memory limit while it expands. An event socket keeps its message cap. The server holds a fixed number of those sockets and closes the next one.
 
 Playlist text, guide XML, and the tables inside a broadcast are read with their own caps. A fragment that claims a huge sample count and no per-sample fields is dropped. A guide request longer than 15 days is refused.
 

@@ -55,8 +55,24 @@ func TestAChannelStartSpeaksToTheViewer(t *testing.T) {
 			t.Errorf("%v: got %d %+v", c.err, rec.Code, body)
 		}
 	}
-	// Other routes keep the detail, for settings and diagnostics.
 	rec := httptest.NewRecorder()
+	writeError(rec, &live.ExportLimitError{Limit: 32})
+	var limited struct {
+		Code, Message string
+		Limit         int `json:"limit"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &limited); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusTooManyRequests || limited.Code != "exports_full" || limited.Limit != 32 || !strings.Contains(limited.Message, "32") {
+		t.Fatalf("%d %+v", rec.Code, limited)
+	}
+	rec = httptest.NewRecorder()
+	if !refuseFullExport(rec, &live.ExportLimitError{Limit: 32}) || rec.Code != http.StatusTooManyRequests || !strings.Contains(rec.Body.String(), "32") {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	// Other routes keep the detail, for settings and diagnostics.
+	rec = httptest.NewRecorder()
 	writeError(rec, errors.New("dial tcp: connection refused"))
 	if !strings.Contains(rec.Body.String(), "connection refused") {
 		t.Fatal(rec.Body.String())

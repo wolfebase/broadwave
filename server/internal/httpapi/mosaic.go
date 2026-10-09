@@ -152,6 +152,9 @@ func exportMosaicTo(w http.ResponseWriter, r *http.Request, hub *live.Hub, ids [
 	if out.wrote {
 		return
 	}
+	if refuseFullExport(w, err) {
+		return
+	}
 	var busy *live.BusyError
 	if errors.As(err, &busy) {
 		w.Header().Set("X-HDHomeRun-Error", "805 All Tuners In Use")

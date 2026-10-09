@@ -1,9 +1,28 @@
 package live
 
 import (
+	"context"
+	"errors"
+	"io"
 	"strings"
 	"testing"
 )
+
+func TestExportStopsWhenEveryAppStreamIsInUse(t *testing.T) {
+	h := &Hub{exportCopies: exportCap}
+	err := h.Export(context.Background(), 1, io.Discard)
+	var full *ExportLimitError
+	if !errors.As(err, &full) || full.Limit != exportCap {
+		t.Fatal(err)
+	}
+	err = h.ExportMosaic(context.Background(), []int64{1, 2}, io.Discard)
+	if !errors.As(err, &full) || full.Limit != exportCap {
+		t.Fatal(err)
+	}
+	if h.exportCopies != exportCap {
+		t.Fatalf("copies %d", h.exportCopies)
+	}
+}
 
 func TestExportProbesTheWholeMultiplex(t *testing.T) {
 	line := strings.Join(exportCopyArgs(3, "AC3"), " ")

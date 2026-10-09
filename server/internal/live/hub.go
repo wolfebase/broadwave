@@ -174,6 +174,10 @@ type Hub struct {
 	// keeps none.
 	Buffer time.Duration
 
+	// exportCopies counts app streams copying a broadcast right now.
+	// It is read and written under mu.
+	exportCopies int
+
 	mu       sync.Mutex
 	muxes    map[int]*mux
 	channels map[int64]*feed

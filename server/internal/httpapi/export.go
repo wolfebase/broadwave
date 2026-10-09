@@ -17,6 +17,15 @@ func asBusy(err error, target **live.BusyError) bool {
 	return errors.As(err, target)
 }
 
+func refuseFullExport(w http.ResponseWriter, err error) bool {
+	var full *live.ExportLimitError
+	if !errors.As(err, &full) {
+		return false
+	}
+	http.Error(w, full.Error(), http.StatusTooManyRequests)
+	return true
+}
+
 // exportLineup is an M3U playlist of the guide lineup for other apps. Streams
 // ride the shared tune.
 func (s *Server) exportLineup(w http.ResponseWriter, r *http.Request) {

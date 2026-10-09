@@ -57,6 +57,7 @@ func errorFor(err error) (int, string, string, map[string]any) {
 	var low *disk.LowError
 	var blocked *disk.WriteError
 	var streams *live.StreamLimitError
+	var exports *live.ExportLimitError
 	switch {
 	case errors.As(err, &busy):
 		return http.StatusConflict, "tuners_busy", "Every tuner is busy. Stop a recording or watch something already on.", map[string]any{"tuners": busy.Tuners}
@@ -72,6 +73,8 @@ func errorFor(err error) (int, string, string, map[string]any) {
 		return http.StatusServiceUnavailable, "stream_down", live.ErrStreamDown.Error(), nil
 	case errors.As(err, &streams):
 		return http.StatusConflict, "streams_full", streams.Error(), map[string]any{"limit": streams.Limit}
+	case errors.As(err, &exports):
+		return http.StatusTooManyRequests, "exports_full", exports.Error(), map[string]any{"limit": exports.Limit}
 	case errors.Is(err, live.ErrNoSource):
 		return http.StatusNotFound, "no_source", live.ErrNoSource.Error(), nil
 	case errors.Is(err, live.ErrTunerSilent):

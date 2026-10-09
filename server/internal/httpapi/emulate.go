@@ -160,6 +160,9 @@ func (h *emuHandler) stream(w http.ResponseWriter, r *http.Request) {
 func exportChannel(w http.ResponseWriter, r *http.Request, hub *live.Hub, channelID int64) {
 	w.Header().Set("Content-Type", "video/mp2t")
 	if err := hub.Export(r.Context(), channelID, flushWriter{w}); err != nil {
+		if refuseFullExport(w, err) {
+			return
+		}
 		var busy *live.BusyError
 		if asBusy(err, &busy) {
 			w.Header().Set("X-HDHomeRun-Error", "805 All Tuners In Use")
