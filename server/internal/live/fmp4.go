@@ -447,7 +447,11 @@ func segmentSpan(dir, name string) (start, dur int64, ok bool) {
 	if err != nil {
 		return 0, 0, false
 	}
-	var first, end int64
+	// The first sample is the origin. Later samples, including one that
+	// wrapped through 2^33, are placed with ptsDiff so a small value is
+	// not treated as the start of a day-long span.
+	var origin, relStart, relEnd int64
+	seen := false
 	for _, top := range boxes(seg) {
 		if top.kind != "moof" {
 			continue
@@ -463,19 +467,30 @@ func segmentSpan(dir, name string) (start, dur int64, ok bool) {
 			dts := r.decodeTime()
 			for _, s := range r.samples {
 				pts, d := dts+r.cts(s), r.sampleDur(s)
-				if !ok || pts < first {
-					first = pts
+				if !seen {
+					origin, relEnd, seen = pts, d, true
+				} else {
+					rel := ptsDiff(pts, origin)
+					if rel < relStart {
+						relStart = rel
+					}
+					if rel+d > relEnd {
+						relEnd = rel + d
+					}
 				}
-				ok = true
-				end = max(end, pts+d)
 				dts += d
 			}
 		}
 	}
-	if !ok || end <= first {
+	if !seen || relEnd <= relStart {
 		return 0, 0, false
 	}
-	return first * 90000 / int64(scale), (end - first) * 90000 / int64(scale), true
+	start = origin + relStart
+	start %= ptsWrap
+	if start < 0 {
+		start += ptsWrap
+	}
+	return start * 90000 / int64(scale), (relEnd - relStart) * 90000 / int64(scale), true
 }
 
 type trunSample struct{ dur, size, flags, cts uint32 }

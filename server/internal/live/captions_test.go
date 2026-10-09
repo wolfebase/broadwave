@@ -288,6 +288,38 @@ func TestSegmentSpanUsesPresentationTime(t *testing.T) {
 	}
 }
 
+// A segment can hold the picture before the 33-bit wrap and the picture
+// after it. The span starts at the earlier picture and covers both.
+func TestSegmentSpanAcrossPTSWrap(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "init.mp4"), videoInit(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const step = int64(30000)
+	want := ptsWrap - step
+	write := func(name string, parts ...[]byte) {
+		t.Helper()
+		var body []byte
+		for _, p := range parts {
+			body = append(body, p...)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("seg00000.m4s", keyframeFragment(want, uint32(step)), keyframeFragment(0, uint32(step)))
+	got, dur, ok := segmentSpan(dir, "seg00000.m4s")
+	if !ok || got != want || dur != 2*step {
+		t.Fatalf("span %d + %d, ok=%v; want %d + %d", got, dur, ok, want, 2*step)
+	}
+	// A B-frame can put the wrapped picture first in the file.
+	write("seg00001.m4s", keyframeFragment(0, uint32(step)), keyframeFragment(want, uint32(step)))
+	got, dur, ok = segmentSpan(dir, "seg00001.m4s")
+	if !ok || got != want || dur != 2*step {
+		t.Fatalf("reordered span %d + %d, ok=%v; want %d + %d", got, dur, ok, want, 2*step)
+	}
+}
+
 func TestSessionNamesTheCaptionedPlaylistOnlyWithCaptions(t *testing.T) {
 	r := &rendition{spec: Rendition{Video: "720", Audio: "aac2"}, dir: t.TempDir()}
 	f := &feed{channel: store.SourceChannel{Channel: store.Channel{ID: 7}}, renditions: map[string]*rendition{r.spec.Key(): r}}
