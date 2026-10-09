@@ -384,6 +384,24 @@ func TestSourcePasswordIsMasked(t *testing.T) {
 	}
 }
 
+func TestAddSourceRollsBackWhenTheSecretCannotBeStored(t *testing.T) {
+	st := openTestStore(t)
+	if _, err := st.db.Exec(`CREATE TRIGGER reject_secret BEFORE INSERT ON source_secrets BEGIN SELECT RAISE(ABORT, 'boom'); END`); err != nil {
+		t.Fatal(err)
+	}
+	_, err := st.AddSource(context.Background(), "m3u", "IPTV", "http://user:s3cret@example/pl.m3u", "")
+	if err == nil {
+		t.Fatal("stored a source whose password was rejected")
+	}
+	var n int
+	if err := st.db.QueryRow(`SELECT COUNT(*) FROM sources`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("left %d source row(s) after the password could not be stored", n)
+	}
+}
+
 func TestMaskedSourceFetchesWithItsLogin(t *testing.T) {
 	st := openTestStore(t)
 	ctx := context.Background()

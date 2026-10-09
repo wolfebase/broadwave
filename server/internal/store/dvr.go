@@ -1058,19 +1058,27 @@ func (s *Store) CredentialValues(ctx context.Context) ([]string, error) {
 func (s *Store) AddSource(ctx context.Context, kind, name, rawURL, xmltv string) (Source, error) {
 	public, secret := maskURL(rawURL)
 	publicXML, xmlSecret := maskURL(xmltv)
-	res, err := s.db.ExecContext(ctx, `INSERT INTO sources (kind, name, url, xmltv_url, enabled) VALUES (?, ?, ?, ?, 1)`, kind, name, public, publicXML)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Source{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `INSERT INTO sources (kind, name, url, xmltv_url, enabled) VALUES (?, ?, ?, ?, 1)`, kind, name, public, publicXML)
 	if err != nil {
 		return Source{}, err
 	}
 	id, _ := res.LastInsertId()
 	key := fmt.Sprintf("src:%d", id)
-	if _, err := s.db.ExecContext(ctx, `UPDATE sources SET stable_key=?, device_id=? WHERE id=? AND stable_key=''`, key, fmt.Sprintf("src-%d", id), id); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE sources SET stable_key=?, device_id=? WHERE id=? AND stable_key=''`, key, fmt.Sprintf("src-%d", id), id); err != nil {
 		return Source{}, err
 	}
 	if secret != "" || xmlSecret != "" {
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO source_secrets (source_id, secret, guide_secret) VALUES (?, ?, ?)`, id, secret, xmlSecret); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO source_secrets (source_id, secret, guide_secret) VALUES (?, ?, ?)`, id, secret, xmlSecret); err != nil {
 			return Source{}, err
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		return Source{}, err
 	}
 	return Source{ID: id, Kind: kind, Name: name, URL: public, XMLTV: publicXML, Enabled: true, StableKey: key}, nil
 }
