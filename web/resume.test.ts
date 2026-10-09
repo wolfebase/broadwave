@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { awayBeforeSeekMs, comeBackAction, edgeCaughtUp, playOnShortReturn, resumePlan, resumeSeek, returnHeld } from "./src/features/player/resume.ts";
+import { awayBeforeSeekMs, comeBackAction, edgeCaughtUp, playOnShortReturn, resumeOnReturn, resumePlan, resumeSeek, returnHeld } from "./src/features/player/resume.ts";
 
 test("a tab that was only gone a moment keeps its playhead", () => {
   assert.equal(resumeSeek({ current: 10, liveSync: 40, awayMs: 800, held: false }), null);
@@ -75,4 +75,16 @@ test("a paused room stays paused when the tab comes back", () => {
   assert.deepEqual(resumePlan({ current: 10, liveSync: 400, awayMs: 10_000, held: returnHeld(true, true, 0), waitedMs: 0, edgeAtLeave: 12, driftMs: null }), {
     action: "ignore",
   });
+});
+
+test("a long return does not clear the screen when the room is held", () => {
+  // comeBackAction still says resume: the room rate is not its input.
+  // The resume side effects (seek, clear the message, drop the quiet clock) wait for this.
+  const action = comeBackAction({ tornDown: false, awayMs: 10_000, syncing: true, paused: true });
+  assert.equal(action, "resume");
+  assert.equal(returnHeld(true, true, 0), true);
+  assert.equal(resumeOnReturn(action, true), false);
+  assert.equal(resumeOnReturn("resume", false), true);
+  assert.equal(resumeOnReturn("play", false), false);
+  assert.equal(resumeOnReturn("ignore", true), false);
 });
