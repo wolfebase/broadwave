@@ -1,9 +1,29 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { holeEnd } from "./src/lib/bufferHole.ts";
+import { PauseHold } from "./src/lib/pauseHold.ts";
 import { roomStart, roomTarget } from "./src/lib/roomStart.ts";
 import { nextSeekLead } from "./src/lib/seekLead.ts";
 import { newSettle, settleDue } from "./src/lib/settle.ts";
+
+type Job = { id: number; fn: () => void; ms: number };
+
+function pauses() {
+  let n = 1;
+  const jobs: Job[] = [];
+  const cleared = new Set<number>();
+  const hold = new PauseHold(
+    (fn, ms) => {
+      const id = n++;
+      jobs.push({ id, fn, ms });
+      return id;
+    },
+    (id) => {
+      if (id) cleared.add(id);
+    },
+  );
+  return { hold, jobs, cleared };
+}
 
 test("a seek that lands behind makes the next one lead by the loss", () => {
   // Safari lost 850 ms decoding up to the target; the next seek aims that far ahead.
@@ -92,4 +112,144 @@ test("a room whose frame the playlist does not hold leaves the start alone", () 
   // Past the edge, and a playlist with no program date-times.
   assert.equal(roomStart(frags, { ...fresh, anchorServer: t0, anchorMedia: t0 + 5_500 }, t0), null);
   assert.equal(roomStart(frags.map((f) => ({ ...f, programDateTime: null })), { ...fresh, anchorServer: t0 }, t0 + 2_000), null);
+});
+
+test("stopping a pause for drift never resumes the picture", () => {
+  const { hold, jobs, cleared } = pauses();
+  let plays = 0;
+  hold.arm(800, () => {
+    plays++;
+  });
+  assert.equal(jobs[0]?.ms, 800);
+  hold.stop();
+  assert.ok(cleared.has(jobs[0].id));
+  jobs[0].fn();
+  assert.equal(plays, 0);
+});
+
+test("a newer pause replaces the one still waiting, and the one that elapses plays once", () => {
+  const { hold, jobs, cleared } = pauses();
+  let plays = 0;
+  hold.arm(800, () => {
+    plays++;
+  });
+  hold.arm(120, () => {
+    plays++;
+  });
+  assert.ok(cleared.has(jobs[0].id));
+  jobs[0].fn();
+  assert.equal(plays, 0);
+  jobs[1].fn();
+  jobs[1].fn();
+  assert.equal(plays, 1);
+  assert.equal(jobs[1].ms, 120);
+});
+
+test("leaving the room does not play a picture that paused to catch up", async () => {
+  const jobs: Job[] = [];
+  const cleared = new Set<number>();
+  let n = 1;
+  const g = globalThis as typeof globalThis & {
+    window: Window & typeof globalThis;
+    document: Document;
+    location: Location;
+    WebSocket: typeof WebSocket;
+    localStorage: Storage;
+  };
+  g.window = {
+    setTimeout: ((fn: TimerHandler, ms?: number) => {
+      const id = n++;
+      if (typeof fn === "function") jobs.push({ id, fn, ms: ms ?? 0 });
+      return id;
+    }) as typeof setTimeout,
+    clearTimeout: ((id?: number) => {
+      if (id) cleared.add(id);
+    }) as typeof clearTimeout,
+    setInterval: (() => n++) as typeof setInterval,
+    clearInterval: (() => undefined) as typeof clearInterval,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  } as unknown as Window & typeof globalThis;
+  g.document = { addEventListener: () => undefined } as unknown as Document;
+  g.location = { protocol: "http:", host: "localhost" } as Location;
+  g.localStorage = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined, clear: () => undefined, length: 0, key: () => null };
+  g.WebSocket = class {
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static CLOSING = 2;
+    static CLOSED = 3;
+    readyState = 0;
+    onopen: ((ev: Event) => void) | null = null;
+    onmessage: ((ev: MessageEvent) => void) | null = null;
+    onclose: ((ev: CloseEvent) => void) | null = null;
+    constructor(_url: string) {}
+    send() {}
+    close() {
+      this.readyState = 3;
+    }
+  } as unknown as typeof WebSocket;
+
+  const { SyncEngine } = await import("./src/lib/sync.ts");
+  const { events } = await import("./src/lib/events.ts");
+  const server = 1_700_000_000_000;
+  const clock = Date.now;
+  Date.now = () => server;
+  try {
+    const calls: string[] = [];
+    const video = {
+      paused: false,
+      seeking: false,
+      currentTime: 5,
+      readyState: 4,
+      playbackRate: 1,
+      buffered: { length: 1, start: () => 0, end: () => 40 },
+      seekable: { length: 1, start: () => 0, end: () => 40 },
+      dataset: {} as DOMStringMap,
+      pause() {
+        this.paused = true;
+        calls.push("pause");
+      },
+      play() {
+        this.paused = false;
+        calls.push("play");
+        return Promise.resolve();
+      },
+      addEventListener() {},
+      removeEventListener() {},
+      getStartDate() {
+        return new Date(1_700_000_000_000);
+      },
+    };
+    const engine = new SyncEngine(video as unknown as HTMLVideoElement, null, "channel:2", 2, () => undefined);
+    engine.start();
+    events().offset = 0;
+    const media = server + video.currentTime * 1000;
+    const ws = (events() as unknown as { ws: { onmessage: ((ev: { data: string }) => void) | null } }).ws;
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: "sync.state",
+        data: {
+          room: "channel:2",
+          channelId: 2,
+          mode: "follow",
+          anchorServer: server,
+          anchorMedia: media - 800,
+          rate: 1,
+          latency: "balanced",
+          version: 1,
+          members: 2,
+        },
+      }),
+    });
+    const pause = jobs.find((job) => job.ms === 800);
+    assert.ok(pause, "a picture that is ahead pauses for the drift");
+    assert.deepEqual(calls, ["pause"]);
+    assert.equal(video.currentTime, 5);
+    engine.stop();
+    assert.ok(cleared.has(pause.id));
+    pause.fn();
+    assert.deepEqual(calls, ["pause"]);
+  } finally {
+    Date.now = clock;
+  }
 });
