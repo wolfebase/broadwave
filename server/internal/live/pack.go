@@ -748,7 +748,10 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 				short = nil
 			}
 		}
-		if sync && dur > 0 && dur < minPartTicks {
+		// Fragments this short are held for the next one, so they never reach
+		// the open segment's byte cap. A run of them at one timestamp would
+		// keep growing and the live pipe would not publish.
+		if sync && dur > 0 && dur < minPartTicks && len(frag) <= maxOpenBytes {
 			short = &held{body: frag, pts: pts, dur: dur, fresh: fresh, handover: handover}
 			fresh, handover = false, false
 			return nil

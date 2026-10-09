@@ -730,6 +730,36 @@ func TestOpenRunStaysBounded(t *testing.T) {
 	}
 }
 
+// Short keyframes at one timestamp stay under the part minimum, so they are
+// held for the next fragment and never reach the open segment's byte cap.
+// A live pipe of them would not publish. Once the held bytes pass that cap,
+// the part goes out.
+func TestHeldShortKeyframesPublishOnceTheyPassTheByteCap(t *testing.T) {
+	dir := t.TempDir()
+	pr, pw := io.Pipe()
+	packErr := make(chan error, 1)
+	go func() { packErr <- Pack(dir, pr, nil) }()
+	defer func() {
+		_ = pw.Close()
+		<-packErr
+	}()
+	if _, err := pw.Write(videoInit()); err != nil {
+		t.Fatal(err)
+	}
+	var sent int
+	for sent <= maxOpenBytes {
+		frag := fragmentAt(1000, 1500, 0, 1<<20)
+		if _, err := pw.Write(frag); err != nil {
+			t.Fatal(err)
+		}
+		sent += len(frag)
+	}
+	playlist := waitPlaylist(t, dir, "#EXT-X-PART:")
+	if !strings.Contains(playlist, "part00000.m4s") {
+		t.Fatalf("the held run never became a part:\n%s", playlist)
+	}
+}
+
 // openParts counts the parts listed after the last closed segment.
 func openParts(playlist string) int {
 	if i := strings.LastIndex(playlist, "#EXTINF:"); i >= 0 {
