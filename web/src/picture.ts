@@ -34,6 +34,10 @@ export function liveHlsConfig(profile: BufferProfile = "desktop") {
 export function fileHlsConfig(start: number) {
   return {
     startPosition: start > 2 ? start : -1,
+    // An event playlist is the recording as it is transcoded. Leaving this
+    // on makes the element's duration Infinity, and the scrubber never moves
+    // past the length the library reported when play opened.
+    liveDurationInfinity: false,
     maxBufferHole: 0.5,
     stretchShortVideoTrack: true,
   };

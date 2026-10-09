@@ -203,7 +203,12 @@ func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, at
 	}
 	done := h.trackFileEncode(id, cmd)
 	go func() {
-		followFile(abs, stdin, still, at)
+		followFile(abs, stdin, still, at, func() {
+			// The clock never reached the resume. The bytes that follow are
+			// the start of the file, so the playlist clock has to say that
+			// before the first segment is published.
+			_ = writeFileOffset(dir, 0)
+		})
 		_ = cmd.Wait()
 		h.dropFileEncode(id, cmd)
 		close(done)
@@ -285,13 +290,134 @@ func waitPlaylistFile(playlist string, id int64) (string, error) {
 // FollowFile copies a growing recording into dst until still is false and no
 // new bytes arrive. The copy starts at the first byte. A pipe has no index.
 func FollowFile(path string, dst io.WriteCloser, still func() bool) {
-	followFile(path, dst, still, 0)
+	followFile(path, dst, still, 0, nil)
+}
+
+// FollowFileAt copies a growing recording, leaving out the first at seconds
+// of its clock. A pipe has no index to seek, so those packets are dropped.
+// at below the resume minimum copies from the first byte.
+func FollowFileAt(path string, dst io.WriteCloser, still func() bool, at float64) {
+	followFile(path, dst, still, at, nil)
+}
+
+// MediaWritten is how many seconds of a growing recording are on disk.
+// The PCR span is the file's own clock. A span far past the time since the
+// recording started is a clock reset, and the elapsed time is used instead.
+func MediaWritten(path string, started, now time.Time) float64 {
+	elapsed := 0.0
+	if !started.IsZero() && now.After(started) {
+		elapsed = now.Sub(started).Seconds()
+	}
+	span, ok := mediaSpan(path)
+	if !ok {
+		return elapsed
+	}
+	if elapsed > 0 && span > elapsed+30 {
+		return elapsed
+	}
+	return span
+}
+
+// mediaSpan is the PCR clock from the first packet that carries one to the
+// last, in seconds. The ends of the file are enough: the clock only moves
+// forward, and a whole-file scan of an hour-long recording is not.
+func mediaSpan(path string) (float64, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, false
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || info.Size() < 188 {
+		return 0, false
+	}
+	first, ok := findPCR(f, info.Size(), true)
+	if !ok {
+		return 0, false
+	}
+	last, ok := findPCR(f, info.Size(), false)
+	if !ok {
+		return 0, false
+	}
+	delta := (last - first) & (1<<33 - 1)
+	if delta <= 0 {
+		return 0, false
+	}
+	return float64(delta) / 90000, true
+}
+
+func findPCR(f *os.File, size int64, first bool) (int64, bool) {
+	const window = 2 << 20
+	start := int64(0)
+	if !first && size > window {
+		start = size - window
+	}
+	n := int(size - start)
+	if n > window {
+		n = window
+	}
+	if _, err := f.Seek(start, io.SeekStart); err != nil {
+		return 0, false
+	}
+	buf := make([]byte, n)
+	got, err := io.ReadFull(f, buf)
+	if got < 188 && err != nil {
+		return 0, false
+	}
+	buf = buf[:got]
+	align := syncAlign(buf)
+	if align < 0 {
+		return 0, false
+	}
+	var pcr int64
+	var have bool
+	for off := align; off+188 <= len(buf); off += 188 {
+		v, ok := readPCR(buf[off : off+188])
+		if !ok {
+			continue
+		}
+		if first {
+			return v, true
+		}
+		pcr = v
+		have = true
+	}
+	return pcr, have
+}
+
+// syncAlign is the first byte of a 188-byte packet. Two sync bytes in a row
+// are the alignment; a longer buffer checks one more so a 0x47 in the payload
+// is not the start.
+func syncAlign(buf []byte) int {
+	if len(buf) < 188*2 {
+		return -1
+	}
+	step := 188
+	if len(buf) >= 188*3 {
+		step = 188 * 2
+	}
+	limit := len(buf) - step
+	if limit > 187 {
+		limit = 187
+	}
+	for i := 0; i <= limit; i++ {
+		if buf[i] != 0x47 || buf[i+188] != 0x47 {
+			continue
+		}
+		if step == 188*2 && buf[i+376] != 0x47 {
+			continue
+		}
+		return i
+	}
+	return -1
 }
 
 // followFile copies a growing recording into ffmpeg until the recording has
 // stopped and no new bytes arrive. skip is how many seconds of the file to
 // leave out, measured from the first PCR. A pipe has no index to seek.
-func followFile(path string, dst io.WriteCloser, still func() bool, skip float64) {
+// missed runs when that clock is never reached and the copy starts over at
+// the first byte. It runs before any byte is written.
+func followFile(path string, dst io.WriteCloser, still func() bool, skip float64, missed func()) {
 	defer dst.Close()
 	var file *os.File
 	deadline := time.Now().Add(15 * time.Second)
@@ -308,7 +434,12 @@ func followFile(path string, dst io.WriteCloser, still func() bool, skip float64
 	}
 	defer file.Close()
 	if skip >= resumeMin && !discardPrefix(file, skip, still) {
-		return
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			return
+		}
+		if missed != nil {
+			missed()
+		}
 	}
 	buf := make([]byte, 64*1024)
 	quiet := 0
@@ -336,18 +467,19 @@ func followFile(path string, dst io.WriteCloser, still func() bool, skip float64
 	}
 }
 
-// discardPrefix drops packets until the PCR clock, measured from the first
-// PCR, reaches skip. The file is left at that packet. A file with no clock
-// is rewound and copied whole once the recording has stopped.
+// discardPrefix drops packets until the PCR clock reaches skip seconds.
+// The file is left at that packet. A step backward, or a packet with the
+// discontinuity flag, starts a new base and is not counted: a splice would
+// otherwise look like 2^33 ticks and the copy would begin there. False means
+// the recording ended before the clock got there.
 func discardPrefix(file *os.File, skip float64, still func() bool) bool {
 	want := int64(skip*90000 + 0.5)
-	buf := make([]byte, 188)
-	var base int64
-	var have bool
-	start, err := file.Seek(0, io.SeekCurrent)
-	if err != nil {
+	if !alignTS(file, still) {
 		return false
 	}
+	buf := make([]byte, 188)
+	var base, elapsed int64
+	var have bool
 	quiet := 0
 	for {
 		off, err := file.Seek(0, io.SeekCurrent)
@@ -362,13 +494,21 @@ func discardPrefix(file *os.File, skip float64, still func() bool) bool {
 			if !still() {
 				quiet++
 				if quiet >= 2 {
-					_, serr := file.Seek(start, io.SeekStart)
-					return serr == nil
+					return false
 				}
 			} else {
 				quiet = 0
 			}
 			time.Sleep(300 * time.Millisecond)
+			continue
+		}
+		if buf[0] != 0x47 {
+			if _, serr := file.Seek(off, io.SeekStart); serr != nil {
+				return false
+			}
+			if !alignTS(file, still) {
+				return false
+			}
 			continue
 		}
 		quiet = 0
@@ -379,11 +519,66 @@ func discardPrefix(file *os.File, skip float64, still func() bool) bool {
 		if !have {
 			base = pcr
 			have = true
+		} else if !advancePCR(&base, &elapsed, pcr, buf[5]&0x80 != 0) {
+			continue
 		}
-		if (pcr-base)&(1<<33-1) >= want {
-			_, err = file.Seek(-188, io.SeekCurrent)
+		if elapsed >= want {
+			_, err = file.Seek(off, io.SeekStart)
 			return err == nil
 		}
+	}
+}
+
+// pcrMod is the 33-bit PCR range. A step through more than half of it is a
+// clock jump, not a second of the show.
+const pcrMod = int64(1) << 33
+
+// advancePCR adds a forward PCR step onto elapsed. A discontinuity, or a
+// step through more than half the clock, sets a new base and adds nothing:
+// one tick backward must not count as a wrap to the end of the show.
+// False means this sample carried no forward time.
+func advancePCR(base, elapsed *int64, pcr int64, discontinuity bool) bool {
+	step := (pcr - *base) & (pcrMod - 1)
+	*base = pcr
+	if discontinuity || step > pcrMod/2 || step == 0 {
+		return false
+	}
+	*elapsed += step
+	return true
+}
+
+// alignTS moves the file to the next 188-byte packet. A leading byte that is
+// not 0x47 would hide every PCR after it.
+func alignTS(file *os.File, still func() bool) bool {
+	quiet := 0
+	for {
+		off, err := file.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return false
+		}
+		buf := make([]byte, 188*8)
+		n, err := file.Read(buf)
+		if n >= 188*2 {
+			if align := syncAlign(buf[:n]); align >= 0 {
+				_, serr := file.Seek(off+int64(align), io.SeekStart)
+				return serr == nil
+			}
+		}
+		if _, serr := file.Seek(off, io.SeekStart); serr != nil {
+			return false
+		}
+		if !still() {
+			quiet++
+			if quiet >= 2 {
+				return false
+			}
+		} else {
+			quiet = 0
+		}
+		if err != nil && err != io.EOF && n == 0 {
+			return false
+		}
+		time.Sleep(300 * time.Millisecond)
 	}
 }
 

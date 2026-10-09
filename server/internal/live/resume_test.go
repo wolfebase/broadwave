@@ -35,6 +35,30 @@ func TestResumeAtStaysInsideTheFile(t *testing.T) {
 	}
 }
 
+func TestExportResumeStaysOnMediaThatExists(t *testing.T) {
+	if got := ExportResume(17*60, 30*60, false); got != 17*60 {
+		t.Fatalf("finished file %v", got)
+	}
+	if got := ExportResume(17*60, 5*60, false); got != 298 {
+		t.Fatalf("finished file shorter than the schedule %v", got)
+	}
+	// Seventeen minutes into a show that has forty minutes on disk.
+	if got := ExportResume(17*60, 40*60, true); got != 17*60 {
+		t.Fatalf("growing file that already holds the point %v", got)
+	}
+	// The schedule is ahead of the bytes written so far. Start at the live
+	// edge, not at the first byte and not past the end.
+	if got := ExportResume(17*60, 30, true); got != 28 {
+		t.Fatalf("schedule past the bytes on disk %v", got)
+	}
+	if got := ExportResume(17*60, 0, true); got != 0 {
+		t.Fatalf("nothing written yet %v", got)
+	}
+	if got := ExportResume(1, 40*60, true); got != 0 {
+		t.Fatalf("a short offset %v", got)
+	}
+}
+
 func TestInputSeekPrecedesTheFile(t *testing.T) {
 	args := PictureArgs(Graph{Input: "show.ts", Start: 2400, VideoCodec: "MPEG2", Encoder: "libx264", Live: false})
 	ss, in := -1, -1
