@@ -25,3 +25,9 @@ import Testing
     #expect(Compatibility.compare("1.9", "1.10") < 0)
     #expect(Compatibility.gateApp(nil) == nil)
 }
+
+@Test func anEmptyVersionPieceCountsAsZero() {
+    #expect(Compatibility.compare("1..2", "1.0.2") == 0)
+    #expect(Compatibility.compare("1.2", "1. 2") == 0)
+    #expect(Compatibility.compare("1.0", "1. 2") < 0)
+}
