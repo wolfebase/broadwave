@@ -76,6 +76,18 @@ func BenchmarkSearch(b *testing.B) {
 			}
 		}
 	})
+	// One hour of a two-week guide. The channel index cannot bound this,
+	// so it reads every listing unless a start-time index can.
+	b.Run("Hour", func(b *testing.B) {
+		b.ReportAllocs()
+		hour := from.Add(time.Hour)
+		for b.Loop() {
+			rows, err := st.Airings(ctx, from, hour)
+			if err != nil || len(rows) != channels*2 {
+				b.Fatal(err, len(rows))
+			}
+		}
+	})
 }
 
 func loadSearchBench(b testing.TB, channels, days int) (*Store, []int64) {
