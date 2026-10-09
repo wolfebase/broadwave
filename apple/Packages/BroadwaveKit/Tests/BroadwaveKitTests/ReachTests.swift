@@ -1,4 +1,5 @@
 @testable import BroadwaveKit
+import CryptoKit
 import Foundation
 import Testing
 
@@ -76,4 +77,22 @@ import Testing
     let v6 = try #require(URL(string: "http://[fd12::5]:8477"))
     let v6Upper = try #require(URL(string: "http://[FD12::5]:8477/guide"))
     #expect(ServerFollow.samePlace(v6, v6Upper))
+}
+
+@Test func aProbeSignatureMustMatchTheStoredKey() throws {
+    let key = Curve25519.Signing.PrivateKey()
+    let pub = key.publicKey.rawRepresentation.base64EncodedString()
+    let nonce = Data(repeating: 7, count: 16)
+    let url = "http://10.1.2.3:8477"
+    let id = "lab"
+    let message = FinderPacket.message(nonce: nonce, url: url, id: id)
+    let sig = try key.signature(for: message).base64EncodedString()
+    #expect(FinderPacket.accepts(sig, nonce: nonce, url: url, id: id, key: pub))
+    #expect(!FinderPacket.accepts(sig, nonce: nonce, url: url, id: "other", key: pub))
+    #expect(!FinderPacket.accepts(sig, nonce: nonce, url: "http://10.1.2.9:8477", id: id, key: pub))
+    #expect(!FinderPacket.accepts(sig, nonce: Data(repeating: 7, count: 15), url: url, id: id, key: pub))
+    #expect(!FinderPacket.accepts(sig, nonce: nonce, url: url, id: id, key: "not-a-key"))
+    #expect(!FinderPacket.accepts("%%%", nonce: nonce, url: url, id: id, key: pub))
+    let other = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedString()
+    #expect(!FinderPacket.accepts(sig, nonce: nonce, url: url, id: id, key: other))
 }
