@@ -56,8 +56,9 @@ public enum FinderPacket {
         return msg
     }
 
-    /// A probe reply may only name a loopback or private literal. A hostname
-    /// or a public address is ignored, so a packet cannot point the app off the LAN.
+    /// A probe reply may only name a loopback or private literal. Shared
+    /// address space (100.64.0.0/10) counts: the server answers there.
+    /// A hostname or a public address is ignored, so a packet cannot point the app off the LAN.
     public static func isLocal(_ url: URL) -> Bool {
         guard url.scheme == "http" || url.scheme == "https",
               url.user == nil, url.password == nil,
@@ -79,6 +80,10 @@ public enum FinderPacket {
             return true
         }
         if a == 172, (16 ... 31).contains(Int(b)) {
+            return true
+        }
+        // 100.64.0.0/10. Go's net.IP.IsPrivate includes this range.
+        if a == 100, (64 ... 127).contains(Int(b)) {
             return true
         }
         return false

@@ -39,6 +39,16 @@ import Testing
     #expect(!FinderPacket.isLocalHost("10.0.0.256"))
 }
 
+@Test func sharedAddressSpaceCountsAsALocalHost() {
+    // The server answers on 100.64.0.0/10. Go's IsPrivate includes that range.
+    #expect(FinderPacket.isLocalHost("100.64.0.1"))
+    #expect(FinderPacket.isLocalHost("100.127.255.255"))
+    #expect(!FinderPacket.isLocalHost("100.63.255.255"))
+    #expect(!FinderPacket.isLocalHost("100.128.0.1"))
+    let raw = Data(#"BWDP!{"id":"abc","name":"Home","url":"http://100.64.1.5:8477"}"#.utf8)
+    #expect(FinderPacket.parse(raw)?.url.host() == "100.64.1.5")
+}
+
 @Test func aProbeURLMustBeLocalHTTPWithoutCredentials() throws {
     let local = try #require(URL(string: "http://10.1.2.3:8477"))
     #expect(FinderPacket.isLocal(local))
