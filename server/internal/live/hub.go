@@ -1324,11 +1324,22 @@ func (h *Hub) fallbackWindow() time.Duration {
 // restartRenditionLocked starts the encode again in an empty directory.
 // software forces the CPU encoder; otherwise the same command line runs once more.
 func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool {
-	// detach closes the pipe. Closing stdin here too races that goroutine.
+	// The encode being replaced has no fragment left to write: this restart
+	// deletes its directory. Kill it now. Its watch reaps it and sees the
+	// command change. A second close of stdin races the subscriber that
+	// already owns that write end, so close it only when nothing else will.
+	old := r.cmd
+	live := old != nil && old.Process != nil && !r.waited.Load()
 	if m := muxOf(h, f); m != nil {
 		m.detach(r.sub)
 	} else if r.sub != nil {
 		r.sub.stop()
+	}
+	if r.sub == nil && r.stdin != nil {
+		_ = r.stdin.Close()
+	}
+	if live {
+		_ = old.Process.Kill()
 	}
 	r.sub = nil
 	r.stdin = nil
