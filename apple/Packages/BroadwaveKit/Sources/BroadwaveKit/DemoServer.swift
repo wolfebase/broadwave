@@ -441,8 +441,8 @@ public final class DemoServer: @unchecked Sendable {
 
     private func airings(query: String) -> [Airing] {
         let items = URLComponents(string: "http://demo/?\(query)")?.queryItems ?? []
-        let from = items.first { $0.name == "from" }?.value.flatMap { ISO8601DateFormatter.plain.date(from: $0) }
-        let to = items.first { $0.name == "to" }?.value.flatMap { ISO8601DateFormatter.plain.date(from: $0) }
+        let from = items.first { $0.name == "from" }?.value.flatMap { ISO8601DateFormatter.date(from: $0) }
+        let to = items.first { $0.name == "to" }?.value.flatMap { ISO8601DateFormatter.date(from: $0) }
         return DemoFilm.airings(from: from, to: to)
     }
 
@@ -595,7 +595,7 @@ public final class DemoServer: @unchecked Sendable {
         let enc = JSONEncoder()
         enc.dateEncodingStrategy = .custom { date, encoder in
             var box = encoder.singleValueContainer()
-            try box.encode(ISO8601DateFormatter.fractional.string(from: date))
+            try box.encode(ISO8601DateFormatter.fractionalString(from: date))
         }
         return enc
     }
@@ -769,7 +769,7 @@ private struct DemoFilm {
                 lines.append("#EXT-X-DISCONTINUITY")
                 lines.append("#EXT-X-MAP:URI=\"init.mp4\"")
             }
-            let pdt = ISO8601DateFormatter.fractional.string(from: Date(timeIntervalSince1970: Double(seq) * seg))
+            let pdt = ISO8601DateFormatter.fractionalString(from: Date(timeIntervalSince1970: Double(seq) * seg))
             lines.append("#EXT-X-PROGRAM-DATE-TIME:\(pdt)")
             lines.append("#EXTINF:4.000,")
             lines.append("seg\(seq % 3).m4s?n=\(seq)")

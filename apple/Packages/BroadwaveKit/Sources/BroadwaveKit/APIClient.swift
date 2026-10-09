@@ -35,7 +35,7 @@ public struct APIClient: Sendable {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .custom { decoder in
             let raw = try decoder.singleValueContainer().decode(String.self)
-            if let date = ISO8601DateFormatter.fractional.date(from: raw) ?? ISO8601DateFormatter.plain.date(from: raw) {
+            if let date = ISO8601DateFormatter.date(from: raw) {
                 return date
             }
             throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Bad date \(raw)"))
@@ -138,8 +138,11 @@ public struct APIClient: Sendable {
     }
 
     public func search(_ query: String) async throws -> SearchResult {
-        let q = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        return try await send("GET", "/search?q=\(q)")
+        // urlQueryAllowed leaves & + = # in the value. The server splits on &
+        // and reads + as a space, so a search for those never matches.
+        var parts = URLComponents()
+        parts.queryItems = [URLQueryItem(name: "q", value: query)]
+        return try await send("GET", "/search?\(parts.percentEncodedQuery ?? "")")
     }
 
     public func airings(hours: Int = 48) async throws -> [Airing] {
@@ -150,8 +153,8 @@ public struct APIClient: Sendable {
     public func airings(from: Date, to: Date) async throws -> [Airing] {
         var parts = URLComponents()
         parts.queryItems = [
-            URLQueryItem(name: "from", value: ISO8601DateFormatter.plain.string(from: from)),
-            URLQueryItem(name: "to", value: ISO8601DateFormatter.plain.string(from: to)),
+            URLQueryItem(name: "from", value: ISO8601DateFormatter.plainString(from: from)),
+            URLQueryItem(name: "to", value: ISO8601DateFormatter.plainString(from: to)),
         ]
         return try await airings(path: "/airings?\(parts.percentEncodedQuery ?? "")")
     }
@@ -345,7 +348,7 @@ public struct APIClient: Sendable {
     @discardableResult
     public func addPass(title: String, channelID: Int64, airingStart: Date? = nil) async throws -> [Pass] {
         struct B: Encodable { var title: String; var channelId: Int64; var airingStart: String? }
-        let start = airingStart.map { ISO8601DateFormatter.plain.string(from: $0) }
+        let start = airingStart.map { ISO8601DateFormatter.plainString(from: $0) }
         return try await send("POST", "/passes", body: B(title: title, channelId: channelID, airingStart: start), as: PassList.self).passes
     }
 
@@ -603,13 +606,11 @@ public struct APIClient: Sendable {
 
     public func startScan(deviceID: String) async throws {
         struct R: Decodable { var scanning: Bool }
-        let id = deviceID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? deviceID
-        _ = try await send("POST", "/devices/\(id)/scan", body: [String: String](), as: R.self)
+        _ = try await send("POST", "/devices/\(Self.pathSegment(deviceID))/scan", body: [String: String](), as: R.self)
     }
 
     public func scanStatus(deviceID: String) async throws -> ScanProgress {
-        let id = deviceID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? deviceID
-        return try await send("GET", "/devices/\(id)/scan")
+        try await send("GET", "/devices/\(Self.pathSegment(deviceID))/scan")
     }
 
     public func storage() async throws -> StorageInfo {
@@ -723,17 +724,39 @@ public struct APIClient: Sendable {
 }
 
 extension ISO8601DateFormatter {
-    nonisolated(unsafe) static let fractional: ISO8601DateFormatter = {
+    // One formatter is not safe to share. A refresh decodes the guide, the
+    // recordings, and the server at the same time, and the demo writes playlists
+    // on another task. The lock is the whole access path.
+    private static let gate = NSLock()
+    private nonisolated(unsafe) static let fractionalFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
     }()
 
-    nonisolated(unsafe) static let plain: ISO8601DateFormatter = {
+    private nonisolated(unsafe) static let plainFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
         return f
     }()
+
+    public static func date(from raw: String) -> Date? {
+        gate.lock()
+        defer { gate.unlock() }
+        return fractionalFormatter.date(from: raw) ?? plainFormatter.date(from: raw)
+    }
+
+    public static func plainString(from date: Date) -> String {
+        gate.lock()
+        defer { gate.unlock() }
+        return plainFormatter.string(from: date)
+    }
+
+    public static func fractionalString(from date: Date) -> String {
+        gate.lock()
+        defer { gate.unlock() }
+        return fractionalFormatter.string(from: date)
+    }
 }
 
 private struct PreviewBody: Encodable {

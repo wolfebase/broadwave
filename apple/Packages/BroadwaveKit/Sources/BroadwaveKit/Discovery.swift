@@ -101,6 +101,9 @@ public final class Discovery {
     }
 
     private func runProbe() {
+        // The delayed probe and a retry after a miss share this slot. Cancel the
+        // one already running so stop() reaches the probe that is actually out.
+        probeTask?.cancel()
         probeTask = Task { @MainActor [weak self] in
             let found = await Task.detached { LANProbe.collect(timeout: 1.5) }.value
             guard !Task.isCancelled, let self, browser != nil else { return }
@@ -139,6 +142,8 @@ public final class Discovery {
                 guard let url = await Self.resolve(result.endpoint, port: port) else { return }
                 let server = FoundServer(id: id, name: display, url: url)
                 guard let self else { return }
+                // Resolve takes seconds. Stop, or this service leaving, must not put it back.
+                guard Self.keepResolved(browsing: browser != nil, listedID: serviceNames[name], resolvedID: id) else { return }
                 NSLog("broadwave discovery: %@ %@", server.name, server.url.absoluteString)
                 // A probe already named this server. A later Bonjour resolve can
                 // replace that address with a link-local host, so leave it.
@@ -152,8 +157,8 @@ public final class Discovery {
                 }
             }
         }
-        let gone = serviceNames.filter { !live.contains($0.key) }.map(\.value)
-        servers.removeAll { gone.contains($0.id) && !probed.contains($0.id) }
+        let gone = Self.droppedServices(names: serviceNames, live: live, probed: probed)
+        servers.removeAll { gone.contains($0.id) }
         serviceNames = serviceNames.filter { live.contains($0.key) }
     }
 
@@ -168,6 +173,27 @@ public final class Discovery {
             }
         }
         looked = true
+    }
+
+    /// A resolve that finishes after browsing stopped, or after that service
+    /// left the latest results, must not put the server back on the list.
+    nonisolated static func keepResolved(browsing: Bool, listedID: String?, resolvedID: String) -> Bool {
+        browsing && listedID == resolvedID
+    }
+
+    /// An id leaves only when every service that used it has left and a probe
+    /// did not also find it. One of two names going quiet is not a departure.
+    nonisolated static func droppedServices(names: [String: String], live: Set<String>, probed: Set<String>) -> Set<String> {
+        var gone = Set<String>()
+        var staying = Set<String>()
+        for (name, id) in names {
+            if live.contains(name) {
+                staying.insert(id)
+            } else {
+                gone.insert(id)
+            }
+        }
+        return gone.subtracting(staying).subtracting(probed)
     }
 
     /// Opens a connection to learn the address the service lives at.

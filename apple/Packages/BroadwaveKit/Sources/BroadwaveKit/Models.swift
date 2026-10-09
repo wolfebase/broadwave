@@ -328,12 +328,11 @@ public struct ScheduleFixRequest: Encodable, Equatable, Sendable {
     public var suggestionStart: String
 
     public init(item: PlannedAiring, later: Suggestion) {
-        let format = ISO8601DateFormatter.plain
         passId = item.passId
         channelId = item.airing.channelId
-        start = format.string(from: item.airing.start)
+        start = ISO8601DateFormatter.plainString(from: item.airing.start)
         suggestionChannelId = later.channelId
-        suggestionStart = format.string(from: later.start)
+        suggestionStart = ISO8601DateFormatter.plainString(from: later.start)
     }
 }
 

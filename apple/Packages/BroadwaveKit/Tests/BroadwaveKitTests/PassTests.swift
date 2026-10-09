@@ -39,7 +39,7 @@ private let start = Date(timeIntervalSince1970: 1_790_000_000)
     #expect(passes.first?.kind == "once")
     let body = try #require(PassStub.lastBody)
     let sent = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
-    #expect(sent["airingStart"] as? String == ISO8601DateFormatter.plain.string(from: start))
+    #expect(sent["airingStart"] as? String == ISO8601DateFormatter.plainString(from: start))
     #expect(sent["channelId"] as? Int == 4)
 
     _ = try await api.addPass(title: "Jeopardy!", channelID: 4)

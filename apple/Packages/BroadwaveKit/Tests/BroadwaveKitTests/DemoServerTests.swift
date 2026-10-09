@@ -32,8 +32,8 @@ let demoMedia = URL(fileURLWithPath: #filePath)
     let now = Date()
     var parts = try #require(URLComponents(url: demoURL(origin, "/api/v1/airings"), resolvingAgainstBaseURL: false))
     parts.queryItems = [
-        URLQueryItem(name: "from", value: ISO8601DateFormatter.plain.string(from: now.addingTimeInterval(-1800))),
-        URLQueryItem(name: "to", value: ISO8601DateFormatter.plain.string(from: now.addingTimeInterval(3600))),
+        URLQueryItem(name: "from", value: ISO8601DateFormatter.plainString(from: now.addingTimeInterval(-1800))),
+        URLQueryItem(name: "to", value: ISO8601DateFormatter.plainString(from: now.addingTimeInterval(3600))),
     ]
     let (airingData, _) = try await URLSession.shared.data(from: #require(parts.url))
     struct Airings: Decodable { var airings: [Airing] }
@@ -56,7 +56,7 @@ let demoMedia = URL(fileURLWithPath: #filePath)
     #expect(!playlist.contains("#EXT-X-ENDLIST"))
     let dates = playlist.split(separator: "\n").compactMap { line -> Date? in
         guard line.hasPrefix("#EXT-X-PROGRAM-DATE-TIME:") else { return nil }
-        return ISO8601DateFormatter.fractional.date(from: String(line.dropFirst("#EXT-X-PROGRAM-DATE-TIME:".count)))
+        return ISO8601DateFormatter.date(from: String(line.dropFirst("#EXT-X-PROGRAM-DATE-TIME:".count)))
     }
     #expect(dates.contains { abs($0.timeIntervalSinceNow) < 30 })
 

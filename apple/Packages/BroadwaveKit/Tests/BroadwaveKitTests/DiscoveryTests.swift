@@ -109,6 +109,21 @@ private func signedServer(id: String, url: String, privateKey: Curve25519.Signin
     #expect(ConnectLink.serverURL(from: creds) == nil)
 }
 
+@Test func aResolveAfterStopOrDepartureDoesNotKeepTheServer() {
+    #expect(!Discovery.keepResolved(browsing: false, listedID: "abc", resolvedID: "abc"))
+    #expect(!Discovery.keepResolved(browsing: true, listedID: nil, resolvedID: "abc"))
+    #expect(!Discovery.keepResolved(browsing: true, listedID: "other", resolvedID: "abc"))
+    #expect(Discovery.keepResolved(browsing: true, listedID: "abc", resolvedID: "abc"))
+}
+
+@Test func oneQuietNameDoesNotDropAServerThatIsStillListed() {
+    let names = ["living-room": "abc", "living-room-2": "abc", "kitchen": "def"]
+    let live: Set = ["living-room-2"]
+    #expect(Discovery.droppedServices(names: names, live: live, probed: []) == ["def"])
+    #expect(Discovery.droppedServices(names: names, live: [], probed: ["def"]) == ["abc"])
+    #expect(Discovery.droppedServices(names: names, live: live, probed: ["def"]).isEmpty)
+}
+
 @Test func aPublicAddressIsNotFollowed() throws {
     let pair = signingKey()
     let nonce = Data(repeating: 2, count: 16)

@@ -237,8 +237,8 @@ private func planned(skipped: Bool = false, reason: String? = nil, later: Sugges
     #expect(body["passId"] as? Int == 7)
     #expect(body["channelId"] as? Int == 4)
     #expect(body["suggestionChannelId"] as? Int == 5)
-    #expect(body["start"] as? String == ISO8601DateFormatter.plain.string(from: item.airing.start))
-    #expect(body["suggestionStart"] as? String == ISO8601DateFormatter.plain.string(from: later.start))
+    #expect(body["start"] as? String == ISO8601DateFormatter.plainString(from: item.airing.start))
+    #expect(body["suggestionStart"] as? String == ISO8601DateFormatter.plainString(from: later.start))
 }
 
 @Test func aPlannedAiringSaysWhenItRecordsOrWhyNot() {

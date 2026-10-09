@@ -42,7 +42,7 @@ public enum CatalogCache {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .custom { date, enc in
             var box = enc.singleValueContainer()
-            try box.encode(ISO8601DateFormatter.plain.string(from: date))
+            try box.encode(ISO8601DateFormatter.plainString(from: date))
         }
         return encoder
     }()
