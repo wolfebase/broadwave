@@ -189,6 +189,82 @@ func TestProgressiveRecordingStays720p60(t *testing.T) {
 	}
 }
 
+// A resume deep into a recording that has never been played must encode from
+// that point. Starting at the beginning makes the player wait out the prefix.
+func TestPlayFileResumeMatchesTheRecording(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not on PATH")
+	}
+	dir := t.TempDir()
+	in := filepath.Join(dir, "show.ts")
+	// Red climbs with time, and a keyframe lands on the resume point.
+	build := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "nullsrc=s=160x90:r=30:d=8,format=yuv420p,geq=r='clip(40*T,0,255)':g=16:b=16",
+		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=8",
+		"-force_key_frames", "expr:gte(t,n_forced*2)",
+		"-c:v", "mpeg2video", "-b:v", "800k", "-g", "15",
+		"-c:a", "ac3", "-b:a", "96k", "-shortest", "-f", "mpegts", in)
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("fixture: %v %s", err, out)
+	}
+	h := &Hub{Dir: dir, Encoder: "libx264", FFmpeg: ffmpeg}
+	if _, err := h.PlayFile(1, in, "mpeg2video", "broadcast", "progressive", 4); err != nil {
+		t.Fatal(err)
+	}
+	play := filepath.Join(dir, "file", "1")
+	seg := filepath.Join(play, "seg00000.ts")
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		info, err := os.Stat(seg)
+		if err == nil && info.Size() > 1000 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	got := meanRed(t, ffmpeg, seg, 0)
+	atStart := meanRed(t, ffmpeg, in, 0)
+	atResume := meanRed(t, ffmpeg, in, 4)
+	t.Logf("red segment %.1f start %.1f resume %.1f", got, atStart, atResume)
+	if abs(got-atResume) >= abs(got-atStart) {
+		t.Fatalf("first segment red %.1f is closer to the start (%.1f) than to 4s (%.1f)", got, atStart, atResume)
+	}
+	if got < 100 {
+		t.Fatalf("first segment red %.1f, want the picture from about 4s", got)
+	}
+	off := FileOffset(play)
+	if off < 3.9 || off > 4.1 {
+		t.Fatalf("offset %v", off)
+	}
+}
+
+func meanRed(t *testing.T, ffmpeg, path string, at float64) float64 {
+	t.Helper()
+	args := []string{"-hide_banner", "-loglevel", "error"}
+	if at > 0 {
+		args = append(args, "-ss", strconv.FormatFloat(at, 'f', 3, 64))
+	}
+	args = append(args, "-i", path, "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-")
+	out, err := exec.Command(ffmpeg, args...).Output()
+	if err != nil || len(out) < 3 {
+		t.Fatalf("frame %s at %v: %v (%d bytes)", path, at, err, len(out))
+	}
+	var sum float64
+	n := 0
+	for i := 0; i+2 < len(out); i += 3 {
+		sum += float64(out[i])
+		n++
+	}
+	return sum / float64(n)
+}
+
+func abs(v float64) float64 {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
 func probePicture(t *testing.T, path string) (width, height int, fps float64, frames int) {
 	t.Helper()
 	out, err := exec.Command("ffprobe", "-v", "error", "-select_streams", "v:0", "-count_frames",

@@ -42,6 +42,7 @@ func (s *Server) playRecording(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	codec, mode, order := s.playbackChoice(r.Context(), rec.ChannelID, body.Picture)
+	position, _ := s.Store.Progress(r.Context(), id)
 	var playlist string
 	if rec.Status == "recording" {
 		playlist, err = s.Hub.PlayFollow(id, rec.Path, codec, mode, order, func() bool {
@@ -49,7 +50,7 @@ func (s *Server) playRecording(w http.ResponseWriter, r *http.Request) {
 			return curErr == nil && cur.Status == "recording"
 		})
 	} else {
-		playlist, err = s.Hub.PlayFile(id, rec.Path, codec, mode, order)
+		playlist, err = s.Hub.PlayFile(id, rec.Path, codec, mode, order, live.ResumeAt(position, recordingDuration(s.Hub, rec)))
 	}
 	if err != nil {
 		writeError(w, err)
@@ -59,7 +60,6 @@ func (s *Server) playRecording(w http.ResponseWriter, r *http.Request) {
 	if markers == nil {
 		markers = []store.Marker{}
 	}
-	position, _ := s.Store.Progress(r.Context(), id)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"playlist":  playlist,
 		"recording": rec,
@@ -367,7 +367,7 @@ func (s *Server) playVirtual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	codec, mode, order := s.playbackChoice(r.Context(), rec.ChannelID, body.Picture)
-	playlist, err := s.Hub.PlayFile(rec.ID, rec.Path, codec, mode, order)
+	playlist, err := s.Hub.PlayFile(rec.ID, rec.Path, codec, mode, order, 0)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -461,6 +461,42 @@ func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 		"totalBytes":  space.Total,
 		"watermarkGB": disk.WatermarkGB(raw),
 	})
+}
+
+// recordingDuration is the file's length in seconds. A stored length wins.
+// Zero means unknown, and a resume then starts at the beginning rather than
+// seeking past the end of a short file.
+func recordingDuration(hub *live.Hub, rec store.Recording) float64 {
+	if rec.Duration > 0 {
+		return rec.Duration
+	}
+	if hub == nil || rec.Path == "" || hub.FFmpeg == "" {
+		return 0
+	}
+	tool := live.FFProbePath(hub.FFmpeg)
+	if tool == "" {
+		return 0
+	}
+	got, err := live.ProbeDuration(tool, rec.Path)
+	if err != nil || got <= 0 {
+		return 0
+	}
+	return got
+}
+
+// nullPackets is a short MPEG-TS of nothing. Gap segments are not encoded;
+// this answers a player that asks for one anyway.
+func nullPackets() []byte {
+	pkt := make([]byte, 188)
+	pkt[0] = 0x47
+	pkt[1] = 0x1F
+	pkt[2] = 0xFF
+	pkt[3] = 0x10
+	out := make([]byte, 0, len(pkt)*8)
+	for range 8 {
+		out = append(out, pkt...)
+	}
+	return out
 }
 
 func (s *Server) playbackChoice(ctx context.Context, channelID int64, requested string) (codec, mode, order string) {
@@ -561,7 +597,8 @@ func (s *Server) fileMedia(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if name != "index.m3u8" && name != "captions.vtt" && !(strings.HasPrefix(name, "seg") && strings.HasSuffix(name, ".ts")) {
+	gap := strings.HasPrefix(name, "gap") && strings.HasSuffix(name, ".ts")
+	if name != "index.m3u8" && name != "captions.vtt" && !gap && !(strings.HasPrefix(name, "seg") && strings.HasSuffix(name, ".ts")) {
 		http.NotFound(w, r)
 		return
 	}
@@ -571,6 +608,13 @@ func (s *Server) fileMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	path := filepath.Join(s.Hub.Dir, "file", id, filepath.Base(name))
 	switch {
+	case gap:
+		// The resume point is covered by gap segments the encode never wrote.
+		// A player that still asks for one gets empty transport packets, not a 404.
+		w.Header().Set("Content-Type", "video/mp2t")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		_, _ = w.Write(nullPackets())
+		return
 	case strings.HasSuffix(name, ".m3u8"):
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 		w.Header().Set("Cache-Control", "no-cache")
@@ -579,6 +623,7 @@ func (s *Server) fileMedia(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
+		body = live.OffsetPlaylist(body, live.FileOffset(filepath.Dir(path)))
 		if recID, err := strconv.ParseInt(id, 10, 64); err == nil && s.Store != nil {
 			if rec, err := s.Store.Recording(r.Context(), recID); err == nil {
 				body = stampRecordingPlaylist(body, rec.StartedAt)
@@ -616,6 +661,10 @@ func stampRecordingPlaylist(body []byte, start time.Time) []byte {
 	for _, line := range lines {
 		trim := strings.TrimSpace(line)
 		if strings.HasPrefix(trim, "#EXT-X-PROGRAM-DATE-TIME:") {
+			continue
+		}
+		if trim == "#EXT-X-GAP" {
+			pending = append(pending, line)
 			continue
 		}
 		if strings.HasPrefix(trim, "#EXTINF:") {

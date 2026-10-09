@@ -25,6 +25,9 @@ type Graph struct {
 	// FullRate keeps field rate on a 540p or 360p tile. Saver and background
 	// tiles stay at one frame per broadcast frame.
 	FullRate bool
+	// Start is an input seek, in seconds. A recording resume begins here so
+	// the encode does not play the file from the beginning.
+	Start float64
 }
 
 func NormalizeMode(mode string) string {
@@ -83,6 +86,11 @@ func PictureArgs(g Graph) []string {
 	}
 	if g.Input == "pipe:0" {
 		args = append(args, "-probesize", "2000000", "-analyzeduration", "1500000")
+	}
+	// Before -i, so ffmpeg seeks the file instead of decoding up to this point.
+	// A pipe has no index to seek.
+	if g.Start >= resumeMin && g.Input != "pipe:0" {
+		args = append(args, "-ss", strconv.FormatFloat(g.Start, 'f', 3, 64))
 	}
 	args = append(args, "-i", g.Input)
 	switch {
