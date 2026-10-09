@@ -1023,7 +1023,7 @@ paths:
                 required: [playlist, position, growing, markers]
                 properties:
                   playlist: { type: string }
-                  position: { type: number, description: "Resume position in seconds" }
+                  position: { type: number, description: "Where playback starts, in seconds. A saved spot in the first two seconds, past the known length, or on a recording whose length is unknown starts at the beginning." }
                   growing: { type: boolean, description: "True while the recording is still being written" }
                   markers:
                     type: array

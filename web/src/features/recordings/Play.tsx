@@ -9,6 +9,7 @@ import { episodeTag } from "../library/model";
 import { breakScans, idleBreakScan } from "./breaks";
 import { DownloadLink } from "./DownloadLink";
 import { introSkip, upNext } from "./ends";
+import { planRecordingSeek } from "./seek";
 
 type Marker = { id: number; start: number; end: number; confidence?: number };
 
@@ -47,6 +48,12 @@ export function Play({
   const saveTimer = useRef(0);
   // A resume seek that lands after the viewer has already moved would undo Start over.
   const viewerSought = useRef(false);
+  // Where this encode started. The playlist before that is gap, not the picture.
+  const encodedStart = useRef(0);
+  const relocate = useRef<(to: number) => void>(() => {});
+  const seekToRef = useRef<(value: number) => void>(() => {});
+  // The spot a reload is already fetching. Time updates must not start it again.
+  const relocating = useRef<number | null>(null);
   const scan = useSyncExternalStore(
     breakScans.subscribe,
     () => breakScans.get(recording.id),
@@ -70,15 +77,41 @@ export function Play({
     if (!video) return;
     viewerSought.current = false;
     let dead = false;
+    let gen = 0;
     let hls: Hls | null = null;
-    let resumeAt = 0;
-    let placed = false;
-    void (async () => {
+    let detach: (() => void) | null = null;
+    const track = document.createElement("track");
+    track.kind = "captions";
+    track.label = "Captions";
+    track.src = `/media/file/${recording.id}/captions.vtt`;
+    video.appendChild(track);
+
+    const start = async (at: number | null) => {
+      const mine = ++gen;
+      detach?.();
+      detach = null;
+      hls?.destroy();
+      hls = null;
+      if (at != null) {
+        whereRef.current = at;
+        try {
+          await saveProgress(recording.id, at);
+        } catch {
+          // Play still reads whatever progress was saved.
+        }
+        if (dead || mine !== gen) return;
+      } else {
+        relocating.current = null;
+      }
+      let resumeAt = 0;
+      let placed = false;
       try {
         const next = await playRecording(recording.id, pictureMode);
-        if (dead) return;
+        if (dead || mine !== gen) return;
+        setError("");
         setMarkers(next.markers);
         setGrowing(next.growing);
+        encodedStart.current = next.position;
         resumeAt = next.position;
         const started = performance.now();
         const place = () => {
@@ -102,27 +135,37 @@ export function Play({
           hls.attachMedia(video);
           hls.on(Hls.Events.MANIFEST_PARSED, place);
           hls.on(Hls.Events.ERROR, (_e, data) => {
-            if (data.fatal) setError(`${data.type}: ${data.details}`);
+            if (data.fatal && mine === gen) setError(`${data.type}: ${data.details}`);
           });
         } else {
           video.src = next.playlist;
           video.addEventListener("loadedmetadata", place);
         }
         video.addEventListener("progress", place);
-        const track = document.createElement("track");
-        track.kind = "captions";
-        track.label = "Captions";
-        track.src = `/media/file/${recording.id}/captions.vtt`;
-        video.appendChild(track);
+        detach = () => {
+          video.removeEventListener("progress", place);
+          video.removeEventListener("loadedmetadata", place);
+        };
         await video.play().catch(() => undefined);
+        if (dead || mine !== gen) return;
         place();
       } catch (err) {
-        if (!dead) setError(err instanceof Error ? err.message : "Playback did not start.");
+        if (mine === gen) relocating.current = null;
+        if (!dead && mine === gen) setError(err instanceof Error ? err.message : "Playback did not start.");
       }
-    })();
+    };
+
+    relocate.current = (to: number) => {
+      void start(to);
+    };
+    void start(null);
     return () => {
       dead = true;
+      gen += 1;
+      relocate.current = () => {};
+      detach?.();
       hls?.destroy();
+      track.remove();
       if (whereRef.current > 1) void saveProgress(recording.id, whereRef.current);
     };
   }, [recording.id, pictureMode]);
@@ -141,7 +184,7 @@ export function Play({
       }
       if (skipMode !== "auto") return;
       const hit = markerAt(markers, t);
-      if (hit && sure(hit)) video.currentTime = hit.end;
+      if (hit && sure(hit)) seekToRef.current(hit.end);
     };
     const ended = () => {
       if (autoplay && !dismissed) onNext();
@@ -176,15 +219,14 @@ export function Play({
     const now = Date.now();
     const inside = markerAt(markers, video.currentTime) ?? null;
     if (aheadBreak.current && now - aheadAt.current < 1200) {
-      video.currentTime = aheadBreak.current.end;
+      seekTo(aheadBreak.current.end);
       aheadBreak.current = null;
       aheadAt.current = 0;
       return;
     }
     aheadBreak.current = inside;
     aheadAt.current = now;
-    const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : video.duration || video.currentTime + 30;
-    video.currentTime = Math.min(end, video.currentTime + 30);
+    seekTo(video.currentTime + 30);
   }
 
   async function markHere() {
@@ -207,9 +249,31 @@ export function Play({
     setMarkers((prev) => prev.filter((marker) => marker.id !== id));
   }
 
+  function seekTo(value: number) {
+    const video = videoRef.current;
+    if (!video) return;
+    const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : 0;
+    const plan = planRecordingSeek(value, encodedStart.current, end);
+    if (plan.action === "within") {
+      relocating.current = null;
+      video.currentTime = plan.to;
+      whereRef.current = plan.to;
+      return;
+    }
+    if (relocating.current != null && Math.abs(relocating.current - plan.to) < 0.5) return;
+    relocating.current = plan.to;
+    relocate.current(plan.to);
+  }
+  seekToRef.current = seekTo;
+
   async function startOver() {
     sought();
     const video = videoRef.current;
+    const end = video && video.seekable.length ? video.seekable.end(video.seekable.length - 1) : 0;
+    if (planRecordingSeek(0, encodedStart.current, end).action === "reload") {
+      relocate.current(0);
+      return;
+    }
     if (video) {
       video.pause();
       video.currentTime = 0;
@@ -228,7 +292,8 @@ export function Play({
   function back(seconds: number) {
     sought();
     const video = videoRef.current;
-    if (video) video.currentTime = Math.max(0, video.currentTime - seconds);
+    if (!video) return;
+    seekTo(Math.max(0, video.currentTime - seconds));
   }
 
   function onKey(event: KeyboardEvent) {
@@ -281,10 +346,7 @@ export function Play({
       onKeyDown={onKey}
       onSeek={(value) => {
         sought();
-        const video = videoRef.current;
-        if (!video) return;
-        const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : value;
-        video.currentTime = Math.min(value, end);
+        seekTo(value);
       }}
       markers={markers}
       onJump={(delta) => {
@@ -307,7 +369,7 @@ export function Play({
       hold={Boolean(card)}
       tools={
         inside && (skipMode === "button" || (skipMode === "auto" && !sure(inside))) ? (
-          <button type="button" className="text-btn on" onClick={() => { if (videoRef.current) videoRef.current.currentTime = inside.end; }}>
+          <button type="button" className="text-btn on" onClick={() => { sought(); seekTo(inside.end); }}>
             Skip break
           </button>
         ) : introEnd !== null ? (
@@ -316,10 +378,7 @@ export function Play({
             className="text-btn on"
             onClick={() => {
               sought();
-              const video = videoRef.current;
-              if (!video) return;
-              const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : introEnd;
-              video.currentTime = Math.min(introEnd, end);
+              seekTo(introEnd);
             }}
           >
             Skip intro

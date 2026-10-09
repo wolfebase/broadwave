@@ -52,6 +52,9 @@ func TestARecordingPlayedLaterKeepsItsBroadcastDates(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(playDir, "index.m3u8"), []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(playDir, "seg00000.ts"), []byte("segment"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	h := (&Server{Store: st, Hub: &live.Hub{Dir: dir}}).Handler()
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/media/file/"+strconv.FormatInt(id, 10)+"/index.m3u8", nil))
@@ -97,13 +100,16 @@ func TestAGrowingRecordingPlaylistIsOneAVPlayerCanOpen(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(playDir, "index.m3u8"), []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(playDir, "seg00000.ts"), []byte("segment"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	h := (&Server{Store: st, Hub: &live.Hub{Dir: dir}}).Handler()
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/media/file/"+strconv.FormatInt(id, 10)+"/index.m3u8", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatal(rec.Code, rec.Body.String())
 	}
-	if issues := live.CheckRecordingPlaylist(rec.Body.Bytes(), ""); len(issues) != 0 {
+	if issues := live.CheckRecordingPlaylist(rec.Body.Bytes(), playDir); len(issues) != 0 {
 		t.Fatalf("%v\n%s", issues, rec.Body.String())
 	}
 }
@@ -130,6 +136,11 @@ func TestResumePlaylistKeepsTheRecordingClock(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(playDir, "offset.txt"), []byte("4.000\n"), 0o644); err != nil {
 		t.Fatal(err)
+	}
+	for _, name := range []string{"seg00000.ts", "seg00001.ts"} {
+		if err := os.WriteFile(filepath.Join(playDir, name), []byte("segment"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	h := (&Server{Store: st, Hub: &live.Hub{Dir: dir}}).Handler()
 	rec := httptest.NewRecorder()
@@ -162,5 +173,58 @@ func TestResumePlaylistKeepsTheRecordingClock(t *testing.T) {
 	}
 	if gap.Body.Len() < 188 {
 		t.Fatalf("gap body %d", gap.Body.Len())
+	}
+}
+
+func TestAPlaylistDoesNotNameAMissingSegment(t *testing.T) {
+	dir := t.TempDir()
+	play := filepath.Join(dir, "file", "3")
+	if err := os.MkdirAll(play, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:EVENT\n" +
+		"#EXTINF:2.000,\nseg00000.ts\n"
+	if err := os.WriteFile(filepath.Join(play, "index.m3u8"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	prev := recordingSegmentWait
+	recordingSegmentWait = 40 * time.Millisecond
+	t.Cleanup(func() { recordingSegmentWait = prev })
+	h := (&Server{Hub: &live.Hub{Dir: dir}}).Handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/media/file/3/index.m3u8", nil))
+	if rec.Code == http.StatusNotFound {
+		t.Fatal("missing segment 404ed the playlist")
+	}
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "seg00000") {
+		t.Fatalf("named the missing segment: %s", rec.Body.String())
+	}
+}
+
+func TestASegmentThatIsStillOpeningDoesNot404(t *testing.T) {
+	dir := t.TempDir()
+	play := filepath.Join(dir, "file", "3")
+	if err := os.MkdirAll(play, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(play, "seg00000.ts")
+	go func() {
+		time.Sleep(120 * time.Millisecond)
+		_ = os.WriteFile(path, []byte("segment"), 0o644)
+	}()
+	h := (&Server{Hub: &live.Hub{Dir: dir}}).Handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/media/file/3/seg00000.ts", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	if rec.Body.String() != "segment" {
+		t.Fatalf("body %q", rec.Body.String())
+	}
+	if rec.Header().Get("Cache-Control") != "no-cache" {
+		t.Fatalf("cache %q", rec.Header().Get("Cache-Control"))
 	}
 }

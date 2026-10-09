@@ -44,13 +44,11 @@ func (s *Server) playRecording(w http.ResponseWriter, r *http.Request) {
 	codec, mode, order := s.playbackChoice(r.Context(), rec.ChannelID, body.Picture)
 	position, _ := s.Store.Progress(r.Context(), id)
 	var playlist string
+	var at float64
 	if rec.Status == "recording" {
-		if rec.Duration <= 0 && !rec.StartedAt.IsZero() {
-			if elapsed := time.Since(rec.StartedAt).Seconds(); elapsed > 0 {
-				rec.Duration = elapsed
-			}
-		}
-		playlist, err = s.Hub.PlayFollow(id, rec.Path, codec, mode, order, live.ResumeAt(position, rec.Duration), func() bool {
+		rec.Duration = mediaSoFar(rec.Path, rec, time.Now())
+		at = live.ResumeAt(position, rec.Duration)
+		playlist, err = s.Hub.PlayFollow(id, rec.Path, codec, mode, order, at, func() bool {
 			cur, curErr := s.Store.Recording(context.Background(), id)
 			return curErr == nil && cur.Status == "recording"
 		})
@@ -64,7 +62,8 @@ func (s *Server) playRecording(w http.ResponseWriter, r *http.Request) {
 				_ = s.Store.SetDuration(r.Context(), id, dur)
 			}
 		}
-		playlist, err = s.Hub.PlayFile(id, rec.Path, codec, mode, order, live.ResumeAt(position, rec.Duration))
+		at = live.ResumeAt(position, rec.Duration)
+		playlist, err = s.Hub.PlayFile(id, rec.Path, codec, mode, order, at)
 	}
 	if err != nil {
 		writeError(w, err)
@@ -78,8 +77,10 @@ func (s *Server) playRecording(w http.ResponseWriter, r *http.Request) {
 		"playlist":  playlist,
 		"recording": rec,
 		"markers":   markers,
-		"position":  position,
-		"growing":   rec.Status == "recording",
+		// Where the encode actually started. A saved spot past the end, or
+		// inside the first two seconds, plays from the beginning.
+		"position": at,
+		"growing":  rec.Status == "recording",
 	})
 }
 
@@ -480,6 +481,22 @@ func (s *Server) storage(w http.ResponseWriter, r *http.Request) {
 // recordingDuration is the file's length in seconds. A stored length wins.
 // Zero means unknown, and a resume then starts at the beginning rather than
 // seeking past the end of a short file.
+// mediaSoFar is how much of a recording still being written can be played.
+// The PCR span is that length. A planned duration stored on the row is the
+// slot, not the bytes on disk, so a resume must not seek past the span.
+// Until a PCR exists, the time since the recording started is the length.
+func mediaSoFar(path string, rec store.Recording, now time.Time) float64 {
+	if path != "" {
+		if written := live.MediaWritten(path, rec.StartedAt, now); written > 0 {
+			return written
+		}
+	}
+	if !rec.StartedAt.IsZero() && now.After(rec.StartedAt) {
+		return now.Sub(rec.StartedAt).Seconds()
+	}
+	return 0
+}
+
 func recordingDuration(hub *live.Hub, rec store.Recording) float64 {
 	if rec.Duration > 0 {
 		return rec.Duration
@@ -630,22 +647,28 @@ func (s *Server) fileMedia(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(nullPackets())
 		return
 	case strings.HasSuffix(name, ".m3u8"):
-		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-		w.Header().Set("Cache-Control", "no-cache")
 		body, err := os.ReadFile(path)
 		if err != nil {
 			http.NotFound(w, r)
 			return
 		}
 		dir := filepath.Dir(path)
-		body = live.OffsetPlaylist(body, live.FileOffset(dir))
-		if recID, err := strconv.ParseInt(id, 10, 64); err == nil && s.Store != nil {
-			if rec, err := s.Store.Recording(r.Context(), recID); err == nil {
-				body = stampRecordingPlaylist(body, rec.StartedAt)
+		served := s.recordingPlaylist(r, id, dir, body)
+		if len(served) == 0 && waitForSegment(dir, recordingSegmentWait) {
+			if again, err := os.ReadFile(path); err == nil {
+				served = s.recordingPlaylist(r, id, dir, again)
 			}
 		}
-		body = s.Hub.StableRecordingPlaylist(dir, body)
-		_, _ = w.Write(body)
+		if len(served) == 0 {
+			// Not a playlist that names a file the encode has not written.
+			// A 404 here makes the player give up on the item.
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		w.Header().Set("Cache-Control", "no-cache")
+		_, _ = w.Write(served)
 		return
 	case strings.HasSuffix(name, ".vtt"):
 		w.Header().Set("Content-Type", "text/vtt")
@@ -653,8 +676,65 @@ func (s *Server) fileMedia(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(name, "seg") && strings.HasSuffix(name, ".ts") {
 		// A new resume replaces seg00000. A cached copy would be the previous picture.
 		w.Header().Set("Cache-Control", "no-cache")
+		// ffmpeg publishes the playlist line before the file is visible.
+		if !waitForFile(path, recordingSegmentWait) {
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
 	}
 	http.ServeFile(w, r, path)
+}
+
+// recordingSegmentWait is how long a player request waits for a segment the
+// encode has already named. Longer than this, the segment is not coming.
+var recordingSegmentWait = time.Second
+
+func (s *Server) recordingPlaylist(r *http.Request, id, dir string, body []byte) []byte {
+	body = live.OffsetPlaylist(body, live.FileOffset(dir))
+	if recID, err := strconv.ParseInt(id, 10, 64); err == nil && s.Store != nil {
+		if rec, err := s.Store.Recording(r.Context(), recID); err == nil {
+			body = stampRecordingPlaylist(body, rec.StartedAt)
+		}
+	}
+	return s.Hub.StableRecordingPlaylist(dir, body)
+}
+
+func waitForSegment(dir string, timeout time.Duration) bool {
+	return waitUntil(timeout, func() bool {
+		matches, err := filepath.Glob(filepath.Join(dir, "seg*.ts"))
+		if err != nil {
+			return false
+		}
+		for _, name := range matches {
+			if fileReady(name) {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+func waitForFile(path string, timeout time.Duration) bool {
+	return waitUntil(timeout, func() bool { return fileReady(path) })
+}
+
+func fileReady(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular() && info.Size() > 0
+}
+
+func waitUntil(timeout time.Duration, ready func() bool) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if ready() {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(40 * time.Millisecond)
+	}
 }
 
 // stampRecordingPlaylist sets EXT-X-PROGRAM-DATE-TIME from the recording's

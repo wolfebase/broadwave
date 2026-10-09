@@ -13,10 +13,10 @@ import (
 // recordingTargetFloor is the target duration a recording playlist advertises
 // from the first segment. Field-rate pictures run 2.002s, over a target of 2,
 // and Apple requires every EXTINF to be at most the target duration. A late
-// keyframe makes one segment near 4s. AVPlayer drops the item when a reload
+// keyframe is 240 frames, 4.004s. AVPlayer drops the item when a reload
 // changes the target (CoreMedia -12642), so the first response is already
-// large enough to keep.
-const recordingTargetFloor = 4
+// large enough to keep that segment.
+const recordingTargetFloor = 5
 
 // PlaylistIssue is one HLS rule AVPlayer enforces on a recording playlist.
 // A playlist that still has one of these fails the item instead of playing.
@@ -147,16 +147,14 @@ func (h *Hub) StableRecordingPlaylist(dir string, raw []byte) []byte {
 	if h.fileList != nil {
 		prev = h.fileList[dir]
 	}
-	use := ""
-	if recordingSegmentsExist(dir) {
-		use = dir
-	}
-	next := RepairRecordingPlaylist(raw, prev, use)
+	// Always the encode's directory. An empty one used to skip the file check,
+	// and the raw playlist then named a segment that 404ed.
+	next := RepairRecordingPlaylist(raw, prev, dir)
 	if len(next) == 0 {
 		if len(prev) > 0 {
 			return append([]byte(nil), prev...)
 		}
-		return raw
+		return nil
 	}
 	if h.fileList == nil {
 		h.fileList = map[string][]byte{}
@@ -229,7 +227,7 @@ func (pl mediaPlaylist) issues(dir string) []PlaylistIssue {
 			out = append(out, PlaylistIssue{Rule: "uri", Detail: "duplicate " + s.uri})
 		}
 		seen[s.uri] = true
-		if pl.target >= 1 && s.dur > float64(pl.target)+1e-3 {
+		if extinfExceeds(s.dur, pl.target) {
 			out = append(out, PlaylistIssue{Rule: "extinf", Detail: fmt.Sprintf("%.3f exceeds target %d", s.dur, pl.target)})
 		}
 		if s.pdt != "" && !rfc3339Date(s.pdt) {
@@ -280,9 +278,13 @@ func normalizeRecording(pl mediaPlaylist, dir string, hold int) (mediaPlaylist, 
 			pl.ended = false
 			break
 		}
-		if limit > 0 && s.dur > float64(limit)+1e-3 {
-			pl.ended = false
-			break
+		if limit > 0 && extinfExceeds(s.dur, limit) {
+			if shown, ok := fitExtinf(s.dur, limit); ok {
+				s.dur = shown
+			} else {
+				pl.ended = false
+				break
+			}
 		}
 		s.pdt = canonicalDate(s.pdt)
 		segs = append(segs, s)
@@ -294,6 +296,9 @@ func normalizeRecording(pl mediaPlaylist, dir string, hold int) (mediaPlaylist, 
 		if gapURI(segs[i-1].uri) && !gapURI(segs[i].uri) {
 			segs[i].discont = true
 		}
+	}
+	if !hasRealSegment(segs) {
+		return mediaPlaylist{}, false
 	}
 	pl.segs = segs
 	if hold > 0 {
@@ -330,6 +335,8 @@ func mergeRecording(prev, cur mediaPlaylist, dir string) (mediaPlaylist, bool) {
 	for _, s := range prev.segs {
 		seen[s.uri] = true
 	}
+	// A segment replaced by gaps is covered. The end list can still close.
+	replaced := map[string]bool{}
 	for _, s := range cur.segs {
 		if seen[s.uri] {
 			continue
@@ -340,8 +347,20 @@ func mergeRecording(prev, cur mediaPlaylist, dir string) (mediaPlaylist, bool) {
 		if dir != "" && !gapURI(s.uri) && !segmentReady(dir, s.uri) {
 			break
 		}
-		if s.dur > float64(out.target)+1e-3 {
-			break
+		if extinfExceeds(s.dur, out.target) {
+			if shown, ok := fitExtinf(s.dur, out.target); ok {
+				s.dur = shown
+			} else {
+				for _, g := range gapCover(s.uri, s.dur, out.target, canonicalDate(s.pdt)) {
+					if seen[g.uri] {
+						continue
+					}
+					out.segs = append(out.segs, g)
+					seen[g.uri] = true
+				}
+				replaced[s.uri] = true
+				continue
+			}
 		}
 		s.pdt = canonicalDate(s.pdt)
 		if n := len(out.segs); n > 0 && gapURI(out.segs[n-1].uri) && !gapURI(s.uri) {
@@ -360,7 +379,7 @@ func mergeRecording(prev, cur mediaPlaylist, dir string) (mediaPlaylist, bool) {
 		}
 		all := true
 		for _, s := range cur.segs {
-			if !have[s.uri] {
+			if !have[s.uri] && !replaced[s.uri] {
 				all = false
 				break
 			}
@@ -368,7 +387,19 @@ func mergeRecording(prev, cur mediaPlaylist, dir string) (mediaPlaylist, bool) {
 		out.ended = all
 	}
 	out.version = neededVersion(out)
-	return out, len(out.segs) > 0
+	if !hasRealSegment(out.segs) {
+		return mediaPlaylist{}, false
+	}
+	return out, true
+}
+
+func hasRealSegment(segs []mediaSeg) bool {
+	for _, s := range segs {
+		if s.uri != "" && !s.gap && !gapURI(s.uri) {
+			return true
+		}
+	}
+	return false
 }
 
 func fitTarget(segs []mediaSeg) int {
@@ -557,6 +588,61 @@ func gapURI(uri string) bool {
 	return strings.HasPrefix(base, "gap") && strings.HasSuffix(strings.ToLower(base), ".ts")
 }
 
+// extinfExceeds reports a duration that would be printed longer than the
+// target. The playlist writes three decimal places, so 5.0006 is 5.001.
+func extinfExceeds(dur float64, target int) bool {
+	if target < 1 || dur <= 0 {
+		return false
+	}
+	shown := math.Round(dur*1000) / 1000
+	return shown > float64(target)
+}
+
+// fitExtinf keeps a segment whose printed duration is only a hair past the
+// target, by advertising the target. A longer segment cannot be clamped:
+// the player would stall inside it. False means the caller covers the span
+// with gaps instead.
+func fitExtinf(dur float64, target int) (float64, bool) {
+	if !extinfExceeds(dur, target) {
+		return dur, true
+	}
+	if dur <= float64(target)+0.05 {
+		return float64(target), true
+	}
+	return 0, false
+}
+
+// gapCover stands in for one segment the frozen target cannot hold. The
+// pieces use the gap prefix, so the file handler answers them without a
+// file, and the later segments stay on the playlist.
+func gapCover(uri string, dur float64, target int, pdt string) []mediaSeg {
+	if target < 1 {
+		target = recordingTargetFloor
+	}
+	piece := float64(target)
+	base := strings.TrimSuffix(filepath.Base(strings.SplitN(uri, "?", 2)[0]), filepath.Ext(uri))
+	if base == "" || base == "." || base == ".." {
+		base = "long"
+	}
+	var out []mediaSeg
+	left := dur
+	for n := 0; left > 0.0005 && n < 20000; n++ {
+		d := piece
+		if left < piece {
+			d = left
+		}
+		out = append(out, mediaSeg{
+			uri: fmt.Sprintf("gap%s%02d.ts", base, n),
+			dur: d,
+			gap: true,
+			pdt: pdt,
+		})
+		pdt = ""
+		left -= d
+	}
+	return out
+}
+
 func segmentReady(dir, uri string) bool {
 	base := filepath.Base(strings.SplitN(uri, "?", 2)[0])
 	if base == "." || base == ".." {
@@ -564,20 +650,6 @@ func segmentReady(dir, uri string) bool {
 	}
 	info, err := os.Stat(filepath.Join(dir, base))
 	return err == nil && info.Mode().IsRegular() && info.Size() > 0
-}
-
-func recordingSegmentsExist(dir string) bool {
-	matches, err := filepath.Glob(filepath.Join(dir, "seg*.ts"))
-	if err != nil {
-		return false
-	}
-	for _, name := range matches {
-		info, err := os.Stat(name)
-		if err == nil && info.Size() > 0 {
-			return true
-		}
-	}
-	return false
 }
 
 func rfc3339Date(value string) bool {

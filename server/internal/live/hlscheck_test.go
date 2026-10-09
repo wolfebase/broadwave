@@ -34,7 +34,7 @@ func TestGrowingRecordingPlaylistBreaksAVPlayerRules(t *testing.T) {
 	if strings.Contains(text, "#EXT-X-DISCONTINUITY") {
 		t.Fatalf("leading discontinuity stayed:\n%s", text)
 	}
-	if !strings.Contains(text, "#EXT-X-TARGETDURATION:4\n") {
+	if !strings.Contains(text, "#EXT-X-TARGETDURATION:5\n") {
 		t.Fatalf("target: %s", text)
 	}
 	if !strings.Contains(text, "#EXT-X-PROGRAM-DATE-TIME:2026-10-09T20:26:10.119Z\n#EXTINF:2.002,\nseg00000.ts\n") {
@@ -45,7 +45,15 @@ func TestGrowingRecordingPlaylistBreaksAVPlayerRules(t *testing.T) {
 func TestAReloadKeepsTheTargetAndTheDiscontinuityCount(t *testing.T) {
 	h := &Hub{}
 	dir := t.TempDir()
+	for _, name := range []string{"seg00000.ts", "seg00001.ts"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("segment"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	first := h.StableRecordingPlaylist(dir, []byte(growingRecordingPlaylist))
+	if len(first) == 0 {
+		t.Fatal("empty playlist")
+	}
 	// A rewrite can change the first segment's duration and the target, and
 	// a later segment arrives. The player has already accepted the first body.
 	second := strings.Replace(growingRecordingPlaylist, "#EXT-X-TARGETDURATION:2\n", "#EXT-X-TARGETDURATION:3\n", 1)
@@ -91,6 +99,17 @@ func TestRecordingPlaylistMapRules(t *testing.T) {
 	}
 }
 
+func TestAPlaylistThatNamesNothingOnDiskIsNotServed(t *testing.T) {
+	dir := t.TempDir()
+	if got := RepairRecordingPlaylist([]byte(growingRecordingPlaylist), nil, dir); got != nil {
+		t.Fatalf("named a missing file:\n%s", got)
+	}
+	h := &Hub{}
+	if body := h.StableRecordingPlaylist(dir, []byte(growingRecordingPlaylist)); body != nil {
+		t.Fatalf("raw playlist served:\n%s", body)
+	}
+}
+
 func TestAMissingSegmentIsNotListed(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "seg00000.ts"), []byte("segment"), 0o644); err != nil {
@@ -127,6 +146,69 @@ func TestGapSegmentsNeedADiscontinuityBeforeThePicture(t *testing.T) {
 	}
 	if strings.HasPrefix(strings.TrimPrefix(got, "#EXTM3U\n"), "#EXT-X-DISCONTINUITY") {
 		t.Fatalf("discontinuity leads:\n%s", got)
+	}
+}
+
+func TestALateKeyframeStillJoinsThePlaylist(t *testing.T) {
+	h := &Hub{}
+	dir := t.TempDir()
+	for _, name := range []string{"seg00000.ts", "seg00001.ts"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("segment"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first := "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:EVENT\n" +
+		"#EXTINF:2.000,\nseg00000.ts\n"
+	opened := h.StableRecordingPlaylist(dir, []byte(first))
+	if !strings.Contains(string(opened), "#EXT-X-TARGETDURATION:5\n") {
+		t.Fatalf("target:\n%s", opened)
+	}
+	// 240 frames at 60000/1001 is 4.004s. A target frozen at 4 drops it.
+	next := h.StableRecordingPlaylist(dir, []byte(first+"#EXTINF:4.004,\nseg00001.ts\n"))
+	if !strings.Contains(string(next), "seg00001.ts") || !strings.Contains(string(next), "4.004") {
+		t.Fatalf("late keyframe dropped:\n%s", next)
+	}
+	if issues := CheckRecordingUpdate(opened, next); len(issues) != 0 {
+		t.Fatalf("%v\n%s", issues, next)
+	}
+}
+
+func TestASegmentLongerThanTheTargetDoesNotHideTheRest(t *testing.T) {
+	h := &Hub{}
+	dir := t.TempDir()
+	for _, name := range []string{"seg00000.ts", "seg00001.ts", "seg00002.ts"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("segment"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first := "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:EVENT\n" +
+		"#EXTINF:2.000,\nseg00000.ts\n"
+	if len(h.StableRecordingPlaylist(dir, []byte(first))) == 0 {
+		t.Fatal("empty playlist")
+	}
+	raw := first + "#EXTINF:30.000,\nseg00001.ts\n#EXTINF:2.000,\nseg00002.ts\n#EXT-X-ENDLIST\n"
+	next := h.StableRecordingPlaylist(dir, []byte(raw))
+	text := string(next)
+	if strings.Contains(text, "seg00001.ts") || !strings.Contains(text, "seg00002.ts") {
+		t.Fatalf("playlist:\n%s", text)
+	}
+	if !strings.Contains(text, "#EXT-X-TARGETDURATION:5\n") || !strings.Contains(text, "#EXT-X-ENDLIST\n") {
+		t.Fatalf("playlist:\n%s", text)
+	}
+	if issues := CheckRecordingPlaylist(next, dir); len(issues) != 0 {
+		t.Fatalf("%v\n%s", issues, text)
+	}
+	again := h.StableRecordingPlaylist(dir, []byte(raw))
+	if issues := CheckRecordingUpdate(next, again); len(issues) != 0 {
+		t.Fatalf("%v\n%s", issues, again)
+	}
+}
+
+func TestADurationThatRoundsPastTheTargetIsRejected(t *testing.T) {
+	raw := "#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:5\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:EVENT\n" +
+		"#EXTINF:5.0006,\nseg00000.ts\n"
+	if !hasIssue(CheckRecordingPlaylist([]byte(raw), ""), "extinf") {
+		t.Fatal("5.001 was allowed under a target of 5")
 	}
 }
 

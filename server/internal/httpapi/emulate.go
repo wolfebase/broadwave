@@ -213,7 +213,11 @@ func (h *emuHandler) streamVirtual(w http.ResponseWriter, r *http.Request, numbe
 		return
 	}
 	if rec.Status == "recording" {
-		h.followVirtual(w, r, ffmpeg, path, rec.ID)
+		// The schedule point can sit past the bytes written so far. -ss there
+		// makes ffmpeg exit with an empty response, so the copy starts at the
+		// later of the schedule and the media that is actually on disk.
+		written := live.MediaWritten(path, rec.StartedAt, now)
+		h.followVirtual(w, r, ffmpeg, path, rec.ID, live.ExportResume(offset, written, true))
 		return
 	}
 	playable := rec.Duration
@@ -223,7 +227,7 @@ func (h *emuHandler) streamVirtual(w http.ResponseWriter, r *http.Request, numbe
 	if playable < 0 {
 		playable = 0
 	}
-	at := live.ResumeAt(offset, playable)
+	at := live.ExportResume(offset, playable, false)
 	args := []string{"-hide_banner", "-loglevel", "error"}
 	if at > 0 {
 		args = append(args, "-ss", strconv.FormatFloat(at, 'f', 3, 64))
@@ -234,10 +238,11 @@ func (h *emuHandler) streamVirtual(w http.ResponseWriter, r *http.Request, numbe
 	_ = cmd.Run()
 }
 
-// followVirtual copies a recording that is still being written. The schedule
-// point is not a seek: the file's clock starts at the first byte, and -ss on
-// a short file would make ffmpeg exit with an empty response.
-func (h *emuHandler) followVirtual(w http.ResponseWriter, r *http.Request, ffmpeg, path string, id int64) {
+// followVirtual copies a recording that is still being written, starting at
+// seconds into its clock. The pipe cannot be seeked, so the bytes before
+// that point are dropped. A point past the end of what has been written is
+// not passed here: ffmpeg would exit before sending a packet.
+func (h *emuHandler) followVirtual(w http.ResponseWriter, r *http.Request, ffmpeg, path string, id int64, at float64) {
 	cmd := exec.CommandContext(r.Context(), ffmpeg, "-hide_banner", "-loglevel", "error", "-re", "-i", "pipe:0", "-c", "copy", "-f", "mpegts", "pipe:1")
 	cmd.Stdout = flushWriter{w}
 	stdin, err := cmd.StdinPipe()
@@ -248,13 +253,13 @@ func (h *emuHandler) followVirtual(w http.ResponseWriter, r *http.Request, ffmpe
 		_ = stdin.Close()
 		return
 	}
-	go live.FollowFile(path, stdin, func() bool {
+	go live.FollowFileAt(path, stdin, func() bool {
 		if r.Context().Err() != nil {
 			return false
 		}
 		cur, err := h.store.Recording(context.Background(), id)
 		return err == nil && cur.Status == "recording"
-	})
+	}, at)
 	_ = cmd.Wait()
 }
 

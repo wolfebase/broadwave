@@ -3305,7 +3305,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         playlist: string;
-                        /** @description Resume position in seconds */
+                        /** @description Where playback starts, in seconds. A saved spot in the first two seconds, past the known length, or on a recording whose length is unknown starts at the beginning. */
                         position: number;
                         /** @description True while the recording is still being written */
                         growing: boolean;
