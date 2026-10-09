@@ -89,7 +89,7 @@ func laterAiring(items []Planned, skipped Planned, pass store.Pass, passes []sto
 		if !air.Start.After(skipped.Airing.Start) || !strings.EqualFold(strings.TrimSpace(air.Title), strings.TrimSpace(skipped.Airing.Title)) {
 			continue
 		}
-		if !rulesMatch(pass, air) || librarySkip(items, air) || !fitsBeside(items, air, tunerCount) {
+		if !rulesMatch(pass, air) || librarySkip(items, air) || !fitsBeside(items, air, pass.PadBefore, pass.PadAfter, tunerCount) {
 			continue
 		}
 		if !found || air.Start.Before(best.Start) || (air.Start.Equal(best.Start) && air.ChannelID < best.ChannelID) {
@@ -125,7 +125,7 @@ func librarySkip(items []Planned, air store.Airing) bool {
 	return false
 }
 
-func fitsBeside(items []Planned, air store.Airing, tunerCount int) bool {
+func fitsBeside(items []Planned, air store.Airing, padBefore, padAfter, tunerCount int) bool {
 	for _, item := range items {
 		if !item.Skipped && sameShowing(item.Airing, air) {
 			return true
@@ -136,9 +136,14 @@ func fitsBeside(items []Planned, air store.Airing, tunerCount int) bool {
 		if item.Skipped || sameShowing(item.Airing, air) {
 			continue
 		}
-		spans = append(spans, span{start: item.Airing.Start, end: item.Airing.End, channel: item.Airing.ChannelID})
+		start, end := paddedSpan(item)
+		spans = append(spans, span{start: start, end: end, channel: item.Airing.ChannelID})
 	}
-	spans = append(spans, span{start: air.Start, end: air.End, channel: air.ChannelID})
+	spans = append(spans, span{
+		start:   air.Start.Add(-time.Duration(padBefore) * time.Minute),
+		end:     air.End.Add(time.Duration(padAfter) * time.Minute),
+		channel: air.ChannelID,
+	})
 	return !overflows(spans, tunerCount)
 }
 

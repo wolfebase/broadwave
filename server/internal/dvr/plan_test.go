@@ -84,6 +84,47 @@ func TestPlanKeepsHigherPriority(t *testing.T) {
 	}
 }
 
+func TestPaddingOverlapTakesTheTuner(t *testing.T) {
+	start := time.Date(2026, 10, 9, 20, 0, 0, 0, time.UTC)
+	passes := []store.Pass{
+		{ID: 1, Title: "Early", ChannelID: 1, Priority: 2, PadAfter: 10},
+		{ID: 2, Title: "Late", ChannelID: 2, Priority: 1, PadBefore: 5},
+	}
+	airings := []store.Airing{
+		{ID: 1, ChannelID: 1, Title: "Early", Start: start, End: start.Add(time.Hour)},
+		{ID: 2, ChannelID: 2, Title: "Late", Start: start.Add(time.Hour), End: start.Add(2 * time.Hour)},
+	}
+	window := []time.Time{start.Add(-time.Hour), start.Add(3 * time.Hour)}
+	got := Plan(passes, airings, 1, window[0], window[1])
+	skipped := map[int64]bool{}
+	for _, item := range got {
+		skipped[item.Airing.ID] = item.Skipped
+	}
+	if len(got) != 2 || skipped[1] || !skipped[2] {
+		t.Fatalf("the pad after Early runs into Late, so the lower priority waits: %+v", got)
+	}
+
+	same := []store.Airing{
+		airings[0],
+		{ID: 2, ChannelID: 1, Title: "Late", Start: airings[1].Start, End: airings[1].End},
+	}
+	for _, item := range Plan(passes, same, 1, window[0], window[1]) {
+		if item.Skipped {
+			t.Fatalf("padding on one channel still uses one tuner: %+v", item)
+		}
+	}
+
+	tight := []store.Pass{
+		{ID: 1, Title: "Early", ChannelID: 1, Priority: 2},
+		{ID: 2, Title: "Late", ChannelID: 2, Priority: 1},
+	}
+	for _, item := range Plan(tight, airings, 1, window[0], window[1]) {
+		if item.Skipped {
+			t.Fatalf("back to back with no pad should both record: %+v", item)
+		}
+	}
+}
+
 func TestOncePassRecordsOnlyItsAiring(t *testing.T) {
 	start := time.Date(2026, 9, 28, 16, 0, 0, 0, time.UTC)
 	passes := []store.Pass{{ID: 1, Title: "Jeopardy", ChannelID: 3, Kind: "once", AiringStart: start}}

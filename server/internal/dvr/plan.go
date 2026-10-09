@@ -25,6 +25,7 @@ type Planned struct {
 
 // Plan matches passes to airings and marks any span where more channels overlap than the tuner count.
 // Two shows on the same channel count as one tuner. A show that ends as the next begins does not overlap.
+// Padding is part of the span: the tuner is held from the pad before the listing until the pad after it.
 // Plan does not move a pass onto another channel. A skipped airing stays skipped.
 // A later airing is named by AttachSuggestions, and only a title pass whose channel pin is the only mismatch moves that pin.
 func Plan(passes []store.Pass, airings []store.Airing, tunerCount int, from, to time.Time) []Planned {
@@ -195,8 +196,9 @@ func resolvePriority(items []Planned, tunerCount int) {
 	}
 	events := make([]event, 0, len(items)*2)
 	for i, item := range items {
-		events = append(events, event{at: item.Airing.Start, index: i, start: true})
-		events = append(events, event{at: item.Airing.End, index: i, start: false})
+		start, end := paddedSpan(item)
+		events = append(events, event{at: start, index: i, start: true})
+		events = append(events, event{at: end, index: i, start: false})
 	}
 	sort.SliceStable(events, func(i, j int) bool {
 		if events[i].at.Equal(events[j].at) && events[i].start != events[j].start {
@@ -241,6 +243,14 @@ func losesTo(a, b Planned) bool {
 		return a.Airing.Start.After(b.Airing.Start)
 	}
 	return a.Airing.ID > b.Airing.ID
+}
+
+// paddedSpan is how long a recording holds its tuner: the listing, plus the
+// pass's pad before the start and after the end.
+func paddedSpan(item Planned) (time.Time, time.Time) {
+	start := item.Airing.Start.Add(-time.Duration(item.PadBefore) * time.Minute)
+	end := item.Airing.End.Add(time.Duration(item.PadAfter) * time.Minute)
+	return start, end
 }
 
 func uniqueChannels(active map[int]int64) int {

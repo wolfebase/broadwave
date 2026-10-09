@@ -65,6 +65,27 @@ func TestLaterAiringThatStillConflictsIsNotSuggested(t *testing.T) {
 	}
 }
 
+func TestASuggestionInsideThePadIsNotOffered(t *testing.T) {
+	start := time.Date(2026, 10, 9, 20, 0, 0, 0, time.UTC)
+	passes := []store.Pass{
+		{ID: 1, Title: "News", ChannelID: 1, Priority: 1, PadBefore: 10},
+		{ID: 2, Title: "Game", ChannelID: 2, Priority: 5},
+	}
+	airings := []store.Airing{
+		{ID: 1, ChannelID: 1, Title: "News", Start: start, End: start.Add(time.Hour)},
+		{ID: 2, ChannelID: 2, Title: "Game", Start: start, End: start.Add(time.Hour)},
+		{ID: 3, ChannelID: 3, Title: "News", Start: start.Add(time.Hour), End: start.Add(2 * time.Hour)},
+	}
+	from := start.Add(-time.Hour)
+	to := start.Add(4 * time.Hour)
+	items := AttachSuggestions(Plan(passes, airings, 1, from, to), passes, airings, 1, from, to, nil)
+	for _, item := range items {
+		if item.Airing.ID == 1 && item.Suggestion != nil {
+			t.Fatalf("the later news starts during the game once its pad is counted: %+v", item.Suggestion)
+		}
+	}
+}
+
 func TestSuggestionCanMoveAChannelPin(t *testing.T) {
 	start := time.Date(2026, 9, 22, 20, 0, 0, 0, time.UTC)
 	passes := []store.Pass{{ID: 1, Title: "News", ChannelID: 1, Priority: 1, MatchKind: "title"}}
