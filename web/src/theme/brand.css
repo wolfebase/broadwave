@@ -232,7 +232,7 @@ body {
   inset: 0;
   z-index: -1;
   background:
-    linear-gradient(180deg, rgba(7, 10, 16, 0.15) 0%, rgba(7, 10, 16, 0.55) 45%, rgba(7, 10, 16, 0.92) 100%),
+    linear-gradient(180deg, rgba(7, 10, 16, 0.2) 0%, rgba(7, 10, 16, 0.9) 32%, rgba(7, 10, 16, 0.94) 100%),
     radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--cat-color, var(--brand-blue)) 30%, transparent), transparent 60%);
 }
 
@@ -243,7 +243,7 @@ body {
 
 :root .now-card.has-art .nc-name,
 :root .now-card.has-art .nc-foot {
-  color: rgba(255, 255, 255, 0.78);
+  color: #f5f7fa;
 }
 
 :root .now-card.has-art .nc-num,
@@ -271,7 +271,11 @@ body {
 
 :root .now-card.has-art {
   align-content: end;
-  min-height: 196px;
+  min-height: 220px;
+}
+
+.layout-tv .now-card.has-art {
+  min-height: 300px;
 }
 
 :root .now-card.has-art .nc-foot {

@@ -34,7 +34,7 @@ test: web/node_modules
 	go test ./server/...
 	go test -race ./server/internal/live/ ./server/internal/hdhr/fake/
 	cd web && npx tsc --noEmit
-	cd web && node --experimental-strip-types --test storage.test.ts art.test.ts compat.test.ts switcher.test.ts sync.test.ts guide.test.ts remote.test.ts outage.test.ts resume.test.ts events.test.ts extras.test.ts captions.test.ts quiet.test.ts download.test.ts health.test.ts clear.test.ts seen.test.ts deviceCard.test.ts focusCycle.test.ts library.test.ts breaks.test.ts ends.test.ts startover.test.ts motion.test.ts dialogFocus.test.ts syncStatus.test.ts matchup.test.ts actionName.test.ts menuStep.test.ts
+	cd web && node --experimental-strip-types --test storage.test.ts art.test.ts compat.test.ts switcher.test.ts sync.test.ts guide.test.ts remote.test.ts outage.test.ts resume.test.ts events.test.ts extras.test.ts captions.test.ts quiet.test.ts download.test.ts health.test.ts clear.test.ts seen.test.ts deviceCard.test.ts focusCycle.test.ts library.test.ts breaks.test.ts ends.test.ts startover.test.ts motion.test.ts dialogFocus.test.ts syncStatus.test.ts matchup.test.ts actionName.test.ts menuStep.test.ts contrast.test.ts
 
 vet:
 	go vet ./server/...
