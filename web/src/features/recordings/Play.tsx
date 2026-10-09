@@ -1,7 +1,7 @@
 import Hls from "hls.js";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
-import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
+import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, subscribeZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
 import { bindFilePlayback, markersForPlayback, playbackGrowing, progressSaveAction, releaseFileVideo, samePlayback, seekableSkip, storedPlayhead, takeFileFatal, type ResumeGate } from "./filePlay";
 import { copy } from "../../strings";
 import { Stage } from "../player/Stage";
@@ -38,7 +38,7 @@ export function Play({
   const [error, setError] = useState("");
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [skipMode, setSkipMode] = useState<SkipMode>(readSkip);
-  const [zoom, setZoom] = useState<Zoom>(readZoom);
+  const zoom = useSyncExternalStore(subscribeZoom, readZoom);
   const [where, setWhere] = useState(0);
   const [length, setLength] = useState(0);
   const aheadAt = useRef(0);
@@ -222,7 +222,6 @@ export function Play({
   }, [shown, skipMode, recording.id, autoplay, dismissed, onNext]);
 
   function chooseZoom(next: Zoom) {
-    setZoom(next);
     saveZoom(next);
   }
 

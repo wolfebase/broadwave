@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKey, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKey, type RefObject } from "react";
 import { useData } from "../../app/data";
 import { useLayout } from "../../app/layout";
 import { focusRing } from "../../app/remote";
@@ -7,11 +7,13 @@ import { airingAt, categoryOf, minutesLeft, progress } from "../../lib/guide";
 import { channelNumberContinues, typedChannel } from "../../lib/remote";
 import type { SyncStatus } from "../../lib/sync";
 import { events, saveLiveDelay, type LiveDelay } from "../../lib/events";
-import { readZoom, saveZoom, type PictureMode, type Zoom } from "../../picture";
+import { readZoom, saveZoom, subscribeZoom, type PictureMode } from "../../picture";
 import { copy } from "../../strings";
 import type { Channel } from "../../types";
 import { saveSound, sleepDue, sleepSentence, sleepUntilFrom } from "./extras";
-import { escapeAction, ignoreHeldKey, pendingTuneFires } from "./keys";
+import { goLiveAction } from "./goLive";
+import { escapeAction, guideListAction, guideRowOnFocus, ignoreHeldKey, pendingTuneFires } from "./keys";
+import { nextPicturePick, shownPicture, visitSync } from "./livePref";
 import { ChevronIcon, InfoIcon, ListIcon, RecordIcon, SideBySideIcon, SyncIcon } from "../../ui/icons";
 import { Progress } from "../../ui/primitives";
 import { isLayout, multiviewPath } from "../multiview/storage";
@@ -77,11 +79,18 @@ export function LivePlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const rootRef = useRef<HTMLElement>(null);
   const [opts, setOpts] = useState<Options>(readOptions);
-  const [picture, setPicture] = useState<PictureMode>(settings.pictureMode || "broadcast");
+  // Pause and seek drop sync for this visit only. The checkbox stays in opts.
+  const [detached, setDetached] = useState(false);
+  const [picturePick, setPicturePick] = useState<PictureMode | null>(null);
+  const [pictureBase, setPictureBase] = useState(settings);
+  const nextPick = nextPicturePick(picturePick, settings.pictureMode, settings !== pictureBase);
+  if (nextPick !== picturePick) setPicturePick(nextPick);
+  const picture = shownPicture(nextPick, settings.pictureMode);
   // Watching together is this channel, this visit: a new channel or a reload
   // starts alone instead of opening a group of one there.
   const [togetherOn, setTogetherOn] = useState<number | null>(null);
-  const together = opts.sync && togetherOn === channel.id;
+  const syncing = visitSync(opts.sync, detached);
+  const together = syncing && togetherOn === channel.id;
   const room = together ? groupRoom(channel.id) : `channel:${channel.id}`;
   const group = useGroup(channel.id);
   const stream = useLiveStream(videoRef, {
@@ -92,7 +101,7 @@ export function LivePlayer({
     even: opts.even,
     picture,
     room,
-    sync: opts.sync,
+    sync: syncing,
     profile: mode === "mini" ? "tile" : layout,
     audible: true,
     remember: channel,
@@ -127,7 +136,7 @@ export function LivePlayer({
     const t = window.setTimeout(() => warm(restingOn), 300);
     return () => window.clearTimeout(t);
   }, [restingOn, channel.id, warm]);
-  const [zoom, setZoom] = useState<Zoom>(readZoom);
+  const zoom = useSyncExternalStore(subscribeZoom, readZoom);
   // Only a pick made on this channel explains itself: a room someone else
   // started at balanced is not a refusal.
   const [asked, setAsked] = useState<{ channel: number; delay: LiveDelay } | null>(null);
@@ -248,9 +257,8 @@ export function LivePlayer({
       hoverRow.current = false;
       return;
     }
-    if (layout === "tv") focusRing(row);
-    else row?.focus();
-  }, [panel, guideRow, layout]);
+    focusRing(row);
+  }, [panel, guideRow]);
 
   function openGuide() {
     hoverRow.current = false;
@@ -267,11 +275,11 @@ export function LivePlayer({
   useEffect(() => () => window.clearTimeout(typedTimer.current), []);
 
   function detachSync() {
-    if (!opts.sync || together) return;
+    if (!syncing || together) return;
     // The engine seeks forward on its next tick. Stop it before the playhead
     // moves, or a rewind is put back before React turns sync off.
     stream.releaseSync();
-    setOpts((o) => ({ ...o, sync: false }));
+    setDetached(true);
   }
 
   function jump(delta: number) {
@@ -321,9 +329,13 @@ export function LivePlayer({
   function goLive() {
     const video = videoRef.current;
     if (!video) return;
-    if (together) return stream.command("live");
-    if (!opts.sync) return setOpts((o) => ({ ...o, sync: true }));
-    if (video.seekable.length) video.currentTime = video.seekable.end(video.seekable.length - 1) - 10;
+    const action = goLiveAction(together, syncing);
+    if (action === "group") return stream.command("live");
+    if (action === "arm") {
+      setDetached(false);
+      if (!opts.sync) setOpts((o) => ({ ...o, sync: true }));
+      return;
+    }
     void video.play();
   }
 
@@ -432,12 +444,14 @@ export function LivePlayer({
         if (layout === "tv") focusRing(document.querySelector<HTMLElement>(".stage:not(.mini) button[aria-label='Channels']"));
         else rootRef.current?.focus();
       };
-      if (k === "Escape" || k === "Backspace" || k === "g") {
+      const action = guideListAction(k, event.repeat);
+      if (action === "ignore") return;
+      if (action === "close") {
         setPanel("none");
         backToChannels();
-      } else if (k === "ArrowDown") setGuideRow((r) => Math.min(channels.length - 1, r + 1));
-      else if (k === "ArrowUp") setGuideRow((r) => Math.max(0, r - 1));
-      else if (k === "Enter" && channels[guideRow]) {
+      } else if (action === "down") setGuideRow((r) => Math.min(channels.length - 1, r + 1));
+      else if (action === "up") setGuideRow((r) => Math.max(0, r - 1));
+      else if (action === "tune" && channels[guideRow]) {
         setPanel("none");
         onChannel(channels[guideRow]);
         backToChannels();
@@ -507,7 +521,7 @@ export function LivePlayer({
     return () => window.removeEventListener("keydown", onStray);
   }, [mode, layout]);
 
-  const liveLabel = livePillLabel(opts.sync && sync.state !== "off", behind);
+  const liveLabel = livePillLabel(syncing && sync.state !== "off", behind);
   const title = airing?.title || channel.displayName;
   const eyebrow = useMemo(
     () => (
@@ -520,7 +534,7 @@ export function LivePlayer({
   );
 
   const syncBadge =
-    opts.sync && sync.state !== "off" ? (
+    syncing && sync.state !== "off" ? (
       <button type="button" className={`sync-pill ${sync.state}`} onClick={() => setPanel((p) => (p === "sync" ? "none" : "sync"))} aria-label="Whole-Home Sync">
         <SyncIcon />
         {together ? (sync.members > 1 ? `Together · ${sync.members}` : "Together") : sync.members > 1 ? `${sync.members} screens` : "Synced"}
@@ -664,7 +678,8 @@ export function LivePlayer({
             options={["broadcast", "smooth", "film"]}
             labels={{ broadcast: "Broadcast 60", smooth: "Smooth", film: "Film 24" }}
             onChange={(p) => {
-              setPicture(p);
+              setPictureBase(settings);
+              setPicturePick(p);
               void saveSettings({ pictureMode: p });
             }}
           />
@@ -692,7 +707,6 @@ export function LivePlayer({
             options={["fit", "fill", "zoom"]}
             labels={{ fit: "Fit", fill: "Fill", zoom: "Zoom" }}
             onChange={(z) => {
-              setZoom(z);
               saveZoom(z);
             }}
           />
@@ -742,6 +756,7 @@ export function LivePlayer({
                   hoverRow.current = true;
                   setGuideRow(i);
                 }}
+                onFocus={() => setGuideRow((current) => guideRowOnFocus(i, channels.length, current))}
                 onClick={() => {
                   setPanel("none");
                   onChannel(c);
@@ -815,7 +830,14 @@ export function LivePlayer({
             <>
               <p className="dim">Every screen on this channel shows the same moment{sync.members > 1 ? ` — ${sync.members} screens right now` : ""}.</p>
               <label className="switch-row">
-                <input type="checkbox" checked={opts.sync} onChange={(e) => setOpts((o) => ({ ...o, sync: e.target.checked }))} />
+                <input
+                  type="checkbox"
+                  checked={opts.sync}
+                  onChange={(e) => {
+                    setOpts((o) => ({ ...o, sync: e.target.checked }));
+                    if (e.target.checked) setDetached(false);
+                  }}
+                />
                 <span>Sync with other screens</span>
               </label>
               <p className="dim">
@@ -829,6 +851,7 @@ export function LivePlayer({
                   className="btn"
                   onClick={() => {
                     setTogetherOn(channel.id);
+                    setDetached(false);
                     setOpts((o) => ({ ...o, sync: true }));
                   }}
                 >

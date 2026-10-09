@@ -42,13 +42,54 @@ export function fileHlsConfig(start: number) {
 const zoomKey = "ota-zoom";
 const skipKey = "ota-skip";
 
+export function zoomFromStorage(raw: string | null): Zoom {
+  return raw === "fill" || raw === "zoom" ? raw : "fit";
+}
+
+export function createZoomBus() {
+  let raw: string | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: (): Zoom => zoomFromStorage(raw),
+    set(value: Zoom) {
+      raw = value;
+      listeners.forEach((fn) => fn());
+    },
+    hydrate(next: string | null) {
+      raw = next;
+    },
+    subscribe(fn: () => void) {
+      listeners.add(fn);
+      return () => {
+        listeners.delete(fn);
+      };
+    },
+  };
+}
+
+const zoomBus = createZoomBus();
+let zoomReady = false;
+
+function ensureZoom() {
+  if (zoomReady) return;
+  zoomBus.hydrate(localStorage.getItem(zoomKey));
+  zoomReady = true;
+}
+
 export function readZoom(): Zoom {
-  const value = localStorage.getItem(zoomKey);
-  return value === "fill" || value === "zoom" ? value : "fit";
+  ensureZoom();
+  return zoomBus.get();
+}
+
+export function subscribeZoom(fn: () => void) {
+  ensureZoom();
+  return zoomBus.subscribe(fn);
 }
 
 export function saveZoom(value: Zoom) {
   localStorage.setItem(zoomKey, value);
+  ensureZoom();
+  zoomBus.set(value);
 }
 
 export function readSkip(): SkipMode {
