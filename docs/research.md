@@ -7,7 +7,7 @@ Facts gathered while building. Each should shape a decision or a test.
 - CONNECT (non-EXTEND) models ignore HTTP `transcode=` profiles. Delivery encoding has to happen in ffmpeg on the server.
 - Busy tuners return HTTP 503 with `X-HDHomeRun-Error: 805`.
 - Signal fields worth showing in diagnostics: strength (`ss`), signal-to-noise quality (`snq`), symbol quality (`seq`).
-- A FLEX 4K has four tuners, and only two of them do ATSC 3.0 (HEVC video, AC-4 audio). Neither AVPlayer nor browsers decode AC-4, so the server must transcode ATSC 3.0 audio. Some ATSC 3.0 stations are DRM-protected and can't be played.
+- A FLEX 4K has four tuners, and only two of them do ATSC 3.0 (HEVC video, AC-4 audio). Neither AVPlayer nor browsers decode AC-4, so the server must transcode ATSC 3.0 audio. Some ATSC 3.0 stations are DRM-protected. Broadwave cannot decrypt them, and plays the regular broadcast when that station sends one.
 - `hdhomerun.local` often doesn't resolve. Use UDP discovery on 65001, then `discover.json` and `lineup.json`.
 - Don't install firmware from the app.
 
