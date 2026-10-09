@@ -150,13 +150,21 @@ public enum LANProbe {
                 return recv(fd, base, raw.count, 0)
             }
             if n > 0, let reply = FinderPacket.parse(Data(buf.prefix(n)), nonce: nonce) {
-                found[reply.id] = FoundServer(
+                let incoming = FoundServer(
                     id: reply.id, name: reply.name, url: reply.url,
                     signature: reply.signature, nonce: nonce, signedURL: reply.signedURL
                 )
+                found[reply.id] = Self.keeping(incoming, insteadOf: found[reply.id])
             }
         }
         return Array(found.values)
+    }
+
+    /// A signed reply stays when a later packet for the same id has no signature.
+    /// An unsigned duplicate would otherwise erase the proof `ServerFollow` needs.
+    static func keeping(_ incoming: FoundServer, insteadOf stored: FoundServer?) -> FoundServer {
+        guard let stored, stored.signature != nil, incoming.signature == nil else { return incoming }
+        return stored
     }
 
     private static func freshNonce() -> Data {
