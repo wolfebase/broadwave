@@ -103,3 +103,12 @@ import Testing
     let alone = PlayerTuning.displayAsked(asset: asset, hint: DisplayMatch())
     #expect(PlayerTuning.refreshRateName(alone.refreshRate) == "60")
 }
+
+@Test func aMeasuredRateSnapsOnlyWhenItIsNearABroadcastRate() {
+    #expect(PlayerTuning.canonicalRefreshRate(0) == 0)
+    #expect(PlayerTuning.canonicalRefreshRate(1) == 0)
+    #expect(PlayerTuning.canonicalRefreshRate(Float(59.94006)) == Float(59.94))
+    #expect(PlayerTuning.canonicalRefreshRate(48) == 48)
+    #expect(PlayerTuning.refreshRateName(48) == "48.000")
+    #expect(PlayerTuning.refreshRateName(Float(59.94006)) == "59.94")
+}
