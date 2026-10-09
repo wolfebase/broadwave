@@ -37,6 +37,15 @@ export function episodeTag(rec: Recording) {
   return rec.episodeLabel ?? "";
 }
 
+/** Title a screen reader can tell apart from the row beside it. */
+export function recordingSubject(rec: Pick<Recording, "title" | "subtitle" | "season" | "episode" | "episodeLabel">): string {
+  const title = rec.title.replace(/\s+/g, " ").trim();
+  const sub = (rec.subtitle ?? "").replace(/\s+/g, " ").trim();
+  const head = sub && sub.toLowerCase() !== title.toLowerCase() ? `${title}, ${sub}` : title;
+  const tag = episodeTag(rec as Recording);
+  return tag ? `${tag}, ${head}` : head;
+}
+
 function compare(sort: Sort) {
   return (a: Recording, b: Recording) => {
     switch (sort) {

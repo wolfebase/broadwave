@@ -57,7 +57,7 @@ test("an encrypted 3.0 station plays and records its clear twin", async ({ page 
   await found.getByRole("button", { name: /Sealed Signal/ }).click();
   const sheet = page.getByRole("dialog", { name: /Sealed Signal/ });
   await expect(sheet).toBeVisible();
-  await sheet.getByRole("button", { name: "Record", exact: true }).click();
+  await sheet.getByRole("button", { name: "Record Sealed Signal", exact: true }).click();
 
   await expect
     .poll(async () => {

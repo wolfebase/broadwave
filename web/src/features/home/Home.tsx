@@ -3,6 +3,7 @@ import { getTeams } from "../../api";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { navigate } from "../../app/router";
+import { actionName } from "../../lib/actionName";
 import { airingAt, categoryLabel, categoryOf, dayLabel, minutesLeft, nextAfter, progress, timeLabel, type Category } from "../../lib/guide";
 import type { Airing, Channel, TeamFollow } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
@@ -151,7 +152,7 @@ export function Home() {
                 <PlayIcon /> Watch
               </button>
               {hero.airing ? (
-                <button type="button" className="btn big" onClick={() => void record(hero.channel, hero.airing!.title)}>
+                <button type="button" className="btn big" aria-label={actionName("Record", hero.airing.title)} onClick={() => void record(hero.channel, hero.airing!.title)}>
                   <RecordIcon className="tally" /> Record
                 </button>
               ) : null}

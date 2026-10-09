@@ -5,6 +5,7 @@ import { useLayout } from "../../app/layout";
 import { usePlayer } from "../../app/player";
 import { focusRing } from "../../app/remote";
 import { navigate, useRoute } from "../../app/router";
+import { actionName } from "../../lib/actionName";
 import { cappedCss } from "../../lib/art";
 import { dayLabel, spanLabel } from "../../lib/guide";
 import type { Recording, SearchAiring } from "../../types";
@@ -171,6 +172,7 @@ export function SearchPage() {
                 <button
                   type="button"
                   className="btn"
+                  aria-label={actionName("Record every airing", airing.title)}
                   onClick={() =>
                     void addPass(airing.title, airing.channelId).then(() => {
                       setNote(`Recording every ${airing.title}.`);

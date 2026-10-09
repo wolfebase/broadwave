@@ -158,7 +158,7 @@ test("a show recorded from the guide plays while it records, then leaves no file
   await cell.click();
   const sheet = page.getByRole("dialog", { name: "NFL: Bears at Bills" });
   await expect(sheet).toBeVisible();
-  await sheet.getByRole("button", { name: "Record", exact: true }).click();
+  await sheet.getByRole("button", { name: "Record NFL: Bears at Bills", exact: true }).click();
   await expect(sheet.getByRole("button", { name: "Stop recording" })).toBeVisible();
   await page.screenshot({ path: path.join(evidence, "guide.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
 

@@ -9,7 +9,8 @@ import { DownloadLink } from "../recordings/DownloadLink";
 import { signalLine } from "./health";
 import { MoveFile } from "./MoveFile";
 import { RecordAgain, recordAgainOffered } from "./RecordAgain";
-import { buildLibrary, continueWatching, episodeTag, filterRecordings, totalBytes, watched, type Kind, type Show, type Sort } from "./model";
+import { actionName } from "../../lib/actionName";
+import { buildLibrary, continueWatching, episodeTag, filterRecordings, recordingSubject, totalBytes, watched, type Kind, type Show, type Sort } from "./model";
 
 export type Many = "watched" | "unwatched" | "delete";
 
@@ -287,6 +288,8 @@ function LibraryRow({
   const line = signalLine(rec.health);
   const tag = episodeTag(rec);
   const name = rec.subtitle || rec.title;
+  const subject = recordingSubject(rec);
+  const named = (action: string) => actionName(action, subject);
   const confirmRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (armed === rec.id) focusRing(confirmRef.current);
@@ -340,49 +343,49 @@ function LibraryRow({
         {selecting ? null : rec.missing ? (
           <div className="sheet-actions">
             {armed === rec.id ? (
-              <button ref={confirmRef} type="button" className="btn primary" onClick={() => onDelete(rec)}>
+              <button ref={confirmRef} type="button" className="btn primary" aria-label={named(copy.library.removeGone)} onClick={() => onDelete(rec)}>
                 {copy.library.removeGone}
               </button>
             ) : (
-              <button type="button" className="btn" onClick={() => setArmed(rec.id)}>
+              <button type="button" className="btn" data-delete={rec.id} aria-label={named("Delete")} onClick={() => setArmed(rec.id)}>
                 Delete
               </button>
             )}
           </div>
         ) : (
           <div className="sheet-actions">
-            <button type="button" className="btn primary" onClick={() => onPlay(rec)}>
+            <button type="button" className="btn primary" aria-label={named("Play")} onClick={() => onPlay(rec)}>
               Play
             </button>
             {rec.status !== "recording" ? (
-              <button type="button" className="btn" onClick={() => onWatched(rec, !seen)}>
+              <button type="button" className="btn" aria-label={named(seen ? "Mark unwatched" : "Mark watched")} onClick={() => onWatched(rec, !seen)}>
                 {seen ? "Mark unwatched" : "Mark watched"}
               </button>
             ) : null}
             {rec.status !== "recording" ? (
-              <button type="button" className="btn" aria-pressed={rec.keep === true} onClick={() => onKeep(rec, !rec.keep)}>
+              <button type="button" className="btn" aria-pressed={rec.keep === true} aria-label={named("Keep forever")} onClick={() => onKeep(rec, !rec.keep)}>
                 Keep forever
               </button>
             ) : null}
             {rec.status !== "recording" ? (
-              <button type="button" className="btn" onClick={() => onVirtual(rec)}>
+              <button type="button" className="btn" aria-label={named("Make channel")} onClick={() => onVirtual(rec)}>
                 Make channel
               </button>
             ) : null}
-            <DownloadLink id={rec.id} status={rec.status} />
+            <DownloadLink id={rec.id} status={rec.status} name={subject} />
             {rec.file && rec.status !== "recording" ? <MoveFile rec={rec} /> : null}
             {recordAgainOffered(rec) ? <RecordAgain rec={rec} /> : null}
             {rec.status === "recording" ? (
-              <button type="button" className="btn" onClick={() => onStop(rec)}>
+              <button type="button" className="btn" aria-label={named("Stop recording")} onClick={() => onStop(rec)}>
                 Stop recording
               </button>
             ) : null}
             {rec.status === "recording" ? null : armed === rec.id ? (
-              <button ref={confirmRef} type="button" className="btn primary" onClick={() => onDelete(rec)}>
+              <button ref={confirmRef} type="button" className="btn primary" aria-label={named("Delete this file")} onClick={() => onDelete(rec)}>
                 Delete this file
               </button>
             ) : (
-              <button type="button" className="btn" onClick={() => setArmed(rec.id)}>
+              <button type="button" className="btn" data-delete={rec.id} aria-label={named("Delete")} onClick={() => setArmed(rec.id)}>
                 Delete
               </button>
             )}

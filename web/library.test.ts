@@ -1,11 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildLibrary, continueWatching, episodeTag, filterRecordings, nextEpisode, watched } from "./src/features/library/model.ts";
+import { buildLibrary, continueWatching, episodeTag, filterRecordings, nextEpisode, recordingSubject, watched } from "./src/features/library/model.ts";
 import type { Recording } from "./src/types.ts";
 
 function rec(id: number, extra: Partial<Recording> = {}): Recording {
   return { id, channelId: 1, guideNumber: "4.1", title: "Mystery Hour", status: "complete", startedAt: `2026-10-0${id % 9}T19:00:00Z`, ...extra };
 }
+
+test("a recording's name keeps the episode apart from the show beside it", () => {
+  assert.equal(recordingSubject(rec(1, { title: "Desk", subtitle: "The Quiet Hour", season: 1, episode: 4 })), "S1 E4, Desk, The Quiet Hour");
+  assert.equal(recordingSubject(rec(1, { title: "Golf", subtitle: "Final round" })), "Golf, Final round");
+  assert.equal(recordingSubject(rec(1, { title: "Golf", subtitle: "golf" })), "Golf");
+  assert.equal(recordingSubject(rec(1, { title: "Tennis" })), "Tennis");
+  assert.equal(episodeTag(rec(1, { episodeLabel: "Part 2" })), "Part 2");
+});
 
 test("continue watching is what was started and not finished, last played first", () => {
   const list = [

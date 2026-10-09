@@ -3,6 +3,7 @@ import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { useDialogFocus } from "../../ui/useDialogFocus";
 import { navigate } from "../../app/router";
+import { actionName } from "../../lib/actionName";
 import { categoryLabel, categoryOf, guideSourceLine, isRecording, minutesLeft, progress, recordingKeys, spanLabel, dayLabel } from "../../lib/guide";
 import type { Airing, Channel } from "../../types";
 import { CloseIcon, PlayIcon, RecordIcon, StarIcon } from "../../ui/icons";
@@ -23,6 +24,8 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
     ? passes.find((p) => p.kind === "once" && p.channelId === channel.id && p.airingStart && Date.parse(p.airingStart) === Date.parse(airing.start))
     : undefined;
   const upcoming = airing ? Date.parse(airing.start) > now : false;
+  const subject = airing?.title ?? channel.displayName;
+  const named = (action: string) => actionName(action, subject);
 
   return (
     <div className="sheet-layer" onClick={onClose}>
@@ -73,6 +76,7 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
               <button
                 type="button"
                 className="btn"
+                aria-label={named("Watch together")}
                 onClick={() => {
                   const current = player.channel?.id;
                   const ids = current && current !== channel.id ? [current, channel.id] : [channel.id];
@@ -85,32 +89,32 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
             ) : null}
             {airing && onNow ? (
               active ? (
-                <button type="button" className="btn" onClick={() => void stopRecord(active.id)}>
+                <button type="button" className="btn" aria-label={named("Stop recording")} onClick={() => void stopRecord(active.id)}>
                   <RecordIcon className="tally" /> Stop recording
                 </button>
               ) : (
-                <button type="button" className="btn" onClick={() => void record(channel, airing.title)}>
+                <button type="button" className="btn" aria-label={named("Record")} onClick={() => void record(channel, airing.title)}>
                   <RecordIcon className="tally" /> Record
                 </button>
               )
             ) : null}
             {airing && upcoming && !hasPass ? (
               once ? (
-                <button type="button" className="btn" onClick={() => void removePass(once.id)}>
+                <button type="button" className="btn" aria-label={named("Don't record")} onClick={() => void removePass(once.id)}>
                   <RecordIcon className="tally" /> Don't record
                 </button>
               ) : rec !== "scheduled" ? (
-                <button type="button" className="btn" onClick={() => void recordOnce(airing, channel)}>
+                <button type="button" className="btn" aria-label={named("Record")} onClick={() => void recordOnce(airing, channel)}>
                   <RecordIcon className="tally" /> Record
                 </button>
               ) : null
             ) : null}
             {airing ? (
-              <button type="button" className="btn" disabled={hasPass} onClick={() => void recordSeries(airing.title, channel)}>
+              <button type="button" className="btn" disabled={hasPass} aria-label={named(hasPass ? "Series is recording" : cat === "sports" ? "Record every airing" : "Record series")} onClick={() => void recordSeries(airing.title, channel)}>
                 {hasPass ? "Series is recording" : cat === "sports" ? "Record every airing" : "Record series"}
               </button>
             ) : null}
-            <button type="button" className="btn ghost" onClick={() => void favorite(channel)} aria-pressed={channel.favorite}>
+            <button type="button" className="btn ghost" onClick={() => void favorite(channel)} aria-pressed={channel.favorite} aria-label={actionName(channel.favorite ? "Favorite" : "Add favorite", channel.displayName)}>
               <StarIcon filled={channel.favorite} /> {channel.favorite ? "Favorite" : "Add favorite"}
             </button>
           </div>

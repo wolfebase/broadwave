@@ -143,7 +143,7 @@ test("channel changes, go to live, sports, and search", async ({ page }) => {
   const game = page.getByRole("article").filter({ hasText: "NFL" }).filter({ hasText: "Chicago" });
   await expect(game).toBeVisible();
   await page.screenshot({ path: path.join(evidence, "sports.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
-  await game.getByRole("button", { name: "Watch", exact: true }).click();
+  await game.getByRole("button", { name: /^Watch / }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get("channel")).toBe(String(bears!.id));
   await playing(page, bears!.id);
   await page.screenshot({ path: path.join(evidence, "sports-watch.jpg"), type: "jpeg", quality: 70, animations: "disabled" });

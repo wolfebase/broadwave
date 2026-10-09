@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Pass, PlannedAiring, Recording } from "../../types";
 import { fixSchedule, getEvents, getSchedule, stopRecording } from "../../api";
+import { actionName } from "../../lib/actionName";
 import { copy } from "../../strings";
 import { formatClock } from "../../time";
 import { Passes } from "./Passes";
@@ -103,6 +104,7 @@ export function Schedule({
                       type="button"
                       className="btn small schedule-fix"
                       disabled={fixing === fixKey}
+                      aria-label={actionName("Record the later airing", item.airing.title)}
                       onClick={() => void recordLater(item)}
                     >
                       Record the later airing
@@ -145,6 +147,7 @@ export function Schedule({
               <button
                 type="button"
                 className="btn"
+                aria-label={actionName("Stop", rec.title)}
                 onClick={() => void stopRecording(rec.id).then(onStop)}
               >
                 Stop

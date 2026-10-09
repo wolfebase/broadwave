@@ -3,6 +3,7 @@ import { useData } from "../../app/data";
 import { useLayout } from "../../app/layout";
 import { focusRing } from "../../app/remote";
 import { navigate } from "../../app/router";
+import { actionName } from "../../lib/actionName";
 import { isTextField } from "../../lib/dialogFocus";
 import { airingAt, categoryOf, minutesLeft, progress } from "../../lib/guide";
 import { channelNumberContinues, typedChannel } from "../../lib/remote";
@@ -576,7 +577,7 @@ export function LivePlayer({
               Start over
             </button>
           ) : null}
-          <button type="button" className={active ? "record-btn on" : "record-btn"} onClick={() => void toggleRecord()} aria-pressed={!!active}>
+          <button type="button" className={active ? "record-btn on" : "record-btn"} onClick={() => void toggleRecord()} aria-pressed={!!active} aria-label={actionName(active ? "Stop recording" : "Record", airing?.title || channel.displayName)}>
             <RecordIcon />
             {active ? "Recording" : "Record"}
           </button>

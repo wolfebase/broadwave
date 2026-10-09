@@ -3,6 +3,7 @@ import { followTeam, getTeams } from "../../api";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { navigate } from "../../app/router";
+import { actionName } from "../../lib/actionName";
 import { categoryOf, dayLabel, isRecording, minutesLeft, progress, recordingKeys, spanLabel } from "../../lib/guide";
 import type { Airing, Channel, TeamFollow } from "../../types";
 import { PlayIcon, RecordIcon } from "../../ui/icons";
@@ -155,17 +156,17 @@ export function Sports() {
                     <ChannelBadge channel={channel} size="sm" />
                     <span className="gc-actions">
                       {liveNow ? (
-                        <button type="button" className="btn primary small" onClick={() => player.open(channel)}>
+                        <button type="button" className="btn primary small" aria-label={actionName("Watch", cardLabel(airing))} onClick={() => player.open(channel)}>
                           <PlayIcon /> Watch
                         </button>
                       ) : null}
                       {liveNow && !rec ? (
-                        <button type="button" className="btn small" onClick={() => void record(channel, airing.title)} aria-label={`Record ${cardLabel(airing)}`}>
+                        <button type="button" className="btn small" onClick={() => void record(channel, airing.title)} aria-label={actionName("Record", cardLabel(airing))}>
                           <RecordIcon className="tally" />
                         </button>
                       ) : null}
                       {!passed ? (
-                        <button type="button" className="btn small ghost" onClick={() => void recordSeries(airing.title, channel)}>
+                        <button type="button" className="btn small ghost" aria-label={actionName("Record all", cardLabel(airing))} onClick={() => void recordSeries(airing.title, channel)}>
                           Record all
                         </button>
                       ) : null}
