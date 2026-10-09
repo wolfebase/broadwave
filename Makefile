@@ -1,4 +1,4 @@
-.PHONY: help web server run dev test vet lint check build docker clean tokens apple apple-test
+.PHONY: help web server run dev test vet lint check build docker clean tokens apple apple-test docs
 
 CONFIG ?= data
 ADDR ?= :8477
@@ -13,6 +13,7 @@ help:
 	@echo "make docker   build the container image"
 	@echo "make apple    generate the Xcode project and build the iOS and tvOS apps"
 	@echo "make tokens   regenerate CSS and Swift from design/tokens.json"
+	@echo "make docs     write the static docs site to docs/sitegen/dist"
 
 web/node_modules: web/package-lock.json
 	cd web && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci
@@ -35,13 +36,14 @@ test: web/node_modules
 	go test -race ./server/internal/live/ ./server/internal/hdhr/fake/
 	cd web && npx tsc --noEmit
 	cd web && node --experimental-strip-types --test storage.test.ts art.test.ts compat.test.ts switcher.test.ts sync.test.ts guide.test.ts remote.test.ts outage.test.ts resume.test.ts events.test.ts extras.test.ts captions.test.ts quiet.test.ts download.test.ts health.test.ts clear.test.ts seen.test.ts deviceCard.test.ts focusCycle.test.ts library.test.ts breaks.test.ts ends.test.ts startover.test.ts
+	cd docs/sitegen && go test ./...
 
 vet:
 	go vet ./server/...
 
 lint: web/node_modules
 	scripts/check-names.sh
-	@test -z "$$(gofmt -l server)" || { gofmt -l server; echo "run: gofmt -w server"; exit 1; }
+	@test -z "$$(gofmt -l server docs/sitegen)" || { gofmt -l server docs/sitegen; echo "run: gofmt -w server docs/sitegen"; exit 1; }
 	go vet ./server/...
 	cd web && npm run lint
 	swiftlint lint --strict
@@ -64,6 +66,9 @@ clean:
 
 tokens:
 	node design/build.mjs
+
+docs:
+	cd docs/sitegen && go run . -out dist
 
 apple:
 	cd apple && xcodegen generate

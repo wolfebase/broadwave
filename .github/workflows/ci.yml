@@ -23,6 +23,17 @@ jobs:
       - run: go run ./server/cmd/apigen -check
       - run: FAKE=1 scripts/relay-smoke.sh
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: docs/sitegen/go.mod
+      - run: test -z "$(gofmt -l docs/sitegen)" || { gofmt -l docs/sitegen; exit 1; }
+      - run: go test ./...
+        working-directory: docs/sitegen
+
   web:
     runs-on: ubuntu-latest
     steps:
