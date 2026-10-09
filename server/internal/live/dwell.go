@@ -49,7 +49,7 @@ func (h *Hub) Idle() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, f := range h.feedsLocked() {
-		if f.recording != nil || f.heldOutside() || f.probing {
+		if f.recording != nil || f.heldOutside() || f.tuneHeld() {
 			return false
 		}
 		for _, r := range f.renditions {
