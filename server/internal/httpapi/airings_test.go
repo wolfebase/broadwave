@@ -76,6 +76,28 @@ func TestAiringsWindowAndCompression(t *testing.T) {
 		t.Fatalf("backwards window %d", rec.Code)
 	}
 
+	// The guide's later request is now+4h through 14 days, about 332h.
+	// now-30min through 14 days is about 336h. Both stay under the 360h cap.
+	laterFrom := now.Add(4 * time.Hour).Format(time.RFC3339)
+	laterTo := now.Add(14 * 24 * time.Hour).Format(time.RFC3339)
+	if got := get(t, h, "/api/v1/airings?from="+laterFrom+"&to="+laterTo); got.Code != http.StatusOK {
+		t.Fatalf("332h window %d %s", got.Code, got.Body.Bytes())
+	}
+	fullFrom := now.Add(-30 * time.Minute).Format(time.RFC3339)
+	fullTo := now.Add(14 * 24 * time.Hour).Format(time.RFC3339)
+	if got := get(t, h, "/api/v1/airings?from="+fullFrom+"&to="+fullTo); got.Code != http.StatusOK {
+		t.Fatalf("14 day window %d %s", got.Code, got.Body.Bytes())
+	}
+
+	overFrom := now.Format(time.RFC3339)
+	overTo := now.Add(361 * time.Hour).Format(time.RFC3339)
+	over := httptest.NewRequest(http.MethodGet, "/api/v1/airings?from="+overFrom+"&to="+overTo, nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, over)
+	if rec.Code != http.StatusBadRequest || !bytes.Contains(rec.Body.Bytes(), []byte("The guide window is too long.")) {
+		t.Fatalf("long window %d %s", rec.Code, rec.Body.Bytes())
+	}
+
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/airings", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	rec = httptest.NewRecorder()

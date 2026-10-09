@@ -419,6 +419,10 @@ func (s *Server) airings(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "The guide window is backwards.", http.StatusBadRequest)
 		return
 	}
+	if to.Sub(from) > 360*time.Hour {
+		httpError(w, "The guide window is too long.", http.StatusBadRequest)
+		return
+	}
 	list, err := s.Store.Airings(r.Context(), from, to)
 	if err != nil {
 		writeError(w, err)

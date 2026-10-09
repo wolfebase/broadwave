@@ -120,12 +120,25 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string) (str
 	if playlistFresh(dir, stamp) {
 		return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
 	}
+	h.playMu.Lock()
+	if h.plays == nil {
+		h.plays = map[int64]struct{}{}
+	}
+	if _, running := h.plays[id]; running {
+		h.playMu.Unlock()
+		return waitPlaylistFile(playlist, id)
+	}
+	h.plays[id] = struct{}{}
+	h.playMu.Unlock()
+
 	_ = os.RemoveAll(dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
+		h.clearPlay(id)
 		return "", err
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
+		h.clearPlay(id)
 		return "", err
 	}
 	g.Input = abs
@@ -133,21 +146,19 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string) (str
 	cmd.Dir = dir
 	logCommand(cmd)
 	if err := os.WriteFile(filepath.Join(dir, "graph.txt"), []byte(stamp), 0o644); err != nil {
+		h.clearPlay(id)
 		return "", err
 	}
 	if err := cmd.Start(); err != nil {
+		h.clearPlay(id)
 		return "", err
 	}
-	go func() { _ = cmd.Wait() }()
+	go func() {
+		_ = cmd.Wait()
+		h.clearPlay(id)
+	}()
 	go extractCaptions(h.FFmpeg, abs, filepath.Join(dir, "captions.vtt"))
-	deadline := time.Now().Add(20 * time.Second)
-	for time.Now().Before(deadline) {
-		if info, err := os.Stat(playlist); err == nil && info.Size() > 0 {
-			return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	return "", fmt.Errorf("recording player did not start")
+	return waitPlaylistFile(playlist, id)
 }
 
 // PlayFollow transcodes a recording that is still being written. Playback starts at the beginning of the file.
@@ -222,8 +233,11 @@ func (h *Hub) clearPlay(id int64) {
 	h.playMu.Unlock()
 }
 
+// filePlaylistWait is how long PlayFile and PlayFollow wait for a playlist.
+var filePlaylistWait = 20 * time.Second
+
 func waitPlaylistFile(playlist string, id int64) (string, error) {
-	deadline := time.Now().Add(20 * time.Second)
+	deadline := time.Now().Add(filePlaylistWait)
 	for time.Now().Before(deadline) {
 		if info, err := os.Stat(playlist); err == nil && info.Size() > 0 {
 			return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil

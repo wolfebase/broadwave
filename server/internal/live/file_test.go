@@ -16,6 +16,95 @@ type bufferCloser struct{ bytes.Buffer }
 
 func (bufferCloser) Close() error { return nil }
 
+func TestPlayFileDoesNotDeleteARunningTranscode(t *testing.T) {
+	prev := filePlaylistWait
+	filePlaylistWait = 400 * time.Millisecond
+	t.Cleanup(func() { filePlaylistWait = prev })
+
+	root := t.TempDir()
+	logPath := filepath.Join(root, "starts")
+	bin := filepath.Join(root, "ffmpeg")
+	script := "#!/bin/sh\n" +
+		"for arg in \"$@\"; do\n" +
+		"\tcase \"$arg\" in\n" +
+		"\t*webvtt*) exit 0 ;;\n" +
+		"\tesac\n" +
+		"done\n" +
+		"echo $$ >> '" + logPath + "'\n" +
+		"touch keep\n" +
+		"exec sleep 30\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		body, err := os.ReadFile(logPath)
+		if err != nil {
+			return
+		}
+		for _, line := range strings.Fields(string(body)) {
+			pid, err := strconv.Atoi(line)
+			if err != nil {
+				continue
+			}
+			proc, err := os.FindProcess(pid)
+			if err != nil {
+				continue
+			}
+			_ = proc.Kill()
+		}
+	})
+	show := filepath.Join(root, "show.ts")
+	if err := os.WriteFile(show, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := &Hub{Dir: filepath.Join(root, "out"), FFmpeg: bin, Encoder: "libx264"}
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := h.PlayFile(9, show, "MPEG2", "broadcast", "")
+		firstDone <- err
+	}()
+
+	keep := filepath.Join(h.Dir, "file", "9", "keep")
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if _, err := os.Stat(keep); err == nil {
+			break
+		}
+		select {
+		case err := <-firstDone:
+			t.Fatalf("PlayFile finished before its transcode marked the directory: %v", err)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("transcode did not start")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	_, err := h.PlayFile(9, show, "MPEG2", "broadcast", "")
+	if _, statErr := os.Stat(keep); statErr != nil {
+		t.Fatalf("second PlayFile removed the running directory: %v", statErr)
+	}
+	body, readErr := os.ReadFile(logPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if n := len(strings.Fields(string(body))); n != 1 {
+		t.Fatalf("ffmpeg started %d times, want 1:\n%s", n, body)
+	}
+	if err == nil {
+		t.Fatal("expected the short wait to report the player did not start")
+	}
+	select {
+	case firstErr := <-firstDone:
+		if firstErr == nil {
+			t.Fatal("first PlayFile returned a playlist that was never written")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("first PlayFile did not return")
+	}
+}
+
 func TestFollowFileReadsBytesWrittenLater(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "show.ts")
 	if err := os.WriteFile(path, []byte("aaa"), 0o644); err != nil {

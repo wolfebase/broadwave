@@ -32,3 +32,23 @@ func TestScanMediaReadsSeasonAndEpisode(t *testing.T) {
 		t.Fatalf("a movie got an episode: %+v", found)
 	}
 }
+
+func TestScanMediaStopsAtTheFileCap(t *testing.T) {
+	prev := mediaFileCap
+	mediaFileCap = 3
+	t.Cleanup(func() { mediaFileCap = prev })
+
+	root := t.TempDir()
+	for _, name := range []string{"a.mp4", "b.mp4", "c.mp4", "d.mp4", "e.mp4", "notes.txt"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	found, err := ScanMedia(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(found) != mediaFileCap {
+		t.Fatalf("got %d videos, want %d", len(found), mediaFileCap)
+	}
+}
