@@ -4,14 +4,14 @@ The guide is the list of what is on. Home opens on what is playing now. Search c
 
 ## Where listings come from
 
-Broadwave fills listings from the first source that has them:
+Broadwave tries listings in this order:
 
 - The tuner's own guide. For an HDHomeRun that is SiliconDust's feed: about two days for everyone, and about fourteen days with an HDHomeRun DVR subscription. The server refreshes it on its own, somewhere between 20 and 28 hours after the last pull.
 - Schedules Direct, if you add an account under Settings. The hint there is "Fills channels the tuner guide skips. Fourteen days when the account allows it."
 - An XMLTV address you paste under Guide address. The hint is "An XMLTV link for channels the tuner guide skips."
-- The broadcast itself, for a channel none of those list.
+- The broadcast itself fills times none of those already list.
 
-A channel matches on its number, then its call sign. A trailing DT or HD still counts. Guide match, on the channel in Settings, pins a listing when the names differ. Leave it blank to use the number and call sign.
+With no guide key, a channel matches on its number, then its name, then its call sign. A trailing DT or HD still counts. Guide match, on the channel in Settings, pins a listing when the names differ. Leave it blank to use the number and call sign.
 
 Logos and episode art are kept on the server. Movie artwork, in Settings, fills posters the guide left blank.
 

@@ -1,6 +1,6 @@
 # Troubleshooting
 
-The line on the screen is the whole message. It names what failed and what to try. The same words are used on the web, iPhone, iPad, and Apple TV.
+The line on the screen is the whole message. It names what failed and what to try. The player lines are the same on the web, iPhone, iPad, and Apple TV. The missing-file line is not: on the Apple apps the channel number comes first.
 
 ## Every tuner is busy
 
@@ -128,6 +128,6 @@ The server writes its log to the process's standard error. Diagnostics shows the
 
 ## Filing a bug
 
-In Settings, under Support, choose "Download a support bundle." The hint under the button is "Logs, versions, and settings. Passwords are left out." The same file is at `http://<your-server>:8477/api/v1/support`. The Apple apps use the same button.
+In Settings, under Support, choose "Download a support bundle". The hint under the button is "Logs, versions, and settings. Passwords are left out." The same file is at `http://<your-server>:8477/api/v1/support`. The Apple apps use the same button.
 
 The download is a zip with four files: `versions.json`, `doctor.json`, `config.json`, and `logs.txt`. Passwords and tuner credentials are left out. Attach it to an issue at [github.com/wolfebase/broadwave/issues](https://github.com/wolfebase/broadwave/issues).

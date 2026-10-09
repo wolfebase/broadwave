@@ -27,7 +27,7 @@ FFmpeg 7.1 has no VAAPI filter that invents progressive frames. `deinterlace_vaa
 
 Smooth does not change the frame rate of a progressive source. It only selects motion-compensated deinterlace when the iGPU has that mode. The `minterpolate` blend path and its startup probe are gone.
 
-Apple TV display matching at 59.94 is still PB7. The apps do not set `AVDisplayCriteria` yet.
+On Apple TV the player sets `AVDisplayCriteria` from the picture size and frame rate while a channel is playing, and clears it when the player goes away.
 
 ## Consequences
 

@@ -35,7 +35,7 @@ Each tuner keeps its own channels. Subchannels of one station share a tune. KBWV
 
 When the same channel number is on two tuners, Broadwave plays it from the tuner that channel belongs to, and tries the others if that one does not answer. Two tuners on one antenna list each channel once on the guide. The other row stays in Settings and plays the same way.
 
-A regular channel uses a tuner that is not receiving ATSC 3.0 when one is free, so a NextGen tune stays available.
+A regular channel uses a tuner that cannot receive ATSC 3.0 when one is free, so a NextGen tune stays available.
 
 ## Removing one
 

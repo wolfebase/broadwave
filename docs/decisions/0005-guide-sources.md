@@ -12,7 +12,7 @@ Listings for every channel the antenna can receive, for as many days as the sour
 
 **Another source fills the gaps.** Schedules Direct, when an account and lineup are saved in Settings, asks for fourteen days and falls back to one day if the account refuses the longer request. An XMLTV link in Settings does the same job for channels that still have no listings. Neither source replaces a channel that already has listings from the tuner feed.
 
-**Match, then pin.** A listing attaches by channel number, then by call sign. A trailing DT or HD still matches. A guide match on the channel pins a listing whose name does not.
+**Match, then pin.** A guide key wins. With none, a listing attaches by channel number, then by an exact name, then by call sign. A trailing DT, DT1, HD, TV, or LD still matches. A guide match on the channel pins a listing whose name does not.
 
 The Schedules Direct password is saved with the other settings and is not returned to the browser or written in the log.
 

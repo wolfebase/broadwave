@@ -64,6 +64,8 @@ On a GPU:
 | under 0.5× | 540p | 360p | 1 |
 | not measured | 1080p | 720p60 | 2 |
 
+An Intel low-power encoder at 4× or faster allows six pictures. The four in the top row is every other GPU.
+
 On the processor:
 
 | 1080p60 speed | Tallest transcode | Selected tile | Tiles at once |

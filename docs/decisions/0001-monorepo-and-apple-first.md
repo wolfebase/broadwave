@@ -9,7 +9,7 @@ The prototype was a Go server with an embedded web app and guidance that deferre
 ## Decision
 
 - One repository: `server/` (Go), `web/`, `apple/`, `design/`, `api/`, `deploy/`, `docs/`. A root `go.work` and `Makefile` let everything build from the root.
-- Native iOS and tvOS apps are built now, in parallel with the web app. iPad and Apple Watch come after the iPhone and Apple TV apps ship. Android and other platforms are out of scope.
+- Native iOS and tvOS apps are built now, in parallel with the web app. The iOS app runs on iPhone and iPad. Apple Watch is not a target. Android and other platforms are out of scope.
 - The OpenAPI document is the contract between the server and all clients.
 
 ## Consequences
