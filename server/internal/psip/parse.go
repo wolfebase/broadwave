@@ -57,9 +57,13 @@ type Guide struct {
 	Offset  time.Duration
 }
 
+// maxCapture is how much of a mux Parse will hold. The live harvester
+// already keeps less than this. A larger reader is cut off.
+const maxCapture = 512 << 10
+
 // Parse reads a transport stream and returns the PSIP it contains.
 func Parse(r io.Reader) (Guide, error) {
-	raw, err := io.ReadAll(r)
+	raw, err := io.ReadAll(io.LimitReader(r, maxCapture))
 	if err != nil {
 		return Guide{}, err
 	}
@@ -153,7 +157,13 @@ func assemble(raw []byte) []section {
 		for len(a.buf) >= 3 {
 			seclen := int(a.buf[1]&0x0F)<<8 | int(a.buf[2])
 			total := 3 + seclen
-			if seclen < 4 || total > 4096 || len(a.buf) < total {
+			// A length that cannot be a PSIP section is dropped. Keeping it
+			// would pin every later packet on this PID.
+			if seclen < 4 || total > 4096 {
+				a.buf = nil
+				break
+			}
+			if len(a.buf) < total {
 				break
 			}
 			body := append([]byte(nil), a.buf[:total]...)
@@ -288,8 +298,9 @@ func parseEIT(b []byte, offset uint8) []Event {
 }
 
 func parseETT(b []byte) (Text, bool) {
-	// header 8 + protocol_version 1 + ETM_id 4 + text.
-	if len(b) < 14 {
+	// header 8 + protocol_version 1 + ETM_id 4 + text, then the CRC.
+	// A shorter section makes the text slice run backwards.
+	if len(b) < 17 {
 		return Text{}, false
 	}
 	etm := binary.BigEndian.Uint32(b[9:13])
