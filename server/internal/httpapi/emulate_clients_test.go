@@ -240,10 +240,10 @@ func TestSiliconDustDocument(t *testing.T) {
 		SourceList     []string
 	}
 	decodeBody(t, fx.ask(fx.mux, http.MethodGet, "/lineup_status.json", ""), &status)
-	if status.ScanInProgress != 0 || status.ScanPossible != 0 || status.Source != "Antenna" || len(status.SourceList) != 1 || status.SourceList[0] != "Antenna" {
+	if status.ScanInProgress != 0 || status.ScanPossible != 1 || status.Source != "Antenna" || len(status.SourceList) != 1 || status.SourceList[0] != "Antenna" {
 		t.Fatalf("status %+v", status)
 	}
-	if body := fx.ask(fx.mux, http.MethodGet, "/lineup_status.json", "").Body.String(); !strings.Contains(body, `"ScanPossible":0`) {
+	if body := fx.ask(fx.mux, http.MethodGet, "/lineup_status.json", "").Body.String(); !strings.Contains(body, `"ScanPossible":1`) {
 		t.Fatalf("scan possible omitted: %s", body)
 	}
 	if rec := fx.ask(fx.mux, http.MethodPost, "/lineup.post?scan=start", ""); rec.Code != http.StatusNoContent {
@@ -277,6 +277,18 @@ func TestSiliconDustDocument(t *testing.T) {
 
 func TestPlexTunerClient(t *testing.T) {
 	fx := newTunerFixture(t)
+	// Plex will not add a tuner whose lineup status says a scan is impossible.
+	// The scan it then posts must finish at once, without taking a tuner.
+	status := fx.ask(fx.mux, http.MethodGet, "/lineup_status.json", uaPlex)
+	if !strings.Contains(status.Body.String(), `"ScanPossible":1`) || !strings.Contains(status.Body.String(), `"ScanInProgress":0`) {
+		t.Fatalf("plex setup %s", status.Body)
+	}
+	if rec := fx.ask(fx.mux, http.MethodPost, "/lineup.post?scan=start", uaPlex); rec.Code != http.StatusNoContent {
+		t.Fatalf("scan start %d", rec.Code)
+	}
+	if body := fx.ask(fx.mux, http.MethodGet, "/lineup_status.json", uaPlex).Body.String(); !strings.Contains(body, `"ScanInProgress":0`) {
+		t.Fatalf("scan ran: %s", body)
+	}
 	disc := fx.ask(fx.mux, http.MethodGet, "/discover.json", uaPlex)
 	var device struct {
 		DeviceID  string
@@ -485,6 +497,10 @@ func TestChannelsGuideMatchesPlaylist(t *testing.T) {
 	if !strings.Contains(guide, `<episode-num system="onscreen">S02E10</episode-num>`) || strings.Contains(guide, "S2E10") {
 		t.Fatalf("episode\n%s", guide)
 	}
+	// Jellyfin and Plex skip the on-screen label and read the zero-based form.
+	if !strings.Contains(guide, `<episode-num system="xmltv_ns">1.9.</episode-num>`) {
+		t.Fatalf("xmltv_ns\n%s", guide)
+	}
 	if !strings.Contains(guide, `<episode-num system="dd_progid">EP0001</episode-num>`) {
 		t.Fatalf("program id\n%s", guide)
 	}
@@ -498,4 +514,98 @@ func TestChannelsGuideMatchesPlaylist(t *testing.T) {
 	if !strings.Contains(m3u, `channel-id="ota.4-1"`) || !strings.Contains(guide, `channel="ota.4-1"`) {
 		t.Fatal("playlist channel-id and guide programme channel differ")
 	}
+}
+
+func TestJellyfinPlaylistProbe(t *testing.T) {
+	fx := newTunerFixture(t)
+	ctx := t.Context()
+	if err := fx.st.SetChannelArt(ctx, map[int64]string{fx.ids["4.1"]: "https://images.example/kbwv.png"}); err != nil {
+		t.Fatal(err)
+	}
+	show := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+	if err := fx.st.ReplaceAirings(ctx, []store.Airing{{
+		ChannelID: fx.ids["4.1"], Title: "Night Desk", Season: 2, Episode: 10,
+		ImageURL: "https://images.example/storm.jpg",
+		Start:    show, End: show.Add(time.Hour),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/export/lineup.m3u", nil)
+	req.Host = "tuner.example"
+	req.Header.Set("User-Agent", uaJellyfin)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	rec := httptest.NewRecorder()
+	fx.api.ServeHTTP(rec, req)
+	m3u := rec.Body.String()
+	var stream string
+	lines := strings.Split(m3u, "\n")
+	for i, line := range lines {
+		if strings.Contains(line, `tvg-name="KBWV"`) {
+			if !strings.Contains(line, `tvg-logo="https://tuner.example/media/art/channel/`) {
+				t.Fatalf("logo %s", line)
+			}
+			if i+1 < len(lines) {
+				stream = lines[i+1]
+			}
+		}
+		if strings.Contains(line, `tvg-name="Rivers"`) && strings.Contains(line, "tvg-logo") {
+			t.Fatalf("logo without art: %s", line)
+		}
+	}
+	if !strings.HasPrefix(stream, "https://tuner.example/export/stream/") {
+		t.Fatalf("stream %q\n%s", stream, m3u)
+	}
+	// Jellyfin sends HEAD, with no file extension, to see if the stream is MPEG-TS.
+	head := httptest.NewRecorder()
+	hreq := httptest.NewRequest(http.MethodHead, strings.TrimPrefix(stream, "https://tuner.example"), nil)
+	hreq.Header.Set("User-Agent", uaJellyfin)
+	fx.api.ServeHTTP(head, hreq)
+	if head.Code != http.StatusOK || !strings.EqualFold(head.Header().Get("Content-Type"), "video/mp2t") || head.Body.Len() != 0 {
+		t.Fatalf("probe %d %q body %d", head.Code, head.Header().Get("Content-Type"), head.Body.Len())
+	}
+	play := fx.ask(fx.api, http.MethodGet, strings.TrimPrefix(stream, "https://tuner.example"), uaJellyfin)
+	if play.Code != http.StatusServiceUnavailable || play.Header().Get("X-HDHomeRun-Error") != "806 Tune Failed" {
+		t.Fatalf("play after probe %d %s", play.Code, play.Header().Get("X-HDHomeRun-Error"))
+	}
+
+	greq := httptest.NewRequest(http.MethodGet, "/export/guide.xml", nil)
+	greq.Host = "tuner.example"
+	greq.Header.Set("X-Forwarded-Proto", "https")
+	grec := httptest.NewRecorder()
+	fx.api.ServeHTTP(grec, greq)
+	guide := grec.Body.String()
+	if !strings.Contains(guide, `<icon src="https://tuner.example/media/art/channel/`) || !strings.Contains(guide, `<icon src="https://tuner.example/media/art/airing/`) {
+		t.Fatalf("guide art\n%s", guide)
+	}
+	if !strings.Contains(guide, `<episode-num system="xmltv_ns">1.9.</episode-num>`) {
+		t.Fatalf("xmltv_ns\n%s", guide)
+	}
+	fx.quietHits()
+}
+
+func TestStreamProbeDoesNotTune(t *testing.T) {
+	fx := newTunerFixture(t)
+	for _, path := range []string{"/auto/v4.1", "/auto/v9001", "/auto/v990.1", "/tuner0/v4.1"} {
+		head := fx.ask(fx.mux, http.MethodHead, path, uaJellyfin)
+		if head.Code != http.StatusOK || !strings.EqualFold(head.Header().Get("Content-Type"), "video/mp2t") || head.Body.Len() != 0 {
+			t.Fatalf("%s probe %d %q body %q", path, head.Code, head.Header().Get("Content-Type"), head.Body.String())
+		}
+	}
+	got := fx.ask(fx.mux, http.MethodGet, "/auto/v4.1", uaJellyfin)
+	if got.Code != http.StatusServiceUnavailable || got.Header().Get("X-HDHomeRun-Error") != "806 Tune Failed" {
+		t.Fatalf("get %d %s", got.Code, got.Header().Get("X-HDHomeRun-Error"))
+	}
+	profile := fx.ask(fx.mux, http.MethodHead, "/auto/v4.1?transcode=heavy", uaEmby)
+	if profile.Code != http.StatusServiceUnavailable || profile.Header().Get("X-HDHomeRun-Error") != "802 Unknown Transcode Profile" {
+		t.Fatalf("transcode probe %d %s", profile.Code, profile.Header().Get("X-HDHomeRun-Error"))
+	}
+	show := false
+	if _, err := fx.st.PatchChannel(t.Context(), fx.ids["105.1"], store.ChannelPatch{Hidden: &show}); err != nil {
+		t.Fatal(err)
+	}
+	drm := fx.ask(fx.mux, http.MethodHead, "/auto/v105.1", uaEmby)
+	if drm.Code != http.StatusServiceUnavailable || drm.Header().Get("X-HDHomeRun-Error") != "811 Content Protection Required" {
+		t.Fatalf("drm probe %d %s", drm.Code, drm.Header().Get("X-HDHomeRun-Error"))
+	}
+	fx.quietHits()
 }

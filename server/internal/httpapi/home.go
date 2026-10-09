@@ -26,15 +26,24 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 			sharing = true
 		}
 	}
-	host := r.Host
-	if name, _, err := net.SplitHostPort(host); err == nil {
-		host = name
-	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"places":       places,
-		"tunerAddress": host + ":8478",
+		"tunerAddress": tunerShareHost(r.Host),
 		"sharing":      sharing,
 	})
+}
+
+// tunerShareHost is the address other apps type. An IPv6 host stays in
+// brackets, so the port is not read as part of the address.
+func tunerShareHost(hostport string) string {
+	host := hostport
+	if name, _, err := net.SplitHostPort(hostport); err == nil {
+		host = name
+	}
+	if strings.Contains(host, ":") && !strings.HasPrefix(host, "[") {
+		host = "[" + host + "]"
+	}
+	return host + ":8478"
 }
 
 func (s *Server) homePlaces(ctx context.Context, fresh, logScan bool) ([]discovery.Place, error) {
