@@ -28,7 +28,7 @@ The file is the station's program, copied, not re-encoded. A clear ATSC 3.0 chan
 
 When the recording ends, a `.json` file with the same name sits beside it. It holds the id, title, channel number, status, and the start and end times.
 
-Commercial breaks, when any are found, go in a matching `.edl`. Each line is a start and an end, in seconds. Broadwave looks after the file is closed. The Docker image includes comskip, which runs along with Broadwave's own scan for black frames, scene cuts, and silence. A server without comskip still runs that scan. A series pass looks unless Commercials is off on that pass. A recording with no pass looks too. comskip's own notes stay in a temporary folder. The recordings folder gets the `.edl` only.
+Commercial breaks, when any are found, go in a matching `.edl`. Each line is a start, an end, and an action: 0 cuts the break, and 2 is a scene marker the player can offer and does not cut. The scan always looks for black frames, silence, and hard cuts. When comskip is installed, and the Docker image includes it, its breaks are added. A server without comskip, such as one on a Mac, keeps that scan, which finds far fewer breaks. A series pass looks unless Commercials is off on that pass. A recording with no pass looks too. comskip's own notes stay in a temporary folder. The recordings folder gets the `.edl` only.
 
 Turn on "Write .nfo files for Plex, Jellyfin, and Kodi" and a finished recording also gets an `.nfo` in that same folder, with the title and description. The switch is off until you turn it on. Those files are never written outside the recordings folder.
 
@@ -86,7 +86,7 @@ Playback is a stream the device can play. The file in the recordings folder stay
 
 A finished recording whose file was moved or deleted outside Broadwave stays in the list. On the web the line is "The file is gone. It was moved or deleted outside Broadwave." On iPhone, iPad, and Apple TV the channel number comes first. Remove from the list drops that row. There is no file left to delete.
 
-When the picture broke up, the row says how many times. A clean recording says nothing.
+When the picture dropped for a second or more, the row says "Signal dropped for N s." Shorter damage says how many times: "Signal broke up once" or "Signal broke up N times." A clean recording says nothing.
 
 ## ATSC 3.0
 
