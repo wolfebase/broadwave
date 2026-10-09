@@ -13,7 +13,7 @@ Apple TV 4K, an iPhone whose machine id is `iPhone9` or later, an iPad whose mac
 Phones, TVs, and browsers do not decode AC-4. Broadwave reads each track and sends it on:
 
 - A 5.1 mix goes out as Dolby Digital where the device plays it.
-- Everywhere else the sound is stereo AAC.
+- Auto sends stereo AAC otherwise. Surround sends 5.1 AAC when the device cannot play Dolby Digital.
 
 A recording of a clear 3.0 channel keeps the broadcast's own packets. The Docker image includes the decoder this needs. A server built without it still shows the picture, with no sound.
 
