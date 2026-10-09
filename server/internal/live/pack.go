@@ -735,9 +735,15 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 			} else {
 				frag = append(short.body, frag...)
 				if dur > 0 {
-					dur += ptsDiff(pts, short.pts)
+					// The next fragment can start before the one held for
+					// it, and the held one can run on past it. The step from
+					// the held timestamp alone is then negative, and a
+					// negative duration is published as half a second.
+					pts, dur = spanCover(short.pts, short.dur, pts, dur)
+				} else {
+					pts = short.pts
 				}
-				pts, sync = short.pts, true
+				sync = true
 				fresh, handover = short.fresh, short.handover
 				short = nil
 			}
@@ -1022,6 +1028,24 @@ func fmtDur(ticks int64) string {
 		ticks = partTicks
 	}
 	return strconv.FormatFloat(float64(ticks)/90000, 'f', 3, 64)
+}
+
+// spanCover is the presentation interval that contains both fragments.
+// pts is the earlier start. dur runs from there to the later end, across
+// the 33-bit wrap.
+func spanCover(aPTS, aDur, bPTS, bDur int64) (pts, dur int64) {
+	pts = aPTS
+	if ptsDiff(bPTS, aPTS) < 0 {
+		pts = bPTS
+	}
+	end := ptsDiff(aPTS, pts) + aDur
+	if other := ptsDiff(bPTS, pts) + bDur; other > end {
+		end = other
+	}
+	if end < 0 {
+		end = 0
+	}
+	return pts, end
 }
 
 // fragmentIndependent reports whether the fragment's first video sample is a
