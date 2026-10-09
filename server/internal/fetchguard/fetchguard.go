@@ -106,6 +106,56 @@ func Allowed(rawURL string) error {
 	return hostPolicy(u.Hostname())
 }
 
+// lookupTimeout bounds name resolution. A caller may hold a lock across Reachable.
+const lookupTimeout = 2 * time.Second
+
+// lookupIP resolves a hostname. Tests replace it so they do not dial.
+var lookupIP = func(ctx context.Context, host string) ([]net.IP, error) {
+	return net.DefaultResolver.LookupIP(ctx, "ip", host)
+}
+
+// Reachable reports whether rawURL may be opened by a program that resolves
+// the name itself. Allowed runs first. A literal address is not looked up.
+// A name is refused when lookup fails, returns nothing, or any answer is blocked.
+// The URL is left unchanged so TLS still sees the name.
+func Reachable(ctx context.Context, rawURL string) error {
+	if err := Allowed(rawURL); err != nil {
+		return err
+	}
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return ErrRefused
+	}
+	host := strings.TrimSuffix(u.Hostname(), ".")
+	if host == "" {
+		return ErrRefused
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if net.ParseIP(host) != nil {
+		return nil
+	}
+	lookupCtx, cancel := context.WithTimeout(ctx, lookupTimeout)
+	defer cancel()
+	ips, err := lookupIP(lookupCtx, host)
+	if cerr := ctx.Err(); cerr != nil {
+		return cerr
+	}
+	if err != nil || lookupCtx.Err() != nil || len(ips) == 0 {
+		return ErrRefused
+	}
+	for _, ip := range ips {
+		if ipBlocked(ip) {
+			return ErrRefused
+		}
+	}
+	return nil
+}
+
 func hostPolicy(host string) error {
 	host = strings.TrimSuffix(host, ".")
 	if host == "" || strings.Contains(host, "%") {
