@@ -1891,6 +1891,48 @@ func TestNoPartIsOneField(t *testing.T) {
 	}
 }
 
+// A short keyframe is held and sent in front of the next fragment. That next
+// fragment can start earlier: the frames it carries were shown before the
+// keyframe. Adding the step from the held timestamp makes the part's duration
+// negative, and a negative duration is published as half a second.
+func TestMergedPartSpansBothFragmentsWhenTheNextStartsEarlier(t *testing.T) {
+	// 8000 ticks of the held keyframe still stick out past the early fragment.
+	// Both rows sit 30_000 ticks before that keyframe: one plainly, one across
+	// the 33-bit wrap. The union from the earlier start is 0.422 s either way.
+	for _, c := range []struct {
+		short, next int64
+	}{
+		{200_000, 170_000},
+		{10_000, ptsWrap - 20_000},
+	} {
+		dir := t.TempDir()
+		var raw []byte
+		raw = append(raw, videoInit()...)
+		raw = append(raw, keyframeFragment(0, 90000)...)
+		raw = append(raw, keyframeFragment(c.short, 8_000)...)
+		raw = append(raw, keyframeFragment(c.next, 2_000)...)
+		if err := Pack(dir, bytes.NewReader(raw), nil); err != nil {
+			t.Fatal(err)
+		}
+		b, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(b)
+		const want = "#EXTINF:0.422,\nseg00001.m4s"
+		if strings.Contains(text, "0.500") || !strings.Contains(text, want) {
+			t.Fatalf("short %d next %d: segment 1 should cover both fragments:\n%s", c.short, c.next, text)
+		}
+		part, err := os.ReadFile(filepath.Join(dir, "part00001.m4s"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := len(topBoxes(part)); got != 4 {
+			t.Fatalf("short %d next %d: part has %d boxes, want both fragments", c.short, c.next, got)
+		}
+	}
+}
+
 // soundSamples counts track 2's samples in every fragment of b.
 func soundSamples(b []byte) int {
 	n := 0
