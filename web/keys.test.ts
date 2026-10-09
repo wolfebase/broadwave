@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { escapeAction, ignoreHeldKey, pendingTuneFires } from "./src/features/player/keys.ts";
+import { escapeAction, guideListAction, guideRowOnFocus, ignoreHeldKey, pendingTuneFires } from "./src/features/player/keys.ts";
 
 const up = { repeat: false, metaKey: false, ctrlKey: false, altKey: false };
 const held = { ...up, repeat: true };
@@ -43,4 +43,13 @@ test("Escape leaves fullscreen before it leaves the player", () => {
   assert.equal(escapeAction(true, false), "exit-fullscreen");
   assert.equal(escapeAction(false, true), "close-panel");
   assert.equal(escapeAction(false, false), "minimize");
+});
+
+test("mini-guide focus selects that row, and a repeated g does not close it", () => {
+  assert.equal(guideRowOnFocus(2, 5, 0), 2);
+  assert.equal(guideRowOnFocus(-1, 5, 0), 0);
+  assert.equal(guideRowOnFocus(1.5, 5, 0), 0);
+  assert.equal(guideListAction("g", false), "close");
+  assert.equal(guideListAction("g", true), "ignore");
+  assert.equal(guideListAction("ArrowDown", false), "down");
 });

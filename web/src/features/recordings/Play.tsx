@@ -1,8 +1,8 @@
 import Hls from "hls.js";
-import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, useMemo } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
 import { actionName } from "../../lib/actionName";
-import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
+import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, subscribeZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
 import { markersForPlayback, playbackGrowing, progressSaveAction, releaseFileVideo, storedPlayhead, takeFileFatal, type ResumeGate } from "./filePlay";
 import { copy } from "../../strings";
 import { Stage } from "../player/Stage";
@@ -40,7 +40,7 @@ export function Play({
   const [error, setError] = useState("");
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [skipMode, setSkipMode] = useState<SkipMode>(readSkip);
-  const [zoom, setZoom] = useState<Zoom>(readZoom);
+  const zoom = useSyncExternalStore(subscribeZoom, readZoom);
   const [captions, setCaptions] = useState<"off" | "on">("off");
   const [captionsReady, setCaptionsReady] = useState(false);
   const captionsLabel = useId();
@@ -257,7 +257,6 @@ export function Play({
   }, [shown, skipMode, recording.id, autoplay, dismissed, onNext]);
 
   function chooseZoom(next: Zoom) {
-    setZoom(next);
     saveZoom(next);
   }
 
