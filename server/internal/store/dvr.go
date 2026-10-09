@@ -566,16 +566,25 @@ func (s *Store) SetRecordingEnd(ctx context.Context, id int64, ends time.Time) e
 	return err
 }
 
-func (s *Store) Recordings(ctx context.Context) ([]Recording, error) {
-	rows, err := s.db.QueryContext(ctx, `
+// recordingSelect is one recording, joined to its playhead. The library
+// orders by id. One recording adds WHERE r.id = ?, which is the primary key.
+// Reading the library and searching it in Go scanned every row for a play click.
+const recordingSelect = `
 SELECT r.id, r.channel_id, r.guide_number, r.title, r.path, r.status, r.error, r.started_at, r.ends_at, r.ended_at, r.duration_sec,
 	r.subtitle, r.description, r.category, r.program_id, r.watched, r.game_id,
 	r.continuity_errors, r.transport_errors, r.sync_losses, r.packets, r.pass_id, r.gaps, COALESCE(r.lost_seconds, 0),
 	r.season, r.episode, r.episode_label, r.original_air, r.breaks_scanned,
 	r.intro_start, r.intro_end, r.credits_start, EXISTS (SELECT 1 FROM episode_prints e WHERE e.recording_id = r.id),
 	r.keep, r.watched_at, COALESCE(p.position_sec, 0), COALESCE(p.updated_at, '')
-FROM recordings r LEFT JOIN progress p ON p.recording_id = r.id
+FROM recordings r LEFT JOIN progress p ON p.recording_id = r.id`
+
+func (s *Store) Recordings(ctx context.Context) ([]Recording, error) {
+	return s.queryRecordings(ctx, recordingSelect+`
 ORDER BY r.id DESC`)
+}
+
+func (s *Store) queryRecordings(ctx context.Context, query string, args ...any) ([]Recording, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -735,16 +744,15 @@ func (s *Store) DeleteRecording(ctx context.Context, id int64) error {
 }
 
 func (s *Store) Recording(ctx context.Context, id int64) (Recording, error) {
-	all, err := s.Recordings(ctx)
+	rows, err := s.queryRecordings(ctx, recordingSelect+`
+WHERE r.id = ?`, id)
 	if err != nil {
 		return Recording{}, err
 	}
-	for _, rec := range all {
-		if rec.ID == id {
-			return rec, nil
-		}
+	if len(rows) == 0 {
+		return Recording{}, sql.ErrNoRows
 	}
-	return Recording{}, sql.ErrNoRows
+	return rows[0], nil
 }
 
 func (s *Store) AddPass(ctx context.Context, title string, channelID int64, padBefore, padAfter int) error {
