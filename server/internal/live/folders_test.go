@@ -131,6 +131,52 @@ func TestFlatRecordingPathStaysInTheFolder(t *testing.T) {
 	}
 }
 
+// A recording folder that is a symlink points outside the recordings
+// directory. Removing the recording must not delete the file it names.
+// A symlink that is itself inside the folder is the recording's link, and
+// that link goes; the file it points at stays.
+func TestRemoveDoesNotFollowAFolderLink(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	kept := filepath.Join(outside, "keep.ts")
+	if err := os.WriteFile(kept, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "Elsewhere")); err != nil {
+		t.Fatal(err)
+	}
+	h := &Hub{Dir: t.TempDir(), RecordingsDir: root}
+	h.RemoveRecordingFiles(store.Recording{ID: 1, Path: filepath.Join(root, "Elsewhere", "keep.ts")})
+	if _, err := os.Stat(kept); err != nil {
+		t.Fatal("deleted a file outside the recordings folder")
+	}
+
+	target := filepath.Join(outside, "other.ts")
+	if err := os.WriteFile(target, []byte("t"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link.ts")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	removeInside(root, link)
+	if _, err := os.Stat(target); err != nil {
+		t.Fatal("unlinked the target of a link inside the folder")
+	}
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Fatal("left the link itself")
+	}
+
+	episode := filepath.Join(root, "episode.ts")
+	if err := os.WriteFile(episode, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	removeInside(root, episode)
+	if _, err := os.Lstat(episode); !os.IsNotExist(err) {
+		t.Fatal("left a recording inside the folder")
+	}
+}
+
 func TestRemovingTheLastEpisodeTakesItsEmptyFolders(t *testing.T) {
 	h := &Hub{Dir: t.TempDir()}
 	root := h.Recordings()
