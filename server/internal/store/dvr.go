@@ -1064,6 +1064,12 @@ func maskURL(raw string) (public, secret string) {
 			changed = true
 		}
 	}
+	for key := range q {
+		if strings.EqualFold(key, "DeviceAuth") && q.Get(key) != "" {
+			q.Set(key, "••••")
+			changed = true
+		}
+	}
 	if !changed {
 		return raw, ""
 	}

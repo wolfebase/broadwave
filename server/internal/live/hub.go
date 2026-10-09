@@ -1098,7 +1098,7 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 		}
 		return nil, err
 	}
-	cmd.Stderr = os.Stderr
+	logCommand(cmd)
 	if err := cmd.Start(); err != nil {
 		_ = stdout.Close()
 		if stdin != nil {
@@ -1408,7 +1408,7 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 		}
 		return false
 	}
-	cmd.Stderr = os.Stderr
+	logCommand(cmd)
 	if err := cmd.Start(); err != nil {
 		_ = stdout.Close()
 		if stdin != nil {
@@ -1491,7 +1491,7 @@ func (h *Hub) followBreak(f *feed, r *rendition, p *programPipe) {
 		fail(err)
 		return
 	}
-	cmd.Stderr = os.Stderr
+	logCommand(cmd)
 	if err := cmd.Start(); err != nil {
 		_ = stdout.Close()
 		_ = stdin.Close()
@@ -2029,7 +2029,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 				return store.Recording{}, err
 			}
 		}
-		cmd.Stderr = os.Stderr
+		logCommand(cmd)
 		if err := cmd.Start(); err != nil {
 			h.abortRecordingLocked(ctx, f, id)
 			return store.Recording{}, err
