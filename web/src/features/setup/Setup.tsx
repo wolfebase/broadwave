@@ -265,7 +265,7 @@ export function Setup() {
               Add playlist
             </button>
           </form>
-          {note ? <p className="dim">{note}</p> : null}
+          {note ? <p className="dim" role={/did not|not finish|nothing|no free/i.test(note) ? "alert" : "status"}>{note}</p> : null}
           <HomeList hideAdded />
         </section>
       ) : null}
@@ -315,7 +315,7 @@ function FinishStep({ progress, note }: { progress: SetupFinish | null; note: st
           </li>
         ))}
       </ul>
-      {note ? <p className="dim">{note}</p> : null}
+      {note ? <p className="dim" role={/did not|not finish|nothing|no free/i.test(note) ? "alert" : "status"}>{note}</p> : null}
       {ready ? (
         <>
           {loopback ? (

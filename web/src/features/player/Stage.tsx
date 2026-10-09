@@ -32,6 +32,7 @@ export function Stage({
   onExpand,
   onClose,
   badge,
+  announce,
   onTogglePlay,
   loading,
   onSound,
@@ -64,6 +65,8 @@ export function Stage({
   onExpand?: () => void;
   onClose?: () => void;
   badge?: ReactNode;
+  /** A live region that stays available after the chrome fades. */
+  announce?: ReactNode;
   onTogglePlay?: () => void;
   /** Shown over the picture until the first frame. The chrome stays up meanwhile. */
   loading?: ReactNode;
@@ -226,6 +229,12 @@ export function Stage({
         }}
         onDoubleClick={fullscreen}
       />
+      {announce}
+      {!error && note && idle ? (
+        <span className="sr-only" role="status" aria-live="polite">
+          {note}
+        </span>
+      ) : null}
       {loading && !error ? loading : null}
       {mode === "mini" ? (
         <div className="mini-bar">
@@ -350,12 +359,16 @@ export function Stage({
               <ExpandIcon />
             </button>
             {more ? (
-              <button type="button" className={open ? "text-btn on" : "text-btn"} onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+              <button type="button" className={open ? "text-btn on" : "text-btn"} onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls={open ? "player-options" : undefined}>
                 Options
               </button>
             ) : null}
           </div>
-          {open && more ? <div className="stage-more">{more}</div> : null}
+          {open && more ? (
+            <div id="player-options" className="stage-more" role="region" aria-label="Options">
+              {more}
+            </div>
+          ) : null}
         </footer>
       </div>
       ) : null}

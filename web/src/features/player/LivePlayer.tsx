@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKey, type RefObject } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKey, type ReactNode, type RefObject } from "react";
 import { useData } from "../../app/data";
 import { useLayout } from "../../app/layout";
 import { focusRing } from "../../app/remote";
 import { navigate } from "../../app/router";
+import { isTextField } from "../../lib/dialogFocus";
 import { airingAt, categoryOf, minutesLeft, progress } from "../../lib/guide";
 import { channelNumberContinues, typedChannel } from "../../lib/remote";
 import type { SyncStatus } from "../../lib/sync";
@@ -13,6 +14,8 @@ import type { Channel } from "../../types";
 import { saveSound, sleepDue, sleepSentence, sleepUntilFrom } from "./extras";
 import { ChevronIcon, InfoIcon, ListIcon, RecordIcon, SideBySideIcon, SyncIcon } from "../../ui/icons";
 import { Progress } from "../../ui/primitives";
+import { useDialogFocus } from "../../ui/useDialogFocus";
+import { syncLiveText, syncPillText } from "./syncStatus";
 import { isLayout, multiviewPath } from "../multiview/storage";
 import { useScoreMap } from "../sports/scores";
 import { listingNote } from "./outage";
@@ -194,7 +197,7 @@ export function LivePlayer({
       focusRing(channelsBtn ?? root);
       return;
     }
-    root.focus();
+    focusRing(root);
   }, [channel.id, mode, layout]);
 
   // The selected row keeps the keys and stays in view. A row the pointer
@@ -329,17 +332,21 @@ export function LivePlayer({
   function onKey(event: ReactKey) {
     const k = event.key;
     const target = event.target;
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable)) {
-      if (k === "Escape") {
+    const arrows = k === "ArrowLeft" || k === "ArrowRight" || k === "ArrowUp" || k === "ArrowDown";
+    if (isTextField(target)) {
+      if (k === "Escape" && target instanceof HTMLElement) {
         target.blur();
         event.preventDefault();
       }
       return;
     }
-    if (panel === "help") {
-      // A modal keeps the player's keys, but Enter, Space, and Tab belong to its Close button.
-      if (k === "Enter" || k === " " || k === "Tab") return;
-      if (k === "Escape" || k === "Backspace" || k === "?") setPanel("none");
+    // A slider keeps the arrows. Back and Escape still leave.
+    if (target instanceof HTMLInputElement && target.type === "range" && arrows) return;
+    if (target instanceof HTMLInputElement && (target.type === "checkbox" || target.type === "radio") && (k === " " || k === "Enter")) return;
+    if (panel === "help" || panel === "info" || panel === "sync") {
+      // Enter, Space, Tab, and the arrows belong to the dialog. Everything else stays here.
+      if (k === "Enter" || k === " " || k === "Tab" || arrows) return;
+      if (k === "Escape" || k === "Backspace" || (panel === "help" && k === "?")) setPanel("none");
       event.preventDefault();
       return;
     }
@@ -375,7 +382,7 @@ export function LivePlayer({
         // The list is about to unmount with the focus in it. On a TV the button
         // (also named Channels) keeps the keys; elsewhere the picture does.
         if (layout === "tv") focusRing(document.querySelector<HTMLElement>(".stage:not(.mini) button[aria-label='Channels']"));
-        else rootRef.current?.focus();
+        else focusRing(rootRef.current);
       };
       if (k === "Escape" || k === "Backspace" || k === "g") {
         setPanel("none");
@@ -393,7 +400,6 @@ export function LivePlayer({
     // On a TV the arrows walk the page, and the chrome when the stage has them.
     // The stage still seeks and changes channel when it has the keys. A mini
     // player must not take those keys from the page underneath it.
-    const arrows = k === "ArrowLeft" || k === "ArrowRight" || k === "ArrowUp" || k === "ArrowDown";
     if (layout === "tv" && arrows && (!(target instanceof Element) || !target.closest(".stage") || target.closest(".stage-hud"))) return;
     const actions: Record<string, () => void> = {
       Escape: () => (panel !== "none" ? setPanel("none") : onMinimize()),
@@ -437,13 +443,12 @@ export function LivePlayer({
       if (event.defaultPrevented || (event.target !== document.body && event.target !== document.documentElement)) return;
       const root = rootRef.current;
       if (!root) return;
-      if (layout === "tv") focusRing(root);
-      else root.focus();
+      focusRing(root);
       keyRef.current(event as unknown as ReactKey);
     };
     window.addEventListener("keydown", onStray);
     return () => window.removeEventListener("keydown", onStray);
-  }, [mode, layout]);
+  }, [mode]);
 
   const liveLabel = livePillLabel(opts.sync && sync.state !== "off", behind);
   const title = airing?.title || channel.displayName;
@@ -457,11 +462,16 @@ export function LivePlayer({
     [channel, airing, now],
   );
 
+  const syncLabel = syncPillText(together, sync.members);
+  // Set before the text is chosen, so a later off still says sync was on.
+  const syncWasOn = useRef(false);
+  if (sync.state !== "off") syncWasOn.current = true;
+  const syncSpoken = syncLiveText(sync.state, together, sync.members, syncWasOn.current);
   const syncBadge =
     opts.sync && sync.state !== "off" ? (
-      <button type="button" className={`sync-pill ${sync.state}`} onClick={() => setPanel((p) => (p === "sync" ? "none" : "sync"))} aria-label="Whole-Home Sync">
+      <button type="button" className={`sync-pill ${sync.state}`} onClick={() => setPanel((p) => (p === "sync" ? "none" : "sync"))} aria-label={`Whole-Home Sync, ${syncSpoken}`}>
         <SyncIcon />
-        {together ? (sync.members > 1 ? `Together · ${sync.members}` : "Together") : sync.members > 1 ? `${sync.members} screens` : "Synced"}
+        {syncLabel}
       </button>
     ) : null;
 
@@ -479,6 +489,7 @@ export function LivePlayer({
       backLabel="Back to browsing"
       onExpand={onExpand}
       onClose={onClose}
+      hold={panel !== "none"}
       liveLabel={liveLabel}
       onLive={goLive}
       position={scrubAt ?? span.at}
@@ -528,6 +539,11 @@ export function LivePlayer({
         ) : null
       }
       badge={syncBadge}
+      announce={
+        <span className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-sync-live="">
+          {syncSpoken}
+        </span>
+      }
       loading={tuning ? <TuningCard channel={channel} show={airing?.title} art={airing?.imageUrl ? `/media/art/airing/${airing.id}?w=960` : ""} mini={mode === "mini"} /> : null}
       tools={
         <>
@@ -590,7 +606,6 @@ export function LivePlayer({
               value={opts.captions ? "on" : "off"}
               options={["off", "on"]}
               labels={{ off: "Off", on: "On" }}
-              pressed
               onChange={(v) => setOpts((o) => ({ ...o, captions: v === "on" }))}
             />
           ) : null}
@@ -696,7 +711,7 @@ export function LivePlayer({
         </div>
       ) : null}
       {panel === "info" ? (
-        <div className="info-panel glass" role="dialog" aria-label={copy.player.stats}>
+        <ModalPanel label={copy.player.stats} onClose={() => setPanel("none")}>
           <h3>{copy.player.stats}</h3>
           {session ? (
             <dl>
@@ -728,11 +743,16 @@ export function LivePlayer({
           ) : (
             <p>Tuning…</p>
           )}
-        </div>
+          <div className="option-actions">
+            <button type="button" className="btn" onClick={() => setPanel("none")}>
+              {copy.player.close}
+            </button>
+          </div>
+        </ModalPanel>
       ) : null}
       {panel === "help" ? <HelpDialog onClose={() => setPanel("none")} /> : null}
       {panel === "sync" ? (
-        <div className="info-panel glass" role="dialog" aria-labelledby="sync-panel-title">
+        <ModalPanel labelledBy="sync-panel-title" onClose={() => setPanel("none")}>
           <h3 id="sync-panel-title">{together ? "Watching together" : "Whole-Home Sync"}</h3>
           {together ? (
             <>
@@ -774,7 +794,7 @@ export function LivePlayer({
               </div>
             </>
           )}
-        </div>
+        </ModalPanel>
       ) : null}
     </Stage>
   );
@@ -786,25 +806,36 @@ function OptionRow<T extends string>({
   options,
   labels,
   onChange,
-  pressed,
 }: {
   label: string;
   value: T | string;
   options: T[];
   labels: Record<string, string>;
   onChange: (v: T) => void;
-  pressed?: boolean;
 }) {
+  const labelId = useId();
   return (
     <div className="option-row">
-      <span className="option-label">{label}</span>
-      <div className="segmented" role="group" aria-label={label}>
+      <span className="option-label" id={labelId}>
+        {label}
+      </span>
+      <div className="segmented" role="group" aria-labelledby={labelId}>
         {options.map((o) => (
-          <button key={o} type="button" className={value === o ? "seg on" : "seg"} aria-pressed={pressed ? value === o : undefined} onClick={() => onChange(o)}>
+          <button key={o} type="button" className={value === o ? "seg on" : "seg"} aria-pressed={value === o} onClick={() => onChange(o)}>
             {labels[o] ?? o}
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function ModalPanel({ label, labelledBy, onClose, children }: { label?: string; labelledBy?: string; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useDialogFocus(ref, onClose);
+  return (
+    <div ref={ref} className="info-panel glass" role="dialog" aria-modal="true" aria-label={label} aria-labelledby={labelledBy} tabIndex={-1}>
+      {children}
     </div>
   );
 }
@@ -855,6 +886,7 @@ function VolumeRow({ videoRef }: { videoRef: RefObject<HTMLVideoElement | null> 
         step={0.05}
         value={level}
         aria-label={copy.player.volume}
+        aria-valuetext={`${Math.round(level * 100)}%`}
         onChange={(event) => {
           const next = Number(event.target.value);
           setLevel(next);
@@ -870,39 +902,7 @@ function VolumeRow({ videoRef }: { videoRef: RefObject<HTMLVideoElement | null> 
 
 function HelpDialog({ onClose }: { onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const root = ref.current;
-    const prev = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const items = () =>
-      [...(root?.querySelectorAll<HTMLElement>("button, a[href], input, select, textarea") ?? [])].filter((el) => !el.hidden && !el.hasAttribute("disabled"));
-    focusRing(items()[0] ?? root);
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
-      const list = items();
-      if (list.length === 0) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      const first = list[0];
-      const last = list[list.length - 1];
-      const active = document.activeElement;
-      if (event.shiftKey && (active === first || !root?.contains(active))) {
-        event.preventDefault();
-        event.stopPropagation();
-        focusRing(last);
-      } else if (!event.shiftKey && (active === last || !root?.contains(active))) {
-        event.preventDefault();
-        event.stopPropagation();
-        focusRing(first);
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => {
-      window.removeEventListener("keydown", onKey, true);
-      focusRing(prev);
-    };
-  }, []);
+  useDialogFocus(ref, onClose);
   return (
     <div ref={ref} className="info-panel help-panel glass" role="dialog" aria-modal="true" aria-label={copy.player.helpTitle} tabIndex={-1}>
       <h3>{copy.player.helpTitle}</h3>

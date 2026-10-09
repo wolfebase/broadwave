@@ -168,7 +168,7 @@ export function Sports() {
                         </button>
                       ) : null}
                       {liveNow && !rec ? (
-                        <button type="button" className="btn small" onClick={() => void record(channel, airing.title)} aria-label="Record">
+                        <button type="button" className="btn small" onClick={() => void record(channel, airing.title)} aria-label={`Record ${airing.title}`}>
                           <RecordIcon className="tally" />
                         </button>
                       ) : null}
