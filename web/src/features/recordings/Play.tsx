@@ -3,7 +3,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalSto
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
 import { actionName } from "../../lib/actionName";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
-import { progressSaveAction, progressToStore, releaseFileVideo, takeFileFatal } from "./filePlay";
+import { progressSaveAction, releaseFileVideo, storedPlayhead, takeFileFatal, type ResumeGate } from "./filePlay";
 import { copy } from "../../strings";
 import { Stage } from "../player/Stage";
 import type { Recording } from "../../types";
@@ -53,6 +53,9 @@ export function Play({
   const saveTimer = useRef(0);
   // A resume seek that lands after the viewer has already moved would undo Start over.
   const viewerSought = useRef(false);
+  // The lead-in must not be stored until this seek has landed. The save timer
+  // lives in another effect, so it reads the gate from here.
+  const resumeGate = useRef<ResumeGate>({ at: 0, known: false });
   // Only a countdown the viewer saw plays the next episode.
   const counted = useRef(false);
   // Where this encode started. The playlist before that is gap, not the picture.
@@ -131,6 +134,7 @@ export function Play({
       }
       let resumeAt = 0;
       let placed = false;
+      resumeGate.current = { at: 0, known: false };
       const tried = { network: false, media: false };
       let gaveUp = false;
       try {
@@ -141,6 +145,7 @@ export function Play({
         setGrowing(next.growing);
         encodedStart.current = next.position;
         resumeAt = next.position;
+        resumeGate.current = { at: next.position, known: true };
         const started = performance.now();
         const place = () => {
           if (viewerSought.current || placed || resumeAt < 2) {
@@ -206,11 +211,11 @@ export function Play({
       detach?.();
       // Read the playhead before releaseFileVideo reloads the element. A
       // timeupdate from that reload would otherwise report the start.
-      const at = whereRef.current;
+      const at = storedPlayhead(whereRef.current, resumeGate.current, viewerSought.current);
       hls?.destroy();
       track.remove();
       releaseFileVideo(video);
-      if (at > 1) void saveProgress(recording.id, at);
+      if (at != null) void saveProgress(recording.id, at);
     };
   }, [recording.id, pictureMode]);
 
@@ -226,7 +231,7 @@ export function Play({
       if (progressSaveAction(saveTimer.current !== 0, t) === "arm") {
         const timer = window.setTimeout(() => {
           if (saveTimer.current === timer) saveTimer.current = 0;
-          const at = progressToStore(whereRef.current);
+          const at = storedPlayhead(whereRef.current, resumeGate.current, viewerSought.current);
           if (at != null) void saveProgress(recording.id, at);
         }, 4000);
         saveTimer.current = timer;
