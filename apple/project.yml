@@ -4,6 +4,7 @@ options:
   deploymentTarget:
     iOS: "26.1"
     tvOS: "26.1"
+    watchOS: "26.0"
   createIntermediateGroups: true
 settings:
   base:
@@ -39,6 +40,8 @@ targets:
       - path: App/Intents
     dependencies:
       - target: BroadwaveWidgets
+      # Embedded under Watch/ ("Embed Watch Content").
+      - target: BroadwaveWatch
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.broadwave
@@ -100,6 +103,27 @@ targets:
           NSAllowsArbitraryLoads: true
         NSLocalNetworkUsageDescription: Broadwave finds your TV server on your home network.
         BroadwaveKeychainGroup: $(AppIdentifierPrefix)com.wolfeup.broadwave.shared
+  BroadwaveWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: App/Watch
+      # The message format the iPhone app answers; compiled here without the rest of the kit.
+      - path: Packages/BroadwaveKit/Sources/BroadwaveKit/WatchRelay.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wolfeup.broadwave.watchkitapp
+        TARGETED_DEVICE_FAMILY: "4"
+        SKIP_INSTALL: YES
+    info:
+      path: App/Watch/Info.plist
+      properties:
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleDisplayName: Broadwave
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: com.wolfeup.broadwave
+        WKRunsIndependentlyOfCompanionApp: false
   BroadwaveTV:
     templates: [App]
     platform: tvOS

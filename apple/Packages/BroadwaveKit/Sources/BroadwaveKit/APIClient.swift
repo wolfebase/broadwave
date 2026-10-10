@@ -261,19 +261,29 @@ public struct APIClient: Sendable {
     // MARK: Screens
 
     /// The apps open on this server that said who they are, this one included.
-    public func screens() async throws -> [Screen] {
+    public func screens(timeout: TimeInterval = 30) async throws -> [Screen] {
         struct R: Decodable { var screens: [Screen] }
-        return try await send("GET", "/screens", as: R.self).screens
+        return try await send("GET", "/screens", timeout: timeout, as: R.self).screens
     }
 
     /// Tells another screen to play a channel live. 404 means it closed; the message is safe to show.
     public func sendToScreen(id: String, channelId: Int64, from: String) async throws {
         struct B: Encodable { var channelId: Int64; var from: String }
-        var req = URLRequest(url: url("/api/v1/screens/\(Self.pathSegment(id))/watch"))
+        try await postToScreen(id: id, "watch", B(channelId: channelId, from: from))
+    }
+
+    /// Presses one remote button on another screen. 404 means it closed.
+    public func pressRemote(screenID: String, action: String, from: String, timeout: TimeInterval = 10) async throws {
+        struct B: Encodable { var action: String; var from: String }
+        try await postToScreen(id: screenID, "remote", B(action: action, from: from), timeout: timeout)
+    }
+
+    private func postToScreen(id: String, _ verb: String, _ body: some Encodable, timeout: TimeInterval = 10) async throws {
+        var req = URLRequest(url: url("/api/v1/screens/\(Self.pathSegment(id))/\(verb)"))
         req.httpMethod = "POST"
-        req.timeoutInterval = 10
+        req.timeoutInterval = timeout
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONEncoder().encode(B(channelId: channelId, from: from))
+        req.httpBody = try JSONEncoder().encode(body)
         // 202 has no body to decode.
         let (data, res) = try await session.data(for: req)
         let status = (res as? HTTPURLResponse)?.statusCode ?? 0

@@ -154,6 +154,12 @@ import Testing
     #expect(body?["channelId"] as? Int == 4)
     #expect(body?["from"] as? String == "Test iPhone")
 
+    try await api.pressRemote(screenID: "tv-1", action: "down", from: "Test Watch")
+    #expect(ScreensStub.lastPath == "/api/v1/screens/tv-1/remote")
+    let press = try JSONSerialization.jsonObject(with: #require(ScreensStub.lastBody)) as? [String: Any]
+    #expect(press?["action"] as? String == "down")
+    #expect(press?["from"] as? String == "Test Watch")
+
     ScreensStub.status = 404
     ScreensStub.payload = Data(#"{"code":"not_found","message":"That screen isn't open right now."}"#.utf8)
     do {

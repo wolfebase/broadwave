@@ -10,7 +10,7 @@ import SwiftUI
 
 @main
 struct BroadwaveApp: App {
-    @State private var store = AppStore()
+    @State private var store: AppStore
     @Environment(\.scenePhase) private var scenePhase
     #if os(iOS)
         @State private var activities = LiveActivities()
@@ -19,9 +19,12 @@ struct BroadwaveApp: App {
     #endif
 
     init() {
+        let store = AppStore()
+        _store = State(initialValue: store)
         #if os(iOS)
             // longFormVideo is what lets Home start Picture in Picture and AirPlay offer a television.
             try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo)
+            WatchBridge.shared.start(store)
         #endif
     }
 
