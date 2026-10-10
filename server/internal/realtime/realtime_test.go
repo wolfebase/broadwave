@@ -874,3 +874,33 @@ func send(t *testing.T, ctx context.Context, conn *websocket.Conn, kind, data st
 		t.Fatal(err)
 	}
 }
+
+func TestTwoTabsOfOneBrowserAreOneScreen(t *testing.T) {
+	b := NewBus()
+	one := &client{send: make(chan []byte, 4), rooms: map[string]bool{}, here: Presence{ID: "chrome-1", Name: "Chrome on Mac", Kind: "web"}}
+	two := &client{send: make(chan []byte, 4), rooms: map[string]bool{"channel:7": true}, here: Presence{ID: "chrome-1", Name: "Chrome on Mac", Kind: "web"}}
+	quad := &client{send: make(chan []byte, 4), rooms: map[string]bool{"channel:7": true, "channel:8": true}, here: Presence{ID: "tv-1", Name: "Den", Kind: "appletv"}}
+	for _, c := range []*client{one, two, quad} {
+		b.clients[c] = struct{}{}
+	}
+	screens := b.Screens()
+	if len(screens) != 2 {
+		t.Fatalf("screens: %+v", screens)
+	}
+	for _, s := range screens {
+		if s.ID == "chrome-1" && s.ChannelID != 7 || s.ID == "tv-1" && s.ChannelID != 0 {
+			t.Fatalf("watching: %+v", screens)
+		}
+	}
+	if n := b.SendTo("chrome-1", "screen.watch", map[string]int{"channelId": 7}); n != 2 || len(one.send) != 1 || len(two.send) != 1 || len(quad.send) != 0 {
+		t.Fatalf("sent to %d", n)
+	}
+	if b.SendTo("", "screen.watch", nil) != 0 {
+		t.Fatal("an empty id reached a screen")
+	}
+	for _, bad := range []string{"has space", "semi;colon", strings.Repeat("a", 65)} {
+		if cleanID(bad) != "" {
+			t.Fatalf("kept %q", bad)
+		}
+	}
+}

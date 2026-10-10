@@ -101,6 +101,44 @@ paths:
                   groups:
                     type: array
                     items: { $ref: "#/components/schemas/RoomState" }
+  /screens:
+    get:
+      tags: [server]
+      operationId: listScreens
+      description: The apps open on this server right now that another screen can send a channel to. Each app names itself with `here` on the socket; apps that send no `id` are left out.
+      responses:
+        "200":
+          description: Every open screen
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [screens]
+                properties:
+                  screens:
+                    type: array
+                    items: { $ref: "#/components/schemas/Screen" }
+  /screens/{id}/watch:
+    post:
+      tags: [server]
+      operationId: sendToScreen
+      description: Tells one screen to play a channel live (a `screen.watch` event on its socket). It joins the channel's room like any screen, so it lands on the same moment as the others.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channelId]
+              properties:
+                channelId: { type: integer, format: int64 }
+                from: { type: string, description: "The sending screen's name, shown on the receiving screen" }
+      responses:
+        "202": { description: Sent }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /ws:
     get:
       tags: [server]
@@ -109,9 +147,9 @@ paths:
         WebSocket for live updates and Whole-Home Sync. Every frame is `{"type", "data"}`.
 
         Server to client: `hello` {serverTime, boot} (boot names the server process; a new one means it restarted and every watch and room is gone), `clock` {t0, t1}, `activity` (Event),
-        `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `error` {code, message}.
+        `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `screen.watch` {channelId, from} (another screen sent this one a channel; see `/screens`), `error` {code, message}.
 
-        Client to server: `clock` {t0}, `sync.join` {room, channelId, latency}, `sync.leave` {room},
+        Client to server: `here` {id, name, kind} (names this screen; `id` is the app's own stable id, 1-64 letters, digits, or `-`; kind is iphone, ipad, appletv, or web), `clock` {t0}, `sync.join` {room, channelId, latency}, `sync.leave` {room},
         `sync.command` {room, action: play|pause|seek|live|latency|stalled, mediaTime, latency}. `stalled` steps a one-screen room or a multiview 2 s further from live, never past its latency target.
         A join's `latency` (lowest|balanced|stable, the screen's default) applies only when the join starts the room. A room with an Apple screen in it plays at balanced or further back: AVPlayer never reaches lowest.
 
@@ -1773,6 +1811,14 @@ components:
           type: array
           description: Group rooms only. Who is in the room; a screen that has not said what it is has an empty name and kind.
           items: { $ref: "#/components/schemas/Person" }
+    Screen:
+      type: object
+      required: [id, name, kind]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { type: string, description: "iphone, ipad, appletv, or web" }
+        channelId: { type: integer, format: int64, description: "The live channel it is watching; absent when none or in a multiview" }
     Person:
       type: object
       required: [name, kind]

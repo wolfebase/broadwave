@@ -678,6 +678,20 @@ public struct RoomState: Codable, Sendable, Hashable {
     }
 }
 
+public struct Screen: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var name: String
+    public var kind: String
+    public var channelId: Int64?
+
+    public init(id: String, name: String, kind: String, channelId: Int64? = nil) {
+        self.id = id
+        self.name = name
+        self.kind = kind
+        self.channelId = channelId
+    }
+}
+
 public struct ServerInfo: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var name: String

@@ -115,6 +115,8 @@ func (s *Server) Handler() http.Handler {
 	api("GET /metrics", s.metrics)
 	api("GET /ws", s.socket)
 	api("GET /groups", s.groups)
+	api("GET /screens", s.screens)
+	api("POST /screens/{id}/watch", s.screenWatch)
 	api("GET /profile", s.profile)
 	api("GET /devices", s.devices)
 	api("DELETE /devices/{id}", s.removeDevice)

@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -45,9 +46,14 @@ type Bus struct {
 
 // Presence is one app that announced itself on the event socket.
 type Presence struct {
+	// ID is the app's own stable id for this screen, so another screen can
+	// send it a channel. Empty for apps that predate it.
+	ID   string
 	Name string
 	Kind string
 	Addr string
+	// ChannelID is the live channel the screen is watching, 0 for none.
+	ChannelID int64
 }
 
 type client struct {
@@ -223,18 +229,75 @@ func (b *Bus) roomChanged(room string) {
 	}
 }
 
-// Screens returns clients that have announced a name and a kind.
+// Screens returns clients that have announced a name and a kind. Sockets
+// that share an id (two tabs of one browser) are one screen.
 func (b *Bus) Screens() []Presence {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	var out []Presence
+	seen := map[string]int{}
 	for c := range b.clients {
 		if c.here.Kind == "" {
 			continue
 		}
-		out = append(out, c.here)
+		p := c.here
+		p.ChannelID = watching(c.rooms)
+		if p.ID != "" {
+			if i, ok := seen[p.ID]; ok {
+				if out[i].ChannelID == 0 {
+					out[i].ChannelID = p.ChannelID
+				}
+				continue
+			}
+			seen[p.ID] = len(out)
+		}
+		out = append(out, p)
 	}
 	return out
+}
+
+// watching is the channel of a screen's one-channel room, 0 when it has none
+// or is in a multiview.
+func watching(rooms map[string]bool) int64 {
+	var id int64
+	for room, in := range rooms {
+		rest, ok := strings.CutPrefix(room, "channel:")
+		if !in || !ok {
+			continue
+		}
+		n, err := strconv.ParseInt(rest, 10, 64)
+		if err != nil || n <= 0 {
+			continue
+		}
+		if id != 0 && id != n {
+			return 0
+		}
+		id = n
+	}
+	return id
+}
+
+// SendTo sends an event to every socket of one screen and reports how many
+// took it.
+func (b *Bus) SendTo(id, kind string, v any) int {
+	if id == "" {
+		return 0
+	}
+	msg := frame(kind, v)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	n := 0
+	for c := range b.clients {
+		if c.here.ID != id || c.here.Kind == "" {
+			continue
+		}
+		select {
+		case c.send <- msg:
+			n++
+		default:
+		}
+	}
+	return n
 }
 
 // Clients reports how many sockets are connected.
@@ -319,6 +382,7 @@ func (b *Bus) handle(c *client, m Message) {
 	switch m.Type {
 	case "here":
 		var req struct {
+			ID   string `json:"id"`
 			Name string `json:"name"`
 			Kind string `json:"kind"`
 		}
@@ -336,6 +400,7 @@ func (b *Bus) handle(c *client, m Message) {
 			name = kind
 		}
 		b.mu.Lock()
+		c.here.ID = cleanID(req.ID)
 		c.here.Name = name
 		c.here.Kind = kind
 		rooms := slices.Collect(maps.Keys(c.rooms))
@@ -502,6 +567,20 @@ func hostOnly(addr string) string {
 		return host
 	}
 	return addr
+}
+
+// cleanID keeps a screen id to letters, digits, and dashes, at most 64.
+func cleanID(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" || len(s) > 64 {
+		return ""
+	}
+	for _, r := range s {
+		if !(r == '-' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') {
+			return ""
+		}
+	}
+	return s
 }
 
 func cleanLabel(s string) string {
