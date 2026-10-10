@@ -56,6 +56,9 @@ struct GuideView: View {
                 if sizeClass == .compact, verticalSize != .compact {
                     onNowList
                 } else {
+                    if sizeClass == .regular, verticalSize == .regular {
+                        GuidePreview(picked: selected?.channel)
+                    }
                     GuideGrid(channels: rows, highlight: filter, jump: jump, scores: scores) { selected = Selection(channel: $0, airing: $1) }
                 }
             #endif
@@ -878,6 +881,129 @@ struct ProgramSheet: View {
         }
     }
 }
+
+#if os(iOS)
+    /// iPad: the docked picture stays on screen above the guide, so browsing never
+    /// hides what is playing. It takes no tuner of its own: with nothing playing, a
+    /// picked channel shows its last frame until Preview starts it here.
+    private struct GuidePreview: View {
+        @Environment(AppStore.self) private var store
+        @Environment(NowPlaying.self) private var nowPlaying
+        @Environment(\.scenePhase) private var scenePhase
+        var picked: Channel?
+        @State private var minute = Int(Date().timeIntervalSince1970) / 60
+        @State private var lastFrame: Image?
+
+        private var playing: Channel? {
+            nowPlaying.docked ? nowPlaying.channel : nil
+        }
+
+        /// A layer on screen makes the system pause the player in the background,
+        /// so the docked sound would stop with the app.
+        private var showsPlayer: Bool {
+            playing != nil && scenePhase == .active
+        }
+
+        var body: some View {
+            if let channel = playing ?? picked {
+                HStack(alignment: .top, spacing: 16) {
+                    picture(channel)
+                        .frame(width: 300, height: 169)
+                        .clipShape(.rect(cornerRadius: Tokens.Radius.md))
+                        .contentShape(.rect)
+                        .onTapGesture {
+                            if playing != nil {
+                                nowPlaying.expanded = true
+                            }
+                        }
+                    details(channel)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .task(id: showsPlayer ? -1 : channel.id) {
+                    guard !showsPlayer else { return }
+                    lastFrame = nil
+                    // The server grabs a new frame about once a minute.
+                    while !Task.isCancelled {
+                        minute = Int(Date().timeIntervalSince1970) / 60
+                        try? await Task.sleep(for: .seconds(30))
+                    }
+                }
+            }
+        }
+
+        @ViewBuilder
+        private func picture(_ channel: Channel) -> some View {
+            if showsPlayer {
+                PlayerLayerBox(player: nowPlaying.live.player)
+                    .background(.black)
+                    .accessibilityElement()
+                    .accessibilityLabel("\(channel.displayNumber) \(channel.displayName), playing")
+                    .accessibilityHint("Opens the player")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { nowPlaying.expanded = true }
+                    .accessibilityIdentifier("guide-preview")
+            } else {
+                let frame = store.api?.frameURL(channelID: channel.id, width: 480, listed: store.frameIDs)
+                ZStack {
+                    Tokens.ColorToken.surface1
+                    Text(channel.displayNumber)
+                        .font(.system(size: 56, weight: .black))
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.12))
+                    if let frame {
+                        // The last frame stays up while the next one loads.
+                        AsyncImage(url: frame.appending(queryItems: [URLQueryItem(name: "t", value: String(minute))])) { phase in
+                            if let image = phase.image {
+                                image.resizable().scaledToFill()
+                                    .onAppear { lastFrame = image }
+                            } else if let lastFrame {
+                                lastFrame.resizable().scaledToFill()
+                            }
+                        }
+                    }
+                }
+                .accessibilityHidden(true)
+                .accessibilityIdentifier("guide-preview-frame")
+            }
+        }
+
+        private func details(_ channel: Channel) -> some View {
+            let airing = store.index.on(channel.id, at: store.now)
+            return VStack(alignment: .leading, spacing: 6) {
+                Text("\(channel.displayNumber)  \(channel.displayName)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(airing?.title ?? "No listing")
+                    .font(.title3.weight(.bold))
+                    .lineLimit(2)
+                if let airing {
+                    Text(airing.minutesLeft(at: store.now))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                HStack(spacing: 10) {
+                    if playing != nil {
+                        Button("Full screen", systemImage: "arrow.up.left.and.arrow.down.right") { nowPlaying.expanded = true }
+                            .accessibilityIdentifier("guide-preview-full")
+                    }
+                    // The program beside the guide has Watch. This plays the picked channel here.
+                    if let picked, picked.id != playing?.id {
+                        Button(nowPlaying.channel == nil ? "Preview" : "Preview \(picked.displayNumber)", systemImage: "pip") {
+                            nowPlaying.play(picked, expanded: false)
+                        }
+                        .accessibilityHint("Plays it here while you browse")
+                        .accessibilityIdentifier("guide-preview-start")
+                    }
+                }
+                .buttonStyle(.glass)
+                .padding(.top, 4)
+            }
+            .accessibilityElement(children: .contain)
+        }
+    }
+#endif
 
 /// A wide screen keeps the program beside the guide. A phone covers it with a sheet.
 private struct GuideDetail: ViewModifier {

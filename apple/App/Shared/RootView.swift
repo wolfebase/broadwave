@@ -59,14 +59,20 @@ final class NowPlaying {
         await live.start(channel, store: store)
     }
 
-    func play(_ channel: Channel, note: String? = nil) {
+    /// `expanded: false` starts it docked, as the iPad guide's preview does.
+    func play(_ channel: Channel, note: String? = nil, expanded: Bool = true) {
         together = []
         standIns = []
         openedLayout = nil
         openedFrom = nil
         self.channel = channel
         self.note = note
-        expanded = true
+        self.expanded = expanded
+    }
+
+    /// The one-channel picture is docked under the tabs, so another view may show it.
+    var docked: Bool {
+        channel != nil && together.isEmpty && !expanded && recordingScreens.isEmpty && !live.pictureInPicture
     }
 
     func watchTogether(_ channels: [Channel], layout: String? = nil, standIns: Set<Int64> = []) {
@@ -570,6 +576,20 @@ struct RootView: View {
         tab = .settings
     }
 
+    #if os(iOS)
+        /// A keyboard's Command-number. The full player steps aside for the page.
+        private func goTo(_ page: AppTab) {
+            // A recording on screen closes through its own cover, not under a page change.
+            guard nowPlaying.recordingScreens.isEmpty else { return }
+            nowPlaying.expanded = false
+            if page == .settings {
+                openSettings()
+            } else {
+                tab = page
+            }
+        }
+    #endif
+
     private var phoneTabs: Bool {
         #if os(iOS)
             usesPhoneTabs(width)
@@ -624,8 +644,11 @@ struct RootView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
+        #if os(iOS)
+            .background { PageKeyLayer(go: goTo) }
+        #endif
         #if os(tvOS)
-            .environment(\.tvSelectedTab, tab)
+        .environment(\.tvSelectedTab, tab)
         #endif
         #if os(iOS)
         .tabBarMinimizeBehavior(.onScrollDown)

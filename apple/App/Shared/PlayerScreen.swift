@@ -981,6 +981,8 @@ struct PlayerScreen: View {
                 },
                 onStartOver: beginStartOver,
                 onStep: { step($0) },
+                onEscape: leaveKey,
+                keysOn: startOverRecording == nil && !keysCovered,
                 onTransport: { transportShown = $0 },
                 onDisplay: { live.displayLine = $0 },
                 panelStore: store,
@@ -1119,6 +1121,11 @@ struct PlayerScreen: View {
             guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") else { return }
             live.playLogNote("size \(size == .compact ? "landscape" : "portrait")")
         }
+        .background {
+            if startOverRecording == nil, !keysCovered {
+                PlayerKeyLayer(keys: keys)
+            }
+        }
         #endif
         .onChange(of: store.prefs.track) { _, track in
             if live.sounds == nil {
@@ -1230,6 +1237,42 @@ struct PlayerScreen: View {
             }
         }
     #endif
+
+    #if os(iOS)
+        private var keys: PlayerKeys {
+            let channel = nowPlaying.channel
+            return PlayerKeys(
+                channels: { showGuide.toggle() },
+                multiview: channel.map { channel in { nowPlaying.watchTogether([channel]) } },
+                record: channel.map { channel in { Task { await store.toggleRecord(channel) } } },
+                recording: channel.flatMap { store.activeRecording(on: $0) } != nil,
+                info: { showStream.toggle() },
+                leave: leaveKey
+            )
+        }
+    #endif
+
+    /// A sheet over the player takes the keyboard.
+    private var keysCovered: Bool {
+        #if os(iOS)
+            showMove
+        #else
+            false
+        #endif
+    }
+
+    /// Escape on a keyboard: an open panel first, then the player docks.
+    private func leaveKey() {
+        #if os(iOS)
+            if showGuide {
+                showGuide = false
+            } else if showStream {
+                showStream = false
+            } else {
+                nowPlaying.expanded = false
+            }
+        #endif
+    }
 
     private func step(_ dir: Int) {
         let now = Date()
@@ -1803,6 +1846,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
     var onRecord: () -> Void = {}
     var onStartOver: () -> Void = {}
     var onStep: (Int) -> Void = { _ in }
+    var onEscape: () -> Void = {}
+    var keysOn = false
     var onTransport: (Bool) -> Void = { _ in }
     var onDisplay: (String) -> Void = { _ in }
     var panelStore: AppStore?
@@ -1818,6 +1863,10 @@ struct SystemPlayer: UIViewControllerRepresentable {
         vc.player = player
         vc.allowsPictureInPicturePlayback = true
         vc.onStep = onStep
+        #if os(iOS)
+            vc.onEscape = onEscape
+            vc.keysOn = keysOn
+        #endif
         #if os(iOS)
             vc.canStartPictureInPictureAutomaticallyFromInline = true
             vc.delegate = context.coordinator.picture
@@ -1868,6 +1917,14 @@ struct SystemPlayer: UIViewControllerRepresentable {
             vc.player = player
         }
         vc.onStep = onStep
+        #if os(iOS)
+            vc.onEscape = onEscape
+            vc.keysOn = keysOn
+            // A sheet that closed took the keyboard with it.
+            if keysOn, !vc.isFirstResponder, vc.view.window != nil {
+                vc.becomeFirstResponder()
+            }
+        #endif
         vc.view.accessibilityIdentifier = "player-channel"
         if !channelNumber.isEmpty {
             vc.view.accessibilityValue = channelNumber

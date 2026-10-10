@@ -1126,6 +1126,9 @@ struct MultiviewScreen: View {
             guard !due.isEmpty else { return }
             nowPlaying.together.removeAll { due.contains($0) }
         }
+        #if os(iOS)
+        .background { PlayerKeyLayer(keys: PlayerKeys(leave: leave, leaveTitle: "Back to one channel")) }
+        #endif
         #if DEBUG && os(iOS)
         // The host writes portrait, landscape, or next. Rotating the Simulator window
         // would steal the frontmost device, which may not be this one.

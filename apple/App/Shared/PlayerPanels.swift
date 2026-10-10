@@ -179,7 +179,50 @@ final class LivePlayerController: AVPlayerViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         installChannelSwipes()
+        #if os(iOS)
+            if keysOn {
+                becomeFirstResponder()
+            }
+        #endif
     }
+
+    #if os(iOS)
+        var onEscape: (() -> Void)?
+        /// The live player's keys. Off for a file, and while a sheet or the Start
+        /// over recording covers the live player.
+        var keysOn = false
+
+        override var canBecomeFirstResponder: Bool {
+            true
+        }
+
+        /// A hardware keyboard. Arrows and Escape need priority, or a scroll view or
+        /// the focus system takes them first. AVKit keeps its own keys.
+        override var keyCommands: [UIKeyCommand]? {
+            guard keysOn else { return super.keyCommands }
+            let own = [
+                (UIKeyCommand.inputUpArrow, "Previous channel"),
+                (UIKeyCommand.inputDownArrow, "Next channel"),
+                (UIKeyCommand.inputEscape, "Minimize"),
+            ].map { input, title in
+                let command = UIKeyCommand(title: title, action: #selector(pressedKey(_:)), input: input)
+                command.wantsPriorityOverSystemBehavior = true
+                return command
+            }
+            // Command-period is Escape on a keyboard without an Escape key.
+            let cancel = UIKeyCommand(title: "Minimize", action: #selector(pressedKey(_:)), input: ".", modifierFlags: .command)
+            cancel.wantsPriorityOverSystemBehavior = true
+            return (super.keyCommands ?? []) + own + [cancel]
+        }
+
+        @objc private func pressedKey(_ command: UIKeyCommand) {
+            switch command.input {
+            case UIKeyCommand.inputUpArrow: channelStep(up: true)
+            case UIKeyCommand.inputDownArrow: channelStep(up: false)
+            default: onEscape?()
+            }
+        }
+    #endif
 
     #if os(tvOS)
         override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
