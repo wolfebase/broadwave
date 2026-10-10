@@ -345,8 +345,12 @@ struct RootView: View {
                     nowPlaying.sharePlay.note = nil
                 }
             }
-            .onChange(of: handoffChannel?.id) {
+            .onChange(of: handoffChannel?.id, initial: true) {
+                store.socket?.watching(handoffChannel?.id ?? 0)
                 nowPlaying.sharePlay.playing(WatchTogether.invite(server: store.server, channel: handoffChannel))
+            }
+            .onChange(of: store.socket.map(ObjectIdentifier.init)) {
+                store.socket?.watching(handoffChannel?.id ?? 0)
             }
             .alert("SharePlay", isPresented: sharePlayNote) {
                 Button("OK", role: .cancel) {}

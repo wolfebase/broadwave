@@ -60,6 +60,9 @@ type client struct {
 	send  chan []byte
 	rooms map[string]bool
 	here  Presence
+	// said is the channel the screen says it plays, for a screen that joins no
+	// room (sync off). A room it is in wins.
+	said int64
 }
 
 func NewBus() *Bus {
@@ -241,7 +244,7 @@ func (b *Bus) Screens() []Presence {
 			continue
 		}
 		p := c.here
-		p.ChannelID = watching(c.rooms)
+		p.ChannelID = cmp.Or(watching(c.rooms), c.said)
 		if p.ID != "" {
 			if i, ok := seen[p.ID]; ok {
 				if out[i].ChannelID == 0 {
@@ -382,9 +385,10 @@ func (b *Bus) handle(c *client, m Message) {
 	switch m.Type {
 	case "here":
 		var req struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-			Kind string `json:"kind"`
+			ID        string `json:"id"`
+			Name      string `json:"name"`
+			Kind      string `json:"kind"`
+			ChannelID int64  `json:"channelId"`
 		}
 		if json.Unmarshal(m.Data, &req) != nil {
 			return
@@ -400,11 +404,19 @@ func (b *Bus) handle(c *client, m Message) {
 			name = kind
 		}
 		b.mu.Lock()
-		c.here.ID = cleanID(req.ID)
+		id := cleanID(req.ID)
+		c.said = max(req.ChannelID, 0)
+		// A screen says it again on each channel change. Its rooms only care
+		// when it names itself for the first time or as something else.
+		same := c.here.ID == id && c.here.Name == name && c.here.Kind == kind
+		c.here.ID = id
 		c.here.Name = name
 		c.here.Kind = kind
 		rooms := slices.Collect(maps.Keys(c.rooms))
 		b.mu.Unlock()
+		if same {
+			return
+		}
 		for _, room := range rooms {
 			floored := false
 			if appleKind(kind) {

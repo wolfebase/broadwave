@@ -71,6 +71,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/screens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The apps open on this server right now that another screen can send a channel to. Each app names itself with `here` on the socket; apps that send no `id` are left out. */
+        get: operations["listScreens"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/screens/{id}/watch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Tells one screen to play a channel live (a `screen.watch` event on its socket). It joins the channel's room like any screen, so it lands on the same moment as the others. */
+        post: operations["sendToScreen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ws": {
         parameters: {
             query?: never;
@@ -82,9 +116,9 @@ export interface paths {
          * @description WebSocket for live updates and Whole-Home Sync. Every frame is `{"type", "data"}`.
          *
          *     Server to client: `hello` {serverTime, boot} (boot names the server process; a new one means it restarted and every watch and room is gone), `clock` {t0, t1}, `activity` (Event),
-         *     `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `error` {code, message}.
+         *     `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `screen.watch` {channelId, from} (another screen sent this one a channel; see `/screens`), `error` {code, message}.
          *
-         *     Client to server: `clock` {t0}, `sync.join` {room, channelId, latency}, `sync.leave` {room},
+         *     Client to server: `here` {id, name, kind, channelId} (names this screen; `id` is the app's own stable id, 1-64 letters, digits, or `-`; kind is iphone, ipad, appletv, or web; `channelId` is the channel it plays alone, sent again on each change, so a screen with sync off still shows what it watches in `/screens`), `clock` {t0}, `sync.join` {room, channelId, latency}, `sync.leave` {room},
          *     `sync.command` {room, action: play|pause|seek|live|latency|stalled, mediaTime, latency}. `stalled` steps a one-screen room or a multiview 2 s further from live, never past its latency target.
          *     A join's `latency` (lowest|balanced|stable, the screen's default) applies only when the join starts the room. A room with an Apple screen in it plays at balanced or further back: AVPlayer never reaches lowest.
          *
@@ -1310,6 +1344,17 @@ export interface components {
             /** @description Group rooms only. Who is in the room; a screen that has not said what it is has an empty name and kind. */
             people?: components["schemas"]["Person"][];
         };
+        Screen: {
+            id: string;
+            name: string;
+            /** @description iphone, ipad, appletv, or web */
+            kind: string;
+            /**
+             * Format: int64
+             * @description The live channel it is watching; absent when none or in a multiview
+             */
+            channelId?: number;
+        };
         Person: {
             name: string;
             /** @description iphone, ipad, appletv, web, or empty */
@@ -2247,6 +2292,59 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    listScreens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every open screen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        screens: components["schemas"]["Screen"][];
+                    };
+                };
+            };
+        };
+    };
+    sendToScreen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: int64 */
+                    channelId: number;
+                    /** @description The sending screen's name, shown on the receiving screen */
+                    from?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sent */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     openSocket: {

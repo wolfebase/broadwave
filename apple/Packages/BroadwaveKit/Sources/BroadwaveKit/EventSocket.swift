@@ -23,6 +23,7 @@ public final class EventSocket {
     private var screenID = ""
     private var screenName = ""
     private var screenKind = ""
+    private var watchingID: Int64 = 0
     private var stopped = false
     private var opened = false
     private var boot = ""
@@ -83,9 +84,7 @@ public final class EventSocket {
         }
         // The server starts a room by the kind of screen that joins it, so the
         // screen says what it is first.
-        if !screenName.isEmpty, !screenKind.isEmpty {
-            send("here", Self.here(id: screenID, name: screenName, kind: screenKind))
-        }
+        sayHere()
         for (room, channel) in rooms {
             send("sync.join", ["room": room, "channelId": channel, "latency": LiveDelay.saved.rawValue])
         }
@@ -97,8 +96,24 @@ public final class EventSocket {
         screenID = id
         screenName = name
         screenKind = kind
-        guard !name.isEmpty, !kind.isEmpty else { return }
-        send("here", Self.here(id: id, name: name, kind: kind))
+        sayHere()
+    }
+
+    /// The channel this screen plays alone, 0 for none. With sync off it joins no
+    /// room, so Move to another screen learns it from this.
+    public func watching(_ channelID: Int64) {
+        guard watchingID != channelID else { return }
+        watchingID = channelID
+        sayHere()
+    }
+
+    private func sayHere() {
+        guard !screenName.isEmpty, !screenKind.isEmpty else { return }
+        var body: [String: Any] = Self.here(id: screenID, name: screenName, kind: screenKind)
+        if watchingID > 0 {
+            body["channelId"] = watchingID
+        }
+        send("here", body)
     }
 
     nonisolated static func here(id: String, name: String, kind: String) -> [String: String] {

@@ -222,3 +222,27 @@ test("watching together has no Move to another screen", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Even volume" }).or(page.getByRole("group", { name: "Quality" }))).toBeVisible();
   await expect(page.getByRole("button", { name: "Move to another screen" })).toHaveCount(0);
 });
+
+test("a screen with sync off takes the channel, and the sender knows it did", async ({ page, browser }) => {
+  test.setTimeout(120_000);
+  const { channels } = (await (await page.request.get("/api/v1/channels?guide=1")).json()) as { channels: Channel[] };
+  const channel = channels[0];
+  const second = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  try {
+    // Sync off joins no room, so the screen tells the server what it plays.
+    await second.addInitScript(() => localStorage.setItem("ota-live", JSON.stringify({ sync: false })));
+    const b = await onHome(second);
+    await playing(page, channel);
+    const dialog = await openMove(page);
+    await dialog.getByRole("list", { name: "Screens" }).getByRole("button", { name: b.name }).click();
+    await expect(page.getByRole("status").filter({ hasText: `Playing on ${b.name}` })).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(".stage")).toHaveCount(0);
+    await expect(b.page).toHaveURL(new RegExp(`channel=${channel.id}(&|$)`));
+    await expect.poll(async () => (await screens(page)).find((s) => s.id === b.id)?.channelId).toBe(channel.id);
+    // Leaving the player says so too.
+    await b.page.goto("/");
+    await expect.poll(async () => (await screens(page)).find((s) => s.id === b.id)?.channelId ?? 0).toBe(0);
+  } finally {
+    await second.close();
+  }
+});

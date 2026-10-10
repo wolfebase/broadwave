@@ -54,6 +54,7 @@ export class EventSocket {
   private heard = 0;
   private tickAt = Date.now();
   private rooms = new Map<string, number>();
+  private watchingId = 0;
   private roomRefs = new Map<string, number>();
   private latest = new Map<string, unknown>();
   /** Estimated server clock minus local clock, in ms. */
@@ -85,7 +86,7 @@ export class EventSocket {
     ws.onopen = () => {
       this.connected = true;
       this.retry = 0;
-      this.raw("here", { id: screenId(), name: browserName(), kind: "web" });
+      this.here();
       for (const [room, channelId] of this.rooms) this.raw("sync.join", { room, channelId, latency: readLiveDelay() });
       // A command older than a few seconds would move the room somewhere nobody asked for now.
       for (const { msg, at } of this.queue.splice(0)) if (Date.now() - at < 3_000) ws.send(msg);
@@ -156,6 +157,18 @@ export class EventSocket {
       this.emit("restarted", boot);
     }
     this.boot = boot;
+  }
+
+  /** The channel this screen plays alone, 0 for none. With sync off it joins no room, so Move learns it here. */
+  watching(channelId: number) {
+    if (this.watchingId === channelId) return;
+    this.watchingId = channelId;
+    this.here();
+  }
+
+  private here() {
+    const said = this.watchingId > 0 ? { channelId: this.watchingId } : {};
+    this.raw("here", { id: screenId(), name: browserName(), kind: "web", ...said });
   }
 
   private raw(type: string, data: unknown) {
