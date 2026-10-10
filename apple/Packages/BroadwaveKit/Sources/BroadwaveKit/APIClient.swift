@@ -244,6 +244,20 @@ public struct APIClient: Sendable {
         await stopWatching(channelID: session.channelId, rendition: session.rendition, boot: session.boot ?? "")
     }
 
+    /// One picture of these channels, sound first. The server answers once the
+    /// playlist has a segment, which can take 20 seconds.
+    public func watchMosaic(channelIDs: [Int64]) async throws -> MosaicSession {
+        struct B: Encodable { var channelIds: [Int64] }
+        return try await send("POST", "/mosaic", body: B(channelIds: channelIDs), timeout: 25)
+    }
+
+    /// Drops this screen's hold on a mosaic. The encode itself stops when nobody is left.
+    public func stopMosaic(key: String) async {
+        struct Ok: Decodable {}
+        let safe = key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? key
+        _ = try? await send("POST", "/mosaic/\(safe)/stop", body: [String: String](), as: Ok.self)
+    }
+
     // MARK: Screens
 
     /// The apps open on this server that said who they are, this one included.

@@ -215,6 +215,8 @@ final class MultiviewSession {
     var pictureRound = PictureOrder.begin(0, now: .distantPast)
     /// Bumps when the server process restarts, so each tile asks again in order.
     var restartTick = 0
+    /// The mosaic player owns AirPlay. Every tile stays muted until it ends.
+    var routingOut = false
 
     init(focusID: Int64) {
         layout = .saved
@@ -290,6 +292,8 @@ final class TilePlayer {
     /// True only after this tile's own item has been told to play. Unmuting the
     /// previous item is not sound yet.
     private(set) var canHear = false
+    /// What the current picture was started with. `.none` cannot be unmuted in place.
+    private var pictureAudio: Prefs.Sound = .none
     /// False until the picture has moved 0.3 s: a new room holds its first frame.
     private(set) var moving = false
     private var movingFrom: Double?
@@ -335,6 +339,12 @@ final class TilePlayer {
     /// This tile had no watch when the server came back, so it asks after the others.
     var askLate = false
     private var pendingRecovery: PlaybackOutage.Recovery?
+    /// The grid, so a mosaic that owns AirPlay can keep this tile quiet.
+    private weak var grid: MultiviewSession?
+
+    func bindGrid(_ grid: MultiviewSession) {
+        self.grid = grid
+    }
 
     var hasWatch: Bool {
         session != nil
@@ -438,9 +448,10 @@ final class TilePlayer {
             // The first segment has to paint. Waiting for an 8s buffer, then
             // pausing until the room's older anchor, leaves this layer black.
             player.automaticallyWaitsToMinimizeStalling = false
+            pictureAudio = prefs.audio
             applyAudible()
             player.playImmediately(atRate: 1)
-            canHear = request.audible
+            canHear = MosaicAirPlay.unmuteNow(wantsSound: audible && grid?.routingOut != true, hasPicture: true, audio: prefs.audio)
             watchOutage()
             if let socket = store.socket {
                 let engine = SyncEngine(player: player, socket: socket, room: room, channelID: channel.id)
@@ -749,13 +760,19 @@ final class TilePlayer {
 
     func setAudible(_ on: Bool) {
         audible = on
-        // Muting is immediate. Unmuting waits until start() has replaced the item,
-        // so the previous silent rendition is not counted as sound.
-        if !on {
+        // Muting is immediate. Unmuting a picture that was started with sound
+        // is immediate too (a sound swap on an equal layout, or AirPlay handing
+        // the tiles back). PiP and the small tiles of 1+3 start with no sound,
+        // so they stay quiet until start() replaces the item.
+        guard on else {
             canHear = false
             applyAudible()
             clearRoute()
+            return
         }
+        guard MosaicAirPlay.unmuteNow(wantsSound: true, hasPicture: session != nil, audio: pictureAudio) else { return }
+        applyAudible()
+        canHear = true
     }
 
     /// Drift from the broadcast timeline, in milliseconds. Nil until sync has a target.
@@ -830,6 +847,7 @@ final class TilePlayer {
         channelID = nil
         session = nil
         canHear = false
+        pictureAudio = .none
         moving = false
         movingFrom = nil
         if let api, let ended {
@@ -843,9 +861,10 @@ final class TilePlayer {
     }
 
     private func applyAudible() {
-        player.isMuted = !audible
-        player.networkResourcePriority = audible ? .high : .low
-        guard audible else { return }
+        let hear = audible && grid?.routingOut != true
+        player.isMuted = !hear
+        player.networkResourcePriority = hear ? .high : .low
+        guard hear else { return }
         let arbiter = AVRoutingPlaybackArbiter.shared()
         arbiter.preferredParticipantForExternalPlayback = player
         // The iOS declaration first ships in the iOS 27 SDK (Swift 6.4); CI still builds with Xcode 26.
@@ -879,6 +898,9 @@ struct MultiviewScreen: View {
     @Environment(\.verticalSizeClass) private var height
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var session: MultiviewSession
+    #if os(iOS)
+        @State private var mosaic = MosaicRoute()
+    #endif
     @State private var blocked: Set<Int64> = []
     @State private var offers: [Int64: MultiviewPlanOffers] = [:]
     @State private var stops: [MultiviewPlanStops] = []
@@ -1023,6 +1045,16 @@ struct MultiviewScreen: View {
                         .glassEffect(in: .capsule)
                         .accessibilityAddTraits(.updatesFrequently)
                 }
+                #if os(iOS)
+                    if !mosaic.message.isEmpty {
+                        Text(mosaic.message)
+                            .font(.footnote.weight(.semibold))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .glassEffect(in: .capsule)
+                            .accessibilityIdentifier("mosaic-message")
+                    }
+                #endif
                 // Tiles start a tune on appear. Wait for the plan so a channel it would refuse never takes a tuner.
                 if nowPlaying.together.count > 1, !planReady {
                     ProgressView()
@@ -1031,6 +1063,21 @@ struct MultiviewScreen: View {
                 } else {
                     grid(tiles)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    #if os(iOS)
+                        .overlay {
+                            if mosaic.onDevice {
+                                // The simulator plays the mosaic on this device. Size it
+                                // to the picture so the tiles stay visible around it.
+                                PlayerLayerBox(player: mosaic.player, gravity: .resizeAspect)
+                                    .aspectRatio(16 / 9, contentMode: .fit)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                    .allowsHitTesting(false)
+                                    .accessibilityElement(children: .ignore)
+                                    .accessibilityLabel("Multiview")
+                                    .accessibilityIdentifier("mosaic-player")
+                            }
+                        }
+                    #endif
                         .safeAreaInset(edge: .bottom, spacing: 8) {
                             VStack(spacing: 8) {
                                 layoutBar
@@ -1048,6 +1095,10 @@ struct MultiviewScreen: View {
             if session.focusID == 0 {
                 session.focusID = nowPlaying.together.first ?? 0
             }
+            #if os(iOS)
+                mosaic.onEnded = { session.routingOut = false }
+                mosaic.setPaused(session.paused)
+            #endif
             if nowPlaying.together.count < 2 || UserDefaults.standard.bool(forKey: "BroadwaveMultiviewAdd") {
                 session.guide = true
             }
@@ -1126,10 +1177,44 @@ struct MultiviewScreen: View {
             guard !due.isEmpty else { return }
             nowPlaying.together.removeAll { due.contains($0) }
         }
+        .onDisappear {
+            #if os(iOS)
+                Task { await mosaic.stop() }
+            #endif
+        }
         #if os(iOS)
         .background { PlayerKeyLayer(keys: PlayerKeys(leave: leave, leaveTitle: "Back to one channel")) }
+        .onChange(of: mosaicChannelIDs()) { _, ids in
+            followMosaicChannels(ids)
+        }
+        .onChange(of: session.paused) { _, paused in
+            mosaic.setPaused(paused)
+        }
         #endif
         #if DEBUG && os(iOS)
+        .task {
+            guard UserDefaults.standard.bool(forKey: "BroadwaveMosaicAirPlay") else { return }
+            for _ in 0 ..< 80 {
+                if Task.isCancelled {
+                    return
+                }
+                let ids = mosaicChannelIDs()
+                if ids.count >= 2, let api = store.api {
+                    session.routingOut = true
+                    await mosaic.start(api: api, channelIDs: ids, onDevice: true)
+                    if mosaic.message.isEmpty {
+                        try? await Task.sleep(for: .seconds(30))
+                        if !Task.isCancelled {
+                            await mosaic.stop()
+                        }
+                    }
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            print("broadwave mosaic no channels")
+            fflush(stdout)
+        }
         // The host writes portrait, landscape, or next. Rotating the Simulator window
         // would steal the frontmost device, which may not be this one.
         .task {
@@ -1212,6 +1297,12 @@ struct MultiviewScreen: View {
             .accessibilityValue(auto ? "On" : "Off")
             .accessibilityHint("Follow the game that matters")
             .accessibilityIdentifier("multiview-auto")
+            #if os(iOS)
+                if mosaicChannelIDs().count >= 2 {
+                    AirPlayRoute(compact: true, onDismiss: { mosaic.pickerClosed() }, onPresent: { beginMosaicRoute() })
+                        .accessibilityIdentifier("multiview-airplay")
+                }
+            #endif
             Button(session.paused ? "Play" : "Pause") { session.togglePause() }
                 .buttonStyle(.glass)
                 .accessibilityIdentifier("multiview-pause")
@@ -1560,7 +1651,49 @@ struct MultiviewScreen: View {
         }
     #endif
 
+    #if os(iOS)
+        /// Sound tile first, then the others on screen. AirPlay plays this as one stream.
+        private func mosaicChannelIDs() -> [Int64] {
+            let tiles = ordered.map(\.id)
+            guard tiles.count >= 2 else { return [] }
+            let sound = tiles.first { $0 == session.focusID } ?? tiles[0]
+            var ids = [sound]
+            for id in tiles where id != sound {
+                ids.append(id)
+            }
+            return Array(ids.prefix(4))
+        }
+
+        private func beginMosaicRoute() {
+            let ids = mosaicChannelIDs()
+            guard ids.count >= 2, let api = store.api else { return }
+            let step = mosaic.openPicker(channelIDs: ids)
+            guard case .begin = step else { return }
+            session.routingOut = true
+            Task { await mosaic.start(api: api, channelIDs: ids, onDevice: false) }
+        }
+
+        /// A mosaic that already owns the route follows the tiles. One that is
+        /// only on this device (the debug path) does too.
+        private func followMosaicChannels(_ ids: [Int64]) {
+            let step = mosaic.channelsChanged(ids)
+            switch step {
+            case let .begin(next, onDevice, _):
+                guard let api = store.api else { return }
+                session.routingOut = true
+                Task { await mosaic.start(api: api, channelIDs: next, onDevice: onDevice) }
+            case let .end(generation):
+                Task { await mosaic.end(generation) }
+            default:
+                break
+            }
+        }
+    #endif
+
     private func leave() {
+        #if os(iOS)
+            Task { await mosaic.stop() }
+        #endif
         let id = session.focusID
         if let channel = store.channels.first(where: { $0.id == id }) ?? chosen.first {
             nowPlaying.play(channel)
@@ -1817,6 +1950,7 @@ struct MultiviewTile: View {
                 }
             #endif
             unbind()
+            live.bindGrid(grid)
             live.viewerPaused = gridPaused
             await waitForSound()
             guard !Task.isCancelled else { return }
@@ -1827,7 +1961,7 @@ struct MultiviewTile: View {
                 await waitForSound()
                 guard !Task.isCancelled else { return }
             }
-            await live.start(TilePlayer.Request(channel: channel, prefs: prefs, audible: focused), room: room, store: store, bind: bind)
+            await live.start(TilePlayer.Request(channel: channel, prefs: prefs, audible: focused && !grid.routingOut), room: room, store: store, bind: bind)
             if !Task.isCancelled {
                 grid.soundDidAnswer(channel.id)
             }
@@ -1864,8 +1998,12 @@ struct MultiviewTile: View {
         .onChange(of: gridPaused) { _, paused in
             live.viewerPaused = paused
         }
+        .onAppear { live.bindGrid(grid) }
         .onChange(of: focused) { _, on in
-            live.setAudible(on)
+            live.setAudible(on && !grid.routingOut)
+        }
+        .onChange(of: grid.routingOut) { _, out in
+            live.setAudible(focused && !out)
         }
         .task(id: focused) {
             guard focused else { return }
@@ -1996,6 +2134,7 @@ final class FrameOnScreen: @unchecked Sendable {
 struct PlayerLayerBox: UIViewRepresentable {
     let player: AVPlayer
     var pip = false
+    var gravity: AVLayerVideoGravity = .resizeAspectFill
     var readyFlag: FrameOnScreen?
 
     func makeCoordinator() -> Coordinator {
@@ -2005,7 +2144,7 @@ struct PlayerLayerBox: UIViewRepresentable {
     func makeUIView(context: Context) -> PlayerHost {
         let view = PlayerHost()
         view.playerLayer?.player = player
-        view.playerLayer?.videoGravity = .resizeAspectFill
+        view.playerLayer?.videoGravity = gravity
         context.coordinator.flag = readyFlag
         context.coordinator.watch(view.playerLayer)
         return view
@@ -2013,6 +2152,7 @@ struct PlayerLayerBox: UIViewRepresentable {
 
     func updateUIView(_ view: PlayerHost, context: Context) {
         view.playerLayer?.player = player
+        view.playerLayer?.videoGravity = gravity
         context.coordinator.flag = readyFlag
         context.coordinator.watch(view.playerLayer)
         #if os(iOS)
@@ -2065,3 +2205,300 @@ final class PlayerHost: UIView {
         var pip: AVPictureInPictureController?
     #endif
 }
+
+#if os(iOS)
+    /// One mosaic for AirPlay. The tiles stay on this device, muted. This player
+    /// is what the route sends. `-BroadwaveMosaicAirPlay 1` plays it here instead,
+    /// because the simulator has no AirPlay receiver.
+    ///
+    /// When to start, restart, and stop lives in `MosaicAirPlay`. This type only
+    /// applies those steps to the player and the server.
+    @MainActor
+    @Observable
+    final class MosaicRoute {
+        let player = AVPlayer()
+        private(set) var onDevice = false
+        private(set) var message = ""
+        var onEnded: () -> Void = {}
+        private var route = MosaicAirPlay.State()
+        private var key: String?
+        private var api: APIClient?
+        private var external: NSKeyValueObservation?
+        private var itemStatus: NSKeyValueObservation?
+        private var itemEnded: NSObjectProtocol?
+        private var idle: Task<Void, Never>?
+
+        /// Same channels already on AirPlay do not start again.
+        func openPicker(channelIDs: [Int64]) -> MosaicAirPlay.Step {
+            let change = MosaicAirPlay.openPicker(route, channelIDs: channelIDs)
+            route = change.0
+            message = route.message
+            return change.1
+        }
+
+        func channelsChanged(_ channelIDs: [Int64]) -> MosaicAirPlay.Step {
+            let change = MosaicAirPlay.channelsChanged(route, channelIDs: channelIDs)
+            route = change.0
+            return change.1
+        }
+
+        func pickerClosed() {
+            route.external = player.isExternalPlaybackActive
+            guard !Self.airPlayRoute() else {
+                apply(MosaicAirPlay.closePicker(route, routeIsAirPlay: true))
+                return
+            }
+            // The audio route can name the television a moment after the picker closes.
+            let gen = route.generation
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1.5))
+                guard MosaicAirPlay.isCurrent(route, generation: gen) else { return }
+                route.external = player.isExternalPlaybackActive
+                apply(MosaicAirPlay.closePicker(route, routeIsAirPlay: Self.airPlayRoute()))
+            }
+        }
+
+        func setPaused(_ paused: Bool) {
+            apply(MosaicAirPlay.setPaused(route, paused: paused))
+        }
+
+        func start(api: APIClient, channelIDs: [Int64], onDevice: Bool) async {
+            let already = route.phase == .starting && route.channelIDs == channelIDs && route.onDevice == onDevice
+            if !already {
+                let change = MosaicAirPlay.startDirect(route, channelIDs: channelIDs, onDevice: onDevice)
+                route = change.0
+                message = route.message
+                if case .none = change.1 {
+                    return
+                }
+            }
+            let gen = route.generation
+            self.api = api
+            message = ""
+            if let old = key {
+                key = nil
+                await api.stopMosaic(key: old)
+            }
+            guard gen == route.generation else { return }
+            self.onDevice = onDevice
+            let sessionAV = AVAudioSession.sharedInstance()
+            try? sessionAV.setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo)
+            try? sessionAV.setActive(true)
+            if !onDevice {
+                claimRoute()
+            }
+            let ids = channelIDs.map(String.init).joined(separator: "-")
+            print("broadwave mosaic start \(ids)")
+            fflush(stdout)
+            let session: MosaicSession
+            do {
+                session = try await api.watchMosaic(channelIDs: channelIDs)
+            } catch let error as APIError {
+                guard gen == route.generation else { return }
+                route = MosaicAirPlay.failStart(route, generation: gen, message: error.message)
+                message = route.message
+                self.onDevice = false
+                releaseRoute()
+                onEnded()
+                return
+            } catch {
+                guard gen == route.generation else { return }
+                route = MosaicAirPlay.failStart(route, generation: gen, message: "AirPlay did not start. The server log says why.")
+                message = route.message
+                self.onDevice = false
+                releaseRoute()
+                onEnded()
+                return
+            }
+            guard gen == route.generation else {
+                await api.stopMosaic(key: session.key)
+                return
+            }
+            key = session.key
+            let item = AVPlayerItem(url: api.url(session.playlist))
+            PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
+            player.replaceCurrentItem(with: item)
+            player.isMuted = false
+            player.allowsExternalPlayback = true
+            player.usesExternalPlaybackWhileExternalScreenIsActive = true
+            if !onDevice {
+                claimRoute()
+                watchExternal(generation: gen)
+            }
+            watchItem(item, generation: gen)
+            // No sync engine rides this player. playImmediately before a
+            // buffer exists returns, and the picture stays on the first frame.
+            item.preferredForwardBufferDuration = 2
+            player.automaticallyWaitsToMinimizeStalling = true
+            if route.paused {
+                player.pause()
+            } else {
+                player.play()
+            }
+            print("broadwave mosaic \(session.key) playing")
+            fflush(stdout)
+            watchMovement(gen: gen, key: session.key)
+            route.external = player.isExternalPlaybackActive
+            apply(MosaicAirPlay.noteReady(route, generation: gen))
+        }
+
+        func stop() async {
+            route = MosaicAirPlay.beginStop(route).0
+            message = ""
+            onDevice = false
+            idle?.cancel()
+            idle = nil
+            external?.invalidate()
+            external = nil
+            itemStatus?.invalidate()
+            itemStatus = nil
+            if let itemEnded {
+                NotificationCenter.default.removeObserver(itemEnded)
+                self.itemEnded = nil
+            }
+            let ended = key
+            key = nil
+            player.pause()
+            player.replaceCurrentItem(with: nil)
+            releaseRoute()
+            // The tiles get their sound back now, not after the server answers.
+            onEnded()
+            if let api, let ended {
+                await api.stopMosaic(key: ended)
+                print("broadwave mosaic \(ended) stop")
+                fflush(stdout)
+            }
+        }
+
+        /// Ends the mosaic an `.end` step was decided for. A newer one keeps playing.
+        func end(_ generation: Int) async {
+            guard MosaicAirPlay.isCurrent(route, generation: generation) else { return }
+            await stop()
+        }
+
+        private func watchMovement(gen: Int, key: String) {
+            Task { @MainActor in
+                var kicked = false
+                for i in 0 ..< 80 {
+                    if gen != route.generation {
+                        return
+                    }
+                    let time = player.currentTime().seconds
+                    if time.isFinite, time > 0.2 {
+                        print("broadwave mosaic \(key) moving \(String(format: "%.2f", time))")
+                        fflush(stdout)
+                        return
+                    }
+                    // One more play() if the first one landed before the item was ready.
+                    if i == 8, !kicked {
+                        kicked = true
+                        let err = player.currentItem?.error?.localizedDescription ?? ""
+                        print("broadwave mosaic \(key) wait status=\(player.timeControlStatus.rawValue) rate=\(player.rate) \(err)")
+                        fflush(stdout)
+                        if !route.paused {
+                            player.play()
+                        }
+                    }
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+            }
+        }
+
+        private func apply(_ change: (MosaicAirPlay.State, MosaicAirPlay.Step)) {
+            route = change.0
+            message = route.message
+            onDevice = route.onDevice
+            switch change.1 {
+            case .none, .begin:
+                break
+            case .cancelWait:
+                idle?.cancel()
+                idle = nil
+            case let .wait(generation, seconds):
+                armIdle(generation: generation, seconds: seconds)
+            case .pause:
+                player.pause()
+            case .play:
+                player.play()
+            case let .end(generation):
+                Task { await self.end(generation) }
+            }
+        }
+
+        private func armIdle(generation: Int, seconds: TimeInterval) {
+            idle?.cancel()
+            idle = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(seconds))
+                guard !Task.isCancelled else { return }
+                self.route.external = self.player.isExternalPlaybackActive
+                self.apply(MosaicAirPlay.idleFired(self.route, generation: generation))
+            }
+        }
+
+        /// `.initial` as well as `.new`: a route that is already AirPlay never
+        /// posts a change, and turning it off would leave the mosaic running.
+        private func watchExternal(generation: Int) {
+            external?.invalidate()
+            external = player.observe(\.isExternalPlaybackActive, options: [.initial, .new]) { [weak self] player, _ in
+                let on = player.isExternalPlaybackActive
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.apply(MosaicAirPlay.noteExternal(self.route, active: on, generation: generation))
+                }
+            }
+        }
+
+        private func watchItem(_ item: AVPlayerItem, generation: Int) {
+            itemStatus?.invalidate()
+            itemStatus = item.observe(\.status, options: [.new]) { [weak self] item, _ in
+                let failed = item.status == .failed
+                Task { @MainActor in
+                    guard let self, failed else { return }
+                    self.apply(MosaicAirPlay.playbackEnded(self.route, generation: generation))
+                }
+            }
+            if let itemEnded {
+                NotificationCenter.default.removeObserver(itemEnded)
+            }
+            itemEnded = NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: item,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.apply(MosaicAirPlay.playbackEnded(self.route, generation: generation))
+                }
+            }
+        }
+
+        private func claimRoute() {
+            player.allowsExternalPlayback = true
+            let arbiter = AVRoutingPlaybackArbiter.shared()
+            arbiter.preferredParticipantForExternalPlayback = player
+            #if compiler(>=6.4)
+                if #available(iOS 27, *) {
+                    arbiter.preferredParticipantForNonMixableAudioRoutes = player
+                }
+            #endif
+        }
+
+        private func releaseRoute() {
+            let arbiter = AVRoutingPlaybackArbiter.shared()
+            if arbiter.preferredParticipantForExternalPlayback === player {
+                arbiter.preferredParticipantForExternalPlayback = nil
+            }
+            #if compiler(>=6.4)
+                if #available(iOS 27, *) {
+                    if arbiter.preferredParticipantForNonMixableAudioRoutes === player {
+                        arbiter.preferredParticipantForNonMixableAudioRoutes = nil
+                    }
+                }
+            #endif
+        }
+
+        private static func airPlayRoute() -> Bool {
+            AVAudioSession.sharedInstance().currentRoute.outputs.contains { $0.portType == .airPlay }
+        }
+    }
+#endif

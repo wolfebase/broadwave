@@ -8,11 +8,12 @@ import SwiftUI
     /// System route button. The spoken name is AirPlay, and a tap opens the picker.
     struct AirPlayRoute: View {
         var compact = false
+        var onDismiss: () -> Void = {}
         var onPresent: () -> Void = {}
 
         var body: some View {
             let radius: CGFloat = compact ? 22 : Tokens.Radius.lg
-            AirPlayPicker(onPresent: onPresent)
+            AirPlayPicker(onPresent: onPresent, onDismiss: onDismiss)
                 .frame(width: 44, height: 44)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: compact ? .center : .top)
                 .padding(.top, compact ? 0 : 4)
@@ -38,6 +39,7 @@ import SwiftUI
 
     private struct AirPlayPicker: UIViewRepresentable {
         var onPresent: () -> Void
+        var onDismiss: () -> Void
 
         func makeUIView(context: Context) -> AirPlayPickerView {
             let picker = AirPlayPickerView(frame: CGRect(x: 0, y: 0, width: 44, height: 44))
@@ -48,22 +50,29 @@ import SwiftUI
 
         func updateUIView(_: AirPlayPickerView, context: Context) {
             context.coordinator.onPresent = onPresent
+            context.coordinator.onDismiss = onDismiss
         }
 
         func makeCoordinator() -> Presenting {
-            Presenting(onPresent: onPresent)
+            Presenting(onPresent: onPresent, onDismiss: onDismiss)
         }
 
         @MainActor
         final class Presenting: NSObject, AVRoutePickerViewDelegate {
             var onPresent: () -> Void
+            var onDismiss: () -> Void
 
-            init(onPresent: @escaping () -> Void) {
+            init(onPresent: @escaping () -> Void, onDismiss: @escaping () -> Void) {
                 self.onPresent = onPresent
+                self.onDismiss = onDismiss
             }
 
             nonisolated func routePickerViewWillBeginPresentingRoutes(_: AVRoutePickerView) {
                 MainActor.assumeIsolated { self.onPresent() }
+            }
+
+            nonisolated func routePickerViewDidEndPresentingRoutes(_: AVRoutePickerView) {
+                MainActor.assumeIsolated { self.onDismiss() }
             }
         }
     }
