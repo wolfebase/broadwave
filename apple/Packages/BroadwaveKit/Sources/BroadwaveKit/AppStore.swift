@@ -61,7 +61,8 @@ public final class AppStore {
 
     public init() {
         prefs = Self.load("prefs") ?? Prefs()
-        syncEnabled = UserDefaults.standard.object(forKey: "sync") as? Bool ?? true
+        // bool(forKey:) also reads a launch argument such as -sync NO.
+        syncEnabled = UserDefaults.standard.object(forKey: "sync") == nil || UserDefaults.standard.bool(forKey: "sync")
         remembered = Self.load("servers") ?? []
         var resumeDemo: FoundServer?
         #if DEBUG
