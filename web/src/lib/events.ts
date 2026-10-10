@@ -15,8 +15,14 @@ export type RoomState = {
   people?: { name: string; kind: string }[];
 };
 
-/** What other screens call this one, such as "Chrome on Mac". */
+/** What other screens call this one. A name from Settings, or "Chrome on Mac" and its kin. */
 export function browserName(ua = navigator.userAgent, touch = navigator.maxTouchPoints ?? 0): string {
+  try {
+    const saved = localStorage.getItem("broadwave-screen-name");
+    if (saved) return saved;
+  } catch {
+    // Storage off: the browser's own name.
+  }
   const browser = /Edg/.test(ua) ? "Edge" : /Firefox\/|FxiOS/.test(ua) ? "Firefox" : /Chrome\/|CriOS/.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Browser";
   // iPadOS asks for desktop pages and names itself a Mac, one with a touch screen.
   const ipad = /iPad/.test(ua) || (/Macintosh/.test(ua) && touch > 1);
@@ -166,7 +172,8 @@ export class EventSocket {
     this.here();
   }
 
-  private here() {
+  /** Say who this screen is again, without opening a new socket. */
+  here() {
     const said = this.watchingId > 0 ? { channelId: this.watchingId } : {};
     this.raw("here", { id: screenId(), name: browserName(), kind: "web", ...said });
   }

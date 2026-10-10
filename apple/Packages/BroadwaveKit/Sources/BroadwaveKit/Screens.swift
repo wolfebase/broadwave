@@ -31,6 +31,53 @@ public enum ScreenID {
     }
 }
 
+/// The name other screens see for this one. A name the viewer typed, or the
+/// device's own name when they have not.
+public enum ScreenName {
+    public static let key = "broadwave-screen-name"
+    /// The server keeps 64. This screen's own field stops at 40.
+    public static let limit = 40
+
+    /// The saved name, or the device name when none is saved or the saved one
+    /// is blank.
+    public static func current(_ defaults: UserDefaults = .standard, device: String) -> String {
+        if let saved = defaults.string(forKey: key) {
+            let name = clean(saved)
+            if !name.isEmpty {
+                return name
+            }
+        }
+        return fallback(device)
+    }
+
+    /// Keeps what the viewer typed. Blank clears the saved name, so the device
+    /// name is used again. Returns the name to send.
+    @discardableResult
+    public static func save(_ raw: String, _ defaults: UserDefaults = .standard, device: String) -> String {
+        let name = clean(raw)
+        if name.isEmpty {
+            defaults.removeObject(forKey: key)
+        } else {
+            defaults.set(name, forKey: key)
+        }
+        return current(defaults, device: device)
+    }
+
+    /// Trim, drop control characters, and keep at most 40 characters.
+    public static func clean(_ raw: String) -> String {
+        var out = ""
+        for scalar in raw.unicodeScalars where scalar.value >= 32 && scalar.value != 127 {
+            out.unicodeScalars.append(scalar)
+        }
+        return String(out.trimmingCharacters(in: .whitespacesAndNewlines).prefix(limit))
+    }
+
+    private static func fallback(_ device: String) -> String {
+        let name = clean(device)
+        return name.isEmpty ? "Screen" : name
+    }
+}
+
 /// A channel another screen sent here (`screen.watch`).
 public struct ScreenWatch: Codable, Sendable, Equatable {
     public var channelId: Int64

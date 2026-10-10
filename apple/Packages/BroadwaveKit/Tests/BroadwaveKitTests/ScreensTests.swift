@@ -41,6 +41,24 @@ import Testing
     #expect(!ScreenID.valid("café"))
 }
 
+@Test func aScreenNameIsStoredTrimmedAndCapped() throws {
+    let defaults = try #require(UserDefaults(suiteName: "screen-name-\(UUID().uuidString)"))
+    #expect(ScreenName.current(defaults, device: "iPhone") == "iPhone")
+
+    #expect(ScreenName.save("  Living Room  ", defaults, device: "iPhone") == "Living Room")
+    #expect(defaults.string(forKey: ScreenName.key) == "Living Room")
+    #expect(ScreenName.current(defaults, device: "iPhone") == "Living Room")
+
+    let long = String(repeating: "n", count: 50)
+    #expect(ScreenName.save(long, defaults, device: "iPhone") == String(repeating: "n", count: 40))
+    #expect(ScreenName.clean("Den\u{1} TV") == "Den TV")
+    #expect(ScreenName.clean("  \n\t  ") == "")
+
+    #expect(ScreenName.save("   ", defaults, device: "Apple TV") == "Apple TV")
+    #expect(defaults.string(forKey: ScreenName.key) == nil)
+    #expect(ScreenName.current(defaults, device: "  ") == "Screen")
+}
+
 @Test func hereCarriesTheIDOnlyWhenTheServerTakesIt() {
     #expect(EventSocket.here(id: "abc-1", name: "Den", kind: "appletv") == ["id": "abc-1", "name": "Den", "kind": "appletv"])
     #expect(EventSocket.here(id: "", name: "Den", kind: "appletv") == ["name": "Den", "kind": "appletv"])

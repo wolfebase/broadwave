@@ -71,6 +71,9 @@ struct SettingsView: View {
     @State private var importBackup = false
     @State private var saveError = ""
     @State private var savedNote = ""
+    @State private var screenLabel = ""
+    @State private var screenLabelSaved = ""
+    @State private var screenNameReady = false
 
     private var demo: Bool {
         store.server?.id == "demo"
@@ -88,6 +91,7 @@ struct SettingsView: View {
     private func settingsForm(_ store: AppStore) -> some View {
         @Bindable var store = store
         Form {
+            screenNameSection
             if !saveError.isEmpty {
                 Section {
                     Text(saveError)
@@ -142,7 +146,10 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .task { await load() }
-        .onDisappear { flushServerText() }
+        .onDisappear {
+            flushServerText()
+            commitScreenName()
+        }
         .navigationDestination(isPresented: $showAbout) { AboutView() }
         .navigationDestination(isPresented: $showDiagnostics) { DiagnosticsView() }
         .navigationDestination(isPresented: $showChannels) { ChannelsView() }
@@ -200,6 +207,35 @@ struct SettingsView: View {
         #else
             _ = proxy
         #endif
+    }
+
+    private var screenNameSection: some View {
+        Section {
+            TextField("Name this screen", text: $screenLabel)
+                .accessibilityIdentifier("screen-name")
+                .onSubmit { commitScreenName() }
+        } header: {
+            Text("Name this screen")
+        } footer: {
+            Text("Other screens see this name.")
+        }
+        .onAppear {
+            guard !screenNameReady else { return }
+            screenNameReady = true
+            let name = ScreenIdentity.name
+            screenLabel = name
+            screenLabelSaved = name
+        }
+    }
+
+    /// Sends the new name on the open socket. Blank goes back to the device name.
+    private func commitScreenName() {
+        guard screenNameReady, screenLabel != screenLabelSaved else { return }
+        let sent = ScreenName.save(screenLabel, device: ScreenIdentity.deviceName)
+        screenLabel = sent
+        screenLabelSaved = sent
+        store.screenName = sent
+        store.socket?.announce(id: ScreenIdentity.id, name: sent, kind: ScreenIdentity.kind)
     }
 
     private var serverSection: some View {
