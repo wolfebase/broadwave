@@ -40,6 +40,8 @@ public final class AppStore {
     private var gameAlerts = GameAlerts()
     /// A channel another screen sent here, until the shell plays it.
     public private(set) var screenWatch: ScreenWatch?
+    /// A remote button pressed for this screen, until the shell acts on it.
+    public private(set) var screenRemote: ScreenRemote?
     /// This screen's name as it announces itself. The server tells every screen
     /// about a new one, the new one included.
     public var screenName = ""
@@ -143,6 +145,7 @@ public final class AppStore {
         socket?.disconnect()
         clearGameAlerts()
         screenWatch = nil
+        screenRemote = nil
         // Down until the first message, so a server that is off at launch gets the banner.
         noteConnection(false)
         announced = false
@@ -179,6 +182,11 @@ public final class AppStore {
         socket.on("screen.watch") { [weak self] data in
             guard let sent = try? JSONDecoder().decode(ScreenWatch.self, from: data) else { return }
             self?.noteScreenWatch(sent)
+        }
+        // A button this app version doesn't know is ignored.
+        socket.on("screen.remote") { [weak self] data in
+            guard let pressed = try? JSONDecoder().decode(ScreenRemote.self, from: data) else { return }
+            self?.noteScreenRemote(pressed)
         }
         socket.connect()
         self.socket = socket
@@ -268,6 +276,16 @@ public final class AppStore {
         screenWatch = sent
     }
 
+    /// Hands the pressed button to the shell once.
+    public func takeScreenRemote() -> ScreenRemote? {
+        defer { screenRemote = nil }
+        return screenRemote
+    }
+
+    func noteScreenRemote(_ pressed: ScreenRemote) {
+        screenRemote = pressed
+    }
+
     /// Hands the sent channel to the shell once.
     public func takeScreenWatch() -> ScreenWatch? {
         defer { screenWatch = nil }
@@ -308,6 +326,7 @@ public final class AppStore {
         homeNotice = nil
         homeQueue = []
         screenWatch = nil
+        screenRemote = nil
         clearGameAlerts()
         UserDefaults.standard.removeObject(forKey: "server")
         SharedServer.save(nil)

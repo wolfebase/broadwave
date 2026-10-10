@@ -1279,10 +1279,8 @@ struct PlayerScreen: View {
         // A swipe can also arrive as an arrow press. One move is enough.
         guard now.timeIntervalSince(lastChannelStep) > 0.35 else { return }
         lastChannelStep = now
-        guard let current = nowPlaying.channel, let i = store.channels.firstIndex(of: current) else { return }
-        let next = store.channels[(i + dir + store.channels.count) % store.channels.count]
-        nowPlaying.channel = next
-        live.playLogNote("step \(dir) \(next.displayNumber)")
+        nowPlaying.step(dir, in: store.channels)
+        live.playLogNote("step \(dir) \(nowPlaying.channel?.displayNumber ?? "-")")
     }
 
     #if os(tvOS)

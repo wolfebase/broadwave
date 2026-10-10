@@ -118,3 +118,28 @@ public enum WatchHandoff {
         return id
     }
 }
+
+/// A remote button another device pressed for this screen (`screen.remote`).
+public struct ScreenRemote: Codable, Sendable, Equatable {
+    public enum Action: String, Codable, Sendable, CaseIterable {
+        case up, down, pause, play, record
+    }
+
+    public var action: Action
+    public var from: String
+    /// Each press is its own, so the same button twice acts twice.
+    public var received = UUID()
+
+    private enum CodingKeys: String, CodingKey { case action, from }
+
+    public init(action: Action, from: String = "") {
+        self.action = action
+        self.from = from
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        action = try c.decode(Action.self, forKey: .action)
+        from = try c.decodeIfPresent(String.self, forKey: .from) ?? ""
+    }
+}

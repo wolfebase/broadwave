@@ -75,6 +75,12 @@ final class NowPlaying {
         channel != nil && together.isEmpty && !expanded && recordingScreens.isEmpty && !live.pictureInPicture
     }
 
+    /// The next or previous channel in the lineup, wrapping at the ends.
+    func step(_ dir: Int, in channels: [Channel]) {
+        guard let current = channel, let i = channels.firstIndex(of: current) else { return }
+        channel = channels[(i + dir + channels.count) % channels.count]
+    }
+
     func watchTogether(_ channels: [Channel], layout: String? = nil, standIns: Set<Int64> = []) {
         if together.isEmpty {
             openedFrom = channel
@@ -330,6 +336,19 @@ struct RootView: View {
             .onOpenURL(perform: open)
             .spotlightLinks(open)
             .watchHandoff(handoffChannel, server: store.server) { watch($0) }
+            .onChange(of: store.screenRemote) {
+                // A remote pressed a button for this screen. It works the one-channel
+                // player as its own controls would; anything else ignores it.
+                guard let pressed = store.takeScreenRemote(), !showSetup, let channel = nowPlaying.channel,
+                      nowPlaying.together.isEmpty, nowPlaying.recordingScreens.isEmpty else { return }
+                let player = nowPlaying.live.player
+                switch pressed.action {
+                case .up, .down: nowPlaying.step(ChannelStep.offset(up: pressed.action == .up), in: store.channels)
+                case .pause: player.pause()
+                case .play: player.play()
+                case .record: Task { await store.toggleRecord(channel) }
+                }
+            }
             .onChange(of: store.screenWatch) {
                 // Another screen sent this one a channel. It plays live and says who sent it.
                 // Setup holds no player, so the channel is dropped and the sender keeps playing.

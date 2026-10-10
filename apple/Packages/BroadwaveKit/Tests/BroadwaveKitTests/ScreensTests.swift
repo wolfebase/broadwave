@@ -205,3 +205,21 @@ private final class ScreensStub: URLProtocol, @unchecked Sendable {
         return data
     }
 }
+
+@MainActor @Test func aRemoteButtonIsHandedOverOnce() throws {
+    let data = Data(#"{"action":"down","from":"Sam's Watch"}"#.utf8)
+    let pressed = try JSONDecoder().decode(ScreenRemote.self, from: data)
+    #expect(pressed.action == .down)
+    #expect(pressed.from == "Sam's Watch")
+    #expect(try JSONDecoder().decode(ScreenRemote.self, from: Data(#"{"action":"pause"}"#.utf8)).from == "")
+    // A newer server's button is not this app's to guess at.
+    #expect(throws: (any Error).self) { try JSONDecoder().decode(ScreenRemote.self, from: Data(#"{"action":"eject"}"#.utf8)) }
+
+    let store = AppStore()
+    store.noteScreenRemote(pressed)
+    #expect(store.takeScreenRemote()?.action == .down)
+    #expect(store.screenRemote == nil)
+    #expect(store.takeScreenRemote() == nil)
+    // The same button again is a new press.
+    #expect(try JSONDecoder().decode(ScreenRemote.self, from: data) != pressed)
+}
