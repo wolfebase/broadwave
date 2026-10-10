@@ -5,7 +5,8 @@ import { navigate } from "../../app/router";
 import { gateFeature } from "../../lib/compat";
 import { copy } from "../../strings";
 import { formatBytes } from "../../lib/format";
-import { readLiveDelay, saveLiveDelay, type LiveDelay } from "../../lib/events";
+import { browserName, readLiveDelay, saveLiveDelay, type LiveDelay } from "../../lib/events";
+import { saveScreenName } from "./screenName";
 import { tunerLine as describeTuners } from "./deviceCard";
 export function SettingsScreen({
   settings,
@@ -22,6 +23,7 @@ export function SettingsScreen({
   tunerCount?: number;
   onChange: (values: Partial<Settings>) => void;
 }) {
+  const [screenName, setScreenName] = useState(browserName);
   const [encoder, setEncoder] = useState("");
   const [delay, setDelay] = useState<LiveDelay>(readLiveDelay);
   const [tunerLine, setTunerLine] = useState("Checking tuners.");
@@ -53,6 +55,26 @@ export function SettingsScreen({
       <div className="page-head">
         <h2>{copy.settings.title}</h2>
       </div>
+      <h3 className="section-title">This screen</h3>
+      <label className="field">
+        {copy.settings.screenName}
+        <input
+          value={screenName}
+          maxLength={40}
+          spellCheck={false}
+          autoComplete="off"
+          onChange={(event) => setScreenName(event.target.value)}
+          onBlur={() => {
+            if (screenName !== browserName()) setScreenName(saveScreenName(screenName));
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            setScreenName(saveScreenName(screenName));
+          }}
+        />
+        <span className="hint">{copy.settings.screenNameHint}</span>
+      </label>
       <h3 className="section-title">Picture</h3>
       <article className="quiet-card wide">
         <h3>This server</h3>

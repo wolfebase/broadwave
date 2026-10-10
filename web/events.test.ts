@@ -45,7 +45,8 @@ Object.assign(globalThis, {
   document: { visibilityState: "visible", addEventListener: (t: string, fn: () => void) => listeners.set(t, fn) },
   window: Object.assign(globalThis, { addEventListener: (t: string, fn: () => void) => listeners.set(t, fn) }),
 });
-const { EventSocket, reconnectWait, screenId } = await import("./src/lib/events.ts");
+const { EventSocket, browserName, reconnectWait, screenId } = await import("./src/lib/events.ts");
+const { cleanScreenName } = await import("./src/features/settings/screenName.ts");
 
 function latest() {
   return FakeSocket.all[FakeSocket.all.length - 1];
@@ -188,4 +189,46 @@ test("every announcement carries the same screen id", () => {
   const again = latest().sent.find((m) => m.type === "here");
   assert.equal(again?.data?.id, first?.data?.id);
   assert.equal(screenId(), first?.data?.id);
+});
+
+test("a screen name is trimmed, capped at 40, and blank falls back", () => {
+  const store = new Map<string, string>();
+  Object.assign(globalThis, {
+    localStorage: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => store.set(key, value),
+      removeItem: (key: string) => store.delete(key),
+    },
+  });
+  assert.equal(cleanScreenName("  Living Room  "), "Living Room");
+  assert.equal(cleanScreenName(`${"n".repeat(50)}`), "n".repeat(40));
+  assert.equal(cleanScreenName("Den\u0001 TV"), "Den TV");
+  assert.equal(cleanScreenName(" \n\t "), "");
+  const own = browserName();
+  store.set("broadwave-screen-name", "Living Room");
+  assert.equal(browserName(), "Living Room");
+  store.delete("broadwave-screen-name");
+  assert.equal(browserName(), own);
+});
+
+test("renaming announces on the open socket", () => {
+  const store = new Map<string, string>();
+  Object.assign(globalThis, {
+    localStorage: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => store.set(key, value),
+      removeItem: (key: string) => store.delete(key),
+    },
+  });
+  FakeSocket.all = [];
+  const bus = new EventSocket();
+  latest().open();
+  const before = latest().sent.filter((m) => m.type === "here").length;
+  store.set("broadwave-screen-name", "Den TV");
+  bus.here();
+  const sent = latest().sent.filter((m) => m.type === "here");
+  assert.equal(sent.length, before + 1);
+  assert.equal(sent.at(-1)?.data?.name, "Den TV");
+  assert.equal(FakeSocket.all.length, 1);
+  store.delete("broadwave-screen-name");
 });

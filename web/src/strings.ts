@@ -65,6 +65,8 @@ export const copy = {
   },
   settings: {
     title: "Settings",
+    screenName: "Name this screen",
+    screenNameHint: "Other screens see this name.",
     liveDelay: "Live delay",
     liveDelayHint: "How far behind live a channel plays when this device starts it. Lowest is about 6 seconds, Balanced 16, Stable 20. Apple devices play at Balanced or Stable.",
     layout: "Layout",
