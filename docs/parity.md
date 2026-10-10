@@ -151,3 +151,19 @@ The demo has no tuners or sources, so Tuners and playlists is not shown there.
 | Live Activities for a recording in progress or a team's game | no | yes, on the Lock Screen and in the Dynamic Island, while the app is open or a channel is playing. Settings has the two switches. | yes, on the Lock Screen. An iPad has no Dynamic Island. Settings has the same two switches. | no |
 
 A game alert is a short note while the app is open: Watch opens that channel, and Not now dismisses it. It waits while the full player is up. The two Live Activity switches stay on this device. They are not a server setting.
+
+## Keyboard and the guide
+
+A hardware keyboard on iPhone or iPad. The Apple TV column is the Siri Remote.
+
+| Choice | Web | iPhone and iPad | Apple TV |
+| --- | --- | --- | --- |
+| Previous and next channel | ↑ and ↓ | ↑ and ↓ | up and down on the clickpad while the bar is hidden |
+| Channel list over the player | G | G | Channels in the bar |
+| Multiview from the player | M | M | Multiview in the bar's menu |
+| Record or stop | R | R | Record in the bar's menu |
+| Program or stream details | I shows the program | I shows the stream | the Info and Stream pages |
+| Close a panel, then leave the player or multiview | Escape or Backspace | Escape or ⌘. | Back |
+| Pages | the browser keeps ⌘ and numbers | ⌘1 Home, ⌘2 Guide, ⌘3 Sports, ⌘4 Recordings, ⌘F Search, ⌘, Settings | the tab bar |
+| Last channel, theater, captions, key list | L, T, C, ? | no | no |
+| A picture beside the guide | Each channel row shows its latest frame. | iPad: what is playing stays above the guide. A picked channel shows its latest frame, and Preview plays it there. iPhone has the mini player. | no |
