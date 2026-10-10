@@ -23,6 +23,9 @@ struct RecordingsView: View {
         /// A cover, like live TV: a pushed player would keep the sidebar's handle on the picture.
         @State private var playing: Recording?
         @State private var playingChannel: VirtualChannel?
+    #else
+        /// A recording a link named (Spotlight), pushed like a tapped row.
+        @State private var linked: Recording?
     #endif
     #if os(tvOS)
         @Environment(\.tvSelectedTab) private var tvSelectedTab
@@ -166,6 +169,7 @@ struct RecordingsView: View {
         #else
             .navigationDestination(for: Recording.self) { RecordingPlayerScreen(recording: $0) }
             .navigationDestination(for: VirtualChannel.self) { RecordingPlayerScreen(channel: $0) }
+            .navigationDestination(item: $linked) { RecordingPlayerScreen(recording: $0) }
         #endif
             .confirmationDialog(
                 deleting.map { "Delete \($0.subtitle ?? $0.title)?" } ?? "",
@@ -211,6 +215,8 @@ struct RecordingsView: View {
                 playingChannel = nil
             }
             .onChange(of: playing != nil || playingChannel != nil) { _, up in library.playing = up }
+        #else
+            .onChange(of: library.recording, initial: true) { _, _ in openLinked() }
         #endif
             .task {
                 async let recordings: Void = store.refreshRecordings()
@@ -227,15 +233,17 @@ struct RecordingsView: View {
             }
     }
 
-    #if os(tvOS)
-        /// Plays the recording a link named (the Top Shelf's Continue watching).
-        /// The link sets it only once the recording is in a fresh list.
-        private func openLinked() {
-            guard show == nil, let id = library.recording else { return }
-            library.recording = nil
+    /// Plays the recording a link named (the Top Shelf's Continue watching, Spotlight).
+    /// The link sets it only once the recording is in a fresh list.
+    private func openLinked() {
+        guard show == nil, let id = library.recording else { return }
+        library.recording = nil
+        #if os(tvOS)
             playing = store.recordings.first { $0.id == id }
-        }
-    #endif
+        #else
+            linked = store.recordings.first { $0.id == id }
+        #endif
+    }
 
     /// The row in one sentence, with the same facts it shows: status, date, size, length, Watched, Kept forever.
     private func recordingSpoken(_ rec: Recording) -> String {

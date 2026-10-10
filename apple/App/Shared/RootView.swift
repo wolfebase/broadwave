@@ -475,23 +475,26 @@ struct RootView: View {
         case "sports": show(.sports)
         case "recordings": show(.recordings)
         case "recording":
-            #if os(tvOS)
-                guard let id = Int64(url.lastPathComponent) else { return }
-                Task {
-                    // The cached list can be older than the Top Shelf that sent the link.
-                    await store.refreshRecordings()
+            guard let id = Int64(url.lastPathComponent) else {
+                show(.recordings)
+                return
+            }
+            Task {
+                // The cached list can be older than the Top Shelf or Spotlight that sent the link.
+                await store.refreshRecordings()
+                #if os(tvOS)
                     let busy = libraryFilter.playing || nowPlaying.channel != nil
                     libraryFilter.closeToken += 1
-                    show(.recordings)
-                    guard store.recordings.contains(where: { $0.id == id }) else { return }
+                #endif
+                show(.recordings)
+                guard store.recordings.contains(where: { $0.id == id }) else { return }
+                #if os(tvOS)
                     if busy {
                         await coverGone()
                     }
-                    libraryFilter.recording = id
-                }
-            #else
-                show(.recordings)
-            #endif
+                #endif
+                libraryFilter.recording = id
+            }
         default: show(.home)
         }
     }

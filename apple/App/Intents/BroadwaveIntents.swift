@@ -44,6 +44,19 @@ func ask<T>(_ call: () async throws -> T) async throws -> T {
     }
 }
 
+/// The server's channels, or the lineup the app last saw when the server can't
+/// be asked, so a saved Shortcut or Control Center channel still opens the app.
+func lineup(_ call: (APIClient) async throws -> [Channel]) async throws -> [Channel] {
+    let api = try intentAPI()
+    do {
+        return try await call(api)
+    } catch {
+        let kept = SharedLineup.load()
+        guard !kept.isEmpty else { throw IntentFailure.unreachable }
+        return kept
+    }
+}
+
 struct ChannelEntity: AppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Channel"
     static let defaultQuery = ChannelQuery()
@@ -77,14 +90,13 @@ struct ChannelEntity: AppEntity {
 struct ChannelQuery: EntityStringQuery {
     func entities(for identifiers: [Int]) async throws -> [ChannelEntity] {
         let wanted = Set(identifiers.map(Int64.init))
-        let api = try intentAPI()
-        return try await ask { try await api.allChannels() }.filter { wanted.contains($0.id) }.map(ChannelEntity.init)
+        let channels = try await lineup { try await $0.allChannels() }
+        return channels.filter { wanted.contains($0.id) }.map(ChannelEntity.init)
     }
 
     /// The whole lineup, hidden channels too, so an encrypted 3.0 number finds its clear twin.
     func entities(matching string: String) async throws -> [ChannelEntity] {
-        let api = try intentAPI()
-        let channels = try await ask { try await api.allChannels() }
+        let channels = try await lineup { try await $0.allChannels() }
         if let hit = Voice.channel(string, in: channels) {
             return [ChannelEntity(hit)]
         }
@@ -94,7 +106,7 @@ struct ChannelQuery: EntityStringQuery {
 
     /// Favorites, then the first of the rest. A big playlist would make Siri's list too long.
     func suggestedEntities() async throws -> [ChannelEntity] {
-        guard let api = try? intentAPI(), let shown = try? await api.channels() else { return [] }
+        guard let shown = try? await lineup({ try await $0.channels() }) else { return [] }
         let visible = shown.filter { $0.enabled && !$0.hidden }
         return (visible.filter(\.favorite) + visible.filter { !$0.favorite }.prefix(30)).map(ChannelEntity.init)
     }

@@ -27,6 +27,8 @@ public final class AppStore {
     public private(set) var offline = false
     /// When the lists on screen last came from the server.
     public private(set) var freshAt: Date?
+    /// What the keychain holds for Siri and Control Center.
+    @ObservationIgnored private var sharedLineup: [SharedLineup.Entry] = []
     private var offlineWait: Task<Void, Never>?
     /// A device that showed up after the house was already known. Nil when nothing is waiting.
     public private(set) var homeNotice: String?
@@ -92,6 +94,7 @@ public final class AppStore {
         // Keychain items outlive the app, so a reinstall must not leave the old address for the Top Shelf.
         if server == nil || server?.id == "demo" {
             SharedServer.save(nil)
+            SharedLineup.save(nil)
         }
         clock = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -181,6 +184,9 @@ public final class AppStore {
         save(server, "server")
         // The demo lives inside the app, where the Top Shelf cannot reach it.
         SharedServer.save(server.id == "demo" ? nil : server.url)
+        // Channel ids belong to one server; the new lineup is written after its first refresh.
+        SharedLineup.save(nil)
+        sharedLineup = []
         remembered = RememberedServers.upsert(remembered, server)
         save(remembered, "servers")
         frameIDs = []
@@ -304,6 +310,16 @@ public final class AppStore {
         clearGameAlerts()
         UserDefaults.standard.removeObject(forKey: "server")
         SharedServer.save(nil)
+        SharedLineup.save(nil)
+        sharedLineup = []
+    }
+
+    /// Writes the keychain only when the lineup changed.
+    private func shareLineup() {
+        let next = SharedLineup.entries(channels)
+        guard next != sharedLineup else { return }
+        sharedLineup = next
+        SharedLineup.save(channels)
     }
 
     #if DEBUG
@@ -383,6 +399,9 @@ public final class AppStore {
             error = nil
             if let id = server?.id {
                 CatalogCache.save(CatalogSnapshot(channels: channels, airings: window, recordings: recordings), serverID: id)
+                if id != "demo" {
+                    shareLineup()
+                }
             }
             if let rest = try? await api.airings(from: moment.addingTimeInterval(4 * 3600), to: moment.addingTimeInterval(14 * 24 * 3600)) {
                 guard self.api?.base == base else { return }
