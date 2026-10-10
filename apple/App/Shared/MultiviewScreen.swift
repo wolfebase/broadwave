@@ -891,9 +891,17 @@ struct MultiviewScreen: View {
     }()
 
     @State private var hint = !UserDefaults.standard.bool(forKey: "broadwave-mv-hint-seen")
+    /// Off until the viewer turns it on, same as the web. A launch argument can set the key.
+    @State private var auto = UserDefaults.standard.bool(forKey: "broadwave-mv-auto")
+    /// When the viewer last chose the sound tile. The ranking stays off for two minutes.
+    @State private var manualAt = Date.distantPast
+    @State private var switchBoard: [GameSwitch.Game] = []
+    @State private var switchPrior: [GameSwitch.Game] = []
+    @State private var switchBanner = ""
     @State private var menuChannel: Int64?
     #if os(tvOS)
         private enum BarFocus: Hashable {
+            case auto
             case layout(TileLayout)
             case channels
             case channel(Int64)
@@ -911,6 +919,9 @@ struct MultiviewScreen: View {
                 }
                 if raw == "channels" {
                     return .channels
+                }
+                if raw == "auto" {
+                    return .auto
                 }
                 if let id = Int64(raw), id > 0 {
                     return .channel(id)
@@ -960,9 +971,13 @@ struct MultiviewScreen: View {
         nowPlaying.together.compactMap { id in store.channels.first { $0.id == id } }
     }
 
+    /// The tiles on screen in the viewer's order. Auto breaks ties in this order, as on the web.
+    private var slotted: [Channel] {
+        Array(chosen.filter { !blocked.contains($0.id) }.prefix(min(session.layout.slots, cap)))
+    }
+
     private var ordered: [Channel] {
-        let visible = chosen.filter { !blocked.contains($0.id) }
-        let capped = Array(visible.prefix(min(session.layout.slots, cap)))
+        let capped = slotted
         guard !session.layout.equal, let focus = capped.first(where: { $0.id == session.focusID }) ?? capped.first else {
             return capped
         }
@@ -983,6 +998,15 @@ struct MultiviewScreen: View {
             Color.black.ignoresSafeArea()
             VStack(spacing: 10) {
                 topBar(tiles)
+                if !switchBanner.isEmpty {
+                    Text(switchBanner)
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .glassEffect(in: .capsule)
+                        .accessibilityIdentifier("mv-switch-banner")
+                        .accessibilityAddTraits(.updatesFrequently)
+                }
                 if hint {
                     Text("Select a tile to hear it.")
                         .font(.footnote.weight(.semibold))
@@ -1060,6 +1084,31 @@ struct MultiviewScreen: View {
                     return
                 }
                 await refreshPlan()
+            }
+        }
+        .task(id: GameSwitch.shouldPoll(auto: auto, gameIDs: switchGameIDs)) {
+            guard GameSwitch.shouldPoll(auto: auto, gameIDs: switchGameIDs) else {
+                // A board from before Auto went off would read as a lead change.
+                switchBoard = []
+                switchPrior = []
+                switchBanner = ""
+                return
+            }
+            while !Task.isCancelled {
+                await pullSwitchBoard()
+                if Task.isCancelled {
+                    break
+                }
+                applySwitch()
+                try? await Task.sleep(for: .seconds(GameSwitch.poll))
+            }
+        }
+        .task(id: manualAt) {
+            let left = GameSwitch.hold - Date().timeIntervalSince(manualAt)
+            guard left > 0, left <= GameSwitch.hold else { return }
+            try? await Task.sleep(for: .seconds(left))
+            if !Task.isCancelled {
+                applySwitch()
             }
         }
         .task(id: stopKey) {
@@ -1144,6 +1193,22 @@ struct MultiviewScreen: View {
             Text(session.layout.label)
                 .font(.headline)
             Spacer()
+            Button("Auto") {
+                auto.toggle()
+                UserDefaults.standard.set(auto, forKey: "broadwave-mv-auto")
+            }
+            #if os(tvOS)
+            .buttonStyle(ChannelsPillStyle(focused: barFocus == .auto, selected: auto))
+            .focused($barFocus, equals: .auto)
+            .focusEffectDisabled()
+            #else
+            .buttonStyle(.glass)
+            .tint(auto ? Color.accentColor : nil)
+            #endif
+            .accessibilityLabel("Auto")
+            .accessibilityValue(auto ? "On" : "Off")
+            .accessibilityHint("Follow the game that matters")
+            .accessibilityIdentifier("multiview-auto")
             Button(session.paused ? "Play" : "Pause") { session.togglePause() }
                 .buttonStyle(.glass)
                 .accessibilityIdentifier("multiview-pause")
@@ -1322,7 +1387,7 @@ struct MultiviewScreen: View {
             grid: session,
             standIn: nowPlaying.standIns.contains(channel.id)
         ) {
-            session.focusID = channel.id
+            hear(channel.id)
         } bind: { session.bind(channel.id, $0) } unbind: {
             session.unbind(channel.id)
         } onSound: {
@@ -1340,7 +1405,7 @@ struct MultiviewScreen: View {
     @ViewBuilder
     private func tileMenu(_ channel: Channel) -> some View {
         Button("Make big") {
-            session.focusID = channel.id
+            hear(channel.id)
             menuChannel = nil
         }
         Button("Record") {
@@ -1349,6 +1414,9 @@ struct MultiviewScreen: View {
         }
         Button("Remove") {
             nowPlaying.together.removeAll { $0 == channel.id }
+            // Removing a tile is a choice too: hold Auto, as on the web.
+            manualAt = Date()
+            switchBanner = ""
             menuChannel = nil
         }
         .accessibilityIdentifier("tile-menu-remove")
@@ -1380,7 +1448,7 @@ struct MultiviewScreen: View {
             return
         }
         if nowPlaying.together.contains(channel.id) {
-            session.focusID = channel.id
+            hear(channel.id)
             session.guide = false
             return
         }
@@ -1393,9 +1461,76 @@ struct MultiviewScreen: View {
         }
         next.append(channel.id)
         nowPlaying.together = next
-        session.focusID = channel.id
+        hear(channel.id)
         session.guide = false
     }
+
+    /// The viewer picked the sound. Auto stays on and waits two minutes, as on the web.
+    private func hear(_ id: Int64) {
+        manualAt = Date()
+        session.focusID = id
+        switchBanner = ""
+    }
+
+    private var switchGameIDs: [String] {
+        slotted.map { store.index.on($0.id, at: store.now)?.gameId ?? "" }
+    }
+
+    private func pullSwitchBoard() async {
+        #if DEBUG
+            if let games = scoreboardFixture() {
+                switchPrior = switchBoard
+                switchBoard = games
+                return
+            }
+        #endif
+        guard let games = try? await store.api?.scoreboardGames() else { return }
+        switchPrior = switchBoard
+        switchBoard = games.map { GameSwitch.Game($0) }
+    }
+
+    /// Moves the sound, which is also the big tile when the layout has one.
+    private func applySwitch() {
+        var unique: [(id: Int64, game: GameSwitch.Game)] = []
+        var seen = Set<String>()
+        for channel in slotted {
+            let gameID = store.index.on(channel.id, at: store.now)?.gameId ?? ""
+            guard !gameID.isEmpty, seen.insert(gameID).inserted else { continue }
+            guard let game = switchBoard.first(where: { $0.id == gameID && $0.state == "in" }) else { continue }
+            unique.append((channel.id, game))
+        }
+        guard auto, unique.count >= 2 else {
+            switchBanner = ""
+            return
+        }
+        let choice = GameSwitch.pickFocus(
+            now: .now,
+            manualAt: manualAt,
+            games: unique.map(\.game),
+            previous: switchPrior
+        )
+        if choice.keepManual {
+            switchBanner = ""
+            return
+        }
+        switchBanner = choice.banner
+        guard let channel = unique.first(where: { $0.game.id == choice.gameId })?.id, channel != session.focusID else { return }
+        session.focusID = channel
+        AccessibilityNotification.Announcement(choice.banner).post()
+    }
+
+    #if DEBUG
+        /// `-BroadwaveFakeScoreboard <path>` stands in for the scoreboard on a simulator.
+        private func scoreboardFixture() -> [GameSwitch.Game]? {
+            let path = UserDefaults.standard.string(forKey: "BroadwaveFakeScoreboard") ?? ""
+            guard !path.isEmpty, let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return nil }
+            struct Box: Decodable { var games: [GameSwitch.Game] }
+            if let box = try? JSONDecoder().decode(Box.self, from: data), !box.games.isEmpty {
+                return box.games
+            }
+            return try? JSONDecoder().decode([GameSwitch.Game].self, from: data)
+        }
+    #endif
 
     #if DEBUG
         /// `-BroadwaveChipFixture` adds one channel the plan refuses, so the strip can show a disabled chip without a tuner.

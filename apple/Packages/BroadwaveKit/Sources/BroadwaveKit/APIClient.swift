@@ -349,6 +349,13 @@ public struct APIClient: Sendable {
         return try await send("GET", "/sports/scoreboard", as: R.self).games
     }
 
+    /// The scoreboard with the clock, period, and red zone. The short `scoreboard()`
+    /// drops those, which is all the guide line needs.
+    public func scoreboardGames() async throws -> [Game] {
+        struct R: Decodable { var games: [Game] }
+        return try await send("GET", "/sports/scoreboard", as: R.self).games
+    }
+
     public func teams() async throws -> [TeamFollow] {
         struct R: Decodable { var teams: [TeamFollow] }
         return try await send("GET", "/teams", as: R.self).teams
