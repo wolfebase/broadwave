@@ -110,3 +110,65 @@ func TestAScreenPlaysWhatAnotherSendsIt(t *testing.T) {
 		t.Fatalf("no channel: %d", code)
 	}
 }
+
+func TestARemoteButtonReachesItsScreen(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	bus := realtime.NewBus()
+	ws := httptest.NewServer(bus)
+	defer ws.Close()
+	tv, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(ws.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tv.CloseNow()
+	raw, _ := json.Marshal(realtime.Message{Type: "here", Data: json.RawMessage(`{"id":"den-tv-1","name":"Den TV","kind":"appletv"}`)})
+	if err := tv.Write(ctx, websocket.MessageText, raw); err != nil {
+		t.Fatal(err)
+	}
+	h := (&Server{Store: testStore(t), Bus: bus}).Handler()
+	press := func(id, body string) int {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/screens/"+id+"/remote", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	// The socket names the screen a moment after it opens.
+	deadline := time.Now().Add(2 * time.Second)
+	code := press("den-tv-1", `{"action":"down","from":"Sam's Watch\u0007"}`)
+	for code == http.StatusNotFound && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+		code = press("den-tv-1", `{"action":"down","from":"Sam's Watch\u0007"}`)
+	}
+	if code != http.StatusAccepted {
+		t.Fatalf("press: %d", code)
+	}
+	for {
+		_, raw, err := tv.Read(ctx)
+		if err != nil {
+			t.Fatalf("the TV never heard it: %v", err)
+		}
+		var m realtime.Message
+		_ = json.Unmarshal(raw, &m)
+		if m.Type != "screen.remote" {
+			continue
+		}
+		var got struct{ Action, From string }
+		if json.Unmarshal(m.Data, &got) != nil || got.Action != "down" || got.From != "Sam's Watch" {
+			t.Fatalf("screen.remote: %s", m.Data)
+		}
+		break
+	}
+	for body, want := range map[string]int{
+		`{"action":"eject"}`: http.StatusBadRequest,
+		`{}`:                 http.StatusBadRequest,
+	} {
+		if code := press("den-tv-1", body); code != want {
+			t.Fatalf("%s: %d, want %d", body, code, want)
+		}
+	}
+	if code := press("gone-tv", `{"action":"pause"}`); code != http.StatusNotFound {
+		t.Fatalf("a screen that isn't open: %d", code)
+	}
+}
