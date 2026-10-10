@@ -98,6 +98,8 @@ The tvOS Top Shelf is an app extension (`App/TopShelf`). It has no Bonjour or sy
 
 The iPhone and iPad widgets (`App/Widgets`, WidgetKit) read the same keychain item: On now (favorite channels, or every channel on now without favorites), Your teams (followed teams' games with the scoreboard line), Recording now, and Up next (the schedule; conflicts stay listed, since the server marks them skipped). A row whose airing is recording or already planned says so instead of offering Record. Their rows come from `WidgetFeed`, and a timeline asks again at the next listing edge, at most 15 minutes out. A Record button runs `RecordIntent` in the extension, which adds a one-airing pass (the app's Record once), so a game keeps recording until it is final. The app reloads the widgets when it leaves the foreground.
 
+The Apple Watch app (`App/Watch`) is a remote for the other screens: a list from `GET /screens`, then channel up and down (buttons or the crown, one channel per detent), play and pause (also a double tap), and Record, each a `POST /api/v1/screens/{id}/remote` that the server passes on as a `screen.remote` event. The screen acts as its own controls would; only a one-channel player acts on it. watchOS keeps plain local-network HTTP for a few kinds of app, so the watch never calls the server: it sends a `WatchRelay` message over WatchConnectivity, which wakes the iPhone app in the background, and the iPhone's `WatchBridge` makes the call with its saved server and replies with the screens list. The watch target compiles `WatchRelay.swift` on its own instead of linking the kit.
+
 ## Design tokens (`design/`)
 
 `tokens.json` generates CSS variables for the web app and a Swift theme for the Apple apps, so both clients share one visual language.
