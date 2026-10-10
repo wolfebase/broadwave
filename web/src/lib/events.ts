@@ -24,6 +24,23 @@ export function browserName(ua = navigator.userAgent, touch = navigator.maxTouch
   return os ? `${browser} on ${os}` : browser;
 }
 
+let ownId = "";
+
+/** This browser's id among the screens, so another screen can send it a channel. Tabs of one browser share it. */
+export function screenId(): string {
+  if (ownId) return ownId;
+  // randomUUID is only there on https and localhost.
+  ownId = crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint32Array(4)), (n) => n.toString(16)).join("");
+  try {
+    const kept = localStorage.getItem("broadwave-screen-id");
+    if (kept) ownId = kept;
+    else localStorage.setItem("broadwave-screen-id", ownId);
+  } catch {
+    // With storage off, the id lasts as long as the page.
+  }
+  return ownId;
+}
+
 type Handler = (data: unknown) => void;
 
 export class EventSocket {
@@ -68,7 +85,7 @@ export class EventSocket {
     ws.onopen = () => {
       this.connected = true;
       this.retry = 0;
-      this.raw("here", { name: browserName(), kind: "web" });
+      this.raw("here", { id: screenId(), name: browserName(), kind: "web" });
       for (const [room, channelId] of this.rooms) this.raw("sync.join", { room, channelId, latency: readLiveDelay() });
       // A command older than a few seconds would move the room somewhere nobody asked for now.
       for (const { msg, at } of this.queue.splice(0)) if (Date.now() - at < 3_000) ws.send(msg);

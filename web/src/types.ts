@@ -14,6 +14,7 @@ export type {
   PassPreview,
   PlannedAiring,
   Recording,
+  Screen,
   SearchAiring,
   ServerInfo,
   Settings,
