@@ -46,6 +46,10 @@ Server choices. The iPhone, iPad, and Apple TV controls are the shared settings 
 | Play the next episode | yes | yes | yes | yes |
 | Offer this server as an HDHomeRun | yes | yes | yes | yes |
 | Recordings folder and free-space reserve | yes | yes | yes | yes |
+| Recording folders: by show, or all in one folder | yes | yes | yes | yes |
+| When space runs low: skip a new recording, or delete the oldest watched one | yes | yes | yes | yes |
+| Delete watched recordings after a set number of days, or never | yes | yes | yes | yes |
+| Game alerts: your teams and close games, your teams only, or off | yes | yes | yes | yes |
 | Catalog backups: list, download, restore a saved copy | yes | yes | yes | yes |
 | Restore a catalog file from this device | yes | yes | yes | Apple TV has no file picker. It restores a copy the server already kept. |
 | Layout (Auto, Desktop, TV, Phone) | yes | The app uses this device's layout. | The app uses this device's layout. | The app uses this device's layout. |
@@ -104,6 +108,7 @@ Recordings on every client. On Apple the actions are in each recording's menu (p
 | Sort (newest, oldest, name, size) and show only shows, movies, or sports | yes | yes | yes | yes |
 | Select several to mark watched, unwatched, or delete | yes | yes | yes | yes |
 | Mark watched or unwatched | yes | yes | yes | yes |
+| Keep forever | yes. The row says Kept forever. A kept recording is left out of both clean-ups. | yes, in the recording's menu. The row says Kept forever. | yes, in the recording's menu. The row says Kept forever. | yes, in the recording's menu. The row says Kept forever. |
 | Stop a recording in progress | yes | yes | yes | yes |
 | Delete, with a confirmation | yes | yes | yes | yes |
 | Play while it records | yes | yes | yes | yes |
@@ -134,3 +139,15 @@ Settings, Tuners and playlists on Apple; Sources on the web. Setup uses the same
 | Signal check | yes | yes, in Diagnostics | yes, in Diagnostics | yes, in Diagnostics |
 
 The demo has no tuners or sources, so Tuners and playlists is not shown there.
+
+## More than one screen
+
+| Choice | Web | iPhone | iPad | Apple TV |
+| --- | --- | --- | --- | --- |
+| Move what you are watching to another open screen | yes. It sends and it receives. | yes | yes | yes |
+| Hand the channel to a nearby device | A Mac opens this page. The page does not start a handoff. | yes, to an iPhone, an iPad, or a Mac | yes, to an iPhone, an iPad, or a Mac | no |
+| Follow the loudest game | yes. Auto in multiview is off until you turn it on. | yes | yes | yes. The note does not take the remote from the player. |
+| AirPlay a multiview as one picture | The grid can be listed as one channel, from 990.1 up, for other apps. The browser does not AirPlay. | AirPlay from the player sends that one channel. A multiview is not one AirPlay stream. | AirPlay from the player sends that one channel. A multiview is not one AirPlay stream. | no |
+| Live Activities for a recording in progress or a team's game | no | yes, on the Lock Screen and in the Dynamic Island, while the app is open or a channel is playing. Settings has the two switches. | yes, on the Lock Screen. An iPad has no Dynamic Island. Settings has the same two switches. | no |
+
+A game alert is a short note while the app is open: Watch opens that channel, and Not now dismisses it. It waits while the full player is up. The two Live Activity switches stay on this device. They are not a server setting.
