@@ -341,6 +341,22 @@ private final class RefusedOnce: @unchecked Sendable {
     #expect(try await client.events().isEmpty)
 }
 
+@Test func theDemoHasNoOtherScreens() async throws {
+    let server = DemoServer()
+    let port = UInt16.random(in: 20000 ... 45000)
+    let origin = try #require(await server.prepare(port: port, media: demoMedia))
+    defer { server.stop() }
+    let client = APIClient(base: origin)
+    #expect(try await client.screens().isEmpty)
+    do {
+        try await client.sendToScreen(id: "tv-1", channelId: 1, from: "Demo")
+        Issue.record("the demo took a channel for another screen")
+    } catch let error as APIError {
+        #expect(error.status == 404)
+        #expect(error.message == "That screen isn't open right now.")
+    }
+}
+
 @Test func reconnectWaitBacksOffWithJitterUnderFiveSeconds() {
     #expect(EventSocket.reconnectWait(0, random: 0) == 0.25)
     #expect(EventSocket.reconnectWait(0, random: 1) == 0.5)

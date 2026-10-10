@@ -54,6 +54,8 @@ targets:
         UILaunchScreen: {}
         UIBackgroundModes: [audio]
         NSSupportsLiveActivities: true
+        NSUserActivityTypes:
+          - com.wolfeup.broadwave.watch
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

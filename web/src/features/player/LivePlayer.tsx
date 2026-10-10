@@ -15,6 +15,8 @@ import { ChevronIcon, InfoIcon, ListIcon, RecordIcon, SideBySideIcon, SyncIcon }
 import { Progress } from "../../ui/primitives";
 import { isLayout, multiviewPath } from "../multiview/storage";
 import { useScoreMap } from "../sports/scores";
+import { movedTo, onSentHere, type SentNote } from "./moved";
+import { MovePanel } from "./MovePanel";
 import { listingNote } from "./outage";
 import { soundFor } from "./sounds";
 import { recordingHoldingStart, startOverChoice } from "./startOver";
@@ -86,7 +88,15 @@ export function LivePlayer({
   const session = stream.session;
   const error = stream.error;
   const sync: SyncStatus = stream.syncStatus;
-  const [panel, setPanel] = useState<"none" | "guide" | "info" | "sync" | "help">("none");
+  const [panel, setPanel] = useState<"none" | "guide" | "info" | "sync" | "help" | "move">("none");
+  const moveButton = useRef<HTMLButtonElement>(null);
+  // Options comes back when the move panel closes; focus goes to the button that opened it.
+  const backToMove = useRef(false);
+  useEffect(() => {
+    if (panel !== "none" || !backToMove.current) return;
+    backToMove.current = false;
+    focusRing(moveButton.current);
+  }, [panel]);
   const [listing, setListing] = useState({ id: channel.id, checks: 0, checking: false });
   if (listing.id !== channel.id) setListing({ id: channel.id, checks: 0, checking: false });
   const playback = usePlaybackStats(videoRef, panel === "info");
@@ -132,6 +142,21 @@ export function LivePlayer({
   const airing = airingAt(index, channel.id, now);
   // A master switches sound without a new picture.
   const tuning = useFirstFrame(videoRef, `${channel.id}:${opts.quality}:${opts.audio}:${stream.sounds ? "" : opts.track}:${opts.even}:${picture}`);
+  // Who sent this channel here. Its 6 s start once the picture moves; a cold tune would use them up.
+  const [sent, setSent] = useState<SentNote | null>(null);
+  useEffect(() => onSentHere(setSent), []);
+  const sentText = sent?.id === channel.id ? sent.text : undefined;
+  // Leaving the channel drops it. The note can land a render before its channel does.
+  const [sentOn, setSentOn] = useState(channel.id);
+  if (sentOn !== channel.id) {
+    setSentOn(channel.id);
+    if (sent && sent.id !== channel.id) setSent(null);
+  }
+  useEffect(() => {
+    if (tuning || !sentText) return;
+    const t = window.setTimeout(() => setSent(null), 6_000);
+    return () => window.clearTimeout(t);
+  }, [tuning, sentText]);
   const scores = useScoreMap();
   const active = recordings.find((r) => r.status === "recording" && r.channelId === channel.id);
   const { mediaNow } = stream;
@@ -508,9 +533,9 @@ export function LivePlayer({
           </button>
         ) : null
       }
-      note={error ? undefined : stream.reconnecting ? "Reconnecting…" : notice ? notice : !airing ? listingNote(listing.checks > 0) : undefined}
+      note={error ? undefined : stream.reconnecting ? "Reconnecting…" : notice ? notice : sentText ? sentText : !airing ? listingNote(listing.checks > 0) : undefined}
       noteAction={
-        !error && !stream.reconnecting && !notice && !airing ? (
+        !error && !stream.reconnecting && !notice && !sentText && !airing ? (
           <button
             type="button"
             className="btn small"
@@ -528,6 +553,7 @@ export function LivePlayer({
         ) : null
       }
       badge={syncBadge}
+      moreAside={panel === "move"}
       loading={tuning ? <TuningCard channel={channel} show={airing?.title} art={airing?.imageUrl ? `/media/art/airing/${airing.id}?w=960` : ""} mini={mode === "mini"} /> : null}
       tools={
         <>
@@ -654,6 +680,12 @@ export function LivePlayer({
             <button type="button" className="text-btn" onClick={() => setPanel((p) => (p === "info" ? "none" : "info"))}>
               {copy.player.stats}
             </button>
+            {together ? null : (
+              // The other screen would join the channel at live, not this group's moment.
+              <button ref={moveButton} type="button" className={panel === "move" ? "text-btn on" : "text-btn"} onClick={() => setPanel((p) => (p === "move" ? "none" : "move"))} aria-expanded={panel === "move"}>
+                Move to another screen
+              </button>
+            )}
           </div>
         </div>
       }
@@ -731,6 +763,20 @@ export function LivePlayer({
         </div>
       ) : null}
       {panel === "help" ? <HelpDialog onClose={() => setPanel("none")} /> : null}
+      {panel === "move" ? (
+        <MovePanel
+          channel={channel}
+          onMoved={(name) => {
+            setPanel("none");
+            movedTo(name);
+            onClose();
+          }}
+          onClose={() => {
+            backToMove.current = true;
+            setPanel("none");
+          }}
+        />
+      ) : null}
       {panel === "sync" ? (
         <div className="info-panel glass" role="dialog" aria-labelledby="sync-panel-title">
           <h3 id="sync-panel-title">{together ? "Watching together" : "Whole-Home Sync"}</h3>

@@ -53,11 +53,14 @@ func (s *Server) screenWatch(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "Live updates are not available.", http.StatusServiceUnavailable)
 		return
 	}
-	from := strings.TrimSpace(body.From)
-	if len([]rune(from)) > 64 {
-		from = string([]rune(from)[:64])
-	}
-	event := map[string]any{"channelId": ch.ID, "from": from}
+	// The name is shown on another screen: no control characters, 64 at most.
+	from := []rune(strings.TrimSpace(strings.Map(func(r rune) rune {
+		if r < 32 || r == 127 {
+			return -1
+		}
+		return r
+	}, body.From)))
+	event := map[string]any{"channelId": ch.ID, "from": string(from[:min(len(from), 64)])}
 	if s.Bus.SendTo(r.PathValue("id"), "screen.watch", event) == 0 {
 		httpError(w, "That screen isn't open right now.", http.StatusNotFound)
 		return

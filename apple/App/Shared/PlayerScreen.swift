@@ -919,6 +919,7 @@ struct PlayerScreen: View {
     @State private var lastChannelStep = Date.distantPast
     #if os(iOS)
         @State private var showGuide = false
+        @State private var showMove = false
     #endif
 
     /// Portrait keeps the channel, the program, and labeled controls on screen.
@@ -1142,7 +1143,23 @@ struct PlayerScreen: View {
         .fullScreenCover(item: $startOverRecording, onDismiss: { live.retry() }, content: { recording in
             RecordingPlayerScreen(recording: recording)
                 .environment(store)
+                .environment(nowPlaying)
         })
+        // A channel sent from another screen, or a link, plays live instead of under the recording.
+        .onChange(of: nowPlaying.closeStartOver) {
+            startOverRecording = nil
+        }
+        #if os(iOS)
+        .sheet(isPresented: $showMove) {
+            MoveToScreenSheet {
+                // The other screen took the channel, so this one stops and the player closes.
+                showMove = false
+                nowPlaying.stop()
+            }
+            .environment(store)
+            .environment(nowPlaying)
+        }
+        #endif
         #if DEBUG
             #if os(iOS)
                 // The host writes portrait or landscape. Rotating the Simulator window would
@@ -1543,6 +1560,9 @@ struct PlayerScreen: View {
                     showStream.toggle()
                 }
                 airPlayControl
+                controlButton("Move to another screen", systemImage: "rectangle.portrait.and.arrow.forward", id: "portrait-move") {
+                    showMove = true
+                }
             }
         }
 
@@ -1633,6 +1653,11 @@ struct PlayerScreen: View {
                     live.playLogNote("airplay open")
                 }
                 .frame(width: 44, height: 44)
+                Button("Move to another screen", systemImage: "rectangle.portrait.and.arrow.forward") { showMove = true }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                    .accessibilityLabel("Move to another screen")
+                    .accessibilityIdentifier("landscape-move")
                 GlassEffectContainer {
                     HStack(spacing: 6) {
                         Button("Previous channel", systemImage: "chevron.up") { step(-1) }
@@ -2217,6 +2242,10 @@ struct RecordingPlayerScreen: View {
     }
 
     @Environment(AppStore.self) private var store
+    /// Absent where a recording opens outside the app shell.
+    @Environment(NowPlaying.self) private var nowPlaying: NowPlaying?
+    /// This player while it is on screen, so Handoff does not offer the live channel under it.
+    @State private var screenID = UUID()
     let source: Source
     @State private var player = AVPlayer()
     @State private var error: String?
@@ -2349,7 +2378,11 @@ struct RecordingPlayerScreen: View {
                     }
                 }
             }
+            .onAppear {
+                nowPlaying?.recordingScreens.insert(screenID)
+            }
             .onDisappear {
+                nowPlaying?.recordingScreens.remove(screenID)
                 player.pause()
                 saveProgress()
             }

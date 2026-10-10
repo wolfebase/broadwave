@@ -45,7 +45,7 @@ Object.assign(globalThis, {
   document: { visibilityState: "visible", addEventListener: (t: string, fn: () => void) => listeners.set(t, fn) },
   window: Object.assign(globalThis, { addEventListener: (t: string, fn: () => void) => listeners.set(t, fn) }),
 });
-const { EventSocket, reconnectWait } = await import("./src/lib/events.ts");
+const { EventSocket, reconnectWait, screenId } = await import("./src/lib/events.ts");
 
 function latest() {
   return FakeSocket.all[FakeSocket.all.length - 1];
@@ -173,4 +173,19 @@ test("a room left and joined again forgets its old state", () => {
   latest().hear("sync.state", { room: "channel:5", anchorMedia: 2 });
   latest().hear("hello", { boot: "b" });
   assert.equal(bus.roomState("channel:5"), undefined);
+});
+
+test("every announcement carries the same screen id", () => {
+  FakeSocket.all = [];
+  new EventSocket();
+  latest().open();
+  const first = latest().sent.find((m) => m.type === "here");
+  assert.match(String(first?.data?.id), /^[A-Za-z0-9-]{1,64}$/);
+  assert.equal(first?.data?.kind, "web");
+  latest().lose();
+  mock.timers.tick(5000);
+  latest().open();
+  const again = latest().sent.find((m) => m.type === "here");
+  assert.equal(again?.data?.id, first?.data?.id);
+  assert.equal(screenId(), first?.data?.id);
 });

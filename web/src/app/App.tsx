@@ -18,6 +18,7 @@ const SchedulePage = lazy(() => import("../features/pages").then((m) => ({ defau
 const SettingsPage = lazy(() => import("../features/pages").then((m) => ({ default: m.SettingsPage })));
 const AboutPage = lazy(() => import("../features/settings/About").then((m) => ({ default: m.AboutPage })));
 const GameAlerts = lazy(() => import("../features/sports/GameAlerts").then((m) => ({ default: m.GameAlerts })));
+const ScreenMoves = lazy(() => import("../features/player/ScreenMoves").then((m) => ({ default: m.ScreenMoves })));
 const PlayPage = lazy(() => import("../features/pages").then((m) => ({ default: m.PlayPage })));
 const Setup = lazy(() => import("../features/setup/Setup").then((m) => ({ default: m.Setup })));
 const DiagnosticsPage = lazy(() => import("../features/setup/Diagnostics").then((m) => ({ default: m.DiagnosticsPage })));
@@ -209,6 +210,7 @@ function Shell() {
         {!booting ? (
           <Suspense fallback={null}>
             <GameAlerts held={immersive || fullPlayer || Boolean(notices[0])} />
+            <ScreenMoves />
           </Suspense>
         ) : null}
         {!booting ? (

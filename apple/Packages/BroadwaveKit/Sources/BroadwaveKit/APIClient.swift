@@ -244,6 +244,33 @@ public struct APIClient: Sendable {
         await stopWatching(channelID: session.channelId, rendition: session.rendition, boot: session.boot ?? "")
     }
 
+    // MARK: Screens
+
+    /// The apps open on this server that said who they are, this one included.
+    public func screens() async throws -> [Screen] {
+        struct R: Decodable { var screens: [Screen] }
+        return try await send("GET", "/screens", as: R.self).screens
+    }
+
+    /// Tells another screen to play a channel live. 404 means it closed; the message is safe to show.
+    public func sendToScreen(id: String, channelId: Int64, from: String) async throws {
+        struct B: Encodable { var channelId: Int64; var from: String }
+        var req = URLRequest(url: url("/api/v1/screens/\(Self.pathSegment(id))/watch"))
+        req.httpMethod = "POST"
+        req.timeoutInterval = 10
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(B(channelId: channelId, from: from))
+        // 202 has no body to decode.
+        let (data, res) = try await session.data(for: req)
+        let status = (res as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200 ..< 300).contains(status) else {
+            if let err = try? JSONDecoder().decode(APIErrorBody.self, from: data) {
+                throw APIError(code: err.code, message: err.message, status: status)
+            }
+            throw Self.unreadable(status)
+        }
+    }
+
     // MARK: Recordings
 
     public func recordings() async throws -> [Recording] {

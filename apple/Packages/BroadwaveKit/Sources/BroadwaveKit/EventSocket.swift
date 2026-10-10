@@ -20,6 +20,7 @@ public final class EventSocket {
     private var bestRTT = Double.infinity
     private var retry = 0
     private var clockTimer: Timer?
+    private var screenID = ""
     private var screenName = ""
     private var screenKind = ""
     private var stopped = false
@@ -83,7 +84,7 @@ public final class EventSocket {
         // The server starts a room by the kind of screen that joins it, so the
         // screen says what it is first.
         if !screenName.isEmpty, !screenKind.isEmpty {
-            send("here", ["name": screenName, "kind": screenKind])
+            send("here", Self.here(id: screenID, name: screenName, kind: screenKind))
         }
         for (room, channel) in rooms {
             send("sync.join", ["room": room, "channelId": channel, "latency": LiveDelay.saved.rawValue])
@@ -91,11 +92,21 @@ public final class EventSocket {
     }
 
     /// Tells the server which screen this app is. Sent again after each reconnect.
-    public func announce(name: String, kind: String) {
+    /// `id` lets another screen send this one a channel.
+    public func announce(id: String = "", name: String, kind: String) {
+        screenID = id
         screenName = name
         screenKind = kind
         guard !name.isEmpty, !kind.isEmpty else { return }
-        send("here", ["name": name, "kind": kind])
+        send("here", Self.here(id: id, name: name, kind: kind))
+    }
+
+    nonisolated static func here(id: String, name: String, kind: String) -> [String: String] {
+        var body = ["name": name, "kind": kind]
+        if ScreenID.valid(id) {
+            body["id"] = id
+        }
+        return body
     }
 
     /// After a sleep, a return to the foreground, or a clock change: reconnect

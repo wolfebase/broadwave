@@ -3,18 +3,22 @@ import BroadwaveKit
 import SwiftUI
 import UIKit
 
-/// Channels and Stream tabs for the Apple TV playback info panel. The system
-/// Info tab comes from the item's metadata, so there is no custom one.
+/// Channels, Stream, and Move tabs for the Apple TV playback info panel. The
+/// system Info tab comes from the item's metadata, so there is no custom one.
 @MainActor
 enum PlayerPanels {
     static func controllers(store: AppStore, now: NowPlaying, live: LivePlayer) -> [UIViewController] {
         [
             host("Channels", ChannelListPanel(), store: store, now: now, live: live),
             host("Stream", StreamFactsPanel(), store: store, now: now, live: live),
+            // The other screen took the channel, so this one stops and the player closes.
+            host("Move to another screen", MoveToScreenList { now.stop() }, store: store, now: now, live: live, id: "move"),
         ]
     }
 
-    private static func host(_ title: String, _ content: some View, store: AppStore, now: NowPlaying, live: LivePlayer) -> UIViewController {
+    private static func host(
+        _ title: String, _ content: some View, store: AppStore, now: NowPlaying, live: LivePlayer, id: String? = nil
+    ) -> UIViewController {
         let root = AnyView(
             content
                 .environment(store)
@@ -25,7 +29,7 @@ enum PlayerPanels {
         controller.title = title
         controller.preferredContentSize = CGSize(width: 960, height: 520)
         controller.view.backgroundColor = .clear
-        controller.view.accessibilityIdentifier = "panel-\(title.lowercased())"
+        controller.view.accessibilityIdentifier = "panel-\(id ?? title.lowercased())"
         return controller
     }
 }

@@ -31,6 +31,10 @@ final class NowPlaying {
     let live = LivePlayer()
     /// Counts track changes that need a new watch. A master switches in place.
     var trackRestarts = 0
+    /// Bumped to close the player's Start over recording before another channel plays.
+    var closeStartOver = 0
+    /// Recording players on screen. A docked live picture is not what is playing then.
+    var recordingScreens: Set<UUID> = []
 
     /// Changes whenever the one-channel player needs a new watch.
     func watchKey(even: Bool) -> String {
@@ -293,7 +297,7 @@ struct RootView: View {
             .task(id: store.connected) {
                 guard store.connected else { return }
                 store.screenName = ScreenIdentity.name
-                store.socket?.announce(name: ScreenIdentity.name, kind: ScreenIdentity.kind)
+                store.socket?.announce(id: ScreenIdentity.id, name: ScreenIdentity.name, kind: ScreenIdentity.kind)
                 #if DEBUG
                     // Simulator testing: -BroadwaveHomeNotice "New Apple TV found: Den." shows an arrival line.
                     if let notice = UserDefaults.standard.string(forKey: "BroadwaveHomeNotice") {
@@ -317,6 +321,13 @@ struct RootView: View {
             }
             .onOpenURL(perform: open)
             .spotlightLinks(open)
+            .watchHandoff(handoffChannel, server: store.server) { watch($0) }
+            .onChange(of: store.screenWatch) {
+                // Another screen sent this one a channel. It plays live and says who sent it.
+                // Setup holds no player, so the channel is dropped and the sender keeps playing.
+                guard let sent = store.takeScreenWatch(), !showSetup, !store.presentSetup else { return }
+                watch(sent.channelId, note: sent.note)
+            }
         #if DEBUG
             .task {
                 if UserDefaults.standard.bool(forKey: "BroadwaveDemo"), store.server?.id != "demo" {
@@ -419,23 +430,7 @@ struct RootView: View {
                 }
             }
         case "watch":
-            let id = Int64(url.lastPathComponent) ?? 0
-            Task {
-                if libraryFilter.playing {
-                    libraryFilter.closeToken += 1
-                    await coverGone()
-                }
-                if store.channels.isEmpty {
-                    await store.refresh()
-                }
-                var lineup = store.channels
-                if !lineup.contains(where: { $0.id == id }), let all = try? await store.api?.allChannels() {
-                    lineup = all
-                }
-                if let choice = ClearBroadcast.play(id: id, visible: store.channels, lineup: lineup) {
-                    nowPlaying.play(choice.channel, note: choice.note)
-                }
-            }
+            watch(Int64(url.lastPathComponent) ?? 0)
         case "multiview":
             let parts = URLComponents(url: url, resolvingAgainstBaseURL: false)
             let query = parts?.queryItems ?? []
@@ -470,6 +465,36 @@ struct RootView: View {
             #endif
         default: show(.home)
         }
+    }
+
+    /// Plays a channel live, closing a recording first. `note` says why, such as
+    /// which screen sent it.
+    private func watch(_ id: Int64, note: String? = nil) {
+        nowPlaying.closeStartOver += 1
+        Task {
+            if libraryFilter.playing {
+                libraryFilter.closeToken += 1
+                await coverGone()
+            }
+            if store.channels.isEmpty {
+                await store.refresh()
+            }
+            var lineup = store.channels
+            if !lineup.contains(where: { $0.id == id }), let all = try? await store.api?.allChannels() {
+                lineup = all
+            }
+            if let choice = ClearBroadcast.play(id: id, visible: store.channels, lineup: lineup) {
+                let line = [note, choice.note].compactMap(\.self).joined(separator: ". ")
+                nowPlaying.play(choice.channel, note: line.isEmpty ? nil : line)
+            }
+        }
+    }
+
+    /// The live channel playing alone, which another device can pick up. Not while
+    /// a recording plays over it.
+    private var handoffChannel: Channel? {
+        guard nowPlaying.together.isEmpty, nowPlaying.recordingScreens.isEmpty, !libraryFilter.playing else { return nil }
+        return nowPlaying.channel
     }
 
     /// A full-screen cover asked for while another is still closing is dropped.

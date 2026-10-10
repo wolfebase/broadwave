@@ -334,6 +334,11 @@ public final class DemoServer: @unchecked Sendable {
             return Self.ok(Data("{\"places\":[],\"tunerAddress\":\"\",\"sharing\":false}".utf8))
         case ("GET", "/api/v1/search"):
             return Self.ok(Self.json(search(query)))
+        // No other screen is ever open in the demo.
+        case ("GET", "/api/v1/screens"):
+            return Self.ok(Data("{\"screens\":[]}".utf8))
+        case ("POST", _) where path.hasPrefix("/api/v1/screens/") && path.hasSuffix("/watch"):
+            return Self.fail(404, "not_found", "That screen isn't open right now.")
         case ("POST", "/api/v1/watch"):
             return watch(body)
         case ("POST", "/api/v1/multiview/plan"):

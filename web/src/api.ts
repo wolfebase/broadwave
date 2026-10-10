@@ -7,7 +7,7 @@ export type ApiFailure = Error & { status: number; code?: string };
 // A body that is not the error envelope. Same words as requestFailed in outage.ts.
 export const unreadBody = "That did not work. Try again.";
 
-function apiFailure(status: number, text: string): ApiFailure {
+export function apiFailure(status: number, text: string): ApiFailure {
   let message = "";
   let code: string | undefined;
   try {
@@ -23,7 +23,7 @@ function apiFailure(status: number, text: string): ApiFailure {
   return err;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
     headers: {

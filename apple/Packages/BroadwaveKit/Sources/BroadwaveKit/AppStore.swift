@@ -36,6 +36,8 @@ public final class AppStore {
     /// When that alert arrived. The banner drops it ten minutes later.
     public private(set) var gameAlertAt: Date?
     private var gameAlerts = GameAlerts()
+    /// A channel another screen sent here, until the shell plays it.
+    public private(set) var screenWatch: ScreenWatch?
     /// This screen's name as it announces itself. The server tells every screen
     /// about a new one, the new one included.
     public var screenName = ""
@@ -136,6 +138,7 @@ public final class AppStore {
     public func connect(_ server: FoundServer) {
         socket?.disconnect()
         clearGameAlerts()
+        screenWatch = nil
         // Down until the first message, so a server that is off at launch gets the banner.
         noteConnection(false)
         announced = false
@@ -168,6 +171,10 @@ public final class AppStore {
         socket.on("game.alert") { [weak self] data in
             guard let alert = try? JSONDecoder().decode(GameAlert.self, from: data) else { return }
             self?.noteGameAlert(alert)
+        }
+        socket.on("screen.watch") { [weak self] data in
+            guard let sent = try? JSONDecoder().decode(ScreenWatch.self, from: data) else { return }
+            self?.noteScreenWatch(sent)
         }
         socket.connect()
         self.socket = socket
@@ -249,6 +256,17 @@ public final class AppStore {
         }
     }
 
+    func noteScreenWatch(_ sent: ScreenWatch) {
+        guard sent.channelId > 0 else { return }
+        screenWatch = sent
+    }
+
+    /// Hands the sent channel to the shell once.
+    public func takeScreenWatch() -> ScreenWatch? {
+        defer { screenWatch = nil }
+        return screenWatch
+    }
+
     private func clearGameAlerts() {
         gameAlerts = GameAlerts()
         gameAlert = nil
@@ -282,6 +300,7 @@ public final class AppStore {
         frameIDs = []
         homeNotice = nil
         homeQueue = []
+        screenWatch = nil
         clearGameAlerts()
         UserDefaults.standard.removeObject(forKey: "server")
         SharedServer.save(nil)

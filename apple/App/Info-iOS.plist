@@ -50,6 +50,10 @@
 	<string>Broadwave finds your TV server on your home network.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>com.wolfeup.broadwave.watch</string>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

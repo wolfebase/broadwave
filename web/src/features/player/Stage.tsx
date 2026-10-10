@@ -36,6 +36,7 @@ export function Stage({
   loading,
   onSound,
   hold,
+  moreAside,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   rootRef?: RefObject<HTMLElement | null>;
@@ -71,6 +72,8 @@ export function Stage({
   onSound?: () => void;
   /** Keeps the chrome and the note up, for a note that asks something. */
   hold?: boolean;
+  /** A panel opened from Options covers it. The sheet steps aside and comes back when the panel closes. */
+  moreAside?: boolean;
 }) {
   const [paused, setPaused] = useState(false);
   const [timedIdle, setTimedIdle] = useState(false);
@@ -355,7 +358,7 @@ export function Stage({
               </button>
             ) : null}
           </div>
-          {open && more ? <div className="stage-more">{more}</div> : null}
+          {open && more && !moreAside ? <div className="stage-more">{more}</div> : null}
         </footer>
       </div>
       ) : null}

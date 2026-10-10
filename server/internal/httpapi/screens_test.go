@@ -78,7 +78,7 @@ func TestAScreenPlaysWhatAnotherSendsIt(t *testing.T) {
 		h.ServeHTTP(rec, req)
 		return rec.Code
 	}
-	if code := send("den-tv-1", `{"channelId":`+strconv.FormatInt(channel, 10)+`,"from":"Sam's iPhone"}`); code != http.StatusAccepted {
+	if code := send("den-tv-1", `{"channelId":`+strconv.FormatInt(channel, 10)+`,"from":"Sam's iPhone\u0007"}`); code != http.StatusAccepted {
 		t.Fatalf("send: %d", code)
 	}
 	for {
