@@ -339,6 +339,13 @@ export type RoomState = {
   people?: Person[];
 };
 
+export type Screen = {
+  id: string;
+  name: string;
+  kind: string;
+  channelId?: number;
+};
+
 export type SearchAiring = {
   cast?: string;
   category?: string;
