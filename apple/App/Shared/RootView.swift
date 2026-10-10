@@ -29,6 +29,8 @@ final class NowPlaying {
     /// The one-channel player. It outlives the full-screen player, so the mini
     /// player keeps the sound and its place in the room.
     let live = LivePlayer()
+    /// SharePlay in a FaceTime call: which channel everyone watches.
+    let sharePlay = SharePlay()
     /// Counts track changes that need a new watch. A master switches in place.
     var trackRestarts = 0
     /// Bumped to close the player's Start over recording before another channel plays.
@@ -328,6 +330,29 @@ struct RootView: View {
                 guard let sent = store.takeScreenWatch(), !showSetup, !store.presentSetup else { return }
                 watch(sent.channelId, note: sent.note)
             }
+            .task {
+                await nowPlaying.sharePlay.run(store: store) { id, force in
+                    guard !showSetup, !store.presentSetup else { return }
+                    if force || nowPlaying.channel?.id != id || !nowPlaying.together.isEmpty {
+                        watch(id, note: "From SharePlay")
+                    }
+                }
+            }
+            .onChange(of: nowPlaying.sharePlay.note) {
+                // The player covers the root's alert, so the note goes on the picture.
+                if playerCovers, let note = nowPlaying.sharePlay.note {
+                    nowPlaying.note = note
+                    nowPlaying.sharePlay.note = nil
+                }
+            }
+            .onChange(of: handoffChannel?.id) {
+                nowPlaying.sharePlay.playing(WatchTogether.invite(server: store.server, channel: handoffChannel))
+            }
+            .alert("SharePlay", isPresented: sharePlayNote) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(nowPlaying.sharePlay.note ?? "")
+            }
         #if DEBUG
             .task {
                 if UserDefaults.standard.bool(forKey: "BroadwaveDemo"), store.server?.id != "demo" {
@@ -486,6 +511,14 @@ struct RootView: View {
             if let choice = ClearBroadcast.play(id: id, visible: store.channels, lineup: lineup) {
                 let line = [note, choice.note].compactMap(\.self).joined(separator: ". ")
                 nowPlaying.play(choice.channel, note: line.isEmpty ? nil : line)
+            }
+        }
+    }
+
+    private var sharePlayNote: Binding<Bool> {
+        Binding { nowPlaying.sharePlay.note != nil && !playerCovers } set: { shown in
+            if !shown {
+                nowPlaying.sharePlay.note = nil
             }
         }
     }

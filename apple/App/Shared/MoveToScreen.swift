@@ -38,6 +38,7 @@ struct MoveToScreenList: View {
     @ViewBuilder private var content: some View {
         #if os(tvOS)
             VStack(alignment: .leading, spacing: 16) {
+                sharePlayRow
                 if let line {
                     statusLine(line)
                 }
@@ -62,6 +63,7 @@ struct MoveToScreenList: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         #else
             List {
+                sharePlayRow
                 if let line {
                     statusLine(line)
                 }
@@ -78,6 +80,44 @@ struct MoveToScreenList: View {
                 }
             }
         #endif
+    }
+
+    /// In a FaceTime call, everyone on it can watch this channel too.
+    @ViewBuilder private var sharePlayRow: some View {
+        let sharePlay = nowPlaying.sharePlay
+        let live = nowPlaying.together.isEmpty && nowPlaying.recordingScreens.isEmpty
+        let invite = live ? WatchTogether.invite(server: store.server, channel: nowPlaying.channel) : nil
+        if sharePlay.eligible || sharePlay.active, let invite {
+            Button {
+                if sharePlay.active {
+                    sharePlay.leave()
+                } else {
+                    Task { await sharePlay.share(invite) }
+                }
+            } label: {
+                HStack(spacing: 16) {
+                    Image(systemName: "shareplay")
+                        .frame(width: 36)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(sharePlay.active ? "Leave SharePlay" : "SharePlay this channel")
+                        Text(sharePlay.active ? "While you're in it, a channel change here changes it for everyone." : "Everyone in this call watches with you.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                #if os(tvOS)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                #endif
+                .contentShape(.rect)
+            }
+            #if os(tvOS)
+            .buttonStyle(.plain)
+            #endif
+            .accessibilityIdentifier("move-shareplay")
+        }
     }
 
     private var emptyLine: some View {
