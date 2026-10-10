@@ -85,6 +85,10 @@ export function LivePlayer({
     captions: opts.captions,
     alternates: true,
   });
+  useEffect(() => {
+    events().watching(channel.id);
+    return () => events().watching(0);
+  }, [channel.id]);
   const session = stream.session;
   const error = stream.error;
   const sync: SyncStatus = stream.syncStatus;

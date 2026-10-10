@@ -904,3 +904,41 @@ func TestTwoTabsOfOneBrowserAreOneScreen(t *testing.T) {
 		}
 	}
 }
+
+func TestAScreenWithSyncOffSaysWhatItWatches(t *testing.T) {
+	b := NewBus()
+	tv := &client{send: make(chan []byte, 8), rooms: map[string]bool{}}
+	b.clients[tv] = struct{}{}
+	say := func(body string) {
+		b.handle(tv, Message{Type: "here", Data: json.RawMessage(body)})
+	}
+	watchingNow := func() int64 {
+		screens := b.Screens()
+		if len(screens) != 1 {
+			t.Fatalf("screens: %+v", screens)
+		}
+		return screens[0].ChannelID
+	}
+	say(`{"id":"tv-1","name":"Den","kind":"appletv"}`)
+	if got := watchingNow(); got != 0 {
+		t.Fatalf("watching %d before it said", got)
+	}
+	say(`{"id":"tv-1","name":"Den","kind":"appletv","channelId":7}`)
+	if got := watchingNow(); got != 7 {
+		t.Fatalf("watching %d, want 7", got)
+	}
+	// A room it joins wins over what it said.
+	b.mu.Lock()
+	tv.rooms["channel:9"] = true
+	b.mu.Unlock()
+	if got := watchingNow(); got != 9 {
+		t.Fatalf("watching %d, want the room's 9", got)
+	}
+	b.mu.Lock()
+	delete(tv.rooms, "channel:9")
+	b.mu.Unlock()
+	say(`{"id":"tv-1","name":"Den","kind":"appletv","channelId":-3}`)
+	if got := watchingNow(); got != 0 {
+		t.Fatalf("watching %d after it stopped", got)
+	}
+}
