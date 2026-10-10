@@ -453,6 +453,27 @@ export function LivePlayer({
     fn();
   }
 
+  // A remote on another screen (a watch, or a phone working a TV) presses the
+  // same buttons as the keys: up and down change channel like the arrows.
+  const remoteRef = useRef({ step, togglePlay, toggleRecord });
+  useEffect(() => {
+    remoteRef.current = { step, togglePlay, toggleRecord };
+  });
+  useEffect(() => {
+    const off = events().on("screen.remote", (data) => {
+      const { action } = (data ?? {}) as { action?: string };
+      const paused = videoRef.current?.paused ?? false;
+      const r = remoteRef.current;
+      if (action === "up") r.step(-1);
+      else if (action === "down") r.step(1);
+      else if ((action === "pause" && !paused) || (action === "play" && paused)) r.togglePlay();
+      else if (action === "record") void r.toggleRecord();
+    });
+    return () => {
+      off();
+    };
+  }, []);
+
   // Nothing else on the page takes focus under the full player. A key that
   // lands on the page itself (focus lost to a remount or a click on nothing)
   // is the player's, or every key would go dead.

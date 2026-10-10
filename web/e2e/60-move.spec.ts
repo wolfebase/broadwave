@@ -246,3 +246,31 @@ test("a screen with sync off takes the channel, and the sender knows it did", as
     await second.close();
   }
 });
+
+test("a remote changes channel and pauses the screen it presses", async ({ page }) => {
+  test.setTimeout(120_000);
+  await routes(page.context());
+  const { channels } = (await (await page.request.get("/api/v1/channels?guide=1")).json()) as { channels: Channel[] };
+  await playing(page, channels[0]);
+  const mine = await screenId(page);
+  await expect.poll(async () => (await screens(page)).find((s) => s.id === mine)?.channelId).toBe(channels[0].id);
+  const press = (action: string) => page.request.post(`/api/v1/screens/${mine}/remote`, { data: { action, from: "Test Watch" } });
+
+  expect((await press("down")).status()).toBe(202);
+  await expect.poll(async () => (await screens(page)).find((s) => s.id === mine)?.channelId, { timeout: 15_000 }).not.toBe(channels[0].id);
+  const video = page.locator("video.stage-video");
+  await expect.poll(() => video.evaluate((v) => (v as HTMLVideoElement).paused), { timeout: 30_000 }).toBe(false);
+
+  expect((await press("pause")).status()).toBe(202);
+  await expect.poll(() => video.evaluate((v) => (v as HTMLVideoElement).paused)).toBe(true);
+  // A second pause leaves it paused instead of flipping it back on.
+  expect((await press("pause")).status()).toBe(202);
+  await page.waitForTimeout(500);
+  expect(await video.evaluate((v) => (v as HTMLVideoElement).paused)).toBe(true);
+  expect((await press("play")).status()).toBe(202);
+  await expect.poll(() => video.evaluate((v) => (v as HTMLVideoElement).paused)).toBe(false);
+
+  expect((await press("up")).status()).toBe(202);
+  await expect.poll(async () => (await screens(page)).find((s) => s.id === mine)?.channelId, { timeout: 15_000 }).toBe(channels[0].id);
+  expect((await press("eject")).status()).toBe(400);
+});
