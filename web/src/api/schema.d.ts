@@ -3774,8 +3774,10 @@ export interface operations {
                     "application/json": components["schemas"]["Recording"];
                 };
             };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             409: components["responses"]["Error"];
-            /** @description `no_signal`, `stream_down`, or `tuner_refused`: the tune for a recording that starts now failed. */
+            /** @description `no_signal`, `stream_down`, `tuner_refused`, or `tuner_silent`: the tune for a recording that starts now failed. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -3822,7 +3824,9 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Ok"];
+            400: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
     };
@@ -3838,6 +3842,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Ok"];
+            400: components["responses"]["Error"];
         };
     };
     playRecording: {
@@ -3874,7 +3879,9 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     saveProgress: {
@@ -3905,6 +3912,8 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     setWatched: {
@@ -3936,6 +3945,8 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     setKeep: {
@@ -3967,6 +3978,8 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     moveRecording: {
@@ -4000,7 +4013,9 @@ export interface operations {
                 };
             };
             400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             409: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     downloadRecording: {
@@ -4023,6 +4038,8 @@ export interface operations {
                     "video/mp2t": string;
                 };
             };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     recordAgain: {
@@ -4048,6 +4065,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["Error"];
             404: components["responses"]["Error"];
         };
     };
@@ -4073,6 +4091,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["Error"];
         };
     };
     addMarker: {
@@ -4102,6 +4121,7 @@ export interface operations {
                     "application/json": components["schemas"]["Marker"];
                 };
             };
+            400: components["responses"]["Error"];
         };
     };
     detectBreaks: {
@@ -4126,6 +4146,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["Error"];
             404: components["responses"]["Error"];
         };
     };
@@ -4141,6 +4162,8 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Ok"];
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     getSchedule: {
@@ -4188,6 +4211,7 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["Ok"];
+            400: components["responses"]["Error"];
         };
     };
     fixSchedule: {
@@ -4233,6 +4257,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
             409: components["responses"]["Error"];
         };
     };
@@ -4305,6 +4330,7 @@ export interface operations {
                     "application/json": components["schemas"]["PassList"];
                 };
             };
+            400: components["responses"]["Error"];
         };
     };
     previewPass: {
@@ -4357,6 +4383,8 @@ export interface operations {
                     "application/json": components["schemas"]["PassList"];
                 };
             };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     updatePass: {
@@ -4386,6 +4414,8 @@ export interface operations {
                     "application/json": components["schemas"]["PassList"];
                 };
             };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     listTeams: {
@@ -4430,6 +4460,7 @@ export interface operations {
                     "application/json": components["schemas"]["TeamList"];
                 };
             };
+            400: components["responses"]["Error"];
         };
     };
     unfollowTeam: {
@@ -4452,6 +4483,8 @@ export interface operations {
                     "application/json": components["schemas"]["TeamList"];
                 };
             };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     listEvents: {
@@ -4524,6 +4557,7 @@ export interface operations {
                     "application/json": components["schemas"]["VirtualChannel"];
                 };
             };
+            400: components["responses"]["Error"];
         };
     };
     updateVirtual: {
@@ -4555,6 +4589,8 @@ export interface operations {
                     "application/json": components["schemas"]["VirtualChannel"];
                 };
             };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     virtualSchedule: {
@@ -4617,6 +4653,9 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     startPair: {
