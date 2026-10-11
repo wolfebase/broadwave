@@ -161,11 +161,8 @@ public extension Channel {
     static func orderNumber(_ channel: Channel, lineup: [Channel]) -> String {
         let paired = channel.isATSC3 && !channel.hidden && channel.twinId != nil && channel.displayNumber == channel.guideNumber
         guard paired else { return channel.displayNumber }
-        if let twinId = channel.twinId,
-           let twin = lineup.first(where: { $0.id == twinId && !$0.isATSC3 }),
-           !twin.displayNumber.isEmpty
-        {
-            return twin.displayNumber
+        if let number = twinDisplayNumber(channel, lineup: lineup) {
+            return number
         }
         let parts = channel.displayNumber.split(separator: ".", omittingEmptySubsequences: false)
         guard let major = Int(parts.first ?? ""), major >= 100 else { return channel.displayNumber }
@@ -183,6 +180,13 @@ public extension Channel {
             return shown < 0
         }
         return a.displayName < b.displayName
+    }
+
+    /// The 1.0 twin's number, when this lineup still has that row.
+    private static func twinDisplayNumber(_ channel: Channel, lineup: [Channel]) -> String? {
+        guard let twinId = channel.twinId else { return nil }
+        guard let twin = lineup.first(where: { $0.id == twinId && !$0.isATSC3 }) else { return nil }
+        return twin.displayNumber.isEmpty ? nil : twin.displayNumber
     }
 
     private static func compareNumbers(_ left: String, _ right: String) -> Int {

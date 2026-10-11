@@ -4,10 +4,12 @@ import CoreGraphics
 /// with exactly `gap` between the pictures and the group centered in the box,
 /// so a tall iPad portrait does not split the leftover space between the rows.
 public enum MosaicFrames {
-    public static func equalGrid(columns: Int, rows: Int, count: Int, in box: CGSize, gap: CGFloat, wide: CGFloat = 16.0 / 9.0) -> [CGRect] {
-        guard columns > 0, rows > 0, count > 0, box.width > 1, box.height > 1, wide > 0 else { return [] }
+    private static let wide = 16.0 / 9.0
+
+    public static func equalGrid(columns: Int, rows: Int, count: Int, in box: CGSize, gap: CGFloat) -> [CGRect] {
+        guard columns > 0, rows > 0, count > 0, box.width > 1, box.height > 1 else { return [] }
         if rows <= 1 {
-            return centeredCells(columns: columns, rows: rows, count: count, in: box, gap: gap, wide: wide)
+            return centeredCells(columns: columns, rows: rows, count: count, in: box, gap: gap)
         }
         let byWidth = (box.width - gap * CGFloat(columns - 1)) / CGFloat(columns)
         var tile = CGSize(width: byWidth, height: byWidth / wide)
@@ -33,7 +35,7 @@ public enum MosaicFrames {
         }
     }
 
-    private static func centeredCells(columns: Int, rows: Int, count: Int, in box: CGSize, gap: CGFloat, wide: CGFloat) -> [CGRect] {
+    private static func centeredCells(columns: Int, rows: Int, count: Int, in box: CGSize, gap: CGFloat) -> [CGRect] {
         let cellW = (box.width - gap * CGFloat(columns - 1)) / CGFloat(columns)
         let cellH = (box.height - gap * CGFloat(rows - 1)) / CGFloat(rows)
         return (0 ..< count).map { index in
@@ -45,11 +47,11 @@ public enum MosaicFrames {
                 width: cellW,
                 height: cellH
             )
-            return fit(region, wide: wide)
+            return fit(region)
         }
     }
 
-    private static func fit(_ region: CGRect, wide: CGFloat) -> CGRect {
+    private static func fit(_ region: CGRect) -> CGRect {
         guard region.width > 1, region.height > 1 else { return .zero }
         let byWidth = CGSize(width: region.width, height: region.width / wide)
         let size = byWidth.height <= region.height
