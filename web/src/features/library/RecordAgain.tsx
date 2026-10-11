@@ -5,15 +5,12 @@ import { formatClock } from "../../time";
 import type { Recording } from "../../types";
 import { recordingSubject } from "./model";
 
+export { recordAgainOffered } from "./againOffer";
+
 /** "Thu 7:00 PM", with the date past six days out. */
 function when(start: Date) {
   const far = start.getTime() - Date.now() > 6 * 86_400_000;
   return `${start.toLocaleDateString([], far ? { weekday: "short", month: "short", day: "numeric" } : { weekday: "short" })} ${formatClock(start)}`;
-}
-
-/** The server finds the next airing by program id or episode name. */
-export function recordAgainOffered(rec: Recording) {
-  return Boolean(rec.health?.damaged) && rec.status !== "recording" && !rec.missing && Boolean(rec.programId || rec.subtitle);
 }
 
 /** On a damaged recording: finds the episode's next airing and records it. */

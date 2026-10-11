@@ -289,6 +289,17 @@ export function SettingsScreen({
         <span className="hint">Counts from when a recording was played to its end or marked watched. Recordings you keep forever stay.</span>
       </label>
       <label className="field">
+        Favorite channels
+        <select
+          value={settings.protectFavorites === "1" ? "1" : "0"}
+          onChange={(event) => onChange({ protectFavorites: event.target.value === "1" ? "1" : "0" })}
+        >
+          <option value="0">Clean up like the others</option>
+          <option value="1">Leave their recordings</option>
+        </select>
+        <span className="hint">Recordings on channels you starred stay, and they do not count toward how many a pass keeps. Keep forever is separate.</span>
+      </label>
+      <label className="field">
         {copy.settings.buffer}
         <select
           value={settings.bufferMinutes ?? "60"}

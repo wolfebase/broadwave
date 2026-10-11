@@ -74,7 +74,11 @@ Settings › When space runs low is "Skip new recordings" unless you change it. 
 
 Settings › Delete watched recordings deletes a recording a number of days after it was watched. It is off unless you pick a number.
 
-Both count a recording as watched once it was played to its last 15 seconds or marked watched. Stopping earlier does not, even through 90% of a long recording. A recording played in the last 6 hours stays, and playing one again starts its days over. Neither touches an unwatched recording, one still recording, a file outside the recordings folder, or a recording you chose to keep forever (Keep forever on its row). A keep rule skips a kept recording too, and doesn't count it among the episodes it keeps. Each deletion is in Activity.
+Both count a recording as watched once it was played to its last 15 seconds or marked watched. Stopping earlier does not, even through 90% of a long recording. A recording played in the last 6 hours stays, and playing one again starts its days over. Neither touches an unwatched recording, one still recording, a file outside the recordings folder, or a recording you chose to keep forever (Keep forever on its row). A keep rule skips a kept recording too, and doesn't count it among the episodes it keeps. A recording whose file is already gone is left alone, and a keep rule doesn't count it either. Each deletion is in Activity.
+
+Settings › Favorite channels can leave recordings on channels you starred out of both, and out of keep rules. It starts off, so starring channels during setup doesn't stop clean-up. Keep forever is separate.
+
+On the web, Recordings › Storage lists what these rules would remove and what they leave alone, and why. Opening it deletes nothing. iPhone, iPad, and Apple TV don't have this page yet.
 
 ## Playing one
 
@@ -84,7 +88,7 @@ On iPhone, iPad, and Apple TV the same lists open the player. It resumes when yo
 
 Playback is a stream the device can play. The file in the recordings folder stays the broadcast.
 
-A finished recording whose file was moved or deleted outside Broadwave stays in the list. The line is the channel number, then "The file is gone. It was moved or deleted outside Broadwave." The web library and the Apple apps use that same line. Remove from the list drops that row. There is no file left to delete.
+A finished recording whose file was moved or deleted outside Broadwave stays in the list. The line is the channel number, then "The file is gone. It was moved or deleted outside Broadwave." The web library and the Apple apps use that same line. Remove from the list drops that row. There is no file left to delete. On the web, a damaged recording whose file is gone still offers Record it again.
 
 When the picture dropped for a second or more, the row says "Signal dropped for N s." Shorter damage says how many times: "Signal broke up once" or "Signal broke up N times." A clean recording says nothing.
 

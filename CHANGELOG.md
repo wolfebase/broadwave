@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- Recordings › Storage on the web lists what the clean-up rules would remove and what they leave alone. Opening it deletes nothing.
+- Settings › Favorite channels can keep recordings on starred channels out of clean-up and keep rules. It starts off.
+- On the web, Record it again is offered on a damaged recording whose file is already gone.
+
+### Fixed
+
+- Clean-up and keep rules leave a recording whose file is already gone, and a pass that keeps the newest episodes no longer counts it as one of them.
+- A short recording whose playhead never moved no longer counts as watched for clean-up.
+
 ## 0.13.2 — 2026-10-11
 
 ### Changed

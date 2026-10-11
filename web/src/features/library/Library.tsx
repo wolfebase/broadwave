@@ -386,6 +386,7 @@ function LibraryRow({
         {line && !rec.missing ? <span className="ch-tags">{line}</span> : null}
         {selecting ? null : rec.missing ? (
           <div className="sheet-actions">
+            {recordAgainOffered(rec) ? <RecordAgain rec={rec} /> : null}
             {armed === rec.id ? (
               <button ref={confirmRef} type="button" className="btn primary" aria-label={named(copy.library.removeGone)} onClick={() => onDelete(rec)}>
                 {copy.library.removeGone}
