@@ -35,7 +35,7 @@ test("a search result opens, and records just that airing", async ({ page }) => 
   await field.fill("Late Local");
   await field.press("Enter");
 
-  const row = page.getByRole("button", { name: /Late Local News/ });
+  const row = page.getByRole("button", { name: /^Late Local News/ });
   await expect(row).toContainText(/(Today|Tomorrow) · /);
   await row.click();
   const sheet = page.getByRole("dialog", { name: "Late Local News" });
@@ -79,7 +79,7 @@ test("a search result opens, and records just that airing", async ({ page }) => 
   await expect(row).toBeFocused();
   await field.fill("Bears");
   await field.press("Enter");
-  await page.getByRole("button", { name: /NFL: Bears at Bills/ }).first().click();
+  await page.getByRole("button", { name: /^NFL: Bears at Bills/ }).first().click();
   const live = page.getByRole("dialog", { name: "NFL: Bears at Bills" });
   await live.getByRole("button", { name: "Watch", exact: true }).click();
   await expect(page).toHaveURL(/\/watch\?channel=/);
