@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/xml"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -223,15 +224,29 @@ type lineupRow struct {
 	URL         string `json:"URL" xml:"URL"`
 }
 
+// lineupRows lists channels, then mosaics, then virtual channels, the order
+// lookup tries them. A number already listed would play the earlier entry
+// from /auto/v, so a channel or mosaic with a taken number gets its own path,
+// and a virtual channel with one is left off.
 func (h *emuHandler) lineupRows(r *http.Request) []lineupRow {
 	base := "http://" + r.Host
 	rows := make([]lineupRow, 0)
 	if h.store == nil {
 		return rows
 	}
+	taken := map[string]bool{}
+	byNumber := func(number, own string) string {
+		if taken[number] {
+			return base + "/auto/" + own
+		}
+		taken[number] = true
+		return base + "/auto/v" + url.PathEscape(number)
+	}
 	if channels, err := h.store.Channels(r.Context(), true); err == nil {
 		for _, ch := range channels {
-			rows = append(rows, channelLineupRow(base, ch))
+			row := channelLineupRow(ch)
+			row.URL = byNumber(ch.DisplayNumber, "c"+strconv.FormatInt(ch.ID, 10))
+			rows = append(rows, row)
 		}
 	}
 	encoder := ""
@@ -246,28 +261,31 @@ func (h *emuHandler) lineupRows(r *http.Request) []lineupRow {
 			HD:          1,
 			VideoCodec:  video,
 			AudioCodec:  audio,
-			URL:         base + "/auto/v" + mo.number,
+			URL:         byNumber(mo.number, "m"+mo.key),
 		})
 	}
 	if list, err := h.store.Virtuals(r.Context()); err == nil {
 		for _, item := range list {
+			if taken[item.Number] {
+				continue
+			}
+			taken[item.Number] = true
 			rows = append(rows, lineupRow{
 				GuideNumber: item.Number,
 				GuideName:   item.Name,
-				URL:         base + "/auto/v" + item.Number,
+				URL:         base + "/auto/v" + url.PathEscape(item.Number),
 			})
 		}
 	}
 	return rows
 }
 
-func channelLineupRow(base string, ch store.Channel) lineupRow {
+func channelLineupRow(ch store.Channel) lineupRow {
 	row := lineupRow{
 		GuideNumber: ch.DisplayNumber,
 		GuideName:   ch.DisplayName,
 		VideoCodec:  ch.VideoCodec,
 		AudioCodec:  ch.AudioCodec,
-		URL:         base + "/auto/v" + ch.DisplayNumber,
 	}
 	var tags []string
 	if ch.HD {
@@ -335,8 +353,9 @@ type streamHit struct {
 
 func (h *emuHandler) stream(w http.ResponseWriter, r *http.Request) {
 	// A transcode profile is an EXTEND feature. Answering with the original
-	// broadcast would lie to an app that asked for AVC.
-	if r.URL.Query().Get("transcode") != "" {
+	// broadcast would lie to an app that asked for AVC. "none" asks for the
+	// broadcast as it is, which is what every stream here is.
+	if p := r.URL.Query().Get("transcode"); p != "" && p != "none" {
 		writeHDHRError(w, http.StatusServiceUnavailable, "802 Unknown Transcode Profile")
 		return
 	}
