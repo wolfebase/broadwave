@@ -76,22 +76,29 @@ func Preview(ctx context.Context, st *store.Store, hub *live.Hub, now time.Time)
 }
 
 // previewSpace reads free space for the recordings folder. A fresh install
-// has not created that folder yet, and Statfs fails on a path that is not
-// there. The parent is the same disk, and a dry run does not create the folder.
+// has not created that folder, or the work folder above it, and Statfs fails
+// on a path that is not there. An ancestor that exists is the same disk.
+// A dry run does not create the folder.
 func previewSpace(dir string) (disk.Space, error) {
 	space, err := diskStat(dir)
 	if err == nil || !os.IsNotExist(err) {
 		return space, err
 	}
-	parent := filepath.Dir(dir)
-	if parent == dir || parent == "" {
-		return space, err
+	cur := dir
+	for {
+		parent := filepath.Dir(cur)
+		if parent == cur || parent == "" {
+			return space, err
+		}
+		parentSpace, parentErr := diskStat(parent)
+		if parentErr == nil {
+			return parentSpace, nil
+		}
+		if !os.IsNotExist(parentErr) {
+			return space, err
+		}
+		cur = parent
 	}
-	parentSpace, parentErr := diskStat(parent)
-	if parentErr != nil {
-		return space, err
-	}
-	return parentSpace, nil
 }
 
 type previewInput struct {
