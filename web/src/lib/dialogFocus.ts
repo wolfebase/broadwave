@@ -3,6 +3,11 @@ import { isTextField } from "./textField.ts";
 export { isTextField };
 
 /** Escape closes a layer. Backspace closes it too, unless it is deleting text. */
+/** The full player makes the page inert. A layer on the page must leave the player its keys. */
+export function pageCovered(): boolean {
+  return typeof document !== "undefined" && document.querySelector("main.content[inert]") != null;
+}
+
 export function dismissesLayer(key: string, target: EventTarget | null): boolean {
   if (key === "Escape") return true;
   if (key === "Backspace") return !isTextField(target);

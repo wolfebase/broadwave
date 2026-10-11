@@ -10,14 +10,14 @@ export function optionArrow(rows: number[], row: number, col: number, key: strin
   return { row: next, col: Math.min(col, rows[next] - 1) };
 }
 
-const FOCUSABLE = "button, input, select, textarea";
+const FOCUSABLE = "button, a[href], input, select, textarea";
 
 /** One row per choice group, so Up and Down change setting and Left and Right change its value. */
 export function optionRows(region: ParentNode | null): HTMLElement[][] {
   if (!region) return [];
   const rows: HTMLElement[][] = [];
   const seen = new Set<Element>();
-  for (const block of region.querySelectorAll(".segmented, .option-actions, .sheet-actions, input[type='range']")) {
+  for (const block of region.querySelectorAll(".segmented, .option-actions, .sheet-actions, .marker-list li, input[type='range']")) {
     const found = block.matches("input, select, textarea") ? [block] : [...block.querySelectorAll(FOCUSABLE)];
     const items = found.filter((el): el is HTMLElement => {
       if (!(el instanceof HTMLElement) || seen.has(el)) return false;

@@ -1,4 +1,4 @@
-const TEXT_INPUT = new Set(["", "text", "search", "password", "email", "url", "tel", "number"]);
+const TEXT_INPUT = new Set(["", "text", "search", "password", "email", "url", "tel", "number", "time", "date", "datetime-local", "month", "week"]);
 
 /**
  * Backspace deletes in a text field. A checkbox, a slider, and a button are not

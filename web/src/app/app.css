@@ -154,7 +154,8 @@
 
 /* The brand ring is a shadow. An outline stays too, so a control that paints
    its own shadow still shows where focus is. The TV layout thickens it. */
-html:root :focus-visible:not(.stage) {
+/* The guide grid and its search pill draw their own focus. */
+html:root :focus-visible:not(.stage, .guide-scroll, .guide-canvas, .guide-search input) {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }

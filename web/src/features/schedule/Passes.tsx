@@ -3,7 +3,7 @@ import type { Channel, NewPass, Pass, PassPreview } from "../../types";
 import { addSeriesPass, deletePass, orderPasses, previewPass, updatePass } from "../../api";
 import { useData } from "../../app/data";
 import { focusRing } from "../../app/remote";
-import { dismissesLayer } from "../../lib/dialogFocus";
+import { dismissesLayer, pageCovered } from "../../lib/dialogFocus";
 import { formatClock } from "../../time";
 import { reloadAfterOrder } from "./plan";
 
@@ -119,7 +119,7 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
     if (editing == null) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (!dismissesLayer(event.key, event.target)) return;
+      if (!dismissesLayer(event.key, event.target) || pageCovered()) return;
       event.preventDefault();
       event.stopPropagation();
       setEditing(null);

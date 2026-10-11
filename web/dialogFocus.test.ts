@@ -21,6 +21,9 @@ test("Backspace edits a text field and leaves a checkbox or a slider", () => {
   assert.equal(isTextField({ tagName: "INPUT", type: "text" }), true);
   assert.equal(isTextField({ tagName: "INPUT", type: "search" }), true);
   assert.equal(isTextField({ tagName: "TEXTAREA" }), true);
+  // A pass editor's From and Until: Backspace clears a field there, it must not close the editor.
+  assert.equal(isTextField({ tagName: "INPUT", type: "time" }), true);
+  assert.equal(isTextField({ tagName: "INPUT", type: "date" }), true);
   assert.equal(isTextField({ tagName: "DIV", isContentEditable: true }), true);
   assert.equal(isTextField({ tagName: "INPUT", type: "checkbox" }), false);
   assert.equal(isTextField({ tagName: "INPUT", type: "range" }), false);

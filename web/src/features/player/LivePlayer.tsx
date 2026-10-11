@@ -257,7 +257,9 @@ export function LivePlayer({
       focusRing(channelsBtn ?? root);
       return;
     }
-    focusRing(root);
+    // A mouse or touch viewer gets no ring around the picture. After a key,
+    // the browser carries the ring over on its own.
+    root.focus({ preventScroll: true });
   }, [channel.id, mode, layout]);
 
   // The selected row keeps the keys and stays in view. A row the pointer
@@ -567,6 +569,14 @@ export function LivePlayer({
   const syncWasOn = useRef(false);
   if (sync.state !== "off") syncWasOn.current = true;
   const syncSpoken = syncLiveText(sync.state, together, sync.members, syncWasOn.current);
+  // Sync trims flip the state several times a second. A screen reader hears
+  // the first state at once and a change once it has held, from the full player only.
+  const [syncHeard, setSyncHeard] = useState("");
+  useEffect(() => {
+    if (syncSpoken === syncHeard) return;
+    const timer = window.setTimeout(() => setSyncHeard(syncSpoken), syncHeard ? 4000 : 0);
+    return () => window.clearTimeout(timer);
+  }, [syncSpoken, syncHeard]);
   const syncBadge =
     syncing && sync.state !== "off" ? (
       <button type="button" className={`sync-pill ${sync.state}`} onClick={() => setPanel((p) => (p === "sync" ? "none" : "sync"))} aria-label={`Whole-Home Sync, ${syncSpoken}`}>
@@ -643,7 +653,7 @@ export function LivePlayer({
       moreAside={panel === "move"}
       announce={
         <span className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-sync-live="">
-          {syncSpoken}
+          {mode === "full" ? syncHeard : ""}
         </span>
       }
       loading={tuning ? <TuningCard channel={channel} show={airing?.title} art={airing?.imageUrl ? `/media/art/airing/${airing.id}?w=960` : ""} mini={mode === "mini"} /> : null}
