@@ -54,7 +54,7 @@ test("a TV remote reaches home, guide, search, recordings, and settings", async 
       await expect.poll(() => box.evaluate((el) => el === document.activeElement && el.matches(":focus-visible") && getComputedStyle(el).boxShadow !== "none")).toBe(true);
     }
     // Start on a known control. A bare Tab from the last field leaves the page.
-    const start = path === "/settings" ? page.getByRole("button", { name: "Settings", exact: true }) : page.getByRole("tab", { selected: true });
+    const start = path === "/settings" ? page.getByRole("button", { name: "Settings", exact: true }) : page.getByRole("navigation", { name: "Primary" }).getByRole("tab", { selected: true });
     await start.evaluate((el) => (el as HTMLElement).focus({ focusVisible: true }));
     await expect.poll(() => focused(page)).toMatchObject({ ring: true });
     await page.keyboard.press("Tab");
@@ -118,4 +118,22 @@ test("reduced motion jumps the guide instead of gliding", async ({ page }) => {
   });
   await page.getByRole("button", { name: "Tonight", exact: true }).click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { __scrolls?: string[] }).__scrolls ?? [])).toContain("auto");
+});
+
+test("Enter on a channel name plays that channel, not the grid's row", async ({ page }) => {
+  expect((await page.request.put("/api/v1/settings", { data: { setupComplete: "1" } })).ok()).toBeTruthy();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/guide");
+  await settle(page);
+  const names = page.locator(".guide-channel");
+  await expect(names.nth(1)).toBeVisible();
+  const second = (await names.nth(1).locator(".gc-num").textContent())?.trim() ?? "";
+  const first = (await names.nth(0).locator(".gc-num").textContent())?.trim() ?? "";
+  expect(second).not.toBe(first);
+  await names.nth(1).evaluate((el) => (el as HTMLElement).focus({ focusVisible: true } as FocusOptions));
+  await page.keyboard.press("Enter");
+  const player = page.getByRole("region", { name: "Player" });
+  await expect(player).toBeVisible();
+  await expect(player).toContainText(second);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
