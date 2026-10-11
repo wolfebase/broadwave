@@ -985,3 +985,106 @@ func TestAScreenWithSyncOffSaysWhatItWatches(t *testing.T) {
 		t.Fatalf("watching %d after it stopped", got)
 	}
 }
+
+// J0.114: AVPlayer starts a low-latency playlist about 8 s behind live, ahead
+// of a room at 16 s. The first Apple screen brings a young room to its frame
+// less measureMargin, and Settle and the Apple floor then leave it there.
+func TestAheadMeasuresAYoungRoomAtTheScreen(t *testing.T) {
+	start := time.Date(2026, 10, 11, 17, 0, 0, 0, time.UTC)
+	r, now := fixedRooms(start)
+	r.Join("channel:33", 33, unixMS(start.Add(-60*time.Second)))
+	*now = start.Add(6 * time.Second)
+	nowMS := unixMS(*now)
+	before, _ := r.State("channel:33")
+	if math.Abs(before.Target(nowMS)-(nowMS-16000)) > 1 {
+		t.Fatalf("a deep buffer starts at the 16 s target: %v", nowMS-before.Target(nowMS))
+	}
+	onScreen := nowMS - 8200
+	st, err := r.Apply("channel:33", Command{Action: "ahead", MediaTime: onScreen})
+	if err != nil || st.Version != before.Version+1 || math.Abs(st.Target(nowMS)-(onScreen-2500)) > 1 || st.Rate != 1 {
+		t.Fatalf("the room should sit 2.5 s behind the screen: %+v %v", st, err)
+	}
+	// Settle and the floor leave a measured room where it is.
+	*now = start.Add(40 * time.Second)
+	if eased := r.Settle(33, unixMS(start.Add(-60*time.Second)), nil); len(eased) != 0 {
+		t.Fatalf("Settle moved a measured room: %+v", eased)
+	}
+	if _, floored := r.Floor("channel:33", "stable"); floored {
+		t.Fatal("the Apple floor moved a measured room")
+	}
+	// Never closer to live than lowest, and never back.
+	r.Join("channel:34", 34, unixMS(start.Add(-60*time.Second)))
+	*now = start.Add(42 * time.Second)
+	nowMS = unixMS(*now)
+	st, _ = r.Apply("channel:34", Command{Action: "ahead", MediaTime: nowMS})
+	if st.Target(nowMS) > nowMS-6000+1 {
+		t.Fatalf("measured past lowest: %v", nowMS-st.Target(nowMS))
+	}
+	same, _ := r.State("channel:34")
+	if back, _ := r.Apply("channel:34", Command{Action: "ahead", MediaTime: same.Target(nowMS) - 5000}); back.Version != same.Version {
+		t.Fatalf("ahead moved a room back: %+v", back)
+	}
+	// A viewer's Live delay choice wins and clears the mark.
+	st, _ = r.Apply("channel:33", Command{Action: "latency", Latency: "stable"})
+	if math.Abs(st.Target(nowMS)-(nowMS-20000)) > 1 {
+		t.Fatalf("latency should override the measure: %v", nowMS-st.Target(nowMS))
+	}
+	if eased := r.Settle(33, unixMS(start.Add(-60*time.Second)), nil); eased != nil && len(eased) != 0 {
+		t.Fatalf("settle on target should be quiet: %+v", eased)
+	}
+}
+
+func TestAheadOnlyForYoungFollowRooms(t *testing.T) {
+	start := time.Date(2026, 10, 11, 17, 0, 0, 0, time.UTC)
+	r, now := fixedRooms(start)
+	for _, room := range []string{"channel:9", "group:den", "multiview:abc"} {
+		r.Join(room, 9, unixMS(start.Add(-60*time.Second)))
+	}
+	*now = start.Add(5 * time.Second)
+	for _, room := range []string{"group:den", "multiview:abc"} {
+		before, _ := r.State(room)
+		if st, _ := r.Apply(room, Command{Action: "ahead", MediaTime: unixMS(*now) - 8000}); st.Version != before.Version {
+			t.Fatalf("%s took ahead: %+v", room, st)
+		}
+	}
+	*now = start.Add(youngRoom + time.Second)
+	old, _ := r.State("channel:9")
+	if st, _ := r.Apply("channel:9", Command{Action: "ahead", MediaTime: unixMS(*now) - 8000}); st.Version != old.Version {
+		t.Fatalf("an old room was pulled forward: %+v", st)
+	}
+	// A room that ends and is made again is young again.
+	r.Leave("channel:9")
+	r.Join("channel:9", 9, unixMS(now.Add(-60*time.Second)))
+	*now = now.Add(5 * time.Second)
+	fresh, _ := r.State("channel:9")
+	if st, _ := r.Apply("channel:9", Command{Action: "ahead", MediaTime: unixMS(*now) - 8000}); st.Version == fresh.Version {
+		t.Fatalf("a remade room should be young: %+v", st)
+	}
+}
+
+// A screen whose live edge sits further back than a measured room takes the
+// room back to itself, so nobody is stranded behind. An unmeasured room keeps
+// today's behavior (its 16 s target already covers every Apple screen).
+func TestBehindStepsAMeasuredRoomBackToTheScreen(t *testing.T) {
+	start := time.Date(2026, 10, 11, 17, 0, 0, 0, time.UTC)
+	r, now := fixedRooms(start)
+	r.Join("channel:5", 5, unixMS(start.Add(-60*time.Second)))
+	*now = start.Add(5 * time.Second)
+	nowMS := unixMS(*now)
+	if st, _ := r.Apply("channel:5", Command{Action: "behind", MediaTime: nowMS - 20000}); st.Version != 1 {
+		t.Fatalf("behind moved an unmeasured room: %+v", st)
+	}
+	r.Apply("channel:5", Command{Action: "ahead", MediaTime: nowMS - 8000})
+	*now = start.Add(60 * time.Second)
+	nowMS = unixMS(*now)
+	onScreen := nowMS - 12500
+	st, _ := r.Apply("channel:5", Command{Action: "behind", MediaTime: onScreen})
+	if math.Abs(st.Target(nowMS)-(onScreen-2500)) > 1 {
+		t.Fatalf("the room should step back to 2.5 s behind the stranded screen: %v", nowMS-st.Target(nowMS))
+	}
+	// A screen only a little behind leaves it to the trims.
+	same, _ := r.State("channel:5")
+	if st, _ := r.Apply("channel:5", Command{Action: "behind", MediaTime: same.Target(nowMS) - 200}); st.Version != same.Version {
+		t.Fatalf("a small gap moved the room: %+v", st)
+	}
+}
