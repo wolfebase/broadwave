@@ -13,6 +13,7 @@ export default defineConfig({
       "layoutHook.test.tsx",
       "screensApi.test.ts",
       "captionsCue.test.ts",
+      "playerChrome.test.ts",
     ],
   },
 });
