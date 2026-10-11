@@ -545,6 +545,10 @@ func (s *Store) Channels(ctx context.Context, guideOnly bool) ([]Channel, error)
 	if err := s.markSameAs(ctx, out); err != nil {
 		return nil, err
 	}
+	byID := make(map[int64]Channel, len(out))
+	for _, ch := range out {
+		byID[ch.ID] = ch
+	}
 	if guideOnly {
 		shown := out[:0]
 		for _, ch := range out {
@@ -555,13 +559,30 @@ func (s *Store) Channels(ctx context.Context, guideOnly bool) ([]Channel, error)
 		out = shown
 	}
 	sort.Slice(out, func(i, j int) bool {
-		cmp := hdhr.CompareGuide(out[i].DisplayNumber, out[j].DisplayNumber)
+		cmp := hdhr.CompareGuide(guideOrderNumber(out[i], byID), guideOrderNumber(out[j], byID))
+		if cmp == 0 {
+			cmp = hdhr.CompareGuide(out[i].DisplayNumber, out[j].DisplayNumber)
+		}
 		if cmp == 0 {
 			return out[i].ID < out[j].ID
 		}
 		return cmp < 0
 	})
 	return out, nil
+}
+
+// guideOrderNumber is where a channel sits in the guide. A shown 3.0 channel
+// uses its 1.0 twin's number, so 104.1 stays next to the 4s. A number the
+// viewer set is kept. A 3.0 channel with no pair keeps its own number.
+func guideOrderNumber(ch Channel, byID map[int64]Channel) string {
+	if ch.Standard != TwinATSC3 || ch.Hidden || ch.TwinID == 0 || ch.DisplayNumber != ch.GuideNumber {
+		return ch.DisplayNumber
+	}
+	twin, ok := byID[ch.TwinID]
+	if !ok || twin.Standard == TwinATSC3 || twin.DisplayNumber == "" {
+		return ch.DisplayNumber
+	}
+	return twin.DisplayNumber
 }
 
 // SetNetworks stores a guide's network decision. Blank values are left alone.

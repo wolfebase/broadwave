@@ -97,7 +97,8 @@ struct ChannelsView: View {
     private func load() async {
         guard let api = store.api else { return }
         do {
-            lineup = try await api.lineup().sorted(by: Channel.guideOrder)
+            let rows = try await api.lineup()
+            lineup = rows.sorted { Channel.comesBefore($0, $1, lineup: rows) }
             error = ""
             #if DEBUG
                 openFirst = UserDefaults.standard.bool(forKey: "BroadwaveOpenFirst") && !lineup.isEmpty

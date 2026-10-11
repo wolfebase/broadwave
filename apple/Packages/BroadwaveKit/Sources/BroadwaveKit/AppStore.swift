@@ -494,9 +494,12 @@ public final class AppStore {
                 NSLog("broadwave ready %@ %@", current.id, current.url.absoluteString)
             }
             if lineup || channels.isEmpty {
+                // A shown 3.0 channel sorts at its hidden 1.0 twin's number, which only the full list has.
+                async let everyChannel = api.allChannels()
                 let nextChannels = try await fetchedChannels
+                let rows = await (try? everyChannel) ?? nextChannels
                 guard sameSession(started, base) else { return }
-                channels = nextChannels.sorted(by: Channel.guideOrder)
+                channels = nextChannels.sorted { Channel.comesBefore($0, $1, lineup: rows) }
             }
             let window = try await fetchedAirings
             let nextRecordings = try await fetchedRecordings
@@ -716,8 +719,13 @@ public final class AppStore {
         let started = generation
         let base = api.base
         let updated = try await api.patchChannel(id, patch)
-        if let list = try? await api.channels(), sameSession(started, base) {
-            channels = list.sorted(by: Channel.guideOrder)
+        async let guide = api.channels()
+        async let everyChannel = api.allChannels()
+        if let list = try? await guide {
+            let rows = await (try? everyChannel) ?? list
+            if sameSession(started, base) {
+                channels = list.sorted { Channel.comesBefore($0, $1, lineup: rows) }
+            }
         }
         return updated
     }

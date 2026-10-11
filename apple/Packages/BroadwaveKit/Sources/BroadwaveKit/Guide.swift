@@ -153,16 +153,49 @@ public extension Channel {
 
     /// Channel numbers sort as numbers: 14.2 before 14.10.
     static func guideOrder(_ a: Channel, _ b: Channel) -> Bool {
-        let x = a.displayNumber.split(separator: ".").map { Int($0) ?? 0 }
-        let y = b.displayNumber.split(separator: ".").map { Int($0) ?? 0 }
+        comesBefore(a, b, lineup: [])
+    }
+
+    /// Where a channel sits in the guide. A shown 3.0 channel uses its 1.0 twin's number,
+    /// so 104.1 stays next to the 4s. A number the viewer set is kept. A 3.0 channel with no pair keeps its own number.
+    static func orderNumber(_ channel: Channel, lineup: [Channel]) -> String {
+        let paired = channel.isATSC3 && !channel.hidden && channel.twinId != nil && channel.displayNumber == channel.guideNumber
+        guard paired else { return channel.displayNumber }
+        if let twinId = channel.twinId,
+           let twin = lineup.first(where: { $0.id == twinId && !$0.isATSC3 }),
+           !twin.displayNumber.isEmpty
+        {
+            return twin.displayNumber
+        }
+        let parts = channel.displayNumber.split(separator: ".", omittingEmptySubsequences: false)
+        guard let major = Int(parts.first ?? ""), major >= 100 else { return channel.displayNumber }
+        let minor = parts.dropFirst().joined(separator: ".")
+        return minor.isEmpty ? "\(major - 100)" : "\(major - 100).\(minor)"
+    }
+
+    static func comesBefore(_ a: Channel, _ b: Channel, lineup: [Channel]) -> Bool {
+        let order = compareNumbers(orderNumber(a, lineup: lineup), orderNumber(b, lineup: lineup))
+        if order != 0 {
+            return order < 0
+        }
+        let shown = compareNumbers(a.displayNumber, b.displayNumber)
+        if shown != 0 {
+            return shown < 0
+        }
+        return a.displayName < b.displayName
+    }
+
+    private static func compareNumbers(_ left: String, _ right: String) -> Int {
+        let x = left.split(separator: ".").map { Int($0) ?? 0 }
+        let y = right.split(separator: ".").map { Int($0) ?? 0 }
         for i in 0 ..< max(x.count, y.count) {
             let l = i < x.count ? x[i] : 0
             let r = i < y.count ? y[i] : 0
             if l != r {
-                return l < r
+                return l < r ? -1 : 1
             }
         }
-        return a.displayName < b.displayName
+        return 0
     }
 }
 

@@ -2,10 +2,14 @@
 import Foundation
 import Testing
 
-private func channel(_ number: String, name: String, hd: Bool = true, favorite: Bool = false) -> Channel {
+private func channel(
+    _ number: String, name: String, hd: Bool = true, favorite: Bool = false,
+    id: Int64? = nil, guideNumber: String? = nil, standard: String? = nil, twinId: Int64? = nil, hidden: Bool = false
+) -> Channel {
     Channel(
-        id: Int64(number.hashValue & 0xFFFF), deviceId: "d", guideNumber: number, guideName: name,
-        displayNumber: number, displayName: name, hd: hd, favorite: favorite, enabled: true, hidden: false, present: true
+        id: id ?? Int64(number.hashValue & 0xFFFF), deviceId: "d", guideNumber: guideNumber ?? number, guideName: name,
+        displayNumber: number, displayName: name, hd: hd, favorite: favorite, enabled: true, hidden: hidden, present: true,
+        standard: standard, twinId: twinId
     )
 }
 
@@ -22,6 +26,32 @@ private func airing(_ title: String, category: String? = nil, subtitle: String? 
     #expect(!Channel.guideOrder(channel("4.1", name: "Zed"), channel("4.1", name: "Alpha")))
     let ordered = ["10", "2", "14.10", "14.2", "9"].map { channel($0, name: $0) }.sorted(by: Channel.guideOrder)
     #expect(ordered.map(\.displayNumber) == ["2", "9", "10", "14.2", "14.10"])
+}
+
+@Test func shown3ChannelSortsAtIts1Number() {
+    let lineup = [
+        channel("4.1", name: "KBWV", id: 4, hidden: true),
+        channel("104.1", name: "KBWV", id: 104, standard: "atsc3", twinId: 4),
+        channel("4.2", name: "KBWV2", id: 42),
+        channel("5.1", name: "WTST", id: 5),
+        channel("100.1", name: "High", id: 100),
+        channel("115.1", name: "Sealed", id: 115, standard: "atsc3"),
+        channel("12.1", name: "Renamed", id: 12, guideNumber: "104.1", standard: "atsc3", twinId: 4),
+        channel("104.1", name: "Hidden", id: 204, standard: "atsc3", twinId: 4, hidden: true),
+    ]
+    let ordered = lineup.sorted { Channel.comesBefore($0, $1, lineup: lineup) }
+    #expect(ordered.map(\.id) == [4, 104, 42, 5, 12, 100, 204, 115])
+}
+
+@Test func shown3UsesTheTwinsNumberWhenItIsNotOneHundredMore() {
+    let twin = channel("7.1", name: "Clear", id: 7, hidden: true)
+    let shown = channel("104.1", name: "Next", id: 107, standard: "atsc3", twinId: 7)
+    let after = channel("7.2", name: "After", id: 72)
+    let lineup = [twin, shown, after]
+    let ordered = [shown, after].sorted { Channel.comesBefore($0, $1, lineup: lineup) }
+    #expect(ordered.map(\.id) == [107, 72])
+    #expect(Channel.orderNumber(shown, lineup: []) == "4.1")
+    #expect(Channel.orderNumber(channel("100.1", name: "High", id: 100), lineup: []) == "100.1")
 }
 
 @Test func listingsUseTheSameCategoriesAsTheWebGuide() {
