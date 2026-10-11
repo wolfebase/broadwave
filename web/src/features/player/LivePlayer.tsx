@@ -373,7 +373,7 @@ export function LivePlayer({
     // A slider keeps the arrows. Back and Escape still leave.
     if (target instanceof HTMLInputElement && target.type === "range" && arrows) return;
     if (target instanceof HTMLInputElement && (target.type === "checkbox" || target.type === "radio") && (k === " " || k === "Enter")) return;
-    if (panel === "help" || panel === "info" || panel === "sync") {
+    if (panel === "help" || panel === "sync") {
       // Enter, Space, Tab, and the arrows belong to the dialog. Everything else stays here.
       if (k === "Enter" || k === " " || k === "Tab" || arrows) return;
       if (k === "Escape" || k === "Backspace" || (panel === "help" && k === "?")) setPanel("none");
@@ -769,7 +769,7 @@ export function LivePlayer({
         </div>
       ) : null}
       {panel === "info" ? (
-        <ModalPanel label={copy.player.stats} onClose={() => setPanel("none")}>
+        <div className="info-panel glass" role="dialog" aria-label={copy.player.stats}>
           <h3>{copy.player.stats}</h3>
           {session ? (
             <dl>
@@ -801,12 +801,7 @@ export function LivePlayer({
           ) : (
             <p>Tuning…</p>
           )}
-          <div className="option-actions">
-            <button type="button" className="btn" onClick={() => setPanel("none")}>
-              {copy.player.close}
-            </button>
-          </div>
-        </ModalPanel>
+        </div>
       ) : null}
       {panel === "help" ? <HelpDialog onClose={() => setPanel("none")} /> : null}
       {panel === "move" ? (
@@ -902,11 +897,11 @@ function OptionRow<T extends string>({
   );
 }
 
-function ModalPanel({ label, labelledBy, onClose, children }: { label?: string; labelledBy?: string; onClose: () => void; children: ReactNode }) {
+function ModalPanel({ labelledBy, onClose, children }: { labelledBy: string; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   useDialogFocus(ref, onClose);
   return (
-    <div ref={ref} className="info-panel glass" role="dialog" aria-modal="true" aria-label={label} aria-labelledby={labelledBy} tabIndex={-1}>
+    <div ref={ref} className="info-panel glass" role="dialog" aria-modal="true" aria-labelledby={labelledBy} tabIndex={-1}>
       {children}
     </div>
   );
