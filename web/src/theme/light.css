@@ -1,0 +1,321 @@
+/* Light theme. The head script sets data-theme before first paint. Without a
+   saved choice the page stays dark. */
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --color-canvas: #F4F6FA;
+  --color-surface1: #FFFFFF;
+  --color-surface2: #E7ECF2;
+  --color-surface3: #D5DCE6;
+  --color-line: #1418201F;
+  --color-line-strong: #14182038;
+  --color-text: #141820;
+  --color-text-secondary: #3E4858;
+  --color-text-tertiary: #526070;
+  --color-accent: #1D4ED8;
+  --color-accent-soft: #1D4ED829;
+  --color-on-accent: #FFFFFF;
+  --color-link: #1D4ED8;
+  --color-accent-ink: #1D4ED8;
+  --color-tally: #9B1218;
+  --color-tally-soft: #9B121822;
+  --color-tally-ink: #9B1218;
+  --color-tally-soft-ink: #9B1218;
+  --color-success: #0D6B3D;
+  --color-warning: #8A5300;
+  --color-glass-fill: #FFFFFFE6;
+  --color-glass-stroke: #14182024;
+  --color-glass-highlight: #FFFFFF;
+  --color-scrim: #141820B8;
+  --brand-blue: var(--color-accent);
+  --brand-glow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 28%, transparent), 0 12px 32px color-mix(in srgb, var(--color-accent) 16%, transparent);
+  --focus-ring: 0 0 0 2px var(--color-canvas), 0 0 0 4px var(--color-accent), 0 0 18px 2px color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+html[data-theme="light"] body {
+  background:
+    radial-gradient(1100px 700px at 8% -10%, color-mix(in srgb, var(--color-accent) 14%, transparent), transparent 58%),
+    radial-gradient(900px 600px at 100% 0%, color-mix(in srgb, var(--brand-violet) 10%, transparent), transparent 58%),
+    radial-gradient(900px 700px at 50% 110%, color-mix(in srgb, var(--brand-cyan) 8%, transparent), transparent 60%),
+    var(--color-canvas);
+  background-attachment: fixed;
+}
+
+html[data-theme="light"],
+html[data-theme="light"] * {
+  scrollbar-color: rgba(20, 24, 32, 0.28) transparent;
+}
+
+html[data-theme="light"] ::selection {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+/* White gradient titles disappear on a light page. background-clip: text
+   would keep them invisible after the gradient is cleared. */
+html[data-theme="light"] .page-header h1,
+html[data-theme="light"] .page-wrap > h1,
+html[data-theme="light"] .sports-page h1 {
+  background: none;
+  background-clip: border-box;
+  -webkit-background-clip: border-box;
+  color: var(--color-text);
+  -webkit-text-fill-color: currentColor;
+}
+
+html[data-theme="light"] .topbar {
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 8px 28px rgba(20, 24, 32, 0.08);
+}
+
+html[data-theme="light"] .glass {
+  box-shadow:
+    inset 0 1px 0 var(--color-glass-highlight),
+    0 10px 30px rgba(20, 24, 32, 0.1);
+}
+
+/* Selected chrome uses the accent, so a white pill is not invisible. */
+html[data-theme="light"] .tab.on,
+html[data-theme="light"] .chip.on,
+html[data-theme="light"] .chip.on .chip-count,
+html[data-theme="light"] .seg.on,
+html[data-theme="light"] .btn.primary {
+  background: var(--color-accent);
+  background-image: none;
+  color: var(--color-on-accent);
+  box-shadow: none;
+}
+
+html[data-theme="light"] .btn.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 86%, #000);
+  color: var(--color-on-accent);
+  transform: none;
+}
+
+html[data-theme="light"] .tab:hover:not(.on) {
+  background: rgba(20, 24, 32, 0.06);
+}
+
+html[data-theme="light"] .segmented,
+html[data-theme="light"] .glass-icon,
+html[data-theme="light"] .ch-badge-num {
+  background: rgba(20, 24, 32, 0.08);
+}
+
+html[data-theme="light"] .glass-icon:hover,
+html[data-theme="light"] .glass-icon.on {
+  background: rgba(20, 24, 32, 0.14);
+}
+
+html[data-theme="light"] .progress {
+  background: rgba(20, 24, 32, 0.12);
+}
+
+/* Hero, poster, and art cards keep a dark scrim. Their ink stays light. */
+html[data-theme="light"] .hero-glow {
+  background:
+    radial-gradient(70% 90% at 85% 10%, color-mix(in srgb, var(--cat-color, var(--cat-other)) 40%, transparent), transparent 60%),
+    radial-gradient(60% 80% at 0% 100%, color-mix(in srgb, var(--cat-color, var(--cat-other)) 22%, transparent), transparent 70%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.55) 32%, rgba(0, 0, 0, 0.9) 62%, rgba(0, 0, 0, 0.94) 100%);
+}
+
+html[data-theme="light"] .hero-num {
+  -webkit-text-stroke: 1.5px rgba(20, 24, 32, 0.28);
+}
+
+html[data-theme="light"] .hero-title,
+html[data-theme="light"] .hero .ch-badge-num,
+html[data-theme="light"] .ps-art .ch-badge-num,
+html[data-theme="light"] .now-card.has-art .nc-num,
+html[data-theme="light"] .now-card.has-art .nc-title {
+  color: #f5f7fa;
+}
+
+html[data-theme="light"] .hero-cat,
+html[data-theme="light"] .hero-sub,
+html[data-theme="light"] .hero-left,
+html[data-theme="light"] .hero-next,
+html[data-theme="light"] .hero .ch-badge-name,
+html[data-theme="light"] .ps-art .ch-badge-name {
+  color: #aeb7c5;
+}
+
+html[data-theme="light"] .hero .live-dot,
+html[data-theme="light"] .ps-art .live-dot {
+  color: #ff3b30;
+}
+
+html[data-theme="light"] .hero .ch-badge-num,
+html[data-theme="light"] .ps-art .ch-badge-num,
+html[data-theme="light"] .hero .progress,
+html[data-theme="light"] .ps-art .progress,
+html[data-theme="light"] .now-card.has-art .progress {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* The close control sits on the poster, which may be a light picture. */
+html[data-theme="light"] .ps-art .glass-icon,
+html[data-theme="light"] .ps-art .glass-icon:hover {
+  color: #f5f7fa;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+/* Guide "now" ink is tuned for a dark wash. On a light wash it follows the text. */
+html[data-theme="light"] .guide-cell.now .cell-sub,
+html[data-theme="light"] .cell-score {
+  color: var(--color-text);
+}
+
+html[data-theme="light"] .cell-new {
+  color: var(--color-link);
+}
+
+/* Accents. Dark rules only match the dark theme, so they cannot repaint a light page. */
+html[data-theme="dark"][data-accent="teal"] {
+  --color-accent: #2DD4BF;
+  --color-accent-soft: #2DD4BF29;
+  --color-on-accent: #04221C;
+  --color-link: #2DD4BF;
+  --color-accent-ink: #2DD4BF;
+}
+
+html[data-theme="light"][data-accent="teal"] {
+  --color-accent: #0D6962;
+  --color-accent-soft: #0D696229;
+  --color-on-accent: #FFFFFF;
+  --color-link: #0D6962;
+  --color-accent-ink: #0D6962;
+}
+
+html[data-theme="dark"][data-accent="green"] {
+  --color-accent: #34D399;
+  --color-accent-soft: #34D39929;
+  --color-on-accent: #052116;
+  --color-link: #34D399;
+  --color-accent-ink: #34D399;
+}
+
+html[data-theme="light"][data-accent="green"] {
+  --color-accent: #0D6B3D;
+  --color-accent-soft: #0D6B3D29;
+  --color-on-accent: #FFFFFF;
+  --color-link: #0D6B3D;
+  --color-accent-ink: #0D6B3D;
+}
+
+html[data-theme="dark"][data-accent="orange"] {
+  --color-accent: #FB923C;
+  --color-accent-soft: #FB923C29;
+  --color-on-accent: #3A1504;
+  --color-link: #FB923C;
+  --color-accent-ink: #FB923C;
+}
+
+html[data-theme="light"][data-accent="orange"] {
+  --color-accent: #A7380A;
+  --color-accent-soft: #A7380A29;
+  --color-on-accent: #FFFFFF;
+  --color-link: #A7380A;
+  --color-accent-ink: #A7380A;
+}
+
+html[data-theme="dark"][data-accent="purple"] {
+  --color-accent: #A78BFA;
+  --color-accent-soft: #A78BFA29;
+  --color-on-accent: #1E1033;
+  --color-link: #A78BFA;
+  --color-accent-ink: #A78BFA;
+}
+
+html[data-theme="light"][data-accent="purple"] {
+  --color-accent: #6D28D9;
+  --color-accent-soft: #6D28D929;
+  --color-on-accent: #FFFFFF;
+  --color-link: #6D28D9;
+  --color-accent-ink: #6D28D9;
+}
+
+html[data-theme="dark"][data-accent="rose"] {
+  --color-accent: #FB7185;
+  --color-accent-soft: #FB718529;
+  --color-on-accent: #3F0610;
+  --color-link: #FB7185;
+  --color-accent-ink: #FB7185;
+}
+
+html[data-theme="light"][data-accent="rose"] {
+  --color-accent: #B8113A;
+  --color-accent-soft: #B8113A29;
+  --color-on-accent: #FFFFFF;
+  --color-link: #B8113A;
+  --color-accent-ink: #B8113A;
+}
+
+html[data-theme="light"][data-accent="blue"] {
+  --color-accent: #1D4ED8;
+  --color-accent-soft: #1D4ED829;
+  --color-on-accent: #FFFFFF;
+  --color-link: #1D4ED8;
+  --color-accent-ink: #1D4ED8;
+}
+
+.accent-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.accent-choice {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 68px;
+  padding: 8px 6px 6px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: var(--type-caption-size);
+  font-weight: 650;
+}
+
+.accent-choice input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.accent-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+}
+
+.accent-choice:has(input:checked) {
+  color: var(--color-text);
+}
+
+.accent-choice:has(input:checked) .accent-dot {
+  box-shadow: 0 0 0 2px var(--color-canvas), 0 0 0 4px var(--color-text);
+}
+
+.accent-choice:has(input:focus-visible) .accent-dot {
+  box-shadow: var(--focus-ring);
+}
+
+.accent-dot[data-accent="blue"] { background: #3d7bff; }
+.accent-dot[data-accent="teal"] { background: #2dd4bf; }
+.accent-dot[data-accent="green"] { background: #34d399; }
+.accent-dot[data-accent="orange"] { background: #fb923c; }
+.accent-dot[data-accent="purple"] { background: #a78bfa; }
+.accent-dot[data-accent="rose"] { background: #fb7185; }
+
+html[data-theme="light"] .accent-dot[data-accent="blue"] { background: #1d4ed8; }
+html[data-theme="light"] .accent-dot[data-accent="teal"] { background: #0d6962; }
+html[data-theme="light"] .accent-dot[data-accent="green"] { background: #0d6b3d; }
+html[data-theme="light"] .accent-dot[data-accent="orange"] { background: #a7380a; }
+html[data-theme="light"] .accent-dot[data-accent="purple"] { background: #6d28d9; }
+html[data-theme="light"] .accent-dot[data-accent="rose"] { background: #b8113a; }

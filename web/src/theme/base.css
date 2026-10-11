@@ -17,6 +17,15 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/* Link and status ink. The light theme replaces these. The dark link is the
+   accent lifted toward white, which is what clears 4.5:1 on a card. */
+:root {
+  --color-link: color-mix(in srgb, var(--color-accent) 72%, #fff);
+  --color-accent-ink: #9cbcff;
+  --color-tally-ink: #ff8a82;
+  --color-tally-soft-ink: #ffb3ad;
+}
+
 body {
   margin: 0;
   background: var(--color-canvas);
@@ -68,9 +77,8 @@ button:disabled {
   opacity: 0.45;
 }
 
-/* Lifted from the accent so text links pass 4.5:1 on cards (the raw accent is 3.9:1). */
 a {
-  color: color-mix(in srgb, var(--color-accent) 72%, #fff);
+  color: var(--color-link);
 }
 
 /* A link styled as a button reads as a button, not as link text in a pill. */
@@ -418,12 +426,12 @@ html[data-layout="tv"] :focus-visible {
 
 .tag.new {
   background: var(--color-accent-soft);
-  color: #9cbcff;
+  color: var(--color-accent-ink);
 }
 
 .tag.rec {
   background: var(--color-tally-soft);
-  color: #ff8a82;
+  color: var(--color-tally-ink);
 }
 
 .switch-row {
@@ -736,7 +744,7 @@ select {
 }
 
 .error {
-  color: #ff8a82;
+  color: var(--color-tally-ink);
 }
 
 .empty {

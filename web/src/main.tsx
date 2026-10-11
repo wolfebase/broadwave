@@ -4,9 +4,12 @@ import "@fontsource-variable/inter";
 import "./theme/tokens.css";
 import "./theme/base.css";
 import "./theme/brand.css";
+import "./theme/light.css";
 import { App } from "./app/App";
 import { chooseGlass } from "./lib/glass";
+import { installLook } from "./theme/look";
 
+installLook();
 chooseGlass();
 
 const root = document.getElementById("root");
