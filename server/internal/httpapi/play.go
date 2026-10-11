@@ -374,7 +374,12 @@ func (s *Server) deleteRecording(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.Hub != nil {
 		s.Hub.StopRecord(id)
-		s.Hub.RemoveRecordingFiles(rec)
+		// The row stays when the file stays, so a later delete can try again.
+		if err := s.Hub.RemoveRecordingFiles(rec); err != nil {
+			slog.Warn("delete recording", "id", id, "err", err)
+			httpError(w, "The recording could not be deleted. It is still in your library.", http.StatusInternalServerError)
+			return
+		}
 	}
 	if err := s.Store.DeleteRecording(r.Context(), id); err != nil {
 		writeError(w, err)

@@ -45,7 +45,11 @@ func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, queue *BreakQu
 				continue
 			}
 			if hub != nil {
-				hub.RemoveRecordingFiles(victim)
+				// Same rule as storage clean-up: a file that stays keeps its row.
+				if err := hub.RemoveRecordingFiles(victim); err != nil {
+					slog.Warn("keep rule: recording file stayed", "id", id, "err", err)
+					continue
+				}
 			}
 			if err := st.DeleteRecording(ctx, id); err == nil {
 				_ = st.AddEvent(ctx, "delete", "Keep rule removed "+victim.Title)

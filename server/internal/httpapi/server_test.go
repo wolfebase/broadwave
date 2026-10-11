@@ -601,6 +601,38 @@ func TestDeleteRecordingRemovesTheFile(t *testing.T) {
 	}
 }
 
+func TestDeleteLeavesTheRowWhenTheFileStays(t *testing.T) {
+	st := testStore(t)
+	dir := t.TempDir()
+	recDir := filepath.Join(dir, "recordings")
+	// A non-empty directory cannot be unlinked, so the recording file stays.
+	path := filepath.Join(recDir, "stuck.ts")
+	if err := os.MkdirAll(filepath.Join(path, "inside"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	id, err := st.CreateRecording(context.Background(), store.Recording{
+		Title: "Stuck", Status: "complete", Path: path, StartedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := &live.Hub{Store: st, Dir: dir, FFmpeg: filepath.Join(dir, "missing-ffmpeg")}
+	h := (&Server{Store: st, Hub: hub, Assets: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("Broadwave")}}}).Handler()
+	req := httptest.NewRequest(http.MethodDelete, "/api/recordings/"+strconv.FormatInt(id, 10), nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code == http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte("still in your library")) {
+		t.Fatalf("delete %d %s", rec.Code, rec.Body.String())
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("file went: %v", err)
+	}
+	res := get(t, h, "/api/recordings")
+	if !bytes.Contains(res.Body.Bytes(), []byte(`"title":"Stuck"`)) {
+		t.Fatalf("row dropped while the file stayed: %s", res.Body.String())
+	}
+}
+
 func TestRecordingDurationRoundTrip(t *testing.T) {
 	st := testStore(t)
 	clip := filepath.Join(t.TempDir(), "clip.ts")
