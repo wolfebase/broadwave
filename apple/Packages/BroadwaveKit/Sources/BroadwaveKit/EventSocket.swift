@@ -21,8 +21,8 @@ public final class EventSocket {
     /// Local time of the last clock burst. A reply whose t0 is older was in
     /// flight across a wake, and with best reset it would otherwise be kept.
     private var clockNotBefore: Double = 0
-    /// Commands asked for while the socket was down. Sent on the next open if
-    /// they are still only a few seconds old.
+    /// Commands asked for while the socket was not open. Sent once it opens if
+    /// they are still only a few seconds old. A handshake that fails keeps them.
     private var pendingCommands: [(text: String, at: Double)] = []
     private var retry = 0
     private var clockTimer: Timer?
@@ -108,7 +108,6 @@ public final class EventSocket {
         for (room, channel) in rooms {
             send("sync.join", ["room": room, "channelId": channel, "latency": LiveDelay.saved.rawValue])
         }
-        flushCommands()
     }
 
     /// Tells the server which screen this app is. Sent again after each reconnect.
@@ -280,12 +279,12 @@ public final class EventSocket {
     private func send(_ type: String, _ data: [String: Any]) {
         let frame: [String: Any] = ["type": type, "data": data]
         guard let json = try? JSONSerialization.data(withJSONObject: frame), let text = String(data: json, encoding: .utf8) else { return }
-        guard let task else {
-            if type == "sync.command" {
-                pendingCommands.append((text: text, at: Self.nowMS()))
-            }
+        // Joins and the announcement are sent again on each connect, so only commands wait.
+        if type == "sync.command", !connected {
+            pendingCommands.append((text: text, at: Self.nowMS()))
             return
         }
+        guard let task else { return }
         task.send(.string(text)) { _ in }
     }
 
@@ -327,6 +326,7 @@ public final class EventSocket {
                     self.retry = 0
                     if !self.connected {
                         self.setConnected(true)
+                        self.flushCommands()
                         self.debugLine("socket open")
                         // Events sent while this screen was away are gone.
                         if self.opened {
