@@ -254,6 +254,8 @@ export function Guide() {
   function onKey(e: KeyboardEvent) {
     const target = e.target;
     if (!(target instanceof HTMLElement) || !target.closest(".guide-canvas")) return;
+    // A channel name reached with Tab is its own button. The grid's cursor may sit on another row.
+    if ((e.key === "Enter" || e.key === " ") && target.closest(".guide-channel")) return;
     const row = rows[focus.row];
     if (!row) {
       move(focus.row, focus.at);
