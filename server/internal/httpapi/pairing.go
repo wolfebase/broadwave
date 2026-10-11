@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"broadwave/internal/store"
 )
@@ -66,13 +67,18 @@ func (s *Server) approvePair(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
+	try, ok := s.takeCodeTry(r)
+	if !ok {
+		tooManyPairTries(w)
+		return
+	}
 	// Hold the token before the approved row is visible. pairMu stays locked
 	// across the commit so a poll cannot see "approved" with an empty handoff.
 	s.pairMu.Lock()
 	pairing, dev, token, err := s.Store.ApproveShow(r.Context(), body.Code, body.Scopes, s.now())
 	if err != nil {
 		s.pairMu.Unlock()
-		s.noteBadCode(r, err)
+		s.settleCodeTry(r, try, err)
 		writePairError(w, err)
 		return
 	}
@@ -81,6 +87,7 @@ func (s *Server) approvePair(w http.ResponseWriter, r *http.Request) {
 	}
 	s.pairTokens[pairing.ID] = heldToken{token: token, device: dev}
 	s.pairMu.Unlock()
+	s.giveBackCodeTry(r, try)
 	writeJSON(w, http.StatusOK, map[string]any{"device": dev})
 }
 
@@ -93,12 +100,18 @@ func (s *Server) claimPair(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
+	try, ok := s.takeCodeTry(r)
+	if !ok {
+		tooManyPairTries(w)
+		return
+	}
 	_, dev, token, err := s.Store.ClaimCode(r.Context(), body.Code, body.Name, body.Kind, s.now())
 	if err != nil {
-		s.noteBadCode(r, err)
+		s.settleCodeTry(r, try, err)
 		writePairError(w, err)
 		return
 	}
+	s.giveBackCodeTry(r, try)
 	setDeviceCookie(w, token)
 	writeJSON(w, http.StatusCreated, map[string]any{"token": token, "device": dev})
 }
@@ -215,11 +228,45 @@ func (s *Server) clientMe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) revokeClient(w http.ResponseWriter, r *http.Request) {
+	last, err := s.lastAdmin(r, r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if last {
+		// Recovery would mean editing the catalog by hand.
+		httpError(w, "Pair another admin device first. This is the last one that can change settings.", http.StatusConflict)
+		return
+	}
 	if err := s.Store.RevokeClient(r.Context(), r.PathValue("id"), s.now()); err != nil {
 		writeError(w, err)
 		return
 	}
 	s.listClients(w, r)
+}
+
+// lastAdmin reports whether id is the only admin left while sign-in is on.
+func (s *Server) lastAdmin(r *http.Request, id string) (bool, error) {
+	on, err := s.deviceAuthOn(r.Context())
+	if err != nil || !on {
+		return false, err
+	}
+	list, err := s.Store.Clients(r.Context())
+	if err != nil {
+		return false, err
+	}
+	target, others := false, false
+	for _, dev := range list {
+		if !store.ScopeAllows(dev.Scopes, store.ScopeAdmin) {
+			continue
+		}
+		if dev.ID == id {
+			target = true
+		} else {
+			others = true
+		}
+	}
+	return target && !others, nil
 }
 
 func (s *Server) takePairToken(id string) (heldToken, bool) {
@@ -248,14 +295,21 @@ func (s *Server) pairOpen(w http.ResponseWriter, r *http.Request) bool {
 	if s.pairAllowed(r) {
 		return true
 	}
-	httpError(w, "Too many pairing tries. Wait a few minutes.", http.StatusTooManyRequests)
+	tooManyPairTries(w)
 	return false
 }
 
-func (s *Server) noteBadCode(r *http.Request, err error) {
+func tooManyPairTries(w http.ResponseWriter) {
+	httpError(w, "Too many pairing tries. Wait a few minutes.", http.StatusTooManyRequests)
+}
+
+// settleCodeTry keeps the counted failure for a wrong, expired, or stopped
+// code, and gives it back for anything else.
+func (s *Server) settleCodeTry(r *http.Request, at time.Time, err error) {
 	if errors.Is(err, store.ErrPairCode) || errors.Is(err, store.ErrPairExpired) || errors.Is(err, store.ErrPairDenied) {
-		s.pairFailed(r)
+		return
 	}
+	s.giveBackCodeTry(r, at)
 }
 
 func writePairError(w http.ResponseWriter, err error) {

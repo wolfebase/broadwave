@@ -65,7 +65,7 @@ Last seen is updated at most once a minute per device. A revoked token does not 
 
 Enabling sign-in from a request that is not already an admin mints an admin token for that browser, named "This browser", and returns it once as `deviceToken` on that settings response, with the cookie set. The setting and that token are one transaction: if the token cannot be saved, sign-in stays off. The web app stores the token and does not send it back as a setting. Echoing `deviceToken` on a later save is ignored.
 
-If every admin token is lost, the server stays locked. Recovery is on the machine that holds the catalog: set `deviceAuth` to `0` in the `settings` table, or delete the `client_devices` rows, and start the server again. There is no network backdoor. Loopback is not treated as an exception, because a reverse proxy on the same computer would look like loopback and would reopen the API.
+While sign-in is on, the last admin device cannot be revoked; pair another admin first. If every admin token is lost anyway, the server stays locked. Recovery is on the machine that holds the catalog: set `deviceAuth` to `0` in the `settings` table, or delete the `client_devices` rows, and start the server again. There is no network backdoor. Loopback is not treated as an exception, because a reverse proxy on the same computer would look like loopback and would reopen the API.
 
 ## Pairing
 
@@ -81,7 +81,7 @@ Approve matches only a code the device is showing. Claim matches only a code an 
 
 ### Rate limits
 
-Limits are in memory, per server process, keyed by the TCP peer address. `X-Forwarded-For` is not trusted. The per-address cap is counted under one lock. The server-wide failure cap is checked before the handler runs and recorded after a bad code, so overlapping calls from many addresses can pass that check together.
+Limits are in memory, per server process, keyed by the TCP peer address. `X-Forwarded-For` is not trusted. Both caps are counted under one lock. A code submission is counted as a failure before the code is checked and given back when it was not a wrong code, so overlapping guesses from many addresses cannot pass the server-wide cap together.
 
 - 10 pairing calls per address per 10 minutes (`POST /pair`, `/pair/code`, `/pair/approve`, `/pair/claim`).
 - 30 failed code submissions per 10 minutes on the whole server, and 10 per address.
@@ -124,7 +124,7 @@ All of these are under `/api/v1` and `/api`.
 | `POST /pair/claim` | public | `{code, name, kind}` → `{token, device}` and `Set-Cookie` |
 | `GET /clients` | admin | `{devices}` unrevoked, no tokens |
 | `GET /clients/me` | public | `{device: ClientDevice \| null, auth: "local-open" \| "device"}` |
-| `DELETE /clients/{id}` | admin | `{devices}` |
+| `DELETE /clients/{id}` | admin | `{devices}`, or 409 for the last admin while sign-in is on |
 
 `PUT /settings` accepts `deviceAuth` of `0` or `1`. The response that turns it on may include `deviceToken` once. `GET /settings` always includes `deviceAuth`, and never includes `deviceToken`.
 

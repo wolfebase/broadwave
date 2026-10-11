@@ -1793,7 +1793,7 @@ paths:
     delete:
       tags: [pairing]
       operationId: revokeClient
-      description: Revokes a device. Its token stops working immediately.
+      description: Revokes a device. Its token stops working immediately. While sign-in is on, the last admin device cannot be revoked (409).
       parameters:
         - name: id
           in: path
@@ -1812,6 +1812,7 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/ClientDevice" }
         "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /playback:
     get:
       tags: [settings]

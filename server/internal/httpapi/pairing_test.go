@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -505,4 +506,121 @@ func jsonField(t *testing.T, raw []byte, key string) string {
 		t.Fatalf("missing %s in %s", key, raw)
 	}
 	return s
+}
+
+// With sign-in off, the middleware must not refuse or reshape any request,
+// whatever token the request carries.
+func TestSignInOffPassesEveryRoute(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	st := testStore(t)
+	s := &Server{Store: st, Clock: func() time.Time { return now }}
+	s.Handler()
+	_, watch, err := st.InsertClient(ctx, "Den", "tv", []string{store.ScopeWatch}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gone, revoked, err := st.InsertClient(ctx, "Old", "phone", []string{store.ScopeAdmin}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RevokeClient(ctx, gone.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	reached := false
+	h := s.withDeviceAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	var targets []string
+	for _, route := range s.routes {
+		method, path, _ := strings.Cut(route, " ")
+		for strings.Contains(path, "{") {
+			i := strings.Index(path, "{")
+			j := strings.Index(path[i:], "}")
+			path = path[:i] + "1" + path[i+j+1:]
+		}
+		targets = append(targets, method+" /api/v1"+path, method+" /api"+path)
+	}
+	targets = append(targets, "GET /media/live/1/index.m3u8", "GET /media/file/1/captions.vtt", "GET /media/art/channel/1",
+		"GET /export/lineup.m3u", "GET /export/stream/1", "GET /", "GET /guide", "POST /nowhere", "OPTIONS /api/v1/settings")
+	if len(targets) < 100 {
+		t.Fatalf("only %d targets", len(targets))
+	}
+	for _, target := range targets {
+		method, path, _ := strings.Cut(target, " ")
+		for _, token := range []string{"", watch, revoked, "bw_unknown"} {
+			reached = false
+			res := call(t, h, method, path, "", token)
+			if !reached || res.Code != http.StatusNoContent {
+				t.Fatalf("%s with token %t: %d %s", target, token != "", res.Code, res.Body.String())
+			}
+		}
+	}
+}
+
+func TestParallelCodeGuessesStopAtTheCap(t *testing.T) {
+	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	h := (&Server{Store: testStore(t), Clock: func() time.Time { return now }}).Handler()
+	const n = 120
+	var wg sync.WaitGroup
+	codes := make([]int, n)
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/pair/claim", strings.NewReader(`{"code":"000000","name":"Guess","kind":"phone"}`))
+			req.Header.Set("Content-Type", "application/json")
+			req.RemoteAddr = "198.51.100." + strconv.Itoa(i%250+1) + ":4000"
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			codes[i] = rec.Code
+		}()
+	}
+	wg.Wait()
+	checked := 0
+	for _, code := range codes {
+		switch code {
+		case http.StatusNotFound:
+			checked++
+		case http.StatusTooManyRequests:
+		default:
+			t.Fatalf("unexpected %d", code)
+		}
+	}
+	if checked > pairFailCap {
+		t.Fatalf("%d guesses were checked, cap is %d", checked, pairFailCap)
+	}
+}
+
+func TestLastAdminCannotBeRevoked(t *testing.T) {
+	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	api := &Server{Store: testStore(t), Clock: func() time.Time { return now }}
+	h := api.Handler()
+	turned := call(t, h, http.MethodPut, "/api/v1/settings", `{"deviceAuth":"1"}`, "")
+	if turned.Code != http.StatusOK {
+		t.Fatalf("enable %d %s", turned.Code, turned.Body.String())
+	}
+	admin := jsonField(t, turned.Body.Bytes(), "deviceToken")
+	me := call(t, h, http.MethodGet, "/api/v1/clients/me", "", admin)
+	var seat struct {
+		Device store.ClientDevice `json:"device"`
+	}
+	if err := json.Unmarshal(me.Body.Bytes(), &seat); err != nil || seat.Device.ID == "" {
+		t.Fatalf("me %s", me.Body.String())
+	}
+	res := call(t, h, http.MethodDelete, "/api/v1/clients/"+seat.Device.ID, "", admin)
+	if res.Code != http.StatusConflict {
+		t.Fatalf("revoke last admin %d %s", res.Code, res.Body.String())
+	}
+	_, second, err := api.Store.InsertClient(context.Background(), "Phone", "phone", []string{store.ScopeAdmin}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := call(t, h, http.MethodDelete, "/api/v1/clients/"+seat.Device.ID, "", second); res.Code != http.StatusOK {
+		t.Fatalf("revoke with another admin %d %s", res.Code, res.Body.String())
+	}
+	if res := call(t, h, http.MethodGet, "/api/v1/settings", "", admin); res.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked token %d", res.Code)
+	}
 }
