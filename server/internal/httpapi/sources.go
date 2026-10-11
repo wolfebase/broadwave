@@ -548,6 +548,12 @@ func (s *Server) updateVirtual(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
+	switch body.OrderMode {
+	case "", "custom", "release", "random", "season", "show", "marathon":
+	default:
+		httpError(w, "orderMode must be custom, release, random, season, show, or marathon", http.StatusBadRequest)
+		return
+	}
 	if body.RuleTitle != "" && body.Recordings == nil {
 		recs, _ := s.Store.Recordings(r.Context())
 		for _, rec := range recs {

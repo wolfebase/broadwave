@@ -4382,10 +4382,57 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NewPass"] & {
-                    /** Format: int64 */
+                "application/json": {
+                    /**
+                     * Format: int64
+                     * @description Absent or 0 previews a new series pass. Any other id previews an edit of that pass.
+                     */
                     id?: number;
+                    /** @description Required when id is absent or 0. Blank is refused. Ignored when id is any other number. */
+                    title?: string;
+                    /** @description Ignored when id is absent or 0, because the new title is title. When id is set, a non-blank value replaces the title. Blank keeps the saved title. A team pass keeps its title. */
                     rename?: string;
+                    /**
+                     * Format: int64
+                     * @description 0 records on any channel. A once pass does not store it.
+                     */
+                    channelId?: number;
+                    /** @description Stored from 0 to 30. */
+                    padBefore?: number;
+                    /** @description Stored from 0 to 30. */
+                    padAfter?: number;
+                    /** @description Ignored. This route does not record one airing. POST /passes does, when airingStart and channelId are set. */
+                    airingStart?: string;
+                    /**
+                     * @description team is refused. A team pass keeps the match kind it already has. A once pass does not store it.
+                     * @enum {string}
+                     */
+                    matchKind?: "title" | "contains" | "category";
+                    /** @description Stored from 0 to 1000. */
+                    priority?: number;
+                    /**
+                     * @description A once pass does not store it. A word other than all or new is refused, including on a once pass.
+                     * @enum {string}
+                     */
+                    episodes?: "all" | "new";
+                    /**
+                     * @description A once pass does not store it. A word other than all, unwatched, or last is refused, including on a once pass.
+                     * @enum {string}
+                     */
+                    keepMode?: "all" | "unwatched" | "last";
+                    /** @description Stored from 0 to 99. A once pass does not store it. */
+                    keepCount?: number;
+                    /** @description Stored from 0 to 99. A once pass does not store it. */
+                    limitCount?: number;
+                    /** @description A once pass does not store it. */
+                    rerecord?: boolean;
+                    commercials?: boolean;
+                    /** @description HH:MM local. Set with timeEnd. Checked only when timeStart or timeEnd is sent, including on a once pass. A once pass does not store it. */
+                    timeStart?: string;
+                    /** @description HH:MM local. Before timeStart crosses midnight. Checked only when timeStart or timeEnd is sent, including on a once pass. A once pass does not store it. */
+                    timeEnd?: string;
+                    /** @description Weekdays an airing may start on, 0 Sunday to 6 Saturday. Empty is every day. A bad entry is refused, including on a once pass. A once pass does not store it. */
+                    days?: number[];
                 };
             };
         };
@@ -4438,9 +4485,59 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Pass"] & {
-                    /** @description New title, words, or category for a series pass */
+                "application/json": {
+                    /**
+                     * Format: int64
+                     * @description Ignored. The path id is the pass.
+                     */
+                    id?: number;
+                    /** @description Ignored. Send rename to change a series pass's title. */
+                    title?: string;
+                    /** @description New title, words, or category for a series pass. Blank is ignored. A team pass keeps its title. A once pass does not store it. */
                     rename?: string;
+                    /**
+                     * Format: int64
+                     * @description 0 records on any channel. A once pass does not store it.
+                     */
+                    channelId?: number;
+                    /** @description Ignored. */
+                    kind?: string;
+                    /** @description Stored from 0 to 30. */
+                    padBefore?: number;
+                    /** @description Stored from 0 to 30. */
+                    padAfter?: number;
+                    /** @description Stored from 0 to 1000. */
+                    priority?: number;
+                    /**
+                     * @description A once pass does not store it. A word other than all or new is refused, including on a once pass.
+                     * @enum {string}
+                     */
+                    episodes?: "all" | "new";
+                    /**
+                     * @description A once pass does not store it. A word other than all, unwatched, or last is refused, including on a once pass.
+                     * @enum {string}
+                     */
+                    keepMode?: "all" | "unwatched" | "last";
+                    /** @description Stored from 0 to 99. A once pass does not store it. */
+                    keepCount?: number;
+                    /** @description Stored from 0 to 99. A once pass does not store it. */
+                    limitCount?: number;
+                    /** @description A once pass does not store it. */
+                    rerecord?: boolean;
+                    commercials?: boolean;
+                    /** @description HH:MM local. Checked only when timeStart or timeEnd is sent, including on a once pass. A once pass does not store it. */
+                    timeStart?: string;
+                    /** @description HH:MM local. Checked only when timeStart or timeEnd is sent, including on a once pass. A once pass does not store it. */
+                    timeEnd?: string;
+                    /**
+                     * @description team is refused. A team pass keeps the match kind it already has. A once pass does not store it.
+                     * @enum {string}
+                     */
+                    matchKind?: "title" | "contains" | "category";
+                    /** @description Weekdays an airing may start on, 0 Sunday to 6 Saturday. Empty is every day. A bad entry is refused, including on a once pass. A once pass does not store it. */
+                    days?: number[];
+                    /** @description Ignored. */
+                    airingStart?: string;
                 };
             };
         };
@@ -4612,7 +4709,10 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @enum {string} */
+                    /**
+                     * @description Omitted or empty is custom. Any other word is refused.
+                     * @enum {string}
+                     */
                     orderMode?: "custom" | "release" | "random" | "season" | "show" | "marathon";
                     ruleTitle?: string;
                     recordings?: number[];
@@ -4666,9 +4766,10 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
                 "application/json": {
+                    /** @description Position in the channel's recording list. Omitted is 0. Below 0 is refused. At or past the end of the list is refused. */
                     index?: number;
                     pictureMode?: components["schemas"]["PictureMode"];
                 };
