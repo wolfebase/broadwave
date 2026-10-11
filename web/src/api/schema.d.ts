@@ -2445,7 +2445,7 @@ export interface components {
             reserveBytes: number;
             /**
              * Format: int64
-             * @description Bytes short of the reserve. 0 when make-room would not run.
+             * @description Bytes still short of the reserve after recordings past their days are counted. 0 when make-room would not run.
              */
             shortBytes: number;
             /** @description False when the watched recordings are not enough to get back to the reserve. None of them would be deleted to make room. */

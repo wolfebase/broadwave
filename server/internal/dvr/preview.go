@@ -135,6 +135,9 @@ func buildPreview(in previewInput) StoragePlan {
 	if in.Days > 0 || (in.MakeRoom && disk.BelowReserve(in.Free, in.Reserve)) {
 		pool = cleanable(in.Root, in.Recs, in.Now, fav)
 	}
+	// The hourly clean-up deletes these before it reads free space again.
+	// Count them here, or make-room lists recordings that pass would leave.
+	var daysFreed uint64
 	if in.Days > 0 {
 		cutoff := in.Now.Add(-time.Duration(in.Days) * 24 * time.Hour)
 		var aged []store.Recording
@@ -158,11 +161,16 @@ func buildPreview(in previewInput) StoragePlan {
 		for _, rec := range aged {
 			out.Remove = append(out.Remove, item(rec, "watchedDays", "now", watchedReason(in.Days)))
 			gone[rec.ID] = true
+			daysFreed += fileSize(rec.Path)
 		}
 	}
+	freeAfterDays := freedSpace(in.Free, daysFreed)
 
-	if in.MakeRoom && disk.BelowReserve(in.Free, in.Reserve) {
-		short := in.Reserve - in.Free
+	if in.MakeRoom && disk.BelowReserve(in.Free, in.Reserve) && !disk.BelowReserve(freeAfterDays, in.Reserve) {
+		out.RoomNote = "Deleting recordings watched past their days gets back to the reserve. Nothing else would be deleted."
+	}
+	if in.MakeRoom && disk.BelowReserve(freeAfterDays, in.Reserve) {
+		short := in.Reserve - freeAfterDays
 		out.ShortBytes = short
 		var victims []store.Recording
 		var could uint64
@@ -210,7 +218,7 @@ func buildPreview(in previewInput) StoragePlan {
 	}
 
 	for _, rec := range in.Recs {
-		if row, ok := holdRow(in, rec, fav, gone); ok {
+		if row, ok := holdRow(in, rec, fav, gone, freeAfterDays); ok {
 			out.Held = append(out.Held, row)
 		}
 		if row, ok := againRow(rec); ok {
@@ -268,7 +276,16 @@ func keepReason(pass store.Pass, mode string) string {
 	return fmt.Sprintf("%s keeps the newest %d episodes.", pass.Title, n)
 }
 
-func holdRow(in previewInput, rec store.Recording, fav map[int64]bool, gone map[int64]bool) (StoragePlanItem, bool) {
+// freedSpace is free space after the days rule unlinks what it would.
+// A sum that does not fit in uint64 is treated as no shortfall.
+func freedSpace(free, extra uint64) uint64 {
+	if extra > ^uint64(0)-free {
+		return ^uint64(0)
+	}
+	return free + extra
+}
+
+func holdRow(in previewInput, rec store.Recording, fav map[int64]bool, gone map[int64]bool, free uint64) (StoragePlanItem, bool) {
 	if gone[rec.ID] {
 		return StoragePlanItem{}, false
 	}
@@ -282,7 +299,7 @@ func holdRow(in previewInput, rec store.Recording, fav map[int64]bool, gone map[
 	if inside && !fileExists(rec.Path) {
 		return item(rec, "missing", "", "The file is gone."), true
 	}
-	if !ruleWouldTake(in, rec, fav) {
+	if !ruleWouldTake(in, rec, fav, free) {
 		return StoragePlanItem{}, false
 	}
 	switch {
@@ -301,7 +318,7 @@ func holdRow(in previewInput, rec store.Recording, fav map[int64]bool, gone map[
 
 // ruleWouldTake reports whether some rule would remove this recording if
 // nothing protected it. Protections are applied by the caller.
-func ruleWouldTake(in previewInput, rec store.Recording, fav map[int64]bool) bool {
+func ruleWouldTake(in previewInput, rec store.Recording, fav map[int64]bool, free uint64) bool {
 	if rec.Status != "complete" {
 		return false
 	}
@@ -314,7 +331,7 @@ func ruleWouldTake(in previewInput, rec store.Recording, fav map[int64]bool) boo
 				old = true
 			}
 		}
-		room := in.MakeRoom && disk.BelowReserve(in.Free, in.Reserve)
+		room := in.MakeRoom && disk.BelowReserve(free, in.Reserve)
 		if old || room {
 			return true
 		}

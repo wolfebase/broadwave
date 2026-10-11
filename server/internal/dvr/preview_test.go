@@ -342,6 +342,83 @@ func TestPreviewLeavesARecentPlay(t *testing.T) {
 	}
 }
 
+// The hourly clean-up deletes past-their-days recordings before it reads
+// free space again. The preview has to count those bytes first, or it
+// lists extra make-room deletions and calls a recent play the reason a
+// recording stayed.
+func TestPreviewCountsDaysBeforeMakeRoom(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "recordings")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name string, n int) string {
+		t.Helper()
+		path := filepath.Join(root, name+".ts")
+		if err := os.WriteFile(path, make([]byte, n), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	now := time.Date(2026, 10, 11, 18, 0, 0, 0, time.UTC)
+	at := func(ago time.Duration) *time.Time {
+		t := now.Add(-ago)
+		return &t
+	}
+	watched := func(id int64, title, path string, ago time.Duration) store.Recording {
+		when := at(ago)
+		return store.Recording{
+			ID: id, Title: title, Status: "complete", Path: path, Watched: 1,
+			WatchedAt: when, ProgressAt: when, Position: 1790, Duration: 1800,
+			StartedAt: *when,
+		}
+	}
+	recs := []store.Recording{
+		watched(1, "aged", write("aged", 100), 10*24*time.Hour),
+		watched(2, "older", write("older", 100), 4*24*time.Hour),
+		watched(3, "newer", write("newer", 100), 3*24*time.Hour),
+		watched(4, "newest", write("newest", 100), 2*24*time.Hour),
+		watched(5, "hour", write("hour", 100), time.Hour),
+	}
+	const reserve = 1000
+	partial := buildPreview(previewInput{
+		Now: now, Days: 7, MakeRoom: true, Reserve: reserve, Free: reserve - 250,
+		Root: root, Recs: recs,
+	})
+	if got := previewIDs(partial.Remove, "watchedDays"); !slices.Equal(got, []int64{1}) {
+		t.Fatalf("days %v", got)
+	}
+	// 250 short, and the days rule frees 100, so 150 remains. Two files cover it.
+	if partial.ShortBytes != 150 || !partial.Covers {
+		t.Fatalf("short %d covers %v note %q", partial.ShortBytes, partial.Covers, partial.RoomNote)
+	}
+	if got := previewIDs(partial.Remove, "makeRoom"); !slices.Equal(got, []int64{2, 3}) {
+		t.Fatalf("room %v (all %+v)", got, partial.Remove)
+	}
+	if slices.Contains(previewIDs(partial.Remove, ""), int64(4)) || slices.Contains(previewIDs(partial.Remove, ""), int64(5)) {
+		t.Fatalf("kept a recording that should stay: %+v", partial.Remove)
+	}
+	if !slices.Contains(previewIDs(partial.Held, "recent"), int64(5)) {
+		t.Fatalf("recent %+v", partial.Held)
+	}
+
+	// The days file alone covers a 100-byte shortfall. Making room does not run,
+	// and the recording played an hour ago is not what saved it.
+	covered := buildPreview(previewInput{
+		Now: now, Days: 7, MakeRoom: true, Reserve: 200, Free: 100, Root: root,
+		Recs: []store.Recording{recs[0], recs[4]},
+	})
+	if got := previewIDs(covered.Remove, ""); !slices.Equal(got, []int64{1}) {
+		t.Fatalf("covered remove %v", got)
+	}
+	if covered.ShortBytes != 0 || !covered.Covers || covered.RoomNote == "" {
+		t.Fatalf("covered short %d covers %v note %q", covered.ShortBytes, covered.Covers, covered.RoomNote)
+	}
+	if len(covered.Held) != 0 {
+		t.Fatalf("held %+v", covered.Held)
+	}
+}
+
 func TestPreviewWorksBeforeTheRecordingsFolderExists(t *testing.T) {
 	cfg := filepath.Join(t.TempDir(), "cfg")
 	st, err := store.Open(cfg)
