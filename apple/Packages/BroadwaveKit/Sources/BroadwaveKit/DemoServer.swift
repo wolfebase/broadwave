@@ -815,12 +815,34 @@ private struct DemoFilm {
                 let beforeTo = to.map { cursor < $0 } ?? true
                 if afterFrom, beforeTo {
                     let slot = Int64(cursor.timeIntervalSince1970 / step)
+                    let title: String
+                    let category: String?
+                    #if DEBUG
+                        // -BroadwaveSportsChrome YES lists two live games so Sports can show Watch together.
+                        // Only the process that owns the listener reads this. A second screen joins that server.
+                        let sportsNow = UserDefaults.standard.bool(forKey: "BroadwaveSportsChrome") && cursor <= now && end > now
+                        switch film.id {
+                        case 1 where sportsNow:
+                            title = "Harbor at Valley"
+                            category = "Sports"
+                        case 2 where sportsNow:
+                            title = "Larks vs. Crows"
+                            category = "Sports"
+                        default:
+                            title = film.title
+                            category = nil
+                        }
+                    #else
+                        title = film.title
+                        category = nil
+                    #endif
                     out.append(Airing(
                         id: film.id * 1_000_000 + slot,
                         channelId: film.id,
-                        title: film.title,
+                        title: title,
                         subtitle: "Open movie",
                         description: blurb,
+                        category: category,
                         imageUrl: "demo",
                         imageWidth: 1280,
                         imageHeight: 720,

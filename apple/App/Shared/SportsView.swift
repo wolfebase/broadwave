@@ -19,6 +19,15 @@ struct SportsView: View {
         let days = Dictionary(grouping: later) { Calendar.current.startOfDay(for: $0.1.start) }
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
+                #if os(tvOS)
+                    if live.count >= 2 {
+                        Button("Watch together", systemImage: "rectangle.split.2x1") {
+                            nowPlaying.watchTogether(live.prefix(4).map(\.0))
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .padding(.horizontal)
+                    }
+                #endif
                 if games.isEmpty {
                     ContentUnavailableView("No games in the guide", systemImage: "sportscourt", description: Text("Sports on your channels show up here as soon as they're listed."))
                         .padding(.top, 60)
@@ -53,13 +62,15 @@ struct SportsView: View {
                 }
                 scores = map
             }
+        #if os(iOS)
             .toolbar {
                 if live.count >= 2 {
-                    Button("Watch together") {
+                    Button("Watch together", systemImage: "rectangle.split.2x1") {
                         nowPlaying.watchTogether(live.prefix(4).map(\.0))
                     }
                 }
             }
+        #endif
     }
 
     #if os(tvOS)
