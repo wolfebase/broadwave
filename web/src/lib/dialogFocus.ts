@@ -1,4 +1,5 @@
 import { isTextField } from "./textField.ts";
+import { tvBackKind } from "./tvKey.ts";
 
 export { isTextField };
 
@@ -8,9 +9,10 @@ export function pageCovered(): boolean {
   return typeof document !== "undefined" && document.querySelector("main.content[inert]") != null;
 }
 
-export function dismissesLayer(key: string, target: EventTarget | null): boolean {
-  if (key === "Escape") return true;
-  if (key === "Backspace") return !isTextField(target);
+export function dismissesLayer(key: string, target: EventTarget | null, code = 0): boolean {
+  const kind = tvBackKind({ key, keyCode: code });
+  if (kind === "escape") return true;
+  if (kind === "backspace") return !isTextField(target);
   return false;
 }
 

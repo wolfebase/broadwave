@@ -32,7 +32,8 @@ export function guideRowOnFocus(index: number, count: number, current: number): 
 export function guideListAction(key: string, repeat: boolean): "close" | "up" | "down" | "tune" | "ignore" {
   const k = key.toLowerCase();
   if (k === "g" && repeat) return "ignore";
-  if (k === "escape" || k === "backspace" || k === "g") return "close";
+  // GoBack, XF86Back, and Back are the remote key on LG, Samsung, and other TV browsers.
+  if (k === "escape" || k === "backspace" || k === "goback" || k === "browserback" || k === "xf86back" || k === "back" || k === "g") return "close";
   if (k === "arrowup") return "up";
   if (k === "arrowdown") return "down";
   if (k === "enter") return "tune";

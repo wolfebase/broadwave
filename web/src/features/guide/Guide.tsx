@@ -28,6 +28,7 @@ import {
   type Category,
 } from "../../lib/guide";
 import { scrollBehavior } from "../../lib/motion";
+import { canonicalKey } from "../../lib/tvKey";
 import type { Airing, Channel } from "../../types";
 import { SearchIcon, StarIcon } from "../../ui/icons";
 import { Atsc3Tag, ChannelBadge, Chip, Empty, Progress, RecDot } from "../../ui/primitives";
@@ -254,8 +255,9 @@ export function Guide() {
   function onKey(e: KeyboardEvent) {
     const target = e.target;
     if (!(target instanceof HTMLElement) || !target.closest(".guide-canvas")) return;
+    const key = canonicalKey(e);
     // A channel name reached with Tab is its own button. The grid's cursor may sit on another row.
-    if ((e.key === "Enter" || e.key === " ") && target.closest(".guide-channel")) return;
+    if ((key === "Enter" || key === " ") && target.closest(".guide-channel")) return;
     const row = rows[focus.row];
     if (!row) {
       move(focus.row, focus.at);
@@ -263,7 +265,7 @@ export function Guide() {
     }
     const cur = airingAt(index, row.id, focus.at);
     const handled = () => e.preventDefault();
-    switch (e.key) {
+    switch (key) {
       case "ArrowDown":
         handled();
         move(focus.row + 1, focus.at);
@@ -589,7 +591,7 @@ export function Guide() {
           className="guide-now-float pill-btn"
           onClick={jumpToNow}
           onKeyDown={(event) => {
-            if (!tv || event.key !== "ArrowDown") return;
+            if (!tv || canonicalKey(event) !== "ArrowDown") return;
             event.preventDefault();
             focusRing(document.querySelector<HTMLElement>(".guide-canvas"));
           }}
@@ -638,7 +640,7 @@ function GuideControls({
   // Down from Now returns to the grid. The canvas is one big target, so spatial
   // nav would rather stop on the chips or the floating Now.
   const enterGrid = (event: KeyboardEvent) => {
-    if (!tvLayout || event.key !== "ArrowDown") return;
+    if (!tvLayout || canonicalKey(event) !== "ArrowDown") return;
     event.preventDefault();
     focusRing(document.querySelector<HTMLElement>(".guide-canvas"));
   };

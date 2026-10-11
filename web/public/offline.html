@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#070A10" />
+    <meta name="color-scheme" content="dark" />
+    <title>Broadwave</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #070a10;
+        color: #f5f7fa;
+        font-family: system-ui, sans-serif;
+      }
+      body {
+        display: grid;
+        place-items: center;
+        padding: 32px 20px;
+      }
+      main {
+        width: min(640px, 100%);
+      }
+      .tally {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #ff3b30;
+        box-shadow: 0 0 12px rgba(255, 59, 48, 0.8);
+      }
+      h1 {
+        margin: 18px 0 8px;
+        font-size: clamp(28px, 4vw, 40px);
+        letter-spacing: -0.03em;
+      }
+      p {
+        margin: 0;
+        max-width: 38em;
+        color: #aeb7c5;
+        font-size: clamp(18px, 2vw, 22px);
+        line-height: 1.4;
+      }
+      button {
+        margin-top: 28px;
+        min-height: 52px;
+        padding: 0 22px;
+        border: 0;
+        border-radius: 999px;
+        background: #3d7bff;
+        color: #fff;
+        font: inherit;
+        font-size: 18px;
+        font-weight: 650;
+        cursor: pointer;
+      }
+      button:focus-visible {
+        outline: 4px solid #3d7bff;
+        outline-offset: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="tally" aria-hidden="true"></div>
+      <h1>Can't reach the server</h1>
+      <p>This device has Broadwave. The server did not answer. Check that it is running, then try again.</p>
+      <button type="button" id="retry">Try again</button>
+    </main>
+    <script>
+      document.getElementById("retry").addEventListener("click", function () {
+        location.replace("/");
+      });
+    </script>
+  </body>
+</html>

@@ -28,13 +28,16 @@
 # CSS raised 2026-10-11: guide bars, field edges, the sports card, the switch,
 # Live on the hero, and the player's dark island on a light page load with the
 # shell. Measured entry gzip 11660, plus 200 bytes.
+# JS raised 2026-10-11: the shell listens for an install prompt and a TV remote
+# walks each row in order. The offer itself loads only when the browser asks.
+# Measured entry gzip 96517, plus 300 bytes of slack.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=96438
+JS_GZIP_MAX=96817
 CSS_GZIP_MAX=11860
 
 if [[ ! -f "$INDEX" ]]; then

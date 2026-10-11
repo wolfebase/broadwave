@@ -7,6 +7,7 @@ import { actionName } from "../../lib/actionName";
 import { isTextField } from "../../lib/dialogFocus";
 import { airingAt, categoryOf, minutesLeft, progress } from "../../lib/guide";
 import { channelNumberContinues, typedChannel } from "../../lib/remote";
+import { canonicalKey } from "../../lib/tvKey";
 import type { SyncStatus } from "../../lib/sync";
 import { events, saveLiveDelay, type LiveDelay } from "../../lib/events";
 import { readZoom, saveZoom, subscribeZoom, type PictureMode } from "../../picture";
@@ -399,7 +400,7 @@ export function LivePlayer({
   }
 
   function onKey(event: ReactKey) {
-    const k = event.key;
+    const k = canonicalKey(event);
     const target = event.target;
     const arrows = k === "ArrowLeft" || k === "ArrowRight" || k === "ArrowUp" || k === "ArrowDown";
     if (isTextField(target)) {

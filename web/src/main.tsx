@@ -8,9 +8,18 @@ import "./theme/light.css";
 import { App } from "./app/App";
 import { chooseGlass } from "./lib/glass";
 import { installLook } from "./theme/look";
+import { installBlocked } from "./lib/install";
 
 installLook();
 chooseGlass();
+
+// Registered before the first paint. The browser fires this once, and a listener
+// added after React commits can miss it.
+window.addEventListener("beforeinstallprompt", (event) => {
+  if (installBlocked()) return;
+  event.preventDefault();
+  void import("./app/installOffer").then((mod) => mod.present(event));
+});
 
 const root = document.getElementById("root");
 if (!root) {

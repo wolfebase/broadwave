@@ -968,6 +968,7 @@ func TestShellStaysFresh(t *testing.T) {
 		"assets/app.js":        &fstest.MapFile{Data: []byte("console.log(1)\n")},
 		"manifest.webmanifest": &fstest.MapFile{Data: []byte(`{"name":"Broadwave"}`)},
 		"sw.js":                &fstest.MapFile{Data: []byte("self.addEventListener('fetch',()=>{})\n")},
+		"offline.html":         &fstest.MapFile{Data: []byte("<!doctype html><h1>Can't reach the server</h1>")},
 	}
 	h := (&Server{Store: testStore(t), Assets: assets}).Handler()
 
@@ -1020,6 +1021,28 @@ func TestShellStaysFresh(t *testing.T) {
 	}
 	if ct := worker.Header().Get("Content-Type"); !strings.Contains(ct, "javascript") {
 		t.Fatalf("worker type %q", ct)
+	}
+
+	// The offline page is its own document. A missing extension would be the app shell.
+	offline := get(t, h, "/offline.html")
+	if got := offline.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("offline cache %q", got)
+	}
+	if ct := offline.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
+		t.Fatalf("offline type %q", ct)
+	}
+	if !bytes.Contains(offline.Body.Bytes(), []byte("Can't reach the server")) {
+		t.Fatalf("offline body %s", offline.Body.Bytes())
+	}
+
+	miss, _ := http.NewRequest(http.MethodGet, "/assets/missing-bundle.js", nil)
+	missed := httptest.NewRecorder()
+	h.ServeHTTP(missed, miss)
+	if missed.Code != http.StatusNotFound {
+		t.Fatalf("missing asset %d", missed.Code)
+	}
+	if got := missed.Header().Get("Cache-Control"); strings.Contains(got, "immutable") || strings.Contains(got, "max-age") {
+		t.Fatalf("missing asset cache %q", got)
 	}
 }
 

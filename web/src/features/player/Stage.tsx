@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { focusRing } from "../../app/remote";
 import { dismissesLayer } from "../../lib/dialogFocus";
+import { canonicalKey } from "../../lib/tvKey";
 import { optionArrow, optionRows } from "../../lib/optionArrow";
 import { BackIcon, CloseIcon, ExpandIcon, PauseIcon, PipIcon, PlayIcon, VolumeIcon } from "../../ui/icons";
 import { playerControls, playerTabTarget } from "./focusCycle";
@@ -209,6 +210,7 @@ export function Stage({
           : (event) => {
               // Tab cycles the bar and any open panel. Past the last control it
               // would leave for the navigation hidden under the picture.
+              const key = canonicalKey(event);
               if (event.key === "Tab" && !event.altKey && !event.metaKey && !event.ctrlKey) {
                 const list = playerControls(root.current);
                 const index = list.findIndex((el) => el === document.activeElement);
@@ -219,7 +221,7 @@ export function Stage({
                 }
               }
               // Arrows inside the open options change the setting. They do not seek.
-              if (open && (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown")) {
+              if (open && (key === "ArrowLeft" || key === "ArrowRight" || key === "ArrowUp" || key === "ArrowDown")) {
                 const region = root.current?.querySelector("#player-options");
                 const current = event.target;
                 const slider = current instanceof HTMLInputElement && current.type === "range";
@@ -230,13 +232,13 @@ export function Stage({
                   event.preventDefault();
                   event.stopPropagation();
                   const col = rows[row].indexOf(current as HTMLElement);
-                  const next = optionArrow(rows.map((items) => items.length), row, col, event.key);
+                  const next = optionArrow(rows.map((items) => items.length), row, col, key);
                   if (next) focusRing(rows[next.row]?.[next.col]);
                   return;
                 }
               }
               // Options is a layer over the picture. Close it before leaving the page.
-              if (open && dismissesLayer(event.key, event.target)) {
+              if (open && dismissesLayer(event.key, event.target, event.keyCode)) {
                 const rootEl = root.current;
                 const above = rootEl?.querySelector("[role='dialog'], .mini-guide");
                 const typing = event.key === "Backspace" && rootEl?.querySelector(".typed-number");

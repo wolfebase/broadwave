@@ -91,10 +91,8 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
   useEffect(() => {
     if (removing == null) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" && event.key !== "Backspace") return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      const target = event.target;
-      if (target instanceof HTMLElement && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (!dismissesLayer(event.key, event.target, event.keyCode)) return;
       event.preventDefault();
       restoreRemove.current = removing;
       setRemoving(null);
@@ -119,7 +117,7 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
     if (editing == null) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (!dismissesLayer(event.key, event.target) || pageCovered()) return;
+      if (!dismissesLayer(event.key, event.target, event.keyCode) || pageCovered()) return;
       event.preventDefault();
       event.stopPropagation();
       setEditing(null);

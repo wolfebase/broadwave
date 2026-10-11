@@ -2,6 +2,7 @@ import Hls from "hls.js";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { addMarker, deleteMarker, detectBreaks, playRecording, saveProgress } from "../../api";
 import { actionName } from "../../lib/actionName";
+import { canonicalKey } from "../../lib/tvKey";
 import { mediaURL } from "../../lib/deviceToken";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, subscribeZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
 import { markersForPlayback, playbackGrowing, progressSaveAction, releaseFileVideo, storedPlayhead, takeFileFatal, type ResumeGate } from "./filePlay";
@@ -360,14 +361,17 @@ export function Play({
   function onKey(event: KeyboardEvent) {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
     if (event.key === " " && event.target instanceof HTMLButtonElement) return;
+    const key = canonicalKey(event);
     const actions: Record<string, () => void> = {
       " ": togglePlay,
       k: togglePlay,
       ArrowLeft: () => back(15),
       ArrowRight: ahead,
       Escape: onBack,
+      // A TV remote's Back is often Backspace, and on some sets only a key code.
+      Backspace: onBack,
     };
-    const fn = actions[event.key];
+    const fn = actions[key];
     if (!fn) return;
     event.preventDefault();
     fn();

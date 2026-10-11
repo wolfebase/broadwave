@@ -39,4 +39,10 @@ test("Escape closes a layer, and Backspace does too unless it is editing text", 
   assert.equal(dismissesLayer("Backspace", field), false);
   assert.equal(dismissesLayer("Backspace", button), true);
   assert.equal(dismissesLayer("Enter", button), false);
+  assert.equal(dismissesLayer("XF86Back", button), true);
+  assert.equal(dismissesLayer("GoBack", field), true);
+  // LG webOS Back is 461. Samsung Tizen Back is 10009. Both leave a text field.
+  assert.equal(dismissesLayer("Unidentified", field, 461), true);
+  assert.equal(dismissesLayer("Unidentified", button, 10009), true);
+  assert.equal(dismissesLayer("Unidentified", field, 8), false);
 });
