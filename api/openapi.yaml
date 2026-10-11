@@ -2670,6 +2670,9 @@ components:
         update:
           $ref: "#/components/schemas/ServerUpdate"
           description: "Present when a newer release is available. Omitted when this build is current or the check is off."
+        castAppId:
+          type: string
+          description: "Google Cast application id from BROADWAVE_CAST_APP_ID. Omitted when unset or not 4 to 32 letters and digits. The web player shows Cast only when this is set."
     ServerUpdate:
       type: object
       required: [version, notesUrl, message]

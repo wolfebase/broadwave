@@ -45,8 +45,11 @@ type Server struct {
 	Version string
 	// DiscoveryKey is the base64 Ed25519 public key for address follow. Empty omits it.
 	DiscoveryKey string
-	Bus          *realtime.Bus
-	Sports       sports.Provider
+	// CastAppID is the Google Cast application id from BROADWAVE_CAST_APP_ID.
+	// Empty, or anything that is not 4 to 32 letters and digits, is omitted.
+	CastAppID string
+	Bus       *realtime.Bus
+	Sports    sports.Provider
 	// Clock is the server's idea of now. Tests set it; production leaves it nil.
 	Clock    func() time.Time
 	signalOn bool
@@ -228,6 +231,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /media/file/", s.fileMedia)
 	mux.HandleFunc("GET /media/poster/{id}", s.poster)
 	mux.HandleFunc("GET /media/art/{kind}/{id}", s.art)
+	// /cast is the receiver page. /cast/receiver.js is a built asset and falls through to ui.
+	mux.HandleFunc("GET /cast", s.castPage)
 	mux.HandleFunc("GET /", s.ui)
 	var handler http.Handler
 	if s.Dev {

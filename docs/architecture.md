@@ -83,13 +83,13 @@ SQLite (WAL) through `modernc.org/sqlite`. Tables include devices, channels, air
 
 ### HTTP (`internal/httpapi`)
 
-JSON under `/api/v1`. The same routes are also mounted under `/api`. HLS is under `/media`, and the web app is at `/`. The optional HDHomeRun emulator on `:8478` exposes channels to other apps. The contract lives in `api/openapi.yaml`.
+JSON under `/api/v1`. The same routes are also mounted under `/api`. HLS is under `/media`, and the web app is at `/`. `GET /cast` is the Cast receiver page: the browser's player is the sender, and the television plays the channel's HLS and joins that channel's sync room on the same WebSocket. The design is `docs/design/cast.md`. The optional HDHomeRun emulator on `:8478` exposes channels to other apps. The contract lives in `api/openapi.yaml`.
 
-Device sign-in is off until Settings turns it on (`deviceAuth`). While it is off, the home network stays open. While it is on, `/api` and `/media` take a per-device token with scope watch, record, or admin. Pairing, health, server identity, the web app's files, `/export`, and the emulator stay open. Tokens are stored as hashes. The design is `docs/design/pairing.md`. IPTV apps get a per-device M3U, XMLTV, and an Xtream Codes player API on that same token; the shared playlist stays open until `exportAuth` is on. That design is `docs/design/iptv.md`. It is not built yet.
+Device sign-in is off until Settings turns it on (`deviceAuth`). While it is off, the home network stays open. While it is on, `/api` and `/media` take a per-device token with scope watch, record, or admin. Pairing, health, server identity, the web app's files, `/cast`, `/export`, and the emulator stay open. Tokens are stored as hashes. The design is `docs/design/pairing.md`. IPTV apps get a per-device M3U, XMLTV, and an Xtream Codes player API on that same token; the shared playlist stays open until `exportAuth` is on. That design is `docs/design/iptv.md`. It is not built yet.
 
 ## Web app (`web/`)
 
-React and Vite, built into `server/cmd/broadwave/assets/web` and embedded with `go:embed`. It plays HLS through hls.js and doubles as the setup and admin console. Side by side is `/multiview`: each tile has its own player, sound follows the focused tile, and each tile joins `multiview:<id>:<channel>`.
+React and Vite, built into `server/cmd/broadwave/assets/web` and embedded with `go:embed`. It plays HLS through hls.js and doubles as the setup and admin console. Cast, when the server has an application id, is a button on the player; the receiver script is a second Vite entry at `/cast/receiver.js`. Side by side is `/multiview`: each tile has its own player, sound follows the focused tile, and each tile joins `multiview:<id>:<channel>`.
 
 ## Apple apps (`apple/`)
 

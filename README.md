@@ -171,6 +171,7 @@ One image, `ghcr.io/wolfebase/broadwave`, for x86-64 and ARM64. It carries its o
 | `BROADWAVE_ENCODER` | `gpu` or `software` to skip the automatic choice (the GPU when it has a low-power encoder, else the processor when it is fast enough). |
 | `BROADWAVE_HOSTS` | Public names the server answers to, comma-separated, such as `tv.example.com` (a leading dot covers subdomains). Addresses, one-word names, `.local`, `.lan`, and other home names work without it. A browser that sends `Sec-Fetch-Site` is allowed on port 443, or when the name has no port. The check does not look at HTTPS. Any other public name needs this setting, so a web page can't reach the server by pointing its own name at your server's address. |
 | `BROADWAVE_ALTERNATES` | `0` carries only the chosen sound track in each live encode. By default a full-size encode also carries the channel's other languages and descriptions, so players switch between them without a restart. |
+| `BROADWAVE_CAST_APP_ID` | Google Cast application id. When it is 4 to 32 letters and digits, the web player shows Cast and a television loads this server's `/cast` page. Empty hides Cast. Restart to change it. Register the application with Google; the steps are in `docs/design/cast.md`. |
 
 Graphics, for smoother transcoding:
 
