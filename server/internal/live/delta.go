@@ -183,47 +183,42 @@ func extinfSeconds(line []byte) float64 {
 	return parseDec(bytes.TrimSpace(v))
 }
 
-// parseDec reads a short decimal the way the playlist durations are written.
+// parseDec is strconv.ParseFloat for a playlist number, without making a
+// string of it. Up to 15 digits, one exact integer divided by an exact power
+// of ten rounds the way ParseFloat does. Anything else goes to ParseFloat.
 // A bad token is zero, which is what a failed parse used to return.
 func parseDec(v []byte) float64 {
-	if len(v) == 0 {
-		return 0
-	}
-	neg := false
-	if v[0] == '-' {
-		neg = true
-		v = v[1:]
-	}
-	var whole, frac uint64
-	var digits int
-	i := 0
-	saw := false
-	for i < len(v) && v[i] >= '0' && v[i] <= '9' {
-		whole = whole*10 + uint64(v[i]-'0')
-		i++
-		saw = true
-	}
-	if i < len(v) && v[i] == '.' {
-		i++
-		for i < len(v) && v[i] >= '0' && v[i] <= '9' && digits < 6 {
-			frac = frac*10 + uint64(v[i]-'0')
+	var mant uint64
+	digits, scale := 0, 0
+	dot := false
+	for _, c := range v {
+		switch {
+		case c >= '0' && c <= '9' && digits < 15:
+			mant = mant*10 + uint64(c-'0')
 			digits++
-			i++
-			saw = true
+			if dot {
+				scale++
+			}
+		case c == '.' && !dot:
+			dot = true
+		default:
+			return slowDec(v)
 		}
 	}
-	if !saw || i != len(v) {
+	if digits == 0 {
+		return slowDec(v)
+	}
+	return float64(mant) / decScale[scale]
+}
+
+var decScale = [...]float64{1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15}
+
+func slowDec(v []byte) float64 {
+	f, err := strconv.ParseFloat(string(v), 64)
+	if err != nil {
 		return 0
 	}
-	div := 1.0
-	for range digits {
-		div *= 10
-	}
-	n := float64(whole) + float64(frac)/div
-	if neg {
-		return -n
-	}
-	return n
+	return f
 }
 
 func blockHasURI(body []byte, lines []lineRef, block deltaBlock) bool {
