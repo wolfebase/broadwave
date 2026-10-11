@@ -5,11 +5,6 @@ export function visitSync(saved: boolean, detached: boolean): boolean {
   return saved && !detached;
 }
 
-/** The checkbox is what gets stored. A detach is not written. */
-export function storedSync(saved: boolean, detached: boolean): boolean {
-  return detached ? saved : saved;
-}
-
 export function shownPicture(pick: PictureChoice | null, saved: string | undefined): PictureChoice {
   if (pick) return pick;
   return saved === "smooth" || saved === "film" || saved === "broadcast" ? saved : "broadcast";
