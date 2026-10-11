@@ -228,6 +228,8 @@ func (s *Server) clientMe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) revokeClient(w http.ResponseWriter, r *http.Request) {
+	s.revokeMu.Lock()
+	defer s.revokeMu.Unlock()
 	last, err := s.lastAdmin(r, r.PathValue("id"))
 	if err != nil {
 		writeError(w, err)

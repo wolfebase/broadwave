@@ -624,3 +624,52 @@ func TestLastAdminCannotBeRevoked(t *testing.T) {
 		t.Fatalf("revoked token %d", res.Code)
 	}
 }
+
+func TestTwoAdminsRevokingEachOtherKeepOne(t *testing.T) {
+	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	api := &Server{Store: testStore(t), Clock: func() time.Time { return now }}
+	h := api.Handler()
+	turned := call(t, h, http.MethodPut, "/api/v1/settings", `{"deviceAuth":"1"}`, "")
+	if turned.Code != http.StatusOK {
+		t.Fatalf("enable %d %s", turned.Code, turned.Body.String())
+	}
+	for round := range 20 {
+		var devs [2]store.ClientDevice
+		var tokens [2]string
+		for i := range devs {
+			dev, token, err := api.Store.InsertClient(context.Background(), "Admin "+strconv.Itoa(i), "phone", []string{store.ScopeAdmin}, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			devs[i], tokens[i] = dev, token
+		}
+		list, err := api.Store.Clients(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, dev := range list {
+			if dev.ID != devs[0].ID && dev.ID != devs[1].ID {
+				if err := api.Store.RevokeClient(context.Background(), dev.ID, now); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		var wg sync.WaitGroup
+		var codes [2]int
+		for i := range devs {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				codes[i] = call(t, h, http.MethodDelete, "/api/v1/clients/"+devs[1-i].ID, "", tokens[i]).Code
+			}()
+		}
+		wg.Wait()
+		has, err := api.Store.HasAdmin(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !has {
+			t.Fatalf("round %d: no admin left, codes %v", round, codes)
+		}
+	}
+}
