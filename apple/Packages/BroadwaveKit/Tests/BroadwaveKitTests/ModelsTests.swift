@@ -224,17 +224,44 @@ private func fixture(_ name: String) throws -> Data {
 /// room by itself; a short pause keeps its place.
 @Test @MainActor func aViewerBackFromATimeShiftRejoins() {
     // Paused, went 840 s back, came back to 1.4 s behind the room, playing at 1x.
-    #expect(SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -840_000, driftMS: -1427, playing: true, rate: 1, roomRate: 1))
-    #expect(SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -6000, driftMS: 2500, playing: true, rate: 1, roomRate: 1))
+    #expect(SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -840_000, driftMS: -1427, playingAtOneX: true, roomRate: 1))
+    #expect(SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -6000, driftMS: 2500, playingAtOneX: true, roomRate: 1))
     // A 2 s pause never went far: it keeps its place.
-    #expect(!SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -2000, driftMS: -2000, playing: true, rate: 1, roomRate: 1))
+    #expect(!SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -2000, driftMS: -2000, playingAtOneX: true, roomRate: 1))
     // Still far behind, paused, scrubbing, a paused room, or a screen the engine gave up on.
-    #expect(!SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -840_000, driftMS: -60000, playing: true, rate: 1, roomRate: 1))
-    #expect(!SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -840_000, driftMS: -1427, playing: false, rate: 0, roomRate: 1))
-    #expect(!SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -840_000, driftMS: -1427, playing: true, rate: 2, roomRate: 1))
-    #expect(!SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -840_000, driftMS: -1427, playing: true, rate: 1, roomRate: 0))
-    #expect(!SyncEngine.backNearRoom(cause: .gaveUp, farthestBehindMS: -840_000, driftMS: -1427, playing: true, rate: 1, roomRate: 1))
-    #expect(!SyncEngine.backNearRoom(cause: nil, farthestBehindMS: -840_000, driftMS: -1427, playing: true, rate: 1, roomRate: 1))
+    #expect(!SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -840_000, driftMS: -60000, playingAtOneX: true, roomRate: 1))
+    #expect(!SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -840_000, driftMS: -1427, playingAtOneX: false, roomRate: 1))
+    #expect(!SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -840_000, driftMS: -1427, playingAtOneX: false, roomRate: 1))
+    #expect(!SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -840_000, driftMS: -1427, playingAtOneX: true, roomRate: 0))
+    #expect(!SyncEngine.backNearRoom(cause: .gaveUp, farthestBehindMS: -840_000, driftMS: -1427, playingAtOneX: true, roomRate: 1))
+    #expect(!SyncEngine.backNearRoom(cause: nil, farthestBehindMS: -840_000, driftMS: -1427, playingAtOneX: true, roomRate: 1))
+}
+
+/// J0.114: a screen far past a young channel room asks the room to come to it
+/// and keeps playing; once the wait is over it pauses for the gap as before.
+@Test @MainActor func farAheadOfAYoungRoomAsksItToCome() {
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: 7800, roomRate: 1, canSeek: false, canMeasureAhead: true) == .measure(ahead: true))
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: 7800, roomRate: 1, canSeek: false, canMeasureAhead: false)
+        == .pause(resumeAfter: 7.8, seekToTarget: false))
+    // A small lead and a catch-up seek's planned lead still pause on the frame.
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: 900, roomRate: 1, canSeek: true, canMeasureAhead: true)
+        == .pause(resumeAfter: 0.9, seekToTarget: false))
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: SyncEngine.catchUpLeadMS, roomRate: 1, canSeek: true, canMeasureAhead: true)
+        == .pause(resumeAfter: SyncEngine.catchUpLeadMS / 1000, seekToTarget: false))
+    #expect(SyncEngine.decide(hasFrame: false, driftMS: 7800, roomRate: 1, canSeek: false, canMeasureAhead: true) == .wait)
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: 7800, roomRate: 0, canSeek: false, canMeasureAhead: true)
+        == .pause(resumeAfter: nil, seekToTarget: false))
+}
+
+/// A screen stranded behind a room it cannot seek toward asks the room back;
+/// a small gap and a seekable target keep today's moves.
+@Test @MainActor func strandedBehindAsksTheRoomBack() {
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: -4500, roomRate: 1, canSeek: false, canMeasureBehind: true) == .measure(ahead: false))
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: -4500, roomRate: 1, canSeek: false, canMeasureBehind: false) == .play(.none, locked: false))
+    // Test B (2026-10-11): a second TV that started 1.08 s behind sat there 51 s.
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: -1082, roomRate: 1, canSeek: false, canMeasureBehind: true) == .measure(ahead: false))
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: -300, roomRate: 1, canSeek: false, canMeasureBehind: true) == .play(.none, locked: false))
+    #expect(SyncEngine.decide(hasFrame: true, driftMS: -4500, roomRate: 1, canSeek: true, canMeasureBehind: true) == .seek)
 }
 
 @Test @MainActor func aheadWithAFramePausesForTheDrift() {

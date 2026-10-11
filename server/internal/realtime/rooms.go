@@ -57,7 +57,7 @@ func (s RoomState) Target(now float64) float64 {
 }
 
 type Command struct {
-	Action    string  `json:"action"` // play, pause, seek, live, latency, stalled
+	Action    string  `json:"action"` // play, pause, seek, live, latency, stalled, ahead, behind
 	MediaTime float64 `json:"mediaTime,omitempty"`
 	Latency   string  `json:"latency,omitempty"`
 }
@@ -68,11 +68,16 @@ type Rooms struct {
 	mu      sync.Mutex
 	rooms   map[string]*RoomState
 	stepped map[string]time.Time
-	now     func() time.Time
+	// born is when each room was made; only a young room takes "ahead".
+	born map[string]time.Time
+	// measured rooms sit where their Apple screens actually start ("ahead",
+	// "behind"), so Settle and the Apple floor leave their frame alone.
+	measured map[string]bool
+	now      func() time.Time
 }
 
 func NewRooms() *Rooms {
-	return &Rooms{rooms: map[string]*RoomState{}, stepped: map[string]time.Time{}, now: time.Now}
+	return &Rooms{rooms: map[string]*RoomState{}, stepped: map[string]time.Time{}, born: map[string]time.Time{}, measured: map[string]bool{}, now: time.Now}
 }
 
 // stallStep is how far a room steps back from live when its only screen, or a
@@ -154,6 +159,7 @@ func (r *Rooms) JoinAt(room string, channelID int64, earliest float64, latency s
 			AnchorServer: anchorServer, AnchorMedia: media, Version: 1,
 		}
 		r.rooms[room] = st
+		r.born[room] = now
 	}
 	st.Members++
 	return *st
@@ -204,6 +210,63 @@ func (r *Rooms) stepBackLocked(room string, st *RoomState, now time.Time) RoomSt
 	return *st
 }
 
+// measureLocked puts a channel room where its Apple screens actually play.
+// Rooms sat 16 s behind live so no Apple screen ever started behind its room
+// (AVPlayer can't speed up at the live edge), but AVPlayer on a low-latency
+// playlist starts about 8 s back, so every Apple channel change paused 8 s on
+// "Lining up with live…" (J0.114: 15 s per change, 22 s on a new tune).
+//
+// "ahead": a screen that started more than aheadMin past a young room brings
+// the room to its frame less measureMargin, and keeps playing. "behind": a
+// screen that can't reach a measured room (its live edge is further back)
+// takes the room back to its own frame less the margin, so no screen is ever
+// stranded behind; the others pause once for the step. Either way the room is
+// marked measured: Settle and the Apple floor no longer pull it back to the
+// latency target, and a viewer's Live delay choice clears the mark.
+func (r *Rooms) measureLocked(room string, st *RoomState, action string, media float64, now time.Time) RoomState {
+	if st.Mode != "follow" || st.Rate != 1 || media <= 0 {
+		return *st
+	}
+	nowMS := unixMS(now)
+	current := st.Target(nowMS)
+	to := min(media-float64(measureMargin/time.Millisecond), unixMS(now.Add(-latencies["lowest"])))
+	// Judge the screen's own gap; the margin only sets where the room lands.
+	switch action {
+	case "ahead":
+		if now.Sub(r.born[room]) > youngRoom || media-current < float64(aheadMin/time.Millisecond) || to <= current {
+			return *st
+		}
+	case "behind":
+		if !r.measured[room] || current-media < float64(behindMin/time.Millisecond) {
+			return *st
+		}
+	}
+	st.AnchorMedia, st.AnchorServer = to, nowMS
+	st.Version++
+	r.measured[room] = true
+	return *st
+}
+
+// youngRoom is how long after it is made a room still takes "ahead": long
+// enough for the first screens of a channel change to start, short enough that
+// screens settled on a room are never pulled forward past what they've seen.
+const youngRoom = 30 * time.Second
+
+// aheadMin is the smallest lead "ahead" acts on (the Apple engine asks past
+// 3 s); a smaller lead is left to the screen's own pause, which lands on the
+// frame. behindMin is the smallest shortfall "behind" acts on: a screen at its
+// live edge can't trim forward, so any real gap is a sound echo between TVs.
+const (
+	aheadMin  = 3000 * time.Millisecond
+	behindMin = 300 * time.Millisecond
+)
+
+// measureMargin keeps a measured room this far behind the screen that set it,
+// so a second screen that starts a little further back still reaches it and
+// trims have room to work. Two simulated Apple TVs on one channel started
+// 2.1 s apart; at 1 s the second sat 1.08 s behind the room for 51 s.
+const measureMargin = 2500 * time.Millisecond
+
 // Easing is a room that Settle slowed, and how long until it reaches its target.
 type Easing struct {
 	State RoomState
@@ -232,7 +295,7 @@ func (r *Rooms) Settle(channelID int64, earliest float64, eases func(room string
 	}
 	var changed []Easing
 	for _, st := range r.rooms {
-		if st.ChannelID != channelID || st.Mode != "follow" || st.Rate != 1 {
+		if st.ChannelID != channelID || st.Mode != "follow" || st.Rate != 1 || r.measured[st.Room] {
 			continue
 		}
 		ease := eases == nil || eases(st.Room)
@@ -290,6 +353,9 @@ func (r *Rooms) Leave(room string) {
 	st.Members--
 	if st.Members <= 0 {
 		delete(r.rooms, room)
+		delete(r.stepped, room)
+		delete(r.born, room)
+		delete(r.measured, room)
 	}
 }
 
@@ -344,11 +410,16 @@ func (r *Rooms) Apply(room string, c Command) (RoomState, error) {
 		if _, ok := latencies[c.Latency]; !ok {
 			return RoomState{}, errors.New("latency is lowest, balanced, or stable")
 		}
+		// A viewer's own Live delay choice wins over the measured frame.
+		delete(r.measured, room)
 		r.setLatencyLocked(st, c.Latency, now)
 		return *st, nil
 	}
 	if c.Action == "stalled" {
 		return r.stepBackLocked(room, st, now), nil
+	}
+	if c.Action == "ahead" || c.Action == "behind" {
+		return r.measureLocked(room, st, c.Action, c.MediaTime, now), nil
 	}
 	if st.Mode != "group" {
 		return RoomState{}, ErrFollowRoom
@@ -395,7 +466,7 @@ func (r *Rooms) Floor(room, latency string) (RoomState, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	st := r.rooms[room]
-	if st == nil || latencyMS(st.Latency) >= latencyMS(latency) {
+	if st == nil || r.measured[room] || latencyMS(st.Latency) >= latencyMS(latency) {
 		return RoomState{}, false
 	}
 	now := r.now()

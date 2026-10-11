@@ -11,7 +11,9 @@ import os
 /// Segments carry EXT-X-PROGRAM-DATE-TIME on the channel's shared timeline, so
 /// `currentDate()` is the same wall time for the same frame on every screen.
 /// Small drift is trimmed with rate, a screen that is ahead pauses for exactly
-/// its drift, and a screen that is behind seeks forward by date.
+/// its drift, and a screen that is behind seeks forward by date. A screen far
+/// ahead of a young channel room, or stranded behind a measured one, asks the
+/// room to come to it instead ("ahead", "behind").
 @MainActor
 @Observable
 public final class SyncEngine {
@@ -66,6 +68,9 @@ public final class SyncEngine {
     private var detachedBy: DetachCause?
     private var farthestBehind = 0.0
     private var backNearTicks = 0
+    /// When this screen last asked its room to move ("ahead" once per engine).
+    private var aheadSentAt: Date?
+    private var behindSentAt = Date.distantPast
     private var inactive = false
     private var seenPlaying = false
     /// The player went to rate 0 through a pause or rate call. AVPlayer also
@@ -101,6 +106,19 @@ public final class SyncEngine {
     /// for rejoinTicks ticks, rejoins by itself. On a living-room Apple TV the
     /// transport bar's way back to live left the screen detached 1.4 s off the
     /// other TV for good (J0.44). A short pause keeps its place, as before.
+    /// A screen more than measureAheadMS past a young channel room asks the
+    /// room to come to it and keeps playing. AVPlayer starts a low-latency
+    /// playlist about 8 s behind live, and a room sat at 16 s, so every
+    /// channel change paused 8 s on "Lining up with live…" (J0.114). Above
+    /// catchUpLeadMS, so a catch-up seek's planned lead still ends in a pause.
+    static let measureAheadMS = 3000.0
+    /// How long a screen plays on after "ahead" before it falls back to the
+    /// pause: a server without the command, or a room too old to move.
+    static let measureWaitSeconds = 1.5
+    /// A screen this far behind a room it cannot seek toward asks the room
+    /// back ("behind"); the server only moves a room it measured.
+    static let measureBehindMS = 400.0
+    static let measureBehindEvery = 10.0
     static let rejoinShiftMS = 5000.0
     static let rejoinWithinMS = 3000.0
     static let rejoinTicks = 8
@@ -120,6 +138,8 @@ public final class SyncEngine {
         case wait
         case pause(resumeAfter: Double?, seekToTarget: Bool)
         case seek
+        /// Ask the room to come to this frame and keep playing.
+        case measure(ahead: Bool)
         /// Play at the room's rate with this trim.
         case play(Trim, locked: Bool)
     }
@@ -136,7 +156,9 @@ public final class SyncEngine {
         forwardBuffer: Double = 2,
         trim: Trim = .none,
         quiet: Bool = true,
-        canSpeedUp: Bool = true
+        canSpeedUp: Bool = true,
+        canMeasureAhead: Bool = false,
+        canMeasureBehind: Bool = false
     ) -> SyncMove {
         guard hasFrame else { return .wait }
         if roomRate == 0 {
@@ -145,10 +167,16 @@ public final class SyncEngine {
         // Behind a target the item cannot seek to is behind its live edge less
         // hold-back. Speeding up only runs into that edge and stalls.
         if driftMS < -trimMS, !canSeek {
+            if driftMS < -measureBehindMS, canMeasureBehind {
+                return .measure(ahead: false)
+            }
             return .play(.none, locked: false)
         }
         if abs(driftMS) > seekMS {
             if driftMS > 0 {
+                if driftMS > measureAheadMS, canMeasureAhead {
+                    return .measure(ahead: true)
+                }
                 return .pause(resumeAfter: driftMS / 1000, seekToTarget: false)
             }
             // Chasing a target the buffer does not hold lands past the live edge.
@@ -228,9 +256,9 @@ public final class SyncEngine {
     /// moving room. Only the viewer's own detach, and only after a real
     /// time-shift: a short pause keeps its place until "Back in sync".
     static func backNearRoom(
-        cause: DetachCause?, farthestBehindMS: Double, driftMS: Double, playing: Bool, rate: Float, roomRate: Double
+        cause: DetachCause?, farthestBehindMS: Double, driftMS: Double, playingAtOneX: Bool, roomRate: Double
     ) -> Bool {
-        cause == .viewer && roomRate != 0 && playing && abs(rate - 1) < 0.01
+        cause == .viewer && roomRate != 0 && playingAtOneX
             && farthestBehindMS <= -rejoinShiftMS && abs(driftMS) <= rejoinWithinMS
     }
 
@@ -386,7 +414,7 @@ public final class SyncEngine {
             farthestBehind = min(farthestBehind, d)
             if Self.backNearRoom(
                 cause: detachedBy, farthestBehindMS: farthestBehind, driftMS: d,
-                playing: player.timeControlStatus == .playing, rate: player.rate, roomRate: st.rate
+                playingAtOneX: player.timeControlStatus == .playing && abs(player.rate - 1) < 0.01, roomRate: st.rate
             ) {
                 backNearTicks += 1
                 if backNearTicks >= Self.rejoinTicks {
@@ -431,7 +459,10 @@ public final class SyncEngine {
         checkSpeedUp(drift: d)
         let move = Self.decide(
             hasFrame: hasFrame, driftMS: d, roomRate: roomRate, canSeek: canSeek(to: target + Self.catchUpLeadMS, item: item),
-            forwardBuffer: bufferedAhead(item), trim: trim, quiet: quiet, canSpeedUp: canSpeedUp
+            forwardBuffer: bufferedAhead(item), trim: trim, quiet: quiet, canSpeedUp: canSpeedUp,
+            canMeasureAhead: room.hasPrefix("channel:") && roomRate == 1
+                && aheadSentAt.map { Date().timeIntervalSince($0) < Self.measureWaitSeconds } ?? true,
+            canMeasureBehind: room.hasPrefix("channel:") && roomRate == 1
         )
         if logs, move != lastMove {
             let status = player.timeControlStatus.rawValue, ahead = bufferedAhead(item), what = String(describing: move)
@@ -480,6 +511,26 @@ public final class SyncEngine {
                 seek(to: target + Self.catchUpLeadMS)
                 state = .syncing
             }
+        case let .measure(ahead):
+            setTrim(.none)
+            if ahead, aheadSentAt == nil {
+                aheadSentAt = Date()
+                if logs {
+                    Self.log.notice("sync measure ahead: room to \(Int(local)), \(Int(d)) ms past it")
+                }
+                socket.command(room: room, action: "ahead", mediaTime: local)
+            } else if !ahead, Date().timeIntervalSince(behindSentAt) > Self.measureBehindEvery {
+                behindSentAt = Date()
+                if logs {
+                    Self.log.notice("sync measure behind: room to \(Int(local)), \(Int(-d)) ms short of it")
+                }
+                socket.command(room: room, action: "behind", mediaTime: local)
+            }
+            if player.rate != Float(roomRate) {
+                player.rate = Float(roomRate)
+                rateSets += 1
+            }
+            state = .syncing
         case let .play(wanted, locked):
             // A live item resumed straight into a trimmed rate stayed frozen on
             // tvOS. Trim only a player that is already moving.
