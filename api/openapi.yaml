@@ -1047,9 +1047,11 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Recording" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "503":
-          description: "`no_signal`, `stream_down`, or `tuner_refused`: the tune for a recording that starts now failed."
+          description: "`no_signal`, `stream_down`, `tuner_refused`, or `tuner_silent`: the tune for a recording that starts now failed."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -1078,7 +1080,9 @@ paths:
         - $ref: "#/components/parameters/Id"
       responses:
         "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
         "500": { $ref: "#/components/responses/Error" }
   /recordings/{id}/stop:
     post:
@@ -1088,6 +1092,7 @@ paths:
         - $ref: "#/components/parameters/Id"
       responses:
         "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/Error" }
   /recordings/{id}/play:
     post:
       tags: [recordings]
@@ -1118,7 +1123,9 @@ paths:
                   markers:
                     type: array
                     items: { $ref: "#/components/schemas/Marker" }
+        "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /recordings/{id}/progress:
     put:
       tags: [recordings]
@@ -1143,6 +1150,8 @@ paths:
                 type: object
                 properties:
                   position: { type: number }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /recordings/{id}/watched:
     put:
       tags: [recordings]
@@ -1170,6 +1179,8 @@ paths:
                 properties:
                   ok: { type: boolean }
                   watched: { type: boolean }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /recordings/{id}/keep:
     put:
       tags: [recordings]
@@ -1198,6 +1209,8 @@ paths:
                 properties:
                   ok: { type: boolean }
                   keep: { type: boolean }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /recordings/{id}/move:
     post:
       tags: [recordings]
@@ -1226,7 +1239,9 @@ paths:
                   ok: { type: boolean }
                   file: { type: string }
         "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /recordings/{id}/file:
     get:
       tags: [recordings]
@@ -1239,6 +1254,8 @@ paths:
           content:
             video/mp2t:
               schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /recordings/{id}/again:
     get:
       tags: [recordings]
@@ -1260,6 +1277,7 @@ paths:
                     anyOf:
                       - $ref: "#/components/schemas/Airing"
                       - type: "null"
+        "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /recordings/{id}/markers:
     get:
@@ -1279,6 +1297,7 @@ paths:
                   markers:
                     type: array
                     items: { $ref: "#/components/schemas/Marker" }
+        "400": { $ref: "#/components/responses/Error" }
     post:
       tags: [recordings]
       operationId: addMarker
@@ -1300,6 +1319,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Marker" }
+        "400": { $ref: "#/components/responses/Error" }
   /recordings/{id}/detect:
     post:
       tags: [recordings]
@@ -1319,6 +1339,7 @@ paths:
                   markers:
                     type: array
                     items: { $ref: "#/components/schemas/Marker" }
+        "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /markers/{id}:
     delete:
@@ -1328,6 +1349,8 @@ paths:
         - $ref: "#/components/parameters/Id"
       responses:
         "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /schedule:
     get:
       tags: [dvr]
@@ -1364,6 +1387,7 @@ paths:
                 start: { type: string, format: date-time }
       responses:
         "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/Error" }
   /schedule/fix:
     post:
       tags: [dvr]
@@ -1396,6 +1420,7 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/PlannedAiring" }
         "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
   /passes:
     get:
@@ -1444,6 +1469,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PassList" }
+        "400": { $ref: "#/components/responses/Error" }
   /passes/preview:
     post:
       tags: [dvr]
@@ -1491,6 +1517,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PassList" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
     delete:
       tags: [dvr]
       operationId: deletePass
@@ -1502,6 +1530,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PassList" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /teams:
     get:
       tags: [dvr]
@@ -1526,6 +1556,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TeamList" }
+        "400": { $ref: "#/components/responses/Error" }
   /teams/{id}:
     delete:
       tags: [dvr]
@@ -1538,6 +1569,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TeamList" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /events:
     get:
       tags: [server]
@@ -1592,6 +1625,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VirtualChannel" }
+        "400": { $ref: "#/components/responses/Error" }
   /virtuals/{id}:
     patch:
       tags: [virtuals]
@@ -1616,6 +1650,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/VirtualChannel" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /virtuals/schedule:
     get:
       tags: [virtuals]
@@ -1672,6 +1708,9 @@ paths:
                   markers:
                     type: array
                     items: { $ref: "#/components/schemas/Marker" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /pair:
     post:
       tags: [pairing]
