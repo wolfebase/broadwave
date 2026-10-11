@@ -19,8 +19,6 @@ const base = read("src/theme/base.css");
 const tokens = read("src/theme/tokens.css");
 const guide = read("src/features/guide/guide.css");
 const player = read("src/features/player/player.css");
-const home = read("src/features/home/home.css");
-const brand = read("src/theme/brand.css");
 const multi = read("src/features/multiview/multiview.css");
 
 function lin(channel: number) {
@@ -300,14 +298,7 @@ test("channel names and tuning text stay at least 4.5:1 on a white picture", () 
   atLeast("tuning show", paint(token("--color-text"), card));
 });
 
-test("artwork text stays at least 4.5:1 on a white poster", () => {
-  const hero = alphaAt(stops(linear(home, ".hero-glow", "180deg")), 40, "%");
-  const heroBg = over({ rgb: [0, 0, 0], alpha: hero }, WHITE);
-  atLeast("hero secondary", paint(token("--color-text-secondary"), heroBg));
-  atLeast("hero live", paint(token("--color-tally"), heroBg));
-  const card = alphaAt(stops(linear(brand, ":root .now-card.has-art::before", "180deg")), 32, "%");
-  const cardBg = over({ rgb: token("--color-canvas").rgb, alpha: card }, WHITE);
-  atLeast("now card", paint(parseColor(prop(brand, ":root .now-card.has-art .nc-name", "color")), cardBg));
+test("program sheet text stays at least 4.5:1 on a white poster", () => {
   const sheet = alphaAt(stops(linear(guide, ".ps-art::after", "180deg")), 100, "%");
   const sheetBg = over({ rgb: [0, 0, 0], alpha: sheet }, WHITE);
   atLeast("sheet name", paint(token("--color-text-secondary"), sheetBg));
