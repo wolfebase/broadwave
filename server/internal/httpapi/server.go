@@ -104,6 +104,8 @@ type Server struct {
 	pairMu     sync.Mutex
 	pairHits   map[string][]time.Time
 	pairTokens map[string]heldToken
+	// revokeMu keeps two revokes from each passing the last-admin check.
+	revokeMu sync.Mutex
 
 	routes []string
 }
