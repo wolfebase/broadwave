@@ -446,6 +446,11 @@ public final class AppStore {
             server = FoundServer(id: "preview", name: "Preview", url: url)
             api = APIClient(base: url, session: session)
         }
+
+        /// One library row for a simulator shot. The demo server has no recordings.
+        public func previewRecording(_ recording: Recording) {
+            recordings = [recording]
+        }
     #endif
 
     public func refresh(lineup: Bool = true) async {

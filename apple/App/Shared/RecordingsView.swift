@@ -1,6 +1,9 @@
 import BroadwaveKit
 import BroadwaveUI
 import SwiftUI
+#if os(iOS)
+    import UIKit
+#endif
 
 struct RecordingsView: View {
     /// A show's own page: every recording of that title, by season.
@@ -19,14 +22,25 @@ struct RecordingsView: View {
     @State private var detecting: Set<Int64> = []
     @State private var scheduling: Set<Int64> = []
     @State private var scheduled: Set<Int64> = []
-    #if os(tvOS)
-        /// A cover, like live TV: a pushed player would keep the sidebar's handle on the picture.
-        @State private var playing: Recording?
-        @State private var playingChannel: VirtualChannel?
-    #else
+    /// A cover, like live TV: a pushed player would keep the sidebar's handle on the picture.
+    @State private var playing: Recording?
+    @State private var playingChannel: VirtualChannel?
+    #if os(iOS)
         /// A recording a link named (Spotlight), pushed like a tapped row.
         @State private var linked: Recording?
     #endif
+
+    /// iPhone pushes. iPad and Apple TV cover the screen, so the sidebar stays off the picture.
+    private var coverPlayer: Bool {
+        #if os(tvOS)
+            true
+        #elseif os(iOS)
+            UIDevice.current.userInterfaceIdiom == .pad
+        #else
+            false
+        #endif
+    }
+
     #if os(tvOS)
         @Environment(\.tvSelectedTab) private var tvSelectedTab
         @FocusState private var focusedRec: Int64?
@@ -163,10 +177,9 @@ struct RecordingsView: View {
             }
         }
         .navigationTitle(show ?? "Recordings")
-        #if os(tvOS)
-            .fullScreenCover(item: $playing) { RecordingPlayerScreen(recording: $0).environment(store) }
-            .fullScreenCover(item: $playingChannel) { RecordingPlayerScreen(channel: $0).environment(store) }
-        #else
+        .fullScreenCover(item: $playing) { RecordingPlayerScreen(recording: $0).environment(store) }
+        .fullScreenCover(item: $playingChannel) { RecordingPlayerScreen(channel: $0).environment(store) }
+        #if os(iOS)
             .navigationDestination(for: Recording.self) { RecordingPlayerScreen(recording: $0) }
             .navigationDestination(for: VirtualChannel.self) { RecordingPlayerScreen(channel: $0) }
             .navigationDestination(item: $linked) { RecordingPlayerScreen(recording: $0) }
@@ -208,25 +221,35 @@ struct RecordingsView: View {
                     stopSelecting()
                 }
             }
-        #if os(tvOS)
             .onChange(of: library.recording, initial: true) { _, _ in openLinked() }
             .onChange(of: library.closeToken) { _, _ in
                 playing = nil
                 playingChannel = nil
             }
             .onChange(of: playing != nil || playingChannel != nil) { _, up in library.playing = up }
-        #else
-            .onChange(of: library.recording, initial: true) { _, _ in openLinked() }
-        #endif
             .task {
                 async let recordings: Void = store.refreshRecordings()
                 async let channels: Void = store.refreshVirtuals()
                 _ = await (recordings, channels)
-                #if DEBUG && os(tvOS)
-                    // Simulator testing: -BroadwaveTab recordings -BroadwaveRecording <id>
-                    // opens it as Select would; simctl cannot press Select.
+                #if DEBUG
+                    // Simulator testing: -BroadwaveSampleRecording shows one row when the
+                    // demo server has none. -BroadwaveRecording <id> opens it as Select
+                    // would; simctl cannot press Select. iPhone does not open a cover.
+                    if UserDefaults.standard.bool(forKey: "BroadwaveSampleRecording"), store.recordings.isEmpty {
+                        store.previewRecording(Recording(
+                            id: 1,
+                            channelId: 1,
+                            guideNumber: "4.1",
+                            title: "Big Buck Bunny",
+                            subtitle: "Open movie",
+                            status: "complete",
+                            startedAt: Date(timeIntervalSince1970: 1_790_000_000),
+                            bytes: 12_000_000,
+                            durationSec: 596
+                        ))
+                    }
                     let id = Int64(UserDefaults.standard.integer(forKey: "BroadwaveRecording"))
-                    if id > 0, playing == nil {
+                    if id > 0, playing == nil, coverPlayer {
                         playing = store.recordings.first { $0.id == id }
                     }
                 #endif
@@ -238,11 +261,13 @@ struct RecordingsView: View {
     private func openLinked() {
         guard show == nil, let id = library.recording else { return }
         library.recording = nil
-        #if os(tvOS)
+        if coverPlayer {
             playing = store.recordings.first { $0.id == id }
-        #else
-            linked = store.recordings.first { $0.id == id }
-        #endif
+        } else {
+            #if os(iOS)
+                linked = store.recordings.first { $0.id == id }
+            #endif
+        }
     }
 
     /// The row in one sentence, with the same facts it shows: status, date, size, length, Watched, Kept forever.
@@ -268,11 +293,11 @@ struct RecordingsView: View {
         }
         .accessibilityElement(children: .combine)
         return Group {
-            #if os(tvOS)
+            if coverPlayer {
                 Button { playingChannel = channel } label: { label }
-            #else
+            } else {
                 NavigationLink(value: channel) { label }
-            #endif
+            }
         }
         .accessibilityIdentifier("library-\(channel.id)")
     }
@@ -293,12 +318,10 @@ struct RecordingsView: View {
             if rec.isMissing {
                 // Nothing to play. Select offers to take it off the list.
                 Button { deleting = rec } label: { rowLabel(rec) }
+            } else if coverPlayer {
+                Button { playing = rec } label: { rowLabel(rec) }
             } else {
-                #if os(tvOS)
-                    Button { playing = rec } label: { rowLabel(rec) }
-                #else
-                    NavigationLink(value: rec) { rowLabel(rec) }
-                #endif
+                NavigationLink(value: rec) { rowLabel(rec) }
             }
         }
         .accessibilityLabel(recordingSpoken(rec))
