@@ -76,6 +76,13 @@ test("a shown 3.0 channel sorts at its 1.0 number", () => {
     sortChannels([next, wide, high, alone, sub, hidden, renamed]).map((channel) => channel.displayName),
     ["KBWV", "KBWV2", "WTST", "Renamed", "High", "Hidden", "Sealed"],
   );
+  // Same order number: the real 4.1 stays ahead of 104.1 even when its name sorts later.
+  const clear = listed({ id: 4, displayNumber: "4.1", displayName: "Zed" });
+  const wideNamed = listed({ id: 104, displayNumber: "104.1", displayName: "Alpha", standard: "atsc3", twinId: 4 });
+  assert.deepEqual(
+    sortChannels([wideNamed, clear], [clear, wideNamed]).map((channel) => channel.id),
+    [4, 104],
+  );
   assert.equal(channelOrderNumber(wide), "4.1");
   assert.equal(channelOrderNumber(alone), "115.1");
   assert.equal(channelOrderNumber(renamed), "12.1");

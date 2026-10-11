@@ -99,8 +99,8 @@ export function sortChannels(channels: Channel[], lineup: readonly Channel[] = c
     return (
       (x[0] ?? 0) - (y[0] ?? 0) ||
       (x[1] ?? 0) - (y[1] ?? 0) ||
-      a.displayName.localeCompare(b.displayName) ||
-      a.displayNumber.localeCompare(b.displayNumber, undefined, { numeric: true })
+      a.displayNumber.localeCompare(b.displayNumber, undefined, { numeric: true }) ||
+      a.displayName.localeCompare(b.displayName)
     );
   });
 }
