@@ -51,7 +51,7 @@ html:root[data-layout="tv"] section.stage.mini:focus-visible {
   pointer-events: none;
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.82) 0, rgba(0, 0, 0, 0.82) 180px, transparent 340px),
-    linear-gradient(0deg, rgba(0, 0, 0, 0.78) 0, rgba(0, 0, 0, 0.78) 140px, transparent 300px);
+    linear-gradient(0deg, rgba(0, 0, 0, 0.7), transparent 30%);
   transition: opacity var(--motion-slow) var(--ease-out);
 }
 
@@ -587,7 +587,7 @@ html:root[data-layout="tv"] section.stage.mini:focus-visible {
   align-items: center;
   gap: 6px;
   padding: 28px 8px 8px 12px;
-  background: linear-gradient(180deg, transparent 0, rgba(0, 0, 0, 0.82) 20px, rgba(0, 0, 0, 0.82) 100%);
+  background: linear-gradient(180deg, transparent 0, rgba(0, 0, 0, 0.8) 20px, rgba(0, 0, 0, 0.8) 100%);
 }
 
 .mini-title {
