@@ -211,6 +211,7 @@ func (s *Server) Handler() http.Handler {
 	api("POST /virtuals/{id}/play", s.playVirtual)
 	api("GET /storage", s.storage)
 	api("GET /storage/shows", s.storageShows)
+	api("GET /storage/plan", s.storagePlan)
 	api("GET /backup", s.backup)
 	api("POST /backup", s.restore)
 	api("GET /backups", s.listBackups)
@@ -608,6 +609,9 @@ func (s *Server) settingsValues(r *http.Request) (map[string]string, error) {
 	values["deleteWatchedDays"] = strconv.Itoa(dvr.WatchedDays(values["deleteWatchedDays"]))
 	if values["makeRoom"] != "1" {
 		values["makeRoom"] = "0"
+	}
+	if values["protectFavorites"] != "1" {
+		values["protectFavorites"] = "0"
 	}
 	if values["folderLayout"] != "flat" {
 		values["folderLayout"] = "shows"

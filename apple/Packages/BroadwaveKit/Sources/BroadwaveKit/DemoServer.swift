@@ -383,6 +383,7 @@ public final class DemoServer: @unchecked Sendable {
         "writeNfo": "0",
         "deleteWatchedDays": "0",
         "makeRoom": "0",
+        "protectFavorites": "0",
         "folderLayout": "shows",
         "gameAlerts": "all",
     ]
@@ -435,7 +436,7 @@ public final class DemoServer: @unchecked Sendable {
             }
         case "bufferMinutes":
             value == "0" || value == "30" || value == "60" || value == "120" || value == "240"
-        case "makeRoom":
+        case "makeRoom", "protectFavorites":
             value == "0" || value == "1"
         case "deleteWatchedDays":
             if let n = Int(value), (0 ... 3650).contains(n), String(n) == value {

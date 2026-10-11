@@ -862,6 +862,7 @@ public struct Settings: Codable, Sendable, Hashable {
     public var writeNfo: String?
     public var deleteWatchedDays: String?
     public var makeRoom: String?
+    public var protectFavorites: String?
     public var folderLayout: String?
     public var gameAlerts: String?
     public var pictureMode: PictureMode?
@@ -890,7 +891,7 @@ public struct Settings: Codable, Sendable, Hashable {
     public var sportsdbKey: String?
     public var sportsdbKeySet: String?
 
-    public init(layout: String? = nil, profile: String? = nil, audio: String? = nil, encoder: String? = nil, watermarkGB: String? = nil, bufferMinutes: String? = nil, writeNfo: String? = nil, deleteWatchedDays: String? = nil, makeRoom: String? = nil, folderLayout: String? = nil, gameAlerts: String? = nil, pictureMode: PictureMode? = nil, autoplay: String? = nil, hdhrEmulate: String? = nil, deviceAuth: String? = nil, deviceToken: String? = nil, exportMosaics: String? = nil, setupComplete: String? = nil, needsSetup: String? = nil, lastGuidePull: Date? = nil, nextGuidePull: Date? = nil, lastManualGuidePull: Date? = nil, lastGuideError: String? = nil, lastGuideErrorAt: Date? = nil, hideScores: String? = nil, liveScores: String? = nil, checkUpdates: String? = nil, sdUser: String? = nil, sdPassword: String? = nil, sdLineup: String? = nil, sdPasswordSet: String? = nil, guideUrl: String? = nil, tmdbKey: String? = nil, tmdbKeySet: String? = nil, sportsdbKey: String? = nil, sportsdbKeySet: String? = nil) {
+    public init(layout: String? = nil, profile: String? = nil, audio: String? = nil, encoder: String? = nil, watermarkGB: String? = nil, bufferMinutes: String? = nil, writeNfo: String? = nil, deleteWatchedDays: String? = nil, makeRoom: String? = nil, protectFavorites: String? = nil, folderLayout: String? = nil, gameAlerts: String? = nil, pictureMode: PictureMode? = nil, autoplay: String? = nil, hdhrEmulate: String? = nil, deviceAuth: String? = nil, deviceToken: String? = nil, exportMosaics: String? = nil, setupComplete: String? = nil, needsSetup: String? = nil, lastGuidePull: Date? = nil, nextGuidePull: Date? = nil, lastManualGuidePull: Date? = nil, lastGuideError: String? = nil, lastGuideErrorAt: Date? = nil, hideScores: String? = nil, liveScores: String? = nil, checkUpdates: String? = nil, sdUser: String? = nil, sdPassword: String? = nil, sdLineup: String? = nil, sdPasswordSet: String? = nil, guideUrl: String? = nil, tmdbKey: String? = nil, tmdbKeySet: String? = nil, sportsdbKey: String? = nil, sportsdbKeySet: String? = nil) {
         self.layout = layout
         self.profile = profile
         self.audio = audio
@@ -900,6 +901,7 @@ public struct Settings: Codable, Sendable, Hashable {
         self.writeNfo = writeNfo
         self.deleteWatchedDays = deleteWatchedDays
         self.makeRoom = makeRoom
+        self.protectFavorites = protectFavorites
         self.folderLayout = folderLayout
         self.gameAlerts = gameAlerts
         self.pictureMode = pictureMode
@@ -1047,6 +1049,54 @@ public struct StorageKeep: Codable, Sendable, Hashable, Identifiable {
     public init(id: Int64, keep: Int) {
         self.id = id
         self.keep = keep
+    }
+}
+
+public struct StoragePlan: Codable, Sendable, Hashable {
+    public var deleteWatchedDays: Int
+    public var makeRoom: Bool
+    public var protectFavorites: Bool
+    public var watermarkGB: Int
+    public var freeBytes: Int64
+    public var reserveBytes: Int64
+    public var shortBytes: Int64
+    public var covers: Bool
+    public var roomNote: String?
+    public var remove: [StoragePlanItem]
+    public var held: [StoragePlanItem]
+    public var again: [StoragePlanItem]
+
+    public init(deleteWatchedDays: Int, makeRoom: Bool, protectFavorites: Bool, watermarkGB: Int, freeBytes: Int64, reserveBytes: Int64, shortBytes: Int64, covers: Bool, roomNote: String? = nil, remove: [StoragePlanItem], held: [StoragePlanItem], again: [StoragePlanItem]) {
+        self.deleteWatchedDays = deleteWatchedDays
+        self.makeRoom = makeRoom
+        self.protectFavorites = protectFavorites
+        self.watermarkGB = watermarkGB
+        self.freeBytes = freeBytes
+        self.reserveBytes = reserveBytes
+        self.shortBytes = shortBytes
+        self.covers = covers
+        self.roomNote = roomNote
+        self.remove = remove
+        self.held = held
+        self.again = again
+    }
+}
+
+public struct StoragePlanItem: Codable, Sendable, Hashable, Identifiable {
+    public var id: Int64
+    public var title: String
+    public var bytes: Int64
+    public var rule: String
+    public var reason: String
+    public var when: String?
+
+    public init(id: Int64, title: String, bytes: Int64, rule: String, reason: String, when: String? = nil) {
+        self.id = id
+        self.title = title
+        self.bytes = bytes
+        self.rule = rule
+        self.reason = reason
+        self.when = when
     }
 }
 

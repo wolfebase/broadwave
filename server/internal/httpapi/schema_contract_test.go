@@ -76,6 +76,7 @@ var fixtureSchema = []struct {
 	{"signals", "get", "/signals", "200"},
 	{"sources", "get", "/sources", "200"},
 	{"star", "post", "/channels/star", "200"},
+	{"storage-plan", "get", "/storage/plan", "200"},
 	{"storage-shows", "get", "/storage/shows", "200"},
 	{"storage", "get", "/storage", "200"},
 	{"team-unfollow", "delete", "/teams/{id}", "200"},

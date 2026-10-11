@@ -466,6 +466,7 @@ export type Settings = {
   writeNfo?: string;
   deleteWatchedDays?: string;
   makeRoom?: string;
+  protectFavorites?: string;
   folderLayout?: string;
   gameAlerts?: string;
   pictureMode?: PictureMode;
@@ -553,6 +554,30 @@ export type SportsTeam = {
 export type StorageKeep = {
   id: number;
   keep: number;
+};
+
+export type StoragePlan = {
+  deleteWatchedDays: number;
+  makeRoom: boolean;
+  protectFavorites: boolean;
+  watermarkGB: number;
+  freeBytes: number;
+  reserveBytes: number;
+  shortBytes: number;
+  covers: boolean;
+  roomNote?: string;
+  remove: StoragePlanItem[];
+  held: StoragePlanItem[];
+  again: StoragePlanItem[];
+};
+
+export type StoragePlanItem = {
+  id: number;
+  title: string;
+  bytes: number;
+  rule: string;
+  reason: string;
+  when?: string;
 };
 
 export type StorageShow = {
