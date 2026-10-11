@@ -1,17 +1,28 @@
 // The shell only. Hashed files under /assets/ stay in the cache.
 // The document is always read from the network first, so a new release
 // cannot be stuck behind this worker. Live video, the API, and previews
-// are not cached.
+// are not cached. When the document itself cannot be loaded, the offline
+// page is the last resort. It is not the app.
 
 const CACHE = "broadwave-shell";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
-  event.waitUntil(fillShell().catch(() => {}));
+  event.waitUntil(
+    Promise.all([
+      fillShell().catch(() => {}),
+      cacheOffline().catch(() => {}),
+    ]),
+  );
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    (async () => {
+      await cacheOffline().catch(() => {});
+      await self.clients.claim();
+    })(),
+  );
 });
 
 function leaveAlone(url) {
@@ -25,7 +36,11 @@ function leaveAlone(url) {
 
 function isDocument(request, url) {
   if (request.mode === "navigate") return true;
-  return url.pathname === "/" || url.pathname === "/index.html";
+  return url.pathname === "/" || url.pathname === "/index.html" || url.pathname === "/offline.html";
+}
+
+function isOfflinePage(url) {
+  return url.pathname === "/offline.html";
 }
 
 self.addEventListener("fetch", (event) => {
@@ -34,6 +49,10 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (leaveAlone(url)) return;
+  if (isOfflinePage(url)) {
+    event.respondWith(offlineDocument(request));
+    return;
+  }
   if (isDocument(request, url)) {
     event.respondWith(networkFirst(request));
     return;
@@ -48,6 +67,33 @@ async function fillShell() {
   if (!fresh.ok) return;
   const html = await fresh.clone().text();
   await remember(fresh, html);
+}
+
+async function cacheOffline() {
+  const fresh = await fetch(new Request("/offline.html", { cache: "no-store" }));
+  if (!fresh.ok) return;
+  if (!(fresh.headers.get("content-type") || "").includes("text/html")) return;
+  const cache = await caches.open(CACHE);
+  await cache.put("/offline.html", fresh);
+}
+
+async function offlineDocument(request) {
+  const cache = await caches.open(CACHE);
+  try {
+    const fresh = await fetch(request, { cache: "no-store" });
+    if (fresh.ok && (fresh.headers.get("content-type") || "").includes("text/html")) {
+      await cache.put("/offline.html", fresh.clone());
+      return fresh;
+    }
+  } catch {
+    // The cached page is the answer.
+  }
+  const hit = await cache.match("/offline.html");
+  if (hit) return hit;
+  return new Response("Can't reach the server.", {
+    status: 503,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
 }
 
 async function networkFirst(request) {
@@ -66,6 +112,8 @@ async function networkFirst(request) {
   } catch {
     const hit = await caches.match("/index.html");
     if (hit) return hit;
+    const offline = await caches.match("/offline.html");
+    if (offline) return offline;
     throw new Error("offline");
   }
 }
@@ -83,7 +131,7 @@ async function remember(response, html) {
 async function cacheAsset(cache, path) {
   if (await cache.match(path)) return false;
   try {
-    const res = await fetch(path);
+    const res = await fetch(path, { cache: "no-store" });
     if (!res.ok) return false;
     await cache.put(path, res);
     return true;
@@ -104,7 +152,7 @@ async function cacheFirst(request) {
   const cache = await caches.open(CACHE);
   const hit = await cache.match(request);
   if (hit) return hit;
-  const fresh = await fetch(request);
+  const fresh = await fetch(request, { cache: "no-store" });
   if (fresh.ok) await cache.put(request, fresh.clone());
   return fresh;
 }

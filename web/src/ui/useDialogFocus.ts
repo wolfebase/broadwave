@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { focusRing } from "../app/remote";
-import { isTextField, trapTab } from "../lib/dialogFocus";
+import { dismissesLayer, trapTab } from "../lib/dialogFocus";
 
 function items(root: ParentNode | null): HTMLElement[] {
   if (!root) return [];
@@ -25,10 +25,8 @@ export function useDialogFocus(ref: RefObject<HTMLElement | null>, onEscape?: ()
     const primary = open.find((el) => el.classList.contains("primary"));
     focusRing(primary ?? open[0] ?? root);
     const onKey = (event: KeyboardEvent) => {
-      if ((event.key === "Escape" || event.key === "Backspace") && escapeRef.current) {
-        const target = event.target;
-        // A checkbox and a slider are inputs, and Back still closes.
-        if (event.key === "Backspace" && isTextField(target)) return;
+      // A checkbox and a slider are inputs, and Back still closes. A TV remote's Back is not always Escape.
+      if (escapeRef.current && dismissesLayer(event.key, event.target, event.keyCode)) {
         event.preventDefault();
         event.stopPropagation();
         escapeRef.current();

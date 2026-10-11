@@ -70,7 +70,7 @@ export function MoveFile({ rec }: { rec: Recording }) {
       }}
       onKeyDown={(event) => {
         if (event.key === "Backspace" && isTextField(event.target)) return;
-        if (!dismissesLayer(event.key, event.target)) return;
+        if (!dismissesLayer(event.key, event.target, event.keyCode)) return;
         event.preventDefault();
         event.stopPropagation();
         setOpen(false);

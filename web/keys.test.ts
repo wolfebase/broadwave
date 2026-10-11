@@ -52,4 +52,7 @@ test("mini-guide focus selects that row, and a repeated g does not close it", ()
   assert.equal(guideListAction("g", false), "close");
   assert.equal(guideListAction("g", true), "ignore");
   assert.equal(guideListAction("ArrowDown", false), "down");
+  assert.equal(guideListAction("GoBack", false), "close");
+  assert.equal(guideListAction("XF86Back", false), "close");
+  assert.equal(guideListAction("Back", false), "close");
 });

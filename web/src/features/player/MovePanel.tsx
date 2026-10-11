@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "re
 import { unreadBody } from "../../api";
 import { useData } from "../../app/data";
 import { focusRing } from "../../app/remote";
+import { canonicalKey } from "../../lib/tvKey";
 import { browserName, screenId } from "../../lib/events";
 import type { Channel, Screen } from "../../types";
 import { getScreens, sendToScreen, startedOn } from "./screens";
@@ -73,7 +74,7 @@ export function MovePanel({ channel, onMoved, onClose }: { channel: Channel; onM
   }
 
   function onKey(event: KeyboardEvent) {
-    const k = event.key;
+    const k = canonicalKey(event);
     if (k === "Escape" || k === "Backspace") {
       event.preventDefault();
       event.stopPropagation();

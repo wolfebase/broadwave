@@ -72,7 +72,7 @@ export function Library({
     if (confirming) {
       const onKey = (event: KeyboardEvent) => {
         if (event.metaKey || event.ctrlKey || event.altKey) return;
-        if (!dismissesLayer(event.key, event.target) || pageCovered()) return;
+        if (!dismissesLayer(event.key, event.target, event.keyCode) || pageCovered()) return;
         const target = event.target;
         if (target instanceof HTMLElement && target.closest("form")) return;
         event.preventDefault();

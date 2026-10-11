@@ -791,6 +791,9 @@ func (s *Server) ui(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.Contains(path, ".") {
+		// A missing bundle must not keep the immutable header set above.
+		// The browser would replay that 404 for a year.
+		w.Header().Set("Cache-Control", "no-store")
 		http.NotFound(w, r)
 		return
 	}

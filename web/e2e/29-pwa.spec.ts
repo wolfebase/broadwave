@@ -1,6 +1,6 @@
 // The installed app shell. The document is read from the network first,
 // so a rebuild's new bundle name shows up on reload. Live video is not cached.
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -96,6 +96,7 @@ test("the manifest installs and a channel plays with the worker on", async ({ pa
     return urls;
   });
   expect(cached.some((url) => url.startsWith("/assets/"))).toBe(true);
+  expect(cached).toContain("/offline.html");
   for (const url of cached) {
     expect(url.startsWith("/api/"), url).toBe(false);
     expect(url.startsWith("/media/"), url).toBe(false);
@@ -124,8 +125,16 @@ test("a reload after a rebuild uses the new bundle", async ({ page }) => {
   for (const ext of [".gz", ".br"]) {
     if (existsSync(path.join(built, "assets", file + ext))) copies.push(path.join(built, "assets", next + ext));
   }
+  // Lazy chunks import the entry by its built name. Loading the copy from HTML
+  // and the original from a chunk evaluates React twice. A real rebuild rewrites
+  // those imports; this test does the same, then puts the files back.
+  const rewritten: { path: string; bytes: Buffer | null }[] = [];
 
   const restore = async () => {
+    for (const item of rewritten) {
+      if (item.bytes) writeFileSync(item.path, item.bytes);
+      else rmSync(item.path, { force: true });
+    }
     writeFileSync(indexPath, saved.html);
     if (saved.gz) writeFileSync(indexPath + ".gz", saved.gz);
     if (saved.br) writeFileSync(indexPath + ".br", saved.br);
@@ -142,6 +151,24 @@ test("a reload after a rebuild uses the new bundle", async ({ page }) => {
       const from = path.join(built, "assets", file + ext);
       if (existsSync(from)) copyFileSync(from, path.join(built, "assets", next + ext));
     }
+    const assetsDir = path.join(built, "assets");
+    for (const name of readdirSync(assetsDir)) {
+      if (!name.endsWith(".js") && !name.endsWith(".css")) continue;
+      if (name === file || name === next) continue;
+      const full = path.join(assetsDir, name);
+      const body = readFileSync(full);
+      if (!body.includes(file)) continue;
+      rewritten.push({ path: full, bytes: body });
+      for (const ext of [".gz", ".br"]) {
+        const side = full + ext;
+        rewritten.push({ path: side, bytes: existsSync(side) ? readFileSync(side) : null });
+      }
+      const updated = Buffer.from(body.toString("utf8").split(file).join(next));
+      writeFileSync(full, updated);
+      writeFileSync(full + ".gz", gzipSync(updated, { level: 9 }));
+      writeFileSync(full + ".br", brotliCompressSync(updated, { params: { [constants.BROTLI_PARAM_QUALITY]: 6 } }));
+    }
+    expect(rewritten.some((item) => item.path.endsWith(".js") && item.bytes)).toBe(true);
     const html = saved.html.toString("utf8").split(file).join(next);
     expect(html).toContain(next);
     writeFileSync(indexPath, html);
@@ -150,6 +177,15 @@ test("a reload after a rebuild uses the new bundle", async ({ page }) => {
     goBuild();
     await control("start");
 
+    // The chunk URLs did not change, so the worker would replay the cached
+    // copies, which still import the old entry. A real rebuild changes the names.
+    await page.evaluate(async () => {
+      const cache = await caches.open("broadwave-shell");
+      for (const req of await cache.keys()) {
+        const path = new URL(req.url).pathname;
+        if (path.startsWith("/assets/") && path.endsWith(".js") && !path.includes("/index-")) await cache.delete(req);
+      }
+    });
     await page.reload();
     await expect.poll(() => moduleSrc(page)).toContain(next);
     await expect(page.getByRole("button", { name: "Watch", exact: true })).toBeVisible();
@@ -168,4 +204,104 @@ test("a reload after a rebuild uses the new bundle", async ({ page }) => {
   } finally {
     await restore();
   }
+});
+
+test("the offline page is used only when the shell is not cached", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto("/");
+  await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
+  await expect.poll(async () => page.evaluate(async () => {
+    const cache = await caches.open("broadwave-shell");
+    return (await cache.keys()).map((req) => new URL(req.url).pathname);
+  })).toContain("/offline.html");
+
+  const offline = await page.request.get("/offline.html");
+  expect(offline.status()).toBe(200);
+  expect(offline.headers()["content-type"]).toContain("text/html");
+  expect(await offline.text()).toContain("Can't reach the server");
+
+  try {
+    await page.context().setOffline(true);
+    await page.reload();
+    await expect(page.locator("#root")).toBeVisible();
+    await expect(page.locator("#retry")).toHaveCount(0);
+
+    await page.evaluate(async () => {
+      const cache = await caches.open("broadwave-shell");
+      for (const req of await cache.keys()) {
+        if (new URL(req.url).pathname === "/index.html") await cache.delete(req);
+      }
+    });
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Can't reach the server" })).toBeVisible();
+    await expect(page.locator("#retry")).toBeVisible();
+    await expect(page.locator("#root")).toHaveCount(0);
+  } finally {
+    await page.context().setOffline(false);
+  }
+
+  await page.locator("#retry").click();
+  await expect(page.locator("#root")).toBeVisible();
+  const cached = await page.evaluate(async () => {
+    const names = await caches.keys();
+    const urls: string[] = [];
+    for (const name of names) {
+      const cache = await caches.open(name);
+      for (const req of await cache.keys()) urls.push(new URL(req.url).pathname);
+    }
+    return urls;
+  });
+  for (const url of cached) {
+    expect(url.startsWith("/api/"), url).toBe(false);
+    expect(url.startsWith("/media/"), url).toBe(false);
+  }
+});
+
+test("the install offer opens the browser dialog and Back dismisses it", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Broadwave home" })).toBeVisible();
+  await page.evaluate(() => {
+    const prompted = { n: 0 };
+    (window as unknown as { __installs?: { n: number } }).__installs = prompted;
+    const event = new Event("beforeinstallprompt", { cancelable: true });
+    Object.assign(event, {
+      prompt: () => {
+        prompted.n += 1;
+        return Promise.resolve();
+      },
+      userChoice: Promise.resolve({ outcome: "accepted" }),
+    });
+    window.dispatchEvent(event);
+  });
+  const offer = page.getByRole("region", { name: "Install Broadwave" });
+  await expect(offer).toBeVisible();
+  await offer.getByRole("button", { name: "Install", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __installs?: { n: number } }).__installs?.n ?? 0)).toBe(1);
+  await expect(offer).toHaveCount(0);
+
+  await page.evaluate(() => {
+    localStorage.removeItem("broadwave.install.dismissed");
+    const event = new Event("beforeinstallprompt", { cancelable: true });
+    Object.assign(event, {
+      prompt: () => Promise.resolve(),
+      userChoice: Promise.resolve({ outcome: "dismissed" }),
+    });
+    window.dispatchEvent(event);
+  });
+  await expect(offer).toBeVisible();
+  await offer.getByRole("button", { name: "Not now" }).focus();
+  await page.keyboard.press("Escape");
+  await expect(offer).toHaveCount(0);
+
+  await page.evaluate(() => {
+    const event = new Event("beforeinstallprompt", { cancelable: true });
+    Object.assign(event, {
+      prompt: () => Promise.resolve(),
+      userChoice: Promise.resolve({ outcome: "accepted" }),
+    });
+    window.dispatchEvent(event);
+  });
+  await expect(offer).toHaveCount(0);
 });

@@ -9,6 +9,7 @@ import { actionName } from "../../lib/actionName";
 import { authHeaders } from "../../lib/deviceToken";
 import { airingAt } from "../../lib/guide";
 import { menuStep } from "../../lib/menuStep";
+import { canonicalKey } from "../../lib/tvKey";
 import { events } from "../../lib/events";
 import { addMosaic, mosaicKey, mosaicShareMax, sharedMosaics } from "../../lib/mosaic";
 import { copy } from "../../strings";
@@ -332,7 +333,7 @@ export function Multiview() {
   }, [menu, focus]);
 
   function onKey(event: KeyboardEvent) {
-    const k = event.key;
+    const k = canonicalKey(event);
     const target = event.target;
     const control = target instanceof Element && target.closest("button, a[href], input, select, textarea");
     if (k === "Escape" || k === "Backspace") {
