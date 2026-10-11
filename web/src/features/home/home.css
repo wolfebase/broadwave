@@ -144,7 +144,7 @@
   padding: 8px 14px;
   border-radius: var(--radius-pill);
   background: var(--color-tally-soft);
-  color: #ffb3ad;
+  color: var(--color-tally-soft-ink);
   font-weight: 600;
   font-size: var(--type-footnote-size);
 }

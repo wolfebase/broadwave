@@ -65,6 +65,10 @@ export const copy = {
   },
   settings: {
     title: "Settings",
+    appearance: "Appearance",
+    appearanceHint: "System follows this device.",
+    accent: "Accent",
+    accentHint: "Links use it. In Light, buttons and tabs do too.",
     screenName: "Name this screen",
     screenNameHint: "Other screens see this name.",
     liveDelay: "Live delay",

@@ -11,6 +11,26 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>Broadwave</title>
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("broadwave-theme");
+          var accent = localStorage.getItem("broadwave-accent");
+          var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var mode = theme === "light" || (theme === "system" && !dark) ? "light" : "dark";
+          var known = { blue: 1, teal: 1, green: 1, orange: 1, purple: 1, rose: 1 };
+          var root = document.documentElement;
+          root.setAttribute("data-theme", mode);
+          root.setAttribute("data-accent", known[accent] ? accent : "blue");
+          var color = document.querySelector('meta[name="theme-color"]');
+          if (color) color.setAttribute("content", mode === "light" ? "#F4F6FA" : "#070A10");
+          var scheme = document.querySelector('meta[name="color-scheme"]');
+          if (scheme) scheme.setAttribute("content", mode);
+          var bar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+          if (bar) bar.setAttribute("content", mode === "light" ? "default" : "black-translucent");
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

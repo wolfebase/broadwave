@@ -12,6 +12,7 @@ import { Play } from "./recordings/Play";
 import { VirtualPlay } from "./recordings/Virtual";
 import { Schedule } from "./schedule/Schedule";
 import { HomeList } from "./setup/HomeList";
+import { Appearance } from "./settings/Appearance";
 import { PairedDevices } from "./settings/PairedDevices";
 import { SettingsScreen } from "./settings/Settings";
 import { ShareLinks } from "./settings/ShareLinks";
@@ -198,6 +199,7 @@ export function SettingsPage() {
           About
         </button>
       </div>
+      <Appearance />
       <section className="settings-section">
         <HomeList heading="h2" />
       </section>
