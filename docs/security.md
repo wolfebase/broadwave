@@ -20,7 +20,7 @@ A refused request answers with the name it saw, and tells you to set `BROADWAVE_
 
 Channels, the guide, recordings, and watch history stay in the database on the machine that runs Broadwave.
 
-The tuner's `DeviceAuth` value is read when a guide request needs it and is not written to the database or the log. A Schedules Direct password, a playlist password, and a guide or artwork key are stored so the server can refresh those sources. Settings does not show a saved password. The field stays blank and says Saved. The log keeps those values out.
+The tuner's `DeviceAuth` value is read when a guide request needs it and is not written to the database or the log. A Schedules Direct password, a playlist password, and a guide or artwork key are stored so the server can refresh those sources. Settings does not show a saved password. The Schedules Direct password and the artwork and scores key fields stay blank and say Saved. The log keeps those values out.
 
 ## Support bundle
 
@@ -30,7 +30,7 @@ The zip holds `versions.json`, `doctor.json`, `config.json`, and `logs.txt`. Pas
 
 ## What the server contacts
 
-The server talks to your tuner, to guide providers you turn on, to scoreboards while live scores are on, and to any playlist you add. Once a day it can ask GitHub whether a newer release exists. That request carries nothing about what you watch. Settings, Check for updates, turns it off. Settings, Live scores, stops the scoreboard requests.
+The server talks to your tuner, to guide providers you turn on, to scoreboards while live scores are on, and to any playlist you add. Once a day it can ask GitHub whether a newer release exists. That request carries nothing about what you watch. Settings, Check for updates, turns it off. Settings, Live scores, stops the scoreboard requests. Look harder asks SiliconDust's device list when nothing on your network answers. An artwork or scores key you add sends requests to that service.
 
 None of those calls go to the maker of Broadwave. The privacy policy is [PRIVACY.md](https://github.com/wolfebase/broadwave/blob/main/PRIVACY.md).
 
