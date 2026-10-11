@@ -222,10 +222,12 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [note]
                 properties:
                   id: { type: integer, format: int64 }
                   name: { type: string }
                   auth: { type: string }
+                  note: { type: string, description: "With sign-in off, a password is required before this server is opened beyond the home network. With sign-in on, devices sign in with a pairing code." }
   /devices:
     get:
       tags: [sources]
@@ -2190,7 +2192,10 @@ components:
       required: [auth]
       properties:
         auth: { type: string, enum: [local-open, device] }
-        device: { $ref: "#/components/schemas/ClientDevice" }
+        device:
+          anyOf:
+            - $ref: "#/components/schemas/ClientDevice"
+            - type: "null"
     Error:
       type: object
       required: [code, message]
@@ -2331,7 +2336,7 @@ components:
         priority: { type: integer }
         tunerCount: { type: integer }
         streamLimit: { type: integer }
-        streamFormat: { type: string, description: "ts or hls. Empty until the source is probed." }
+        streamFormat: { type: string, description: "ts, mpegts, or hls, empty until the source is probed." }
         hasGuide: { type: boolean }
         needsTuner: { type: boolean }
         refresh: { type: string, description: "When this source will be fetched again." }
