@@ -53,7 +53,7 @@ A playlist that has every stream it allows open says "All 2 streams from this pl
 
 "The file is gone. It was moved or deleted outside Broadwave."
 
-The recording finished, and the file is no longer in the recordings folder. It stays in the list so you can see the title. It does not play. The line is the channel number, then "The file is gone. It was moved or deleted outside Broadwave." The web library and the Apple apps use that same line. Remove from the list drops the row. There is no file left to delete.
+The recording finished, and the file is no longer in the recordings folder. It stays in the list so you can see the title. It does not play. The line is the channel number, then "The file is gone. It was moved or deleted outside Broadwave." The web library and the Apple apps use that same line. When the recording is damaged and the episode has a name, Record it again records the next airing. Remove from the list drops the row. There is no file left to delete.
 
 ## An encrypted 3.0 station
 
