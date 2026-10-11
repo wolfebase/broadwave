@@ -646,3 +646,40 @@ func TestLineupURLPlaysItsOwnRow(t *testing.T) {
 	}
 	fx.quietHits()
 }
+
+// An encrypted 3.0 row whose station has a clear 1.0 channel plays that
+// channel in its place, so other apps are not refused it.
+func TestEmulatorPlaysAnEncryptedRowThroughItsTwin(t *testing.T) {
+	fx := newTunerFixture(t)
+	ctx := t.Context()
+	if err := fx.st.UpsertDevice(ctx, hdhr.Device{
+		DeviceID: "LABDUO1", FriendlyName: "Lab 2", BaseURL: "http://127.0.0.1:1", TunerCount: 0,
+	}, []hdhr.Channel{
+		{GuideNumber: "3.1", GuideName: "WTST", VideoCodec: "MPEG2", AudioCodec: "AC3", HD: true, StreamURL: "http://127.0.0.1:1/auto/v3.1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	show := false
+	if _, err := fx.st.PatchChannel(ctx, fx.ids["105.1"], store.ChannelPatch{Hidden: &show}); err != nil {
+		t.Fatal(err)
+	}
+	var rows []lineupRow
+	decodeBody(t, fx.ask(fx.mux, http.MethodGet, "/lineup.json", uaJellyfin), &rows)
+	found := false
+	for _, row := range rows {
+		if row.GuideNumber != "105.1" {
+			continue
+		}
+		found = true
+		if row.DRM == 1 || strings.Contains(row.Tags, "drm") {
+			t.Fatalf("a row with a clear twin is listed as DRM: %+v", row)
+		}
+	}
+	if !found {
+		t.Fatal("105.1 is not in the lineup")
+	}
+	got := fx.ask(fx.mux, http.MethodGet, "/auto/v105.1", uaJellyfin)
+	if got.Header().Get("X-HDHomeRun-Error") == "811 Content Protection Required" {
+		t.Fatal("a row with a clear twin was refused as protected")
+	}
+}

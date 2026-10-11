@@ -255,8 +255,9 @@ func (h *emuHandler) lineupRows(r *http.Request) []lineupRow {
 		return base + "/auto/v" + url.PathEscape(number)
 	}
 	if channels, err := h.store.Channels(r.Context(), true); err == nil {
+		standIns := h.standIns(r.Context())
 		for _, ch := range channels {
-			row := channelLineupRow(ch)
+			row := channelLineupRow(ch, encryptedOnly(ch, standIns))
 			row.URL = byNumber(ch.DisplayNumber, "c"+strconv.FormatInt(ch.ID, 10))
 			rows = append(rows, row)
 		}
@@ -292,7 +293,25 @@ func (h *emuHandler) lineupRows(r *http.Request) []lineupRow {
 	return rows
 }
 
-func channelLineupRow(ch store.Channel) lineupRow {
+// standIns maps each encrypted 3.0 row to the clear 1.0 row that plays in its place.
+func (h *emuHandler) standIns(ctx context.Context) map[int64]int64 {
+	all, err := h.store.Channels(ctx, false)
+	if err != nil {
+		return nil
+	}
+	return store.StandIns(all)
+}
+
+// encryptedOnly is an encrypted row with no clear twin to play instead.
+func encryptedOnly(ch store.Channel, standIns map[int64]int64) bool {
+	if !ch.Protected {
+		return false
+	}
+	_, ok := standIns[ch.ID]
+	return !ok
+}
+
+func channelLineupRow(ch store.Channel, drm bool) lineupRow {
 	row := lineupRow{
 		GuideNumber: ch.DisplayNumber,
 		GuideName:   ch.DisplayName,
@@ -307,7 +326,7 @@ func channelLineupRow(ch store.Channel) lineupRow {
 		row.Favorite = 1
 		tags = append(tags, "favorite")
 	}
-	if ch.Protected {
+	if drm {
 		row.DRM = 1
 		tags = append(tags, "drm")
 	}
@@ -442,7 +461,7 @@ func (h *emuHandler) lookup(ctx context.Context, rest string) (streamHit, bool) 
 		}
 		for _, ch := range channels {
 			if ch.ID == channelID {
-				return streamHit{kind: "channel", id: ch.ID, protected: ch.Protected}, true
+				return streamHit{kind: "channel", id: ch.ID, protected: encryptedOnly(ch, h.standIns(ctx))}, true
 			}
 		}
 		return streamHit{}, false
@@ -461,7 +480,7 @@ func (h *emuHandler) lookup(ctx context.Context, rest string) (streamHit, bool) 
 	if channels, err := h.store.Channels(ctx, true); err == nil {
 		for _, ch := range channels {
 			if ch.DisplayNumber == number {
-				return streamHit{kind: "channel", id: ch.ID, protected: ch.Protected}, true
+				return streamHit{kind: "channel", id: ch.ID, protected: encryptedOnly(ch, h.standIns(ctx))}, true
 			}
 		}
 	}
@@ -489,7 +508,6 @@ func (h *emuHandler) lookup(ctx context.Context, rest string) (streamHit, bool) 
 // here would take a tuner for a request that never reads video.
 func writeStreamProbe(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "video/mp2t")
-	w.Header().Set("Content-Length", "0")
 	w.WriteHeader(http.StatusOK)
 }
 
