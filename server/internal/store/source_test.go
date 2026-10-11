@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -444,6 +445,43 @@ func TestDeviceAuthRoundTripsThroughTheStoredSource(t *testing.T) {
 	again, err := st.Sources(ctx)
 	if err != nil || len(again) != 1 || strings.Contains(again[0].URL, auth) {
 		t.Fatalf("%+v %v", again, err)
+	}
+}
+
+// A source saved before the stream path was masked keeps the password in the
+// path of its public URL. It must still fetch with its login after the upgrade.
+func TestALegacyMaskedSourceStillFetches(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	raw := "http://iptv.example/live/viewer/legacy-fixture-pass/list.m3u?password=legacy-fixture-pass"
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	q.Set("password", "••••")
+	u.RawQuery = q.Encode()
+	legacy := u.String()
+	if now, _ := maskURL(raw); now == legacy {
+		t.Fatalf("fixture does not differ from the current mask: %s", now)
+	}
+	res, err := st.db.ExecContext(ctx, `INSERT INTO sources (kind, name, url, xmltv_url, enabled) VALUES ('m3u', 'Old', ?, '', 1)`, legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, _ := res.LastInsertId()
+	if _, err := st.db.ExecContext(ctx, `INSERT INTO source_secrets (source_id, secret, guide_secret) VALUES (?, ?, '')`, id, raw); err != nil {
+		t.Fatal(err)
+	}
+	list, err := st.Sources(ctx)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("%+v %v", list, err)
+	}
+	if got := st.FetchURL(ctx, id, list[0].URL); got != raw {
+		t.Fatalf("fetch %q", got)
+	}
+	if got := st.FetchURL(ctx, id, "http://iptv.example/other.m3u"); got == raw {
+		t.Fatal("another address picked up the login")
 	}
 }
 

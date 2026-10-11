@@ -1223,11 +1223,14 @@ func (s *Store) FetchURL(ctx context.Context, id int64, public string) string {
 	if err := s.db.QueryRowContext(ctx, `SELECT secret, guide_secret FROM source_secrets WHERE source_id=?`, id).Scan(&secret, &guide); err != nil {
 		return public
 	}
+	// A row saved before a field was masked keeps that value in public.
+	// Masking public again lines it up with the stored login.
+	again, _ := maskURL(public)
 	for _, candidate := range []string{secret, guide} {
 		if candidate == "" {
 			continue
 		}
-		if masked, _ := maskURL(candidate); masked == public {
+		if masked, _ := maskURL(candidate); masked == public || masked == again {
 			return candidate
 		}
 	}
