@@ -30,8 +30,8 @@ private func airing(_ title: String, category: String? = nil, subtitle: String? 
 
 @Test func shown3ChannelSortsAtIts1Number() {
     let lineup = [
-        channel("4.1", name: "KBWV", id: 4, hidden: true),
-        channel("104.1", name: "KBWV", id: 104, standard: "atsc3", twinId: 4),
+        channel("104.1", name: "Alpha", id: 104, standard: "atsc3", twinId: 4),
+        channel("4.1", name: "Zed", id: 4, hidden: true),
         channel("4.2", name: "KBWV2", id: 42),
         channel("5.1", name: "WTST", id: 5),
         channel("100.1", name: "High", id: 100),
@@ -47,9 +47,11 @@ private func airing(_ title: String, category: String? = nil, subtitle: String? 
     let twin = channel("7.1", name: "Clear", id: 7, hidden: true)
     let shown = channel("104.1", name: "Next", id: 107, standard: "atsc3", twinId: 7)
     let after = channel("7.2", name: "After", id: 72)
-    let lineup = [twin, shown, after]
-    let ordered = [shown, after].sorted { Channel.comesBefore($0, $1, lineup: lineup) }
-    #expect(ordered.map(\.id) == [107, 72])
+    let mid = channel("5.1", name: "Mid", id: 51)
+    let lineup = [twin, shown, after, mid]
+    let ordered = [shown, after, mid].sorted { Channel.comesBefore($0, $1, lineup: lineup) }
+    #expect(ordered.map(\.id) == [51, 107, 72])
+    #expect(Channel.orderNumber(shown, lineup: lineup) == "7.1")
     #expect(Channel.orderNumber(shown, lineup: []) == "4.1")
     #expect(Channel.orderNumber(channel("100.1", name: "High", id: 100), lineup: []) == "100.1")
 }

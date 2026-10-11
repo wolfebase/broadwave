@@ -97,7 +97,7 @@ func TestFlex4KTwinChoiceAndFavorite(t *testing.T) {
 		}
 	}
 
-	expectGuide("atsc3", []string{"4.2", "5.1", "104.1"})
+	expectGuide("atsc3", []string{"104.1", "4.2", "5.1"})
 
 	code, hidden := patch(id("4.1"), `{"favorite":true}`)
 	if code != http.StatusOK || !hidden.Hidden || !hidden.Favorite {
@@ -133,12 +133,12 @@ func TestFlex4KTwinChoiceAndFavorite(t *testing.T) {
 	if code, _ = patch(id("104.1"), `{"twinChoice":"both"}`); code != http.StatusOK {
 		t.Fatalf("both %d", code)
 	}
-	expectGuide("both", []string{"4.1", "4.2", "5.1", "104.1"})
+	expectGuide("both", []string{"4.1", "104.1", "4.2", "5.1"})
 
 	if code, _ = patch(id("4.1"), `{"twinChoice":"atsc3"}`); code != http.StatusOK {
 		t.Fatalf("atsc3 %d", code)
 	}
-	expectGuide("atsc3 again", []string{"4.2", "5.1", "104.1"})
+	expectGuide("atsc3 again", []string{"104.1", "4.2", "5.1"})
 	if shown := byNumber(true)["104.1"]; !shown.Favorite {
 		t.Fatalf("104.1 %+v, want the favorite after 4.1 is hidden again", shown)
 	}
