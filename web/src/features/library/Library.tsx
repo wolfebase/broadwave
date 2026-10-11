@@ -4,7 +4,7 @@ import { copy } from "../../strings";
 import { formatBytes, formatClockPoint } from "../../lib/format";
 import { focusRing } from "../../app/remote";
 import { navigate } from "../../app/router";
-import { dismissesLayer } from "../../lib/dialogFocus";
+import { dismissesLayer, pageCovered } from "../../lib/dialogFocus";
 import { RecordingCard, Shelf } from "../../ui/shelf";
 import { DownloadLink } from "../recordings/DownloadLink";
 import { signalLine } from "./health";
@@ -72,7 +72,7 @@ export function Library({
     if (confirming) {
       const onKey = (event: KeyboardEvent) => {
         if (event.metaKey || event.ctrlKey || event.altKey) return;
-        if (!dismissesLayer(event.key, event.target)) return;
+        if (!dismissesLayer(event.key, event.target) || pageCovered()) return;
         const target = event.target;
         if (target instanceof HTMLElement && target.closest("form")) return;
         event.preventDefault();

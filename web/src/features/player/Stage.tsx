@@ -128,7 +128,7 @@ export function Stage({
     const dock = ".stage-top, .stage-dock, .player-note, .stage-fab";
     const fade = () => {
       const active = document.activeElement;
-      if (active instanceof Element && active.closest(dock)) root.current?.focus({ preventScroll: true, focusVisible: true } as FocusOptions);
+      if (active instanceof Element && active.closest(dock)) root.current?.focus({ preventScroll: true });
       setTimedIdle(true);
     };
     let timer = window.setTimeout(fade, 3200);
@@ -223,12 +223,13 @@ export function Stage({
                 const region = root.current?.querySelector("#player-options");
                 const current = event.target;
                 const slider = current instanceof HTMLInputElement && current.type === "range";
-                if (region && current instanceof HTMLElement && region.contains(current) && !slider) {
+                const rows = region && current instanceof HTMLElement && region.contains(current) && !slider ? optionRows(region) : [];
+                const row = rows.findIndex((items) => items.includes(current as HTMLElement));
+                // A control outside the rows keeps its own arrows and the remote's.
+                if (row >= 0) {
                   event.preventDefault();
                   event.stopPropagation();
-                  const rows = optionRows(region);
-                  const row = rows.findIndex((items) => items.includes(current));
-                  const col = row < 0 ? -1 : rows[row].indexOf(current);
+                  const col = rows[row].indexOf(current as HTMLElement);
                   const next = optionArrow(rows.map((items) => items.length), row, col, event.key);
                   if (next) focusRing(rows[next.row]?.[next.col]);
                   return;
