@@ -1559,15 +1559,27 @@ export interface components {
             device?: components["schemas"]["ClientDevice"];
         };
         Error: {
-            /** @description Stable machine code, for example tuners_busy, no_signal, stream_down, tuner_refused, tuner_silent, no_source, streams_full, disk_low, not_found, bad_request, pictures_full. */
+            /**
+             * @description Stable machine code. An unknown code is still a failure.
+             *     Known codes: bad_request, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, no_signal, no_source, not_found, pictures_full, rate_limited, recording_soon, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable.
+             */
             code: string;
             /** @description Short text safe to show a user. */
             message: string;
             tuners?: components["schemas"]["Tuner"][];
+            /** @description How many pictures this server can play at once, when the code is pictures_full. */
+            tiles?: number;
             /** Format: int64 */
             freeBytes?: number;
             /** Format: int64 */
             needBytes?: number;
+            /** @description The stream or export cap, when the code is streams_full or exports_full. */
+            limit?: number;
+            /**
+             * Format: date-time
+             * @description When another try is allowed, when the code is guide_rate_limited.
+             */
+            retryAt?: string;
         } & {
             [key: string]: unknown;
         };
