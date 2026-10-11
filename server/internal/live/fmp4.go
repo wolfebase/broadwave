@@ -651,6 +651,10 @@ func runTiming(traf []byte) (trackRun, bool) {
 	return r, true
 }
 
+// maxTrunSamples is far past any fragment ffmpeg writes: a six-second
+// fragment of 60 fps video has 360 samples.
+const maxTrunSamples = 1 << 20
+
 func (r *trackRun) readTrun(b []byte) bool {
 	if len(b) < 8 {
 		return false
@@ -676,7 +680,7 @@ func (r *trackRun) readTrun(b []byte) bool {
 	}
 	// Per-sample fields are the only stride. Without them a huge count is the
 	// whole allocation; a small count is constant-duration audio.
-	if r.flags&0xF00 == 0 && count > uint32(maxBox) {
+	if r.flags&0xF00 == 0 && count > maxTrunSamples {
 		return false
 	}
 	for i := 0; i < n; i++ {

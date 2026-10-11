@@ -88,9 +88,12 @@ func TestFetchArtRefusesAHugeHeader(t *testing.T) {
 	if len(raw) < 33 || string(raw[12:16]) != "IHDR" {
 		t.Fatalf("png header %q", raw)
 	}
-	// 3000 by 3000 is past the pixel cap and still small if a decode slips through.
-	binary.BigEndian.PutUint32(raw[16:20], 3000)
-	binary.BigEndian.PutUint32(raw[20:24], 3000)
+	// 6000 by 6000 is past the pixel cap. A 4K backdrop is not.
+	if artTooLarge(3840, 2160) || artTooLarge(5120, 2880) {
+		t.Fatal("a 4K or 5K picture is refused")
+	}
+	binary.BigEndian.PutUint32(raw[16:20], 6000)
+	binary.BigEndian.PutUint32(raw[20:24], 6000)
 	binary.BigEndian.PutUint32(raw[29:33], crc32.ChecksumIEEE(raw[12:29]))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "image/png")

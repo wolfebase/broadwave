@@ -44,12 +44,13 @@ type Entry struct {
 	DRM           bool
 }
 
-// maxPlaylist is the most playlist text one read will hold.
-// A test lowers it. The live value matches the guide document cap.
-var maxPlaylist = 32 << 20
+// maxPlaylist is the most playlist text one read will hold. A 30,000-channel
+// playlist is about 15 MB. A test lowers it.
+var maxPlaylist = 128 << 20
 
 // maxEntries stops a playlist from turning one file into an unbounded list.
-const maxEntries = 50000
+// It is far past the largest channel lists people import.
+const maxEntries = 250_000
 
 // ParseM3U reads an extended M3U playlist. Lines that are not channels are ignored.
 func ParseM3U(r io.Reader) []Entry {

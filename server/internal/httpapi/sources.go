@@ -154,7 +154,7 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 
 // maxPlaylistUpload is the largest playlist file one request may carry.
 // ParseMultipartForm alone still writes the rest of a file part to disk.
-var maxPlaylistUpload int64 = 32 << 20
+var maxPlaylistUpload int64 = 128 << 20
 
 func (s *Server) addPlaylistFile(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(nil, r.Body, maxPlaylistUpload)

@@ -13,7 +13,7 @@ import (
 var episodeFile = regexp.MustCompile(`(?i)[sS](\d{1,2})[eE](\d{1,3})`)
 
 // mediaFileCap is the most videos ScanMedia returns from one folder.
-var mediaFileCap = 5000
+var mediaFileCap = 200_000
 
 // ScanMedia reads a folder of movies and episodes. Files stay where they are.
 func ScanMedia(root string) ([]store.Recording, error) {

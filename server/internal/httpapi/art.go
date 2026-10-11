@@ -165,8 +165,8 @@ func fetchArt(ctx context.Context, rawURL string, width int) ([]byte, string, in
 // A picture header can claim a huge size in a few bytes. Decoding that
 // allocates width times height, so refuse it first.
 func artTooLarge(w, h int) bool {
-	const maxSide = 8192
-	const maxPixels = 8 << 20
+	const maxSide = 16384
+	const maxPixels = 32 << 20
 	if w < 1 || h < 1 || w > maxSide || h > maxSide {
 		return true
 	}
