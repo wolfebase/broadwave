@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.13.1 — 2026-10-11
+
+### Changed
+
+- Apple TV changes channel about 6 seconds faster.
+
+### Fixed
+
+- An Apple TV that you paused and brought back to live rejoins the other TVs by itself.
+
 ## 0.13.0 — 2026-10-11
 
 ### Added
