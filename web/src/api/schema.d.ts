@@ -3865,6 +3865,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         playlist: string;
+                        recording: components["schemas"]["Recording"];
                         /** @description Where playback starts, in seconds. A saved spot in the first two seconds, past the known length, or on a recording whose length is unknown starts at the beginning. */
                         position: number;
                         /** @description True while the recording is still being written */
@@ -3923,7 +3924,18 @@ export interface operations {
             };
         };
         responses: {
-            200: components["responses"]["Ok"];
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        ok: boolean;
+                        watched: boolean;
+                    };
+                };
+            };
         };
     };
     setKeep: {
@@ -3943,7 +3955,18 @@ export interface operations {
             };
         };
         responses: {
-            200: components["responses"]["Ok"];
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        ok: boolean;
+                        keep: boolean;
+                    };
+                };
+            };
         };
     };
     moveRecording: {
@@ -4020,7 +4043,8 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        airing?: components["schemas"]["Airing"];
+                        /** @description Null when the guide has no later airing of this episode. */
+                        airing: components["schemas"]["Airing"] | null;
                     };
                 };
             };

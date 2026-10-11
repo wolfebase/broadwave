@@ -1109,9 +1109,10 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [playlist, position, growing, markers]
+                required: [playlist, recording, position, growing, markers]
                 properties:
                   playlist: { type: string }
+                  recording: { $ref: "#/components/schemas/Recording" }
                   position: { type: number, description: "Where playback starts, in seconds. A saved spot in the first two seconds, past the known length, or on a recording whose length is unknown starts at the beginning." }
                   growing: { type: boolean, description: "True while the recording is still being written" }
                   markers:
@@ -1158,7 +1159,17 @@ paths:
               properties:
                 watched: { type: boolean }
       responses:
-        "200": { $ref: "#/components/responses/Ok" }
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [ok, watched]
+                properties:
+                  ok: { type: boolean }
+                  watched: { type: boolean }
   /recordings/{id}/keep:
     put:
       tags: [recordings]
@@ -1176,7 +1187,17 @@ paths:
               properties:
                 keep: { type: boolean }
       responses:
-        "200": { $ref: "#/components/responses/Ok" }
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [ok, keep]
+                properties:
+                  ok: { type: boolean }
+                  keep: { type: boolean }
   /recordings/{id}/move:
     post:
       tags: [recordings]
@@ -1232,8 +1253,13 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [airing]
                 properties:
-                  airing: { $ref: "#/components/schemas/Airing" }
+                  airing:
+                    description: Null when the guide has no later airing of this episode.
+                    anyOf:
+                      - $ref: "#/components/schemas/Airing"
+                      - type: "null"
         "404": { $ref: "#/components/responses/Error" }
   /recordings/{id}/markers:
     get:

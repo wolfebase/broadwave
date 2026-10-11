@@ -482,16 +482,29 @@ func siblingSchema(schema map[string]any) map[string]any {
 }
 
 func allowsNull(schema map[string]any) bool {
+	if schema == nil {
+		return false
+	}
 	if schema["nullable"] == true {
 		return true
 	}
-	kinds, ok := typeNames(schema["type"])
-	if !ok {
-		return false
+	if kinds, ok := typeNames(schema["type"]); ok {
+		for _, kind := range kinds {
+			if kind == "null" {
+				return true
+			}
+		}
 	}
-	for _, kind := range kinds {
-		if kind == "null" {
-			return true
+	for _, key := range []string{"anyOf", "oneOf"} {
+		raw, ok := schema[key].([]any)
+		if !ok {
+			continue
+		}
+		for _, branch := range raw {
+			item, ok := asMap(branch)
+			if ok && allowsNull(item) {
+				return true
+			}
 		}
 	}
 	return false
