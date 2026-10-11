@@ -22,7 +22,6 @@ import {
   pictureRetryDelay,
   pictureRetryEveryMs,
   liveFatalStep,
-  outageAtWatchStart,
   outageTearsDown,
   pictureStopped,
   recoveryEdge,
@@ -154,8 +153,7 @@ export function useLiveStream(
     // clock. An automatic retry names its channel before bumping attempt; the
     // name stays until that watch answers, so a rerun of this effect keeps it.
     const quiet = quietRetry.current != null && quietRetry.current === channelId;
-    const opened = outageAtWatchStart(quiet, { error: "kept", recovery: "server", needsConfirm: true });
-    if (!opened.error) {
+    if (!quiet) {
       if (pictureStopAtRef.current) {
         pictureStopAtRef.current = 0;
         setPictureStopAt(0);

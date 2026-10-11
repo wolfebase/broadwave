@@ -181,14 +181,6 @@ export function holdPictureMessage(next: { message: string; recovery: Recovery }
 // not start the count over.
 export const frozenMs = 8000;
 
-/** A new watch drops the previous failure. A quiet retune keeps the one already on screen. */
-export function outageAtWatchStart(
-  quiet: boolean,
-  prev: { error: string; recovery: Recovery; needsConfirm: boolean },
-): { error: string; recovery: Recovery; needsConfirm: boolean } {
-  if (quiet) return prev;
-  return { error: "", recovery: "", needsConfirm: false };
-}
 
 /**
  * A watch that answers after this effect has stopped must not mark the next
