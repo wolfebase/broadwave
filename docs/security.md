@@ -18,15 +18,19 @@ A refused request answers with the name it saw, and tells you to set `BROADWAVE_
 
 ## Requests
 
-A browser page from another site cannot change the server. A request that changes something has to come from this server's own pages, or from an app that is not a browser. The host name on the request has to be this server.
+A page on another site cannot change the server. A request that changes something has to come from this server's own pages, or from an app that is not a browser. The live socket and the stream exports refuse a page on another site too. Plex, Jellyfin, Channels, and curl send no browser site header and are not affected.
 
-The tuner interface this server offers to other apps uses that same host check.
+The tuner interface this server offers to other apps on port 8478 uses the same name check as the API.
+
+Responses carry `X-Content-Type-Options: nosniff`. The web app can still be framed, so a home dashboard can show it.
 
 ## Fetches
 
-Playlists, guides, artwork, and tuner requests use http or https. Other schemes are refused. Link-local addresses, and the well-known cloud metadata names and addresses, are refused. A tuner on a private network address still works. A tuner that answers only on a link-local address does not.
+Playlists, guides, artwork, scoreboards, and the release check use http or https. Other schemes are refused. Cloud metadata names and addresses are refused, however the address is written: decimal, hex, octal, IPv4-mapped, or NAT64. Redirects are checked the same way.
 
-When ffmpeg or ffprobe opens a URL, the input is limited to http and https. A playlist cannot hand either program a file on this machine. A recording on disk is still opened as a file.
+Link-local addresses are refused for playlists, guides, and artwork. A tuner is allowed one, because a tuner with no DHCP server gives itself a 169.254 address. Private addresses (`10/8`, `172.16/12`, `192.168/16`, IPv6 ULA), loopback, and `.local` names work everywhere.
+
+When ffmpeg or ffprobe opens a URL, the input is limited to http and https. A remote playlist cannot hand either program a file on this machine. A recording on disk is still opened as a file. A playlist you add by its path on this machine is still read.
 
 ## Files
 
@@ -34,9 +38,21 @@ A channel number from a playlist is cleaned before it becomes a recording's file
 
 ## Size
 
-A playlist upload, a picture, and a guide each stop at a fixed size. An app copying the broadcast stops at 32 streams at once. A recording you start is set for at most a day. A picture whose header claims a huge width or height is not decoded. A compressed guide that expands past the cap is refused, and xz is held to a memory limit while it expands. An event socket keeps its message cap. The server holds a fixed number of those sockets and closes the next one.
+Each cap is far past real use and stops a file that never ends or a compression bomb:
 
-Playlist text, guide XML, and the tables inside a broadcast are read with their own caps.
+- A playlist, read or uploaded: 128 MB and 250,000 channels. A 30,000-channel playlist is about 15 MB.
+- A guide after it is unpacked: 512 MB. xz may use 256 MB while it unpacks.
+- A picture: 32 megapixels, and no side past 16,384.
+- A folder of videos: 200,000 files.
+- Event sockets: 128 at once.
+- Apps copying the broadcast through the exports or the tuner interface: 32 at once. People watching in Broadwave are not counted.
+- A recording you start: a day.
+
+Playlist text, guide XML, the tables inside a broadcast, and fMP4 fragments are read with their own caps.
+
+## Secrets
+
+A password, token, secret, or key in a playlist or guide address, and a tuner `DeviceAuth`, are masked before they are shown or written to diagnostics, the device list, and the support bundle. The field name is matched in any case, and a password in an Xtream-style stream path (`/live/<user>/<password>/<id>`) is masked too. A source saved before a field was masked still fetches with its login. Settings shows the guide address with its password removed, and saving that page keeps the stored password. ffmpeg's messages go through the same log filter. A failed tuner or artwork request does not repeat its address.
 
 ## What is stored
 
@@ -60,13 +76,14 @@ None of those calls go to the maker of Broadwave. The privacy policy is [PRIVACY
 
 Anyone on the network can use the server until accounts exist.
 
-ffmpeg looks up a name on its own after Broadwave has checked the first address. A name can change where it points.
+ffmpeg looks up a stream's name again after Broadwave has checked it, and a later segment or key can name another address. A name can change where it points between the two lookups.
 
-A stream that starts on an allowed address can later ask for a segment or a key on a link-local address.
+On plain http, a page on another site can still open an export or a tuner URL in a way that sends no site header.
 
-A tuner that uses only a link-local address is refused.
+The encoder's command line still shows the stream address it was given. Its log output does not.
 
 Recordings stay the original broadcast. Transcoding is only for playback.
+
 ## Away from home
 
 Use a VPN that puts your phone on the home network, and open the server's address on that VPN. Do not forward port 8477 from the public internet.
