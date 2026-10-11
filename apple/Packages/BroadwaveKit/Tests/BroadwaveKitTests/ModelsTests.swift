@@ -220,6 +220,23 @@ private func fixture(_ name: String) throws -> Data {
     #expect(move == .wait)
 }
 
+/// J0.44: a viewer who paused, time-shifted, and came back to live rejoins the
+/// room by itself; a short pause keeps its place.
+@Test @MainActor func aViewerBackFromATimeShiftRejoins() {
+    // Paused, went 840 s back, came back to 1.4 s behind the room, playing at 1x.
+    #expect(SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -840_000, driftMS: -1427, playing: true, rate: 1, roomRate: 1))
+    #expect(SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -6000, driftMS: 2500, playing: true, rate: 1, roomRate: 1))
+    // A 2 s pause never went far: it keeps its place.
+    #expect(!SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -2000, driftMS: -2000, playing: true, rate: 1, roomRate: 1))
+    // Still far behind, paused, scrubbing, a paused room, or a screen the engine gave up on.
+    #expect(!SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -840_000, driftMS: -60000, playing: true, rate: 1, roomRate: 1))
+    #expect(!SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -840_000, driftMS: -1427, playing: false, rate: 0, roomRate: 1))
+    #expect(!SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -840_000, driftMS: -1427, playing: true, rate: 2, roomRate: 1))
+    #expect(!SyncEngine.backNearRoom(cause: .viewer, farthestBehindMS: -840_000, driftMS: -1427, playing: true, rate: 1, roomRate: 0))
+    #expect(!SyncEngine.backNearRoom(cause: .gaveUp, farthestBehindMS: -840_000, driftMS: -1427, playing: true, rate: 1, roomRate: 1))
+    #expect(!SyncEngine.backNearRoom(cause: nil, farthestBehindMS: -840_000, driftMS: -1427, playing: true, rate: 1, roomRate: 1))
+}
+
 @Test @MainActor func aheadWithAFramePausesForTheDrift() {
     let move = SyncEngine.decide(hasFrame: true, driftMS: 10000, roomRate: 1, canSeek: true)
     #expect(move == .pause(resumeAfter: 10, seekToTarget: false))
