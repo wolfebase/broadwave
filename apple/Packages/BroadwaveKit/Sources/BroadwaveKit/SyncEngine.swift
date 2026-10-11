@@ -61,6 +61,11 @@ public final class SyncEngine {
     /// The viewer paused this screen. It keeps its own place, time-shifted,
     /// and the engine stops pulling it back to the room.
     public private(set) var detached = false
+    /// Why the engine let go of this screen, and how far behind the room the
+    /// viewer took it while it was let go.
+    private var detachedBy: DetachCause?
+    private var farthestBehind = 0.0
+    private var backNearTicks = 0
     private var inactive = false
     private var seenPlaying = false
     /// The player went to rate 0 through a pause or rate call. AVPlayer also
@@ -91,6 +96,16 @@ public final class SyncEngine {
     /// AVPlayer takes about this long to show frames again after play(), so
     /// a sync pause resumes this much early and lands on the room's frame.
     static let resumeLeadSeconds = 0.12
+    /// A screen the viewer paused and took more than rejoinShiftMS behind the
+    /// room, then brought back within rejoinWithinMS of it while playing at 1x
+    /// for rejoinTicks ticks, rejoins by itself. On a living-room Apple TV the
+    /// transport bar's way back to live left the screen detached 1.4 s off the
+    /// other TV for good (J0.44). A short pause keeps its place, as before.
+    static let rejoinShiftMS = 5000.0
+    static let rejoinWithinMS = 3000.0
+    static let rejoinTicks = 8
+
+    enum DetachCause: Equatable { case viewer, gaveUp }
 
     /// Posted before a screen asks the TV for a new display mode. The HDMI
     /// switch blanks the picture for a second or two while the clock runs.
@@ -209,6 +224,16 @@ public final class SyncEngine {
         roomRate != 0 && (paused || rate == 0)
     }
 
+    /// A screen the viewer let go of and has since brought back next to a
+    /// moving room. Only the viewer's own detach, and only after a real
+    /// time-shift: a short pause keeps its place until "Back in sync".
+    static func backNearRoom(
+        cause: DetachCause?, farthestBehindMS: Double, driftMS: Double, playing: Bool, rate: Float, roomRate: Double
+    ) -> Bool {
+        cause == .viewer && roomRate != 0 && playing && abs(rate - 1) < 0.01
+            && farthestBehindMS <= -rejoinShiftMS && abs(driftMS) <= rejoinWithinMS
+    }
+
     public init(player: AVPlayer, socket: EventSocket, room: String, channelID: Int64) {
         self.player = player
         self.socket = socket
@@ -297,6 +322,9 @@ public final class SyncEngine {
     public func rejoin() {
         guard detached else { return }
         detached = false
+        detachedBy = nil
+        farthestBehind = 0
+        backNearTicks = 0
         seenPlaying = false
         misses = 0
         speedUpFails = 0
@@ -355,6 +383,21 @@ public final class SyncEngine {
         let hasFrame = displayedFrame?() ?? sized
         if detached {
             state = .off
+            farthestBehind = min(farthestBehind, d)
+            if Self.backNearRoom(
+                cause: detachedBy, farthestBehindMS: farthestBehind, driftMS: d,
+                playing: player.timeControlStatus == .playing, rate: player.rate, roomRate: st.rate
+            ) {
+                backNearTicks += 1
+                if backNearTicks >= Self.rejoinTicks {
+                    if logs {
+                        Self.log.notice("sync rejoin: back next to the room at \(Int(d)) ms")
+                    }
+                    rejoin()
+                }
+            } else {
+                backNearTicks = 0
+            }
             return
         }
         let paused = player.timeControlStatus == .paused
@@ -367,6 +410,9 @@ public final class SyncEngine {
             seenPlaying: seenPlaying, byCall: pausedByCall
         ) {
             detached = true
+            detachedBy = .viewer
+            farthestBehind = min(0, d)
+            backNearTicks = 0
             setTrim(.none)
             state = .off
             if logs {
@@ -478,6 +524,7 @@ public final class SyncEngine {
     /// where it is, and the menu offers "Back in sync".
     private func giveUp(item: AVPlayerItem, drift: Double) {
         detached = true
+        detachedBy = .gaveUp
         setTrim(.none)
         if player.rate != 1, player.rate != 0 {
             player.rate = 1
