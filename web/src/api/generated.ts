@@ -321,6 +321,20 @@ export type Playback = {
   layout: string;
 };
 
+export type PlaylistPickChannels = {
+  id: string;
+  name: string;
+  number: string;
+};
+
+export type PlaylistPick = {
+  pick: boolean;
+  count: number;
+  message: string;
+  groups: string[];
+  channels?: PlaylistPickChannels[];
+};
+
 export type Reception = {
   freeTuner: boolean;
   tunerAnswers: boolean;
@@ -519,6 +533,8 @@ export type Source = {
   health?: string;
   streamsInUse?: number;
   deviceId?: string;
+  groups?: string;
+  start?: number;
 };
 
 export type SportsTeam = {
