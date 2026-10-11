@@ -302,7 +302,7 @@ export function Play({
         else back(-delta);
       }}
       error={error}
-      note={card ? `Up next: ${nextLabel}. Plays on its own.` : undefined}
+      note={card ? `Up next: ${nextLabel}${card.left !== null ? ". Plays on its own." : ""}` : undefined}
       noteAction={
         card ? (
           <>
@@ -317,7 +317,7 @@ export function Play({
       hold={Boolean(card)}
       tools={
         inside && (skipMode === "button" || (skipMode === "auto" && !sure(inside))) ? (
-          <button type="button" className="text-btn on" aria-label={actionName("Skip break", `${Math.round(inside.start)}s`)} onClick={() => { if (videoRef.current) videoRef.current.currentTime = inside.end; }}>
+          <button type="button" className="text-btn on" onClick={() => { if (videoRef.current) videoRef.current.currentTime = inside.end; }}>
             Skip break
           </button>
         ) : introEnd !== null ? (
