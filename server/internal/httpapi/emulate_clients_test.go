@@ -609,3 +609,40 @@ func TestStreamProbeDoesNotTune(t *testing.T) {
 	}
 	fx.quietHits()
 }
+
+func TestLineupURLPlaysItsOwnRow(t *testing.T) {
+	fx := newTunerFixture(t)
+	ctx := t.Context()
+	same := "4.1"
+	if _, err := fx.st.PatchChannel(ctx, fx.ids["5.2"], store.ChannelPatch{CustomNumber: &same}); err != nil {
+		t.Fatal(err)
+	}
+	var rows []lineupRow
+	decodeBody(t, fx.ask(fx.mux, http.MethodGet, "/lineup.json", uaJellyfin), &rows)
+	h := &emuHandler{store: fx.st}
+	want := map[string]int64{"KBWV": fx.ids["4.1"], "Rivers": fx.ids["5.2"]}
+	auto := 0
+	for _, row := range rows {
+		if row.GuideName == "Same number" {
+			t.Fatalf("a virtual channel /auto/v cannot reach is listed: %+v", row)
+		}
+		id, ok := want[row.GuideName]
+		if !ok {
+			continue
+		}
+		if row.URL == "http://example.com/auto/v4.1" {
+			auto++
+		}
+		hit, ok := h.lookup(ctx, strings.TrimPrefix(row.URL, "http://example.com/auto/"))
+		if !ok || hit.kind != "channel" || hit.id != id {
+			t.Fatalf("%s at %s plays %+v", row.GuideName, row.URL, hit)
+		}
+	}
+	if auto != 1 {
+		t.Fatalf("one row owns /auto/v4.1, got %d: %+v", auto, rows)
+	}
+	if rec := fx.ask(fx.mux, http.MethodGet, "/auto/v9001?transcode=none", uaChannels); rec.Code != http.StatusOK {
+		t.Fatalf("transcode=none is the broadcast as it is: %d %s", rec.Code, rec.Header().Get("X-HDHomeRun-Error"))
+	}
+	fx.quietHits()
+}
