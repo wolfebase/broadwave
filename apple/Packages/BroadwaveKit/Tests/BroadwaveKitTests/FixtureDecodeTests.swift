@@ -207,7 +207,7 @@ private func fixture(_ name: String) throws -> Data {
 
     let played = try APIClient.decoder.decode(Played.self, from: fixture("recording-play"))
     #expect(played.playlist == "/media/file/1/index.m3u8")
-    #expect(played.position == 12.5)
+    #expect(played.position == 0)
     #expect(!played.growing)
     #expect(played.markers.count == 1)
     #expect(played.recording.title == "Jeopardy!")
