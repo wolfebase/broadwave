@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // AiringHit is a guide listing that matched a search, with the channel it is on.
@@ -212,27 +213,19 @@ func titleMatch(query string) string {
 }
 
 // teamMatch is an FTS query for listings whose title or subtitle names one
-// of the teams. Words are cleaned the same way as a typed search, so a name
-// cannot change the query. Description and cast are not searched: a news item
-// that mentions a club is not that club's game. An empty result means none of
-// the names had a searchable word.
+// of the teams. Each name is one quoted phrase, so FTS splits it the way it
+// split the listing (accents, "A&M", one-letter words) and no character is
+// query syntax. Description and cast are not searched: a news item that
+// mentions a club is not that club's game. An empty result means no name had
+// a letter or digit.
 func teamMatch(names []string) string {
 	var parts []string
 	for _, name := range names {
-		var words []string
-		for _, field := range strings.Fields(ftsMatch(name)) {
-			word := strings.Trim(field, `"*`)
-			// A run of hyphens is not a word. FTS rejects it as syntax.
-			if word == "" || strings.Trim(word, "-") == "" {
-				continue
-			}
-			words = append(words, word)
-		}
-		if len(words) == 0 {
+		if strings.IndexFunc(name, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) < 0 {
 			continue
 		}
-		phrase := strings.Join(words, " ")
-		parts = append(parts, `(title : "`+phrase+`" OR subtitle : "`+phrase+`")`)
+		phrase := `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+		parts = append(parts, `(title : `+phrase+` OR subtitle : `+phrase+`)`)
 	}
 	return strings.Join(parts, " OR ")
 }

@@ -127,3 +127,28 @@ func titlesOf(rows []Airing) []string {
 	}
 	return out
 }
+
+// A team name is read the way the listing was indexed. Stripping the accent
+// or the ampersand from the name made a word the index never held.
+func TestQueryAiringsFindsATeamWithAnAccentOrAmpersand(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	from := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	rows := []Airing{
+		{ChannelID: 1, Title: "MLS Soccer", Subtitle: "CF Montréal at Toronto FC", Start: from, End: from.Add(2 * time.Hour)},
+		{ChannelID: 2, Title: "Texas A&M at Alabama", Start: from.Add(time.Hour), End: from.Add(4 * time.Hour)},
+		{ChannelID: 3, Title: "Evening News", Start: from, End: from.Add(time.Hour)},
+	}
+	if err := st.InsertAirings(ctx, rows); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{"Montréal": "MLS Soccer", "Texas A&M": "Texas A&M at Alabama"} {
+		got, err := st.QueryAirings(ctx, AiringQuery{From: from, To: from.Add(6 * time.Hour), Teams: []string{name}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Join(titlesOf(got), ",") != want {
+			t.Fatalf("%s: %v", name, titlesOf(got))
+		}
+	}
+}

@@ -65,7 +65,7 @@ func (s *Server) NoteTeams(ctx context.Context) {
 	for _, team := range follows {
 		names = append(names, team.Name, team.Short, team.Abbr)
 	}
-	airings, err := s.Store.TeamAirings(ctx, now, now.Add(36*time.Hour), names)
+	airings, err := s.Store.QueryAirings(ctx, store.AiringQuery{From: now, To: now.Add(36 * time.Hour), Teams: names})
 	if err != nil {
 		return
 	}
