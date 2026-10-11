@@ -265,6 +265,11 @@ html:root[data-layout="tv"] section.stage.mini:focus-visible {
   flex-wrap: wrap;
 }
 
+.cast-note {
+  font-size: var(--type-caption-size);
+  color: var(--color-text-secondary);
+}
+
 .transport-play {
   width: 46px;
   height: 46px;

@@ -16,6 +16,7 @@ import { saveSound, sleepDue, sleepSentence, sleepUntilFrom } from "./extras";
 import { goLiveAction } from "./goLive";
 import { escapeAction, guideListAction, guideRowOnFocus, ignoreHeldKey, pendingTuneFires } from "./keys";
 import { nextPicturePick, shownPicture, visitSync } from "./livePref";
+import { CastButton } from "../../cast/CastButton";
 import { ChevronIcon, InfoIcon, ListIcon, RecordIcon, SideBySideIcon, SyncIcon } from "../../ui/icons";
 import { Progress } from "../../ui/primitives";
 import { useDialogFocus } from "../../ui/useDialogFocus";
@@ -65,7 +66,7 @@ export function LivePlayer({
   onClose: () => void;
   onExpand: () => void;
 }) {
-  const { channels, index, now, recordings, settings, saveSettings, record, stopRecord, refresh } = useData();
+  const { channels, index, now, recordings, settings, saveSettings, record, stopRecord, refresh, server } = useData();
   const layout = useLayout();
   const videoRef = useRef<HTMLVideoElement>(null);
   const rootRef = useRef<HTMLElement>(null);
@@ -659,6 +660,7 @@ export function LivePlayer({
       loading={tuning ? <TuningCard channel={channel} show={airing?.title} art={airing?.imageUrl ? `/media/art/airing/${airing.id}?w=960` : ""} mini={mode === "mini"} /> : null}
       tools={
         <>
+          <CastButton appId={server?.castAppId ?? ""} channelId={channel.id} playlist={stream.session?.playlist ?? ""} room={room} title={airing?.title || channel.displayName} subtitle={channel.displayName} />
           {layout === "phone" ? (
             <span className="channel-step">
               <button type="button" className="glass-icon" aria-label="Previous channel" onClick={() => step(-1)}>

@@ -128,3 +128,11 @@ export const ChevronIcon = (p: P) => (
     <path d="m9 5.5 6.5 6.5L9 18.5" />
   </Base>
 );
+export const CastIcon = (p: P) => (
+  <Base {...p}>
+    <path d="M5 7.5V7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2.5" />
+    <circle cx="6" cy="17.5" r="0.8" fill="currentColor" stroke="none" />
+    <path d="M6 14.2a3.3 3.3 0 0 1 3.3 3.3" />
+    <path d="M6 11a6.5 6.5 0 0 1 6.5 6.5" />
+  </Base>
+);
