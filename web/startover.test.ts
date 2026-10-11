@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { recordingHoldingStart, startOverChoice } from "./src/features/player/startOver.ts";
+import { recordingHoldingStart, scrubHold, startOverChoice, swallowWakeClick } from "./src/features/player/startOver.ts";
 import type { Airing, Recording } from "./src/types.ts";
 
 const show = Date.parse("2026-10-08T19:00:00Z");
@@ -29,4 +29,18 @@ test("a recording holds the start when it is this showing and began before it", 
   ];
   assert.equal(recordingHoldingStart(airing, list)?.id, 7);
   assert.equal(recordingHoldingStart(airing, list.slice(0, 5)), undefined);
+});
+
+test("the scrub thumb stays on the drag until the playhead arrives", () => {
+  assert.equal(scrubHold(40, 12), 40);
+  assert.equal(scrubHold(40, 39.6), null);
+  assert.equal(scrubHold(null, 12), null);
+  assert.equal(scrubHold(40, Number.NaN), 40);
+});
+
+test("a tap that wakes the bar does not press the control under it", () => {
+  assert.equal(swallowWakeClick(true, "touchstart"), true);
+  assert.equal(swallowWakeClick(false, "touchstart"), false);
+  assert.equal(swallowWakeClick(true, "click"), false);
+  assert.equal(swallowWakeClick(true, "mousemove"), false);
 });

@@ -15,6 +15,18 @@ export function startOverChoice(showStart: number | undefined, windowFrom: numbe
   return null;
 }
 
+/** Drop the drag once the playhead is on it, so a seek that never ends cannot freeze the thumb. */
+export function scrubHold(held: number | null, playhead: number): number | null {
+  if (held == null) return null;
+  if (!Number.isFinite(playhead) || Math.abs(held - playhead) >= 0.5) return held;
+  return null;
+}
+
+/** A tap that wakes a hidden bar must not also press the control that appears under the finger. */
+export function swallowWakeClick(idle: boolean, type: string): boolean {
+  return idle && type === "touchstart";
+}
+
 /** A recording of this showing whose file holds its start, the earliest such. */
 export function recordingHoldingStart(airing: Airing, recordings: Recording[]): Recording | undefined {
   const start = Date.parse(airing.start);

@@ -24,7 +24,7 @@ import { movedTo, onSentHere, type SentNote } from "./moved";
 import { MovePanel } from "./MovePanel";
 import { listingNote } from "./outage";
 import { soundFor } from "./sounds";
-import { recordingHoldingStart, startOverChoice } from "./startOver";
+import { recordingHoldingStart, scrubHold, startOverChoice } from "./startOver";
 import { Stage } from "./Stage";
 import { groupRoom, peopleSentence, personLabel, useGroup } from "./together";
 import { useLiveStream } from "./useLiveStream";
@@ -172,6 +172,17 @@ export function LivePlayer({
   const held = airing ? recordingHoldingStart(airing, recordings) : undefined;
   const startOverFrom = startOverChoice(airing ? Date.parse(airing.start) : undefined, windowFrom, held ? Date.parse(held.startedAt) : undefined);
 
+  // Held while a drag is ahead of the playhead. The ref is what the tick reads.
+  const [scrubAt, setScrubAt] = useState<number | null>(null);
+  const scrubAtRef = useRef<number | null>(null);
+  const scrubTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(scrubTimer.current), []);
+  function holdScrub(value: number | null) {
+    if (scrubAtRef.current === value) return;
+    scrubAtRef.current = value;
+    setScrubAt(value);
+  }
+
   useEffect(() => localStorage.setItem("ota-live", JSON.stringify(opts)), [opts]);
 
   useEffect(() => {
@@ -180,10 +191,13 @@ export function LivePlayer({
     const tick = () => {
       const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : video.currentTime;
       const start = video.seekable.length ? video.seekable.start(0) : 0;
+      const at = Math.max(0, video.currentTime - start);
       setBehind(Math.max(0, end - video.currentTime));
-      setSpan({ at: Math.max(0, video.currentTime - start), len: Math.max(1, end - start) });
+      setSpan({ at, len: Math.max(1, end - start) });
       const media = mediaNow();
       setWindowFrom(media === null || !video.seekable.length ? null : Math.round((media - (video.currentTime - start) * 1000) / 1000) * 1000);
+      // A timeupdate while the seek is still behind keeps the drag. Arriving drops it.
+      holdScrub(scrubHold(scrubAtRef.current, at));
     };
     // A paused video fires no timeupdate, and live moves on without it.
     const paused = window.setInterval(() => {
@@ -283,16 +297,13 @@ export function LivePlayer({
   }
 
   // A drag on the scrubber is one seek for the group, sent when it rests.
-  const [scrubAt, setScrubAt] = useState<number | null>(null);
-  const scrubTimer = useRef(0);
-  useEffect(() => () => window.clearTimeout(scrubTimer.current), []);
   function scrubTogether(value: number) {
-    setScrubAt(value);
+    holdScrub(value);
     window.clearTimeout(scrubTimer.current);
     scrubTimer.current = window.setTimeout(() => {
       const video = videoRef.current;
       if (video?.seekable.length) seekTogether(video.seekable.start(0) + value);
-      scrubTimer.current = window.setTimeout(() => setScrubAt(null), 1000);
+      scrubTimer.current = window.setTimeout(() => holdScrub(null), 1000);
     }, 250);
   }
 
@@ -549,6 +560,7 @@ export function LivePlayer({
         const video = videoRef.current;
         if (!video || !video.seekable.length) return;
         if (together) return scrubTogether(value);
+        holdScrub(value);
         detachSync();
         video.currentTime = video.seekable.start(0) + value;
       }}
