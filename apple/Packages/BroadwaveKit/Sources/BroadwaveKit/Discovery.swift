@@ -207,17 +207,6 @@ public final class Discovery {
         return gone.subtracting(staying).subtracting(probed)
     }
 
-    /// What a resolve does when the connection reaches a terminal state.
-    /// The handler is dropped so it cannot keep the connection alive.
-    struct ResolveAction: Equatable {
-        var resumeWithAddress: Bool
-        var dropHandler: Bool
-    }
-
-    enum ResolveEvent {
-        case ready, failed, cancelled
-    }
-
     /// After a browse failure the browser must be dropped, or the next start()
     /// sees it and returns. Cancel is stop()'s own clear.
     struct BrowseStep: Equatable {
@@ -237,15 +226,6 @@ public final class Discovery {
             BrowseStep(searching: false, holding: false)
         case .cancelled:
             BrowseStep(searching: false, holding: holding)
-        }
-    }
-
-    nonisolated static func closeResolve(_ event: ResolveEvent) -> ResolveAction {
-        switch event {
-        case .ready:
-            ResolveAction(resumeWithAddress: true, dropHandler: true)
-        case .failed, .cancelled:
-            ResolveAction(resumeWithAddress: false, dropHandler: true)
         }
     }
 
@@ -283,25 +263,22 @@ public final class Discovery {
             let conn = NWConnection(to: endpoint, using: params)
             let once = OnceBox()
             conn.stateUpdateHandler = { state in
-                let event: ResolveEvent
-                switch state {
-                case .ready: event = .ready
-                case .failed: event = .failed
-                case .cancelled: event = .cancelled
-                default: return
-                }
-                let action = Self.closeResolve(event)
                 var url: URL?
-                if action.resumeWithAddress, case let .hostPort(host, _) = conn.currentPath?.remoteEndpoint {
-                    url = serverURL(host: "\(host)", port: port)
+                switch state {
+                case .ready:
+                    if case let .hostPort(host, _) = conn.currentPath?.remoteEndpoint {
+                        url = serverURL(host: "\(host)", port: port)
+                    }
+                case .failed, .cancelled:
+                    break
+                default:
+                    return
                 }
                 let won = once.claim()
                 // Clear the handler before cancel. The handler retains the connection,
                 // and a cancel delivered on this stack must not resume with nil after
                 // the address was already taken.
-                if action.dropHandler {
-                    conn.stateUpdateHandler = nil
-                }
+                conn.stateUpdateHandler = nil
                 conn.cancel()
                 if won {
                     cont.resume(returning: url)

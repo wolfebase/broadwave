@@ -26,14 +26,6 @@ private func signedServer(id: String, url: String, privateKey: Curve25519.Signin
     #expect(cancelled == Discovery.BrowseStep(searching: false, holding: true))
 }
 
-@Test func aFinishedResolveDropsTheHandler() {
-    let ready = Discovery.closeResolve(.ready)
-    #expect(ready == Discovery.ResolveAction(resumeWithAddress: true, dropHandler: true))
-    let failed = Discovery.closeResolve(.failed)
-    #expect(failed == Discovery.ResolveAction(resumeWithAddress: false, dropHandler: true))
-    #expect(Discovery.closeResolve(.cancelled).dropHandler)
-}
-
 @Test func aMoveAfterForgetDoesNotConnectAndAColdLaunchKeepsTheCache() {
     #expect(AppStore.shouldApplyMove(savedID: "abc", currentID: "abc", epoch: 1, captured: 1))
     #expect(!AppStore.shouldApplyMove(savedID: "abc", currentID: nil, epoch: 2, captured: 1))
