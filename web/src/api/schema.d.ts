@@ -1435,6 +1435,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/storage/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description What the storage rules would remove, which recordings they would leave, and which damaged recordings can be recorded again.
+         *     Nothing is deleted. An admin call when device sign-in is on.
+         */
+        get: operations["getStoragePlan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/backup": {
         parameters: {
             query?: never;
@@ -2409,6 +2429,49 @@ export interface components {
             channelId?: number;
             steps: components["schemas"]["SetupStep"][];
         };
+        /** @description What the storage rules would do right now. Nothing is deleted. */
+        StoragePlan: {
+            /** @description Days a watched recording stays. 0 keeps them. */
+            deleteWatchedDays: number;
+            /** @description True when watched recordings would be deleted to get back to the reserve. */
+            makeRoom: boolean;
+            /** @description True when recordings on favorite channels are left alone. */
+            protectFavorites: boolean;
+            /** @description The reserve in gigabytes. 0 turns it off. */
+            watermarkGB: number;
+            /** Format: int64 */
+            freeBytes: number;
+            /** Format: int64 */
+            reserveBytes: number;
+            /**
+             * Format: int64
+             * @description Bytes short of the reserve. 0 when make-room would not run.
+             */
+            shortBytes: number;
+            /** @description False when the watched recordings are not enough to get back to the reserve. None of them would be deleted to make room. */
+            covers: boolean;
+            /** @description Why make-room would or would not delete. */
+            roomNote?: string;
+            remove: components["schemas"]["StoragePlanItem"][];
+            held: components["schemas"]["StoragePlanItem"][];
+            again: components["schemas"]["StoragePlanItem"][];
+        };
+        /** @description One recording a rule would remove, leave alone, or record again. */
+        StoragePlanItem: {
+            /** Format: int64 */
+            id: number;
+            title: string;
+            /** Format: int64 */
+            bytes: number;
+            /** @enum {string} */
+            rule: "watchedDays" | "makeRoom" | "keepLast" | "keepUnwatched" | "kept" | "recording" | "missing" | "favorite" | "recent" | "outside" | "lostTime";
+            reason: string;
+            /**
+             * @description now is a clean-up that runs on its own. next is a keep rule that runs when another episode of that show finishes.
+             * @enum {string}
+             */
+            when?: "now" | "next";
+        };
         /** @description Finished recordings in the recordings folder, grouped by title, largest first. */
         StorageShows: {
             shows: components["schemas"]["StorageShow"][];
@@ -2486,6 +2549,11 @@ export interface components {
              * @enum {string}
              */
             makeRoom?: "0" | "1";
+            /**
+             * @description 1 leaves recordings on favorite channels out of clean-up and out of a pass's keep count. 0, the default, cleans them up like any other recording. Keep forever is separate and always on for a recording you mark.
+             * @enum {string}
+             */
+            protectFavorites?: "0" | "1";
             /**
              * @description Where new recordings go. shows (the default) uses the layout Plex and Jellyfin read: TV/Show/Season 01/Show - S01E02 - Episode.ts when the guide has both a season and an episode number, TV/Show/Show - 2026-10-08 - Episode.ts otherwise (the start time when the episode has no name), and Movies/Title (1999)/Title (1999).ts for a movie (the year only when the guide has one). flat puts every recording in the recordings folder, named by start time and channel. Recordings already made stay where they are.
              * @enum {string}
@@ -5357,6 +5425,26 @@ export interface operations {
                 };
             };
             503: components["responses"]["Error"];
+        };
+    };
+    getStoragePlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The clean-up that would run */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoragePlan"];
+                };
+            };
         };
     };
     downloadBackup: {

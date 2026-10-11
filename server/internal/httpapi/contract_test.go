@@ -193,6 +193,7 @@ func TestContractFixtures(t *testing.T) {
 		{"virtual-schedule", "GET", "/api/v1/virtuals/schedule", "", 0},
 		{"settings", "GET", "/api/v1/settings", "", 0},
 		{"storage", "GET", "/api/v1/storage", "", 0},
+		{"storage-plan", "GET", "/api/v1/storage/plan", "", 0},
 		{"diagnostics", "GET", "/api/v1/diagnostics", "", 0},
 		{"multiview", "POST", "/api/v1/multiview/plan", `{"channelIds":[1,2]}`, 0},
 		{"channel", "PATCH", "/api/v1/channels/1", `{"favorite":true,"customName":"Fox 4"}`, 0},

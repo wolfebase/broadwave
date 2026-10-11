@@ -1,0 +1,13 @@
+{
+  "again": [],
+  "covers": true,
+  "deleteWatchedDays": 0,
+  "freeBytes": 0,
+  "held": [],
+  "makeRoom": false,
+  "protectFavorites": false,
+  "remove": [],
+  "reserveBytes": 10000000000,
+  "shortBytes": 0,
+  "watermarkGB": 10
+}
