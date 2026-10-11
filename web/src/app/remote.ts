@@ -1,4 +1,4 @@
-import { isTextField } from "../lib/dialogFocus";
+import { isTextField } from "../lib/textField";
 import { firstBelow, nearest, type Box, type Direction } from "../lib/remote";
 import { inAppDepth } from "./router";
 
