@@ -590,10 +590,10 @@ func (s *Server) settingsValues(r *http.Request) (map[string]string, error) {
 		values["layout"] = "auto"
 	}
 	delete(values, "recordingsPath")
-	if values["profile"] == "" {
+	if values["profile"] != "transparent" && values["profile"] != "balanced" && values["profile"] != "saver" {
 		values["profile"] = "transparent"
 	}
-	if values["audio"] == "" {
+	if values["audio"] != "stereo" && values["audio"] != "surround" {
 		values["audio"] = "stereo"
 	}
 	if strings.TrimSpace(values["watermarkGB"]) == "" {
@@ -618,10 +618,10 @@ func (s *Server) settingsValues(r *http.Request) (map[string]string, error) {
 	if values["pictureMode"] == "" {
 		values["pictureMode"] = "broadcast"
 	}
-	if values["autoplay"] == "" {
+	if values["autoplay"] != "0" && values["autoplay"] != "1" {
 		values["autoplay"] = "1"
 	}
-	if values["hdhrEmulate"] == "" {
+	if values["hdhrEmulate"] != "0" && values["hdhrEmulate"] != "1" {
 		values["hdhrEmulate"] = "0"
 	}
 	if values[store.SettingDeviceAuth] != "1" {
@@ -661,6 +661,9 @@ func (s *Server) settingsValues(r *http.Request) (map[string]string, error) {
 	needs, err := s.Store.ApplySetupDefault(r.Context(), s.now())
 	if err != nil {
 		return nil, err
+	}
+	if values["setupComplete"] != "" && values["setupComplete"] != "0" && values["setupComplete"] != "1" {
+		values["setupComplete"] = "0"
 	}
 	if needs {
 		values["needsSetup"] = "1"

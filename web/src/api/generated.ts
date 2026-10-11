@@ -479,6 +479,8 @@ export type Settings = {
   lastGuidePull?: string;
   nextGuidePull?: string;
   lastManualGuidePull?: string;
+  lastGuideError?: string;
+  lastGuideErrorAt?: string;
   hideScores?: string;
   liveScores?: string;
   checkUpdates?: string;

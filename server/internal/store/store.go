@@ -676,36 +676,42 @@ func (s *Store) PutSettings(ctx context.Context, values map[string]string) error
 
 func cleanSettings(values map[string]string) (map[string]string, error) {
 	allowed := map[string]bool{
-		"layout":            true,
-		"profile":           true,
-		"audio":             true,
-		"encoder":           true,
-		"watermarkGB":       true,
-		"bufferMinutes":     true,
-		"writeNfo":          true,
-		"deleteWatchedDays": true,
-		"makeRoom":          true,
-		"folderLayout":      true,
-		"gameAlerts":        true,
-		"pictureMode":       true,
-		"autoplay":          true,
-		"hdhrEmulate":       true,
-		"deviceAuth":        true,
-		"deviceToken":       true,
-		"exportMosaics":     true,
-		"hideScores":        true,
-		"liveScores":        true,
-		"checkUpdates":      true,
-		"setupComplete":     true,
-		"sdUser":            true,
-		"sdPassword":        true,
-		"sdLineup":          true,
-		"guideUrl":          true,
-		"sdPasswordSet":     true,
-		"tmdbKey":           true,
-		"tmdbKeySet":        true,
-		"sportsdbKey":       true,
-		"sportsdbKeySet":    true,
+		"layout":              true,
+		"profile":             true,
+		"audio":               true,
+		"encoder":             true,
+		"watermarkGB":         true,
+		"bufferMinutes":       true,
+		"writeNfo":            true,
+		"deleteWatchedDays":   true,
+		"makeRoom":            true,
+		"folderLayout":        true,
+		"gameAlerts":          true,
+		"pictureMode":         true,
+		"autoplay":            true,
+		"hdhrEmulate":         true,
+		"deviceAuth":          true,
+		"deviceToken":         true,
+		"exportMosaics":       true,
+		"hideScores":          true,
+		"liveScores":          true,
+		"checkUpdates":        true,
+		"setupComplete":       true,
+		"sdUser":              true,
+		"sdPassword":          true,
+		"sdLineup":            true,
+		"guideUrl":            true,
+		"sdPasswordSet":       true,
+		"tmdbKey":             true,
+		"tmdbKeySet":          true,
+		"sportsdbKey":         true,
+		"sportsdbKeySet":      true,
+		"needsSetup":          true,
+		"lastGuidePull":       true,
+		"nextGuidePull":       true,
+		"lastManualGuidePull": true,
+		"lastGuideError":      true,
+		"lastGuideErrorAt":    true,
 	}
 	cleaned := map[string]string{}
 	for k, v := range values {
@@ -725,6 +731,21 @@ func cleanSettings(values map[string]string) (map[string]string, error) {
 		}
 		if k == "pictureMode" && v != "broadcast" && v != "smooth" && v != "film" {
 			return nil, fmt.Errorf("pictureMode must be broadcast, smooth, or film")
+		}
+		if k == "profile" && v != "transparent" && v != "balanced" && v != "saver" {
+			return nil, fmt.Errorf("profile must be transparent, balanced, or saver")
+		}
+		if k == "audio" && v != "stereo" && v != "surround" {
+			return nil, fmt.Errorf("audio must be stereo or surround")
+		}
+		if k == "autoplay" && v != "0" && v != "1" {
+			return nil, fmt.Errorf("autoplay must be 0 or 1")
+		}
+		if k == "hdhrEmulate" && v != "0" && v != "1" {
+			return nil, fmt.Errorf("hdhrEmulate must be 0 or 1")
+		}
+		if k == "setupComplete" && v != "0" && v != "1" {
+			return nil, fmt.Errorf("setupComplete must be 0 or 1")
 		}
 		if k == "watermarkGB" {
 			n, err := strconv.Atoi(strings.TrimSpace(v))
@@ -772,7 +793,9 @@ func cleanSettings(values map[string]string) (map[string]string, error) {
 		if k == "sdPassword" && strings.TrimSpace(v) == "" {
 			continue
 		}
-		if k == "sdPasswordSet" || k == "tmdbKeySet" || k == "sportsdbKeySet" || k == "deviceToken" {
+		if k == "sdPasswordSet" || k == "tmdbKeySet" || k == "sportsdbKeySet" || k == "deviceToken" ||
+			k == "needsSetup" || k == "lastGuidePull" || k == "nextGuidePull" || k == "lastManualGuidePull" ||
+			k == "lastGuideError" || k == "lastGuideErrorAt" {
 			continue
 		}
 		if k == "deviceAuth" && v != "0" && v != "1" {
