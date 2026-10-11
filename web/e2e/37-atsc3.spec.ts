@@ -54,7 +54,7 @@ test("an encrypted 3.0 station plays and records its clear twin", async ({ page 
   await page.getByLabel("Search shows, people, and recordings").fill("Sealed");
   await page.getByLabel("Search shows, people, and recordings").press("Enter");
   const found = page.locator("section").filter({ has: page.getByRole("heading", { name: "Guide" }) });
-  await found.getByRole("button", { name: /Sealed Signal/ }).click();
+  await found.getByRole("button", { name: /^Sealed Signal/ }).click();
   const sheet = page.getByRole("dialog", { name: /Sealed Signal/ });
   await expect(sheet).toBeVisible();
   await sheet.getByRole("button", { name: "Record Sealed Signal", exact: true }).click();
