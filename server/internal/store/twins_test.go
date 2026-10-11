@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -99,6 +100,24 @@ func TestEncryptedChannelIsStoredAndHidden(t *testing.T) {
 	}
 	if c := byNumber(t, s, ctx)["104.1"][0]; c.Protected {
 		t.Fatal("a clear 3.0 channel is marked protected")
+	}
+}
+
+func TestShown3ChannelSortsAtIts1Number(t *testing.T) {
+	s, ctx := openTwins(t)
+	guide, err := s.Channels(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var numbers []string
+	for _, ch := range guide {
+		numbers = append(numbers, ch.GuideNumber)
+	}
+	// 104.1 is the shown 3.0 of 4.1, and 119.1 is the shown 3.0 of 19.1.
+	// 19.2 stays on its own number. 5.1 has no 3.0 on the guide.
+	want := []string{"104.1", "5.1", "119.1", "19.2"}
+	if strings.Join(numbers, ",") != strings.Join(want, ",") {
+		t.Fatalf("guide order %v, want %v", numbers, want)
 	}
 }
 

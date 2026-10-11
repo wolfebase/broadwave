@@ -75,12 +75,33 @@ export function isRecording(keys: Set<string>, airing: Airing, now: number): "re
   return null;
 }
 
-export function sortChannels(channels: Channel[]): Channel[] {
-  const num = (v: string) => v.split(".").map((p) => Number(p) || 0);
+/** Where a channel sits in the guide. A shown 3.0 channel uses its 1.0 number,
+ * so 104.1 stays next to the 4s. A number the viewer set is kept. A 3.0
+ * channel with no pair keeps its own number. `lineup` supplies a hidden twin. */
+export function channelOrderNumber(channel: Channel, lineup: readonly Channel[] = []): string {
+  const paired = channel.standard === "atsc3" && !channel.hidden && channel.twinId != null && channel.displayNumber === channel.guideNumber;
+  if (!paired) return channel.displayNumber;
+  const twin = lineup.find((row) => row.id === channel.twinId && row.standard !== "atsc3");
+  if (twin?.displayNumber) return twin.displayNumber;
+  const dot = channel.displayNumber.indexOf(".");
+  const majorText = dot === -1 ? channel.displayNumber : channel.displayNumber.slice(0, dot);
+  const major = Number(majorText);
+  if (!Number.isFinite(major) || major < 100) return channel.displayNumber;
+  const minor = dot === -1 ? "" : channel.displayNumber.slice(dot);
+  return `${major - 100}${minor}`;
+}
+
+export function sortChannels(channels: Channel[], lineup: readonly Channel[] = channels): Channel[] {
+  const num = (channel: Channel) => channelOrderNumber(channel, lineup).split(".").map((p) => Number(p) || 0);
   return [...channels].sort((a, b) => {
-    const x = num(a.displayNumber);
-    const y = num(b.displayNumber);
-    return (x[0] ?? 0) - (y[0] ?? 0) || (x[1] ?? 0) - (y[1] ?? 0) || a.displayName.localeCompare(b.displayName);
+    const x = num(a);
+    const y = num(b);
+    return (
+      (x[0] ?? 0) - (y[0] ?? 0) ||
+      (x[1] ?? 0) - (y[1] ?? 0) ||
+      a.displayName.localeCompare(b.displayName) ||
+      a.displayNumber.localeCompare(b.displayNumber, undefined, { numeric: true })
+    );
   });
 }
 

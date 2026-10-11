@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { test } from "node:test";
-import { channelWatchName, guideCellId, guideCellName, guideOrigin, guideRowScroll, guideShowsGrid, guideSpan, guideViewBox, keptGuideWindow, keptRow, liveChannel, primeTime, recordingCountLabel, reorderChannels, searchRows } from "./src/lib/guide.ts";
+import type { Channel } from "./src/api/generated.ts";
+import { channelOrderNumber, channelWatchName, guideCellId, guideCellName, guideOrigin, guideRowScroll, guideShowsGrid, guideSpan, guideViewBox, keptGuideWindow, keptRow, liveChannel, primeTime, recordingCountLabel, reorderChannels, searchRows, sortChannels } from "./src/lib/guide.ts";
 
 test("tonight is 8 PM, and the next day after that", () => {
   const afternoon = new Date(2026, 8, 26, 15, 0, 0).getTime();
@@ -38,6 +39,58 @@ test("a guide cell says when the show is recording, new, or scored", () => {
     guideCellName("Late Local News", span, "KBWV2", { recording: "scheduled" }),
     `Late Local News, Will record, ${span}, KBWV2`,
   );
+});
+
+function listed(partial: Partial<Channel> & Pick<Channel, "id" | "displayNumber">): Channel {
+  const number = partial.guideNumber ?? partial.displayNumber;
+  return {
+    deviceId: "d",
+    guideNumber: number,
+    guideName: partial.displayName ?? "KBWV",
+    displayName: partial.displayName ?? "KBWV",
+    hd: true,
+    favorite: false,
+    enabled: true,
+    hidden: false,
+    present: true,
+    ...partial,
+  };
+}
+
+test("a shown 3.0 channel sorts at its 1.0 number", () => {
+  const wide = listed({ id: 104, displayNumber: "104.1", displayName: "KBWV", standard: "atsc3", twinId: 4 });
+  const sub = listed({ id: 42, displayNumber: "4.2", displayName: "KBWV2" });
+  const next = listed({ id: 5, displayNumber: "5.1", displayName: "WTST" });
+  const high = listed({ id: 100, displayNumber: "100.1", displayName: "High" });
+  const alone = listed({ id: 115, displayNumber: "115.1", displayName: "Sealed", standard: "atsc3" });
+  const hidden = listed({ id: 204, displayNumber: "104.1", displayName: "Hidden", standard: "atsc3", twinId: 4, hidden: true });
+  const renamed = listed({
+    id: 304,
+    guideNumber: "104.1",
+    displayNumber: "12.1",
+    displayName: "Renamed",
+    standard: "atsc3",
+    twinId: 4,
+  });
+  assert.deepEqual(
+    sortChannels([next, wide, high, alone, sub, hidden, renamed]).map((channel) => channel.displayName),
+    ["KBWV", "KBWV2", "WTST", "Renamed", "High", "Hidden", "Sealed"],
+  );
+  assert.equal(channelOrderNumber(wide), "4.1");
+  assert.equal(channelOrderNumber(alone), "115.1");
+  assert.equal(channelOrderNumber(renamed), "12.1");
+  assert.equal(channelOrderNumber(hidden), "104.1");
+});
+
+test("a shown 3.0 channel uses its twin's number when that twin is not 100 less", () => {
+  const wide = listed({ id: 104, displayNumber: "104.1", displayName: "KBWV", standard: "atsc3", twinId: 7 });
+  const one = listed({ id: 7, displayNumber: "7.1", displayName: "KBWV", hidden: true });
+  const sub = listed({ id: 72, displayNumber: "7.2", displayName: "Plus" });
+  assert.deepEqual(
+    sortChannels([sub, wide], [wide, one, sub]).map((channel) => channel.displayNumber),
+    ["104.1", "7.2"],
+  );
+  assert.equal(channelOrderNumber(wide, [one]), "7.1");
 });
 
 test("a channel button names a favorite", () => {

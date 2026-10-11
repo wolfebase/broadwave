@@ -171,7 +171,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       jobs.push(
         Promise.all([getChannels(true), getChannels(false)]).then(([g, a]) => {
           if (!still("channels")) return;
-          setChannels(sortChannels(g.channels));
+          setChannels(sortChannels(g.channels, a.channels));
           setAllChannels(sortChannels(a.channels));
           setChannelsReady(true);
         }),
@@ -227,7 +227,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       try {
         const snap = await loadSnapshot();
         if (snap) {
-          setChannels(sortChannels(snap.channels));
+          setChannels(sortChannels(snap.channels, snap.allChannels));
           setAllChannels(sortChannels(snap.allChannels));
           setAirings(snap.airings);
           setRecordings(snap.recordings);
@@ -274,7 +274,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           getAirings({ from: span.from, to: span.to }),
           getRecordings(),
         ]);
-        const channelsNow = sortChannels(guideChannels.channels);
+        const channelsNow = sortChannels(guideChannels.channels, everyChannel.channels);
         const allNow = sortChannels(everyChannel.channels);
         const wroteChannels = stillBoot("channels");
         const wroteAirings = stillBoot("airings");
