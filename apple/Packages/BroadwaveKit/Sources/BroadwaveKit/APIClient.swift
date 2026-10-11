@@ -299,7 +299,7 @@ public struct APIClient: Sendable {
         req.httpMethod = "POST"
         req.timeoutInterval = timeout
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONEncoder().encode(body)
+        req.httpBody = try Self.makeEncoder().encode(body)
         // 202 has no body to decode.
         let (data, res) = try await session.data(for: req)
         let status = (res as? HTTPURLResponse)?.statusCode ?? 0
