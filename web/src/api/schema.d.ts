@@ -2652,6 +2652,7 @@ export interface operations {
             };
             400: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     pressRemote: {
@@ -2683,6 +2684,7 @@ export interface operations {
             };
             400: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     openSocket: {
@@ -2701,6 +2703,8 @@ export interface operations {
                 };
                 content?: never;
             };
+            403: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     getDiagnostics: {
@@ -2961,6 +2965,8 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["Error"];
+            415: components["responses"]["Error"];
             500: components["responses"]["Error"];
         };
     };
@@ -3159,6 +3165,8 @@ export interface operations {
             /** @description Lineup */
             200: {
                 headers: {
+                    ETag?: string;
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -3166,6 +3174,13 @@ export interface operations {
                         channels: components["schemas"]["Channel"][];
                     };
                 };
+            };
+            /** @description Not modified. No body. If-None-Match matched the ETag. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -3245,6 +3260,7 @@ export interface operations {
                     "application/json": components["schemas"]["Channel"];
                 };
             };
+            400: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
         };
@@ -3339,6 +3355,14 @@ export interface operations {
                     };
                 };
             };
+            /** @description Not modified. No body. If-None-Match matched the ETag. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Error"];
         };
     };
     refreshGuide: {
@@ -3427,7 +3451,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["Error"];
-            500: components["responses"]["Error"];
+            502: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     watchChannel: {
@@ -3474,6 +3499,7 @@ export interface operations {
                     "application/json": components["schemas"]["WatchSession"];
                 };
             };
+            400: components["responses"]["Error"];
             /** @description `not_found`: the channel is not in the lineup. `no_source`: no enabled source carries the channel now. */
             404: {
                 headers: {
@@ -3536,6 +3562,7 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["Ok"];
+            400: components["responses"]["Error"];
         };
     };
     warmChannel: {
@@ -3568,6 +3595,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["Error"];
             /** @description `not_found`: the channel is not in the lineup. */
             404: {
                 headers: {
@@ -3577,6 +3605,8 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            409: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     planMultiview: {
@@ -3606,6 +3636,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     watchMosaic: {
@@ -4716,6 +4747,7 @@ export interface operations {
                     "application/json": components["schemas"]["PairTicket"];
                 };
             };
+            400: components["responses"]["Error"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             429: components["responses"]["Error"];
@@ -4749,7 +4781,9 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            410: components["responses"]["Error"];
             429: components["responses"]["Error"];
         };
     };
@@ -4780,7 +4814,9 @@ export interface operations {
                     "application/json": components["schemas"]["PairGrant"];
                 };
             };
+            400: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            410: components["responses"]["Error"];
             429: components["responses"]["Error"];
         };
     };
@@ -4934,11 +4970,20 @@ export interface operations {
             /** @description Settings with defaults filled in */
             200: {
                 headers: {
+                    ETag?: string;
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Settings"];
                 };
+            };
+            /** @description Not modified. No body. If-None-Match matched the ETag. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -5005,6 +5050,7 @@ export interface operations {
                     "application/json": components["schemas"]["SetupFinish"];
                 };
             };
+            415: components["responses"]["Error"];
         };
     };
     getStorage: {
@@ -5033,6 +5079,7 @@ export interface operations {
                     };
                 };
             };
+            503: components["responses"]["Error"];
         };
     };
     storageShows: {
@@ -5053,6 +5100,7 @@ export interface operations {
                     "application/json": components["schemas"]["StorageShows"];
                 };
             };
+            503: components["responses"]["Error"];
         };
     };
     downloadBackup: {
@@ -5089,6 +5137,7 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["Ok"];
+            503: components["responses"]["Error"];
         };
     };
     listBackups: {
