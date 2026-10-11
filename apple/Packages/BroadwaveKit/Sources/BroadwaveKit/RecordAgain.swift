@@ -23,12 +23,12 @@ public enum RecordAgain: Sendable {
         return "Records again \(start.formatted(day)) \(start.formatted(clock))."
     }
 
-    /// Offered on a finished recording that lost enough signal, still has its
-    /// file, and names its episode (a program id or an episode name), which is
-    /// how the server finds the next airing.
+    /// Offered on a finished recording that lost enough signal and names its
+    /// episode (a program id or an episode name), which is how the server finds
+    /// the next airing. A file that is already gone can still be recorded again.
     public static func offered(_ rec: Recording) -> Bool {
         let named = !(rec.programId ?? "").isEmpty || !(rec.subtitle ?? "").isEmpty
-        return rec.isDamaged && !rec.isRecording && !rec.isMissing && named
+        return rec.isDamaged && !rec.isRecording && named
     }
 
     struct Answer: Decodable {

@@ -48,6 +48,6 @@ Settings, Delete watched recordings, deletes a recording a number of days after 
 
 Open a recording from Recordings or from Home. It starts again where you left off. While it is still recording, you watch the file as it grows. Download, on the web, appears after the recording has finished and saves the MPEG-TS.
 
-Delete removes the recording and the files beside it inside the recordings folder. Stop it first if it is still recording. A file that was moved or deleted outside Broadwave stays in the list. The line is the channel number, then "The file is gone. It was moved or deleted outside Broadwave." The web library and the Apple apps use that same line. Remove from the list drops that row. There is no file left to delete.
+Delete removes the recording and the files beside it inside the recordings folder. Stop it first if it is still recording. A file that was moved or deleted outside Broadwave stays in the list. The line is the channel number, then "The file is gone. It was moved or deleted outside Broadwave." The web library and the Apple apps use that same line. When the recording is damaged and the episode has a name, Record it again records the next airing. Remove from the list drops that row. There is no file left to delete.
 
 The folder layout, pass rules, rename, and the `.edl` format are in [How recordings are stored](../recordings.md).

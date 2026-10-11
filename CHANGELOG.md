@@ -6,7 +6,7 @@
 
 - Recordings › Storage on the web lists what the clean-up rules would remove and what they leave alone. Opening it deletes nothing.
 - Settings › Favorite channels can keep recordings on starred channels out of clean-up and keep rules. It starts off.
-- On the web, Record it again is offered on a damaged recording whose file is already gone.
+- Record it again is offered on a damaged recording whose file is already gone, on the web and on iPhone, iPad, and Apple TV.
 
 ### Fixed
 

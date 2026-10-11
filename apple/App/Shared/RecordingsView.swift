@@ -359,6 +359,15 @@ struct RecordingsView: View {
                 act { try await store.stopRecording(rec) }
             }
         } else if rec.isMissing {
+            // The file is gone. Record it again still asks the guide for the next airing.
+            if RecordAgain.offered(rec), !scheduled.contains(rec.id) {
+                Button(RecordAgain.label, systemImage: "arrow.clockwise.circle") {
+                    recordAgain(rec)
+                }
+                .disabled(scheduling.contains(rec.id))
+                .accessibilityLabel(RecordAgain.label)
+                .accessibilityIdentifier("record-again")
+            }
             Button("Delete", systemImage: "trash", role: .destructive) { deleting = rec }
         } else {
             Button(rec.isWatched ? "Mark unwatched" : "Mark watched", systemImage: rec.isWatched ? "eye.slash" : "eye") {

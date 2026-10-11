@@ -62,14 +62,21 @@ private func rec(status: String = "done", position: Double? = nil, duration: Dou
     #expect(damaged.isDamaged)
     // Nothing names the episode, so there is no airing to find.
     #expect(!RecordAgain.offered(damaged))
+    var unnamedGone = damaged
+    unnamedGone.missing = true
+    #expect(!RecordAgain.offered(unnamedGone))
     damaged.subtitle = "The Lighthouse"
     #expect(RecordAgain.offered(damaged))
     var running = damaged
     running.status = "recording"
     #expect(!RecordAgain.offered(running))
+    // The file can already be gone. The server still finds the next airing.
     var gone = damaged
     gone.missing = true
-    #expect(!RecordAgain.offered(gone))
+    #expect(RecordAgain.offered(gone))
+    var pinned = gone
+    pinned.keep = true
+    #expect(RecordAgain.offered(pinned))
     var fine = rec()
     fine.health = RecordingHealth(continuityErrors: 3, transportErrors: 0, syncLosses: 0, packets: 40, damaged: false)
     #expect(!fine.isDamaged)

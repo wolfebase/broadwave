@@ -88,7 +88,7 @@ On iPhone, iPad, and Apple TV the same lists open the player. It resumes when yo
 
 Playback is a stream the device can play. The file in the recordings folder stays the broadcast.
 
-A finished recording whose file was moved or deleted outside Broadwave stays in the list. The line is the channel number, then "The file is gone. It was moved or deleted outside Broadwave." The web library and the Apple apps use that same line. Remove from the list drops that row. There is no file left to delete. On the web, a damaged recording whose file is gone still offers Record it again.
+A finished recording whose file was moved or deleted outside Broadwave stays in the list. The line is the channel number, then "The file is gone. It was moved or deleted outside Broadwave." The web library and the Apple apps use that same line. Remove from the list drops that row. There is no file left to delete. A damaged recording whose file is gone still offers Record it again when the episode has a name.
 
 When the picture dropped for a second or more, the row says "Signal dropped for N s." Shorter damage says how many times: "Signal broke up once" or "Signal broke up N times." A clean recording says nothing.
 
