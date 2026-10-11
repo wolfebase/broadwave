@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { claimPair, pollPair, startPair, unreadBody } from "../../api";
-import { codeAfterPoll, formatPairCode, normalizePairCode, pairPollStep, writeToken } from "../../lib/deviceToken";
+import { unreadBody } from "../../api";
+import { writeToken } from "../../lib/deviceToken";
+import { claimPair, pollPair, startPair } from "./pairApi";
+import { codeAfterPoll, formatPairCode, normalizePairCode, pairPollStep } from "./pairCode";
 
 type Kind = "web" | "phone" | "tv";
 

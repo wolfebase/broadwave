@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { approvePair, createPairCode, getClientMe, listClients, revokeClient, unreadBody } from "../../api";
+import { getClientMe, unreadBody } from "../../api";
+import { approvePair, createPairCode, listClients, revokeClient } from "./pairApi";
 import { navigate } from "../../app/router";
-import { canEditSignIn, formatPairCode, isForbidden, isUnauthorized, kindLabel, normalizePairCode, scopeLabel, scopesForAccess } from "../../lib/deviceToken";
+import { isForbidden, isUnauthorized } from "../../lib/deviceToken";
+import { canEditSignIn, formatPairCode, kindLabel, normalizePairCode, scopeLabel, scopesForAccess } from "./pairCode";
 import { lastSeenPhrase } from "../../time";
 import type { ClientDevice } from "../../types";
 
