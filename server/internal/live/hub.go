@@ -1870,13 +1870,15 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 	if minutes <= 0 {
 		minutes = 60
 	}
-	if err := h.ensureSpace(ctx); err != nil {
-		return store.Recording{}, err
-	}
 	values, _ := h.Store.Settings(ctx)
 	byShow := FoldersByShow(values)
 	ch, err := h.Store.SourceChannel(ctx, channelID)
 	if err != nil {
+		return store.Recording{}, err
+	}
+	// Room is made for a channel that exists, and before a tuner is taken or
+	// a viewer is stopped for a recording the disk would refuse.
+	if err := h.ensureSpace(ctx); err != nil {
 		return store.Recording{}, err
 	}
 	var res *http.Response

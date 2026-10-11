@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"broadwave/internal/disk"
 	"broadwave/internal/store"
 )
 
@@ -530,6 +531,57 @@ func TestRecordingStopWithAClosedPipeStaysComplete(t *testing.T) {
 	}
 	if got.Status != "complete" {
 		t.Fatalf("a closed pipe ended %s (%q)", got.Status, got.Error)
+	}
+}
+
+// A channel that is not in the lineup must not delete older recordings.
+// Room is made only after the channel is tuned and nothing is already recording.
+func TestRecordMetaDoesNotMakeRoomWithoutAChannel(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.PutSettings(context.Background(), map[string]string{"watermarkGB": "999999"}); err != nil {
+		t.Fatal(err)
+	}
+	var calls int
+	h := &Hub{Dir: dir, Store: st}
+	h.MakeRoom = func(context.Context, uint64) { calls++ }
+	_, err = h.RecordMeta(context.Background(), 5, store.Recording{ChannelID: 99999, Title: "Nope"})
+	if err == nil {
+		t.Fatal("a missing channel started a recording")
+	}
+	if calls != 0 {
+		t.Fatalf("MakeRoom ran %d times for a channel that is not in the lineup", calls)
+	}
+}
+
+// Free space under the reserve still refuses the recording when nothing was deleted.
+func TestEnsureSpaceRefusesWhenNothingWasFreed(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.PutSettings(context.Background(), map[string]string{"watermarkGB": "999999"}); err != nil {
+		t.Fatal(err)
+	}
+	var calls int
+	h := &Hub{Dir: dir, Store: st}
+	h.MakeRoom = func(context.Context, uint64) { calls++ }
+	err = h.ensureSpace(context.Background())
+	var low *disk.LowError
+	if !errors.As(err, &low) {
+		t.Fatalf("got %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("MakeRoom ran %d times", calls)
+	}
+	if low.Need != 999999*1000*1000*1000 {
+		t.Fatalf("need %d", low.Need)
 	}
 }
 

@@ -225,6 +225,24 @@ func TestDiskReserveBlocksRecording(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/recordings", bytes.NewBufferString(`{"channelId":1,"minutes":5,"title":"Nope"}`))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("missing channel %d %s", rec.Code, rec.Body.String())
+	}
+	if asked != 0 {
+		t.Fatalf("MakeRoom ran for a channel that is not in the lineup (%d bytes)", asked)
+	}
+
+	dev := hdhr.Device{DeviceID: "reserve-1", FriendlyName: "Tuner", BaseURL: "http://127.0.0.1:1", TunerCount: 1}
+	if err := st.UpsertDevice(context.Background(), dev, []hdhr.Channel{{GuideNumber: "4.1", GuideName: "KBWV"}}); err != nil {
+		t.Fatal(err)
+	}
+	channels, err := st.Channels(context.Background(), false)
+	if err != nil || len(channels) != 1 {
+		t.Fatal(err, channels)
+	}
+	body := fmt.Sprintf(`{"channelId":%d,"minutes":5,"title":"Nope"}`, channels[0].ID)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/recordings", bytes.NewBufferString(body)))
 	if rec.Code != http.StatusInsufficientStorage || !bytes.Contains(rec.Body.Bytes(), []byte("in reserve")) {
 		t.Fatalf("reserve %d %s", rec.Code, rec.Body.String())
 	}
