@@ -893,7 +893,7 @@ async function readRecoverySnap(channelId: number, assumeLost: boolean): Promise
   const online = typeof navigator === "undefined" ? true : navigator.onLine;
   let health: boolean;
   try {
-    health = (await fetch("/api/v1/health")).ok;
+    health = (await fetch("/api/v1/health", { headers: authHeaders() })).ok;
   } catch {
     health = false;
   }
