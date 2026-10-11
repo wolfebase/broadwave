@@ -1,5 +1,6 @@
 // The screens calls live with the player, not in api.ts, so the first page load does not carry them.
 import { apiFailure, request } from "../../api";
+import { authHeaders } from "../../lib/deviceToken";
 import type { Screen } from "../../types";
 
 export function getScreens() {
@@ -10,7 +11,7 @@ export function getScreens() {
 export async function sendToScreen(id: string, channelId: number, from: string) {
   const res = await fetch(`/api/v1/screens/${encodeURIComponent(id)}/watch`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ channelId, from }),
   });
   if (!res.ok) throw apiFailure(res.status, await res.text());
