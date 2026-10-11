@@ -1591,6 +1591,7 @@ struct PlayerScreen: View {
             }
             .frame(maxHeight: 280)
             .glassEffect(in: .rect(cornerRadius: Tokens.Radius.lg))
+            .clipShape(.rect(cornerRadius: Tokens.Radius.lg))
             .accessibilityLabel("Channels")
             .accessibilityIdentifier("portrait-guide")
         }
@@ -1731,6 +1732,7 @@ struct PlayerScreen: View {
             }
             .padding(.horizontal)
             .padding(.top, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
 
         @ViewBuilder private var syncPill: some View {
@@ -2320,6 +2322,7 @@ struct RecordingPlayerScreen: View {
     @Environment(AppStore.self) private var store
     /// Absent where a recording opens outside the app shell.
     @Environment(NowPlaying.self) private var nowPlaying: NowPlaying?
+    @Environment(\.dismiss) private var dismiss
     /// This player while it is on screen, so Handoff does not offer the live channel under it.
     @State private var screenID = UUID()
     let source: Source
@@ -2393,6 +2396,15 @@ struct RecordingPlayerScreen: View {
             }
             .overlay(alignment: .top) { PlayerNote(text: note) }
         #if os(iOS)
+            .overlay(alignment: .topLeading) {
+                if UIDevice.current.userInterfaceIdiom == .pad {
+                    Button("Close", systemImage: "xmark") { dismiss() }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.glass)
+                        .accessibilityLabel("Close")
+                        .padding(20)
+                }
+            }
             .overlay(alignment: .bottomTrailing) {
                 Group {
                     if let marker = inBreak {
@@ -2414,6 +2426,7 @@ struct RecordingPlayerScreen: View {
                 .padding(.bottom, 110)
             }
             .toolbar { fileToolbar }
+            .toolbar(removing: .sidebarToggle)
         #endif
             .task {
                 await loadLibrary()
