@@ -10,6 +10,12 @@ The player picks a picture the browser can play. It copies the broadcast when th
 
 While Whole-Home Sync is on, the player shows Synced when this screen is the only one, the number of screens on that channel when others are there, and Together while you are watching together. [Sync](sync.md) covers that control and Watch together.
 
+## Cast
+
+A television with Cast can play the channel that is on in the browser. Cast is in the player when the server has a Cast application id (`BROADWAVE_CAST_APP_ID`). The television plays the same moment as the other screens. Watch together includes it.
+
+The id comes from a Cast application you register with Google. The steps are in [the Cast design note](../design/cast.md). The application stays unpublished, and the television has to be registered by its serial number.
+
 ## iPhone, iPad, and Apple TV
 
 The apps look on your home network and list the servers they find. You pick one. The next time you open the app, it connects to the one you saved. You can type an address instead. The first screen says "Find your server," and the button is "Look for my server." The list is headed "On your network." A server you have used is under "Saved."

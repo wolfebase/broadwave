@@ -62,6 +62,9 @@ func (s *Server) serverInfo(w http.ResponseWriter, r *http.Request) {
 			body["update"] = notice
 		}
 	}
+	if id := publishCastAppID(s.CastAppID); id != "" {
+		body["castAppId"] = id
+	}
 	writeJSON(w, http.StatusOK, body)
 }
 

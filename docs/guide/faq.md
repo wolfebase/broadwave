@@ -16,7 +16,7 @@ Other network tuners and servers that speak HDHomeRun work by address. Leave the
 
 ## What do I watch on?
 
-A browser at `http://<your-server>:8477`, and the Broadwave apps on iPhone, iPad, and Apple TV. The apps find the server on the same network. There is no Roku app. [Watching](watching.md) covers the browser and the apps.
+A browser at `http://<your-server>:8477`, and the Broadwave apps on iPhone, iPad, and Apple TV, and a Cast television when the server has a Cast application id. The apps find the server on the same network. There is no Roku app. [Watching](watching.md) covers them.
 
 The usual install is Docker. Building from source needs Go 1.26 or newer, Node 22 or newer, and ffmpeg. There is no separate download for a Mac or Linux. [Install](install.md) is the setup.
 

@@ -448,6 +448,7 @@ export type ServerInfo = {
   minAppVersion?: string;
   discoveryKey?: string;
   update?: ServerUpdate;
+  castAppId?: string;
 };
 
 export type ServerUpdate = {

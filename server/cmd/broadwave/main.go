@@ -200,6 +200,7 @@ func main() {
 	api := &httpapi.Server{Store: st, Assets: assets, Dev: *dev, Hub: hub, Version: version, Bus: bus, Sports: sports.NewCache(sports.NewESPN()), Staging: *staging, BackupDir: filepath.Join(*configDir, "backups")}
 	api.Updates = releaseCheck(st, version)
 	api.Hosts = strings.Split(os.Getenv("BROADWAVE_HOSTS"), ",")
+	api.CastAppID = os.Getenv("BROADWAVE_CAST_APP_ID")
 	hub.OnPSIP = func(_ int, g psip.Guide) {
 		n, err := api.ApplyBroadcast(context.Background(), g)
 		if err != nil {
