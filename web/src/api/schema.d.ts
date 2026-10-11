@@ -3768,6 +3768,7 @@ export interface operations {
         responses: {
             200: components["responses"]["Ok"];
             404: components["responses"]["Error"];
+            500: components["responses"]["Error"];
         };
     };
     stopRecording: {
