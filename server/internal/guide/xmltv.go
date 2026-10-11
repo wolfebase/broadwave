@@ -114,8 +114,9 @@ func inflateGuide(body []byte, encoding, rawURL string) ([]byte, error) {
 	return readCapped(gz, maxGuide)
 }
 
-// maxGuide is the largest guide text kept after decompression.
-var maxGuide = 32 << 20
+// maxGuide is the largest guide text kept after decompression. Two weeks of
+// listings for 500 channels is well under it; a compression bomb is not.
+var maxGuide = 512 << 20
 
 func readCapped(r io.Reader, n int) ([]byte, error) {
 	out, err := io.ReadAll(io.LimitReader(r, int64(n)+1))
@@ -136,9 +137,9 @@ func xzCompressed(body []byte, encoding, rawURL string) bool {
 }
 
 func inflateXZ(body []byte) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "xz", "--memlimit-decompress=64MiB", "-dc")
+	cmd := exec.CommandContext(ctx, "xz", "--memlimit-decompress=256MiB", "-dc")
 	cmd.Stdin = bytes.NewReader(body)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

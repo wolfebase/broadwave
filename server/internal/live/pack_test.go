@@ -2316,8 +2316,8 @@ func TestATrunWithNoPerSampleFieldsRejectsAHugeCount(t *testing.T) {
 		binary.BigEndian.PutUint32(trun[4:8], n)
 		return append(append(mp4Box("tfhd", tfhd), mp4Box("tfdt", make([]byte, 8))...), mp4Box("trun", trun)...)
 	}
-	if _, ok := parseRun(traf(uint32(maxBox + 1))); ok {
-		t.Fatal("a trun with no sample fields and more than maxBox samples was accepted")
+	if _, ok := parseRun(traf(maxTrunSamples + 1)); ok {
+		t.Fatal("a trun with no sample fields and more than maxTrunSamples samples was accepted")
 	}
 	r, ok := parseRun(traf(4))
 	if !ok || len(r.samples) != 4 {
