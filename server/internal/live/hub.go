@@ -3028,18 +3028,31 @@ func (h *Hub) ensureSpace(ctx context.Context) error {
 	}
 	values, err := h.Store.Settings(ctx)
 	if err != nil {
-		return nil
-	}
-	reserve := disk.WatermarkBytes(values["watermarkGB"])
-	if reserve == 0 {
-		return nil
+		return err
 	}
 	dir := h.Recordings()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	if err := h.keepReserve(ctx, dir, disk.WatermarkBytes(values["watermarkGB"])); err != nil {
+		return err
+	}
+	// Checked after room is made: a disk that is completely full fails the
+	// probe file until watched recordings are removed.
+	return disk.Writable(dir)
+}
+
+// keepReserve makes room, when allowed, and refuses a recording while free
+// space stays under reserve. Free space that cannot be read does not refuse
+// one: the folder is still checked for a file, and a recording that fills
+// the disk is marked failed.
+func (h *Hub) keepReserve(ctx context.Context, dir string, reserve uint64) error {
+	if reserve == 0 {
+		return nil
+	}
 	space, err := diskStat(dir)
 	if err != nil {
+		slog.Warn(fmt.Sprintf("disk: free space: %v", err))
 		return nil
 	}
 	var freed uint64
