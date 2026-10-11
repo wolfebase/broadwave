@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"broadwave/internal/disk"
+	"broadwave/internal/hdhr"
 	"broadwave/internal/live"
 	"broadwave/internal/store"
 )
@@ -90,6 +91,51 @@ func (r *storageRig) addAs(t *testing.T, title string, watched int, keep bool, p
 		}
 	}
 	return mustRecording(t, r.st, id)
+}
+
+func (r *storageRig) addOn(t *testing.T, title string, channelID int64) store.Recording {
+	t.Helper()
+	ctx := context.Background()
+	path := filepath.Join(r.dir, title+".ts")
+	if err := os.WriteFile(path, make([]byte, 100), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	id, err := r.st.CreateRecording(ctx, store.Recording{
+		Title: title, ChannelID: channelID, Path: path, Status: "recording", StartedAt: time.Now().Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.st.FinishRecording(ctx, id, "complete", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.st.SetDuration(ctx, id, 1800); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.st.SetWatched(ctx, id, 1); err != nil {
+		t.Fatal(err)
+	}
+	return mustRecording(t, r.st, id)
+}
+
+func favoriteChannel(t *testing.T, st *store.Store) int64 {
+	t.Helper()
+	ctx := context.Background()
+	dev := hdhr.Device{DeviceID: "TESTBOX", FriendlyName: "Test", BaseURL: "http://203.0.113.10", LineupURL: "http://203.0.113.10/lineup.json", TunerCount: 1}
+	channels := []hdhr.Channel{{
+		GuideNumber: "4.1", GuideName: "WZZZ", Favorite: true, StreamURL: "http://203.0.113.10:5004/auto/v4.1",
+	}}
+	if err := st.UpsertDevice(ctx, dev, channels); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.Channels(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || !got[0].Favorite {
+		t.Fatalf("channel %+v", got)
+	}
+	return got[0].ID
 }
 
 func (r *storageRig) left(t *testing.T) []string {
@@ -284,6 +330,41 @@ func TestMakeRoomIsOffByDefault(t *testing.T) {
 	}
 }
 
+func TestAShortRecordingThatWasNeverPlayedStays(t *testing.T) {
+	r := newStorageRig(t, map[string]string{"makeRoom": "1", "deleteWatchedDays": "1"})
+	ctx := context.Background()
+	rec := r.add(t, "bumper", 0, false, "")
+	if err := r.st.SetDuration(ctx, rec.ID, 12); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.st.SaveProgress(ctx, rec.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	// The progress just saved would also keep it for 6 hours. Age the playhead
+	// so only the "never played" rule is what saves it.
+	dbPath := filepath.Join(r.cfg, "broadwave.db")
+	old := time.Now().Add(-48 * time.Hour).UTC().Format(time.RFC3339)
+	sqlDB, err := sql.Open("sqlite", "file:"+filepath.ToSlash(dbPath)+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`UPDATE progress SET updated_at = ? WHERE recording_id = ?`, old, rec.ID); err != nil {
+		_ = sqlDB.Close()
+		t.Fatal(err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	orig := diskStat
+	t.Cleanup(func() { diskStat = orig })
+	diskStat = func(string) (disk.Space, error) { return disk.Space{Free: 0, Total: 100}, nil }
+	Tidy(ctx, r.st, r.hub, time.Now())
+	MakeRoom(ctx, r.st, r.hub, 100)
+	if got := r.left(t); !slices.Equal(got, []string{"bumper"}) {
+		t.Fatalf("left %v", got)
+	}
+}
+
 func TestRoomOrderIsWatchedLongestAgoFirst(t *testing.T) {
 	at := func(days int) *time.Time {
 		v := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC).Add(time.Duration(days) * 24 * time.Hour)
@@ -302,6 +383,58 @@ func TestRoomOrderIsWatchedLongestAgoFirst(t *testing.T) {
 	}
 	if !slices.Equal(ids, []int64{2, 4, 1}) {
 		t.Fatalf("order %v", ids)
+	}
+}
+
+func TestTidyLeavesAMissingFile(t *testing.T) {
+	r := newStorageRig(t, map[string]string{"deleteWatchedDays": "1"})
+	gone := r.add(t, "gone", 1, false, "")
+	r.add(t, "marked", 1, false, "")
+	if err := os.Remove(gone.Path); err != nil {
+		t.Fatal(err)
+	}
+	Tidy(context.Background(), r.st, r.hub, time.Now().Add(48*time.Hour))
+	if got := r.left(t); !slices.Equal(got, []string{"gone"}) {
+		t.Fatalf("left %v", got)
+	}
+}
+
+func TestMakeRoomLeavesAMissingFileAndDoesNotCountIt(t *testing.T) {
+	r := newStorageRig(t, map[string]string{"makeRoom": "1"})
+	gone := r.add(t, "gone", 1, false, "")
+	r.add(t, "watched", 1, false, "")
+	if err := os.Remove(gone.Path); err != nil {
+		t.Fatal(err)
+	}
+	orig := diskStat
+	t.Cleanup(func() { diskStat = orig })
+	diskStat = func(string) (disk.Space, error) { return disk.Space{Free: 1000, Total: 10000}, nil }
+	// 50 bytes short. The real file is 100. The missing one must not be deleted
+	// on the way to it, and it must not be what makes the total look large enough.
+	MakeRoom(context.Background(), r.st, r.hub, 1050)
+	if got := r.left(t); !slices.Equal(got, []string{"gone"}) {
+		t.Fatalf("left %v", got)
+	}
+}
+
+func TestTidyLeavesAFavoriteChannelWhenAsked(t *testing.T) {
+	r := newStorageRig(t, map[string]string{"deleteWatchedDays": "1", "protectFavorites": "1"})
+	favID := favoriteChannel(t, r.st)
+	r.add(t, "other", 1, false, "")
+	r.addOn(t, "favorite", favID)
+	Tidy(context.Background(), r.st, r.hub, time.Now().Add(48*time.Hour))
+	if got := r.left(t); !slices.Equal(got, []string{"favorite"}) {
+		t.Fatalf("left %v", got)
+	}
+}
+
+func TestTidyRemovesAFavoriteWhenTheRuleIsOff(t *testing.T) {
+	r := newStorageRig(t, map[string]string{"deleteWatchedDays": "1"})
+	favID := favoriteChannel(t, r.st)
+	r.addOn(t, "favorite", favID)
+	Tidy(context.Background(), r.st, r.hub, time.Now().Add(48*time.Hour))
+	if got := r.left(t); len(got) != 0 {
+		t.Fatalf("left %v", got)
 	}
 }
 

@@ -77,3 +77,53 @@ func TestKeepRuleLeavesARecordingWhoseFileStays(t *testing.T) {
 		t.Fatalf("the recording that just finished went: %v", err)
 	}
 }
+
+func TestKeepRuleDoesNotCountAMissingFile(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	ctx := context.Background()
+	if _, err := st.AddSeriesPass(ctx, store.Pass{Title: "News", KeepMode: "last", KeepCount: 1}); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	root := filepath.Join(dir, "recordings")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 11, 18, 0, 0, 0, time.UTC)
+	missingID, err := st.CreateRecording(ctx, store.Recording{
+		Title: "News", Status: "complete", Path: filepath.Join(root, "missing.ts"), StartedAt: now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	olderPath := filepath.Join(root, "older.ts")
+	if err := os.WriteFile(olderPath, []byte{0x47}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	olderID, err := st.CreateRecording(ctx, store.Recording{
+		Title: "News", Status: "complete", Path: olderPath, StartedAt: now.Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := st.Recording(ctx, olderID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The newest row has no file. It must not count as the one episode kept,
+	// or the real recording would be deleted to get down to one.
+	OnSaved(ctx, st, &live.Hub{Dir: dir}, nil, rec)
+	if _, err := st.Recording(ctx, missingID); err != nil {
+		t.Fatalf("missing file lost its row: %v", err)
+	}
+	if _, err := st.Recording(ctx, olderID); err != nil {
+		t.Fatalf("the only real episode was removed because a missing file took the slot: %v", err)
+	}
+	if _, err := os.Stat(olderPath); err != nil {
+		t.Fatalf("older file: %v", err)
+	}
+}

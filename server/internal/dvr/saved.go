@@ -34,10 +34,20 @@ func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, queue *BreakQu
 	if err != nil {
 		return
 	}
+	values, err := st.Settings(ctx)
+	if err != nil {
+		values = nil
+	}
+	// A missing file and a recording on a favorite channel (when that rule is
+	// on) are not episodes the keep rule counts, and they are not removed.
+	fav := favoriteIDs(ctx, st, values)
 	for _, pass := range passes {
-		for _, id := range KeepVictims(pass, recs) {
+		for _, id := range KeepVictims(pass, keepEligible(recs, fav)) {
 			victim, err := st.Recording(ctx, id)
-			if err != nil || victim.Status == "recording" {
+			if err != nil || victim.Status == "recording" || victim.Keep {
+				continue
+			}
+			if !fileExists(victim.Path) || fav[victim.ChannelID] {
 				continue
 			}
 			// A keep rule removes only what Broadwave recorded, never a file in a library folder.

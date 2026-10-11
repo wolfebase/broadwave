@@ -24,6 +24,17 @@ var tidyMu sync.Mutex
 // diskStat reads free space; tests stand in for a filling disk.
 var diskStat = disk.Stat
 
+// fileExists reports whether the recording file is still at its path.
+// A file removed outside Broadwave stays in the library; clean-up does not
+// drop the row, and it does not count as a kept episode or as free space.
+var fileExists = func(path string) bool {
+	if path == "" {
+		return false
+	}
+	_, err := os.Lstat(path)
+	return err == nil
+}
+
 // recentPlay is how long after its playhead last moved a recording is left
 // alone: someone may be watching it now.
 const recentPlay = 6 * time.Hour
@@ -48,14 +59,15 @@ func Tidy(ctx context.Context, st *store.Store, hub *live.Hub, now time.Time) {
 	if err != nil {
 		return
 	}
+	fav := favoriteIDs(ctx, st, values)
 	if days := WatchedDays(values["deleteWatchedDays"]); days > 0 {
 		tidyMu.Lock()
 		recs, err := st.Recordings(ctx)
 		if err == nil {
 			cutoff := now.Add(-time.Duration(days) * 24 * time.Hour)
-			for _, rec := range cleanable(hub, recs, now) {
+			for _, rec := range cleanable(hub.Recordings(), recs, now, fav) {
 				if at := rec.WatchedSince(); !at.IsZero() && at.Before(cutoff) {
-					remove(ctx, st, hub, rec, now, fmt.Sprintf("Removed %s, watched more than %d days ago", rec.Title, days))
+					remove(ctx, st, hub, rec, now, fav, fmt.Sprintf("Removed %s, watched more than %d days ago", rec.Title, days))
 				}
 			}
 		}
@@ -91,7 +103,8 @@ func MakeRoom(ctx context.Context, st *store.Store, hub *live.Hub, need uint64) 
 		return 0
 	}
 	now := time.Now()
-	victims := RoomOrder(cleanable(hub, recs, now))
+	fav := favoriteIDs(ctx, st, values)
+	victims := RoomOrder(cleanable(hub.Recordings(), recs, now, fav))
 	var could uint64
 	for _, rec := range victims {
 		could += fileSize(rec.Path)
@@ -108,7 +121,7 @@ func MakeRoom(ctx context.Context, st *store.Store, hub *live.Hub, need uint64) 
 		if freed >= short {
 			return freed
 		}
-		freed += remove(ctx, st, hub, rec, now, "Made room: removed "+rec.Title+", already watched")
+		freed += remove(ctx, st, hub, rec, now, fav, "Made room: removed "+rec.Title+", already watched")
 	}
 	return freed
 }
@@ -138,21 +151,21 @@ func finished(rec store.Recording) bool {
 	case 1:
 		return true
 	case 0:
-		return rec.Duration >= 10 && rec.Position >= rec.Duration-15
+		// A playhead that never moved is not the end, even when the
+		// recording is shorter than the last-15-seconds window.
+		return rec.Duration >= 10 && rec.Position >= 1 && rec.Position >= rec.Duration-15
 	}
 	return false
 }
 
 // cleanable is what a clean-up may remove: finished recordings inside the
 // recordings folder that nobody kept forever or played in the last hours.
-func cleanable(hub *live.Hub, recs []store.Recording, now time.Time) []store.Recording {
-	root := hub.Recordings()
+// fav is the set of favorite channel ids when that protection is on.
+// A missing file, and a recording on one of those channels, is left alone.
+func cleanable(root string, recs []store.Recording, now time.Time, fav map[int64]bool) []store.Recording {
 	var out []store.Recording
 	for _, rec := range recs {
-		if rec.Keep || rec.Status != "complete" || !finished(rec) || !insideDir(root, rec.Path) {
-			continue
-		}
-		if rec.ProgressAt != nil && now.Sub(*rec.ProgressAt) < recentPlay {
+		if !deletable(root, rec, now, fav) {
 			continue
 		}
 		out = append(out, rec)
@@ -160,13 +173,27 @@ func cleanable(hub *live.Hub, recs []store.Recording, now time.Time) []store.Rec
 	return out
 }
 
+// deletable is a finished recording clean-up may remove right now.
+func deletable(root string, rec store.Recording, now time.Time, fav map[int64]bool) bool {
+	if rec.Keep || rec.Status != "complete" || !finished(rec) || !insideDir(root, rec.Path) {
+		return false
+	}
+	if rec.ProgressAt != nil && now.Sub(*rec.ProgressAt) < recentPlay {
+		return false
+	}
+	if !fileExists(rec.Path) || fav[rec.ChannelID] {
+		return false
+	}
+	return true
+}
+
 // remove deletes a recording the clean-up chose, after reading it again:
 // someone may have kept it or marked it unwatched since. It returns the
 // bytes of the recording file that were unlinked. The row stays when the
 // file cannot be removed.
-func remove(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Recording, now time.Time, why string) uint64 {
+func remove(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Recording, now time.Time, fav map[int64]bool, why string) uint64 {
 	fresh, err := st.Recording(ctx, rec.ID)
-	if err != nil || len(cleanable(hub, []store.Recording{fresh}, now)) == 0 {
+	if err != nil || !deletable(hub.Recordings(), fresh, now, fav) {
 		return 0
 	}
 	size := fileSize(fresh.Path)
@@ -183,9 +210,44 @@ func remove(ctx context.Context, st *store.Store, hub *live.Hub, rec store.Recor
 }
 
 func fileSize(path string) uint64 {
+	if !fileExists(path) {
+		return 0
+	}
 	info, err := os.Stat(path)
 	if err != nil || info.Size() < 0 {
 		return 0
 	}
 	return uint64(info.Size())
+}
+
+// keepEligible is the recordings a keep rule may count. A missing file and a
+// recording on a favorite channel are neither counted nor removed.
+func keepEligible(recs []store.Recording, fav map[int64]bool) []store.Recording {
+	var out []store.Recording
+	for _, rec := range recs {
+		if !fileExists(rec.Path) || fav[rec.ChannelID] {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+// favoriteIDs is the channels marked favorite, when protectFavorites is on.
+// Nil means the rule is off, so a favorite channel is cleaned up like any other.
+func favoriteIDs(ctx context.Context, st *store.Store, values map[string]string) map[int64]bool {
+	if st == nil || values["protectFavorites"] != "1" {
+		return nil
+	}
+	chs, err := st.Channels(ctx, false)
+	if err != nil {
+		return nil
+	}
+	out := map[int64]bool{}
+	for _, ch := range chs {
+		if ch.Favorite && ch.ID != 0 {
+			out[ch.ID] = true
+		}
+	}
+	return out
 }
