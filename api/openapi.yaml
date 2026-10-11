@@ -140,6 +140,7 @@ paths:
         "202": { description: Sent }
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /screens/{id}/remote:
     post:
       tags: [server]
@@ -161,6 +162,7 @@ paths:
         "202": { description: Sent }
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /ws:
     get:
       tags: [server]
@@ -183,6 +185,8 @@ paths:
       responses:
         "101":
           description: Switching to WebSocket
+        "403": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /diagnostics:
     get:
       tags: [server]
@@ -382,6 +386,8 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/Device" }
                   found: { type: integer }
+        "400": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/Error" }
         "500": { $ref: "#/components/responses/Error" }
   /sources/look:
     post:
@@ -545,6 +551,11 @@ paths:
       responses:
         "200":
           description: Lineup
+          headers:
+            ETag:
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string }
           content:
             application/json:
               schema:
@@ -554,6 +565,8 @@ paths:
                   channels:
                     type: array
                     items: { $ref: "#/components/schemas/Channel" }
+        "304":
+          description: Not modified. No body. If-None-Match matched the ETag.
   /channels/star:
     post:
       tags: [channels]
@@ -612,6 +625,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Channel" }
+        "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
   /frames:
@@ -693,6 +707,9 @@ paths:
                   airings:
                     type: array
                     items: { $ref: "#/components/schemas/Airing" }
+        "304":
+          description: Not modified. No body. If-None-Match matched the ETag.
+        "400": { $ref: "#/components/responses/Error" }
   /guide/refresh:
     post:
       tags: [guide]
@@ -768,7 +785,8 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/Game" }
         "400": { $ref: "#/components/responses/Error" }
-        "500": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /watch:
     post:
       tags: [live]
@@ -801,6 +819,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/WatchSession" }
+        "400": { $ref: "#/components/responses/Error" }
         "404":
           description: "`not_found`: the channel is not in the lineup. `no_source`: no enabled source carries the channel now."
           content:
@@ -842,6 +861,7 @@ paths:
                     process is ignored: that process and its viewers are gone.
       responses:
         "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/Error" }
   /watch/{id}/warm:
     post:
       tags: [live]
@@ -875,11 +895,14 @@ paths:
                 required: [warm]
                 properties:
                   warm: { type: boolean }
+        "400": { $ref: "#/components/responses/Error" }
         "404":
           description: "`not_found`: the channel is not in the lineup."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /multiview/plan:
     post:
       tags: [live]
@@ -908,6 +931,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/MultiviewPlan" }
         "400": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /mosaic:
     post:
       tags: [live]
@@ -1764,6 +1788,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PairTicket" }
+        "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
@@ -1796,7 +1821,9 @@ paths:
                 required: [device]
                 properties:
                   device: { $ref: "#/components/schemas/ClientDevice" }
+        "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+        "410": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
   /pair/claim:
     post:
@@ -1822,7 +1849,9 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PairGrant" }
+        "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+        "410": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
   /pair/{id}:
     get:
@@ -1938,9 +1967,16 @@ paths:
       responses:
         "200":
           description: Settings with defaults filled in
+          headers:
+            ETag:
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Settings" }
+        "304":
+          description: Not modified. No body. If-None-Match matched the ETag.
     put:
       tags: [settings]
       operationId: putSettings
@@ -1971,6 +2007,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SetupFinish" }
+        "415": { $ref: "#/components/responses/Error" }
     get:
       tags: [settings]
       operationId: setupFinishStatus
@@ -1997,6 +2034,7 @@ paths:
                   freeBytes: { type: integer, format: int64 }
                   totalBytes: { type: integer, format: int64 }
                   watermarkGB: { type: integer }
+        "503": { $ref: "#/components/responses/Error" }
   /storage/shows:
     get:
       tags: [settings]
@@ -2010,6 +2048,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/StorageShows" }
+        "503": { $ref: "#/components/responses/Error" }
   /backup:
     get:
       tags: [settings]
@@ -2030,6 +2069,7 @@ paths:
             schema: { type: string, format: binary }
       responses:
         "200": { $ref: "#/components/responses/Ok" }
+        "503": { $ref: "#/components/responses/Error" }
   /backups:
     get:
       tags: [settings]
