@@ -53,10 +53,13 @@ export function RecordingsPage() {
           )
         }
         onDelete={(r) =>
-          void deleteRecording(r.id).then(() => {
-            setNote(`Deleted ${r.title}.`);
-            return refresh(["recordings"]);
-          })
+          void deleteRecording(r.id).then(
+            () => {
+              setNote(`Deleted ${r.title}.`);
+              return refresh(["recordings"]);
+            },
+            (err: unknown) => setNote(err instanceof Error ? err.message : String(err)),
+          )
         }
         onStop={(r) =>
           void stopRecording(r.id).then(() => {
