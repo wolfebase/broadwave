@@ -45,7 +45,7 @@ The large-tile size comes from a short encode the server runs at startup. Diagno
 
 The two columns are timed differently, and on the processor each picture also decodes and deinterlaces its own broadcast. [Hardware](hardware.md) has the measurements.
 
-On an Intel GPU using its low-power encoder, a startup encode of 4 times real time or faster allows six pictures: a quad and two full screens. AMD, NVIDIA, and Apple stay at four in that row. The processor stays at two until its encode is 5.5 times real time or faster. A slower result stays on the table above, including on that Intel encoder.
+On an Intel GPU using its low-power encoder, a startup encode of 4 times real time or faster allows six pictures: a quad and two full screens. AMD, NVIDIA, and Apple stay at four in that row. On the processor, four pictures need an encode of 5.5 times real time or faster. A slower result stays on the table above, including on that Intel encoder.
 
 Side by side, and a quiet tile beside a large one, can keep a clear 1080 HEVC picture as the station sent it. A quad stays 360p.
 

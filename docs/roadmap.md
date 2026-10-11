@@ -51,11 +51,11 @@ Phases run roughly in order. Later phases can start when their dependencies are 
 ## 6. System integration
 
 - [x] Widgets on iPhone and iPad
-- [ ] Live Activities, Dynamic Island, and a Control Center control
+- [x] Live Activities, Dynamic Island, and a Control Center control
 - [x] Top Shelf
-- [x] App Intents for Record on a widget
-- [ ] Siri, Spotlight, and system Now Playing
-- [ ] SharePlay
+- [x] App Intents for Siri, the widgets, and the Control Center control
+- [x] Siri, Spotlight, and system Now Playing
+- [ ] SharePlay (built, off until the app has the Group Activities entitlement)
 - [x] Commercial skip, with intro and credits detection
 
 ## 7. Launch
@@ -66,4 +66,4 @@ Phases run roughly in order. Later phases can start when their dependencies are 
 
 ## Later
 
-Secure remote access and downloads; Mac and visionOS.
+Secure remote access and downloads; scores and recording alerts on Apple Watch; Mac and visionOS.

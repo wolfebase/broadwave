@@ -8,7 +8,7 @@ iPad runs the iPhone app with the iPad's own layout. Where a column matches iPho
 
 Five layouts: Side by side and Small over big (2 pictures), One big and two (3), One big and three and Quad (4).
 
-Captured 2026-09-25 on staging `v0.8.0-33-g8ccb3e1-dirty`, encoder `h264_vaapi`. Four pictures on two tuners, with two subchannels sharing each frequency. Shots and clips are in `.evidence/mv6/` (not committed).
+Captured 2026-09-25, encoder `h264_vaapi`. Four pictures on two tuners, with two subchannels sharing each frequency.
 
 | Layout | Web phone | Web desktop | Web TV | iPhone | iPad | Apple TV |
 | --- | --- | --- | --- | --- | --- | --- |

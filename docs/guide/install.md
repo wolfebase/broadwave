@@ -65,7 +65,7 @@ To update by hand, pull the new image and recreate the container with the same f
 | Setting | What it does |
 | --- | --- |
 | `PUID`, `PGID` | The user and group that own the config folder and recordings. The Compose file sets 99 and 100. Leave them out of a plain `docker run` to run as root. |
-| `UMASK` | Permissions for new files. Default `022`. |
+| `UMASK` | Permissions for new files. The Compose file and the Unraid template set `022`. |
 | `BROADWAVE_RECORDINGS` | The recordings folder, when it is not `/config/work/recordings`. |
 | `BROADWAVE_ENCODER` | `gpu` or `software`, to skip the automatic choice. |
 | `BROADWAVE_HOSTS` | Public names the server answers to. See [Security](security.md). |
