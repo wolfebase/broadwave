@@ -19,14 +19,14 @@
 # save's response and a failed disk read, and the entry sends a device token,
 # opens pairing on any 401, and loads picture settings for a watch token. The
 # pairing calls and code helpers load with the pages that use them. Measured
-# entry gzip MEASURED, plus 300 bytes of slack.
+# entry gzip 95389 with all of these, plus 300 bytes of slack.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=94936
+JS_GZIP_MAX=95689
 CSS_GZIP_MAX=9860
 
 if [[ ! -f "$INDEX" ]]; then
