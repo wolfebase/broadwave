@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { TOKEN_KEY, authHeaders, canEditSignIn, codeAfterPoll, formatPairCode, isForbidden, isUnauthorized, kindLabel, mediaURL, normalizePairCode, noteIfUnauthorized, onUnauthorized, pairPollStep, readToken, scopeLabel, scopesForAccess, settingsForWatcher, writeToken } from "./src/lib/deviceToken.ts";
+import { TOKEN_KEY, authHeaders, isForbidden, isUnauthorized, mediaURL, noteIfUnauthorized, onUnauthorized, readToken, settingsForWatcher, writeToken } from "./src/lib/deviceToken.ts";
+import { canEditSignIn, codeAfterPoll, formatPairCode, kindLabel, normalizePairCode, pairPollStep, scopeLabel, scopesForAccess } from "./src/features/settings/pairCode.ts";
 
 test("a pair code is six digits, with spaces and dashes ignored", () => {
   assert.equal(normalizePairCode("482913"), "482913");

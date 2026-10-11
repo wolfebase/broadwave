@@ -15,10 +15,11 @@
 # loads up front, so those names are in the entry: 93137 -> 93507, plus 100
 # bytes of slack for lazy-chunk hashes.
 # JS raised 2026-10-11: a slow list read no longer replaces a newer one, a guide
-# refresh keeps the two weeks already loaded, and a settings save drops an older
-# save's response and a failed disk read. Measured entry gzip 94636, plus 300
-# bytes of slack for lazy-chunk hashes.
-# The entry also sends a device token and opens the pair screen on 401.
+# refresh keeps the two weeks already loaded, a settings save drops an older
+# save's response and a failed disk read, and the entry sends a device token,
+# opens pairing on any 401, and loads picture settings for a watch token. The
+# pairing calls and code helpers load with the pages that use them. Measured
+# entry gzip MEASURED, plus 300 bytes of slack.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
