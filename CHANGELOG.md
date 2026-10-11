@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.13.0 — 2026-10-11
+
 ### Added
 
 - iPhone and iPad have four home screen widgets, in small, medium, and large: On now, Your teams, Recording now, and Up next. On now, Your teams, and Recording now open that channel. Up next opens Recordings. Record on an airing sets it to record once, and a game keeps going until it is final. A row that is already recording, or set to record, says so. The teams widget lists your teams' games from a full day of the guide, and a game leaves when its listing ends.
@@ -25,6 +27,11 @@
 - On iPad, the guide shows the picture above the grid. The apps can be driven from a keyboard.
 - Shows in a library folder are read for their intros and end titles too.
 - A handbook covers install, the first run, tuners, the guide, watching, multiview, recordings, sync, troubleshooting, and security. It opens in a browser with no server, and it is published with the site.
+- Device sign-in, off until you turn on Settings › Devices › Require a device to sign in. While it is off, everything on your home network works as before. While it is on, each phone, TV, or browser pairs with a six-digit code that lasts 10 minutes: show a code in Settings and enter it on the new browser, or approve the code a new browser shows. Each code allows Watch, Record, or Admin. Watch plays and reads the guide. Record also adds recordings and passes. Admin also changes settings, tuners, and sources. Settings lists the paired devices with when each was last seen, and Revoke stops one. The last admin device cannot be revoked while sign-in is on. The shared playlist and guide (`/export`), the HDHomeRun port, and health checks stay open on your network, because Plex, Jellyfin, and Channels have no place for a code. The iPhone, iPad, and Apple TV apps cannot pair yet, so leave sign-in off if you use them.
+- On the web, Settings › Share with other apps lists what to give Plex, Jellyfin, Emby, and Channels: the playlist, the guide, and the HDHomeRun address, each with Copy.
+- On the web, a recording with captions has Captions in Options. It starts Off. The row is hidden when the file has none.
+- On the web, a keyboard or a TV remote runs Home, the guide, Search, Recordings, and Settings with Tab, the arrows, Enter, and Escape, and the focus ring stays in view. A dialog keeps Tab inside it and gives focus back when it closes. Escape closes the top layer, and the arrows move through the player's Options.
+- On the web, a screen reader can tell the controls apart. Play, Delete, Watch, and Record name the show they act on, and a sports Record names the matchup. The guide names a recording, a score, and a favorite. The sync pill says whether it is waiting, syncing, or off, and setup and diagnostics failures are read out.
 
 ### Changed
 
@@ -36,6 +43,12 @@
 - A pass's keep and limit rules touch the recordings that pass made, not every recording with a similar name. A title pass also covers older recordings of that same title. A keep rule does not delete a file outside the recordings folder. A recording a pass starts is tied to that pass, so those rules cover it. One you played to the last 15 seconds, or through 90% of it, now counts as watched for "keep unwatched", and so does one you marked watched.
 - On the web, removing a pass asks first and says the recordings it made stay. Cancel, Escape, or Back keeps the pass.
 - A quiet scoreboard goes stale when the next game starts, so the next look is within about a minute instead of up to two hours. The Sports page asks once when it opens. A game that started before midnight still matches its listing, so a recording of it can keep going.
+- The HDHomeRun this server acts as now calls itself an HDHR4-2US, a model that does not transcode, so Jellyfin stops asking it for one. A request for the broadcast with no transcode plays instead of being refused.
+- In the shared M3U, a channel's channel-id is now the id the XMLTV guide uses, not its channel number. Channels or another app that read the old one may ask you to match channels to the guide once.
+- Each channel in the HDHomeRun lineup has its own stream address. Two channels with the same number each play their own picture, and a library channel whose number is taken is left off the lineup.
+- Search lists the shows whose titles match first, then the listings that mention your words.
+- Live TV does less work per viewer. Playlist reloads and the channel filter take a fraction of the time and memory they did, so one server holds more screens. Opening a recording, the guide, and search are faster on a big lineup or library.
+- On the web, small and faded text, the guide's past and filtered shows, chip counts, channel names, and the live pills read at 4.5:1 contrast or better. With Reduce Motion, the guide jumps instead of gliding.
 
 ### Fixed
 
@@ -49,6 +62,36 @@
 - A channel name with a quotation mark no longer cuts the line short in an M3U shared with another app.
 - On a server with room for only a couple of pictures, sharing a multiview no longer comes up empty while one you just closed is still winding down.
 - On iPhone, iPad, and Apple TV, a tuner found on the network that has stopped answering says it is offline, with when it was last seen, and Remove is the first control.
+- A recording opens where you left off right away, including one still being recorded. It used to wait while the part before that spot was prepared. On iPhone, iPad, and Apple TV, the first play of a recording no longer stops when its playlist grows.
+- A recording still being made shows how far it has gotten, and the scrubber stops at what is on disk. A long segment no longer hides the rest of the show. Forward 30 near the end of a finished recording stops at the end. Two screens opening the same recording at once both play it.
+- A library channel shared with other apps starts on the recording that is on, not at the start of the block, and its guide fills two days instead of stopping after 40 airings.
+- A recording that stops on its own is marked failed and lets its tuner go. Extending a recording no longer ends it early or drops its tuner. A disk that fills while recording marks it failed with the disk-full message, and a recordings folder that cannot be written refuses the recording before it takes a tuner.
+- A half-hour show records again the next time it airs. A finished episode used to block the next one with the same title for an hour. An episode whose recording failed, or whose file could not be deleted, still records at its next airing, and a file that cannot be deleted stays in Recordings, and the web says it could not be deleted.
+- Following or unfollowing a team, adding a playlist with a password, and changing a library channel's recordings either finish or leave things as they were. A failure halfway used to leave a team without its pass, a source sending a masked password, or a short channel.
+- A playlist refresh that renumbers channels keeps every channel. Two entries with the same stream used to become one. Search shows a recording's season, episode, and where you left off.
+- Find commercials on a recording that is still being made waits for the whole file. It used to mark the recording scanned after reading only part of it. Finding commercials again replaces the breaks instead of adding a second set.
+- Live TV starts on a channel that sends a run of short keyframes. It used to never begin. A segment no longer plays as half a second, a frame after dropped filler is no longer marked corrupt, a segment that crosses the broadcast clock's rollover keeps its real length, and segment times no longer step ahead after a held keyframe.
+- The guide's live preview keeps its tuner after its picture check finishes. A picture nobody is watching lets its tuner go after a rebuild, and an encode replaced after a break is stopped instead of running on.
+- Plex and Channels can play a channel from the HDHomeRun this server acts as. They ask for it by number on paths the server did not answer. Jellyfin's check before playing no longer takes a tuner, and Plex can add the tuner. A failed tune says so. The guide carries the season and episode those apps read, and the channel logo when there is one. An IPv6 address keeps its brackets. An encrypted 3.0 channel whose station has a clear 1.0 channel plays that channel in other apps too, as it does in Broadwave.
+- On the web, a live picture reloads once after a network error, and recovers once after a media error, before it says it stopped. A recording does the same. Coming back to the tab keeps Try again on screen instead of a black picture, and a late answer from a channel you left no longer mutes the next one.
+- On the web, Whole-Home Sync holds better. A screen that is behind no longer jumps past what has loaded, a paused group stays paused when you come back to the tab, and a screen you left does not start playing again. The clock keeps correcting itself, and the live connection reconnects when the tab comes back. Live no longer pulls a screen away from the group while sync is on, and pausing no longer turns sync off.
+- On the web, holding Space or R no longer flips play or Record over and over. Escape leaves fullscreen, and a channel number typed before docking the player is not tuned after. Closing the full player opened from a link keeps the channel playing. The scrub thumb stays where you drag it, and the tap that wakes the bar on a touch screen does not press the button under it. A picture size or zoom change reaches a player already on screen.
+- On the web, a recording saves your place while it plays, not only when you leave. Start over stays at the start, and opening a recording no longer saves its lead-in as your place. Skip break waits for the breaks to load and never uses the previous recording's.
+- On the web, the guide stays on the channel you were on, including on a phone in landscape and after the list gets shorter. A refresh keeps the two weeks already loaded. In a time zone offset by half an hour, the columns line up with the local half-hour. A filter scrolls to the row it keeps, and dragging channels in a filtered guide no longer reorders the ones it hides.
+- On the web, a slow answer no longer puts an older list back. Recordings, channels, the schedule, your teams, tuners, free channels, multiview, and settings each keep the newest, and a guide field saves when you leave it. A failed check no longer empties tuners or free channels already found. Sports keeps its scores when the feed fails, and shows 0 for a game in progress. The search box follows Back and Forward. In multiview, Auto no longer moves the sound to a tile without any, or back and forth.
+- On the web, Enter or Space on a channel name in the guide plays that channel. It used to open whichever row the guide's own cursor was on.
+- On iPhone, iPad, and Apple TV, a list from a server you just left no longer lands on the new one, and two servers with similar names keep their own lineups. A removed pass, a delete, or a watched mark is not undone by a slower list. A favorite that does not save says so. Search with a semicolon finds results. If the rest of the guide fails to load, the listings already loaded stay, and a late check no longer says no signal after the picture is back.
+- On iPhone, iPad, and Apple TV, finding a server is steadier. A search that failed can start again instead of staying on No server answered. A server that left the network is not brought back by a late answer, Forget stays forgotten, and the app follows a server that was renamed or moved. A group command sent while reconnecting waits for the connection instead of being lost, a server restart no longer leaves a screen following the old group, and the clock keeps correcting itself. Guide categories, matchups, and minutes left match the web.
+
+### Security
+
+- A page on another site can no longer open the live connection or start a stream meant for other apps. Changes from another site were already refused. The HDHomeRun this server acts as refuses a name the server was not given, as the main address does. Plex, Jellyfin, Channels, and the apps are not affected.
+- Playlists, guides, artwork, scoreboards, and the update check use only http and https. Cloud metadata addresses are refused however they are written, and redirects are checked the same way. Link-local addresses are refused, except for a tuner, which gives itself one when there is no DHCP server. A stream name that points at a refused address is refused before the tune. A scoreboard key is not sent on to another host.
+- A remote playlist cannot hand ffmpeg or ffprobe a file on this machine. A recording on disk, and a playlist you add by its path, still open.
+- Size limits, far past real use, stop a file that never ends or a compression bomb: a playlist 128 MB and 250,000 channels, a guide 512 MB unpacked, a picture 32 megapixels, a video folder 200,000 files, 128 event connections, and 32 apps copying the broadcast at once. A recording you start runs a day at most. A broadcast with a malformed table is read safely.
+- Passwords, keys, and tokens in a playlist or guide address, in any spelling, a password in an Xtream-style stream path, and the tuner's DeviceAuth stay out of the log, diagnostics, the device list, and the support bundle. A failed tuner request no longer repeats its address. Settings shows the guide address without its password, and saving keeps the stored one. A source saved before this still signs in.
+- A recording's file stays inside the recordings folder, even when a channel number has a slash in it, and deleting a recording no longer follows a folder link out of it.
+- A security note in the docs lists what the server refuses, what it caps, and what it leaves to your network.
 
 ## 0.12.20 — 2026-10-05
 
