@@ -12,7 +12,7 @@ public enum Tokens {
         public static let lineStrong = Color(.sRGB, red: 1.000, green: 1.000, blue: 1.000, opacity: 0.200)
         public static let text = Color(.sRGB, red: 0.961, green: 0.969, blue: 0.980, opacity: 1.000)
         public static let textSecondary = Color(.sRGB, red: 0.682, green: 0.718, blue: 0.773, opacity: 1.000)
-        public static let textTertiary = Color(.sRGB, red: 0.451, green: 0.494, blue: 0.561, opacity: 1.000)
+        public static let textTertiary = Color(.sRGB, red: 0.510, green: 0.561, blue: 0.635, opacity: 1.000)
         public static let accent = Color(.sRGB, red: 0.239, green: 0.482, blue: 1.000, opacity: 1.000)
         public static let accentSoft = Color(.sRGB, red: 0.239, green: 0.482, blue: 1.000, opacity: 0.161)
         public static let onAccent = Color(.sRGB, red: 1.000, green: 1.000, blue: 1.000, opacity: 1.000)
