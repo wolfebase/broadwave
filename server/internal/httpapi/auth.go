@@ -74,11 +74,7 @@ func (s *Server) withDeviceAuth(next http.Handler) http.Handler {
 }
 
 func (s *Server) deviceAuthOn(ctx context.Context) (bool, error) {
-	values, err := s.Store.Settings(ctx)
-	if err != nil {
-		return false, err
-	}
-	return values[store.SettingDeviceAuth] == "1", nil
+	return s.Store.DeviceAuthOn(ctx)
 }
 
 func (s *Server) noteClient(ctx context.Context, id string, now time.Time) {
@@ -364,9 +360,10 @@ func (s *Server) pairAllowed(r *http.Request) bool {
 	return hitAllowed(s.pairHits, "ip:"+ip, now, pairIPLimit, pairWindow)
 }
 
-// pairFailed records a wrong code. The call that crosses the cap is refused
-// by the next pairAllowed.
-func (s *Server) pairFailed(r *http.Request) {
+// takeCodeTry counts a code submission as a failure before the code is
+// checked, so parallel guesses cannot all pass the caps before any of them is
+// recorded. A submission that turns out not to be a wrong code gives it back.
+func (s *Server) takeCodeTry(r *http.Request) (time.Time, bool) {
 	now := s.now()
 	ip := clientIP(r)
 	s.pairMu.Lock()
@@ -374,8 +371,28 @@ func (s *Server) pairFailed(r *http.Request) {
 	if s.pairHits == nil {
 		s.pairHits = map[string][]time.Time{}
 	}
-	hitAllowed(s.pairHits, "fail:"+ip, now, pairIPLimit+1, pairWindow)
-	hitAllowed(s.pairHits, "fail:all", now, pairFailCap+1, pairWindow)
+	if countRecent(s.pairHits["fail:"+ip], now, pairWindow) >= pairIPLimit ||
+		countRecent(s.pairHits["fail:all"], now, pairWindow) >= pairFailCap {
+		return now, false
+	}
+	hitAllowed(s.pairHits, "fail:"+ip, now, pairIPLimit, pairWindow)
+	hitAllowed(s.pairHits, "fail:all", now, pairFailCap, pairWindow)
+	return now, true
+}
+
+func (s *Server) giveBackCodeTry(r *http.Request, at time.Time) {
+	ip := clientIP(r)
+	s.pairMu.Lock()
+	defer s.pairMu.Unlock()
+	for _, key := range []string{"fail:" + ip, "fail:all"} {
+		hits := s.pairHits[key]
+		for i := len(hits) - 1; i >= 0; i-- {
+			if hits[i].Equal(at) {
+				s.pairHits[key] = append(hits[:i], hits[i+1:]...)
+				break
+			}
+		}
+	}
 }
 
 func countRecent(at []time.Time, now time.Time, window time.Duration) int {

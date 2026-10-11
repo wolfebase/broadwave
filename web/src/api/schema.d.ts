@@ -1308,7 +1308,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** @description Revokes a device. Its token stops working immediately. */
+        /** @description Revokes a device. Its token stops working immediately. While sign-in is on, the last admin device cannot be revoked (409). */
         delete: operations["revokeClient"];
         options?: never;
         head?: never;
@@ -4757,6 +4757,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     getPlayback: {

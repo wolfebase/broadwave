@@ -154,6 +154,16 @@ ON CONFLICT(key) DO UPDATE SET value=excluded.value`, k, v); err != nil {
 	return token, nil
 }
 
+// DeviceAuthOn reads only the sign-in switch. Every request asks.
+func (s *Store) DeviceAuthOn(ctx context.Context) (bool, error) {
+	var v string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, SettingDeviceAuth).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return v == "1", err
+}
+
 // ClientByToken finds the device for a raw bearer token.
 // revoked is true when the hash matches a revoked row. An unknown token
 // returns an empty device and revoked false.
