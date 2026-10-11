@@ -153,6 +153,7 @@ export function Play({
           video.addEventListener("loadedmetadata", place);
         }
         video.addEventListener("progress", place);
+        if (at != null) relocating.current = null;
         detach = () => {
           video.removeEventListener("progress", place);
           video.removeEventListener("loadedmetadata", place);
@@ -264,9 +265,9 @@ export function Play({
     const video = videoRef.current;
     if (!video) return;
     const end = video.seekable.length ? video.seekable.end(video.seekable.length - 1) : 0;
-    const plan = planRecordingSeek(value, encodedStart.current, end);
+    const finished = growing ? 0 : Math.max(length, recording.durationSec || 0);
+    const plan = planRecordingSeek(value, encodedStart.current, end, finished, relocating.current);
     if (plan.action === "within") {
-      relocating.current = null;
       video.currentTime = plan.to;
       whereRef.current = plan.to;
       return;

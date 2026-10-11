@@ -18,3 +18,12 @@ test("a seek past the encode, or back before it started, asks the server to begi
 test("a seek that is not a number starts over", () => {
   assert.deepEqual(planRecordingSeek(Number.NaN, 20, 40), { action: "reload", to: 0 });
 });
+
+test("a seek past the end of a finished recording lands on its end", () => {
+  assert.deepEqual(planRecordingSeek(62, 0, 60, 60), { action: "within", to: 60 });
+  assert.deepEqual(planRecordingSeek(62, 0, 20, 60), { action: "reload", to: 60 });
+});
+
+test("a seek during a reload replaces that reload", () => {
+  assert.deepEqual(planRecordingSeek(45, 0, 60, 60, 62), { action: "reload", to: 45 });
+});
