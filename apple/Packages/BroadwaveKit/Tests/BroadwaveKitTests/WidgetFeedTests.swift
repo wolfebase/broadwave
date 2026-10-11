@@ -123,6 +123,15 @@ private func planned(_ airing: Airing, skipped: Bool = false, conflict: Bool = f
     #expect(WidgetFeed.onNow(reversed, now: now).map(\.title) == ["Harbor Report"])
 }
 
+@Test func aFollowedNameIsItsOwnWordAndAShortCodeDoesNotHideIt() {
+    let pines = airing(1, on: 4, title: "North City Pines at Oaks", category: "Sports event")
+    let porcupines = airing(2, on: 5, title: "Porcupines at Harbor", category: "Sports event")
+    #expect(WidgetFeed.followed(pines, [TeamFollow(name: "North City Pines", short: "NC")]))
+    #expect(!WidgetFeed.followed(porcupines, [TeamFollow(name: "North City Pines", short: "Pines")]))
+    #expect(WidgetFeed.followed(pines, [TeamFollow(name: "North City Pines", short: "Pines")]))
+    #expect(WidgetFeed.followed(airing(3, on: 4, title: "Pines at Oaks", category: "Sports event"), [TeamFollow(name: "Harbor Pines", short: "Pines")]))
+}
+
 @Test func upNextKeepsConflictsAndNamesTheChannel() {
     let items = [
         planned(airing(1, on: 4, title: "Later", from: 7200, to: 9000)),
