@@ -419,6 +419,27 @@ func TestPreviewCountsDaysBeforeMakeRoom(t *testing.T) {
 	}
 }
 
+func TestPreviewWorksBeforeTheWorkFolderExists(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "cfg")
+	st, err := store.Open(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	root := t.TempDir()
+	missing := filepath.Join(root, "work", "recordings")
+	plan, err := Preview(context.Background(), st, &live.Hub{Dir: filepath.Join(root, "work"), RecordingsDir: missing}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.FreeBytes == 0 || len(plan.Remove) != 0 || !plan.Covers {
+		t.Fatalf("plan %+v", plan)
+	}
+	if _, err := os.Stat(filepath.Join(root, "work")); !os.IsNotExist(err) {
+		t.Fatalf("preview created the work folder: %v", err)
+	}
+}
+
 func TestPreviewWorksBeforeTheRecordingsFolderExists(t *testing.T) {
 	cfg := filepath.Join(t.TempDir(), "cfg")
 	st, err := store.Open(cfg)
