@@ -109,19 +109,7 @@ enum TileGeometry {
     }
 
     private static func splitGrid(columns: Int, rows: Int, count: Int, in box: CGSize, gap: CGFloat) -> [CGRect] {
-        let cellW = (box.width - gap * CGFloat(columns - 1)) / CGFloat(columns)
-        let cellH = (box.height - gap * CGFloat(rows - 1)) / CGFloat(rows)
-        return (0 ..< count).map { index in
-            let col = index % columns
-            let row = index / columns
-            let region = CGRect(
-                x: CGFloat(col) * (cellW + gap),
-                y: CGFloat(row) * (cellH + gap),
-                width: cellW,
-                height: cellH
-            )
-            return fit(region)
-        }
+        MosaicFrames.equalGrid(columns: columns, rows: rows, count: count, in: box, gap: gap)
     }
 
     private static func feature(count: Int, rows: Int, sideShare: CGFloat, in box: CGSize) -> [CGRect] {
@@ -1870,7 +1858,6 @@ struct MultiviewTile: View {
                     if focused, !live.detail.isEmpty {
                         Text(live.detail)
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     if tileStats {
@@ -1884,9 +1871,10 @@ struct MultiviewTile: View {
                         }
                     }
                 }
+                .foregroundStyle(.white)
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.black.opacity(0.45))
+                .background(Color.black.opacity(0.82))
             }
             .clipShape(.rect(cornerRadius: Tokens.Radius.md))
             .overlay {
