@@ -584,6 +584,7 @@ export interface paths {
          *     takes as broadcast, and only while another tuner that can carry it stays free.
          *     It never stops another picture to fit the budget, and counts no viewer; one
          *     warmed picture runs at a time and stops after about 20 s unless a watch joins it.
+         *     `profile`/`audio`/`pictureMode` are the older web fields and still work.
          */
         post: operations["warmChannel"];
         delete?: never;
@@ -3690,7 +3691,19 @@ export interface operations {
                 "application/json": {
                     caps?: components["schemas"]["Caps"];
                     prefs?: components["schemas"]["Prefs"];
+                    /** @description Force a rendition key, for example copy.copy or 720.aac2.broadcast */
                     rendition?: string;
+                    /**
+                     * @deprecated
+                     * @enum {string}
+                     */
+                    profile?: "transparent" | "balanced" | "saver";
+                    /**
+                     * @deprecated
+                     * @enum {string}
+                     */
+                    audio?: "stereo" | "surround";
+                    pictureMode?: components["schemas"]["PictureMode"];
                 };
             };
         };
