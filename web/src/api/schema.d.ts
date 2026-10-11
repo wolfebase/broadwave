@@ -1515,6 +1515,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/export/lineup.m3u": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description M3U of the guide lineup for other apps: every present, enabled, visible channel, once each, pointing at `/export/stream/{id}`. Library channels are not listed. A shared multiview whose channels are all still in the lineup points at `/export/mosaic/{key}`. The playlist names `/export/guide.xml`. Device sign-in does not cover `/export`. */
+        get: operations["exportLineup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/export/guide.xml": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description XMLTV for the same lineup, from two hours ago through 14 days ahead. A channel id is `ota.` plus the display number with dots as dashes; a shared multiview is `mosaic.` plus its key, with two-hour Multiview blocks so apps that hide guideless channels still list it. Device sign-in does not cover `/export`. */
+        get: operations["exportGuide"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/export/stream/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The channel's broadcast as MPEG-TS, riding the shared tune. Device sign-in does not cover `/export`; a cross-site browser page is refused with 403. HEAD does not tune. An id the server does not know is 503 on GET, not 404. A failure after the first byte stays 200. */
+        get: operations["exportStream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/export/mosaic/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description A shared multiview as MPEG-TS. Only a mosaic in the export list whose channels are all still in the lineup is served. Device sign-in does not cover `/export`; a cross-site browser page is refused with 403. HEAD does not tune. A failure after the first byte stays 200. */
+        get: operations["exportMosaic"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/poster/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description JPEG still from a recording. */
+        get: operations["recordingPoster"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/art/{kind}/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description A channel logo or a listing picture, re-encoded as JPEG, or PNG when it has transparency. When there is no picture or it cannot be used, the answer is an SVG placeholder with 200. */
+        get: operations["getArt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5326,6 +5428,222 @@ export interface operations {
                 };
                 content: {
                     "application/zip": string;
+                };
+            };
+        };
+    };
+    exportLineup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Playlist. Content-Type is audio/x-mpegurl; charset=utf-8. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/x-mpegurl": string;
+                };
+            };
+        };
+    };
+    exportGuide: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description XMLTV document. Content-Type is application/xml; charset=utf-8. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/xml": string;
+                };
+            };
+        };
+    };
+    exportStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description MPEG-TS. Content-Type is video/mp2t. HEAD has an empty body and does not tune. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp2t": string;
+                };
+            };
+            403: components["responses"]["Error"];
+            /** @description Plain text. The id is not an integer, or live TV is not set up. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description Plain text. Every app stream is already in use. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description Plain text, GET only. "805 All Tuners In Use" when every tuner is busy, otherwise "806 Tune Failed", also sent as X-HDHomeRun-Error. */
+            503: {
+                headers: {
+                    /** @description The body's sentence. */
+                    "X-HDHomeRun-Error"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+        };
+    };
+    exportMosaic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Channel ids joined by hyphens, the sound channel first. Two to four different positive ids, with no leading zeros. */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description MPEG-TS. Content-Type is video/mp2t. HEAD has an empty body and does not tune. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp2t": string;
+                };
+            };
+            403: components["responses"]["Error"];
+            /** @description Plain text. The key is not a mosaic, live TV is not set up, or this mosaic is not shared. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description Plain text. Every app stream is already in use. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description Plain text, GET only. When every tuner is busy, X-HDHomeRun-Error is "805 All Tuners In Use". */
+            503: {
+                headers: {
+                    /** @description Set only when every tuner is busy. */
+                    "X-HDHomeRun-Error"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+        };
+    };
+    recordingPoster: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description JPEG poster. Content-Type is image/jpeg. Cache-Control is public, max-age=3600. */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            /** @description Plain text. No such recording, or no poster could be made. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+        };
+    };
+    getArt: {
+        parameters: {
+            query?: {
+                /** @description Width in pixels, from 32 to 960. A smaller picture is not enlarged. */
+                w?: number;
+            };
+            header?: never;
+            path: {
+                /** @description channel is a logo. airing is a listing picture. Anything else is 404. */
+                kind: "channel" | "airing";
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The picture, cached for a day, or the placeholder, cached for an hour. */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/svg+xml": string;
+                };
+            };
+            /** @description Plain text. The id is not a positive integer, the kind is not channel or airing, or the row is missing. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
                 };
             };
         };
