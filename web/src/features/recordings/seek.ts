@@ -5,8 +5,13 @@
 
 export type RecordingSeek = { action: "within"; to: number } | { action: "reload"; to: number };
 
-export function planRecordingSeek(target: number, encodedStart: number, seekEnd: number): RecordingSeek {
-  const want = Number.isFinite(target) ? Math.max(0, target) : 0;
+// length, when known, is a finished recording's end: a seek past it lands there.
+// pending is a reload already under way. The old player is gone, so the new
+// spot replaces that reload instead of seeking the old one.
+export function planRecordingSeek(target: number, encodedStart: number, seekEnd: number, length = 0, pending: number | null = null): RecordingSeek {
+  let want = Number.isFinite(target) ? Math.max(0, target) : 0;
+  if (Number.isFinite(length) && length > 0) want = Math.min(want, length);
+  if (pending != null) return { action: "reload", to: want };
   const start = Number.isFinite(encodedStart) && encodedStart > 0 ? encodedStart : 0;
   const end = Number.isFinite(seekEnd) && seekEnd > 0 ? seekEnd : 0;
   const covered = end > start ? end : start;
