@@ -40,6 +40,21 @@ export default defineConfig({
   build: {
     outDir: "../server/cmd/broadwave/assets/web",
     emptyOutDir: true,
+    rollupOptions: {
+      // The receiver URL is written into the embedded HTML, so that entry
+      // keeps a stable name. Shared pieces are still hashed under assets/.
+      input: {
+        index: path.resolve("index.html"),
+        cast: path.resolve("src/cast/receiver.ts"),
+      },
+      output: {
+        entryFileNames(chunk) {
+          return chunk.name === "cast" ? "cast/receiver.js" : "assets/[name]-[hash].js";
+        },
+        chunkFileNames: "assets/[name]-[hash].js",
+        assetFileNames: "assets/[name]-[hash][extname]",
+      },
+    },
   },
   server: {
     proxy: {
