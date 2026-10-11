@@ -1,7 +1,8 @@
 // Package fetchguard is the HTTP client for addresses a person or a playlist
 // asked the server to open. http and https are allowed. A tuner or a playlist
-// server on the home network is allowed. Link-local addresses, cloud metadata
-// addresses, and any other scheme are not.
+// server on the home network is allowed. Cloud metadata addresses and any
+// other scheme are not. Link-local addresses are refused too, except on the
+// tuner client: a tuner plugged straight into the server has one.
 package fetchguard
 
 import (
@@ -10,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -29,51 +29,95 @@ var metadataNames = []string{
 	"metadata.goog",
 }
 
-// metadataIPs are metadata addresses that are not link-local.
-// 169.254.169.254 is link-local and is refused with the rest of that range.
+// metadataIPs are cloud metadata and credential addresses. They are refused
+// on every client, including the tuner client that allows link-local.
 var metadataIPs = []net.IP{
+	net.ParseIP("169.254.169.254"),
+	net.ParseIP("169.254.170.2"),
+	net.ParseIP("169.254.170.23"),
 	net.ParseIP("fd00:ec2::254"),
+	net.ParseIP("fd00:ec2::23"),
 	net.ParseIP("100.100.100.200"),
 	net.ParseIP("192.0.0.192"),
 }
 
+// nat64 is the well-known NAT64 prefix. 64:ff9b::a9fe:a9fe reaches
+// 169.254.169.254 on a network that translates it.
+var nat64 = &net.IPNet{IP: net.ParseIP("64:ff9b::"), Mask: net.CIDRMask(96, 128)}
+
 var dialer = &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 
-// transport is shared. Proxy is off: an environment proxy would dial a
-// different host and skip the address check.
-var transport = &http.Transport{
-	Proxy: nil,
-	DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-		return dialAllowed(ctx, network, addr)
-	},
-	ForceAttemptHTTP2:     true,
-	MaxIdleConns:          32,
-	IdleConnTimeout:       90 * time.Second,
-	TLSHandshakeTimeout:   10 * time.Second,
-	ResponseHeaderTimeout: 30 * time.Second,
-	ExpectContinueTimeout: 1 * time.Second,
+// policy is what one client refuses. The tuner client allows link-local.
+type policy struct {
+	linkLocal bool
 }
 
+var (
+	strict = policy{}
+	tuner  = policy{linkLocal: true}
+)
+
+// newTransport builds a shared transport for p. Proxy is off: an environment
+// proxy would dial a different host and skip the address check. The header
+// wait only catches a server that never answers; a large guide can be slow.
+func newTransport(p policy) *http.Transport {
+	return &http.Transport{
+		Proxy: nil,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dialAllowed(ctx, network, addr, p)
+		},
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          32,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 2 * time.Minute,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+}
+
+var (
+	transport      = newTransport(strict)
+	tunerTransport = newTransport(tuner)
+)
+
 // Transport is the dialer that refuses a link-local or metadata address.
-// Callers that already refuse redirects, such as the tuner client, use it.
 func Transport() *http.Transport { return transport }
+
+// TunerTransport is the dialer for a tuner or another device on the home
+// network. It allows link-local and still refuses metadata addresses.
+// Callers that already refuse redirects, such as the tuner client, use it.
+func TunerTransport() *http.Transport { return tunerTransport }
 
 // Client fetches with Allowed, including after a redirect.
 // A timeout of 0 waits for the request context. The header wait is still bounded.
 func Client(timeout time.Duration) *http.Client {
-	return &http.Client{Timeout: timeout, Transport: transport, CheckRedirect: checkRedirect}
+	return &http.Client{Timeout: timeout, Transport: transport, CheckRedirect: checkRedirect(strict)}
+}
+
+// TunerClient is Client for a tuner or another device on the home network.
+func TunerClient(timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout, Transport: tunerTransport, CheckRedirect: checkRedirect(tuner)}
 }
 
 // Do sends req. A refused address, and a URL inside a transport error, are
 // replaced so the error can be logged.
 func Do(req *http.Request, timeout time.Duration) (*http.Response, error) {
+	return do(req, strict, Client(timeout))
+}
+
+// TunerDo is Do for a tuner or another device on the home network.
+func TunerDo(req *http.Request, timeout time.Duration) (*http.Response, error) {
+	return do(req, tuner, TunerClient(timeout))
+}
+
+func do(req *http.Request, p policy, client *http.Client) (*http.Response, error) {
 	if req == nil || req.URL == nil {
 		return nil, ErrRefused
 	}
-	if err := Allowed(req.URL.String()); err != nil {
+	if err := p.allowed(req.URL.String()); err != nil {
 		return nil, err
 	}
-	res, err := Client(timeout).Do(req)
+	res, err := client.Do(req)
 	if err != nil {
 		if res != nil && res.Body != nil {
 			res.Body.Close()
@@ -83,17 +127,23 @@ func Do(req *http.Request, timeout time.Duration) (*http.Response, error) {
 	return res, nil
 }
 
-func checkRedirect(req *http.Request, via []*http.Request) error {
-	if len(via) >= 5 {
-		return ErrRefused
+func checkRedirect(p policy) func(*http.Request, []*http.Request) error {
+	return func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 5 {
+			return ErrRefused
+		}
+		return p.allowed(req.URL.String())
 	}
-	return Allowed(req.URL.String())
 }
 
 // Allowed reports whether rawURL may be fetched.
 // A private LAN address and loopback are allowed. A link-local address,
 // a metadata address, and any scheme other than http or https are not.
 func Allowed(rawURL string) error {
+	return strict.allowed(rawURL)
+}
+
+func (p policy) allowed(rawURL string) error {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || u.Hostname() == "" {
 		return ErrRefused
@@ -103,7 +153,7 @@ func Allowed(rawURL string) error {
 	default:
 		return ErrRefused
 	}
-	return hostPolicy(u.Hostname())
+	return p.host(u.Hostname())
 }
 
 // lookupTimeout bounds name resolution. A caller may hold a lock across Reachable.
@@ -116,7 +166,8 @@ var lookupIP = func(ctx context.Context, host string) ([]net.IP, error) {
 
 // Reachable reports whether rawURL may be opened by a program that resolves
 // the name itself. Allowed runs first. A literal address is not looked up.
-// A name is refused when lookup fails, returns nothing, or any answer is blocked.
+// A name is refused when any answer is blocked. A name this resolver cannot
+// find is left to the program: a .local name may resolve there and not here.
 // The URL is left unchanged so TLS still sees the name.
 func Reachable(ctx context.Context, rawURL string) error {
 	if err := Allowed(rawURL); err != nil {
@@ -145,18 +196,18 @@ func Reachable(ctx context.Context, rawURL string) error {
 	if cerr := ctx.Err(); cerr != nil {
 		return cerr
 	}
-	if err != nil || lookupCtx.Err() != nil || len(ips) == 0 {
-		return ErrRefused
+	if err != nil || lookupCtx.Err() != nil {
+		return nil
 	}
 	for _, ip := range ips {
-		if ipBlocked(ip) {
+		if strict.blocked(ip) {
 			return ErrRefused
 		}
 	}
 	return nil
 }
 
-func hostPolicy(host string) error {
+func (p policy) host(host string) error {
 	host = strings.TrimSuffix(host, ".")
 	if host == "" || strings.Contains(host, "%") {
 		return ErrRefused
@@ -164,7 +215,7 @@ func hostPolicy(host string) error {
 	if metadataName(host) || ambiguous(host) {
 		return ErrRefused
 	}
-	if ip := net.ParseIP(host); ip != nil && ipBlocked(ip) {
+	if ip := net.ParseIP(host); ip != nil && p.blocked(ip) {
 		return ErrRefused
 	}
 	return nil
@@ -188,14 +239,9 @@ func ambiguous(host string) bool {
 	if strings.Contains(host, ":") {
 		return false
 	}
-	low := strings.ToLower(host)
-	if strings.HasPrefix(low, "0x") {
-		return true
-	}
 	labels := strings.Split(host, ".")
 	if len(labels) == 1 {
-		_, err := strconv.ParseUint(host, 10, 64)
-		return err == nil
+		return numericLabel(host) != numOther
 	}
 	hexLabel := false
 	for _, label := range labels {
@@ -252,11 +298,17 @@ func numericLabel(label string) int {
 	return numDecimal
 }
 
-func ipBlocked(ip net.IP) bool {
+func (p policy) blocked(ip net.IP) bool {
 	if ip == nil {
 		return true
 	}
-	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+	if nat64.Contains(ip) {
+		ip = net.IP(ip[12:16])
+	}
+	if ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return true
+	}
+	if ip.IsLinkLocalUnicast() && !p.linkLocal {
 		return true
 	}
 	for _, other := range metadataIPs {
@@ -267,35 +319,45 @@ func ipBlocked(ip net.IP) bool {
 	return false
 }
 
-func dialAllowed(ctx context.Context, network, addr string) (net.Conn, error) {
+// dialAllowed checks every answer, then dials the checked addresses in order,
+// so a name cannot change between the check and the dial. A host whose first
+// answer is unreachable, such as IPv6 in a container without it, still works.
+func dialAllowed(ctx context.Context, network, addr string, p policy) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
 	}
-	if err := hostPolicy(host); err != nil {
+	if err := p.host(host); err != nil {
 		return nil, err
 	}
 	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 	if err != nil {
 		return nil, err
 	}
-	if len(ips) == 0 {
-		return nil, ErrRefused
-	}
 	for _, ip := range ips {
-		if ipBlocked(ip.IP) {
+		if p.blocked(ip.IP) {
 			return nil, ErrRefused
 		}
 	}
-	chosen := ips[0].IP
-	family := "tcp4"
-	if chosen.To4() == nil {
-		family = "tcp6"
+	var last error = ErrRefused
+	for _, ip := range ips {
+		family := "tcp4"
+		if ip.IP.To4() == nil {
+			family = "tcp6"
+		}
+		if network != "tcp" && network != family {
+			continue
+		}
+		conn, err := dialer.DialContext(ctx, family, net.JoinHostPort(ip.IP.String(), port))
+		if err == nil {
+			return conn, nil
+		}
+		last = err
+		if ctx.Err() != nil {
+			break
+		}
 	}
-	if network != "tcp" && network != family {
-		return nil, ErrRefused
-	}
-	return dialer.DialContext(ctx, family, net.JoinHostPort(chosen.String(), port))
+	return nil, last
 }
 
 func dropURL(err error) error {

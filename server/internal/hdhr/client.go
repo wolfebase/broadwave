@@ -82,7 +82,7 @@ func (c *Client) httpClient() *http.Client {
 		return c.HTTP
 	}
 	// Discovery documents are on the tuner. A redirect would leave that host.
-	return &http.Client{Timeout: 20 * time.Second, Transport: fetchguard.Transport(), CheckRedirect: refuseRedirect}
+	return &http.Client{Timeout: 20 * time.Second, Transport: fetchguard.TunerTransport(), CheckRedirect: refuseRedirect}
 }
 
 func (c *Client) FetchDevice(ctx context.Context, baseURL string) (Device, error) {

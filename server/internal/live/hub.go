@@ -3704,7 +3704,7 @@ func fetchTunerStatus(ctx context.Context, host string) ([]tunerStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := fetchguard.Do(req, 0)
+	res, err := fetchguard.TunerDo(req, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -3751,7 +3751,7 @@ func openKept(ctx context.Context, u string) (io.ReadCloser, error) {
 		stop()
 		return nil, err
 	}
-	res, err := fetchguard.Do(req, 0)
+	res, err := fetchguard.TunerDo(req, 0)
 	if !halt() {
 		stop()
 		if res != nil {
@@ -3950,7 +3950,7 @@ func openMux(root string, tuner, freq int) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := fetchguard.Do(req, 0)
+	res, err := fetchguard.TunerDo(req, 0)
 	if err != nil {
 		return nil, err
 	}

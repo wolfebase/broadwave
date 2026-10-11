@@ -44,7 +44,7 @@ func ProbeHost(ctx context.Context, host string, ports []ProbePort) (Found, bool
 	if len(ports) == 0 {
 		ports = KnownPorts
 	}
-	client := fetchguard.Client(400 * time.Millisecond)
+	client := fetchguard.TunerClient(400 * time.Millisecond)
 	for _, port := range ports {
 		if ctx.Err() != nil {
 			return Found{}, false
