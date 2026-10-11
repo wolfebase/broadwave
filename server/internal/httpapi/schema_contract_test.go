@@ -35,6 +35,7 @@ var fixtureSchema = []struct {
 	{"events", "get", "/events", "200"},
 	{"frames", "get", "/frames", "200"},
 	{"free", "get", "/sources/free", "200"},
+	{"free-add", "post", "/sources/free", "200"},
 	{"groups", "get", "/groups", "200"},
 	{"guide-refresh", "post", "/guide/refresh", "200"},
 	{"health", "get", "/health", "200"},
@@ -93,7 +94,6 @@ var fixtureSchema = []struct {
 // operation publishes no JSON schema. A new file in api/fixtures must be added
 // here or to fixtureSchema.
 var skippedFixtures = map[string]string{
-	"free-add":    "POST /sources/free 200 publishes no application/json schema",
 	"ws-activity": "websocket frame, not an HTTP response",
 	"ws-clock":    "websocket frame, not an HTTP response",
 	"ws-group":    "websocket frame, not an HTTP response",
@@ -120,10 +120,9 @@ func TestFixtureJSONMatchesOpenAPI(t *testing.T) {
 			if err := validateSchema(doc, schema, body, "$", 0); err != nil {
 				t.Fatal(err)
 			}
-			// The handler writes the source itself. The published 200 schema is a
-			// wrapper whose fields are all optional, so a bare object still matches
-			// and none of Source's required fields are checked. Clients decode it
-			// as a Source, so check that too.
+			// Playlist, Xtream, link, and emulator adds return the source itself.
+			// The published 200 schema is a oneOf, so this checks the branch clients
+			// decode: a Source, with its required fields.
 			if tc.name == "xtream" {
 				source, ok := asMap(doc.schemas["Source"])
 				if !ok {
@@ -175,14 +174,23 @@ func TestEveryJSONFixtureIsChecked(t *testing.T) {
 	}
 }
 
-func TestFreeAddResponseHasNoJSONSchema(t *testing.T) {
+func TestFreeAddResponseDocumentsTheSource(t *testing.T) {
 	doc := loadOpenAPI(t)
-	_, ok, err := responseSchema(doc, "post", "/sources/free", "200")
+	schema, ok, err := responseSchema(doc, "post", "/sources/free", "200")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ok {
-		t.Fatal("POST /sources/free 200 now has a JSON schema; check free-add.json and drop the skip")
+	if !ok {
+		t.Fatal("POST /sources/free 200 has no JSON schema")
+	}
+	required, err := stringList(schema["required"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"id", "kind", "name", "url", "xmltvUrl", "message"} {
+		if !listHas(required, key) {
+			t.Errorf("POST /sources/free 200 does not require %s", key)
+		}
 	}
 }
 

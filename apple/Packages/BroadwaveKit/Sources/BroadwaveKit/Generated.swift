@@ -642,6 +642,34 @@ public struct Playback: Codable, Sendable, Hashable {
     }
 }
 
+public struct PlaylistPickChannels: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var name: String
+    public var number: String
+
+    public init(id: String, name: String, number: String) {
+        self.id = id
+        self.name = name
+        self.number = number
+    }
+}
+
+public struct PlaylistPick: Codable, Sendable, Hashable {
+    public var pick: Bool
+    public var count: Int
+    public var message: String
+    public var groups: [String]
+    public var channels: [PlaylistPickChannels]?
+
+    public init(pick: Bool, count: Int, message: String, groups: [String], channels: [PlaylistPickChannels]? = nil) {
+        self.pick = pick
+        self.count = count
+        self.message = message
+        self.groups = groups
+        self.channels = channels
+    }
+}
+
 public struct Reception: Codable, Sendable, Hashable {
     public var freeTuner: Bool
     public var tunerAnswers: Bool
@@ -959,8 +987,10 @@ public struct Source: Codable, Sendable, Hashable, Identifiable {
     public var health: String?
     public var streamsInUse: Int?
     public var deviceId: String?
+    public var groups: String?
+    public var start: Int?
 
-    public init(id: Int64, kind: String, name: String, url: String? = nil, xmltvUrl: String? = nil, enabled: Bool, stableKey: String? = nil, priority: Int? = nil, tunerCount: Int? = nil, streamLimit: Int? = nil, streamFormat: String? = nil, hasGuide: Bool? = nil, needsTuner: Bool? = nil, refresh: String? = nil, lastRefresh: String? = nil, health: String? = nil, streamsInUse: Int? = nil, deviceId: String? = nil) {
+    public init(id: Int64, kind: String, name: String, url: String? = nil, xmltvUrl: String? = nil, enabled: Bool, stableKey: String? = nil, priority: Int? = nil, tunerCount: Int? = nil, streamLimit: Int? = nil, streamFormat: String? = nil, hasGuide: Bool? = nil, needsTuner: Bool? = nil, refresh: String? = nil, lastRefresh: String? = nil, health: String? = nil, streamsInUse: Int? = nil, deviceId: String? = nil, groups: String? = nil, start: Int? = nil) {
         self.id = id
         self.kind = kind
         self.name = name
@@ -979,6 +1009,8 @@ public struct Source: Codable, Sendable, Hashable, Identifiable {
         self.health = health
         self.streamsInUse = streamsInUse
         self.deviceId = deviceId
+        self.groups = groups
+        self.start = start
     }
 }
 

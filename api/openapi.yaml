@@ -453,6 +453,19 @@ paths:
       responses:
         "200":
           description: The source, plus a note when DRM channels were skipped
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [id, kind, name, url, xmltvUrl, message]
+                properties:
+                  id: { type: integer, format: int64 }
+                  kind: { type: string, enum: [free] }
+                  name: { type: string }
+                  url: { type: string }
+                  xmltvUrl: { type: string }
+                  message: { type: string, description: "Empty when every channel was added. Otherwise how many DRM channels were skipped." }
         "400": { $ref: "#/components/responses/Error" }
   /sources:
     get:
@@ -502,14 +515,23 @@ paths:
                 file: { type: string, format: binary, description: "An M3U playlist. Gzip is unpacked." }
       responses:
         "200":
-          description: Source added
+          description: |
+            What was added, or a question before a long playlist is saved.
+            A playlist, Xtream server, link, or emulator comes back as the source itself.
+            A folder comes back as `source` and how many recordings were found.
+            A playlist of more than 300 channels comes back as a pick, and nothing is saved until the next call names `groups` or `keep`.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  source: { $ref: "#/components/schemas/Source" }
-                  added: { type: integer }
+                oneOf:
+                  - $ref: "#/components/schemas/Source"
+                  - type: object
+                    additionalProperties: false
+                    required: [source, added]
+                    properties:
+                      source: { $ref: "#/components/schemas/Source" }
+                      added: { type: integer, description: "Recordings found in the folder." }
+                  - $ref: "#/components/schemas/PlaylistPick"
         "400": { $ref: "#/components/responses/Error" }
   /channels:
     get:
@@ -2181,10 +2203,16 @@ components:
         locked: { type: boolean }
     Source:
       type: object
+      additionalProperties: false
       required: [id, kind, name, enabled]
       properties:
         id: { type: integer, format: int64 }
-        kind: { type: string, enum: [hdhomerun, hdhr-compatible, m3u, xtream, tvheadend, channels-dvr, link, folder] }
+        kind:
+          type: string
+          description: |
+            How this source was added. A Channels server added from the form is `channels`.
+            `hdhomerun`, `hdhr-compatible`, and `channels-dvr` are discovery names; tuners themselves are devices.
+          enum: [hdhomerun, hdhr-compatible, m3u, xtream, tvheadend, channels, channels-dvr, threadfin, xteve, ersatztv, dispatcharr, free, link, folder]
         name: { type: string }
         url: { type: string }
         xmltvUrl: { type: string }
@@ -2201,6 +2229,31 @@ components:
         health: { type: string, description: "Empty when the source is online. Otherwise the last error." }
         streamsInUse: { type: integer }
         deviceId: { type: string }
+        groups: { type: string, description: "Group filter saved with this playlist. Empty keeps every group. The add response is the source from before this is saved; GET /sources has it." }
+        start: { type: integer, description: "First channel number saved with this playlist. 0 keeps the numbers in the playlist. Omitted until a number was set. The add response may omit it; GET /sources has it." }
+    PlaylistPick:
+      type: object
+      additionalProperties: false
+      required: [pick, count, message, groups]
+      description: A long playlist was not saved. The next add names which groups or channels to keep.
+      properties:
+        pick: { type: boolean, enum: [true] }
+        count: { type: integer, description: "Channels in the playlist." }
+        message: { type: string }
+        groups:
+          type: array
+          items: { type: string }
+        channels:
+          type: array
+          description: Present when the playlist has no groups. Each row is one channel that can be kept.
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, id, number]
+            properties:
+              name: { type: string }
+              id: { type: string }
+              number: { type: string }
     Channel:
       type: object
       required: [id, deviceId, guideNumber, guideName, displayNumber, displayName, hd, favorite, enabled, hidden, present]

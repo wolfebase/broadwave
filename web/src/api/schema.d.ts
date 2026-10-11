@@ -1667,8 +1667,12 @@ export interface components {
         Source: {
             /** Format: int64 */
             id: number;
-            /** @enum {string} */
-            kind: "hdhomerun" | "hdhr-compatible" | "m3u" | "xtream" | "tvheadend" | "channels-dvr" | "link" | "folder";
+            /**
+             * @description How this source was added. A Channels server added from the form is `channels`.
+             *     `hdhomerun`, `hdhr-compatible`, and `channels-dvr` are discovery names; tuners themselves are devices.
+             * @enum {string}
+             */
+            kind: "hdhomerun" | "hdhr-compatible" | "m3u" | "xtream" | "tvheadend" | "channels" | "channels-dvr" | "threadfin" | "xteve" | "ersatztv" | "dispatcharr" | "free" | "link" | "folder";
             name: string;
             url?: string;
             xmltvUrl?: string;
@@ -1688,6 +1692,25 @@ export interface components {
             health?: string;
             streamsInUse?: number;
             deviceId?: string;
+            /** @description Group filter saved with this playlist. Empty keeps every group. The add response is the source from before this is saved; GET /sources has it. */
+            groups?: string;
+            /** @description First channel number saved with this playlist. 0 keeps the numbers in the playlist. Omitted until a number was set. The add response may omit it; GET /sources has it. */
+            start?: number;
+        };
+        /** @description A long playlist was not saved. The next add names which groups or channels to keep. */
+        PlaylistPick: {
+            /** @enum {boolean} */
+            pick: true;
+            /** @description Channels in the playlist. */
+            count: number;
+            message: string;
+            groups: string[];
+            /** @description Present when the playlist has no groups. Each row is one channel that can be kept. */
+            channels?: {
+                name: string;
+                id: string;
+                number: string;
+            }[];
         };
         Channel: {
             /** Format: int64 */
@@ -3010,7 +3033,19 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        /** Format: int64 */
+                        id: number;
+                        /** @enum {string} */
+                        kind: "free";
+                        name: string;
+                        url: string;
+                        xmltvUrl: string;
+                        /** @description Empty when every channel was added. Otherwise how many DRM channels were skipped. */
+                        message: string;
+                    };
+                };
             };
             400: components["responses"]["Error"];
         };
@@ -3076,16 +3111,22 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Source added */
+            /**
+             * @description What was added, or a question before a long playlist is saved.
+             *     A playlist, Xtream server, link, or emulator comes back as the source itself.
+             *     A folder comes back as `source` and how many recordings were found.
+             *     A playlist of more than 300 channels comes back as a pick, and nothing is saved until the next call names `groups` or `keep`.
+             */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        source?: components["schemas"]["Source"];
-                        added?: number;
-                    };
+                    "application/json": components["schemas"]["Source"] | {
+                        source: components["schemas"]["Source"];
+                        /** @description Recordings found in the folder. */
+                        added: number;
+                    } | components["schemas"]["PlaylistPick"];
                 };
             };
             400: components["responses"]["Error"];
