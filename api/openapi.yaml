@@ -1506,12 +1506,76 @@ paths:
         content:
           application/json:
             schema:
-              allOf:
-                - $ref: "#/components/schemas/NewPass"
-                - type: object
-                  properties:
-                    id: { type: integer, format: int64 }
-                    rename: { type: string }
+              type: object
+              description: "Nothing is saved. When id is absent or 0, title is required and rename is ignored. When id is any other number, title is ignored and a non-blank rename is the new title, words, or category. A missing pass is not found."
+              properties:
+                id:
+                  type: integer
+                  format: int64
+                  description: "Absent or 0 previews a new series pass. Any other id previews an edit of that pass."
+                title:
+                  type: string
+                  description: "Required when id is absent or 0. Blank is refused. Ignored when id is any other number."
+                rename:
+                  type: string
+                  description: "Ignored when id is absent or 0, because the new title is title. When id is set, a non-blank value replaces the title. Blank keeps the saved title. A team pass keeps its title."
+                channelId:
+                  type: integer
+                  format: int64
+                  description: "0 records on any channel. A once pass does not store it."
+                padBefore:
+                  type: integer
+                  description: "Stored from 0 to 30."
+                padAfter:
+                  type: integer
+                  description: "Stored from 0 to 30."
+                airingStart:
+                  type: string
+                  description: "Ignored. This route does not record one airing. POST /passes does, when airingStart and channelId are set."
+                matchKind:
+                  type: string
+                  enum: [title, contains, category]
+                  description: "team is refused. A team pass keeps the match kind it already has. A once pass does not store it."
+                priority:
+                  type: integer
+                  description: "Stored from 0 to 1000."
+                episodes:
+                  type: string
+                  enum: [all, new]
+                  description: "A once pass does not store it. A word other than all or new is refused, including on a once pass."
+                keepMode:
+                  type: string
+                  enum: [all, unwatched, last]
+                  description: "A once pass does not store it. A word other than all, unwatched, or last is refused, including on a once pass."
+                keepCount:
+                  type: integer
+                  description: "Stored from 0 to 99. A once pass does not store it."
+                limitCount:
+                  type: integer
+                  description: "Stored from 0 to 99. A once pass does not store it."
+                rerecord:
+                  type: boolean
+                  description: "A once pass does not store it."
+                commercials: { type: boolean }
+                timeStart:
+                  type: string
+                  description: "HH:MM local. Set with timeEnd. Checked only when timeStart or timeEnd is sent, including on a once pass. A once pass does not store it."
+                timeEnd:
+                  type: string
+                  description: "HH:MM local. Before timeStart crosses midnight. Checked only when timeStart or timeEnd is sent, including on a once pass. A once pass does not store it."
+                days:
+                  type: array
+                  description: "Weekdays an airing may start on, 0 Sunday to 6 Saturday. Empty is every day. A bad entry is refused, including on a once pass. A once pass does not store it."
+                  items: { type: integer, minimum: 0, maximum: 6 }
+              if:
+                anyOf:
+                  - not:
+                      required: [id]
+                  - properties:
+                      id:
+                        const: 0
+              then:
+                required: [title]
       responses:
         "200":
           description: What the pass would record, and recordings of other passes it would push out
@@ -1532,11 +1596,70 @@ paths:
         content:
           application/json:
             schema:
-              allOf:
-                - $ref: "#/components/schemas/Pass"
-                - type: object
-                  properties:
-                    rename: { type: string, description: "New title, words, or category for a series pass" }
+              type: object
+              description: "Changes only the fields sent. The body must be JSON. No field is required. id and title are ignored; the path id is the pass. rename changes a series pass's title. A time window is checked only when timeStart or timeEnd is sent."
+              properties:
+                id:
+                  type: integer
+                  format: int64
+                  description: "Ignored. The path id is the pass."
+                title:
+                  type: string
+                  description: "Ignored. Send rename to change a series pass's title."
+                rename:
+                  type: string
+                  description: "New title, words, or category for a series pass. Blank is ignored. A team pass keeps its title. A once pass does not store it."
+                channelId:
+                  type: integer
+                  format: int64
+                  description: "0 records on any channel. A once pass does not store it."
+                kind:
+                  type: string
+                  description: "Ignored."
+                padBefore:
+                  type: integer
+                  description: "Stored from 0 to 30."
+                padAfter:
+                  type: integer
+                  description: "Stored from 0 to 30."
+                priority:
+                  type: integer
+                  description: "Stored from 0 to 1000."
+                episodes:
+                  type: string
+                  enum: [all, new]
+                  description: "A once pass does not store it. A word other than all or new is refused, including on a once pass."
+                keepMode:
+                  type: string
+                  enum: [all, unwatched, last]
+                  description: "A once pass does not store it. A word other than all, unwatched, or last is refused, including on a once pass."
+                keepCount:
+                  type: integer
+                  description: "Stored from 0 to 99. A once pass does not store it."
+                limitCount:
+                  type: integer
+                  description: "Stored from 0 to 99. A once pass does not store it."
+                rerecord:
+                  type: boolean
+                  description: "A once pass does not store it."
+                commercials: { type: boolean }
+                timeStart:
+                  type: string
+                  description: "HH:MM local. Checked only when timeStart or timeEnd is sent, including on a once pass. A once pass does not store it."
+                timeEnd:
+                  type: string
+                  description: "HH:MM local. Checked only when timeStart or timeEnd is sent, including on a once pass. A once pass does not store it."
+                matchKind:
+                  type: string
+                  enum: [title, contains, category]
+                  description: "team is refused. A team pass keeps the match kind it already has. A once pass does not store it."
+                days:
+                  type: array
+                  description: "Weekdays an airing may start on, 0 Sunday to 6 Saturday. Empty is every day. A bad entry is refused, including on a once pass. A once pass does not store it."
+                  items: { type: integer, minimum: 0, maximum: 6 }
+                airingStart:
+                  type: string
+                  description: "Ignored."
       responses:
         "200":
           description: Passes after the change
@@ -1665,7 +1788,10 @@ paths:
             schema:
               type: object
               properties:
-                orderMode: { type: string, enum: [custom, release, random, season, show, marathon] }
+                orderMode:
+                  type: string
+                  enum: [custom, release, random, season, show, marathon]
+                  description: "Omitted or empty is custom. Any other word is refused."
                 ruleTitle: { type: string }
                 recordings:
                   type: array
@@ -1708,13 +1834,17 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
               type: object
+              description: "The body must be JSON. An empty body is refused. index may be omitted; omitted is 0, the first recording."
               properties:
-                index: { type: integer }
+                index:
+                  type: integer
+                  minimum: 0
+                  description: "Position in the channel's recording list. Omitted is 0. Below 0 is refused. At or past the end of the list is refused."
                 pictureMode: { $ref: "#/components/schemas/PictureMode" }
       responses:
         "200":
