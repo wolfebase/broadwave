@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createVirtual, deleteRecording, getServer, setKeep, setWatched, stopRecording } from "../api";
 import { useData } from "../app/data";
 import { gateFeature } from "../lib/compat";
+import { focusRing } from "../app/remote";
 import { navigate, useRoute } from "../app/router";
 import type { ServerInfo } from "../types";
 import { Library } from "./library/Library";
+import { StoragePlanView } from "./library/StoragePlanView";
 import { nextEpisode } from "./library/model";
 import { Play } from "./recordings/Play";
 import { VirtualPlay } from "./recordings/Virtual";
@@ -20,6 +22,17 @@ export function RecordingsPage() {
   const { recordings, virtuals, refresh } = useData();
   const { params } = useRoute();
   const show = params.get("show")?.trim() ?? "";
+  const storage = params.get("view") === "storage";
+  const libraryRef = useRef<HTMLButtonElement>(null);
+  const storageRef = useRef<HTMLButtonElement>(null);
+  const openView = (next: "library" | "storage") => {
+    const query = new URLSearchParams(params);
+    if (next === "storage") query.set("view", "storage");
+    else query.delete("view");
+    const search = query.toString();
+    navigate(search ? `/recordings?${search}` : "/recordings");
+    focusRing(next === "storage" ? storageRef.current : libraryRef.current);
+  };
   const listed =
     show === ""
       ? recordings
@@ -29,54 +42,68 @@ export function RecordingsPage() {
     <div className="page-wrap">
       <header className="page-header">
         <h1>Recordings</h1>
+        <div className="guide-chips">
+          <div className="segmented" role="group" aria-label="Recordings">
+            <button ref={libraryRef} type="button" className={storage ? "seg" : "seg on"} aria-pressed={!storage} onClick={() => openView("library")}>
+              Library
+            </button>
+            <button ref={storageRef} type="button" className={storage ? "seg on" : "seg"} aria-pressed={storage} onClick={() => openView("storage")}>
+              Storage
+            </button>
+          </div>
+        </div>
       </header>
-      <Library
-        key={show}
-        recordings={listed}
-        show={show}
-        note={note}
-        onMany={async (action, recs) => {
-          const results = await Promise.allSettled(recs.map((r) => (action === "delete" ? deleteRecording(r.id) : setWatched(r.id, action === "watched"))));
-          const failed = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
-          const done = recs.length - failed.length;
-          const what = done === 1 ? "1 recording" : `${done} recordings`;
-          const said = action === "delete" ? `Deleted ${what}.` : `Marked ${what} ${action}.`;
-          setNote(failed.length === 0 ? said : `${done > 0 ? `${said} ` : ""}${failed.length} could not be changed: ${String(failed[0].reason?.message ?? failed[0].reason)}`);
-          await refresh(["recordings"]);
-        }}
-        onPlay={(r) => navigate(`/play?recording=${r.id}`)}
-        onWatched={(r, flag) => void setWatched(r.id, flag).then(() => refresh(["recordings"]))}
-        onKeep={(r, keep) =>
-          void setKeep(r.id, keep).then(
-            () => refresh(["recordings"]),
-            (err: unknown) => setNote(err instanceof Error ? err.message : String(err)),
-          )
-        }
-        onDelete={(r) =>
-          void deleteRecording(r.id).then(
-            () => {
-              setNote(`Deleted ${r.title}.`);
+      {storage ? (
+        <StoragePlanView />
+      ) : (
+        <Library
+          key={show}
+          recordings={listed}
+          show={show}
+          note={note}
+          onMany={async (action, recs) => {
+            const results = await Promise.allSettled(recs.map((r) => (action === "delete" ? deleteRecording(r.id) : setWatched(r.id, action === "watched"))));
+            const failed = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+            const done = recs.length - failed.length;
+            const what = done === 1 ? "1 recording" : `${done} recordings`;
+            const said = action === "delete" ? `Deleted ${what}.` : `Marked ${what} ${action}.`;
+            setNote(failed.length === 0 ? said : `${done > 0 ? `${said} ` : ""}${failed.length} could not be changed: ${String(failed[0].reason?.message ?? failed[0].reason)}`);
+            await refresh(["recordings"]);
+          }}
+          onPlay={(r) => navigate(`/play?recording=${r.id}`)}
+          onWatched={(r, flag) => void setWatched(r.id, flag).then(() => refresh(["recordings"]))}
+          onKeep={(r, keep) =>
+            void setKeep(r.id, keep).then(
+              () => refresh(["recordings"]),
+              (err: unknown) => setNote(err instanceof Error ? err.message : String(err)),
+            )
+          }
+          onDelete={(r) =>
+            void deleteRecording(r.id).then(
+              () => {
+                setNote(`Deleted ${r.title}.`);
+                return refresh(["recordings"]);
+              },
+              (err: unknown) => setNote(err instanceof Error ? err.message : String(err)),
+            )
+          }
+          onStop={(r) =>
+            void stopRecording(r.id).then(() => {
+              setNote(`Stopped ${r.title}. What it recorded is kept.`);
               return refresh(["recordings"]);
-            },
-            (err: unknown) => setNote(err instanceof Error ? err.message : String(err)),
-          )
-        }
-        onStop={(r) =>
-          void stopRecording(r.id).then(() => {
-            setNote(`Stopped ${r.title}. What it recorded is kept.`);
-            return refresh(["recordings"]);
-          })
-        }
-        onVirtual={(r) => {
-          const used = new Set(virtuals.map((v) => v.number));
-          let n = 900;
-          while (used.has(String(n))) n++;
-          void createVirtual(String(n), `${r.title} channel`, [r.id]).then(() => {
-            setNote(`Channel ${n} now plays ${r.title} around the clock, without a tuner.`);
-            return refresh(["virtuals"]);
-          });
-        }}
-      />
+            })
+          }
+          onVirtual={(r) => {
+            const used = new Set(virtuals.map((v) => v.number));
+            let n = 900;
+            while (used.has(String(n))) n++;
+            void createVirtual(String(n), `${r.title} channel`, [r.id]).then(() => {
+              setNote(`Channel ${n} now plays ${r.title} around the clock, without a tuner.`);
+              return refresh(["virtuals"]);
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -23,6 +23,8 @@ export type {
   ServerInfo,
   Settings,
   StorageKeep,
+  StoragePlan,
+  StoragePlanItem,
   StorageShow,
   StorageShows,
   TeamFollow,

@@ -1,4 +1,4 @@
-import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, ClientDevice, Device, DeviceHealth, FrameList, MultiviewPlan, NewPass, Pass, PassPreview, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, StorageShows, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
+import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, ClientDevice, Device, DeviceHealth, FrameList, MultiviewPlan, NewPass, Pass, PassPreview, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, StoragePlan, StorageShows, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
 import { authHeaders, noteIfUnauthorized } from "./lib/deviceToken.ts";
 
 import type { RoomState } from "./lib/events";
@@ -176,6 +176,10 @@ export function getStorage() {
 
 export function getStorageShows() {
   return request<StorageShows>("/api/v1/storage/shows");
+}
+
+export function getStoragePlan() {
+  return request<StoragePlan>("/api/v1/storage/plan");
 }
 
 export function listBackups() {

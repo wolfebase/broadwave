@@ -5447,6 +5447,27 @@ export interface operations {
             };
         };
     };
+    getStoragePlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The clean-up that would run */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoragePlan"];
+                };
+            };
+            503: components["responses"]["Error"];
+        };
+    };
     downloadBackup: {
         parameters: {
             query?: never;
