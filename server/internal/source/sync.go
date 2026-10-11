@@ -305,7 +305,7 @@ func compatible(ctx context.Context, base string) bool {
 	if err != nil {
 		return false
 	}
-	res, err := fetchguard.Do(req, 700*time.Millisecond)
+	res, err := fetchguard.TunerDo(req, 700*time.Millisecond)
 	if err != nil {
 		return false
 	}
