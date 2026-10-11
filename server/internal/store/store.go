@@ -685,6 +685,7 @@ func cleanSettings(values map[string]string) (map[string]string, error) {
 		"writeNfo":            true,
 		"deleteWatchedDays":   true,
 		"makeRoom":            true,
+		"protectFavorites":    true,
 		"folderLayout":        true,
 		"gameAlerts":          true,
 		"pictureMode":         true,
@@ -765,6 +766,9 @@ func cleanSettings(values map[string]string) (map[string]string, error) {
 		}
 		if k == "makeRoom" && v != "0" && v != "1" {
 			return nil, fmt.Errorf("makeRoom must be 0 or 1")
+		}
+		if k == "protectFavorites" && v != "0" && v != "1" {
+			return nil, fmt.Errorf("protectFavorites must be 0 or 1")
 		}
 		if k == "folderLayout" && v != "shows" && v != "flat" {
 			return nil, fmt.Errorf("folderLayout must be shows or flat")
