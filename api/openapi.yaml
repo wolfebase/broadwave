@@ -875,6 +875,7 @@ paths:
         takes as broadcast, and only while another tuner that can carry it stays free.
         It never stops another picture to fit the budget, and counts no viewer; one
         warmed picture runs at a time and stops after about 20 s unless a watch joins it.
+        `profile`/`audio`/`pictureMode` are the older web fields and still work.
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -886,7 +887,10 @@ paths:
               properties:
                 caps: { $ref: "#/components/schemas/Caps" }
                 prefs: { $ref: "#/components/schemas/Prefs" }
-                rendition: { type: string }
+                rendition: { type: string, description: "Force a rendition key, for example copy.copy or 720.aac2.broadcast" }
+                profile: { type: string, enum: [transparent, balanced, saver], deprecated: true }
+                audio: { type: string, enum: [stereo, surround], deprecated: true }
+                pictureMode: { $ref: "#/components/schemas/PictureMode" }
       responses:
         "200":
           description: Whether the picture is running. False when the frequency is not tuned or the picture budget is full.
