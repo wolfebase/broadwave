@@ -211,3 +211,27 @@ func TestPlayFollowLeavesAStartedPlayerRunning(t *testing.T) {
 		t.Fatal("a running follow was dropped")
 	}
 }
+
+func TestPlayFileFailsAtOnceWhenTheEncodeExits(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "ffmpeg")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rec := filepath.Join(dir, "rec.ts")
+	if err := os.WriteFile(rec, make([]byte, 188), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := &Hub{Dir: filepath.Join(dir, "hub"), FFmpeg: bin}
+	// Two plays of the same unreadable file. The second waits for the first's
+	// start lock, so a full wait each would put it past this bound.
+	start := time.Now()
+	for range 2 {
+		if _, err := h.PlayFile(5, rec, "mpeg2video", "broadcast", "", 0); err == nil || !strings.Contains(err.Error(), "did not start") {
+			t.Fatal(err)
+		}
+	}
+	if took := time.Since(start); took > 5*time.Second {
+		t.Fatalf("two plays of a file ffmpeg cannot read took %s", took)
+	}
+}

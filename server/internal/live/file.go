@@ -169,7 +169,7 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string, at f
 		defer capCancel()
 		extractCaptions(capCtx, h.FFmpeg, abs, filepath.Join(dir, "captions.vtt"))
 	}()
-	url, err := waitPlaylistFile(playlist, id)
+	url, err := waitPlaylistFile(playlist, id, done)
 	if err != nil {
 		capCancel()
 		h.stopFileEncode(id)
@@ -233,7 +233,7 @@ func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, at
 		h.dropFileEncode(id, cmd)
 		close(done)
 	}()
-	url, err := waitPlaylistFile(playlist, id)
+	url, err := waitPlaylistFile(playlist, id, done)
 	if err != nil {
 		// The follow copy sees the encode is no longer current and stops.
 		h.stopFileEncode(id)
@@ -317,22 +317,37 @@ func (h *Hub) stopFileEncode(id int64) {
 	}
 }
 
-func waitPlaylistFile(playlist string, id int64) (string, error) {
+// waitPlaylistFile waits for the encode's playlist. exited closes when that
+// ffmpeg is gone: a file it cannot read fails at once instead of holding the
+// recording's start lock for the whole wait.
+func waitPlaylistFile(playlist string, id int64, exited <-chan struct{}) (string, error) {
 	appeared := func() bool {
 		info, err := os.Stat(playlist)
 		return err == nil && info.Size() > 0
 	}
-	deadline := time.Now().Add(playStart)
-	for time.Now().Before(deadline) {
+	url := fmt.Sprintf("/media/file/%d/index.m3u8", id)
+	deadline := time.NewTimer(playStart)
+	defer deadline.Stop()
+	tick := time.NewTicker(200 * time.Millisecond)
+	defer tick.Stop()
+	for {
 		if appeared() {
-			return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
+			return url, nil
 		}
-		time.Sleep(200 * time.Millisecond)
+		select {
+		case <-exited:
+			if appeared() {
+				return url, nil
+			}
+			return "", fmt.Errorf("recording player did not start")
+		case <-deadline.C:
+			if appeared() {
+				return url, nil
+			}
+			return "", fmt.Errorf("recording player did not start")
+		case <-tick.C:
+		}
 	}
-	if appeared() {
-		return fmt.Sprintf("/media/file/%d/index.m3u8", id), nil
-	}
-	return "", fmt.Errorf("recording player did not start")
 }
 
 // FollowFile copies a growing recording into dst until still is false and no
