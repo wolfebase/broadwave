@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -114,6 +115,7 @@ func playlistFresh(dir, stamp string) bool {
 // at is where playback resumes, in seconds. The encode input-seeks there when that
 // spot is far enough in, and the served playlist keeps the recording's clock.
 func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string, at float64) (string, error) {
+	defer h.lockFileStart(id)()
 	if at < resumeMin {
 		at = 0
 	}
@@ -163,6 +165,7 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string, at f
 // at is where playback resumes, in seconds. The pipe cannot be seeked, so the
 // bytes before at are dropped and the playlist's clock still starts there.
 func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, at float64, still func() bool) (string, error) {
+	defer h.lockFileStart(id)()
 	if at < resumeMin {
 		at = 0
 	}
@@ -203,7 +206,8 @@ func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, at
 	}
 	done := h.trackFileEncode(id, cmd)
 	go func() {
-		followFile(abs, stdin, still, at, func() {
+		current := func() bool { return h.fileEncodeCurrent(id, cmd) && still() }
+		followFile(abs, stdin, current, at, func() {
 			// The clock never reached the resume. The bytes that follow are
 			// the start of the file, so the playlist clock has to say that
 			// before the first segment is published.
@@ -239,19 +243,38 @@ func (h *Hub) trackFileEncode(id int64, cmd *exec.Cmd) chan struct{} {
 		h.fileEnc = map[int64]*fileEncode{}
 	}
 	h.fileEnc[id] = &fileEncode{cmd: cmd, done: done}
-	if h.plays == nil {
-		h.plays = map[int64]struct{}{}
-	}
-	h.plays[id] = struct{}{}
 	h.playMu.Unlock()
 	return done
+}
+
+func (h *Hub) lockFileStart(id int64) func() {
+	h.playMu.Lock()
+	if h.fileStart == nil {
+		h.fileStart = map[int64]*sync.Mutex{}
+	}
+	mu := h.fileStart[id]
+	if mu == nil {
+		mu = &sync.Mutex{}
+		h.fileStart[id] = mu
+	}
+	h.playMu.Unlock()
+	mu.Lock()
+	return mu.Unlock
+}
+
+// fileEncodeCurrent is false once a newer encode replaced cmd. A follow copy
+// waiting at the end of the file never writes, so it would not see the kill.
+func (h *Hub) fileEncodeCurrent(id int64, cmd *exec.Cmd) bool {
+	h.playMu.Lock()
+	defer h.playMu.Unlock()
+	cur := h.fileEnc[id]
+	return cur != nil && cur.cmd == cmd
 }
 
 func (h *Hub) dropFileEncode(id int64, cmd *exec.Cmd) {
 	h.playMu.Lock()
 	if cur := h.fileEnc[id]; cur != nil && cur.cmd == cmd {
 		delete(h.fileEnc, id)
-		delete(h.plays, id)
 	}
 	h.playMu.Unlock()
 }
@@ -262,7 +285,6 @@ func (h *Hub) stopFileEncode(id int64) {
 	h.playMu.Lock()
 	enc := h.fileEnc[id]
 	delete(h.fileEnc, id)
-	delete(h.plays, id)
 	h.playMu.Unlock()
 	if enc == nil {
 		return

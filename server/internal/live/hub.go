@@ -205,7 +205,9 @@ type Hub struct {
 	scanCancel context.CancelFunc
 	scanToken  *struct{}
 	playMu     sync.Mutex
-	plays      map[int64]struct{}
+	// fileStart holds one start of a recording's encode at a time, so two
+	// players opening it at once share one ffmpeg instead of racing for its directory.
+	fileStart map[int64]*sync.Mutex
 	// fileList is the recording playlist last served for a play directory.
 	// AVPlayer drops the item when a reload changes the target duration or
 	// the discontinuity count, so the next response keeps that prefix.

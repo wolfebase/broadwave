@@ -522,3 +522,80 @@ func probePicture(t *testing.T, path string) (width, height int, fps float64, fr
 	frames, _ = strconv.Atoi(strings.TrimSpace(parts[3]))
 	return width, height, num / den, frames
 }
+
+// fakeHLS is an ffmpeg stand-in that notes each encode it starts, publishes a
+// one-segment playlist after a pause, and then runs body.
+func fakeHLS(t *testing.T, dir, body string) (bin, starts string) {
+	t.Helper()
+	bin = filepath.Join(dir, "ffmpeg")
+	starts = filepath.Join(dir, "starts")
+	script := "#!/bin/sh\ncase \" $* \" in\n*\" -f hls \"*)\necho $$ >> " + starts + "\nsleep 0.3\nprintf '#EXTM3U\\n#EXTINF:2.000,\\nseg00000.ts\\n' > index.m3u8\necho x > seg00000.ts\n" + body + "\n;;\nesac\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		raw, _ := os.ReadFile(starts)
+		for _, line := range strings.Fields(string(raw)) {
+			if pid, _ := strconv.Atoi(line); pid > 0 {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+	})
+	return bin, starts
+}
+
+func TestPlayersOpeningARecordingAtOnceShareOneEncode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "show.ts")
+	if err := os.WriteFile(path, mpeg2TS(1, true), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bin, starts := fakeHLS(t, dir, "exec sleep 60")
+	h := &Hub{Dir: dir, Encoder: "libx264", FFmpeg: bin}
+	errs := make(chan error, 4)
+	for range 4 {
+		go func() {
+			_, err := h.PlayFile(5, path, "mpeg2video", "broadcast", "progressive", 0)
+			errs <- err
+		}()
+	}
+	for range 4 {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, _ := os.ReadFile(starts)
+	if n := len(strings.Fields(string(raw))); n != 1 {
+		t.Fatalf("%d encodes started for one recording", n)
+	}
+}
+
+func TestAReplacedFollowStopsReadingTheRecording(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "show.ts")
+	if err := os.WriteFile(path, mpeg2TS(1, true), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Reads its input to the end, like ffmpeg waiting on a growing file.
+	bin, _ := fakeHLS(t, dir, "exec cat > /dev/null")
+	h := &Hub{Dir: dir, Encoder: "libx264", FFmpeg: bin}
+	still := func() bool { return true }
+	if _, err := h.PlayFollow(6, path, "mpeg2video", "broadcast", "progressive", 0, still); err != nil {
+		t.Fatal(err)
+	}
+	h.playMu.Lock()
+	first := h.fileEnc[6]
+	h.playMu.Unlock()
+	if first == nil {
+		t.Fatal("no encode tracked")
+	}
+	time.Sleep(200 * time.Millisecond)
+	if _, err := h.PlayFollow(6, path, "mpeg2video", "broadcast", "progressive", 40, still); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-first.done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the replaced copy still follows the recording")
+	}
+}
