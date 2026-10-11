@@ -2412,19 +2412,26 @@ export interface components {
             needsSetup?: "0" | "1";
             /**
              * Format: date-time
-             * @description When listings last loaded. Set by the server.
+             * @description When listings last loaded. Set by the server; ignored on write.
              */
             lastGuidePull?: string;
             /**
              * Format: date-time
-             * @description When the next automatic listing refresh is due. Set by the server.
+             * @description When the next automatic listing refresh is due. Set by the server; ignored on write.
              */
             nextGuidePull?: string;
             /**
              * Format: date-time
-             * @description When listings were last reloaded by hand. Set by the server.
+             * @description When listings were last reloaded by hand. Set by the server; ignored on write.
              */
             lastManualGuidePull?: string;
+            /** @description Why the last listing load failed. Empty after a load that worked. Set by the server; ignored on write. */
+            lastGuideError?: string;
+            /**
+             * Format: date-time
+             * @description When the last listing load failed. Set by the server; ignored on write.
+             */
+            lastGuideErrorAt?: string;
             /** @enum {string} */
             hideScores?: "0" | "1";
             /**
