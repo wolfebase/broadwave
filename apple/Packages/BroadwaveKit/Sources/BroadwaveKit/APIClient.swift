@@ -151,9 +151,10 @@ public struct APIClient: Sendable {
     }
 
     public func search(_ query: String) async throws -> SearchResult {
-        // urlQueryAllowed keeps & = + # ?, which would split the query or end it.
+        // urlQueryAllowed keeps & = + # ? ;, which would split the query or end it.
+        // The server also drops a query that contains a raw ;.
         var allowed = CharacterSet.urlQueryAllowed
-        allowed.remove(charactersIn: "&=+#?")
+        allowed.remove(charactersIn: "&=+#?;")
         let q = query.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
         return try await send("GET", "/search?q=\(q)")
     }
