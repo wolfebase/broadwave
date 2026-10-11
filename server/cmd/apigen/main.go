@@ -195,6 +195,35 @@ func typ(nested string, prop map[string]any, schemas map[string]map[string]any) 
 			return typ(nested, m, schemas)
 		}
 	}
+	// One $ref plus null is that ref. Required, not this type, makes it optional.
+	if branches, ok := prop["anyOf"].([]any); ok && len(branches) == 2 {
+		var ref map[string]any
+		nulls := 0
+		for _, branch := range branches {
+			m, ok := branch.(map[string]any)
+			if !ok {
+				ref = nil
+				break
+			}
+			if _, isRef := m["$ref"].(string); isRef {
+				if ref != nil {
+					ref = nil
+					break
+				}
+				ref = m
+				continue
+			}
+			if m["type"] == "null" {
+				nulls++
+				continue
+			}
+			ref = nil
+			break
+		}
+		if ref != nil && nulls == 1 {
+			return typ(nested, ref, schemas)
+		}
+	}
 	kind, _ := prop["type"].(string)
 	switch kind {
 	case "boolean":

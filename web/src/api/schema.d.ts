@@ -1556,7 +1556,7 @@ export interface components {
         ClientSeat: {
             /** @enum {string} */
             auth: "local-open" | "device";
-            device?: components["schemas"]["ClientDevice"];
+            device?: components["schemas"]["ClientDevice"] | null;
         };
         Error: {
             /**
@@ -1693,7 +1693,7 @@ export interface components {
             priority?: number;
             tunerCount?: number;
             streamLimit?: number;
-            /** @description ts or hls. Empty until the source is probed. */
+            /** @description ts, mpegts, or hls, empty until the source is probed. */
             streamFormat?: string;
             hasGuide?: boolean;
             needsTuner?: boolean;
@@ -2776,6 +2776,8 @@ export interface operations {
                         id?: number;
                         name?: string;
                         auth?: string;
+                        /** @description With sign-in off, a password is required before this server is opened beyond the home network. With sign-in on, devices sign in with a pairing code. */
+                        note: string;
                     };
                 };
             };

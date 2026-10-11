@@ -194,6 +194,106 @@ func TestFreeAddResponseDocumentsTheSource(t *testing.T) {
 	}
 }
 
+// TestProfileNoteMatchesTheSpec checks the live GET /profile body against the
+// spec. A fresh store has device sign-in off, so note is the local-open sentence.
+func TestProfileNoteMatchesTheSpec(t *testing.T) {
+	doc := loadOpenAPI(t)
+	schema, ok, err := responseSchema(doc, "get", "/profile", "200")
+	if err != nil || !ok {
+		t.Fatalf("profile schema: ok=%v %v", ok, err)
+	}
+	required, err := stringList(schema["required"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !listHas(required, "note") {
+		t.Fatal("GET /profile 200 does not require note")
+	}
+	rec := get(t, (&Server{Store: testStore(t), Version: "dev", Staging: true}).Handler(), "/api/v1/profile")
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateSchema(doc, schema, body, "$", 0); err != nil {
+		t.Fatal(err)
+	}
+	note, isString := body["note"].(string)
+	if !isString || note != "A password is required before this server is opened beyond your home network. That arrives with accounts." {
+		t.Fatalf("note %#v", body["note"])
+	}
+}
+
+// TestClientSeatDeviceIsNull checks a request with no token. The seat still
+// names the device, and the value is null.
+func TestClientSeatDeviceIsNull(t *testing.T) {
+	doc := loadOpenAPI(t)
+	seat, ok := asMap(doc.schemas["ClientSeat"])
+	if !ok {
+		t.Fatal("ClientSeat schema missing")
+	}
+	props, _ := asMap(seat["properties"])
+	device, ok := asMap(props["device"])
+	if !ok || !refOrNull(device, "ClientDevice") {
+		t.Fatalf("device schema %#v", props["device"])
+	}
+	rec := get(t, (&Server{Store: testStore(t), Version: "dev", Staging: true}).Handler(), "/api/v1/clients/me")
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := body["device"]; !present || body["device"] != nil {
+		t.Fatalf("device %#v", body["device"])
+	}
+	schema, ok, err := responseSchema(doc, "get", "/clients/me", "200")
+	if err != nil || !ok {
+		t.Fatalf("client schema: ok=%v %v", ok, err)
+	}
+	if err := validateSchema(doc, schema, body, "$", 0); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSourceStreamFormatNamesProbeResults(t *testing.T) {
+	doc := loadOpenAPI(t)
+	source, ok := asMap(doc.schemas["Source"])
+	if !ok {
+		t.Fatal("Source schema missing")
+	}
+	props, _ := asMap(source["properties"])
+	format, ok := asMap(props["streamFormat"])
+	if !ok {
+		t.Fatal("streamFormat missing")
+	}
+	if _, isEnum := format["enum"]; isEnum {
+		t.Fatal("streamFormat is an enum")
+	}
+	desc, _ := format["description"].(string)
+	if desc != "ts, mpegts, or hls, empty until the source is probed." {
+		t.Fatalf("streamFormat %q", desc)
+	}
+}
+
+func refOrNull(schema map[string]any, name string) bool {
+	branches, ok := schema["anyOf"].([]any)
+	if !ok || len(branches) != 2 {
+		return false
+	}
+	var sawRef, sawNull bool
+	for _, branch := range branches {
+		item, ok := asMap(branch)
+		if !ok {
+			return false
+		}
+		if ref, _ := item["$ref"].(string); strings.HasSuffix(ref, "/"+name) {
+			sawRef = true
+		}
+		if item["type"] == "null" {
+			sawNull = true
+		}
+	}
+	return sawRef && sawNull
+}
+
 func TestSchemaWalker(t *testing.T) {
 	integer := map[string]any{"type": "integer"}
 	if err := validateSchema(nil, integer, 1.5, "$", 0); err == nil {
