@@ -5,6 +5,8 @@ export const appPages = [
   { name: "Search", path: "/search" },
   { name: "Sports", path: "/sports" },
   { name: "Recordings", path: "/recordings" },
+  // One title is its own page: Library renders seasons instead of the show grid.
+  { name: "Show", path: "/recordings?show=Jeopardy%21" },
   { name: "Library", path: "/library" },
   { name: "Schedule", path: "/schedule" },
   { name: "Settings", path: "/settings" },

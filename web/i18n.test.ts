@@ -125,6 +125,15 @@ test("every shell route is rendered by the pseudo-locale check", () => {
   assert.equal(routes.has("/"), true);
 });
 
+test("the show page is rendered by the pseudo-locale check", () => {
+  const show = appPages.find((page) => page.name === "Show");
+  assert.ok(show, "a title's recordings are their own page");
+  const query = new URL(`http://local${show.path}`).searchParams;
+  assert.equal(query.get("show"), "Jeopardy!");
+  const recordings = fs.readFileSync(new URL("../api/fixtures/recordings.json", import.meta.url), "utf8");
+  assert.equal(recordings.includes(`"title": ${JSON.stringify(query.get("show"))}`), true);
+});
+
 function walk(dir: string, out: string[]) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
