@@ -23,6 +23,7 @@ export default defineConfig({
       "diagnosticsHook.test.tsx",
       "playerShell.test.tsx",
       "screenName.test.ts",
+      "snapshotStore.test.ts",
       "playerChrome.test.ts",
     ],
   },
