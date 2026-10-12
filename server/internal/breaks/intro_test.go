@@ -223,9 +223,36 @@ func TestFindEndsLeavesOutTheEarlyPadding(t *testing.T) {
 	if got := FindEnds(self, []Episode{other}); !near(got.IntroStart, 90) || !near(got.IntroEnd, 110) {
 		t.Fatalf("%+v", got)
 	}
-	// Without the listing, the earlier stretch wins.
+	// Without a listing on either episode, the earlier stretch wins.
 	self.ShowEnd = 0
+	other.ShowEnd = 0
 	if got := FindEnds(self, []Episode{other}); !near(got.IntroStart, 20) {
+		t.Fatalf("%+v", got)
+	}
+}
+
+// The show before sits just inside this episode's slack, and far before the
+// listing on the other. It is that show's ending, not the intro.
+func TestFindEndsIgnoresTheShowBeforeOnTheOtherEpisode(t *testing.T) {
+	before, theme := tune(15, 30, soundRate), tune(1, 20, soundRate)
+	a := soundOf(t, join(talk(2, 52, soundRate), before, talk(3, 8, soundRate), theme, talk(9, 60, soundRate)), 10)
+	b := soundOf(t, join(talk(4, 10, soundRate), before, talk(5, 100, soundRate), theme, talk(12, 60, soundRate)), 11)
+	self := Episode{Sound: Sound{Head: a}, ShowStart: 60, ShowEnd: 1800}
+	other := Episode{Sound: Sound{Head: b}, ShowStart: 60, ShowEnd: 1800}
+	if got := FindEnds(self, []Episode{other}); !near(got.IntroStart, 90) || !near(got.IntroEnd, 110) {
+		t.Fatalf("%+v", got)
+	}
+}
+
+// The next show starts just before this listing ends, and after the other
+// episode's listing. The end titles are the earlier theme they share.
+func TestFindEndsIgnoresTheNextShowOnTheOtherEpisode(t *testing.T) {
+	outro, next := tune(13, 25, soundRate), tune(14, 30, soundRate)
+	a := soundOf(t, join(talk(2, 180, soundRate), outro, talk(3, 10, soundRate), next, talk(9, 40, soundRate)), 10)
+	b := soundOf(t, join(talk(4, 20, soundRate), outro, talk(5, 75, soundRate), next, talk(12, 40, soundRate)), 11)
+	self := Episode{Sound: Sound{Tail: a, TailFrom: 1000}, ShowEnd: 1240}
+	other := Episode{Sound: Sound{Tail: b, TailFrom: 1000}, ShowEnd: 1100}
+	if got := FindEnds(self, []Episode{other}); !near(got.Credits, 1180) {
 		t.Fatalf("%+v", got)
 	}
 }
