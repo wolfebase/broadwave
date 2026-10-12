@@ -14,6 +14,7 @@ export default defineConfig({
       "screensApi.test.ts",
       "captionsCue.test.ts",
       "captionsFollow.test.ts",
+      "startLine.test.ts",
       "playerChrome.test.ts",
     ],
   },
