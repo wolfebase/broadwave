@@ -22,6 +22,7 @@ export default defineConfig({
       "tvRemote.test.ts",
       "diagnosticsHook.test.tsx",
       "playerShell.test.tsx",
+      "screenName.test.ts",
       "playerChrome.test.ts",
     ],
   },
