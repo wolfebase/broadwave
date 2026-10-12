@@ -257,7 +257,7 @@ func (s *Server) freeSources(w http.ResponseWriter, r *http.Request) {
 	if feed.Playlist == "" {
 		resolved, err := source.FeedByKind(body.Kind, body.Addr)
 		if err != nil {
-			writeError(w, err)
+			httpError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		feed = resolved

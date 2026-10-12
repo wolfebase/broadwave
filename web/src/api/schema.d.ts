@@ -333,7 +333,10 @@ export interface paths {
         /** @description Look for FastChannels, Pluto, and Samsung generators already on this network. */
         get: operations["findFreeChannels"];
         put?: never;
-        /** @description Add one generator feed as a tuner-free playlist. DRM streams are skipped. */
+        /**
+         * @description Add one generator feed as a tuner-free playlist. DRM streams are skipped.
+         *     With a playlist, kind is ignored. Without one, kind is fastchannels, pluto, or samsung (any case) on addr; anything else is 400.
+         */
         post: operations["addFreeChannels"];
         delete?: never;
         options?: never;
@@ -1010,7 +1013,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Rank passes, first highest. Ids that are gone or repeated are skipped; a pass not named ranks last. */
+        /** @description Rank passes, first highest. Omitted or empty ids leaves order. Ids that are gone or repeated are skipped; a pass not named ranks last. */
         put: operations["orderPasses"];
         post?: never;
         delete?: never;
@@ -2044,10 +2047,10 @@ export interface components {
             audio?: "auto" | "surround" | "stereo" | "none";
             picture?: components["schemas"]["PictureMode"];
             /**
-             * @description Which broadcast audio mix to play. Empty is main. With `caps.alternates`, a watch plays the main encode when that encode carries this mix as an alternate, and the player selects it from the master.
+             * @description Which broadcast audio mix to play. Empty is main. Compared without regard to case. language, lang, and sap are the second language. described and vi are described video. With `caps.alternates`, a watch plays the main encode when that encode carries this mix as an alternate, and the player selects it from the master.
              * @enum {string}
              */
-            track?: "main" | "language" | "described";
+            track?: "main" | "language" | "lang" | "sap" | "described" | "vi";
             /** @description Level the volume. Off keeps the original mix. */
             even?: boolean;
         };
@@ -2275,7 +2278,7 @@ export interface components {
             airingStart?: string;
         };
         NewPass: {
-            /** @description The title, the words a title contains, or the category */
+            /** @description The title, the words a title contains, or the category. A blank title, including one that is only spaces, is 400. */
             title: string;
             /**
              * Format: int64
@@ -3179,6 +3182,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["Error"];
+            500: components["responses"]["Error"];
         };
     };
     listSources: {
@@ -3213,7 +3217,10 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @enum {string} */
+                    /**
+                     * @description Matched without regard to case, and surrounding spaces are ignored. M3U is m3u.
+                     * @enum {string}
+                     */
                     kind: "m3u" | "xtream" | "tvheadend" | "channels" | "threadfin" | "xteve" | "ersatztv" | "dispatcharr" | "link" | "folder";
                     name?: string;
                     /** @description Playlist URL, Xtream server, stream URL, or folder path */
@@ -3401,8 +3408,8 @@ export interface operations {
     channelFrame: {
         parameters: {
             query?: {
-                /** @description 480 is the small frame. 1280 is the wide one. A missing size is not upscaled. */
-                w?: "480" | "1280";
+                /** @description Only the exact value 1280 returns the wide JPEG. Omitted, 480, and every other value return the 480 JPEG and are not an error. */
+                w?: string;
             };
             header?: never;
             path: {
@@ -4475,7 +4482,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    ids: number[];
+                    ids?: number[];
                 };
             };
         };
@@ -4930,9 +4937,14 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @description Counted in characters. A name that is only spaces is 400. */
                     name: string;
-                    /** @enum {string} */
+                    /**
+                     * @description Compared exactly after trimming spaces. Any other value, including a different case, is stored as other. The response is still 201.
+                     * @enum {string}
+                     */
                     kind?: "phone" | "tv" | "web" | "other";
+                    /** @description Compared without regard to case, and surrounding spaces are ignored. An unknown scope is 400. Omitted, empty, or only blank entries is watch. */
                     scopes?: ("watch" | "record" | "admin")[];
                 };
             };
@@ -4961,9 +4973,14 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @description Optional. Counted in characters after trimming spaces. A name that is only spaces is stored as empty. */
                     name?: string;
-                    /** @enum {string} */
+                    /**
+                     * @description Compared exactly after trimming spaces. Any other value, including a different case, is stored as other. The response is still 201.
+                     * @enum {string}
+                     */
                     kind?: "phone" | "tv" | "web" | "other";
+                    /** @description Compared without regard to case, and surrounding spaces are ignored. An unknown scope is 400. Omitted, empty, or only blank entries is watch. */
                     scopes?: ("watch" | "record" | "admin")[];
                 };
             };
@@ -4996,6 +5013,7 @@ export interface operations {
                 "application/json": {
                     /** @description Six digits. Spaces and dashes are ignored. */
                     code: string;
+                    /** @description Replaces the scopes the device asked for. Compared without regard to case, and surrounding spaces are ignored. An unknown scope is 400. Omitted, empty, or only blank entries is watch. */
                     scopes?: ("watch" | "record" | "admin")[];
                 };
             };
@@ -5029,8 +5047,12 @@ export interface operations {
             content: {
                 "application/json": {
                     code: string;
+                    /** @description Counted in characters. A name that is only spaces is 400. */
                     name: string;
-                    /** @enum {string} */
+                    /**
+                     * @description Omitted keeps the kind stored with the code. Otherwise compared exactly after trimming spaces. Any other value, including a different case, is stored as other. The response is still 201.
+                     * @enum {string}
+                     */
                     kind?: "phone" | "tv" | "web" | "other";
                 };
             };
