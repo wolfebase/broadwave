@@ -288,7 +288,7 @@ struct RecordingsView: View {
         .accessibilityElement(children: .combine)
         return Group {
             if recordingCovers {
-                Button { playingChannel = channel } label: { label }
+                Button { playingChannel = channel } label: { label }.rowInk()
             } else {
                 NavigationLink(value: channel) { label }
             }
@@ -311,9 +311,9 @@ struct RecordingsView: View {
         Group {
             if rec.isMissing {
                 // Nothing to play. Select offers to take it off the list.
-                Button { deleting = rec } label: { rowLabel(rec) }
+                Button { deleting = rec } label: { rowLabel(rec) }.rowInk()
             } else if recordingCovers {
-                Button { playing = rec } label: { rowLabel(rec) }
+                Button { playing = rec } label: { rowLabel(rec) }.rowInk()
             } else {
                 NavigationLink(value: rec) { rowLabel(rec) }
             }
@@ -623,4 +623,16 @@ struct RecordingsView: View {
             }
         }
     #endif
+}
+
+private extension View {
+    /// A list tints a button's whole label with the accent; a row reads like a link instead.
+    /// tvOS draws its own focused colors, so it keeps the system style.
+    func rowInk() -> some View {
+        #if os(iOS)
+            tint(.primary)
+        #else
+            self
+        #endif
+    }
 }
