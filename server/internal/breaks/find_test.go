@@ -262,6 +262,23 @@ func TestALogoOffGapStaysOneBreak(t *testing.T) {
 	}
 }
 
+// Two spots cut on the picture, with one black frame between them. The black
+// frame is the stronger cue, and it must not pull both ends of the break onto
+// itself.
+func TestABlackFrameBetweenHardCutsStaysTheBreak(t *testing.T) {
+	c := Cues{Length: 900, Cuts: []float64{600, 615, 630}}
+	c.Blacks = []span{{614.8, 615.2}}
+	c.Silences = []span{{614.75, 615.25}}
+	c.Logo = logoOff(900, span{600, 630})
+	got := Find(c)
+	if len(got) != 1 || got[0].Start != 600 || got[0].End != 630 {
+		t.Fatalf("%+v", got)
+	}
+	if got[0].Confidence < AutoSkip {
+		t.Fatalf("confidence %v", got[0].Confidence)
+	}
+}
+
 // A recording with no sound is scanned for its picture.
 func TestScanWithoutSound(t *testing.T) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
