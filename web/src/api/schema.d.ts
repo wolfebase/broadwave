@@ -3440,7 +3440,7 @@ export interface operations {
                 to?: string;
                 /** @description Comma-separated channel ids. Omit for every channel. */
                 channels?: string;
-                /** @description How far ahead to return listings when to is omitted. Kept for older clients. */
+                /** @description How far ahead to return listings when to is omitted. Kept for older clients. Outside 1 to 168 is 400. A valid to ignores hours. */
                 hours?: number;
                 /**
                  * @description Only listings of this kind. sports is the apps' rule: a sports word in the category, or in a

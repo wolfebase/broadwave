@@ -685,7 +685,7 @@ paths:
         - in: query
           name: hours
           schema: { type: integer, minimum: 1, maximum: 168, default: 48 }
-          description: How far ahead to return listings when to is omitted. Kept for older clients.
+          description: How far ahead to return listings when to is omitted. Kept for older clients. Outside 1 to 168 is 400. A valid to ignores hours.
         - in: query
           name: kind
           schema: { type: string, enum: [sports] }
