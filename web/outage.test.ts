@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { unreadBody } from "./src/api.ts";
-import { aTunerAnswers, aTunerIsFree, autoplayRetry, channelDidNotStart, classifySnap, connectionDropped, frozenMs, FrozenPicture, hiddenInventory, holdPictureMessage, inventoryHidden, listingNote, liveFatalStep, noListing, noListingChecked, noSignal, outageTearsDown, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryEdge, recoveryReady, requestFailed, restartDelayMs, restartFollowUp, serverStopped, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage, watchResolution } from "./src/features/player/outage.ts";
+import { apiFailure, unreadBody } from "./src/api.ts";
+import { setLocaleMode } from "./src/i18n/runtime.ts";
+import { aTunerAnswers, aTunerIsFree, autoplayRetry, channelDidNotStart, classifySnap, connectionDropped, frozenMs, FrozenPicture, hiddenInventory, holdPictureMessage, inventoryHidden, listingNote, liveFatalStep, noListing, noListingChecked, noSignal, outageTearsDown, pictureRestarting, pictureRetryDelay, pictureRetryEveryMs, pictureRetryForMs, pictureStopped, recoveryEdge, recoveryReady, requestFailed, restartDelayMs, restartFollowUp, serverStopped, shownOutage, startAttempts, startRetryMs, tunerStopped, viewerFailure, viewerMessage, watchResolution } from "./src/features/player/outage.ts";
 
 test("checking for listings says so when nothing comes back", () => {
   assert.equal(listingNote(false), noListing);
@@ -167,7 +168,7 @@ test("a dark tune the server gave back says no signal, not a restart", () => {
 
 test("system text does not reach the viewer, and a server sentence does", () => {
   assert.equal(requestFailed, "That did not work. Try again.");
-  assert.equal(unreadBody, requestFailed);
+  assert.equal(unreadBody(), requestFailed);
   assert.equal(channelDidNotStart, "This channel did not start. Try again.");
   assert.equal(viewerFailure({ status: 500, code: "http_500", message: "The server answered 500." }).message, channelDidNotStart);
   assert.equal(viewerFailure(new Error("Unexpected token < in JSON at position 0")).message, channelDidNotStart);
@@ -188,6 +189,26 @@ test("system text does not reach the viewer, and a server sentence does", () => 
   assert.deepEqual(viewerFailure({ status: 503, code: "tuner_refused", message: refused }), { message: refused, recovery: "" });
   assert.deepEqual(viewerFailure({ status: 500, code: "internal", message: internal }), { message: internal, recovery: "" });
   assert.equal(viewerFailure(new Error("Bad Gateway")).message, channelDidNotStart);
+});
+
+test("an unreadable body uses the catalog sentence once", () => {
+  const server = "That did not work. Try again.";
+  const busy = "The tuner is busy.";
+  assert.equal(apiFailure(502, JSON.stringify({ message: server })).message, server);
+  assert.equal(apiFailure(500, JSON.stringify({ message: busy })).message, busy);
+  setLocaleMode("pseudo");
+  try {
+    const doubled = `${requestFailed}${requestFailed}`;
+    assert.equal(requestFailed, server);
+    assert.equal(apiFailure(502, "<html>nope</html>").message, doubled);
+    assert.equal(apiFailure(500, JSON.stringify({ message: server })).message, server);
+    assert.equal(apiFailure(500, JSON.stringify({ message: busy })).message, busy);
+    assert.equal(shownOutage(requestFailed), doubled);
+    assert.equal(shownOutage(doubled), doubled);
+    assert.equal(shownOutage(busy), busy);
+  } finally {
+    setLocaleMode("en");
+  }
 });
 
 test("a source that stopped sending goes on the quiet clock", () => {

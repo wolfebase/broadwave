@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { unreadBody } from "../../api";
 import { useData } from "../../app/data";
 import { focusRing } from "../../app/remote";
 import { canonicalKey } from "../../lib/tvKey";
@@ -33,7 +32,7 @@ export function MovePanel({ channel, onMoved, onClose }: { channel: Channel; onM
       })
       .catch((err: Error) => {
         if (!open.current || mine !== loadN.current) return;
-        setError(err.message || unreadBody);
+        setError(err.message || t("player.outage.requestFailed"));
       });
   }, []);
 
@@ -69,7 +68,7 @@ export function MovePanel({ channel, onMoved, onClose }: { channel: Channel; onM
       }
       if (open.current) setError(t("player.didntStart", { name: screen.name }));
     } catch (err) {
-      if (open.current) setError((err as Error).message || unreadBody);
+      if (open.current) setError((err as Error).message || t("player.outage.requestFailed"));
     }
     if (!open.current) return;
     setStatus("");
