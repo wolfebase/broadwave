@@ -33,7 +33,7 @@ final class GuideFocusTests: XCTestCase {
         app.launch()
 
         let now = app.buttons["guide-now"]
-        let channel = app.buttons[label].firstMatch
+        let channel = channelButton(app, label)
         XCTAssertTrue(channel.waitForExistence(timeout: 25), "no \(label)\n\(app.debugDescription)")
         XCTAssertTrue(until(10) { channel.hasFocus }, "\(label) did not take focus: \(focused(app))\n\(app.debugDescription)")
         shot(app, "guide-channel")
@@ -79,7 +79,7 @@ final class GuideFocusTests: XCTestCase {
             "-BroadwaveTab", "guide",
         ]
         app.launch()
-        let channel = app.buttons[label].firstMatch
+        let channel = channelButton(app, label)
         XCTAssertTrue(channel.waitForExistence(timeout: 25), app.debugDescription)
         XCTAssertTrue(until(10) { channel.hasFocus }, "\(label) did not take focus: \(focused(app))")
 
@@ -147,7 +147,7 @@ final class GuideFocusTests: XCTestCase {
         XCUIRemote.shared.press(.select)
         pause(1)
 
-        let channel = app.buttons[label].firstMatch
+        let channel = channelButton(app, label)
         XCTAssertTrue(channel.waitForExistence(timeout: 15), "no \(label)")
         XCTAssertTrue(until(8) { channel.hasFocus }, "\(label) did not take focus after opening Guide: \(focused(app))")
         shot(app, "guide-from-home")
@@ -170,7 +170,7 @@ final class GuideFocusTests: XCTestCase {
             "-BroadwaveTab", "guide",
         ]
         app.launch()
-        let channel = app.buttons[label].firstMatch
+        let channel = channelButton(app, label)
         XCTAssertTrue(channel.waitForExistence(timeout: 25), app.debugDescription)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", ended ?? "")).firstMatch.waitForExistence(timeout: 15), "the ended program is not drawn")
         XCTAssertTrue(until(10) { channel.hasFocus }, "\(label) did not take focus: \(focused(app))")
@@ -198,7 +198,7 @@ final class GuideFocusTests: XCTestCase {
             "-BroadwaveSyncProbe", "YES",
         ]
         app.launch()
-        let channel = app.buttons[label].firstMatch
+        let channel = channelButton(app, label)
         XCTAssertTrue(channel.waitForExistence(timeout: 25), app.debugDescription)
         XCTAssertTrue(until(10) { channel.hasFocus }, "\(label) did not take focus: \(focused(app))")
 
@@ -340,5 +340,10 @@ final class GuideFocusTests: XCTestCase {
             pause(0.2)
         }
         return done()
+    }
+
+    /// A 3.0 row's label goes on with ", ATSC 3.0", so match the start.
+    private func channelButton(_ app: XCUIApplication, _ label: String) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", label)).firstMatch
     }
 }
