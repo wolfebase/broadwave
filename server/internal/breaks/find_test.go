@@ -182,6 +182,86 @@ func TestCombineKeepsNearBreaksApart(t *testing.T) {
 	}
 }
 
+// Spots that cut straight from one picture to the next, with the logo off and
+// no black frame or silence, are still a break.
+func TestALogoGapOfHardCutsIsABreak(t *testing.T) {
+	var c Cues
+	for _, at := range []float64{600, 615, 645, 660, 690, 705} {
+		c.Cuts = append(c.Cuts, at)
+	}
+	c.Logo = logoOff(1200, span{600, 705})
+	c.Length = 1200
+	got := Find(c)
+	if len(got) != 1 || got[0].Start != 600 || got[0].End != 705 {
+		t.Fatalf("%+v", got)
+	}
+	if got[0].Confidence < AutoSkip {
+		t.Fatalf("confidence %v", got[0].Confidence)
+	}
+}
+
+// A cut half a second after the logo is back is the show, not the end of the break.
+func TestACutJustAfterTheLogoReturnsIsTheShow(t *testing.T) {
+	var c Cues
+	for _, at := range []float64{600, 630, 660, 690, 720.5} {
+		c.Cuts = append(c.Cuts, at)
+	}
+	c.Logo = logoOff(1200, span{600, 690})
+	got := Find(c)
+	if len(got) != 1 || got[0].Start != 600 || got[0].End != 690 {
+		t.Fatalf("%+v", got)
+	}
+}
+
+// The same hard cuts with the logo on are the show changing scene.
+func TestHardCutsWithTheLogoOnAreTheShow(t *testing.T) {
+	var c Cues
+	for at := 300.0; at <= 450; at += 15 {
+		c.Cuts = append(c.Cuts, at)
+	}
+	c.Logo = logoOff(1200)
+	if got := Find(c); len(got) != 0 {
+		t.Fatalf("%+v", got)
+	}
+}
+
+// The logo drops for one spot-length fade. That is a dark scene, not a break,
+// even when the fade lands on a whole number of 5 s.
+func TestALogoDropoutOfOneSpotIsNotABreak(t *testing.T) {
+	c := spotCuts(500, 540)
+	c.Logo = logoOff(1200, span{500, 540})
+	if got := Find(c); len(got) != 0 {
+		t.Fatalf("%+v", got)
+	}
+}
+
+// Two breaks with a short return to the show between them stay two. Joining
+// them would skip the show on the breaks' word.
+func TestAShowBetweenCloseBreaksIsNotSkipped(t *testing.T) {
+	c := spotCuts(100, 130, 160, 190, 220, 250)
+	c.Logo = logoOff(600, span{100, 160}, span{190, 250})
+	got := Find(c)
+	if len(got) != 2 || got[0].End != 160 || got[1].Start != 190 {
+		t.Fatalf("%+v", got)
+	}
+	for _, b := range got {
+		if b.Start < 175 && b.End > 175 {
+			t.Fatalf("show at 175 s is inside %+v", got)
+		}
+	}
+}
+
+// A hole with the logo still off is a spot the cues missed, so the break
+// stays one.
+func TestALogoOffGapStaysOneBreak(t *testing.T) {
+	c := spotCuts(100, 130, 160, 190, 250, 280, 310, 340)
+	c.Logo = logoOff(600, span{100, 340})
+	got := Find(c)
+	if len(got) != 1 || got[0].Start != 100 || got[0].End != 340 {
+		t.Fatalf("%+v", got)
+	}
+}
+
 // A recording with no sound is scanned for its picture.
 func TestScanWithoutSound(t *testing.T) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {

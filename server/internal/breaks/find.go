@@ -24,9 +24,10 @@ type boundary struct {
 }
 
 // Find reads the cues of one recording and returns the breaks in it.
-// Spots are cut apart with black frames, a moment of silence, or both, and
-// run a whole number of 5 s; a station logo is on during the show and off
-// during the spots. Each cue alone is wrong often; together they are not.
+// Spots are cut apart with black frames, a moment of silence, or a hard cut
+// while the logo is off, and run a whole number of 5 s. The logo is on
+// during the show and off during the spots. Each cue alone is wrong often;
+// together they are not.
 func Find(c Cues) []Break {
 	cuts := boundaries(c)
 	var spans []Break
@@ -61,7 +62,7 @@ func Find(c Cues) []Break {
 		}
 	}
 	var out []Break
-	for _, b := range merge(spans) {
+	for _, b := range merge(spans, c.Logo) {
 		b.Confidence = confidence(c, cuts, b)
 		if b.Confidence >= minConfidence {
 			out = append(out, b)
@@ -97,14 +98,19 @@ func snapGap(cuts []boundary, s span, length float64) (Break, bool) {
 	if !okStart || !okEnd || end-start < 20 || longestQuiet(cuts, start, end) > maxSpot {
 		return Break{}, false
 	}
+	// One spot-length gap is a fade or a single scene. A break runs at least
+	// two spots, so a logo that drops for one of them is not skipped.
+	if spotsWithin(cuts, Break{Start: start, End: end}) < minLogoSpots {
+		return Break{}, false
+	}
 	return Break{Start: start, End: end}, true
 }
 
 // minConfidence is the least a break needs to be offered at all.
 const minConfidence = 0.4
 
-// boundaries are black stretches and silences that hold a scene cut, merged
-// when they fall within a second of each other.
+// boundaries are black stretches, silences that hold a scene cut, and hard
+// cuts while the logo is off, merged when they fall within a second.
 func boundaries(c Cues) []boundary {
 	var out []boundary
 	for _, b := range c.Blacks {
@@ -119,6 +125,16 @@ func boundaries(c Cues) []boundary {
 			if at >= s.Start-0.3 && at <= s.End+0.3 {
 				out = append(out, boundary{At: at, Strength: 0.5})
 				break
+			}
+		}
+	}
+	// A hard cut while the logo is off is a spot changing over, with no black
+	// frame and no silence. The same cut with the logo on is the show. The
+	// cut on the frame the logo comes back is the end of the break.
+	if c.Logo != nil {
+		for _, at := range c.Cuts {
+			if cutLogoOff(c.Logo, at) {
+				out = append(out, boundary{At: at, Strength: cutWhenLogoOff})
 			}
 		}
 	}
@@ -167,6 +183,13 @@ func logoGaps(logo []bool) []span {
 const (
 	outReach = 8
 	inReach  = 30
+	// cutWhenLogoOff is weaker than a silent cut (0.5) and a black frame
+	// (0.7), so those still win on the same moment. strong ignores it, and a
+	// recording with no logo never adds it.
+	cutWhenLogoOff = 0.45
+	// minLogoSpots is the fewest spot-length gaps a logo gap needs. One is a
+	// fade to black, or one scene the logo dropped out of.
+	minLogoSpots = 2
 )
 
 // snap moves a time to the strongest boundary between from and to, nearest
@@ -191,22 +214,31 @@ func snap(cuts []boundary, at, from, to float64) (float64, bool) {
 
 // logoOffSpots keeps the spots of a chain that have the logo off, joined
 // where they follow each other. A show's own scenes can be timed like spots;
-// they keep the logo on.
+// they keep the logo on. One logo-off spot at the end of a chain that stepped
+// across the show is a fade, not a break.
 func logoOffSpots(logo []bool, chain []float64) []Break {
 	if logo == nil {
 		return []Break{{Start: chain[0], End: chain[len(chain)-1]}}
 	}
 	var out []Break
+	run, start := 0, 0.0
+	flush := func(end float64) {
+		if run >= minLogoSpots {
+			out = append(out, Break{Start: start, End: end})
+		}
+		run = 0
+	}
 	for i := 1; i < len(chain); i++ {
 		if offShare(logo, chain[i-1], chain[i]) <= 0.5 {
+			flush(chain[i-1])
 			continue
 		}
-		if n := len(out); n > 0 && out[n-1].End == chain[i-1] {
-			out[n-1].End = chain[i]
-			continue
+		if run == 0 {
+			start = chain[i-1]
 		}
-		out = append(out, Break{Start: chain[i-1], End: chain[i]})
+		run++
 	}
+	flush(chain[len(chain)-1])
 	return out
 }
 
@@ -297,18 +329,41 @@ func spotLength(seconds float64) bool {
 }
 
 // merge joins spans that overlap or nearly touch. Shows run minutes between
-// breaks; under breakGap apart is one break with a spot that was missed.
-func merge(spans []Break) []Break {
+// breaks; under breakGap apart is one break with a spot that was missed,
+// unless the logo is on in the gap, which is the show back for a moment.
+func merge(spans []Break, logo []bool) []Break {
 	sort.Slice(spans, func(i, j int) bool { return spans[i].Start < spans[j].Start })
 	var out []Break
 	for _, s := range spans {
-		if n := len(out); n > 0 && s.Start <= out[n-1].End+breakGap && (s.Start < out[n-1].End || s.End-out[n-1].Start <= longestBreak) {
+		if n := len(out); n > 0 && s.Start <= out[n-1].End+breakGap && (s.Start < out[n-1].End || s.End-out[n-1].Start <= longestBreak) && !logoOnBetween(logo, out[n-1].End, s.Start) {
 			out[n-1].End = max(out[n-1].End, s.End)
 			continue
 		}
 		out = append(out, s)
 	}
 	return out
+}
+
+// cutLogoOff is a cut in a second the logo is off, or on the first quarter
+// second of the logo coming back. Later than that is the show.
+func cutLogoOff(logo []bool, at float64) bool {
+	sec := int(math.Floor(at))
+	if sec >= 0 && sec < len(logo) && !logo[sec] {
+		return true
+	}
+	if sec > 0 && sec < len(logo) && logo[sec] && !logo[sec-1] && at-float64(sec) <= 0.25 {
+		return true
+	}
+	return false
+}
+
+// logoOnBetween is a gap where the station logo is on for most of the
+// seconds, so the show is back. A missed spot keeps the logo off.
+func logoOnBetween(logo []bool, from, to float64) bool {
+	if len(logo) == 0 || to-from < 1 {
+		return false
+	}
+	return offShare(logo, from, to) < 0.5
 }
 
 // confidence weighs a span's evidence: how much of it has the logo off,
