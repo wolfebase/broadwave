@@ -78,6 +78,9 @@ function boxes(scope: ParentNode) {
     if (node.tabIndex < 0 || node.closest("[inert], [aria-hidden='true']")) continue;
     if ((node as HTMLButtonElement).disabled) continue;
     if (pictureWithChrome(node)) continue;
+    // The multiview page fills the screen. Its center sits on the tiles, so
+    // Down would land on the page instead of the buttons under the grid.
+    if (node.matches("section.mv") && node.querySelector("button:not([disabled]), [tabindex='0']")) continue;
     const rect = node.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) continue;
     out.push({ el: node, box: { id: out.length, ...onScreen(node, rect) } });
