@@ -141,15 +141,15 @@ func episode(ctx context.Context, st *store.Store, rec store.Recording, sound br
 // known: no listing, a recording stopped before the listing ended, or a game,
 // which can run past it.
 func showBounds(ctx context.Context, st *store.Store, rec store.Recording, length float64) (float64, float64) {
-	if rec.StartedAt.IsZero() || length <= 0 || rec.GameID != "" {
+	// A library file has no channel. Its modification time is not when a
+	// listing started, so a listing of the same title is not inside the file.
+	if rec.StartedAt.IsZero() || length <= 0 || rec.GameID != "" || rec.ChannelID == 0 {
 		return 0, 0
 	}
 	q := store.AiringQuery{
-		From: rec.StartedAt.Add(-time.Hour),
-		To:   rec.StartedAt.Add(time.Duration(length * float64(time.Second))),
-	}
-	if rec.ChannelID != 0 {
-		q.Channels = []int64{rec.ChannelID}
+		From:     rec.StartedAt.Add(-time.Hour),
+		To:       rec.StartedAt.Add(time.Duration(length * float64(time.Second))),
+		Channels: []int64{rec.ChannelID},
 	}
 	airings, err := st.QueryAirings(ctx, q)
 	if err != nil {
