@@ -449,7 +449,9 @@ paths:
     post:
       tags: [sources]
       operationId: addFreeChannels
-      description: Add one generator feed as a tuner-free playlist. DRM streams are skipped.
+      description: |
+        Add one generator feed as a tuner-free playlist. DRM streams are skipped.
+        With a playlist, kind is ignored. Without one, kind is fastchannels, pluto, or samsung (any case) on addr; anything else is 400.
       requestBody:
         required: true
         content:
@@ -479,6 +481,7 @@ paths:
                   xmltvUrl: { type: string }
                   message: { type: string, description: "Empty when every channel was added. Otherwise how many DRM channels were skipped." }
         "400": { $ref: "#/components/responses/Error" }
+        "500": { $ref: "#/components/responses/Error" }
   /sources:
     get:
       tags: [sources]
@@ -506,7 +509,10 @@ paths:
               type: object
               required: [kind]
               properties:
-                kind: { type: string, enum: [m3u, xtream, tvheadend, channels, threadfin, xteve, ersatztv, dispatcharr, link, folder] }
+                kind:
+                  type: string
+                  enum: [m3u, xtream, tvheadend, channels, threadfin, xteve, ersatztv, dispatcharr, link, folder]
+                  description: Matched without regard to case, and surrounding spaces are ignored. M3U is m3u.
                 name: { type: string }
                 url: { type: string, description: "Playlist URL, Xtream server, stream URL, or folder path" }
                 username: { type: string }
@@ -657,8 +663,8 @@ paths:
         - $ref: "#/components/parameters/Id"
         - in: query
           name: w
-          schema: { type: string, enum: ["480", "1280"] }
-          description: 480 is the small frame. 1280 is the wide one. A missing size is not upscaled.
+          schema: { type: string }
+          description: Only the exact value 1280 returns the wide JPEG. Omitted, 480, and every other value return the 480 JPEG and are not an error.
       responses:
         "200":
           description: JPEG preview. X-Frame-Stale is 1 when the picture is older than 10 minutes.
@@ -1345,6 +1351,7 @@ paths:
           application/json:
             schema:
               type: object
+              description: 'A body that is not JSON, or whose end is not greater than start, is 400 and the message is "start and end required". A negative start is accepted when end is greater.'
               required: [start, end]
               properties:
                 start: { type: number }
@@ -1491,14 +1498,13 @@ paths:
     put:
       tags: [dvr]
       operationId: orderPasses
-      description: Rank passes, first highest. Ids that are gone or repeated are skipped; a pass not named ranks last.
+      description: Rank passes, first highest. Omitted or empty ids leaves order. Ids that are gone or repeated are skipped; a pass not named ranks last.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [ids]
               properties:
                 ids:
                   type: array
@@ -1899,10 +1905,18 @@ paths:
               type: object
               required: [name]
               properties:
-                name: { type: string, minLength: 1, maxLength: 63 }
-                kind: { type: string, enum: [phone, tv, web, other] }
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 63
+                  description: Counted in characters. A name that is only spaces is 400.
+                kind:
+                  type: string
+                  enum: [phone, tv, web, other]
+                  description: Compared exactly after trimming spaces. Any other value, including a different case, is stored as other. The response is still 201.
                 scopes:
                   type: array
+                  description: Compared without regard to case, and surrounding spaces are ignored. An unknown scope is 400. Omitted, empty, or only blank entries is watch.
                   items: { type: string, enum: [watch, record, admin] }
       responses:
         "201":
@@ -1926,10 +1940,17 @@ paths:
             schema:
               type: object
               properties:
-                name: { type: string, maxLength: 63 }
-                kind: { type: string, enum: [phone, tv, web, other] }
+                name:
+                  type: string
+                  maxLength: 63
+                  description: Optional. Counted in characters after trimming spaces. A name that is only spaces is stored as empty.
+                kind:
+                  type: string
+                  enum: [phone, tv, web, other]
+                  description: Compared exactly after trimming spaces. Any other value, including a different case, is stored as other. The response is still 201.
                 scopes:
                   type: array
+                  description: Compared without regard to case, and surrounding spaces are ignored. An unknown scope is 400. Omitted, empty, or only blank entries is watch.
                   items: { type: string, enum: [watch, record, admin] }
       responses:
         "201":
@@ -1959,6 +1980,7 @@ paths:
                 code: { type: string, description: "Six digits. Spaces and dashes are ignored." }
                 scopes:
                   type: array
+                  description: Replaces the scopes the device asked for. Compared without regard to case, and surrounding spaces are ignored. An unknown scope is 400. Omitted, empty, or only blank entries is watch.
                   items: { type: string, enum: [watch, record, admin] }
       responses:
         "200":
@@ -1990,8 +2012,15 @@ paths:
               required: [code, name]
               properties:
                 code: { type: string }
-                name: { type: string, minLength: 1, maxLength: 63 }
-                kind: { type: string, enum: [phone, tv, web, other] }
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 63
+                  description: Counted in characters. A name that is only spaces is 400.
+                kind:
+                  type: string
+                  enum: [phone, tv, web, other]
+                  description: Omitted keeps the kind stored with the code. Otherwise compared exactly after trimming spaces. Any other value, including a different case, is stored as other. The response is still 201.
       responses:
         "201":
           description: Token for this device
@@ -2885,7 +2914,10 @@ components:
         quality: { type: string, enum: [auto, original, high, medium, saver, tile, "360", focus] }
         audio: { type: string, enum: [auto, surround, stereo, none] }
         picture: { $ref: "#/components/schemas/PictureMode" }
-        track: { type: string, enum: [main, language, described], description: "Which broadcast audio mix to play. Empty is main. With `caps.alternates`, a watch plays the main encode when that encode carries this mix as an alternate, and the player selects it from the master." }
+        track:
+          type: string
+          enum: [main, language, lang, sap, described, vi]
+          description: "Which broadcast audio mix to play. Empty is main. Compared without regard to case. language, lang, and sap are the second language. described and vi are described video. With `caps.alternates`, a watch plays the main encode when that encode carries this mix as an alternate, and the player selects it from the master."
         even: { type: boolean, description: "Level the volume. Off keeps the original mix." }
     MosaicSession:
       type: object
@@ -3094,7 +3126,7 @@ components:
       type: object
       required: [title]
       properties:
-        title: { type: string, description: "The title, the words a title contains, or the category" }
+        title: { type: string, description: "The title, the words a title contains, or the category. A blank title, including one that is only spaces, is 400." }
         channelId: { type: integer, format: int64, description: "0 records on any channel" }
         padBefore: { type: integer, minimum: 0, maximum: 30 }
         padAfter: { type: integer, minimum: 0, maximum: 30 }
