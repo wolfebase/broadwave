@@ -8,7 +8,7 @@ A channel is 3.0 when the lineup says HEVC and AC-4. The channel number is not t
 
 A clear 3.0 channel is an HEVC picture and AC-4 sound. A second sound track, often another language, can be picked the same way as on any other channel.
 
-Apple TV 4K, an iPhone whose machine id is `iPhone9` or later, an iPad whose machine id is `iPad7` or later, and Safari or Chrome when it reports HEVC, get the HEVC picture as the station sent it, including a 2160p picture. Apple TV HD gets H.264 at 1080p. An older iPhone or iPad gets H.264. A browser that cannot play HEVC gets H.264. The picture is scaled down only when the player names a maximum height. Apple TV HD names 1080, and Apple TV 4K names 2160. iPhone and iPad do not, so a 2160p picture they can decode stays 2160p.
+Apple TV 4K, an iPhone whose machine id is `iPhone9` or later, an iPad whose machine id is `iPad7` or later, and Safari or Chrome when it reports HEVC, get the HEVC picture as the station sent it, including a 2160p picture. Apple TV HD gets H.264 at 1080p. An older iPhone or iPad gets H.264. A browser that cannot play HEVC gets H.264. Apple TV HD names a maximum height of 1080, and Apple TV 4K names 2160. iPhone and iPad do not, so a 2160p picture they can decode stays 2160p when it is copied. A transcode is also limited by the short encode at startup. On the web, a cellular connection or Save-Data asks for 720p.
 
 Phones, TVs, and browsers do not decode AC-4. Broadwave reads each track and sends it on:
 

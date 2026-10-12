@@ -18,7 +18,7 @@ docker run -d --name broadwave --network host --restart unless-stopped \
 
 Then open `http://<your-server>:8477`.
 
-- `TZ` is your time zone. Without it, a container runs on UTC, and Diagnostics says "The time zone is not set. Set TZ so the guide uses your local time." A name you set is not checked. If the listings stay on UTC, the zone data did not load.
+- `TZ` is your time zone. Without it, a container runs on UTC, and Diagnostics says "The time zone is not set. Set TZ so the guide uses your local time." The guide on a phone or in a browser uses that device's clock. Pass times and the server's own clock messages use `TZ`.
 - The two folders keep the database and the recordings. An update replaces the container and leaves the folders.
 - Add `--device /dev/dri` when that path exists (Intel or AMD graphics). Docker refuses to start if the path is missing. The picture still plays from the processor without it.
 - When the tuner does not appear, set `HDHR_HOST` to its address. Add `:port` only when the port is not 80.

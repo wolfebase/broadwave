@@ -24,7 +24,7 @@ The usual install is Docker. Building from source needs Go 1.26 or newer, Node 2
 
 Yes, over a VPN such as Tailscale. Do not count on the apps finding the server from there. Enter its Tailscale address and port 8477. Leave port 8477 and port 8478 off the public internet, and do not turn on Tailscale Funnel. There is no account password.
 
-Device sign-in covers the guide, recordings, and settings inside Broadwave. The shared guide and the playlist stay open, and a stream address can still start a tune with no code. Port 8478 can too, while Act as an HDHomeRun is on. The iPhone, iPad, and Apple TV apps cannot enter a code. Leave "Require a device to sign in" off while you use them. With it on they still connect, but the server refuses the guide and playback with "Sign in from a paired device." [Away from home](remote.md) is the setup. [Security](security.md) is the name check.
+Device sign-in covers the guide, recordings, and settings inside Broadwave. The shared guide and the playlist stay open. A stream address opened directly can still start a tune with no code. A page on another site cannot. Port 8478 can too, while Act as an HDHomeRun is on. The iPhone, iPad, and Apple TV apps cannot enter a code. Leave "Require a device to sign in" off while you use them. With it on they still connect, but the server refuses the guide and playback with "Sign in from a paired device." [Away from home](remote.md) is the setup. [Security](security.md) is the name check.
 
 ## Can I watch more than one channel?
 
@@ -82,7 +82,7 @@ Without an updater, Settings, Check for updates, asks once a day. The hint is "O
 
 ## The guide is on UTC.
 
-Set `TZ` to your time zone. Without it, a container runs on UTC, and Diagnostics says "The time zone is not set. Set TZ so the guide uses your local time." A name you set is not checked. If listings stay on UTC, the zone data did not load.
+Set `TZ` to your time zone. Without it, a container runs on UTC, and Diagnostics says "The time zone is not set. Set TZ so the guide uses your local time." The guide on a phone or in a browser uses that device's clock. Pass times and the server's own clock messages use `TZ`.
 
 ## Is there a backup?
 
