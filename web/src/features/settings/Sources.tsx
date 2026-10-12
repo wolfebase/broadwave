@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Channel, Device, TunerStatus } from "../../types";
 import { addFree, addPlaylistFile, addSource, checkSignals, findFree, getSignals, getTuners, lookHarder, sourceStatuses, startScan, type ChannelSignal, type FreeFeed, type SourceAdded, type SourceStatus } from "../../api";
+import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { actionName } from "../../lib/actionName";
 import { copy } from "../../strings";
 import { lastSeenPhrase } from "../../time";
@@ -8,6 +10,9 @@ import { deviceScans, showFirmware } from "./deviceCard";
 import { applySignalPoll, applyTunerPoll } from "./sourcePoll";
 import { guideAfterFree, hitsAfterLook } from "../setup/lookHits";
 import { playlistKeep } from "./playlistKeep";
+
+const t = bind(settingsUiMessages);
+
 export function Sources({
   devices,
   channels,
@@ -171,7 +176,7 @@ export function Sources({
                 onClick={() => {
                   setFreeNote("");
                   void addFree(feed)
-                    .then((res) => setFreeNote(res.message || "Source added. It shows up with the lineup."))
+                    .then((res) => setFreeNote(res.message || t("sources.added")))
                     .catch((err: unknown) => setFreeNote(err instanceof Error ? err.message : copy.sources.freeEmpty));
                 }}
               >
@@ -200,10 +205,10 @@ export function Sources({
       ) : null}
       <SourceAdd />
       {error ? <p className="error">{error}</p> : null}
-      <h3 className="section-title">Tuners</h3>
-      {encoder ? <p className="hint">Picture encoder {encoder}.</p> : null}
+      <h3 className="section-title">{t("sources.tunersHeading")}</h3>
+      {encoder ? <p className="hint">{t("settings.encoder", { name: encoder })}</p> : null}
       {tuners.length === 0 ? (
-        <p className="empty">Tuner status is not available yet.</p>
+        <p className="empty">{t("settings.tunersUnavailable")}</p>
       ) : (
         <ul className="source-list">
           {tuners.map((tuner) => (
@@ -211,9 +216,7 @@ export function Sources({
               <span className="ch-num">{tuner.index + 1}</span>
               <span>{tunerLabel(tuner)}</span>
               <span className="codec">
-                {tuner.guide || tuner.target
-                  ? `Signal ${tuner.strength ?? 0}% · quality ${tuner.quality ?? 0}% · symbols ${tuner.symbol ?? 0}%`
-                  : "Idle"}
+                {tunerSignal(tuner)}
               </span>
             </li>
           ))}
@@ -225,10 +228,10 @@ export function Sources({
           {unmatchedSources(statuses, devices).map((item) => (
             <li key={item.id} className="source-row">
               <span>{item.name}</span>
-              <span className="codec">{item.health ? "Offline" : "Online"}</span>
+              <span className="codec">{item.health ? t("sources.statusOffline") : t("sources.statusOnline")}</span>
               <span className="codec">
-                {item.streamLimit ? copy.sources.streams(item.streamsInUse ?? 0, item.streamLimit) : "No stream limit"}
-                {item.health && !item.health.includes("://") ? `. ${item.health}` : ""}
+                {item.streamLimit ? copy.sources.streams(item.streamsInUse ?? 0, item.streamLimit) : t("sources.noStreamLimit")}
+                {item.health && !item.health.includes("://") ? t("sources.healthMore", { health: item.health }) : ""}
               </span>
             </li>
           ))}
@@ -279,9 +282,7 @@ export function Sources({
               {showFirmware(device.firmwareVersion) ? (
                 <p className="hint">
                   {copy.sources.firmware} {device.firmwareVersion}
-                  {device.upgradeAvailable
-                    ? `. A newer build, ${device.upgradeAvailable}, is published. This app will not install it.`
-                    : "."}
+                  {device.upgradeAvailable ? t("sources.firmwareNewer", { version: device.upgradeAvailable }) : "."}
                 </p>
               ) : null}
               {offline ? <p className="hint">{copy.sources.offline(lastSeenPhrase(device.lastSeen))}</p> : null}
@@ -333,10 +334,10 @@ export function Sources({
               }}
             />
             <span className="codec">
-              {channel.hd ? "HD" : "SD"}
+              {channel.hd ? t("sources.hd") : t("sources.sd")}
               {channel.videoCodec ? ` ${channel.videoCodec}` : ""}
               {channel.standard === "atsc3" ? ` · ${copy.sources.atsc3}` : ""}
-              {!channel.present ? " · off air" : ""}
+              {!channel.present ? t("sources.offAir") : ""}
             </span>
             {channel.protected ? (
               <span className="hint protected-note">
@@ -417,7 +418,7 @@ function SourceAdd() {
       className="lookup"
       onSubmit={(event) => {
         event.preventDefault();
-        const fail = (err: unknown) => setNote(err instanceof Error ? err.message : "The source did not add.");
+        const fail = (err: unknown) => setNote(err instanceof Error ? err.message : t("sources.addFailed"));
         const finish = (res: SourceAdded) => {
           if (res.pick) {
             setPick(res);
@@ -427,7 +428,7 @@ function SourceAdd() {
           }
           setPick(null);
           setChosen([]);
-          setNote(kind === "folder" ? `Added ${res.added ?? 0} files to the library.` : "Source added. It shows up with the lineup.");
+          setNote(kind === "folder" ? t("sources.addedFiles", { count: res.added ?? 0 }) : t("sources.added"));
         };
         let useGroups = groups;
         let useKeep = "";
@@ -455,36 +456,36 @@ function SourceAdd() {
       }}
     >
       <label>
-        Add a source
+        {t("sources.addSource")}
         <select value={kind} onChange={(event) => setKind(event.target.value)}>
-          <option value="m3u">Playlist</option>
-          <option value="xtream">Xtream Codes</option>
-          <option value="tvheadend">tvheadend</option>
-          <option value="channels">Channels DVR</option>
-          <option value="threadfin">Threadfin</option>
-          <option value="xteve">xTeVe</option>
-          <option value="ersatztv">ErsatzTV</option>
-          <option value="dispatcharr">Dispatcharr</option>
-          <option value="link">Stream link</option>
-          <option value="folder">Media folder</option>
+          <option value="m3u">{t("sources.kind.playlist")}</option>
+          <option value="xtream">{t("sources.kind.xtream")}</option>
+          <option value="tvheadend">{t("sources.kind.tvheadend")}</option>
+          <option value="channels">{t("sources.kind.channels")}</option>
+          <option value="threadfin">{t("sources.kind.threadfin")}</option>
+          <option value="xteve">{t("sources.kind.xteve")}</option>
+          <option value="ersatztv">{t("sources.kind.ersatztv")}</option>
+          <option value="dispatcharr">{t("sources.kind.dispatcharr")}</option>
+          <option value="link">{t("sources.kind.link")}</option>
+          <option value="folder">{t("sources.kind.folder")}</option>
         </select>
       </label>
       <label>
-        Name
+        {t("sources.name")}
         <input value={name} onChange={(event) => setName(event.target.value)} />
       </label>
       <label>
-        Address
-        <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={kind === "folder" ? "D:\\TV" : kind === "xtream" ? "http://example:8080" : "https://example/playlist.m3u"} spellCheck={false} />
+        {copy.sources.address}
+        <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={kind === "folder" ? t("sources.folderPlaceholder") : kind === "xtream" ? t("sources.xtreamPlaceholder") : t("sources.playlistPlaceholder")} spellCheck={false} />
       </label>
       {kind === "xtream" || kind === "tvheadend" ? (
         <>
           <label>
-            Username
+            {t("sources.username")}
             <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="off" />
           </label>
           <label>
-            Password
+            {t("sources.password")}
             <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="off" />
           </label>
         </>
@@ -502,11 +503,11 @@ function SourceAdd() {
       {kind === "m3u" || kind === "xtream" || kind === "tvheadend" || kind === "channels" ? (
         <label>
           {copy.sources.groups}
-          <input value={groups} onChange={(event) => setGroups(event.target.value)} placeholder="News, Sports, -Shopping" spellCheck={false} />
+          <input value={groups} onChange={(event) => setGroups(event.target.value)} placeholder={t("sources.groupsPlaceholder")} spellCheck={false} />
         </label>
       ) : null}
-      <button type="submit" className="btn" disabled={(url.trim() === "" && file == null) || ((kind === "xtream" || kind === "tvheadend") && (username.trim() === "" || password === ""))}>Add</button>
-      {kind === "channels" ? <p className="hint">Uses your Channels DVR tuners.</p> : null}
+      <button type="submit" className="btn" disabled={(url.trim() === "" && file == null) || ((kind === "xtream" || kind === "tvheadend") && (username.trim() === "" || password === ""))}>{copy.sources.add}</button>
+      {kind === "channels" ? <p className="hint">{t("sources.channelsHint")}</p> : null}
       {kind === "m3u" || kind === "xtream" ? <p className="hint">{copy.sources.groupsHint}</p> : null}
       {options.length > 0 ? (
         <fieldset>
@@ -574,7 +575,7 @@ function SignalCheck() {
               .catch((err: Error) => setNote(err.message));
           }}
         >
-          {running ? "Checking channels" : "Check all channels"}
+          {running ? t("sources.checkingChannels") : t("sources.checkChannels")}
         </button>
       </div>
       {note ? <p className="hint">{note}</p> : null}
@@ -588,22 +589,29 @@ function SignalCheck() {
                 <span>{row.name}</span>
                 <span className="codec">
                   {row.verdict}
-                  {row.strength != null ? ` · signal ${row.strength}% · quality ${row.quality ?? 0}% · symbols ${row.symbol ?? 0}%` : ""}
-                  {row.tip ? `. ${row.tip}` : ""}
+                  {row.strength != null ? t("sources.signalDetail", { strength: row.strength, quality: row.quality ?? 0, symbol: row.symbol ?? 0 }) : ""}
+                  {row.tip ? t("sources.tipJoin", { tip: row.tip }) : ""}
                 </span>
               </li>
             ))}
         </ul>
       ) : (
-        <p className="empty">Check all channels to see how the antenna is doing.</p>
+        <p className="empty">{t("sources.checkEmpty")}</p>
       )}
     </div>
   );
 }
 
+function tunerSignal(tuner: TunerStatus) {
+  if (!(tuner.guide || tuner.target)) return t("sources.idle");
+  return t("sources.signal", { strength: tuner.strength ?? 0, quality: tuner.quality ?? 0, symbol: tuner.symbol ?? 0 });
+}
+
 function tunerLabel(tuner: TunerStatus) {
-  if (tuner.ours) return `This server${tuner.guide ? ` · ${tuner.guide} ${tuner.name ?? ""}` : ""}`;
-  if (tuner.target) return `Another device at ${tuner.target}${tuner.guide ? ` · ${tuner.guide} ${tuner.name ?? ""}` : ""}`;
-  if (tuner.guide) return `${tuner.guide} ${tuner.name ?? ""}`;
-  return "Free";
+  const guide = tuner.guide ?? "";
+  const name = tuner.name ?? "";
+  if (tuner.ours) return tuner.guide ? t("sources.tunerOurs", { guide, name }) : t("settings.thisServer");
+  if (tuner.target) return tuner.guide ? t("sources.tunerOtherChannel", { target: tuner.target, guide, name }) : t("sources.tunerOther", { target: tuner.target });
+  if (tuner.guide) return `${guide} ${name}`;
+  return t("sources.free");
 }

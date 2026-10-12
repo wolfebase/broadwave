@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { getGroups } from "../../api";
+import { playerUiMessages } from "../../i18n/messages/playerUi.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { events, type RoomState } from "../../lib/events";
+
+const t = bind(playerUiMessages);
 
 // Watching together is one group per channel, so every screen in the house
 // finds it without a code.
@@ -41,17 +45,24 @@ export function useGroup(channelId: number): RoomState | undefined {
   return groups.find((g) => g.room === groupRoom(channelId));
 }
 
-const kinds: Record<string, string> = { iphone: "iPhone", ipad: "iPad", appletv: "Apple TV", web: "Browser" };
+function kindName(kind: string): string {
+  if (kind === "iphone") return t("player.kind.iphone");
+  if (kind === "ipad") return t("player.kind.ipad");
+  if (kind === "appletv") return t("player.kind.appletv");
+  if (kind === "web") return t("player.kind.browser");
+  return "";
+}
 
 // A screen that gave no name is named by its kind on the server ("appletv").
 export function personLabel(p: { name: string; kind: string }) {
-  return (p.name !== p.kind && p.name) || kinds[p.kind] || "Another screen";
+  return (p.name !== p.kind && p.name) || kindName(p.kind) || t("player.anotherScreen");
 }
 
 /** "Den TV and Chrome on Mac", "Den TV, Kitchen iPad, and 2 more". */
 export function peopleSentence(people: { name: string; kind: string }[]) {
   const names = people.map(personLabel);
-  if (names.length <= 2) return names.join(" and ");
-  if (names.length === 3) return `${names[0]}, ${names[1]}, and ${names[2]}`;
-  return `${names[0]}, ${names[1]}, and ${names.length - 2} more`;
+  const and = t("player.and");
+  if (names.length <= 2) return names.join(` ${and} `);
+  if (names.length === 3) return `${names[0]}, ${names[1]}, ${and} ${names[2]}`;
+  return `${names[0]}, ${names[1]}, ${and} ${t("player.more", names.length - 2)}`;
 }

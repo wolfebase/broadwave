@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { useRoute } from "../../app/router";
+import { playerUiMessages } from "../../i18n/messages/playerUi.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { events } from "../../lib/events";
 import { onMoved, sentHere } from "./moved";
+
+const t = bind(playerUiMessages);
 
 /**
  * Channels another screen sends here (screen.watch) play at once, with who
@@ -28,7 +32,7 @@ export function ScreenMoves() {
       if (!channel) return;
       const name = from?.trim();
       // The player plays an encrypted channel's clear twin; the note goes with what plays.
-      if (name) sentHere({ id: channel.playsAs && all.some((c) => c.id === channel.playsAs) ? channel.playsAs : channel.id, text: `From ${name}` });
+      if (name) sentHere({ id: channel.playsAs && all.some((c) => c.id === channel.playsAs) ? channel.playsAs : channel.id, text: t("player.from", { name }) });
       open(channel);
     });
     return () => {
@@ -40,13 +44,13 @@ export function ScreenMoves() {
   useEffect(() => onMoved(setSentTo), []);
   useEffect(() => {
     if (!sentTo) return;
-    const t = window.setTimeout(() => setSentTo(""), 5_000);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => setSentTo(""), 5_000);
+    return () => window.clearTimeout(timer);
   }, [sentTo]);
   if (!sentTo) return null;
   return (
     <div className="banner-home" role="status">
-      <p>Playing on {sentTo}</p>
+      <p>{t("player.playingOn", { name: sentTo })}</p>
     </div>
   );
 }

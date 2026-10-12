@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
+import { uiMessages } from "../i18n/messages/ui.ts";
+import { bind } from "../i18n/runtime.ts";
 import type { Category } from "../lib/guide";
 import type { Channel } from "../types";
+
+const t = bind(uiMessages);
 
 export function ChannelBadge({ channel, size = "md" }: { channel: Pick<Channel, "displayNumber" | "displayName" | "standard">; size?: "sm" | "md" | "lg" }) {
   return (
@@ -14,25 +18,24 @@ export function ChannelBadge({ channel, size = "md" }: { channel: Pick<Channel, 
 
 export function Atsc3Tag() {
   return (
-    <span className="tag" aria-label="ATSC 3.0">
-      3.0
+    <span className="tag" aria-label={t("ui.atsc3")}>
+      {t("ui.atsc3Short")}
     </span>
   );
 }
 
-export function LiveDot({ label = "Live" }: { label?: string }) {
+export function LiveDot({ label }: { label?: string }) {
   return (
     <span className="live-dot">
       <span className="live-dot-light" aria-hidden="true" />
-      {label}
+      {label ?? t("ui.live")}
     </span>
   );
 }
 
 export function RecDot({ scheduled }: { scheduled?: boolean }) {
-  return (
-    <span className={scheduled ? "rec-dot scheduled" : "rec-dot"} role="img" aria-label={scheduled ? "Will record" : "Recording"} title={scheduled ? "Will record" : "Recording"} />
-  );
+  const label = scheduled ? t("ui.willRecord") : t("ui.recording");
+  return <span className={scheduled ? "rec-dot scheduled" : "rec-dot"} role="img" aria-label={label} title={label} />;
 }
 
 export function Progress({ value, category }: { value: number; category?: Category }) {

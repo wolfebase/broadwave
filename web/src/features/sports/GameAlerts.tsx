@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { sportsMessages } from "../../i18n/messages/sports.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { events } from "../../lib/events";
 import type { GameAlert } from "../../types";
+
+const t = bind(sportsMessages);
 
 type Seen = GameAlert & { at: number };
 
@@ -90,11 +94,11 @@ function GameNotice({ alert, onDismiss }: { alert: Seen; onDismiss: () => void }
             player.open(channel);
           }}
         >
-          Watch {alert.channel}
+          {t("sports.watchChannel", { channel: alert.channel })}
         </button>
       ) : null}
       <button type="button" className="btn small ghost" onClick={onDismiss}>
-        Not now
+        {t("sports.notNow")}
       </button>
     </div>
   );

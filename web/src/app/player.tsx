@@ -101,7 +101,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           key="live"
           channel={playing}
           mode={mode}
-          notice={standIn && standIn !== noted && mode === "full" ? encryptedBroadcast : undefined}
+          notice={standIn && standIn !== noted && mode === "full" ? encryptedBroadcast() : undefined}
           onChannel={open}
           onMinimize={() => {
             setChannel(channelToDock(channel, playing));

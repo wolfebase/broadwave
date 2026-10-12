@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { unreadBody } from "../../api";
+import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { writeToken } from "../../lib/deviceToken";
 import { claimPair, pollPair, startPair } from "./pairApi";
 import { codeAfterPoll, formatPairCode, normalizePairCode, pairPollStep } from "./pairCode";
+
+const t = bind(settingsUiMessages);
 
 type Kind = "web" | "phone" | "tv";
 
 type PairSession = { id: string; secret: string };
 
 function message(err: unknown): string {
-  return err instanceof Error && err.message ? err.message : unreadBody;
+  return err instanceof Error && err.message ? err.message : t("devices.failed");
 }
 
 export function PairScreen({ onPaired }: { onPaired: () => void }) {
@@ -60,11 +63,11 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
           }
           if (stop) return;
           if (step.action === "miss") {
-            finish("The code was approved, but this screen missed the token. Show a new code.", "miss");
+            finish(t("pair.missed"), "miss");
             return;
           }
           if (step.action === "expired" || step.action === "denied") {
-            finish(step.action === "expired" ? "This code expired. Show a new code." : "This code was denied.", step.action);
+            finish(step.action === "expired" ? t("pair.expired") : t("pair.denied"), step.action);
             return;
           }
           setError("");
@@ -86,11 +89,11 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
     const trimmed = name.trim();
     const normalized = normalizePairCode(code);
     if (!trimmed) {
-      setError("Enter a name.");
+      setError(t("pair.needName"));
       return;
     }
     if (!normalized) {
-      setError("Enter the 6-digit code.");
+      setError(t("devices.needCode"));
       return;
     }
     setBusy(true);
@@ -99,7 +102,7 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
     try {
       const res = await claimPair({ code: normalized, name: trimmed, kind });
       if (!res.token) {
-        setError("This device did not get a token. Try the code again.");
+        setError(t("pair.noToken"));
         return;
       }
       writeToken(res.token);
@@ -118,13 +121,13 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
     setSession(null);
     try {
       const res = await startPair({
-        name: name.trim() || "This browser",
+        name: name.trim() || t("pair.thisBrowser"),
         kind,
         scopes: ["watch"],
       });
       setIssued(res.code);
       if (!res.pollSecret) {
-        setError("This screen cannot wait on that code. Show a new code.");
+        setError(t("pair.cannotWait"));
         return;
       }
       setSession({ id: res.id, secret: res.pollSecret });
@@ -138,24 +141,24 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
   return (
     <div className="page-wrap">
       <header className="page-header">
-        <h1>Pair this device</h1>
-        <p className="lede">Enter the code from Settings on a device that is already signed in.</p>
+        <h1>{t("pair.title")}</h1>
+        <p className="lede">{t("pair.lede")}</p>
       </header>
       <form onSubmit={(event) => void claim(event)}>
         <label className="field">
-          Name
+          {t("pair.name")}
           <input required value={name} autoComplete="off" spellCheck={false} onChange={(event) => setName(event.target.value)} />
         </label>
         <label className="field">
-          Device
+          {t("pair.device")}
           <select value={kind} onChange={(event) => setKind(event.target.value as Kind)}>
-            <option value="web">Browser</option>
-            <option value="phone">Phone</option>
-            <option value="tv">TV</option>
+            <option value="web">{t("devices.browser")}</option>
+            <option value="phone">{t("devices.phone")}</option>
+            <option value="tv">{t("devices.tv")}</option>
           </select>
         </label>
         <label className="field">
-          Code
+          {t("pair.code")}
           <input
             required
             value={code}
@@ -166,16 +169,16 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
           />
         </label>
         <button type="submit" className="btn primary" disabled={busy}>
-          Pair
+          {t("pair.submit")}
         </button>
       </form>
       <button type="button" className="btn" disabled={busy} onClick={() => void showCode()}>
-        Show a code instead
+        {t("pair.showCode")}
       </button>
       {issued ? (
         <>
           <p className="pair-code">{formatPairCode(issued)}</p>
-          <p className="hint">Enter this code in Settings. It lasts 10 minutes.</p>
+          <p className="hint">{t("pair.codeHint")}</p>
         </>
       ) : null}
       {error ? (

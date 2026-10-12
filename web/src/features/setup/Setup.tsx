@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { addFree, addPlaylistFile, addSource, findFree, lookHarder, setupFinish, startSetupFinish, type FreeFeed, type SetupFinish } from "../../api";
 import { useData } from "../../app/data";
 import { navigate } from "../../app/router";
+import { setupMessages } from "../../i18n/messages/setup.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { actionName } from "../../lib/actionName";
 import { copy } from "../../strings";
 import { ChevronIcon } from "../../ui/icons";
@@ -11,10 +13,22 @@ import { guideAfterFree, hitsAfterLook } from "./lookHits";
 import { HomeList } from "./HomeList";
 import "./setup.css";
 
+const t = bind(setupMessages);
+
 type Step = "sources" | "finish";
-const steps: { id: Step; title: string }[] = [
-  { id: "sources", title: "Sources" },
-  { id: "finish", title: "Ready" },
+const steps: { id: Step; readonly title: string }[] = [
+  {
+    id: "sources",
+    get title() {
+      return copy.sources.title;
+    },
+  },
+  {
+    id: "finish",
+    get title() {
+      return t("setup.ready");
+    },
+  },
 ];
 
 /** First run: find a tuner, then the server finishes setup on its own. */
@@ -65,9 +79,9 @@ export function Setup() {
           status = await setupFinish();
           if (!stop) setProgress(status);
         }
-        if (!stop && !status.ready) setNote("Setup did not finish.");
+        if (!stop && !status.ready) setNote(t("setup.didNotFinish"));
       } catch (e: unknown) {
-        if (!stop) setNote(e instanceof Error ? e.message : "Setup did not finish.");
+        if (!stop) setNote(e instanceof Error ? e.message : t("setup.didNotFinish"));
       }
     })();
     return () => {
@@ -88,7 +102,7 @@ export function Setup() {
     <div className="setup" data-setup={step}>
       <header className="setup-head">
         <span className="brand-tally" aria-hidden="true" />
-        <h1>Let's set up your TV</h1>
+        <h1>{t("setup.title")}</h1>
         <ol className="setup-steps">
           {steps.map((s, i) => (
             <li key={s.id} className={i < index ? "done" : i === index ? "on" : ""}>
@@ -112,22 +126,24 @@ export function Setup() {
           onPointerDownCapture={() => (hold.current = true)}
           onKeyDownCapture={() => (hold.current = true)}
         >
-          <h2>{devices.length > 0 ? "Your tuner" : "Looking for your tuner…"}</h2>
-          <p className="dim">Setup adds an HDHomeRun on this network and moves on by itself. Start adding something else and it waits for you.</p>
+          <h2>{devices.length > 0 ? t("setup.yourTuner") : t("setup.looking")}</h2>
+          <p className="dim">{t("setup.lead")}</p>
           {devices.length > 0 ? (
             <ul className="setup-list">
               {devices.map((d) => (
                 <li key={d.deviceId}>
                   <strong>{d.friendlyName || d.modelNumber}</strong>
                   <span className="dim">
-                    {d.tunerCount > 0 ? `${d.tunerCount} tuners` : "Streamed"} · {channels.filter((c) => c.deviceId === d.deviceId).length} channels
+                    {d.tunerCount > 0 ? t("setup.tuners", { count: d.tunerCount }) : t("setup.streamed")}
+                    {" · "}
+                    {t("setup.channels", { count: channels.filter((c) => c.deviceId === d.deviceId).length })}
                   </span>
-                  <span className="ok">Found</span>
+                  <span className="ok">{t("setup.found")}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p>{busy ? "Searching…" : "No tuner answered yet."}</p>
+            <p>{busy ? t("setup.searching") : t("setup.noTuner")}</p>
           )}
           <form
             className="setup-form"
@@ -136,7 +152,7 @@ export function Setup() {
               if (!address.trim() || busy) return;
               setBusy(true);
               void rediscover(address.trim())
-                .catch((e: unknown) => setNote(e instanceof Error ? e.message : "Nothing answered at that address."))
+                .catch((e: unknown) => setNote(e instanceof Error ? e.message : t("setup.nothingAtAddress")))
                 .finally(() => setBusy(false));
             }}
           >
@@ -175,7 +191,7 @@ export function Setup() {
                   });
               }}
             >
-              Look harder
+              {copy.sources.look}
             </button>
             <button
               type="button"
@@ -190,18 +206,18 @@ export function Setup() {
                     setFeeds((shown) => hitsAfterLook(mine, freeN.current, shown, true, res.found) ?? shown);
                     const guide = guideAfterFree(true, res.found, res.guide);
                     if (guide != null) setFreeGuide(guide);
-                    setNote((n) => noteAfterFetch(n, true, "No free-channel server answered."));
+                    setNote((n) => noteAfterFetch(n, true, copy.sources.freeEmpty));
                   })
                   .catch(() => {
                     setFeeds((shown) => hitsAfterLook(mine, freeN.current, shown, false, undefined) ?? shown);
-                    if (mine === freeN.current) setNote((n) => noteAfterFetch(n, false, "No free-channel server answered."));
+                    if (mine === freeN.current) setNote((n) => noteAfterFetch(n, false, copy.sources.freeEmpty));
                   })
                   .finally(() => {
                     if (mine === freeN.current) setBusy(false);
                   });
               }}
             >
-              Add free channels
+              {copy.sources.free}
             </button>
           </div>
           {hits.length > 0 ? (
@@ -210,8 +226,8 @@ export function Setup() {
                 <li key={`${hit.kind}-${hit.addr}`}>
                   <strong>{hit.name}</strong>
                   <span className="dim">{hit.addr}</span>
-                  <button type="button" className="btn" aria-label={actionName("Add", hit.name)} onClick={() => void addHit(hit, rediscover, setNote, refresh)}>
-                    Add
+                  <button type="button" className="btn" aria-label={actionName(copy.sources.add, hit.name)} onClick={() => void addHit(hit, rediscover, setNote, refresh)}>
+                    {copy.sources.add}
                   </button>
                 </li>
               ))}
@@ -223,19 +239,19 @@ export function Setup() {
               <button
                 type="button"
                 className="btn"
-                aria-label={actionName("Add", feed.name)}
+                aria-label={actionName(copy.sources.add, feed.name)}
                 onClick={() => {
                   setBusy(true);
                   void addFree(feed)
                     .then((res) => {
-                      setNote(res.message || "Source added. It shows up with the lineup.");
+                      setNote(res.message || t("setup.addedLineup"));
                       return refresh(["devices", "channels"]);
                     })
-                    .catch((e: unknown) => setNote(e instanceof Error ? e.message : "That feed did not add."))
+                    .catch((e: unknown) => setNote(e instanceof Error ? e.message : t("setup.feedFailed")))
                     .finally(() => setBusy(false));
                 }}
               >
-                Add
+                {copy.sources.add}
               </button>
             </div>
           ))}
@@ -248,25 +264,25 @@ export function Setup() {
               const kind = xtreamUser ? "xtream" : "m3u";
               void addSource(kind, "", playlistURL, "", "", "", xtreamUser, xtreamPass)
                 .then(() => refresh(["devices", "channels"]))
-                .then(() => setNote("Playlist added."))
-                .catch((e: unknown) => setNote(e instanceof Error ? e.message : "That playlist did not add."))
+                .then(() => setNote(t("setup.playlistAdded")))
+                .catch((e: unknown) => setNote(e instanceof Error ? e.message : t("setup.playlistFailed")))
                 .finally(() => setBusy(false));
             }}
           >
             <label>
-              Playlist or Xtream server
-              <input value={playlistURL} onChange={(e) => setPlaylistURL(e.target.value)} placeholder="https://example/playlist.m3u" spellCheck={false} />
+              {t("setup.playlistOrXtream")}
+              <input value={playlistURL} onChange={(e) => setPlaylistURL(e.target.value)} placeholder={t("setup.playlistPlaceholder")} spellCheck={false} />
             </label>
             <label>
-              Username
+              {t("setup.username")}
               <input value={xtreamUser} onChange={(e) => setXtreamUser(e.target.value)} autoComplete="off" />
             </label>
             <label>
-              Password
+              {t("setup.password")}
               <input type="password" value={xtreamPass} onChange={(e) => setXtreamPass(e.target.value)} autoComplete="off" />
             </label>
             <label>
-              Playlist file
+              {copy.sources.file}
               <input
                 type="file"
                 accept=".m3u,.m3u8"
@@ -276,14 +292,14 @@ export function Setup() {
                   setBusy(true);
                   void addPlaylistFile("", "", file)
                     .then(() => refresh(["devices", "channels"]))
-                    .then(() => setNote("Playlist added."))
-                    .catch((err: unknown) => setNote(err instanceof Error ? err.message : "That file did not add."))
+                    .then(() => setNote(t("setup.playlistAdded")))
+                    .catch((err: unknown) => setNote(err instanceof Error ? err.message : t("setup.fileFailed")))
                     .finally(() => setBusy(false));
                 }}
               />
             </label>
             <button type="submit" className="btn" disabled={busy || playlistURL.trim() === ""}>
-              Add playlist
+              {t("setup.addPlaylist")}
             </button>
           </form>
           {note ? <p className="dim" role={/did not|not finish|nothing|no free/i.test(note) ? "alert" : "status"}>{note}</p> : null}
@@ -295,11 +311,11 @@ export function Setup() {
       <div className="setup-foot">
         {step === "sources" ? (
           <button type="button" className="btn primary" disabled={devices.length === 0 && channels.length === 0} onClick={() => setStep("finish")}>
-            Continue <ChevronIcon />
+            {t("setup.continue")} <ChevronIcon />
           </button>
         ) : progress?.ready ? (
           <button type="button" className="btn primary big" onClick={() => void watch()}>
-            Watch <ChevronIcon />
+            {t("setup.watch")} <ChevronIcon />
           </button>
         ) : null}
       </div>
@@ -326,7 +342,7 @@ function FinishStep({ progress, note }: { progress: SetupFinish | null; note: st
       data-ready={ready ? "1" : "0"}
     >
       {/* The card scrolls on a phone and has no controls of its own. */}
-      <h2 id="setup-ready-title">{ready || "Setting up your TV"}</h2>
+      <h2 id="setup-ready-title">{ready || t("setup.settingUp")}</h2>
       <ul className="setup-list">
         {(progress?.steps ?? []).map((item) => (
           <li key={item.id}>
@@ -341,13 +357,13 @@ function FinishStep({ progress, note }: { progress: SetupFinish | null; note: st
         <>
           {loopback ? (
             <p className="dim">
-              To connect your phone or TV, open this page from another device at this computer's network address, or open Broadwave there. It finds this server on its own.
+              {t("setup.loopback")}
             </p>
           ) : (
             <>
-              <p className="dim">Scan this with your iPhone. On Apple TV, open Broadwave. It finds this server on its own.</p>
+              <p className="dim">{t("setup.scan")}</p>
               <div className="apps-row">
-                <div className="qr" dangerouslySetInnerHTML={{ __html: svg }} role="img" aria-label="QR code to connect the app" />
+                <div className="qr" dangerouslySetInnerHTML={{ __html: svg }} role="img" aria-label={t("setup.qr")} />
                 <p className="big-url">{url}</p>
               </div>
             </>
@@ -359,10 +375,10 @@ function FinishStep({ progress, note }: { progress: SetupFinish | null; note: st
 }
 
 function stateWord(state: string) {
-  if (state === "running") return "Working";
-  if (state === "done") return "Done";
-  if (state === "check") return "Needs a look";
-  if (state === "skipped") return "Skipped";
+  if (state === "running") return t("setup.working");
+  if (state === "done") return t("setup.done");
+  if (state === "check") return t("setup.needsLook");
+  if (state === "skipped") return t("setup.skipped");
   return "";
 }
 
@@ -375,7 +391,7 @@ async function addHit(
   if (hit.kind === "fastchannels" || hit.kind === "pluto" || hit.kind === "samsung") {
     await addFree({ kind: hit.kind, addr: hit.addr.includes("://") ? hit.addr : `http://${hit.addr}` });
     await refresh(["devices", "channels"]);
-    setNote("Source added.");
+    setNote(t("setup.sourceAdded"));
     return;
   }
   await rediscover(hit.addr);

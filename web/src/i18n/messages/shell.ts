@@ -1,0 +1,23 @@
+import type { Message } from "../runtime";
+
+export const shellMessages = {
+  "shell.brand": "Broadwave",
+  "nav.primary": "Primary",
+  "nav.home": "Home",
+  "nav.homeAria": "Broadwave home",
+  "nav.guide": "Guide",
+  "nav.search": "Search",
+  "nav.sports": "Sports",
+  "nav.recordings": "Recordings",
+  "nav.schedule": "Schedule",
+  "nav.settings": "Settings",
+  "shell.offlineSaved": "Can't reach the server. Showing what was saved at {time}.",
+  "shell.offline": "Can't reach the server. Trying again.",
+  "shell.booting": "Finding your tuner…",
+  "shell.releaseNotes": "Release notes",
+  "shell.notNow": "Not now",
+  "shell.yourHome": "Your home",
+  "shell.updateServer": "Update your Broadwave server to use this",
+  "shell.updateApp": "Update Broadwave to use this server",
+  "shell.unreachable": "The server could not be reached.",
+} as const satisfies Record<string, Message>;

@@ -1,4 +1,6 @@
 import { useRef } from "react";
+import { guideUiMessages } from "../../i18n/messages/guideUi.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { useDialogFocus } from "../../ui/useDialogFocus";
@@ -9,6 +11,8 @@ import type { Airing, Channel } from "../../types";
 import { CloseIcon, PlayIcon, RecordIcon, StarIcon } from "../../ui/icons";
 import { ArtFrame } from "../../ui/ArtFrame";
 import { ChannelBadge, LiveDot, Progress } from "../../ui/primitives";
+
+const t = bind(guideUiMessages);
 
 export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: Channel; airing?: Airing; onClose: () => void; onWatch: (c: Channel) => void }) {
   const { now, planned, recordings, passes, record, recordSeries, recordOnce, removePass, favorite, stopRecord, allChannels } = useData();
@@ -33,7 +37,7 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
       <div ref={ref} className="program-sheet glass" data-cat={cat} role="dialog" aria-modal="true" aria-label={airing?.title ?? channel.displayName} onClick={(e) => e.stopPropagation()}>
         <div className="ps-art" data-cat={cat}>
           {airing?.imageUrl ? <ArtFrame src={`/media/art/airing/${airing.id}?w=640`} width={airing.imageWidth} height={airing.imageHeight} /> : null}
-          <button type="button" className="glass-icon ps-close" onClick={onClose} aria-label="Close">
+          <button type="button" className="glass-icon ps-close" onClick={onClose} aria-label={t("guideUi.close")}>
             <CloseIcon />
           </button>
           <div className="ps-art-meta">
@@ -43,7 +47,7 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
         </div>
         <div className="ps-body">
           <p className="ps-eyebrow">
-            {airing ? `${categoryLabel[cat]} · ${dayLabel(airing.start, now)} · ${spanLabel(airing)}` : "No listing"}
+            {airing ? `${categoryLabel[cat]} · ${dayLabel(airing.start, now)} · ${spanLabel(airing)}` : t("guideUi.noListing")}
           </p>
           <h2 className="ps-title">{airing?.title ?? channel.displayName}</h2>
           {airing?.subtitle ? <p className="ps-sub">{airing.subtitle}</p> : null}
@@ -54,30 +58,30 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
             </div>
           ) : null}
           <div className="ps-tags">
-            {airing?.new ? <span className="tag new">New</span> : null}
-            {airing?.live ? <span className="tag">Live</span> : null}
-            {airing?.premiere ? <span className="tag">Premiere</span> : null}
-            {airing?.finale ? <span className="tag">Finale</span> : null}
+            {airing?.new ? <span className="tag new">{t("guideUi.new")}</span> : null}
+            {airing?.live ? <span className="tag">{t("guideUi.live")}</span> : null}
+            {airing?.premiere ? <span className="tag">{t("guideUi.premiere")}</span> : null}
+            {airing?.finale ? <span className="tag">{t("guideUi.finale")}</span> : null}
             {airing?.rating ? <span className="tag">{airing.rating}</span> : null}
             {airing?.episodeLabel ? <span className="tag">{airing.episodeLabel}</span> : null}
-            {channel.hd ? <span className="tag">HD</span> : null}
-            {rec === "recording" ? <span className="tag rec">Recording</span> : rec === "scheduled" ? <span className="tag rec">Will record</span> : null}
+            {channel.hd ? <span className="tag">{t("guideUi.hd")}</span> : null}
+            {rec === "recording" ? <span className="tag rec">{t("guideUi.recording")}</span> : rec === "scheduled" ? <span className="tag rec">{t("guideUi.willRecord")}</span> : null}
           </div>
-          {airing?.originalAir ? <p className="ps-sub">First aired {airing.originalAir}</p> : null}
+          {airing?.originalAir ? <p className="ps-sub">{t("guideUi.firstAired", { date: airing.originalAir })}</p> : null}
           {airing?.cast ? <p className="ps-sub">{airing.cast}</p> : null}
           {airing?.description ? <p className="ps-desc">{airing.description}</p> : null}
           {guideSourceLine(airing?.guideSource) ? <p className="ps-sub">{guideSourceLine(airing?.guideSource)}</p> : null}
           <div className="ps-actions">
             {onNow ? (
               <button type="button" className="btn primary" onClick={() => onWatch(shown)}>
-                <PlayIcon /> Watch
+                <PlayIcon /> {t("guideUi.watch")}
               </button>
             ) : null}
             {onNow ? (
               <button
                 type="button"
                 className="btn"
-                aria-label={named("Watch together")}
+                aria-label={named(t("guideUi.watchTogether"))}
                 onClick={() => {
                   const current = player.channel?.id;
                   const ids = current && current !== channel.id ? [current, channel.id] : [channel.id];
@@ -85,38 +89,38 @@ export function ProgramSheet({ channel, airing, onClose, onWatch }: { channel: C
                   onClose();
                 }}
               >
-                Watch together
+                {t("guideUi.watchTogether")}
               </button>
             ) : null}
             {airing && onNow ? (
               active ? (
-                <button type="button" className="btn" aria-label={named("Stop recording")} onClick={() => void stopRecord(active.id)}>
-                  <RecordIcon className="tally" /> Stop recording
+                <button type="button" className="btn" aria-label={named(t("guideUi.stopRecording"))} onClick={() => void stopRecord(active.id)}>
+                  <RecordIcon className="tally" /> {t("guideUi.stopRecording")}
                 </button>
               ) : (
-                <button type="button" className="btn" aria-label={named("Record")} onClick={() => void record(channel, airing.title)}>
-                  <RecordIcon className="tally" /> Record
+                <button type="button" className="btn" aria-label={named(t("guideUi.record"))} onClick={() => void record(channel, airing.title)}>
+                  <RecordIcon className="tally" /> {t("guideUi.record")}
                 </button>
               )
             ) : null}
             {airing && upcoming && !hasPass ? (
               once ? (
-                <button type="button" className="btn" aria-label={named("Don't record")} onClick={() => void removePass(once.id)}>
-                  <RecordIcon className="tally" /> Don't record
+                <button type="button" className="btn" aria-label={named(t("guideUi.dontRecord"))} onClick={() => void removePass(once.id)}>
+                  <RecordIcon className="tally" /> {t("guideUi.dontRecord")}
                 </button>
               ) : rec !== "scheduled" ? (
-                <button type="button" className="btn" aria-label={named("Record")} onClick={() => void recordOnce(airing, channel)}>
-                  <RecordIcon className="tally" /> Record
+                <button type="button" className="btn" aria-label={named(t("guideUi.record"))} onClick={() => void recordOnce(airing, channel)}>
+                  <RecordIcon className="tally" /> {t("guideUi.record")}
                 </button>
               ) : null
             ) : null}
             {airing ? (
-              <button type="button" className="btn" disabled={hasPass} aria-label={named(hasPass ? "Series is recording" : cat === "sports" ? "Record every airing" : "Record series")} onClick={() => void recordSeries(airing.title, channel)}>
-                {hasPass ? "Series is recording" : cat === "sports" ? "Record every airing" : "Record series"}
+              <button type="button" className="btn" disabled={hasPass} aria-label={named(hasPass ? t("guideUi.seriesRecording") : cat === "sports" ? t("guideUi.recordEvery") : t("guideUi.recordSeries"))} onClick={() => void recordSeries(airing.title, channel)}>
+                {hasPass ? t("guideUi.seriesRecording") : cat === "sports" ? t("guideUi.recordEvery") : t("guideUi.recordSeries")}
               </button>
             ) : null}
-            <button type="button" className="btn ghost" onClick={() => void favorite(shown)} aria-pressed={shown.favorite} aria-label={actionName(shown.favorite ? "Favorite" : "Add favorite", shown.displayName)}>
-              <StarIcon filled={shown.favorite} /> {shown.favorite ? "Favorite" : "Add favorite"}
+            <button type="button" className="btn ghost" onClick={() => void favorite(shown)} aria-pressed={shown.favorite} aria-label={actionName(shown.favorite ? t("guideUi.favorite") : t("guideUi.addFavorite"), shown.displayName)}>
+              <StarIcon filled={shown.favorite} /> {shown.favorite ? t("guideUi.favorite") : t("guideUi.addFavorite")}
             </button>
           </div>
         </div>

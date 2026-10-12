@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { homeMessages } from "../../i18n/messages/home.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { getTeams } from "../../api";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
@@ -15,6 +17,8 @@ import { LiveFrame } from "../../ui/LiveFrame";
 import { Atsc3Tag, ChannelBadge, Empty, LiveDot, Progress } from "../../ui/primitives";
 import { RecordingCard, Shelf } from "../../ui/shelf";
 import "./home.css";
+
+const t = bind(homeMessages);
 
 type Live = { channel: Channel; airing?: Airing; cat: Category };
 
@@ -111,8 +115,8 @@ export function Home() {
   if (ready && settled && channels.length === 0) {
     return (
       <div className="home">
-        <Empty title="Let's find your tuner" action={<button className="btn primary" onClick={() => navigate("/settings#sources")}>Set up</button>}>
-          Connect an HDHomeRun to your network, then search for it.
+        <Empty title={t("home.emptyTitle")} action={<button className="btn primary" onClick={() => navigate("/settings#sources")}>{t("home.setup")}</button>}>
+          {t("home.emptyBody")}
         </Empty>
       </div>
     );
@@ -133,7 +137,7 @@ export function Home() {
           </div>
           <div className="hero-body">
             <div className="hero-meta">
-              <LiveDot label="Live now" />
+              <LiveDot label={t("home.liveNow")} />
               {hero.cat !== "other" ? <span className="hero-cat">{categoryLabel[hero.cat]}</span> : null}
             </div>
             <h1 className="hero-title">{hero.airing?.title ?? hero.channel.displayName}</h1>
@@ -149,19 +153,17 @@ export function Home() {
             </div>
             <div className="hero-actions">
               <button type="button" className="btn primary big" onClick={() => player.open(hero.channel)}>
-                <PlayIcon /> Watch
+                <PlayIcon /> {t("home.watch")}
               </button>
               {hero.airing ? (
-                <button type="button" className="btn big" aria-label={actionName("Record", hero.airing.title)} onClick={() => void record(hero.channel, hero.airing!.title)}>
-                  <RecordIcon className="tally" /> Record
+                <button type="button" className="btn big" aria-label={actionName(t("home.record"), hero.airing.title)} onClick={() => void record(hero.channel, hero.airing!.title)}>
+                  <RecordIcon className="tally" /> {t("home.record")}
                 </button>
               ) : null}
               {(() => {
                 const n = nextAfter(index, hero.channel.id, hero.airing ? Date.parse(hero.airing.end) : now);
                 return n ? (
-                  <span className="hero-next">
-                    Next at {timeLabel(n.start)} · {n.title}
-                  </span>
+                  <span className="hero-next">{t("home.nextAt", { time: timeLabel(n.start), title: n.title })}</span>
                 ) : null;
               })()}
             </div>
@@ -173,13 +175,13 @@ export function Home() {
         <div className="rec-strip">
           {recordingNow.map((r) => (
             <span key={r.id} className="rec-chip">
-              <span className="live-dot-light" aria-hidden="true" /> Recording {r.title}
+              <span className="live-dot-light" aria-hidden="true" /> {t("home.recordingTitle", { title: r.title })}
             </span>
           ))}
         </div>
       ) : null}
 
-      <Shelf title="On now" action={<button className="text-btn" onClick={() => navigate("/guide")}>Guide</button>}>
+      <Shelf title={t("home.onNow")} action={<button className="text-btn" onClick={() => navigate("/guide")}>{t("home.guide")}</button>}>
         {onNow.length === 0 && !settled ? (
           <div className="skel-row" aria-hidden="true">
             <div className="skel" />
@@ -206,14 +208,14 @@ export function Home() {
                 </span>
               </>
             ) : (
-              <span className="nc-title nc-unlisted">On the air</span>
+              <span className="nc-title nc-unlisted">{t("home.onTheAir")}</span>
             )}
           </button>
         ))}
       </Shelf>
 
       {yours.length > 0 ? (
-        <Shelf title="Your teams" action={<button className="text-btn" onClick={() => navigate("/sports")}>Sports</button>}>
+        <Shelf title={t("home.yourTeams")} action={<button className="text-btn" onClick={() => navigate("/sports")}>{t("home.sports")}</button>}>
           {yours.map(({ channel, airing }) => {
             const liveNow = Date.parse(airing.start) <= now;
             return (
@@ -229,7 +231,7 @@ export function Home() {
 
       {sports.length > 0 ? (
         <Shelf
-          title="Sports"
+          title={t("home.sports")}
           action={
             <>
               {sports.filter((s) => Date.parse(s.airing.start) <= now).length >= 2 ? (
@@ -242,10 +244,10 @@ export function Home() {
                     navigate(multiviewPath(ids, layout, ids[0]));
                   }}
                 >
-                  Watch together
+                  {t("home.watchTogether")}
                 </button>
               ) : null}
-              <button className="text-btn" onClick={() => navigate("/sports")}>All sports</button>
+              <button className="text-btn" onClick={() => navigate("/sports")}>{t("home.allSports")}</button>
             </>
           }
         >
@@ -264,7 +266,7 @@ export function Home() {
       ) : null}
 
       {savedSets().length > 0 ? (
-        <Shelf title="Saved sets">
+        <Shelf title={t("home.savedSets")}>
           {savedSets().map((set) => {
             const layout = set.layout && isLayout(set.layout) ? set.layout : layoutForCount(set.channels.length);
             return (
@@ -278,7 +280,7 @@ export function Home() {
       ) : null}
 
       {resume.length > 0 ? (
-        <Shelf title="Continue watching">
+        <Shelf title={t("home.continueWatching")}>
           {resume.map((r) => (
             <RecordingCard key={r.id} rec={r} />
           ))}
@@ -286,7 +288,7 @@ export function Home() {
       ) : null}
 
       {tonight.length > 0 ? (
-        <Shelf title="Tonight">
+        <Shelf title={t("home.tonight")}>
           {tonight.map(({ channel, airing }) => (
             <button key={airing.id} type="button" className="now-card tonight" data-cat={categoryOf(airing)} onClick={() => navigate("/guide")}>
               <span className="nc-top">
@@ -301,7 +303,7 @@ export function Home() {
       ) : null}
 
       {recent.length > 0 ? (
-        <Shelf title="Recently recorded" action={<button className="text-btn" onClick={() => navigate("/recordings")}>Recordings</button>}>
+        <Shelf title={t("home.recent")} action={<button className="text-btn" onClick={() => navigate("/recordings")}>{t("home.recordings")}</button>}>
           {recent.map((r) => (
             <RecordingCard key={r.id} rec={r} />
           ))}

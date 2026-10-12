@@ -4,6 +4,8 @@ import { Home } from "../features/home/Home";
 import { gateApp } from "../lib/compat";
 import { recordingCountLabel } from "../lib/guide";
 import { events } from "../lib/events";
+import { shellMessages } from "../i18n/messages/shell";
+import { bind } from "../i18n/runtime";
 import { formatClock } from "../time";
 import { GuideIcon, HomeIcon, RecordingsIcon, ScheduleIcon, SearchIcon, SettingsIcon, SportsIcon } from "../ui/icons";
 import { DataProvider, useData } from "./data";
@@ -12,6 +14,8 @@ import { PlayerProvider, usePlayer } from "./player";
 import { focusRing, installTvRemote } from "./remote";
 import { navigate, useRoute } from "./router";
 import "./app.css";
+
+const shell = bind(shellMessages);
 
 const Sports = lazy(() => import("../features/sports/Sports").then((m) => ({ default: m.Sports })));
 const RecordingsPage = lazy(() => import("../features/pages").then((m) => ({ default: m.RecordingsPage })));
@@ -51,13 +55,13 @@ function PlayClaim() {
 }
 
 const tabs = [
-  { path: "/", label: "Home", Icon: HomeIcon },
-  { path: "/guide", label: "Guide", Icon: GuideIcon },
-  { path: "/search", label: "Search", Icon: SearchIcon },
-  { path: "/sports", label: "Sports", Icon: SportsIcon },
-  { path: "/recordings", label: "Recordings", Icon: RecordingsIcon },
-  { path: "/schedule", label: "Schedule", Icon: ScheduleIcon },
-];
+  { path: "/", label: "nav.home", Icon: HomeIcon },
+  { path: "/guide", label: "nav.guide", Icon: GuideIcon },
+  { path: "/search", label: "nav.search", Icon: SearchIcon },
+  { path: "/sports", label: "nav.sports", Icon: SportsIcon },
+  { path: "/recordings", label: "nav.recordings", Icon: RecordingsIcon },
+  { path: "/schedule", label: "nav.schedule", Icon: ScheduleIcon },
+] as const;
 
 function notesHref(url: string | undefined): string {
   if (!url) return "";
@@ -113,7 +117,7 @@ function Shell() {
         pick("[role='dialog'] .btn.primary") ||
         pick(".mv-guide button:not([disabled])") ||
         pick(".mv") ||
-        pick(".stage:not(.mini) [aria-label='Channels']") ||
+        pick(".stage:not(.mini) [data-channels]") ||
         pick(".stage:not(.mini) .transport-play") ||
         pick(".stage:not(.mini) button:not([disabled])") ||
         pick(".stage:not(.mini)") ||
@@ -177,16 +181,16 @@ function Shell() {
   return (
     <div className={`shell layout-${layout}${fullPlayer || immersive ? " immersive" : ""}${player.channel && !fullPlayer && path !== "/multiview" ? " has-mini" : ""}`}>
       {!immersive ? (
-        <nav className="topbar glass" aria-label="Primary" inert={fullPlayer ? true : undefined}>
-          <button type="button" className="brand" onClick={() => navigate("/")} aria-label="Broadwave home">
+        <nav className="topbar glass" aria-label={shell("nav.primary")} inert={fullPlayer ? true : undefined}>
+          <button type="button" className="brand" onClick={() => navigate("/")} aria-label={shell("nav.homeAria")}>
             <span className="brand-tally" aria-hidden="true" />
-            <span className="brand-word">Broadwave</span>
+            <span className="brand-word">{shell("shell.brand")}</span>
           </button>
           <div className="tabs" role="tablist">
             {tabs.map(({ path: p, label, Icon }) => (
               <button key={p} type="button" role="tab" aria-selected={active(p)} className={active(p) ? "tab on" : "tab"} onClick={() => navigate(p)}>
                 <Icon className="tab-icon" />
-                <span className="tab-label">{label}</span>
+                <span className="tab-label">{shell(label)}</span>
                 {p === "/recordings" && recordingCount > 0 ? (
                   <span className="tab-rec">
                     <span className="sr-only">{recordingCountLabel(recordingCount)}</span>
@@ -198,25 +202,25 @@ function Shell() {
           <div className="topbar-right">
             {!online ? (
               <span className="offline" role="status">
-                {freshAt ? `Can't reach the server. Showing what was saved at ${formatClock(new Date(freshAt))}.` : "Can't reach the server. Trying again."}
+                {freshAt ? shell("shell.offlineSaved", { time: formatClock(new Date(freshAt)) }) : shell("shell.offline")}
               </span>
             ) : null}
-            <button type="button" className={active("/settings") ? "glass-icon on" : "glass-icon"} onClick={() => navigate("/settings")} aria-label="Settings">
+            <button type="button" className={active("/settings") ? "glass-icon on" : "glass-icon"} onClick={() => navigate("/settings")} aria-label={shell("nav.settings")}>
               <SettingsIcon />
             </button>
           </div>
         </nav>
       ) : null}
       <main className="content" aria-busy={booting} data-ready={ready ? "1" : "0"} inert={fullPlayer ? true : undefined}>
-        {booting ? <div className="boot"><span className="brand-tally" /> Finding your tuner…</div> : null}
+        {booting ? <div className="boot"><span className="brand-tally" /> {shell("shell.booting")}</div> : null}
         {!booting && error ? <p className="banner-error" role="alert">{error}</p> : null}
         {!booting && notice?.message ? (
           <div className="banner-update" role="status">
             <p>{notice.message}</p>
             {notesHref(notice.notesUrl) ? (
-              <a className="btn small" href={notesHref(notice.notesUrl)} target="_blank" rel="noreferrer">Release notes</a>
+              <a className="btn small" href={notesHref(notice.notesUrl)} target="_blank" rel="noreferrer">{shell("shell.releaseNotes")}</a>
             ) : null}
-            <button type="button" className="btn small ghost" onClick={() => setHiddenUpdate(notice.message)}>Not now</button>
+            <button type="button" className="btn small ghost" onClick={() => setHiddenUpdate(notice.message)}>{shell("shell.notNow")}</button>
           </div>
         ) : null}
         {!booting && notices[0] && !immersive && !fullPlayer ? (
@@ -269,8 +273,8 @@ function HomeNotice({ message, onDismiss }: { message: string; onDismiss: () => 
   return (
     <div ref={ref} className="banner-home" role="status">
       <p>{message}</p>
-      <button type="button" className="btn small" onClick={() => navigate("/settings")}>Your home</button>
-      <button type="button" className="btn small ghost" onClick={onDismiss}>Not now</button>
+      <button type="button" className="btn small" onClick={() => navigate("/settings")}>{shell("shell.yourHome")}</button>
+      <button type="button" className="btn small ghost" onClick={onDismiss}>{shell("shell.notNow")}</button>
     </div>
   );
 }

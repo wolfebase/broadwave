@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sportsMessages } from "../../i18n/messages/sports.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { followTeam, getTeams } from "../../api";
 import { takeTeams } from "./follow";
 import { useData } from "../../app/data";
@@ -16,6 +18,8 @@ import { cardLabel, matchup } from "./matchup";
 import { scoreLine, useScoreboard, type ScoreGame, type ScoreTeam } from "./scores";
 import "./sports.css";
 
+const t = bind(sportsMessages);
+
 type Range = "live" | "today" | "week";
 
 function Matchup({ names, game }: { names: [string, string]; game?: ScoreGame }) {
@@ -26,7 +30,7 @@ function Matchup({ names, game }: { names: [string, string]; game?: ScoreGame })
     <>
       <div className="gc-matchup">
         <TeamMark name={names[0]} team={away} state={game?.state} />
-        <span className="at">at</span>
+        <span className="at">{t("sports.at")}</span>
         <TeamMark name={names[1]} team={home} state={game?.state} />
       </div>
       {game?.state === "in" && (game.detail || game.clock) ? <p className="gc-score">{game.detail || game.clock}</p> : null}
@@ -95,18 +99,18 @@ export function Sports() {
 
   const days = new Map<string, typeof items>();
   for (const it of items) {
-    const key = Date.parse(it.airing.start) <= now ? "Live now" : dayLabel(it.airing.start, now);
+    const key = Date.parse(it.airing.start) <= now ? t("sports.liveNow") : dayLabel(it.airing.start, now);
     days.set(key, [...(days.get(key) ?? []), it]);
   }
 
   return (
     <div className="sports-page">
       <header className="page-header">
-        <h1>Sports</h1>
+        <h1>{t("sports.title")}</h1>
         <div className="guide-chips">
-          <Chip on={range === "live"} onClick={() => setRange("live")}>Live now</Chip>
-          <Chip on={range === "today"} onClick={() => setRange("today")}>Today</Chip>
-          <Chip on={range === "week"} onClick={() => setRange("week")}>Coming up</Chip>
+          <Chip on={range === "live"} onClick={() => setRange("live")}>{t("sports.liveNow")}</Chip>
+          <Chip on={range === "today"} onClick={() => setRange("today")}>{t("sports.today")}</Chip>
+          <Chip on={range === "week"} onClick={() => setRange("week")}>{t("sports.comingUp")}</Chip>
         </div>
         {liveGames.length >= 2 ? (
           <button
@@ -118,19 +122,19 @@ export function Sports() {
               navigate(multiviewPath(ids, layout, ids[0]));
             }}
           >
-            Watch together
+            {t("sports.watchTogether")}
           </button>
         ) : null}
       </header>
       {leagues.length > 1 ? (
         <div className="guide-chips league-chips">
-          <Chip on={leagueFilter === "all"} onClick={() => setLeague("all")}>Everything</Chip>
+          <Chip on={leagueFilter === "all"} onClick={() => setLeague("all")}>{t("sports.everything")}</Chip>
           {leagues.map((l) => (
             <Chip key={l} on={leagueFilter === l} onClick={() => setLeague(l)}>{l}</Chip>
           ))}
         </div>
       ) : null}
-      {items.length === 0 ? <Empty title={range === "live" ? "No games on right now" : "No games in the guide"}>Sports on your channels show up here as soon as they're listed.</Empty> : null}
+      {items.length === 0 ? <Empty title={range === "live" ? t("sports.noLive") : t("sports.noGames")}>{t("sports.empty")}</Empty> : null}
       {[...days.entries()].map(([day, list]) => (
         <section key={day} className="sports-day">
           <h2 className="sports-day-title">{day}</h2>
@@ -167,23 +171,23 @@ export function Sports() {
                     <ChannelBadge channel={channel} size="sm" />
                     <span className="gc-actions">
                       {liveNow ? (
-                        <button type="button" className="btn primary small" aria-label={actionName("Watch", cardLabel(airing))} onClick={() => player.open(channel)}>
-                          <PlayIcon /> Watch
+                        <button type="button" className="btn primary small" aria-label={actionName(t("sports.watch"), cardLabel(airing))} onClick={() => player.open(channel)}>
+                          <PlayIcon /> {t("sports.watch")}
                         </button>
                       ) : null}
                       {liveNow && !rec ? (
-                        <button type="button" className="btn small" onClick={() => void record(channel, airing.title)} aria-label={actionName("Record", cardLabel(airing))}>
+                        <button type="button" className="btn small" onClick={() => void record(channel, airing.title)} aria-label={actionName(t("sports.record"), cardLabel(airing))}>
                           <RecordIcon className="tally" />
                         </button>
                       ) : null}
                       {!passed ? (
-                        <button type="button" className="btn small ghost" aria-label={actionName("Record all", cardLabel(airing))} onClick={() => void recordSeries(airing.title, channel)}>
-                          Record all
+                        <button type="button" className="btn small ghost" aria-label={actionName(t("sports.recordAll"), cardLabel(airing))} onClick={() => void recordSeries(airing.title, channel)}>
+                          {t("sports.recordAll")}
                         </button>
                       ) : null}
                       {sides?.map((side) => {
                         const mine = teams.find((team) => team.short?.toLowerCase() === side.toLowerCase() || team.name.toLowerCase() === side.toLowerCase());
-                        if (mine?.record) return <span key={side} className="dim">Every {side} game</span>;
+                        if (mine?.record) return <span key={side} className="dim">{t("sports.everyGame", { side })}</span>;
                         if (mine) {
                           return (
                             <button
@@ -198,7 +202,7 @@ export function Sports() {
                                 });
                               }}
                             >
-                              Record every {side} game
+                              {t("sports.recordEveryGame", { side })}
                             </button>
                           );
                         }
@@ -215,7 +219,7 @@ export function Sports() {
                               });
                             }}
                           >
-                            Follow {side}
+                            {t("sports.follow", { side })}
                           </button>
                         );
                       })}

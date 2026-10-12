@@ -1,10 +1,14 @@
 import Hls from "hls.js";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { playVirtual } from "../../api";
+import { recordingsMessages } from "../../i18n/messages/recordings.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { mediaURL } from "../../lib/deviceToken";
 import { fileHlsConfig, type PictureMode } from "../../picture";
 import { markersForPlayback, releaseFileVideo, seekableSkip, takeFileFatal } from "./filePlay";
 import { Stage } from "../player/Stage";
+
+const t = bind(recordingsMessages);
 
 type Marker = { id: number; recordingId?: number; start: number; end: number };
 
@@ -48,7 +52,7 @@ export function VirtualPlay({ id, pictureMode, onBack }: { id: number; pictureMo
         const next = await playVirtual(id, index, pictureMode);
         if (dead) return;
         if (next.usesTuner) {
-          setError("This library channel tried to use an antenna tuner.");
+          setError(t("recordings.tunerUsed"));
           return;
         }
         setTitle(next.recording.title);
@@ -79,7 +83,7 @@ export function VirtualPlay({ id, pictureMode, onBack }: { id: number; pictureMo
         }
         await video.play().catch(() => undefined);
       } catch (err) {
-        if (!dead) setError(err instanceof Error ? err.message : "Playback did not start.");
+        if (!dead) setError(err instanceof Error ? err.message : t("recordings.playbackFailed"));
       }
     })();
     return () => {
@@ -118,10 +122,10 @@ export function VirtualPlay({ id, pictureMode, onBack }: { id: number; pictureMo
     <Stage
       videoRef={videoRef}
       videoClass="stage-video"
-      eyebrow={channel || "Library channel"}
-      title={title || "Recording"}
+      eyebrow={channel || t("recordings.libraryChannel")}
+      title={title || t("recordings.recording")}
       onBack={onBack}
-      backLabel="Guide"
+      backLabel={t("recordings.guide")}
       position={where}
       duration={length}
       onSeek={(value) => {
@@ -137,18 +141,18 @@ export function VirtualPlay({ id, pictureMode, onBack }: { id: number; pictureMo
       tools={
         count > 1 ? (
           <button type="button" className="text-btn" onClick={() => setIndex((current) => (current + 1) % count)}>
-            Next
+            {t("recordings.next")}
           </button>
         ) : null
       }
       more={
         <>
           <button type="button" className={skip ? "btn primary" : "btn"} onClick={() => setSkip((value) => !value)}>
-            {skip ? "Skipping breaks" : "Playing through breaks"}
+            {skip ? t("recordings.skippingBreaks") : t("recordings.playingBreaks")}
           </button>
           <p className="hint">
-            {count > 1 ? `Recording ${index + 1} of ${count}. ` : ""}
-            This channel plays files already on disk. It does not use an antenna tuner.
+            {count > 1 ? `${t("recordings.virtualIndex", { index: index + 1, count })} ` : ""}
+            {t("recordings.virtualDisk")}
           </p>
         </>
       }

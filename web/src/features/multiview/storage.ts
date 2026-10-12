@@ -1,13 +1,43 @@
+import { mvMessages } from "../../i18n/messages/mv.ts";
+import { bind } from "../../i18n/runtime.ts";
+
+const t = bind(mvMessages);
+
 export type MvLayout = "2up" | "1+2" | "1+3" | "quad" | "pip";
 
 export type SavedSet = { name: string; channels: number[]; layout?: MvLayout };
 
-export const layoutChoices: { id: MvLayout; label: string }[] = [
-  { id: "2up", label: "Side by side" },
-  { id: "1+2", label: "One big and two" },
-  { id: "1+3", label: "One big and three" },
-  { id: "quad", label: "Quad" },
-  { id: "pip", label: "Small over big" },
+export const layoutChoices: { id: MvLayout; readonly label: string }[] = [
+  {
+    id: "2up",
+    get label() {
+      return t("mv.side");
+    },
+  },
+  {
+    id: "1+2",
+    get label() {
+      return t("mv.oneTwo");
+    },
+  },
+  {
+    id: "1+3",
+    get label() {
+      return t("mv.oneThree");
+    },
+  },
+  {
+    id: "quad",
+    get label() {
+      return t("mv.quad");
+    },
+  },
+  {
+    id: "pip",
+    get label() {
+      return t("mv.pip");
+    },
+  },
 ];
 
 /** Watch together opens the layout that fits the games on now. */
@@ -18,7 +48,7 @@ export function layoutForCount(count: number): MvLayout {
 }
 
 export function layoutLabel(layout: MvLayout): string {
-  return layoutChoices.find((item) => item.id === layout)?.label ?? "Side by side";
+  return layoutChoices.find((item) => item.id === layout)?.label ?? t("mv.side");
 }
 
 const KEY = "broadwave-multiview";

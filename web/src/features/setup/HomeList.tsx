@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { discover, getHome, type HomePlace } from "../../api";
 import { useData } from "../../app/data";
+import { setupMessages } from "../../i18n/messages/setup.ts";
+import { bind } from "../../i18n/runtime.ts";
+import { copy } from "../../strings";
 import { noteAfterFetch } from "./fetchNote";
 import "./setup.css";
 
-const networkSilent = "This network did not answer.";
+const t = bind(setupMessages);
 
 /** Tuners, screens, and servers on this network. One action each. Nothing is added until a tap. */
 export function HomeList({ hideAdded = false, heading: Heading = "h3" }: { hideAdded?: boolean; heading?: "h2" | "h3" }) {
@@ -19,17 +22,18 @@ export function HomeList({ hideAdded = false, heading: Heading = "h3" }: { hideA
 
   function load(fresh: boolean) {
     const mine = ++scanN.current;
+    const silent = t("setup.networkSilent");
     return getHome(fresh)
       .then((res) => {
         if (mine !== scanN.current) return;
         setPlaces(res.places ?? []);
         setTunerAddress(res.tunerAddress);
         setSharing(res.sharing);
-        setNote((n) => noteAfterFetch(n, true, networkSilent));
+        setNote((n) => noteAfterFetch(n, true, silent));
       })
       .catch(() => {
         if (mine !== scanN.current) return;
-        setNote((n) => noteAfterFetch(n, false, networkSilent));
+        setNote((n) => noteAfterFetch(n, false, silent));
       })
       .finally(() => {
         if (mine === scanN.current) setReady(true);
@@ -44,9 +48,9 @@ export function HomeList({ hideAdded = false, heading: Heading = "h3" }: { hideA
 
   return (
     <div className="home-list">
-      <Heading>Your home</Heading>
-      <p className="dim">Tuners, screens, and servers on this network. Nothing is added until you tap.</p>
-      {shown.length === 0 ? <p className="dim">{ready ? "Nothing else answered yet." : "Searching…"}</p> : null}
+      <Heading>{t("setup.home")}</Heading>
+      <p className="dim">{t("setup.homeLead")}</p>
+      {shown.length === 0 ? <p className="dim">{ready ? t("setup.nothingElse") : t("setup.searching")}</p> : null}
       <ul className="setup-list">
         {shown.map((place) => (
           <li key={place.id}>
@@ -61,14 +65,12 @@ export function HomeList({ hideAdded = false, heading: Heading = "h3" }: { hideA
                 void discover(place.addr)
                   .then(() => refresh(["devices", "channels"]))
                   .then(() => load(true))
-                  .then(() => setNote("Tuner added."))
-                  .catch((e: unknown) => setNote(e instanceof Error ? e.message : "That tuner did not answer."))
+                  .then(() => setNote(t("setup.tunerAdded")))
+                  .catch((e: unknown) => setNote(e instanceof Error ? e.message : t("setup.tunerFailed")))
                   .finally(() => setBusy(false));
               }}
               onUse={() => {
-                const line = sharing
-                  ? `Add an HDHomeRun at ${tunerAddress}.`
-                  : `Turn on Act as an HDHomeRun, then add ${tunerAddress}.`;
+                const line = sharing ? t("setup.hdhrAt", { address: tunerAddress }) : t("setup.hdhrTurnOn", { address: tunerAddress });
                 setNote(line);
                 void navigator.clipboard?.writeText(tunerAddress).catch(() => undefined);
               }}
@@ -86,7 +88,7 @@ export function HomeList({ hideAdded = false, heading: Heading = "h3" }: { hideA
           void load(true).finally(() => setBusy(false));
         }}
       >
-        Scan again
+        {t("setup.scanAgain")}
       </button>
     </div>
   );
@@ -105,18 +107,18 @@ function PlaceAction({
 }) {
   if (place.action === "add") {
     return (
-      <button type="button" className="btn" disabled={busy} aria-label={`Add ${place.name}`} onClick={onAdd}>
-        Add
+      <button type="button" className="btn" disabled={busy} aria-label={t("setup.addNamed", { name: place.name })} onClick={onAdd}>
+        {copy.sources.add}
       </button>
     );
   }
   if (place.action === "use") {
     return (
-      <button type="button" className="btn" aria-label={`Use ${place.name} as tuner`} onClick={onUse}>
-        Use as tuner
+      <button type="button" className="btn" aria-label={t("setup.useNamed", { name: place.name })} onClick={onUse}>
+        {t("setup.useTuner")}
       </button>
     );
   }
-  const label = place.action === "added" ? "Added" : place.action === "here" ? "On this server" : "On this network";
+  const label = place.action === "added" ? t("setup.added") : place.action === "here" ? t("setup.onServer") : t("setup.onNetwork");
   return <span className={place.action === "added" ? "ok" : "dim"}>{label}</span>;
 }

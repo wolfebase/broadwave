@@ -1,8 +1,11 @@
+import { shellMessages } from "../i18n/messages/shell.ts";
+import { translate } from "../i18n/runtime.ts";
+
 // This web build. Compared with the server's minAppVersion, not the server's own version.
 export const appVersion = "1.0";
 
-export const updateServer = "Update your Broadwave server to use this";
-export const updateApp = "Update Broadwave to use this server";
+export const updateServer = shellMessages["shell.updateServer"];
+export const updateApp = shellMessages["shell.updateApp"];
 
 type ServerCaps = {
   apiVersion?: number;
@@ -35,7 +38,7 @@ function parts(version: string): number[] {
 // No features list means a server from before negotiation: leave the control up.
 export function gateFeature(server: ServerCaps | null | undefined, feature: string): string | null {
   if (!server?.features) return null;
-  return server.features.includes(feature) ? null : updateServer;
+  return server.features.includes(feature) ? null : translate(updateServer);
 }
 
 // Full-screen block when this app is older than the server asks for.
@@ -43,5 +46,5 @@ export function gateFeature(server: ServerCaps | null | undefined, feature: stri
 export function gateApp(server: ServerCaps | null | undefined, app = appVersion): string | null {
   const need = server?.minAppVersion?.trim();
   if (!need) return null;
-  return compareVersions(app, need) < 0 ? updateApp : null;
+  return compareVersions(app, need) < 0 ? translate(updateApp) : null;
 }

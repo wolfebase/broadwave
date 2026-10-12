@@ -1,3 +1,8 @@
+import { timeMessages } from "./i18n/messages/time.ts";
+import { bind, formatRelative, formatTime } from "./i18n/runtime.ts";
+
+const t = bind(timeMessages);
+
 export function halfHourFloor(date: Date): Date {
   const next = new Date(date);
   next.setSeconds(0, 0);
@@ -10,7 +15,7 @@ export function addMinutes(date: Date, minutes: number): Date {
 }
 
 export function formatClock(date: Date): string {
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return formatTime(date);
 }
 
 // How long ago a device answered, for the offline line on its card.
@@ -20,13 +25,13 @@ export function lastSeenPhrase(iso: string | undefined, now = Date.now()): strin
   const then = Date.parse(iso);
   if (Number.isNaN(then)) return "";
   const sec = Math.max(0, Math.round((now - then) / 1000));
-  if (sec < 45) return "just now";
+  if (sec < 45) return t("time.justNow");
   const min = Math.round(sec / 60);
-  if (min < 60) return min === 1 ? "1 minute ago" : `${min} minutes ago`;
+  if (min < 60) return formatRelative(-min, "minute");
   const hours = Math.round(min / 60);
-  if (hours < 24) return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
+  if (hours < 24) return formatRelative(-hours, "hour");
   const days = Math.round(hours / 24);
-  return days === 1 ? "1 day ago" : `${days} days ago`;
+  return formatRelative(-days, "day");
 }
 
 export const SLOT_MINUTES = 30;

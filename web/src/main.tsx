@@ -6,9 +6,16 @@ import "./theme/base.css";
 import "./theme/brand.css";
 import "./theme/light.css";
 import { App } from "./app/App";
+import { shellMessages } from "./i18n/messages/shell";
+import { bind, setLocaleMode } from "./i18n/runtime";
 import { chooseGlass } from "./lib/glass";
 import { installLook } from "./theme/look";
 import { installBlocked } from "./lib/install";
+
+const shell = bind(shellMessages);
+const asked = new URLSearchParams(location.search).get("locale");
+if (asked === "pseudo") setLocaleMode("pseudo");
+document.title = shell("shell.brand");
 
 installLook();
 chooseGlass();
