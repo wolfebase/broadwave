@@ -3164,7 +3164,7 @@ components:
       required: [name]
       properties:
         id: { type: integer, format: int64 }
-        name: { type: string }
+        name: { type: string, description: "A name that is only spaces is 400." }
         short: { type: string }
         abbr: { type: string }
         league: { type: string }

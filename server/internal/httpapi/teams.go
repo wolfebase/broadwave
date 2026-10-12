@@ -14,7 +14,7 @@ import (
 func (s *Server) teams(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPut {
 		var team store.TeamFollow
-		if err := decodeJSON(r, &team); err != nil || team.Name == "" {
+		if err := decodeJSON(r, &team); err != nil || strings.TrimSpace(team.Name) == "" {
 			httpError(w, "a team needs a name", http.StatusBadRequest)
 			return
 		}
