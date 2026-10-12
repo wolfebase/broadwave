@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.13.2 — 2026-10-11
+
+### Changed
+
+- Apple TV opens on the Guide with a channel already highlighted. Select plays it at once; a later program opens its details, and holding Select opens details for anything.
+- Channels start right away. Lining up with the other TVs is now optional: choose Sync screens in the player, or turn on Settings › Whole-Home Sync › Line up automatically.
+
+### Fixed
+
+- Back from the Guide goes back to the channel you were watching instead of leaving the app.
+- One press of Back leaves the player.
+- Scrolling down the channel list with the remote no longer stops at the bottom of the screen.
+
 ## 0.13.1 — 2026-10-11
 
 ### Changed
