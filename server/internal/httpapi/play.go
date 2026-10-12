@@ -46,7 +46,9 @@ func (s *Server) decide(ctx context.Context, body watchBody) (live.Decision, boo
 	if err != nil {
 		return live.Decision{}, false, err
 	}
-	if forced, chosen := live.ParseRenditionKey(body.Rendition); chosen {
+	adaptive := s.adaptive(ctx)
+	// A ladder key kept from before adaptive was turned off plays the decision.
+	if forced, chosen := live.ParseRenditionKey(body.Rendition); chosen && (adaptive || !forced.ABR) {
 		return s.unvoiced(src, live.Decision{Rendition: forced, Reason: "Chosen in the player"}), true, nil
 	}
 	caps, prefs := live.LegacyCaps(body.Profile, body.Audio, body.Picture)
@@ -56,7 +58,16 @@ func (s *Server) decide(ctx context.Context, body watchBody) (live.Decision, boo
 	if prefs.Picture == "" {
 		_, prefs.Picture, _ = s.playbackChoice(ctx, 0, "")
 	}
-	return s.unvoiced(src, live.DecideFor(src, caps, prefs, s.Hub.Encoder, s.Hub.Host)), false, nil
+	d := s.unvoiced(src, live.DecideFor(src, caps, prefs, s.Hub.Encoder, s.Hub.Host))
+	return live.ApplyLadder(adaptive, caps, prefs, s.Hub.Host, d), false, nil
+}
+
+func (s *Server) adaptive(ctx context.Context) bool {
+	if s.Store == nil {
+		return false
+	}
+	values, err := s.Store.Settings(ctx)
+	return err == nil && values["adaptive"] == "1"
 }
 
 const noAC4Reason = "No sound: this server's ffmpeg can't decode ATSC 3.0 sound (AC-4)."
@@ -171,7 +182,7 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 	}
 	// A master names its default sound as the main one, so an encode that
 	// carries another track first keeps its one-sound playlist.
-	if spec, ok := live.ParseRenditionKey(session.Rendition); alternates && ok && spec.Track == "" {
+	if spec, ok := live.ParseRenditionKey(session.Rendition); alternates && ok && spec.Track == "" && !spec.ABR {
 		if master, ok := s.Hub.MasterPath(session.ChannelID, session.Rendition); ok {
 			session.MainPlaylist = master
 		}
@@ -1135,6 +1146,16 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Query().Get("_HLS_skip") {
 		case "YES", "v2":
 			body = live.DeltaPlaylist(body)
+		}
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		_, _ = w.Write(body)
+		return
+	}
+	if name == "ladder.m3u8" {
+		body, err := s.Hub.LadderPlaylist(r.Context(), channelID, key)
+		if err != nil {
+			http.NotFound(w, r)
+			return
 		}
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 		_, _ = w.Write(body)

@@ -371,6 +371,11 @@ type rendition struct {
 	// late is when the playlist last grew before a late gap, in Unix ns,
 	// until the gap ends and is logged.
 	late int64
+	// ladderChild packs one output of a shared ladder encode. The primary
+	// holds the process; stopping or counting a child on its own would tear
+	// that encode down, or count it once per rung.
+	ladderChild bool
+	group       *ladderGroup
 }
 
 type recording struct {
@@ -944,6 +949,9 @@ func (h *Hub) addFeedLocked(m *mux, ch store.SourceChannel) *feed {
 }
 
 func (h *Hub) pictureArgs(f *feed, want Rendition, extras []AudioTrack) (string, []string) {
+	if want.ABR {
+		return h.ladderCommandLocked(f, want, "")
+	}
 	input := "pipe:0"
 	if m := muxOf(h, f); m != nil && m.input != "" {
 		input = m.input
@@ -967,6 +975,11 @@ func (h *Hub) rebuildRenditionsLocked(f *feed) {
 	}
 	var list []kept
 	for key, r := range f.renditions {
+		// A ladder is one process. Rebuilding a rung on its own would start
+		// another encode and fold the shorter URL onto the primary.
+		if r.spec.ABR {
+			continue
+		}
 		// Tracks measured after the start are left out: a new sound track is
 		// not worth a restart. A changed main still is, and so is a stored
 		// track the PMT no longer lists the same way.
@@ -1023,6 +1036,7 @@ func (h *Hub) rebuildRenditionsLocked(f *feed) {
 	if len(list) > 0 {
 		h.dropIfUnusedLocked(f)
 	}
+	h.rebuildLaddersLocked(f)
 }
 
 // currentKey follows a rebuilt rendition from a key a viewer joined under.
@@ -1060,6 +1074,9 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 	}
 	if h.NoAC4 {
 		want = Unvoiced(f.channel.AudioCodec, want)
+	}
+	if want.ABR {
+		return h.ensureLadderLocked(f, want, frame)
 	}
 	key := want.Key()
 	if r := f.renditions[key]; r != nil {
@@ -1139,6 +1156,11 @@ func joinTranscode(f *feed, want Rendition) *rendition {
 	var best *rendition
 	bestDist, bestRank := 0, 0
 	for _, r := range f.renditions {
+		// A ladder rung is not a stand-in for a one-picture watch, and a
+		// one-picture watch is not a rung.
+		if want.ABR || r.spec.ABR || r.ladderChild {
+			continue
+		}
 		if r.spec.Video == "copy" || r.spec.Codec != want.Codec {
 			continue
 		}
@@ -1196,9 +1218,10 @@ func (h *Hub) releaseIdlePicturesLocked(asking *feed, now time.Time, need int) {
 		}
 		seen[f] = true
 		for key, r := range f.renditions {
-			if r.spec.Video != "copy" && freePicture(r, now) {
-				list = append(list, idle{f, key, r.seen})
+			if r.ladderChild || r.spec.Video == "copy" || !freePicture(r, now) {
+				continue
 			}
+			list = append(list, idle{f, key, r.seen})
 		}
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].seen.Before(list[j].seen) })
@@ -1234,7 +1257,7 @@ func (h *Hub) Pictures() (used, limit int, running map[int64]bool) {
 	now := time.Now()
 	for id, f := range h.channels {
 		for _, r := range f.renditions {
-			if r.spec.Video == "copy" || freePicture(r, now) {
+			if r.ladderChild || r.spec.Video == "copy" || freePicture(r, now) {
 				continue
 			}
 			running[id] = true
@@ -1257,9 +1280,10 @@ func (h *Hub) transcodesLocked() int {
 		}
 		seen[f] = true
 		for _, r := range f.renditions {
-			if r.spec.Video != "copy" {
-				n++
+			if r.ladderChild || r.spec.Video == "copy" {
+				continue
 			}
+			n++
 		}
 	}
 	return n
@@ -1448,7 +1472,13 @@ func (h *Hub) renditionPipe(f *feed, r *rendition, stdin io.WriteCloser) io.Writ
 	w := newProgramPipe(markWriter{stdin, &r.fed}, program)
 	if p, ok := w.(*programPipe); ok {
 		p.sw = &pipeSwitch{}
-		p.onBreak = func() { go h.followBreak(f, r, p) }
+		p.onBreak = func() {
+			if r.spec.ABR {
+				go h.followLadderBreak(f, r, p)
+				return
+			}
+			go h.followBreak(f, r, p)
+		}
 		r.filter = p
 	}
 	return w
@@ -1784,11 +1814,21 @@ func (h *Hub) stamped(channelID int64, key string) ([]byte, error) {
 	if f != nil {
 		r = f.renditions[key]
 		if r != nil {
-			r.seen = time.Now()
+			noteLadderSeen(r)
 			if r.clock == nil {
 				r.clock = NewTimeline()
 			}
 			seedClockLocked(f, r)
+		}
+	}
+	var ladder *rendition
+	if r != nil && r.group != nil && !r.clock.hasDate() {
+		ladder = ladderPrimaryOf(r)
+		if ladder == nil {
+			ladder = r
+		}
+		if ladder.clock == nil {
+			ladder.clock = NewTimeline()
 		}
 	}
 	clock := (*Timeline)(nil)
@@ -1798,6 +1838,19 @@ func (h *Hub) stamped(channelID int64, key string) ([]byte, error) {
 	h.mu.Unlock()
 	if r == nil {
 		return nil, os.ErrNotExist
+	}
+	// The sibling search above runs before any rung has anchored. Date the
+	// primary once, then seed the rung that asked from that clock.
+	if ladder != nil {
+		if ladderAnchorHook != nil {
+			ladderAnchorHook()
+		}
+		establishLadderAnchor(ladder)
+		h.mu.Lock()
+		if live := h.channels[channelID]; live != nil && live.renditions[key] == r && !r.clock.hasDate() {
+			seedClockLocked(live, r)
+		}
+		h.mu.Unlock()
 	}
 	raw, err := readPlaylist(filepath.Join(r.dir, "index.m3u8"))
 	if err != nil {
@@ -1814,7 +1867,7 @@ func (h *Hub) WaitMedia(channelID int64, key string, msn, part int, d time.Durat
 	if f := h.channels[channelID]; f != nil {
 		if r := f.renditions[key]; r != nil {
 			gate = r.gate
-			r.seen = time.Now()
+			noteLadderSeen(r)
 		}
 	}
 	h.mu.Unlock()
@@ -1832,7 +1885,7 @@ func (h *Hub) WaitBlocking(channelID int64, key string, msn, part int) {
 	if f := h.channels[channelID]; f != nil {
 		if r := f.renditions[key]; r != nil {
 			gate = r.gate
-			r.seen = time.Now()
+			noteLadderSeen(r)
 		}
 	}
 	h.mu.Unlock()
@@ -1847,7 +1900,7 @@ func (h *Hub) Touch(channelID int64, key string) string {
 	if f := h.channels[channelID]; f != nil {
 		key = f.currentKey(key)
 		if r := f.renditions[key]; r != nil {
-			r.seen = time.Now()
+			noteLadderSeen(r)
 		}
 	}
 	return key
@@ -1862,7 +1915,7 @@ func (h *Hub) ReleaseAbandoned(maxAge time.Duration) {
 	h.releaseAbandonedMosaicsLocked(now, maxAge)
 	for _, f := range h.feedsLocked() {
 		for key, r := range f.renditions {
-			if r.viewers == 0 || now.Sub(r.seen) < maxAge {
+			if r.ladderChild || r.viewers == 0 || now.Sub(r.seen) < maxAge {
 				continue
 			}
 			r.viewers = 0
@@ -1909,7 +1962,7 @@ func (h *Hub) idleStop(channelID int64, key string) {
 	if f == nil {
 		return
 	}
-	if r := f.renditions[key]; r != nil && r.viewers == 0 {
+	if r := f.renditions[key]; r != nil && r.viewers == 0 && !r.ladderChild {
 		h.stopRenditionLocked(f, key)
 	}
 	h.dropIfUnusedLocked(f)
@@ -2745,6 +2798,10 @@ func (h *Hub) unfreezeLocked(m *mux, now, fed time.Time) {
 			continue
 		}
 		for _, r := range f.renditions {
+			if r.ladderChild {
+				h.unfreezeLadderRungLocked(f, r, now, fed, limit)
+				continue
+			}
 			noteLate(r, f.channel.GuideNumber, now, fed)
 			if r.cmd == nil || r.cmd.Process == nil || r.waited.Load() || now.Sub(r.unfroze) < unfreezeGap || !r.gate.stuck(now, fed, limit) {
 				continue
@@ -2947,7 +3004,9 @@ func (h *Hub) sessionLocked(f *feed, r *rendition) Session {
 		videoMode = "copy"
 	}
 	var main string
-	if f.captions != nil {
+	if spec.ABR {
+		main = fmt.Sprintf("/media/live/%d/%s/ladder.m3u8", f.channel.ID, key)
+	} else if f.captions != nil {
 		main = fmt.Sprintf("/media/live/%d/%s/main.m3u8", f.channel.ID, key)
 	}
 	return Session{
@@ -2961,7 +3020,7 @@ func (h *Hub) sessionLocked(f *feed, r *rendition) Session {
 		Viewers:      viewers,
 		Frequency:    f.channel.FrequencyHz,
 		Program:      f.program,
-		Profile:      renditionProfile(spec.Video),
+		Profile:      sessionProfile(spec.Video),
 		Audio:        legacyAudio,
 		Picture:      spec.Mode,
 		VideoMode:    videoMode,
@@ -2973,6 +3032,20 @@ func (h *Hub) sessionLocked(f *feed, r *rendition) Session {
 func (h *Hub) stopRenditionLocked(f *feed, key string) {
 	r := f.renditions[key]
 	if r == nil {
+		return
+	}
+	if r.ladderChild {
+		if primary := ladderPrimaryOf(r); primary != nil && primary != r {
+			h.stopRenditionLocked(f, primary.spec.Key())
+			return
+		}
+		// No primary to redirect to. Still remove every rung of this group
+		// instead of deleting one directory while the encode is writing.
+		h.stopLadderLocked(f, r)
+		return
+	}
+	if r.group != nil && !r.ladderChild {
+		h.stopLadderLocked(f, r)
 		return
 	}
 	stopTimer(&r.idle)

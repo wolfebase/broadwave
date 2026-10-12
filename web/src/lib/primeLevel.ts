@@ -10,12 +10,13 @@ import Hls, {
 } from "hls.js";
 import { soundsOf, type Sound } from "../features/player/sounds";
 import { authHeaders } from "./deviceToken";
+import { choosePrimeURL, takePrimed } from "./playbackURL";
 import type { Frag } from "./roomStart";
 
 type Body = { data: string; start: number; first: number; end: number };
 
 /** A master and its picture playlist, fetched once, for a start on the room's frame. */
-export type Primed = { url: string; bodies: Map<string, Body>; frags: Frag[]; sounds: Sound[] };
+export type Primed = { url: string; bodies: Map<string, Body>; frags: Frag[]; sounds: Sound[]; ladder: boolean };
 
 const key = (url: string) => new URL(url, window.location.href).href;
 
@@ -31,19 +32,18 @@ async function load(url: string, signal?: AbortSignal): Promise<Body> {
 /**
  * hls.js loads no level playlist from a master until startLoad, and a start on
  * the room's frame needs that playlist's fragments before it. This fetches the
- * master and its one picture playlist and parses the fragments with hls.js's own
- * parser. primedLoader then answers hls.js's first requests with the same
- * bodies, so the fragment starts it plays by are the ones the start was computed on.
+ * master and its one picture playlist (a ladder's tallest) and parses the
+ * fragments with hls.js's own parser. primedLoader then answers hls.js's first
+ * requests with the same bodies, so the fragment starts it plays by are the ones
+ * the start was computed on.
  */
-export async function primeLevel(master: string, signal?: AbortSignal): Promise<Primed | null> {
+export async function primeLevel(master: string, signal?: AbortSignal, ladder = false): Promise<Primed | null> {
   const masterUrl = key(master);
   const top = await load(masterUrl, signal);
   if (M3U8Parser.isMediaPlaylist(top.data)) return null;
   const parsed = M3U8Parser.parseMasterPlaylist(top.data, masterUrl);
-  const { levels } = parsed;
-  const urls = new Set(levels.map((level) => level.url));
-  if (urls.size !== 1) return null;
-  const [levelUrl] = urls;
+  const levelUrl = choosePrimeURL(parsed.levels, ladder);
+  if (!levelUrl) return null;
   const level = await load(levelUrl, signal);
   level.data = openPartsOnly(level.data);
   const details = M3U8Parser.parseLevelPlaylist(level.data, levelUrl, 0, PlaylistLevelType.MAIN, 0, null);
@@ -58,6 +58,7 @@ export async function primeLevel(master: string, signal?: AbortSignal): Promise<
     ]),
     frags,
     sounds,
+    ladder,
   };
 }
 
@@ -115,13 +116,12 @@ export function primedLoader(primed: Primed): HlsConfig["pLoader"] {
     }
 
     load(context: LoaderContext, config: LoaderConfiguration, callbacks: LoaderCallbacks<LoaderContext>) {
-      const body = primed.bodies.get(key(context.url));
+      const body = takePrimed(primed.bodies, primed.url, key(context.url), primed.ladder);
       if (!body) {
         this.inner = new Base(this.config);
         this.inner.load(context, config, callbacks);
         return;
       }
-      primed.bodies.delete(key(context.url));
       this.owned = context;
       this.own.loading = { start: body.start, first: body.first, end: body.end };
       this.own.loaded = this.own.total = body.data.length;

@@ -39,6 +39,7 @@ const defaults: Settings = {
   folderLayout: "shows",
   gameAlerts: "all",
   pictureMode: "broadcast",
+  adaptive: "0",
   autoplay: "1",
   hdhrEmulate: "0",
   deviceAuth: "0",

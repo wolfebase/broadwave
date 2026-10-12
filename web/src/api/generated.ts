@@ -470,6 +470,7 @@ export type Settings = {
   folderLayout?: string;
   gameAlerts?: string;
   pictureMode?: PictureMode;
+  adaptive?: string;
   autoplay?: string;
   hdhrEmulate?: string;
   deviceAuth?: string;

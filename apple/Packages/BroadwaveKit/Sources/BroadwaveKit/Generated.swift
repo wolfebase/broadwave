@@ -866,6 +866,7 @@ public struct Settings: Codable, Sendable, Hashable {
     public var folderLayout: String?
     public var gameAlerts: String?
     public var pictureMode: PictureMode?
+    public var adaptive: String?
     public var autoplay: String?
     public var hdhrEmulate: String?
     public var deviceAuth: String?
@@ -891,7 +892,7 @@ public struct Settings: Codable, Sendable, Hashable {
     public var sportsdbKey: String?
     public var sportsdbKeySet: String?
 
-    public init(layout: String? = nil, profile: String? = nil, audio: String? = nil, encoder: String? = nil, watermarkGB: String? = nil, bufferMinutes: String? = nil, writeNfo: String? = nil, deleteWatchedDays: String? = nil, makeRoom: String? = nil, protectFavorites: String? = nil, folderLayout: String? = nil, gameAlerts: String? = nil, pictureMode: PictureMode? = nil, autoplay: String? = nil, hdhrEmulate: String? = nil, deviceAuth: String? = nil, deviceToken: String? = nil, exportMosaics: String? = nil, setupComplete: String? = nil, needsSetup: String? = nil, lastGuidePull: Date? = nil, nextGuidePull: Date? = nil, lastManualGuidePull: Date? = nil, lastGuideError: String? = nil, lastGuideErrorAt: Date? = nil, hideScores: String? = nil, liveScores: String? = nil, checkUpdates: String? = nil, sdUser: String? = nil, sdPassword: String? = nil, sdLineup: String? = nil, sdPasswordSet: String? = nil, guideUrl: String? = nil, tmdbKey: String? = nil, tmdbKeySet: String? = nil, sportsdbKey: String? = nil, sportsdbKeySet: String? = nil) {
+    public init(layout: String? = nil, profile: String? = nil, audio: String? = nil, encoder: String? = nil, watermarkGB: String? = nil, bufferMinutes: String? = nil, writeNfo: String? = nil, deleteWatchedDays: String? = nil, makeRoom: String? = nil, protectFavorites: String? = nil, folderLayout: String? = nil, gameAlerts: String? = nil, pictureMode: PictureMode? = nil, adaptive: String? = nil, autoplay: String? = nil, hdhrEmulate: String? = nil, deviceAuth: String? = nil, deviceToken: String? = nil, exportMosaics: String? = nil, setupComplete: String? = nil, needsSetup: String? = nil, lastGuidePull: Date? = nil, nextGuidePull: Date? = nil, lastManualGuidePull: Date? = nil, lastGuideError: String? = nil, lastGuideErrorAt: Date? = nil, hideScores: String? = nil, liveScores: String? = nil, checkUpdates: String? = nil, sdUser: String? = nil, sdPassword: String? = nil, sdLineup: String? = nil, sdPasswordSet: String? = nil, guideUrl: String? = nil, tmdbKey: String? = nil, tmdbKeySet: String? = nil, sportsdbKey: String? = nil, sportsdbKeySet: String? = nil) {
         self.layout = layout
         self.profile = profile
         self.audio = audio
@@ -905,6 +906,7 @@ public struct Settings: Codable, Sendable, Hashable {
         self.folderLayout = folderLayout
         self.gameAlerts = gameAlerts
         self.pictureMode = pictureMode
+        self.adaptive = adaptive
         self.autoplay = autoplay
         self.hdhrEmulate = hdhrEmulate
         self.deviceAuth = deviceAuth

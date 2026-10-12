@@ -713,6 +713,7 @@ func cleanSettings(values map[string]string) (map[string]string, error) {
 		"lastManualGuidePull": true,
 		"lastGuideError":      true,
 		"lastGuideErrorAt":    true,
+		"adaptive":            true,
 	}
 	cleaned := map[string]string{}
 	for k, v := range values {
@@ -778,6 +779,9 @@ func cleanSettings(values map[string]string) (map[string]string, error) {
 		}
 		if k == "writeNfo" && v != "0" && v != "1" {
 			return nil, fmt.Errorf("writeNfo must be 0 or 1")
+		}
+		if k == "adaptive" && v != "0" && v != "1" {
+			return nil, fmt.Errorf("adaptive must be 0 or 1")
 		}
 		if k == "hideScores" && v != "0" && v != "1" {
 			return nil, fmt.Errorf("hideScores must be 0 or 1")

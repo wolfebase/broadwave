@@ -635,6 +635,9 @@ func (s *Server) settingsValues(r *http.Request) (map[string]string, error) {
 	if values["hideScores"] == "" {
 		values["hideScores"] = "0"
 	}
+	if values["adaptive"] != "1" {
+		values["adaptive"] = "0"
+	}
 	if values["liveScores"] == "" {
 		values["liveScores"] = "1"
 	}

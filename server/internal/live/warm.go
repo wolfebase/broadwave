@@ -80,12 +80,31 @@ func (h *Hub) Warm(ctx context.Context, channelID int64, want Rendition, alterna
 		want = Unvoiced(f.channel.AudioCodec, want)
 	}
 	key := want.Key()
+	// A shorter rung is not its own picture. Keeping its key would let the
+	// guess sweep stop the primary, and its idle timer would stop the ladder.
+	if child := f.renditions[key]; child != nil && child.ladderChild {
+		if p := ladderPrimaryOf(child); p != nil {
+			key = p.spec.Key()
+		}
+	}
 	h.dropGuessesLocked(f, key)
-	if r := f.renditions[key]; r != nil {
+	if r := f.renditions[key]; r != nil && !r.ladderChild {
 		if r.viewers == 0 {
 			h.idleLocked(channelID, key, r)
 		}
 		return true, nil
+	}
+	// A channel-change guess is one picture. Starting the ladder would decode
+	// and encode three sizes for a row the viewer may never open.
+	if want.ABR {
+		if p := f.ladderPrimary(want.Mode); p != nil {
+			if p.viewers == 0 {
+				h.idleLocked(channelID, p.spec.Key(), p)
+			}
+			return true, nil
+		}
+		h.dropIfUnusedLocked(f)
+		return false, nil
 	}
 	if want.Video != "copy" && h.Host.Tiles > 0 && h.transcodesLocked() >= h.Host.Tiles {
 		h.dropIfUnusedLocked(f)
@@ -110,6 +129,9 @@ func (h *Hub) Warm(ctx context.Context, channelID int64, want Rendition, alterna
 func (h *Hub) dropGuessesLocked(keep *feed, keepKey string) {
 	for _, f := range h.feedsLocked() {
 		for key, r := range f.renditions {
+			if r.ladderChild {
+				continue
+			}
 			if r.guess && r.viewers == 0 && (f != keep || key != keepKey) {
 				h.stopRenditionLocked(f, key)
 			}

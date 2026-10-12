@@ -101,6 +101,17 @@ export function SettingsScreen({
         </div>
         <span className="hint">Broadcast rebuilds interlaced channels at 60 frames a second. Smooth adds motion compensation when this server can hold it. Film is for movies.</span>
       </div>
+      <label className="field">
+        {copy.settings.adaptive}
+        <select
+          value={settings.adaptive === "1" ? "1" : "0"}
+          onChange={(event) => onChange({ adaptive: event.target.value === "1" ? "1" : "0" })}
+        >
+          <option value="0">Off</option>
+          <option value="1">On</option>
+        </select>
+        <span className="hint">{copy.settings.adaptiveHint}</span>
+      </label>
       <div className="field">
         <span>{copy.settings.liveDelay}</span>
         <div className="segmented" role="group" aria-label={copy.settings.liveDelay}>

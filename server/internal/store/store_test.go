@@ -100,6 +100,23 @@ func TestSettingsRejectUnknown(t *testing.T) {
 	}
 }
 
+func TestAdaptiveSetting(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	for _, v := range []string{"0", "1"} {
+		if err := s.PutSettings(ctx, map[string]string{"adaptive": v}); err != nil {
+			t.Fatalf("%s: %v", v, err)
+		}
+	}
+	if err := s.PutSettings(ctx, map[string]string{"adaptive": "yes"}); err == nil {
+		t.Fatal(`adaptive "yes" must be refused`)
+	}
+}
+
 func TestCredentialValuesIncludesTheSportsKey(t *testing.T) {
 	s, err := Open(t.TempDir())
 	if err != nil {

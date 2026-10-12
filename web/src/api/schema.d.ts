@@ -2145,7 +2145,7 @@ export interface components {
         StreamInfo: {
             rendition: string;
             /** @enum {string} */
-            video: "copy" | "1080" | "720" | "540" | "360";
+            video: "copy" | "1080" | "720" | "540" | "480" | "360";
             /** @enum {string} */
             audio: "copy" | "aac2" | "aac6" | "ac3" | "none";
             mode?: components["schemas"]["PictureMode"];
@@ -2180,8 +2180,9 @@ export interface components {
              * @description Multivariant playlist that pairs `playlist` with an English CC WebVTT track, present
              *     when the server reads the channel's captions. For a watch with `caps.alternates` whose
              *     rendition carries more than one sound track, it is `master.m3u8` instead: the picture
-             *     view and each sound track as an alternate (plus captions when they run). Players load
-             *     this one; readiness checks keep reading `playlist`.
+             *     view and each sound track as an alternate (plus captions when they run). When adaptive
+             *     quality is on and this watch uses the ladder, it is `ladder.m3u8`: 1080p, 720p, 480p,
+             *     and audio only, from one decode. Players load this one; readiness checks keep reading `playlist`.
              */
             mainPlaylist?: string;
             rendition: string;
@@ -2589,6 +2590,11 @@ export interface components {
              */
             gameAlerts?: "all" | "teams" | "off";
             pictureMode?: components["schemas"]["PictureMode"];
+            /**
+             * @description 1 turns on an adaptive ladder (1080p, 720p, 480p, and audio only) for browsers and Apple. The rungs share one decode. Missing means off.
+             * @enum {string}
+             */
+            adaptive?: "0" | "1";
             /** @enum {string} */
             autoplay?: "0" | "1";
             /** @enum {string} */
@@ -5501,27 +5507,6 @@ export interface operations {
                     "application/json": components["schemas"]["StoragePlan"];
                 };
             };
-        };
-    };
-    getStoragePlan: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The clean-up that would run */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StoragePlan"];
-                };
-            };
-            503: components["responses"]["Error"];
         };
     };
     downloadBackup: {
