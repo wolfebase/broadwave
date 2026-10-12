@@ -26,8 +26,8 @@
 # CSS raised 2026-10-11: the light theme, accent fills, and the poster close
 # plate load with the shell. Measured entry gzip 10880, plus 200 bytes.
 # CSS raised 2026-10-11: guide bars, field edges, the sports card, the switch,
-# and the player's dark island on a light page load with the shell. Measured
-# entry gzip 11536, plus 200 bytes.
+# Live on the hero, and the player's dark island on a light page load with the
+# shell. Measured entry gzip 11660, plus 200 bytes.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -35,7 +35,7 @@ WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
 JS_GZIP_MAX=96438
-CSS_GZIP_MAX=11736
+CSS_GZIP_MAX=11860
 
 if [[ ! -f "$INDEX" ]]; then
   echo "bundle budget: missing $INDEX" >&2
