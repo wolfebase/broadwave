@@ -29,6 +29,7 @@ export default defineConfig({
       "screenMoves.test.tsx",
       "movePanel.test.tsx",
       "moveFile.test.tsx",
+      "stage.test.tsx",
       "playerChrome.test.ts",
     ],
   },
