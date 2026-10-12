@@ -21,6 +21,7 @@ export default defineConfig({
       "livePill.test.ts",
       "tvRemote.test.ts",
       "diagnosticsHook.test.tsx",
+      "playerShell.test.tsx",
       "playerChrome.test.ts",
     ],
   },
