@@ -372,6 +372,7 @@ export function addPlaylistFile(name: string, groups: string, file: File, keep =
   return fetch("/api/v1/sources", { method: "POST", body, headers: authHeaders() }).then(async (res) => {
     const text = await res.text();
     if (!res.ok) {
+      noteIfUnauthorized(res.status);
       let message = "";
       try {
         const parsed = JSON.parse(text) as { message?: string };
