@@ -9,18 +9,20 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/wolfebase/broadwave/issues</Support>
   <Project>https://github.com/nicholas-fedor/watchtower</Project>
-  <Overview>Optional. Keeps Broadwave on the newest release. Checks nightly at 03:30 and updates only containers that carry the Broadwave template's updater labels. It skips a night while someone is watching, a recording is running, or a recording starts within two hours, and tries again the next night.</Overview>
-  <Category>Tools:</Category>
+  <ReadMe>https://github.com/wolfebase/broadwave/blob/main/docs/guide/install.md</ReadMe>
+  <Overview>Optional. Keeps the Broadwave container on the newest release. It checks nightly at 03:30 and updates only containers that carry the Broadwave template's updater labels. It skips a night while someone is watching, a recording is running, or a recording starts within two hours, and tries again the next night. Install the Broadwave template first. This container has no web page.</Overview>
+  <Description>Watchtower, limited to Broadwave. The Broadwave template labels its container so this updater can see it, and so Broadwave can say it is busy before an update. Leave "Only labeled containers" and "Busy check" on. Set TZ to the same value as Broadwave. The Docker socket is how the updater pulls the new image and recreates that one container.</Description>
+  <Category>Tools:Utilities</Category>
   <WebUI/>
-  <TemplateURL/>
-  <Icon/>
+  <TemplateURL>https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/unraid/broadwave-updater.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/wolfebase/broadwave/main/web/public/icons/icon-512.png</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>
   <DateInstalled/>
   <DonateText/>
   <DonateLink/>
-  <Requires>The Broadwave container, installed from the Broadwave template (it carries the labels this updater reads).</Requires>
+  <Requires>The Broadwave container, installed from the Broadwave template. That template carries the labels this updater reads. Do not point this at every container on the server.</Requires>
   <Config Name="Docker socket" Target="/var/run/docker.sock" Default="/var/run/docker.sock" Mode="rw" Description="Lets the updater pull the new image and recreate Broadwave." Type="Path" Display="always" Required="true" Mask="false">/var/run/docker.sock</Config>
   <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Time zone for the nightly check, like America/Chicago. Use the same value as Broadwave." Type="Variable" Display="always" Required="false" Mask="false">UTC</Config>
   <Config Name="Schedule" Target="WATCHTOWER_SCHEDULE" Default="0 30 3 * * *" Mode="" Description="When to check: seconds, minutes, hours, day, month, weekday. The default is 03:30 every night." Type="Variable" Display="always" Required="false" Mask="false">0 30 3 * * *</Config>

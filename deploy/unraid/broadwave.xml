@@ -9,24 +9,42 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/wolfebase/broadwave/issues</Support>
   <Project>https://github.com/wolfebase/broadwave</Project>
-  <Overview>Live TV and DVR for your antenna. Finds your HDHomeRun, fills a 14-day guide, records the original broadcast, and shares one tuner with every screen in the house, in sync. Apps for iPhone and Apple TV find this server on their own.</Overview>
+  <ReadMe>https://github.com/wolfebase/broadwave/blob/main/docs/guide/install.md</ReadMe>
+  <Overview>Live TV and DVR for an antenna. Broadwave finds an HDHomeRun on your network, fills the guide, and records the original broadcast. One tune of a channel feeds every screen and every recording. The web app is on port 8477. The iPhone, iPad, and Apple TV apps find this server on the local network.
+
+Host networking lets the server hear the tuner and lets the apps find the server. Remove --device=/dev/dri from Extra Parameters when this server has no Intel or AMD graphics. The container will not start if that path is missing. The picture still plays from the processor.
+
+Leave PUID at 99 and PGID at 100 so recordings are not owned by root. Set TZ to your time zone, such as America/Chicago. Do not forward port 8477 to the internet. Away from home, use Tailscale and type the server's address on that network.</Overview>
+  <Description>Broadwave is a server you run at home. It talks to a network tuner, builds a guide, records the untouched broadcast, and plays it in a browser and in the Broadwave apps for iPhone, iPad, and Apple TV.
+
+One tune of a station is shared by every viewer and by a recording of that station. Subchannels of one station share it too. A second station takes another tuner.
+
+The template uses host networking and port 8477. Config holds the database and the guide. Recordings are a separate folder, mounted at /config/work/recordings, so they survive a new container. The image includes ffmpeg. comskip is included for commercial detection.
+
+Act as an HDHomeRun, under Settings, Share with other apps, lets Plex, Jellyfin, Emby, and Channels add this server at port 8478. That port does not answer tuner discovery, so type the address and the port. Leave it off when you do not use those apps.
+
+There is no account password. Anything that can open port 8477 can use the server until you turn on device sign-in, and the shared playlist stays open even then. Keep the port on your own network.</Description>
   <Category>MediaApp:Video MediaServer:Video</Category>
   <WebUI>http://[IP]:[PORT:8477]/</WebUI>
-  <TemplateURL/>
-  <Icon/>
-  <ExtraParams>--device=/dev/dri --label=com.centurylinklabs.watchtower.enable=true --label="com.centurylinklabs.watchtower.lifecycle.pre-update=broadwave -update-check"</ExtraParams>
+  <TemplateURL>https://raw.githubusercontent.com/wolfebase/broadwave/main/deploy/unraid/broadwave.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/wolfebase/broadwave/main/web/public/icons/icon-512.png</Icon>
+  <ExtraParams>--device=/dev/dri --label=com.centurylinklabs.watchtower.enable=true --label="com.centurylinklabs.watchtower.lifecycle.pre-update=broadwave -update-check" --label=com.centurylinklabs.watchtower.lifecycle.pre-update-timeout=1</ExtraParams>
   <PostArgs/>
   <CPUset/>
   <DateInstalled/>
   <DonateText/>
   <DonateLink/>
-  <Requires>An HDHomeRun tuner on the same network. Host networking lets the server find it and lets the apps find the server. Remove --device=/dev/dri if the server has no Intel or AMD graphics.</Requires>
-  <Config Name="Web UI" Target="8477" Default="8477" Mode="tcp" Description="Web app and API port" Type="Port" Display="always" Required="true" Mask="false">8477</Config>
+  <License>https://github.com/wolfebase/broadwave/blob/main/LICENSE</License>
+  <Requires>An HDHomeRun tuner on the same network. Host networking lets the server find it and lets the apps find the server. Remove --device=/dev/dri from Extra Parameters if the server has no Intel or AMD graphics. Docker will not start when that path is missing. Do not publish port 8477 on your router.</Requires>
+  <Config Name="Web UI" Target="8477" Default="8477" Mode="tcp" Description="Web app and API port. Host networking uses this port on the server itself." Type="Port" Display="always" Required="true" Mask="false">8477</Config>
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/broadwave" Mode="rw" Description="Database, guide, and live buffer. Put this on a fast pool." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/broadwave</Config>
-  <Config Name="Recordings" Target="/config/work/recordings" Default="/mnt/user/media/recordings" Mode="rw" Description="Where recordings are saved as original broadcast files." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media/recordings</Config>
-  <Config Name="Tuner address" Target="HDHR_HOST" Default="" Mode="" Description="Optional. Only needed if the tuner is on another subnet or the container is not on host networking." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Recordings" Target="/config/work/recordings" Default="/mnt/user/media/recordings" Mode="rw" Description="Where recordings are saved as original broadcast files. This path is the container default. Do not also set a different recordings folder." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media/recordings</Config>
+  <Config Name="Tuner address" Target="HDHR_HOST" Default="" Mode="" Description="Optional. Only needed if the tuner is on another subnet. Leave blank on host networking so the server can find the tuner itself." Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Time zone for the guide, like America/Chicago." Type="Variable" Display="always" Required="false" Mask="false">UTC</Config>
-  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User id for recordings. 99 is Unraid's nobody user." Type="Variable" Display="always" Required="false" Mask="false">99</Config>
-  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group id for recordings. 100 is Unraid's users group." Type="Variable" Display="always" Required="false" Mask="false">100</Config>
-  <Config Name="UMASK" Target="UMASK" Default="022" Mode="" Description="File mode mask for new recordings." Type="Variable" Display="advanced" Required="false" Mask="false">022</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User id for the config folder and recordings. 99 is Unraid's nobody user. The server starts as root, hands those folders over, and then runs as this user." Type="Variable" Display="always" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group id for the config folder and recordings. 100 is Unraid's users group. Set this together with PUID." Type="Variable" Display="always" Required="false" Mask="false">100</Config>
+  <Config Name="UMASK" Target="UMASK" Default="022" Mode="" Description="File mode mask for new recordings, in octal. 022 leaves files readable by others on the server." Type="Variable" Display="advanced" Required="false" Mask="false">022</Config>
+  <Config Name="Public names" Target="BROADWAVE_HOSTS" Default="" Mode="" Description="Optional. Public names this server answers to, comma-separated, such as tv.example.com. A leading dot covers subdomains. Addresses and home names work without this. A MagicDNS name on port 8477 needs the name listed here." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Encoder" Target="BROADWAVE_ENCODER" Default="" Mode="" Description="Optional. Leave blank to choose automatically. gpu keeps the detected graphics encoder. software uses the processor." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Extra audio" Target="BROADWAVE_ALTERNATES" Default="" Mode="" Description="Optional. Leave blank to keep other languages in a full-size encode. Set to 0 to send only the chosen track." Type="Variable" Display="advanced" Required="false" Mask="false"/>
 </Container>
