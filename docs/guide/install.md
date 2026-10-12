@@ -18,7 +18,7 @@ docker run -d --name broadwave --network host --restart unless-stopped \
 
 Then open `http://<your-server>:8477`.
 
-- `TZ` is your time zone, so the guide lines up. Without it the server runs on UTC.
+- `TZ` is your time zone. Without it, a container runs on UTC, and Diagnostics says "The time zone is not set. Set TZ so the guide uses your local time." A name you set is not checked. If the listings stay on UTC, the zone data did not load.
 - The two folders keep the database and the recordings. An update replaces the container and leaves the folders.
 - Add `--device /dev/dri` when that path exists (Intel or AMD graphics). Docker refuses to start if the path is missing. The picture still plays from the processor without it.
 - When the tuner does not appear, set `HDHR_HOST` to its address. Add `:port` only when the port is not 80.
@@ -59,7 +59,7 @@ Add the template [`deploy/unraid/broadwave.xml`](https://github.com/wolfebase/br
 - Remove `/dev/dri` from Extra Parameters when the server has no Intel or AMD graphics. Docker will not start while that path is missing.
 - Tuner address, public names, the encoder, and extra audio are under Show more settings. Leave the tuner address blank unless the tuner is on another subnet.
 
-The optional updater is [`deploy/unraid/broadwave-updater.xml`](https://github.com/wolfebase/broadwave/blob/main/deploy/unraid/broadwave-updater.xml). It checks at 03:30 and updates only the Broadwave container. It skips a night while someone is watching, or a recording is running or starts within two hours. To update by hand, pull the new image and recreate the container with the same folders.
+The optional updater is [`deploy/unraid/broadwave-updater.xml`](https://github.com/wolfebase/broadwave/blob/main/deploy/unraid/broadwave-updater.xml). It checks at 03:30 and updates only the Broadwave container. It skips a night while a tuner is in use, a recording is running, or a recording starts within two hours. To update by hand, pull the new image and recreate the container with the same folders.
 
 ## Other settings
 

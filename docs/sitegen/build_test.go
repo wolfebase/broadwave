@@ -68,9 +68,9 @@ func TestSiteBuildsTheGuide(t *testing.T) {
 	}
 
 	want := map[string][]string{
-		"install.html":          {"Unraid", "Docker", "8477", "ghcr.io/wolfebase/broadwave", "PUID"},
+		"install.html":          {"Unraid", "Docker", "8477", "ghcr.io/wolfebase/broadwave", "PUID", "The time zone is not set", "a tuner is in use"},
 		"first-run.html":        {"Let's set up your TV", "Add by address"},
-		"tuners.html":           {"HDHomeRun", "FLEX 4K", "ATSC 3.0", "reference/atsc3.html"},
+		"tuners.html":           {"HDHomeRun", "FLEX 4K", "ATSC 3.0", "reference/atsc3.html", "model number"},
 		"channels.html":         {"Schedules Direct", "XMLTV", "answers at once", "While a channel is tuned", "On the guide"},
 		"watching.html":         {"iPhone", "iPad", "Apple TV", "8477", "web", "saved on that device"},
 		"multiview.html":        {"Side by side", "Quad", "1080p or smaller"},
@@ -82,7 +82,7 @@ func TestSiteBuildsTheGuide(t *testing.T) {
 		"faq.html":              {"antenna", "first two tuners", "no Roku app", "Sign in from a paired device.", "about 6 seconds", "Stopping in 8 min.", "Keep this much free", "HDHR4-2US", "03:30", "does not install tuner firmware", "While a channel is tuned", "it deletes none", "starts within two hours"},
 		"security.html":         {"BROADWAVE_HOSTS", securitySentence, "reference/security.html", "port 443", "does not look at HTTPS"},
 		"reference/tuners.html": {"Search the network"},
-		"reference/atsc3.html":  {"FLEX 4K"},
+		"reference/atsc3.html":  {"FLEX 4K", "model number", "both pictures were already measured"},
 	}
 	for name, needles := range want {
 		page := readOut(t, out, name)

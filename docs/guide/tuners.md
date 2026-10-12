@@ -9,7 +9,9 @@ Any current HDHomeRun works. Broadwave finds it on the network.
 | Tuner | What it receives |
 | --- | --- |
 | FLEX 4K | Four tuners. Two of them receive ATSC 3.0. A 3.0 channel will not tune on the other two. |
-| FLEX DUO, FLEX QUATRO, CONNECT | The regular broadcast only. A model name that contains 4K marks the first two tuners as ATSC 3.0. |
+| FLEX DUO, FLEX QUATRO, CONNECT | The regular broadcast only. |
+
+The model number decides which tuners receive ATSC 3.0. A number that contains 4K marks the first two, which is how a FLEX 4K is marked. FLEX DUO, FLEX QUATRO, and a CONNECT whose model number does not contain 4K stay on the regular broadcast.
 
 A clear ATSC 3.0 channel is an HEVC picture and AC-4 sound. Phones, TVs, and browsers do not decode AC-4, so Auto sends Dolby Digital where the device plays it, and stereo AAC otherwise. Surround sends 5.1 AAC when the device cannot play Dolby Digital. Apple TV 4K, a recent iPhone or iPad, and Safari can take the HEVC picture as the station sent it. Apple TV HD and an older iPhone or iPad get H.264. A browser that cannot play HEVC gets H.264.
 
