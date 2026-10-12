@@ -91,10 +91,19 @@ func longestQuiet(cuts []boundary, from, to float64) float64 {
 
 // snapGap moves the ends of a logo gap to the cuts that likely bound it. A
 // logo can come back a while after the break, over a bumper or the show's
-// open, so an end reaches further into the gap than out.
+// open, so an end reaches further into the gap than out. The strongest cut
+// in both windows can be one black frame between two spots; both ends land
+// on it and the break disappears. The cuts nearest the logo are the edges.
 func snapGap(cuts []boundary, s span, length float64) (Break, bool) {
-	start, okStart := snap(cuts, s.Start, s.Start-outReach, s.Start+inReach)
-	end, okEnd := snap(cuts, s.End, s.End-inReach, s.End+outReach)
+	if b, ok := snapped(cuts, s, length, snap); ok {
+		return b, true
+	}
+	return snapped(cuts, s, length, nearest)
+}
+
+func snapped(cuts []boundary, s span, length float64, pick func([]boundary, float64, float64, float64) (float64, bool)) (Break, bool) {
+	start, okStart := pick(cuts, s.Start, s.Start-outReach, s.Start+inReach)
+	end, okEnd := pick(cuts, s.End, s.End-inReach, s.End+outReach)
 	// A recording that ends in a break ends on its last second.
 	if length > 0 && s.End >= length-1 {
 		end, okEnd = length, true
@@ -208,6 +217,26 @@ func snap(cuts []boundary, at, from, to float64) (float64, bool) {
 		score := b.Strength - math.Abs(b.At-at)/(2*inReach)
 		if !found || score > bestScore {
 			best, bestScore, found = b.At, score, true
+		}
+	}
+	if !found && at < 1 {
+		return 0, true
+	}
+	return best, found
+}
+
+// nearest is the boundary closest to at inside the window. It is the edge
+// when the strongest boundary sits between two spots.
+func nearest(cuts []boundary, at, from, to float64) (float64, bool) {
+	best, found := 0.0, false
+	bestDist := 0.0
+	for _, b := range cuts {
+		if b.At < from || b.At > to {
+			continue
+		}
+		d := math.Abs(b.At - at)
+		if !found || d < bestDist {
+			best, bestDist, found = b.At, d, true
 		}
 	}
 	if !found && at < 1 {
