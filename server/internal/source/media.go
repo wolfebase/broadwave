@@ -69,8 +69,23 @@ func ScanMedia(root string) ([]store.Recording, error) {
 		subtitle := ""
 		category := "Movie"
 		dir := filepath.Dir(path)
+		// Show/Season 01/Show - S01E02/episode: the episode folder is not the show.
+		episodeDir := ""
+		if dir != root {
+			parent := filepath.Dir(dir)
+			if seasonDir(filepath.Base(parent)) && episodeFile.MatchString(filepath.Base(dir)) {
+				episodeDir = filepath.Base(dir)
+				dir = parent
+			}
+		}
+		climbed := false
 		if seasonDir(filepath.Base(dir)) && dir != root {
 			// Show/S01/episode: the show is the folder above.
+			dir = filepath.Dir(dir)
+			climbed = true
+		}
+		// Show/Seasons/Season 01/episode: the set folder is not the show either.
+		if climbed && strings.EqualFold(strings.TrimSpace(filepath.Base(dir)), "seasons") && dir != root {
 			dir = filepath.Dir(dir)
 		}
 		namedByFolder := false
@@ -81,7 +96,11 @@ func ScanMedia(root string) ([]store.Recording, error) {
 			namedByFolder = true
 		}
 		season, episode := 0, 0
-		if m := episodeFile.FindStringSubmatch(info.Name()); m != nil {
+		label := info.Name()
+		if episodeFile.FindStringSubmatch(label) == nil && episodeDir != "" {
+			label = episodeDir
+		}
+		if m := episodeFile.FindStringSubmatch(label); m != nil {
 			category = "Series"
 			if subtitle == "" {
 				subtitle = "S" + m[1] + "E" + m[2]
@@ -91,7 +110,7 @@ func ScanMedia(root string) ([]store.Recording, error) {
 			// A file dropped in the library root has no show folder. The
 			// name before SxxEyy is the show, so two episodes are one series.
 			if !namedByFolder {
-				if show, ok := showBeforeEpisode(info.Name()); ok {
+				if show, ok := showBeforeEpisode(label); ok {
 					title = show
 				}
 			}

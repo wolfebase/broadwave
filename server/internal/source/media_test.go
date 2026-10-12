@@ -173,6 +173,38 @@ func TestLibraryIdentityChangesTheShowAndKeepsARecording(t *testing.T) {
 	}
 }
 
+func TestScanMediaNamesTheShowAboveASeasonSet(t *testing.T) {
+	root := t.TempDir()
+	names := []string{
+		filepath.Join(root, "Lighthouse", "Seasons", "Season 01", "Lighthouse - S01E02.mkv"),
+		filepath.Join(root, "Lighthouse", "Season 02", "Lighthouse - S02E03", "episode.mkv"),
+		filepath.Join(root, "Harbor Watch", "Seasons", "S01", "Harbor Watch - S01E04", "video.mp4"),
+		filepath.Join(root, "Season 03", "Lighthouse - S03E01", "clip.mkv"),
+	}
+	for _, name := range names {
+		if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(name, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	found, err := ScanMedia(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[[2]int]string{}
+	for _, rec := range found {
+		got[[2]int{rec.Season, rec.Episode}] = rec.Title
+		if rec.Title == "Seasons" || rec.Title == "Season 01" || rec.Title == "Season 02" || rec.Title == "S01" || rec.Title == "Lighthouse - S02E03" || rec.Title == "Harbor Watch - S01E04" {
+			t.Fatalf("folder kept as the show: %+v", rec)
+		}
+	}
+	if got[[2]int{1, 2}] != "Lighthouse" || got[[2]int{2, 3}] != "Lighthouse" || got[[2]int{1, 4}] != "Harbor Watch" || got[[2]int{3, 1}] != "Lighthouse" {
+		t.Fatalf("%+v", found)
+	}
+}
+
 func TestScanMediaStopsAtTheFileCap(t *testing.T) {
 	prev := mediaFileCap
 	mediaFileCap = 3
