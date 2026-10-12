@@ -12,7 +12,7 @@ These are the situations people run into, with the cause and what to do. The sen
 
 ## A tuner stops answering
 
-While you are watching, the line is "This tuner did not answer. Check that it is on." On the tuner's card, 15 minutes with no answer reads "Offline. Last seen" and then when. Remove is the first control. Check the power and the network cable. Remove the card if the tuner is gone.
+While you are watching, the line is "This tuner did not answer. Check that it is on." On the tuner's card, 15 minutes with no answer reads "Offline. Last seen" and then when. Remove is the first control. Diagnostics says "Your tuner stopped answering. Check that it is plugged in." after about three minutes when nothing is tuned. Check the power and the network cable. Remove the card if the tuner is gone.
 
 A signal check uses the same busy sentence as a tune that cannot get a tuner, and it answers at once. It does not wait. It refuses while something is recording, while a recording starts within 30 minutes, or while a tuner is already in use.
 
@@ -55,6 +55,8 @@ Before 0.12.16, one channel with no signal could stall live TV, a recording, or 
 **A recording skips fades, or finds almost no breaks.** Before 0.12.20, and without comskip, every short black stretch counted as a commercial. Update to 0.12.20 or later. The Docker image includes comskip as of 0.13.0.
 
 **Two recordings that started together wrote one file.** Update to 0.13.0 or later.
+
+**A recording would not delete.** The web says "The recording could not be deleted. It is still in your library." The file is still there, so the row stays and a later delete can try again.
 
 **Updating the catalog stopped the server.** Before 0.13.0, a database update stopped the server when something else was writing the catalog. Update to 0.13.0 or later.
 
