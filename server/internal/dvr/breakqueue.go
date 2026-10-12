@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"broadwave/internal/breaks"
 	"broadwave/internal/live"
 	"broadwave/internal/store"
 )
@@ -19,6 +20,18 @@ import (
 const libraryPerHour = 6
 
 const libraryWindow = time.Hour
+
+// libraryBytesPerHour is how many bytes of library files that hour may read.
+// A listen reads the first 20 minutes and the last 10, picture included,
+// because the sound is mixed in with it. Six broadcasts of those stretches
+// are about eight gigabytes. A file larger than the budget still goes when
+// the hour has read nothing, and then the hour is full. Tests lower it.
+var libraryBytesPerHour int64 = 8 << 30
+
+// libraryReadCeiling is the most one library file counts for, when its
+// length is not known. That is half an hour at about 20 Mb/s, more than a
+// listen reads of a long file. A shorter file counts as its whole size.
+var libraryReadCeiling int64 = 4 << 30
 
 // BreakQueue scans recordings for breaks one at a time, while nobody watches
 // live TV: a scan reads the whole file and takes a couple of CPU cores that a
@@ -44,10 +57,17 @@ type BreakQueue struct {
 	backfill time.Duration
 	// now is the clock. Tests set it; production leaves it nil.
 	now func() time.Time
-	// libraryAt is when each library file started being read, inside the window.
-	libraryAt []time.Time
+	// librarySpend is each library read still inside the window.
+	librarySpend []libraryRead
 	// libraryHeld is a library file that is waiting for a quiet hour with room.
 	libraryHeld bool
+}
+
+// libraryRead is one library file the queue started: when, and how many
+// bytes it was counted as reading.
+type libraryRead struct {
+	at time.Time
+	n  int64
 }
 
 // NewBreakQueue scans with the hub's ffmpeg and waits while anyone watches.
@@ -155,7 +175,12 @@ func (q *BreakQueue) Run(ctx context.Context) {
 			scan = false
 			listen = !rec.Listened
 			if listen {
-				q.noteLibrary(q.clock())
+				n := libraryReadOf(rec)
+				if !q.libraryBytesFit(q.clock(), n) {
+					q.libraryHeld = true
+					continue
+				}
+				q.noteLibrary(q.clock(), n)
 				q.libraryHeld = false
 			}
 		}
@@ -255,22 +280,59 @@ func (q *BreakQueue) libraryBlocked() bool {
 
 func (q *BreakQueue) libraryRoom(now time.Time) bool {
 	q.pruneLibrary(now)
-	return len(q.libraryAt) < libraryPerHour
+	return len(q.librarySpend) < libraryPerHour
 }
 
-func (q *BreakQueue) noteLibrary(now time.Time) {
+// libraryFileFits is room in the hour for this library file's read.
+func (q *BreakQueue) libraryFileFits(ctx context.Context, id int64) bool {
+	rec, err := q.st.Recording(ctx, id)
+	if err != nil {
+		return true
+	}
+	return q.libraryBytesFit(q.clock(), libraryReadOf(rec))
+}
+
+// libraryBytesFit is room for another library read of next bytes. The first
+// read of an hour fits even when the file is larger than the budget.
+func (q *BreakQueue) libraryBytesFit(now time.Time, next int64) bool {
 	q.pruneLibrary(now)
-	q.libraryAt = append(q.libraryAt, now)
+	if len(q.librarySpend) == 0 {
+		return true
+	}
+	var sum int64
+	for _, s := range q.librarySpend {
+		sum += s.n
+	}
+	return sum+next <= libraryBytesPerHour
+}
+
+func (q *BreakQueue) noteLibrary(now time.Time, n int64) {
+	q.pruneLibrary(now)
+	q.librarySpend = append(q.librarySpend, libraryRead{at: now, n: n})
 }
 
 func (q *BreakQueue) pruneLibrary(now time.Time) {
-	kept := make([]time.Time, 0, len(q.libraryAt))
-	for _, at := range q.libraryAt {
-		if now.Sub(at) < libraryWindow {
-			kept = append(kept, at)
+	kept := q.librarySpend[:0]
+	for _, s := range q.librarySpend {
+		if now.Sub(s.at) < libraryWindow {
+			kept = append(kept, s)
 		}
 	}
-	q.libraryAt = kept
+	q.librarySpend = kept
+}
+
+// libraryReadOf is the bytes a listen of rec counts for. A missing file
+// counts as nothing. The length comes from the recording when it is known.
+func libraryReadOf(rec store.Recording) int64 {
+	info, err := os.Stat(rec.Path)
+	if err != nil || info.IsDir() {
+		return 0
+	}
+	n := breaks.ListenBytes(info.Size(), rec.Duration)
+	if rec.Duration <= 0 && n > libraryReadCeiling {
+		n = libraryReadCeiling
+	}
+	return n
 }
 
 func (q *BreakQueue) isLibraryPath(path string) bool {
@@ -291,7 +353,7 @@ func (q *BreakQueue) enqueueLibrary(ctx context.Context, push func(int64), libra
 		q.libraryHeld = false
 		return
 	}
-	if q.libraryBlocked() {
+	if q.libraryBlocked() || !q.libraryFileFits(ctx, id) {
 		q.libraryHeld = true
 		return
 	}

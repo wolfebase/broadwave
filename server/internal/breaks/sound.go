@@ -46,6 +46,25 @@ const (
 // soundLimit stops one end's decode that hangs.
 var soundLimit = 10 * time.Minute
 
+// ListenBytes is how much of a file a listen reads. The sound is mixed in
+// with the picture, so the whole stretch counts: the first headSeconds, and
+// the last tailSeconds when the file is longer than the head. A file that
+// short, or of unknown length, counts in full. size is the file in bytes.
+func ListenBytes(size int64, length float64) int64 {
+	if size <= 0 {
+		return 0
+	}
+	if length <= headSeconds {
+		return size
+	}
+	tailFrom := max(headSeconds, length-tailSeconds)
+	span := headSeconds + (length - tailFrom)
+	if span <= 0 || span >= length {
+		return size
+	}
+	return int64(math.Ceil(float64(size) * span / length))
+}
+
 // ListenEnds prints the first and the last minutes of a recording's sound.
 // length is the recording's length in seconds; with none, only the start is
 // printed. A recording with no sound has no prints.
