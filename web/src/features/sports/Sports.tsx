@@ -14,7 +14,7 @@ import { ArtFrame } from "../../ui/ArtFrame";
 import { ChannelBadge, Chip, Empty, LiveDot, Progress, RecDot } from "../../ui/primitives";
 import { layoutForCount, multiviewPath } from "../multiview/storage";
 import { teamScoreShown } from "./board";
-import { cardLabel, matchup } from "./matchup";
+import { cardLabel, leagueLabel, matchup } from "./matchup";
 import { scoreLine, useScoreboard, type ScoreGame, type ScoreTeam } from "./scores";
 import "./sports.css";
 
@@ -130,7 +130,7 @@ export function Sports() {
         <div className="guide-chips league-chips">
           <Chip on={leagueFilter === "all"} onClick={() => setLeague("all")}>{t("sports.everything")}</Chip>
           {leagues.map((l) => (
-            <Chip key={l} on={leagueFilter === l} onClick={() => setLeague(l)}>{l}</Chip>
+            <Chip key={l} on={leagueFilter === l} onClick={() => setLeague(l)}>{leagueLabel(l)}</Chip>
           ))}
         </div>
       ) : null}
@@ -152,7 +152,7 @@ export function Sports() {
                     </div>
                   ) : null}
                   <div className="gc-head">
-                    <span className="gc-league">{league(airing)}</span>
+                    <span className="gc-league">{leagueLabel(league(airing))}</span>
                     {liveNow ? <LiveDot /> : <span className="gc-time">{spanLabel(airing)}</span>}
                     {rec ? <RecDot scheduled={rec === "scheduled"} /> : null}
                   </div>
