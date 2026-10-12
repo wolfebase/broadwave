@@ -28,9 +28,9 @@ const libraryWindow = time.Hour
 // the hour has read nothing, and then the hour is full. Tests lower it.
 var libraryBytesPerHour int64 = 8 << 30
 
-// libraryReadCeiling is the most one library file counts for, when its
-// length is not known. That is half an hour at about 20 Mb/s, more than a
-// listen reads of a long file. A shorter file counts as its whole size.
+// libraryReadCeiling is the most one library file counts for when its length
+// cannot be read. That is about half an hour at 20 Mb/s. A file whose length
+// is known counts the stretch the listen actually reads.
 var libraryReadCeiling int64 = 4 << 30
 
 // BreakQueue scans recordings for breaks one at a time, while nobody watches
@@ -47,6 +47,9 @@ type BreakQueue struct {
 	// backfill does not scan it for breaks (Find commercials still does, when
 	// asked). A series there is listened to for its intro, under libraryPerHour.
 	root string
+	// ffmpeg is the binary the listen probes with, so the charge uses the
+	// same length the listen will.
+	ffmpeg string
 
 	// poll is how often a waiting scan checks again; patience is how long it
 	// waits for a quiet moment before it runs anyway. A library file does not
@@ -79,6 +82,7 @@ func NewBreakQueue(st *store.Store, hub *live.Hub) *BreakQueue {
 		return FindEpisodeEnds(ctx, st, hub.FFmpeg, rec)
 	}, hub.Watching)
 	q.root = hub.Recordings()
+	q.ffmpeg = hub.FFmpeg
 	return q
 }
 
@@ -175,7 +179,7 @@ func (q *BreakQueue) Run(ctx context.Context) {
 			scan = false
 			listen = !rec.Listened
 			if listen {
-				n := libraryReadOf(rec)
+				n := q.libraryReadOf(ctx, &rec)
 				if !q.libraryBytesFit(q.clock(), n) {
 					q.libraryHeld = true
 					continue
@@ -289,7 +293,7 @@ func (q *BreakQueue) libraryFileFits(ctx context.Context, id int64) bool {
 	if err != nil {
 		return true
 	}
-	return q.libraryBytesFit(q.clock(), libraryReadOf(rec))
+	return q.libraryBytesFit(q.clock(), q.libraryReadOf(ctx, &rec))
 }
 
 // libraryBytesFit is room for another library read of next bytes. The first
@@ -322,17 +326,32 @@ func (q *BreakQueue) pruneLibrary(now time.Time) {
 }
 
 // libraryReadOf is the bytes a listen of rec counts for. A missing file
-// counts as nothing. The length comes from the recording when it is known.
-func libraryReadOf(rec store.Recording) int64 {
+// counts as nothing. The length comes from the recording, or from a probe
+// when it was not stored and the file is larger than the ceiling; the probe
+// is stored on rec and in the store, so a file held for the next hour, and
+// its listen, do not probe again. The ceiling applies when the length
+// cannot be read.
+func (q *BreakQueue) libraryReadOf(ctx context.Context, rec *store.Recording) int64 {
 	info, err := os.Stat(rec.Path)
 	if err != nil || info.IsDir() {
 		return 0
 	}
 	n := breaks.ListenBytes(info.Size(), rec.Duration)
-	if rec.Duration <= 0 && n > libraryReadCeiling {
-		n = libraryReadCeiling
+	if rec.Duration > 0 || n <= libraryReadCeiling {
+		return n
 	}
-	return n
+	if rec.Duration < 0 {
+		return libraryReadCeiling
+	}
+	length := probeLength(q.ffmpeg, rec.Path)
+	if length <= 0 {
+		return libraryReadCeiling
+	}
+	rec.Duration = length
+	if q.st != nil && rec.ID != 0 {
+		_ = q.st.SetDuration(ctx, rec.ID, length)
+	}
+	return breaks.ListenBytes(info.Size(), length)
 }
 
 func (q *BreakQueue) isLibraryPath(path string) bool {
