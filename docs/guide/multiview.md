@@ -14,7 +14,7 @@ The web app, iPad, and Apple TV share these layouts.
 | Quad | Four pictures, the same size |
 | Small over big | A small picture over a large one |
 
-iPhone offers Side by side and Small over big. A link that asks for a quad opens side by side there. In a phone browser, Side by side stacks the two pictures, and the other layouts stay available.
+iPhone offers Side by side and Small over big. A link that asks for a quad opens side by side there. In a browser, Side by side stacks the two pictures when Settings, Layout, is Phone, or when Layout is Auto and the window is 760 pixels wide or narrower. Desktop, TV, and a wider Auto window keep the two pictures side by side. The other layouts stay available.
 
 Click or tap a tile to hear it. With a remote, move to the tile and press Enter or the clickpad. The page says "Select a tile to hear it." until you do. In the layouts with one large picture, the tile you hear is the large one.
 

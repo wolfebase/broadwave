@@ -6,15 +6,15 @@ The same server plays on a browser, an iPhone, an iPad, and an Apple TV. Nothing
 
 Open `http://<your-server>:8477`. There is nothing to install. The page is the guide, live TV, recordings, and multiview.
 
-The player picks a picture the browser can play. A broadcast the browser already understands is passed through. Anything else is encoded for that browser. Settings, Live delay, is how far behind live a channel starts: Lowest is about 6 seconds, Balanced is 16, Stable is 20.
+The player picks a picture the browser can play. It copies the broadcast when the browser lists that codec and the picture is progressive or HEVC. A picture that has not been measured as progressive is encoded, and so is interlaced H.264. Open Stats. The choice is under Playing. For interlaced H.264 that line starts with "Deinterlaced for smooth motion." A cellular connection or Save-Data asks for 720p before that choice. Settings, Live delay, is how far behind live a channel starts: Lowest is about 6 seconds, Balanced is 16, Stable is 20.
 
 While Whole-Home Sync is on, the player shows Synced when this screen is the only one, the number of screens on that channel when others are there, and Together while you are watching together. [Sync](sync.md) covers that control and Watch together.
 
 ## iPhone, iPad, and Apple TV
 
-The apps look for a Broadwave server on the local network and connect when they find one. You can type an address instead.
+The apps look on your home network and list the servers they find. You pick one. The next time you open the app, it connects to the one you saved. You can type an address instead. The first screen says "Find your server," and the button is "Look for my server." The list is headed "On your network." A server you have used is under "Saved."
 
-On iPhone and iPad, Local Network access has to be on for Broadwave (Settings, Privacy and Security, Local Network). With no server around, the apps play a built-in demo so you can try the screens first. The demo does not contact your server or the internet.
+On iPhone and iPad, Local Network access has to be on for Broadwave (Settings, Privacy and Security, Local Network). "Try the demo" plays sample films on this device. The line under that button is "Sample films on this device." The demo does not contact your server or the internet. It starts when you tap the button.
 
 Apple TV opens Broadwave and finds the server the same way. The first-run page on the web can show a QR code for the iPhone. [First run](first-run.md) describes it.
 
