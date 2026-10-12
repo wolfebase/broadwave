@@ -3540,8 +3540,8 @@ export interface operations {
     scoreboard: {
         parameters: {
             query?: {
-                /** @description nfl, ncaaf, nba, wnba, ncaab, mlb, nhl, mls, nwsl, epl, f1, or nascar. Blank asks for every league. */
-                league?: string;
+                /** @description One of nfl, ncaaf, nba, wnba, ncaab, mlb, nhl, mls, nwsl, epl, f1, or nascar. Blank asks for every league. Anything else, including NFL, is 400. */
+                league?: "" | "nfl" | "ncaaf" | "nba" | "wnba" | "ncaab" | "mlb" | "nhl" | "mls" | "nwsl" | "epl" | "f1" | "nascar";
                 /** @description Calendar day. Blank is today on the server. */
                 date?: string;
             };
