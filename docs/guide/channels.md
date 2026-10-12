@@ -25,7 +25,7 @@ Channels found by a later scan take their place by number.
 
 ## Signal
 
-A signal check reports Great, OK, Weak, or Lost. It waits while a tuner is busy, while something is recording, or while a recording starts within 30 minutes, and it says so in the same words as a busy tuner.
+A signal check reports Great, OK, Weak, or Lost. While a tuner is busy, while something is recording, or while a recording starts within 30 minutes, it answers at once, in the same words as a busy tuner. It does not wait.
 
 ## Favorites and Home
 

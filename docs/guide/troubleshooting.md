@@ -16,7 +16,7 @@ The line on the screen is the whole message. It names what failed and what to tr
 
 **Encrypted 3.0.** "The 3.0 version is encrypted. Showing the regular broadcast." Broadwave plays and records the regular channel. [Tuners](tuners.md) explains why.
 
-**A tuner that stopped answering.** While you are watching: "This tuner did not answer. Check that it is on." On its card in Settings: "Offline. Last seen 15 minutes ago." Remove is the first button. A tuner added by its address keeps reading as online while it answers.
+**A tuner that stopped answering.** While you are watching: "This tuner did not answer. Check that it is on." On its card in Settings: "Offline. Last seen" and then how long ago. A tuner is marked offline after more than 15 minutes. Remove is the first button. A tuner added by its address keeps reading as online while it answers.
 
 **Setup finds nothing.** The first look says "No tuner answered yet." "Searching…" shows while Add by address, Look harder, Add free channels, or adding a playlist is running. An address that does not answer says "No HDHomeRun answered at that address. Add the port if it is not 80." On Docker Desktop, set `HDHR_HOST`. [Install](install.md) has the command.
 
@@ -30,7 +30,7 @@ On iPhone, iPad, and Apple TV it shows Fix these, guide depth, tuner health, and
 
 One Fix these line is "Broadwave can't see your tuner from inside Docker. Switch the container to host networking." Another is "Less than 20 GB is free. Free some space before a long recording."
 
-On the web, when this ffmpeg cannot decode AC-4, Diagnostics says "This ffmpeg can't decode AC-4, so ATSC 3.0 channels play without sound." The player says "No sound: this server's ffmpeg can't decode ATSC 3.0 sound (AC-4)." The Docker image includes that decoder.
+On the web, when this ffmpeg cannot decode AC-4, Diagnostics says "This ffmpeg can't decode AC-4, so ATSC 3.0 channels play without sound." iPhone, iPad, and Apple TV Diagnostics do not show that line. The web player and multiview, and multiview on the Apple apps, can show "No sound: this server's ffmpeg can't decode ATSC 3.0 sound (AC-4)." The Docker image includes that decoder.
 
 ## Logs and a bug report
 

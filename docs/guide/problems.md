@@ -30,7 +30,7 @@ Before 0.12.16, one channel with no signal could stall live TV, a recording, or 
 
 ## The picture
 
-**An ATSC 3.0 channel has no sound.** The player says "No sound: this server's ffmpeg can't decode ATSC 3.0 sound (AC-4)." On the web, Diagnostics says "This ffmpeg can't decode AC-4, so ATSC 3.0 channels play without sound." The Docker image includes that decoder. Before 0.12.6 the channel stopped after about a second and a half. Update to 0.12.6 or later, or run the Docker image.
+**An ATSC 3.0 channel has no sound.** The web player and multiview, and multiview on the Apple apps, can show "No sound: this server's ffmpeg can't decode ATSC 3.0 sound (AC-4)." On the web, Diagnostics says "This ffmpeg can't decode AC-4, so ATSC 3.0 channels play without sound." The Apple apps' Diagnostics do not. The Docker image includes that decoder. Before 0.12.6 the channel stopped after about a second and a half. Update to 0.12.6 or later, or run the Docker image.
 
 **An ATSC 3.0 channel is encrypted.** The player says "The 3.0 version is encrypted. Showing the regular broadcast." Broadwave does not decrypt it. Since 0.13.0, Plex, Jellyfin, and Channels play that station's regular broadcast the same way, when there is one.
 
