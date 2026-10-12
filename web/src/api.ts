@@ -1,17 +1,15 @@
 import type { Airing, Caps, CatalogBackup, Channel, ChannelPatch, ClientDevice, Device, DeviceHealth, FrameList, MultiviewPlan, NewPass, Pass, PassPreview, PlannedAiring, Prefs, Recording, SearchAiring, ServerInfo, Settings, StorageInfo, StoragePlan, StorageShows, TeamFollow, TunerStatus, VirtualChannel, WatchSession } from "./types";
-import { playerUiMessages } from "./i18n/messages/playerUi.ts";
-import { bind } from "./i18n/runtime.ts";
+import { requestFailedMessage } from "./i18n/messages/requestFailed.ts";
+import { translate } from "./i18n/runtime.ts";
 import { authHeaders, noteIfUnauthorized } from "./lib/deviceToken.ts";
 
 import type { RoomState } from "./lib/events";
-
-const t = bind(playerUiMessages);
 
 export type ApiFailure = Error & { status: number; code?: string };
 
 // A body that is not the error envelope. Same words as requestFailed, read when the error is thrown.
 export function unreadBody(): string {
-  return t("player.outage.requestFailed");
+  return translate(requestFailedMessage);
 }
 
 export function apiFailure(status: number, text: string): ApiFailure {

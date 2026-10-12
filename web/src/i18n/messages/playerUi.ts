@@ -1,4 +1,5 @@
 import type { Message } from "../runtime.ts";
+import { requestFailedMessage } from "./requestFailed.ts";
 
 export const playerUiMessages = {
   "player.nowPlaying": "Now playing: {title}",
@@ -142,6 +143,6 @@ export const playerUiMessages = {
   "player.outage.noListing": "No listing for this channel.",
   "player.outage.noListingChecked": "Still no listing for this channel.",
   "player.outage.channelDidNotStart": "This channel did not start. Try again.",
-  "player.outage.requestFailed": "That did not work. Try again.",
+  "player.outage.requestFailed": requestFailedMessage,
   "player.outage.tunersBusy": "Every tuner is busy. Stop a recording or watch something already on.",
 } as const satisfies Record<string, Message>;
