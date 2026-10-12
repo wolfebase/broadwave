@@ -4,17 +4,40 @@
 
 ### Added
 
+- The web app has an Appearance setting: Dark (the default), Light, or System, and six accent colors. The player and multiview stay dark. Both are saved per device.
+- Settings › Adaptive quality, off by default. When it is on, the player moves between 1080p, 720p, and 480p as the network allows, from one decode of the channel; an Apple device can also drop to sound only.
 - Recordings › Storage on the web lists what the clean-up rules would remove and what they leave alone. Opening it deletes nothing.
 - Settings › Favorite channels can keep recordings on starred channels out of clean-up and keep rules. It starts off.
 - Record it again is offered on a damaged recording whose file is already gone, on the web and on iPhone, iPad, and Apple TV.
+- The web app can be installed from the browser. When the server can't be reached it shows an offline page; live video and the API are never cached.
+- A browser can cast the channel it is playing to a Google Cast TV, which plays the same moment as the other screens and keeps playing after the browser leaves. Cast appears only when the server has a Cast application id (`BROADWAVE_CAST_APP_ID`).
+- Apple TV's Sports page has a labeled Watch together button.
+- The handbook has an Away from home page (Tailscale) and a Common problems page, and the FAQ covers much more. The Unraid template is filled in for Community Apps.
+
+### Changed
+
+- A shown ATSC 3.0 channel (104.1) sits next to its 1.0 channel (4.x) in the guide, Channels, the antenna list, and exports. When two channels share a number, the real one comes first, then by name.
+- iPad plays recordings full screen, with Close, Start over, Next, and Breaks in the top bar. Apple TV Home opens a recording full screen.
+- A TV browser: OK on the picture opens the player controls at Play; arrows on the picture still change channel and seek. Arrows walk each row and list in order, reach the shelf's heading action or the mini player at the end of a row, move between a recording's buttons, reach Sort under Show, and leave a multiview at its edges. Back works on LG, Samsung, and Fire TV remotes.
+- Find commercials catches breaks that cut straight from one ad to the next, two-ad breaks with one black frame between them, black frames of uneven length, and one at the very start of a recording. A repeated ad is still learned when one black frame runs longer.
+- Library episodes get a show name from the file name, or from the folder above a season, Seasons, or Specials folder. Adding the folder again renames files already added.
+- Looking for intros reads at most six files and about 8 GB of a library folder an hour.
 
 ### Fixed
 
 - Clean-up and keep rules leave a recording whose file is already gone, and a pass that keeps the newest episodes no longer counts it as one of them.
 - A short recording whose playhead never moved no longer counts as watched for clean-up.
-- Record it again finds the next airing for a recording on the other half of a 1.0 and 3.0 pair when the guide names the episode only by title and episode name.
-- Record it again works on a recording with no show title, using the airing's name. On the web the new pass shows in Passes right away.
 - A pass's keep rule removes older episodes only when a new episode of that show is saved, not when any recording is saved.
+- Record it again works on the other half of a 1.0 and 3.0 pair, and on a recording with no show title.
+- A guide listing with the same name no longer hides a library show's intro; end titles are marked on the first episode checked; duplicate copies of an episode count once.
+- Stopping or switching a recording, or shutting the server down, ends its picture and caption ffmpeg, which used to keep running. Resuming a recording that finishes during the seek no longer starts from the beginning.
+- The web opens pairing when a playlist upload or a send to another screen is refused because this browser is signed out.
+- When a long playlist asks which channels to keep, two channels with the same name are kept apart.
+- A server name with accents or emoji can use all 63 characters.
+- Adding free channels of an unknown kind says so instead of giving a server error.
+- A live playlist with Windows line endings keeps its open segment's parts.
+- "Add to other apps" never lists the same multiview twice and stops at eight.
+- iPhone landscape: the player bar stays at the top, and the Channels panel no longer draws rows past its rounded corners. Multiview tile captions are white on a darker bar.
 
 ## 0.13.2 — 2026-10-11
 
