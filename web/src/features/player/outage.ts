@@ -30,7 +30,8 @@ export function shownOutage(message: string): string {
   if (message === noListing) return t("player.outage.noListing");
   if (message === noListingChecked) return t("player.outage.noListingChecked");
   if (message === channelDidNotStart) return t("player.outage.channelDidNotStart");
-  if (message === requestFailed) return t("player.outage.requestFailed");
+  // requestFailed is translated when the error is thrown. Matching it here
+  // would stretch a server sentence that happens to use the same words.
   if (message === busyFallback) return t("player.outage.tunersBusy");
   return message;
 }
