@@ -78,6 +78,7 @@ func TestSiteBuildsTheGuide(t *testing.T) {
 		"sync.html":             {"Whole-Home Sync", "Watch together"},
 		"remote.html":           {"Tailscale", "8477", "BROADWAVE_HOSTS", "Funnel", "Require a device to sign in", "8478", "/export/stream/"},
 		"troubleshooting.html":  {"isn't coming in", "Diagnostics", "No tuner answered yet"},
+		"problems.html":         {"HDHR_HOST", "BROADWAVE_HOSTS", "0.13.0", "HDHR4-2US"},
 		"faq.html":              {"antenna", "FLEX 4K"},
 		"security.html":         {"BROADWAVE_HOSTS", securitySentence, "reference/security.html", "port 443"},
 		"reference/tuners.html": {"Search the network"},

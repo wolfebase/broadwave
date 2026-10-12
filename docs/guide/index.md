@@ -16,6 +16,7 @@ One tune of a channel feeds every screen and every recording. Screens in the hou
 - [Recordings and storage](recordings.md)
 - [Sync and watching together](sync.md)
 - [Troubleshooting](troubleshooting.md)
+- [Common problems](problems.md)
 - [FAQ](faq.md)
 - [Security](security.md)
 
