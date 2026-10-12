@@ -14,9 +14,9 @@ Each device aims at the room's moment. Settings, Live delay, is how far behind l
 
 ## Pause for every screen
 
-On the web, the same panel offers Watch together. The line under it is "Watch together: pause and rewind for every screen that joins." After you join, the heading is Watching together, and the line is "Pause, rewind, and Live move every screen watching together." The panel lists the screens. Leave drops you out and leaves the others where they are.
+On the web, the same panel offers Watch together. While nobody has joined, the line is "Watch together: pause and rewind for every screen that joins." and the button is "Watch together." When someone has already joined, the line names them and the button is "Join." After you join, the heading is Watching together, and the line is "Pause, rewind, and Live move every screen watching together." The panel lists the screens. Leave drops you out and leaves the others where they are.
 
-A screen that has not joined keeps its own pause. Sync still holds it on the room's moment while it is playing.
+A screen that has not joined keeps its own pause. Pausing it leaves Whole-Home Sync. Playing again stays off the room until you come back. On the web, the Live control does that. On iPhone, iPad, and Apple TV the button is "Back in sync."
 
 ## Watch together on Home
 
