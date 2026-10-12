@@ -12,6 +12,7 @@
 
 - Clean-up and keep rules leave a recording whose file is already gone, and a pass that keeps the newest episodes no longer counts it as one of them.
 - A short recording whose playhead never moved no longer counts as watched for clean-up.
+- Record it again finds the next airing for a recording on the other half of a 1.0 and 3.0 pair when the guide names the episode only by title and episode name.
 
 ## 0.13.2 — 2026-10-11
 

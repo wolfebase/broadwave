@@ -360,7 +360,7 @@ public struct APIClient: Sendable {
         return try await send("POST", "/recordings/\(recordingID)/detect", body: [String: String](), timeout: 600, as: R.self).markers
     }
 
-    /// The next airing of the recording's episode in the guide. Nil when the guide has none.
+    /// The next airing of the recording's episode in the guide, on the channel a simulcast pair records. Nil when the guide has none.
     public func recordAgain(recordingID: Int64) async throws -> Airing? {
         try await send("GET", "/recordings/\(recordingID)/again", as: RecordAgain.Answer.self).airing
     }

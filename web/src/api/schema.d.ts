@@ -880,7 +880,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The next airing of the recording's episode in the guide, for Record it again. Record it with POST /passes (kind once, airingStart). */
+        /** @description The next airing of the recording's episode in the guide, on the channel a simulcast pair records, for Record it again. Record it with POST /passes (kind once, airingStart). */
         get: operations["recordAgain"];
         put?: never;
         post?: never;
