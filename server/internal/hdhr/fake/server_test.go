@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,6 +15,42 @@ import (
 
 	"broadwave/internal/hdhr"
 )
+
+func TestStartPinsLocalhostPorts(t *testing.T) {
+	httpLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpAddr := httpLn.Addr().String()
+	_ = httpLn.Close()
+	ctrlLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctrlAddr := ctrlLn.Addr().String()
+	_ = ctrlLn.Close()
+
+	s := &Server{HTTPAddr: httpAddr, ControlAddr: ctrlAddr}
+	base, port, err := s.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	if base != "http://"+httpAddr {
+		t.Fatalf("base %s, want http://%s", base, httpAddr)
+	}
+	_, wantPort, _ := net.SplitHostPort(ctrlAddr)
+	if port != wantPort {
+		t.Fatalf("control %s, want %s", port, wantPort)
+	}
+}
+
+func TestStartRejectsAPublicAddress(t *testing.T) {
+	s := &Server{HTTPAddr: "0.0.0.0:9"}
+	if _, _, err := s.Start(); err == nil {
+		t.Fatal("a public address should be refused")
+	}
+}
 
 func TestStreamSourceKeepsEachFrequency(t *testing.T) {
 	s := &Server{Source: "fast.ts", Source5: "slow.ts"}
