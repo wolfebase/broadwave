@@ -220,6 +220,10 @@ func (s *Server) detectBreaks(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "recording not found", http.StatusNotFound)
 		return
 	}
+	if s.Hub == nil {
+		httpError(w, "player is not configured", http.StatusServiceUnavailable)
+		return
+	}
 	list, err := dvr.IndexBreaks(r.Context(), s.Store, s.Hub.FFmpeg, rec, false)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -582,6 +586,10 @@ func (s *Server) poster(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) backup(w http.ResponseWriter, r *http.Request) {
+	if s.Hub == nil {
+		httpError(w, "player is not configured", http.StatusServiceUnavailable)
+		return
+	}
 	dir := filepath.Join(s.Hub.Dir, "backup")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		writeError(w, err)

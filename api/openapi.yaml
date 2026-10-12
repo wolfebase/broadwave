@@ -1093,7 +1093,7 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "503":
-          description: "`no_signal`, `stream_down`, `tuner_refused`, or `tuner_silent`: the tune for a recording that starts now failed."
+          description: "`no_signal`, `stream_down`, `tuner_refused`, or `tuner_silent`: the tune for a recording that starts now failed. `unavailable`: the player is not configured."
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -1135,6 +1135,7 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Ok" }
         "400": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /recordings/{id}/play:
     post:
       tags: [recordings]
@@ -1384,6 +1385,7 @@ paths:
                     items: { $ref: "#/components/schemas/Marker" }
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /markers/{id}:
     delete:
       tags: [recordings]
@@ -2237,6 +2239,7 @@ paths:
           content:
             application/octet-stream:
               schema: { type: string, format: binary }
+        "503": { $ref: "#/components/responses/Error" }
     post:
       tags: [settings]
       operationId: restoreBackup
