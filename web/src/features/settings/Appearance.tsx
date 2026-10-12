@@ -9,7 +9,7 @@ export function Appearance() {
   const [theme, setTheme] = useState(readTheme);
   const [accent, setAccent] = useState(readAccent);
   return (
-    <section className="settings-section">
+    <section className="settings-section appearance">
       <h2 id="appearance-title">{copy.settings.appearance}</h2>
       <div className="field">
         <div className="segmented" role="group" aria-labelledby="appearance-title">

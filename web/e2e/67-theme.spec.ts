@@ -63,6 +63,12 @@ test.describe("appearance", () => {
         await atSize(page, size);
         await shot(page, `guide-${theme}-${size.name}`, info);
       }
+      // Phone is the layout that presses Now. A black pill there ignores the accent.
+      await atSize(page, viewports[0]);
+      const now = page.getByRole("button", { name: "Now", exact: true });
+      await expect(now).toHaveAttribute("aria-pressed", "true");
+      await expect(now).toHaveCSS("background-color", theme === "light" ? "rgb(29, 78, 216)" : "rgb(245, 247, 250)");
+      await expect(now).toHaveCSS("color", theme === "light" ? "rgb(255, 255, 255)" : "rgb(7, 10, 16)");
 
       await page.getByRole("button", { name: "Settings", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Appearance" })).toBeVisible();

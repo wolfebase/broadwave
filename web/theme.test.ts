@@ -284,6 +284,17 @@ test("a league name and a live edge clear the light card", () => {
   assert.match(block(light, 'html[data-theme="light"] .team-swatch'), /inset 0 0 0 1px var\(--color-line-strong\)/);
 });
 
+test("a pressed jump and the setup step follow the accent", () => {
+  const pressed = block(light, 'html[data-theme="light"] .pill-btn[aria-pressed="true"],\nhtml[data-theme="light"] .setup-steps li.on button');
+  assert.match(pressed, /background:\s*var\(--color-accent\)/);
+  assert.match(pressed, /color:\s*var\(--color-on-accent\)/);
+  assert.match(pressed, /border-color:\s*transparent/);
+  const player = block(light, 'html[data-theme="light"] :is(.stage, .mv) .seg.on,\nhtml[data-theme="light"] :is(.stage, .mv) .btn.primary,\nhtml[data-theme="light"] :is(.stage, .mv) .pill-btn[aria-pressed="true"]');
+  assert.match(player, /rgba\(255, 255, 255, 0\.92\)/);
+  assert.match(player, /var\(--color-canvas\)/);
+  assert.match(block(light, ".appearance .field > .segmented"), /justify-self:\s*start/);
+});
+
 test("an off switch shows its knob on a light track", () => {
   assert.match(block(light, 'html[data-theme="light"] .switch-row input'), /var\(--color-text\)\s+55%/);
   assert.match(block(light, 'html[data-theme="light"] .switch-row input:checked'), /var\(--color-success\)/);
@@ -304,7 +315,7 @@ test("the player and multiview keep the dark palette in a light page", () => {
   assert.equal(decl(stage, "--brand-blue"), "var(--color-accent)");
   assert.match(decl(stage, "--focus-ring"), /var\(--color-canvas\)/);
   assert.match(block(light, 'html[data-theme="light"] :is(.stage, .mv) .glass-icon'), /rgba\(255, 255, 255, 0\.08\)/);
-  const selected = block(light, 'html[data-theme="light"] :is(.stage, .mv) .seg.on,\nhtml[data-theme="light"] :is(.stage, .mv) .btn.primary');
+  const selected = block(light, 'html[data-theme="light"] :is(.stage, .mv) .seg.on,\nhtml[data-theme="light"] :is(.stage, .mv) .btn.primary,\nhtml[data-theme="light"] :is(.stage, .mv) .pill-btn[aria-pressed="true"]');
   assert.match(selected, /rgba\(255, 255, 255, 0\.92\)/);
   assert.match(selected, /var\(--color-canvas\)/);
   const pill = mix([255, 255, 255], parseHex("#1A2130"), 0.92);
