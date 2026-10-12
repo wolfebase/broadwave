@@ -1409,12 +1409,16 @@ paths:
           application/json:
             schema:
               type: object
+              required: [start]
               properties:
                 programId: { type: string }
                 title: { type: string }
                 subtitle: { type: string }
                 channelId: { type: integer, format: int64 }
-                start: { type: string, format: date-time }
+                start:
+                  type: string
+                  format: date-time
+                  description: An offset is accepted and stored as UTC, which is how the skip is matched. A missing or unreadable time is 400.
       responses:
         "200": { $ref: "#/components/responses/Ok" }
         "400": { $ref: "#/components/responses/Error" }

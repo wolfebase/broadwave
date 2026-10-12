@@ -522,11 +522,19 @@ func (s *Server) skipAiring(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
+	// The planner matches the UTC start from SkipParts. An offset, or the
+	// raw text, would be stored and then never skip the airing.
+	parsed, err := parseGuideTime(body.Start)
+	if err != nil {
+		httpError(w, "start needs to be a time", http.StatusBadRequest)
+		return
+	}
+	start := parsed.UTC().Format(time.RFC3339)
 	key := store.EpisodeKey(body.ProgramID, body.Title, body.Subtitle, body.ChannelID)
 	if key == "" {
-		key = store.EpisodeKey("once", body.Title, body.Start, body.ChannelID)
+		key = store.EpisodeKey("once", body.Title, start, body.ChannelID)
 	}
-	if err := s.Store.SkipAiring(r.Context(), key, body.Start); err != nil {
+	if err := s.Store.SkipAiring(r.Context(), key, start); err != nil {
 		writeError(w, err)
 		return
 	}

@@ -4359,8 +4359,11 @@ export interface operations {
                     subtitle?: string;
                     /** Format: int64 */
                     channelId?: number;
-                    /** Format: date-time */
-                    start?: string;
+                    /**
+                     * Format: date-time
+                     * @description An offset is accepted and stored as UTC, which is how the skip is matched. A missing or unreadable time is 400.
+                     */
+                    start: string;
                 };
             };
         };
