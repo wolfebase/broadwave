@@ -779,6 +779,53 @@ test("a restarted server is watched again, and the old boot is not kept", async 
   assert.equal(script.posts.length, 3);
 });
 
+test("a failed watch is asked again once hello names the process", async () => {
+  const stray = scriptedPoster();
+  const ignored = createCastHold("http://broadwave.local:8477/cast", stray.poster);
+  ignored.hold({ channelId: 1, playlist: "/media/live/1/index.m3u8", token: "" });
+  ignored.noteBoot("boot-9");
+  assert.equal(stray.posts.length, 0);
+
+  const script = scriptedPoster();
+  const hold = createCastHold("http://broadwave.local:8477/cast", script.poster);
+  hold.hold({ channelId: 1, playlist: castPlaylist, token: "bw_casttoken" });
+  script.gates[0]?.resolve(null);
+  await script.gates[0]?.promise;
+  assert.equal(script.posts.length, 1);
+  assert.equal(script.stops.length, 0);
+  hold.noteBoot("boot-9");
+  assert.equal(script.posts.length, 2);
+  assert.equal(script.posts[1]?.token, "bw_casttoken");
+  script.gates[1]?.resolve(null);
+  await script.gates[1]?.promise;
+  assert.equal(script.posts.length, 2);
+  hold.noteBoot("boot-9");
+  assert.equal(script.posts.length, 2);
+
+  hold.noteBoot("boot-10");
+  assert.equal(script.posts.length, 3);
+  script.gates[2]?.resolve({ channelId: 1, rendition: "1080.aac2.broadcast", boot: "boot-10" });
+  await script.gates[2]?.promise;
+  assert.equal(script.stops.length, 0);
+  hold.release();
+  assert.equal(script.stops.length, 1);
+  assert.equal(script.stops[0]?.boot, "boot-10");
+});
+
+test("a watch that fails after hello is asked once more", async () => {
+  const script = scriptedPoster();
+  const hold = createCastHold("http://broadwave.local:8477/cast", script.poster);
+  hold.noteBoot("boot-9");
+  hold.hold({ channelId: 1, playlist: castPlaylist, token: "bw_casttoken" });
+  script.gates[0]?.resolve(null);
+  await script.gates[0]?.promise;
+  assert.equal(script.posts.length, 2);
+  script.gates[1]?.resolve(null);
+  await script.gates[1]?.promise;
+  assert.equal(script.posts.length, 2);
+  assert.equal(script.stops.length, 0);
+});
+
 test("a failed watch does not release a viewer, and stop drops one still in flight", async () => {
   const script = scriptedPoster();
   const hold = createCastHold("http://broadwave.local:8477/cast", script.poster);
