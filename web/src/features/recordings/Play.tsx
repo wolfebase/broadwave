@@ -7,6 +7,7 @@ import { mediaURL } from "../../lib/deviceToken";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, subscribeZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
 import { markersForPlayback, playbackGrowing, progressSaveAction, releaseFileVideo, storedPlayhead, takeFileFatal, type ResumeGate } from "./filePlay";
 import { copy } from "../../strings";
+import { recordingSeekArrow } from "../player/keys";
 import { Stage } from "../player/Stage";
 import type { Recording } from "../../types";
 import { episodeTag, recordingSubject } from "../library/model";
@@ -362,15 +363,19 @@ export function Play({
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
     if (event.key === " " && event.target instanceof HTMLButtonElement) return;
     const key = canonicalKey(event);
+    const onPicture = event.target === event.currentTarget;
     const actions: Record<string, () => void> = {
       " ": togglePlay,
       k: togglePlay,
-      ArrowLeft: () => back(15),
-      ArrowRight: ahead,
       Escape: onBack,
       // A TV remote's Back is often Backspace, and on some sets only a key code.
       Backspace: onBack,
     };
+    // On a TV the arrows walk the buttons. They skip only from the picture.
+    if (recordingSeekArrow(document.documentElement.dataset.layout === "tv", key, onPicture)) {
+      if (key === "ArrowLeft") actions.ArrowLeft = () => back(15);
+      if (key === "ArrowRight") actions.ArrowRight = ahead;
+    }
     const fn = actions[key];
     if (!fn) return;
     event.preventDefault();
