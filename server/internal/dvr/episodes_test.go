@@ -279,6 +279,114 @@ func TestFindEpisodeEndsFillsCreditsAfterTheIntroIsSet(t *testing.T) {
 	}
 }
 
+// Two copies of one episode are one vote. A logo only those copies share
+// does not beat the intro the other episodes share.
+func TestFindEpisodeEndsCountsOneCopyOfAnEpisode(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	logo := prints(1, 30, nil, 0)
+	theme := prints(2, 30, nil, 0)
+	selfHead := prints(3, 400, logo, 0)
+	themeAt := 100.0
+	copy(selfHead[int(themeAt/breaks.HopSeconds):], theme)
+	heads := map[string][]uint32{
+		"/lib/a.ts": prints(4, 400, logo, 0),
+		"/lib/b.ts": prints(5, 400, logo, 0),
+		"/lib/c.ts": prints(6, 400, theme, 100),
+		"/lib/d.ts": prints(7, 400, theme, 100),
+		"/lib/e.ts": selfHead,
+	}
+	old := listenFile
+	listenFile = func(_ context.Context, _, path string, _ float64) (breaks.Sound, error) {
+		return breaks.Sound{Head: heads[path]}, nil
+	}
+	t.Cleanup(func() { listenFile = old })
+	when := time.Date(2026, 10, 1, 19, 0, 0, 0, time.UTC)
+	add := func(path string, episode, day int) int64 {
+		t.Helper()
+		id, err := st.CreateRecording(ctx, store.Recording{
+			Title: "Harbor", Path: path, Status: "complete",
+			Season: 1, Episode: episode, StartedAt: when.AddDate(0, 0, day),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.SetDuration(ctx, id, 1800); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	listen := func(id int64) {
+		t.Helper()
+		if err := FindEpisodeEnds(ctx, st, "", mustRec(t, st, id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	listen(add("/lib/a.ts", 1, -4))
+	listen(add("/lib/b.ts", 1, -3))
+	listen(add("/lib/c.ts", 2, -2))
+	listen(add("/lib/d.ts", 3, -1))
+	self := add("/lib/e.ts", 5, 0)
+	listen(self)
+	got, _ := st.Recording(ctx, self)
+	if math.Abs(got.IntroStart-100) > 1 || math.Abs(got.IntroEnd-130) > 1 {
+		t.Fatalf("intro %v-%v, want 100-130", got.IntroStart, got.IntroEnd)
+	}
+}
+
+// Two copies of one episode were listened to before any other episode. The
+// next episode fills in the intro on both copies, not only the closer one.
+func TestFindEpisodeEndsFillsEveryCopyOfAnEpisode(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	theme := prints(1, 30, nil, 0)
+	heads := map[string][]uint32{
+		"/lib/a.ts": prints(3, 1200, theme, 90),
+		"/lib/b.ts": prints(3, 1200, theme, 90),
+		"/lib/c.ts": prints(4, 1200, theme, 200),
+	}
+	old := listenFile
+	listenFile = func(_ context.Context, _, path string, _ float64) (breaks.Sound, error) {
+		return breaks.Sound{Head: heads[path]}, nil
+	}
+	t.Cleanup(func() { listenFile = old })
+	when := time.Date(2026, 10, 1, 19, 0, 0, 0, time.UTC)
+	listen := func(path string, episode, day int) int64 {
+		t.Helper()
+		id, err := st.CreateRecording(ctx, store.Recording{
+			Title: "Harbor", Path: path, Status: "complete",
+			Season: 1, Episode: episode, StartedAt: when.AddDate(0, 0, day),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.SetDuration(ctx, id, 1800); err != nil {
+			t.Fatal(err)
+		}
+		if err := FindEpisodeEnds(ctx, st, "", mustRec(t, st, id)); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	a := listen("/lib/a.ts", 1, -3)
+	b := listen("/lib/b.ts", 1, -2)
+	c := listen("/lib/c.ts", 2, 0)
+	for id, start := range map[int64]float64{a: 90, b: 90, c: 200} {
+		got, _ := st.Recording(ctx, id)
+		if math.Abs(got.IntroStart-start) > 1 || math.Abs(got.IntroEnd-start-30) > 1 {
+			t.Fatalf("recording %d: intro %v-%v, want %v", id, got.IntroStart, got.IntroEnd, start)
+		}
+	}
+}
+
 func mustRec(t *testing.T, st *store.Store, id int64) store.Recording {
 	t.Helper()
 	rec, err := st.Recording(context.Background(), id)
@@ -324,11 +432,37 @@ func TestSameEpisodeIsLeftOut(t *testing.T) {
 	d := store.Recording{ID: 4, Title: "Sitcom", Season: 2, Episode: 6, Listened: true, Status: "complete"}
 	e := store.Recording{ID: 5, Title: "Sitcom", Subtitle: "Pilot", Listened: true, Status: "complete"}
 	f := store.Recording{ID: 6, Title: "Sitcom", Subtitle: "pilot ", Listened: true, Status: "complete"}
-	got := showSiblings([]store.Recording{a, b, c, d}, a)
-	if len(got) != 1 || got[0].ID != 4 {
+	got, copies := showSiblings([]store.Recording{a, b, c, d}, a)
+	if len(got) != 1 || got[0].ID != 4 || len(copies) != 0 {
+		t.Fatalf("%+v %+v", got, copies)
+	}
+	if got, copies := showSiblings([]store.Recording{e, f}, e); len(got) != 0 || len(copies) != 0 {
+		t.Fatalf("%+v %+v", got, copies)
+	}
+}
+
+// Two copies of one episode are one vote. The closest copy votes, the copies
+// do not take every slot from another episode, and the rest are still listed
+// to be filled in, up to maxEpisodes.
+func TestShowSiblingsCountsOneCopy(t *testing.T) {
+	now := time.Date(2026, 10, 1, 19, 0, 0, 0, time.UTC)
+	self := store.Recording{ID: 5, Title: "Sitcom", Season: 1, Episode: 5, Listened: true, Status: "complete", StartedAt: now}
+	recs := []store.Recording{self}
+	for i := int64(1); i <= 9; i++ {
+		recs = append(recs, store.Recording{
+			ID: 10 + i, Title: "Sitcom", Season: 1, Episode: 1,
+			Listened: true, Status: "complete", StartedAt: now.Add(time.Duration(i) * time.Hour),
+		})
+	}
+	recs = append(recs, store.Recording{
+		ID: 2, Title: "Sitcom", Season: 1, Episode: 2,
+		Listened: true, Status: "complete", StartedAt: now.Add(30 * time.Minute),
+	})
+	got, copies := showSiblings(recs, self)
+	if len(got) != 2 || got[0].ID != 2 || got[1].ID != 11 {
 		t.Fatalf("%+v", got)
 	}
-	if got := showSiblings([]store.Recording{e, f}, e); len(got) != 0 {
-		t.Fatalf("%+v", got)
+	if len(copies) != maxEpisodes || copies[0].ID != 12 || copies[maxEpisodes-1].ID != 19 {
+		t.Fatalf("copies %+v", copies)
 	}
 }
