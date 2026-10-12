@@ -12,6 +12,22 @@ import (
 
 var episodeFile = regexp.MustCompile(`(?i)[sS](\d{1,2})[eE](\d{1,3})`)
 
+// showBeforeEpisode is the show in a filename that has no folder to name it.
+// "Harbor - S01E02 - The Storm" is Harbor. A name that is only the episode
+// is left alone, so two bare files do not become one show.
+func showBeforeEpisode(name string) (string, bool) {
+	base := strings.TrimSuffix(name, filepath.Ext(name))
+	loc := episodeFile.FindStringIndex(base)
+	if loc == nil || loc[0] == 0 {
+		return "", false
+	}
+	title := strings.TrimRight(base[:loc[0]], " .-_")
+	if title == "" {
+		return "", false
+	}
+	return title, true
+}
+
 // mediaFileCap is the most videos ScanMedia returns from one folder.
 var mediaFileCap = 200_000
 
@@ -36,10 +52,12 @@ func ScanMedia(root string) ([]store.Recording, error) {
 			// Show/Season 2/episode: the show is the folder above.
 			dir = filepath.Dir(dir)
 		}
+		namedByFolder := false
 		if dir != root && strings.HasPrefix(dir, root) {
 			title = filepath.Base(dir)
 			subtitle = strings.TrimSuffix(info.Name(), filepath.Ext(info.Name()))
 			category = "Series"
+			namedByFolder = true
 		}
 		season, episode := 0, 0
 		if m := episodeFile.FindStringSubmatch(info.Name()); m != nil {
@@ -49,6 +67,13 @@ func ScanMedia(root string) ([]store.Recording, error) {
 			}
 			season, _ = strconv.Atoi(m[1])
 			episode, _ = strconv.Atoi(m[2])
+			// A file dropped in the library root has no show folder. The
+			// name before SxxEyy is the show, so two episodes are one series.
+			if !namedByFolder {
+				if show, ok := showBeforeEpisode(info.Name()); ok {
+					title = show
+				}
+			}
 		}
 		out = append(out, store.Recording{
 			Title: title, Subtitle: subtitle, Category: category, Path: path, Status: "complete", GuideNumber: "Library",
