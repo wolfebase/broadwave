@@ -215,3 +215,23 @@ test("the Apple catalogs are English and hold the strings the apps look up", () 
   }
   assert.deepEqual(missing, []);
 });
+
+test("a recording count of one uses the catalog plural", () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const app = JSON.parse(fs.readFileSync(path.join(root, "apple/App/Localizable.xcstrings"), "utf8")) as {
+    strings: Record<string, { localizations?: { en?: { variations?: { plural?: { one?: { stringUnit?: { value?: string } } } } } } }>;
+  };
+  const one = (key: string) => app.strings[key]?.localizations?.en?.variations?.plural?.one?.stringUnit?.value;
+  assert.equal(one("Delete %lld files?"), "Delete 1 file?");
+  assert.equal(one("Delete %lld files"), "Delete 1 file");
+  assert.equal(one("Plays %lld recordings in turn. Uses no tuner."), "Plays 1 recording. Uses no tuner.");
+  assert.equal(one("%lld selected"), "1 selected");
+  const view = fs.readFileSync(path.join(root, "apple/App/Shared/RecordingsView.swift"), "utf8");
+  for (const literal of ["Delete 1 file?", "Delete 1 file", "Plays 1 recording. Uses no tuner.", '"1 selected"']) {
+    assert.equal(view.includes(literal), false, literal);
+  }
+  assert.match(view, /"Delete \\\(chosen\.count\) files\?"/);
+  assert.match(view, /Button\("Delete \\\(chosen\.count\) files"/);
+  assert.match(view, /"Plays \\\(channel\.recordings\.count\) recordings in turn\. Uses no tuner\."/);
+  assert.match(view, /"\\\(chosen\.count\) selected"/);
+});
