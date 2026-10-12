@@ -86,6 +86,8 @@ export class CastSession {
   private state: RoomState | null = null;
   private started = false;
   private waited = false;
+  /** True once a frame has been read. A paused room plays only until then. */
+  private framed = false;
   private label: CastStatus = "buffering";
 
   constructor(input: Open, media: string) {
@@ -119,6 +121,7 @@ export class CastSession {
 
   /** here, join, and the first clock sample. The socket is already open. */
   onOpen() {
+    if (this.stopped) return;
     this.clock = freshClock();
     this.transport.send(hereMessage(this.screenId, this.channelId));
     this.transport.send(joinMessage(this.room, this.channelId, this.latency));
@@ -126,11 +129,12 @@ export class CastSession {
   }
 
   sampleClock() {
+    if (this.stopped) return;
     this.transport.send(clockMessage(this.now()));
   }
 
   onMessage(raw: unknown) {
-    if (!raw || typeof raw !== "object") return;
+    if (this.stopped || !raw || typeof raw !== "object") return;
     const message = raw as { type?: unknown; data?: unknown };
     if (message.type === "sync.state") {
       const room = readRoom(message.data);
@@ -149,29 +153,31 @@ export class CastSession {
    * the playlist does not hold it). After the wait, at the edge.
    */
   considerStart() {
-    if (this.started) return;
+    if (this.stopped || this.started) return;
     const frags = this.player.fragments();
-    if (this.state && frags.length > 0) {
-      this.started = true;
-      this.player.startAt(roomStart(frags, this.state, this.serverNow()));
-      return;
-    }
-    if (this.waited) {
-      this.started = true;
-      this.player.startAt(null);
-    }
+    const positioned = !!this.state && frags.length > 0;
+    if (!positioned && !this.waited) return;
+    this.started = true;
+    // play() is what raises the picture. A Cast device can leave readyState at
+    // 0 until then, including a paused room, and the corrections never run
+    // without a frame. The room pauses on a later tick, once a frame exists.
+    this.player.startAt(positioned ? roomStart(frags, this.state!, this.serverNow()) : null);
+    this.player.play();
   }
 
   /** The page's 800 ms timer. A stale generation, from a retune, does nothing. */
   markWaitOver(generation: number) {
-    if (generation !== this.generation) return;
+    if (this.stopped || generation !== this.generation) return;
     this.waited = true;
     this.considerStart();
   }
 
   tick() {
+    if (this.stopped) return;
     this.considerStart();
+    if (this.player.mediaNow() != null) this.framed = true;
     if (!this.state) {
+      this.playUntilFrame();
       this.emit("buffering");
       return;
     }
@@ -196,6 +202,7 @@ export class CastSession {
    * goes out on the new socket's open. Otherwise this sends leave, here, and join.
    */
   retune(next: CastLoad): boolean {
+    if (this.stopped) return false;
     const nextToken = next.token ?? "";
     if (next.channelId === this.channelId && next.playlist === this.playlist && next.room === this.room && nextToken === this.token) {
       this.title = next.title;
@@ -214,6 +221,7 @@ export class CastSession {
     this.generation += 1;
     this.started = false;
     this.waited = false;
+    this.framed = false;
     this.state = null;
     this.memory = freshSync();
     const media = mediaURL(this.pageURL, next.playlist);
@@ -236,7 +244,13 @@ export class CastSession {
 
   private apply(action: SyncAction) {
     const rate = this.state?.rate ?? 1;
-    if (action.kind === "wait") return;
+    if (action.kind === "wait") {
+      // No frame yet: play() may have been refused. A hold is not a wait, so
+      // this does not play through that pause. After the first frame a paused
+      // room stays paused, including while a seek hides the playhead.
+      this.playUntilFrame();
+      return;
+    }
     if (action.kind === "seek") {
       this.player.seek(action.to);
       if (rate !== 0) this.player.play();
@@ -252,11 +266,26 @@ export class CastSession {
     this.player.setRate(action.rate);
   }
 
+  /** Asks for a picture until one frame has been read. Later pauses are left alone. */
+  private playUntilFrame() {
+    if (!this.started || this.framed) return;
+    if (this.player.mediaNow() != null) {
+      this.framed = true;
+      return;
+    }
+    if (this.player.paused()) this.player.play();
+  }
+
   private emit(next: CastStatus) {
     if (this.label === next) return;
     this.label = next;
     this.onStatus?.(next);
   }
+}
+
+/** A session that can take another load. A stopped one cannot; the page opens another. */
+export function castSessionLive<T extends { stopped: boolean }>(session: T | null): session is T {
+  return session != null && !session.stopped;
 }
 
 /** Null when the playlist is not this server's /media/ path. The player is not touched. */

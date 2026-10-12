@@ -63,6 +63,33 @@ func TestCastPageStaysOpenWhenDeviceSignInIsOn(t *testing.T) {
 	}
 }
 
+func TestCastReceiverScriptStaysOpenWhenDeviceSignInIsOn(t *testing.T) {
+	assets := fstest.MapFS{
+		"index.html":         &fstest.MapFile{Data: []byte("SPA")},
+		"cast/receiver.js":   &fstest.MapFile{Data: []byte("receiver-script")},
+		"assets/cast-abc.js": &fstest.MapFile{Data: []byte("cast-chunk")},
+	}
+	h := (&Server{Store: testStore(t), Assets: assets}).Handler()
+	on := call(t, h, http.MethodPut, "/api/v1/settings", `{"deviceAuth":"1"}`, "")
+	if on.Code != http.StatusOK {
+		t.Fatalf("enable %d %s", on.Code, on.Body.String())
+	}
+	script := call(t, h, http.MethodGet, "/cast/receiver.js", "", "")
+	if script.Code != http.StatusOK || !strings.Contains(script.Body.String(), "receiver-script") || strings.Contains(script.Body.String(), "SPA") {
+		t.Fatalf("receiver script %d %s", script.Code, script.Body.String())
+	}
+	if script.Header().Get("Cache-Control") != "no-cache" {
+		t.Fatalf("receiver cache %q", script.Header().Get("Cache-Control"))
+	}
+	chunk := call(t, h, http.MethodGet, "/assets/cast-abc.js", "", "")
+	if chunk.Code != http.StatusOK || chunk.Body.String() != "cast-chunk" {
+		t.Fatalf("chunk %d %s", chunk.Code, chunk.Body.String())
+	}
+	if !strings.Contains(chunk.Header().Get("Cache-Control"), "immutable") {
+		t.Fatalf("chunk cache %q", chunk.Header().Get("Cache-Control"))
+	}
+}
+
 func TestCastAppIDPublishedWhenValid(t *testing.T) {
 	st := testStore(t)
 	empty := get(t, (&Server{Store: st}).Handler(), "/api/v1/server")
