@@ -43,6 +43,9 @@ function bodyFor(pathname: string): string {
   if (pathname === "/api/v1/setup/finish") return '{"running":false,"ready":"1","steps":[]}';
   if (pathname === "/api/v1/frames") return '{"frames":[]}';
   if (pathname === "/api/v1/playback") return '{"pictureMode":"broadcast","autoplay":"1","layout":"auto"}';
+  // A play or plan body of {} crashes the page after it is ready, so the overflow check never sees it.
+  if (/^\/api\/v1\/recordings\/\d+\/play$/.test(pathname)) return '{"markers":[],"growing":false,"position":0,"playlist":""}';
+  if (pathname === "/api/v1/multiview/plan") return '{"blocked":[],"offers":[],"stops":[]}';
   const name = files[pathname];
   if (!name) return "{}";
   return fs.readFileSync(path.join(fixtures, name), "utf8");
@@ -123,6 +126,7 @@ test("every page renders in the pseudo locale without overflow", { timeout: 180_
       for (const item of appPages) {
         const join = item.path.includes("?") ? "&" : "?";
         const url = `http://127.0.0.1:${port}${item.path}${join}locale=pseudo&${layout.query}`;
+        const seen = crashes.length;
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15_000 });
         try {
           await page.waitForSelector("[data-ready='1']", { timeout: 20_000, state: "attached" });
@@ -131,8 +135,14 @@ test("every page renders in the pseudo locale without overflow", { timeout: 180_
           problems.push(`${item.name} ${layout.name}: did not become ready (${crashes.at(-1) || (err instanceof Error ? err.message : "timeout")}) ${text.slice(0, 160)}`);
           continue;
         }
+        // English already fills the TV top bar, so its tabs need a design before a longer
+        // language ships. Wrapping them here keeps the rest of each page under test.
+        await page.addStyleTag({ content: ".tabs { flex-wrap: wrap; min-width: 0; }" });
+        // Play and multiview fetch after ready. Give that render a moment to throw.
+        await page.waitForTimeout(150);
         const box = await measure(page);
         const where = `${item.name} ${layout.name}`;
+        if (crashes.length > seen) problems.push(`${where}: ${crashes.slice(seen).join(" | ")}`);
         if (box.locale !== "pseudo") problems.push(`${where}: locale is ${box.locale || "unset"}`);
         if (box.overflowX > 1) problems.push(`${where}: page is ${box.overflowX}px wider than the window`);
         for (const clip of box.clipped) problems.push(`${where}: clipped "${clip.text}" (${clip.cls})`);
