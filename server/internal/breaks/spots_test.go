@@ -98,6 +98,39 @@ func TestSureBreaksTeachTheirSpots(t *testing.T) {
 	}
 }
 
+// A black frame a second longer than the others still starts its spot at the
+// same moment. The ad is learned, so the next airing is skipped too.
+func TestALongerBlackStillTeachesTheSpot(t *testing.T) {
+	r := rand.New(rand.NewPCG(15, 16))
+	c := Cues{Length: 1800, Prints: randomPrints(r, 1800)}
+	for _, b := range []span{{600, 600.2}, {630, 631.3}, {660, 660.2}} {
+		c.Blacks = append(c.Blacks, b)
+		c.Silences = append(c.Silences, span{b.Start - 0.05, b.End + 0.05})
+	}
+	c.Logo = logoOff(1800, span{600, 660}, span{1200, 1230})
+	ad := append([]uint64(nil), c.Prints[601:629]...)
+	playAt(r, c.Prints, ad, 1201)
+	got := score(c, nil, nil, false).Breaks
+	if len(got) != 2 || got[1].Start != 1201 || got[1].Confidence < AutoSkip {
+		t.Fatalf("%+v", got)
+	}
+}
+
+// Two black frames can overlap in the log. Their middles sit a second apart
+// while their starts are a spot apart, and the print cut must not run backward.
+func TestOverlappingBlacksDoNotPanicTheSpotCut(t *testing.T) {
+	r := rand.New(rand.NewPCG(17, 18))
+	c := Cues{Length: 400, Prints: randomPrints(r, 400)}
+	for _, b := range []span{{100, 118}, {110, 110.2}, {140, 140.2}, {170, 170.2}} {
+		c.Blacks = append(c.Blacks, b)
+		c.Silences = append(c.Silences, span{b.Start - 0.05, b.End + 0.05})
+	}
+	c.Logo = logoOff(400, span{100, 180})
+	if got := score(c, nil, nil, false).Spots; len(got) == 0 {
+		t.Fatal("no spot")
+	}
+}
+
 func TestSpotsDoNotMatchStillPictures(t *testing.T) {
 	if usable(make([]uint64, 30)) {
 		t.Fatal("black is usable")

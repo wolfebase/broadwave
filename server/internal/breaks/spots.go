@@ -51,23 +51,27 @@ func spotsOf(c Cues, found []Break) []Spot {
 		if b.Confidence < AutoSkip {
 			continue
 		}
-		var in []float64
+		var in []boundary
 		for _, cut := range cuts {
 			if cut.At >= b.Start-0.5 && cut.At <= b.End+0.5 {
-				in = append(in, cut.At)
+				in = append(in, cut)
 			}
 		}
 		for i := 0; i+1 < len(in); {
 			j := i + 1
-			for j < len(in) && !spotLength(in[j]-in[i]) {
+			// Length is measured from when the black starts. The middle moves
+			// when one black runs longer, and a real spot would no longer
+			// line up.
+			for j < len(in) && !spotLength(in[j].Grid-in[i].Grid) {
 				j++
 			}
 			if j == len(in) {
 				i++
 				continue
 			}
-			from, to := int(in[i])+1, int(in[j])-1
-			if to <= len(c.Prints) && usable(c.Prints[from:to]) {
+			from, to := int(in[i].At)+1, int(in[j].At)-1
+			// Overlapping blacks can put the next middle before this one.
+			if from >= 0 && from < to && to <= len(c.Prints) && usable(c.Prints[from:to]) {
 				out = append(out, Spot{Prints: append([]uint64(nil), c.Prints[from:to]...), Start: from})
 			}
 			i = j
