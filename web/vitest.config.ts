@@ -5,6 +5,9 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
-    include: ["hook.test.tsx"],
+    include: [
+      "hook.test.tsx",
+      "prime.test.ts",
+    ],
   },
 });
