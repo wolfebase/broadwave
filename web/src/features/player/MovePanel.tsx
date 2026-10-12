@@ -16,14 +16,19 @@ export function MovePanel({ channel, onMoved, onClose }: { channel: Channel; onM
   const [sending, setSending] = useState("");
   const [status, setStatus] = useState("");
   const open = useRef(true);
+  // Only the newest look may land. Strict mode starts two.
+  const loadN = useRef(0);
 
   const load = useCallback(() => {
+    const mine = ++loadN.current;
     getScreens()
       .then(({ screens: list }) => {
-        if (open.current) setScreens(list.filter((s) => s.id !== screenId()));
+        if (!open.current || mine !== loadN.current) return;
+        setScreens(list.filter((s) => s.id !== screenId()));
       })
       .catch((err: Error) => {
-        if (open.current) setError(err.message || unreadBody);
+        if (!open.current || mine !== loadN.current) return;
+        setError(err.message || unreadBody);
       });
   }, []);
 

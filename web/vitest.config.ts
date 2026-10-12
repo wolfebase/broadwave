@@ -27,6 +27,7 @@ export default defineConfig({
       "liveLoader.test.ts",
       "scoreFetch.test.ts",
       "screenMoves.test.tsx",
+      "movePanel.test.tsx",
       "playerChrome.test.ts",
     ],
   },
