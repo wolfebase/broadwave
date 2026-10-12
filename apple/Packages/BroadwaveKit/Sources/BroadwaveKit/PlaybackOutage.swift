@@ -4,16 +4,16 @@ import Foundation
 /// long enough to ask. A short stall is the player's to ride out. The words
 /// match the web player.
 public enum PlaybackOutage {
-    public static let serverStopped = "The server stopped. It will try again when it's back."
-    public static let connectionDropped = "The connection dropped. It will try again when it's back."
-    public static let tunerStopped = "This tuner did not answer. Check that it is on."
-    public static let noSignal = "This channel isn't coming in. Check the antenna."
-    public static let pictureStopped = "The picture stopped. Trying again usually fixes it."
-    public static let pictureRestarting = "The picture stopped. Starting it again."
-    public static let tunersBusy = "Every tuner is busy. Stop a recording or watch something already on."
-    public static let channelDidNotStart = "This channel did not start. Try again."
+    public static let serverStopped = String(localized: "The server stopped. It will try again when it's back.", bundle: .module)
+    public static let connectionDropped = String(localized: "The connection dropped. It will try again when it's back.", bundle: .module)
+    public static let tunerStopped = String(localized: "This tuner did not answer. Check that it is on.", bundle: .module)
+    public static let noSignal = String(localized: "This channel isn't coming in. Check the antenna.", bundle: .module)
+    public static let pictureStopped = String(localized: "The picture stopped. Trying again usually fixes it.", bundle: .module)
+    public static let pictureRestarting = String(localized: "The picture stopped. Starting it again.", bundle: .module)
+    public static let tunersBusy = String(localized: "Every tuner is busy. Stop a recording or watch something already on.", bundle: .module)
+    public static let channelDidNotStart = String(localized: "This channel did not start. Try again.", bundle: .module)
     /// A response that is not the error envelope. The same words as the web client.
-    public static let requestFailed = "That did not work. Try again."
+    public static let requestFailed = String(localized: "That did not work. Try again.", bundle: .module)
 
     /// What a failed button says: the server's sentence, or the generic one for
     /// anything else (a timeout, an unreachable server, a proxy page).

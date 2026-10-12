@@ -50,7 +50,7 @@ public struct ATSC3Tag: View {
     public init() {}
 
     public var body: some View {
-        Text("3.0")
+        Text(String(localized: "atsc.short", defaultValue: "3.0"))
         #if os(tvOS)
             // Smaller sizes do not read across a room.
             .font(.body.weight(.bold))
@@ -170,7 +170,7 @@ public struct NowCard: View {
                 }
                 Text(channel.displayName).font(.footnote.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
             }
-            Text(airing?.title ?? "No listing")
+            Text(airing?.title ?? String(localized: "No listing"))
                 .font(.headline)
                 .lineLimit(2, reservesSpace: true)
             Spacer(minLength: 0)
@@ -199,7 +199,7 @@ public struct NowCard: View {
         let station = channel.isATSC3
             ? "\(channel.displayNumber) \(channel.displayName), ATSC 3.0"
             : "\(channel.displayNumber) \(channel.displayName)"
-        let title = airing?.title ?? "No listing"
+        let title = airing?.title ?? String(localized: "No listing")
         if title == channel.displayName {
             return station
         }
@@ -242,7 +242,7 @@ public struct OnNowRow: View {
                     if recording {
                         Circle().fill(Tokens.ColorToken.tally).frame(width: 8, height: 8)
                     }
-                    Text(airing?.title ?? "No listing").font(.body.weight(.semibold)).lineLimit(1)
+                    Text(airing?.title ?? String(localized: "No listing")).font(.body.weight(.semibold)).lineLimit(1)
                 }
                 AiringProgress(airing?.progress(at: now) ?? 0, color: kind.color)
                 if let next {

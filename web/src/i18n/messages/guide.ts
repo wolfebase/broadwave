@@ -1,0 +1,28 @@
+import type { Message } from "../runtime";
+
+export const guideMessages = {
+  "guide.category.sports": "Sports",
+  "guide.category.news": "News",
+  "guide.category.movies": "Movies",
+  "guide.category.kids": "Kids",
+  "guide.category.series": "Shows",
+  "guide.category.other": "Other",
+  "guide.recordings": { one: "{count} recording", other: "{count} recordings" },
+  "guide.recording": "Recording",
+  "guide.willRecord": "Will record",
+  "guide.new": "New",
+  "guide.watchChannel": "Watch {number} {name}",
+  "guide.atsc3Suffix": ", ATSC 3.0",
+  "guide.favoriteSuffix": ", Favorite",
+  "guide.noListings": "No listings",
+  "guide.listingsThrough": "Listings through {day}",
+  "guide.today": "Today",
+  "guide.tomorrow": "Tomorrow",
+  "guide.leftHours": "{hours}h {minutes}m left",
+  "guide.leftMinutes": "{minutes}m left",
+  "guide.source.silicondust": "From the tuner guide.",
+  "guide.source.schedulesDirect": "From Schedules Direct.",
+  "guide.source.xmltv": "From your guide file.",
+  "guide.source.playlist": "From the playlist.",
+  "guide.source.broadcast": "From the broadcast.",
+} as const satisfies Record<string, Message>;

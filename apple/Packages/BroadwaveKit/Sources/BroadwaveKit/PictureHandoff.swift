@@ -8,7 +8,7 @@ import Foundation
 /// held for a picture nobody can see.
 public enum PictureHandoff {
     /// VoiceOver name of the system route button.
-    public static let airPlayLabel = "AirPlay"
+    public static let airPlayLabel = String(localized: "AirPlay", bundle: .module)
 
     /// The embedded player is not a presented controller. Dismissing it when the
     /// small window starts would drop the watch, and a tap would have nothing

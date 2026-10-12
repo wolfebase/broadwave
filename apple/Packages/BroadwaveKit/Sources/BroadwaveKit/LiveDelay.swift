@@ -13,7 +13,7 @@ public enum LiveDelay: String, CaseIterable, Identifiable, Sendable {
     }
 
     public var title: String {
-        self == .balanced ? "Balanced" : "Stable"
+        self == .balanced ? String(localized: "Balanced", bundle: .module) : String(localized: "Stable", bundle: .module)
     }
 
     static let key = "BroadwaveLiveDelay"

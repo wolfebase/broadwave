@@ -1,18 +1,39 @@
 // What the player tells a viewer when live TV cannot keep going, and when it
 // is worth asking again without reloading the page.
 
+import { playerUiMessages } from "../../i18n/messages/playerUi.ts";
+import { bind } from "../../i18n/runtime.ts";
+
+const t = bind(playerUiMessages);
+
 export type Recovery = "" | "busy" | "server" | "tuner" | "signal" | "restart";
 
-export const serverStopped = "The server stopped. It will try again when it's back.";
-export const connectionDropped = "The connection dropped. It will try again when it's back.";
-export const tunerStopped = "This tuner did not answer. Check that it is on.";
-export const noSignal = "This channel isn't coming in. Check the antenna.";
-export const pictureStopped = "The picture stopped. Trying again usually fixes it.";
-export const pictureRestarting = "The picture stopped. Starting it again.";
-export const noListing = "No listing for this channel.";
-export const noListingChecked = "Still no listing for this channel.";
-export const channelDidNotStart = "This channel did not start. Try again.";
-export const requestFailed = "That did not work. Try again.";
+// Raw English, so a stored outage still matches these. The screen calls shownOutage.
+export const serverStopped = playerUiMessages["player.outage.serverStopped"];
+export const connectionDropped = playerUiMessages["player.outage.connectionDropped"];
+export const tunerStopped = playerUiMessages["player.outage.tunerStopped"];
+export const noSignal = playerUiMessages["player.outage.noSignal"];
+export const pictureStopped = playerUiMessages["player.outage.pictureStopped"];
+export const pictureRestarting = playerUiMessages["player.outage.pictureRestarting"];
+export const noListing = playerUiMessages["player.outage.noListing"];
+export const noListingChecked = playerUiMessages["player.outage.noListingChecked"];
+export const channelDidNotStart = playerUiMessages["player.outage.channelDidNotStart"];
+export const requestFailed = playerUiMessages["player.outage.requestFailed"];
+
+export function shownOutage(message: string): string {
+  if (message === serverStopped) return t("player.outage.serverStopped");
+  if (message === connectionDropped) return t("player.outage.connectionDropped");
+  if (message === tunerStopped) return t("player.outage.tunerStopped");
+  if (message === noSignal) return t("player.outage.noSignal");
+  if (message === pictureStopped) return t("player.outage.pictureStopped");
+  if (message === pictureRestarting) return t("player.outage.pictureRestarting");
+  if (message === noListing) return t("player.outage.noListing");
+  if (message === noListingChecked) return t("player.outage.noListingChecked");
+  if (message === channelDidNotStart) return t("player.outage.channelDidNotStart");
+  if (message === requestFailed) return t("player.outage.requestFailed");
+  if (message === busyFallback) return t("player.outage.tunersBusy");
+  return message;
+}
 
 // A response that is not the error envelope, or a system string from the player.
 // The server's own sentences pass through.
@@ -38,7 +59,7 @@ export function listingNote(checked: boolean): string {
   return checked ? noListingChecked : noListing;
 }
 
-const busyFallback = "Every tuner is busy. Stop a recording or watch something already on.";
+const busyFallback = playerUiMessages["player.outage.tunersBusy"];
 
 type Failed = { status?: number; code?: string; message?: string };
 

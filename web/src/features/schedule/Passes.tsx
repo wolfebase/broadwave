@@ -3,11 +3,14 @@ import type { Channel, NewPass, Pass, PassPreview } from "../../types";
 import { addSeriesPass, deletePass, orderPasses, previewPass, updatePass } from "../../api";
 import { useData } from "../../app/data";
 import { focusRing } from "../../app/remote";
+import { scheduleMessages } from "../../i18n/messages/schedule.ts";
+import { bind, weekdayShortNames } from "../../i18n/runtime.ts";
 import { dismissesLayer, pageCovered } from "../../lib/dialogFocus";
+import { copy } from "../../strings";
 import { formatClock } from "../../time";
 import { reloadAfterOrder } from "./plan";
 
-const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const t = bind(scheduleMessages);
 
 type Draft = Required<Omit<NewPass, "airingStart" | "priority">>;
 type Body = NewPass & { rename?: string };
@@ -147,7 +150,7 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
       setRemoving(null);
       onPasses();
     } catch (err) {
-      setRemoveError(err instanceof Error ? err.message : "The pass could not be removed.");
+      setRemoveError(err instanceof Error ? err.message : t("schedule.removeFailed"));
     } finally {
       setRemoveBusy(false);
     }
@@ -164,7 +167,7 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
       .then(() => orderPasses(ids))
       .then(
         () => undefined,
-        (err: unknown) => setNote(err instanceof Error ? err.message : "The order could not be saved."),
+        (err: unknown) => setNote(err instanceof Error ? err.message : t("schedule.orderFailed")),
       );
     void queue.current.then(() => {
       if (reloadAfterOrder(mine, orderN.current)) onPasses();
@@ -206,10 +209,10 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
   return (
     <>
       <div className="passes-head">
-        <h3 className="section-title">Passes</h3>
+        <h3 className="section-title">{t("schedule.passes")}</h3>
         {editing === "new" ? null : (
           <button type="button" className="btn small" data-pass-new onClick={() => setEditing("new")}>
-            New pass
+            {t("schedule.newPass")}
           </button>
         )}
       </div>
@@ -223,7 +226,7 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
         />
       ) : null}
       {rows.length === 0 && editing !== "new" ? (
-        <p className="empty">A pass records every airing that matches: a title, words in a title, or a category. Set one here or from the guide.</p>
+        <p className="empty">{t("schedule.passesEmpty")}</p>
       ) : (
         <ol className="source-list pass-list">
           {rows.map((pass, index) => (
@@ -256,13 +259,13 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
               </span>
               {removing === pass.id ? (
                 <span className="pad pass-actions">
-                  <span>Remove {passLabel(pass)}?</span>
-                  <span className="codec">Recordings it made stay.</span>
-                  <button type="button" className="btn small" disabled={removeBusy} aria-label={`Remove ${passLabel(pass)}`} onClick={() => void confirmRemove(pass.id)}>
-                    Remove
+                  <span>{t("schedule.removeAsk", { name: passLabel(pass) })}</span>
+                  <span className="codec">{t("schedule.recordingsStay")}</span>
+                  <button type="button" className="btn small" disabled={removeBusy} aria-label={t("schedule.removeNamed", { name: passLabel(pass) })} onClick={() => void confirmRemove(pass.id)}>
+                    {t("schedule.remove")}
                   </button>
                   <button ref={cancelRef} type="button" className="btn small" disabled={removeBusy} onClick={cancelRemove}>
-                    Cancel
+                    {t("schedule.cancel")}
                   </button>
                   {removeError ? (
                     <span className="hint error" role="alert">
@@ -272,17 +275,17 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
                 </span>
               ) : (
                 <span className="pad pass-actions">
-                  <button type="button" className="btn small" data-pass={pass.id} data-move="up" aria-label={`Move ${pass.title} up`} disabled={index === 0} onClick={() => move(pass.id, -1)}>
-                    Up
+                  <button type="button" className="btn small" data-pass={pass.id} data-move="up" aria-label={t("schedule.moveUp", { title: pass.title })} disabled={index === 0} onClick={() => move(pass.id, -1)}>
+                    {t("schedule.up")}
                   </button>
-                  <button type="button" className="btn small" data-pass={pass.id} data-move="down" aria-label={`Move ${pass.title} down`} disabled={index === rows.length - 1} onClick={() => move(pass.id, 1)}>
-                    Down
+                  <button type="button" className="btn small" data-pass={pass.id} data-move="down" aria-label={t("schedule.moveDown", { title: pass.title })} disabled={index === rows.length - 1} onClick={() => move(pass.id, 1)}>
+                    {t("schedule.down")}
                   </button>
-                  <button type="button" className="btn small" data-pass-edit={pass.id} aria-label={`${editing === pass.id ? "Close" : "Edit"} ${pass.title}`} aria-expanded={editing === pass.id} onClick={() => setEditing(editing === pass.id ? null : pass.id)}>
-                    {editing === pass.id ? "Close" : "Edit"}
+                  <button type="button" className="btn small" data-pass-edit={pass.id} aria-label={t(editing === pass.id ? "schedule.closeNamed" : "schedule.editNamed", { title: pass.title })} aria-expanded={editing === pass.id} onClick={() => setEditing(editing === pass.id ? null : pass.id)}>
+                    {editing === pass.id ? t("schedule.close") : t("schedule.edit")}
                   </button>
-                  <button type="button" className="btn small" data-pass-remove={pass.id} aria-label={`Remove ${pass.title}`} onClick={() => askRemove(pass.id)}>
-                    Remove
+                  <button type="button" className="btn small" data-pass-remove={pass.id} aria-label={t("schedule.removeNamed", { name: pass.title })} onClick={() => askRemove(pass.id)}>
+                    {t("schedule.remove")}
                   </button>
                 </span>
               )}
@@ -302,7 +305,7 @@ export function Passes({ passes, onPasses }: { passes: Pass[]; onPasses: () => v
         </ol>
       )}
       {note ? <p className="hint" role="alert">{note}</p> : null}
-      <p className="hint">When two passes need the same tuner, the one higher in the list records. Drag a pass or use Up and Down to change the order.</p>
+      <p className="hint">{t("schedule.priorityHint")}</p>
     </>
   );
 }
@@ -346,7 +349,7 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
 
   async function save() {
     if (!draft.title.trim() && !once && !team) {
-      setError("Name a title, words, or a category.");
+      setError(t("schedule.nameNeeded"));
       return;
     }
     setSaving(true);
@@ -356,18 +359,19 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
       else await addSeriesPass(body);
       onDone(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "The pass could not be saved.");
+      setError(err instanceof Error ? err.message : t("schedule.saveFailed"));
     } finally {
       setSaving(false);
     }
   }
 
-  const label = pass ? `${pass.title}` : "New pass";
+  const dayNames = weekdayShortNames();
+  const label = pass ? pass.title : t("schedule.newPass");
   const shown = channels.filter((ch) => !ch.hidden || ch.id === draft.channelId);
   return (
     <form
       className="pass-editor"
-      aria-label={pass ? `Edit ${label}` : label}
+      aria-label={pass ? t("schedule.editNamed", { title: label }) : label}
       onSubmit={(event) => {
         event.preventDefault();
         void save();
@@ -376,18 +380,18 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
       {once || team ? null : (
         <div className="pad">
           <label>
-            Match
+            {t("schedule.match")}
             <select value={draft.matchKind} onChange={(e) => set("matchKind", e.target.value as Draft["matchKind"])}>
-              <option value="title">Title is</option>
-              <option value="contains">Title contains</option>
-              <option value="category">Category</option>
+              <option value="title">{t("schedule.titleIs")}</option>
+              <option value="contains">{t("schedule.titleContains")}</option>
+              <option value="category">{t("schedule.category")}</option>
             </select>
           </label>
           <label className="pass-name">
-            {draft.matchKind === "category" ? "Category" : draft.matchKind === "contains" ? "Words" : "Title"}
+            {draft.matchKind === "category" ? t("schedule.category") : draft.matchKind === "contains" ? t("schedule.words") : t("schedule.titleField")}
             <input
               type="text"
-              placeholder={draft.matchKind === "category" ? "Sports" : draft.matchKind === "contains" ? "Chiefs" : "Jeopardy!"}
+              placeholder={draft.matchKind === "category" ? t("schedule.placeholderCategory") : draft.matchKind === "contains" ? t("schedule.placeholderWords") : t("schedule.placeholderTitle")}
               value={draft.title}
               autoFocus={!pass}
               onChange={(e) => set("title", e.target.value)}
@@ -399,9 +403,9 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
         <>
           <div className="pad">
             <label>
-              Channel
+              {t("schedule.channel")}
               <select value={draft.channelId} onChange={(e) => set("channelId", Number(e.target.value))}>
-                <option value={0}>Any channel</option>
+                <option value={0}>{t("schedule.anyChannel")}</option>
                 {shown.map((ch) => (
                   <option key={ch.id} value={ch.id}>
                     {ch.displayNumber} {ch.displayName}
@@ -411,16 +415,16 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
             </label>
             {team ? null : (
               <label>
-                Episodes
+                {t("schedule.episodes")}
                 <select value={draft.episodes} onChange={(e) => set("episodes", e.target.value as Draft["episodes"])}>
-                  <option value="all">All</option>
-                  <option value="new">New only</option>
+                  <option value="all">{t("schedule.all")}</option>
+                  <option value="new">{t("schedule.newOnly")}</option>
                 </select>
               </label>
             )}
           </div>
           <fieldset className="pad pass-days">
-            <legend>Days</legend>
+            <legend>{t("schedule.days")}</legend>
             {dayNames.map((name, day) => {
               const on = draft.days.includes(day);
               return (
@@ -435,49 +439,49 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
                 </button>
               );
             })}
-            <span className="codec">{draft.days.length === 0 ? "Every day" : ""}</span>
+            <span className="codec">{draft.days.length === 0 ? t("schedule.everyDay") : ""}</span>
           </fieldset>
           <div className="pad">
             <label>
-              From
+              {t("schedule.from")}
               <input type="time" value={draft.timeStart} onChange={(e) => set("timeStart", e.target.value)} />
             </label>
             <label>
-              Until
+              {t("schedule.until")}
               <input type="time" value={draft.timeEnd} onChange={(e) => set("timeEnd", e.target.value)} />
             </label>
             {draft.timeStart || draft.timeEnd ? (
               <button type="button" className="btn small" onClick={() => setDraft((d) => ({ ...d, timeStart: "", timeEnd: "" }))}>
-                Any time
+                {t("schedule.anyTime")}
               </button>
             ) : (
-              <span className="codec">Any time</span>
+              <span className="codec">{t("schedule.anyTime")}</span>
             )}
           </div>
           <div className="pad">
             <label>
-              Keep
+              {t("schedule.keep")}
               <select value={draft.keepMode} onChange={(e) => set("keepMode", e.target.value as Draft["keepMode"])}>
-                <option value="all">All</option>
-                <option value="unwatched">Unwatched</option>
-                <option value="last">The newest</option>
+                <option value="all">{t("schedule.all")}</option>
+                <option value="unwatched">{t("schedule.unwatched")}</option>
+                <option value="last">{t("schedule.theNewest")}</option>
               </select>
             </label>
             {draft.keepMode === "last" ? (
               <label>
-                How many
+                {t("schedule.howMany")}
                 <input type="number" min={1} max={99} value={draft.keepCount} onChange={(e) => set("keepCount", clamp(e.target.value, 1, 99))} />
               </label>
             ) : null}
             <label>
-              Stop at
+              {t("schedule.stopAt")}
               <input type="number" min={0} max={99} aria-describedby={`stop-${pass?.id ?? "new"}`} value={draft.limitCount} onChange={(e) => set("limitCount", clamp(e.target.value, 0, 99))} />
             </label>
-            <span className="codec" id={`stop-${pass?.id ?? "new"}`}>unwatched{draft.limitCount === 0 ? " (no limit)" : ""}</span>
+            <span className="codec" id={`stop-${pass?.id ?? "new"}`}>{t("schedule.unwatchedLimit")}{draft.limitCount === 0 ? t("schedule.noLimit") : ""}</span>
             {team ? null : (
               <label>
                 <input type="checkbox" checked={draft.rerecord} onChange={(e) => set("rerecord", e.target.checked)} />
-                Record again after a delete
+                {t("schedule.recordAgainAfterDelete")}
               </label>
             )}
           </div>
@@ -485,29 +489,29 @@ function PassEditor({ pass, channels, onDone }: { pass?: Pass; channels: Channel
       )}
       <div className="pad">
         <label>
-          Early
+          {t("schedule.early")}
           <input type="number" min={0} max={30} value={draft.padBefore} onChange={(e) => set("padBefore", clamp(e.target.value, 0, 30))} />
         </label>
         <label>
-          After
+          {t("schedule.after")}
           <input type="number" min={0} max={30} value={draft.padAfter} onChange={(e) => set("padAfter", clamp(e.target.value, 0, 30))} />
         </label>
         <label>
           <input type="checkbox" checked={draft.commercials} onChange={(e) => set("commercials", e.target.checked)} />
-          Find commercials
+          {copy.library.findCommercials}
         </label>
       </div>
       {body.title ? <PreviewLines preview={preview} note={previewNote} channels={channels} /> : null}
       {preview && !once && preview.utcOffset !== -new Date().getTimezoneOffset() * 60 ? (
-        <p className="hint">Days and times are on the server's clock ({preview.timeZone}).</p>
+        <p className="hint">{t("schedule.serverClock", { zone: preview.timeZone })}</p>
       ) : null}
       {error ? <p className="hint error" role="alert">{error}</p> : null}
       <div className="pad">
         <button type="submit" className="btn primary small" disabled={saving}>
-          {pass ? "Save" : "Add pass"}
+          {pass ? t("schedule.save") : t("schedule.addPass")}
         </button>
         <button type="button" className="btn small" onClick={() => onDone(false)}>
-          Cancel
+          {t("schedule.cancel")}
         </button>
       </div>
     </form>
@@ -519,11 +523,11 @@ function PreviewLines({ preview, note, channels }: { preview: PassPreview | null
   if (!preview) return null;
   const records = preview.items.filter((item) => !item.skipped);
   const number = (id: number) => channels.find((ch) => ch.id === id)?.displayNumber ?? "";
-  let head = "Nothing in the guide matches in the next 2 weeks.";
+  let head = t("schedule.previewNone");
   if (preview.items.length > 0) {
-    if (records.length === preview.items.length) head = `Records ${count(records.length, "airing")} in the next 2 weeks.`;
-    else if (records.length === 0) head = `Matches ${count(preview.items.length, "airing")} in the next 2 weeks, but none will record.`;
-    else head = `Records ${records.length} of ${count(preview.items.length, "airing")} in the next 2 weeks.`;
+    if (records.length === preview.items.length) head = t("schedule.previewRecords", records.length);
+    else if (records.length === 0) head = t("schedule.previewNoneRecord", preview.items.length);
+    else head = t("schedule.previewSome", preview.items.length, { done: records.length });
   }
   return (
     <div className="pass-preview" role="status" aria-live="polite">
@@ -533,15 +537,15 @@ function PreviewLines({ preview, note, channels }: { preview: PassPreview | null
           {preview.items.slice(0, 5).map((item) => (
             <li key={`${item.airing.channelId}-${item.airing.start}`} className="codec">
               {formatDay(item.airing.start)} · {number(item.airing.channelId)} {item.airing.title}
-              {item.skipped ? ` · ${item.conflict ? "Skipped: another pass has the tuner" : item.reason || "Skipped"}` : ""}
+              {item.skipped ? ` · ${item.conflict ? t("schedule.skippedTuner") : item.reason || t("schedule.skipped")}` : ""}
             </li>
           ))}
-          {preview.items.length > 5 ? <li className="codec">and {preview.items.length - 5} more</li> : null}
+          {preview.items.length > 5 ? <li className="codec">{t("schedule.andMore", { count: preview.items.length - 5 })}</li> : null}
         </ul>
       ) : null}
       {preview.bumps.length > 0 ? (
         <>
-          <p>This pass would stop these from recording:</p>
+          <p>{t("schedule.previewBump")}</p>
           <ul className="marker-list">
             {preview.bumps.map((item) => (
               <li key={`${item.passId}-${item.airing.channelId}-${item.airing.start}`} className="codec">
@@ -558,13 +562,13 @@ function PreviewLines({ preview, note, channels }: { preview: PassPreview | null
 export function passLabel(pass: Pass) {
   switch (pass.kind === "once" || pass.kind === "team" ? pass.kind : pass.matchKind) {
     case "once":
-      return pass.airingStart ? `${pass.title} · ${formatDay(pass.airingStart)} only` : pass.title;
+      return pass.airingStart ? t("schedule.onceLabel", { title: pass.title, when: formatDay(pass.airingStart) }) : pass.title;
     case "team":
-      return `${pass.title} games`;
+      return t("schedule.teamLabel", { title: pass.title });
     case "contains":
-      return `Titles with “${pass.title}”`;
+      return t("schedule.containsLabel", { title: pass.title });
     case "category":
-      return `${pass.title} (category)`;
+      return t("schedule.categoryLabel", { title: pass.title });
     default:
       return pass.title;
   }
@@ -573,23 +577,24 @@ export function passLabel(pass: Pass) {
 export function passDetails(pass: Pass, channels: Channel[]) {
   const parts: string[] = [];
   const ch = pass.channelId ? channels.find((c) => c.id === pass.channelId) : undefined;
-  if (pass.kind !== "once") parts.push(ch ? `${ch.displayNumber} ${ch.displayName}` : "Any channel");
+  if (pass.kind !== "once") parts.push(ch ? `${ch.displayNumber} ${ch.displayName}` : t("schedule.anyChannel"));
   if (pass.days?.length) parts.push(daysLabel(pass.days));
   if (pass.timeStart && pass.timeEnd) parts.push(`${clockLabel(pass.timeStart)}–${clockLabel(pass.timeEnd)}`);
-  if (pass.episodes === "new") parts.push("New only");
-  if (pass.keepMode === "unwatched") parts.push("Keeps unwatched");
-  if (pass.keepMode === "last") parts.push(`Keeps the newest ${pass.keepCount || 1}`);
-  if (pass.limitCount) parts.push(`Stops at ${pass.limitCount} unwatched`);
-  parts.push(`${pass.padBefore ?? 0} min early, ${pass.padAfter ?? 0} after`);
+  if (pass.episodes === "new") parts.push(t("schedule.newOnly"));
+  if (pass.keepMode === "unwatched") parts.push(t("schedule.keepsUnwatched"));
+  if (pass.keepMode === "last") parts.push(t("schedule.keepsNewest", { count: pass.keepCount || 1 }));
+  if (pass.limitCount) parts.push(t("schedule.stopsAt", { count: pass.limitCount }));
+  parts.push(t("schedule.pad", { before: pass.padBefore ?? 0, after: pass.padAfter ?? 0 }));
   return parts.join(" · ");
 }
 
 export function daysLabel(days: number[]) {
+  const names = weekdayShortNames();
   const set = [...days].sort().join("");
-  if (set === "12345") return "Weekdays";
-  if (set === "06") return "Weekends";
-  if (set === "0123456") return "Every day";
-  return [...days].sort().map((d) => dayNames[d]).join(", ");
+  if (set === "12345") return t("schedule.weekdays");
+  if (set === "06") return t("schedule.weekends");
+  if (set === "0123456") return t("schedule.everyDay");
+  return [...days].sort().map((d) => names[d]).join(", ");
 }
 
 function clockLabel(hhmm: string) {
@@ -601,11 +606,7 @@ function clockLabel(hhmm: string) {
 
 function formatDay(iso: string) {
   const date = new Date(iso);
-  return `${dayNames[date.getDay()]} ${date.getMonth() + 1}/${date.getDate()}, ${formatClock(date)}`;
-}
-
-function count(n: number, word: string) {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
+  return `${weekdayShortNames()[date.getDay()]} ${date.getMonth() + 1}/${date.getDate()}, ${formatClock(date)}`;
 }
 
 function clamp(value: string, min: number, max: number) {

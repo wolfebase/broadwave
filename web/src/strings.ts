@@ -1,169 +1,425 @@
+import { copyMessages } from "./i18n/messages/copy.ts";
+import { bind } from "./i18n/runtime.ts";
 import { encryptedBroadcast } from "./strings/notice.ts";
+
+const t = bind(copyMessages);
+
+const playerKeys = [
+  ["player.key.space", "player.key.spaceDoes"],
+  ["player.key.left", "player.key.leftDoes"],
+  ["player.key.right", "player.key.rightDoes"],
+  ["player.key.up", "player.key.upDoes"],
+  ["player.key.down", "player.key.downDoes"],
+  ["player.key.escape", "player.key.escapeDoes"],
+  ["player.key.last", "player.key.lastDoes"],
+  ["player.key.channels", "player.key.channelsDoes"],
+  ["player.key.stats", "player.key.statsDoes"],
+  ["player.key.side", "player.key.sideDoes"],
+  ["player.key.record", "player.key.recordDoes"],
+  ["player.key.captions", "player.key.captionsDoes"],
+  ["player.key.theater", "player.key.theaterDoes"],
+  ["player.key.help", "player.key.helpDoes"],
+  ["player.key.number", "player.key.numberDoes"],
+] as const;
 
 export const copy = {
   sources: {
-    title: "Sources",
-    lead: "The server reads the lineup only. It does not open a tuner from this screen.",
-    search: "Search the network",
-    look: "Look harder",
-    lookHint: "Checks this network for tuners and servers.",
-    lookEmpty: "Nothing else answered.",
-    free: "Add free channels",
-    freeHint: "Looks for a free-channel server already on this network.",
-    freeEmpty: "No free-channel server answered.",
-    add: "Add",
-    lookup: "Add by address",
-    address: "Address",
-    addressPlaceholder: "IP address or name",
-    addressHint: "A tuner, or a server that speaks HDHomeRun. Add the port if it is not 80.",
-    none: "No HDHomeRun has answered yet.",
-    tuners: "tuners",
-    firmware: "Firmware",
-    scan: "Scan channels",
-    scanning: "Scanning for channels.",
-    remove: "Remove",
-    offline: (when: string) => (when ? `Offline. Last seen ${when}.` : "Offline."),
-    streams: (used: number, limit: number) => `${used} of ${limit} streams`,
-    removeLabel: (name: string) => `Remove ${name}`,
-    removeConfirm: (name: string) =>
-      `Remove ${name}? Its channels leave the lineup. Favorites and passes move to another tuner with the same channel, and the other passes go. Recordings stay.`,
-    channels: "Lineup",
-    enabled: "On guide",
-    hidden: "Hidden",
-    name: "Name on the guide",
-    number: "Number",
-    match: "Guide match",
-    matchHint: "Leave guide match blank to use the number and call sign.",
-    atsc3: "ATSC 3.0",
-    encrypted: (atsc3: boolean) =>
-      atsc3 ? "Encrypted (ATSC 3.0 DRM). Only the tuner maker's app can play it." : "Copy protected. Only the tuner maker's app can play it.",
-    playsAs: (n: string) => `Encrypted (ATSC 3.0 DRM). Plays and records ${n}, the same station in ATSC 1.0.`,
-    twinShow: "Show",
-    twinChoices: {
-      atsc3: "3.0 only",
-      atsc1: (n: string) => (n ? `1.0 only (${n})` : "1.0 only"),
-      both: "Both",
+    get title() {
+      return t("sources.title");
     },
-    twinOf: (n: string) => `Same station as ${n} in ATSC 3.0`,
-    groups: "Groups",
-    groupsHint: "News, Sports, -Shopping. Leave blank to keep every group.",
-    file: "Playlist file",
-    pick: "Choose what to keep",
+    get lead() {
+      return t("sources.lead");
+    },
+    get search() {
+      return t("sources.search");
+    },
+    get look() {
+      return t("sources.look");
+    },
+    get lookHint() {
+      return t("sources.lookHint");
+    },
+    get lookEmpty() {
+      return t("sources.lookEmpty");
+    },
+    get free() {
+      return t("sources.free");
+    },
+    get freeHint() {
+      return t("sources.freeHint");
+    },
+    get freeEmpty() {
+      return t("sources.freeEmpty");
+    },
+    get add() {
+      return t("sources.add");
+    },
+    get lookup() {
+      return t("sources.lookup");
+    },
+    get address() {
+      return t("sources.address");
+    },
+    get addressPlaceholder() {
+      return t("sources.addressPlaceholder");
+    },
+    get addressHint() {
+      return t("sources.addressHint");
+    },
+    get none() {
+      return t("sources.none");
+    },
+    get tuners() {
+      return t("sources.tuners");
+    },
+    get firmware() {
+      return t("sources.firmware");
+    },
+    get scan() {
+      return t("sources.scan");
+    },
+    get scanning() {
+      return t("sources.scanning");
+    },
+    get remove() {
+      return t("sources.remove");
+    },
+    offline: (when: string) => (when ? t("sources.offlineSeen", { when }) : t("sources.offline")),
+    streams: (used: number, limit: number) => t("sources.streams", { used, limit }),
+    removeLabel: (name: string) => t("sources.removeLabel", { name }),
+    removeConfirm: (name: string) => t("sources.removeConfirm", { name }),
+    get channels() {
+      return t("sources.channels");
+    },
+    get enabled() {
+      return t("sources.enabled");
+    },
+    get hidden() {
+      return t("sources.hidden");
+    },
+    get name() {
+      return t("sources.name");
+    },
+    get number() {
+      return t("sources.number");
+    },
+    get match() {
+      return t("sources.match");
+    },
+    get matchHint() {
+      return t("sources.matchHint");
+    },
+    get atsc3() {
+      return t("sources.atsc3");
+    },
+    encrypted: (atsc3: boolean) => (atsc3 ? t("sources.encryptedAtsc3") : t("sources.encryptedCopy")),
+    playsAs: (name: string) => t("sources.playsAs", { name }),
+    get twinShow() {
+      return t("sources.twinShow");
+    },
+    twinChoices: {
+      get atsc3() {
+        return t("sources.twin.atsc3");
+      },
+      atsc1: (name: string) => (name ? t("sources.twin.atsc1Named", { name }) : t("sources.twin.atsc1")),
+      get both() {
+        return t("sources.twin.both");
+      },
+    },
+    twinOf: (name: string) => t("sources.twinOf", { name }),
+    get groups() {
+      return t("sources.groups");
+    },
+    get groupsHint() {
+      return t("sources.groupsHint");
+    },
+    get file() {
+      return t("sources.file");
+    },
+    get pick() {
+      return t("sources.pick");
+    },
   },
   library: {
-    title: "Library",
-    body: "Recordings gather here by show. The guide is the place to start.",
-    gone: "The file is gone. It was moved or deleted outside Broadwave.",
-    removeGone: "Remove from the list",
-    findCommercials: "Find commercials",
-    findingCommercials: "Finding commercials…",
-    foundBreaks: (count: number) => (count <= 0 ? "No breaks found." : count === 1 ? "Found 1 break." : `Found ${count} breaks.`),
-    findFailed: "Could not look for commercials. Try again.",
+    get title() {
+      return t("library.title");
+    },
+    get body() {
+      return t("library.body");
+    },
+    get gone() {
+      return t("library.gone");
+    },
+    get removeGone() {
+      return t("library.removeGone");
+    },
+    get findCommercials() {
+      return t("library.findCommercials");
+    },
+    get findingCommercials() {
+      return t("library.findingCommercials");
+    },
+    foundBreaks: (count: number) => t("library.foundBreaks", count),
+    get findFailed() {
+      return t("library.findFailed");
+    },
   },
   schedule: {
-    title: "Schedule",
+    get title() {
+      return t("schedule.title");
+    },
   },
   settings: {
-    title: "Settings",
-    appearance: "Appearance",
-    appearanceHint: "System follows this device.",
-    accent: "Accent",
-    accentHint: "Links use it. In Light, buttons and tabs do too.",
-    screenName: "Name this screen",
-    screenNameHint: "Other screens see this name.",
-    liveDelay: "Live delay",
-    liveDelayHint: "How far behind live a channel plays when this device starts it. Lowest is about 6 seconds, Balanced 16, Stable 20. Apple devices play at Balanced or Stable.",
-    adaptive: "Adaptive quality",
-    adaptiveHint: "The player switches between 1080p, 720p, and 480p. Apple can also drop to sound only. Off plays one picture. Sound is stereo.",
-    layout: "Layout",
-    layoutHint: "Auto follows the window. TV uses the large guide you can drive with arrows.",
-    recordings: "Recordings folder",
-    recordingsHint: "The original broadcast files. To keep them somewhere else, mount that folder at /config/work/recordings or set BROADWAVE_RECORDINGS.",
-    byShow: "Space by show",
-    byShowEmpty: "No finished recordings yet.",
-    byShowFailed: "Could not load space by show.",
-    nfo: "Write .nfo files for Plex, Jellyfin, and Kodi",
-    nfoHint: "A file beside each finished recording, with the title and description.",
-    reserve: "Keep this much free",
-    reserveHint: "Use 0 to turn the reserve off. A show already recording is left alone.",
-    buffer: "Keep for recording from the start",
-    bufferHint: "While a channel is on, the server keeps up to this much of it, so recording a show already on starts from its beginning. It uses at most half the free space.",
-    backup: "Download backup",
-    backups: "Backups",
-    backupHint: "The backup is the catalog. Recordings stay put. Seven nightly copies and four weekly copies are kept. A copy is saved before an update.",
-    backupEmpty: "No backups yet.",
-    backupFailed: "Could not load backups.",
-    backupDownload: "Download",
-    backupNightly: "Nightly",
-    backupWeekly: "Weekly",
-    backupUpdate: "Update",
-    restore: "Restore",
-    restoreConfirm: "Restore this backup? The catalog goes back to that copy. Recordings stay.",
-    restoreFailed: "Could not restore that backup.",
-    support: "Download a support bundle",
-    supportHint: "Logs, versions, and settings. Passwords are left out.",
-    guideAccount: "Schedules Direct",
-    guideAccountHint: "Fills channels the tuner guide skips. Fourteen days when the account allows it.",
-    guideLineup: "Lineup",
-    guideAddress: "Guide address",
-    guideAddressHint: "An XMLTV link for channels the tuner guide skips.",
-    movieArt: "Movie artwork",
-    movieArtHint: "Fills posters the guide does not include.",
-    hideScores: "Hide scores",
-    hideScoresHint: "A recorded game stays hidden until you watch it.",
-    scoresFrom: "Scores from ESPN's public scoreboard",
-    scoresFromSportsDB: "Scores from TheSportsDB",
-    liveScores: "Live scores",
-    liveScoresHint: "On asks your server for the scoreboard. Off sends nothing.",
-    sportsdbKey: "TheSportsDB key",
-    sportsdbKeyHint: "Optional. Your own key. None is included.",
-    updates: "Check for updates",
-    updatesHint: "Once a day. Nothing else is sent.",
-    passwordTitle: "This server is for the home network",
-    passwordBody: "Device sign-in is in Devices, and it stays off until you turn it on.",
-    profile: "Profile",
+    get title() {
+      return t("settings.title");
+    },
+    get appearance() {
+      return t("settings.appearance");
+    },
+    get appearanceHint() {
+      return t("settings.appearanceHint");
+    },
+    get accent() {
+      return t("settings.accent");
+    },
+    get accentHint() {
+      return t("settings.accentHint");
+    },
+    get screenName() {
+      return t("settings.screenName");
+    },
+    get screenNameHint() {
+      return t("settings.screenNameHint");
+    },
+    get liveDelay() {
+      return t("settings.liveDelay");
+    },
+    get liveDelayHint() {
+      return t("settings.liveDelayHint");
+    },
+    get adaptive() {
+      return t("settings.adaptive");
+    },
+    get adaptiveHint() {
+      return t("settings.adaptiveHint");
+    },
+    get layout() {
+      return t("settings.layout");
+    },
+    get layoutHint() {
+      return t("settings.layoutHint");
+    },
+    get recordings() {
+      return t("settings.recordings");
+    },
+    get recordingsHint() {
+      return t("settings.recordingsHint");
+    },
+    get byShow() {
+      return t("settings.byShow");
+    },
+    get byShowEmpty() {
+      return t("settings.byShowEmpty");
+    },
+    get byShowFailed() {
+      return t("settings.byShowFailed");
+    },
+    get nfo() {
+      return t("settings.nfo");
+    },
+    get nfoHint() {
+      return t("settings.nfoHint");
+    },
+    get reserve() {
+      return t("settings.reserve");
+    },
+    get reserveHint() {
+      return t("settings.reserveHint");
+    },
+    get buffer() {
+      return t("settings.buffer");
+    },
+    get bufferHint() {
+      return t("settings.bufferHint");
+    },
+    get backup() {
+      return t("settings.backup");
+    },
+    get backups() {
+      return t("settings.backups");
+    },
+    get backupHint() {
+      return t("settings.backupHint");
+    },
+    get backupEmpty() {
+      return t("settings.backupEmpty");
+    },
+    get backupFailed() {
+      return t("settings.backupFailed");
+    },
+    get backupDownload() {
+      return t("settings.backupDownload");
+    },
+    get backupNightly() {
+      return t("settings.backupNightly");
+    },
+    get backupWeekly() {
+      return t("settings.backupWeekly");
+    },
+    get backupUpdate() {
+      return t("settings.backupUpdate");
+    },
+    get restore() {
+      return t("settings.restore");
+    },
+    get restoreConfirm() {
+      return t("settings.restoreConfirm");
+    },
+    get restoreFailed() {
+      return t("settings.restoreFailed");
+    },
+    get support() {
+      return t("settings.support");
+    },
+    get supportHint() {
+      return t("settings.supportHint");
+    },
+    get guideAccount() {
+      return t("settings.guideAccount");
+    },
+    get guideAccountHint() {
+      return t("settings.guideAccountHint");
+    },
+    get guideLineup() {
+      return t("settings.guideLineup");
+    },
+    get guideAddress() {
+      return t("settings.guideAddress");
+    },
+    get guideAddressHint() {
+      return t("settings.guideAddressHint");
+    },
+    get movieArt() {
+      return t("settings.movieArt");
+    },
+    get movieArtHint() {
+      return t("settings.movieArtHint");
+    },
+    get hideScores() {
+      return t("settings.hideScores");
+    },
+    get hideScoresHint() {
+      return t("settings.hideScoresHint");
+    },
+    get scoresFrom() {
+      return t("settings.scoresFrom");
+    },
+    get scoresFromSportsDB() {
+      return t("settings.scoresFromSportsDB");
+    },
+    get liveScores() {
+      return t("settings.liveScores");
+    },
+    get liveScoresHint() {
+      return t("settings.liveScoresHint");
+    },
+    get sportsdbKey() {
+      return t("settings.sportsdbKey");
+    },
+    get sportsdbKeyHint() {
+      return t("settings.sportsdbKeyHint");
+    },
+    get updates() {
+      return t("settings.updates");
+    },
+    get updatesHint() {
+      return t("settings.updatesHint");
+    },
+    get passwordTitle() {
+      return t("settings.passwordTitle");
+    },
+    get passwordBody() {
+      return t("settings.passwordBody");
+    },
+    get profile() {
+      return t("settings.profile");
+    },
   },
   player: {
-    encrypted: encryptedBroadcast,
-    stats: "Stats",
-    delayApple: "An Apple device is watching, so this channel stays at Balanced.",
-    playing: "Playing",
-    source: "Source",
-    output: "Output",
-    tuner: "Tuner",
-    bitrate: "Bitrate",
-    dropped: "Dropped frames",
-    buffer: "Buffer ahead",
-    behind: "Behind live",
-    drift: "Sync drift",
-    rendition: "Rendition",
-    encoder: "Encoder",
-    sound: "Sound",
-    waiting: "Waiting",
-    helpTitle: "Keyboard",
-    close: "Close",
-    sleep: "Sleep",
-    sleep30: "Stops in 30 minutes.",
-    sleep60: "Stops in 1 hour.",
-    sleep90: "Stops in 90 minutes.",
-    sleepHint: "Sleep, in Options, stops the picture after 30, 60, or 90 minutes.",
-    volume: "Volume",
-    keys: [
-      ["Space", "Play or pause"],
-      ["Left", "Back 15 seconds"],
-      ["Right", "Ahead 30 seconds"],
-      ["Up", "Previous channel"],
-      ["Down", "Next channel"],
-      ["Escape or Backspace", "Back to browsing"],
-      ["L", "Last channel"],
-      ["G", "Channels"],
-      ["I", "Stats"],
-      ["M", "Side by side"],
-      ["R", "Record"],
-      ["C", "Captions"],
-      ["T", "Theater"],
-      ["?", "This list"],
-      ["0–9", "Channel number"],
-    ],
+    get encrypted() {
+      return encryptedBroadcast();
+    },
+    get stats() {
+      return t("player.stats");
+    },
+    get delayApple() {
+      return t("player.delayApple");
+    },
+    get playing() {
+      return t("player.playing");
+    },
+    get source() {
+      return t("player.source");
+    },
+    get output() {
+      return t("player.output");
+    },
+    get tuner() {
+      return t("player.tuner");
+    },
+    get bitrate() {
+      return t("player.bitrate");
+    },
+    get dropped() {
+      return t("player.dropped");
+    },
+    get buffer() {
+      return t("player.buffer");
+    },
+    get behind() {
+      return t("player.behind");
+    },
+    get drift() {
+      return t("player.drift");
+    },
+    get rendition() {
+      return t("player.rendition");
+    },
+    get encoder() {
+      return t("player.encoder");
+    },
+    get sound() {
+      return t("player.sound");
+    },
+    get waiting() {
+      return t("player.waiting");
+    },
+    get helpTitle() {
+      return t("player.helpTitle");
+    },
+    get close() {
+      return t("player.close");
+    },
+    get sleep() {
+      return t("player.sleep");
+    },
+    get sleep30() {
+      return t("player.sleep30");
+    },
+    get sleep60() {
+      return t("player.sleep60");
+    },
+    get sleep90() {
+      return t("player.sleep90");
+    },
+    get sleepHint() {
+      return t("player.sleepHint");
+    },
+    get volume() {
+      return t("player.volume");
+    },
+    get keys() {
+      return playerKeys.map(([name, does]) => [t(name), t(does)] as [string, string]);
+    },
   },
-} as const;
+};

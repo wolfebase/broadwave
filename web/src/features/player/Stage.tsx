@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { focusRing } from "../../app/remote";
+import { playerUiMessages } from "../../i18n/messages/playerUi.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { dismissesLayer } from "../../lib/dialogFocus";
 import { canonicalKey } from "../../lib/tvKey";
 import { optionArrow, optionRows } from "../../lib/optionArrow";
 import { BackIcon, CloseIcon, ExpandIcon, PauseIcon, PipIcon, PlayIcon, VolumeIcon } from "../../ui/icons";
 import { playerControls, playerTabTarget } from "./focusCycle";
+import { shownOutage } from "./outage";
 import { tvPictureEnter } from "./keys";
 import { swallowWakeClick } from "./startOver";
 import "./player.css";
+
+const t = bind(playerUiMessages);
 
 export function Stage({
   videoRef,
@@ -19,6 +24,7 @@ export function Stage({
   onBack,
   backLabel,
   liveLabel,
+  liveAria,
   onLive,
   position,
   duration,
@@ -53,6 +59,8 @@ export function Stage({
   onBack: () => void;
   backLabel: string;
   liveLabel?: string;
+  /** Set when the pill is behind live. The label itself is how far. */
+  liveAria?: string;
   onLive?: () => void;
   position: number;
   duration: number;
@@ -273,7 +281,7 @@ export function Stage({
               onKeyDown?.(event);
             }
       }
-      aria-label={mode === "mini" ? `Now playing: ${title}` : "Player"}
+      aria-label={mode === "mini" ? t("player.nowPlaying", { title }) : t("player.player")}
     >
       <video
         ref={videoRef}
@@ -296,26 +304,26 @@ export function Stage({
       {announce}
       {!error && note && idle ? (
         <span className="sr-only" role="status" aria-live="polite">
-          {note}
+          {shownOutage(note)}
         </span>
       ) : null}
       {loading && !error ? loading : null}
       {mode === "mini" ? (
         <div className="mini-bar">
-          <button type="button" className="mini-title" onClick={onExpand} aria-label="Open player">
+          <button type="button" className="mini-title" onClick={onExpand} aria-label={t("player.openPlayer")}>
             <span className="mini-eyebrow">{eyebrow}</span>
             <strong>{title}</strong>
           </button>
-          <button type="button" className="glass-icon" onClick={toggle} aria-label={paused ? "Play" : "Pause"}>
+          <button type="button" className="glass-icon" onClick={toggle} aria-label={paused ? t("player.play") : t("player.pause")}>
             {paused ? <PlayIcon /> : <PauseIcon />}
           </button>
-          <button type="button" className="glass-icon" onClick={onClose} aria-label="Stop watching">
+          <button type="button" className="glass-icon" onClick={onClose} aria-label={t("player.stopWatching")}>
             <CloseIcon />
           </button>
         </div>
       ) : null}
       {mode === "full" && paused && !loading ? (
-        <button type="button" className="stage-fab" onClick={toggle} aria-label="Play">
+        <button type="button" className="stage-fab" onClick={toggle} aria-label={t("player.play")}>
           <PlayIcon />
         </button>
       ) : null}
@@ -335,8 +343,8 @@ export function Stage({
             {liveLabel ? (
               <button
                 type="button"
-                className={liveLabel === "Live" ? "live-pill on" : "live-pill"}
-                aria-label={liveLabel === "Live" ? undefined : `Go to live, ${liveLabel}`}
+                className={liveLabel === t("player.live") ? "live-pill on" : "live-pill"}
+                aria-label={liveAria}
                 onClick={onLive}
               >
                 <span className="live-dot-light" aria-hidden="true" />
@@ -348,13 +356,13 @@ export function Stage({
         {children}
         {error ? (
           <div className="player-error">
-            <p role="alert">{error}</p>
+            <p role="alert">{shownOutage(error)}</p>
             {errorAction}
           </div>
         ) : null}
         {!error && note ? (
           <div className="player-note" inert={idle ? true : undefined}>
-            <p role="status">{note}</p>
+            <p role="status">{shownOutage(note)}</p>
             {noteAction}
           </div>
         ) : null}
@@ -379,24 +387,24 @@ export function Stage({
               step={1}
               value={at}
               style={{ ["--at" as string]: `${(at / span) * 100}%` }}
-              aria-label="Playback position"
-              aria-valuetext={`${formatClock(at)} of ${formatClock(span)}`}
+              aria-label={t("player.position")}
+              aria-valuetext={t("player.positionOf", { at: formatClock(at), span: formatClock(span) })}
               onChange={(event) => onSeek(Number(event.target.value))}
             />
           </div>
           <div className="transport">
-            <button type="button" className="transport-play" onClick={toggle} aria-label={paused ? "Play" : "Pause"}>
+            <button type="button" className="transport-play" onClick={toggle} aria-label={paused ? t("player.play") : t("player.pause")}>
               {paused ? <PlayIcon /> : <PauseIcon />}
             </button>
-            <button type="button" className="text-btn" onClick={() => onJump(-15)} aria-label="Back 15 seconds">
-              −15
+            <button type="button" className="text-btn" onClick={() => onJump(-15)} aria-label={t("player.back15")}>
+              {t("player.back15short")}
             </button>
-            <button type="button" className="text-btn" onClick={() => onJump(30)} aria-label="Forward 30 seconds">
-              +30
+            <button type="button" className="text-btn" onClick={() => onJump(30)} aria-label={t("player.forward30")}>
+              {t("player.forward30short")}
             </button>
             <span className="time-read">
               {formatClock(at)}
-              <span> / {formatClock(span)}</span>
+              <span>{t("player.timeSep")}{formatClock(span)}</span>
             </span>
             <span className="transport-gap" />
             {tools}
@@ -410,26 +418,26 @@ export function Stage({
                 setMuted(v.muted);
                 onSound?.();
               }}
-              aria-label={muted ? "Unmute" : "Mute"}
+              aria-label={muted ? t("player.unmute") : t("player.mute")}
             >
               <VolumeIcon muted={muted} />
             </button>
             {"pictureInPictureEnabled" in document ? (
-              <button type="button" className="glass-icon" onClick={pip} aria-label="Picture in picture">
+              <button type="button" className="glass-icon" onClick={pip} aria-label={t("player.pip")}>
                 <PipIcon />
               </button>
             ) : null}
-            <button type="button" className="glass-icon" onClick={fullscreen} aria-label="Full screen">
+            <button type="button" className="glass-icon" onClick={fullscreen} aria-label={t("player.fullScreen")}>
               <ExpandIcon />
             </button>
             {more ? (
               <button ref={optionsRef} type="button" className={open ? "text-btn on" : "text-btn"} data-options onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls={open && !moreAside ? "player-options" : undefined}>
-                Options
+                {t("player.options")}
               </button>
             ) : null}
           </div>
           {open && more && !moreAside ? (
-            <div id="player-options" className="stage-more" role="region" aria-label="Options">
+            <div id="player-options" className="stage-more" role="region" aria-label={t("player.options")}>
               {more}
             </div>
           ) : null}

@@ -1,3 +1,5 @@
+import { copy } from "../../strings.ts";
+
 const soundKey = "broadwave-volume";
 
 export type Sound = { volume: number; muted: boolean };
@@ -49,8 +51,8 @@ export function sleepDue(until: number | null, now: number): boolean {
 }
 
 export function sleepSentence(minutes: number): string {
-  if (minutes === 30) return "Stops in 30 minutes.";
-  if (minutes === 60) return "Stops in 1 hour.";
-  if (minutes === 90) return "Stops in 90 minutes.";
+  if (minutes === 30) return copy.player.sleep30;
+  if (minutes === 60) return copy.player.sleep60;
+  if (minutes === 90) return copy.player.sleep90;
   return "";
 }

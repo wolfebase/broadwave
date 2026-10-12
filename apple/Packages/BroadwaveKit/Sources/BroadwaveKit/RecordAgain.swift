@@ -5,9 +5,9 @@ public enum RecordAgain: Sendable {
     /// The recording and its next airing have no name to store on the pass.
     public struct MissingTitle: Error, Sendable {}
 
-    public static let label = "Record it again"
-    public static let noAiring = "The guide has no other airing yet."
-    public static let failed = "Could not schedule it. Try again."
+    public static let label = String(localized: "Record it again", bundle: .module)
+    public static let noAiring = String(localized: "The guide has no other airing yet.", bundle: .module)
+    public static let failed = String(localized: "Could not schedule it. Try again.", bundle: .module)
 
     /// "Records again Thu 7:00 PM.", with the date ("Thu, Oct 15") past six days out.
     public static func scheduled(_ start: Date, now: Date = Date(), locale: Locale = .current, timeZone: TimeZone = .current) -> String {
@@ -23,7 +23,9 @@ public enum RecordAgain: Sendable {
         day.timeZone = timeZone
         clock.locale = locale
         clock.timeZone = timeZone
-        return "Records again \(start.formatted(day)) \(start.formatted(clock))."
+        let dayText = start.formatted(day)
+        let clockText = start.formatted(clock)
+        return String(localized: "Records again \(dayText) \(clockText).", bundle: .module)
     }
 
     /// The name stored on the once-pass. A blank show title uses the airing's

@@ -5,12 +5,12 @@ public enum Category: String, Sendable, CaseIterable {
 
     public var label: String {
         switch self {
-        case .sports: "Sports"
-        case .news: "News"
-        case .movies: "Movies"
-        case .kids: "Kids"
-        case .series: "Shows"
-        case .other: "Other"
+        case .sports: String(localized: "Sports", bundle: .module)
+        case .news: String(localized: "News", bundle: .module)
+        case .movies: String(localized: "Movies", bundle: .module)
+        case .kids: String(localized: "Kids", bundle: .module)
+        case .series: String(localized: "Shows", bundle: .module)
+        case .other: String(localized: "Other", bundle: .module)
         }
     }
 }
@@ -74,7 +74,12 @@ public extension Airing {
 
     func minutesLeft(at date: Date) -> String {
         let m = max(0, Int((end.timeIntervalSince(date) / 60).rounded()))
-        return m >= 60 ? "\(m / 60)h \(m % 60)m left" : "\(m)m left"
+        if m >= 60 {
+            let hours = m / 60
+            let mins = m % 60
+            return String(localized: "\(String(hours))h \(String(mins))m left", bundle: .module)
+        }
+        return String(localized: "\(String(m))m left", bundle: .module)
     }
 }
 
@@ -216,7 +221,7 @@ public struct PlaybackChoice: Equatable, Sendable {
 }
 
 public enum ClearBroadcast {
-    public static let encryptedNote = "The 3.0 version is encrypted. Showing the regular broadcast."
+    public static let encryptedNote = String(localized: "The 3.0 version is encrypted. Showing the regular broadcast.", bundle: .module)
 
     /// A channel on the guide plays as itself. An encrypted 3.0 station plays its clear 1.0 twin.
     /// A hidden half of a 1.0/3.0 pair plays as the half that is on the guide.

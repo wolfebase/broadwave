@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import type { Pass, PlannedAiring, Recording } from "../../types";
 import { fixSchedule, getEvents, getSchedule, stopRecording } from "../../api";
+import { scheduleMessages } from "../../i18n/messages/schedule.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { actionName } from "../../lib/actionName";
 import { copy } from "../../strings";
 import { formatClock } from "../../time";
 import { Passes } from "./Passes";
 import { takeScheduleRead, takeScheduleWrite } from "./plan";
 import "./schedule.css";
+
+const t = bind(scheduleMessages);
+
 export function Schedule({
   recordings,
   passes,
@@ -81,7 +86,7 @@ export function Schedule({
         setItems(next.items);
         setTunerCount(next.tunerCount);
       }
-      if (mine === writeN.current) setNote(err instanceof Error ? err.message : "That airing could not be scheduled.");
+      if (mine === writeN.current) setNote(err instanceof Error ? err.message : t("schedule.couldNot"));
     } finally {
       if (mine === writeN.current) setFixing("");
     }
@@ -91,9 +96,9 @@ export function Schedule({
       <div className="page-head">
         <h2>{copy.schedule.title}</h2>
       </div>
-      <h3 className="section-title">Coming up</h3>
+      <h3 className="section-title">{t("schedule.comingUp")}</h3>
       {items.length === 0 ? (
-        <p className="empty">No pass matches an airing in the guide.</p>
+        <p className="empty">{t("schedule.noMatch")}</p>
       ) : (
         <ul className="source-list">
           {items.map((item) => {
@@ -101,21 +106,22 @@ export function Schedule({
               <li key={`${item.passId}-${item.airing.id}`} className="source-row">
                 <span className="ch-num">{formatDay(new Date(item.airing.start))}</span>
                 <span>{item.airing.title}</span>
-                <span className="codec">{item.skipped ? item.reason || (tunerCount === 1 ? "Lower priority · 1 tuner" : `Lower priority · ${tunerCount} tuners`) : `Will record ${formatClock(recordWindow(item).start)}–${formatClock(recordWindow(item).end)}`}</span>
+                <span className="codec">{item.skipped ? item.reason || t("schedule.lowerPriority", tunerCount) : t("schedule.willRecord", { start: formatClock(recordWindow(item).start), end: formatClock(recordWindow(item).end) })}</span>
                 {item.suggestion ? (
                   <span className="schedule-suggest">
                     <span>
-                      Later on {formatDay(new Date(item.suggestion.start))}
-                      {item.suggestion.guideNumber ? ` on ${item.suggestion.guideNumber}` : ""}.
+                      {item.suggestion.guideNumber
+                        ? t("schedule.laterOnChannel", { when: formatDay(new Date(item.suggestion.start)), number: item.suggestion.guideNumber })
+                        : t("schedule.laterOn", { when: formatDay(new Date(item.suggestion.start)) })}
                     </span>
                     <button
                       type="button"
                       className="btn small schedule-fix"
                       disabled={fixing !== ""}
-                      aria-label={actionName("Record the later airing", item.airing.title)}
+                      aria-label={actionName(t("schedule.recordLater"), item.airing.title)}
                       onClick={() => void recordLater(item)}
                     >
-                      Record the later airing
+                      {t("schedule.recordLater")}
                     </button>
                   </span>
                 ) : null}
@@ -126,12 +132,12 @@ export function Schedule({
       )}
       {note ? <p className="hint" role="alert">{note}</p> : null}
       {items.some((item) => item.conflict) ? (
-        <p className="hint">A skipped show can move to a later airing when one fits. Otherwise move its pass up the list.</p>
+        <p className="hint">{t("schedule.conflictHint")}</p>
       ) : null}
       <Passes passes={passes} onPasses={onPasses} />
-      <h3 className="section-title">Activity</h3>
+      <h3 className="section-title">{t("schedule.activity")}</h3>
       {events.length === 0 ? (
-        <p className="empty">Guide updates and recordings will be listed here.</p>
+        <p className="empty">{t("schedule.activityEmpty")}</p>
       ) : (
         <ul className="source-list">
           {events.map((event) => (
@@ -144,7 +150,7 @@ export function Schedule({
       )}
       {active.length === 0 ? (
         <article className="quiet-card wide">
-          <p>Nothing is recording right now. A pass above starts the next matching airing on its own.</p>
+          <p>{t("schedule.nothingRecording")}</p>
         </article>
       ) : (
         <ul className="source-list">
@@ -155,10 +161,10 @@ export function Schedule({
               <button
                 type="button"
                 className="btn"
-                aria-label={actionName("Stop", rec.title)}
+                aria-label={actionName(t("schedule.stop"), rec.title)}
                 onClick={() => void stopRecording(rec.id).then(onStop)}
               >
-                Stop
+                {t("schedule.stop")}
               </button>
             </li>
           ))}

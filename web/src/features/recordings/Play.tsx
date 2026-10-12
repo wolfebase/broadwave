@@ -6,6 +6,8 @@ import { canonicalKey } from "../../lib/tvKey";
 import { mediaURL } from "../../lib/deviceToken";
 import { fileHlsConfig, markerAt, readSkip, readZoom, saveSkip, saveZoom, subscribeZoom, type PictureMode, type SkipMode, type Zoom } from "../../picture";
 import { markersForPlayback, playbackGrowing, progressSaveAction, releaseFileVideo, storedPlayhead, takeFileFatal, type ResumeGate } from "./filePlay";
+import { recordingsMessages } from "../../i18n/messages/recordings.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { copy } from "../../strings";
 import { recordingSeekArrow } from "../player/keys";
 import { Stage } from "../player/Stage";
@@ -15,6 +17,8 @@ import { breakScans, idleBreakScan } from "./breaks";
 import { DownloadLink } from "./DownloadLink";
 import { endedAdvances, introSkip, takeUpNext, upNext } from "./ends";
 import { planRecordingSeek } from "./seek";
+
+const t = bind(recordingsMessages);
 
 type Marker = { id: number; recordingId?: number; start: number; end: number; confidence?: number };
 
@@ -112,7 +116,7 @@ export function Play({
     let detach: (() => void) | null = null;
     const track = document.createElement("track");
     track.kind = "captions";
-    track.label = "Captions";
+    track.label = t("recordings.captions");
     track.src = mediaURL(`/media/file/${recording.id}/captions.vtt`);
     track.addEventListener("load", () => {
       if (!dead && (track.track.cues?.length ?? 0) > 0) setCaptionsReady(true);
@@ -202,7 +206,7 @@ export function Play({
         place();
       } catch (err) {
         if (mine === gen) relocating.current = null;
-        if (!dead && mine === gen) setError(err instanceof Error ? err.message : "Playback did not start.");
+        if (!dead && mine === gen) setError(err instanceof Error ? err.message : t("recordings.playbackFailed"));
       }
     };
 
@@ -404,7 +408,7 @@ export function Play({
       eyebrow={recording.guideNumber}
       title={recording.subtitle ? `${recording.title} · ${recording.subtitle}` : recording.title}
       onBack={onBack}
-      backLabel="Library"
+      backLabel={copy.library.title}
       position={where}
       duration={total}
       onKeyDown={onKey}
@@ -418,14 +422,14 @@ export function Play({
         else back(-delta);
       }}
       error={error}
-      note={card ? `Up next: ${nextLabel}${card.left !== null ? ". Plays on its own." : ""}` : undefined}
+      note={card ? (card.left !== null ? t("recordings.upNextPlays", { label: nextLabel }) : t("recordings.upNext", { label: nextLabel })) : undefined}
       noteAction={
         card ? (
           <>
-            {card.left !== null ? <p className="hint" aria-hidden="true">Playing in {card.left} s</p> : null}
+            {card.left !== null ? <p className="hint" aria-hidden="true">{t("recordings.playingIn", { seconds: card.left })}</p> : null}
             <div className="sheet-actions">
-              <button type="button" className="btn" aria-label={nextLabel ? actionName("Play now", nextLabel) : undefined} onClick={onNext}>Play now</button>
-              <button type="button" className="btn" onClick={() => setDismissed(true)}>Not now</button>
+              <button type="button" className="btn" aria-label={nextLabel ? actionName(t("recordings.playNow"), nextLabel) : undefined} onClick={onNext}>{t("recordings.playNow")}</button>
+              <button type="button" className="btn" onClick={() => setDismissed(true)}>{t("recordings.notNow")}</button>
             </div>
           </>
         ) : null
@@ -434,7 +438,7 @@ export function Play({
       tools={
         inside && (skipMode === "button" || (skipMode === "auto" && !sure(inside))) ? (
           <button type="button" className="text-btn on" onClick={() => { sought(); seekTo(inside.end); }}>
-            Skip break
+            {t("recordings.skipBreak")}
           </button>
         ) : introEnd !== null ? (
           <button
@@ -445,30 +449,30 @@ export function Play({
               seekTo(introEnd);
             }}
           >
-            Skip intro
+            {t("recordings.skipIntro")}
           </button>
         ) : null
       }
       more={
         <>
-          <div className="segmented" role="group" aria-label="Picture size">
+          <div className="segmented" role="group" aria-label={t("recordings.pictureSize")}>
             {(["fit", "fill", "zoom"] as const).map((item) => (
               <button key={item} type="button" className={zoom === item ? "seg on" : "seg"} aria-pressed={zoom === item} onClick={() => chooseZoom(item)}>
-                {item === "fit" ? "Fit" : item === "fill" ? "Fill" : "Zoom"}
+                {item === "fit" ? t("recordings.fit") : item === "fill" ? t("recordings.fill") : t("recordings.zoom")}
               </button>
             ))}
           </div>
-          <div className="segmented" role="group" aria-label="Break skipping">
+          <div className="segmented" role="group" aria-label={t("recordings.breakSkipping")}>
             {(["auto", "button", "manual"] as const).map((item) => (
               <button key={item} type="button" className={skipMode === item ? "seg on" : "seg"} aria-pressed={skipMode === item} onClick={() => chooseSkip(item)}>
-                {item === "auto" ? "Skip auto" : item === "button" ? "Skip button" : "Manual"}
+                {item === "auto" ? t("recordings.skipAuto") : item === "button" ? t("recordings.skipButton") : t("recordings.manual")}
               </button>
             ))}
           </div>
           {captionsReady ? (
             <div className="option-row">
               <span className="option-label" id={captionsLabel}>
-                Captions
+                {t("recordings.captions")}
               </span>
               <div className="segmented" role="group" aria-labelledby={captionsLabel}>
                 {(["off", "on"] as const).map((item) => (
@@ -486,16 +490,16 @@ export function Play({
                       }
                     }}
                   >
-                    {item === "off" ? "Off" : "On"}
+                    {item === "off" ? t("recordings.off") : t("recordings.on")}
                   </button>
                 ))}
               </div>
             </div>
           ) : null}
           <div className="sheet-actions">
-            <button type="button" className="btn" aria-label={actionName("Start over", recordingSubject(recording))} onClick={() => void startOver()}>Start over</button>
+            <button type="button" className="btn" aria-label={actionName(t("recordings.startOver"), recordingSubject(recording))} onClick={() => void startOver()}>{t("recordings.startOver")}</button>
             <DownloadLink id={recording.id} status={recording.status} name={recordingSubject(recording)} />
-            <button type="button" className="btn" onClick={() => void markHere()}>Mark 3 seconds</button>
+            <button type="button" className="btn" onClick={() => void markHere()}>{t("recordings.markThree")}</button>
             <button
               type="button"
               className="btn"
@@ -512,15 +516,16 @@ export function Play({
               {shown.map((marker) => (
                 <li key={marker.id}>
                   <span>
-                    {marker.start.toFixed(1)}s–{marker.end.toFixed(1)}s{sure(marker) ? "" : " · maybe"}
+                    {t("recordings.markerSpan", { start: marker.start.toFixed(1), end: marker.end.toFixed(1) })}
+                    {sure(marker) ? "" : t("recordings.maybe")}
                   </span>
-                  <button type="button" className="btn" aria-label={actionName("Remove", `break ${marker.start.toFixed(0)}–${marker.end.toFixed(0)}s`)} onClick={() => void removeMarker(marker.id)}>Remove</button>
+                  <button type="button" className="btn" aria-label={actionName(t("recordings.remove"), t("recordings.breakRange", { start: marker.start.toFixed(0), end: marker.end.toFixed(0) }))} onClick={() => void removeMarker(marker.id)}>{t("recordings.remove")}</button>
                 </li>
               ))}
             </ul>
           ) : null}
           <p className="hint">
-            {growing ? "This show is still recording. It keeps playing as the file grows." : "Breaks show as marks on the timeline. One marked maybe gets a Skip button instead of skipping on its own."}
+            {growing ? t("recordings.stillRecording") : t("recordings.breaksHint")}
           </p>
         </>
       }

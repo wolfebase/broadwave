@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { getClientMe, unreadBody } from "../../api";
+import { getClientMe } from "../../api";
+import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { approvePair, createPairCode, listClients, revokeClient } from "./pairApi";
 import { navigate } from "../../app/router";
 import { isForbidden, isUnauthorized } from "../../lib/deviceToken";
@@ -7,13 +9,12 @@ import { canEditSignIn, formatPairCode, kindLabel, normalizePairCode, scopeLabel
 import { lastSeenPhrase } from "../../time";
 import type { ClientDevice } from "../../types";
 
+const t = bind(settingsUiMessages);
+
 type Access = "watch" | "record" | "admin";
 
-const openHint = "Off leaves this home network open. On asks a new phone, TV, or browser for a code. This browser is signed in when you turn it on.";
-const closedHint = "A new device needs a code. This browser stays signed in. Health checks, playlists, and the HDHomeRun port stay open. The guide needs a signed-in device.";
-
 function message(err: unknown): string {
-  return err instanceof Error && err.message ? err.message : unreadBody;
+  return err instanceof Error && err.message ? err.message : t("devices.failed");
 }
 
 export function PairedDevices({
@@ -90,7 +91,7 @@ export function PairedDevices({
   }
 
   async function revoke(device: ClientDevice) {
-    if (!window.confirm(`Revoke ${device.name}? It will need a new code to sign in.`)) return;
+    if (!window.confirm(t("devices.revokeConfirm", { name: device.name }))) return;
     setBusy(true);
     setError("");
     setNote("");
@@ -109,7 +110,7 @@ export function PairedDevices({
     const normalized = normalizePairCode(code);
     if (!normalized) {
       setNote("");
-      setError("Enter the 6-digit code.");
+      setError(t("devices.needCode"));
       return;
     }
     setBusy(true);
@@ -119,7 +120,7 @@ export function PairedDevices({
       const scopes = scopesForAccess(access);
       if (!scopes) return;
       const res = await approvePair({ code: normalized, scopes });
-      setNote(`${res.device.name} can sign in.`);
+      setNote(t("devices.canSignIn", { name: res.device.name }));
       setCode("");
       setDevices((rows) => [res.device, ...(rows ?? []).filter((item) => item.id !== res.device.id)]);
     } catch (err: unknown) {
@@ -131,19 +132,19 @@ export function PairedDevices({
 
   return (
     <section>
-      <h3 className="section-title">Devices</h3>
-      <p className="hint">Phones, TVs, and browsers that sign in to this server.</p>
+      <h3 className="section-title">{t("devices.title")}</h3>
+      <p className="hint">{t("devices.lead")}</p>
       {canEdit ? (
         <label className="field">
-          Require a device to sign in
+          {t("devices.require")}
           <select value={on ? "1" : "0"} onChange={(event) => void changeAuth(event.target.value)}>
-            <option value="0">Off</option>
-            <option value="1">On</option>
+            <option value="0">{t("settings.off")}</option>
+            <option value="1">{t("settings.on")}</option>
           </select>
-          <span className="hint">{on ? closedHint : openHint}</span>
+          <span className="hint">{on ? t("devices.closedHint") : t("devices.openHint")}</span>
         </label>
       ) : (
-        <p className="hint">{on ? closedHint : "An admin turns device sign-in on or off."}</p>
+        <p className="hint">{on ? t("devices.closedHint") : t("devices.adminOnly")}</p>
       )}
       {error ? (
         <p className="error" role="alert">
@@ -155,7 +156,7 @@ export function PairedDevices({
           {note}
         </p>
       ) : null}
-      {canEdit && devices && devices.length === 0 ? <p className="empty">No devices paired yet.</p> : null}
+      {canEdit && devices && devices.length === 0 ? <p className="empty">{t("devices.none")}</p> : null}
       {canEdit && devices && devices.length > 0 ? (
         <ul className="source-list">
           {devices.map((device) => {
@@ -165,9 +166,9 @@ export function PairedDevices({
                 <span>{device.name}</span>
                 <span>{kindLabel(device.kind)}</span>
                 <span>{scopeLabel(device.scopes ?? [])}</span>
-                <span className="hint">{seen || "Hasn't signed in yet."}</span>
-                <button type="button" className="btn" aria-label={`Revoke ${device.name}`} disabled={busy} onClick={() => void revoke(device)}>
-                  Revoke
+                <span className="hint">{seen || t("devices.notSeen")}</span>
+                <button type="button" className="btn" aria-label={t("devices.revokeNamed", { name: device.name })} disabled={busy} onClick={() => void revoke(device)}>
+                  {t("devices.revoke")}
                 </button>
               </li>
             );
@@ -177,28 +178,28 @@ export function PairedDevices({
       {canEdit ? (
         <>
           <label className="field">
-            This code allows
+            {t("devices.codeAllows")}
             <select value={access} onChange={(event) => setAccess(event.target.value as Access)}>
-              <option value="watch">Watch</option>
-              <option value="record">Record</option>
-              <option value="admin">Admin</option>
+              <option value="watch">{t("devices.watch")}</option>
+              <option value="record">{t("devices.record")}</option>
+              <option value="admin">{t("devices.admin")}</option>
             </select>
           </label>
           <button type="button" className="btn" disabled={busy} onClick={() => void issue()}>
-            Pair a device
+            {t("devices.pair")}
           </button>
           <button type="button" className="btn" onClick={() => navigate("/pair")}>
-            Pair this browser
+            {t("devices.pairBrowser")}
           </button>
           {issued ? (
             <>
               <p className="pair-code">{formatPairCode(issued)}</p>
-              <p className="hint">Enter this code on the other device. It lasts 10 minutes.</p>
+              <p className="hint">{t("devices.codeHint")}</p>
             </>
           ) : null}
           <form onSubmit={(event) => void approve(event)}>
             <label className="field">
-              Approve a code
+              {t("devices.approveCode")}
               <input
                 value={code}
                 inputMode="numeric"
@@ -208,7 +209,7 @@ export function PairedDevices({
               />
             </label>
             <button type="submit" className="btn" disabled={busy}>
-              Approve
+              {t("devices.approve")}
             </button>
           </form>
         </>

@@ -101,7 +101,7 @@ public final class AppStore {
             let forcedURL: String? = nil
         #endif
         if !holdConnect, let raw = forcedURL, let url = URL(string: raw) {
-            connect(FoundServer(id: "pending", name: "Server", url: url))
+            connect(FoundServer(id: "pending", name: String(localized: "Server", bundle: .module), url: url))
         } else if !holdConnect, let saved: FoundServer = Self.load("server") {
             if let snap = CatalogCache.load(serverID: saved.id) {
                 channels = snap.channels
@@ -159,7 +159,7 @@ public final class AppStore {
         guard generation == started else { return }
         guard url != nil else {
             forget()
-            error = "The demo did not start."
+            error = String(localized: "The demo did not start.", bundle: .module)
             return
         }
         connect(server)
@@ -177,11 +177,11 @@ public final class AppStore {
     /// Starts the loopback demo, or joins one already running on this Mac.
     public func startDemo() async {
         guard let url = await DemoServer.shared.prepare() else {
-            error = "The demo did not start."
+            error = String(localized: "The demo did not start.", bundle: .module)
             return
         }
         error = nil
-        connect(FoundServer(id: "demo", name: "Demo", url: url))
+        connect(FoundServer(id: "demo", name: String(localized: "Demo", bundle: .module), url: url))
     }
 
     public func connect(_ server: FoundServer) {
@@ -443,7 +443,7 @@ public final class AppStore {
         public func previewLineup(_ channels: [Channel]) {
             self.channels = channels
             let url = URL(string: "http://127.0.0.1:9")!
-            server = FoundServer(id: "preview", name: "Preview", url: url)
+            server = FoundServer(id: "preview", name: String(localized: "Preview", bundle: .module), url: url)
             api = APIClient(base: url, session: session)
         }
 
@@ -480,7 +480,7 @@ public final class AppStore {
             let info = try await fetchedInfo
             guard sameSession(started, base) else { return }
             if let current = server, current.id != "pending", current.id != "demo", !current.id.isEmpty, current.id != info.id {
-                error = "A different server answered at this address."
+                error = String(localized: "A different server answered at this address.", bundle: .module)
                 socket?.disconnect()
                 socket = nil
                 self.api = nil
@@ -572,15 +572,15 @@ public final class AppStore {
 
     /// Makes a library channel that plays one recording, numbered like the web does it.
     public func makeChannel(from recording: Recording) async throws -> VirtualChannel {
-        guard let api else { throw APIError(code: "offline", message: "Not connected to a server.", status: 0) }
+        guard let api else { throw APIError(code: "offline", message: String(localized: "Not connected to a server.", bundle: .module), status: 0) }
         let started = generation
         let base = api.base
         // The server does not keep numbers unique, so a stale list could hand out 900 twice.
         let existing = try await api.virtuals()
-        guard sameSession(started, base) else { throw APIError(code: "offline", message: "Not connected to a server.", status: 0) }
+        guard sameSession(started, base) else { throw APIError(code: "offline", message: String(localized: "Not connected to a server.", bundle: .module), status: 0) }
         virtuals = existing
         let made = try await api.createVirtual(
-            number: VirtualChannel.nextNumber(after: virtuals), name: "\(recording.title) channel", recordings: [recording.id]
+            number: VirtualChannel.nextNumber(after: virtuals), name: String(localized: "\(recording.title) channel", bundle: .module), recordings: [recording.id]
         )
         guard sameSession(started, base) else { return made }
         await refreshVirtuals()
@@ -661,7 +661,7 @@ public final class AppStore {
     /// Returns the first error and how many failed; the rest still go through.
     @discardableResult
     public func apply(_ action: BulkAction, to recs: [Recording]) async -> (failed: Int, error: Error?) {
-        guard let api else { return (recs.count, APIError(code: "offline", message: "Not connected to a server.", status: 0)) }
+        guard let api else { return (recs.count, APIError(code: "offline", message: String(localized: "Not connected to a server.", bundle: .module), status: 0)) }
         let started = generation
         let base = api.base
         recordingsEpoch += 1
@@ -720,7 +720,7 @@ public final class AppStore {
     /// Saves a channel edit, then reloads the guide's lineup so hiding or
     /// renaming shows everywhere at once.
     public func editChannel(_ id: Int64, _ patch: ChannelPatch) async throws -> Channel {
-        guard let api else { throw APIError(code: "offline", message: "Not connected to a server.", status: 0) }
+        guard let api else { throw APIError(code: "offline", message: String(localized: "Not connected to a server.", bundle: .module), status: 0) }
         let started = generation
         let base = api.base
         let updated = try await api.patchChannel(id, patch)

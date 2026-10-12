@@ -55,7 +55,9 @@ public enum TopShelf {
             let image = api.frameURL(channelID: channel.id, width: 1280, listed: framed).map { fresh($0, now) }
                 ?? airing.flatMap { a in a.imageUrl?.isEmpty == false ? api.artURL(kind: "airing", id: a.id, width: 1280) : nil }
                 ?? (channel.artUrl?.isEmpty == false ? api.artURL(kind: "channel", id: channel.id, width: 320) : nil)
-            let title = airing.map { "\(channel.displayNumber) · \($0.title)" } ?? "\(channel.displayNumber) \(channel.displayName)"
+            let title = airing.map { show in
+                String(localized: "shelf.channelShow", defaultValue: "\(channel.displayNumber) · \(show.title)", bundle: .module)
+            } ?? String(localized: "shelf.channelName", defaultValue: "\(channel.displayNumber) \(channel.displayName)", bundle: .module)
             return Item(id: "channel-\(channel.id)", title: title, image: image, link: watchLink(channel.id), progress: nil)
         }
 
@@ -66,7 +68,9 @@ public enum TopShelf {
             let progress = rec.durationSec.flatMap { d in d > 0 ? min(1, max(0, (rec.position ?? 0) / d)) : nil }
             return Item(
                 id: "recording-\(rec.id)",
-                title: rec.subtitle.map { "\(rec.title): \($0)" } ?? rec.title,
+                title: rec.subtitle.map { subtitle in
+                    String(localized: "shelf.recordingSubtitle", defaultValue: "\(rec.title): \(subtitle)", bundle: .module)
+                } ?? rec.title,
                 image: api.posterURL(recordingID: rec.id),
                 link: recordingLink(rec.id),
                 progress: progress
@@ -74,9 +78,9 @@ public enum TopShelf {
         }
 
         let all = [
-            Section(title: "Games on now", items: games.prefix(limit).map(live)),
-            Section(title: "Favorites", items: favorites.prefix(limit).map(live)),
-            Section(title: "Continue watching", items: resume),
+            Section(title: String(localized: "Games on now", bundle: .module), items: games.prefix(limit).map(live)),
+            Section(title: String(localized: "Favorites", bundle: .module), items: favorites.prefix(limit).map(live)),
+            Section(title: String(localized: "Continue watching", bundle: .module), items: resume),
         ]
         return all.filter { !$0.items.isEmpty }
     }

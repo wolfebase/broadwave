@@ -543,9 +543,11 @@ public struct APIClient: Sendable {
 
         public var line: String {
             if found == 0, let progress, progress > 0 {
-                return "\(progress)% done."
+                return String(localized: "\(String(progress))% done.", bundle: .module)
             }
-            return found == 1 ? "1 channel found." : "\(found) channels found."
+            return found == 1
+                ? String(localized: "1 channel found.", bundle: .module)
+                : String(localized: "\(String(found)) channels found.", bundle: .module)
         }
     }
 

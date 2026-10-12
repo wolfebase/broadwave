@@ -74,7 +74,7 @@ public enum ScreenName {
 
     private static func fallback(_ device: String) -> String {
         let name = clean(device)
-        return name.isEmpty ? "Screen" : name
+        return name.isEmpty ? String(localized: "Screen", bundle: .module) : name
     }
 }
 
@@ -102,7 +102,7 @@ public struct ScreenWatch: Codable, Sendable, Equatable {
     /// "From Kitchen iPad", or nil when the sender gave no name.
     public var note: String? {
         let name = from.trimmingCharacters(in: .whitespacesAndNewlines)
-        return name.isEmpty ? nil : "From \(name)"
+        return name.isEmpty ? nil : String(localized: "From \(name)", bundle: .module)
     }
 }
 

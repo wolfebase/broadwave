@@ -4,8 +4,8 @@ import Foundation
 public enum Compatibility {
     /// Matches the App Store version when the bundle does not say.
     public static let appVersion = "1.1"
-    public static let updateServer = "Update your Broadwave server to use this"
-    public static let updateApp = "Update Broadwave to use this server"
+    public static let updateServer = String(localized: "Update your Broadwave server to use this", bundle: .module)
+    public static let updateApp = String(localized: "Update Broadwave to use this server", bundle: .module)
 
     /// The sentence to show in place of a control, or nil when the server can do it.
     /// No server info yet means leave the control up.

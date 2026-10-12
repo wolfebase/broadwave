@@ -39,7 +39,7 @@ public enum TogetherJoin: Equatable, Sendable {
     /// Only a server this device was set up with. SharePlay never relays a broadcast.
     public static func decide(_ invite: WatchTogether, server: FoundServer?, remembered: [FoundServer]) -> TogetherJoin {
         guard invite.channelID > 0, !invite.serverID.isEmpty, invite.serverID != "demo" else {
-            return .cannot("This SharePlay can't be opened here.")
+            return .cannot(String(localized: "This SharePlay can't be opened here.", bundle: .module))
         }
         if server?.id == invite.serverID {
             return .watch(invite.channelID)
@@ -48,7 +48,8 @@ public enum TogetherJoin: Equatable, Sendable {
             return .connect(known, invite.channelID)
         }
         let name = invite.serverName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let place = name.isEmpty ? "another Broadwave server" : name
-        return .cannot("\(invite.channelName) is on \(place), which this device isn't set up with.")
+        let place = name.isEmpty ? String(localized: "another Broadwave server", bundle: .module) : name
+        let channelName = invite.channelName
+        return .cannot(String(localized: "\(channelName) is on \(place), which this device isn't set up with.", bundle: .module))
     }
 }

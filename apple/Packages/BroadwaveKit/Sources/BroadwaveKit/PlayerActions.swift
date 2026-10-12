@@ -61,7 +61,7 @@ public enum ProgramLine {
             return label
         }
         if let season, let episode, season > 0, episode > 0 {
-            return "Season \(season), episode \(episode)"
+            return String(localized: "Season \(String(season)), episode \(String(episode))", bundle: .module)
         }
         return text(subtitle)
     }
@@ -108,26 +108,33 @@ public struct StreamFacts: Equatable, Sendable {
         )
     }
 
+    private static var waiting: String {
+        String(localized: "Waiting", bundle: .module)
+    }
+
     private static func text(_ value: String?) -> String {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? "Waiting" : trimmed
+        return trimmed.isEmpty ? waiting : trimmed
     }
 
     private static func rate(_ value: String?) -> String {
         let raw = text(value)
-        guard raw != "Waiting" else { return raw }
+        guard raw != waiting else { return raw }
         if raw.hasSuffix("M") {
-            return String(raw.dropLast()) + " Mb/s"
+            let number = String(raw.dropLast())
+            return String(localized: "\(number) Mb/s", bundle: .module)
         }
         if raw.hasSuffix("k") {
-            return String(raw.dropLast()) + " kb/s"
+            let number = String(raw.dropLast())
+            return String(localized: "\(number) kb/s", bundle: .module)
         }
         return raw
     }
 
     private static func drift(_ ms: Double?, state: String?) -> String {
-        guard let state, !state.isEmpty, state != "off" else { return "Off" }
+        guard let state, !state.isEmpty, state != "off" else { return String(localized: "Off", bundle: .module) }
         let word = state.prefix(1).uppercased() + state.dropFirst()
-        return "\(word) · \(Int((ms ?? 0).rounded())) ms"
+        let rounded = Int((ms ?? 0).rounded())
+        return String(localized: "\(word) · \(String(rounded)) ms", bundle: .module)
     }
 }

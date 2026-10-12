@@ -1,3 +1,8 @@
+import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
+import { bind } from "../../i18n/runtime.ts";
+
+const t = bind(settingsUiMessages);
+
 // Spaces and dashes only group the six digits.
 export function normalizePairCode(raw: string): string | null {
   const digits = raw.replace(/[\s-]/g, "");
@@ -12,23 +17,23 @@ export function formatPairCode(code: string): string {
 
 const scopeOrder = ["watch", "record", "admin"] as const;
 
-const scopeNames: Record<(typeof scopeOrder)[number], string> = {
-  watch: "Watch",
-  record: "Record",
-  admin: "Admin",
-};
+function scopeName(scope: (typeof scopeOrder)[number]): string {
+  if (scope === "record") return t("devices.record");
+  if (scope === "admin") return t("devices.admin");
+  return t("devices.watch");
+}
 
 export function scopeLabel(scopes: string[]): string {
-  const names = scopeOrder.filter((scope) => scopes.includes(scope)).map((scope) => scopeNames[scope]);
-  if (names.length === 0) return "Watch";
+  const names = scopeOrder.filter((scope) => scopes.includes(scope)).map((scope) => scopeName(scope));
+  if (names.length === 0) return t("devices.watch");
   return names.join(", ");
 }
 
 export function kindLabel(kind: string): string {
-  if (kind === "phone") return "Phone";
-  if (kind === "tv") return "TV";
-  if (kind === "web") return "Browser";
-  return "Device";
+  if (kind === "phone") return t("devices.phone");
+  if (kind === "tv") return t("devices.tv");
+  if (kind === "web") return t("devices.browser");
+  return t("devices.device");
 }
 
 export function scopesForAccess(access: string): string[] | null {

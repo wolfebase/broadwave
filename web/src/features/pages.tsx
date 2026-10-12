@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createVirtual, deleteRecording, getServer, setKeep, setWatched, stopRecording } from "../api";
+import { pagesMessages } from "../i18n/messages/pagesCopy.ts";
+import { bind } from "../i18n/runtime.ts";
 import { useData } from "../app/data";
+import { copy } from "../strings";
 import { gateFeature } from "../lib/compat";
 import { focusRing } from "../app/remote";
 import { navigate, useRoute } from "../app/router";
@@ -18,6 +21,8 @@ import { SettingsScreen } from "./settings/Settings";
 import { ShareLinks } from "./settings/ShareLinks";
 import { tunerAddress } from "./settings/tunerShare";
 import { Sources } from "./settings/Sources";
+
+const t = bind(pagesMessages);
 
 export function RecordingsPage() {
   const { recordings, virtuals, refresh } = useData();
@@ -42,14 +47,14 @@ export function RecordingsPage() {
   return (
     <div className="page-wrap">
       <header className="page-header">
-        <h1>Recordings</h1>
+        <h1>{t("pages.recordings")}</h1>
         <div className="guide-chips">
-          <div className="segmented" role="group" aria-label="Recordings">
+          <div className="segmented" role="group" aria-label={t("pages.recordings")}>
             <button ref={libraryRef} type="button" className={storage ? "seg" : "seg on"} aria-pressed={!storage} onClick={() => openView("library")}>
-              Library
+              {t("pages.library")}
             </button>
             <button ref={storageRef} type="button" className={storage ? "seg on" : "seg"} aria-pressed={storage} onClick={() => openView("storage")}>
-              Storage
+              {t("pages.storage")}
             </button>
           </div>
         </div>
@@ -66,9 +71,8 @@ export function RecordingsPage() {
             const results = await Promise.allSettled(recs.map((r) => (action === "delete" ? deleteRecording(r.id) : setWatched(r.id, action === "watched"))));
             const failed = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
             const done = recs.length - failed.length;
-            const what = done === 1 ? "1 recording" : `${done} recordings`;
-            const said = action === "delete" ? `Deleted ${what}.` : `Marked ${what} ${action}.`;
-            setNote(failed.length === 0 ? said : `${done > 0 ? `${said} ` : ""}${failed.length} could not be changed: ${String(failed[0].reason?.message ?? failed[0].reason)}`);
+            const said = action === "delete" ? t("pages.deletedMany", done) : action === "watched" ? t("pages.markedWatched", done) : t("pages.markedUnwatched", done);
+            setNote(failed.length === 0 ? said : `${done > 0 ? `${said} ` : ""}${t("pages.couldNotChange", { count: failed.length, reason: String(failed[0].reason?.message ?? failed[0].reason) })}`);
             await refresh(["recordings"]);
           }}
           onPlay={(r) => navigate(`/play?recording=${r.id}`)}
@@ -82,7 +86,7 @@ export function RecordingsPage() {
           onDelete={(r) =>
             void deleteRecording(r.id).then(
               () => {
-                setNote(`Deleted ${r.title}.`);
+                setNote(t("pages.deleted", { title: r.title }));
                 return refresh(["recordings"]);
               },
               (err: unknown) => setNote(err instanceof Error ? err.message : String(err)),
@@ -90,7 +94,7 @@ export function RecordingsPage() {
           }
           onStop={(r) =>
             void stopRecording(r.id).then(() => {
-              setNote(`Stopped ${r.title}. What it recorded is kept.`);
+              setNote(t("pages.stopped", { title: r.title }));
               return refresh(["recordings"]);
             })
           }
@@ -98,8 +102,8 @@ export function RecordingsPage() {
             const used = new Set(virtuals.map((v) => v.number));
             let n = 900;
             while (used.has(String(n))) n++;
-            void createVirtual(String(n), `${r.title} channel`, [r.id]).then(() => {
-              setNote(`Channel ${n} now plays ${r.title} around the clock, without a tuner.`);
+            void createVirtual(String(n), t("pages.virtualName", { title: r.title }), [r.id]).then(() => {
+              setNote(t("pages.virtualNote", { number: n, title: r.title }));
               return refresh(["virtuals"]);
             });
           }}
@@ -114,7 +118,7 @@ export function SchedulePage() {
   return (
     <div className="page-wrap">
       <header className="page-header">
-        <h1>Schedule</h1>
+        <h1>{copy.schedule.title}</h1>
       </header>
       <Schedule recordings={recordings} passes={passes} onStop={() => void refresh(["recordings"])} onPasses={() => void refresh(["passes"])} />
     </div>
@@ -180,23 +184,23 @@ export function SettingsPage() {
   return (
     <div className="page-wrap settings-page">
       <header className="page-header">
-        <h1>Settings</h1>
+        <h1>{copy.settings.title}</h1>
         {server ? (
           <p className="page-sub">
-            {server.name} · version {server.version}
-            {server.encoder ? ` · ${server.encoder.replace("h264_", "").toUpperCase()} encoding` : ""}
+            {t("pages.serverVersion", { name: server.name, version: server.version })}
+            {server.encoder ? ` · ${t("pages.encoding", { encoder: server.encoder.replace("h264_", "").toUpperCase() })}` : ""}
           </p>
         ) : null}
       </header>
       <div className="setup-row" style={{ marginBottom: 8 }}>
         <button type="button" className="btn" onClick={() => navigate("/diagnostics")}>
-          Diagnostics
+          {t("pages.diagnostics")}
         </button>
         <button type="button" className="btn" onClick={() => navigate("/setup")}>
-          Run setup again
+          {t("pages.setupAgain")}
         </button>
-        <button type="button" className="btn" onClick={() => navigate("/about")} aria-label="About Broadwave">
-          About
+        <button type="button" className="btn" onClick={() => navigate("/about")} aria-label={t("pages.aboutAria")}>
+          {t("pages.about")}
         </button>
       </div>
       <Appearance />
@@ -204,7 +208,7 @@ export function SettingsPage() {
         <HomeList heading="h2" />
       </section>
       <section id="sources" className="settings-section">
-        <h2>Tuners and channels</h2>
+        <h2>{t("pages.tuners")}</h2>
         <Sources
           devices={devices}
           channels={allChannels}
@@ -226,44 +230,44 @@ export function SettingsPage() {
         />
       </section>
       <section className="settings-section">
-        <h2>Playback and recording</h2>
+        <h2>{t("pages.playback")}</h2>
         <SettingsScreen settings={settings} storage={storage} tunerCount={server?.tunerCount} onChange={(v) => void saveSettings(v)} />
       </section>
       <section className="settings-section">
         <PairedDevices deviceAuth={settings.deviceAuth ?? "0"} onChange={saveSettings} />
       </section>
       <section className="settings-section">
-        <h2>Share with other apps</h2>
-        <p className="dim">Plex, Jellyfin, Emby, and Channels can watch through this server. They share its tuners, so they never fight over one.</p>
+        <h2>{t("pages.share")}</h2>
+        <p className="dim">{t("pages.shareLead")}</p>
         {hdhrNote ? (
           <p className="hint" role="status">{hdhrNote}</p>
         ) : (
           <label className="switch-row">
             <input type="checkbox" checked={settings.hdhrEmulate === "1"} onChange={(e) => void saveSettings({ hdhrEmulate: e.target.checked ? "1" : "0" })} />
-            <span>Act as an HDHomeRun at {address}</span>
+            <span>{t("pages.hdhr", { address })}</span>
           </label>
         )}
-        {hdhrNote ? null : <p className="hint">Other apps add this address and include the port. Discovery stays quiet, so a tuner already on the network is unchanged. The change applies within a minute.</p>}
+        {hdhrNote ? null : <p className="hint">{t("pages.hdhrHint")}</p>}
         <ShareLinks pageURL={window.location.href} sharing={settings.hdhrEmulate === "1"} hdhr={!hdhrNote} />
-        <h3 className="section-title">Multiview channels</h3>
+        <h3 className="section-title">{t("pages.mosaics")}</h3>
         {mosaics.some(Boolean) ? (
           <ul className="share-mosaics">
             {mosaics.map((key, i) =>
               key ? (
                 <li key={key}>
                   <span>
-                    990.{i + 1} · Multiview: {mosaicName(key)}
-                    {listed(key) ? null : <span className="hint"> Not listed: a channel in it is hidden or gone.</span>}
+                    {t("pages.mosaicLine", { slot: i + 1, name: mosaicName(key) })}
+                    {listed(key) ? null : <span className="hint">{t("pages.mosaicHidden")}</span>}
                   </span>
-                  <button type="button" className="btn small" aria-label={`Remove Multiview: ${mosaicName(key)}`} onClick={() => void saveSettings({ exportMosaics: removeMosaic(mosaics, key) })}>
-                    Remove
+                  <button type="button" className="btn small" aria-label={t("pages.removeMosaic", { name: mosaicName(key) })} onClick={() => void saveSettings({ exportMosaics: removeMosaic(mosaics, key) })}>
+                    {t("pages.remove")}
                   </button>
                 </li>
               ) : null,
             )}
           </ul>
         ) : (
-          <p className="hint">Other apps can show 2 to 4 channels at once as one channel. Open a multiview and choose Add to other apps.</p>
+          <p className="hint">{t("pages.mosaicEmpty")}</p>
         )}
       </section>
     </div>

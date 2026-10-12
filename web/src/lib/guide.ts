@@ -1,4 +1,8 @@
+import { guideMessages } from "../i18n/messages/guide.ts";
+import { bind, formatDateTime, formatTime } from "../i18n/runtime.ts";
 import type { Airing, Channel, PlannedAiring, Recording } from "../types";
+
+const t = bind(guideMessages);
 
 export type Category = "sports" | "news" | "movies" | "kids" | "series" | "other";
 
@@ -18,12 +22,24 @@ export function categoryOf(airing: Pick<Airing, "category" | "title"> | undefine
 }
 
 export const categoryLabel: Record<Category, string> = {
-  sports: "Sports",
-  news: "News",
-  movies: "Movies",
-  kids: "Kids",
-  series: "Shows",
-  other: "Other",
+  get sports() {
+    return t("guide.category.sports");
+  },
+  get news() {
+    return t("guide.category.news");
+  },
+  get movies() {
+    return t("guide.category.movies");
+  },
+  get kids() {
+    return t("guide.category.kids");
+  },
+  get series() {
+    return t("guide.category.series");
+  },
+  get other() {
+    return t("guide.category.other");
+  },
 };
 
 export type AiringIndex = Map<number, Airing[]>;
@@ -114,7 +130,7 @@ export function primeTime(now: number): number {
 }
 
 export function timeLabel(iso: string | number): string {
-  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return formatTime(new Date(iso));
 }
 
 export function spanLabel(a: Airing): string {
@@ -123,20 +139,21 @@ export function spanLabel(a: Airing): string {
 
 export function minutesLeft(a: Airing, now: number): string {
   const m = Math.max(0, Math.round((Date.parse(a.end) - now) / 60000));
-  if (m >= 60) return `${Math.floor(m / 60)}h ${m % 60}m left`;
-  return `${m}m left`;
+  if (m >= 60) return t("guide.leftHours", { hours: Math.floor(m / 60), minutes: m % 60 });
+  return t("guide.leftMinutes", { minutes: m });
 }
 
-const sourceLine: Record<string, string> = {
-  silicondust: "From the tuner guide.",
-  "schedules-direct": "From Schedules Direct.",
-  xmltv: "From your guide file.",
-  playlist: "From the playlist.",
-  broadcast: "From the broadcast.",
+const sourceLine: Record<string, "guide.source.silicondust" | "guide.source.schedulesDirect" | "guide.source.xmltv" | "guide.source.playlist" | "guide.source.broadcast"> = {
+  silicondust: "guide.source.silicondust",
+  "schedules-direct": "guide.source.schedulesDirect",
+  xmltv: "guide.source.xmltv",
+  playlist: "guide.source.playlist",
+  broadcast: "guide.source.broadcast",
 };
 
 export function guideSourceLine(source?: string): string {
-  return source ? sourceLine[source] ?? "" : "";
+  const id = source ? sourceLine[source] : undefined;
+  return id ? t(id) : "";
 }
 
 // emptyGuideLabel is what a row says when the time on screen has no program.
@@ -154,9 +171,9 @@ export function guideCellName(
   opts?: { recording?: "recording" | "scheduled" | null; fresh?: boolean; score?: string },
 ): string {
   const parts = [title];
-  if (opts?.recording === "recording") parts.push("Recording");
-  else if (opts?.recording === "scheduled") parts.push("Will record");
-  if (opts?.fresh) parts.push("New");
+  if (opts?.recording === "recording") parts.push(t("guide.recording"));
+  else if (opts?.recording === "scheduled") parts.push(t("guide.willRecord"));
+  if (opts?.fresh) parts.push(t("guide.new"));
   if (opts?.score) parts.push(opts.score);
   parts.push(span, channel);
   return parts.join(", ");
@@ -164,23 +181,23 @@ export function guideCellName(
 
 /** What the channel column says. The star is hidden from the name, so a favorite has to be in the label. */
 export function channelWatchName(number: string, name: string, opts?: { atsc3?: boolean; favorite?: boolean }): string {
-  let label = `Watch ${number} ${name}`;
-  if (opts?.atsc3) label += ", ATSC 3.0";
-  if (opts?.favorite) label += ", Favorite";
+  let label = t("guide.watchChannel", { number, name });
+  if (opts?.atsc3) label += t("guide.atsc3Suffix");
+  if (opts?.favorite) label += t("guide.favoriteSuffix");
   return label;
 }
 
 /** What the Recordings tab adds when something is taping. One stays singular. */
 export function recordingCountLabel(count: number): string {
-  return count === 1 ? "1 recording" : `${count} recordings`;
+  return t("guide.recordings", count);
 }
 
 export function emptyGuideLabel(airings: Airing[], windowStart: number): string {
-  if (airings.length === 0) return "No listings";
+  if (airings.length === 0) return t("guide.noListings");
   const end = Date.parse(airings[airings.length - 1].end);
-  if (windowStart < end - 60_000) return "No listings";
-  const day = new Date(end).toLocaleDateString([], { weekday: "long" });
-  return `Listings through ${day}`;
+  if (windowStart < end - 60_000) return t("guide.noListings");
+  const day = formatDateTime(new Date(end), { weekday: "long" });
+  return t("guide.listingsThrough", { day });
 }
 
 export function dayLabel(iso: string, now: number): string {
@@ -188,9 +205,9 @@ export function dayLabel(iso: string, now: number): string {
   const today = new Date(now);
   const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diff = Math.round((startOf(d) - startOf(today)) / 86_400_000);
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Tomorrow";
-  return d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+  if (diff === 0) return t("guide.today");
+  if (diff === 1) return t("guide.tomorrow");
+  return formatDateTime(d, { weekday: "long", month: "short", day: "numeric" });
 }
 
 export type GuideFocus = { row: number; id: number };

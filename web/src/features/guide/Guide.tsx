@@ -1,4 +1,6 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { guideUiMessages } from "../../i18n/messages/guideUi.ts";
+import { bind, formatDateTime } from "../../i18n/runtime.ts";
 import { useData } from "../../app/data";
 import { usePlayer } from "../../app/player";
 import { focusRing } from "../../app/remote";
@@ -36,6 +38,8 @@ import { useScoreMap } from "../sports/scores";
 import { LiveFrame } from "../../ui/LiveFrame";
 import "./guide.css";
 
+const t = bind(guideUiMessages);
+
 // The sheet opens after a cell is chosen, so it stays out of the first script.
 const ProgramSheet = lazy(() => import("./ProgramSheet").then((m) => ({ default: m.ProgramSheet })));
 
@@ -52,14 +56,17 @@ function loadOrder(): number[] {
   }
 }
 
+function sameDay(a: number, b: number) {
+  return new Date(a).toDateString() === new Date(b).toDateString();
+}
+
 function dayWord(midnight: number, now: number) {
   const day = new Date(midnight);
-  const today = new Date(now);
-  if (day.toDateString() === today.toDateString()) return "Today";
+  if (sameDay(midnight, now)) return t("guideUi.today");
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  if (day.toDateString() === tomorrow.toDateString()) return "Tomorrow";
-  return day.toLocaleDateString([], { weekday: "short" });
+  if (sameDay(midnight, tomorrow.getTime())) return t("guideUi.tomorrow");
+  return formatDateTime(day, { weekday: "short" });
 }
 
 export function Guide() {
@@ -369,7 +376,7 @@ export function Guide() {
   if (!grid) {
     return (
       <div className="guide-page phone">
-        <h1 className="sr-only">Guide</h1>
+        <h1 className="sr-only">{t("guideUi.guide")}</h1>
         <GuideControls
           filter={filter}
           setFilter={setFilter}
@@ -381,7 +388,7 @@ export function Guide() {
           onTonight={() => setWhen("tonight")}
           compact
         />
-        {rows.length === 0 ? <Empty title="Nothing matches">Try another filter or search.</Empty> : null}
+        {rows.length === 0 ? <Empty title={t("guideUi.nothingMatches")}>{t("guideUi.nothingHint")}</Empty> : null}
         <ul className="onnow-list">
           {rows.map((c) => {
             const at = when === "tonight" ? primeTime(now) : now;
@@ -420,7 +427,7 @@ export function Guide() {
 
   return (
     <div className="guide-page">
-      <h1 className="sr-only">Guide</h1>
+      <h1 className="sr-only">{t("guideUi.guide")}</h1>
       <GuideControls
         filter={filter}
         setFilter={setFilter}
@@ -442,14 +449,14 @@ export function Guide() {
         <div
           className="guide-canvas"
           role="grid"
-          aria-label="TV guide"
+          aria-label={t("guideUi.tvGuide")}
           aria-rowcount={rows.length}
           aria-activedescendant={activeId}
           tabIndex={0}
           style={{ width: channelW + width, height: headH + rows.length * rowH }}
         >
           <div className="guide-times glass-flat" aria-hidden="true" style={{ width: channelW + width }}>
-            <div className="guide-corner">{new Date(Math.max(leftT, origin)).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}</div>
+            <div className="guide-corner">{formatDateTime(new Date(Math.max(leftT, origin)), { weekday: "short", month: "short", day: "numeric" })}</div>
             {slots.map((t) => (
               <div key={t} className="guide-slot" style={{ left: channelW + ((t - origin) / MIN) * pxPerMin, width: 30 * pxPerMin }}>
                 {timeLabel(t)}
@@ -491,7 +498,7 @@ export function Guide() {
                   }}
                   onClick={() => watch(c)}
                   aria-label={channelWatchName(c.displayNumber, c.displayName, { atsc3: c.standard === "atsc3", favorite: c.favorite })}
-                  title="Drag to reorder. Right-click to hide."
+                  title={t("guideUi.reorderHint")}
                 >
                   <span className="gc-num">{c.displayNumber}</span>
                   <span className="gc-name">
@@ -562,7 +569,7 @@ export function Guide() {
                         {rec ? <RecDot scheduled={rec === "scheduled"} /> : null}
                         {a.title}
                         {a.gameId && scores.get(a.gameId) ? <span className="cell-score">{scores.get(a.gameId)}</span> : null}
-                        {a.new ? <span className="cell-new">New</span> : null}
+                        {a.new ? <span className="cell-new">{t("guideUi.new")}</span> : null}
                       </span>
                       <span className="cell-sub">{a.subtitle || (w > 160 ? spanLabel(a) : timeLabel(a.start))}</span>
                       {a.imageUrl && w > 220 ? <img className="cell-thumb" alt="" loading="lazy" src={`/media/art/airing/${a.id}?w=96`} /> : null}
@@ -577,7 +584,7 @@ export function Guide() {
       </div>
       {virtuals.length > 0 && filter === "all" && !query ? (
         <div className="library-channels">
-          <span className="lc-label">Library channels</span>
+          <span className="lc-label">{t("guideUi.libraryChannels")}</span>
           {virtuals.map((v) => (
             <button key={v.id} type="button" className="chip" onClick={() => navigate(`/watch?virtual=${v.id}`)}>
               <span className="gc-num">{v.number}</span> {v.name}
@@ -596,7 +603,7 @@ export function Guide() {
             focusRing(document.querySelector<HTMLElement>(".guide-canvas"));
           }}
         >
-          Now
+          {t("guideUi.now")}
         </button>
       )}
       {sheet ? (
@@ -648,14 +655,14 @@ function GuideControls({
     <div className="guide-controls">
       <div className="guide-jump">
         <button type="button" className="pill-btn" aria-pressed={pressed ? pressed === "now" : undefined} onClick={onNow} onKeyDown={enterGrid}>
-          Now
+          {t("guideUi.now")}
         </button>
         <button type="button" className="pill-btn" aria-pressed={pressed ? pressed === "tonight" : undefined} onClick={onTonight}>
-          Tonight
+          {t("guideUi.tonight")}
         </button>
         {!compact && days && now != null
           ? days
-              .filter((day) => dayWord(day, now) !== "Today")
+              .filter((day) => !sameDay(day, now))
               .map((day) => (
                 <button key={day} type="button" className="pill-btn" onClick={() => onDay?.(day)}>
                   {dayWord(day, now)}
@@ -663,12 +670,12 @@ function GuideControls({
               ))
           : null}
       </div>
-      <div className="guide-chips" role="group" aria-label="Filter">
+      <div className="guide-chips" role="group" aria-label={t("guideUi.filter")}>
         <Chip on={filter === "all"} onClick={() => setFilter("all")}>
-          All
+          {t("guideUi.all")}
         </Chip>
         <Chip on={filter === "favorites"} onClick={() => setFilter("favorites")}>
-          Favorites
+          {t("guideUi.favorites")}
         </Chip>
         {cats.map((c) => (
           <Chip key={c} on={filter === c} onClick={() => setFilter(c)} count={counts[c]}>
@@ -677,20 +684,20 @@ function GuideControls({
           </Chip>
         ))}
         <Chip on={filter === "recording"} onClick={() => setFilter("recording")}>
-          Recording
+          {t("guideUi.recording")}
         </Chip>
       </div>
       <label className="guide-search">
         <SearchIcon />
         <input
           type="search"
-          placeholder="Search shows and channels"
+          placeholder={t("guideUi.searchPlaceholder")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && query.trim().length >= 2) navigate(`/search?q=${encodeURIComponent(query.trim())}`);
           }}
-          aria-label="Search the guide"
+          aria-label={t("guideUi.searchLabel")}
         />
       </label>
     </div>

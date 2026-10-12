@@ -7,10 +7,10 @@ public enum Library {
 
         public var label: String {
             switch self {
-            case .newest: "Newest first"
-            case .oldest: "Oldest first"
-            case .title: "By name"
-            case .largest: "Largest first"
+            case .newest: String(localized: "Newest first", bundle: .module)
+            case .oldest: String(localized: "Oldest first", bundle: .module)
+            case .title: String(localized: "By name", bundle: .module)
+            case .largest: String(localized: "Largest first", bundle: .module)
             }
         }
     }
@@ -20,10 +20,10 @@ public enum Library {
 
         public var label: String {
             switch self {
-            case .all: "Everything"
-            case .shows: "Shows"
-            case .movies: "Movies"
-            case .sports: "Sports"
+            case .all: String(localized: "Everything", bundle: .module)
+            case .shows: String(localized: "Shows", bundle: .module)
+            case .movies: String(localized: "Movies", bundle: .module)
+            case .sports: String(localized: "Sports", bundle: .module)
             }
         }
     }
@@ -37,7 +37,7 @@ public enum Library {
         }
 
         public var title: String {
-            season > 0 ? "Season \(season)" : "Other episodes"
+            season > 0 ? String(localized: "Season \(String(season))", bundle: .module) : String(localized: "Other episodes", bundle: .module)
         }
     }
 
@@ -53,8 +53,12 @@ public enum Library {
 
         /// "5 recordings · 4 unwatched · 34.4 MB"
         public var line: String {
-            let count = items.count == 1 ? "1 recording" : "\(items.count) recordings"
-            let left = unwatched == 0 ? "all watched" : "\(unwatched) unwatched"
+            let count = items.count == 1
+                ? String(localized: "1 recording", bundle: .module)
+                : String(localized: "\(String(items.count)) recordings", bundle: .module)
+            let left = unwatched == 0
+                ? String(localized: "all watched", bundle: .module)
+                : String(localized: "\(String(unwatched)) unwatched", bundle: .module)
             return "\(count) · \(left) · \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))"
         }
     }
@@ -131,7 +135,9 @@ public enum Library {
 
     /// "3 recordings · 1.2 GB"
     public static func summary(_ recordings: [Recording]) -> String {
-        let count = recordings.count == 1 ? "1 recording" : "\(recordings.count) recordings"
+        let count = recordings.count == 1
+            ? String(localized: "1 recording", bundle: .module)
+            : String(localized: "\(String(recordings.count)) recordings", bundle: .module)
         return "\(count) · \(ByteCountFormatter.string(fromByteCount: totalBytes(recordings), countStyle: .file))"
     }
 
@@ -184,10 +190,10 @@ public extension Recording {
     /// "S2 E5", "E5", the guide's own label, or nil.
     var episodeTag: String? {
         if let season, let episode, season > 0, episode > 0 {
-            return "S\(season) E\(episode)"
+            return String(localized: "S\(String(season)) E\(String(episode))", bundle: .module)
         }
         if let episode, episode > 0 {
-            return "E\(episode)"
+            return String(localized: "E\(String(episode))", bundle: .module)
         }
         if let episodeLabel, !episodeLabel.isEmpty {
             return episodeLabel

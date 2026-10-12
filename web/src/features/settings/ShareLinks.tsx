@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { shareRows } from "./tunerShare";
+
+const t = bind(settingsUiMessages);
 
 export function ShareLinks({ pageURL, sharing, hdhr = true }: { pageURL: string; sharing: boolean; hdhr?: boolean }) {
   const rows = shareRows(pageURL, sharing, hdhr);
@@ -29,7 +33,7 @@ export function ShareLinks({ pageURL, sharing, hdhr = true }: { pageURL: string;
                     <button
                       type="button"
                       className="btn"
-                      aria-label={`Copy ${key}`}
+                      aria-label={`${t("share.copy")} ${key}`}
                       onClick={() => {
                         const write = navigator.clipboard?.writeText(row.value);
                         if (!write) return;
@@ -40,7 +44,7 @@ export function ShareLinks({ pageURL, sharing, hdhr = true }: { pageURL: string;
                         }, () => undefined);
                       }}
                     >
-                      {copied === key ? "Copied" : "Copy"}
+                      {copied === key ? t("share.copied") : t("share.copy")}
                     </button>
                   </li>
                 );
@@ -49,7 +53,7 @@ export function ShareLinks({ pageURL, sharing, hdhr = true }: { pageURL: string;
         </section>
       ))}
       <p className="sr-only" aria-live="polite">
-        {copied ? "Copied." : ""}
+        {copied ? t("share.copiedLive") : ""}
       </p>
     </div>
   );

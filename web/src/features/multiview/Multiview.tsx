@@ -11,11 +11,14 @@ import { airingAt } from "../../lib/guide";
 import { menuStep } from "../../lib/menuStep";
 import { canonicalKey } from "../../lib/tvKey";
 import { events } from "../../lib/events";
+import { multiviewUiMessages } from "../../i18n/messages/multiviewUi.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { addMosaic, mosaicKey, mosaicShareMax, sharedMosaics } from "../../lib/mosaic";
 import { copy } from "../../strings";
 import type { Channel, MultiviewPlan } from "../../types";
 import { CloseIcon, VolumeIcon } from "../../ui/icons";
 import { LiveFrame } from "../../ui/LiveFrame";
+import { shownOutage } from "../player/outage";
 import { pageFitsTiles, StartGate } from "../player/quietStart";
 import { useLiveStream } from "../player/useLiveStream";
 import { refreshScores, scoreLine, useScoreMap, type ScoreGame } from "../sports/scores";
@@ -25,6 +28,7 @@ import { pickFocus } from "./switcher";
 import { tileArrow } from "./tileArrow";
 import "./multiview.css";
 
+const t = bind(multiviewUiMessages);
 
 function pressedAt() {
   return Date.now();
@@ -63,7 +67,7 @@ function scheduleStop(stops: { at: string; channelId: number }[], selected: numb
 
 export function Multiview() {
   const { channels, allChannels, ready, index, now, record, settings, saveSettings } = useData();
-  const [shareNote, setShareNote] = useState<{ key: string; text: string } | null>(null);
+  const [shareNote, setShareNote] = useState<{ key: string; slot: number | null } | null>(null);
   const { params } = useRoute();
   const layoutMode = useLayout();
   const player = usePlayer();
@@ -474,7 +478,7 @@ export function Multiview() {
   return (
     <section className="mv" tabIndex={0} onKeyDown={onKey} aria-label={layoutLabel(layout)} data-fits={fits ? "1" : "0"} data-slots={slots ?? ""} data-pictures={pictures.size} data-tiles={ordered.length}>
       <header className="mv-top">
-        <button type="button" className="glass-icon" aria-label="Back to one channel" onClick={() => (focused ? player.open(focused) : navigate("/guide"))}>
+        <button type="button" className="glass-icon" aria-label={t("mv.back")} onClick={() => (focused ? player.open(focused) : navigate("/guide"))}>
           <CloseIcon />
         </button>
         <h1>{layoutLabel(layout)}</h1>
@@ -483,49 +487,53 @@ export function Multiview() {
           type="button"
           className={auto ? "btn primary" : "btn"}
           aria-pressed={auto}
-          title="Follow the game that matters"
+          title={t("mv.follow")}
           onClick={() => {
             const next = !auto;
             setAuto(next);
             rememberAuto(next);
           }}
         >
-          Auto
+          {t("mv.auto")}
         </button>
         <button
           type="button"
           className="btn"
           disabled={ordered.length < 2}
           onClick={() => {
-            const name = ordered.map((c) => c.displayNumber).join(" and ");
+            const name = ordered.map((c) => c.displayNumber).join(` ${t("mv.and")} `);
             saveSet(name, ordered.map((c) => c.id), layout);
           }}
         >
-          Save
+          {t("mv.save")}
         </button>
         <button
           type="button"
           className="btn"
-          title={shareFull ? `Other apps can list ${mosaicShareMax}. Remove one in Settings.` : "Plex, Jellyfin, and Channels see these channels as one"}
+          title={shareFull ? t("mv.shareFull", { count: mosaicShareMax }) : t("mv.shareHint")}
           disabled={!shareable || shared.includes(shareKey) || shareFull}
           onClick={() => {
             const added = addMosaic(shared, shareKey);
             void saveSettings({ exportMosaics: added.slots.join(",") }).then(
-              () => setShareNote({ key: shareKey, text: `Other apps list this as channel 990.${added.slot + 1}. Settings has the list.` }),
-              () => setShareNote({ key: shareKey, text: "That did not save. Try again." }),
+              () => setShareNote({ key: shareKey, slot: added.slot + 1 }),
+              () => setShareNote({ key: shareKey, slot: null }),
             );
           }}
         >
-          {shared.includes(shareKey) ? "In other apps" : "Add to other apps"}
+          {shared.includes(shareKey) ? t("mv.inApps") : t("mv.addApps")}
         </button>
       </header>
-      {shareNote?.key === shareKey ? <p className="mv-note" role="status">{shareNote.text}</p> : null}
+      {shareNote?.key === shareKey ? (
+        <p className="mv-note" role="status">
+          {shareNote.slot == null ? t("mv.shareFailed") : t("mv.shareSaved", { channel: `990.${shareNote.slot}` })}
+        </p>
+      ) : null}
       {banner ? <p className="mv-banner" role="status">{banner}</p> : null}
-      {hint ? <p className="mv-note" role="status">Select a tile to hear it.</p> : null}
+      {hint ? <p className="mv-note" role="status">{t("mv.hint")}</p> : null}
       {notice ? <p className="mv-note" role="status">{notice}</p> : null}
       <div className="mv-fit">
       <div className={`mv-grid${layoutMode === "phone" && layout === "2up" ? " stacked" : ""}`} data-layout={layout}>
-        {waiting ? null : ordered.length === 0 ? <p className="mv-empty">Pick two channels.</p> : null}
+        {waiting ? null : ordered.length === 0 ? <p className="mv-empty">{t("mv.pickTwo")}</p> : null}
         {ordered.map((channel) => (
           <Tile
             key={channel.id}
@@ -550,18 +558,18 @@ export function Multiview() {
         ))}
       </div>
       </div>
-      <div className="mv-bottom" role="toolbar" aria-label="Layout">
+      <div className="mv-bottom" role="toolbar" aria-label={t("mv.layout")}>
         {layoutChoices.map((item) => (
           <button key={item.id} type="button" className={layout === item.id ? "btn primary" : "btn"} aria-pressed={layout === item.id} onClick={() => go({ layout: item.id })}>
             {item.label}
           </button>
         ))}
         <button type="button" className={guide ? "btn primary" : "btn"} aria-pressed={guide} onClick={() => go({ add: !guide })}>
-          Channels
+          {t("mv.channels")}
         </button>
       </div>
       {guide ? (
-        <div className="mv-guide" role="listbox" aria-label="Add a channel">
+        <div className="mv-guide" role="listbox" aria-label={t("mv.addChannel")}>
           {channels.map((c) => {
             const cost = costs.get(c.id);
             const full = cost?.cost === "none";
@@ -680,53 +688,53 @@ function Tile({
   }, [focused, onHeard]);
   return (
     <div className="mv-cell" onClick={onFocus}>
-    <div className={focused ? "mv-tile focused" : "mv-tile"} role="group" tabIndex={pointed ? 0 : -1} data-channel={channel.id} aria-label={`${channel.displayNumber} ${channel.displayName}${focused ? ", sound on" : ""}${standIn ? `. ${copy.player.encrypted}` : ""}`}>
+    <div className={focused ? "mv-tile focused" : "mv-tile"} role="group" tabIndex={pointed ? 0 : -1} data-channel={channel.id} aria-label={`${channel.displayNumber} ${channel.displayName}${focused ? t("mv.soundOn") : ""}${standIn ? `. ${copy.player.encrypted}` : ""}`}>
       <video ref={videoRef} className="mv-video" autoPlay playsInline data-channel={channel.id} />
       <div className="mv-meta">
         <span>{channel.displayNumber}</span>
-        <span className="mv-title">{title}{score ? ` · ${score}` : ""}</span>
+        <span className="mv-title">{title}{score ? `${t("mv.sep")}${score}` : ""}</span>
         {standIn ? <p className="mv-note" role="status">{copy.player.encrypted}</p> : null}
         {focused ? (
           <span className="mv-audio">
-            <VolumeIcon /> Sound
+            <VolumeIcon /> {copy.player.sound}
           </span>
         ) : null}
         {focused && stream.session?.stream.reason ? <span className="mv-detail">{stream.session.stream.reason}</span> : null}
       </div>
       {stream.error ? (
         <div className="mv-error" role="alert">
-          <p>{stream.error}</p>
+          <p>{shownOutage(stream.error)}</p>
           {stream.needsConfirm ? (
-            <button type="button" className="btn small" aria-label={`Watch ${channel.displayNumber} ${channel.displayName} anyway`} onClick={(event) => { event.stopPropagation(); stream.confirm(); }}>
-              Watch anyway
+            <button type="button" className="btn small" aria-label={t("mv.watchAnyway", { channel: `${channel.displayNumber} ${channel.displayName}` })} onClick={(event) => { event.stopPropagation(); stream.confirm(); }}>
+              {t("mv.watchAnywayBtn")}
             </button>
           ) : (
-            <button type="button" className="btn small" aria-label={actionName("Try again", `${channel.displayNumber} ${channel.displayName}`)} onClick={(event) => { event.stopPropagation(); stream.retry(); }}>
-              Try again
+            <button type="button" className="btn small" aria-label={actionName(t("mv.tryAgain"), `${channel.displayNumber} ${channel.displayName}`)} onClick={(event) => { event.stopPropagation(); stream.retry(); }}>
+              {t("mv.tryAgain")}
             </button>
           )}
-          <button type="button" className="btn small" aria-label={actionName("Remove", `${channel.displayNumber} ${channel.displayName}`)} onClick={(event) => { event.stopPropagation(); onRemove(); }}>
-            Remove
+          <button type="button" className="btn small" aria-label={actionName(t("mv.remove"), `${channel.displayNumber} ${channel.displayName}`)} onClick={(event) => { event.stopPropagation(); onRemove(); }}>
+            {t("mv.remove")}
           </button>
         </div>
       ) : null}
       {menu ? (
         <div className="mv-menu" role="menu" aria-label={`${channel.displayNumber} ${channel.displayName}`}>
-          <button type="button" role="menuitem" className="btn" aria-label={actionName("Make big", `${channel.displayNumber} ${channel.displayName}`)} onClick={(e) => { e.stopPropagation(); onFocus(); }}>Make big</button>
-          <button type="button" role="menuitem" className="btn" aria-label={actionName("Record", `${title} on ${channel.displayNumber} ${channel.displayName}`)} onClick={(e) => { e.stopPropagation(); onRecord(); }}>Record</button>
-          <button type="button" role="menuitem" className="btn" aria-label={actionName("Remove", `${channel.displayNumber} ${channel.displayName}`)} onClick={(e) => { e.stopPropagation(); onRemove(); }}>Remove</button>
+          <button type="button" role="menuitem" className="btn" aria-label={actionName(t("mv.makeBig"), `${channel.displayNumber} ${channel.displayName}`)} onClick={(e) => { e.stopPropagation(); onFocus(); }}>{t("mv.makeBig")}</button>
+          <button type="button" role="menuitem" className="btn" aria-label={t("mv.recordOn", { title, channel: `${channel.displayNumber} ${channel.displayName}` })} onClick={(e) => { e.stopPropagation(); onRecord(); }}>{t("mv.record")}</button>
+          <button type="button" role="menuitem" className="btn" aria-label={actionName(t("mv.remove"), `${channel.displayNumber} ${channel.displayName}`)} onClick={(e) => { e.stopPropagation(); onRemove(); }}>{t("mv.remove")}</button>
           <button
             type="button"
             role="menuitem"
             className="btn"
-            aria-label={actionName("Full screen", `${channel.displayNumber} ${channel.displayName}`)}
+            aria-label={actionName(t("mv.fullScreen"), `${channel.displayNumber} ${channel.displayName}`)}
             onClick={(e) => {
               e.stopPropagation();
               const el = e.currentTarget.closest(".mv-tile");
               void el?.requestFullscreen?.().catch(() => undefined);
             }}
           >
-            Full screen
+            {t("mv.fullScreen")}
           </button>
         </div>
       ) : null}

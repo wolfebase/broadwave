@@ -10,6 +10,8 @@ import { channelNumberContinues, typedChannel } from "../../lib/remote";
 import { canonicalKey } from "../../lib/tvKey";
 import type { SyncStatus } from "../../lib/sync";
 import { events, saveLiveDelay, type LiveDelay } from "../../lib/events";
+import { playerUiMessages } from "../../i18n/messages/playerUi.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { readZoom, saveZoom, subscribeZoom, type PictureMode } from "../../picture";
 import { copy } from "../../strings";
 import type { Channel } from "../../types";
@@ -33,6 +35,8 @@ import { Stage } from "./Stage";
 import { groupRoom, peopleSentence, personLabel, useGroup } from "./together";
 import { useLiveStream } from "./useLiveStream";
 
+const t = bind(playerUiMessages);
+
 type Quality = "auto" | "original" | "high" | "medium" | "saver";
 type Sound = "auto" | "surround" | "stereo";
 type Track = "main" | "language" | "described";
@@ -46,8 +50,18 @@ function readOptions(): Options {
   }
 }
 
-const qualityLabels: Record<Options["quality"], string> = { auto: "Auto", original: "Original", high: "High", medium: "Medium", saver: "Data saver" };
-const delayLabels: Record<LiveDelay, string> = { lowest: "Lowest", balanced: "Balanced", stable: "Stable" };
+function qualityLabels(): Record<Options["quality"], string> {
+  return { auto: t("player.auto"), original: t("player.original"), high: t("player.high"), medium: t("player.medium"), saver: t("player.dataSaver") };
+}
+
+function delayLabels(): Record<LiveDelay, string> {
+  return { lowest: t("player.lowest"), balanced: t("player.balanced"), stable: t("player.stable") };
+}
+
+function channelsNamed(root: ParentNode | null | undefined, selector: string): HTMLElement | null {
+  const label = t("player.channels");
+  return root?.querySelector<HTMLElement>(`${selector}[aria-label="${label}"]`) ?? null;
+}
 
 export function LivePlayer({
   channel,
@@ -255,7 +269,7 @@ export function LivePlayer({
     if (layout === "tv") {
       const active = document.activeElement;
       if (active instanceof HTMLElement && root.contains(active)) return;
-      const channelsBtn = root.querySelector<HTMLElement>("button[aria-label='Channels']");
+      const channelsBtn = channelsNamed(root, "button");
       focusRing(channelsBtn ?? root);
       return;
     }
@@ -455,7 +469,7 @@ export function LivePlayer({
       const backToChannels = () => {
         // The list is about to unmount with the focus in it. On a TV the button
         // (also named Channels) keeps the keys; elsewhere the picture does.
-        if (layout === "tv") focusRing(document.querySelector<HTMLElement>(".stage:not(.mini) button[aria-label='Channels']"));
+        if (layout === "tv") focusRing(channelsNamed(document, ".stage:not(.mini) button"));
         else focusRing(rootRef.current);
       };
       const action = guideListAction(k, event.repeat);
@@ -561,7 +575,7 @@ export function LivePlayer({
     () => (
       <>
         <span className="eyebrow-num">{channel.displayNumber}</span> {channel.displayName}
-        {airing ? <span className="eyebrow-dim"> · {minutesLeft(airing, now)}</span> : null}
+        {airing ? <span className="eyebrow-dim">{t("player.sep")}{minutesLeft(airing, now)}</span> : null}
       </>
     ),
     [channel, airing, now],
@@ -582,7 +596,7 @@ export function LivePlayer({
   }, [syncSpoken, syncHeard]);
   const syncBadge =
     syncing && sync.state !== "off" ? (
-      <button type="button" className={`sync-pill ${sync.state}`} onClick={() => setPanel((p) => (p === "sync" ? "none" : "sync"))} aria-label={`Whole-Home Sync, ${syncSpoken}`}>
+      <button type="button" className={`sync-pill ${sync.state}`} onClick={() => setPanel((p) => (p === "sync" ? "none" : "sync"))} aria-label={`${t("player.wholeHome")}, ${syncSpoken}`}>
         <SyncIcon />
         {syncLabel}
       </button>
@@ -599,11 +613,12 @@ export function LivePlayer({
       title={title}
       score={airing?.gameId ? scores.get(airing.gameId) : undefined}
       onBack={onMinimize}
-      backLabel="Back to browsing"
+      backLabel={t("player.backBrowsing")}
       onExpand={onExpand}
       onClose={onClose}
       hold={panel !== "none"}
       liveLabel={liveLabel}
+      liveAria={livePillAria(syncing && sync.state !== "off", behind)}
       onLive={goLive}
       position={scrubAt ?? span.at}
       duration={span.len}
@@ -625,15 +640,15 @@ export function LivePlayer({
       errorAction={
         stream.needsConfirm ? (
           <button type="button" className="btn small" onClick={stream.confirm}>
-            Watch anyway
+            {t("player.watchAnyway")}
           </button>
         ) : error ? (
           <button type="button" className="btn small" onClick={stream.retry}>
-            Try again
+            {t("player.tryAgain")}
           </button>
         ) : null
       }
-      note={error ? undefined : stream.reconnecting ? "Reconnecting…" : notice ? notice : sentText ? sentText : !airing ? listingNote(listing.checks > 0) : undefined}
+      note={error ? undefined : stream.reconnecting ? t("player.reconnecting") : notice ? notice : sentText ? sentText : !airing ? listingNote(listing.checks > 0) : undefined}
       noteAction={
         !error && !stream.reconnecting && !notice && !sentText && !airing ? (
           <button
@@ -648,7 +663,7 @@ export function LivePlayer({
               });
             }}
           >
-            {listing.checking ? "Checking…" : "Check for listings"}
+            {listing.checking ? t("player.checking") : t("player.checkListings")}
           </button>
         ) : null
       }
@@ -665,21 +680,21 @@ export function LivePlayer({
           <CastButton appId={server?.castAppId ?? ""} channelId={channel.id} playlist={stream.session?.playlist ?? ""} room={room} title={airing?.title || channel.displayName} subtitle={channel.displayName} />
           {layout === "phone" ? (
             <span className="channel-step">
-              <button type="button" className="glass-icon" aria-label="Previous channel" onClick={() => step(-1)}>
+              <button type="button" className="glass-icon" aria-label={t("player.prevChannel")} onClick={() => step(-1)}>
                 <ChevronIcon style={{ transform: "rotate(-90deg)" }} />
               </button>
-              <button type="button" className="glass-icon" aria-label="Next channel" onClick={() => step(1)}>
+              <button type="button" className="glass-icon" aria-label={t("player.nextChannel")} onClick={() => step(1)}>
                 <ChevronIcon style={{ transform: "rotate(90deg)" }} />
               </button>
             </span>
           ) : null}
-          <button type="button" className={panel === "guide" ? "glass-icon on" : "glass-icon"} onClick={() => (panel === "guide" ? setPanel("none") : openGuide())} aria-label="Channels">
+          <button type="button" className={panel === "guide" ? "glass-icon on" : "glass-icon"} onClick={() => (panel === "guide" ? setPanel("none") : openGuide())} aria-label={t("player.channels")} data-channels="">
             <ListIcon />
           </button>
           <button
             type="button"
             className="glass-icon"
-            aria-label="Side by side"
+            aria-label={t("player.sideBySide")}
             onClick={() => {
               const stored = localStorage.getItem("broadwave-mv-layout");
               navigate(multiviewPath([channel.id], isLayout(stored) ? stored : "2up", channel.id, true));
@@ -689,12 +704,12 @@ export function LivePlayer({
           </button>
           {startOverFrom ? (
             <button type="button" className="text-btn" onClick={startOver}>
-              Start over
+              {t("player.startOver")}
             </button>
           ) : null}
-          <button type="button" className={active ? "record-btn on" : "record-btn"} onClick={() => void toggleRecord()} aria-pressed={!!active} aria-label={actionName(active ? "Stop recording" : "Record", airing?.title || channel.displayName)}>
+          <button type="button" className={active ? "record-btn on" : "record-btn"} onClick={() => void toggleRecord()} aria-pressed={!!active} aria-label={actionName(active ? t("player.stopRecording") : t("player.record"), airing?.title || channel.displayName)}>
             <RecordIcon />
-            {active ? "Recording" : "Record"}
+            {active ? t("player.recording") : t("player.record")}
           </button>
           <button type="button" className={panel === "info" ? "glass-icon on" : "glass-icon"} onClick={() => setPanel((p) => (p === "info" ? "none" : "info"))} aria-label={copy.player.stats}>
             <InfoIcon />
@@ -703,34 +718,34 @@ export function LivePlayer({
       }
       more={
         <div className="options-grid">
-          <OptionRow label="Quality" value={opts.quality} options={Object.keys(qualityLabels) as Options["quality"][]} labels={qualityLabels} onChange={(quality) => setOpts((o) => ({ ...o, quality }))} />
-          <OptionRow label="Sound" value={opts.audio} options={["auto", "surround", "stereo"]} labels={{ auto: "Auto", surround: "Surround", stereo: "Stereo" }} onChange={(audio) => setOpts((o) => ({ ...o, audio }))} />
+          <OptionRow label={t("player.quality")} value={opts.quality} options={Object.keys(qualityLabels()) as Options["quality"][]} labels={qualityLabels()} onChange={(quality) => setOpts((o) => ({ ...o, quality }))} />
+          <OptionRow label={copy.player.sound} value={opts.audio} options={["auto", "surround", "stereo"]} labels={{ auto: t("player.auto"), surround: t("player.surround"), stereo: t("player.stereo") }} onChange={(audio) => setOpts((o) => ({ ...o, audio }))} />
           {stream.sounds ? (
             <OptionRow
-              label="Audio"
+              label={t("player.audio")}
               value={soundFor(stream.sounds, opts.track)?.role ?? "main"}
               options={stream.sounds.map((s) => s.role)}
               labels={Object.fromEntries(stream.sounds.map((s) => [s.role, s.name]))}
               onChange={(track) => setOpts((o) => ({ ...o, track }))}
             />
           ) : (
-            <OptionRow label="Audio" value={opts.track} options={["main", "language", "described"]} labels={{ main: "Main", language: "Second language", described: "Described video" }} onChange={(track) => setOpts((o) => ({ ...o, track }))} />
+            <OptionRow label={t("player.audio")} value={opts.track} options={["main", "language", "described"]} labels={{ main: t("player.main"), language: t("player.secondLanguage"), described: t("player.described") }} onChange={(track) => setOpts((o) => ({ ...o, track }))} />
           )}
           {stream.canCaption ? (
             <OptionRow
-              label="Captions"
+              label={t("player.captions")}
               value={opts.captions ? "on" : "off"}
               options={["off", "on"]}
-              labels={{ off: "Off", on: "On" }}
+              labels={{ off: t("player.off"), on: t("player.on") }}
               onChange={(v) => setOpts((o) => ({ ...o, captions: v === "on" }))}
             />
           ) : null}
-          <OptionRow label="Even volume" value={opts.even ? "on" : "off"} options={["off", "on"]} labels={{ off: "Off", on: "On" }} onChange={(v) => setOpts((o) => ({ ...o, even: v === "on" }))} />
+          <OptionRow label={t("player.evenVolume")} value={opts.even ? "on" : "off"} options={["off", "on"]} labels={{ off: t("player.off"), on: t("player.on") }} onChange={(v) => setOpts((o) => ({ ...o, even: v === "on" }))} />
           <OptionRow
-            label="Motion"
+            label={t("player.motion")}
             value={picture}
             options={["broadcast", "smooth", "film"]}
-            labels={{ broadcast: "Broadcast 60", smooth: "Smooth", film: "Film 24" }}
+            labels={{ broadcast: t("player.broadcast60"), smooth: t("player.smooth"), film: t("player.film24") }}
             onChange={(p) => {
               setPictureBase(settings);
               setPicturePick(p);
@@ -739,10 +754,10 @@ export function LivePlayer({
           />
           {sync.room ? (
             <OptionRow
-              label="Live delay"
+              label={t("player.liveDelay")}
               value={sync.room.latency}
               options={["lowest", "balanced", "stable"]}
-              labels={delayLabels}
+              labels={delayLabels()}
               onChange={(latency) => {
                 setAsked({ channel: channel.id, delay: latency });
                 saveLiveDelay(latency);
@@ -756,10 +771,10 @@ export function LivePlayer({
             </p>
           ) : null}
           <OptionRow
-            label="Picture"
+            label={t("player.pictureLabel")}
             value={zoom}
             options={["fit", "fill", "zoom"]}
-            labels={{ fit: "Fit", fill: "Fill", zoom: "Zoom" }}
+            labels={{ fit: t("player.fit"), fill: t("player.fill"), zoom: t("player.zoom") }}
             onChange={(z) => {
               saveZoom(z);
             }}
@@ -768,7 +783,7 @@ export function LivePlayer({
             label={copy.player.sleep}
             value={sleepFor ? String(sleepFor) : "off"}
             options={["off", "30", "60", "90"]}
-            labels={{ off: "Off", "30": "30 min", "60": "1 hr", "90": "90 min" }}
+            labels={{ off: t("player.off"), "30": t("player.min30"), "60": t("player.hr1"), "90": t("player.min90") }}
             onChange={(v) => {
               const minutes = v === "off" ? 0 : Number(v);
               setSleepFor(minutes);
@@ -788,7 +803,7 @@ export function LivePlayer({
             {together ? null : (
               // The other screen would join the channel at live, not this group's moment.
               <button ref={moveButton} type="button" className={panel === "move" ? "text-btn on" : "text-btn"} onClick={() => setPanel((p) => (p === "move" ? "none" : "move"))} aria-expanded={panel === "move"}>
-                Move to another screen
+                {t("player.move")}
               </button>
             )}
           </div>
@@ -796,12 +811,12 @@ export function LivePlayer({
       }
     >
       {entry ? (
-        <p className="typed-number glass" role="status" aria-label={`Channel ${entry}`}>
+        <p className="typed-number glass" role="status" aria-label={t("player.channelEntry", { entry })}>
           {entry}
         </p>
       ) : null}
       {panel === "guide" ? (
-        <div className="mini-guide glass" role="listbox" aria-label="Channels">
+        <div className="mini-guide glass" role="listbox" aria-label={t("player.channels")} data-channels="">
           {channels.map((c, i) => {
             const a = airingAt(index, c.id, now);
             return (
@@ -825,7 +840,7 @@ export function LivePlayer({
                 <span className="mg-num">{c.displayNumber}</span>
                 <span className="mg-body">
                   <span className="mg-name">{c.displayName}</span>
-                  <span className="mg-title">{a?.title ?? "No listing"}</span>
+                  <span className="mg-title">{a?.title ?? t("player.noListingShort")}</span>
                   <Progress value={progress(a, now)} category={categoryOf(a)} />
                 </span>
               </button>
@@ -847,24 +862,24 @@ export function LivePlayer({
               <dt>{copy.player.bitrate}</dt>
               <dd>{bitrateText(session.stream.bitrate) || copy.player.waiting}</dd>
               <dt>{copy.player.dropped}</dt>
-              <dd>{playback.total > 0 ? `${playback.dropped} of ${playback.total}` : "0"}</dd>
+              <dd>{playback.total > 0 ? t("player.droppedOf", { dropped: playback.dropped, total: playback.total }) : "0"}</dd>
               <dt>{copy.player.buffer}</dt>
-              <dd>{`${playback.buffer.toFixed(1)}s`}</dd>
+              <dd>{t("player.seconds", { n: playback.buffer.toFixed(1) })}</dd>
               <dt>{copy.player.behind}</dt>
               <dd>{formatBehind(behind)}</dd>
               <dt>{copy.player.drift}</dt>
-              <dd>{playback.drift == null ? copy.player.waiting : `${Math.round(playback.drift)} ms`}</dd>
+              <dd>{playback.drift == null ? copy.player.waiting : t("player.milliseconds", { n: Math.round(playback.drift) })}</dd>
               <dt>{copy.player.rendition}</dt>
               <dd>{session.rendition || copy.player.waiting}</dd>
               <dt>{copy.player.encoder}</dt>
               <dd>{session.encoder || session.stream.encoder || copy.player.waiting}</dd>
               <dt>{copy.player.sound}</dt>
-              <dd>{session.stream.audio === "copy" ? `Original ${session.stream.sourceAudio ?? ""}` : session.stream.audio === "aac6" ? "5.1 AAC" : session.stream.audio === "ac3" ? "5.1 AC-3" : "Stereo AAC"}</dd>
+              <dd>{session.stream.audio === "copy" ? `${t("player.original")} ${session.stream.sourceAudio ?? ""}` : session.stream.audio === "aac6" ? "5.1 AAC" : session.stream.audio === "ac3" ? "5.1 AC-3" : "Stereo AAC"}</dd>
               <dt>{copy.player.tuner}</dt>
-              <dd>{session.shared ? `Shared · ${session.viewers} watching` : "This screen only"}</dd>
+              <dd>{session.shared ? t("player.shared", session.viewers) : t("player.thisScreen")}</dd>
             </dl>
           ) : (
-            <p>Tuning…</p>
+            <p>{t("player.tuning")}</p>
           )}
         </div>
       ) : null}
@@ -885,24 +900,24 @@ export function LivePlayer({
       ) : null}
       {panel === "sync" ? (
         <ModalPanel labelledBy="sync-panel-title" onClose={() => setPanel("none")}>
-          <h3 id="sync-panel-title">{together ? "Watching together" : "Whole-Home Sync"}</h3>
+          <h3 id="sync-panel-title">{together ? t("player.watchingTogether") : t("player.wholeHome")}</h3>
           {together ? (
             <>
-              <p className="dim">Pause, rewind, and Live move every screen watching together.</p>
-              <ul className="together-list" aria-label="Screens watching together">
+              <p className="dim">{t("player.togetherMoves")}</p>
+              <ul className="together-list" aria-label={t("player.screensTogether")}>
                 {(sync.room?.people ?? []).map((p, i) => (
                   <li key={`${p.name}:${p.kind}:${i}`}>{personLabel(p)}</li>
                 ))}
               </ul>
               <div className="option-actions">
                 <button type="button" className="btn" onClick={() => setTogetherOn(null)}>
-                  Leave
+                  {t("player.leave")}
                 </button>
               </div>
             </>
           ) : (
             <>
-              <p className="dim">Every screen on this channel shows the same moment{sync.members > 1 ? ` — ${sync.members} screens right now` : ""}.</p>
+              <p className="dim">{sync.members > 1 ? t("player.sameMomentCount", sync.members) : t("player.sameMoment")}</p>
               <label className="switch-row">
                 <input
                   type="checkbox"
@@ -912,12 +927,12 @@ export function LivePlayer({
                     if (e.target.checked) setDetached(false);
                   }}
                 />
-                <span>Sync with other screens</span>
+                <span>{t("player.syncWith")}</span>
               </label>
               <p className="dim">
                 {group?.people?.length
-                  ? `${peopleSentence(group.people)} ${group.people.length === 1 ? "is" : "are"} watching together.`
-                  : "Watch together: pause and rewind for every screen that joins."}
+                  ? `${peopleSentence(group.people)} ${t("player.togetherBe", group.people.length)}`
+                  : t("player.watchTogetherHint")}
               </p>
               <div className="option-actions">
                 <button
@@ -929,7 +944,7 @@ export function LivePlayer({
                     setOpts((o) => ({ ...o, sync: true }));
                   }}
                 >
-                  {group?.people?.length ? "Join" : "Watch together"}
+                  {group?.people?.length ? t("player.join") : t("player.watchTogether")}
                 </button>
               </div>
             </>
@@ -1026,7 +1041,7 @@ function VolumeRow({ videoRef }: { videoRef: RefObject<HTMLVideoElement | null> 
         step={0.05}
         value={level}
         aria-label={copy.player.volume}
-        aria-valuetext={`${Math.round(level * 100)}%`}
+        aria-valuetext={t("player.percent", { level: Math.round(level * 100) })}
         onChange={(event) => {
           const next = Number(event.target.value);
           setLevel(next);
@@ -1070,7 +1085,7 @@ function outputLine(stream: { outputWidth?: number; outputHeight?: number; outpu
   const width = picture.width || stream.outputWidth;
   const height = picture.height || stream.outputHeight;
   const fps = stream.outputFps || (picture.fps > 1 ? picture.fps.toFixed(2) : "");
-  const decode = stream.decode === "gpu" ? "GPU decode" : stream.decode === "cpu" ? "CPU decode" : stream.video === "copy" ? "Direct" : "";
+  const decode = stream.decode === "gpu" ? t("player.gpu") : stream.decode === "cpu" ? t("player.cpu") : stream.video === "copy" ? t("player.direct") : "";
   return joinFacts([sizeText(width, height), fps, decode]);
 }
 
@@ -1079,20 +1094,20 @@ function sizeText(width?: number, height?: number) {
 }
 
 function scanWord(scan?: string) {
-  if (scan === "progressive") return "Progressive";
-  if (scan === "interlaced") return "Interlaced";
-  if (scan === "film") return "Film";
+  if (scan === "progressive") return t("player.progressive");
+  if (scan === "interlaced") return t("player.interlaced");
+  if (scan === "film") return t("player.film");
   return "";
 }
 
 function joinFacts(parts: Array<string | undefined>) {
-  return parts.filter(Boolean).join(" · ") || copy.player.waiting;
+  return parts.filter(Boolean).join(t("player.sep")) || copy.player.waiting;
 }
 
 function bitrateText(rate?: string) {
   if (!rate) return "";
-  if (rate.endsWith("M")) return `${rate.slice(0, -1)} Mb/s`;
-  if (rate.endsWith("k")) return `${rate.slice(0, -1)} kb/s`;
+  if (rate.endsWith("M")) return t("player.mbps", { rate: rate.slice(0, -1) });
+  if (rate.endsWith("k")) return t("player.kbps", { rate: rate.slice(0, -1) });
   return rate;
 }
 
@@ -1111,8 +1126,13 @@ function bufferedAhead(video: HTMLVideoElement) {
 
 /** "Live" while lined up. Far enough behind, the pill says how far and is the way back. */
 export function livePillLabel(synced: boolean, behindSeconds: number): string {
-  if (synced || behindSeconds < 14) return "Live";
-  return `${formatBehind(behindSeconds)} behind`;
+  if (synced || behindSeconds < 14) return t("player.live");
+  return t("player.behind", { amount: formatBehind(behindSeconds) });
+}
+
+export function livePillAria(synced: boolean, behindSeconds: number): string | undefined {
+  if (synced || behindSeconds < 14) return undefined;
+  return t("player.goLive", { amount: formatBehind(behindSeconds) });
 }
 
 function formatBehind(seconds: number) {
@@ -1144,11 +1164,11 @@ function useFirstFrame(videoRef: RefObject<HTMLVideoElement | null>, key: string
 }
 
 const tuneSteps = [
-  { at: 0, text: "Tuning the antenna" },
-  { at: 3000, text: "Starting the picture" },
-  { at: 7000, text: "Lining up with live" },
-  { at: 18000, text: "Still tuning. A weak signal can take longer" },
-];
+  { at: 0, id: "player.tuneAntenna" },
+  { at: 3000, id: "player.tunePicture" },
+  { at: 7000, id: "player.tuneLive" },
+  { at: 18000, id: "player.tuneWeak" },
+] as const;
 
 function TuningCard({ channel, show, art, mini }: { channel: Channel; show?: string; art: string; mini: boolean }) {
   const [elapsed, setElapsed] = useState(0);
@@ -1169,7 +1189,7 @@ function TuningCard({ channel, show, art, mini }: { channel: Channel; show?: str
         {mini ? null : (
           <>
             <span className="tuning-bar" aria-hidden="true" />
-            <p className="tuning-step">{step.text}…</p>
+            <p className="tuning-step">{t(step.id)}</p>
           </>
         )}
       </div>

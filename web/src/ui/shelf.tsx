@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { formatDateTime } from "../i18n/runtime.ts";
 import { navigate } from "../app/router";
 import type { Recording } from "../types";
 import { Progress, SectionHeader } from "./primitives";
@@ -35,7 +36,7 @@ export function RecordingCard({ rec }: { rec: Recording }) {
         {pct > 0 ? <Progress value={pct} /> : null}
       </span>
       <span className="rc-title">{rec.title}</span>
-      <span className="rc-sub">{rec.subtitle || new Date(rec.startedAt).toLocaleDateString([], { month: "short", day: "numeric" })}</span>
+      <span className="rc-sub">{rec.subtitle || formatDateTime(new Date(rec.startedAt), { month: "short", day: "numeric" })}</span>
     </button>
   );
 }

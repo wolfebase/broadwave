@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Recording } from "../../types";
+import { libraryMessages } from "../../i18n/messages/library.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { copy } from "../../strings";
 import { formatBytes, formatClockPoint } from "../../lib/format";
 import { focusRing } from "../../app/remote";
@@ -12,6 +14,8 @@ import { MoveFile } from "./MoveFile";
 import { RecordAgain, recordAgainOffered } from "./RecordAgain";
 import { actionName } from "../../lib/actionName";
 import { buildLibrary, continueWatching, episodeTag, filterRecordings, recordingSubject, totalBytes, watched, type Kind, type Show, type Sort } from "./model";
+
+const t = bind(libraryMessages);
 
 export type Many = "watched" | "unwatched" | "delete";
 
@@ -147,7 +151,7 @@ export function Library({
       <div className="page-head">
         {show ? (
           <button type="button" className="text-btn" onClick={() => navigate("/recordings")}>
-            All recordings
+            {t("library.allRecordings")}
           </button>
         ) : null}
         <h2>{headline}</h2>
@@ -159,63 +163,63 @@ export function Library({
         </p>
       ) : null}
       {resume.length > 0 ? (
-        <Shelf title="Continue watching">
+        <Shelf title={t("library.continueWatching")}>
           {resume.map((rec) => (
             <RecordingCard key={rec.id} rec={rec} />
           ))}
         </Shelf>
       ) : null}
       <div className="library-tools sheet-actions">
-        <div className="segmented" role="tablist" aria-label="Library filter">
+        <div className="segmented" role="tablist" aria-label={t("library.filter")}>
           <button type="button" role="tab" aria-selected={libraryFilter === "all"} className={libraryFilter === "all" ? "seg on" : "seg"} onClick={() => setLibraryFilter("all")}>
-            All
+            {t("library.all")}
           </button>
           <button type="button" role="tab" aria-selected={libraryFilter === "unwatched"} className={libraryFilter === "unwatched" ? "seg on" : "seg"} onClick={() => setLibraryFilter("unwatched")}>
-            Unwatched
+            {t("library.unwatchedTab")}
           </button>
         </div>
         {show ? null : (
           <label>
-            Show
+            {t("library.show")}
             <select value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
-              <option value="all">Everything</option>
-              <option value="shows">Shows</option>
-              <option value="movies">Movies</option>
-              <option value="sports">Sports</option>
+              <option value="all">{t("library.everything")}</option>
+              <option value="shows">{t("library.shows")}</option>
+              <option value="movies">{t("library.movies")}</option>
+              <option value="sports">{t("library.sports")}</option>
             </select>
           </label>
         )}
         <label>
-          Sort
+          {t("library.sort")}
           <select value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-            <option value="title">By name</option>
-            <option value="largest">Largest first</option>
+            <option value="newest">{t("library.newest")}</option>
+            <option value="oldest">{t("library.oldest")}</option>
+            <option value="title">{t("library.byName")}</option>
+            <option value="largest">{t("library.largest")}</option>
           </select>
         </label>
         {choosable.length > 0 || selecting ? (
           <button type="button" className="btn" aria-pressed={selecting} onClick={() => (selecting ? stopSelecting() : setSelecting(true))}>
-            {selecting ? "Done" : "Select"}
+            {selecting ? t("library.done") : t("library.select")}
           </button>
         ) : null}
       </div>
       {selecting ? (
-        <div className="sheet-actions" role="toolbar" aria-label="Selected recordings" aria-busy={busy}>
-          <span aria-live="polite">{chosen.length === 1 ? "1 selected" : `${chosen.length} selected`}</span>
+        <div className="sheet-actions" role="toolbar" aria-label={t("library.selected")} aria-busy={busy}>
+          <span aria-live="polite">{t("library.selectedCount", { count: chosen.length })}</span>
           <button type="button" className="btn" disabled={chosen.length === choosable.length} onClick={() => pick(choosable, true)}>
-            Select all
+            {t("library.selectAll")}
           </button>
           <button type="button" className="btn" disabled={chosen.length === 0 || busy} onClick={() => runMany("watched")}>
-            Mark watched
+            {t("library.markWatched")}
           </button>
           <button type="button" className="btn" disabled={chosen.length === 0 || busy} onClick={() => runMany("unwatched")}>
-            Mark unwatched
+            {t("library.markUnwatched")}
           </button>
           {armedMany ? (
             <>
               <button ref={manyRef} type="button" className="btn primary" disabled={chosen.length === 0 || busy} onClick={() => runMany("delete")}>
-                {chosen.length === 1 ? "Delete 1 file" : `Delete ${chosen.length} files`}
+                {t("library.deleteFiles", chosen.length)}
               </button>
               <button
                 type="button"
@@ -225,19 +229,19 @@ export function Library({
                   setArmedMany(false);
                 }}
               >
-                Keep them
+                {t("library.keepThem")}
               </button>
             </>
           ) : (
             <button type="button" className="btn" data-delete-many disabled={chosen.length === 0 || busy} onClick={() => setArmedMany(true)}>
-              Delete
+              {t("library.delete")}
             </button>
           )}
         </div>
       ) : null}
       {shows.length === 0 && movies.length === 0 ? (
         <article className="quiet-card wide">
-          <p>{recordings.length === 0 ? copy.library.body : libraryFilter === "unwatched" ? "Everything here has been watched." : "Nothing here matches."}</p>
+          <p>{recordings.length === 0 ? copy.library.body : libraryFilter === "unwatched" ? t("library.allWatched") : t("library.nothingMatches")}</p>
         </article>
       ) : (
         <div className="show-grid">
@@ -250,13 +254,13 @@ export function Library({
                 {item.items.length > 1 ? <p className="ch-tags">{showLine(item)}</p> : null}
                 {selecting && item.items.length > 1 ? (
                   <button type="button" className="text-btn" onClick={() => pick(item.items, !item.items.every((rec) => rec.status === "recording" || picked.has(rec.id)))}>
-                    {item.items.every((rec) => rec.status === "recording" || picked.has(rec.id)) ? `Clear ${item.title}` : `Select all of ${item.title}`}
+                    {item.items.every((rec) => rec.status === "recording" || picked.has(rec.id)) ? t("library.clearShow", { title: item.title }) : t("library.selectShow", { title: item.title })}
                   </button>
                 ) : null}
                 <ul className="source-list">{item.items.slice(0, preview).map(row)}</ul>
                 {item.items.length > preview ? (
                   <button type="button" className="text-btn" onClick={() => navigate(`/recordings?show=${encodeURIComponent(item.title)}`)}>
-                    All {item.items.length} of {item.title}
+                    {t("library.allOf", { count: item.items.length, title: item.title })}
                   </button>
                 ) : null}
               </section>
@@ -264,7 +268,7 @@ export function Library({
           )}
           {movies.length > 0 ? (
             <section>
-              <h3 className="show-title">Movies</h3>
+              <h3 className="show-title">{t("library.movies")}</h3>
               <ul className="source-list">{movies.map(row)}</ul>
             </section>
           ) : null}
@@ -281,7 +285,7 @@ function ShowPage({ show, row }: { show: Show; row: (rec: Recording) => React.Re
       <p className="ch-tags">{showLine(show)}</p>
       {show.seasons.map((season) => (
         <section key={season.season}>
-          {titled ? <h3 className="show-title">{season.season > 0 ? `Season ${season.season}` : "Other episodes"}</h3> : null}
+          {titled ? <h3 className="show-title">{season.season > 0 ? t("library.season", { number: season.season }) : t("library.otherEpisodes")}</h3> : null}
           <ul className="source-list">{season.items.map(row)}</ul>
         </section>
       ))}
@@ -290,15 +294,11 @@ function ShowPage({ show, row }: { show: Show; row: (rec: Recording) => React.Re
 }
 
 function summary(recordings: Recording[]) {
-  const n = recordings.length;
-  return `${n === 1 ? "1 recording" : `${n} recordings`} · ${formatBytes(totalBytes(recordings))}`;
+  return `${t("library.count", recordings.length)} · ${formatBytes(totalBytes(recordings))}`;
 }
 
 function showLine(show: Show) {
-  const n = show.items.length;
-  const count = n === 1 ? "1 recording" : `${n} recordings`;
-  const left = show.unwatched === 0 ? "all watched" : `${show.unwatched} unwatched`;
-  return `${count} · ${left} · ${formatBytes(show.bytes)}`;
+  return `${t("library.count", show.items.length)} · ${t("library.unwatched", show.unwatched)} · ${formatBytes(show.bytes)}`;
 }
 
 function LibraryRow({
@@ -360,7 +360,7 @@ function LibraryRow({
       <div>
         {selecting && rec.status !== "recording" ? (
           <label>
-            <input type="checkbox" checked={picked} onChange={(e) => onPick(e.target.checked)} aria-label={`Select ${tag ? `${tag} ` : ""}${name}`} /> <strong>{name}</strong>
+            <input type="checkbox" checked={picked} onChange={(e) => onPick(e.target.checked)} aria-label={t("library.selectNamed", { name: `${tag ? `${tag} ` : ""}${name}` })} /> <strong>{name}</strong>
           </label>
         ) : (
           <strong>{name}</strong>
@@ -377,9 +377,9 @@ function LibraryRow({
             {" · "}
             {formatBytes(rec.bytes ?? 0)}
             {rec.durationSec ? ` · ${formatClockPoint(rec.durationSec)}` : ""}
-            {(rec.position ?? 0) > 1 ? ` · resume ${formatClockPoint(rec.position ?? 0)}` : ""}
-            {seen ? " · Watched" : ""}
-            {rec.keep ? " · Kept forever" : ""}
+            {(rec.position ?? 0) > 1 ? ` · ${t("library.resumeAt", { time: formatClockPoint(rec.position ?? 0) })}` : ""}
+            {seen ? ` · ${t("library.watched")}` : ""}
+            {rec.keep ? ` · ${t("library.keptForever")}` : ""}
             {rec.error ? ` · ${rec.error}` : ""}
           </span>
         )}
@@ -392,46 +392,46 @@ function LibraryRow({
                 {copy.library.removeGone}
               </button>
             ) : (
-              <button type="button" className="btn" data-delete={rec.id} aria-label={named("Delete")} onClick={() => setArmed(rec.id)}>
-                Delete
+              <button type="button" className="btn" data-delete={rec.id} aria-label={named(t("library.delete"))} onClick={() => setArmed(rec.id)}>
+                {t("library.delete")}
               </button>
             )}
           </div>
         ) : (
           <div className="sheet-actions">
-            <button type="button" className="btn primary" aria-label={named("Play")} onClick={() => onPlay(rec)}>
-              Play
+            <button type="button" className="btn primary" aria-label={named(t("library.play"))} onClick={() => onPlay(rec)}>
+              {t("library.play")}
             </button>
             {rec.status !== "recording" ? (
-              <button type="button" className="btn" aria-label={named(seen ? "Mark unwatched" : "Mark watched")} onClick={() => onWatched(rec, !seen)}>
-                {seen ? "Mark unwatched" : "Mark watched"}
+              <button type="button" className="btn" aria-label={named(seen ? t("library.markUnwatched") : t("library.markWatched"))} onClick={() => onWatched(rec, !seen)}>
+                {seen ? t("library.markUnwatched") : t("library.markWatched")}
               </button>
             ) : null}
             {rec.status !== "recording" ? (
-              <button type="button" className="btn" aria-pressed={rec.keep === true} aria-label={named("Keep forever")} onClick={() => onKeep(rec, !rec.keep)}>
-                Keep forever
+              <button type="button" className="btn" aria-pressed={rec.keep === true} aria-label={named(t("library.keepForever"))} onClick={() => onKeep(rec, !rec.keep)}>
+                {t("library.keepForever")}
               </button>
             ) : null}
             {rec.status !== "recording" ? (
-              <button type="button" className="btn" aria-label={named("Make channel")} onClick={() => onVirtual(rec)}>
-                Make channel
+              <button type="button" className="btn" aria-label={named(t("library.makeChannel"))} onClick={() => onVirtual(rec)}>
+                {t("library.makeChannel")}
               </button>
             ) : null}
             <DownloadLink id={rec.id} status={rec.status} name={subject} />
             {rec.file && rec.status !== "recording" ? <MoveFile rec={rec} /> : null}
             {recordAgainOffered(rec) ? <RecordAgain rec={rec} /> : null}
             {rec.status === "recording" ? (
-              <button type="button" className="btn" aria-label={named("Stop recording")} onClick={() => onStop(rec)}>
-                Stop recording
+              <button type="button" className="btn" aria-label={named(t("library.stopRecording"))} onClick={() => onStop(rec)}>
+                {t("library.stopRecording")}
               </button>
             ) : null}
             {rec.status === "recording" ? null : armed === rec.id ? (
-              <button ref={confirmRef} type="button" className="btn primary" aria-label={named("Delete this file")} onClick={() => onDelete(rec)}>
-                Delete this file
+              <button ref={confirmRef} type="button" className="btn primary" aria-label={named(t("library.deleteFile"))} onClick={() => onDelete(rec)}>
+                {t("library.deleteFile")}
               </button>
             ) : (
-              <button type="button" className="btn" data-delete={rec.id} aria-label={named("Delete")} onClick={() => setArmed(rec.id)}>
-                Delete
+              <button type="button" className="btn" data-delete={rec.id} aria-label={named(t("library.delete"))} onClick={() => setArmed(rec.id)}>
+                {t("library.delete")}
               </button>
             )}
           </div>
@@ -445,13 +445,13 @@ function LibraryRow({
 function statusLabel(status: Recording["status"]) {
   switch (status) {
     case "recording":
-      return "Recording";
+      return t("library.statusRecording");
     case "failed":
-      return "Failed";
+      return t("library.statusFailed");
     case "stopped":
-      return "Stopped early";
+      return t("library.statusStopped");
     case "imported":
-      return "Imported";
+      return t("library.statusImported");
     default:
       return "";
   }

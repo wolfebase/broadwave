@@ -115,7 +115,7 @@ public enum Voice {
             }
             rows = WidgetFeed.onNow(everyone, now: now, limit: limit).filter { $0.start != nil }
         }
-        guard !rows.isEmpty else { return "Nothing in the guide right now." }
+        guard !rows.isEmpty else { return String(localized: "Nothing in the guide right now.", bundle: .module) }
         return rows.map { "\($0.number), \($0.title)" }.joined(separator: ". ") + "."
     }
 }

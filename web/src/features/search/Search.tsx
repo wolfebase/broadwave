@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { searchMessages } from "../../i18n/messages/search.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { addPass, search } from "../../api";
 import { useData } from "../../app/data";
 import { useLayout } from "../../app/layout";
@@ -14,6 +16,8 @@ import { SearchIcon } from "../../ui/icons";
 import { Atsc3Tag } from "../../ui/primitives";
 import { ProgramSheet } from "../guide/ProgramSheet";
 import "./search.css";
+
+const t = bind(searchMessages);
 
 function SearchArt({
   src,
@@ -112,7 +116,7 @@ export function SearchPage() {
         const next = searchRows({ status: "done", airings: res.airings, recordings: playable });
         setAirings(next.airings);
         setRecordings(next.recordings);
-        setNote(next.airings.length === 0 && next.recordings.length === 0 ? "Nothing matches." : "");
+        setNote(next.airings.length === 0 && next.recordings.length === 0 ? t("search.nothing") : "");
         setResultQuery(q);
       })
       .catch((err: unknown) => {
@@ -120,7 +124,7 @@ export function SearchPage() {
         const next = searchRows<SearchAiring, Recording>({ status: "error" });
         setAirings(next.airings);
         setRecordings(next.recordings);
-        setNote(err instanceof Error ? err.message : "Search failed.");
+        setNote(err instanceof Error ? err.message : t("search.failed"));
         setResultQuery(q);
       });
     return () => {
@@ -145,7 +149,7 @@ export function SearchPage() {
   return (
     <div className="page-wrap search-page">
       <header className="page-header">
-        <h1>Search</h1>
+        <h1>{t("search.title")}</h1>
       </header>
       <form className="search-form" onSubmit={submit}>
         <SearchIcon />
@@ -153,19 +157,19 @@ export function SearchPage() {
           ref={field}
           type="search"
           value={draft}
-          placeholder="Shows, people, recordings"
-          aria-label="Search shows, people, and recordings"
+          placeholder={t("search.placeholder")}
+          aria-label={t("search.label")}
           onChange={(event) => type(event.target.value)}
         />
       </form>
       {active && q === resultQuery && note ? (
-        <p className="hint" role={note === "Nothing matches." || note.startsWith("Recording every ") ? "status" : "alert"}>
+        <p className="hint" role={note === t("search.nothing") || note.startsWith("Recording every ") ? "status" : "alert"}>
           {note}
         </p>
       ) : null}
       {listed.airings.length > 0 ? (
         <section>
-          <h2 className="section-title">Guide</h2>
+          <h2 className="section-title">{t("search.guide")}</h2>
           <ul className="search-list">
             {listed.airings.map((airing) => (
               <li key={airing.id}>
@@ -197,7 +201,7 @@ export function SearchPage() {
                 <button
                   type="button"
                   className="btn"
-                  aria-label={actionName("Record every airing", airing.title)}
+                  aria-label={actionName(t("search.recordEvery"), airing.title)}
                   onClick={() => {
                     const asked = q;
                     const title = airing.title;
@@ -208,7 +212,7 @@ export function SearchPage() {
                     });
                   }}
                 >
-                  Record every airing
+                  {t("search.recordEvery")}
                 </button>
               </li>
             ))}
@@ -217,7 +221,7 @@ export function SearchPage() {
       ) : null}
       {listed.recordings.length > 0 ? (
         <section>
-          <h2 className="section-title">Recordings</h2>
+          <h2 className="section-title">{t("search.recordings")}</h2>
           <ul className="search-list">
             {listed.recordings.map((rec) => (
               <li key={rec.id}>

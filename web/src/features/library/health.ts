@@ -1,12 +1,15 @@
 import type { RecordingHealth } from "../../api/generated";
+import { libraryMessages } from "../../i18n/messages/library.ts";
+import { bind } from "../../i18n/runtime.ts";
+
+const t = bind(libraryMessages);
 
 /** A line when the finished file was damaged. Empty when it was clean or not counted yet. */
 export function signalLine(health: RecordingHealth | undefined): string {
   if (!health) return "";
   const lost = Math.round(health.lostSeconds ?? 0);
-  if (lost >= 1) return `Signal dropped for ${lost} s`;
+  if (lost >= 1) return t("library.signalDropped", { seconds: lost });
   const times = health.continuityErrors + health.transportErrors + health.syncLosses;
   if (times <= 0) return "";
-  if (times === 1) return "Signal broke up once";
-  return `Signal broke up ${times} times`;
+  return t("library.signalBroke", times);
 }

@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { shellMessages } from "../i18n/messages/shell";
+import { bind } from "../i18n/runtime";
 import {
   addPass,
   deletePass,
@@ -28,6 +30,8 @@ import { beginSave, commitSave, followUpRead, LatestReads, type SaveSeq } from "
 import { guideSpan, indexAirings, keptGuideWindow, sortChannels, type AiringIndex } from "../lib/guide";
 import { hasSnapshotFlag, loadSnapshot, saveSnapshot } from "../lib/snapshot";
 import type { Airing, Channel, ChannelPatch, Device, Pass, PlannedAiring, Recording, ServerInfo, Settings, StorageInfo, VirtualChannel } from "../types";
+
+const shell = bind(shellMessages);
 
 const defaults: Settings = {
   layout: "auto",
@@ -180,7 +184,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (all || want.has("devices")) {
       jobs.push(
         getDevices()
-          .then((r) => still("devices") && setDevices(r.devices))
+          .then((r) => still("devices") && setDevices(r.devices ?? []))
           .catch((err) => {
             if (!isForbidden(err) && !isUnauthorized(err)) throw err;
           }),
@@ -330,7 +334,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             const found = await getDevices().catch(() => null);
             if (found && reads.current.generation("devices") === devicesGen && found.devices.length === 0) {
               const again = await discover().catch(() => null);
-              if (again && reads.current.generation("devices") === devicesGen) setDevices(again.devices);
+              if (again && reads.current.generation("devices") === devicesGen) setDevices(again.devices ?? []);
               await refresh(["channels"]);
             }
           })();
@@ -344,7 +348,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setBooting(false);
           return;
         }
-        setError(err instanceof Error ? err.message : "The server could not be reached.");
+        setError(err instanceof Error ? err.message : shell("shell.unreachable"));
         loadFailed.current = true;
         setReady(true);
         setChannelsReady(true);
@@ -506,7 +510,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         reads.current.start(["devices"]);
         try {
           const res = await discover(ip);
-          setDevices(res.devices);
+          setDevices(res.devices ?? []);
           setError("");
         } catch (err) {
           setError(err instanceof Error ? err.message : "No tuner answered.");
@@ -517,7 +521,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         reads.current.start(["devices"]);
         try {
           const res = await removeDevice(deviceId);
-          setDevices(res.devices);
+          setDevices(res.devices ?? []);
           setError("");
         } catch (err) {
           setError(err instanceof Error ? err.message : "That device was not removed.");

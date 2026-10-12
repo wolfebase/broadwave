@@ -1,3 +1,8 @@
+import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
+import { bind } from "../../i18n/runtime.ts";
+
+const t = bind(settingsUiMessages);
+
 // Share rows are the addresses other apps paste. The playlist and the guide
 // stay on this server's own port. The HDHomeRun address is that host on 8478.
 
@@ -31,13 +36,13 @@ export function shareRows(pageURL: string, sharing: boolean, hdhr = true): Share
     if (hdhr) {
       rows.push({
         app,
-        label: "HDHomeRun",
+        label: t("share.hdhr"),
         value: address,
-        hint: sharing ? undefined : "Turn on Act as an HDHomeRun.",
+        hint: sharing ? undefined : t("share.turnOn"),
       });
     }
-    rows.push({ app, label: "M3U playlist", value: playlist });
-    rows.push({ app, label: "XMLTV guide", value: guide });
+    rows.push({ app, label: t("share.m3u"), value: playlist });
+    rows.push({ app, label: t("share.xmltv"), value: guide });
   }
   return rows;
 }

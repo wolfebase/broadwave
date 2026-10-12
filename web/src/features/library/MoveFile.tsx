@@ -2,10 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { moveRecording } from "../../api";
 import { useData } from "../../app/data";
 import { focusRing } from "../../app/remote";
+import { libraryMessages } from "../../i18n/messages/library.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { actionName } from "../../lib/actionName";
 import { dismissesLayer, isTextField } from "../../lib/dialogFocus";
 import type { Recording } from "../../types";
 import { recordingSubject } from "./model";
+
+const t = bind(libraryMessages);
 
 /** Renames a recording's file, or moves it into a folder, with the files beside it. */
 export function MoveFile({ rec }: { rec: Recording }) {
@@ -37,7 +41,7 @@ export function MoveFile({ rec }: { rec: Recording }) {
       setOpen(false);
       await refresh(["recordings"]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "The file could not be moved.");
+      setError(err instanceof Error ? err.message : t("library.moveFailed"));
     } finally {
       setBusy(false);
     }
@@ -49,21 +53,21 @@ export function MoveFile({ rec }: { rec: Recording }) {
         ref={opener}
         type="button"
         className="btn"
-        aria-label={actionName("Rename file", recordingSubject(rec))}
+        aria-label={actionName(t("library.renameFile"), recordingSubject(rec))}
         onClick={() => {
           setName(current);
           setError("");
           setOpen(true);
         }}
       >
-        Rename file
+        {t("library.renameFile")}
       </button>
     );
   }
   return (
     <form
       className="sheet-actions"
-      aria-label={`Rename ${rec.subtitle || rec.title}`}
+      aria-label={t("library.renameNamed", { name: rec.subtitle || rec.title })}
       onSubmit={(event) => {
         event.preventDefault();
         void save();
@@ -77,15 +81,15 @@ export function MoveFile({ rec }: { rec: Recording }) {
       }}
     >
       <label className="field">
-        File name in the recordings folder
+        {t("library.fileName")}
         <input ref={field} value={name} spellCheck={false} disabled={busy} onChange={(event) => setName(event.target.value)} />
-        <span className="hint">Use a slash for a folder, such as Show/S01E02. The files beside it move too.</span>
+        <span className="hint">{t("library.fileHint")}</span>
       </label>
       <button type="submit" className="btn primary" disabled={busy || name.trim() === ""}>
-        Save
+        {t("library.save")}
       </button>
       <button type="button" className="btn" disabled={busy} onClick={() => setOpen(false)}>
-        Cancel
+        {t("library.cancel")}
       </button>
       {error ? (
         <span className="hint error" role="alert">

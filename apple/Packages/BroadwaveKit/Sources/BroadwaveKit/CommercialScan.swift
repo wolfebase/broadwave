@@ -2,14 +2,14 @@ import Foundation
 
 /// What Find commercials says, the same words as the web player.
 public enum CommercialScan: Sendable {
-    public static let finding = "Finding commercials…"
-    public static let failed = "Could not look for commercials. Try again."
+    public static let finding = String(localized: "Finding commercials…", bundle: .module)
+    public static let failed = String(localized: "Could not look for commercials. Try again.", bundle: .module)
 
     public static func found(_ count: Int) -> String {
         switch count {
-        case ...0: "No breaks found."
-        case 1: "Found 1 break."
-        default: "Found \(count) breaks."
+        case ...0: String(localized: "No breaks found.", bundle: .module)
+        case 1: String(localized: "Found 1 break.", bundle: .module)
+        default: String(localized: "Found \(String(count)) breaks.", bundle: .module)
         }
     }
 

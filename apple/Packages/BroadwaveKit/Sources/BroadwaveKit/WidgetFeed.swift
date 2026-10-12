@@ -95,9 +95,9 @@ public enum WidgetFeed {
             !item.skipped && item.airing.channelId == airing.channelId && item.airing.start == airing.start
         }
         if recording {
-            row.detail = "Recording"
+            row.detail = String(localized: "Recording", bundle: .module)
         } else if planned {
-            row.detail = "Set to record"
+            row.detail = String(localized: "Set to record", bundle: .module)
         } else {
             row.record = RecordAsk(channelID: airing.channelId, title: airing.title, start: airing.start)
         }
@@ -152,7 +152,7 @@ public enum WidgetFeed {
                 let a = item.airing
                 return Row(
                     id: "next-\(a.id)", number: numbers[a.channelId] ?? a.guideNumber ?? "", title: a.title,
-                    detail: item.conflict ? "Conflict" : (a.subtitle ?? ""), start: a.start, end: a.end,
+                    detail: item.conflict ? String(localized: "Conflict", bundle: .module) : (a.subtitle ?? ""), start: a.start, end: a.end,
                     link: URL(string: "broadwave://recordings")!
                 )
             }

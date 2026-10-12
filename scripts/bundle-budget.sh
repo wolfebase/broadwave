@@ -34,13 +34,16 @@
 # JS raised 2026-10-11: Right at the end of a row continues to the control
 # beside it, and the picture is left out of the arrow order while its buttons
 # are up. Measured entry gzip 97061, plus 300 bytes of slack.
+# JS raised 2026-10-12: Home, the guide, and the shell look up their words in
+# an English catalog, with the plural helper. Measured entry gzip 97465, plus
+# 300 bytes of slack for lazy-chunk hashes.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=97361
+JS_GZIP_MAX=97765
 CSS_GZIP_MAX=11860
 
 if [[ ! -f "$INDEX" ]]; then

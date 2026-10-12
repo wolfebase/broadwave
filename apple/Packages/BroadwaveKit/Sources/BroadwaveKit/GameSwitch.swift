@@ -153,23 +153,23 @@ public enum GameSwitch {
 
     private static func classify(_ game: Game, _ prev: Game?, _ hasPrev: Bool) -> (String, Rank) {
         if game.redZone == true, sportOf(game.league ?? "") == "football" {
-            return ("Red zone", .situation)
+            return (String(localized: "Red zone", bundle: .module), .situation)
         }
         if game.powerPlay == true, sportOf(game.league ?? "") == "hockey" {
-            return ("Power play", .situation)
+            return (String(localized: "Power play", bundle: .module), .situation)
         }
         if hasPrev, let prev, leadChanged(game, prev) {
-            return ("Lead change", .lead)
+            return (String(localized: "Lead change", bundle: .module), .lead)
         }
         if closeFinish(game) {
-            return ("Final minutes", .close)
+            return (String(localized: "Final minutes", bundle: .module), .close)
         }
         return ("", .none)
     }
 
     private static func banner(_ why: String, _ game: Game) -> String {
         let who = matchup(game)
-        return who.isEmpty ? why : "\(why): \(who)"
+        return who.isEmpty ? why : String(localized: "switch.reason", defaultValue: "\(why): \(who)", bundle: .module)
     }
 
     private static func matchup(_ game: Game) -> String {
@@ -177,10 +177,12 @@ public enum GameSwitch {
         let home = teams.first { $0.home == true }
         let away = home.flatMap { home in teams.first { $0.abbr != home.abbr || $0.name != home.name } }
         if let home, let away {
-            return "\(label(away)) at \(label(home))"
+            let awayName = label(away)
+            let homeName = label(home)
+            return String(localized: "\(awayName) at \(homeName)", bundle: .module)
         }
         if let short = game.shortName, !short.isEmpty {
-            return short.replacingOccurrences(of: " @ ", with: " at ")
+            return short.replacingOccurrences(of: " @ ", with: String(localized: " at ", bundle: .module))
         }
         return game.name ?? ""
     }

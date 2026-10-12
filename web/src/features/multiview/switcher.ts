@@ -1,5 +1,10 @@
 // Matches sports.PickFocus. The clock is injected so tests can freeze it.
 
+import { multiviewUiMessages } from "../../i18n/messages/multiviewUi.ts";
+import { bind } from "../../i18n/runtime.ts";
+
+const t = bind(multiviewUiMessages);
+
 export type SwitchTeam = {
   name: string;
   short?: string;
@@ -84,10 +89,10 @@ function actionable(game: SwitchGame): boolean {
 }
 
 function classify(game: SwitchGame, prev: SwitchGame | undefined, hasPrev: boolean): [string, Rank] {
-  if (game.redZone && sportOf(game.league ?? "") === "football") return ["Red zone", 3];
-  if (game.powerPlay && sportOf(game.league ?? "") === "hockey") return ["Power play", 3];
-  if (hasPrev && prev && leadChanged(game, prev)) return ["Lead change", 2];
-  if (closeFinish(game)) return ["Final minutes", 1];
+  if (game.redZone && sportOf(game.league ?? "") === "football") return [t("mv.redZone"), 3];
+  if (game.powerPlay && sportOf(game.league ?? "") === "hockey") return [t("mv.powerPlay"), 3];
+  if (hasPrev && prev && leadChanged(game, prev)) return [t("mv.leadChange"), 2];
+  if (closeFinish(game)) return [t("mv.finalMinutes"), 1];
   return ["", 0];
 }
 
@@ -100,8 +105,8 @@ function matchup(game: SwitchGame): string {
   const teams = game.teams ?? [];
   const home = teams.find((team) => team.home);
   const away = home ? teams.find((team) => team.abbr !== home.abbr || team.name !== home.name) : undefined;
-  if (home && away) return `${label(away)} at ${label(home)}`;
-  if (game.shortName) return game.shortName.replace(" @ ", " at ");
+  if (home && away) return t("mv.at", { away: label(away), home: label(home) });
+  if (game.shortName) return game.shortName.replace(" @ ", ` ${t("mv.atWord")} `);
   return game.name ?? "";
 }
 

@@ -7,23 +7,31 @@ public enum LastSeen: Sendable {
         guard let iso, !iso.isEmpty, let then = parsed(iso) else { return "" }
         let sec = max(0, Int(now.timeIntervalSince(then).rounded()))
         if sec < 45 {
-            return "just now"
+            return String(localized: "just now", bundle: .module)
         }
         let minutes = Int((Double(sec) / 60).rounded())
         if minutes < 60 {
-            return minutes == 1 ? "1 minute ago" : "\(minutes) minutes ago"
+            return minutes == 1
+                ? String(localized: "1 minute ago", bundle: .module)
+                : String(localized: "\(String(minutes)) minutes ago", bundle: .module)
         }
         let hours = Int((Double(minutes) / 60).rounded())
         if hours < 24 {
-            return hours == 1 ? "1 hour ago" : "\(hours) hours ago"
+            return hours == 1
+                ? String(localized: "1 hour ago", bundle: .module)
+                : String(localized: "\(String(hours)) hours ago", bundle: .module)
         }
         let days = Int((Double(hours) / 24).rounded())
-        return days == 1 ? "1 day ago" : "\(days) days ago"
+        return days == 1
+            ? String(localized: "1 day ago", bundle: .module)
+            : String(localized: "\(String(days)) days ago", bundle: .module)
     }
 
     /// The card line. No time when the device has never answered.
     public static func offline(_ when: String) -> String {
-        when.isEmpty ? "Offline." : "Offline. Last seen \(when)."
+        when.isEmpty
+            ? String(localized: "Offline.", bundle: .module)
+            : String(localized: "Offline. Last seen \(when).", bundle: .module)
     }
 
     private static func parsed(_ iso: String) -> Date? {

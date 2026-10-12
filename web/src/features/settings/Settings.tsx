@@ -3,12 +3,17 @@ import type { CatalogBackup, Settings, StorageInfo, StorageShow } from "../../ty
 import { getEvents, getStorageShows, getTuners, listBackups, restoreBackup } from "../../api";
 import { navigate } from "../../app/router";
 import { authHeaders } from "../../lib/deviceToken";
+import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
+import { bind, formatDateTime } from "../../i18n/runtime.ts";
 import { copy } from "../../strings";
 import { formatBytes } from "../../lib/format";
 import { browserName, readLiveDelay, saveLiveDelay, type LiveDelay } from "../../lib/events";
 import { saveScreenName } from "./screenName";
 import { tunerLine as describeTuners } from "./deviceCard";
 import { settingTextCommit, settingTextDraft, shownSettingText } from "./field";
+
+const t = bind(settingsUiMessages);
+
 export function SettingsScreen({
   settings,
   storage,
@@ -24,7 +29,7 @@ export function SettingsScreen({
   const [screenName, setScreenName] = useState(browserName);
   const [encoder, setEncoder] = useState("");
   const [delay, setDelay] = useState<LiveDelay>(readLiveDelay);
-  const [tunerLine, setTunerLine] = useState("Checking tuners.");
+  const [tunerFacts, setTunerFacts] = useState<{ busy: number; answering: number } | "down" | null>(null);
   const [lastEvent, setLastEvent] = useState("");
   useEffect(() => {
     let stop = false;
@@ -33,10 +38,10 @@ export function SettingsScreen({
         if (stop) return;
         setEncoder(res.encoder || "");
         const busy = (res.tuners ?? []).filter((tuner) => tuner.guide || tuner.target).length;
-        setTunerLine(describeTuners(busy, (res.tuners ?? []).length, tunerCount));
+        setTunerFacts({ busy, answering: (res.tuners ?? []).length });
       })
       .catch(() => {
-        if (!stop) setTunerLine("Tuner status is not available yet.");
+        if (!stop) setTunerFacts("down");
       });
     void getEvents()
       .then((res) => {
@@ -47,12 +52,14 @@ export function SettingsScreen({
       stop = true;
     };
   }, [tunerCount]);
+  const tunerLine =
+    tunerFacts == null ? t("settings.checkingTuners") : tunerFacts === "down" ? t("settings.tunersUnavailable") : describeTuners(tunerFacts.busy, tunerFacts.answering, tunerCount);
   return (
     <section className="page">
       <div className="page-head">
         <h2>{copy.settings.title}</h2>
       </div>
-      <h3 className="section-title">This screen</h3>
+      <h3 className="section-title">{t("settings.thisScreen")}</h3>
       <label className="field">
         {copy.settings.screenName}
         <input
@@ -72,21 +79,21 @@ export function SettingsScreen({
         />
         <span className="hint">{copy.settings.screenNameHint}</span>
       </label>
-      <h3 className="section-title">Picture</h3>
+      <h3 className="section-title">{t("settings.picture")}</h3>
       <article className="quiet-card wide">
-        <h3>This server</h3>
-        <p>{encoder ? `Picture encoder ${encoder}.` : "Picture encoder is still being detected."}</p>
+        <h3>{t("settings.thisServer")}</h3>
+        <p>{encoder ? t("settings.encoder", { name: encoder }) : t("settings.encoderPending")}</p>
         <p>{tunerLine}</p>
         {storage ? <p>{storageLine(storage)}</p> : null}
-        {lastEvent ? <p>Latest activity: {lastEvent}</p> : null}
+        {lastEvent ? <p>{t("settings.latest", { event: lastEvent })}</p> : null}
       </article>
       <label className="field">
         {copy.settings.profile}
-        <input value="Home" readOnly />
+        <input value={t("settings.homeProfile")} readOnly />
       </label>
       <div className="field">
-        <span>Picture</span>
-        <div className="segmented" role="group" aria-label="Picture motion">
+        <span>{t("settings.picture")}</span>
+        <div className="segmented" role="group" aria-label={t("settings.pictureMotion")}>
           {(["broadcast", "smooth", "film"] as const).map((item) => (
             <button
               key={item}
@@ -95,11 +102,11 @@ export function SettingsScreen({
               aria-pressed={settings.pictureMode === item}
               onClick={() => onChange({ pictureMode: item })}
             >
-              {item === "broadcast" ? "Broadcast" : item === "smooth" ? "Smooth" : "Film"}
+              {item === "broadcast" ? t("settings.broadcast") : item === "smooth" ? t("settings.smooth") : t("settings.film")}
             </button>
           ))}
         </div>
-        <span className="hint">Broadcast rebuilds interlaced channels at 60 frames a second. Smooth adds motion compensation when this server can hold it. Film is for movies.</span>
+        <span className="hint">{t("settings.pictureHint")}</span>
       </div>
       <label className="field">
         {copy.settings.adaptive}
@@ -126,13 +133,13 @@ export function SettingsScreen({
                 saveLiveDelay(item);
               }}
             >
-              {item === "lowest" ? "Lowest" : item === "balanced" ? "Balanced" : "Stable"}
+              {item === "lowest" ? t("settings.lowest") : item === "balanced" ? t("settings.balanced") : t("settings.stable")}
             </button>
           ))}
         </div>
         <span className="hint">{copy.settings.liveDelayHint}</span>
       </div>
-      <h3 className="section-title">Guide</h3>
+      <h3 className="section-title">{t("settings.guide")}</h3>
       <GuideText
         label={copy.settings.guideAccount}
         value={settings.sdUser ?? ""}
@@ -141,11 +148,11 @@ export function SettingsScreen({
         onSave={(sdUser) => onChange({ sdUser })}
       />
       <label className="field">
-        Password
+        {t("settings.password")}
         <input
           type="password"
           autoComplete="current-password"
-          placeholder={settings.sdPasswordSet === "1" ? "Saved" : ""}
+          placeholder={settings.sdPasswordSet === "1" ? t("settings.saved") : ""}
           onBlur={(event) => {
             const value = event.target.value;
             if (value) onChange({ sdPassword: value });
@@ -162,7 +169,7 @@ export function SettingsScreen({
         label={copy.settings.guideAddress}
         value={settings.guideUrl ?? ""}
         hint={copy.settings.guideAddressHint}
-        placeholder="https://"
+        placeholder={t("settings.guidePlaceholder")}
         onSave={(guideUrl) => onChange({ guideUrl })}
       />
       <label className="field">
@@ -171,7 +178,7 @@ export function SettingsScreen({
           type="password"
           autoComplete="off"
           spellCheck={false}
-          placeholder={settings.tmdbKeySet === "1" ? "Saved" : ""}
+          placeholder={settings.tmdbKeySet === "1" ? t("settings.saved") : ""}
           onBlur={(event) => {
             const value = event.target.value;
             if (value) onChange({ tmdbKey: value });
@@ -180,13 +187,13 @@ export function SettingsScreen({
         />
         <span className="hint">{copy.settings.movieArtHint}</span>
       </label>
-      <h3 className="section-title">Sports</h3>
+      <h3 className="section-title">{t("settings.sports")}</h3>
       <p className="hint">{settings.sportsdbKeySet === "1" ? copy.settings.scoresFromSportsDB : copy.settings.scoresFrom}</p>
       <label className="field">
         {copy.settings.liveScores}
         <select value={settings.liveScores || "1"} onChange={(event) => onChange({ liveScores: event.target.value })}>
-          <option value="1">On</option>
-          <option value="0">Off</option>
+          <option value="1">{t("settings.on")}</option>
+          <option value="0">{t("settings.off")}</option>
         </select>
         <span className="hint">{copy.settings.liveScoresHint}</span>
       </label>
@@ -196,7 +203,7 @@ export function SettingsScreen({
           type="password"
           autoComplete="off"
           spellCheck={false}
-          placeholder={settings.sportsdbKeySet === "1" ? "Saved" : ""}
+          placeholder={settings.sportsdbKeySet === "1" ? t("settings.saved") : ""}
           onBlur={(event) => {
             const value = event.target.value;
             if (value) onChange({ sportsdbKey: value });
@@ -208,44 +215,42 @@ export function SettingsScreen({
       <label className="field">
         {copy.settings.hideScores}
         <select value={settings.hideScores || "0"} onChange={(event) => onChange({ hideScores: event.target.value })}>
-          <option value="0">Show</option>
-          <option value="1">Hide</option>
+          <option value="0">{t("settings.show")}</option>
+          <option value="1">{t("settings.hide")}</option>
         </select>
         <span className="hint">{copy.settings.hideScoresHint}</span>
       </label>
       <label className="field">
-        Game alerts
+        {t("settings.gameAlerts")}
         <select
           value={settings.gameAlerts === "teams" || settings.gameAlerts === "off" ? settings.gameAlerts : "all"}
           onChange={(event) => onChange({ gameAlerts: event.target.value as Settings["gameAlerts"] })}
         >
-          <option value="all">Your teams and close games</option>
-          <option value="teams">Your teams only</option>
-          <option value="off">Off</option>
+          <option value="all">{t("settings.alertsAll")}</option>
+          <option value="teams">{t("settings.alertsTeams")}</option>
+          <option value="off">{t("settings.off")}</option>
         </select>
-        <span className="hint">
-          A note when a team you follow starts playing, or a game on your channels comes down to the last minutes. A game you&apos;re recording and haven&apos;t watched gets no score and no close-game note.
-        </span>
+        <span className="hint">{t("settings.alertsHint")}</span>
       </label>
-      <h3 className="section-title">DVR</h3>
+      <h3 className="section-title">{t("settings.dvr")}</h3>
       <label className="field">
-        Play the next episode
+        {t("settings.autoplay")}
         <select value={settings.autoplay || "1"} onChange={(event) => onChange({ autoplay: event.target.value })}>
-          <option value="1">On</option>
-          <option value="0">Off</option>
+          <option value="1">{t("settings.on")}</option>
+          <option value="0">{t("settings.off")}</option>
         </select>
       </label>
-      <h3 className="section-title">Storage</h3>
+      <h3 className="section-title">{t("settings.storage")}</h3>
       <label className="field">
         {copy.settings.layout}
         <select
           value={settings.layout}
           onChange={(event) => onChange({ layout: event.target.value as Settings["layout"] })}
         >
-          <option value="auto">Auto</option>
-          <option value="desktop">Desktop</option>
-          <option value="tv">TV</option>
-          <option value="phone">Phone</option>
+          <option value="auto">{t("settings.layoutAuto")}</option>
+          <option value="desktop">{t("settings.layoutDesktop")}</option>
+          <option value="tv">{t("settings.layoutTv")}</option>
+          <option value="phone">{t("settings.layoutPhone")}</option>
         </select>
         <span className="hint">{copy.settings.layoutHint}</span>
       </label>
@@ -256,17 +261,15 @@ export function SettingsScreen({
       </label>
       <ShowSpace />
       <label className="field">
-        Recording folders
+        {t("settings.folders")}
         <select
           value={settings.folderLayout === "flat" ? "flat" : "shows"}
           onChange={(event) => onChange({ folderLayout: event.target.value === "flat" ? "flat" : "shows" })}
         >
-          <option value="shows">By show, for Plex and Jellyfin</option>
-          <option value="flat">All in one folder</option>
+          <option value="shows">{t("settings.foldersByShow")}</option>
+          <option value="flat">{t("settings.foldersFlat")}</option>
         </select>
-        <span className="hint">
-          By show puts new recordings in TV/Show/Season 01 and Movies/Title (Year). Point a TV library at TV and a movie library at Movies.
-        </span>
+        <span className="hint">{t("settings.foldersHint")}</span>
       </label>
       <label className="field">
         {copy.settings.nfo}
@@ -274,30 +277,30 @@ export function SettingsScreen({
           value={settings.writeNfo === "1" ? "1" : "0"}
           onChange={(event) => onChange({ writeNfo: event.target.value === "1" ? "1" : "0" })}
         >
-          <option value="0">Off</option>
-          <option value="1">On</option>
+          <option value="0">{t("settings.off")}</option>
+          <option value="1">{t("settings.on")}</option>
         </select>
         <span className="hint">{copy.settings.nfoHint}</span>
       </label>
       <ReserveField value={settings.watermarkGB || "10"} storage={storage} onSave={(watermarkGB) => onChange({ watermarkGB })} />
       <label className="field">
-        When space runs low
+        {t("settings.lowSpace")}
         <select value={settings.makeRoom === "1" ? "1" : "0"} onChange={(event) => onChange({ makeRoom: event.target.value === "1" ? "1" : "0" })}>
-          <option value="0">Skip new recordings</option>
-          <option value="1">Delete the oldest watched</option>
+          <option value="0">{t("settings.skipNew")}</option>
+          <option value="1">{t("settings.deleteOldest")}</option>
         </select>
-        <span className="hint">Delete makes room before a new recording is skipped, oldest watched first. Unwatched and kept recordings stay.</span>
+        <span className="hint">{t("settings.lowSpaceHint")}</span>
       </label>
       <label className="field">
-        Delete watched recordings
+        {t("settings.deleteWatched")}
         <select value={watchedDays(settings.deleteWatchedDays)} onChange={(event) => onChange({ deleteWatchedDays: event.target.value })}>
           {watchedChoices(settings.deleteWatchedDays).map((days) => (
             <option key={days} value={days}>
-              {days === "0" ? "Never" : days === "1" ? "After 1 day" : `After ${days} days`}
+              {t("settings.afterDays", Number(days))}
             </option>
           ))}
         </select>
-        <span className="hint">Counts from when a recording was played to its end or marked watched. Recordings you keep forever stay.</span>
+        <span className="hint">{t("settings.deleteWatchedHint")}</span>
       </label>
       <label className="field">
         Favorite channels
@@ -316,11 +319,11 @@ export function SettingsScreen({
           value={settings.bufferMinutes ?? "60"}
           onChange={(event) => onChange({ bufferMinutes: event.target.value as Settings["bufferMinutes"] })}
         >
-          <option value="0">Off</option>
-          <option value="30">30 minutes</option>
-          <option value="60">1 hour</option>
-          <option value="120">2 hours</option>
-          <option value="240">4 hours</option>
+          <option value="0">{t("settings.off")}</option>
+          <option value="30">{t("settings.minutes30")}</option>
+          <option value="60">{t("settings.hour1")}</option>
+          <option value="120">{t("settings.hours2")}</option>
+          <option value="240">{t("settings.hours4")}</option>
         </select>
         <span className="hint">{copy.settings.bufferHint}</span>
       </label>
@@ -337,31 +340,31 @@ export function SettingsScreen({
           const file = input.files?.[0];
           if (!file) return;
           void fetch("/api/v1/backup", { method: "POST", body: file, headers: authHeaders() }).then((res) => {
-            if (!res.ok) throw new Error("Restore failed");
+            if (!res.ok) throw new Error(t("settings.restoreError"));
             window.location.reload();
           });
         }}
       >
         <label>
-          Restore a catalog backup
+          {t("settings.restoreCatalog")}
           <input name="backup" type="file" accept=".db" />
         </label>
         <button type="submit" className="btn">{copy.settings.restore}</button>
       </form>
       <p className="hint">{copy.settings.backupHint}</p>
-      <h3 className="section-title">Updates</h3>
+      <h3 className="section-title">{t("settings.updates")}</h3>
       <label className="field">
         {copy.settings.updates}
         <select
           value={settings.checkUpdates === "0" ? "0" : "1"}
           onChange={(event) => onChange({ checkUpdates: event.target.value })}
         >
-          <option value="1">On</option>
-          <option value="0">Off</option>
+          <option value="1">{t("settings.on")}</option>
+          <option value="0">{t("settings.off")}</option>
         </select>
         <span className="hint">{copy.settings.updatesHint}</span>
       </label>
-      <h3 className="section-title">Support</h3>
+      <h3 className="section-title">{t("settings.support")}</h3>
       <a className="btn" href="/api/v1/support">
         {copy.settings.support}
       </a>
@@ -403,7 +406,7 @@ function ShowSpace() {
         <ul className="source-list">
           {rows.map((row) => {
             const href = `/recordings?show=${encodeURIComponent(row.title)}`;
-            const count = row.count === 1 ? "1 recording" : `${row.count} recordings`;
+            const count = t("settings.recordingsCount", row.count);
             return (
               <li key={row.title} className="source-row">
                 <a
@@ -508,7 +511,7 @@ function backupKind(kind: string) {
 function backupWhen(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return formatDateTime(date);
 }
 
 function GuideText({
@@ -560,7 +563,7 @@ function ReserveField({ value, storage, onSave }: { value: string; storage: Stor
         type="number"
         min={0}
         max={1000000}
-        aria-label="Gigabytes to keep free"
+        aria-label={t("settings.reserveAria")}
         value={text}
         onChange={(event) => setTyped(event.target.value)}
         onBlur={() => {
@@ -595,6 +598,6 @@ function watchedChoices(raw: string | undefined) {
 }
 
 function storageLine(storage: StorageInfo) {
-  const reserve = storage.watermarkGB === 0 ? "The free-space reserve is off." : `New recordings stop under ${storage.watermarkGB} GB.`;
-  return `${formatBytes(storage.freeBytes)} free of ${formatBytes(storage.totalBytes)}. ${reserve}`;
+  const reserve = storage.watermarkGB === 0 ? t("settings.reserveOff") : t("settings.reserveStop", { gb: storage.watermarkGB });
+  return `${t("settings.storageFree", { free: formatBytes(storage.freeBytes), total: formatBytes(storage.totalBytes) })} ${reserve}`;
 }

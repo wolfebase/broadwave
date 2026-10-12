@@ -29,6 +29,8 @@ targetTemplates:
       - path: App/Shared
       - path: App/DemoMedia
         type: folder
+      # One English catalog for every app target. Each target copies it into its own bundle.
+      - path: App/Localizable.xcstrings
     dependencies:
       - package: BroadwaveKit
       - package: BroadwaveUI
@@ -81,6 +83,7 @@ targets:
     sources:
       - path: App/Widgets
       - path: App/Intents
+      - path: App/Localizable.xcstrings
     dependencies:
       - package: BroadwaveKit
       - package: BroadwaveUI
@@ -108,6 +111,7 @@ targets:
     platform: watchOS
     sources:
       - path: App/Watch
+      - path: App/Localizable.xcstrings
       # The message format the iPhone app answers; compiled here without the rest of the kit.
       - path: Packages/BroadwaveKit/Sources/BroadwaveKit/WatchRelay.swift
     settings:
@@ -158,6 +162,7 @@ targets:
     platform: tvOS
     sources:
       - path: App/TopShelf
+      - path: App/Localizable.xcstrings
     dependencies:
       - package: BroadwaveKit
       - sdk: TVServices.framework

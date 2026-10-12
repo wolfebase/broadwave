@@ -1381,10 +1381,10 @@ struct PlayerScreen: View {
             VStack(alignment: .leading, spacing: 10) {
                 if let channel = nowPlaying.channel {
                     let airing = store.index.on(channel.id, at: store.now)
-                    Text("\(channel.displayNumber)  \(channel.displayName)")
+                    Text(String(localized: "guide.channelName", defaultValue: "\(channel.displayNumber)  \(channel.displayName)"))
                         .font(.headline)
                         .accessibilityIdentifier("player-chrome")
-                    Text(airing?.title ?? "No listing")
+                    Text(airing?.title ?? String(localized: "No listing"))
                         .font(.title2.weight(.bold))
                         .lineLimit(1)
                     if let airing {
@@ -1536,10 +1536,10 @@ struct PlayerScreen: View {
             VStack(alignment: .leading, spacing: 2) {
                 if let channel = nowPlaying.channel {
                     let airing = store.index.on(channel.id, at: store.now)
-                    Text("\(channel.displayNumber)  \(channel.displayName)")
+                    Text(String(localized: "guide.channelName", defaultValue: "\(channel.displayNumber)  \(channel.displayName)"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.86))
-                    Text(airing?.title ?? "No listing")
+                    Text(airing?.title ?? String(localized: "No listing"))
                         .font(.title2.weight(.bold))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1560,7 +1560,7 @@ struct PlayerScreen: View {
                 VStack(spacing: 0) {
                     ForEach(store.channels) { channel in
                         let airing = store.index.on(channel.id, at: store.now)
-                        let title = airing?.title ?? "No listing"
+                        let title = airing?.title ?? String(localized: "No listing")
                         Button {
                             nowPlaying.channel = channel
                             showGuide = false
@@ -2737,8 +2737,8 @@ struct RecordingPlayerScreen: View {
         }
         if case let .card(left) = upNextStep, let next = nextEpisode {
             let label = next.upNextLabel
-            let title = left.map { "Up next: \(label) · \($0) s" } ?? "Up next: \(label)"
-            let spoken = left.map { "Up next, \(label). Playing in \($0) seconds." } ?? "Up next, \(label). Play now."
+            let title = left.map { String(localized: "Up next: \(label) · \($0) s") } ?? String(localized: "Up next: \(label)")
+            let spoken = left.map { String(localized: "Up next, \(label). Playing in \($0) seconds.") } ?? String(localized: "Up next, \(label). Play now.")
             return [FileMenuEntry(id: "up-next", title: title, symbol: "play.fill", spoken: spoken) { playEpisode(next) }]
         }
         return []

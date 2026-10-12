@@ -36,7 +36,7 @@ public struct ScoreGame: Codable, Sendable, Hashable, Identifiable {
               let awayScore = away.score, !awayScore.isEmpty else { return nil }
         let awayName = away.abbr ?? away.short ?? away.name
         let homeName = home.abbr ?? home.short ?? home.name
-        return "\(awayName) \(awayScore) · \(homeName) \(homeScore)"
+        return String(localized: "score.line", defaultValue: "\(awayName) \(awayScore) · \(homeName) \(homeScore)", bundle: .module)
     }
 }
 
@@ -141,13 +141,14 @@ public extension Pass {
         switch isOnce || isTeam ? kind : matchKind {
         case "once":
             guard let start = airingStart else { return title }
-            return "\(title) · \(start.formatted(.dateTime.weekday(.abbreviated).hour().minute())) only"
+            let when = start.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+            return String(localized: "\(title) · \(when) only", bundle: .module)
         case "team":
-            return "\(title) games"
+            return String(localized: "\(title) games", bundle: .module)
         case "contains":
-            return "Titles with “\(title)”"
+            return String(localized: "Titles with “\(title)”", bundle: .module)
         case "category":
-            return "\(title) (category)"
+            return String(localized: "\(title) (category)", bundle: .module)
         default:
             return title
         }
@@ -157,7 +158,7 @@ public extension Pass {
     func details(channel: String?) -> String {
         var parts: [String] = []
         if !isOnce {
-            parts.append(channel ?? "Any channel")
+            parts.append(channel ?? String(localized: "Any channel", bundle: .module))
         }
         if let days, !days.isEmpty {
             parts.append(Self.daysLabel(days))
@@ -166,17 +167,21 @@ public extension Pass {
             parts.append("\(Self.clockLabel(from))–\(Self.clockLabel(until))")
         }
         if episodes == "new" {
-            parts.append("New only")
+            parts.append(String(localized: "New only", bundle: .module))
         }
         switch keepMode {
-        case "unwatched": parts.append("Keeps unwatched")
-        case "last": parts.append("Keeps the newest \(max(keepCount ?? 1, 1))")
+        case "unwatched": parts.append(String(localized: "Keeps unwatched", bundle: .module))
+        case "last":
+            let kept = max(keepCount ?? 1, 1)
+            parts.append(String(localized: "Keeps the newest \(String(kept))", bundle: .module))
         default: break
         }
         if let limit = limitCount, limit > 0 {
-            parts.append("Stops at \(limit) unwatched")
+            parts.append(String(localized: "Stops at \(String(limit)) unwatched", bundle: .module))
         }
-        parts.append("\(padBefore ?? 0) min early, \(padAfter ?? 0) after")
+        let early = padBefore ?? 0
+        let after = padAfter ?? 0
+        parts.append(String(localized: "\(String(early)) min early, \(String(after)) after", bundle: .module))
         return parts.joined(separator: " · ")
     }
 
@@ -191,9 +196,9 @@ public extension Pass {
     static func daysLabel(_ days: [Int]) -> String {
         let set = Set(days.filter { (0 ... 6).contains($0) })
         switch set {
-        case [], [0, 1, 2, 3, 4, 5, 6]: return "Every day"
-        case [1, 2, 3, 4, 5]: return "Weekdays"
-        case [0, 6]: return "Weekends"
+        case [], [0, 1, 2, 3, 4, 5, 6]: return String(localized: "Every day", bundle: .module)
+        case [1, 2, 3, 4, 5]: return String(localized: "Weekdays", bundle: .module)
+        case [0, 6]: return String(localized: "Weekends", bundle: .module)
         default:
             let names = dayNames
             return set.sorted().map { names[$0] }.joined(separator: ", ")
@@ -264,10 +269,10 @@ public extension Recording {
     /// Nothing for a finished recording; the others say what happened.
     var statusLabel: String? {
         switch status {
-        case "recording": "Recording"
-        case "failed": "Failed"
-        case "stopped": "Stopped early"
-        case "imported": "Imported"
+        case "recording": String(localized: "Recording", bundle: .module)
+        case "failed": String(localized: "Failed", bundle: .module)
+        case "stopped": String(localized: "Stopped early", bundle: .module)
+        case "imported": String(localized: "Imported", bundle: .module)
         default: nil
         }
     }
@@ -281,16 +286,16 @@ public extension Recording {
         guard let health else { return nil }
         let lost = Int((health.lostSeconds ?? 0).rounded())
         if lost >= 1 {
-            return "Signal dropped for \(lost) s"
+            return String(localized: "Signal dropped for \(String(lost)) s", bundle: .module)
         }
         let times = health.continuityErrors + health.transportErrors + health.syncLosses
         if times <= 0 {
             return nil
         }
         if times == 1 {
-            return "Signal broke up once"
+            return String(localized: "Signal broke up once", bundle: .module)
         }
-        return "Signal broke up \(times) times"
+        return String(localized: "Signal broke up \(String(times)) times", bundle: .module)
     }
 
     /// Worth recording again: the server counted enough lost signal.
@@ -378,18 +383,22 @@ public extension PlannedAiring {
             if let reason, !reason.isEmpty {
                 return reason
             }
-            return tuners == 1 ? "Lower priority · 1 tuner" : "Lower priority · \(tuners) tuners"
+            return tuners == 1
+                ? String(localized: "Lower priority · 1 tuner", bundle: .module)
+                : String(localized: "Lower priority · \(String(tuners)) tuners", bundle: .module)
         }
         let window = recordWindow
-        return "Will record \(window.lowerBound.formatted(date: .omitted, time: .shortened))–\(window.upperBound.formatted(date: .omitted, time: .shortened))"
+        let start = window.lowerBound.formatted(date: .omitted, time: .shortened)
+        let end = window.upperBound.formatted(date: .omitted, time: .shortened)
+        return String(localized: "Will record \(start)–\(end)", bundle: .module)
     }
 
     func laterLine(_ later: Suggestion) -> String {
         let when = later.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
         if let number = later.guideNumber, !number.isEmpty {
-            return "Later on \(when) on \(number)."
+            return String(localized: "Later on \(when) on \(number).", bundle: .module)
         }
-        return "Later on \(when)."
+        return String(localized: "Later on \(when).", bundle: .module)
     }
 }
 
@@ -403,9 +412,9 @@ public enum BreakSkip: String, CaseIterable, Sendable {
 
     public var label: String {
         switch self {
-        case .auto: "Skip them"
-        case .button: "Show a Skip button"
-        case .manual: "Play them"
+        case .auto: String(localized: "Skip them", bundle: .module)
+        case .button: String(localized: "Show a Skip button", bundle: .module)
+        case .manual: String(localized: "Play them", bundle: .module)
         }
     }
 
