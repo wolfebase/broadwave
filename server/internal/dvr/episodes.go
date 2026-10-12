@@ -34,7 +34,9 @@ const maxEpisodes = 8
 // FindEpisodeEnds prints the sound of a recording's ends and compares it with
 // other recordings of its show, for where its intro and end titles are. The
 // first recording of a show has nothing to compare with, so each later one
-// also fills in the others that have no intro yet.
+// also fills in the others. An intro that is already set stays. End titles
+// are filled in when they were missing, including when that episode already
+// has its intro.
 func FindEpisodeEnds(ctx context.Context, st *store.Store, ffmpeg string, rec store.Recording) error {
 	length := rec.Duration
 	if length <= 0 {
@@ -71,7 +73,7 @@ func FindEpisodeEnds(ctx context.Context, st *store.Store, ffmpeg string, rec st
 	}
 	for _, sib := range siblings {
 		mine, ok := loaded[sib.ID]
-		if sib.IntroEnd > 0 || !ok {
+		if !ok || (sib.IntroEnd > 0 && sib.CreditsStart > 0) {
 			continue
 		}
 		rest := []breaks.Episode{self}
@@ -80,9 +82,18 @@ func FindEpisodeEnds(ctx context.Context, st *store.Store, ffmpeg string, rec st
 				rest = append(rest, e)
 			}
 		}
-		if e := breaks.FindEnds(mine, rest); e.IntroEnd > 0 {
-			_ = st.SetEpisodeEnds(ctx, sib.ID, e.IntroStart, e.IntroEnd, e.Credits)
+		e := breaks.FindEnds(mine, rest)
+		introStart, introEnd, credits := sib.IntroStart, sib.IntroEnd, sib.CreditsStart
+		if introEnd == 0 && e.IntroEnd > 0 {
+			introStart, introEnd = e.IntroStart, e.IntroEnd
 		}
+		if credits == 0 && e.Credits > 0 {
+			credits = e.Credits
+		}
+		if introStart == sib.IntroStart && introEnd == sib.IntroEnd && credits == sib.CreditsStart {
+			continue
+		}
+		_ = st.SetEpisodeEnds(ctx, sib.ID, introStart, introEnd, credits)
 	}
 	return nil
 }

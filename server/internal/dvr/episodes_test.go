@@ -147,6 +147,138 @@ func TestALibraryFileIgnoresAListingOfTheSameName(t *testing.T) {
 	}
 }
 
+// The episodes share a closing theme and nothing else. The one listened to
+// first has no intro, and the end titles are still marked on it.
+func TestFindEpisodeEndsFillsCreditsOnTheEarlierEpisode(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	outro := prints(9, 30, nil, 0)
+	heads := map[string][]uint32{
+		"/lib/one.ts": prints(3, 200, nil, 0),
+		"/lib/two.ts": prints(4, 200, nil, 0),
+	}
+	tails := map[string][]uint32{
+		"/lib/one.ts": prints(7, 120, outro, 0),
+		"/lib/two.ts": prints(8, 120, outro, 0),
+	}
+	old := listenFile
+	listenFile = func(_ context.Context, _, path string, _ float64) (breaks.Sound, error) {
+		return breaks.Sound{Head: heads[path], Tail: tails[path], TailFrom: 3000}, nil
+	}
+	t.Cleanup(func() { listenFile = old })
+	add := func(path string, episode int) int64 {
+		t.Helper()
+		id, err := st.CreateRecording(ctx, store.Recording{
+			Title: "Harbor", Path: path, Status: "complete",
+			Season: 1, Episode: episode, StartedAt: time.Now().AddDate(0, 0, -episode),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.SetDuration(ctx, id, 3600); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	one := add("/lib/one.ts", 1)
+	if err := FindEpisodeEnds(ctx, st, "", mustRec(t, st, one)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := st.Recording(ctx, one); got.CreditsStart != 0 || got.IntroEnd != 0 {
+		t.Fatalf("first listen: intro %v credits %v", got.IntroEnd, got.CreditsStart)
+	}
+	two := add("/lib/two.ts", 2)
+	if err := FindEpisodeEnds(ctx, st, "", mustRec(t, st, two)); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []int64{one, two} {
+		got, _ := st.Recording(ctx, id)
+		if math.Abs(got.CreditsStart-3000) > 1 {
+			t.Fatalf("recording %d: credits %v, want 3000", id, got.CreditsStart)
+		}
+		if got.IntroEnd != 0 {
+			t.Fatalf("recording %d: intro %v, want none", id, got.IntroEnd)
+		}
+	}
+}
+
+// An episode that already has its intro still gets the end titles when a
+// later episode shares only the closing theme. The intro stays where it was.
+func TestFindEpisodeEndsFillsCreditsAfterTheIntroIsSet(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	theme := prints(1, 30, nil, 0)
+	outro := prints(9, 30, nil, 0)
+	heads := map[string][]uint32{
+		"/lib/one.ts":   prints(3, 1200, theme, 90),
+		"/lib/two.ts":   prints(4, 1200, theme, 200),
+		"/lib/three.ts": prints(5, 200, nil, 0),
+	}
+	tails := map[string][]uint32{
+		"/lib/one.ts":   prints(7, 120, outro, 0),
+		"/lib/two.ts":   prints(8, 120, nil, 0),
+		"/lib/three.ts": prints(6, 120, outro, 0),
+	}
+	old := listenFile
+	listenFile = func(_ context.Context, _, path string, _ float64) (breaks.Sound, error) {
+		return breaks.Sound{Head: heads[path], Tail: tails[path], TailFrom: 3000}, nil
+	}
+	t.Cleanup(func() { listenFile = old })
+	add := func(path string, episode int) int64 {
+		t.Helper()
+		id, err := st.CreateRecording(ctx, store.Recording{
+			Title: "Harbor", Path: path, Status: "complete",
+			Season: 1, Episode: episode, StartedAt: time.Now().AddDate(0, 0, -episode),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.SetDuration(ctx, id, 3600); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	one := add("/lib/one.ts", 1)
+	if err := FindEpisodeEnds(ctx, st, "", mustRec(t, st, one)); err != nil {
+		t.Fatal(err)
+	}
+	two := add("/lib/two.ts", 2)
+	if err := FindEpisodeEnds(ctx, st, "", mustRec(t, st, two)); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := st.Recording(ctx, one)
+	if math.Abs(got.IntroStart-90) > 1 || math.Abs(got.IntroEnd-120) > 1 || got.CreditsStart != 0 {
+		t.Fatalf("before the closing theme: intro %v-%v credits %v", got.IntroStart, got.IntroEnd, got.CreditsStart)
+	}
+	three := add("/lib/three.ts", 3)
+	if err := FindEpisodeEnds(ctx, st, "", mustRec(t, st, three)); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = st.Recording(ctx, one)
+	if math.Abs(got.IntroStart-90) > 1 || math.Abs(got.IntroEnd-120) > 1 {
+		t.Fatalf("intro moved: %v-%v", got.IntroStart, got.IntroEnd)
+	}
+	if math.Abs(got.CreditsStart-3000) > 1 {
+		t.Fatalf("recording %d: credits %v, want 3000", one, got.CreditsStart)
+	}
+	got, _ = st.Recording(ctx, two)
+	if math.Abs(got.IntroStart-200) > 1 || math.Abs(got.IntroEnd-230) > 1 || got.CreditsStart != 0 {
+		t.Fatalf("second episode: intro %v-%v credits %v", got.IntroStart, got.IntroEnd, got.CreditsStart)
+	}
+	got, _ = st.Recording(ctx, three)
+	if got.IntroEnd != 0 || math.Abs(got.CreditsStart-3000) > 1 {
+		t.Fatalf("third episode: intro %v credits %v", got.IntroEnd, got.CreditsStart)
+	}
+}
+
 func mustRec(t *testing.T, st *store.Store, id int64) store.Recording {
 	t.Helper()
 	rec, err := st.Recording(context.Background(), id)
