@@ -57,3 +57,14 @@ func TestHostNetworkingIsNotTheBridge(t *testing.T) {
 		}
 	}
 }
+
+func TestTheRootMountIsNotARecordingsDisk(t *testing.T) {
+	f := Facts{IPs: []string{"203.0.113.4"}, TunerStored: true, HostHasGPU: true, DevDri: true, RecordingsPath: "/data/recordings", Mounts: "overlay / overlay rw 0 0\n", FreeBytes: 40e9, Timezone: "UTC", Now: time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC), UID: 99, PUID: "99", PGID: "100"}
+	if notes := Notes(f); len(notes) != 1 || notes[0].ID != "volume" {
+		t.Fatalf("recordings on the container's root: %+v", notes)
+	}
+	f.Mounts += "/dev/sda /data ext4 rw 0 0\n"
+	if notes := Notes(f); len(notes) != 0 {
+		t.Fatalf("recordings on /data: %+v", notes)
+	}
+}
