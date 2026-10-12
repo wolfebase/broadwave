@@ -2323,6 +2323,7 @@ export interface components {
         TeamFollow: {
             /** Format: int64 */
             id?: number;
+            /** @description A name that is only spaces is 400. */
             name: string;
             short?: string;
             abbr?: string;

@@ -106,6 +106,35 @@ func TestTeamFollowMatchesTheSpec(t *testing.T) {
 	}
 }
 
+func TestBlankTeamNameIsRejected(t *testing.T) {
+	doc := loadOpenAPI(t)
+	schema, ok := asMap(doc.schemas["TeamFollow"])
+	if !ok {
+		t.Fatal("TeamFollow schema missing")
+	}
+	props, _ := asMap(schema["properties"])
+	name, _ := asMap(props["name"])
+	desc, _ := name["description"].(string)
+	if !strings.Contains(desc, "only spaces") {
+		t.Fatalf("name description %q", desc)
+	}
+	api := (&Server{Store: testStore(t), Version: "dev", Staging: true}).Handler()
+	blank := sendJSON(t, api, http.MethodPut, "/api/v1/teams", `{"name":"  "}`)
+	errBody := assertErrorBody(t, doc, http.MethodPut, "/teams", "400", blank)
+	if errBody["code"] != "bad_request" || errBody["message"] != "a team needs a name" {
+		t.Fatalf("%#v", errBody)
+	}
+	body := successBody(t, doc, http.MethodPut, "/teams", sendJSON(t, api, http.MethodPut, "/api/v1/teams", `{"name":" Harbor Watch ","abbr":"HBR"}`))
+	teams := numberList(t, body["teams"])
+	if len(teams) != 1 {
+		t.Fatalf("teams %#v", body["teams"])
+	}
+	team, ok := teams[0].(map[string]any)
+	if !ok || team["name"] != "Harbor Watch" {
+		t.Fatalf("team %#v", teams[0])
+	}
+}
+
 func TestScheduleFixMatchesTheSpec(t *testing.T) {
 	doc := loadOpenAPI(t)
 	st := testStore(t)
