@@ -68,21 +68,23 @@ func TestSiteBuildsTheGuide(t *testing.T) {
 	}
 
 	want := map[string][]string{
-		"install.html":          {"Unraid", "Docker", "8477", "ghcr.io/wolfebase/broadwave", "PUID", "The time zone is not set", "a tuner is in use"},
-		"first-run.html":        {"Let's set up your TV", "Add by address", "The code opens the iPhone app on this server"},
-		"tuners.html":           {"HDHomeRun", "FLEX 4K", "ATSC 3.0", "reference/atsc3.html", "model number"},
-		"channels.html":         {"Schedules Direct", "XMLTV", "answers at once", "While a channel is tuned", "On the guide", "up to 20 titles", "ahead of the others in On now"},
-		"watching.html":         {"iPhone", "iPad", "Apple TV", "8477", "web", "saved on that device", "Look for my server", "Try the demo", "Deinterlaced for smooth motion", "same list"},
-		"multiview.html":        {"Side by side", "Quad", "1080p or smaller", "760 pixels"},
-		"recordings.html":       {"MPEG-TS", "/config/work/recordings", "Keep this much free", "last 15 seconds", "longer than 90 seconds", "first sound track", "hour past the guide", "it deletes none", "The file is gone"},
-		"sync.html":             {"Whole-Home Sync", "Watch together", "Back in sync", "nobody has joined"},
-		"remote.html":           {"Tailscale", "8477", "BROADWAVE_HOSTS", "Funnel", "Require a device to sign in", "8478", "/export/stream/", "can advertise a Tailscale address", "within about 20 seconds", "still connect", "Show a code instead", "not a page on another site"},
-		"troubleshooting.html":  {"isn't coming in", "Diagnostics", "No tuner answered yet", "more than 15 minutes", "do not show that line"},
-		"problems.html":         {"HDHR_HOST", "BROADWAVE_HOSTS", "0.13.0", "HDHR4-2US", "Apple apps' Diagnostics do not"},
-		"faq.html":              {"antenna", "first two tuners", "no Roku app", "Sign in from a paired device.", "about 6 seconds", "Stopping in 8 min.", "Keep this much free", "HDHR4-2US", "03:30", "does not install tuner firmware", "While a channel is tuned", "it deletes none", "starts within two hours", "uses that device's clock"},
-		"security.html":         {"BROADWAVE_HOSTS", securitySentence, "reference/security.html", "port 443", "does not look at HTTPS"},
-		"reference/tuners.html": {"Search the network"},
-		"reference/atsc3.html":  {"FLEX 4K", "model number", "both pictures were already measured", "Save-Data asks for 720p"},
+		"install.html":                   {"Unraid", "Docker", "8477", "ghcr.io/wolfebase/broadwave", "PUID", "The time zone is not set", "a tuner is in use"},
+		"first-run.html":                 {"Let's set up your TV", "Add by address", "The code opens the iPhone app on this server"},
+		"tuners.html":                    {"HDHomeRun", "FLEX 4K", "ATSC 3.0", "reference/atsc3.html", "model number"},
+		"channels.html":                  {"Schedules Direct", "XMLTV", "answers at once", "While a channel is tuned", "On the guide", "up to 20 titles", "ahead of the others in On now"},
+		"watching.html":                  {"iPhone", "iPad", "Apple TV", "8477", "web", "saved on that device", "Look for my server", "Try the demo", "Deinterlaced for smooth motion", "same list"},
+		"multiview.html":                 {"Side by side", "Quad", "1080p or smaller", "760 pixels"},
+		"recordings.html":                {"MPEG-TS", "/config/work/recordings", "Keep this much free", "last 15 seconds", "longer than 90 seconds", "first sound track", "hour past the guide", "it deletes none", "The file is gone", "use that same line"},
+		"sync.html":                      {"Whole-Home Sync", "Watch together", "Back in sync", "nobody has joined"},
+		"remote.html":                    {"Tailscale", "8477", "BROADWAVE_HOSTS", "Funnel", "Require a device to sign in", "8478", "/export/stream/", "can advertise a Tailscale address", "within about 20 seconds", "still connect", "Show a code instead", "not a page on another site"},
+		"troubleshooting.html":           {"isn't coming in", "Diagnostics", "No tuner answered yet", "more than 15 minutes", "do not show that line", "use that same line"},
+		"problems.html":                  {"HDHR_HOST", "BROADWAVE_HOSTS", "0.13.0", "HDHR4-2US", "Apple apps' Diagnostics do not", "use that same line"},
+		"faq.html":                       {"antenna", "first two tuners", "no Roku app", "Sign in from a paired device.", "about 6 seconds", "Stopping in 8 min.", "Keep this much free", "HDHR4-2US", "03:30", "does not install tuner firmware", "While a channel is tuned", "it deletes none", "starts within two hours", "uses that device's clock"},
+		"security.html":                  {"BROADWAVE_HOSTS", securitySentence, "reference/security.html", "port 443", "does not look at HTTPS"},
+		"reference/tuners.html":          {"Search the network"},
+		"reference/troubleshooting.html": {"use that same line"},
+		"reference/recordings.html":      {"use that same line"},
+		"reference/atsc3.html":           {"FLEX 4K", "model number", "both pictures were already measured", "Save-Data asks for 720p"},
 	}
 	for name, needles := range want {
 		page := readOut(t, out, name)

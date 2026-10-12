@@ -1,6 +1,6 @@
 # Troubleshooting
 
-The line on the screen is the whole message. It names what failed and what to try. The player lines below are the same on the web, iPhone, iPad, and Apple TV. The missing-file line is not: on the Apple apps the channel number comes first. The cause, and the problems an update already fixed, are in [Common problems](problems.md).
+The line on the screen is the whole message. It names what failed and what to try. The player lines below are the same on the web, iPhone, iPad, and Apple TV. The cause, and the problems an update already fixed, are in [Common problems](problems.md).
 
 ## Lines you will see
 
@@ -12,7 +12,7 @@ The line on the screen is the whole message. It names what failed and what to tr
 
 **The picture.** "The picture stopped. Trying again usually fixes it." The player starts the channel again on its own. "The picture stopped. Starting it again." means the server no longer has this picture, usually because it restarted.
 
-**The file.** On the web the line is "The file is gone. It was moved or deleted outside Broadwave." On iPhone, iPad, and Apple TV the channel number comes first. The row stays so you can see the title. It does not play. Remove from the list drops it.
+**The file.** The line is the channel number, then "The file is gone. It was moved or deleted outside Broadwave." The web library and the Apple apps use that same line. The row stays so you can see the title. It does not play. Remove from the list drops it.
 
 **Encrypted 3.0.** "The 3.0 version is encrypted. Showing the regular broadcast." Broadwave plays and records the regular channel. [Tuners](tuners.md) explains why.
 
