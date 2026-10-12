@@ -4,7 +4,7 @@ Broadwave has no account password. With device sign-in off, which is the default
 
 ## Public names
 
-The server refuses a public name it was not given. Set `BROADWAVE_HOSTS` when you open it by a name such as `tv.example.com`. A leading dot covers the subdomains. Addresses, one-word names, and home names (`.local`, `.lan`, and a few others) work without that setting. A browser that reaches the server by HTTPS on port 443 is allowed. Any other public name or port needs `BROADWAVE_HOSTS`.
+The server refuses a public name it was not given. Set `BROADWAVE_HOSTS` when you open it by a name such as `tv.example.com`. A leading dot covers the subdomains. Addresses, one-word names, and home names (`.local`, `.lan`, and a few others) work without that setting. A browser that sends `Sec-Fetch-Site` is allowed on port 443, or when the name has no port. The check does not look at HTTPS. The Apple apps do not send that header, so a public name on port 8477 needs `BROADWAVE_HOSTS`.
 
 This stops a web page from calling your server by pointing the page's own name at your server's address.
 
