@@ -6,7 +6,7 @@ Open `http://<your-server>:8477`. The first page is titled "Let's set up your TV
 
 Setup looks for an HDHomeRun on the network and moves on by itself once one answers. The line under the heading says so: "Setup adds an HDHomeRun on this network and moves on by itself. Start adding something else and it waits for you."
 
-The first look says "No tuner answered yet." The page says "Searching…" while Add by address, Look harder, Add free channels, or adding a playlist is running. A tuner that answered shows its name, how many tuners it has, how many channels it listed, and the word Found.
+The first look says "No tuner answered yet." On the web, while no tuner is listed yet, that line says "Searching…" while Add by address, Look harder, Add free channels, or adding a playlist is running. On iPhone, iPad, and Apple TV, Add by address, Look harder, and Add free channels say "Looking…", and adding a playlist says "Adding…". "Searching…" there is the first automatic look. A tuner that answered shows its name, how many tuners it has, how many channels it listed, and the word Found.
 
 If nothing answers, type the tuner's address and choose Add by address. The hint under the field is "A tuner, or a server that speaks HDHomeRun. Add the port if it is not 80." On Docker Desktop, discovery cannot see the tuner. Set `HDHR_HOST` when you start the container, or type the tuner's address here. [Install](install.md) has that command.
 

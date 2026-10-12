@@ -18,7 +18,7 @@ The line on the screen is the whole message. It names what failed and what to tr
 
 **A tuner that stopped answering.** While you are watching: "This tuner did not answer. Check that it is on." On its card in Settings: "Offline. Last seen" and then how long ago. A tuner is marked offline after more than 15 minutes. Remove is the first button. A tuner added by its address keeps reading as online while it answers.
 
-**Setup finds nothing.** The first look says "No tuner answered yet." "Searching…" shows while Add by address, Look harder, Add free channels, or adding a playlist is running. An address with no port that does not answer says "No HDHomeRun answered at that address. Add the port if it is not 80." On Docker Desktop, set `HDHR_HOST`. [Install](install.md) has the command.
+**Setup finds nothing.** The first look says "No tuner answered yet." On the web, while no tuner is listed yet, that line says "Searching…" while Add by address, Look harder, Add free channels, or adding a playlist is running. On iPhone, iPad, and Apple TV, Add by address, Look harder, and Add free channels say "Looking…", and adding a playlist says "Adding…". "Searching…" there is the first automatic look. An address with no port that does not answer says "No HDHomeRun answered at that address. Add the port if it is not 80." On Docker Desktop, set `HDHR_HOST`. [Install](install.md) has the command.
 
 **The disk.** "The recordings disk has 4.2 GB free, and Broadwave keeps 10 GB in reserve. Free some space or lower the reserve in Settings." Those two numbers are this server's. A show already recording is left alone.
 
@@ -40,6 +40,6 @@ The server writes its log to the process's standard error. On the web, Diagnosti
 - **Unraid.** Open the Broadwave container from the Docker tab and choose Logs.
 - **A Mac running the server in Terminal.** The log is that window.
 
-In Settings, under Support, choose "Download a support bundle". The hint is "Logs, versions, and settings. Passwords are left out." The same file is at `http://<your-server>:8477/api/v1/support`. Attach it to an issue at [github.com/wolfebase/broadwave/issues](https://github.com/wolfebase/broadwave/issues).
+On the web, Settings, under Support, choose "Download a support bundle". On iPhone, iPad, and Apple TV the button is "Download a support bundle". The hint is "Logs, versions, and settings. Passwords are left out." The same file is at `http://<your-server>:8477/api/v1/support`. Attach it to an issue at [github.com/wolfebase/broadwave/issues](https://github.com/wolfebase/broadwave/issues).
 
 Every line, including the ones only Diagnostics uses, is in [Messages](../troubleshooting.md).

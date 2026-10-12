@@ -25,8 +25,9 @@ services:
     labels:
       # Read only by the optional updater below.
       com.centurylinklabs.watchtower.enable: "true"
-      # Exits 75 (skip tonight) while a tuner is in use or a recording starts
-      # within two hours.
+      # Exits 75 (skip tonight) while a tuner is in use, a recording is running,
+      # or a recording starts within two hours. If the server does not answer,
+      # the update proceeds.
       com.centurylinklabs.watchtower.lifecycle.pre-update: broadwave -update-check
       com.centurylinklabs.watchtower.lifecycle.pre-update-timeout: "1"
 

@@ -24,7 +24,7 @@ Before 0.12.17, two tuners on one antenna listed every channel twice. Update to 
 
 "This channel isn't coming in. Check the antenna." The tuner answered and the channel did not lock. The tuner is released. Check the antenna and the cabling, then try again.
 
-Before 0.12.16, one channel with no signal could stall live TV, a recording, or another screen for the length of that failure. A multiview tile on a dead channel could freeze the good tiles, which 0.12.15 stopped. Update to 0.12.16 or later. The wait before the message is shorter as of 0.12.20.
+Before 0.12.15, a channel with no signal froze the other pictures, including the good tiles in multiview. Before 0.12.16, a recording, an export, or a guide check on a channel with no signal froze live TV for the length of that failure. Update to 0.12.16 or later. The wait before the message is shorter as of 0.12.20.
 
 "The tuner would not start this channel. Try again." The tuner answered and rejected the tune, often because another app holds it. Stop that app, or watch a channel that is already on.
 
@@ -48,11 +48,11 @@ Before 0.12.16, one channel with no signal could stall live TV, a recording, or 
 
 **The disk is low, or the folder will not take a file.** A recording that would cross the reserve names the free space and the reserve. Settings calls the reserve "Keep this much free". The default is 10 GB. Set it to 0 to turn it off. Diagnostics warns earlier, with "Less than 20 GB is free. Free some space before a long recording." A disk with no room left says "The recordings disk is full. Free some space, then try again." A folder that refuses the write says "Broadwave can't save this recording. Check the recordings folder, then try again."
 
-**A recording file was moved.** The line is the channel number, then "The file is gone. It was moved or deleted outside Broadwave." The web library and the Apple apps use that same line. A finished recording you move inside the recordings folder is found again when the notes file beside it moves with it. The server looks about a minute after it starts, then about once an hour. The same set of missing files is left until the next day. A file moved outside that folder stays on the list and does not play.
+**A recording file was moved.** The line is the channel number, then "The file is gone. It was moved or deleted outside Broadwave." The web library and the Apple apps use that same line. A finished recording you move inside the recordings folder is found again when the .json file beside it moves with it. That file has to carry the same id, title, and start. The server looks about a minute after it starts, then about once an hour. The same set of missing files is left until the next day. A file moved outside that folder stays on the list and does not play.
 
 **The next half-hour of the same show did not record.** Before 0.13.0, a finished episode blocked the next one with the same title for an hour. Update to 0.13.0 or later.
 
-**A recording skips fades, or finds almost no breaks.** Before 0.12.20, and without comskip, every short black stretch counted as a commercial. Update to 0.12.20 or later. The Docker image includes comskip as of 0.13.0.
+**A recording skips fades and scene changes.** Before 0.12.20, and without comskip, every short black stretch counted as a commercial. Update to 0.12.20 or later. The Docker image includes comskip as of 0.13.0.
 
 **Two recordings that started together wrote one file.** Update to 0.13.0 or later.
 
@@ -80,7 +80,7 @@ Before 0.12.16, one channel with no signal could stall live TV, a recording, or 
 
 ## Watching together
 
-Screens that sit well behind the broadcast are on the room's delay, not a stuck buffer. Lowest is 6 seconds, Balanced is 16, and Stable is 20. Pick it for the room from the player's Options, or set a default per device in Settings. An Apple screen is not left on Lowest. In a room with an Apple screen, a channel whose pictures come in long groups uses Stable. [Sync](sync.md) is the rest.
+Screens that sit well behind the broadcast are on the room's delay, not a stuck buffer. Lowest is about 6 seconds, Balanced is 16, and Stable is 20. On the web, open Options and choose Live delay. That sets it for the room. On iPhone, iPad, and Apple TV the player's menu is Live delay, and it offers Balanced and Stable. Settings on each device saves a default. An Apple screen is not left on Lowest. In a room with an Apple screen, a channel whose pictures come in long groups uses Stable. [Sync](sync.md) is the rest.
 
 Before 0.11.9, Apple TVs in one room could sit a third of a second apart and never meet. Update the app and the server to 0.11.9 or later.
 
