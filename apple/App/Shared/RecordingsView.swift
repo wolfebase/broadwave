@@ -1,9 +1,6 @@
 import BroadwaveKit
 import BroadwaveUI
 import SwiftUI
-#if os(iOS)
-    import UIKit
-#endif
 
 struct RecordingsView: View {
     /// A show's own page: every recording of that title, by season.
@@ -29,17 +26,6 @@ struct RecordingsView: View {
         /// A recording a link named (Spotlight), pushed like a tapped row.
         @State private var linked: Recording?
     #endif
-
-    /// iPhone pushes. iPad and Apple TV cover the screen, so the sidebar stays off the picture.
-    private var coverPlayer: Bool {
-        #if os(tvOS)
-            true
-        #elseif os(iOS)
-            UIDevice.current.userInterfaceIdiom == .pad
-        #else
-            false
-        #endif
-    }
 
     #if os(tvOS)
         @Environment(\.tvSelectedTab) private var tvSelectedTab
@@ -177,83 +163,91 @@ struct RecordingsView: View {
             }
         }
         .navigationTitle(show ?? "Recordings")
-        .fullScreenCover(item: $playing) { RecordingPlayerScreen(recording: $0).environment(store) }
-        .fullScreenCover(item: $playingChannel) { RecordingPlayerScreen(channel: $0).environment(store) }
+        .fullScreenCover(item: $playing) { recording in
+            RecordingCover {
+                RecordingPlayerScreen(recording: recording).environment(store)
+            }
+        }
+        .fullScreenCover(item: $playingChannel) { channel in
+            RecordingCover {
+                RecordingPlayerScreen(channel: channel).environment(store)
+            }
+        }
         #if os(iOS)
-            .navigationDestination(for: Recording.self) { RecordingPlayerScreen(recording: $0) }
-            .navigationDestination(for: VirtualChannel.self) { RecordingPlayerScreen(channel: $0) }
-            .navigationDestination(item: $linked) { RecordingPlayerScreen(recording: $0) }
+        .navigationDestination(for: Recording.self) { RecordingPlayerScreen(recording: $0) }
+        .navigationDestination(for: VirtualChannel.self) { RecordingPlayerScreen(channel: $0) }
+        .navigationDestination(item: $linked) { RecordingPlayerScreen(recording: $0) }
         #endif
-            .confirmationDialog(
-                deleting.map { "Delete \($0.subtitle ?? $0.title)?" } ?? "",
-                isPresented: Binding(get: { deleting != nil }, set: {
-                    if !$0 {
-                        deleting = nil
-                    }
-                }),
-                titleVisibility: .visible,
-                presenting: deleting
-            ) { rec in
-                Button(rec.isMissing ? "Remove from the list" : "Delete this file", role: .destructive) {
-                    act { try await store.deleteRecording(rec) }
+        .confirmationDialog(
+            deleting.map { "Delete \($0.subtitle ?? $0.title)?" } ?? "",
+            isPresented: Binding(get: { deleting != nil }, set: {
+                if !$0 {
+                    deleting = nil
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: { rec in
-                Text(rec.isMissing ? "Its file is already gone." : "The recording and its commercial markers are removed from the server.")
+            }),
+            titleVisibility: .visible,
+            presenting: deleting
+        ) { rec in
+            Button(rec.isMissing ? "Remove from the list" : "Delete this file", role: .destructive) {
+                act { try await store.deleteRecording(rec) }
             }
-            .confirmationDialog(
-                chosen.count == 1 ? "Delete 1 file?" : "Delete \(chosen.count) files?",
-                isPresented: $confirmingMany,
-                titleVisibility: .visible
-            ) {
-                Button(chosen.count == 1 ? "Delete 1 file" : "Delete \(chosen.count) files", role: .destructive) { runMany(.delete) }
-                Button("Keep them", role: .cancel) {}
-            } message: {
-                Text("The recordings and their commercial markers are removed from the server.")
-            }
+            Button("Cancel", role: .cancel) {}
+        } message: { rec in
+            Text(rec.isMissing ? "Its file is already gone." : "The recording and its commercial markers are removed from the server.")
+        }
+        .confirmationDialog(
+            chosen.count == 1 ? "Delete 1 file?" : "Delete \(chosen.count) files?",
+            isPresented: $confirmingMany,
+            titleVisibility: .visible
+        ) {
+            Button(chosen.count == 1 ? "Delete 1 file" : "Delete \(chosen.count) files", role: .destructive) { runMany(.delete) }
+            Button("Keep them", role: .cancel) {}
+        } message: {
+            Text("The recordings and their commercial markers are removed from the server.")
+        }
         #if os(tvOS)
-            .onAppear { claimRecordingFocus() }
-            .onChange(of: tvSelectedTab) { _, _ in claimRecordingFocus() }
-            .onChange(of: store.recordings.isEmpty) { _, _ in claimRecordingFocus() }
+        .onAppear { claimRecordingFocus() }
+        .onChange(of: tvSelectedTab) { _, _ in claimRecordingFocus() }
+        .onChange(of: store.recordings.isEmpty) { _, _ in claimRecordingFocus() }
         #endif
-            .onChange(of: listed.isEmpty) { _, empty in
-                if empty {
-                    stopSelecting()
+        .onChange(of: listed.isEmpty) { _, empty in
+            if empty {
+                stopSelecting()
+            }
+        }
+        .onChange(of: library.recording, initial: true) { _, _ in openLinked() }
+        .onChange(of: library.closeToken) { _, _ in
+            playing = nil
+            playingChannel = nil
+        }
+        .onChange(of: playing != nil || playingChannel != nil) { _, up in library.playing = up }
+        .task {
+            async let recordings: Void = store.refreshRecordings()
+            async let channels: Void = store.refreshVirtuals()
+            _ = await (recordings, channels)
+            #if DEBUG
+                // Simulator testing: -BroadwaveSampleRecording shows one row when the
+                // demo server has none. -BroadwaveRecording <id> opens it as Select
+                // would; simctl cannot press Select. iPhone does not open a cover.
+                if UserDefaults.standard.bool(forKey: "BroadwaveSampleRecording"), store.recordings.isEmpty {
+                    store.previewRecording(Recording(
+                        id: 1,
+                        channelId: 1,
+                        guideNumber: "4.1",
+                        title: "Big Buck Bunny",
+                        subtitle: "Open movie",
+                        status: "complete",
+                        startedAt: Date(timeIntervalSince1970: 1_790_000_000),
+                        bytes: 12_000_000,
+                        durationSec: 596
+                    ))
                 }
-            }
-            .onChange(of: library.recording, initial: true) { _, _ in openLinked() }
-            .onChange(of: library.closeToken) { _, _ in
-                playing = nil
-                playingChannel = nil
-            }
-            .onChange(of: playing != nil || playingChannel != nil) { _, up in library.playing = up }
-            .task {
-                async let recordings: Void = store.refreshRecordings()
-                async let channels: Void = store.refreshVirtuals()
-                _ = await (recordings, channels)
-                #if DEBUG
-                    // Simulator testing: -BroadwaveSampleRecording shows one row when the
-                    // demo server has none. -BroadwaveRecording <id> opens it as Select
-                    // would; simctl cannot press Select. iPhone does not open a cover.
-                    if UserDefaults.standard.bool(forKey: "BroadwaveSampleRecording"), store.recordings.isEmpty {
-                        store.previewRecording(Recording(
-                            id: 1,
-                            channelId: 1,
-                            guideNumber: "4.1",
-                            title: "Big Buck Bunny",
-                            subtitle: "Open movie",
-                            status: "complete",
-                            startedAt: Date(timeIntervalSince1970: 1_790_000_000),
-                            bytes: 12_000_000,
-                            durationSec: 596
-                        ))
-                    }
-                    let id = Int64(UserDefaults.standard.integer(forKey: "BroadwaveRecording"))
-                    if id > 0, playing == nil, coverPlayer {
-                        playing = store.recordings.first { $0.id == id }
-                    }
-                #endif
-            }
+                let id = Int64(UserDefaults.standard.integer(forKey: "BroadwaveRecording"))
+                if id > 0, playing == nil, recordingCovers {
+                    playing = store.recordings.first { $0.id == id }
+                }
+            #endif
+        }
     }
 
     /// Plays the recording a link named (the Top Shelf's Continue watching, Spotlight).
@@ -261,7 +255,7 @@ struct RecordingsView: View {
     private func openLinked() {
         guard show == nil, let id = library.recording else { return }
         library.recording = nil
-        if coverPlayer {
+        if recordingCovers {
             playing = store.recordings.first { $0.id == id }
         } else {
             #if os(iOS)
@@ -293,7 +287,7 @@ struct RecordingsView: View {
         }
         .accessibilityElement(children: .combine)
         return Group {
-            if coverPlayer {
+            if recordingCovers {
                 Button { playingChannel = channel } label: { label }
             } else {
                 NavigationLink(value: channel) { label }
@@ -318,7 +312,7 @@ struct RecordingsView: View {
             if rec.isMissing {
                 // Nothing to play. Select offers to take it off the list.
                 Button { deleting = rec } label: { rowLabel(rec) }
-            } else if coverPlayer {
+            } else if recordingCovers {
                 Button { playing = rec } label: { rowLabel(rec) }
             } else {
                 NavigationLink(value: rec) { rowLabel(rec) }

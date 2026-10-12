@@ -1,24 +1,19 @@
 import BroadwaveKit
 import BroadwaveUI
 import SwiftUI
-#if os(iOS)
-    import UIKit
-#endif
 
 struct HomeView: View {
     @Environment(AppStore.self) private var store
     @Environment(NowPlaying.self) private var nowPlaying
+    @Environment(LibraryFilter.self) private var library
     #if os(iOS)
         @Environment(\.horizontalSizeClass) private var width
-        @Environment(LibraryFilter.self) private var library
         @Environment(SettingsRoute.self) private var settingsRoute
     #endif
     @State private var saved = SavedMultiview.load()
     @State private var teams: [TeamFollow] = []
-    #if os(iOS)
-        /// iPad covers the picture. A push would keep the sidebar on it.
-        @State private var playingRecording: Recording?
-    #endif
+    /// iPad and Apple TV cover the picture. A push would keep the sidebar on it.
+    @State private var playingRecording: Recording?
     #if os(tvOS)
         @Environment(\.tvSelectedTab) private var tvSelectedTab
         @FocusState private var watch: Bool
@@ -171,12 +166,14 @@ struct HomeView: View {
             }
         }
         .navigationDestination(for: Recording.self) { RecordingPlayerScreen(recording: $0) }
-        #if os(iOS)
-            .fullScreenCover(item: $playingRecording) { RecordingPlayerScreen(recording: $0).environment(store) }
-            .onChange(of: playingRecording != nil) { _, up in library.playing = up }
-            .onChange(of: library.closeToken) { _, _ in playingRecording = nil }
-        #endif
-            .navigationTitle("Home")
+        .fullScreenCover(item: $playingRecording) { recording in
+            RecordingCover {
+                RecordingPlayerScreen(recording: recording).environment(store)
+            }
+        }
+        .onChange(of: playingRecording != nil) { _, up in library.playing = up }
+        .onChange(of: library.closeToken) { _, _ in playingRecording = nil }
+        .navigationTitle("Home")
         #if os(iOS)
             .toolbarTitleDisplayMode(.inlineLarge)
             .toolbar {
@@ -227,29 +224,22 @@ struct HomeView: View {
         }
     #endif
 
-    /// iPad plays a recording over the whole screen. iPhone pushes it.
+    /// iPad and Apple TV play a recording over the whole screen. iPhone pushes it.
     @ViewBuilder
     private func recentRecording(_ rec: Recording) -> some View {
-        #if os(iOS)
-            if UIDevice.current.userInterfaceIdiom == .pad {
-                Button {
-                    playingRecording = rec
-                } label: {
-                    RecordingCard(recording: rec)
-                }
-                .cardButton()
-            } else {
-                NavigationLink(value: rec) {
-                    RecordingCard(recording: rec)
-                }
-                .cardButton()
+        if recordingCovers {
+            Button {
+                playingRecording = rec
+            } label: {
+                RecordingCard(recording: rec)
             }
-        #else
+            .cardButton()
+        } else {
             NavigationLink(value: rec) {
                 RecordingCard(recording: rec)
             }
             .cardButton()
-        #endif
+        }
     }
 
     /// `-BroadwaveScroll teams` on a debug launch. Off-screen shelves cannot be reached with a click while another simulator window is in front.

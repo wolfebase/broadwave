@@ -2396,15 +2396,6 @@ struct RecordingPlayerScreen: View {
             }
             .overlay(alignment: .top) { PlayerNote(text: note) }
         #if os(iOS)
-            .overlay(alignment: .topLeading) {
-                if UIDevice.current.userInterfaceIdiom == .pad {
-                    Button("Close", systemImage: "xmark") { dismiss() }
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.glass)
-                        .accessibilityLabel("Close")
-                        .padding(20)
-                }
-            }
             .overlay(alignment: .bottomTrailing) {
                 Group {
                     if let marker = inBreak {
@@ -2484,6 +2475,14 @@ struct RecordingPlayerScreen: View {
         /// Next recording as its own button, and the break entries in a Breaks menu.
         @ToolbarContentBuilder private var fileToolbar: some ToolbarContent {
             let entries = menu
+            // An iPad recording is a cover, so it has no Back.
+            if recordingCovers {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close", systemImage: "xmark") { dismiss() }
+                        .labelStyle(.iconOnly)
+                        .accessibilityLabel("Close")
+                }
+            }
             if let next = entries.first(where: { $0.id == "next" }) {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(next.title, systemImage: next.symbol) { next.action() }
