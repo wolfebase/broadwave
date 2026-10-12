@@ -121,6 +121,40 @@ func TestShown3ChannelSortsAtIts1Number(t *testing.T) {
 	}
 }
 
+func TestShown3UsesTheTwinsNumberWhenItIsNotOneHundredMore(t *testing.T) {
+	s, ctx := openTwins(t)
+	all, err := s.Channels(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var twin int64
+	for _, ch := range all {
+		if ch.GuideNumber == "104.1" {
+			twin = ch.TwinID
+		}
+	}
+	if twin == 0 {
+		t.Fatal("104.1 has no twin")
+	}
+	number := "7.1"
+	if _, err := s.PatchChannel(ctx, twin, ChannelPatch{CustomNumber: &number}); err != nil {
+		t.Fatal(err)
+	}
+	guide, err := s.Channels(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var numbers []string
+	for _, ch := range guide {
+		numbers = append(numbers, ch.GuideNumber)
+	}
+	// 104.1 keeps that label and sits where 7.1 sits, between 5.1 and 19.1.
+	want := []string{"5.1", "104.1", "119.1", "19.2"}
+	if strings.Join(numbers, ",") != strings.Join(want, ",") {
+		t.Fatalf("guide order %v, want %v", numbers, want)
+	}
+}
+
 func TestTwinDefaultShowsThe3Point0ChannelOnce(t *testing.T) {
 	s, ctx := openTwins(t)
 	got := byNumber(t, s, ctx)
