@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -36,4 +37,55 @@ func TestSaveFrequencySignalWritesEveryChannel(t *testing.T) {
 	if !got["4.1"] || !got["4.2"] || got["5.1"] {
 		t.Fatalf("%+v", rows)
 	}
+}
+
+func TestAntennaListSortsAShown3NextToIts1(t *testing.T) {
+	s, ctx := openTwins(t)
+	rows, err := s.ChannelSignals(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var numbers []string
+	for _, row := range rows {
+		numbers = append(numbers, row.GuideNumber)
+	}
+	// Two tuners each have a 4.1. The shown 104.1 sits with them, and 119.1 sits
+	// with 19.1. The unpaired 105.1 keeps its own number.
+	want := []string{"4.1", "4.1", "104.1", "5.1", "19.1", "119.1", "19.2", "105.1"}
+	if strings.Join(numbers, ",") != strings.Join(want, ",") {
+		t.Fatalf("antenna order %v, want %v", numbers, want)
+	}
+
+	var shown int64
+	for _, ch := range mustChannels(t, s, ctx) {
+		if ch.GuideNumber == "104.1" {
+			shown = ch.ID
+		}
+	}
+	number := "12.1"
+	if _, err := s.PatchChannel(ctx, shown, ChannelPatch{CustomNumber: &number}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = s.ChannelSignals(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	numbers = numbers[:0]
+	for _, row := range rows {
+		numbers = append(numbers, row.GuideNumber)
+	}
+	// A number the viewer set is where that row sits. The label stays 104.1.
+	want = []string{"4.1", "4.1", "5.1", "104.1", "19.1", "119.1", "19.2", "105.1"}
+	if strings.Join(numbers, ",") != strings.Join(want, ",") {
+		t.Fatalf("renamed antenna order %v, want %v", numbers, want)
+	}
+}
+
+func mustChannels(t *testing.T, s *Store, ctx context.Context) []Channel {
+	t.Helper()
+	channels, err := s.Channels(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return channels
 }
