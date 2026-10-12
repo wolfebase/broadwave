@@ -23,7 +23,7 @@ The tailnet is everyone you invited to it. A tailnet you share is a shared serve
 
 Turn sign-in on when other people can reach the server and you watch in a browser. The hint under the switch, once it is on, is "A new device needs a code. This browser stays signed in. Health checks, playlists, and the HDHomeRun port stay open. The guide needs a signed-in device."
 
-A code is six digits and lasts 10 minutes. In Devices, choose Watch, Record, or Admin, then Pair a device and read the code out, or open Pair this browser on the new browser and approve the code it shows. Watch plays and reads the guide. Record also records and edits passes. Admin also changes settings. Revoke stops one device. The last admin cannot be revoked while sign-in is on. The message is "Pair another admin device first. This is the last one that can change settings."
+A code is six digits and lasts 10 minutes. On a browser that is already signed in, Settings, Devices, choose Watch, Record, or Admin, then Pair a device. The hint is "Enter this code on the other device. It lasts 10 minutes." That page also has Approve a code. A browser that is not signed in says "Pair this device" and asks for the code from Settings. Show a code instead shows one there, and the hint is "Enter this code in Settings. It lasts 10 minutes." Pair this browser, on the signed-in page, opens that screen for the browser you are using. Watch plays and reads the guide. Record also records and edits passes. Admin also changes settings. Revoke stops one device. The last admin cannot be revoked while sign-in is on. The message is "Pair another admin device first. This is the last one that can change settings."
 
 The iPhone, iPad, and Apple TV apps have no place to enter a code. Leave sign-in off if you use them. With it on they still connect, but the server refuses the guide and playback with "Sign in from a paired device."
 
@@ -34,7 +34,7 @@ These stay open with no code, even after sign-in is on:
 | The site itself | Loads the web app. The guide inside it asks for a code. |
 | `/export/lineup.m3u` | The channel list other apps play. |
 | `/export/guide.xml` | The listings the server has, with no code. |
-| `/export/stream/…` and `/export/mosaic/…` | Copies the broadcast. Opening one starts a tune. |
+| `/export/stream/…` and `/export/mosaic/…` | Copies the broadcast. Opening one in an app, or directly in a browser, starts a tune. A page on another site is refused: "This stream is for apps on your network, not a page on another site." |
 | Port 8478 | The same kind of stream, while Act as an HDHomeRun is on. |
 
 Health checks and the server's name and version are open too. Settings and the support bundle need an admin device while sign-in is on. Reading and playing a recording needs Watch. Adding or deleting one needs Record. Turning Act as an HDHomeRun off closes port 8478. Nothing closes the playlist.
@@ -87,7 +87,7 @@ A Tailscale subnet router can let the phone reach the server's home address. Mul
 - Reach the server through Tailscale. Do not forward 8477 or 8478, and do not put Broadwave on a proxy the public internet can open.
 - Use the Tailscale address. Add a public name to `BROADWAVE_HOSTS` only when you actually open that name.
 - Leave Act as an HDHomeRun off when nothing in the house needs port 8478. That port has no device code.
-- The playlist and `/export/stream/` are open on port 8477 whenever the server is. A stream starts a tune and uses a tuner.
+- The playlist and `/export/stream/` are open on port 8477 whenever the server is. A stream opened in an app, or directly in a browser, starts a tune and uses a tuner. A page on another site is refused.
 - Device sign-in covers the guide, recordings, and settings in Broadwave. It does not cover the playlist, the stream URLs, or port 8478.
 - Leave device sign-in off while you use the iPhone, iPad, or Apple TV app.
 - Invite only the people who should be able to watch. Everyone on the tailnet can open the server.

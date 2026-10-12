@@ -163,7 +163,7 @@ One image, `ghcr.io/wolfebase/broadwave`, for x86-64 and ARM64. It carries its o
 
 | Setting | What it does |
 | --- | --- |
-| `TZ` | Your time zone, such as `America/New_York`. Without it, a container runs on UTC. If the listings stay on UTC, the zone data did not load. |
+| `TZ` | Your time zone, such as `America/New_York`. Without it, a container runs on UTC. The guide on a phone or in a browser uses that device's clock. Pass times use `TZ`. |
 | `PUID`, `PGID` | The user and group that own the config folder and recordings. Broadwave starts as root, hands the config folder to them, and then runs as them. Leave them out to run as root. |
 | `UMASK` | Permissions for new files, such as `002` so the group can write. Default `022`. |
 | `HDHR_HOST` | The tuner's address, when discovery can't reach it. |
