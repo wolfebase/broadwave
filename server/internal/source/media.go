@@ -42,7 +42,13 @@ func specialsDir(name string) bool {
 // "Harbor - S01E02 - The Storm" is Harbor. A name that is only the episode
 // is left alone, so two bare files do not become one show.
 func showBeforeEpisode(name string) (string, bool) {
-	base := strings.TrimSuffix(name, filepath.Ext(name))
+	base := name
+	// Only a video extension comes off. A dot in the show name is not one,
+	// and an episode folder has no extension at all.
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".ts", ".mp4", ".mkv", ".m4v", ".mov":
+		base = strings.TrimSuffix(name, filepath.Ext(name))
+	}
 	loc := episodeFile.FindStringIndex(base)
 	if loc == nil || loc[0] == 0 {
 		return "", false
@@ -74,11 +80,11 @@ func ScanMedia(root string) ([]store.Recording, error) {
 		subtitle := ""
 		category := "Movie"
 		dir := filepath.Dir(path)
-		// Show/Season 01/Show - S01E02/episode: the episode folder is not the show.
+		// Show/Season 01/Show - S01E02/episode, or Show/Specials/Show - S00E03/episode.
 		episodeDir := ""
 		if dir != root {
 			parent := filepath.Dir(dir)
-			if seasonDir(filepath.Base(parent)) && episodeFile.MatchString(filepath.Base(dir)) {
+			if (seasonDir(filepath.Base(parent)) || specialsDir(filepath.Base(parent))) && episodeFile.MatchString(filepath.Base(dir)) {
 				episodeDir = filepath.Base(dir)
 				dir = parent
 			}
