@@ -20,6 +20,7 @@ export default defineConfig({
       "scoreLine.test.ts",
       "livePill.test.ts",
       "tvRemote.test.ts",
+      "diagnosticsHook.test.tsx",
       "playerChrome.test.ts",
     ],
   },
