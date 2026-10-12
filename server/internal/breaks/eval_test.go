@@ -64,7 +64,7 @@ func scoreBreaks(signal string, truth []span, found []Break, length float64) sco
 	}
 }
 
-// coverSpan is how much of second sec the spans cover.
+// breakHits is how many labelled breaks overlap a found break by half their length.
 func coverSpan(spans []span, sec int) float64 {
 	from, to := float64(sec), float64(sec+1)
 	n := 0.0
@@ -87,7 +87,6 @@ func coverBreak(found []Break, sec int) (hit, sure bool) {
 	return n >= 0.5, auto >= 0.5
 }
 
-// breakHits is how many labelled breaks overlap a found break by half their length.
 func breakHits(truth []span, found []Break) int {
 	n := 0
 	for _, s := range truth {
@@ -115,7 +114,7 @@ func silenceBreaks(c Cues) []Break {
 func cutBreaks(c Cues) []Break {
 	var cuts []boundary
 	for _, at := range c.Cuts {
-		cuts = append(cuts, boundary{At: at, Strength: 0.7})
+		cuts = append(cuts, boundary{At: at, Grid: at, Strength: 0.7})
 	}
 	return chainsOf(cuts)
 }
