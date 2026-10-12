@@ -22,6 +22,7 @@ import { refreshScores, scoreLine, useScoreMap, type ScoreGame } from "../sports
 import { clearBroadcast, fromStillOn, resolveClear, standInIds } from "./clear";
 import { autoCandidates, channelsOnScreen, holdShown, layoutChoices, layoutFromParam, layoutLabel, rememberAuto, rememberLayout, roomId, saveSet, savedAuto, savedLayout, settlePlan, slotsFor, yieldsSound, type MvLayout } from "./storage";
 import { pickFocus } from "./switcher";
+import { tileArrow } from "./tileArrow";
 import "./multiview.css";
 
 
@@ -402,9 +403,12 @@ export function Multiview() {
       return;
     }
     const cols = layout === "2up" || layout === "quad" ? 2 : 1;
-    const step = k === "ArrowRight" ? 1 : k === "ArrowLeft" ? -1 : k === "ArrowDown" ? cols : k === "ArrowUp" ? -cols : 0;
-    if (!step) return;
-    const dest = Math.max(0, Math.min(ordered.length - 1, i + step));
+    const dest = tileArrow(ordered.length, i, k, cols);
+    // The grid ended. A TV walks on to the buttons. A desktop page must not scroll.
+    if (dest == null) {
+      if (layoutMode !== "tv" && k.startsWith("Arrow")) event.preventDefault();
+      return;
+    }
     event.preventDefault();
     const next = ordered[dest];
     if (!next || next.id === mark) return;
