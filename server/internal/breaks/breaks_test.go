@@ -73,6 +73,29 @@ func TestFindBlackFramesOfUnevenLengthStillTimeTheSpots(t *testing.T) {
 	}
 }
 
+// The first black can start before the picture, which ffmpeg logs as a
+// negative time. It still times the first spot.
+func TestABlackFrameBeforeTheFirstPictureStillTimesTheSpots(t *testing.T) {
+	log := "[blackdetect @ 0x1] black_start:-0.033667 black_end:0.267 black_duration:0.300667\n" + blackLog(
+		[2]float64{15, 15.2},
+		[2]float64{30, 30.2},
+		[2]float64{45, 45.2},
+	)
+	got := findLog(log)
+	if len(got) != 1 || got[0].Start > 1 || math.Abs(got[0].End-45.1) > 0.01 {
+		t.Fatalf("%+v", got)
+	}
+}
+
+// A scene cut on the same lead-in is kept, at the start of the recording.
+func TestACutBeforeTheFirstPictureIsKept(t *testing.T) {
+	var c Cues
+	c.readLog(strings.NewReader("[Parsed_scdet_1 @ 0x1] lavfi.scd.score: 18.4, lavfi.scd.time: -0.033367\n"))
+	if len(c.Cuts) != 1 || c.Cuts[0] != 0 {
+		t.Fatalf("%+v", c.Cuts)
+	}
+}
+
 // Two spots in a row are not enough: a show's own scenes can line up that way.
 func TestFindBlackOnlyNeedsThreeSpots(t *testing.T) {
 	log := blackLog([2]float64{100, 100.2}, [2]float64{130, 130.2}, [2]float64{160, 160.2}, [2]float64{171, 171.2})

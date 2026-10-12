@@ -33,10 +33,10 @@ type Cues struct {
 }
 
 var (
-	blackLine   = regexp.MustCompile(`black_start:\s*([0-9.]+) black_end:\s*([0-9.]+)`)
+	blackLine   = regexp.MustCompile(`black_start:\s*(-?[0-9.]+) black_end:\s*(-?[0-9.]+)`)
 	silenceFrom = regexp.MustCompile(`silence_start: (-?[0-9.]+)`)
 	silenceTo   = regexp.MustCompile(`silence_end: ([0-9.]+)`)
-	cutLine     = regexp.MustCompile(`lavfi\.scd\.time: ([0-9.]+)`)
+	cutLine     = regexp.MustCompile(`lavfi\.scd\.time: (-?[0-9.]+)`)
 )
 
 // logTail is what a failed scan says about itself.
@@ -59,6 +59,8 @@ func (c *Cues) readLog(r io.Reader) logTail {
 		if m := blackLine.FindStringSubmatch(line); m != nil {
 			start, _ := strconv.ParseFloat(m[1], 64)
 			end, _ := strconv.ParseFloat(m[2], 64)
+			// A lead-in before the first picture is logged as a negative time.
+			start = max(start, 0)
 			if end > start {
 				c.Blacks = append(c.Blacks, span{start, end})
 			}
@@ -79,7 +81,7 @@ func (c *Cues) readLog(r io.Reader) logTail {
 		}
 		if m := cutLine.FindStringSubmatch(line); m != nil {
 			at, _ := strconv.ParseFloat(m[1], 64)
-			c.Cuts = append(c.Cuts, at)
+			c.Cuts = append(c.Cuts, max(at, 0))
 			continue
 		}
 		if strings.TrimSpace(line) != "" {
