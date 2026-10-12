@@ -114,8 +114,8 @@ export function SettingsScreen({
           value={settings.adaptive === "1" ? "1" : "0"}
           onChange={(event) => onChange({ adaptive: event.target.value === "1" ? "1" : "0" })}
         >
-          <option value="0">Off</option>
-          <option value="1">On</option>
+          <option value="0">{t("settings.off")}</option>
+          <option value="1">{t("settings.on")}</option>
         </select>
         <span className="hint">{copy.settings.adaptiveHint}</span>
       </label>
@@ -303,15 +303,15 @@ export function SettingsScreen({
         <span className="hint">{t("settings.deleteWatchedHint")}</span>
       </label>
       <label className="field">
-        Favorite channels
+        {t("settings.favorites")}
         <select
           value={settings.protectFavorites === "1" ? "1" : "0"}
           onChange={(event) => onChange({ protectFavorites: event.target.value === "1" ? "1" : "0" })}
         >
-          <option value="0">Clean up like the others</option>
-          <option value="1">Leave their recordings</option>
+          <option value="0">{t("settings.favoritesCleanUp")}</option>
+          <option value="1">{t("settings.favoritesLeave")}</option>
         </select>
-        <span className="hint">Recordings on channels you starred stay, and they do not count toward how many a pass keeps. Keep forever is separate.</span>
+        <span className="hint">{t("settings.favoritesHint")}</span>
       </label>
       <label className="field">
         {copy.settings.buffer}

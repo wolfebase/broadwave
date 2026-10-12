@@ -1,8 +1,20 @@
 import { useState } from "react";
+import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
+import { bind } from "../../i18n/runtime.ts";
 import { copy } from "../../strings";
 import { accents, readAccent, readTheme, saveAccent, saveTheme, themeChoices } from "../../theme/look";
 
-const themeLabel = { system: "System", light: "Light", dark: "Dark" } as const;
+const t = bind(settingsUiMessages);
+
+// The accent names live here, not in look.ts, so the first script stays small.
+const accentKeys = {
+  blue: "accent.blue",
+  teal: "accent.teal",
+  green: "accent.green",
+  orange: "accent.orange",
+  purple: "accent.purple",
+  rose: "accent.rose",
+} as const;
 
 /** Appearance is this device's. It is not one of the server's settings. */
 export function Appearance() {
@@ -21,7 +33,7 @@ export function Appearance() {
               aria-pressed={theme === item}
               onClick={() => setTheme(saveTheme(item))}
             >
-              {themeLabel[item]}
+              {t(`appearance.${item}`)}
             </button>
           ))}
         </div>
@@ -34,7 +46,7 @@ export function Appearance() {
             <label key={item.id} className="accent-choice">
               <input type="radio" name="accent" value={item.id} checked={accent === item.id} onChange={() => setAccent(saveAccent(item.id))} />
               <span className="accent-dot" data-accent={item.id} />
-              <span>{item.label}</span>
+              <span>{t(accentKeys[item.id])}</span>
             </label>
           ))}
         </div>

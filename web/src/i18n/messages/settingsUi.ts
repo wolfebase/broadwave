@@ -171,4 +171,18 @@ export const settingsUiMessages = {
   "share.copy": "Copy",
   "share.copied": "Copied",
   "share.copiedLive": "Copied.",
+
+  "appearance.system": "System",
+  "appearance.light": "Light",
+  "appearance.dark": "Dark",
+  "accent.blue": "Blue",
+  "accent.teal": "Teal",
+  "accent.green": "Green",
+  "accent.orange": "Orange",
+  "accent.purple": "Purple",
+  "accent.rose": "Rose",
+  "settings.favorites": "Favorite channels",
+  "settings.favoritesCleanUp": "Clean up like the others",
+  "settings.favoritesLeave": "Leave their recordings",
+  "settings.favoritesHint": "Recordings on channels you starred stay, and they do not count toward how many a pass keeps. Keep forever is separate.",
 } as const satisfies Record<string, Message>;

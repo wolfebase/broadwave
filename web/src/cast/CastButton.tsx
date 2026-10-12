@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { castMessages } from "../i18n/messages/cast.ts";
+import { bind } from "../i18n/runtime.ts";
 import { readToken } from "../lib/deviceToken";
 import { readLiveDelay } from "../lib/events";
 import { CastIcon } from "../ui/icons";
 import { castControl, castLoad, castOutgoing } from "./protocol";
 import { ensureSender, requestCast, type CastLink } from "./sender";
+
+const t = bind(castMessages);
 
 /** Cast in the web player. Hidden until this server has an application id and a playlist. */
 export function CastButton({
@@ -49,7 +53,7 @@ export function CastButton({
     try {
       const ready = await ensureSender();
       if (!ready) {
-        setError("Cast didn't load.");
+        setError(t("cast.didNotLoad"));
         return;
       }
       const next = await requestCast(appId, undefined, () => {
@@ -59,7 +63,7 @@ export function CastButton({
       setError("");
       setLink(next);
     } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : "No Cast devices found.");
+      setError(err instanceof Error && err.message ? err.message : t("cast.noDevices"));
     } finally {
       busy.current = false;
     }
@@ -76,7 +80,7 @@ export function CastButton({
   const casting = mode === "casting";
   return (
     <>
-      <button type="button" className={casting ? "glass-icon on" : "glass-icon"} aria-pressed={casting} aria-label={casting ? "Stop casting" : "Cast"} onClick={() => (casting ? stop() : void start())}>
+      <button type="button" className={casting ? "glass-icon on" : "glass-icon"} aria-pressed={casting} aria-label={casting ? t("cast.stop") : t("cast.cast")} onClick={() => (casting ? stop() : void start())}>
         <CastIcon />
       </button>
       {error ? (
