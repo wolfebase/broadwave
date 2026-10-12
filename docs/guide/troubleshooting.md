@@ -1,6 +1,6 @@
 # Troubleshooting
 
-The line on the screen is the whole message. It names what failed and what to try. The player lines below are the same on the web, iPhone, iPad, and Apple TV. The missing-file line is not: on the Apple apps the channel number comes first.
+The line on the screen is the whole message. It names what failed and what to try. The player lines below are the same on the web, iPhone, iPad, and Apple TV. The missing-file line is not: on the Apple apps the channel number comes first. The cause, and the problems an update already fixed, are in [Common problems](problems.md).
 
 ## Lines you will see
 
@@ -30,7 +30,7 @@ On iPhone, iPad, and Apple TV it shows Fix these, guide depth, tuner health, and
 
 One Fix these line is "Broadwave can't see your tuner from inside Docker. Switch the container to host networking." Another is "Less than 20 GB is free. Free some space before a long recording."
 
-When this ffmpeg cannot decode AC-4, Diagnostics says "This ffmpeg can't decode AC-4, so ATSC 3.0 channels play without sound." The Docker image includes that decoder.
+On the web, when this ffmpeg cannot decode AC-4, Diagnostics says "This ffmpeg can't decode AC-4, so ATSC 3.0 channels play without sound." The player says "No sound: this server's ffmpeg can't decode ATSC 3.0 sound (AC-4)." The Docker image includes that decoder.
 
 ## Logs and a bug report
 
