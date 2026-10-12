@@ -76,6 +76,7 @@ func TestSiteBuildsTheGuide(t *testing.T) {
 		"multiview.html":        {"Side by side", "Quad"},
 		"recordings.html":       {"MPEG-TS", "/config/work/recordings", "Keep this much free", "last 15 seconds", "longer than 90 seconds", "first sound track"},
 		"sync.html":             {"Whole-Home Sync", "Watch together"},
+		"remote.html":           {"Tailscale", "8477", "BROADWAVE_HOSTS", "Funnel", "Require a device to sign in", "8478", "/export/stream/"},
 		"troubleshooting.html":  {"isn't coming in", "Diagnostics", "No tuner answered yet"},
 		"faq.html":              {"antenna", "FLEX 4K"},
 		"security.html":         {"BROADWAVE_HOSTS", securitySentence, "reference/security.html", "port 443"},

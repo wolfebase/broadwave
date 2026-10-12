@@ -11,6 +11,7 @@ One tune of a channel feeds every screen and every recording. Screens in the hou
 - [Tuners](tuners.md), including a FLEX 4K and ATSC 3.0
 - [Channels and the guide](channels.md)
 - [Watching](watching.md) on the web, iPhone, iPad, and Apple TV
+- [Away from home](remote.md), over Tailscale
 - [Multiview](multiview.md)
 - [Recordings and storage](recordings.md)
 - [Sync and watching together](sync.md)

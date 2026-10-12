@@ -204,6 +204,7 @@ Without an updater, the web app says when a new release is out.
 
 - **Any browser** at `http://<your-server>:8477` — live TV, the guide, recordings, and multiview. Nothing to install.
 - **Native apps** for phones, tablets, and TVs find your server on the same Wi-Fi by themselves — no typing. With no server around, they play a built-in demo so you can try everything first.
+- **Away from home.** Use Tailscale and type that address with port 8477. Do not forward the port. [Away from home](docs/guide/remote.md) lists what stays open.
 
 </details>
 

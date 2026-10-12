@@ -18,7 +18,7 @@ A browser at `http://<your-server>:8477`, and the Broadwave apps on iPhone, iPad
 
 ## Can I watch away from home?
 
-Yes, over a VPN such as Tailscale. Enter the server's address on that VPN if the app does not find it. Leave port 8477 off the public internet. [Security](security.md) says why.
+Yes, over a VPN such as Tailscale. The apps do not find the server on their own from there. Enter its Tailscale address and port 8477. Leave port 8477 and port 8478 off the public internet, and do not turn on Tailscale Funnel. There is no account password. Device sign-in covers the guide and settings, and the playlist can still start a tune with no code. [Away from home](remote.md) is the setup. [Security](security.md) is the name check.
 
 ## Can I watch more than one channel?
 

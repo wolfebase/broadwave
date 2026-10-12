@@ -1,6 +1,6 @@
 # Security
 
-Broadwave has no accounts. Anything that can reach the server on your network can change channels, recordings, and settings. Keep port 8477 on that network.
+Broadwave has no account password. With device sign-in off, which is the default, anything that can reach the server can change channels, recordings, and settings. Keep port 8477 on your own network. [Away from home](remote.md) is how to reach it through Tailscale, and what stays open after you turn sign-in on.
 
 ## Public names
 
@@ -16,6 +16,6 @@ A support bundle leaves passwords and tuner credentials out. Settings calls the 
 
 ## Away from home
 
-Use a VPN that puts your phone on the home network. Do not forward port 8477 from the public internet.
+Use Tailscale, or another VPN that only your devices can join, and open the server's address on that VPN. Do not forward port 8477 or 8478, and do not turn on Tailscale Funnel. [Away from home](remote.md) covers the address, MagicDNS names, device sign-in, and the playlist and port 8478, which stay open with no code.
 
 The apps do not install tuner firmware.

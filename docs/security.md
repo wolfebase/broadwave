@@ -1,6 +1,6 @@
 # Security
 
-Broadwave is a server you run at home. It has no accounts. Anything that can open port 8477 can use the web app and the API, so keep that port on your own network.
+Broadwave is a server you run at home. It has no account password. With device sign-in off, which is the default, anything that can open port 8477 can use the web app and the API, so keep that port on your own network.
 
 ## Names the server answers to
 
@@ -74,7 +74,7 @@ None of those calls go to the maker of Broadwave. The privacy policy is [PRIVACY
 
 ## Limits to know
 
-Anyone on the network can use the server until accounts exist.
+While device sign-in is off, anyone on the network can use the server. Turning it on does not close the playlist or port 8478. Away from home, below, is the list.
 
 ffmpeg looks up a stream's name again after Broadwave has checked it, and a later segment or key can name another address. A name can change where it points between the two lookups.
 
@@ -86,6 +86,12 @@ Recordings stay the original broadcast. Transcoding is only for playback.
 
 ## Away from home
 
-Use a VPN that puts your phone on the home network, and open the server's address on that VPN. Do not forward port 8477 from the public internet.
+Use a VPN that only your devices can join, and open the server's address on that VPN. Tailscale is one. Do not forward port 8477 or 8478 from the public internet, and do not turn on Tailscale Funnel. The handbook page [Away from home](guide/remote.md) is the setup: the Tailscale address, a `ts.net` name, and device sign-in.
+
+An address in the Host header is allowed with no `BROADWAVE_HOSTS`, including a Tailscale address in `100.64.0.0/10`. A MagicDNS name on port 8477 is a public name and is refused until `BROADWAVE_HOSTS` lists it. The port 443 exception needs a non-empty `Sec-Fetch-Site`. The Apple apps do not send that header, and their address field defaults to `http` and port 8477.
+
+Device sign-in is off until Settings, Devices, Require a device to sign in. While it is off, anyone who can open port 8477 can use the API. While it is on, the guide, recordings, and settings need a paired device. The iPhone, iPad, and Apple TV apps cannot pair, so leave it off if you use them. These stay open with no code either way: `/export/lineup.m3u`, `/export/guide.xml`, `/export/stream/`, and `/export/mosaic/`. A stream starts a tune. Port 8478 does too, while Act as an HDHomeRun is on, and that listener checks the name only. Bonjour and the UDP probe on 8479 answer the home network, not a Tailscale address.
+
+The sign-in cookie is not marked Secure, so a browser will store it on plain HTTP. Tailscale encrypts the path between your phone and the server. The cookie does not hide the server from anyone else on the tailnet.
 
 The apps do not install tuner firmware. Diagnostics says "This app does not install firmware."

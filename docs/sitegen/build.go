@@ -30,6 +30,7 @@ var handbook = []struct {
 	{"multiview.md", "Multiview"},
 	{"recordings.md", "Recordings and storage"},
 	{"sync.md", "Sync"},
+	{"remote.md", "Away from home"},
 	{"troubleshooting.md", "Troubleshooting"},
 	{"faq.md", "FAQ"},
 	{"security.md", "Security"},
