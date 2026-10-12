@@ -45,3 +45,26 @@ export function stepInGroup(index: number, count: number, dir: StepDir, axis: Ax
   }
   return next;
 }
+
+/**
+ * The nearest box past `from` in `dir` that shares its row or column.
+ * A box on the next line does not count: Right at the end of a shelf must not
+ * drop into that shelf. The index is into `items`.
+ */
+export function alignedAhead(from: Bounds, items: Bounds[], dir: StepDir): number | null {
+  const vertical = dir === "up" || dir === "down";
+  const origin = mid(from);
+  let best: { index: number; score: number } | null = null;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const point = mid(item);
+    const primary = dir === "left" ? origin.x - point.x : dir === "right" ? point.x - origin.x : dir === "up" ? origin.y - point.y : point.y - origin.y;
+    if (primary <= 1) continue;
+    const overlap = vertical ? Math.min(from.right, item.right) - Math.max(from.left, item.left) : Math.min(from.bottom, item.bottom) - Math.max(from.top, item.top);
+    if (overlap <= 1) continue;
+    const cross = vertical ? Math.abs(point.x - origin.x) : Math.abs(point.y - origin.y);
+    const score = primary + cross * 2;
+    if (!best || score < best.score) best = { index: i, score };
+  }
+  return best?.index ?? null;
+}

@@ -5,6 +5,7 @@ import { canonicalKey } from "../../lib/tvKey";
 import { optionArrow, optionRows } from "../../lib/optionArrow";
 import { BackIcon, CloseIcon, ExpandIcon, PauseIcon, PipIcon, PlayIcon, VolumeIcon } from "../../ui/icons";
 import { playerControls, playerTabTarget } from "./focusCycle";
+import { tvPictureEnter } from "./keys";
 import { swallowWakeClick } from "./startOver";
 import "./player.css";
 
@@ -236,6 +237,25 @@ export function Stage({
                   if (next) focusRing(rows[next.row]?.[next.col]);
                   return;
                 }
+              }
+              // A TV remote has no Tab, and its arrows on the picture change channel
+              // and seek. OK on the picture opens the bar and moves into it at Play.
+              const typing = root.current?.querySelector(".typed-number") != null;
+              if (tvPictureEnter(document.documentElement.dataset.layout === "tv", key, event.target === event.currentTarget, open || typing)) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (idle) setTimedIdle(false);
+                const enter = () => {
+                  const list = playerControls(root.current);
+                  if (list.length === 0) return false;
+                  focusRing(list.find((el) => el.classList.contains("transport-play")) ?? list[0]);
+                  return true;
+                };
+                if (!idle && enter()) return;
+                window.requestAnimationFrame(() => {
+                  if (!enter()) window.requestAnimationFrame(enter);
+                });
+                return;
               }
               // Options is a layer over the picture. Close it before leaving the page.
               if (open && dismissesLayer(event.key, event.target, event.keyCode)) {

@@ -28,6 +28,14 @@ export function guideRowOnFocus(index: number, count: number, current: number): 
   return index;
 }
 
+/**
+ * On a TV, OK on the picture moves into the bar. The arrows there still change
+ * channel and seek. A typed channel number or open options keep Enter.
+ */
+export function tvPictureEnter(layoutTv: boolean, key: string, onPicture: boolean, busy: boolean): boolean {
+  return layoutTv && key === "Enter" && onPicture && !busy;
+}
+
 /** Close keys inside the open mini-guide. A repeated g must not undo the open. */
 export function guideListAction(key: string, repeat: boolean): "close" | "up" | "down" | "tune" | "ignore" {
   const k = key.toLowerCase();
