@@ -34,18 +34,20 @@ A clear 3.0 channel is paired with the same station's main regular channel, the 
 On the web, Settings lists the 3.0 row with Show:
 
 - **3.0 only.** The usual choice. The regular channel stays off the guide.
-- **1.0 only.** The regular channel stays, with its number in the label. Broadwave picks this on its own when that picture is known to be taller.
+- **1.0 only.** The regular channel stays, with its number in the label. Broadwave picks this when a station first appears and both pictures were already measured with the regular one taller. Otherwise a new station starts at 3.0 only.
 - **Both.** The guide lists each.
 
 The favorite follows the channel that stays. On iPhone, iPad, and Apple TV the same three choices are on the channel's page. The note there is "This station broadcasts in ATSC 1.0 and 3.0. Both share one guide."
 
-An encrypted station does not offer the choice. It always uses the regular broadcast.
+An encrypted station does not offer the choice. When a regular broadcast exists, that is what plays.
 
 ## Tuners
 
 | Tuner | What it receives |
 | --- | --- |
 | FLEX 4K | Four tuners. Two of them receive ATSC 3.0. A 3.0 channel will not tune on the other two. |
-| FLEX DUO, FLEX QUATRO, CONNECT | The regular broadcast only. A model name that contains 4K marks the first two tuners as ATSC 3.0. |
+| FLEX DUO, FLEX QUATRO, CONNECT | The regular broadcast only. |
+
+The model number decides which tuners receive ATSC 3.0. A number that contains 4K marks the first two, which is how a FLEX 4K is marked. FLEX DUO, FLEX QUATRO, and a CONNECT whose model number does not contain 4K stay on the regular broadcast.
 
 A 3.0 channel takes a tuner that can receive it. A regular channel takes a tuner that cannot, when one is free, so a NextGen tune stays available. Everyone watching one channel still shares that one tune. A 3.0 channel is its own frequency. It does not ride the station's regular multiplex.
