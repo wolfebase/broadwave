@@ -26,6 +26,7 @@ export default defineConfig({
       "snapshotStore.test.ts",
       "liveLoader.test.ts",
       "scoreFetch.test.ts",
+      "screenMoves.test.tsx",
       "playerChrome.test.ts",
     ],
   },
