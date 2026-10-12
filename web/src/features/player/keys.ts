@@ -36,6 +36,15 @@ export function tvPictureEnter(layoutTv: boolean, key: string, onPicture: boolea
   return layoutTv && key === "Enter" && onPicture && !busy;
 }
 
+/**
+ * Left and Right skip through a recording. On a TV they do that only while
+ * the picture itself has the keys. A button keeps the arrow so focus can move.
+ */
+export function recordingSeekArrow(layoutTv: boolean, key: string, onPicture: boolean): boolean {
+  if (key !== "ArrowLeft" && key !== "ArrowRight") return false;
+  return !layoutTv || onPicture;
+}
+
 /** Close keys inside the open mini-guide. A repeated g must not undo the open. */
 export function guideListAction(key: string, repeat: boolean): "close" | "up" | "down" | "tune" | "ignore" {
   const k = key.toLowerCase();
