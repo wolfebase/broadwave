@@ -14,7 +14,7 @@ While a channel is tuned, the broadcast's own listings fill times none of those 
 
 With no guide key, a channel matches on its number, then its name, then its call sign. A trailing DT, DT1, HD, TV, or LD still counts. Guide match, on the channel in Settings, pins a listing when the names differ. Leave it blank to use the number, the name, and the call sign.
 
-Logos and episode art are kept on the server. Movie artwork, in Settings, fills posters the guide left blank.
+Logos and episode art are kept on the server. Movie artwork, in Settings, has the hint "Fills posters the guide does not include." A refresh fills blank posters on the tuner guide and on a pasted XMLTV file, up to 20 titles from each. Schedules Direct rows stay as that service sent them.
 
 ## On the guide, or hidden
 
@@ -30,6 +30,6 @@ A signal check reports Great, OK, Weak, or Lost. While a tuner is busy, while so
 
 ## Favorites and Home
 
-Star a channel to keep it on Home. The favorite follows the channel that stays when you choose 3.0 or the regular broadcast for a station that has both.
+Star a channel to put it ahead of the others in On now. Home still lists the channels that are not starred. The favorite follows the channel that stays when you choose 3.0 or the regular broadcast for a station that has both.
 
 Setup's Favorites step can star channels for you. You can change them later.

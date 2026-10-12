@@ -71,7 +71,7 @@ func TestSiteBuildsTheGuide(t *testing.T) {
 		"install.html":          {"Unraid", "Docker", "8477", "ghcr.io/wolfebase/broadwave", "PUID", "The time zone is not set", "a tuner is in use"},
 		"first-run.html":        {"Let's set up your TV", "Add by address"},
 		"tuners.html":           {"HDHomeRun", "FLEX 4K", "ATSC 3.0", "reference/atsc3.html", "model number"},
-		"channels.html":         {"Schedules Direct", "XMLTV", "answers at once", "While a channel is tuned", "On the guide"},
+		"channels.html":         {"Schedules Direct", "XMLTV", "answers at once", "While a channel is tuned", "On the guide", "up to 20 titles", "ahead of the others in On now"},
 		"watching.html":         {"iPhone", "iPad", "Apple TV", "8477", "web", "saved on that device"},
 		"multiview.html":        {"Side by side", "Quad", "1080p or smaller"},
 		"recordings.html":       {"MPEG-TS", "/config/work/recordings", "Keep this much free", "last 15 seconds", "longer than 90 seconds", "first sound track", "hour past the guide"},

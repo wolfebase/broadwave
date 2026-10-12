@@ -10,7 +10,7 @@ Broadwave is live TV and DVR for an antenna. You run the server on Unraid. It ta
 
 One tune of a channel feeds every screen and every recording. The tuner stays on the home network. Only this server talks to it.
 
-The template is not in Community Apps yet. You can add it from the repository file `deploy/unraid/broadwave.xml`. An optional second template, `deploy/unraid/broadwave-updater.xml`, checks nightly at 03:30 and updates only the Broadwave container, and it skips a night while someone is watching or a recording is due.
+The template is not in Community Apps yet. You can add it from the repository file `deploy/unraid/broadwave.xml`. An optional second template, `deploy/unraid/broadwave-updater.xml`, checks nightly at 03:30 and updates only the Broadwave container, and it skips a night while a tuner is in use, a recording is running, or a recording starts within two hours.
 
 Project and issues: https://github.com/wolfebase/broadwave
 

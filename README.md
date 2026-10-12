@@ -124,7 +124,7 @@ Then open **`http://<your-server>:8477`**. On a Linux server, Broadwave finds yo
 
 - **`--network host`** lets a Linux server hear your tuner, and lets phones and TVs find Broadwave. Keep it there.
 - **Graphics.** Add `--device /dev/dri` when that path exists (Intel or AMD). Docker refuses to start if the path is missing. The picture still plays without it.
-- **`TZ`** is your time zone, so the guide lines up.
+- **`TZ`** is your time zone. Without it, a container runs on UTC.
 - **Tuner address.** When the tuner does not appear, enter its address on the setup page, or set `HDHR_HOST` to that address. Add `:port` only when it is not 80.
 - **Unraid.** Add the template [`deploy/unraid/broadwave.xml`](https://github.com/wolfebase/broadwave/blob/main/deploy/unraid/broadwave.xml). It uses host networking and port 8477. Leave PUID at 99 and PGID at 100 so recordings are not owned by root. Set Config and Recordings to folders on your server, and remove `/dev/dri` when the server has no Intel or AMD graphics. A plain `docker run` on Unraid needs `-e PUID=99 -e PGID=100` as well.
 
@@ -163,13 +163,13 @@ One image, `ghcr.io/wolfebase/broadwave`, for x86-64 and ARM64. It carries its o
 
 | Setting | What it does |
 | --- | --- |
-| `TZ` | Your time zone, such as `America/New_York`. Without it the server runs on UTC. |
+| `TZ` | Your time zone, such as `America/New_York`. Without it, a container runs on UTC. If the listings stay on UTC, the zone data did not load. |
 | `PUID`, `PGID` | The user and group that own the config folder and recordings. Broadwave starts as root, hands the config folder to them, and then runs as them. Leave them out to run as root. |
 | `UMASK` | Permissions for new files, such as `002` so the group can write. Default `022`. |
 | `HDHR_HOST` | The tuner's address, when discovery can't reach it. |
 | `BROADWAVE_RECORDINGS` | The recordings folder, when it is not `/config/work/recordings`. Outside Docker, `-recordings <folder>` does the same. |
 | `BROADWAVE_ENCODER` | `gpu` or `software` to skip the automatic choice (the GPU when it has a low-power encoder, else the processor when it is fast enough). |
-| `BROADWAVE_HOSTS` | Public names the server answers to, comma-separated, such as `tv.example.com` (a leading dot covers subdomains). Addresses, one-word names, `.local`, `.lan`, and other home names always work, and so does a browser that reaches the server by HTTPS on port 443. Any other public name or port is refused, so a web page can't reach the server by pointing its own name at your server's address. |
+| `BROADWAVE_HOSTS` | Public names the server answers to, comma-separated, such as `tv.example.com` (a leading dot covers subdomains). Addresses, one-word names, `.local`, `.lan`, and other home names work without it. A browser that sends `Sec-Fetch-Site` is allowed on port 443, or when the name has no port. The check does not look at HTTPS. Any other public name needs this setting, so a web page can't reach the server by pointing its own name at your server's address. |
 | `BROADWAVE_ALTERNATES` | `0` carries only the chosen sound track in each live encode. By default a full-size encode also carries the channel's other languages and descriptions, so players switch between them without a restart. |
 
 Graphics, for smoother transcoding:
@@ -186,7 +186,7 @@ Docker's health check runs `broadwave -healthcheck` every 30 seconds, so `docker
 <summary><b>Automatic updates (optional)</b></summary>
 <br>
 
-Broadwave can keep itself on the newest release. An updater checks every night at 03:30 and updates only Broadwave. It follows the tag the container already uses, so `latest` moves forward and a full version tag stays put. It skips a night while someone is watching, a recording is running, or a recording starts within two hours.
+Broadwave can keep itself on the newest release. An updater checks every night at 03:30 and updates only Broadwave. It follows the tag the container already uses, so `latest` moves forward and a full version tag stays put. It skips a night while a tuner is in use, a recording is running, or a recording starts within two hours.
 
 - **Docker Compose:** `docker compose --profile updater up -d`. Set its `TZ` to match Broadwave.
 - **Unraid:** install the Broadwave template (it carries the labels the updater reads), then add the **Broadwave-Updater** template from `deploy/unraid/broadwave-updater.xml`. After an update, the Docker tab can still say an update is ready until it checks again.
