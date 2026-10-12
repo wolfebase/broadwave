@@ -144,7 +144,7 @@ export function Multiview() {
   const notice = warning || dropped[0]?.reason || plan?.note || "";
   const shared = sharedMosaics(settings.exportMosaics);
   const shareable = ordered.length >= 2 && ordered.length <= 4;
-  const shareFull = !shared.includes("") && shared.length >= mosaicShareMax;
+  const shareFull = addMosaic(shared, "").slot < 0;
   const shareKey = shareable ? mosaicKey(ordered.some((c) => c.id === focus) ? focus : ordered[0].id, ordered.map((c) => c.id)) : "";
   const cachedScores = useScoreMap();
   const [auto, setAuto] = useState(() => savedAuto());
