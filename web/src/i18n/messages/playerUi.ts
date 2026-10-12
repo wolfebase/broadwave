@@ -10,7 +10,7 @@ export const playerUiMessages = {
   "player.stopWatching": "Stop watching",
   "player.live": "Live",
   "player.behind": "{amount} behind",
-  "player.goLive": "Go to live, {amount} behind",
+  "player.goLive": "Go to live, {label}",
   "player.position": "Playback position",
   "player.positionOf": "{at} of {span}",
   "player.back15": "Back 15 seconds",

@@ -168,7 +168,7 @@ test("a list that fails says why, and a blank error uses the shared sentence", a
   await act(async () => {
     api.loads[api.loads.length - 1].reject(new Error(""));
   });
-  expect(again.querySelector('[role="alert"]')?.textContent).toBe(unreadBody);
+  expect(again.querySelector('[role="alert"]')?.textContent).toBe(unreadBody());
 });
 
 test("a screen that starts the channel reports the move", async () => {
@@ -251,7 +251,7 @@ test("a send that throws something other than an error uses the shared sentence"
   await act(async () => {
     click(el.querySelector("li button")!);
   });
-  expect(el.querySelector('[role="alert"]')?.textContent).toBe(unreadBody);
+  expect(el.querySelector('[role="alert"]')?.textContent).toBe(unreadBody());
 });
 
 test("closing the panel while it is still starting does not show an error", async () => {

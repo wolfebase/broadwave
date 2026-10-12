@@ -207,11 +207,11 @@ test("an encrypted station plays its clear twin and the note leaves after ten se
   await flush();
   expect(here()).toBe("/watch?channel=4&from=9");
   expect(text()).toContain("full Den TV");
-  expect(shown.props?.notice).toBe(encryptedBroadcast);
+  expect(shown.props?.notice).toBe(encryptedBroadcast());
   await act(async () => {
     await vi.advanceTimersByTimeAsync(9_999);
   });
-  expect(shown.props?.notice).toBe(encryptedBroadcast);
+  expect(shown.props?.notice).toBe(encryptedBroadcast());
   await act(async () => {
     await vi.advanceTimersByTimeAsync(1);
   });
@@ -300,7 +300,7 @@ test("opening a channel watches it, and an encrypted one names the stand-in", as
   click("open encrypted");
   await flush();
   expect(here()).toBe("/watch?channel=4&from=9");
-  expect(shown.props?.notice).toBe(encryptedBroadcast);
+  expect(shown.props?.notice).toBe(encryptedBroadcast());
   expect(text()).toContain("full Den TV");
 });
 

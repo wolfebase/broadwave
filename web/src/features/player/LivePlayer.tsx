@@ -619,7 +619,6 @@ export function LivePlayer({
       onClose={onClose}
       hold={panel !== "none"}
       liveLabel={liveLabel}
-      liveAria={livePillAria(syncing && sync.state !== "off", behind)}
       onLive={goLive}
       position={scrubAt ?? span.at}
       duration={span.len}
@@ -1129,11 +1128,6 @@ function bufferedAhead(video: HTMLVideoElement) {
 export function livePillLabel(synced: boolean, behindSeconds: number): string {
   if (synced || behindSeconds < 14) return t("player.live");
   return t("player.behind", { amount: formatBehind(behindSeconds) });
-}
-
-export function livePillAria(synced: boolean, behindSeconds: number): string | undefined {
-  if (synced || behindSeconds < 14) return undefined;
-  return t("player.goLive", { amount: formatBehind(behindSeconds) });
 }
 
 function formatBehind(seconds: number) {

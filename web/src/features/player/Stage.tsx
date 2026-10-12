@@ -24,7 +24,6 @@ export function Stage({
   onBack,
   backLabel,
   liveLabel,
-  liveAria,
   onLive,
   position,
   duration,
@@ -59,8 +58,6 @@ export function Stage({
   onBack: () => void;
   backLabel: string;
   liveLabel?: string;
-  /** Set when the pill is behind live. The label itself is how far. */
-  liveAria?: string;
   onLive?: () => void;
   position: number;
   duration: number;
@@ -344,7 +341,7 @@ export function Stage({
               <button
                 type="button"
                 className={liveLabel === t("player.live") ? "live-pill on" : "live-pill"}
-                aria-label={liveAria}
+                aria-label={liveLabel === t("player.live") ? undefined : t("player.goLive", { label: liveLabel })}
                 onClick={onLive}
               >
                 <span className="live-dot-light" aria-hidden="true" />

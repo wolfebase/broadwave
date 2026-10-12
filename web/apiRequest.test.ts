@@ -47,15 +47,15 @@ test("an error body becomes a failure, and a body that is not JSON uses the shar
   assert.equal(parsed.code, "recording");
 
   const coded = apiFailure(400, JSON.stringify({ code: "bad" }));
-  assert.equal(coded.message, unreadBody);
+  assert.equal(coded.message, unreadBody());
   assert.equal(coded.code, "bad");
 
   const blank = apiFailure(500, JSON.stringify({ message: "" }));
-  assert.equal(blank.message, unreadBody);
+  assert.equal(blank.message, unreadBody());
   assert.equal(blank.code, undefined);
 
   const junk = apiFailure(502, "nope");
-  assert.equal(junk.message, unreadBody);
+  assert.equal(junk.message, unreadBody());
   assert.equal(junk.status, 502);
 });
 
@@ -184,7 +184,7 @@ test("a playlist file uploads as form data, and a 401 still opens pairing", asyn
 
   stub(() => new Response("nope", { status: 500 }));
   await assert.rejects(addPlaylistFile("Den TV", "", file), (err: unknown) => {
-    assert.equal((err as Error).message, unreadBody);
+    assert.equal((err as Error).message, unreadBody());
     return true;
   });
   assert.equal(denied, 1);
