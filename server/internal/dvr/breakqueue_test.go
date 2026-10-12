@@ -474,20 +474,95 @@ func TestLibraryReadChargeFollowsTheFile(t *testing.T) {
 	if err := os.WriteFile(path, make([]byte, 1000), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := libraryReadOf(store.Recording{Path: path}); got != 1000 {
+	ctx := context.Background()
+	q := &BreakQueue{}
+	if got := q.libraryReadOf(ctx, &store.Recording{Path: path}); got != 1000 {
 		t.Fatalf("short file: %d", got)
 	}
-	if got := libraryReadOf(store.Recording{Path: path, Duration: 3600}); got != breaks.ListenBytes(1000, 3600) {
+	if got := q.libraryReadOf(ctx, &store.Recording{Path: path, Duration: 3600}); got != breaks.ListenBytes(1000, 3600) {
 		t.Fatalf("known length: %d", got)
 	}
 	prev := libraryReadCeiling
 	libraryReadCeiling = 100
-	t.Cleanup(func() { libraryReadCeiling = prev })
-	if got := libraryReadOf(store.Recording{Path: path}); got != 100 {
+	prevProbe := probeLength
+	probeLength = func(string, string) float64 { return 0 }
+	t.Cleanup(func() {
+		libraryReadCeiling = prev
+		probeLength = prevProbe
+	})
+	if got := q.libraryReadOf(ctx, &store.Recording{Path: path}); got != 100 {
 		t.Fatalf("ceiling: %d", got)
 	}
-	if got := libraryReadOf(store.Recording{Path: filepath.Join(dir, "gone.ts")}); got != 0 {
+	if got := q.libraryReadOf(ctx, &store.Recording{Path: filepath.Join(dir, "gone.ts")}); got != 0 {
 		t.Fatalf("missing: %d", got)
+	}
+}
+
+// A file with no stored length is charged what the listen will read once the
+// length is probed. The ceiling remains when the probe cannot read it.
+func TestLibraryReadChargeUsesTheProbedLength(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ep.ts")
+	if err := os.WriteFile(path, make([]byte, 1000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	prevCeiling := libraryReadCeiling
+	libraryReadCeiling = 100
+	prevProbe := probeLength
+	t.Cleanup(func() {
+		libraryReadCeiling = prevCeiling
+		probeLength = prevProbe
+	})
+	ctx := context.Background()
+	q := &BreakQueue{}
+	probeLength = func(string, string) float64 { return 3600 }
+	if got, want := q.libraryReadOf(ctx, &store.Recording{Path: path}), breaks.ListenBytes(1000, 3600); got != want || got <= 100 {
+		t.Fatalf("probed hour: %d, listen %d", got, want)
+	}
+	probeLength = func(string, string) float64 { return 600 }
+	if got := q.libraryReadOf(ctx, &store.Recording{Path: path}); got != 1000 {
+		t.Fatalf("short file counted as the ceiling: %d", got)
+	}
+	probeLength = func(string, string) float64 { return 0 }
+	if got := q.libraryReadOf(ctx, &store.Recording{Path: path}); got != 100 {
+		t.Fatalf("unknown length: %d", got)
+	}
+}
+
+// A probed length is stored, so a file held for the next hour, and its
+// listen, do not probe it again.
+func TestLibraryReadChargeStoresTheProbedLength(t *testing.T) {
+	r := newQueueRig(t, "")
+	path := filepath.Join(t.TempDir(), "ep.ts")
+	if err := os.WriteFile(path, make([]byte, 1000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	id := r.addEpisode(t, "Wide", path, 1, 1)
+	prevCeiling, prevProbe := libraryReadCeiling, probeLength
+	libraryReadCeiling = 100
+	probes := 0
+	probeLength = func(string, string) float64 { probes++; return 3600 }
+	t.Cleanup(func() {
+		libraryReadCeiling = prevCeiling
+		probeLength = prevProbe
+	})
+	ctx := context.Background()
+	want := breaks.ListenBytes(1000, 3600)
+	for range 2 {
+		rec, err := r.st.Recording(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := r.q.libraryReadOf(ctx, &rec); got != want || rec.Duration != 3600 {
+			t.Fatalf("charge %d, want %d, length %v", got, want, rec.Duration)
+		}
+	}
+	if probes != 1 {
+		t.Fatalf("probed %d times", probes)
+	}
+	// A length that could not be read before is not probed again.
+	if got := r.q.libraryReadOf(ctx, &store.Recording{Path: path, Duration: -1}); got != 100 || probes != 1 {
+		t.Fatalf("unreadable: %d, probes %d", got, probes)
 	}
 }
 
