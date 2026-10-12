@@ -4,7 +4,7 @@ These are the situations people run into, with the cause and what to do. The sen
 
 ## Setup finds no tuner
 
-**Docker Desktop.** Setup stays on "No tuner answered yet." The server finds a tuner by a broadcast, and Docker Desktop's host network is a virtual machine, so that broadcast never arrives. Publish port 8477 and set `HDHR_HOST` to the tuner's address. [Install](install.md) has the command. An address that does not answer says "No HDHomeRun answered at that address. Add the port if it is not 80."
+**Docker Desktop.** Setup stays on "No tuner answered yet." The server finds a tuner by a broadcast, and Docker Desktop's host network is a virtual machine, so that broadcast never arrives. Publish port 8477 and set `HDHR_HOST` to the tuner's address. [Install](install.md) has the command. An address with no port that does not answer says "No HDHomeRun answered at that address. Add the port if it is not 80."
 
 **The container is on the bridge network.** Diagnostics says "Broadwave can't see your tuner from inside Docker. Switch the container to host networking." When a tuner is already stored, the line is "Phones and TVs can't find this server on their own from inside Docker. Switch the container to host networking." On Linux, use host networking. On Docker Desktop, set the tuner address instead.
 

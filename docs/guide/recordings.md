@@ -28,7 +28,7 @@ Record this airing, record the series, or record every game for a team you follo
 
 A series pass can be one channel or any channel, new episodes only, certain days, and a time of day. Padding is minutes before the listing and after it. While you set a pass up, the schedule shows what it would record in the next two weeks. Passes higher in the list win when two shows overlap and a tuner is short. The schedule offers a later airing when one fits.
 
-A game that is matched to a live score keeps recording until the game is over, in ten-minute steps, and stops eight minutes after it ends. Turning live scores off leaves the recording at the time the guide gave it.
+A game that is matched to a live score keeps recording until the game is over, in ten-minute steps, and stops eight minutes after it ends. Turning live scores off means a game is not extended as it runs. A sports listing that is not matched to a score records for an hour past the guide.
 
 A show that is already on can still be recorded from its beginning, when the channel has been tuned and the buffer still holds the start. Settings, Keep for recording from the start, is how long that buffer is. The choices are Off, 30 minutes, 1 hour, 2 hours, and 4 hours. One hour is the usual choice.
 

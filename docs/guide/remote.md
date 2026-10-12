@@ -8,10 +8,10 @@ The tuner stays home. Your phone talks to Broadwave, and Broadwave talks to the 
 
 The server listens on port 8477 on every network interface, unless you started it on another address. That port is the web app, the API, and the shared playlist.
 
-Two more listeners stay on the home network and do not help a phone that is only on Tailscale:
+The apps find a server on the home network. Do not count on them finding it over Tailscale. Type the address.
 
-- The apps find a server by Bonjour, as `_broadwave._tcp`, and by a UDP probe on port 8479. The probe answers a private home address. It does not answer a Tailscale address, and it does not answer on a tunnel. Type the address.
-- Port 8478 is the HDHomeRun address for Plex, Jellyfin, Emby, and Channels. It listens only after Settings, Share with other apps, Act as an HDHomeRun is on, and the change applies within a minute. It does not answer tuner discovery, so those apps need the address with `:8478`. It never asks for a device code.
+- Bonjour, `_broadwave._tcp`, can advertise a Tailscale address. The UDP probe on port 8479 answers a private home address. It does not answer a Tailscale address, and it does not answer on a tunnel.
+- Port 8478 is the HDHomeRun address for Plex, Jellyfin, Emby, and Channels. It listens on every interface once Settings, Share with other apps, Act as an HDHomeRun is on. The change applies within about 20 seconds. A Tailscale address can open it. It does not answer tuner discovery, so those apps need the address with `:8478`. It never asks for a device code.
 
 On Docker Desktop, the published-port install maps only 8477. Port 8478 is reachable when the container uses host networking, which is the Linux and Unraid install, and only while Act as an HDHomeRun is on.
 
@@ -25,7 +25,7 @@ Turn sign-in on when other people can reach the server and you watch in a browse
 
 A code is six digits and lasts 10 minutes. In Devices, choose Watch, Record, or Admin, then Pair a device and read the code out, or open Pair this browser on the new browser and approve the code it shows. Watch plays and reads the guide. Record also records and edits passes. Admin also changes settings. Revoke stops one device. The last admin cannot be revoked while sign-in is on. The message is "Pair another admin device first. This is the last one that can change settings."
 
-The iPhone, iPad, and Apple TV apps have no place to enter a code. Leave sign-in off if you use them. With it on they stop at "Sign in from a paired device."
+The iPhone, iPad, and Apple TV apps have no place to enter a code. Leave sign-in off if you use them. With it on they still connect, but the server refuses the guide and playback with "Sign in from a paired device."
 
 These stay open with no code, even after sign-in is on:
 
@@ -37,7 +37,7 @@ These stay open with no code, even after sign-in is on:
 | `/export/stream/…` and `/export/mosaic/…` | Copies the broadcast. Opening one starts a tune. |
 | Port 8478 | The same kind of stream, while Act as an HDHomeRun is on. |
 
-Health checks and the server's name and version are open too. Settings, recordings, and the support bundle need an admin device while sign-in is on. There is no switch that closes the playlist or port 8478.
+Health checks and the server's name and version are open too. Settings and the support bundle need an admin device while sign-in is on. Reading and playing a recording needs Watch. Adding or deleting one needs Record. Turning Act as an HDHomeRun off closes port 8478. Nothing closes the playlist.
 
 ## Tailscale
 
@@ -48,7 +48,7 @@ Join both machines to the same tailnet. Then copy the server's Tailscale address
 1. In a browser, open `http://` that address, then `:8477`. An address needs no extra setting. `100.64.0.0/10` addresses and Tailscale's IPv6 addresses are addresses, so the name check lets them through.
 2. On iPhone or iPad, the connect screen says "Or enter an address". On Apple TV, choose Enter an address. Type the Tailscale address and `:8477`, then Connect. If you leave the scheme and the port off, the app uses `http` and port 8477.
 
-The apps will not list the server on their own. Bonjour and the UDP probe stay on the home network.
+Do not count on the apps listing the server. The UDP probe stays on the home network. Bonjour can advertise a Tailscale address.
 
 Leave Act as an HDHomeRun off unless a media server in the house needs it. Leave device sign-in off while you use the Apple apps. On the web, turn it on when the tailnet is not only you, and remember that a playlist or a stream URL still plays with no code.
 

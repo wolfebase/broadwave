@@ -20,7 +20,7 @@ Click or tap a tile to hear it. With a remote, move to the tile and press Enter 
 
 ## How big the pictures are
 
-A quad is 360p on every tile. The large-tile size comes from a short encode the server runs at startup. Diagnostics prints the result, for example "Intel GPU found: 1080p60 at 5.4x real time. 720p60 on a large tile, 4 pictures at once."
+A quad is 360p on every tile. The large-tile size comes from a short encode the server runs at startup, unless the device can play that HEVC picture and it is 1080p or smaller. Then the tile is the station's picture. Diagnostics prints the result, for example "Intel GPU found: 1080p60 at 5.4x real time. 720p60 on a large tile, 4 pictures at once."
 
 On an Intel GPU using its low-power encoder, a fast startup encode allows six pictures, so a quad fits beside two full screens. A fast GPU stays at four. A software encoder needs a faster result than that to reach four.
 
