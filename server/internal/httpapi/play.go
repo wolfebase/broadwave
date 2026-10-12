@@ -425,9 +425,12 @@ func (s *Server) airings(w http.ResponseWriter, r *http.Request) {
 		}
 		to = parsed
 	} else if raw := r.URL.Query().Get("hours"); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 168 {
-			to = now.Add(time.Duration(n) * time.Hour)
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 168 {
+			httpError(w, "hours needs to be from 1 to 168", http.StatusBadRequest)
+			return
 		}
+		to = now.Add(time.Duration(n) * time.Hour)
 	}
 	if !to.After(from) {
 		httpError(w, "The guide window is backwards.", http.StatusBadRequest)
