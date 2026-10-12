@@ -758,7 +758,9 @@ public final class AppStore {
         let base = api.base
         guard let airing = try await api.recordAgain(recordingID: rec.id) else { return nil }
         guard sameSession(started, base) else { return airing }
-        let list = try await api.addPass(title: rec.title, channelID: airing.channelId, airingStart: airing.start)
+        let title = RecordAgain.passTitle(recording: rec, airing: airing)
+        guard !title.isEmpty else { throw RecordAgain.MissingTitle() }
+        let list = try await api.addPass(title: title, channelID: airing.channelId, airingStart: airing.start)
         guard sameSession(started, base) else { return airing }
         passesEpoch += 1
         passes = list

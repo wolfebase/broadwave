@@ -202,6 +202,16 @@ private func healthySnap() -> RecoverySnap {
     #expect(RecordAgain.failed == "Could not schedule it. Try again.")
 }
 
+@Test func recordAgainNamesThePassFromTheAiringWhenTheShowTitleIsBlank() {
+    let next = airing(2, on: 4, title: "Evening News", subtitle: "Pilot", from: 3600, to: 7200)
+    #expect(RecordAgain.passTitle(recording: recording(1, title: "  ", subtitle: "Pilot", programId: "EP1"), airing: next) == "Evening News")
+    let blank = airing(3, on: 4, title: " ", subtitle: "Finals", from: 3600, to: 7200)
+    #expect(RecordAgain.passTitle(recording: recording(1, title: "", subtitle: "Finals"), airing: blank) == "Finals")
+    let late = airing(4, on: 4, title: "Harbor Watch Late", from: 3600, to: 7200)
+    #expect(RecordAgain.passTitle(recording: recording(1, title: "Harbor Watch", subtitle: "The Lighthouse"), airing: late) == "Harbor Watch")
+    #expect(RecordAgain.passTitle(recording: recording(1, title: " "), airing: airing(5, on: 4, title: " ", from: 3600, to: 7200)).isEmpty)
+}
+
 @Test func recordAgainIsOfferedWhenTheProgramIsNamed() {
     var episode = recording(1, title: "Harbor", programId: "SH-HARBOR")
     episode.health = RecordingHealth(

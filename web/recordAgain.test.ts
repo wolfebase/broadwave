@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { recordAgainOffered } from "./src/features/library/againOffer.ts";
+import { recordAgainOffered, recordAgainTitle, scheduleRecordAgain } from "./src/features/library/againOffer.ts";
 import type { Recording } from "./src/types.ts";
 
 function rec(extra: Partial<Recording> = {}): Recording {
@@ -23,4 +23,58 @@ test("a recording still in progress is not offered", () => {
 
 test("a clean recording is not offered", () => {
   assert.equal(recordAgainOffered(rec({ programId: "EP1", health: { continuityErrors: 0, transportErrors: 0, syncLosses: 0, packets: 10, damaged: false } })), false);
+});
+
+test("a blank show title names the pass from the next airing", () => {
+  assert.equal(
+    recordAgainTitle(rec({ title: "  ", programId: "EP1", subtitle: "Pilot" }), { title: "Evening News", subtitle: "Pilot" }),
+    "Evening News",
+  );
+});
+
+test("a blank show title on the recording and the airing uses the episode name", () => {
+  assert.equal(recordAgainTitle(rec({ title: "", subtitle: "Finals" }), { title: "", subtitle: "Finals" }), "Finals");
+});
+
+test("a show title that is already set stays the pass name", () => {
+  assert.equal(
+    recordAgainTitle(rec({ title: "Harbor Watch", subtitle: "The Lighthouse" }), { title: "Harbor Watch Late" }),
+    "Harbor Watch",
+  );
+});
+
+test("scheduling a blank show title posts the airing name and reloads passes", async () => {
+  let posted = "";
+  let refreshed = 0;
+  await scheduleRecordAgain(
+    rec({ title: "  ", programId: "EP1" }),
+    { title: "Evening News", subtitle: "Pilot", channelId: 4, start: "2026-10-12T01:00:00Z" },
+    async (title) => {
+      posted = title;
+    },
+    async () => {
+      refreshed += 1;
+    },
+  );
+  assert.equal(posted, "Evening News");
+  assert.equal(refreshed, 1);
+});
+
+test("scheduling with no name at all does not post a pass", async () => {
+  let posted = 0;
+  let refreshed = 0;
+  await assert.rejects(
+    scheduleRecordAgain(
+      rec({ title: " " }),
+      { title: " ", channelId: 4, start: "2026-10-12T01:00:00Z" },
+      async () => {
+        posted += 1;
+      },
+      async () => {
+        refreshed += 1;
+      },
+    ),
+  );
+  assert.equal(posted, 0);
+  assert.equal(refreshed, 0);
 });

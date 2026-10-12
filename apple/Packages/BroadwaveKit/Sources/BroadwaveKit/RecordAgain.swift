@@ -2,6 +2,9 @@ import Foundation
 
 /// What Record it again says, the same words as the web library.
 public enum RecordAgain: Sendable {
+    /// The recording and its next airing have no name to store on the pass.
+    public struct MissingTitle: Error, Sendable {}
+
     public static let label = "Record it again"
     public static let noAiring = "The guide has no other airing yet."
     public static let failed = "Could not schedule it. Try again."
@@ -21,6 +24,18 @@ public enum RecordAgain: Sendable {
         clock.locale = locale
         clock.timeZone = timeZone
         return "Records again \(start.formatted(day)) \(start.formatted(clock))."
+    }
+
+    /// The name stored on the once-pass. A blank show title uses the airing's
+    /// name, then the episode name. Empty when none of those is set.
+    public static func passTitle(recording rec: Recording, airing: Airing) -> String {
+        for name in [rec.title, airing.title, rec.subtitle ?? "", airing.subtitle ?? ""] {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+        return ""
     }
 
     /// Offered on a finished recording that lost enough signal and names its
