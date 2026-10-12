@@ -1,6 +1,7 @@
 package dvr
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"math"
@@ -161,13 +162,7 @@ func buildPreview(in previewInput) StoragePlan {
 			if c := a.WatchedSince().Compare(b.WatchedSince()); c != 0 {
 				return c
 			}
-			if a.ID < b.ID {
-				return -1
-			}
-			if a.ID > b.ID {
-				return 1
-			}
-			return 0
+			return cmp.Compare(a.ID, b.ID)
 		})
 		for _, rec := range aged {
 			out.Remove = append(out.Remove, item(rec, "watchedDays", "now", watchedReason(in.Days)))
@@ -231,7 +226,7 @@ func buildPreview(in previewInput) StoragePlan {
 	}
 
 	for _, rec := range in.Recs {
-		if row, ok := holdRow(in, rec, fav, gone, roomRuns); ok {
+		if row, ok := holdRow(in, rec, fav, eligible, gone, roomRuns); ok {
 			out.Held = append(out.Held, row)
 		}
 		if row, ok := againRow(rec); ok {
@@ -242,13 +237,7 @@ func buildPreview(in previewInput) StoragePlan {
 		if c := strings.Compare(a.Title, b.Title); c != 0 {
 			return c
 		}
-		if a.ID < b.ID {
-			return -1
-		}
-		if a.ID > b.ID {
-			return 1
-		}
-		return 0
+		return cmp.Compare(a.ID, b.ID)
 	})
 	return out
 }
@@ -298,7 +287,7 @@ func freedSpace(free, extra uint64) uint64 {
 	return free + extra
 }
 
-func holdRow(in previewInput, rec store.Recording, fav map[int64]bool, gone map[int64]bool, roomRuns bool) (StoragePlanItem, bool) {
+func holdRow(in previewInput, rec store.Recording, fav map[int64]bool, eligible []store.Recording, gone map[int64]bool, roomRuns bool) (StoragePlanItem, bool) {
 	if gone[rec.ID] {
 		return StoragePlanItem{}, false
 	}
@@ -312,7 +301,7 @@ func holdRow(in previewInput, rec store.Recording, fav map[int64]bool, gone map[
 	if inside && !fileExists(rec.Path) {
 		return item(rec, "missing", "", "The file is gone."), true
 	}
-	if !ruleWouldTake(in, rec, fav, roomRuns) {
+	if !ruleWouldTake(in, rec, eligible, roomRuns) {
 		return StoragePlanItem{}, false
 	}
 	switch {
@@ -331,7 +320,7 @@ func holdRow(in previewInput, rec store.Recording, fav map[int64]bool, gone map[
 
 // ruleWouldTake reports whether some rule would remove this recording if
 // nothing protected it. Protections are applied by the caller.
-func ruleWouldTake(in previewInput, rec store.Recording, fav map[int64]bool, roomRuns bool) bool {
+func ruleWouldTake(in previewInput, rec store.Recording, eligible []store.Recording, roomRuns bool) bool {
 	if rec.Status != "complete" {
 		return false
 	}
@@ -351,26 +340,25 @@ func ruleWouldTake(in previewInput, rec store.Recording, fav map[int64]bool, roo
 			return true
 		}
 	}
-	// A keep rule would count it if the file were here and the channel were
-	// not favorite. Ask with those protections off.
-	stripped := in.Recs
-	if !fileExists(rec.Path) || fav[rec.ChannelID] || rec.Keep {
-		copy := append([]store.Recording(nil), in.Recs...)
-		for i := range copy {
-			if copy[i].ID == rec.ID {
-				copy[i].Keep = false
-			}
-		}
-		stripped = copy
+	// A keep rule counts what it really counts: a missing file and a
+	// favorite channel are not episodes. Ask about this row as if it were
+	// not kept and not on a favorite channel.
+	if !fileExists(rec.Path) {
+		return false
 	}
+	asked := make([]store.Recording, 0, len(eligible)+1)
+	for _, other := range eligible {
+		if other.ID != rec.ID {
+			asked = append(asked, other)
+		}
+	}
+	asked = append(asked, plain)
 	for _, pass := range in.Passes {
-		if keepMode(pass) == "" {
+		if keepMode(pass) == "" || !sameShow(pass, rec) {
 			continue
 		}
-		for _, id := range KeepVictims(pass, stripped) {
-			if id == rec.ID {
-				return true
-			}
+		if slices.Contains(KeepVictims(pass, asked), rec.ID) {
+			return true
 		}
 	}
 	return false
