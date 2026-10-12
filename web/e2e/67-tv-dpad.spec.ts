@@ -150,6 +150,8 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   await unwatched.focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.getByRole("combobox", { name: "Show" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("combobox", { name: "Sort" })).toBeFocused();
   await pressCode(page, 10009);
   await expect(page).toHaveURL(/\/sports$/);
 

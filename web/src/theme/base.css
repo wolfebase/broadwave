@@ -743,6 +743,18 @@ select {
   align-items: center;
 }
 
+/* Sort and Select sit under the filter. Left and Right change a menu, so a
+   control beside Show cannot be reached. Show stays on the filter's row.
+   The menu fills that line so Down from Show lands on it. */
+html[data-layout="tv"] .library-tools > label + label,
+html[data-layout="tv"] .library-tools > button.btn {
+  flex-basis: 100%;
+}
+
+html[data-layout="tv"] .library-tools > label + label select {
+  width: 100%;
+}
+
 .error {
   color: var(--color-tally-ink);
 }
