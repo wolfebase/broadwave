@@ -19,6 +19,7 @@ export default defineConfig({
       "passLabel.test.ts",
       "scoreLine.test.ts",
       "livePill.test.ts",
+      "tvRemote.test.ts",
       "playerChrome.test.ts",
     ],
   },
