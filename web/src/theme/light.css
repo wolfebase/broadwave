@@ -146,18 +146,26 @@ html[data-theme="light"] .now-card.has-art .nc-title {
   color: #f5f7fa;
 }
 
-html[data-theme="light"] .hero-cat,
 html[data-theme="light"] .hero-sub,
 html[data-theme="light"] .hero-left,
 html[data-theme="light"] .hero-next,
-html[data-theme="light"] .hero .ch-badge-name,
-html[data-theme="light"] .ps-art .ch-badge-name {
+html[data-theme="light"] .hero .ch-badge-name {
   color: #aeb7c5;
 }
 
+/* Live now and the category sit high on the hero, where the scrim is still thin.
+   The channel name on a short poster does the same. */
+html[data-theme="light"] .hero-cat,
+html[data-theme="light"] .ps-art .ch-badge-name,
 html[data-theme="light"] .hero .live-dot,
 html[data-theme="light"] .ps-art .live-dot {
-  color: #ff3b30;
+  color: #f5f7fa;
+}
+
+html[data-theme="light"] .hero .live-dot-light,
+html[data-theme="light"] .ps-art .live-dot-light {
+  background: #f5f7fa;
+  box-shadow: none;
 }
 
 html[data-theme="light"] .hero .ch-badge-num,
@@ -166,6 +174,12 @@ html[data-theme="light"] .hero .progress,
 html[data-theme="light"] .ps-art .progress,
 html[data-theme="light"] .now-card.has-art .progress {
   background: rgba(255, 255, 255, 0.22);
+}
+
+/* The poster scrim was clear until the last pixels, above the channel name. */
+html[data-theme="light"] .ps-art::after {
+  height: 72%;
+  background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.92) 55%, rgba(0, 0, 0, 0.92) 100%);
 }
 
 /* The close control sits on the poster, which may be a light picture. */
@@ -374,6 +388,11 @@ html[data-theme="light"] .guide-cell::before {
   opacity: 1;
 }
 
+/* The aired wash adds the category color under the bar and drops it under 3:1. */
+html[data-theme="light"] .guide-cell.now::before {
+  background: color-mix(in srgb, var(--cat-ink, var(--cat-color)) 85%, var(--color-text));
+}
+
 /* A selected chip is the accent. The category ink disappears on that fill. */
 html[data-theme="light"] .chip.on .chip-swatch {
   background: var(--color-on-accent);
@@ -401,6 +420,11 @@ html[data-theme="light"] .rc-poster .progress-fill {
 
 /* An empty field's only edge is this border. The token line is about 1.4:1. */
 html[data-theme="light"] :is(.field input, .field select, .name-input, .num-input, .lookup input, input[type="text"], input[type="password"], input[type="number"], input[type="search"], select) {
+  border-color: #6e7580;
+}
+
+/* The search field clears its own border, so the frame around it is the edge. */
+html[data-theme="light"] .search-form {
   border-color: #6e7580;
 }
 
@@ -562,6 +586,15 @@ html[data-theme="light"] :is(.stage, .mv) .segmented {
 
 html[data-theme="light"] :is(.stage, .mv) .progress {
   background: rgba(255, 255, 255, 0.1);
+}
+
+/* Dark ink vanishes on a dark row. The bright category misses 3:1 on a white frame. */
+html[data-theme="light"] :is(.stage, .mv) .progress-fill {
+  background: color-mix(in srgb, var(--cat-color, var(--color-text)) 30%, #fff);
+}
+
+html[data-theme="light"] :is(.stage, .mv) .mg-row.current .progress-fill {
+  background: var(--cat-ink, var(--cat-color));
 }
 
 html[data-theme="light"] :is(.stage, .mv) .switch-row input {

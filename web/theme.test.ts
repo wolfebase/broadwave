@@ -198,11 +198,20 @@ test("hero and poster ink stays light on the dark scrim", () => {
   assert.match(block(light, 'html[data-theme="light"] .ps-art .glass-icon,\nhtml[data-theme="light"] .ps-art .glass-icon:hover'), /rgba\(0, 0, 0, 0\.72\)/);
   assert.match(block(light, "html[data-theme=\"light\"] .hero-glow"), /rgba\(0, 0, 0, 0\.9\)/);
   const scrim = mix([0, 0, 0], [255, 255, 255], 0.9);
+  const thin = mix([0, 0, 0], [255, 255, 255], 0.62);
   const plate = mix([0, 0, 0], [255, 255, 255], 0.72);
-  atLeast("hero title", contrast(parseHex("#F5F7FA"), scrim));
+  const ink = parseHex("#F5F7FA");
+  atLeast("hero title", contrast(ink, scrim));
   atLeast("hero detail", contrast(parseHex("#AEB7C5"), scrim));
-  atLeast("hero live", contrast(parseHex("#FF3B30"), scrim));
-  atLeast("poster close", contrast(parseHex("#F5F7FA"), plate));
+  atLeast("poster close", contrast(ink, plate));
+  const live = block(light, 'html[data-theme="light"] .hero-cat,\nhtml[data-theme="light"] .ps-art .ch-badge-name,\nhtml[data-theme="light"] .hero .live-dot,\nhtml[data-theme="light"] .ps-art .live-dot');
+  assert.match(live, /color:\s*#f5f7fa/);
+  atLeast("hero live", contrast(ink, thin));
+  const dot = block(light, 'html[data-theme="light"] .hero .live-dot-light,\nhtml[data-theme="light"] .ps-art .live-dot-light');
+  assert.match(dot, /background:\s*#f5f7fa/);
+  const poster = block(light, 'html[data-theme="light"] .ps-art::after');
+  assert.match(poster, /rgba\(0, 0, 0, 0\.92\) 55%/);
+  atLeast("poster name", contrast(ink, mix([0, 0, 0], [255, 255, 255], 0.92)));
 });
 
 test("the dark theme keeps today's link and status ink", () => {
@@ -269,7 +278,18 @@ test("guide text stays at 4.5:1 after a light cell fades", () => {
     assert.ok(ratio >= 3, `field edge on ${name} is ${ratio.toFixed(2)}:1`);
   }
   assert.match(light, /border-color:\s*#6e7580/);
+  assert.match(block(light, 'html[data-theme="light"] .search-form'), /border-color:\s*#6e7580/);
   assert.match(block(light, 'html[data-theme="light"] :is(input, textarea)::placeholder'), /var\(--color-text-tertiary\)/);
+  const textInk = parseHex("#141820");
+  for (const [name, hex] of Object.entries(brightCats)) {
+    const cat = parseHex(hex);
+    const wash = mix(cat, surface, 0.16);
+    const aired = mix(cat, wash, 0.1);
+    const barInk = mix(parseHex(decl(block(light, `html[data-theme="light"] [data-cat="${name}"]`), "--cat-ink")), textInk, 0.85);
+    const ratio = contrast(barInk, aired);
+    assert.ok(ratio >= 3, `${name} now bar is ${ratio.toFixed(2)}:1`);
+  }
+  assert.match(block(light, 'html[data-theme="light"] .guide-cell.now::before'), /85%/);
 });
 
 test("a league name and a live edge clear the light card", () => {
@@ -315,6 +335,20 @@ test("the player and multiview keep the dark palette in a light page", () => {
   assert.equal(decl(stage, "--brand-blue"), "var(--color-accent)");
   assert.match(decl(stage, "--focus-ring"), /var\(--color-canvas\)/);
   assert.match(block(light, 'html[data-theme="light"] :is(.stage, .mv) .glass-icon'), /rgba\(255, 255, 255, 0\.08\)/);
+  assert.match(block(light, 'html[data-theme="light"] :is(.stage, .mv) .progress-fill'), /30%/);
+  assert.match(block(light, 'html[data-theme="light"] :is(.stage, .mv) .mg-row.current .progress-fill'), /var\(--cat-ink, var\(--cat-color\)\)/);
+  const glass = mix(parseHex("#1A2130"), [255, 255, 255], 0.72);
+  const track = mix([255, 255, 255], glass, 0.1);
+  const current = mix([255, 255, 255], glass, 0.92);
+  for (const [name, hex] of Object.entries({ sports: "#2FBF71", news: "#3D9BFF", movies: "#B36BFF", kids: "#FFB020", series: "#5E7BA8", other: "#5A6474" })) {
+    const fill = mix(parseHex(hex), [255, 255, 255], 0.3);
+    const ratio = contrast(fill, track);
+    assert.ok(ratio >= 3, `${name} player fill is ${ratio.toFixed(2)}:1`);
+  }
+  for (const hex of ["#268A57", "#337CC9", "#985DD9", "#9F7220", "#5E7BA8", "#5A6474"]) {
+    const ratio = contrast(parseHex(hex), current);
+    assert.ok(ratio >= 3, `current row fill ${hex} is ${ratio.toFixed(2)}:1`);
+  }
   const selected = block(light, 'html[data-theme="light"] :is(.stage, .mv) .seg.on,\nhtml[data-theme="light"] :is(.stage, .mv) .btn.primary,\nhtml[data-theme="light"] :is(.stage, .mv) .pill-btn[aria-pressed="true"]');
   assert.match(selected, /rgba\(255, 255, 255, 0\.92\)/);
   assert.match(selected, /var\(--color-canvas\)/);
