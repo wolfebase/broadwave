@@ -105,7 +105,7 @@ func TestPassAndVirtualBodiesMatchTheHandler(t *testing.T) {
 		}
 		cleared := sendJSON(t, api, http.MethodPatch, fmt.Sprintf("/api/v1/virtuals/%d", channel.ID), `{"ruleTitle":"Harbor Watch"}`)
 		clearedBody := successBody(t, doc, http.MethodPatch, "/virtuals/{id}", cleared)
-		if clearedBody["orderMode"] != "custom" {
+		if clearedBody["orderMode"] != "random" {
 			t.Fatalf("omitted orderMode %#v", clearedBody["orderMode"])
 		}
 

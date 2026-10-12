@@ -549,7 +549,7 @@ func (s *Server) updateVirtual(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		OrderMode  string  `json:"orderMode"`
-		RuleTitle  string  `json:"ruleTitle"`
+		RuleTitle  *string `json:"ruleTitle"`
 		Recordings []int64 `json:"recordings"`
 	}
 	if err := decodeJSON(r, &body); err != nil {
@@ -562,15 +562,28 @@ func (s *Server) updateVirtual(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "orderMode must be custom, release, random, season, show, or marathon", http.StatusBadRequest)
 		return
 	}
-	if body.RuleTitle != "" && body.Recordings == nil {
+	current, err := s.Store.Virtual(r.Context(), id)
+	if err != nil {
+		httpError(w, "channel not found", http.StatusNotFound)
+		return
+	}
+	orderMode := body.OrderMode
+	if orderMode == "" {
+		orderMode = current.OrderMode
+	}
+	ruleTitle := current.RuleTitle
+	if body.RuleTitle != nil {
+		ruleTitle = *body.RuleTitle
+	}
+	if body.RuleTitle != nil && *body.RuleTitle != "" && body.Recordings == nil {
 		recs, _ := s.Store.Recordings(r.Context())
 		for _, rec := range recs {
-			if rec.Status != "failed" && strings.EqualFold(rec.Title, body.RuleTitle) {
+			if rec.Status != "failed" && strings.EqualFold(rec.Title, *body.RuleTitle) {
 				body.Recordings = append(body.Recordings, rec.ID)
 			}
 		}
 	}
-	updated, err := s.Store.UpdateVirtual(r.Context(), id, body.OrderMode, body.RuleTitle, body.Recordings)
+	updated, err := s.Store.UpdateVirtual(r.Context(), id, orderMode, ruleTitle, body.Recordings)
 	if err != nil {
 		httpError(w, "channel not found", http.StatusNotFound)
 		return
