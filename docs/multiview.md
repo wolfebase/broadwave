@@ -14,7 +14,7 @@ The web app, iPad, and Apple TV share these layouts.
 | Quad | Four pictures, the same size | `layout=quad` |
 | Small over big | A small picture over a large one | `layout=pip` |
 
-iPhone offers Side by side and Small over big, two pictures. A link that asks for a quad opens side by side there. In the browser on a phone, Side by side stacks the two pictures, and the other layouts stay available.
+iPhone offers Side by side and Small over big, two pictures. A link that asks for a quad opens side by side there. In a browser, Side by side stacks the two pictures when Settings, Layout, is Phone, or when Layout is Auto and the window is 760 pixels wide or narrower. Desktop, TV, and a wider Auto window keep the two pictures side by side. The other layouts stay available.
 
 A page link looks like `/multiview?ch=12,34&layout=2up`. The apps use `broadwave://multiview?ch=12,34&layout=2up`. `focus` names the tile with the sound. Write `1%2B2` in an address for One big and two: a bare plus sign is read as a space.
 
