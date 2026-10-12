@@ -2102,6 +2102,9 @@ func (h *Hub) Shutdown() {
 		m.cancel()
 	}
 	h.mu.Unlock()
+	// A recording being played is not a tuner feed. Leaving its ffmpeg
+	// running survives the process, and the next boot has no pid to reap.
+	h.stopFileEncodes()
 	h.grabbers.Wait()
 }
 

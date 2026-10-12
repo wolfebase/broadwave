@@ -298,6 +298,20 @@ func (h *Hub) dropFileEncode(id int64, cmd *exec.Cmd) {
 	h.playMu.Unlock()
 }
 
+// stopFileEncodes ends every recording playback. The caller is not holding
+// playMu: each stop waits for that ffmpeg to exit.
+func (h *Hub) stopFileEncodes() {
+	h.playMu.Lock()
+	ids := make([]int64, 0, len(h.fileEnc))
+	for id := range h.fileEnc {
+		ids = append(ids, id)
+	}
+	h.playMu.Unlock()
+	for _, id := range ids {
+		h.stopFileEncode(id)
+	}
+}
+
 // stopFileEncode kills the ffmpeg writing this recording and waits until it
 // has exited, so the next encode is not replacing files that process still has open.
 func (h *Hub) stopFileEncode(id int64) {

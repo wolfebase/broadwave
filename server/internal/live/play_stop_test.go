@@ -145,6 +145,26 @@ func TestPlayFileStopsWhenThePlaylistNeverStarts(t *testing.T) {
 	}
 }
 
+func TestShutdownStopsAPlayingFile(t *testing.T) {
+	shortenPlayStart(t, 2*time.Second)
+	h, rec, log := playFixture(t, true)
+	if _, err := h.PlayFile(4, rec, "hevc", "broadcast", "", 0); err != nil {
+		t.Fatal(err)
+	}
+	players, _ := awaitRoles(t, log, 1, 0)
+	if !processLive(players[0]) {
+		t.Fatal("player did not start")
+	}
+	h.Shutdown()
+	waitDead(t, players[0])
+	h.playMu.Lock()
+	_, held := h.fileEnc[4]
+	h.playMu.Unlock()
+	if held {
+		t.Fatal("shutdown left the recording encode tracked")
+	}
+}
+
 func TestPlayFileLeavesAStartedPlayerRunning(t *testing.T) {
 	shortenPlayStart(t, 2*time.Second)
 	h, rec, log := playFixture(t, true)
