@@ -1,4 +1,4 @@
-import { groupAxis, stepInGroup } from "../lib/focusStep";
+import { alignedAhead, groupAxis, stepInGroup } from "../lib/focusStep";
 import { isTextField } from "../lib/textField";
 import { firstBelow, nearest, type Box, type Direction } from "../lib/remote";
 import { canonicalKey } from "../lib/tvKey";
@@ -60,12 +60,24 @@ function onScreen(node: HTMLElement, rect: DOMRect) {
   return { left, top, right, bottom };
 }
 
+/** The picture fills the screen. While its buttons are up, it must not take the arrow. */
+function pictureWithChrome(node: HTMLElement) {
+  if (!node.matches("section.stage:not(.mini)")) return false;
+  for (const el of node.querySelectorAll<HTMLElement>("button, a[href], input, select, textarea")) {
+    if (el.tabIndex < 0 || (el as HTMLButtonElement).disabled || el.closest("[inert], [aria-hidden='true']")) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width >= 2 && rect.height >= 2) return true;
+  }
+  return false;
+}
+
 function boxes(scope: ParentNode) {
   const out: { el: HTMLElement; box: Box }[] = [];
   for (const node of scope.querySelectorAll<HTMLElement>(selector)) {
     // An inert control sits behind the player. Focusing it would drop the keys.
     if (node.tabIndex < 0 || node.closest("[inert], [aria-hidden='true']")) continue;
     if ((node as HTMLButtonElement).disabled) continue;
+    if (pictureWithChrome(node)) continue;
     const rect = node.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) continue;
     out.push({ el: node, box: { id: out.length, ...onScreen(node, rect) } });
@@ -86,16 +98,32 @@ function editing(target: HTMLElement | null) {
  * The next control in the same row or list, in order.
  * "stay" means this direction ends here. Null lets the page-wide search run.
  */
+/** Past the end of a row or list. A control beside it, outside the group, is still this way. */
+function pastEnd(group: Element, from: Box, dir: Direction, items: { el: HTMLElement; box: Box }[]): HTMLElement | "stay" {
+  const outside = items.filter((item) => !group.contains(item.el));
+  const hit = alignedAhead(from, outside.map((item) => item.box), dir);
+  if (hit != null) return outside[hit].el;
+  // The shelf's own heading action (Guide, All sports) and the mini player in
+  // the corner are still reachable. Nothing else is: Right at the end of a
+  // shelf must not drop into the next one.
+  const heading = group.closest(".shelf")?.querySelector(":scope > .section-header");
+  const lone = outside.filter((item) => item.el.closest(".stage.mini") || heading?.contains(item.el));
+  const pool = lone.map((item) => item.box);
+  const id = nearest(from, pool, dir) ?? nearest(from, pool, dir, true);
+  return lone.find((item) => item.box.id === id)?.el ?? "stay";
+}
+
 function withinGroup(current: HTMLElement, dir: Direction, items: { el: HTMLElement; box: Box }[]): HTMLElement | "stay" | null {
   const group = current.closest(groupSelector);
   if (!group) return null;
   const inside = items.filter((item) => group.contains(item.el));
-  if (inside.length < 2) return null;
   const index = inside.findIndex((item) => item.el === current);
   if (index < 0) return null;
+  // A shelf with one card is still a row. Left and Right end there.
+  if (inside.length < 2) return dir === "left" || dir === "right" ? pastEnd(group, inside[index].box, dir, items) : null;
   const boxes = inside.map((item) => item.box);
   const stepped = stepInGroup(index, inside.length, dir, groupAxis(boxes), boxes);
-  if (stepped === "stay") return "stay";
+  if (stepped === "stay") return pastEnd(group, inside[index].box, dir, items);
   if (typeof stepped === "number") return inside[stepped].el;
   // The next line of a wrapped row starts past this control. A sibling on this
   // line can sit a little lower, and Down must not stop there.

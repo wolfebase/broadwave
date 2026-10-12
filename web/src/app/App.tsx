@@ -37,7 +37,13 @@ function PlayClaim() {
       const active = document.activeElement;
       const lost = !(active instanceof HTMLElement) || active === document.body || active === document.documentElement || active.matches(".stage.mini") || Boolean(active.closest("[inert]"));
       if (!lost) return;
-      focusRing(document.querySelector<HTMLElement>(".stage:not(.mini)"));
+      const stage = document.querySelector<HTMLElement>(".stage:not(.mini)");
+      // Play, not Back: the first OK on a remote must not leave the recording.
+      const pick = (selector: string) => {
+        const el = stage?.querySelector<HTMLElement>(selector);
+        return el && !el.closest("[inert]") ? el : null;
+      };
+      focusRing(pick(".transport-play") ?? pick("button:not([disabled])") ?? stage);
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
@@ -108,6 +114,8 @@ function Shell() {
         pick(".mv-guide button:not([disabled])") ||
         pick(".mv") ||
         pick(".stage:not(.mini) [aria-label='Channels']") ||
+        pick(".stage:not(.mini) .transport-play") ||
+        pick(".stage:not(.mini) button:not([disabled])") ||
         pick(".stage:not(.mini)") ||
         pick(".has-mini .guide-canvas") ||
         pick(".tabs [role='tab'][aria-selected='true']") ||

@@ -31,13 +31,16 @@
 # JS raised 2026-10-11: the shell listens for an install prompt and a TV remote
 # walks each row in order. The offer itself loads only when the browser asks.
 # Measured entry gzip 96517, plus 300 bytes of slack.
+# JS raised 2026-10-11: Right at the end of a row continues to the control
+# beside it, and the picture is left out of the arrow order while its buttons
+# are up. Measured entry gzip 97061, plus 300 bytes of slack.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=96817
+JS_GZIP_MAX=97361
 CSS_GZIP_MAX=11860
 
 if [[ ! -f "$INDEX" ]]; then

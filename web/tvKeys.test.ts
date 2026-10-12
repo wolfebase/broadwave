@@ -15,6 +15,8 @@ test("Back on a TV remote is Escape, and Backspace still deletes text", () => {
   assert.equal(tvBackKind({ key: "", which: 461 }), "escape");
   // Fire TV's Back is Escape. Some builds only fill the code.
   assert.equal(tvBackKind({ key: "Unidentified", keyCode: 27 }), "escape");
+  assert.equal(tvBackKind({ key: "Unidentified", keyCode: 4 }), "escape");
+  assert.equal(tvBackKind({ key: "4", keyCode: 4 }), null);
   assert.equal(tvBackKind({ key: "Unidentified", keyCode: 8 }), "backspace");
   assert.equal(tvBackKind({ key: "a", keyCode: 461 }), "escape");
   assert.equal(tvBackKind({ key: "Enter" }), null);

@@ -20,7 +20,8 @@ export function tvBackKind(event: KeyLike): "escape" | "backspace" | null {
   if (namedBack.has(event.key)) return "escape";
   const code = codeOf(event);
   if (code === 461 || code === 10009) return "escape";
-  if (unnamed(event.key) && code === 27) return "escape";
+  // Fire TV's browser sometimes sends Android's Back code and no key name.
+  if (unnamed(event.key) && (code === 27 || code === 4)) return "escape";
   if (unnamed(event.key) && code === 8) return "backspace";
   return null;
 }

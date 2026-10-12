@@ -70,11 +70,18 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   expect(byCode?.className).toContain("now-card");
   expect(byCode!.x).toBeGreaterThan(first!.x);
 
+  // Right at the end of a shelf stays in that shelf: on its heading's action
+  // when it has one, never in the next shelf.
   const last = cards.last();
   await last.focus();
-  const end = await focused(page);
   await page.keyboard.press("ArrowRight");
-  expect(await focused(page)).toMatchObject({ label: end!.label, x: end!.x });
+  const stayed = await page.evaluate(() => {
+    const all = document.querySelectorAll(".shelf-row .now-card");
+    const end = all[all.length - 1];
+    const el = document.activeElement;
+    return el === end || Boolean(el?.closest(".section-header") && el.closest(".shelf") === end?.closest(".shelf"));
+  });
+  expect(stayed).toBe(true);
 
   await page.locator(".topbar").getByRole("tab", { name: "Guide" }).click();
   await expect(page).toHaveURL(/\/guide$/);
@@ -138,6 +145,11 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   await page.locator(".topbar").getByRole("tab", { name: "Recordings" }).click();
   await expect(page).toHaveURL(/\/recordings$/);
   await settle(page);
+  // Unwatched is the end of its group. Show sits on the same row, outside it.
+  const unwatched = page.getByRole("tab", { name: "Unwatched" });
+  await unwatched.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("combobox", { name: "Show" })).toBeFocused();
   await pressCode(page, 10009);
   await expect(page).toHaveURL(/\/sports$/);
 
@@ -187,4 +199,23 @@ test("a TV remote walks every screen and Back leaves", async ({ page }) => {
   expect((await focused(page))?.label).toBe("Film");
   await page.keyboard.press("Escape");
   await expect(page).toHaveURL(/\/sports$/);
+
+  await page.locator(".topbar").getByRole("tab", { name: "Home" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await settle(page);
+  await page.getByRole("button", { name: "Watch", exact: true }).click();
+  const stage = page.locator("section.stage:not(.mini)");
+  await expect(stage).toBeVisible();
+  // Focus and the arrow in one turn, so the page cannot move focus first.
+  await page.evaluate(() => {
+    const el = document.querySelector("section.stage:not(.mini)");
+    if (!(el instanceof HTMLElement)) throw new Error("no stage");
+    el.focus();
+    el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  });
+  await expect.poll(() => page.evaluate(() => document.activeElement instanceof HTMLButtonElement && document.activeElement.closest("section.stage") != null)).toBe(true);
+  const back = stage.getByRole("button", { name: "Back to browsing" });
+  await back.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(() => page.evaluate(() => document.activeElement?.matches("section.stage") === true)).toBe(false);
 });
