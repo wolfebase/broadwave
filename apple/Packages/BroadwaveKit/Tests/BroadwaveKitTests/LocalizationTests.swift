@@ -38,6 +38,37 @@ import Testing
     #expect(recording(errors: 3).signalLine == "Signal broke up 3 times")
 }
 
+@Test func demoSentencesAreInTheCatalog() throws {
+    var url = URL(fileURLWithPath: #filePath)
+    for _ in 0 ..< 3 {
+        url.deleteLastPathComponent()
+    }
+    let data = try Data(contentsOf: url.appendingPathComponent("Sources/BroadwaveKit/Localizable.xcstrings"))
+    let catalog = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let strings = try #require(catalog["strings"] as? [String: Any])
+    let phrases = [
+        "A Blender Foundation film, under CC BY.",
+        "Demo",
+        "Kept",
+        "Only a group pauses every screen.",
+        "Open movie",
+        "Original picture",
+        "Say whether to keep it.",
+        "Settings need text values.",
+        "That channel is not in the demo.",
+        "That picture is not in the demo.",
+        "That recording is not in the demo.",
+        "That recording is not in the list.",
+        "That screen isn't open right now.",
+        "The demo films are not on this device.",
+        "The demo has no %@.",
+        "The demo plays samples. It does not record.",
+    ]
+    let missing = phrases.filter { !catalogHas($0, strings) }
+    #expect(missing.isEmpty)
+    #expect(String(localized: "Only a group pauses every screen.", bundle: .module) == "Only a group pauses every screen.")
+}
+
 private func catalogHas(_ phrase: String, _ strings: [String: Any]) -> Bool {
     if strings[phrase] != nil {
         return true

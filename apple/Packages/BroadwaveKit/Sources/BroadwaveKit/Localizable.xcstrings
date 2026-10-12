@@ -331,6 +331,17 @@
         }
       }
     },
+    "A Blender Foundation film, under CC BY." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Blender Foundation film, under CC BY."
+          }
+        }
+      }
+    },
     "A different server answered at this address." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -606,6 +617,17 @@
         }
       }
     },
+    "Kept" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kept"
+          }
+        }
+      }
+    },
     "Kids" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -815,6 +837,39 @@
         }
       }
     },
+    "Only a group pauses every screen." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only a group pauses every screen."
+          }
+        }
+      }
+    },
+    "Open movie" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open movie"
+          }
+        }
+      }
+    },
+    "Original picture" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Original picture"
+          }
+        }
+      }
+    },
     "Other" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -925,6 +980,17 @@
         }
       }
     },
+    "Say whether to keep it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Say whether to keep it."
+          }
+        }
+      }
+    },
     "Screen" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -976,6 +1042,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Set to record"
+          }
+        }
+      }
+    },
+    "Settings need text values." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings need text values."
           }
         }
       }
@@ -1112,6 +1189,17 @@
         }
       }
     },
+    "That channel is not in the demo." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That channel is not in the demo."
+          }
+        }
+      }
+    },
     "That did not work. Try again." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1119,6 +1207,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "That did not work. Try again."
+          }
+        }
+      }
+    },
+    "That picture is not in the demo." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That picture is not in the demo."
+          }
+        }
+      }
+    },
+    "That recording is not in the demo." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That recording is not in the demo."
+          }
+        }
+      }
+    },
+    "That recording is not in the list." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That recording is not in the list."
+          }
+        }
+      }
+    },
+    "That screen isn't open right now." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That screen isn't open right now."
           }
         }
       }
@@ -1152,6 +1284,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "The demo did not start."
+          }
+        }
+      }
+    },
+    "The demo films are not on this device." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The demo films are not on this device."
+          }
+        }
+      }
+    },
+    "The demo plays samples. It does not record." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The demo plays samples. It does not record."
           }
         }
       }
@@ -1350,6 +1504,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "another Broadwave server"
+          }
+        }
+      }
+    },
+    "demo.missing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The demo has no %@."
           }
         }
       }

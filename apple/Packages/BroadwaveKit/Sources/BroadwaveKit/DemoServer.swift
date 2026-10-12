@@ -239,7 +239,7 @@ public final class DemoServer: @unchecked Sendable {
         }
         guard room.grouped else {
             lock.unlock()
-            reply(socket, "error", ["code": "sync", "message": "Only a group pauses every screen."])
+            reply(socket, "error", ["code": "sync", "message": String(localized: "Only a group pauses every screen.", bundle: .module)])
             return
         }
         let action = body["action"] as? String ?? ""
@@ -344,7 +344,7 @@ public final class DemoServer: @unchecked Sendable {
         case ("GET", "/api/v1/screens"):
             return Self.ok(Data("{\"screens\":[]}".utf8))
         case ("POST", _) where path.hasPrefix("/api/v1/screens/") && path.hasSuffix("/watch"):
-            return Self.fail(404, "not_found", "That screen isn't open right now.")
+            return Self.fail(404, "not_found", String(localized: "That screen isn't open right now.", bundle: .module))
         case ("POST", "/api/v1/watch"):
             return watch(body)
         case ("POST", "/api/v1/multiview/plan"):
@@ -364,9 +364,9 @@ public final class DemoServer: @unchecked Sendable {
         case ("POST", "/api/v1/passes/preview"):
             return Self.ok(Data("{\"tunerCount\":2,\"items\":[],\"bumps\":[],\"timeZone\":\"UTC\",\"utcOffset\":0}".utf8))
         case ("POST", "/api/v1/recordings"), ("POST", "/api/v1/passes"):
-            return Self.fail(409, "demo", "The demo plays samples. It does not record.")
+            return Self.fail(409, "demo", String(localized: "The demo plays samples. It does not record.", bundle: .module))
         default:
-            return Self.fail(404, "missing", "The demo has no \(path).")
+            return Self.fail(404, "missing", String(localized: "demo.missing", defaultValue: "The demo has no \(path).", bundle: .module))
         }
     }
 
@@ -401,7 +401,7 @@ public final class DemoServer: @unchecked Sendable {
 
     private func putSettings(_ body: Data) -> Data {
         guard let obj = try? JSONSerialization.jsonObject(with: body) as? [String: String] else {
-            return Self.fail(400, "bad", "Settings need text values.")
+            return Self.fail(400, "bad", String(localized: "Settings need text values.", bundle: .module))
         }
         lock.lock()
         for (key, value) in obj {
@@ -457,7 +457,7 @@ public final class DemoServer: @unchecked Sendable {
         var id: Int64
         var channelId: Int64 = 1
         var guideNumber = "4.1"
-        var title = "Kept"
+        var title = String(localized: "Kept", bundle: .module)
         var status = "complete"
         var startedAt = "2026-10-09T12:00:00Z"
         var keep: Bool?
@@ -494,16 +494,16 @@ public final class DemoServer: @unchecked Sendable {
         let prefix = "/api/v1/recordings/"
         let suffix = "/keep"
         guard path.hasPrefix(prefix), path.hasSuffix(suffix) else {
-            return Self.fail(404, "missing", "That recording is not in the list.")
+            return Self.fail(404, "missing", String(localized: "That recording is not in the list.", bundle: .module))
         }
         let idText = path.dropFirst(prefix.count).dropLast(suffix.count)
         guard let id = Int64(idText), id > 0 else {
-            return Self.fail(400, "bad", "That recording is not in the list.")
+            return Self.fail(400, "bad", String(localized: "That recording is not in the list.", bundle: .module))
         }
         guard let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
               let keep = obj["keep"] as? Bool
         else {
-            return Self.fail(400, "bad", "Say whether to keep it.")
+            return Self.fail(400, "bad", String(localized: "Say whether to keep it.", bundle: .module))
         }
         lock.lock()
         kept[id] = keep
@@ -547,7 +547,7 @@ public final class DemoServer: @unchecked Sendable {
     private func watch(_ body: Data) -> Data {
         let channel = Self.intField(body, "channelId") ?? 1
         guard DemoFilm.all.contains(where: { $0.id == channel }) else {
-            return Self.fail(404, "missing", "That channel is not in the demo.")
+            return Self.fail(404, "missing", String(localized: "That channel is not in the demo.", bundle: .module))
         }
         let session = WatchSession(
             channelId: channel,
@@ -558,7 +558,7 @@ public final class DemoServer: @unchecked Sendable {
                 video: "720",
                 audio: "aac2",
                 mode: "broadcast",
-                reason: "Original picture",
+                reason: String(localized: "Original picture", bundle: .module),
                 sourceVideo: "H264",
                 sourceAudio: "AAC",
                 encoder: "copy",
@@ -589,7 +589,7 @@ public final class DemoServer: @unchecked Sendable {
             if DemoFilm.all.contains(where: { $0.id == id }) {
                 playable.append(MultiviewPlanPlayable(channelId: id, frequencyHz: 500_000_000 + Int(id), shared: false))
             } else {
-                blocked.append(MultiviewPlanBlocked(channelId: id, holders: [], reason: "That channel is not in the demo."))
+                blocked.append(MultiviewPlanBlocked(channelId: id, holders: [], reason: String(localized: "That channel is not in the demo.", bundle: .module)))
             }
         }
         let plan = MultiviewPlan(
@@ -605,7 +605,7 @@ public final class DemoServer: @unchecked Sendable {
     private func patchChannel(_ path: String, body: Data) -> Data {
         let id = Int64(path.split(separator: "/").last ?? "") ?? 0
         guard var channel = channels().first(where: { $0.id == id }) else {
-            return Self.fail(404, "missing", "That channel is not in the demo.")
+            return Self.fail(404, "missing", String(localized: "That channel is not in the demo.", bundle: .module))
         }
         if let fav = Self.boolField(body, "favorite") {
             lock.lock()
@@ -625,7 +625,7 @@ public final class DemoServer: @unchecked Sendable {
     private func media(_ path: String) -> Data {
         let bits = path.split(separator: "/").map(String.init)
         guard bits.count >= 3, let channel = Int(bits[1]) else {
-            return Self.fail(404, "missing", "That recording is not in the demo.")
+            return Self.fail(404, "missing", String(localized: "That recording is not in the demo.", bundle: .module))
         }
         let name = bits[2]
         if name == "index.m3u8" {
@@ -633,11 +633,11 @@ public final class DemoServer: @unchecked Sendable {
         }
         let file = name.split(separator: "?").first.map(String.init) ?? name
         guard let root = mediaDirectory() else {
-            return Self.fail(404, "missing", "The demo films are not on this device.")
+            return Self.fail(404, "missing", String(localized: "The demo films are not on this device.", bundle: .module))
         }
         let url = root.appendingPathComponent("\(channel)").appendingPathComponent(file)
         guard let data = try? Data(contentsOf: url) else {
-            return Self.fail(404, "missing", "The demo films are not on this device.")
+            return Self.fail(404, "missing", String(localized: "The demo films are not on this device.", bundle: .module))
         }
         return Self.ok(data, type: "video/mp4")
     }
@@ -656,13 +656,13 @@ public final class DemoServer: @unchecked Sendable {
                 return Self.ok(data, type: "image/jpeg")
             }
         }
-        return Self.fail(404, "missing", "That picture is not in the demo.")
+        return Self.fail(404, "missing", String(localized: "That picture is not in the demo.", bundle: .module))
     }
 
     private static func serverInfo() -> ServerInfo {
         ServerInfo(
             id: "demo",
-            name: "Demo",
+            name: String(localized: "Demo", bundle: .module),
             version: "1.0.0",
             apiVersion: 1,
             encoder: "copy",
@@ -780,7 +780,7 @@ private struct DemoFilm {
         DemoFilm(id: 4, number: "11.1", title: "Elephants Dream"),
     ]
 
-    static let blurb = "A Blender Foundation film, under CC BY."
+    static let blurb = String(localized: "A Blender Foundation film, under CC BY.", bundle: .module)
 
     func channel() -> Channel {
         Channel(
@@ -840,7 +840,7 @@ private struct DemoFilm {
                         id: film.id * 1_000_000 + slot,
                         channelId: film.id,
                         title: title,
-                        subtitle: "Open movie",
+                        subtitle: String(localized: "Open movie", bundle: .module),
                         description: blurb,
                         category: category,
                         imageUrl: "demo",
