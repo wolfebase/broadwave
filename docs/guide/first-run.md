@@ -27,9 +27,9 @@ Ready runs six checks and marks each one Working, Done, Needs a look, or Skipped
 
 The heading becomes a Ready line: the channel count, the tuner count, and the encoder, and the guide when some listings are in. Choose Watch.
 
-If you opened the page on the server itself, as localhost, it tells you to open it from another device at that computer's network address, or to open the Broadwave app. The app finds the server on its own.
+If you opened the page on the server itself, as localhost, it says "To connect your phone or TV, open this page from another device at this computer's network address, or open Broadwave there. It finds this server on its own." Opening the app lists the servers on your network. You pick one.
 
-From any other address, the page shows a QR code and the words "Scan this with your iPhone. On Apple TV, open Broadwave. It finds this server on its own."
+From any other address, the page shows a QR code and the words "Scan this with your iPhone. On Apple TV, open Broadwave. It finds this server on its own." The code opens the iPhone app on this server. On Apple TV you still pick the server from the list.
 
 On iPhone, if the app cannot see the server, allow Local Network for Broadwave under Settings, Privacy and Security. You can also type the server's address in the app.
 

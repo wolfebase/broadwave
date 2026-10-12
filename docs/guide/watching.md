@@ -16,7 +16,7 @@ The apps look on your home network and list the servers they find. You pick one.
 
 On iPhone and iPad, Local Network access has to be on for Broadwave (Settings, Privacy and Security, Local Network). "Try the demo" plays sample films on this device. The line under that button is "Sample films on this device." The demo does not contact your server or the internet. It starts when you tap the button.
 
-Apple TV opens Broadwave and finds the server the same way. The first-run page on the web can show a QR code for the iPhone. [First run](first-run.md) describes it.
+Apple TV uses the same list. The first-run page on the web can show a QR code for the iPhone. That code opens the app on this server. [First run](first-run.md) describes it.
 
 Whole-Home Sync is on unless you turn it off. The switch is in Settings, and the line under it is "Every screen on the same channel shows the same moment, so nobody hears the next room cheer first." Apple devices start a channel at Balanced or Stable, not at Lowest.
 
