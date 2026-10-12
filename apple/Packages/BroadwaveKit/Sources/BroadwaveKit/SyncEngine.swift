@@ -63,6 +63,16 @@ public final class SyncEngine {
     /// The viewer paused this screen. It keeps its own place, time-shifted,
     /// and the engine stops pulling it back to the room.
     public private(set) var detached = false
+    /// The screen plays on its own because lining up is off; "Sync screens"
+    /// (or another screen choosing it) lines it up.
+    public var offByChoice: Bool {
+        detached && detachedBy == .choice
+    }
+
+    /// Line up with the room on start. Off, a channel starts playing at once
+    /// and lines up only when someone chooses Sync screens (owner 2026-10-11:
+    /// "when I load in I want it smooth... I don't want it mandatory").
+    private let lineUp: Bool
     /// Why the engine let go of this screen, and how far behind the room the
     /// viewer took it while it was let go.
     private var detachedBy: DetachCause?
@@ -123,7 +133,8 @@ public final class SyncEngine {
     static let rejoinWithinMS = 3000.0
     static let rejoinTicks = 8
 
-    enum DetachCause: Equatable { case viewer, gaveUp }
+    /// `choice`: the screen started without lining up (Line up automatically off).
+    enum DetachCause: Equatable { case viewer, gaveUp, choice }
 
     /// Posted before a screen asks the TV for a new display mode. The HDMI
     /// switch blanks the picture for a second or two while the clock runs.
@@ -262,7 +273,8 @@ public final class SyncEngine {
             && farthestBehindMS <= -rejoinShiftMS && abs(driftMS) <= rejoinWithinMS
     }
 
-    public init(player: AVPlayer, socket: EventSocket, room: String, channelID: Int64) {
+    public init(player: AVPlayer, socket: EventSocket, room: String, channelID: Int64, lineUp: Bool = true) {
+        self.lineUp = lineUp
         self.player = player
         self.socket = socket
         self.room = room
@@ -278,6 +290,12 @@ public final class SyncEngine {
         }
         socket.join(room: room, channelID: channelID)
         state = .waiting
+        // Group rooms and multiview tiles always line up; a channel can wait.
+        if !lineUp, room.hasPrefix("channel:") {
+            detached = true
+            detachedBy = .choice
+            state = .off
+        }
         if let cached = socket.roomState(room), let st = try? JSONDecoder().decode(RoomState.self, from: cached), st.room == room {
             room_ = st
             members = st.members
@@ -362,6 +380,13 @@ public final class SyncEngine {
         state = .syncing
     }
 
+    /// Sync screens: every screen on this channel lines up with the room, this
+    /// one now and the others when they see the room marked.
+    public func syncScreens() {
+        socket.command(room: room, action: "syncall")
+        rejoin()
+    }
+
     public func command(_ action: String, mediaTime: Double? = nil) {
         socket.command(room: room, action: action, mediaTime: mediaTime)
     }
@@ -375,7 +400,8 @@ public final class SyncEngine {
     private func apply() {
         guard let st = room_, Date() >= holdUntil else { return }
         guard let item = player.currentItem, item.status == .readyToPlay, let local = mediaNow() else {
-            state = .waiting
+            // A screen off by choice is not lining up, even before its first frame.
+            state = detached && detachedBy == .choice ? .off : .waiting
             return
         }
         let serverNow = socket.serverNow()
@@ -409,6 +435,22 @@ public final class SyncEngine {
         }
         let sized = item.presentationSize.width > 0 && item.presentationSize.height > 0
         let hasFrame = displayedFrame?() ?? sized
+        if detached, detachedBy == .choice {
+            state = .off
+            if st.synced == true {
+                if logs {
+                    Self.log.notice("sync screens: the room asked every screen to line up")
+                }
+                rejoin()
+                return
+            }
+            // Keep a young room next to this screen, so Sync screens is quick.
+            if hasFrame, aheadSentAt == nil, st.rate == 1, d > Self.measureAheadMS {
+                aheadSentAt = Date()
+                socket.command(room: room, action: "ahead", mediaTime: local)
+            }
+            return
+        }
         if detached {
             state = .off
             farthestBehind = min(farthestBehind, d)

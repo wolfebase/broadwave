@@ -12,6 +12,18 @@ import SwiftUI
 final class NowPlaying {
     var channel: Channel?
     var expanded = false
+    /// The channel that played last, kept after the player closes: Back from the
+    /// Apple TV guide goes back to it, and the guide opens on its row.
+    var lastChannel: Channel?
+    /// When the player last closed: a second Back that lands on the guide right
+    /// after it should not open the channel again.
+    var stoppedAt: Date?
+    /// Its id across launches, so the guide opens on it after a relaunch.
+    static var lastChannelID: Int64 {
+        get { Int64(UserDefaults.standard.integer(forKey: "lastChannel")) }
+        set { UserDefaults.standard.set(Int(newValue), forKey: "lastChannel") }
+    }
+
     /// Channel ids playing side by side. Empty means one channel.
     var together: [Int64] = [] {
         // A tile that left must not bring its note back if the channel is added again.
@@ -68,6 +80,8 @@ final class NowPlaying {
         self.channel = channel
         self.note = note
         self.expanded = expanded
+        lastChannel = channel
+        Self.lastChannelID = channel.id
     }
 
     /// The one-channel picture is docked under the tabs, so another view may show it.
@@ -78,7 +92,10 @@ final class NowPlaying {
     /// The next or previous channel in the lineup, wrapping at the ends.
     func step(_ dir: Int, in channels: [Channel]) {
         guard let current = channel, let i = channels.firstIndex(of: current) else { return }
-        channel = channels[(i + dir + channels.count) % channels.count]
+        let next = channels[(i + dir + channels.count) % channels.count]
+        channel = next
+        lastChannel = next
+        Self.lastChannelID = next.id
     }
 
     func watchTogether(_ channels: [Channel], layout: String? = nil, standIns: Set<Int64> = []) {
@@ -100,6 +117,9 @@ final class NowPlaying {
     }
 
     func stop() {
+        if channel != nil {
+            stoppedAt = Date()
+        }
         channel = nil
         note = nil
         together = []
@@ -251,7 +271,12 @@ struct RootView: View {
     #endif
     @State private var nowPlaying = NowPlaying()
     @State private var libraryFilter = LibraryFilter()
-    @State private var tab: AppTab = .home
+    // Apple TV opens on the guide: live TV is what it's for (owner 2026-10-11).
+    #if os(tvOS)
+        @State private var tab: AppTab = .guide
+    #else
+        @State private var tab: AppTab = .home
+    #endif
     @State private var showSetup = false
     @State private var dismissedUpdate = ""
     @Environment(\.scenePhase) private var scenePhase

@@ -753,9 +753,10 @@ public struct RoomState: Codable, Sendable, Hashable {
     public var latencyMs: Double?
     public var version: Int
     public var members: Int
+    public var synced: Bool?
     public var people: [Person]?
 
-    public init(room: String, channelId: Int64? = nil, mode: String, anchorServer: Double, anchorMedia: Double, rate: Double, latency: String, latencyMs: Double? = nil, version: Int, members: Int, people: [Person]? = nil) {
+    public init(room: String, channelId: Int64? = nil, mode: String, anchorServer: Double, anchorMedia: Double, rate: Double, latency: String, latencyMs: Double? = nil, version: Int, members: Int, synced: Bool? = nil, people: [Person]? = nil) {
         self.room = room
         self.channelId = channelId
         self.mode = mode
@@ -766,6 +767,7 @@ public struct RoomState: Codable, Sendable, Hashable {
         self.latencyMs = latencyMs
         self.version = version
         self.members = members
+        self.synced = synced
         self.people = people
     }
 }

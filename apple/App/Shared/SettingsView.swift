@@ -479,10 +479,15 @@ struct SettingsView: View {
             } else {
                 @Bindable var store = store
                 Toggle("Whole-Home Sync", isOn: $store.syncEnabled)
+                if store.syncEnabled {
+                    Toggle("Line up automatically", isOn: $store.lineUpAutomatically)
+                }
             }
         } footer: {
             if Compatibility.gateFeature(store.info, "wholeHomeSync") == nil {
-                Text("Every screen on the same channel shows the same moment, so nobody hears the next room cheer first.")
+                Text(store.syncEnabled && !store.lineUpAutomatically
+                    ? "Channels start right away. Choose Sync screens in the player to put every screen on the same channel on the same moment."
+                    : "Every screen on the same channel shows the same moment, so nobody hears the next room cheer first. A channel can take a few seconds longer to start.")
             }
         }
     }

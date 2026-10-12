@@ -13,6 +13,7 @@ struct GuideView: View {
     @State private var scores: [String: String] = [:]
     #if os(tvOS)
         @Environment(\.tvSelectedTab) private var tvSelectedTab
+        @Environment(NowPlaying.self) private var nowPlaying
         @FocusState private var headerFocus: GuideHeader?
         @FocusState private var channelFocus: Int64?
 
@@ -51,7 +52,19 @@ struct GuideView: View {
             filters
             dayJump
             #if os(tvOS)
-                GuideGrid(channels: rows, highlight: filter, jump: jump, scores: scores, channelFocus: $channelFocus) { selected = Selection(channel: $0, airing: $1) }
+                // Select plays what is on now, as on any TV guide; a later program opens its
+                // details. A long press opens the details of anything.
+                GuideGrid(
+                    channels: rows, highlight: filter, jump: jump, scores: scores, channelFocus: $channelFocus,
+                    onDetails: { selected = Selection(channel: $0, airing: $1) },
+                    onSelect: { channel, airing in
+                        if let airing, airing.start > store.now {
+                            selected = Selection(channel: channel, airing: airing)
+                        } else {
+                            nowPlaying.play(channel)
+                        }
+                    }
+                )
             #else
                 if sizeClass == .compact, verticalSize != .compact {
                     onNowList
@@ -106,9 +119,28 @@ struct GuideView: View {
         .sheet(item: $selected) { sel in
             ProgramSheet(channel: sel.channel, airing: sel.airing)
         }
-        .defaultFocus($headerFocus, .now)
+        .defaultFocus($channelFocus, startChannel)
         .onAppear { claimGuideFocus() }
         .onChange(of: tvSelectedTab) { _, _ in claimGuideFocus() }
+        // Closing the player lands back on the channel that played.
+        .onChange(of: nowPlaying.channel == nil) { _, closed in
+            if closed {
+                claimGuideFocus()
+            }
+        }
+        // Back from the guide goes back to the channel you were watching, like a
+        // cable box's Last; with nothing watched yet it goes to the sidebar as usual.
+        .onExitCommand(perform: resumable.map { last in {
+            // The player can take the first Back for its overlay, so viewers press twice;
+            // the second one must not bounce them back into the channel.
+            guard Date().timeIntervalSince(nowPlaying.stoppedAt ?? .distantPast) > 1.5 else { return }
+            // Opened inside the press, the player came up without focus and the next
+            // Back went to the guide under it. Open it after the press.
+            Task {
+                try? await Task.sleep(for: .milliseconds(200))
+                nowPlaying.play(last)
+            }
+        } })
         .task(id: tvSelectedTab) {
             // The sidebar takes focus on the same turn as onAppear and clears a focus set then.
             guard tvSelectedTab == .guide else { return }
@@ -119,10 +151,28 @@ struct GuideView: View {
     }
 
     #if os(tvOS)
-        /// The sidebar stays open over the grid until something in the page has focus, and it covers the channel column.
+        /// The sidebar stays open over the grid until something in the page has focus, and it covers the
+        /// channel column. Focus goes into the grid, on the last channel watched or the first, so a click
+        /// plays it and the sidebar menu stays out of the way.
         private func claimGuideFocus() {
             guard tvSelectedTab == .guide else { return }
-            headerFocus = .now
+            if let id = startChannel {
+                channelFocus = id
+            } else {
+                headerFocus = .now
+            }
+        }
+
+        /// The row the guide opens on: the last channel watched if it's listed, else the first.
+        private var startChannel: Int64? {
+            let last = nowPlaying.lastChannel?.id ?? NowPlaying.lastChannelID
+            return rows.first(where: { $0.id == last })?.id ?? rows.first?.id
+        }
+
+        /// The channel Back goes to: one that played this session and isn't on screen now.
+        private var resumable: Channel? {
+            guard nowPlaying.channel == nil, let last = nowPlaying.lastChannel else { return nil }
+            return last
         }
     #endif
 
@@ -313,9 +363,11 @@ struct GuideGrid: View {
     var scores: [String: String] = [:]
     #if os(tvOS)
         var channelFocus: FocusState<Int64?>.Binding
+        var onDetails: (Channel, Airing?) -> Void = { _, _ in }
     #endif
     let onSelect: (Channel, Airing?) -> Void
     @State private var offset: CGPoint = .zero
+    @State private var scroll = ScrollPosition()
     @State private var hasScrollSample = false
 
     #if os(tvOS)
@@ -450,6 +502,7 @@ struct GuideGrid: View {
                 }
                 .frame(width: gridW, height: viewport.height)
                 .scrollIndicators(.hidden)
+                .scrollPosition($scroll)
                 .onScrollGeometryChange(for: CGPoint.self) { $0.contentOffset } action: { _, new in
                     offset = CGPoint(x: max(0, new.x), y: max(0, new.y))
                     hasScrollSample = true
@@ -524,6 +577,9 @@ struct GuideGrid: View {
                     #if os(tvOS)
                         .focused(channelFocus, equals: channel.id)
                         .onMoveCommand { moveRail($0, from: channel.id, rowHeight: rowHeight, viewport: viewport) }
+                        .contextMenu {
+                            Button("Details", systemImage: "info.circle") { onDetails(channel, store.index.on(channel.id, at: store.now)) }
+                        }
                     #endif
                         .accessibilityLabel("\(channel.displayNumber) \(channel.displayName)\(channel.isATSC3 ? ", ATSC 3.0" : "")")
                 }
@@ -534,8 +590,8 @@ struct GuideGrid: View {
 
     #if os(tvOS)
         /// Up and Down step through the column. With no programs to its right, the
-        /// geometric search left focus on the first channel. A row that is not fully on
-        /// screen is left to that search, which scrolls the grid.
+        /// geometric search left focus on the first channel. The column is not a scroll
+        /// view, so the search cannot reach a row below the screen: scroll the grid to it.
         private func moveRail(_ direction: MoveCommandDirection, from id: Int64, rowHeight: CGFloat, viewport: CGFloat) {
             guard let index = channels.firstIndex(where: { $0.id == id }) else { return }
             let next: Int
@@ -549,7 +605,11 @@ struct GuideGrid: View {
             }
             guard channels.indices.contains(next) else { return }
             let top = headH + CGFloat(next) * rowHeight - offset.y
-            guard top >= headH, top + rowHeight <= viewport + 1 else { return }
+            if top < headH {
+                scroll.scrollTo(y: CGFloat(next) * rowHeight)
+            } else if top + rowHeight > viewport + 1 {
+                scroll.scrollTo(y: headH + CGFloat(next + 1) * rowHeight - viewport)
+            }
             channelFocus.wrappedValue = channels[next].id
         }
     #endif
@@ -578,6 +638,9 @@ struct GuideGrid: View {
                 .buttonStyle(GuideCellStyle())
                 #if os(tvOS)
                     .onPlayPauseCommand { nowPlaying.play(channel) }
+                    .contextMenu {
+                        Button("Details", systemImage: "info.circle") { onDetails(channel, airing) }
+                    }
                     // The grid opens up to an hour before now, and Right from a channel
                     // landed on the leftmost cell: a program that had ended, whose panel
                     // offered only Record series.

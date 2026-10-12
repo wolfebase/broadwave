@@ -1,7 +1,8 @@
 import XCTest
 
-/// Down from Now must reach the first channel, including after a relaunch.
-/// The day row used to sit in the middle of the screen, beside the channel column.
+/// The guide opens with focus on a channel, so Select plays it. Up reaches the day row
+/// and Down comes back. Back from the player returns to the guide, and Back from the
+/// guide goes back to the channel that was on.
 /// Opt-in: TEST_RUNNER_BROADWAVE_SERVER.
 @MainActor
 final class GuideFocusTests: XCTestCase {
@@ -18,7 +19,7 @@ final class GuideFocusTests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testDownFromNowReachesTheFirstChannel() throws {
+    func testTheGuideOpensOnTheFirstChannel() throws {
         try XCTSkipIf(server.isEmpty, "set TEST_RUNNER_BROADWAVE_SERVER")
         try finishSetup()
         let label = try firstChannelLabel()
@@ -26,26 +27,15 @@ final class GuideFocusTests: XCTestCase {
         app.launchArguments = [
             "-ApplePersistenceIgnoreState", "YES",
             "-BroadwaveServerURL", server,
+            "-lastChannel", "0",
             "-BroadwaveTab", "guide",
         ]
         app.launch()
 
         let now = app.buttons["guide-now"]
-        XCTAssertTrue(now.waitForExistence(timeout: 25), app.debugDescription)
-        XCTAssertTrue(until(10) { now.hasFocus }, "Now did not take focus: \(focused(app))\n\(app.debugDescription)")
-
         let channel = app.buttons[label].firstMatch
-        XCTAssertTrue(channel.waitForExistence(timeout: 15), "no \(label)\n\(app.debugDescription)")
-        var trail: [String] = []
-        for _ in 0 ..< 3 {
-            if channel.hasFocus {
-                break
-            }
-            XCUIRemote.shared.press(.down)
-            pause(0.7)
-            trail.append(focused(app))
-        }
-        XCTAssertTrue(channel.hasFocus, "Down from Now did not reach \(label): \(trail)")
+        XCTAssertTrue(channel.waitForExistence(timeout: 25), "no \(label)\n\(app.debugDescription)")
+        XCTAssertTrue(until(10) { channel.hasFocus }, "\(label) did not take focus: \(focused(app))\n\(app.debugDescription)")
         shot(app, "guide-channel")
 
         XCUIRemote.shared.press(.up)
@@ -85,15 +75,13 @@ final class GuideFocusTests: XCTestCase {
         app.launchArguments = [
             "-ApplePersistenceIgnoreState", "YES",
             "-BroadwaveServerURL", server,
+            "-lastChannel", "0",
             "-BroadwaveTab", "guide",
         ]
         app.launch()
         let channel = app.buttons[label].firstMatch
         XCTAssertTrue(channel.waitForExistence(timeout: 25), app.debugDescription)
-        XCTAssertTrue(until(10) { app.buttons["guide-now"].hasFocus }, "Now did not take focus: \(focused(app))")
-        XCUIRemote.shared.press(.down)
-        pause(0.7)
-        XCTAssertTrue(channel.hasFocus, "Down from Now did not reach \(label): \(focused(app))")
+        XCTAssertTrue(until(10) { channel.hasFocus }, "\(label) did not take focus: \(focused(app))")
 
         let count = try channelCount()
         var walked = [place(app)]
@@ -127,7 +115,7 @@ final class GuideFocusTests: XCTestCase {
 
     /// The same move after the viewer opens Guide from the sidebar. Launching straight onto
     /// the tab is not enough: the collapsed sidebar still sits in the focus search.
-    func testDownFromNowAfterChoosingGuide() throws {
+    func testChoosingGuideFocusesAChannel() throws {
         try XCTSkipIf(server.isEmpty, "set TEST_RUNNER_BROADWAVE_SERVER")
         try finishSetup()
         let label = try firstChannelLabel()
@@ -135,6 +123,7 @@ final class GuideFocusTests: XCTestCase {
         app.launchArguments = [
             "-ApplePersistenceIgnoreState", "YES",
             "-BroadwaveServerURL", server,
+            "-lastChannel", "0",
         ]
         app.launch()
 
@@ -158,21 +147,9 @@ final class GuideFocusTests: XCTestCase {
         XCUIRemote.shared.press(.select)
         pause(1)
 
-        let now = app.buttons["guide-now"]
-        XCTAssertTrue(now.waitForExistence(timeout: 15), app.debugDescription)
-        XCTAssertTrue(until(8) { now.hasFocus }, "Now did not take focus: \(focused(app))")
         let channel = app.buttons[label].firstMatch
         XCTAssertTrue(channel.waitForExistence(timeout: 15), "no \(label)")
-        trail = []
-        for _ in 0 ..< 3 {
-            if channel.hasFocus {
-                break
-            }
-            XCUIRemote.shared.press(.down)
-            pause(0.7)
-            trail.append(focused(app))
-        }
-        XCTAssertTrue(channel.hasFocus, "Down from Now did not reach \(label) after opening Guide: \(trail)")
+        XCTAssertTrue(until(8) { channel.hasFocus }, "\(label) did not take focus after opening Guide: \(focused(app))")
         shot(app, "guide-from-home")
     }
 
@@ -189,21 +166,81 @@ final class GuideFocusTests: XCTestCase {
         app.launchArguments = [
             "-ApplePersistenceIgnoreState", "YES",
             "-BroadwaveServerURL", server,
+            "-lastChannel", "0",
             "-BroadwaveTab", "guide",
         ]
         app.launch()
         let channel = app.buttons[label].firstMatch
         XCTAssertTrue(channel.waitForExistence(timeout: 25), app.debugDescription)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", ended ?? "")).firstMatch.waitForExistence(timeout: 15), "the ended program is not drawn")
-        XCTAssertTrue(until(10) { app.buttons["guide-now"].hasFocus }, "Now did not take focus: \(focused(app))")
-        XCUIRemote.shared.press(.down)
-        pause(0.7)
-        XCTAssertTrue(channel.hasFocus, "Down from Now did not reach \(label): \(focused(app))")
+        XCTAssertTrue(until(10) { channel.hasFocus }, "\(label) did not take focus: \(focused(app))")
         XCUIRemote.shared.press(.right)
         pause(0.7)
         let landed = focused(app)
         shot(app, "guide-right")
         XCTAssertTrue(landed.contains(on ?? "-"), "Right from \(label) landed on \(landed), not \(on ?? "")")
+    }
+
+    /// Select plays the focused channel and it starts at once: nothing lines up unless the
+    /// viewer asks. Back returns to the guide on that channel; Back from the guide plays it
+    /// again instead of leaving the app.
+    func testBackGoesBetweenTheGuideAndTheChannel() throws {
+        try XCTSkipIf(server.isEmpty, "set TEST_RUNNER_BROADWAVE_SERVER")
+        try finishSetup()
+        let label = try firstChannelLabel()
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ApplePersistenceIgnoreState", "YES",
+            "-BroadwaveServerURL", server,
+            "-lastChannel", "0",
+            "-sync", "YES",
+            "-lineUp", "NO",
+            "-BroadwaveSyncProbe", "YES",
+        ]
+        app.launch()
+        let channel = app.buttons[label].firstMatch
+        XCTAssertTrue(channel.waitForExistence(timeout: 25), app.debugDescription)
+        XCTAssertTrue(until(10) { channel.hasFocus }, "\(label) did not take focus: \(focused(app))")
+
+        XCUIRemote.shared.press(.select)
+        let probe = app.staticTexts["syncState"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 15), "Select did not open the player: \(focused(app))")
+        XCTAssertTrue(until(30) { !probe.label.hasPrefix("none") }, "no sync engine: \(probe.label)")
+        // Sync is on, but off by choice until the viewer asks: it plays where it starts.
+        XCTAssertTrue(probe.label.hasPrefix("off"), "the player lined up on its own: \(probe.label)")
+        pause(6)
+        XCTAssertTrue(probe.label.hasPrefix("off"), "the player lined up later: \(probe.label)")
+        shot(app, "back-playing")
+
+        // The player may take the first Back for its own overlay; a second one leaves it.
+        XCUIRemote.shared.press(.menu)
+        var backs = 1
+        if !until(6, { channel.hasFocus }) {
+            shot(app, "back-first-press")
+            XCUIRemote.shared.press(.menu)
+            backs += 1
+        }
+        print("broadwave-test backs to leave the player: \(backs)")
+        XCTAssertTrue(until(8) { !probe.exists }, "Back did not close the player after \(backs) presses: \(focused(app))")
+        XCTAssertTrue(until(8) { channel.hasFocus }, "Back did not land on \(label): \(focused(app))")
+        shot(app, "back-guide")
+
+        pause(2)
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(until(15) { probe.exists }, "Back from the guide did not resume \(label): \(focused(app))")
+        XCTAssertEqual(app.state, .runningForeground)
+        // The player may take the first Back for its own overlay; a second one leaves it.
+        XCUIRemote.shared.press(.menu)
+        var againBacks = 1
+        if !until(6, { channel.hasFocus }) {
+            XCUIRemote.shared.press(.menu)
+            againBacks += 1
+        }
+        print("broadwave-test backs to leave the resumed player: \(againBacks)")
+        let backAgain = until(8) { channel.hasFocus }
+        shot(app, "back-again")
+        XCTAssertTrue(backAgain, "Back again did not land on \(label): \(focused(app)) state \(app.state.rawValue) player \(probe.exists)")
+        XCTAssertEqual(app.state, .runningForeground)
     }
 
     /// Titles of the first channel's program that ended in the last hour and the one on now.

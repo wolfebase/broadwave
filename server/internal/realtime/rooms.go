@@ -41,6 +41,9 @@ type RoomState struct {
 	LatencyMS float64 `json:"latencyMs"`
 	Version   int     `json:"version"`
 	Members   int     `json:"members"`
+	// Synced says someone chose Sync screens: every screen on the channel
+	// lines up with the room, including those that don't on their own.
+	Synced bool `json:"synced,omitempty"`
 	// People names who is in a group room, so every screen can show it.
 	People []Person `json:"people,omitempty"`
 }
@@ -57,7 +60,7 @@ func (s RoomState) Target(now float64) float64 {
 }
 
 type Command struct {
-	Action    string  `json:"action"` // play, pause, seek, live, latency, stalled, ahead, behind
+	Action    string  `json:"action"` // play, pause, seek, live, latency, stalled, ahead, behind, syncall
 	MediaTime float64 `json:"mediaTime,omitempty"`
 	Latency   string  `json:"latency,omitempty"`
 }
@@ -417,6 +420,14 @@ func (r *Rooms) Apply(room string, c Command) (RoomState, error) {
 	}
 	if c.Action == "stalled" {
 		return r.stepBackLocked(room, st, now), nil
+	}
+	if c.Action == "syncall" {
+		// Sync screens: every screen on the channel lines up from now on.
+		if !st.Synced {
+			st.Synced = true
+			st.Version++
+		}
+		return *st, nil
 	}
 	if c.Action == "ahead" || c.Action == "behind" {
 		return r.measureLocked(room, st, c.Action, c.MediaTime, now), nil

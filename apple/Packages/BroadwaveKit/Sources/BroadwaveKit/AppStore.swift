@@ -56,6 +56,12 @@ public final class AppStore {
         didSet { UserDefaults.standard.set(syncEnabled, forKey: "sync") }
     }
 
+    /// Line a new channel up with the other screens before it plays. Off by
+    /// default: a channel starts at once and Sync screens lines them up.
+    public var lineUpAutomatically: Bool {
+        didSet { UserDefaults.standard.set(lineUpAutomatically, forKey: "lineUp") }
+    }
+
     private var clock: Timer?
     private var frameTick = 0
     private var announced = false
@@ -84,6 +90,7 @@ public final class AppStore {
         prefs = Self.load("prefs") ?? Prefs()
         // bool(forKey:) also reads a launch argument such as -sync NO.
         syncEnabled = UserDefaults.standard.object(forKey: "sync") == nil || UserDefaults.standard.bool(forKey: "sync")
+        lineUpAutomatically = UserDefaults.standard.bool(forKey: "lineUp")
         remembered = Self.load("servers") ?? []
         var resumeDemo: FoundServer?
         #if DEBUG

@@ -186,8 +186,8 @@ final class LivePlayerController: AVPlayerViewController {
         #endif
     }
 
+    var onEscape: (() -> Void)?
     #if os(iOS)
-        var onEscape: (() -> Void)?
         /// The live player's keys. Off for a file, and while a sheet or the Start
         /// over recording covers the live player.
         var keysOn = false
@@ -232,6 +232,13 @@ final class LivePlayerController: AVPlayerViewController {
             if !transportShown, !infoPanelVisible, let press = presses.first(where: { $0.type == .upArrow || $0.type == .downArrow }) {
                 swallowedPress = true
                 channelStep(up: press.type == .upArrow)
+                return
+            }
+            // AVKit spends Back on hiding its bar, so leaving took two presses and the
+            // first seemed to do nothing. With no page open, Back leaves the player.
+            if transportShown, !infoPanelVisible, presses.contains(where: { $0.type == .menu }), let onEscape {
+                swallowedPress = true
+                onEscape()
                 return
             }
             swallowedPress = false

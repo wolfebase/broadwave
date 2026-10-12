@@ -238,7 +238,9 @@ final class LivePlayer {
                 }
             #endif
             if store.syncEnabled, Compatibility.gateFeature(store.info, "wholeHomeSync") == nil, let socket = store.socket {
-                let engine = SyncEngine(player: player, socket: socket, room: room, channelID: channel.id)
+                let engine = SyncEngine(
+                    player: player, socket: socket, room: room, channelID: channel.id, lineUp: store.lineUpAutomatically
+                )
                 listenForRoom(socket, room: room)
                 engine.start()
                 sync = engine
@@ -958,7 +960,14 @@ struct PlayerScreen: View {
                         nowPlaying.watchTogether([channel])
                     }
                 },
-                rejoin: live.sync?.detached == true ? { live.sync?.rejoin() } : nil,
+                rejoin: live.sync?.detached == true ? {
+                    if live.sync?.offByChoice == true {
+                        live.sync?.syncScreens()
+                    } else {
+                        live.sync?.rejoin()
+                    }
+                } : nil,
+                rejoinTitle: live.sync?.offByChoice == true ? "Sync screens" : "Back in sync",
                 onPictureInPicture: { live.notePictureInPicture($0) },
                 onPictureRestore: {
                     live.playLogNote("pip restore \(nowPlaying.channel.map { String($0.id) } ?? "-")")
@@ -1271,6 +1280,8 @@ struct PlayerScreen: View {
             } else {
                 nowPlaying.expanded = false
             }
+        #else
+            nowPlaying.stop()
         #endif
     }
 
@@ -1295,7 +1306,7 @@ struct PlayerScreen: View {
                 names.append("Start over")
             }
             if live.sync?.detached == true {
-                names.insert("Back in sync", at: 0)
+                names.insert(live.sync?.offByChoice == true ? "Sync screens" : "Back in sync", at: 0)
             }
             return names
         }
@@ -1723,7 +1734,15 @@ struct PlayerScreen: View {
         }
 
         @ViewBuilder private var syncPill: some View {
-            if let sync = live.sync, sync.detached {
+            if let sync = live.sync, sync.offByChoice {
+                // Playing on its own; offer to line up only when someone else is on this channel.
+                if sync.members > 1 {
+                    Button("Sync screens", systemImage: "arrow.triangle.2.circlepath") { sync.syncScreens() }
+                        .labelStyle(.titleAndIcon)
+                        .buttonStyle(.glass)
+                        .accessibilityLabel("Sync \(sync.members) screens")
+                }
+            } else if let sync = live.sync, sync.detached {
                 Button("Back in sync", systemImage: "arrow.triangle.2.circlepath") { sync.rejoin() }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.glass)
@@ -1826,6 +1845,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
     var onTogether: () -> Void = {}
     /// Set while this screen has left sync; the menu offers the way back.
     var rejoin: (() -> Void)?
+    /// "Sync screens" when the screen plays on its own by choice, "Back in sync" after a pause.
+    var rejoinTitle = "Back in sync"
     /// A recording's buttons over the picture: Skip break, Skip intro, or Up next. Apple TV only;
     /// iPhone and iPad draw their own.
     var actions: [FileMenuEntry] = []
@@ -1861,8 +1882,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
         vc.player = player
         vc.allowsPictureInPicturePlayback = true
         vc.onStep = onStep
+        vc.onEscape = onEscape
         #if os(iOS)
-            vc.onEscape = onEscape
             vc.keysOn = keysOn
         #endif
         #if os(iOS)
@@ -1915,8 +1936,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
             vc.player = player
         }
         vc.onStep = onStep
+        vc.onEscape = onEscape
         #if os(iOS)
-            vc.onEscape = onEscape
             vc.keysOn = keysOn
             // A sheet that closed took the keyboard with it.
             if keysOn, !vc.isFirstResponder, vc.view.window != nil {
@@ -1972,7 +1993,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
             }
             // Setting the items redraws the transport bar and keeps it on screen,
             // so a view update that changes nothing must leave them alone.
-            let key = (menu + audio + delay).map { "\($0.id) \($0.title) \($0.current)" } + ["\(streamOn)", "\(rejoin != nil)", "\(recording)", "\(canStartOver)"]
+            let key = (menu + audio + delay).map { "\($0.id) \($0.title) \($0.current)" } + ["\(streamOn)", "\(rejoin != nil) \(rejoinTitle)", "\(recording)", "\(canStartOver)"]
             guard key != context.coordinator.menuKey else { return }
             context.coordinator.menuKey = key
             let actions = menu.map { entry in
@@ -1997,7 +2018,7 @@ struct SystemPlayer: UIViewControllerRepresentable {
             }
             items.append(together)
             if let rejoin {
-                items.insert(UIAction(title: "Back in sync", image: UIImage(systemName: "arrow.triangle.2.circlepath")) { _ in rejoin() }, at: 0)
+                items.insert(UIAction(title: rejoinTitle, image: UIImage(systemName: "arrow.triangle.2.circlepath")) { _ in rejoin() }, at: 0)
             }
             vc.transportBarCustomMenuItems = items
             // The default action is Play From Beginning, which a live picture cannot do

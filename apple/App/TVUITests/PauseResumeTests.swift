@@ -36,7 +36,7 @@ final class PauseResumeTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = [
             "-BroadwaveServerURL", server, "-BroadwaveWatch", env["BROADWAVE_CHANNEL"] ?? "1",
-            "-BroadwaveSyncLog", "1", "-BroadwaveRejoinTest", "YES", "-ApplePersistenceIgnoreState", "YES",
+            "-BroadwaveSyncLog", "1", "-BroadwaveRejoinTest", "YES", "-ApplePersistenceIgnoreState", "YES", "-lineUp", "YES",
         ]
         app.launch()
         let probe = app.staticTexts["syncProbe"]
