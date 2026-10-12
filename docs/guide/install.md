@@ -56,9 +56,10 @@ Add the template [`deploy/unraid/broadwave.xml`](https://github.com/wolfebase/br
 
 - Leave PUID at 99 and PGID at 100 so recordings are not owned by root. A plain `docker run` on Unraid needs `-e PUID=99 -e PGID=100` as well.
 - Set Config and Recordings to folders on your server. Recordings are mounted at `/config/work/recordings`.
-- Remove `/dev/dri` from Extra Parameters when the server has no Intel or AMD graphics.
+- Remove `/dev/dri` from Extra Parameters when the server has no Intel or AMD graphics. Docker will not start while that path is missing.
+- Tuner address, public names, the encoder, and extra audio are under Show more settings. Leave the tuner address blank unless the tuner is on another subnet.
 
-To update by hand, pull the new image and recreate the container with the same folders.
+The optional updater is [`deploy/unraid/broadwave-updater.xml`](https://github.com/wolfebase/broadwave/blob/main/deploy/unraid/broadwave-updater.xml). It checks at 03:30 and updates only the Broadwave container. It skips a night while someone is watching, or a recording is running or starts within two hours. To update by hand, pull the new image and recreate the container with the same folders.
 
 ## Other settings
 
