@@ -8,6 +8,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Identity names this server to clients. The id survives restarts and renames,
@@ -61,7 +62,7 @@ ON CONFLICT(id) DO UPDATE SET server_id = excluded.server_id, name = excluded.na
 
 func (s *Store) RenameServer(ctx context.Context, name string) error {
 	name = strings.TrimSpace(name)
-	if name == "" || len(name) > 63 {
+	if name == "" || utf8.RuneCountInString(name) > 63 {
 		return errors.New("server name must be 1 to 63 characters")
 	}
 	res, err := s.db.ExecContext(ctx, `UPDATE server_identity SET name = ? WHERE id = 1`, name)

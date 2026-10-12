@@ -2649,6 +2649,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** @description Counted in characters. A name that is only spaces is 400. */
                     name: string;
                 };
             };

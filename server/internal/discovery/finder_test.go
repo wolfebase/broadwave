@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -88,6 +89,25 @@ func TestAnswerProbeRejectsAnythingButTheAsk(t *testing.T) {
 	outside := net.ParseIP("203.0.113.9")
 	if answerProbe([]byte(finderAsk), outside, 8477, "abc", "Home", nil) != nil {
 		t.Fatal("an address outside every local subnet was answered")
+	}
+}
+
+func TestAnswerProbeAllowsALongCharacterName(t *testing.T) {
+	remote := net.ParseIP("127.0.0.1")
+	name := strings.Repeat("é", 63)
+	pkt := answerProbe([]byte(finderAsk), remote, 8477, "abc", name, nil)
+	if pkt == nil {
+		t.Fatal("63 characters were refused")
+	}
+	var got FinderReply
+	if err := json.Unmarshal(pkt[len(finderYes):], &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != name {
+		t.Fatalf("name %q", got.Name)
+	}
+	if answerProbe([]byte(finderAsk), remote, 8477, "abc", name+"é", nil) != nil {
+		t.Fatal("64 characters were answered")
 	}
 }
 

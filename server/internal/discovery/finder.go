@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // FinderPort is the UDP port the apps probe when Bonjour finds nothing.
@@ -148,7 +149,7 @@ func answerProbe(pkt []byte, remote net.IP, httpPort int, id, name string, key e
 	default:
 		return nil
 	}
-	if id == "" || name == "" || httpPort < 1 || httpPort > 65535 || len(id) > 64 || len(name) > 63 {
+	if id == "" || name == "" || httpPort < 1 || httpPort > 65535 || len(id) > 64 || utf8.RuneCountInString(name) > 63 {
 		return nil
 	}
 	ip := ipFacing(remote)

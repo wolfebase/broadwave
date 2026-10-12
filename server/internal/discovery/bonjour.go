@@ -60,12 +60,25 @@ func (a Advert) txt() []string {
 	}
 }
 
+// serviceInstance is the Bonjour name. A DNS-SD instance is one label, 63
+// bytes, and the cut stays on a character.
+func serviceInstance(name string) string {
+	if len(name) <= 63 {
+		return name
+	}
+	cut := 0
+	for i := range name {
+		if i > 63 {
+			break
+		}
+		cut = i
+	}
+	return name[:cut]
+}
+
 // Announce registers the service. Call Shutdown on the result to withdraw it.
 func Announce(a Advert) (*zeroconf.Server, error) {
-	instance := a.Name
-	if len(instance) > 63 {
-		instance = instance[:63]
-	}
+	instance := serviceInstance(a.Name)
 	host, _ := os.Hostname()
 	host = strings.TrimSuffix(strings.TrimSuffix(host, "."), ".local")
 	if host == "" {
