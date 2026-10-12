@@ -419,6 +419,42 @@ func TestPreviewCountsDaysBeforeMakeRoom(t *testing.T) {
 	}
 }
 
+func TestPreviewDoesNotCreditAProtectionWhenMakeRoomDeletesNothing(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "recordings")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "show.ts")
+	if err := os.WriteFile(path, make([]byte, 100), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 11, 18, 0, 0, 0, time.UTC)
+	watched := now.Add(-48 * time.Hour)
+	recent := now.Add(-time.Hour)
+	base := store.Recording{
+		ID: 1, Title: "Kept Show", Status: "complete", Path: path,
+		Watched: 1, WatchedAt: &watched, ProgressAt: &watched, Position: 1790, Duration: 1800,
+	}
+	kept := base
+	kept.Keep = true
+	played := base
+	played.Title = "News"
+	played.ProgressAt = &recent
+	favorite := base
+	favorite.Title = "Favorite"
+	favorite.ChannelID = 9
+	for _, recs := range [][]store.Recording{{kept}, {played}, {favorite}} {
+		plan := buildPreview(previewInput{
+			Now: now, MakeRoom: true, Reserve: 200, Free: 0, Root: root, Recs: recs,
+			ProtectFavorites: true, Favorites: map[int64]bool{9: true},
+		})
+		if plan.Covers || len(plan.Remove) != 0 || len(plan.Held) != 0 {
+			t.Fatalf("plan %+v", plan)
+		}
+	}
+}
+
 func TestPreviewWorksBeforeTheWorkFolderExists(t *testing.T) {
 	cfg := filepath.Join(t.TempDir(), "cfg")
 	st, err := store.Open(cfg)
