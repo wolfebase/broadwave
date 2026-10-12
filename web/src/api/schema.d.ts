@@ -1589,6 +1589,8 @@ export interface components {
             latencyMs?: number;
             version: number;
             members: number;
+            /** @description Someone chose Sync screens: every screen on this channel lines up with the room, including screens that don't line up on their own. A new room starts false. */
+            synced?: boolean;
             /** @description Group rooms only. Who is in the room; a screen that has not said what it is has an empty name and kind. */
             people?: components["schemas"]["Person"][];
         };

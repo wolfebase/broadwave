@@ -382,6 +382,7 @@ export type RoomState = {
   latencyMs?: number;
   version: number;
   members: number;
+  synced?: boolean;
   people?: Person[];
 };
 

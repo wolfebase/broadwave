@@ -1088,3 +1088,26 @@ func TestBehindStepsAMeasuredRoomBackToTheScreen(t *testing.T) {
 		t.Fatalf("a small gap moved the room: %+v", st)
 	}
 }
+
+// Sync screens: lining up is a choice. A new channel room starts unsynced;
+// "syncall" marks it once so every screen on it lines up, and a remade room
+// starts fresh.
+func TestSyncAllMarksTheRoomOnce(t *testing.T) {
+	start := time.Date(2026, 10, 11, 20, 0, 0, 0, time.UTC)
+	r, _ := fixedRooms(start)
+	st := r.Join("channel:4", 4, 0)
+	if st.Synced {
+		t.Fatalf("a new room starts unsynced: %+v", st)
+	}
+	st, err := r.Apply("channel:4", Command{Action: "syncall"})
+	if err != nil || !st.Synced || st.Version != 2 {
+		t.Fatalf("syncall should mark the room: %+v %v", st, err)
+	}
+	if again, _ := r.Apply("channel:4", Command{Action: "syncall"}); again.Version != st.Version {
+		t.Fatalf("a second syncall changed the room: %+v", again)
+	}
+	r.Leave("channel:4")
+	if fresh := r.Join("channel:4", 4, 0); fresh.Synced {
+		t.Fatalf("a remade room should start unsynced: %+v", fresh)
+	}
+}
