@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"sort"
 	"time"
 )
 
@@ -39,14 +40,15 @@ ON CONFLICT(channel_id) DO UPDATE SET
 }
 
 // ChannelSignals lists present channels and any reading stored for them.
+// The order matches the guide, so a shown 3.0 channel sits beside its 1.0 twin
+// instead of with the 100s. Text order on guide_number put 104.1 after 100.1.
 func (s *Store) ChannelSignals(ctx context.Context) ([]ChannelSignal, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT c.id, c.guide_number, c.guide_name, c.frequency_hz,
 	sig.strength, sig.quality, sig.symbol, sig.locked, sig.checked_at
 FROM channels c
 LEFT JOIN channel_signals sig ON sig.channel_id = c.id
-WHERE c.present = 1
-ORDER BY c.guide_number`)
+WHERE c.present = 1`)
 	if err != nil {
 		return nil, err
 	}
@@ -67,5 +69,27 @@ ORDER BY c.guide_number`)
 		}
 		out = append(out, row)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	channels, err := s.Channels(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	rank := make(map[int64]int, len(channels))
+	for i, ch := range channels {
+		rank[ch.ID] = i
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		ri, okI := rank[out[i].ChannelID]
+		rj, okJ := rank[out[j].ChannelID]
+		if okI != okJ {
+			return okI
+		}
+		if !okI {
+			return out[i].ChannelID < out[j].ChannelID
+		}
+		return ri < rj
+	})
+	return out, nil
 }
