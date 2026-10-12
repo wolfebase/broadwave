@@ -12,7 +12,7 @@ While Whole-Home Sync is on, the player shows Synced when this screen is the onl
 
 ## Cast
 
-A television with Cast can play the channel that is on in the browser. Cast is in the player when the server has a Cast application id (`BROADWAVE_CAST_APP_ID`). The television plays the same moment as the other screens. Watch together includes it.
+A television with Cast can play the channel that is on in the browser. Cast is in the player when the server has a Cast application id (`BROADWAVE_CAST_APP_ID`). The television plays the same moment as the other screens. Watch together includes it. Leaving the browser does not stop the television. Stop casting does.
 
 The id comes from a Cast application you register with Google. The steps are in [the Cast design note](../design/cast.md). The application stays unpublished, and the television has to be registered by its serial number.
 

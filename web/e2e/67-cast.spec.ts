@@ -94,31 +94,72 @@ test("Cast tells the television which channel to play", async ({ page }) => {
 
 test("the receiver joins the channel room", async ({ page }) => {
   const frames: string[] = [];
+  const watches: { method: string; url: string; body: string | null; auth: string }[] = [];
   page.on("websocket", (socket) => {
     socket.on("framesent", (frame) => {
       if (typeof frame.payload === "string") frames.push(frame.payload);
     });
+    socket.on("framereceived", (frame) => {
+      if (typeof frame.payload === "string") frames.push(frame.payload);
+    });
+  });
+  const helloBoot = () => {
+    for (const frame of frames) {
+      try {
+        const message = JSON.parse(frame) as { type?: string; data?: { boot?: unknown } };
+        if (message.type === "hello" && typeof message.data?.boot === "string" && message.data.boot) return message.data.boot;
+      } catch {
+        // A partial frame is not a hello.
+      }
+    }
+    return "";
+  };
+  let grantedBoot = "";
+  await page.route("**/api/v1/watch**", async (route) => {
+    const req = route.request();
+    const watchPost = req.method() === "POST" && new URL(req.url()).pathname === "/api/v1/watch";
+    // The grant names this process. A different boot makes the receiver drop
+    // the viewer and ask again, so the answer waits for the server's hello.
+    let boot = "";
+    if (watchPost) {
+      const deadline = Date.now() + 8_000;
+      while (Date.now() < deadline && !boot) {
+        boot = helloBoot();
+        if (!boot) await new Promise((resolve) => setTimeout(resolve, 40));
+      }
+      grantedBoot = boot;
+    }
+    watches.push({ method: req.method(), url: req.url(), body: req.postData(), auth: req.headers().authorization ?? "" });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ channelId: 1, rendition: "1080.aac2.broadcast", playlist: "/media/live/1/1080.aac2.broadcast/index.m3u8", boot }),
+    });
   });
   await page.addInitScript(() => {
-    const host = window as Window & { cast?: unknown };
+    const host = window as Window & { cast?: unknown; __castStop?: () => void };
     class CastReceiverOptions {}
+    let onMessage: ((event: { data: unknown }) => void) | null = null;
     const context = {
       start() {},
       addCustomMessageListener(_namespace: string, listener: (event: { data: unknown }) => void) {
+        onMessage = listener;
         queueMicrotask(() => {
           listener({
             data: {
               type: "load",
               channelId: 1,
-              playlist: "/media/live/1/index.m3u8",
+              playlist: "/media/live/1/1080.aac2.broadcast/index.m3u8",
               room: "channel:1",
               latency: "balanced",
               title: "Evening news",
+              token: "bw_casttoken",
             },
           });
         });
       },
     };
+    host.__castStop = () => onMessage?.({ data: { type: "stop" } });
     host.cast = {
       framework: {
         CastReceiverContext: { getInstance: () => context },
@@ -138,4 +179,23 @@ test("the receiver joins the channel room", async ({ page }) => {
   await expect(page.locator("#cast-idle")).toBeHidden();
   await expect(page.locator("#cast-title")).toHaveText("Evening news");
   await expect.poll(() => page.locator("html").getAttribute("data-cast-state")).toBe("buffering");
+  await expect.poll(() => watches.filter((row) => row.method === "POST" && row.url.endsWith("/api/v1/watch")).length).toBe(1);
+  const watch = watches.find((row) => row.url.endsWith("/api/v1/watch"));
+  const body = JSON.parse(watch?.body ?? "{}") as { channelId?: number; rendition?: string; confirmLive?: boolean; token?: string };
+  expect(body.channelId).toBe(1);
+  expect(body.rendition).toBe("1080.aac2.broadcast");
+  expect(body.confirmLive).toBe(true);
+  expect(body.token).toBeUndefined();
+  expect(watch?.auth).toBe("Bearer bw_casttoken");
+  expect(watch?.url).not.toContain("bw_casttoken");
+  expect(frames.some((frame) => frame.includes("bw_casttoken"))).toBe(false);
+  await page.evaluate(() => (window as unknown as { __castStop?: () => void }).__castStop?.());
+  await expect.poll(() => watches.some((row) => row.url.endsWith("/api/v1/watch/1/stop"))).toBe(true);
+  const stop = watches.find((row) => row.url.endsWith("/api/v1/watch/1/stop"));
+  const stopped = JSON.parse(stop?.body ?? "{}") as { rendition?: string; boot?: string };
+  expect(stopped.rendition).toBe("1080.aac2.broadcast");
+  expect(grantedBoot).not.toBe("");
+  expect(stopped.boot).toBe(grantedBoot);
+  expect(stop?.auth).toBe("Bearer bw_casttoken");
+  expect(watches.filter((row) => row.method === "POST" && new URL(row.url).pathname === "/api/v1/watch")).toHaveLength(1);
 });

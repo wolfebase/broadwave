@@ -5,6 +5,7 @@ import { reconnectWait } from "../lib/events.ts";
 import { hlsCastPlayer } from "./hlsPlayer.ts";
 import { castLine, castNamespace, parseLoad, type CastLoad } from "./protocol.ts";
 import { castSessionLive, openCastSession, type CastPlayer, type CastSession, type CastStatus, type CastTransport } from "./session.ts";
+import { createCastHold, type CastHold } from "./watch.ts";
 
 type CastMessage = { data?: unknown };
 
@@ -33,6 +34,7 @@ type SocketBox = { ws: WebSocket | null };
 const box: SocketBox = { ws: null };
 let session: CastSession | null = null;
 let player: CastPlayer | null = null;
+let channelHold: CastHold | null = null;
 let retry = 0;
 let tickTimer = 0;
 let clockTimer = 0;
@@ -121,6 +123,11 @@ function reconnect(current: CastSession) {
   connect(current);
 }
 
+function hold(): CastHold {
+  channelHold ??= createCastHold(location.href);
+  return channelHold;
+}
+
 function accept(load: CastLoad) {
   const video = document.querySelector<HTMLVideoElement>("#cast-video");
   if (!video) return;
@@ -140,6 +147,7 @@ function accept(load: CastLoad) {
       transport: transport(),
       screenId: screenId(),
       onStatus: paint,
+      watch: hold(),
     });
     if (!opened) return;
     session = opened;
@@ -193,5 +201,9 @@ export function bootCastReceiver(cast: CastGlobal | undefined = (globalThis as {
   context.addCustomMessageListener(castNamespace, onCastMessage);
   context.start(options);
 }
+
+window.addEventListener("pagehide", () => {
+  session?.stop();
+});
 
 bootCastReceiver();
