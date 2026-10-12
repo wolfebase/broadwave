@@ -180,6 +180,7 @@ func buildPreview(in previewInput) StoragePlan {
 	if in.MakeRoom && disk.BelowReserve(in.Free, in.Reserve) && !disk.BelowReserve(freeAfterDays, in.Reserve) {
 		out.RoomNote = "Deleting recordings watched past their days gets back to the reserve. Nothing else would be deleted."
 	}
+	var roomRuns bool
 	if in.MakeRoom && disk.BelowReserve(freeAfterDays, in.Reserve) {
 		short := in.Reserve - freeAfterDays
 		out.ShortBytes = short
@@ -196,6 +197,7 @@ func buildPreview(in previewInput) StoragePlan {
 			out.Covers = false
 			out.RoomNote = "There isn't enough watched video to get back to the reserve. Nothing would be deleted to make room."
 		} else {
+			roomRuns = true
 			var freed uint64
 			for _, rec := range victims {
 				if freed >= short {
@@ -229,7 +231,7 @@ func buildPreview(in previewInput) StoragePlan {
 	}
 
 	for _, rec := range in.Recs {
-		if row, ok := holdRow(in, rec, fav, gone, freeAfterDays); ok {
+		if row, ok := holdRow(in, rec, fav, gone, roomRuns); ok {
 			out.Held = append(out.Held, row)
 		}
 		if row, ok := againRow(rec); ok {
@@ -296,7 +298,7 @@ func freedSpace(free, extra uint64) uint64 {
 	return free + extra
 }
 
-func holdRow(in previewInput, rec store.Recording, fav map[int64]bool, gone map[int64]bool, free uint64) (StoragePlanItem, bool) {
+func holdRow(in previewInput, rec store.Recording, fav map[int64]bool, gone map[int64]bool, roomRuns bool) (StoragePlanItem, bool) {
 	if gone[rec.ID] {
 		return StoragePlanItem{}, false
 	}
@@ -310,7 +312,7 @@ func holdRow(in previewInput, rec store.Recording, fav map[int64]bool, gone map[
 	if inside && !fileExists(rec.Path) {
 		return item(rec, "missing", "", "The file is gone."), true
 	}
-	if !ruleWouldTake(in, rec, fav, free) {
+	if !ruleWouldTake(in, rec, fav, roomRuns) {
 		return StoragePlanItem{}, false
 	}
 	switch {
@@ -329,7 +331,7 @@ func holdRow(in previewInput, rec store.Recording, fav map[int64]bool, gone map[
 
 // ruleWouldTake reports whether some rule would remove this recording if
 // nothing protected it. Protections are applied by the caller.
-func ruleWouldTake(in previewInput, rec store.Recording, fav map[int64]bool, free uint64) bool {
+func ruleWouldTake(in previewInput, rec store.Recording, fav map[int64]bool, roomRuns bool) bool {
 	if rec.Status != "complete" {
 		return false
 	}
@@ -342,8 +344,10 @@ func ruleWouldTake(in previewInput, rec store.Recording, fav map[int64]bool, fre
 				old = true
 			}
 		}
-		room := in.MakeRoom && disk.BelowReserve(free, in.Reserve)
-		if old || room {
+		// roomRuns is false when the watched files together would not reach
+		// the reserve. Make-room then deletes nothing, so a protection is
+		// not what saved this recording.
+		if old || roomRuns {
 			return true
 		}
 	}
