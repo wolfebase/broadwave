@@ -3324,7 +3324,7 @@ components:
         nextGuidePull: { type: string, format: date-time, description: "When the next automatic listing refresh is due. Set by the server; ignored on write." }
         lastManualGuidePull: { type: string, format: date-time, description: "When listings were last reloaded by hand. Set by the server; ignored on write." }
         lastGuideError: { type: string, description: "Why the last listing load failed. Empty after a load that worked. Set by the server; ignored on write." }
-        lastGuideErrorAt: { type: string, format: date-time, description: "When the last listing load failed. Set by the server; ignored on write." }
+        lastGuideErrorAt: { type: string, format: date-time, description: "When the last listing load failed. Absent after a load that worked. Set by the server; ignored on write." }
         hideScores: { type: string, enum: ["0", "1"] }
         liveScores: { type: string, enum: ["0", "1"], description: "1 asks the scoreboard. 0 stops every scoreboard request. Missing means on." }
         checkUpdates: { type: string, enum: ["0", "1"], description: "1 checks for a newer release once a day. 0 turns the check off. Missing means on." }

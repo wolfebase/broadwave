@@ -2535,7 +2535,7 @@ export interface components {
             lastGuideError?: string;
             /**
              * Format: date-time
-             * @description When the last listing load failed. Set by the server; ignored on write.
+             * @description When the last listing load failed. Absent after a load that worked. Set by the server; ignored on write.
              */
             lastGuideErrorAt?: string;
             /** @enum {string} */
