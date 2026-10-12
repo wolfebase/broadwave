@@ -1,4 +1,5 @@
 import type { Message } from "../runtime.ts";
+import { requestFailedMessage } from "./requestFailed.ts";
 
 export const settingsUiMessages = {
   "about.title": "About",
@@ -145,7 +146,7 @@ export const settingsUiMessages = {
   "devices.tv": "TV",
   "devices.browser": "Browser",
   "devices.device": "Device",
-  "devices.failed": "That did not work. Try again.",
+  "devices.failed": requestFailedMessage,
 
   "pair.title": "Pair this device",
   "pair.lede": "Enter the code from Settings on a device that is already signed in.",
