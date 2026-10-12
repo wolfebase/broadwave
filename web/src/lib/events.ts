@@ -1,8 +1,12 @@
 // One socket per tab for live updates, clock sync, and Whole-Home Sync rooms.
 
-// Same key as web/src/lib/deviceToken.ts. This file stays free of imports so the
-// node test can load it without a bundler.
+import { shellMessages } from "../i18n/messages/shell.ts";
+import { bind } from "../i18n/runtime.ts";
+
+// Same key as web/src/lib/deviceToken.ts. The i18n modules load in the node test as written.
 const deviceTokenKey = "bw.deviceToken";
+
+const t = bind(shellMessages);
 
 function storedDeviceToken(): string {
   try {
@@ -39,7 +43,7 @@ export function browserName(ua = navigator.userAgent, touch = navigator.maxTouch
   // iPadOS asks for desktop pages and names itself a Mac, one with a touch screen.
   const ipad = /iPad/.test(ua) || (/Macintosh/.test(ua) && touch > 1);
   const os = /iPhone/.test(ua) ? "iPhone" : ipad ? "iPad" : /Android/.test(ua) ? "Android" : /CrOS/.test(ua) ? "Chromebook" : /Mac OS X/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "";
-  return os ? `${browser} on ${os}` : browser;
+  return os ? t("shell.browserOn", { browser, os }) : browser;
 }
 
 let ownId = "";

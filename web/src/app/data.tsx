@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { actionError } from "./actionError";
 import { shellMessages } from "../i18n/messages/shell";
 import { bind } from "../i18n/runtime";
 import {
@@ -471,7 +472,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           await startRecording(channel.id, 0, title);
           setError("");
         } catch (err) {
-          setError(err instanceof Error ? err.message : "Recording did not start.");
+          setError(actionError(err, "shell.recordFailed"));
         }
         await refresh(["recordings"]);
       },
@@ -488,7 +489,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           await addPass(airing.title, channel.id, airing.start);
           setError("");
         } catch (err) {
-          setError(err instanceof Error ? err.message : "That airing was not scheduled.");
+          setError(actionError(err, "shell.airingNotScheduled"));
         }
         await refresh(["passes"]);
       },
@@ -497,7 +498,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           await deletePass(id);
           setError("");
         } catch (err) {
-          setError(err instanceof Error ? err.message : "That pass was not removed.");
+          setError(actionError(err, "shell.passNotRemoved"));
         }
         await refresh(["passes"]);
       },
@@ -513,7 +514,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setDevices(res.devices ?? []);
           setError("");
         } catch (err) {
-          setError(err instanceof Error ? err.message : "No tuner answered.");
+          setError(actionError(err, "shell.noTuner"));
         }
         await refresh(["channels"]);
       },
@@ -524,7 +525,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setDevices(res.devices ?? []);
           setError("");
         } catch (err) {
-          setError(err instanceof Error ? err.message : "That device was not removed.");
+          setError(actionError(err, "shell.deviceNotRemoved"));
         }
         await refresh(["channels", "passes"]);
       },

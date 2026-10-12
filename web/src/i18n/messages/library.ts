@@ -32,6 +32,8 @@ export const libraryMessages = {
   "library.selectShow": "Select all of {title}",
   "library.allOf": "All {count} of {title}",
   "library.season": "Season {number}",
+  "library.episodeBoth": "S{season} E{episode}",
+  "library.episodeOnly": "E{episode}",
   "library.otherEpisodes": "Other episodes",
   "library.count": { one: "{count} recording", other: "{count} recordings" },
   "library.unwatched": { zero: "all watched", one: "{count} unwatched", other: "{count} unwatched" },

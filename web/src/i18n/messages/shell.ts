@@ -20,4 +20,10 @@ export const shellMessages = {
   "shell.updateServer": "Update your Broadwave server to use this",
   "shell.updateApp": "Update Broadwave to use this server",
   "shell.unreachable": "The server could not be reached.",
+  "shell.recordFailed": "Recording did not start.",
+  "shell.airingNotScheduled": "That airing was not scheduled.",
+  "shell.passNotRemoved": "That pass was not removed.",
+  "shell.noTuner": "No tuner answered.",
+  "shell.deviceNotRemoved": "That device was not removed.",
+  "shell.browserOn": "{browser} on {os}",
 } as const satisfies Record<string, Message>;

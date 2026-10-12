@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
+import { setLocaleMode } from "./src/i18n/runtime.ts";
 
 type Sent = { type: string; data?: Record<string, unknown> };
 
@@ -293,6 +294,27 @@ test("a screen name is trimmed, capped at 40, and blank falls back", () => {
   assert.equal(browserName(), "Living Room");
   store.delete("broadwave-screen-name");
   assert.equal(browserName(), own);
+});
+
+test("a browser with no saved name is named from the catalog", () => {
+  const store = new Map<string, string>();
+  Object.assign(globalThis, {
+    localStorage: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => store.set(key, value),
+      removeItem: (key: string) => store.delete(key),
+    },
+  });
+  const ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0 Safari/537.36";
+  assert.equal(browserName(ua, 0), "Chrome on Mac");
+  setLocaleMode("pseudo");
+  try {
+    assert.equal(browserName(ua, 0), "Chrome on MacChrome on Mac");
+    store.set("broadwave-screen-name", "Den");
+    assert.equal(browserName(ua, 0), "Den");
+  } finally {
+    setLocaleMode("en");
+  }
 });
 
 test("renaming announces on the open socket", () => {

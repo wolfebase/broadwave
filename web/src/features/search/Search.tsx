@@ -10,7 +10,7 @@ import { navigate, useRoute } from "../../app/router";
 import { actionName } from "../../lib/actionName";
 import { cappedCss } from "../../lib/art";
 import { dayLabel, searchRows, spanLabel } from "../../lib/guide";
-import { noteAfterRecord, searchFieldValue } from "./field";
+import { noteAfterRecord, noteTone, searchFieldValue } from "./field";
 import type { Recording, SearchAiring } from "../../types";
 import { SearchIcon } from "../../ui/icons";
 import { Atsc3Tag } from "../../ui/primitives";
@@ -163,7 +163,7 @@ export function SearchPage() {
         />
       </form>
       {active && q === resultQuery && note ? (
-        <p className="hint" role={note === t("search.nothing") || note.startsWith("Recording every ") ? "status" : "alert"}>
+        <p className="hint" role={noteTone(note)}>
           {note}
         </p>
       ) : null}
