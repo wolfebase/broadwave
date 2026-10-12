@@ -1,7 +1,11 @@
 // The sender SDK is loaded from Google the first time someone presses Cast.
 // A test can install window.cast.framework first; then this does not add a script.
 
+import { castMessages } from "../i18n/messages/cast.ts";
+import { bind } from "../i18n/runtime.ts";
 import { castNamespace, senderSDK } from "./protocol.ts";
+
+const t = bind(castMessages);
 
 export { senderSDK };
 
@@ -78,7 +82,7 @@ let ending: (() => void) | undefined;
 export async function requestCast(appId: string, env: SenderEnv = browserSenderEnv(), onEnd?: () => void): Promise<CastLink | null> {
   const framework = env.cast?.framework;
   const Context = framework?.CastContext;
-  if (!Context) throw new Error("Cast didn't load.");
+  if (!Context) throw new Error(t("cast.didNotLoad"));
   const context = Context.getInstance();
   const policy = env.chrome?.cast?.AutoJoinPolicy?.ORIGIN_SCOPED ?? "origin_scoped";
   context.setOptions({ receiverApplicationId: appId, autoJoinPolicy: policy });
@@ -91,11 +95,11 @@ export async function requestCast(appId: string, env: SenderEnv = browserSenderE
     } catch (err) {
       // The sender SDK rejects with chrome.cast.ErrorCode.CANCEL when the picker is dismissed.
       if (err === "cancel") return null;
-      throw new Error("No Cast devices found.", { cause: err });
+      throw new Error(t("cast.noDevices"), { cause: err });
     }
     session = context.getCurrentSession();
   }
-  if (!session) throw new Error("No Cast devices found.");
+  if (!session) throw new Error(t("cast.noDevices"));
   const eventType = framework?.CastContextEventType?.SESSION_STATE_CHANGED ?? "sessionstatechanged";
   const ended = framework?.SessionState?.SESSION_ENDED ?? "sessionended";
   ending = onEnd;

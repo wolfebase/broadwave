@@ -6,12 +6,12 @@ export type ResolvedTheme = "light" | "dark";
 
 /** Six accents. `dark` is the bright ink on the dark surfaces. `light` is dark enough for white button text and for links on the lightest card. */
 export const accents = [
-  { id: "blue", label: "Blue", dark: "#3D7BFF", darkSoft: "#3D7BFF29", light: "#1D4ED8", lightSoft: "#1D4ED829" },
-  { id: "teal", label: "Teal", dark: "#2DD4BF", darkSoft: "#2DD4BF29", light: "#0D6962", lightSoft: "#0D696229" },
-  { id: "green", label: "Green", dark: "#34D399", darkSoft: "#34D39929", light: "#0D6B3D", lightSoft: "#0D6B3D29" },
-  { id: "orange", label: "Orange", dark: "#FB923C", darkSoft: "#FB923C29", light: "#A7380A", lightSoft: "#A7380A29" },
-  { id: "purple", label: "Purple", dark: "#A78BFA", darkSoft: "#A78BFA29", light: "#6D28D9", lightSoft: "#6D28D929" },
-  { id: "rose", label: "Rose", dark: "#FB7185", darkSoft: "#FB718529", light: "#B8113A", lightSoft: "#B8113A29" },
+  { id: "blue", dark: "#3D7BFF", darkSoft: "#3D7BFF29", light: "#1D4ED8", lightSoft: "#1D4ED829" },
+  { id: "teal", dark: "#2DD4BF", darkSoft: "#2DD4BF29", light: "#0D6962", lightSoft: "#0D696229" },
+  { id: "green", dark: "#34D399", darkSoft: "#34D39929", light: "#0D6B3D", lightSoft: "#0D6B3D29" },
+  { id: "orange", dark: "#FB923C", darkSoft: "#FB923C29", light: "#A7380A", lightSoft: "#A7380A29" },
+  { id: "purple", dark: "#A78BFA", darkSoft: "#A78BFA29", light: "#6D28D9", lightSoft: "#6D28D929" },
+  { id: "rose", dark: "#FB7185", darkSoft: "#FB718529", light: "#B8113A", lightSoft: "#B8113A29" },
 ] as const;
 
 export type AccentId = (typeof accents)[number]["id"];

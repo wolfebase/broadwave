@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { installMessages } from "../i18n/messages/install.ts";
+import { bind } from "../i18n/runtime.ts";
 import { installDismissKey } from "../lib/install";
 import { canonicalKey } from "../lib/tvKey";
 
@@ -7,6 +9,8 @@ type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice?: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
+
+const t = bind(installMessages);
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -36,19 +40,19 @@ function Banner({ event, onDone }: { event: InstallPromptEvent; onDone: () => vo
       if (choice.outcome === "accepted") rememberDismiss();
       onDone();
     } catch {
-      setError("Couldn't open the install dialog. Try again from the browser menu.");
+      setError(t("install.failed"));
     }
   }
 
   return (
     <>
-      <p>Install Broadwave on this device. It opens like an app.</p>
+      <p>{t("install.lede")}</p>
       {error ? <p role="alert">{error}</p> : null}
       <button type="button" className="btn small primary" onClick={() => void accept()}>
-        Install
+        {t("install.install")}
       </button>
       <button type="button" className="btn small ghost" data-install-dismiss onClick={dismiss}>
-        Not now
+        {t("install.notNow")}
       </button>
     </>
   );
@@ -77,7 +81,7 @@ export function present(event: Event) {
   host = document.createElement("div");
   host.className = "install-offer";
   host.setAttribute("role", "region");
-  host.setAttribute("aria-label", "Install Broadwave");
+  host.setAttribute("aria-label", t("install.region"));
   document.body.appendChild(host);
   root = createRoot(host);
   const shell = document.querySelector(".shell");
