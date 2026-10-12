@@ -59,7 +59,10 @@ func Tidy(ctx context.Context, st *store.Store, hub *live.Hub, now time.Time) {
 	if err != nil {
 		return
 	}
-	fav := favoriteIDs(ctx, st, values)
+	fav, err := favoriteIDs(ctx, st, values)
+	if err != nil {
+		return
+	}
 	if days := WatchedDays(values["deleteWatchedDays"]); days > 0 {
 		tidyMu.Lock()
 		recs, err := st.Recordings(ctx)
@@ -103,7 +106,10 @@ func MakeRoom(ctx context.Context, st *store.Store, hub *live.Hub, need uint64) 
 		return 0
 	}
 	now := time.Now()
-	fav := favoriteIDs(ctx, st, values)
+	fav, err := favoriteIDs(ctx, st, values)
+	if err != nil {
+		return 0
+	}
 	victims := RoomOrder(cleanable(hub.Recordings(), recs, now, fav))
 	var could uint64
 	for _, rec := range victims {
@@ -234,14 +240,17 @@ func keepEligible(recs []store.Recording, fav map[int64]bool) []store.Recording 
 }
 
 // favoriteIDs is the channels marked favorite, when protectFavorites is on.
-// Nil means the rule is off, so a favorite channel is cleaned up like any other.
-func favoriteIDs(ctx context.Context, st *store.Store, values map[string]string) map[int64]bool {
+// A nil map means the rule is off, so a favorite channel is cleaned up like
+// any other. An error means the list could not be read. A favorite then
+// cannot be told from any other recording, and the caller must remove nothing.
+func favoriteIDs(ctx context.Context, st *store.Store, values map[string]string) (map[int64]bool, error) {
 	if st == nil || values["protectFavorites"] != "1" {
-		return nil
+		return nil, nil
 	}
 	chs, err := st.Channels(ctx, false)
 	if err != nil {
-		return nil
+		slog.Warn("storage: channel list could not be read, so nothing was removed", "err", err)
+		return nil, err
 	}
 	out := map[int64]bool{}
 	for _, ch := range chs {
@@ -249,5 +258,5 @@ func favoriteIDs(ctx context.Context, st *store.Store, values map[string]string)
 			out[ch.ID] = true
 		}
 	}
-	return out
+	return out, nil
 }

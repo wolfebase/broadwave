@@ -36,11 +36,16 @@ func OnSaved(ctx context.Context, st *store.Store, hub *live.Hub, queue *BreakQu
 	}
 	values, err := st.Settings(ctx)
 	if err != nil {
-		values = nil
+		return
 	}
 	// A missing file and a recording on a favorite channel (when that rule is
 	// on) are not episodes the keep rule counts, and they are not removed.
-	fav := favoriteIDs(ctx, st, values)
+	// When the channel list cannot be read, a favorite cannot be told from
+	// any other recording, so the keep rule removes nothing.
+	fav, err := favoriteIDs(ctx, st, values)
+	if err != nil {
+		return
+	}
 	for _, pass := range passes {
 		for _, id := range KeepVictims(pass, keepEligible(recs, fav)) {
 			victim, err := st.Recording(ctx, id)
