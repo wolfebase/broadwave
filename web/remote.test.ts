@@ -1,10 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { channelNumberContinues, firstBelow, nearest, typedChannel, type Box } from "./src/lib/remote.ts";
+import { arrowScope, channelNumberContinues, firstBelow, nearest, typedChannel, type Box } from "./src/lib/remote.ts";
 
 function box(id: number, left: number, top: number, width = 40, height = 20): Box {
   return { id, left, top, right: left + width, bottom: top + height };
 }
+
+test("arrows stay in a dialog only when it has stops", () => {
+  const stats = { id: "stats" };
+  const sheet = { id: "sheet" };
+  assert.equal(arrowScope(null, 0), null);
+  assert.equal(arrowScope(null, 4), null);
+  assert.equal(arrowScope(stats, 0), null);
+  assert.equal(arrowScope(sheet, 1), sheet);
+  assert.equal(arrowScope(sheet, 6), sheet);
+});
 
 test("arrows walk to the nearest control in that direction", () => {
   const tabs = [box(1, 100, 10, 80, 30), box(2, 200, 10, 80, 30), box(3, 300, 10, 80, 30)];
