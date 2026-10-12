@@ -26,4 +26,4 @@ That is [Multiview](multiview.md). It is not the pause-for-everyone control.
 
 ## Away from home
 
-The apps do not open the server to the internet. A VPN that puts the phone on the home network, such as Tailscale, is how you watch away. If the app does not find the server, enter the server's address on that VPN. [Security](security.md) is why port 8477 stays off the public internet.
+The apps do not open the server to the internet. Tailscale, or another VPN that only your devices can join, is how you watch away. The apps do not find the server over it, so enter the Tailscale address. [Away from home](remote.md) is the setup, and why port 8477 stays off the public internet.

@@ -12,7 +12,7 @@ Broadwave is live TV and DVR for your antenna. You run the Broadwave server at h
 
 - **The app doesn't find my server.** Make sure the phone or Apple TV is on the same network, and that Local Network access is on (Settings > Privacy & Security > Local Network > Broadwave). Or enter the server's address.
 - **Some channels have no guide.** Broadwave reads listings from your tuner's guide, from the broadcast itself, and from any guide source you add in Settings > Guide.
-- **Can I watch away from home?** Yes, over a VPN such as Tailscale. Enter the server's VPN address in the app.
+- **Can I watch away from home?** Yes, over a VPN such as Tailscale. Enter the server's Tailscale address and port 8477. The apps do not find it on their own from there. Do not forward port 8477. The handbook page is `docs/guide/remote.md`.
 
 ## Contact
 
