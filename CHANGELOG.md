@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.13.3 — 2026-10-12
+
 ### Added
 
 - The web app has an Appearance setting: Dark (the default), Light, or System, and six accent colors. The player and multiview stay dark. Both are saved per device.
