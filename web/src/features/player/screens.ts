@@ -1,6 +1,6 @@
 // The screens calls live with the player, not in api.ts, so the first page load does not carry them.
 import { apiFailure, request } from "../../api";
-import { authHeaders } from "../../lib/deviceToken";
+import { authHeaders, noteIfUnauthorized } from "../../lib/deviceToken";
 import type { Screen } from "../../types";
 
 export function getScreens() {
@@ -14,7 +14,10 @@ export async function sendToScreen(id: string, channelId: number, from: string) 
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ channelId, from }),
   });
-  if (!res.ok) throw apiFailure(res.status, await res.text());
+  if (!res.ok) {
+    noteIfUnauthorized(res.status);
+    throw apiFailure(res.status, await res.text());
+  }
 }
 
 /** Polls until the screen is on the channel, up to 12 s. */
