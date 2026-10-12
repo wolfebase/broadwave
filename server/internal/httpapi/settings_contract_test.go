@@ -172,6 +172,52 @@ func TestSettingsRoundTripMatchesTheSpec(t *testing.T) {
 	}
 }
 
+func TestClearedGuideFailureTimeIsOmitted(t *testing.T) {
+	doc := loadOpenAPI(t)
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := t.Context()
+	if err := st.PutSettings(ctx, map[string]string{"setupComplete": "1"}); err != nil {
+		t.Fatal(err)
+	}
+	last := time.Date(2026, 10, 8, 15, 0, 0, 0, time.UTC)
+	next := last.Add(24 * time.Hour)
+	if err := st.SetGuideSchedule(ctx, last, next); err != nil {
+		t.Fatal(err)
+	}
+	api := (&Server{Store: st, Version: "dev", Staging: true}).Handler()
+	body := settingsBody(t, doc, api, http.MethodGet, "/api/v1/settings", "/settings")
+	if _, ok := body["lastGuideErrorAt"]; ok {
+		t.Fatalf("cleared failure time was sent: %+v", body["lastGuideErrorAt"])
+	}
+	if body["lastGuideError"] != "" || body["lastGuidePull"] != last.Format(time.RFC3339) || body["nextGuidePull"] != next.Format(time.RFC3339) {
+		t.Fatalf("schedule %+v", body)
+	}
+	stored, err := st.Settings(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored["lastGuideErrorAt"] != "" || stored["lastGuideError"] != "" {
+		t.Fatalf("stored failure was rewritten: %+v", stored)
+	}
+
+	failedAt := time.Date(2026, 10, 8, 16, 4, 5, 0, time.UTC)
+	if err := st.SetGuideError(ctx, "listings did not load", failedAt); err != nil {
+		t.Fatal(err)
+	}
+	failed := settingsBody(t, doc, api, http.MethodGet, "/api/v1/settings", "/settings")
+	if failed["lastGuideError"] != "listings did not load" || failed["lastGuideErrorAt"] != failedAt.Format(time.RFC3339) {
+		t.Fatalf("failure %+v", failed)
+	}
+	saved := putSettingsJSON(t, doc, api, `{"lastGuideErrorAt":"","lastGuideError":"changed","layout":"tv"}`)
+	if saved["lastGuideErrorAt"] != failedAt.Format(time.RFC3339) || saved["lastGuideError"] != "listings did not load" || saved["layout"] != "tv" {
+		t.Fatalf("write %+v", saved)
+	}
+}
+
 func settingsBody(t *testing.T, doc *apiDoc, h http.Handler, method, url, specPath string) map[string]any {
 	t.Helper()
 	rec := httptest.NewRecorder()

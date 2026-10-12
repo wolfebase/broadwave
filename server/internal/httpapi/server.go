@@ -672,6 +672,10 @@ func (s *Server) settingsValues(r *http.Request) (map[string]string, error) {
 		values["setupComplete"] = "1"
 	}
 	delete(values, "deviceToken")
+	// A cleared failure is stored as an empty string. That is not a time.
+	if _, err := time.Parse(time.RFC3339, values["lastGuideErrorAt"]); err != nil {
+		delete(values, "lastGuideErrorAt")
+	}
 	return values, nil
 }
 
