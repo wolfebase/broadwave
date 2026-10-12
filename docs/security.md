@@ -30,7 +30,7 @@ Playlists, guides, artwork, scoreboards, and the release check use http or https
 
 Link-local addresses are refused for playlists, guides, and artwork. A tuner is allowed one, because a tuner with no DHCP server gives itself a 169.254 address. Private addresses (`10/8`, `172.16/12`, `192.168/16`, IPv6 ULA), loopback, and `.local` names work everywhere.
 
-When ffmpeg or ffprobe opens a URL, the input is limited to http and https. A remote playlist cannot hand either program a file on this machine. A recording on disk is still opened as a file. A playlist you add by its path on this machine is still read.
+When ffmpeg or ffprobe opens a URL, the input is limited to http, https, tcp, tls, and crypto. A remote playlist cannot hand either program a file on this machine. A recording on disk is still opened as a file. A playlist you add by its path on this machine is still read.
 
 ## Files
 
@@ -58,7 +58,7 @@ A password, token, secret, or key in a playlist or guide address, and a tuner `D
 
 Channels, the guide, recordings, and watch history stay in the database on the machine that runs Broadwave.
 
-The tuner's `DeviceAuth` value is read when a guide request needs it and is not written to the database or the log. A Schedules Direct password, a playlist password, and a guide or artwork key are stored so the server can refresh those sources. Settings does not show a saved password. The Schedules Direct password and the artwork and scores key fields stay blank and say Saved. The log keeps those values out.
+The tuner's `DeviceAuth` value is read when a guide request needs it and is not written to the database or the log. A Schedules Direct password, a playlist password, and a guide or artwork key are stored so the server can refresh those sources. Settings does not show a saved password. The Schedules Direct password and the movie artwork key stay blank and say Saved, on the web and in the Apple apps. The TheSportsDB key field says Saved on the web and stays blank in the Apple apps. The log keeps those values out.
 
 ## Support bundle
 
@@ -90,7 +90,7 @@ Use a VPN that only your devices can join, and open the server's address on that
 
 An address in the Host header is allowed with no `BROADWAVE_HOSTS`, including a Tailscale address in `100.64.0.0/10`. A MagicDNS name on port 8477 is a public name and is refused until `BROADWAVE_HOSTS` lists it. The port 443 exception needs a non-empty `Sec-Fetch-Site`. The Apple apps do not send that header, and their address field defaults to `http` and port 8477.
 
-Device sign-in is off until Settings, Devices, Require a device to sign in. While it is off, anyone who can open port 8477 can use the API. While it is on, the guide, recordings, and settings need a paired device. The iPhone, iPad, and Apple TV apps cannot pair, so leave it off if you use them. These stay open with no code either way: `/export/lineup.m3u`, `/export/guide.xml`, `/export/stream/`, and `/export/mosaic/`. A stream starts a tune. Port 8478 does too, while Act as an HDHomeRun is on, and that listener checks the name only. Bonjour and the UDP probe on 8479 answer the home network, not a Tailscale address.
+Device sign-in is off until Settings, Devices, Require a device to sign in. While it is off, anyone who can open port 8477 can use the API. While it is on, the guide, recordings, and settings need a paired device. The iPhone, iPad, and Apple TV apps cannot pair, so leave it off if you use them. These stay open with no code either way: `/export/lineup.m3u`, `/export/guide.xml`, `/export/stream/`, and `/export/mosaic/`. A stream opened in an app, or directly in a browser, starts a tune. A page on another site is refused: "This stream is for apps on your network, not a page on another site." Port 8478 does too, while Act as an HDHomeRun is on. It checks the name, and a page on another site gets that same refusal. Bonjour can advertise a Tailscale address. The UDP probe on 8479 answers a private home address, not a Tailscale address, and not a tunnel.
 
 The sign-in cookie is not marked Secure, so a browser will store it on plain HTTP. Tailscale encrypts the path between your phone and the server. The cookie does not hide the server from anyone else on the tailnet.
 
