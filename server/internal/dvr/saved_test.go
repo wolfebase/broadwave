@@ -127,3 +127,79 @@ func TestKeepRuleDoesNotCountAMissingFile(t *testing.T) {
 		t.Fatalf("older file: %v", err)
 	}
 }
+
+// Saving one show must not apply another show's keep rule. The older News
+// episode goes when a News episode is saved.
+func TestKeepRuleWaitsForAnotherEpisodeOfThatShow(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	ctx := context.Background()
+	newsID, err := st.AddSeriesPass(ctx, store.Pass{Title: "News", KeepMode: "last", KeepCount: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	root := filepath.Join(dir, "recordings")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 11, 18, 0, 0, 0, time.UTC)
+	write := func(name string) string {
+		t.Helper()
+		path := filepath.Join(root, name)
+		if err := os.WriteFile(path, []byte{0x47}, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	olderID, err := st.CreateRecording(ctx, store.Recording{
+		Title: "News", Status: "complete", PassID: newsID, Path: write("older.ts"), StartedAt: now.Add(-2 * time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	newerID, err := st.CreateRecording(ctx, store.Recording{
+		Title: "News", Status: "complete", PassID: newsID, Path: write("newer.ts"), StartedAt: now.Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	movieID, err := st.CreateRecording(ctx, store.Recording{
+		Title: "Movie", Status: "complete", Path: write("movie.ts"), StartedAt: now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	movie, err := st.Recording(ctx, movieID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := &live.Hub{Dir: dir}
+	OnSaved(ctx, st, hub, nil, movie)
+	for _, id := range []int64{olderID, newerID, movieID} {
+		if _, err := st.Recording(ctx, id); err != nil {
+			t.Fatalf("saving a movie removed recording %d: %v", id, err)
+		}
+	}
+
+	newer, err := st.Recording(ctx, newerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	OnSaved(ctx, st, hub, nil, newer)
+	if _, err := st.Recording(ctx, olderID); err == nil {
+		t.Fatal("the older News episode stayed after a newer one was saved")
+	}
+	if _, err := os.Stat(filepath.Join(root, "older.ts")); !os.IsNotExist(err) {
+		t.Fatalf("older News file stayed: %v", err)
+	}
+	if _, err := st.Recording(ctx, newerID); err != nil {
+		t.Fatalf("the News episode that was saved went: %v", err)
+	}
+	if _, err := st.Recording(ctx, movieID); err != nil {
+		t.Fatalf("the movie went when News was saved: %v", err)
+	}
+}
