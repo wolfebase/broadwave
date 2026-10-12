@@ -14,6 +14,7 @@
 - A short recording whose playhead never moved no longer counts as watched for clean-up.
 - Record it again finds the next airing for a recording on the other half of a 1.0 and 3.0 pair when the guide names the episode only by title and episode name.
 - Record it again works on a recording with no show title, using the airing's name. On the web the new pass shows in Passes right away.
+- A pass's keep rule removes older episodes only when a new episode of that show is saved, not when any recording is saved.
 
 ## 0.13.2 — 2026-10-11
 
