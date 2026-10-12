@@ -3032,7 +3032,7 @@ components:
       required: [rendition, video, audio, reason]
       properties:
         rendition: { type: string }
-        video: { type: string, enum: [copy, "1080", "720", "540", "360"] }
+        video: { type: string, enum: [copy, "1080", "720", "540", "480", "360"] }
         audio: { type: string, enum: [copy, aac2, aac6, ac3, none] }
         mode: { $ref: "#/components/schemas/PictureMode" }
         reason: { type: string, description: "Short, user-facing explanation of the choice" }
@@ -3064,8 +3064,9 @@ components:
             Multivariant playlist that pairs `playlist` with an English CC WebVTT track, present
             when the server reads the channel's captions. For a watch with `caps.alternates` whose
             rendition carries more than one sound track, it is `master.m3u8` instead: the picture
-            view and each sound track as an alternate (plus captions when they run). Players load
-            this one; readiness checks keep reading `playlist`.
+            view and each sound track as an alternate (plus captions when they run). When adaptive
+            quality is on and this watch uses the ladder, it is `ladder.m3u8`: 1080p, 720p, 480p,
+            and audio only, from one decode. Players load this one; readiness checks keep reading `playlist`.
         rendition: { type: string }
         stream: { $ref: "#/components/schemas/StreamInfo" }
         profile: { type: string }
@@ -3403,6 +3404,7 @@ components:
         folderLayout: { type: string, enum: [shows, flat], description: "Where new recordings go. shows (the default) uses the layout Plex and Jellyfin read: TV/Show/Season 01/Show - S01E02 - Episode.ts when the guide has both a season and an episode number, TV/Show/Show - 2026-10-08 - Episode.ts otherwise (the start time when the episode has no name), and Movies/Title (1999)/Title (1999).ts for a movie (the year only when the guide has one). flat puts every recording in the recordings folder, named by start time and channel. Recordings already made stay where they are." }
         gameAlerts: { type: string, enum: [all, teams, off], description: "Which game alerts the server sends as game.alert events. all (the default) is followed teams' games starting and close finishes; teams is followed teams only; off sends none. Live scores off sends none either." }
         pictureMode: { $ref: "#/components/schemas/PictureMode" }
+        adaptive: { type: string, enum: ["0", "1"], description: "1 turns on an adaptive ladder (1080p, 720p, 480p, and audio only) for browsers and Apple. The rungs share one decode. Missing means off." }
         autoplay: { type: string, enum: ["0", "1"] }
         hdhrEmulate: { type: string, enum: ["0", "1"] }
         deviceAuth: { type: string, enum: ["0", "1"], description: "1 requires a device token on the API and on /media. 0, the default, leaves the home network open. A presented token is still recognized while this is off." }

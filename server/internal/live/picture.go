@@ -163,6 +163,10 @@ func pictureSize(profile string, field bool) (int, int, string) {
 		return 1280, 720, "5M"
 	case "saver":
 		return 960, 540, "2500k"
+	case "low":
+		// 480p stays at one rate. Doubling it for field rate would make the
+		// ladder's short rung a different size from its progressive twin.
+		return 848, 480, "1800k"
 	case "tile":
 		return 640, 360, "1200k"
 	default:

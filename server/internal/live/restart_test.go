@@ -236,6 +236,26 @@ func TestFailedRebuildReleasesAnEmptyTune(t *testing.T) {
 	}
 }
 
+// The ladder is the only thing holding the tuner. A rebuild that cannot start
+// the new encode has to let the tuner go, the same as one rendition.
+func TestFailedLadderRebuildReleasesAnEmptyTune(t *testing.T) {
+	h, f, _ := restartHub(t, time.Hour, "hold")
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, err := h.ensureLadderLocked(f, ladderRung("broadcast", "1080"), time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.renditions) < 2 {
+		t.Fatalf("ladder rungs: %d", len(f.renditions))
+	}
+	h.FFmpeg = filepath.Join(t.TempDir(), "no-ffmpeg")
+	f.source.Progressive = false
+	h.rebuildLaddersLocked(f)
+	if len(f.renditions) != 0 || h.channels[1] != nil || len(h.muxes) != 0 {
+		t.Fatalf("tuner stayed up: renditions %d channel %v muxes %d", len(f.renditions), h.channels[1] != nil, len(h.muxes))
+	}
+}
+
 func TestEarlyHEVCFallbackUsesLibx265(t *testing.T) {
 	h, f, mark := restartHub(t, time.Hour, "once")
 	h.HEVC = true

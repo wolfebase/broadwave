@@ -10,7 +10,7 @@ import (
 // Rendition is one delivery form of a live channel. Viewers who need the same
 // form share one ffmpeg process; a different form never disturbs them.
 type Rendition struct {
-	Video string `json:"video"` // copy, 1080, 720, 540
+	Video string `json:"video"` // copy, 1080, 720, 540, 360, or 480 on a ladder
 	Audio string `json:"audio"` // copy, aac2, aac6
 	Mode  string `json:"mode,omitempty"`
 	Codec string `json:"codec,omitempty"` // hevc, or empty for H.264
@@ -19,11 +19,14 @@ type Rendition struct {
 	// FullRate is a 540p or 360p tile at field rate. The key gains ".60" so it
 	// does not share ffmpeg with the 30 fps tile of the same size.
 	FullRate bool `json:"fullRate,omitempty"`
+	// ABR is one rung of an adaptive ladder. The key gains ".abr". The rungs
+	// share one decode; the primary is the one a watch joins.
+	ABR bool `json:"abr,omitempty"`
 }
 
 func (r Rendition) normalized() Rendition {
 	switch r.Video {
-	case "copy", "1080", "720", "540", "360":
+	case "copy", "1080", "720", "540", "480", "360":
 	default:
 		r.Video = "1080"
 	}
@@ -51,6 +54,22 @@ func (r Rendition) normalized() Rendition {
 		r.Track = ""
 		r.Even = false
 	}
+	// A copied picture and a silent one are single encodes. A ladder is H.264
+	// and AAC stereo, with no second language and no volume leveling.
+	if r.Video == "copy" || r.Audio == "none" {
+		r.ABR = false
+	}
+	if r.ABR {
+		r.Audio = "aac2"
+		r.Codec = ""
+		r.Track = ""
+		r.Even = false
+		r.FullRate = false
+	}
+	// 480p is only a ladder rung.
+	if r.Video == "480" && !r.ABR {
+		r.Video = "1080"
+	}
 	return r
 }
 
@@ -73,12 +92,15 @@ func (r Rendition) Key() string {
 	if r.Codec == "hevc" {
 		key += ".hevc"
 	}
+	if r.ABR {
+		key += ".abr"
+	}
 	return key
 }
 
 func ParseRenditionKey(key string) (Rendition, bool) {
 	parts := strings.Split(key, ".")
-	if len(parts) < 2 || len(parts) > 7 {
+	if len(parts) < 2 || len(parts) > 8 {
 		return Rendition{}, false
 	}
 	r := Rendition{Video: parts[0], Audio: parts[1]}
@@ -94,6 +116,8 @@ func ParseRenditionKey(key string) (Rendition, bool) {
 			r.Track = p
 		case "broadcast", "smooth", "film":
 			r.Mode = p
+		case "abr":
+			r.ABR = true
 		default:
 			return Rendition{}, false
 		}
@@ -458,11 +482,23 @@ func renditionProfile(video string) string {
 		return "balanced"
 	case "540":
 		return "saver"
+	case "480":
+		return "low"
 	case "360":
 		return "tile"
 	default:
 		return "transparent"
 	}
+}
+
+// sessionProfile is the word older clients already know. 480p is the ladder's
+// short rung; "saver" is the profile those clients show for a small picture.
+func sessionProfile(video string) string {
+	p := renditionProfile(video)
+	if p == "low" {
+		return "saver"
+	}
+	return p
 }
 
 // openingKeyframes puts a transcode keyframe wherever the source has one.

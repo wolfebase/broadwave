@@ -154,6 +154,17 @@ func (t *Timeline) Start(wall time.Time) {
 	t.startWall = wall
 }
 
+// hasDate reports whether the first stamp will follow a seed or an anchor
+// instead of reading the wall clock.
+func (t *Timeline) hasDate() bool {
+	if t == nil {
+		return false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.set || t.seeded || !t.startWall.IsZero()
+}
+
 // Anchor is the timestamp the clock last anchored on and its wall time.
 func (t *Timeline) Anchor() (int64, time.Time, bool) {
 	t.mu.Lock()

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 import { getDeviceHealth, getReception, getSignals, getTuners, stopWatch, warmChannel, watchChannel, type ApiFailure } from "../../api";
 import { authHeaders } from "../../lib/deviceToken";
 import { events } from "../../lib/events";
+import { playbackURL, primedSounds, quietSubtitles, showCaptions } from "../../lib/playbackURL";
 import { livePlaylistLoader, masterConfig, primeLevel } from "../../lib/primeLevel";
 import { startOnRoom, SyncEngine, type SyncStatus } from "../../lib/sync";
 import type { Caps, Channel, Prefs, WatchSession } from "../../types";
@@ -103,6 +104,8 @@ export function useLiveStream(
   const [session, setSession] = useState<WatchSession | null>(null);
   // The master's sounds when this watch switches them in place, else null.
   const [sounds, setSounds] = useState<Sound[] | null>(null);
+  // The ladder master text, so captions are offered only when it lists them.
+  const [ladderText, setLadderText] = useState("");
   const inPlace = useRef(false);
   const [error, setError] = useState("");
   const [recovery, setRecovery] = useState<Recovery>("");
@@ -340,11 +343,11 @@ export function useLiveStream(
         }
         watching.current = true;
         autoTries.current = settled.autoTries;
-        // A master is played only once its picture playlist is in hand, so the
-        // start can land on the room's frame. Otherwise the plain playlist,
-        // which carries the main sound, plays as before.
-        const master = askAlternates && /\/master\.m3u8(\?|$)/.test(next.mainPlaylist ?? "") ? next.mainPlaylist! : "";
-        const primedLevel = master ? await primeLevel(master, ctrl.signal).catch(() => null) : null;
+        // A master or ladder is played once its picture playlist is in hand, so
+        // the start can land on the room's frame. Without that, a master falls
+        // back to the plain playlist, which carries the main sound.
+        const chosen = playbackURL(next, askAlternates);
+        const primedLevel = chosen.prime ? await primeLevel(chosen.prime, ctrl.signal, chosen.ladder).catch(() => null) : null;
         if (dead) {
           release();
           return;
@@ -365,18 +368,26 @@ export function useLiveStream(
           setError("");
           setRecovery("");
         }
-        inPlace.current = !!primedLevel;
-        setSounds(primedLevel?.sounds ?? null);
+        const tracks = primedSounds(primedLevel, chosen.ladder);
+        inPlace.current = tracks !== null;
+        setSounds(tracks);
+        setLadderText(chosen.ladder ? (primedLevel?.bodies.get(primedLevel.url)?.data ?? "") : "");
         setSession(next);
         playlist = next.playlist;
         if (Hls.isSupported()) {
           const onRoom = syncing.current && !holdSync.current ? roomRef.current : null;
-          hls = new Hls({ ...liveHlsConfig(profile), pLoader: livePlaylistLoader(), ...(primedLevel ? masterConfig(primedLevel, soundFor(primedLevel.sounds, track)) : {}), autoStartLoad: !onRoom });
+          hls = new Hls({
+            ...liveHlsConfig(profile),
+            pLoader: livePlaylistLoader(),
+            ...(primedLevel ? masterConfig(primedLevel, soundFor(primedLevel.sounds, track)) : {}),
+            ...(quietSubtitles(!!primedLevel, chosen.ladder) ? { subtitleTrackController: undefined, subtitleStreamController: undefined } : {}),
+            autoStartLoad: !onRoom,
+          });
           hlsRef.current = hls;
           (video as HTMLVideoElement & { hls?: Hls }).hls = hls;
           if (onRoom) startOnRoom(hls, video, onRoom, 800, primedLevel?.frags);
           watchTimeline(hls, Hls.Events);
-          hls.loadSource(primedLevel ? primedLevel.url : next.playlist);
+          hls.loadSource(primedLevel ? primedLevel.url : chosen.src);
           hls.attachMedia(video);
           attached = true;
           mark = Number.NaN;
@@ -407,7 +418,7 @@ export function useLiveStream(
             void noteOutage(true);
           });
         } else {
-          video.src = next.playlist;
+          video.src = chosen.src;
           attached = true;
           mark = Number.NaN;
         }
@@ -847,7 +858,7 @@ export function useLiveStream(
     warm,
     sounds: session?.channelId === channelId ? sounds : null,
     // Captions need hls.js; a native player gets none yet.
-    canCaption: !!mainPlaylist && Hls.isSupported(),
+    canCaption: Hls.isSupported() && showCaptions(mainPlaylist, ladderText),
     error,
     reconnecting: reconnecting.on && reconnecting.channel === channelId,
     needsConfirm,

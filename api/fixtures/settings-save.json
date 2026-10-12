@@ -1,4 +1,5 @@
 {
+  "adaptive": "0",
   "audio": "stereo",
   "autoplay": "1",
   "bufferMinutes": "60",

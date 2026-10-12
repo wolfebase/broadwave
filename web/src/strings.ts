@@ -73,6 +73,8 @@ export const copy = {
     screenNameHint: "Other screens see this name.",
     liveDelay: "Live delay",
     liveDelayHint: "How far behind live a channel plays when this device starts it. Lowest is about 6 seconds, Balanced 16, Stable 20. Apple devices play at Balanced or Stable.",
+    adaptive: "Adaptive quality",
+    adaptiveHint: "The player switches between 1080p, 720p, and 480p. Apple can also drop to sound only. Off plays one picture. Sound is stereo.",
     layout: "Layout",
     layoutHint: "Auto follows the window. TV uses the large guide you can drive with arrows.",
     recordings: "Recordings folder",
