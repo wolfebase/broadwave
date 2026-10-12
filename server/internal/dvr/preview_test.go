@@ -496,3 +496,40 @@ func TestPreviewWorksBeforeTheRecordingsFolderExists(t *testing.T) {
 		t.Fatalf("preview created %s: %v", missing, err)
 	}
 }
+
+// A missing file is not an episode the keep rule counts. It must not make an
+// older kept recording look like Keep forever is what saved it.
+func TestPreviewDoesNotCreditKeepWhenTheNewerFileIsGone(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "recordings")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	older := filepath.Join(root, "older.ts")
+	if err := os.WriteFile(older, make([]byte, 100), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 11, 18, 0, 0, 0, time.UTC)
+	recs := []store.Recording{
+		{ID: 1, Title: "News", Status: "complete", Path: filepath.Join(root, "missing.ts"), StartedAt: now},
+		{ID: 2, Title: "News", Status: "complete", Path: older, StartedAt: now.Add(-time.Hour), Keep: true},
+	}
+	plan := buildPreview(previewInput{
+		Now: now, Root: root, Passes: []store.Pass{{ID: 1, Title: "News", KeepMode: "last", KeepCount: 1}},
+		Recs: recs,
+	})
+	if len(plan.Remove) != 0 || slices.Contains(previewIDs(plan.Held, "kept"), int64(2)) {
+		t.Fatalf("plan %+v", plan)
+	}
+	fav := recs
+	fav[1].Keep = false
+	fav[1].ChannelID = 9
+	plan = buildPreview(previewInput{
+		Now: now, Root: root, ProtectFavorites: true, Favorites: map[int64]bool{9: true},
+		Passes: []store.Pass{{ID: 1, Title: "News", KeepMode: "last", KeepCount: 1}},
+		Recs:   fav,
+	})
+	if len(plan.Remove) != 0 || slices.Contains(previewIDs(plan.Held, "favorite"), int64(2)) {
+		t.Fatalf("favorite %+v", plan)
+	}
+}
