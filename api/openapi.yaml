@@ -1303,7 +1303,7 @@ paths:
     get:
       tags: [recordings]
       operationId: recordAgain
-      description: The next airing of the recording's episode in the guide, for Record it again. Record it with POST /passes (kind once, airingStart).
+      description: The next airing of the recording's episode in the guide, on the channel a simulcast pair records, for Record it again. Record it with POST /passes (kind once, airingStart).
       parameters:
         - $ref: "#/components/parameters/Id"
       responses:

@@ -144,14 +144,33 @@ func (s *Server) nextAiring(ctx context.Context, rec store.Recording, now time.T
 	for _, ch := range chs {
 		off[ch.ID] = !ch.Enabled
 	}
-	// A simulcast copy records on its other channel; that row is in the list too.
+	// A subtitle key includes the channel. The channel a simulcast pair records
+	// is the copy row's Simulcast.
+	title, subtitle := folded(rec.Title), folded(rec.Subtitle)
+	onCopy := map[[2]int64]bool{}
+	if strings.TrimSpace(rec.ProgramID) == "" && subtitle != "" {
+		for _, air := range airings {
+			if air.ChannelID == rec.ChannelID && air.Simulcast != 0 && folded(air.Title) == title && folded(air.Subtitle) == subtitle {
+				onCopy[[2]int64{air.Simulcast, air.Start.Unix()}] = true
+			}
+		}
+	}
 	for i := range airings {
 		air := airings[i]
-		if air.Start.After(now) && air.Simulcast == 0 && !off[air.ChannelID] && store.EpisodeKey(air.ProgramID, air.Title, air.Subtitle, air.ChannelID) == key {
+		if !air.Start.After(now) || air.Simulcast != 0 || off[air.ChannelID] {
+			continue
+		}
+		same := store.EpisodeKey(air.ProgramID, air.Title, air.Subtitle, air.ChannelID) == key
+		paired := onCopy[[2]int64{air.ChannelID, air.Start.Unix()}] && folded(air.Title) == title && folded(air.Subtitle) == subtitle
+		if same || paired {
 			return &air
 		}
 	}
 	return nil
+}
+
+func folded(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
 }
 
 func (s *Server) markers(w http.ResponseWriter, r *http.Request) {
