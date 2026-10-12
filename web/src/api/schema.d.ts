@@ -3941,7 +3941,7 @@ export interface operations {
             400: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
-            /** @description `no_signal`, `stream_down`, `tuner_refused`, or `tuner_silent`: the tune for a recording that starts now failed. */
+            /** @description `no_signal`, `stream_down`, `tuner_refused`, or `tuner_silent`: the tune for a recording that starts now failed. `unavailable`: the player is not configured. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -4007,6 +4007,7 @@ export interface operations {
         responses: {
             200: components["responses"]["Ok"];
             400: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     playRecording: {
@@ -4312,6 +4313,7 @@ export interface operations {
             };
             400: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            503: components["responses"]["Error"];
         };
     };
     deleteMarker: {
@@ -5375,6 +5377,7 @@ export interface operations {
                     "application/octet-stream": string;
                 };
             };
+            503: components["responses"]["Error"];
         };
     };
     restoreBackup: {

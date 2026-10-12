@@ -276,9 +276,13 @@ func (s *Server) startRecording(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
+	if s.Hub == nil {
+		httpError(w, "player is not configured", http.StatusServiceUnavailable)
+		return
+	}
 	meta := store.Recording{ChannelID: body.ChannelID, Title: strings.TrimSpace(body.Title)}
 	minutes := body.Minutes
-	if s.Hub != nil && s.Hub.Dir != "" {
+	if s.Hub.Dir != "" {
 		if err := disk.Writable(s.Hub.Recordings()); err != nil {
 			writeError(w, err)
 			return
@@ -312,6 +316,10 @@ func (s *Server) stopRecording(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		httpError(w, "invalid recording", http.StatusBadRequest)
+		return
+	}
+	if s.Hub == nil {
+		httpError(w, "player is not configured", http.StatusServiceUnavailable)
 		return
 	}
 	s.Hub.StopRecord(id)
