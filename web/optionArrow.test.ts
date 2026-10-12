@@ -16,4 +16,8 @@ test("arrows move inside the open player options", () => {
   assert.equal(optionArrow(rows, 0, 0, "Enter"), null);
   assert.equal(optionArrow(rows, -1, 0, "ArrowDown"), null);
   assert.equal(optionArrow([], 0, 0, "ArrowRight"), null);
+  assert.equal(optionArrow(rows, 0, -1, "ArrowRight"), null);
+  assert.equal(optionArrow([0], 0, 0, "ArrowRight"), null);
+  assert.deepEqual(optionArrow([2, 0, 2], 0, 1, "ArrowDown"), { row: 0, col: 1 });
+  assert.deepEqual(optionArrow([2, 0, 2], 2, 1, "ArrowUp"), { row: 2, col: 1 });
 });

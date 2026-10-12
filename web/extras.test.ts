@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseSound, sleepDue, sleepSentence, sleepUntilFrom, soundRecord } from "./src/features/player/extras.ts";
+import { applySound, parseSound, readSound, saveSound, sleepDue, sleepSentence, sleepUntilFrom, soundRecord } from "./src/features/player/extras.ts";
 import { copy } from "./src/strings.ts";
 
 test("volume and mute round-trip", () => {
@@ -21,4 +21,35 @@ test("sleep is 30, 60, or 90 minutes and then it is due", () => {
   assert.equal(sleepSentence(60), copy.player.sleep60);
   assert.equal(sleepSentence(90), copy.player.sleep90);
   assert.match(copy.player.sleep30, /^Stops in 30 minutes\.$/);
+});
+
+test("the saved level is what the next picture starts at, and a blocked store stays quiet", () => {
+  const store = new Map<string, string>();
+  Object.assign(globalThis, {
+    localStorage: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => store.set(key, value),
+      removeItem: (key: string) => store.delete(key),
+    },
+  });
+  assert.deepEqual(readSound(), { volume: 1, muted: false });
+  saveSound({ volume: -2, muted: true });
+  assert.deepEqual(readSound(), { volume: 0, muted: true });
+  const video = { volume: 1, muted: false };
+  applySound(video as HTMLVideoElement);
+  assert.equal(video.volume, 0);
+  assert.equal(video.muted, true);
+
+  Object.assign(globalThis, {
+    localStorage: {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
+    },
+  });
+  assert.deepEqual(readSound(), { volume: 1, muted: false });
+  assert.doesNotThrow(() => saveSound({ volume: 0.2, muted: false }));
 });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { gateApp, gateFeature, updateApp, updateServer } from "./src/lib/compat.ts";
+import { compareVersions, gateApp, gateFeature, updateApp, updateServer } from "./src/lib/compat.ts";
 
 const older = {
   id: "s",
@@ -29,4 +29,13 @@ test("an older app is told to update, and a newer api does not block by itself",
   assert.equal(gateApp(older, "1.0"), null);
   assert.equal(gateApp({ apiVersion: 99, version: "0.1.0", minAppVersion: "1.0" }, "1.0"), null);
   assert.equal(gateApp(null, "1.0"), null);
+  assert.equal(gateApp({ minAppVersion: "  " }, "1.0"), null);
+});
+
+test("version pieces line up, and a suffix does not make a newer build", () => {
+  assert.equal(compareVersions("1.0", "1.0.0"), 0);
+  assert.equal(compareVersions("1.2-rc", "1.2"), 0);
+  assert.equal(compareVersions("1.2.1", "1.2"), 1);
+  assert.equal(compareVersions("", "0.0.1"), -1);
+  assert.equal(compareVersions("1..2", "1.0.2"), 0);
 });

@@ -37,3 +37,25 @@ test("a scan already running is not started again", () => {
   assert.equal(scans.get(4).note, "Could not look for commercials. Try again.");
   assert.equal(notes, 5);
 });
+
+test("a failed scan keeps the breaks it already found, and a stopped listener hears nothing", () => {
+  const scans = createBreakScans();
+  const markers = [{ id: 1, start: 4, end: 20 }];
+  let notes = 0;
+  const stop = scans.subscribe(() => {
+    notes += 1;
+  });
+  assert.equal(scans.get(9).running, false);
+  assert.equal(scans.get(9).markers, null);
+  assert.equal(scans.begin(9), true);
+  assert.deepEqual(scans.get(9).markers, null);
+  scans.finish(9, markers, "Found 1 break.");
+  scans.begin(9);
+  assert.equal(scans.get(9).running, true);
+  assert.deepEqual(scans.get(9).markers, markers);
+  scans.fail(9, "Could not look for commercials. Try again.");
+  assert.deepEqual(scans.get(9).markers, markers);
+  stop();
+  scans.begin(3);
+  assert.equal(notes, 4);
+});

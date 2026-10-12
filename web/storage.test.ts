@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { autoCandidates, channelsOnScreen, holdShown, layoutForCount, layoutFromParam, layoutLabel, multiviewPath, rememberAuto, saveSet, savedAuto, savedSets, settlePlan, yieldsSound } from "./src/features/multiview/storage.ts";
+import { autoCandidates, channelsOnScreen, holdShown, isLayout, layoutForCount, layoutFromParam, layoutLabel, multiviewPath, rememberAuto, rememberLayout, roomId, saveSet, savedAuto, savedLayout, savedSets, settlePlan, slotsFor, yieldsSound } from "./src/features/multiview/storage.ts";
 
 test("a tile that already showed a picture keeps the sound", () => {
   assert.equal(yieldsSound("", false), false);
@@ -102,4 +102,64 @@ test("one big and two survives the query string", () => {
   assert.equal(layoutFromParam("1 2"), "1+2");
   assert.equal(layoutFromParam("quad"), "quad");
   assert.equal(layoutFromParam("nope"), null);
+  assert.equal(layoutFromParam(null), null);
+  assert.equal(slotsFor("2up"), 2);
+  assert.equal(slotsFor("pip"), 2);
+  assert.equal(slotsFor("1+2"), 3);
+  assert.equal(slotsFor("1+3"), 4);
+  assert.equal(slotsFor("quad"), 4);
+  assert.equal(isLayout("pip"), true);
+  assert.equal(isLayout("1 2"), false);
+});
+
+function memory() {
+  const local = new Map<string, string>();
+  const session = new Map<string, string>();
+  const api = (store: Map<string, string>) => ({
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => store.set(key, value),
+    removeItem: (key: string) => store.delete(key),
+    clear: () => store.clear(),
+    key: () => null,
+    length: 0,
+  });
+  globalThis.localStorage = api(local);
+  globalThis.sessionStorage = api(session);
+  return { local, session };
+}
+
+test("the layout this browser last used is the one a new visit opens", () => {
+  const { local } = memory();
+  assert.equal(savedLayout(), "2up");
+  local.set("broadwave-multiview", "not json");
+  assert.equal(savedLayout(), "2up");
+  assert.equal(savedAuto(), false);
+  assert.deepEqual(savedSets(), []);
+  rememberLayout("quad");
+  assert.equal(savedLayout(), "quad");
+  assert.equal(local.get("broadwave-mv-layout"), "quad");
+  rememberLayout("pip");
+  assert.equal(savedAuto(), false);
+});
+
+test("a saved set list keeps eight, newest first, and one row per channel list", () => {
+  memory();
+  for (let n = 1; n <= 9; n += 1) saveSet(`Set ${n}`, [n]);
+  const sets = savedSets();
+  assert.equal(sets.length, 8);
+  assert.equal(sets[0].name, "Set 9");
+  assert.equal(sets[0].layout, "2up");
+  assert.equal(sets.at(-1)?.name, "Set 2");
+  saveSet("Renamed", [9], "pip");
+  assert.equal(savedSets()[0].name, "Renamed");
+  assert.equal(savedSets()[0].layout, "pip");
+  assert.equal(savedSets().filter((set) => set.channels.join(",") === "9").length, 1);
+});
+
+test("one multiview visit keeps the same room", () => {
+  const { session } = memory();
+  const first = roomId();
+  assert.match(first, /^multiview:[a-z0-9]+$/);
+  assert.equal(roomId(), first);
+  assert.equal(session.get("broadwave-mv-room"), first.slice("multiview:".length));
 });
