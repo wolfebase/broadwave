@@ -125,7 +125,9 @@ func logoScore(frame bitmap, mask []int) float64 {
 }
 
 // smooth takes the majority over a window, so one busy frame does not drop
-// the logo and one dark frame does not end it.
+// the logo and one dark frame does not end it. The window is one short at
+// the second in from each end, and a tie there keeps that second: two show
+// seconds before a break are still the show.
 func smooth(in []bool, width int) []bool {
 	out := make([]bool, len(in))
 	for i := range in {
@@ -136,7 +138,7 @@ func smooth(in []bool, width int) []bool {
 				on++
 			}
 		}
-		out[i] = on*2 > n
+		out[i] = on*2 > n || (on*2 == n && in[i])
 	}
 	return out
 }
