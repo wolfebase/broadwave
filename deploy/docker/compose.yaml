@@ -15,6 +15,7 @@ services:
       PGID: "100"
       UMASK: "022"
       # HDHR_HOST: 192.168.1.50   # only if discovery cannot reach the tuner
+      # BROADWAVE_CAST_APP_ID: "" # Google Cast application id. Empty hides Cast.
     volumes:
       - ./config:/config
       - ./recordings:/config/work/recordings

@@ -27,6 +27,7 @@ import {
 } from "./src/cast/protocol.ts";
 import { castSessionLive, openCastSession, type CastPlayer } from "./src/cast/session.ts";
 import { ensureSender, requestCast } from "./src/cast/sender.ts";
+import { canonicalRendition, createCastHold, renditionOf, stopPayload, watchEndpoint, watchHeaders, watchPayload, type CastHold, type WatchGrant, type WatchPoster } from "./src/cast/watch.ts";
 
 const page = "http://broadwave.local:8477/cast";
 
@@ -652,3 +653,203 @@ test("closing the picker is not an error, and a device that fails is", async () 
   await assert.rejects(() => requestCast("4F8C2A1B", env("receiver_unavailable")), /No Cast devices found/);
 });
 
+test("a live playlist names one rendition, and anything else is not a watch", () => {
+  assert.equal(canonicalRendition("1080.aac2.broadcast"), "1080.aac2.broadcast");
+  assert.equal(canonicalRendition("copy.copy"), "copy.copy");
+  assert.equal(canonicalRendition("720.aac2.broadcast.hevc"), "720.aac2.broadcast.hevc");
+  assert.equal(canonicalRendition("540.aac2.smooth.60"), "540.aac2.smooth.60");
+  assert.equal(canonicalRendition("360.none.film"), "360.none.film");
+  assert.equal(canonicalRendition("1080.aac6.broadcast.lang.even"), "1080.aac6.broadcast.lang.even");
+  // These would not round-trip, so the server would pick an encode of its own.
+  for (const key of ["1080.aac2", "copy.copy.broadcast", "720.aac2.hevc.broadcast", "1080.aac2.nope", "1080.aac2.broadcast.broadcast"]) {
+    assert.equal(canonicalRendition(key), null, key);
+  }
+  assert.deepEqual(renditionOf("/media/live/4/1080.aac2.broadcast/index.m3u8"), { channelId: 4, rendition: "1080.aac2.broadcast" });
+  assert.deepEqual(renditionOf("/media/live/4/1080.aac2.broadcast/master.m3u8"), { channelId: 4, rendition: "1080.aac2.broadcast" });
+  assert.deepEqual(renditionOf("/media/live/4/copy.copy/main.m3u8"), { channelId: 4, rendition: "copy.copy" });
+  assert.equal(renditionOf("/media/live/1/index.m3u8"), null);
+  assert.equal(renditionOf("/media/live/01/1080.aac2.broadcast/index.m3u8"), null);
+  assert.equal(renditionOf("/media/mosaic/1-2/index.m3u8"), null);
+  assert.equal(renditionOf("https://evil.example/a.m3u8"), null);
+  assert.equal(renditionOf("/media/live/4/1080.aac2.broadcast/index.m3u8?access_token=bw_secret"), null);
+});
+
+test("the watch request stays on this server and keeps the token out of the URL", () => {
+  const pageURL = "http://broadwave.local:8477/cast?access_token=bw_secret";
+  assert.equal(watchEndpoint(pageURL), "http://broadwave.local:8477/api/v1/watch");
+  assert.equal(watchEndpoint(pageURL, 4), "http://broadwave.local:8477/api/v1/watch/4/stop");
+  assert.equal(JSON.stringify(watchEndpoint(pageURL, 4)).includes("bw_secret"), false);
+  assert.deepEqual(watchPayload(4, "1080.aac2.broadcast"), { channelId: 4, rendition: "1080.aac2.broadcast", confirmLive: true });
+  assert.equal("token" in watchPayload(4, "1080.aac2.broadcast"), false);
+  assert.deepEqual(stopPayload({ channelId: 4, rendition: "1080.aac2.broadcast", boot: "boot-1" }), { rendition: "1080.aac2.broadcast", boot: "boot-1" });
+  assert.equal(watchHeaders("bw_casttoken").Authorization, "Bearer bw_casttoken");
+  assert.deepEqual(watchHeaders(""), { "Content-Type": "application/json" });
+});
+
+function gate() {
+  let resolve: (value: WatchGrant | null) => void = () => {};
+  const promise = new Promise<WatchGrant | null>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function scriptedPoster() {
+  const posts: { channelId: number; rendition: string; token: string }[] = [];
+  const stops: { channelId: number; rendition: string; boot: string; token: string }[] = [];
+  const gates: ReturnType<typeof gate>[] = [];
+  const poster: WatchPoster = {
+    post(body, token) {
+      posts.push({ channelId: body.channelId, rendition: body.rendition, token });
+      const next = gate();
+      gates.push(next);
+      return next.promise;
+    },
+    stop(held, token) {
+      stops.push({ ...held, token });
+    },
+  };
+  return { posts, stops, gates, poster };
+}
+
+const castPlaylist = "/media/live/1/1080.aac2.broadcast/index.m3u8";
+
+test("the television holds its rendition once, and releases it on stop", async () => {
+  const script = scriptedPoster();
+  const hold = createCastHold("http://broadwave.local:8477/cast", script.poster);
+  hold.hold({ channelId: 1, playlist: castPlaylist, token: "bw_casttoken" });
+  hold.hold({ channelId: 1, playlist: castPlaylist, token: "bw_casttoken" });
+  assert.equal(script.posts.length, 1);
+  assert.equal(script.posts[0]?.rendition, "1080.aac2.broadcast");
+  assert.equal(script.posts[0]?.token, "bw_casttoken");
+  assert.equal(JSON.stringify(script.posts[0]).includes("confirmLive"), false);
+  script.gates[0]?.resolve({ channelId: 1, rendition: "1080.aac2.broadcast", boot: "boot-1" });
+  await script.gates[0]?.promise;
+  hold.hold({ channelId: 1, playlist: "/media/live/1/1080.aac2.broadcast/master.m3u8", token: "bw_next" });
+  assert.equal(script.posts.length, 1);
+  hold.release();
+  assert.equal(script.stops.length, 1);
+  assert.equal(script.stops[0]?.rendition, "1080.aac2.broadcast");
+  assert.equal(script.stops[0]?.boot, "boot-1");
+  assert.equal(script.stops[0]?.token, "bw_next");
+  hold.release();
+  assert.equal(script.stops.length, 1);
+});
+
+test("a different rendition releases the old viewer, and a stranger grant is not kept", async () => {
+  const script = scriptedPoster();
+  const hold = createCastHold("http://broadwave.local:8477/cast", script.poster);
+  hold.hold({ channelId: 1, playlist: castPlaylist, token: "" });
+  script.gates[0]?.resolve({ channelId: 1, rendition: "720.aac2.broadcast", boot: "boot-1" });
+  await script.gates[0]?.promise;
+  assert.equal(script.stops.length, 1);
+  assert.equal(script.stops[0]?.rendition, "720.aac2.broadcast");
+
+  hold.hold({ channelId: 2, playlist: "/media/live/2/720.aac2.broadcast/index.m3u8", token: "bw_two" });
+  assert.equal(script.posts.at(-1)?.channelId, 2);
+  script.gates[1]?.resolve({ channelId: 2, rendition: "720.aac2.broadcast", boot: "boot-1" });
+  await script.gates[1]?.promise;
+  hold.hold({ channelId: 2, playlist: "/media/live/9/720.aac2.broadcast/index.m3u8", token: "bw_two" });
+  assert.equal(script.posts.length, 2);
+  assert.equal(script.stops.at(-1)?.channelId, 2);
+  hold.hold({ channelId: 1, playlist: "/media/live/1/index.m3u8", token: "" });
+  assert.equal(script.posts.length, 2);
+});
+
+test("a restarted server is watched again, and the old boot is not kept", async () => {
+  const script = scriptedPoster();
+  const hold = createCastHold("http://broadwave.local:8477/cast", script.poster);
+  hold.noteBoot("boot-2");
+  hold.hold({ channelId: 1, playlist: castPlaylist, token: "bw_casttoken" });
+  script.gates[0]?.resolve({ channelId: 1, rendition: "1080.aac2.broadcast", boot: "boot-1" });
+  await script.gates[0]?.promise;
+  assert.equal(script.stops[0]?.boot, "boot-1");
+  assert.equal(script.posts.length, 2);
+  script.gates[1]?.resolve({ channelId: 1, rendition: "1080.aac2.broadcast", boot: "boot-2" });
+  await script.gates[1]?.promise;
+  assert.equal(script.posts.length, 2);
+  hold.noteBoot("boot-2");
+  assert.equal(script.posts.length, 2);
+
+  hold.noteBoot("boot-3");
+  assert.equal(script.stops.at(-1)?.boot, "boot-2");
+  assert.equal(script.posts.length, 3);
+  script.gates[2]?.resolve({ channelId: 1, rendition: "1080.aac2.broadcast", boot: "boot-3" });
+  await script.gates[2]?.promise;
+  assert.equal(script.posts.length, 3);
+});
+
+test("a failed watch does not release a viewer, and stop drops one still in flight", async () => {
+  const script = scriptedPoster();
+  const hold = createCastHold("http://broadwave.local:8477/cast", script.poster);
+  hold.hold({ channelId: 1, playlist: castPlaylist, token: "bw_casttoken" });
+  script.gates[0]?.resolve(null);
+  await script.gates[0]?.promise;
+  assert.equal(script.stops.length, 0);
+
+  hold.hold({ channelId: 1, playlist: castPlaylist, token: "bw_casttoken" });
+  hold.release();
+  script.gates[1]?.resolve({ channelId: 1, rendition: "1080.aac2.broadcast", boot: "boot-1" });
+  await script.gates[1]?.promise;
+  assert.equal(script.stops.length, 1);
+  assert.equal(script.stops[0]?.boot, "boot-1");
+});
+
+test("the session asks the television to hold the channel, and stop lets it go", () => {
+  const calls: string[] = [];
+  const watch: CastHold = {
+    hold(input) {
+      calls.push(`hold ${input.channelId} ${input.playlist} ${input.token}`);
+    },
+    release() {
+      calls.push("release");
+    },
+    noteBoot(boot) {
+      calls.push(`boot ${boot}`);
+    },
+  };
+  const fake = fakePlayer();
+  const session = openCastSession({
+    pageURL: page,
+    channelId: 1,
+    playlist: castPlaylist,
+    room: "channel:1",
+    latency: "balanced",
+    token: "bw_casttoken",
+    player: fake.player,
+    transport: { send() {}, close() {} },
+    watch,
+  });
+  assert.ok(session);
+  assert.deepEqual(calls, [`hold 1 ${castPlaylist} bw_casttoken`]);
+  const same = parseLoad({ type: "load", channelId: 1, playlist: castPlaylist, room: "channel:1", latency: "balanced", token: "bw_casttoken" });
+  assert.equal(session.retune(same!), false);
+  assert.equal(calls.length, 1);
+  session.onMessage({ type: "hello", data: { boot: "boot-9" } });
+  assert.equal(calls.at(-1), "boot boot-9");
+  session.onMessage({ type: "hello", data: {} });
+  assert.equal(calls.length, 2);
+  const moved = parseLoad({ type: "load", channelId: 2, playlist: "/media/live/2/720.aac2.broadcast/index.m3u8", room: "channel:2", latency: "stable" });
+  session.retune(moved!);
+  assert.equal(calls.at(-1), "hold 2 /media/live/2/720.aac2.broadcast/index.m3u8 ");
+  session.stop();
+  assert.equal(calls.at(-1), "release");
+  session.onMessage({ type: "hello", data: { boot: "boot-10" } });
+  assert.equal(calls.at(-1), "release");
+
+  calls.length = 0;
+  assert.equal(
+    openCastSession({
+      pageURL: page,
+      channelId: 1,
+      playlist: "https://evil.example/a.m3u8",
+      room: "channel:1",
+      latency: "balanced",
+      player: fakePlayer().player,
+      transport: { send() {}, close() {} },
+      watch,
+    }),
+    null,
+  );
+  assert.deepEqual(calls, []);
+});

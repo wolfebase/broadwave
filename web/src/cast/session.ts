@@ -22,6 +22,7 @@ import {
   type SyncAction,
   type SyncMemory,
 } from "./protocol.ts";
+import type { CastHold } from "./watch.ts";
 
 export type CastStatus = "idle" | "buffering" | "playing";
 
@@ -61,6 +62,8 @@ type Open = {
   now?: () => number;
   screenId?: string;
   onStatus?: (status: CastStatus) => void;
+  /** Counts this television as a viewer. Omitted in tests that only check the picture. */
+  watch?: CastHold;
 };
 
 export class CastSession {
@@ -81,6 +84,7 @@ export class CastSession {
   private readonly now: () => number;
   private readonly screenId: string;
   private readonly onStatus?: (status: CastStatus) => void;
+  private readonly watch?: CastHold;
   private clock: Clock = freshClock();
   private memory: SyncMemory = freshSync();
   private state: RoomState | null = null;
@@ -104,7 +108,9 @@ export class CastSession {
     this.now = input.now ?? (() => Date.now());
     this.screenId = input.screenId ?? "cast";
     this.onStatus = input.onStatus;
+    this.watch = input.watch;
     this.player.load(media, this.token);
+    this.watch?.hold(this.holdInput());
   }
 
   get status(): CastStatus {
@@ -136,6 +142,12 @@ export class CastSession {
   onMessage(raw: unknown) {
     if (this.stopped || !raw || typeof raw !== "object") return;
     const message = raw as { type?: unknown; data?: unknown };
+    if (message.type === "hello") {
+      const data = message.data;
+      const boot = data && typeof data === "object" ? (data as { boot?: unknown }).boot : "";
+      if (typeof boot === "string" && boot) this.watch?.noteBoot(boot);
+      return;
+    }
     if (message.type === "sync.state") {
       const room = readRoom(message.data);
       if (!room || room.room !== this.room) return;
@@ -226,6 +238,7 @@ export class CastSession {
     this.memory = freshSync();
     const media = mediaURL(this.pageURL, next.playlist);
     if (media) this.player.load(media, nextToken);
+    this.watch?.hold(this.holdInput());
     this.emit("buffering");
     if (reopen) return true;
     this.transport.send(hereMessage(this.screenId, this.channelId));
@@ -236,6 +249,7 @@ export class CastSession {
   stop() {
     if (this.stopped) return;
     this.stopped = true;
+    this.watch?.release();
     this.transport.send(leaveMessage(this.room));
     this.player.stop();
     this.transport.close();
@@ -264,6 +278,10 @@ export class CastSession {
     }
     if (action.rate !== 0 && this.player.paused()) this.player.play();
     this.player.setRate(action.rate);
+  }
+
+  private holdInput() {
+    return { channelId: this.channelId, playlist: this.playlist, token: this.token };
   }
 
   /** Asks for a picture until one frame has been read. Later pauses are left alone. */

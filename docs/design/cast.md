@@ -20,9 +20,11 @@ The message is JSON on the namespace `urn:x-cast:app.broadwave.watch`:
 | `token` | The browser's device token, omitted when device sign-in is off |
 | `title`, `subtitle` | The program and the channel, for the line on the television before the picture starts |
 
-The receiver refuses any other playlist. A Cast message cannot make the television fetch an arbitrary URL. The token is not written into the playlist URL and it is not logged. The television sends it as `Authorization: Bearer` on media requests, and as `access_token` on the WebSocket, which is the same query the browser uses because a WebSocket cannot set that header.
+The receiver refuses any other playlist. A Cast message cannot make the television fetch an arbitrary URL. The token is not written into the playlist URL and it is not logged. The television sends it as `Authorization: Bearer` on media requests and on its watch request, and as `access_token` on the WebSocket, which is the same query the browser uses because a WebSocket cannot set that header.
 
-Changing the channel, the playlist, or the room sends another `load`. The same load twice does not restart the picture. Stop leaves the sync room and ends the Cast session.
+Changing the channel, the playlist, or the room sends another `load`. The same load twice does not restart the picture. Stop leaves the sync room, releases the viewer, and ends the Cast session.
+
+The television counts as a viewer. On a load it sends `POST /api/v1/watch` for the rendition in the playlist, with `confirmLive`, so the channel stays up when the browser leaves. The watch does not name the room. The socket join does, and the watch does not wait for the room's frame. A playlist that is not one rendition of this server is not asked for, so the message cannot start some other encode. A load of a different rendition releases the previous viewer. A `hello` whose boot changed means the server restarted, and the television watches again. The old boot does not release a viewer on the new process.
 
 Cast plays the room, not a private pause. A browser that has stepped off sync still sends the channel room. A browser that is watching together sends the group room, so pause and rewind move the television too.
 
