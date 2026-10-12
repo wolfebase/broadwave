@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildLibrary, continueWatching, episodeTag, filterRecordings, nextEpisode, recordingSubject, watched } from "./src/features/library/model.ts";
+import { setLocaleMode } from "./src/i18n/runtime.ts";
 import type { Recording } from "./src/types.ts";
 
 function rec(id: number, extra: Partial<Recording> = {}): Recording {
@@ -74,6 +75,14 @@ test("episode tags", () => {
   assert.equal(episodeTag(rec(1, { episode: 5 })), "E5");
   assert.equal(episodeTag(rec(1, { episodeLabel: "Part 2" })), "Part 2");
   assert.equal(episodeTag(rec(1)), "");
+  setLocaleMode("pseudo");
+  try {
+    assert.equal(episodeTag(rec(1, { season: 2, episode: 5 })), "S2 E5S2 E5");
+    assert.equal(episodeTag(rec(1, { episode: 5 })), "E5E5");
+    assert.equal(episodeTag(rec(1, { episodeLabel: "Part 2" })), "Part 2");
+  } finally {
+    setLocaleMode("en");
+  }
 });
 
 test("the next episode is the next one aired of the same show", () => {

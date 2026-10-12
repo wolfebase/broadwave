@@ -30,7 +30,8 @@ export function localeMode(): LocaleMode {
 
 export function setLocaleMode(next: LocaleMode): void {
   mode = next;
-  if (typeof document !== "undefined") document.documentElement.dataset.locale = next;
+  const root = typeof document !== "undefined" ? document.documentElement : undefined;
+  if (root) root.dataset.locale = next;
 }
 
 function finish(text: string): string {

@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { actionError } from "./src/app/actionError.ts";
+import { captionTrackName, streamAudioLabel } from "./src/features/player/audioLabel.ts";
 import { copyMessages } from "./src/i18n/messages/copy.ts";
 import { guideMessages } from "./src/i18n/messages/guide.ts";
 import { appPages } from "./src/i18n/pages.ts";
@@ -79,6 +81,39 @@ test("weekday names come from Intl in Sunday-first order", () => {
   const names = [0, 1, 2, 3, 4, 5, 6].map((index) => new Intl.DateTimeFormat("en", { weekday: "short" }).format(new Date(2024, 0, 7 + index)));
   assert.deepEqual(weekdayShortNames(), names);
   assert.deepEqual(names, ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
+});
+
+test("failed actions, stream audio, and captions use the catalog", () => {
+  assert.equal(actionError(new Error("The tuner is busy."), "shell.recordFailed"), "The tuner is busy.");
+  assert.equal(actionError(new Error(""), "shell.recordFailed"), "");
+  assert.equal(actionError("no", "shell.recordFailed"), "Recording did not start.");
+  assert.equal(actionError(null, "shell.airingNotScheduled"), "That airing was not scheduled.");
+  assert.equal(actionError(undefined, "shell.passNotRemoved"), "That pass was not removed.");
+  assert.equal(actionError(0, "shell.noTuner"), "No tuner answered.");
+  assert.equal(actionError(false, "shell.deviceNotRemoved"), "That device was not removed.");
+  assert.equal(streamAudioLabel("copy", "AC-3"), "Original AC-3");
+  assert.equal(streamAudioLabel("copy"), "Original ");
+  assert.equal(streamAudioLabel("aac6"), "5.1 AAC");
+  assert.equal(streamAudioLabel("ac3"), "5.1 AC-3");
+  assert.equal(streamAudioLabel("aac"), "Stereo AAC");
+  assert.equal(captionTrackName(), "English CC");
+  const data = fs.readFileSync(new URL("./src/app/data.tsx", import.meta.url), "utf8");
+  const player = fs.readFileSync(new URL("./src/features/player/LivePlayer.tsx", import.meta.url), "utf8");
+  const search = fs.readFileSync(new URL("./src/features/search/Search.tsx", import.meta.url), "utf8");
+  assert.equal(data.includes("Recording did not start."), false);
+  assert.equal(player.includes("Stereo AAC"), false);
+  assert.equal(search.includes("Recording every "), false);
+  setLocaleMode("pseudo");
+  try {
+    assert.equal(actionError(null, "shell.recordFailed"), "Recording did not start.Recording did not start.");
+    assert.equal(actionError(new Error("busy"), "shell.recordFailed"), "busy");
+    assert.equal(streamAudioLabel("aac6"), "5.1 AAC5.1 AAC");
+    assert.equal(streamAudioLabel("ac3"), "5.1 AC-35.1 AC-3");
+    assert.equal(streamAudioLabel(undefined), "Stereo AACStereo AAC");
+    assert.equal(captionTrackName(), "English CCEnglish CC");
+  } finally {
+    setLocaleMode("en");
+  }
 });
 
 test("every shell route is rendered by the pseudo-locale check", () => {

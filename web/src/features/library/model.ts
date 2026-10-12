@@ -1,5 +1,9 @@
+import { libraryMessages } from "../../i18n/messages/library.ts";
+import { bind } from "../../i18n/runtime.ts";
 import type { Recording } from "../../types";
 import { watched } from "./resume.ts";
+
+const t = bind(libraryMessages);
 
 export { continueWatching, watched } from "./resume.ts";
 
@@ -32,8 +36,8 @@ function kindOf(rec: Recording): Exclude<Kind, "all"> {
 
 /** "S2 E5", "E5", the guide's own label, or "". */
 export function episodeTag(rec: Recording) {
-  if (rec.season && rec.episode) return `S${rec.season} E${rec.episode}`;
-  if (rec.episode) return `E${rec.episode}`;
+  if (rec.season && rec.episode) return t("library.episodeBoth", { season: rec.season, episode: rec.episode });
+  if (rec.episode) return t("library.episodeOnly", { episode: rec.episode });
   return rec.episodeLabel ?? "";
 }
 

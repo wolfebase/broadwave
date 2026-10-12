@@ -29,6 +29,7 @@ import { useScoreMap } from "../sports/scores";
 import { movedTo, onSentHere, type SentNote } from "./moved";
 import { MovePanel } from "./MovePanel";
 import { listingNote } from "./outage";
+import { streamAudioLabel } from "./audioLabel";
 import { soundFor } from "./sounds";
 import { recordingHoldingStart, scrubHold, startOverChoice } from "./startOver";
 import { Stage } from "./Stage";
@@ -874,7 +875,7 @@ export function LivePlayer({
               <dt>{copy.player.encoder}</dt>
               <dd>{session.encoder || session.stream.encoder || copy.player.waiting}</dd>
               <dt>{copy.player.sound}</dt>
-              <dd>{session.stream.audio === "copy" ? `${t("player.original")} ${session.stream.sourceAudio ?? ""}` : session.stream.audio === "aac6" ? "5.1 AAC" : session.stream.audio === "ac3" ? "5.1 AC-3" : "Stereo AAC"}</dd>
+              <dd>{streamAudioLabel(session.stream.audio, session.stream.sourceAudio)}</dd>
               <dt>{copy.player.tuner}</dt>
               <dd>{session.shared ? t("player.shared", session.viewers) : t("player.thisScreen")}</dd>
             </dl>

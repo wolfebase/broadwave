@@ -1,4 +1,5 @@
 import type Hls from "hls.js";
+import { captionTrackName } from "./audioLabel.ts";
 import { authHeaders } from "../../lib/deviceToken.ts";
 
 // Live captions ride beside the video playlist instead of through a
@@ -110,7 +111,7 @@ export function watchTimeline(hls: Hls, events: typeof Hls.Events) {
 
 function trackFor(video: HTMLVideoElement): TextTrack {
   const own = video as HTMLVideoElement & { captionTrack?: TextTrack };
-  own.captionTrack ??= video.addTextTrack("captions", "English CC", "en");
+  own.captionTrack ??= video.addTextTrack("captions", captionTrackName(), "en");
   return own.captionTrack;
 }
 
