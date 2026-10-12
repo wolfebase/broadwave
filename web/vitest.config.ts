@@ -24,6 +24,7 @@ export default defineConfig({
       "playerShell.test.tsx",
       "screenName.test.ts",
       "snapshotStore.test.ts",
+      "liveLoader.test.ts",
       "playerChrome.test.ts",
     ],
   },
