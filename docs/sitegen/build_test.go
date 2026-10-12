@@ -80,11 +80,12 @@ func TestSiteBuildsTheGuide(t *testing.T) {
 		"troubleshooting.html":           {"isn't coming in", "Diagnostics", "No tuner answered yet", "more than 15 minutes", "do not show that line", "use that same line", "Looking…"},
 		"problems.html":                  {"HDHR_HOST", "BROADWAVE_HOSTS", "0.13.0", "HDHR4-2US", "Apple apps' Diagnostics do not", "use that same line", ".json file beside it", "froze live TV", "player's menu is Live delay"},
 		"faq.html":                       {"antenna", "first two tuners", "no Roku app", "Sign in from a paired device.", "about 6 seconds", "Stopping in 8 min.", "Keep this much free", "HDHR4-2US", "03:30", "does not install tuner firmware", "While a channel is tuned", "it deletes none", "starts within two hours", "uses that device's clock"},
-		"security.html":                  {"BROADWAVE_HOSTS", securitySentence, "reference/security.html", "port 443", "does not look at HTTPS"},
+		"security.html":                  {"BROADWAVE_HOSTS", securitySentence, "reference/security.html", "port 443", "does not look at HTTPS", "TheSportsDB key"},
 		"reference/tuners.html":          {"Search the network"},
 		"reference/troubleshooting.html": {"use that same line", "Looking…"},
 		"reference/recordings.html":      {"use that same line"},
 		"reference/atsc3.html":           {"FLEX 4K", "model number", "both pictures were already measured", "Save-Data asks for 720p"},
+		"reference/security.html":        {"tcp, tls, and crypto", "TheSportsDB key", "can advertise a Tailscale address", "not a page on another site"},
 	}
 	for name, needles := range want {
 		page := readOut(t, out, name)
