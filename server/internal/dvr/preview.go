@@ -67,11 +67,15 @@ func Preview(ctx context.Context, st *store.Store, hub *live.Hub, now time.Time)
 	}
 	gb := disk.WatermarkGB(values["watermarkGB"])
 	reserve := disk.WatermarkBytes(values["watermarkGB"])
+	fav, err := favoriteIDs(ctx, st, values)
+	if err != nil {
+		return StoragePlan{}, err
+	}
 	return buildPreview(previewInput{
 		Now: now, Days: WatchedDays(values["deleteWatchedDays"]),
 		MakeRoom: values["makeRoom"] == "1", ProtectFavorites: values["protectFavorites"] == "1",
 		WatermarkGB: gb, Reserve: reserve, Free: space.Free, Root: hub.Recordings(),
-		Favorites: favoriteIDs(ctx, st, values), Passes: passes, Recs: recs,
+		Favorites: fav, Passes: passes, Recs: recs,
 	}), nil
 }
 

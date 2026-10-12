@@ -451,3 +451,92 @@ func TestCleanUpFollowsTheRecordingsFolder(t *testing.T) {
 		t.Fatalf("file still there (%v)", err)
 	}
 }
+
+// dropCatalogTable removes one table through a second connection. The open
+// store then fails the next read of that table and still has the recordings.
+func dropCatalogTable(t *testing.T, cfg, table string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(filepath.Join(cfg, "broadwave.db"))+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.Exec(`DROP TABLE ` + table); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTidyLeavesRecordingsWhenFavoritesCannotBeRead(t *testing.T) {
+	r := newStorageRig(t, map[string]string{"deleteWatchedDays": "1", "protectFavorites": "1"})
+	favID := favoriteChannel(t, r.st)
+	r.add(t, "other", 1, false, "")
+	r.addOn(t, "favorite", favID)
+	dropCatalogTable(t, r.cfg, "channels")
+	Tidy(context.Background(), r.st, r.hub, time.Now().Add(48*time.Hour))
+	if got := r.left(t); !slices.Equal(got, []string{"favorite", "other"}) {
+		t.Fatalf("left %v", got)
+	}
+}
+
+func TestPreviewRefusesToListRemovalsWhenFavoritesCannotBeRead(t *testing.T) {
+	r := newStorageRig(t, map[string]string{"deleteWatchedDays": "1", "protectFavorites": "1"})
+	favID := favoriteChannel(t, r.st)
+	r.addOn(t, "favorite", favID)
+	dropCatalogTable(t, r.cfg, "channels")
+	plan, err := Preview(context.Background(), r.st, r.hub, time.Now().Add(48*time.Hour))
+	if err == nil {
+		t.Fatalf("preview listed removals without the channel list: %+v", plan.Remove)
+	}
+	if got := r.left(t); !slices.Equal(got, []string{"favorite"}) {
+		t.Fatalf("left %v", got)
+	}
+}
+
+func TestMakeRoomLeavesRecordingsWhenFavoritesCannotBeRead(t *testing.T) {
+	r := newStorageRig(t, map[string]string{"makeRoom": "1", "protectFavorites": "1"})
+	favID := favoriteChannel(t, r.st)
+	r.addOn(t, "favorite", favID)
+	dropCatalogTable(t, r.cfg, "channels")
+	orig := diskStat
+	t.Cleanup(func() { diskStat = orig })
+	diskStat = func(string) (disk.Space, error) { return disk.Space{Free: 1000, Total: 10000}, nil }
+	if got := MakeRoom(context.Background(), r.st, r.hub, 1050); got != 0 {
+		t.Fatalf("freed %d", got)
+	}
+	if got := r.left(t); !slices.Equal(got, []string{"favorite"}) {
+		t.Fatalf("left %v", got)
+	}
+}
+
+func TestKeepRuleLeavesAFavoriteWhenTheChannelListCannotBeRead(t *testing.T) {
+	r := newStorageRig(t, map[string]string{"protectFavorites": "1"})
+	favID := favoriteChannel(t, r.st)
+	if _, err := r.st.AddSeriesPass(context.Background(), store.Pass{Title: "News", KeepMode: "last", KeepCount: 1}); err != nil {
+		t.Fatal(err)
+	}
+	fav := r.addOn(t, "News", favID)
+	newer := r.add(t, "News", 0, false, "")
+	dropCatalogTable(t, r.cfg, "channels")
+	OnSaved(context.Background(), r.st, r.hub, nil, newer)
+	if _, err := r.st.Recording(context.Background(), fav.ID); err != nil {
+		t.Fatalf("favorite was removed: %v", err)
+	}
+	if _, err := r.st.Recording(context.Background(), newer.ID); err != nil {
+		t.Fatalf("newer recording was removed: %v", err)
+	}
+}
+
+func TestKeepRuleLeavesAFavoriteWhenSettingsCannotBeRead(t *testing.T) {
+	r := newStorageRig(t, map[string]string{"protectFavorites": "1"})
+	favID := favoriteChannel(t, r.st)
+	if _, err := r.st.AddSeriesPass(context.Background(), store.Pass{Title: "News", KeepMode: "last", KeepCount: 1}); err != nil {
+		t.Fatal(err)
+	}
+	fav := r.addOn(t, "News", favID)
+	newer := r.add(t, "News", 0, false, "")
+	dropCatalogTable(t, r.cfg, "settings")
+	OnSaved(context.Background(), r.st, r.hub, nil, newer)
+	if _, err := r.st.Recording(context.Background(), fav.ID); err != nil {
+		t.Fatalf("favorite was removed: %v", err)
+	}
+}
