@@ -87,6 +87,17 @@ html[data-theme="light"] .btn.primary {
   box-shadow: none;
 }
 
+/* A pressed guide jump and the current setup step used the page ink. On a
+   light page that is a black pill next to the accent chips. */
+html[data-theme="light"] .pill-btn[aria-pressed="true"],
+html[data-theme="light"] .setup-steps li.on button {
+  background: var(--color-accent);
+  background-image: none;
+  color: var(--color-on-accent);
+  border-color: transparent;
+  box-shadow: none;
+}
+
 /* The brand hover glow is a brighter blue than the accent, and it wins on
    specificity unless this rule is at least as specific. */
 :root[data-theme="light"] .btn.primary:hover:not(:disabled) {
@@ -263,10 +274,16 @@ html[data-theme="light"][data-accent="blue"] {
   --color-accent-ink: #1D4ED8;
 }
 
+/* The settings field is a grid, so an inline track stretches across the page. */
+.appearance .field > .segmented {
+  justify-self: start;
+}
+
 .accent-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  justify-self: start;
 }
 
 .accent-choice {
@@ -520,7 +537,8 @@ html[data-theme="light"] .layout-tv :is(.stage, .mv) {
 
 /* Accent pills are for the light page. On the player they are white type on a bright fill, under 4.5:1. */
 html[data-theme="light"] :is(.stage, .mv) .seg.on,
-html[data-theme="light"] :is(.stage, .mv) .btn.primary {
+html[data-theme="light"] :is(.stage, .mv) .btn.primary,
+html[data-theme="light"] :is(.stage, .mv) .pill-btn[aria-pressed="true"] {
   background: rgba(255, 255, 255, 0.92);
   color: var(--color-canvas);
   box-shadow: none;
