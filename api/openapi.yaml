@@ -1801,10 +1801,13 @@ paths:
                 orderMode:
                   type: string
                   enum: [custom, release, random, season, show, marathon]
-                  description: "Omitted or empty is custom. Any other word is refused."
-                ruleTitle: { type: string }
+                  description: "Omitted or empty leaves the saved order. Any other word is refused."
+                ruleTitle:
+                  type: string
+                  description: Omitted leaves the saved title.
                 recordings:
                   type: array
+                  description: Omitted leaves the saved list. An empty array clears it.
                   items: { type: integer, format: int64 }
       responses:
         "200":

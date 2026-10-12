@@ -4828,11 +4828,13 @@ export interface operations {
             content: {
                 "application/json": {
                     /**
-                     * @description Omitted or empty is custom. Any other word is refused.
+                     * @description Omitted or empty leaves the saved order. Any other word is refused.
                      * @enum {string}
                      */
                     orderMode?: "custom" | "release" | "random" | "season" | "show" | "marathon";
+                    /** @description Omitted leaves the saved title. */
                     ruleTitle?: string;
+                    /** @description Omitted leaves the saved list. An empty array clears it. */
                     recordings?: number[];
                 };
             };
