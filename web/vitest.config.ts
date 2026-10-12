@@ -28,6 +28,7 @@ export default defineConfig({
       "scoreFetch.test.ts",
       "screenMoves.test.tsx",
       "movePanel.test.tsx",
+      "moveFile.test.tsx",
       "playerChrome.test.ts",
     ],
   },
