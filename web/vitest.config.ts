@@ -8,6 +8,11 @@ export default defineConfig({
     include: [
       "hook.test.tsx",
       "prime.test.ts",
+      "dialogHook.test.tsx",
+      "framesHook.test.tsx",
+      "layoutHook.test.tsx",
+      "screensApi.test.ts",
+      "captionsCue.test.ts",
     ],
   },
 });
