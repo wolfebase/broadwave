@@ -200,10 +200,14 @@ test("an unreadable body uses the catalog sentence once", () => {
   try {
     const doubled = `${requestFailed}${requestFailed}`;
     assert.equal(requestFailed, server);
-    assert.equal(apiFailure(502, "<html>nope</html>").message, doubled);
-    assert.equal(apiFailure(500, JSON.stringify({ message: server })).message, server);
+    const html = apiFailure(502, "<html>nope</html>");
+    assert.equal(html.message, doubled);
+    assert.equal(shownOutage(html.message), doubled);
+    const sameWords = apiFailure(500, JSON.stringify({ message: server }));
+    assert.equal(sameWords.message, server);
+    assert.equal(shownOutage(sameWords.message), server);
     assert.equal(apiFailure(500, JSON.stringify({ message: busy })).message, busy);
-    assert.equal(shownOutage(requestFailed), doubled);
+    assert.equal(shownOutage(requestFailed), server);
     assert.equal(shownOutage(doubled), doubled);
     assert.equal(shownOutage(busy), busy);
   } finally {
