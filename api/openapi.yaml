@@ -768,8 +768,10 @@ paths:
       parameters:
         - in: query
           name: league
-          schema: { type: string }
-          description: nfl, ncaaf, nba, wnba, ncaab, mlb, nhl, mls, nwsl, epl, f1, or nascar. Blank asks for every league.
+          schema:
+            type: string
+            enum: ["", nfl, ncaaf, nba, wnba, ncaab, mlb, nhl, mls, nwsl, epl, f1, nascar]
+          description: One of nfl, ncaaf, nba, wnba, ncaab, mlb, nhl, mls, nwsl, epl, f1, or nascar. Blank asks for every league. Anything else, including NFL, is 400.
         - in: query
           name: date
           schema: { type: string, format: date }
