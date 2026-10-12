@@ -205,6 +205,45 @@ func TestScanMediaNamesTheShowAboveASeasonSet(t *testing.T) {
 	}
 }
 
+func TestScanMediaNamesTheShowAboveSpecials(t *testing.T) {
+	root := t.TempDir()
+	names := []string{
+		filepath.Join(root, "Lighthouse", "Specials", "Lighthouse - S00E03.mkv"),
+		filepath.Join(root, "Harbor Watch", "Specials", "Harbor Watch - S00E01.mp4"),
+		filepath.Join(root, "Lighthouse", "Seasons", "Specials", "bonus.mkv"),
+	}
+	for _, name := range names {
+		if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(name, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	found, err := ScanMedia(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]store.Recording{}
+	for _, rec := range found {
+		got[rec.Path] = rec
+	}
+	want := []store.Recording{
+		{Path: names[0], Title: "Lighthouse", Season: 0, Episode: 3},
+		{Path: names[1], Title: "Harbor Watch", Season: 0, Episode: 1},
+		{Path: names[2], Title: "Lighthouse", Season: 0, Episode: 0},
+	}
+	if len(found) != len(want) {
+		t.Fatalf("%+v", found)
+	}
+	for _, w := range want {
+		rec := got[w.Path]
+		if rec.Title != w.Title || rec.Season != w.Season || rec.Episode != w.Episode || rec.Title == "Specials" {
+			t.Fatalf("%+v", rec)
+		}
+	}
+}
+
 func TestScanMediaStopsAtTheFileCap(t *testing.T) {
 	prev := mediaFileCap
 	mediaFileCap = 3
