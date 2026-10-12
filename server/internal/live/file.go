@@ -158,13 +158,15 @@ func (h *Hub) PlayFile(id int64, path, videoCodec, mode, fieldOrder string, at f
 	if err := cmd.Start(); err != nil {
 		return "", err
 	}
-	done := h.trackFileEncode(id, cmd)
+	// The caption pass is a second ffmpeg. A stop of this encode, a new
+	// picture, or shutdown ends it too.
+	capCtx, capCancel := context.WithTimeout(context.Background(), captionSpan)
+	done := h.trackFileEncode(id, cmd, capCancel)
 	go func() {
 		_ = cmd.Wait()
 		h.dropFileEncode(id, cmd)
 		close(done)
 	}()
-	capCtx, capCancel := context.WithTimeout(context.Background(), captionSpan)
 	go func() {
 		defer capCancel()
 		extractCaptions(capCtx, h.FFmpeg, abs, filepath.Join(dir, "captions.vtt"))
@@ -220,10 +222,11 @@ func (h *Hub) PlayFollow(id int64, path, videoCodec, mode, fieldOrder string, at
 	if err := cmd.Start(); err != nil {
 		return "", err
 	}
-	done := h.trackFileEncode(id, cmd)
+	done := h.trackFileEncode(id, cmd, nil)
 	go func() {
-		current := func() bool { return h.fileEncodeCurrent(id, cmd) && still() }
-		followFile(abs, stdin, current, at, func() {
+		gone := func() bool { return !h.fileEncodeCurrent(id, cmd) }
+		current := func() bool { return !gone() && still() }
+		followFile(abs, stdin, current, gone, at, func() {
 			// The clock never reached the resume. The bytes that follow are
 			// the start of the file, so the playlist clock has to say that
 			// before the first segment is published.
@@ -250,18 +253,20 @@ func extractCaptions(ctx context.Context, ffmpeg, path, dest string) {
 }
 
 // fileEncode is one ffmpeg process writing a recording's playlist.
+// cancel stops the caption pass that belongs to that process.
 type fileEncode struct {
-	cmd  *exec.Cmd
-	done chan struct{}
+	cmd    *exec.Cmd
+	done   chan struct{}
+	cancel context.CancelFunc
 }
 
-func (h *Hub) trackFileEncode(id int64, cmd *exec.Cmd) chan struct{} {
+func (h *Hub) trackFileEncode(id int64, cmd *exec.Cmd, cancel context.CancelFunc) chan struct{} {
 	done := make(chan struct{})
 	h.playMu.Lock()
 	if h.fileEnc == nil {
 		h.fileEnc = map[int64]*fileEncode{}
 	}
-	h.fileEnc[id] = &fileEncode{cmd: cmd, done: done}
+	h.fileEnc[id] = &fileEncode{cmd: cmd, done: done, cancel: cancel}
 	h.playMu.Unlock()
 	return done
 }
@@ -322,6 +327,9 @@ func (h *Hub) stopFileEncode(id int64) {
 	if enc == nil {
 		return
 	}
+	if enc.cancel != nil {
+		enc.cancel()
+	}
 	if enc.cmd != nil && enc.cmd.Process != nil {
 		_ = enc.cmd.Process.Kill()
 	}
@@ -367,14 +375,14 @@ func waitPlaylistFile(playlist string, id int64, exited <-chan struct{}) (string
 // FollowFile copies a growing recording into dst until still is false and no
 // new bytes arrive. The copy starts at the first byte. A pipe has no index.
 func FollowFile(path string, dst io.WriteCloser, still func() bool) {
-	followFile(path, dst, still, 0, nil)
+	followFile(path, dst, still, nil, 0, nil)
 }
 
 // FollowFileAt copies a growing recording, leaving out the first at seconds
 // of its clock. A pipe has no index to seek, so those packets are dropped.
 // at below the resume minimum copies from the first byte.
 func FollowFileAt(path string, dst io.WriteCloser, still func() bool, at float64) {
-	followFile(path, dst, still, at, nil)
+	followFile(path, dst, still, nil, at, nil)
 }
 
 // MediaWritten is how many seconds of a growing recording are on disk.
@@ -493,8 +501,9 @@ func syncAlign(buf []byte) int {
 // stopped and no new bytes arrive. skip is how many seconds of the file to
 // leave out, measured from the first PCR. A pipe has no index to seek.
 // missed runs when that clock is never reached and the copy starts over at
-// the first byte. It runs before any byte is written.
-func followFile(path string, dst io.WriteCloser, still func() bool, skip float64, missed func()) {
+// the first byte. It runs before any byte is written. gone, when set, is true
+// once nobody will read dst, and the copy quits without reading the rest.
+func followFile(path string, dst io.WriteCloser, still, gone func() bool, skip float64, missed func()) {
 	defer dst.Close()
 	var file *os.File
 	deadline := time.Now().Add(15 * time.Second)
@@ -510,7 +519,11 @@ func followFile(path string, dst io.WriteCloser, still func() bool, skip float64
 		time.Sleep(200 * time.Millisecond)
 	}
 	defer file.Close()
-	if skip >= resumeMin && !discardPrefix(file, skip, still) {
+	if skip >= resumeMin && !discardPrefix(file, skip, still, gone) {
+		// The next encode may already own the playlist folder.
+		if gone != nil && gone() {
+			return
+		}
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
 			return
 		}
@@ -549,7 +562,7 @@ func followFile(path string, dst io.WriteCloser, still func() bool, skip float64
 // discontinuity flag, starts a new base and is not counted: a splice would
 // otherwise look like 2^33 ticks and the copy would begin there. False means
 // the recording ended before the clock got there.
-func discardPrefix(file *os.File, skip float64, still func() bool) bool {
+func discardPrefix(file *os.File, skip float64, still, gone func() bool) bool {
 	want := int64(skip*90000 + 0.5)
 	if !alignTS(file, still) {
 		return false
@@ -558,7 +571,12 @@ func discardPrefix(file *os.File, skip float64, still func() bool) bool {
 	var base, elapsed int64
 	var have bool
 	quiet := 0
-	for {
+	for n := 0; ; n++ {
+		// Every packet already on disk reads at once, so a replaced encode
+		// would otherwise scan the whole file before it noticed.
+		if gone != nil && n%1024 == 0 && gone() {
+			return false
+		}
 		off, err := file.Seek(0, io.SeekCurrent)
 		if err != nil {
 			return false

@@ -1,6 +1,7 @@
 package live
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -151,18 +152,66 @@ func TestShutdownStopsAPlayingFile(t *testing.T) {
 	if _, err := h.PlayFile(4, rec, "hevc", "broadcast", "", 0); err != nil {
 		t.Fatal(err)
 	}
-	players, _ := awaitRoles(t, log, 1, 0)
+	players, captions := awaitRoles(t, log, 1, 1)
 	if !processLive(players[0]) {
 		t.Fatal("player did not start")
 	}
+	if len(captions) == 0 || !processLive(captions[0]) {
+		t.Fatal("caption pass did not start")
+	}
 	h.Shutdown()
 	waitDead(t, players[0])
+	waitDead(t, captions[0])
 	h.playMu.Lock()
 	_, held := h.fileEnc[4]
 	h.playMu.Unlock()
 	if held {
 		t.Fatal("shutdown left the recording encode tracked")
 	}
+}
+
+func TestDiscardPrefixStopsWhenTheEncodeIsGone(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "show.ts")
+	pkt := make([]byte, 188)
+	pkt[0] = 0x47
+	pkt[3] = 0x10
+	body := make([]byte, 0, 188*2000)
+	for i := 0; i < 2000; i++ {
+		body = append(body, pkt...)
+	}
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if discardPrefix(file, 30, func() bool { return true }, func() bool { return true }) {
+		t.Fatal("kept scanning after the encode stopped")
+	}
+	off, err := file.Seek(0, io.SeekCurrent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if off > 188*20 {
+		t.Fatalf("read %d bytes after the encode stopped", off)
+	}
+}
+
+func TestReplacingAFileStopsItsCaptionPass(t *testing.T) {
+	shortenPlayStart(t, 2*time.Second)
+	h, rec, log := playFixture(t, true)
+	if _, err := h.PlayFile(4, rec, "hevc", "broadcast", "", 0); err != nil {
+		t.Fatal(err)
+	}
+	_, captions := awaitRoles(t, log, 1, 1)
+	// A different picture is a new encode. The old caption pass has to die with it.
+	if _, err := h.PlayFile(4, rec, "hevc", "film", "", 0); err != nil {
+		t.Fatal(err)
+	}
+	waitDead(t, captions[0])
 }
 
 func TestPlayFileLeavesAStartedPlayerRunning(t *testing.T) {
