@@ -1,6 +1,6 @@
 # Troubleshooting
 
-The line on the screen is the whole message. It names what failed and what to try. The player lines are the same on the web, iPhone, iPad, and Apple TV. The missing-file line is not: on the Apple apps the channel number comes first.
+The line on the screen is the whole message. It names what failed and what to try. The player lines are the same on the web, iPhone, iPad, and Apple TV.
 
 ## Every tuner is busy
 
@@ -53,7 +53,7 @@ A playlist that has every stream it allows open says "All 2 streams from this pl
 
 "The file is gone. It was moved or deleted outside Broadwave."
 
-The recording finished, and the file is no longer in the recordings folder. It stays in the list so you can see the title. It does not play. On Apple the channel number comes first: "4.1 · The file is gone. It was moved or deleted outside Broadwave." Remove from the list drops the row. There is no file left to delete.
+The recording finished, and the file is no longer in the recordings folder. It stays in the list so you can see the title. It does not play. The line is the channel number, then "The file is gone. It was moved or deleted outside Broadwave." The web library and the Apple apps use that same line. Remove from the list drops the row. There is no file left to delete.
 
 ## An encrypted 3.0 station
 
