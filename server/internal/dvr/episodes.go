@@ -2,6 +2,7 @@ package dvr
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -58,7 +59,7 @@ func FindEpisodeEnds(ctx context.Context, st *store.Store, ffmpeg string, rec st
 		return err
 	}
 	self := episode(ctx, st, rec, breaks.Sound{Head: sound.Head, Tail: sound.Tail, TailFrom: sound.TailFrom}, from, to)
-	siblings := showSiblings(recs, rec)
+	siblings, copies := showSiblings(recs, rec)
 	loaded := map[int64]breaks.Episode{}
 	var others []breaks.Episode
 	for _, sib := range siblings {
@@ -71,9 +72,15 @@ func FindEpisodeEnds(ctx context.Context, st *store.Store, ffmpeg string, rec st
 	if err := st.SetEpisodeEnds(ctx, rec.ID, ends.IntroStart, ends.IntroEnd, ends.Credits); err != nil {
 		return err
 	}
-	for _, sib := range siblings {
+	for _, sib := range append(siblings[:len(siblings):len(siblings)], copies...) {
+		if sib.IntroEnd > 0 && sib.CreditsStart > 0 {
+			continue
+		}
 		mine, ok := loaded[sib.ID]
-		if !ok || (sib.IntroEnd > 0 && sib.CreditsStart > 0) {
+		if !ok {
+			mine, ok = loadEpisode(ctx, st, sib)
+		}
+		if !ok {
 			continue
 		}
 		rest := []breaks.Episode{self}
@@ -99,9 +106,12 @@ func FindEpisodeEnds(ctx context.Context, st *store.Store, ffmpeg string, rec st
 }
 
 // showSiblings are the other listened recordings with the same title, the
-// closest in time first. Another airing of the same episode shares all of
-// its show, not just the intro, so it is left out.
-func showSiblings(recs []store.Recording, rec store.Recording) []store.Recording {
+// closest in time first, one copy of each episode: two copies would be two
+// votes, fill the list, and outvote the intro. Another airing of rec's own
+// episode shares all of its show, not just the intro, so it is left out.
+// copies are the other copies of those episodes, which do not vote but
+// still get their intro filled in.
+func showSiblings(recs []store.Recording, rec store.Recording) (votes, copies []store.Recording) {
 	title := strings.TrimSpace(rec.Title)
 	var out []store.Recording
 	for _, r := range recs {
@@ -112,10 +122,18 @@ func showSiblings(recs []store.Recording, rec store.Recording) []store.Recording
 	}
 	gap := func(r store.Recording) time.Duration { return r.StartedAt.Sub(rec.StartedAt).Abs() }
 	sort.SliceStable(out, func(i, j int) bool { return gap(out[i]) < gap(out[j]) })
-	if len(out) > maxEpisodes {
-		out = out[:maxEpisodes]
+	for _, r := range out {
+		if slices.ContainsFunc(votes, func(v store.Recording) bool { return sameEpisode(v, r) }) {
+			if len(copies) < maxEpisodes {
+				copies = append(copies, r)
+			}
+			continue
+		}
+		if len(votes) < maxEpisodes {
+			votes = append(votes, r)
+		}
 	}
-	return out
+	return votes, copies
 }
 
 // sameEpisode is two recordings of one episode, as far as the guide says.
