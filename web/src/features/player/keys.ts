@@ -45,6 +45,15 @@ export function recordingSeekArrow(layoutTv: boolean, key: string, onPicture: bo
   return !layoutTv || onPicture;
 }
 
+/**
+ * Arrows seek and change channel. On a TV, only the picture does.
+ * The center Play button is not the picture, so the arrow can leave it.
+ */
+export function liveArrowActs(layoutTv: boolean, key: string, onPicture: boolean): boolean {
+  if (key !== "ArrowLeft" && key !== "ArrowRight" && key !== "ArrowUp" && key !== "ArrowDown") return false;
+  return !layoutTv || onPicture;
+}
+
 /** Close keys inside the open mini-guide. A repeated g must not undo the open. */
 export function guideListAction(key: string, repeat: boolean): "close" | "up" | "down" | "tune" | "ignore" {
   const k = key.toLowerCase();

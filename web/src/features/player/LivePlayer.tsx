@@ -15,7 +15,7 @@ import { copy } from "../../strings";
 import type { Channel } from "../../types";
 import { saveSound, sleepDue, sleepSentence, sleepUntilFrom } from "./extras";
 import { goLiveAction } from "./goLive";
-import { escapeAction, guideListAction, guideRowOnFocus, ignoreHeldKey, pendingTuneFires } from "./keys";
+import { escapeAction, guideListAction, guideRowOnFocus, ignoreHeldKey, liveArrowActs, pendingTuneFires } from "./keys";
 import { nextPicturePick, shownPicture, visitSync } from "./livePref";
 import { CastButton } from "../../cast/CastButton";
 import { ChevronIcon, InfoIcon, ListIcon, RecordIcon, SideBySideIcon, SyncIcon } from "../../ui/icons";
@@ -473,10 +473,11 @@ export function LivePlayer({
       event.preventDefault();
       return;
     }
-    // On a TV the arrows walk the page, and the chrome when the stage has them.
-    // The stage still seeks and changes channel when it has the keys. A mini
-    // player must not take those keys from the page underneath it.
-    if (layout === "tv" && arrows && (!(target instanceof Element) || !target.closest(".stage") || target.closest(".stage-hud"))) return;
+    // On a TV the arrows walk the page and the buttons, the center Play button
+    // included. The picture still seeks and changes channel when it has the
+    // keys. A mini player must not take those keys from the page underneath it.
+    const onPicture = target instanceof Element && target.matches("section.stage:not(.mini)");
+    if (arrows && !liveArrowActs(layout === "tv", k, onPicture)) return;
     const actions: Record<string, () => void> = {
       Escape: () => {
         const action = escapeAction(document.fullscreenElement != null, panel !== "none");

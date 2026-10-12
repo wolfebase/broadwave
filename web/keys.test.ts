@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { escapeAction, guideListAction, guideRowOnFocus, ignoreHeldKey, pendingTuneFires, recordingSeekArrow, tvPictureEnter } from "./src/features/player/keys.ts";
+import { escapeAction, guideListAction, guideRowOnFocus, ignoreHeldKey, liveArrowActs, pendingTuneFires, recordingSeekArrow, tvPictureEnter } from "./src/features/player/keys.ts";
 
 const up = { repeat: false, metaKey: false, ctrlKey: false, altKey: false };
 const held = { ...up, repeat: true };
@@ -45,6 +45,15 @@ test("Left and Right on a recording button move focus on a TV", () => {
   assert.equal(recordingSeekArrow(false, "ArrowLeft", false), true);
   assert.equal(recordingSeekArrow(false, "ArrowRight", true), true);
   assert.equal(recordingSeekArrow(true, "ArrowDown", false), false);
+});
+
+test("an arrow on the center Play button does not change channel on a TV", () => {
+  for (const key of ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]) {
+    assert.equal(liveArrowActs(true, key, false), false);
+    assert.equal(liveArrowActs(false, key, false), true);
+    assert.equal(liveArrowActs(true, key, true), true);
+  }
+  assert.equal(liveArrowActs(true, " ", false), false);
 });
 
 test("OK on the TV picture moves into the controls, and the arrows still zap", () => {
