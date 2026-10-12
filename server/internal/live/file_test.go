@@ -27,7 +27,7 @@ func TestFollowFileReadsBytesWrittenLater(t *testing.T) {
 	still.Store(true)
 	done := make(chan struct{})
 	go func() {
-		followFile(path, &buf, still.Load, 0, nil)
+		followFile(path, &buf, still.Load, nil, 0, nil)
 		close(done)
 	}()
 	time.Sleep(150 * time.Millisecond)
@@ -67,7 +67,7 @@ func TestFollowFileStartsAtTheResume(t *testing.T) {
 	still.Store(true)
 	done := make(chan struct{})
 	go func() {
-		followFile(path, &buf, still.Load, 10, nil)
+		followFile(path, &buf, still.Load, nil, 10, nil)
 		close(done)
 	}()
 	time.Sleep(150 * time.Millisecond)
@@ -112,7 +112,7 @@ func TestAClockResetDoesNotEndTheResume(t *testing.T) {
 	still.Store(true)
 	done := make(chan struct{})
 	go func() {
-		followFile(path, &buf, still.Load, 10, nil)
+		followFile(path, &buf, still.Load, nil, 10, nil)
 		close(done)
 	}()
 	time.Sleep(200 * time.Millisecond)
@@ -144,7 +144,7 @@ func TestAResumeSkipsAByteBeforeTheFirstPacket(t *testing.T) {
 	still.Store(true)
 	done := make(chan struct{})
 	go func() {
-		followFile(path, &buf, still.Load, 10, nil)
+		followFile(path, &buf, still.Load, nil, 10, nil)
 		close(done)
 	}()
 	time.Sleep(200 * time.Millisecond)
@@ -153,6 +153,38 @@ func TestAResumeSkipsAByteBeforeTheFirstPacket(t *testing.T) {
 	case <-done:
 	case <-time.After(3 * time.Second):
 		t.Fatal("follower did not finish")
+	}
+	want := append(pcrTS(0x100, 10*90000), pcrTS(0x100, 12*90000)...)
+	if !bytes.Equal(buf.Bytes(), want) {
+		t.Fatalf("copied %d bytes, want the resume (%d)", buf.Len(), len(want))
+	}
+}
+
+// A recording that has finished is still on disk. Its resume reaches the
+// clock instead of starting the show over.
+func TestAFinishedRecordingStillStartsAtTheResume(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "show.ts")
+	var raw []byte
+	for _, tick := range []uint64{0, 5 * 90000, 10 * 90000, 12 * 90000} {
+		raw = append(raw, pcrTS(0x100, tick)...)
+	}
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var buf bufferCloser
+	var missed atomic.Bool
+	done := make(chan struct{})
+	go func() {
+		followFile(path, &buf, func() bool { return false }, func() bool { return false }, 10, func() { missed.Store(true) })
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("follower did not finish")
+	}
+	if missed.Load() {
+		t.Fatal("resume was dropped")
 	}
 	want := append(pcrTS(0x100, 10*90000), pcrTS(0x100, 12*90000)...)
 	if !bytes.Equal(buf.Bytes(), want) {
@@ -175,7 +207,7 @@ func TestAResumePastTheWrittenClockStartsAtTheBeginning(t *testing.T) {
 	var missed atomic.Bool
 	done := make(chan struct{})
 	go func() {
-		followFile(path, &buf, still.Load, 30, func() { missed.Store(true) })
+		followFile(path, &buf, still.Load, nil, 30, func() { missed.Store(true) })
 		close(done)
 	}()
 	select {
