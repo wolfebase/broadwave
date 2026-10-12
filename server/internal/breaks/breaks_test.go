@@ -58,6 +58,21 @@ func TestFindBlackOnlyIgnoresFadesInAShow(t *testing.T) {
 	}
 }
 
+// Blacks that start 30 s apart and last different lengths. Their middles are
+// not on the 5 s grid; the starts are. The break's edges stay on the middles.
+func TestFindBlackFramesOfUnevenLengthStillTimeTheSpots(t *testing.T) {
+	got := findLog(blackLog(
+		[2]float64{100.0, 100.2},
+		[2]float64{130.0, 131.4},
+		[2]float64{160.0, 160.2},
+		[2]float64{190.0, 191.4},
+		[2]float64{220.0, 220.2},
+	))
+	if len(got) != 1 || math.Abs(got[0].Start-100.1) > 0.01 || math.Abs(got[0].End-220.1) > 0.01 {
+		t.Fatalf("%+v", got)
+	}
+}
+
 // Two spots in a row are not enough: a show's own scenes can line up that way.
 func TestFindBlackOnlyNeedsThreeSpots(t *testing.T) {
 	log := blackLog([2]float64{100, 100.2}, [2]float64{130, 130.2}, [2]float64{160, 160.2}, [2]float64{171, 171.2})

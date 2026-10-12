@@ -17,9 +17,13 @@ type Break struct {
 // asking. Below it a player offers the skip.
 const AutoSkip = 0.7
 
-// boundary is a moment that looks like the cut between two spots.
+// boundary is a moment that looks like the cut between two spots. At is
+// where the break edge goes. Grid is the time the spot length is measured
+// from: the start of a black frame, whose middle moves when the black is
+// longer, or At for a cut.
 type boundary struct {
 	At       float64
+	Grid     float64
 	Strength float64
 }
 
@@ -118,12 +122,12 @@ func boundaries(c Cues) []boundary {
 		if overlapsAny(c.Silences, b.Start-0.3, b.End+0.3) {
 			strength = 1
 		}
-		out = append(out, boundary{At: (b.Start + b.End) / 2, Strength: strength})
+		out = append(out, boundary{At: (b.Start + b.End) / 2, Grid: b.Start, Strength: strength})
 	}
 	for _, s := range c.Silences {
 		for _, at := range c.Cuts {
 			if at >= s.Start-0.3 && at <= s.End+0.3 {
-				out = append(out, boundary{At: at, Strength: 0.5})
+				out = append(out, boundary{At: at, Grid: at, Strength: 0.5})
 				break
 			}
 		}
@@ -134,7 +138,7 @@ func boundaries(c Cues) []boundary {
 	if c.Logo != nil {
 		for _, at := range c.Cuts {
 			if cutLogoOff(c.Logo, at) {
-				out = append(out, boundary{At: at, Strength: cutWhenLogoOff})
+				out = append(out, boundary{At: at, Grid: at, Strength: cutWhenLogoOff})
 			}
 		}
 	}
@@ -268,8 +272,8 @@ func spotChains(cuts []boundary) [][]float64 {
 	next := make([]int, n)
 	for i := n - 1; i >= 0; i-- {
 		next[i] = -1
-		for j := i + 1; j < n && cuts[j].At-cuts[i].At <= maxSpot; j++ {
-			if !spotLength(cuts[j].At - cuts[i].At) {
+		for j := i + 1; j < n && cuts[j].Grid-cuts[i].Grid <= maxSpot; j++ {
+			if !spotLength(cuts[j].Grid - cuts[i].Grid) {
 				continue
 			}
 			if 1+length[j] > length[i] {
@@ -394,8 +398,8 @@ func spotsWithin(cuts []boundary, b Break) int {
 	best := 0
 	length := make([]int, len(inside))
 	for i := len(inside) - 1; i >= 0; i-- {
-		for j := i + 1; j < len(inside) && inside[j].At-inside[i].At <= maxSpot; j++ {
-			if spotLength(inside[j].At-inside[i].At) && 1+length[j] > length[i] {
+		for j := i + 1; j < len(inside) && inside[j].Grid-inside[i].Grid <= maxSpot; j++ {
+			if spotLength(inside[j].Grid-inside[i].Grid) && 1+length[j] > length[i] {
 				length[i] = 1 + length[j]
 			}
 		}
