@@ -196,11 +196,11 @@ struct RecordingsView: View {
             Text(rec.isMissing ? "Its file is already gone." : "The recording and its commercial markers are removed from the server.")
         }
         .confirmationDialog(
-            chosen.count == 1 ? "Delete 1 file?" : "Delete \(chosen.count) files?",
+            "Delete \(chosen.count) files?",
             isPresented: $confirmingMany,
             titleVisibility: .visible
         ) {
-            Button(chosen.count == 1 ? "Delete 1 file" : "Delete \(chosen.count) files", role: .destructive) { runMany(.delete) }
+            Button("Delete \(chosen.count) files", role: .destructive) { runMany(.delete) }
             Button("Keep them", role: .cancel) {}
         } message: {
             Text("The recordings and their commercial markers are removed from the server.")
@@ -281,7 +281,7 @@ struct RecordingsView: View {
     private func libraryRow(_ channel: VirtualChannel) -> some View {
         let label = VStack(alignment: .leading, spacing: 4) {
             Text("\(channel.number) \(channel.name)").font(.headline).lineLimit(1)
-            Text(channel.recordings.count == 1 ? "Plays 1 recording. Uses no tuner." : "Plays \(channel.recordings.count) recordings in turn. Uses no tuner.")
+            Text("Plays \(channel.recordings.count) recordings in turn. Uses no tuner.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -481,7 +481,7 @@ struct RecordingsView: View {
             Button("Delete", systemImage: "trash", role: .destructive) { confirmingMany = true }
                 .disabled(chosen.isEmpty || busy)
         } header: {
-            Text(chosen.count == 1 ? "1 selected" : "\(chosen.count) selected")
+            Text("\(chosen.count) selected")
                 .accessibilityIdentifier("selected-count")
         }
     }
