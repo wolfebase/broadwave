@@ -6,10 +6,11 @@ import (
 )
 
 func TestLiveControlModel(t *testing.T) {
-	if os.Getenv("OTA_LIVE") != "1" {
-		t.Skip("set OTA_LIVE=1 to talk to the tuner")
+	addr := os.Getenv("OTA_TUNER")
+	if os.Getenv("OTA_LIVE") != "1" || addr == "" {
+		t.Skip("set OTA_LIVE=1 and OTA_TUNER=<tuner address> to talk to the tuner")
 	}
-	c := Control{Addr: "192.168.1.252"}
+	c := Control{Addr: addr}
 	model, err := c.Get("/sys/model")
 	if err != nil {
 		t.Fatal(err)
