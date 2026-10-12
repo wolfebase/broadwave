@@ -71,6 +71,7 @@ web/tsconfig.tsbuildinfo
 .evidence/
 .build/
 web/e2e/.run/
+scripts/soak/.run/
 web/e2e/test-results/
 web/e2e/playwright-report/
 web/playwright-report/
