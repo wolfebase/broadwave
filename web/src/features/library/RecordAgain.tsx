@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { useData } from "../../app/data";
 import { addPass, getRecordAgain } from "../../api";
 import { actionName } from "../../lib/actionName";
 import { formatClock } from "../../time";
 import type { Recording } from "../../types";
+import { scheduleRecordAgain } from "./againOffer";
 import { recordingSubject } from "./model";
 
 export { recordAgainOffered } from "./againOffer";
@@ -15,6 +17,7 @@ function when(start: Date) {
 
 /** On a damaged recording: finds the episode's next airing and records it. */
 export function RecordAgain({ rec }: { rec: Recording }) {
+  const { refresh } = useData();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [done, setDone] = useState(false);
@@ -27,7 +30,7 @@ export function RecordAgain({ rec }: { rec: Recording }) {
         setNote("The guide has no other airing yet.");
         return;
       }
-      await addPass(rec.title, airing.channelId, airing.start);
+      await scheduleRecordAgain(rec, airing, addPass, () => refresh(["passes"]));
       setDone(true);
       setNote(`Records again ${when(new Date(airing.start))}.`);
     } catch {
