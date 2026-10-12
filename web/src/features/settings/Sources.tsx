@@ -7,6 +7,7 @@ import { lastSeenPhrase } from "../../time";
 import { deviceScans, showFirmware } from "./deviceCard";
 import { applySignalPoll, applyTunerPoll } from "./sourcePoll";
 import { guideAfterFree, hitsAfterLook } from "../setup/lookHits";
+import { playlistKeep } from "./playlistKeep";
 export function Sources({
   devices,
   channels,
@@ -409,7 +410,7 @@ function SourceAdd() {
   const [file, setFile] = useState<File | null>(null);
   const [note, setNote] = useState("");
   const [pick, setPick] = useState<SourceAdded | null>(null);
-  const [chosen, setChosen] = useState<string[]>([]);
+  const [chosen, setChosen] = useState<number[]>([]);
   const options = pick?.groups?.length ? pick.groups : (pick?.channels ?? []).map((ch) => ch.name);
   return (
     <form
@@ -420,10 +421,12 @@ function SourceAdd() {
         const finish = (res: SourceAdded) => {
           if (res.pick) {
             setPick(res);
+            setChosen([]);
             setNote(res.message || copy.sources.pick);
             return;
           }
           setPick(null);
+          setChosen([]);
           setNote(kind === "folder" ? `Added ${res.added ?? 0} files to the library.` : "Source added. It shows up with the lineup.");
         };
         let useGroups = groups;
@@ -433,8 +436,16 @@ function SourceAdd() {
             setNote(copy.sources.pick);
             return;
           }
-          if (pick.groups?.length) useGroups = chosen.join(", ");
-          else useKeep = chosen.join(", ");
+          const pickedGroups = pick.groups ?? [];
+          if (pickedGroups.length > 0) {
+            useGroups = [...chosen]
+              .filter((i) => i >= 0 && i < pickedGroups.length)
+              .sort((a, b) => a - b)
+              .map((i) => pickedGroups[i])
+              .join(", ");
+          } else {
+            useKeep = playlistKeep(pick.channels ?? [], chosen);
+          }
         }
         if (kind === "m3u" && file) {
           void addPlaylistFile(name, useGroups, file, useKeep).then(finish).catch(fail);
@@ -500,13 +511,13 @@ function SourceAdd() {
       {options.length > 0 ? (
         <fieldset>
           <legend>{copy.sources.pick}</legend>
-          {options.map((option) => (
-            <label className="check" key={option}>
+          {options.map((option, index) => (
+            <label className="check" key={`${index}:${option}`}>
               <input
                 type="checkbox"
-                checked={chosen.includes(option)}
+                checked={chosen.includes(index)}
                 onChange={(event) =>
-                  setChosen((prev) => (event.target.checked ? [...prev, option] : prev.filter((item) => item !== option)))
+                  setChosen((prev) => (event.target.checked ? [...prev, index] : prev.filter((item) => item !== index)))
                 }
               />
               {option}
