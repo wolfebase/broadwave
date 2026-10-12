@@ -74,7 +74,7 @@ func TestSiteBuildsTheGuide(t *testing.T) {
 		"channels.html":         {"Schedules Direct", "XMLTV", "answers at once", "While a channel is tuned", "On the guide", "up to 20 titles", "ahead of the others in On now"},
 		"watching.html":         {"iPhone", "iPad", "Apple TV", "8477", "web", "saved on that device"},
 		"multiview.html":        {"Side by side", "Quad", "1080p or smaller"},
-		"recordings.html":       {"MPEG-TS", "/config/work/recordings", "Keep this much free", "last 15 seconds", "longer than 90 seconds", "first sound track", "hour past the guide"},
+		"recordings.html":       {"MPEG-TS", "/config/work/recordings", "Keep this much free", "last 15 seconds", "longer than 90 seconds", "first sound track", "hour past the guide", "it deletes none"},
 		"sync.html":             {"Whole-Home Sync", "Watch together"},
 		"remote.html":           {"Tailscale", "8477", "BROADWAVE_HOSTS", "Funnel", "Require a device to sign in", "8478", "/export/stream/", "can advertise a Tailscale address", "within about 20 seconds", "still connect"},
 		"troubleshooting.html":  {"isn't coming in", "Diagnostics", "No tuner answered yet", "more than 15 minutes", "do not show that line"},
