@@ -71,6 +71,11 @@ type Server struct {
 	Source5    string
 	Profile    string
 	TunerCount int
+	// HTTPAddr and ControlAddr pin the listen addresses. Empty listens on
+	// 127.0.0.1:0. Both must stay on localhost: the fake tuner is a test
+	// double and must not answer the LAN.
+	HTTPAddr    string
+	ControlAddr string
 	// TuneDelay holds each new stream this long before it answers, as a
 	// real device takes about 2 s to answer an ATSC 3.0 /auto request.
 	TuneDelay time.Duration
@@ -138,16 +143,16 @@ type lineupJSON struct {
 	Tags        string `json:"Tags,omitempty"`
 }
 
-// Start listens on 127.0.0.1. BaseURL is the HTTP origin. Control is the TCP port.
+// Start listens on localhost. BaseURL is the HTTP origin. Control is the TCP port.
 func (s *Server) Start() (baseURL, control string, err error) {
 	if err := s.applyProfile(); err != nil {
 		return "", "", err
 	}
-	s.httpLn, err = net.Listen("tcp", "127.0.0.1:0")
+	s.httpLn, err = listenLocal(s.HTTPAddr)
 	if err != nil {
 		return "", "", err
 	}
-	s.ctrlLn, err = net.Listen("tcp", "127.0.0.1:0")
+	s.ctrlLn, err = listenLocal(s.ControlAddr)
 	if err != nil {
 		_ = s.httpLn.Close()
 		return "", "", err
@@ -156,6 +161,24 @@ func (s *Server) Start() (baseURL, control string, err error) {
 	go s.serveControl()
 	_, port, _ := net.SplitHostPort(s.ctrlLn.Addr().String())
 	return "http://" + s.httpLn.Addr().String(), port, nil
+}
+
+// listenLocal binds a localhost address. An empty address uses port 0.
+// Anything else is refused so a harness cannot publish the fake tuner.
+func listenLocal(addr string) (net.Listener, error) {
+	if addr == "" {
+		addr = "127.0.0.1:0"
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+	switch host {
+	case "127.0.0.1", "localhost", "::1":
+	default:
+		return nil, fmt.Errorf("fake tuner listens on localhost, not %s", host)
+	}
+	return net.Listen("tcp", addr)
 }
 
 func (s *Server) applyProfile() error {

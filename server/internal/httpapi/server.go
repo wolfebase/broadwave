@@ -124,6 +124,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /clock", s.clock)
 	api("GET /diagnostics", s.diagnostics)
 	api("GET /metrics", s.metrics)
+	api("GET /runtime", s.runtime)
 	api("GET /ws", s.socket)
 	api("GET /groups", s.groups)
 	api("GET /screens", s.screens)

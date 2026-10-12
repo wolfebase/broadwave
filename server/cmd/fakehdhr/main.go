@@ -29,7 +29,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "-raw plays -ts on its own; drop -realtime and -source")
 		os.Exit(2)
 	}
-	srv := &fake.Server{TS: *ts, Realtime: *realtime, Raw: *raw, Source: *source, Source5: *source5, Profile: *profile, TS3: *ts3}
+	srv := &fake.Server{
+		TS: *ts, Realtime: *realtime, Raw: *raw, Source: *source, Source5: *source5, Profile: *profile, TS3: *ts3,
+		HTTPAddr: os.Getenv("FAKEHDHR_HTTP"), ControlAddr: os.Getenv("FAKEHDHR_CONTROL"),
+	}
 	if *quad {
 		srv.Channels = fake.QuadLineup()
 	}
@@ -44,6 +47,8 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("BASE=%s\nCONTROL_PORT=%s\n", base, port)
+	// A pipe is block buffered. The harness reads this line before it continues.
+	_ = os.Stdout.Sync()
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 	<-sig

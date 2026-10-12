@@ -215,6 +215,40 @@ paths:
           content:
             text/plain:
               schema: { type: string }
+  /runtime:
+    get:
+      tags: [server]
+      operationId: getRuntime
+      description: |
+        Process counters for a long run or a support note. `goroutines` is how many are alive.
+        `heapAlloc`, `heapInuse`, `heapSys`, and `sys` are Go memory bytes. `numGC` is completed collections.
+        `maxRss` is the resident-set high water in bytes, or 0 when the OS does not report it.
+        `openFDs` is how many files this process has open, or -1 when they cannot be listed.
+        `uptimeSec` is seconds since the process started.
+        Pass `gc=1` to collect garbage first, so a reading after the viewers leave is not inflated by memory Go can already free.
+      parameters:
+        - name: gc
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Process counters
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [goroutines, heapAlloc, heapInuse, heapSys, sys, numGC, maxRss, openFDs, uptimeSec]
+                properties:
+                  goroutines: { type: integer, minimum: 0 }
+                  heapAlloc: { type: integer, minimum: 0 }
+                  heapInuse: { type: integer, minimum: 0 }
+                  heapSys: { type: integer, minimum: 0 }
+                  sys: { type: integer, minimum: 0 }
+                  numGC: { type: integer, minimum: 0 }
+                  maxRss: { type: integer, minimum: 0 }
+                  openFDs: { type: integer }
+                  uptimeSec: { type: integer, minimum: 0 }
   /profile:
     get:
       tags: [server]

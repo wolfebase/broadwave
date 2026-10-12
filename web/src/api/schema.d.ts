@@ -188,6 +188,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/runtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Process counters for a long run or a support note. `goroutines` is how many are alive.
+         *     `heapAlloc`, `heapInuse`, `heapSys`, and `sys` are Go memory bytes. `numGC` is completed collections.
+         *     `maxRss` is the resident-set high water in bytes, or 0 when the OS does not report it.
+         *     `openFDs` is how many files this process has open, or -1 when they cannot be listed.
+         *     `uptimeSec` is seconds since the process started.
+         *     Pass `gc=1` to collect garbage first, so a reading after the viewers leave is not inflated by memory Go can already free.
+         */
+        get: operations["getRuntime"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/profile": {
         parameters: {
             query?: never;
@@ -2928,6 +2952,38 @@ export interface operations {
                 };
                 content: {
                     "text/plain": string;
+                };
+            };
+        };
+    };
+    getRuntime: {
+        parameters: {
+            query?: {
+                gc?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Process counters */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        goroutines: number;
+                        heapAlloc: number;
+                        heapInuse: number;
+                        heapSys: number;
+                        sys: number;
+                        numGC: number;
+                        maxRss: number;
+                        openFDs: number;
+                        uptimeSec: number;
+                    };
                 };
             };
         };
