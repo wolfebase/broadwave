@@ -1,6 +1,6 @@
 import { alignedAhead, groupAxis, stepInGroup } from "../lib/focusStep";
 import { isTextField } from "../lib/textField";
-import { firstBelow, nearest, type Box, type Direction } from "../lib/remote";
+import { arrowScope, firstBelow, nearest, type Box, type Direction } from "../lib/remote";
 import { canonicalKey } from "../lib/tvKey";
 import { inAppDepth } from "./router";
 
@@ -190,7 +190,8 @@ export function installTvRemote(): () => void {
     }
     if (target && keepsArrows(target, dir)) return;
     const dialog = document.querySelector<HTMLElement>("[role='dialog']");
-    const items = boxes(dialog ?? document);
+    const inDialog = dialog ? boxes(dialog) : [];
+    const items = arrowScope(dialog, inDialog.length) == null ? boxes(document) : inDialog;
     if (items.length === 0) return;
     const current = items.find((item) => item.el === document.activeElement);
     const focused = current?.el ?? target;

@@ -2,6 +2,12 @@ export type Box = { id: number; left: number; top: number; right: number; bottom
 
 export type Direction = "up" | "down" | "left" | "right";
 
+/** A dialog with stops keeps the arrows. None, or no dialog, searches the page. */
+export function arrowScope<T>(dialog: T | null, stops: number): T | null {
+  if (dialog == null || stops <= 0) return null;
+  return dialog;
+}
+
 function center(box: Box) {
   return { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 };
 }
