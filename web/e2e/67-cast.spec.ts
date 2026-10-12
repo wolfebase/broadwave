@@ -39,7 +39,7 @@ test("Cast tells the television which channel to play", async ({ page }) => {
     host.__castEnded = false;
     host.chrome = host.chrome ?? {};
     host.chrome.cast = { AutoJoinPolicy: { ORIGIN_SCOPED: "origin_scoped" } };
-    let options: { receiverApplicationId?: string } | null = null;
+    let asked = false;
     const session = {
       sendMessage(namespace: string, data: unknown) {
         host.__castSends?.push({ namespace, data });
@@ -54,11 +54,13 @@ test("Cast tells the television which channel to play", async ({ page }) => {
         CastContext: {
           getInstance: () => ({
             setOptions(next: { receiverApplicationId?: string }) {
-              options = next;
               host.__castOptions = next;
             },
-            requestSession: () => Promise.resolve(null),
-            getCurrentSession: () => (options ? session : null),
+            requestSession: () => {
+              asked = true;
+              return Promise.resolve(null);
+            },
+            getCurrentSession: () => (asked ? session : null),
           }),
         },
       },
@@ -85,6 +87,9 @@ test("Cast tells the television which channel to play", async ({ page }) => {
   expect(options?.receiverApplicationId).toBe("4F8C2A1B");
   await page.getByRole("button", { name: "Stop casting", exact: true }).click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { __castEnded?: boolean }).__castEnded)).toBe(true);
+  const stop = await page.evaluate(() => (window as unknown as { __castSends: { namespace: string; data: { type?: string } }[] }).__castSends.at(-1));
+  expect(stop?.namespace).toBe(namespace);
+  expect(stop?.data.type).toBe("stop");
 });
 
 test("the receiver joins the channel room", async ({ page }) => {

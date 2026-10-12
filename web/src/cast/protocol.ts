@@ -98,7 +98,15 @@ export function mediaTime(frags: Frag[], currentTime: number): number | null {
  * A group room ahead by more than two seconds seeks back to the rewind.
  */
 export function syncStep(memory: SyncMemory, input: SyncInput): { memory: SyncMemory; action: SyncAction } {
-  if (input.mediaNow == null) return { memory, action: { kind: "wait" } };
+  // A missing frame cannot cancel a hold. Playing here would cut the pause short.
+  // A paused room drops the hold, the same as the web player.
+  if (input.mediaNow == null) {
+    if (input.now < memory.holdUntil && input.room.rate !== 0) {
+      return { memory, action: { kind: "hold", ms: memory.holdUntil - input.now } };
+    }
+    const next = input.now < memory.holdUntil ? { ...memory, holdUntil: 0 } : memory;
+    return { memory: next, action: { kind: "wait" } };
+  }
   const target = targetMedia(input.room, input.serverNow);
   const drift = input.mediaNow - target;
   const groupRewind = drift > GROUP_REWIND_MS && input.room.room.startsWith("group:");
@@ -262,4 +270,27 @@ export function castLoad(input: { channelId: number; playlist: string; room: str
 /** Cast is in the player only when this server published an id and there is a playlist to send. */
 export function castAvailable(appId: string, playlist: string): boolean {
   return appId.trim().length > 0 && mediaPath(playlist) !== null;
+}
+
+/**
+ * Hidden until there is an id and a playlist. An open session stays visible so
+ * it can be stopped while the next channel's playlist is not ready yet.
+ */
+export function castControl(appId: string, playlist: string, linked: boolean): "hidden" | "cast" | "casting" {
+  if (linked) return "casting";
+  return castAvailable(appId, playlist) ? "cast" : "hidden";
+}
+
+/** A load goes out only for a playlist the receiver will play, and only while a session is open. */
+export function castOutgoing(appId: string, playlist: string, linked: boolean): boolean {
+  return linked && castAvailable(appId, playlist);
+}
+
+/** The line on the television before the picture. The channel is left out when it repeats the title. */
+export function castLine(title: string, subtitle: string): string {
+  const program = title.trim();
+  const channel = subtitle.trim();
+  if (program === "") return channel;
+  if (channel === "" || channel === program) return program;
+  return `${program} · ${channel}`;
 }

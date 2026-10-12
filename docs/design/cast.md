@@ -6,7 +6,7 @@ Registration of the Cast application stays with the person who runs the server. 
 
 ## What plays
 
-The sender is the web player. Cast is shown only when the server has an application id. Pressing it asks the sender SDK for a session, then tells the receiver which channel to play.
+The sender is the web player. Cast is shown only when the server has an application id and there is a playlist to send. Pressing it asks the sender SDK for a session. A session already open on this page is used again, so the picker does not cover a television that is already playing. The sender then tells the receiver which channel to play. While that session is open, Cast stays in the player so it can be stopped, including while the next channel's playlist is not ready. A load is sent only for a playlist this server will play. When the television ends the session, the button returns to Cast.
 
 The message is JSON on the namespace `urn:x-cast:app.broadwave.watch`:
 
@@ -36,7 +36,9 @@ The page is a GET that is not under `/api` or `/media`, so it stays open when de
 
 The receiver does not use the framework's player (`skipPlayersLoad`). Playback is hls.js on a video element, with the same live configuration the web player uses for a television, and `autoStartLoad` off so the first picture can be the room's frame. The framework would not see that picture as its own playback, so the receiver sets `disableIdleTimeout`. `maxInactivity` is 10 minutes, which turns on the sender heartbeat.
 
-Until a load arrives the page says "This page plays on a Cast device."
+Until a load arrives the page says "This page plays on a Cast device." The line after a load is the program and the channel. The channel is left off when it repeats the program. That line hides once the picture is playing.
+
+Starting the picture calls play. A Cast device can leave the video at readyState 0 until then, and the corrections never run without a frame. Play is tried again until a frame is ready, including when the room is paused. Once that frame is on screen a paused room holds it, and can move to the anchor. A pause that lines the picture up is not played through when the frame drops. Stop leaves the room, and a later load opens a new session. A tick after stop does not start the picture again.
 
 ## Sync
 

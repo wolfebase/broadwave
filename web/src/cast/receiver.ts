@@ -3,8 +3,8 @@
 
 import { reconnectWait } from "../lib/events.ts";
 import { hlsCastPlayer } from "./hlsPlayer.ts";
-import { castNamespace, parseLoad, type CastLoad } from "./protocol.ts";
-import { openCastSession, type CastPlayer, type CastSession, type CastStatus, type CastTransport } from "./session.ts";
+import { castLine, castNamespace, parseLoad, type CastLoad } from "./protocol.ts";
+import { castSessionLive, openCastSession, type CastPlayer, type CastSession, type CastStatus, type CastTransport } from "./session.ts";
 
 type CastMessage = { data?: unknown };
 
@@ -46,7 +46,7 @@ function paint(status: CastStatus) {
   const idle = document.getElementById("cast-idle");
   const title = document.getElementById("cast-title");
   if (!idle || !title) return;
-  const text = session?.title ?? "";
+  const text = castLine(session?.title ?? "", session?.subtitle ?? "");
   if (status === "idle") {
     idle.hidden = false;
     title.hidden = true;
@@ -125,7 +125,8 @@ function accept(load: CastLoad) {
   const video = document.querySelector<HTMLVideoElement>("#cast-video");
   if (!video) return;
   if (!player) player = hlsCastPlayer(video);
-  if (!session) {
+  if (!castSessionLive(session)) {
+    session = null;
     const opened = openCastSession({
       pageURL: location.href,
       channelId: load.channelId,

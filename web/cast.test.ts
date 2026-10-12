@@ -4,8 +4,11 @@ import { test } from "node:test";
 import { roomTarget } from "./src/lib/roomStart.ts";
 import {
   castAvailable,
+  castControl,
+  castLine,
   castLoad,
   castNamespace,
+  castOutgoing,
   clockMessage,
   freshClock,
   freshSync,
@@ -22,7 +25,7 @@ import {
   type SyncAction,
   type SyncInput,
 } from "./src/cast/protocol.ts";
-import { openCastSession, type CastPlayer } from "./src/cast/session.ts";
+import { castSessionLive, openCastSession, type CastPlayer } from "./src/cast/session.ts";
 import { ensureSender, requestCast } from "./src/cast/sender.ts";
 
 const page = "http://broadwave.local:8477/cast";
@@ -121,6 +124,9 @@ function fakePlayer() {
     setAhead(next: number) {
       ahead = next;
     },
+    setPaused(next: boolean) {
+      isPaused = next;
+    },
   };
 }
 
@@ -162,6 +168,8 @@ test("receiver page loads the Cast SDK from Google and not from this repo", () =
   assert.match(receiver, /skipPlayersLoad\s*=\s*true/);
   assert.match(receiver, /disableIdleTimeout\s*=\s*true/);
   assert.match(receiver, /maxInactivity\s*=\s*600/);
+  assert.match(receiver, /castSessionLive/);
+  assert.match(receiver, /castLine/);
   assert.doesNotMatch(receiver, /from ["'][^"']*sync/);
   assert.doesNotMatch(receiver, /events\(\)/);
   const player = readFileSync(new URL("./src/cast/hlsPlayer.ts", import.meta.url), "utf8");
@@ -224,6 +232,16 @@ test("the token rides the socket, not the playlist", () => {
   assert.equal(castAvailable("4F8C2A1B", ""), false);
   assert.equal(castAvailable("4F8C2A1B", "https://evil.example/a.m3u8"), false);
   assert.equal(castAvailable("4F8C2A1B", "/media/live/1/index.m3u8"), true);
+  assert.equal(castControl("", "/media/live/1/index.m3u8", false), "hidden");
+  assert.equal(castControl("4F8C2A1B", "/media/live/1/index.m3u8", false), "cast");
+  assert.equal(castControl("4F8C2A1B", "", true), "casting");
+  assert.equal(castOutgoing("4F8C2A1B", "/media/live/1/index.m3u8", true), true);
+  assert.equal(castOutgoing("4F8C2A1B", "https://evil.example/a.m3u8", true), false);
+  assert.equal(castOutgoing("4F8C2A1B", "/media/live/1/index.m3u8", false), false);
+  assert.equal(castLine("Evening news", "Channel 4"), "Evening news · Channel 4");
+  assert.equal(castLine("Channel 4", "Channel 4"), "Channel 4");
+  assert.equal(castLine("  ", "Channel 4"), "Channel 4");
+  assert.equal(castLine("Evening news", ""), "Evening news");
 });
 
 test("clock offset matches the web player", () => {
@@ -305,6 +323,12 @@ test("sync step pauses when ahead, seeks when behind, and trims the rest", () =>
   const rewound = syncStep(held.memory, input({ room: "group:ch1", drift: 3000, timeFor: 2, now: 10_100 }));
   assert.equal(rewound.action.kind, "seek");
   assert.equal(syncStep(freshSync(), { ...input({ drift: 500 }), mediaNow: null }).action.kind, "wait");
+  const dropped = syncStep(held.memory, input({ mediaNow: null, now: 10_100 }));
+  assert.equal(dropped.action.kind, "hold");
+  assert.equal(dropped.memory.holdUntil, held.memory.holdUntil);
+  const roomPaused = syncStep(held.memory, input({ rate: 0, mediaNow: null, now: 10_100 }));
+  assert.equal(roomPaused.action.kind, "wait");
+  assert.equal(roomPaused.memory.holdUntil, 0);
 });
 
 test("a session joins on open, starts on the room, and ignores a bad playlist", () => {
@@ -352,11 +376,25 @@ test("playback starts at the room frame, or at the edge when the wait ends first
   });
   session.considerStart();
   assert.ok(fake.calls.includes("start 0.5"));
+  assert.ok(fake.calls.includes("play"));
+
+  const held = fakePlayer();
+  const paused = open(held.player);
+  held.setFrags([{ programDateTime: 5_000_000, start: 0, duration: 2 }]);
+  paused.onMessage({
+    type: "sync.state",
+    data: { room: "channel:1", channelId: 1, anchorServer: 10_000, anchorMedia: 5_000_000, rate: 0, mode: "follow", latency: "balanced", version: 1, members: 1 },
+  });
+  paused.considerStart();
+  assert.ok(held.calls.includes("start 0"));
+  assert.ok(held.calls.includes("play"));
+  assert.equal(held.calls.includes("pause"), false);
 
   const edge = fakePlayer();
   const waiting = open(edge.player);
   waiting.markWaitOver(waiting.generation);
   assert.ok(edge.calls.includes("start null"));
+  assert.ok(edge.calls.includes("play"));
   const before = edge.calls.length;
   waiting.retune(parseLoad({ type: "load", channelId: 2, playlist: "/media/live/2/index.m3u8", room: "channel:2", latency: "balanced" })!);
   waiting.markWaitOver(0);
@@ -400,6 +438,75 @@ test("a tick ahead pauses, stop leaves, and a repeat load does not restart", () 
   assert.ok(sent.some((message) => message.type === "sync.leave"));
   assert.ok(fake.calls.includes("stop"));
   assert.equal(session.status, "idle");
+  const before = fake.calls.length;
+  sent.length = 0;
+  session.tick();
+  session.sampleClock();
+  session.onOpen();
+  assert.equal(session.retune(moved), false);
+  assert.equal(fake.calls.length, before);
+  assert.deepEqual(sent, []);
+  assert.equal(castSessionLive(session), false);
+  assert.equal(castSessionLive(null), false);
+});
+
+test("play is tried again until a frame is ready, and a hold is not played through", () => {
+  const fake = fakePlayer();
+  const session = open(fake.player);
+  session.markWaitOver(session.generation);
+  assert.ok(fake.calls.includes("play"));
+  fake.calls.length = 0;
+  fake.setPaused(true);
+  session.tick();
+  assert.ok(fake.calls.includes("play"));
+
+  fake.calls.length = 0;
+  fake.setMedia(5_000_500);
+  fake.setPaused(false);
+  session.onMessage({
+    type: "sync.state",
+    data: { room: "channel:1", channelId: 1, anchorServer: 10_000, anchorMedia: 5_000_000, rate: 1 },
+  });
+  session.tick();
+  assert.ok(fake.calls.includes("pause"));
+  fake.calls.length = 0;
+  fake.setPaused(true);
+  session.tick();
+  assert.equal(fake.calls.includes("play"), false);
+  fake.setMedia(null);
+  session.tick();
+  assert.equal(fake.calls.includes("play"), false);
+  assert.ok(fake.calls.includes("pause"));
+});
+
+test("a paused room plays until it has a frame, then seeks to the anchor", () => {
+  const fake = fakePlayer();
+  const session = open(fake.player);
+  fake.setFrags([{ programDateTime: 5_000_000, start: 0, duration: 2 }]);
+  session.onMessage({
+    type: "sync.state",
+    data: { room: "channel:1", channelId: 1, anchorServer: 10_000, anchorMedia: 5_000_000, rate: 0, mode: "follow", latency: "balanced", version: 1, members: 1 },
+  });
+  fake.setPaused(true);
+  session.tick();
+  session.tick();
+  assert.ok(fake.calls.includes("play"));
+  assert.equal(fake.calls.some((call) => call.startsWith("seek")), false);
+
+  fake.calls.length = 0;
+  fake.setMedia(5_000_500);
+  fake.setTimeFor(0.2);
+  fake.setPaused(false);
+  session.tick();
+  assert.ok(fake.calls.includes("seek 0.2"));
+  assert.ok(fake.calls.includes("pause"));
+  assert.equal(fake.calls.includes("play"), false);
+
+  fake.calls.length = 0;
+  fake.setMedia(null);
+  fake.setPaused(true);
+  session.tick();
+  assert.equal(fake.calls.includes("play"), false);
 });
 
 test("the sender script is Google's, and an existing framework is left alone", async () => {
@@ -440,7 +547,17 @@ test("the sender script is Google's, and an existing framework is left alone", a
 test("requestCast addresses this app and this namespace", async () => {
   const sent: { namespace: string; data: unknown }[] = [];
   let ended = false;
+  let asked = false;
   let options: { receiverApplicationId?: string; autoJoinPolicy?: string } = {};
+  const current = {
+    sendMessage(namespace: string, data: unknown) {
+      sent.push({ namespace, data });
+      return Promise.resolve(null);
+    },
+    endSession(stop: boolean) {
+      ended = stop;
+    },
+  };
   const link = await requestCast("4F8C2A1B", {
     cast: {
       framework: {
@@ -449,22 +566,19 @@ test("requestCast addresses this app and this namespace", async () => {
             setOptions(next) {
               options = next;
             },
-            requestSession: () => Promise.resolve(null),
-            getCurrentSession: () => ({
-              sendMessage(namespace, data) {
-                sent.push({ namespace, data });
-                return Promise.resolve(null);
-              },
-              endSession(stop) {
-                ended = stop;
-              },
-            }),
+            requestSession: () => {
+              asked = true;
+              return Promise.resolve(null);
+            },
+            getCurrentSession: () => (asked ? current : null),
           }),
         },
       },
     },
     chrome: { cast: { AutoJoinPolicy: { ORIGIN_SCOPED: "origin_scoped" } } },
   });
+  assert.ok(link);
+  assert.equal(asked, true);
   assert.equal(options.receiverApplicationId, "4F8C2A1B");
   assert.equal(options.autoJoinPolicy, "origin_scoped");
   link.send({ type: "load" });
@@ -473,3 +587,68 @@ test("requestCast addresses this app and this namespace", async () => {
   assert.equal(ended, true);
   await assert.rejects(() => requestCast("4F8C2A1B", {}), /Cast didn't load/);
 });
+
+test("an open Cast session is reused, and the button clears when the television ends it", async () => {
+  let asked = false;
+  let fire: ((state: string) => void) | null = null;
+  let cleared = false;
+  const link = await requestCast(
+    "4F8C2A1B",
+    {
+      cast: {
+        framework: {
+          CastContextEventType: { SESSION_STATE_CHANGED: "sessionstatechanged" },
+          SessionState: { SESSION_ENDED: "sessionended" },
+          CastContext: {
+            getInstance: () => ({
+              setOptions() {},
+              requestSession() {
+                asked = true;
+                return Promise.reject(new Error("picker"));
+              },
+              getCurrentSession: () => ({
+                sendMessage() {
+                  return Promise.resolve(null);
+                },
+                endSession() {},
+              }),
+              addEventListener(type: string, listener: (event: { sessionState?: string }) => void) {
+                assert.equal(type, "sessionstatechanged");
+                fire = (state) => listener({ sessionState: state });
+              },
+            }),
+          },
+        },
+      },
+    },
+    () => {
+      cleared = true;
+    },
+  );
+  assert.equal(asked, false);
+  assert.ok(link);
+  link.send({ type: "load" });
+  fire?.("sessionstarted");
+  assert.equal(cleared, false);
+  fire?.("sessionended");
+  assert.equal(cleared, true);
+});
+
+test("closing the picker is not an error, and a device that fails is", async () => {
+  const env = (reason: unknown) => ({
+    cast: {
+      framework: {
+        CastContext: {
+          getInstance: () => ({
+            setOptions() {},
+            requestSession: () => Promise.reject(reason),
+            getCurrentSession: () => null,
+          }),
+        },
+      },
+    },
+  });
+  assert.equal(await requestCast("4F8C2A1B", env("cancel")), null);
+  await assert.rejects(() => requestCast("4F8C2A1B", env("receiver_unavailable")), /No Cast devices found/);
+});
+
