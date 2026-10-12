@@ -10,7 +10,7 @@
   <Support>https://github.com/wolfebase/broadwave/issues</Support>
   <Project>https://github.com/nicholas-fedor/watchtower</Project>
   <ReadMe>https://github.com/wolfebase/broadwave/blob/main/docs/guide/install.md</ReadMe>
-  <Overview>Optional. Keeps the Broadwave container on the newest release. It checks nightly at 03:30 and updates only containers that carry the Broadwave template's updater labels. It skips a night while someone is watching, a recording is running, or a recording starts within two hours, and tries again the next night. Install the Broadwave template first. This container has no web page.</Overview>
+  <Overview>Optional. Keeps the Broadwave container on the newest release. It checks nightly at 03:30 and updates only containers that carry the Broadwave template's updater labels. It skips a night while a tuner is in use, a recording is running, or a recording starts within two hours, and tries again the next night. Install the Broadwave template first. This container has no web page.</Overview>
   <Description>Watchtower, limited to Broadwave. The Broadwave template labels its container so this updater can see it, and so Broadwave can say it is busy before an update. Leave "Only labeled containers" and "Busy check" on. Set TZ to the same value as Broadwave. The Docker socket is how the updater pulls the new image and recreates that one container.</Description>
   <Category>Tools:Utilities</Category>
   <WebUI/>
