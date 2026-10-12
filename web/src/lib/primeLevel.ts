@@ -71,12 +71,14 @@ export async function primeLevel(master: string, signal?: AbortSignal, ladder = 
  */
 export function openPartsOnly(text: string): string {
   if (!text.includes("#EXT-X-PART:")) return text;
-  const lines = text.split("\n");
+  // HLS allows CRLF. A leftover \r is not a segment, and neither is a blank line.
+  const lines = text.split(/\r?\n/);
   let last = -1;
-  lines.forEach((line, i) => {
-    if (line && !line.startsWith("#")) last = i;
-  });
-  return lines.filter((line, i) => i > last || !line.startsWith("#EXT-X-PART:")).join("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed && !trimmed.startsWith("#")) last = i;
+  }
+  return lines.filter((line, i) => i > last || !line.trim().startsWith("#EXT-X-PART:")).join("\n");
 }
 
 /** hls.js's playlist loader, with each playlist passed through openPartsOnly. */
