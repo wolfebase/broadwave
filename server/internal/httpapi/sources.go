@@ -124,12 +124,16 @@ func (s *Server) addSource(w http.ResponseWriter, r *http.Request) {
 		}
 		added := 0
 		existing, _ := s.Store.Recordings(ctx)
-		have := map[string]bool{}
+		have := map[string]store.Recording{}
 		for _, rec := range existing {
-			have[rec.Path] = true
+			have[rec.Path] = rec
 		}
 		for _, rec := range found {
-			if have[rec.Path] {
+			if old, ok := have[rec.Path]; ok {
+				next, relisten, change := source.LibraryIdentity(old, rec)
+				if change {
+					_ = s.Store.SetLibraryIdentity(ctx, old.ID, next, relisten)
+				}
 				continue
 			}
 			info, err := os.Stat(rec.Path)

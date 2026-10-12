@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"broadwave/internal/store"
 )
 
 func TestScanMediaReadsSeasonAndEpisode(t *testing.T) {
@@ -93,6 +95,81 @@ func TestScanMediaNamesTheShowFromAFileInTheLibraryRoot(t *testing.T) {
 	}
 	if episodes["Harbor S01E01"] != nil {
 		t.Fatalf("filename kept as the show: %+v", found)
+	}
+}
+
+func TestScanMediaNamesTheShowAboveASeasonFolder(t *testing.T) {
+	root := t.TempDir()
+	names := []string{
+		filepath.Join(root, "Lighthouse", "S01", "Lighthouse - S01E02.mkv"),
+		filepath.Join(root, "Lighthouse", "S02", "Lighthouse - S02E01.mkv"),
+		filepath.Join(root, "Lighthouse", "S1", "Lighthouse - S01E03.mkv"),
+		filepath.Join(root, "Harbor Watch", "S01", "Harbor Watch - S01E02.mkv"),
+		filepath.Join(root, "Lighthouse", "Season.01", "Lighthouse - S01E04.mkv"),
+		filepath.Join(root, "Lighthouse", "Season_02", "Lighthouse - S02E02.mkv"),
+		filepath.Join(root, "Lighthouse", "Series 1", "Lighthouse - S01E05.mkv"),
+		filepath.Join(root, "Lighthouse", "Season 01", "Other Name S01E06.mkv"),
+	}
+	for _, name := range names {
+		if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(name, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	found, err := ScanMedia(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type ep struct {
+		title string
+		se    [2]int
+	}
+	got := map[ep]int{}
+	for _, rec := range found {
+		got[ep{rec.Title, [2]int{rec.Season, rec.Episode}}]++
+		if rec.Title == "S01" || rec.Title == "S1" || rec.Title == "S02" || rec.Title == "Season.01" || rec.Title == "Season_02" || rec.Title == "Series 1" {
+			t.Fatalf("season folder kept as the show: %+v", rec)
+		}
+	}
+	for _, want := range []ep{
+		{"Lighthouse", [2]int{1, 2}},
+		{"Lighthouse", [2]int{2, 1}},
+		{"Lighthouse", [2]int{1, 3}},
+		{"Lighthouse", [2]int{1, 4}},
+		{"Lighthouse", [2]int{2, 2}},
+		{"Lighthouse", [2]int{1, 5}},
+		{"Lighthouse", [2]int{1, 6}},
+		{"Harbor Watch", [2]int{1, 2}},
+	} {
+		if got[want] != 1 {
+			t.Fatalf("%s %v seen %d times\n%+v", want.title, want.se, got[want], found)
+		}
+	}
+}
+
+func TestLibraryIdentityChangesTheShowAndKeepsARecording(t *testing.T) {
+	old := store.Recording{ID: 4, GuideNumber: "Library", Title: "S01", Subtitle: "Harbor Watch - S01E02", Category: "Series", Season: 1, Episode: 2, Listened: true}
+	found := store.Recording{Title: "Harbor Watch", Subtitle: "Harbor Watch - S01E02", Category: "Series", Season: 1, Episode: 2, Path: "/lib/a.mkv"}
+	next, relisten, ok := LibraryIdentity(old, found)
+	if !ok || !relisten || next.ID != 4 || next.Title != "Harbor Watch" {
+		t.Fatalf("%+v %v %v", next, relisten, ok)
+	}
+	found.Title = old.Title
+	if _, _, ok := LibraryIdentity(old, found); ok {
+		t.Fatal("an unchanged file was renamed")
+	}
+	old.ChannelID = 3
+	old.Title = "S01"
+	found.Title = "Harbor Watch"
+	if _, _, ok := LibraryIdentity(old, found); ok {
+		t.Fatal("a recording was renamed")
+	}
+	old.ChannelID = 0
+	old.Listened = false
+	if _, relisten, ok := LibraryIdentity(old, found); !ok || relisten {
+		t.Fatal("an unlistened file was marked to be heard again")
 	}
 }
 

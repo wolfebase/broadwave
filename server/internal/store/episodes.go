@@ -61,6 +61,37 @@ func (s *Store) EpisodePrints(ctx context.Context, recordingID int64) (EpisodePr
 	return p, true, nil
 }
 
+// SetLibraryIdentity renames a library file from a fresh scan. A recording
+// Broadwave made is left alone. relisten drops an intro found under the old
+// name, so the file is heard again with its show.
+func (s *Store) SetLibraryIdentity(ctx context.Context, id int64, rec Recording, relisten bool) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `
+UPDATE recordings SET title = ?, subtitle = ?, category = ?, season = ?, episode = ?
+WHERE id = ? AND channel_id = 0 AND guide_number = 'Library'`,
+		rec.Title, rec.Subtitle, rec.Category, rec.Season, rec.Episode, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil || n == 0 {
+		return err
+	}
+	if relisten {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM episode_prints WHERE recording_id = ?`, id); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE recordings SET intro_start = 0, intro_end = 0, credits_start = 0 WHERE id = ?`, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // SetEpisodeEnds stores where a recording's intro and end titles are.
 func (s *Store) SetEpisodeEnds(ctx context.Context, recordingID int64, introStart, introEnd, credits float64) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE recordings SET intro_start = ?, intro_end = ?, credits_start = ? WHERE id = ?`,
