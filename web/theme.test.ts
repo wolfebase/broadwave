@@ -214,6 +214,116 @@ test("the dark theme keeps today's link and status ink", () => {
   assert.match(base, /color:\s*var\(--color-link\)/);
 });
 
+const brightCats = {
+  sports: "#2FBF71",
+  news: "#3D9BFF",
+  movies: "#B36BFF",
+  kids: "#FFB020",
+  series: "#5E7BA8",
+  other: "#5A6474",
+} as const;
+
+test("guide text stays at 4.5:1 after a light cell fades", () => {
+  const past = block(light, 'html[data-theme="light"] .guide-cell.past:not(.dim)');
+  const opacity = Number(past.match(/opacity:\s*([0-9.]+)/)?.[1]);
+  assert.equal(opacity, 0.9);
+  const text = parseHex("#141820");
+  const secondary = parseHex("#3E4858");
+  const link = parseHex("#1D4ED8");
+  const page = parseHex("#FFFFFF");
+  const surface = parseHex("#E7ECF2");
+  const faded = (ink: RGB, bg: RGB) => contrast(mix(ink, page, opacity), mix(bg, page, opacity));
+  atLeast("past subtitle", faded(secondary, surface));
+  atLeast("past new", faded(link, surface));
+  assert.match(block(light, 'html[data-theme="light"] .guide-cell.now .cell-new'), /color:\s*var\(--color-text\)/);
+  assert.match(block(light, 'html[data-theme="light"] .guide-cell.empty .cell-frame'), /var\(--color-line\)/);
+  for (const [name, hex] of Object.entries(brightCats)) {
+    const cat = parseHex(hex);
+    const wash = mix(cat, surface, 0.16);
+    const aired = mix(cat, wash, 0.22);
+    atLeast(`${name} new`, contrast(text, aired));
+    atLeast(`${name} new faded`, faded(text, aired));
+    const ink = parseHex(decl(block(light, `html[data-theme="light"] [data-cat="${name}"]`), "--cat-ink"));
+    const bar = (bg: RGB) => {
+      const ratio = contrast(ink, bg);
+      assert.ok(ratio >= 3, `${name} bar is ${ratio.toFixed(2)}:1`);
+    };
+    bar(surface);
+    bar(wash);
+    bar(surface3);
+    const track = mix(text, [255, 255, 255], 0.12);
+    const fill = contrast(ink, track);
+    assert.ok(fill >= 3, `${name} progress is ${fill.toFixed(2)}:1`);
+  }
+  assert.equal(block(light, 'html[data-theme="light"] .guide-cell::before').match(/opacity:\s*([0-9.]+)/)?.[1], "1");
+  assert.match(block(light, 'html[data-theme="light"] .chip.on .chip-swatch'), /var\(--color-on-accent\)/);
+  atLeast("selected swatch", contrast([255, 255, 255], link));
+  assert.match(block(light, 'html[data-theme="light"] .progress-fill'), /var\(--cat-ink, var\(--cat-color\)\)/);
+  assert.match(block(light, 'html[data-theme="light"] .hero .progress-fill,\nhtml[data-theme="light"] .now-card.has-art .progress-fill,\nhtml[data-theme="light"] .ps-art .progress-fill'), /var\(--cat-color, var\(--color-text\)\)/);
+  assert.match(block(light, 'html[data-theme="light"] .rc-poster .progress-fill'), /#f5f7fa/);
+  const plate = mix(parseHex("#070A10"), [255, 255, 255], 0.72);
+  atLeast("poster progress", contrast(parseHex("#F5F7FA"), plate));
+  const edge = parseHex("#6E7580");
+  for (const [name, bg] of [["field", surface], ["page", canvas], ["card", surface1]] as const) {
+    const ratio = contrast(edge, bg);
+    assert.ok(ratio >= 3, `field edge on ${name} is ${ratio.toFixed(2)}:1`);
+  }
+  assert.match(light, /border-color:\s*#6e7580/);
+  assert.match(block(light, 'html[data-theme="light"] :is(input, textarea)::placeholder'), /var\(--color-text-tertiary\)/);
+});
+
+test("a league name and a live edge clear the light card", () => {
+  assert.match(block(light, 'html[data-theme="light"] .gc-league'), /var\(--color-success\)/);
+  const success = parseHex("#0D6B3D");
+  atLeast("league", contrast(success, surface1));
+  const edge = mix(success, surface1, 0.75);
+  for (const [name, bg] of [["card", surface1], ["page", canvas]] as const) {
+    const ratio = contrast(edge, bg);
+    assert.ok(ratio >= 3, `live edge on ${name} is ${ratio.toFixed(2)}:1`);
+  }
+  assert.match(block(light, 'html[data-theme="light"] .team-swatch'), /inset 0 0 0 1px var\(--color-line-strong\)/);
+});
+
+test("an off switch shows its knob on a light track", () => {
+  assert.match(block(light, 'html[data-theme="light"] .switch-row input'), /var\(--color-text\)\s+55%/);
+  assert.match(block(light, 'html[data-theme="light"] .switch-row input:checked'), /var\(--color-success\)/);
+  const track = mix(parseHex("#141820"), surface3, 0.55);
+  const ratio = contrast([255, 255, 255], track);
+  assert.ok(ratio >= 3, `switch knob is ${ratio.toFixed(2)}:1`);
+});
+
+test("the player and multiview keep the dark palette in a light page", () => {
+  const stage = block(light, 'html[data-theme="light"] :is(.stage, .mv)');
+  assert.equal(decl(stage, "color-scheme"), "dark");
+  assert.match(stage, /color:\s*var\(--color-text\)/);
+  assert.equal(decl(stage, "--color-text").toUpperCase(), "#F5F7FA");
+  assert.equal(decl(stage, "--color-glass-fill").toUpperCase(), "#1A2130B8");
+  assert.equal(decl(stage, "--color-surface3").toUpperCase(), "#1E2736");
+  assert.equal(decl(stage, "--color-tally").toUpperCase(), "#FF3B30");
+  assert.equal(decl(stage, "--color-accent").toUpperCase(), "#3D7BFF");
+  assert.equal(decl(stage, "--brand-blue"), "var(--color-accent)");
+  assert.match(decl(stage, "--focus-ring"), /var\(--color-canvas\)/);
+  assert.match(block(light, 'html[data-theme="light"] :is(.stage, .mv) .glass-icon'), /rgba\(255, 255, 255, 0\.08\)/);
+  const selected = block(light, 'html[data-theme="light"] :is(.stage, .mv) .seg.on,\nhtml[data-theme="light"] :is(.stage, .mv) .btn.primary');
+  assert.match(selected, /rgba\(255, 255, 255, 0\.92\)/);
+  assert.match(selected, /var\(--color-canvas\)/);
+  const pill = mix([255, 255, 255], parseHex("#1A2130"), 0.92);
+  atLeast("player segment", contrast(darkCanvas, pill));
+  atLeast("player button", contrast(darkCanvas, parseHex("#E6EDFF")));
+  assert.match(block(light, 'html[data-theme="light"] :is(.stage, .mv) .switch-row input::after'), /#fff/);
+  assert.match(block(light, 'html[data-theme="light"] :is(.stage, .mv) .switch-row input:checked'), /var\(--color-success\)/);
+  const knob = contrast([255, 255, 255], darkSurface);
+  assert.ok(knob >= 3, `player switch knob is ${knob.toFixed(2)}:1`);
+  assert.match(light, /html\[data-theme="light"\] :is\(\.stage, \.mv\) \*[\s\S]*rgba\(255, 255, 255, 0\.18\)/);
+  for (const accent of accents) {
+    if (accent.id === "blue") continue;
+    const rule = block(light, `html[data-theme="light"][data-accent="${accent.id}"] :is(.stage, .mv)`);
+    assert.equal(decl(rule, "--color-accent").toUpperCase(), accent.dark);
+    assert.equal(decl(rule, "--color-link").toUpperCase(), accent.dark);
+    atLeast(`${accent.id} on the player`, contrast(parseHex(accent.dark), darkSurface));
+  }
+});
+
 test("the page paints the saved appearance before the app loads", () => {
   assert.match(html, /broadwave-theme/);
   assert.match(html, /broadwave-accent/);

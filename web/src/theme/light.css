@@ -87,9 +87,12 @@ html[data-theme="light"] .btn.primary {
   box-shadow: none;
 }
 
-html[data-theme="light"] .btn.primary:hover:not(:disabled) {
+/* The brand hover glow is a brighter blue than the accent, and it wins on
+   specificity unless this rule is at least as specific. */
+:root[data-theme="light"] .btn.primary:hover:not(:disabled) {
   background: color-mix(in srgb, var(--color-accent) 86%, #000);
   color: var(--color-on-accent);
+  box-shadow: none;
   transform: none;
 }
 
@@ -319,3 +322,244 @@ html[data-theme="light"] .accent-dot[data-accent="green"] { background: #0d6b3d;
 html[data-theme="light"] .accent-dot[data-accent="orange"] { background: #a7380a; }
 html[data-theme="light"] .accent-dot[data-accent="purple"] { background: #6d28d9; }
 html[data-theme="light"] .accent-dot[data-accent="rose"] { background: #b8113a; }
+
+/* A past cell fades onto the sheet. At 0.72 the subtitle falls under 4.5:1
+   on a light page. A filtered miss stays faint. */
+html[data-theme="light"] .guide-cell.past:not(.dim) {
+  opacity: 0.9;
+}
+
+/* Link blue on the aired wash misses 4.5:1. The title color clears it. */
+html[data-theme="light"] .guide-cell.now .cell-new {
+  color: var(--color-text);
+}
+
+html[data-theme="light"] .guide-cell.empty .cell-frame {
+  box-shadow: 0 0 0 1px var(--color-line);
+}
+
+/* Bright category colors stay on washes and the hero. Bars and dots need 3:1 on a light cell. */
+html[data-theme="light"] [data-cat="sports"] { --cat-ink: #268A57; }
+html[data-theme="light"] [data-cat="news"] { --cat-ink: #337CC9; }
+html[data-theme="light"] [data-cat="movies"] { --cat-ink: #985DD9; }
+html[data-theme="light"] [data-cat="kids"] { --cat-ink: #9F7220; }
+html[data-theme="light"] [data-cat="series"] { --cat-ink: #5E7BA8; }
+html[data-theme="light"] [data-cat="other"] { --cat-ink: #5A6474; }
+
+html[data-theme="light"] .guide-cell::before,
+html[data-theme="light"] .onnow-row::before,
+html[data-theme="light"] .chip-swatch {
+  background: var(--cat-ink, var(--cat-color));
+}
+
+/* The bar is 90% opaque in the dark theme. On a light cell that drops it under 3:1. */
+html[data-theme="light"] .guide-cell::before {
+  opacity: 1;
+}
+
+/* A selected chip is the accent. The category ink disappears on that fill. */
+html[data-theme="light"] .chip.on .chip-swatch {
+  background: var(--color-on-accent);
+}
+
+/* Bright category fills miss 3:1 on the light track. Art on a dark scrim keeps them. */
+html[data-theme="light"] .progress-fill {
+  background: var(--cat-ink, var(--cat-color));
+}
+
+html[data-theme="light"] .hero .progress-fill,
+html[data-theme="light"] .now-card.has-art .progress-fill,
+html[data-theme="light"] .ps-art .progress-fill {
+  background: var(--cat-color, var(--color-text));
+}
+
+/* Continue-watching sits on the poster, which may be light or dark. */
+html[data-theme="light"] .rc-poster .progress {
+  background: rgba(7, 10, 16, 0.72);
+}
+
+html[data-theme="light"] .rc-poster .progress-fill {
+  background: #f5f7fa;
+}
+
+/* An empty field's only edge is this border. The token line is about 1.4:1. */
+html[data-theme="light"] :is(.field input, .field select, .name-input, .num-input, .lookup input, input[type="text"], input[type="password"], input[type="number"], input[type="search"], select) {
+  border-color: #6e7580;
+}
+
+html[data-theme="light"] :is(input, textarea)::placeholder {
+  color: var(--color-text-tertiary);
+  opacity: 1;
+}
+
+/* A white or gold team color otherwise disappears on the card. */
+html[data-theme="light"] .team-swatch {
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+}
+
+html[data-theme="light"] .gc-league {
+  color: var(--color-success);
+}
+
+html[data-theme="light"] .game-card.live {
+  border-color: color-mix(in srgb, var(--color-success) 75%, var(--color-surface1));
+}
+
+/* A white knob on the light track is about 1.2:1. The off track darkens until the knob clears 3:1. */
+html[data-theme="light"] .switch-row input {
+  background: color-mix(in srgb, var(--color-text) 55%, var(--color-surface3));
+}
+
+html[data-theme="light"] .switch-row input:checked {
+  background: var(--color-success);
+}
+
+html[data-theme="light"] .switch-row input::after {
+  background: var(--color-surface1);
+  box-shadow: 0 1px 2px rgba(20, 24, 32, 0.35);
+}
+
+html[data-theme="light"] .now-card:hover,
+html[data-theme="light"] .now-card:focus-visible {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+
+html[data-theme="light"] .layout-tv {
+  --focus-ring: 0 0 0 3px var(--color-canvas), 0 0 0 7px var(--color-accent), 0 0 40px 8px color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+/* Player and multiview chrome was tuned for a dark surface: light type, white
+   controls, dark glass. On a light page that type would sit on the scrim in
+   the page's dark ink, and the same light type would sit on a white dock. */
+html[data-theme="light"] :is(.stage, .mv) {
+  color-scheme: dark;
+  /* color inherits as a used value from the page, so the variable alone does not repaint the title. */
+  color: var(--color-text);
+  --color-canvas: #070A10;
+  --color-surface1: #0E131C;
+  --color-surface2: #151C28;
+  --color-surface3: #1E2736;
+  --color-line: #FFFFFF1A;
+  --color-line-strong: #FFFFFF33;
+  --color-text: #F5F7FA;
+  --color-text-secondary: #AEB7C5;
+  --color-text-tertiary: #828FA2;
+  --color-glass-fill: #1A2130B8;
+  --color-glass-stroke: #FFFFFF24;
+  --color-glass-highlight: #FFFFFF14;
+  --color-scrim: #000000A6;
+  --color-tally: #FF3B30;
+  --color-tally-soft: #FF3B3029;
+  --color-tally-ink: #ff8a82;
+  --color-tally-soft-ink: #ffb3ad;
+  --color-success: #32D74B;
+  --color-warning: #FFB340;
+  --color-accent: #3D7BFF;
+  --color-accent-soft: #3D7BFF29;
+  --color-on-accent: #FFFFFF;
+  --color-link: color-mix(in srgb, var(--color-accent) 72%, #fff);
+  --color-accent-ink: #9cbcff;
+  --brand-blue: var(--color-accent);
+  --brand-gradient: linear-gradient(120deg, var(--brand-cyan), var(--brand-blue) 40%, var(--brand-violet) 75%, var(--brand-pink));
+  --focus-ring: 0 0 0 2px var(--color-canvas), 0 0 0 4px var(--color-accent), 0 0 24px 4px color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+
+html[data-theme="light"][data-accent="teal"] :is(.stage, .mv) {
+  --color-accent: #2DD4BF;
+  --color-accent-soft: #2DD4BF29;
+  --color-on-accent: #04221C;
+  --color-link: #2DD4BF;
+  --color-accent-ink: #2DD4BF;
+}
+
+html[data-theme="light"][data-accent="green"] :is(.stage, .mv) {
+  --color-accent: #34D399;
+  --color-accent-soft: #34D39929;
+  --color-on-accent: #052116;
+  --color-link: #34D399;
+  --color-accent-ink: #34D399;
+}
+
+html[data-theme="light"][data-accent="orange"] :is(.stage, .mv) {
+  --color-accent: #FB923C;
+  --color-accent-soft: #FB923C29;
+  --color-on-accent: #3A1504;
+  --color-link: #FB923C;
+  --color-accent-ink: #FB923C;
+}
+
+html[data-theme="light"][data-accent="purple"] :is(.stage, .mv) {
+  --color-accent: #A78BFA;
+  --color-accent-soft: #A78BFA29;
+  --color-on-accent: #1E1033;
+  --color-link: #A78BFA;
+  --color-accent-ink: #A78BFA;
+}
+
+html[data-theme="light"][data-accent="rose"] :is(.stage, .mv) {
+  --color-accent: #FB7185;
+  --color-accent-soft: #FB718529;
+  --color-on-accent: #3F0610;
+  --color-link: #FB7185;
+  --color-accent-ink: #FB7185;
+}
+
+html[data-theme="light"] :is(.stage, .mv) .glass-icon {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="light"] :is(.stage, .mv) .glass-icon:hover,
+html[data-theme="light"] :is(.stage, .mv) .glass-icon.on {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* A TV shell's focus ring was substituted with the light canvas. Recompute it here. */
+html[data-theme="light"] .layout-tv :is(.stage, .mv) {
+  --focus-ring: 0 0 0 3px var(--color-canvas), 0 0 0 7px var(--color-accent), 0 0 40px 8px color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+
+/* Accent pills are for the light page. On the player they are white type on a bright fill, under 4.5:1. */
+html[data-theme="light"] :is(.stage, .mv) .seg.on,
+html[data-theme="light"] :is(.stage, .mv) .btn.primary {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--color-canvas);
+  box-shadow: none;
+}
+
+html[data-theme="light"] :is(.stage, .mv) .btn.primary {
+  background: linear-gradient(180deg, #ffffff, #e6edff);
+  box-shadow: 0 8px 28px rgba(143, 178, 255, 0.25);
+}
+
+html[data-theme="light"] :is(.stage, .mv) .btn.primary:hover:not(:disabled) {
+  background: #fff;
+  color: var(--color-canvas);
+  box-shadow: 0 10px 36px rgba(143, 178, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+html[data-theme="light"] :is(.stage, .mv) .segmented {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+html[data-theme="light"] :is(.stage, .mv) .progress {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme="light"] :is(.stage, .mv) .switch-row input {
+  background: var(--color-surface3);
+}
+
+html[data-theme="light"] :is(.stage, .mv) .switch-row input:checked {
+  background: var(--color-success);
+}
+
+html[data-theme="light"] :is(.stage, .mv) .switch-row input::after {
+  background: #fff;
+  box-shadow: none;
+}
+
+html[data-theme="light"] :is(.stage, .mv),
+html[data-theme="light"] :is(.stage, .mv) * {
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
