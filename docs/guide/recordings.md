@@ -40,7 +40,7 @@ Settings, Keep this much free, is the reserve. It is 10 GB unless you change it.
 
 A new recording is refused while free space is under that reserve. The message names the free space and the reserve. A show that is already recording keeps going.
 
-Settings, When space runs low, is "Skip new recordings" unless you change it. "Delete the oldest watched" deletes watched recordings, the one watched longest ago first, before a new recording would be skipped. It does not delete an unwatched recording, one still recording, or one you marked Keep forever.
+Settings, When space runs low, is "Skip new recordings" unless you change it. "Delete the oldest watched" deletes watched recordings, the one watched longest ago first, when free space is under the reserve. It checks once an hour and before a new recording would be skipped. If deleting all of them would still leave the disk under the reserve, it deletes none. It does not delete an unwatched recording, one still recording, or one you marked Keep forever.
 
 Settings, Delete watched recordings, deletes a recording a number of days after it was watched. It is off unless you pick a number. Both of these count a recording as watched once it was played to the last 15 seconds or marked watched. Stopping earlier does not, even through 90% of a long recording. One you played in the last 6 hours stays.
 
