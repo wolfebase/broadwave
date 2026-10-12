@@ -145,12 +145,13 @@ export function createCastHold(pageURL: string, poster: WatchPoster = browserPos
   let last: CastHoldInput | null = null;
   let seenBoot = "";
   let bootRetries = 0;
+  let failRetries = 0;
 
   function releaseGrant(grant: Grant) {
     poster.stop({ channelId: grant.channelId, rendition: grant.rendition, boot: grant.boot }, grant.token);
   }
 
-  function hold(input: CastHoldInput) {
+  function hold(input: CastHoldInput, retry = false) {
     last = { channelId: input.channelId, playlist: input.playlist, token: input.token };
     const named = renditionOf(input.playlist);
     const match = named && named.channelId === input.channelId ? named : null;
@@ -159,6 +160,11 @@ export function createCastHold(pageURL: string, poster: WatchPoster = browserPos
       return;
     }
     if (match && pending && pending.channelId === match.channelId && pending.rendition === match.rendition) return;
+    // A caller's hold starts clean. A retry must not, or a dead server is asked forever.
+    if (!retry) {
+      bootRetries = 0;
+      failRetries = 0;
+    }
     const gen = ++generation;
     const previous = current;
     current = null;
@@ -168,18 +174,29 @@ export function createCastHold(pageURL: string, poster: WatchPoster = browserPos
     const asked = match;
     void poster.post({ channelId: asked.channelId, rendition: asked.rendition }, input.token).then((granted) => {
       if (pending?.gen === gen) pending = null;
-      if (!granted) return;
+      if (gen !== generation) {
+        if (granted) releaseGrant({ ...granted, token: input.token });
+        return;
+      }
+      if (!granted) {
+        // Hello already named this process, and the request died with the old one.
+        if (seenBoot && last && failRetries < 1) {
+          failRetries = 1;
+          hold(last, true);
+        }
+        return;
+      }
       const token = last?.channelId === asked.channelId ? last.token : input.token;
       const grant: Grant = { ...granted, token };
-      if (gen !== generation || grant.channelId !== asked.channelId || grant.rendition !== asked.rendition) {
+      if (grant.channelId !== asked.channelId || grant.rendition !== asked.rendition) {
         releaseGrant(grant);
         return;
       }
       if (seenBoot && grant.boot && seenBoot !== grant.boot) {
         releaseGrant(grant);
         if (bootRetries < 1 && last) {
-          bootRetries += 1;
-          hold(last);
+          bootRetries = 1;
+          hold(last, true);
         }
         return;
       }
@@ -194,6 +211,7 @@ export function createCastHold(pageURL: string, poster: WatchPoster = browserPos
       generation += 1;
       pending = null;
       bootRetries = 0;
+      failRetries = 0;
       const previous = current;
       current = null;
       last = null;
@@ -201,13 +219,22 @@ export function createCastHold(pageURL: string, poster: WatchPoster = browserPos
     },
     noteBoot(boot) {
       if (!boot) return;
+      const changed = boot !== seenBoot;
       seenBoot = boot;
-      if (!current || !current.boot || current.boot === boot) return;
-      const again = last;
-      const previous = current;
-      current = null;
-      releaseGrant(previous);
-      if (again) hold(again);
+      if (changed) failRetries = 0;
+      if (current && current.boot && current.boot !== boot) {
+        const again = last;
+        const previous = current;
+        current = null;
+        releaseGrant(previous);
+        if (again) hold(again);
+        return;
+      }
+      // The watch died before this hello. Ask once for the process that is up now.
+      if (changed && !current && !pending && last && failRetries < 1) {
+        failRetries = 1;
+        hold(last, true);
+      }
     },
   };
 }
