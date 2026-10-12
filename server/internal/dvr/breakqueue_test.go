@@ -465,6 +465,107 @@ func TestLibraryListenCapIsSixAnHour(t *testing.T) {
 	}
 }
 
+// A library read counts its file, up to the ceiling when the length is
+// unknown, and the ends when the length is known. A missing file counts
+// as nothing.
+func TestLibraryReadChargeFollowsTheFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ep.ts")
+	if err := os.WriteFile(path, make([]byte, 1000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := libraryReadOf(store.Recording{Path: path}); got != 1000 {
+		t.Fatalf("short file: %d", got)
+	}
+	if got := libraryReadOf(store.Recording{Path: path, Duration: 3600}); got != breaks.ListenBytes(1000, 3600) {
+		t.Fatalf("known length: %d", got)
+	}
+	prev := libraryReadCeiling
+	libraryReadCeiling = 100
+	t.Cleanup(func() { libraryReadCeiling = prev })
+	if got := libraryReadOf(store.Recording{Path: path}); got != 100 {
+		t.Fatalf("ceiling: %d", got)
+	}
+	if got := libraryReadOf(store.Recording{Path: filepath.Join(dir, "gone.ts")}); got != 0 {
+		t.Fatalf("missing: %d", got)
+	}
+}
+
+// The hour stops when the bytes are spent, even before six files. A file
+// larger than the budget still goes when the hour has read nothing. A
+// recording in the recordings folder is not counted and does not wait.
+func TestLibraryListenStopsAtTheByteBudget(t *testing.T) {
+	prev := libraryBytesPerHour
+	libraryBytesPerHour = 1000
+	t.Cleanup(func() { libraryBytesPerHour = prev })
+
+	r := newQueueRig(t, "")
+	lib := t.TempDir()
+	write := func(name string) string {
+		t.Helper()
+		path := filepath.Join(lib, name)
+		if err := os.WriteFile(path, make([]byte, 800), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	r.addEpisode(t, "Wide", write("e1.ts"), 1, 1)
+	r.addEpisode(t, "Wide", write("e2.ts"), 1, 2)
+	start := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	var wall atomic.Int64
+	wall.Store(start.UnixNano())
+	r.q.now = func() time.Time { return time.Unix(0, wall.Load()).UTC() }
+	r.run(t)
+
+	select {
+	case title := <-r.heard:
+		if title != "Wide" {
+			t.Fatalf("heard %s", title)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the first library file was not read")
+	}
+	select {
+	case title := <-r.heard:
+		t.Fatalf("read %s after the hour's bytes were spent", title)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	id := r.add(t, "Bulletin", filepath.Join(r.q.root, "news.ts"), "complete")
+	r.q.Add(id)
+	select {
+	case title := <-r.scanned:
+		if title != "Bulletin" {
+			t.Fatalf("scanned %s", title)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a recording waited on the library budget")
+	}
+	select {
+	case title := <-r.heard:
+		if title != "Bulletin" {
+			t.Fatalf("heard %s", title)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a recording was not listened to")
+	}
+	select {
+	case title := <-r.heard:
+		t.Fatalf("read %s while the library budget was spent", title)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	wall.Store(start.Add(libraryWindow).UnixNano())
+	select {
+	case title := <-r.heard:
+		if title != "Wide" {
+			t.Fatalf("heard %s", title)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the next library file did not start once the hour had passed")
+	}
+}
+
 func (r *queueRig) addEpisode(t *testing.T, title, path string, season, episode int) int64 {
 	t.Helper()
 	id, err := r.st.CreateRecording(context.Background(), store.Recording{

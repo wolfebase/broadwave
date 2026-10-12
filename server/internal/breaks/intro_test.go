@@ -150,6 +150,27 @@ func TestFindEndsFindsEndTitlesBeforeTheNextShow(t *testing.T) {
 	}
 }
 
+func TestListenBytesCountsTheEnds(t *testing.T) {
+	if got := ListenBytes(0, 3600); got != 0 {
+		t.Fatalf("empty file: %d", got)
+	}
+	// Shorter than the head, or no known length: the listen reads it all.
+	if got := ListenBytes(1000, 0); got != 1000 {
+		t.Fatalf("unknown length: %d", got)
+	}
+	if got := ListenBytes(1000, headSeconds); got != 1000 {
+		t.Fatalf("head-length file: %d", got)
+	}
+	// An hour is the first 20 minutes and the last 10.
+	if got := ListenBytes(3600, 3600); got != 1800 {
+		t.Fatalf("hour: %d", got)
+	}
+	// 10 bytes over 4000 s, 1800 s of ends: 4.5 rounds up.
+	if got := ListenBytes(10, 4000); got != 5 {
+		t.Fatalf("partial: %d", got)
+	}
+}
+
 // The same theme through a broadcast codec at 48 kHz, read back by ffmpeg.
 func TestListenEndsThroughACodec(t *testing.T) {
 	ffmpeg, err := exec.LookPath("ffmpeg")
