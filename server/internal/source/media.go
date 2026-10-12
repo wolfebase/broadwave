@@ -33,6 +33,11 @@ func seasonDir(name string) bool {
 	return err == nil && n >= 0 && n < 100
 }
 
+// specialsDir is a folder of one-offs, not the show. The show is above it.
+func specialsDir(name string) bool {
+	return strings.EqualFold(strings.TrimSpace(name), "specials")
+}
+
 // showBeforeEpisode is the show in a filename that has no folder to name it.
 // "Harbor - S01E02 - The Storm" is Harbor. A name that is only the episode
 // is left alone, so two bare files do not become one show.
@@ -79,8 +84,8 @@ func ScanMedia(root string) ([]store.Recording, error) {
 			}
 		}
 		climbed := false
-		if seasonDir(filepath.Base(dir)) && dir != root {
-			// Show/S01/episode: the show is the folder above.
+		if (seasonDir(filepath.Base(dir)) || specialsDir(filepath.Base(dir))) && dir != root {
+			// Show/S01/episode, or Show/Specials/episode: the show is above.
 			dir = filepath.Dir(dir)
 			climbed = true
 		}
