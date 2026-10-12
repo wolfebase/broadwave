@@ -244,6 +244,49 @@ func TestScanMediaNamesTheShowAboveSpecials(t *testing.T) {
 	}
 }
 
+// An episode folder under Specials, and one whose show name contains a dot,
+// still name the show. The file beside them already does.
+func TestScanMediaNamesADottedShowInAnEpisodeFolder(t *testing.T) {
+	root := t.TempDir()
+	names := []string{
+		filepath.Join(root, "Season 1", "Show.Name - S01E02", "episode.mkv"),
+		filepath.Join(root, "Season 1", "Show.Name - S01E03.mkv"),
+		filepath.Join(root, "Lighthouse", "Specials", "Lighthouse - S00E03", "episode.mkv"),
+		filepath.Join(root, "Lighthouse", "Seasons", "Specials", "Lighthouse - S00E04", "episode.mkv"),
+	}
+	for _, name := range names {
+		if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(name, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	found, err := ScanMedia(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]store.Recording{}
+	for _, rec := range found {
+		got[rec.Path] = rec
+	}
+	want := []store.Recording{
+		{Path: names[0], Title: "Show.Name", Season: 1, Episode: 2},
+		{Path: names[1], Title: "Show.Name", Season: 1, Episode: 3},
+		{Path: names[2], Title: "Lighthouse", Season: 0, Episode: 3},
+		{Path: names[3], Title: "Lighthouse", Season: 0, Episode: 4},
+	}
+	if len(found) != len(want) {
+		t.Fatalf("%+v", found)
+	}
+	for _, w := range want {
+		rec := got[w.Path]
+		if rec.Title != w.Title || rec.Season != w.Season || rec.Episode != w.Episode {
+			t.Fatalf("%+v", rec)
+		}
+	}
+}
+
 func TestScanMediaStopsAtTheFileCap(t *testing.T) {
 	prev := mediaFileCap
 	mediaFileCap = 3
