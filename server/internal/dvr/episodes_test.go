@@ -88,6 +88,74 @@ func TestFindEpisodeEndsComparesEpisodesOfAShow(t *testing.T) {
 	}
 }
 
+// A library file's modification time is not a broadcast start. A listing of
+// the same title that happens to fall then is not inside the file, and the
+// intro the episodes share is kept.
+func TestALibraryFileIgnoresAListingOfTheSameName(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "cfg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	modified := time.Date(2026, 10, 2, 15, 0, 0, 0, time.UTC)
+	if err := st.ReplaceAirings(ctx, []store.Airing{{
+		ChannelID: 4, Title: "Harbor", Start: modified.Add(10 * time.Minute), End: modified.Add(25 * time.Minute),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	theme := prints(1, 30, nil, 0)
+	heads := map[string][]uint32{
+		"/lib/one.ts": prints(3, 1200, theme, 90),
+		"/lib/two.ts": prints(4, 1200, theme, 200),
+	}
+	old := listenFile
+	listenFile = func(_ context.Context, _, path string, _ float64) (breaks.Sound, error) {
+		return breaks.Sound{Head: heads[path]}, nil
+	}
+	t.Cleanup(func() { listenFile = old })
+	add := func(path string, episode int) int64 {
+		t.Helper()
+		id, err := st.CreateRecording(ctx, store.Recording{
+			Title: "Harbor", Path: path, Status: "complete",
+			Season: 1, Episode: episode, StartedAt: modified,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.SetDuration(ctx, id, 1800); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	one := add("/lib/one.ts", 1)
+	if from, to := showBounds(ctx, st, store.Recording{Title: "Harbor", StartedAt: modified}, 1800); from != 0 || to != 0 {
+		t.Fatalf("library file took a listing: %v %v", from, to)
+	}
+	if err := FindEpisodeEnds(ctx, st, "", mustRec(t, st, one)); err != nil {
+		t.Fatal(err)
+	}
+	two := add("/lib/two.ts", 2)
+	if err := FindEpisodeEnds(ctx, st, "", mustRec(t, st, two)); err != nil {
+		t.Fatal(err)
+	}
+	for id, start := range map[int64]float64{one: 90, two: 200} {
+		got, _ := st.Recording(ctx, id)
+		if math.Abs(got.IntroStart-start) > 1 || math.Abs(got.IntroEnd-start-30) > 1 {
+			t.Fatalf("recording %d: intro %v-%v, want %v", id, got.IntroStart, got.IntroEnd, start)
+		}
+	}
+}
+
+func mustRec(t *testing.T, st *store.Store, id int64) store.Recording {
+	t.Helper()
+	rec, err := st.Recording(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rec
+}
+
 // The listing bounds the show in the file: a padded recording starts a minute
 // before its show and ends two after it.
 func TestShowBoundsComeFromTheListing(t *testing.T) {
