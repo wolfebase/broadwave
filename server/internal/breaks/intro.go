@@ -75,8 +75,14 @@ func pickShared(self Episode, others []Episode, part func(Episode) ([]uint32, fl
 			if self.ShowEnd > 0 && !first && mine.Start > self.ShowEnd-introMin {
 				continue // the next show, in the late padding
 			}
+			if o.ShowEnd > 0 && !first && their.Start > o.ShowEnd-introMin {
+				continue // the next show, on the other episode
+			}
 			if self.ShowEnd > 0 && first && mine.Start < self.ShowStart-showSlack {
 				continue // the show before, in the early padding
+			}
+			if o.ShowEnd > 0 && first && their.Start < o.ShowStart-showSlack {
+				continue // the show before, on the other episode
 			}
 			found = append(found, mine)
 		}
