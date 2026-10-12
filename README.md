@@ -203,7 +203,7 @@ Without an updater, the web app says when a new release is out.
 <br>
 
 - **Any browser** at `http://<your-server>:8477` — live TV, the guide, recordings, and multiview. Nothing to install.
-- **Native apps** for phones, tablets, and TVs find your server on the same Wi-Fi by themselves — no typing. With no server around, they play a built-in demo so you can try everything first.
+- **Native apps** for iPhone, iPad, and Apple TV list the servers they find on your home network. You pick one, or you type an address. The next launch connects to the one you saved. "Try the demo" plays sample films on the device.
 - **Away from home.** Use Tailscale and type that address with port 8477. Do not forward the port. [Away from home](docs/guide/remote.md) lists what stays open.
 
 </details>
@@ -248,12 +248,12 @@ Without an updater, the web app says when a new release is out.
 
 <details>
 <summary><b>When the picture stops</b></summary>
-<br>The line on the player says what failed and what to try. Diagnostics shows the tuners, the disk, and the recent log, and Settings can download a support bundle. [What each message means](docs/troubleshooting.md).
+<br>The line on the player says what failed and what to try. On the web, Diagnostics shows the tuners, the disk, and the recent log. On the Apple apps it shows Fix these, guide depth, tuner health, and antenna readings. Settings can download a support bundle. [What each message means](docs/troubleshooting.md).
 </details>
 
 <details>
 <summary><b>Can I watch more than one channel?</b></summary>
-<br>Yes. Side by side, one large picture with smaller ones beside it, or four at once, on the web, iPad, and Apple TV. The iPhone app shows two. One tile has the sound. [How that works](docs/multiview.md).
+<br>Yes, when this server has room for that many pictures. Side by side, one large picture with smaller ones beside it, or four at once, on the web, iPad, and Apple TV. The iPhone app shows two. One tile has the sound. [How that works](docs/multiview.md).
 </details>
 
 <details>

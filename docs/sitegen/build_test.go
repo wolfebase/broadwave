@@ -111,6 +111,21 @@ func TestSiteBuildsTheGuide(t *testing.T) {
 	if !strings.Contains(mv, "https://github.com/wolfebase/broadwave/blob/main/docs/hardware.md") || strings.Contains(mv, "hardware.html") {
 		t.Fatal("hardware.md should stay on GitHub")
 	}
+	if !strings.Contains(mv, "760 pixels") {
+		t.Fatal("multiview reference still stacks every phone browser")
+	}
+	readme, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(readme), "built-in demo") {
+		t.Fatal("readme still says the apps play a demo with no server around")
+	}
+	for _, needle := range []string{"Try the demo", "You pick one", "when this server has room", "antenna readings"} {
+		if !strings.Contains(string(readme), needle) {
+			t.Errorf("readme missing %q", needle)
+		}
+	}
 	for _, name := range []string{"reference/research.html", "reference/hardware.html"} {
 		if _, err := os.Stat(filepath.Join(out, filepath.FromSlash(name))); err == nil {
 			t.Fatalf("published %s", name)
