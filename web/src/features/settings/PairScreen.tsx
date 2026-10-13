@@ -3,13 +3,23 @@ import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
 import { bind } from "../../i18n/runtime.ts";
 import { writeToken } from "../../lib/deviceToken";
 import { claimPair, pollPair, startPair } from "./pairApi";
-import { codeAfterPoll, formatPairCode, normalizePairCode, pairPollStep } from "./pairCode";
+import { codeAfterPoll, formatPairCode, normalizeClaimCode, normalizeInviteCode, pairPollStep } from "./pairCode";
 
 const t = bind(settingsUiMessages);
 
 type Kind = "web" | "phone" | "tv";
 
 type PairSession = { id: string; secret: string };
+
+// A link from an invite opens /pair?invite=CODE.
+function invitedCode(): string {
+  try {
+    const raw = new URLSearchParams(window.location.search).get("invite") ?? "";
+    return normalizeInviteCode(raw) ?? "";
+  } catch {
+    return "";
+  }
+}
 
 function message(err: unknown): string {
   return err instanceof Error && err.message ? err.message : t("devices.failed");
@@ -18,7 +28,8 @@ function message(err: unknown): string {
 export function PairScreen({ onPaired }: { onPaired: () => void }) {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<Kind>("web");
-  const [code, setCode] = useState("");
+  const [invite] = useState(invitedCode);
+  const [code, setCode] = useState(invite);
   const [issued, setIssued] = useState("");
   const [session, setSession] = useState<PairSession | null>(null);
   const [error, setError] = useState("");
@@ -87,13 +98,13 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
   async function claim(event: FormEvent) {
     event.preventDefault();
     const trimmed = name.trim();
-    const normalized = normalizePairCode(code);
+    const normalized = normalizeClaimCode(code);
     if (!trimmed) {
       setError(t("pair.needName"));
       return;
     }
     if (!normalized) {
-      setError(t("devices.needCode"));
+      setError(t("pair.needCode"));
       return;
     }
     setBusy(true);
@@ -141,8 +152,8 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
   return (
     <div className="page-wrap">
       <header className="page-header">
-        <h1>{t("pair.title")}</h1>
-        <p className="lede">{t("pair.lede")}</p>
+        <h1>{invite ? t("pair.inviteTitle") : t("pair.title")}</h1>
+        <p className="lede">{invite ? t("pair.inviteLede") : t("pair.lede")}</p>
       </header>
       <form onSubmit={(event) => void claim(event)}>
         <label className="field">
@@ -162,8 +173,8 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
           <input
             required
             value={code}
-            inputMode="numeric"
             autoComplete="one-time-code"
+            autoCapitalize="characters"
             spellCheck={false}
             onChange={(event) => setCode(event.target.value)}
           />
@@ -172,9 +183,11 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
           {t("pair.submit")}
         </button>
       </form>
-      <button type="button" className="btn" disabled={busy} onClick={() => void showCode()}>
-        {t("pair.showCode")}
-      </button>
+      {invite ? null : (
+        <button type="button" className="btn" disabled={busy} onClick={() => void showCode()}>
+          {t("pair.showCode")}
+        </button>
+      )}
       {issued ? (
         <>
           <p className="pair-code">{formatPairCode(issued)}</p>

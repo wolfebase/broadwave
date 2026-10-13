@@ -220,7 +220,7 @@ final class LivePlayer {
             }
             // The multivariant playlist carries the captions track, so the
             // system subtitle menu and the Closed Captions setting apply.
-            let item = AVPlayerItem(url: api.url(session.mainPlaylist ?? session.playlist))
+            let item = api.playerItem(session.mainPlaylist ?? session.playlist)
             item.externalMetadata = metadata(channel: channel, airing: store.index.on(channel.id, at: Date()))
             PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
             player.replaceCurrentItem(with: item)
@@ -850,7 +850,7 @@ final class LivePlayer {
     /// The same watch on a fresh item, which AVPlayer opens at the live edge.
     private func reload() {
         guard let api, let session, let old = player.currentItem else { return }
-        let item = AVPlayerItem(url: api.url(session.mainPlaylist ?? session.playlist))
+        let item = api.playerItem(session.mainPlaylist ?? session.playlist)
         item.externalMetadata = old.externalMetadata
         PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
         pausedItself = false
@@ -2546,7 +2546,7 @@ struct RecordingPlayerScreen: View {
             // A playlist the server is still writing can fail an item while it loads
             // (a changed discontinuity count). A fresh item reads it again once.
             for _ in 0 ..< 2 {
-                let item = AVPlayerItem(url: api.url(playlist))
+                let item = api.playerItem(playlist)
                 PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
                 item.externalMetadata = metadata(rec)
                 player.replaceCurrentItem(with: item)

@@ -105,7 +105,11 @@ func (s *Server) claimPair(w http.ResponseWriter, r *http.Request) {
 		tooManyPairTries(w)
 		return
 	}
-	_, dev, token, err := s.Store.ClaimCode(r.Context(), body.Code, body.Name, body.Kind, s.now())
+	claim := s.Store.ClaimCode
+	if store.IsInviteCode(body.Code) {
+		claim = s.Store.ClaimInvite
+	}
+	_, dev, token, err := claim(r.Context(), body.Code, body.Name, body.Kind, s.now())
 	if err != nil {
 		s.settleCodeTry(r, try, err)
 		writePairError(w, err)
@@ -217,7 +221,7 @@ func (s *Server) clientMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	auth := "local-open"
-	if on {
+	if on || s.isRemote(r) {
 		auth = "device"
 	}
 	body := map[string]any{"device": nil, "auth": auth}

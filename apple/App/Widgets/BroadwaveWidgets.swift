@@ -122,7 +122,7 @@ struct FeedProvider: AppIntentTimelineProvider {
         }
         let session = boundedSession()
         defer { session.finishTasksAndInvalidate() }
-        let api = APIClient(base: base, session: session)
+        let api = APIClient(base: base, session: session, token: SharedServer.loadToken())
         do {
             return try await FeedEntry(date: now, state: .rows, rows: feed.rows(api: api, now: now))
         } catch is NoTeams {
@@ -305,7 +305,7 @@ struct RecordIntent: AppIntent {
         }
         let session = boundedSession()
         defer { session.finishTasksAndInvalidate() }
-        try await APIClient(base: base, session: session).addPass(title: title, channelID: Int64(channelID), airingStart: Date(timeIntervalSince1970: TimeInterval(start)))
+        try await APIClient(base: base, session: session, token: SharedServer.loadToken()).addPass(title: title, channelID: Int64(channelID), airingStart: Date(timeIntervalSince1970: TimeInterval(start)))
         WidgetCenter.shared.reloadAllTimelines()
         return .result()
     }

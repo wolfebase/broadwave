@@ -284,12 +284,16 @@ struct RootView: View {
     #endif
     @State private var showSetup = false
     @State private var dismissedUpdate = ""
+    /// A broadwave://join link, shown filled in until the viewer joins or closes it.
+    @State private var joinLink: JoinLink?
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
             if !store.connected {
                 ConnectView()
+            } else if let message = store.signedOut {
+                SignedOutView(message: message)
             } else if let message = Compatibility.gateApp(store.info, app: installedVersion) {
                 IncompatibleServer(message: message)
             } else if showSetup || store.presentSetup {
@@ -364,6 +368,9 @@ struct RootView: View {
                 }
             }
             .onOpenURL(perform: open)
+            .sheet(item: $joinLink) { link in
+                joinSheet(link)
+            }
             .spotlightLinks(open)
             .watchHandoff(handoffChannel, server: store.server) { watch($0) }
             .onChange(of: store.screenRemote) {
@@ -493,7 +500,7 @@ struct RootView: View {
         }
     #endif
 
-    /// broadwave://connect?url=, broadwave://watch/<channel id>,
+    /// broadwave://connect?url=, broadwave://join?server=&code=, broadwave://watch/<channel id>,
     /// broadwave://multiview?ch=<id>,<id>, broadwave://recording/<id>, broadwave://guide, broadwave://sports.
     private var installedVersion: String {
         if let raw = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, !raw.isEmpty {
@@ -502,9 +509,29 @@ struct RootView: View {
         return Compatibility.appVersion
     }
 
+    /// Filled in from the link. Nothing happens until the viewer chooses Join.
+    private func joinSheet(_ link: JoinLink) -> some View {
+        NavigationStack {
+            ScrollView {
+                JoinView(address: link.server, code: link.code) { joinLink = nil }
+                    .padding(24)
+                    .frame(maxWidth: 640, alignment: .leading)
+                    .frame(maxWidth: .infinity)
+            }
+            .background(Tokens.ColorToken.canvas.ignoresSafeArea())
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { joinLink = nil }
+                }
+            }
+        }
+    }
+
     private func open(_ url: URL) {
         guard url.scheme == "broadwave" else { return }
         switch url.host() {
+        case "join":
+            joinLink = JoinLink(url)
         case "connect":
             if let server = ConnectLink.serverURL(from: url) {
                 Task {

@@ -25,6 +25,9 @@ public final class AppStore {
     public var now = Date()
     /// The event socket has been down for a few seconds, so the lists on screen are the saved copy.
     public private(set) var offline = false
+    /// The server's words when it wants a paired device: this one has no token
+    /// for it, or the owner removed it. Nil while signed in or on the home network.
+    public private(set) var signedOut: String?
     /// When the lists on screen last came from the server.
     public private(set) var freshAt: Date?
     /// What the keychain holds for Siri and Control Center.
@@ -96,12 +99,15 @@ public final class AppStore {
         #if DEBUG
             let holdConnect = UserDefaults.standard.bool(forKey: "BroadwaveDiscover") || UserDefaults.standard.bool(forKey: "BroadwaveExplain")
             let forcedURL = UserDefaults.standard.string(forKey: "BroadwaveServerURL")
+            // UI tests against a server away from home: -BroadwaveToken bw_...
+            let forcedToken = UserDefaults.standard.string(forKey: "BroadwaveToken")
         #else
             let holdConnect = false
             let forcedURL: String? = nil
+            let forcedToken: String? = nil
         #endif
         if !holdConnect, let raw = forcedURL, let url = URL(string: raw) {
-            connect(FoundServer(id: "pending", name: String(localized: "Server", bundle: .module), url: url))
+            connect(FoundServer(id: "pending", name: String(localized: "Server", bundle: .module), url: url), token: forcedToken)
         } else if !holdConnect, let saved: FoundServer = Self.load("server") {
             if let snap = CatalogCache.load(serverID: saved.id) {
                 channels = snap.channels
@@ -123,6 +129,7 @@ public final class AppStore {
         // Keychain items outlive the app, so a reinstall must not leave the old address for the Top Shelf.
         if server == nil || server?.id == "demo" {
             SharedServer.save(nil)
+            SharedServer.saveToken(nil)
             SharedLineup.save(nil)
         }
         clock = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
@@ -184,8 +191,14 @@ public final class AppStore {
         connect(FoundServer(id: "demo", name: String(localized: "Demo", bundle: .module), url: url))
     }
 
-    public func connect(_ server: FoundServer) {
+    /// `token` is this device's token from pairing. Without one, the token saved
+    /// for this server is used, if any.
+    public func connect(_ server: FoundServer, token: String? = nil) {
         generation += 1
+        if let token, !token.isEmpty {
+            DeviceTokens.save(token, forServer: server.id == "pending" ? "" : server.id)
+        }
+        let token = token?.isEmpty == false ? token : DeviceTokens.token(forServer: server.id)
         if Self.dropCatalog(previousID: self.server?.id, nextID: server.id) {
             channels = []
             index = GuideIndex([])
@@ -201,13 +214,14 @@ public final class AppStore {
         screenRemote = nil
         // A new server is not the previous one's outage. The banner waits out a short drop.
         offline = false
+        signedOut = nil
         // Down until the first message, so a server that is off at launch gets the banner.
         noteConnection(false)
         announced = false
         self.server = server
-        let api = APIClient(base: server.url, session: session)
+        let api = APIClient(base: server.url, session: session, token: token)
         self.api = api
-        let socket = EventSocket(base: server.url)
+        let socket = EventSocket(base: server.url, token: token)
         socket.onFailure = { [weak self] in
             Task { await self?.relocate() }
         }
@@ -248,6 +262,7 @@ public final class AppStore {
         save(server, "server")
         // The demo lives inside the app, where the Top Shelf cannot reach it.
         SharedServer.save(server.id == "demo" ? nil : server.url)
+        SharedServer.saveToken(server.id == "demo" ? nil : token)
         // Channel ids belong to one server; the new lineup is written after its first refresh.
         SharedLineup.save(nil)
         sharedLineup = []
@@ -271,7 +286,8 @@ public final class AppStore {
     public func relocate() async {
         guard Date() >= relocateAfter else { return }
         relocateAfter = Date().addingTimeInterval(5)
-        guard let saved = server, let key = saved.key, !key.isEmpty else { return }
+        // Only a server on the home network moves. One reached by name away from home stays put.
+        guard let saved = server, saved.url.scheme == "http", let key = saved.key, !key.isEmpty else { return }
         let savedID = saved.id
         let started = generation
         let found = await Task.detached { LANProbe.collect(timeout: 1.2) }.value
@@ -378,6 +394,7 @@ public final class AppStore {
         offlineWait?.cancel()
         offlineWait = nil
         offline = false
+        signedOut = nil
         loading = false
         socket?.disconnect()
         socket = nil
@@ -405,6 +422,7 @@ public final class AppStore {
             UserDefaults.standard.removeObject(forKey: "server")
         #endif
         SharedServer.save(nil)
+        SharedServer.saveToken(nil)
         SharedLineup.save(nil)
         sharedLineup = []
     }
@@ -489,6 +507,9 @@ public final class AppStore {
             }
             self.info = info
             if let current = server, let fixed = RememberedServers.refreshed(current, id: info.id, name: info.name, key: info.discoveryKey) {
+                if current.id == "pending", let token = api.token {
+                    DeviceTokens.save(token, forServer: info.id)
+                }
                 server = fixed
                 save(fixed, "server")
                 remembered = RememberedServers.upsert(remembered, fixed)
@@ -534,8 +555,24 @@ public final class AppStore {
             }
         } catch {
             guard sameSession(started, base) else { return }
+            if let failure = error as? APIError, failure.signedOut {
+                noteSignedOut(failure.message)
+                return
+            }
             self.error = error.localizedDescription
         }
+    }
+
+    /// The server turned this device away. The socket would only be turned away
+    /// again, so it closes until a new code is entered.
+    func noteSignedOut(_ message: String) {
+        let words = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        signedOut = words.isEmpty ? String(localized: "Sign in from a paired device.", bundle: .module) : words
+        error = nil
+        offlineWait?.cancel()
+        offline = false
+        socket?.disconnect()
+        socket = nil
     }
 
     /// A drop that reconnects within a few seconds is not worth a word.

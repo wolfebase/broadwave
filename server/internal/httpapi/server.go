@@ -110,6 +110,12 @@ type Server struct {
 	// revokeMu keeps two revokes from each passing the last-admin check.
 	revokeMu sync.Mutex
 
+	// Tunnel runs cloudflared for a saved token. Nil in tests.
+	Tunnel    Tunnel
+	remoteMu  sync.Mutex
+	remoteVal string
+	remoteAt  time.Time
+
 	routes []string
 }
 
@@ -164,6 +170,10 @@ func (s *Server) Handler() http.Handler {
 	api("GET /clients", s.listClients)
 	api("GET /clients/me", s.clientMe)
 	api("DELETE /clients/{id}", s.revokeClient)
+	api("GET /remote", s.remoteStatus)
+	api("GET /invites", s.listInvites)
+	api("POST /invites", s.createInvite)
+	api("DELETE /invites/{id}", s.deleteInvite)
 	api("POST /setup/finish", s.postSetupFinish)
 	api("GET /setup/finish", s.getSetupFinish)
 	api("POST /watch", s.watch)
@@ -263,7 +273,7 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 func (s *Server) profile(w http.ResponseWriter, r *http.Request) {
 	auth := "local-open"
 	note := "A password is required before this server is opened beyond your home network. That arrives with accounts."
-	if on, err := s.deviceAuthOn(r.Context()); err == nil && on {
+	if on, err := s.deviceAuthOn(r.Context()); err == nil && (on || s.isRemote(r)) {
 		auth = "device"
 		note = "Devices sign in with a pairing code."
 	}
@@ -667,6 +677,12 @@ func (s *Server) settingsValues(r *http.Request) (map[string]string, error) {
 		values["sportsdbKeySet"] = "0"
 	}
 	delete(values, "sportsdbKey")
+	if strings.TrimSpace(values[store.SettingTunnelToken]) != "" {
+		values["tunnelTokenSet"] = "1"
+	} else {
+		values["tunnelTokenSet"] = "0"
+	}
+	delete(values, store.SettingTunnelToken)
 	delete(values, store.SettingUpdateVersion)
 	delete(values, store.SettingUpdateNotesURL)
 	delete(values, store.SettingUpdateMessage)
@@ -740,6 +756,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	} else if err := s.Store.PutSettings(r.Context(), body); err != nil {
 		httpError(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	_, tokenSent := body[store.SettingTunnelToken]
+	_, addressSent := body[store.SettingRemoteURL]
+	if tokenSent || addressSent {
+		s.forgetRemote()
+		s.applyTunnel(r.Context())
 	}
 	// Turning the check back on looks now. A check that already ran today is reused.
 	if body["checkUpdates"] == "1" && s.Updates != nil {

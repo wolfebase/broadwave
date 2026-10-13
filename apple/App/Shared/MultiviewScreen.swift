@@ -426,7 +426,7 @@ final class TilePlayer {
                 holdPicture = false
             }
             detail = session.stream.reason
-            let item = AVPlayerItem(url: api.url(session.playlist))
+            let item = api.playerItem(session.playlist)
             let tile = prefs.quality == .tile || prefs.quality == .tile360
             tileTuning = tile
             PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: tile)
@@ -649,7 +649,7 @@ final class TilePlayer {
         namedCause = nil
         namingCause = false
         causeGen += 1
-        let item = AVPlayerItem(url: api.url(session.playlist))
+        let item = api.playerItem(session.playlist)
         PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: tileTuning)
         // Through nil, as start() does: the layer's ready flag only reports a
         // change, and the engine waits for it.
@@ -2303,7 +2303,7 @@ final class PlayerHost: UIView {
                 return
             }
             key = session.key
-            let item = AVPlayerItem(url: api.url(session.playlist))
+            let item = api.playerItem(session.playlist)
             PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
             player.replaceCurrentItem(with: item)
             player.isMuted = false

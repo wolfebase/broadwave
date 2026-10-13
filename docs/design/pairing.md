@@ -104,11 +104,18 @@ Not built in this version. The apps already share the server URL through the key
 
 A TV pairs by calling `POST /api/v1/pair`, showing the code, and polling `GET /api/v1/pair/{id}?secret=` until the token arrives, then saving it. The Apple settings sentence that still says a password is required is unchanged until that screen exists.
 
+## Away from home
+
+A request is from outside when it carries `Cf-Connecting-Ip` or `Cf-Ray`, or when its Host is the saved public address (`remoteUrl`, or the hostname the built-in tunnel reported). Such a request is treated as if sign-in were on, and `/export/*` needs watch. The home network keeps whatever `deviceAuth` says. `GET /profile` and `GET /clients/me` answer `device` to an outside request, so the web app opens the pairing screen.
+
+An invite is a claim code that lasts 7 days: twelve characters from `23456789ABCDEFGHJKLMNPQRSTUVWXYZ`, shown in groups of four. It is a `pairings` row with mode `invite`, so it has the same hash, single use, and state machine as a claim code, and `POST /pair/claim` takes either kind. Invites have their own waiting cap (20) and do not count against the 20 short codes. `POST /invites`, `GET /invites`, and `DELETE /invites/{id}` are admin. `GET /remote` is the Settings view: the address, the tunnel's state, and the waiting invites.
+
+`tunnelToken` is saved like a password and never returned. The server runs `cloudflared tunnel run` with it in `TUNNEL_TOKEN`, restarts it with a backoff, and reads its log for connections, errors, and the hostnames in the tunnel's configuration.
+
 ## What a later accounts pass adds
 
 - A person, with more than one device, and a way to tell two people in one house apart. Tokens stay per device. An account would own a set of tokens, not replace them.
 - A switch that also requires a token for `/export` and port 8478, for a server that is deliberately published. Default remains open, so Plex on the LAN does not break when device sign-in is turned on.
-- The Apple pairing screen and keychain item described above.
 - Profiles (whose recordings, whose watch history) as a separate layer. Nothing in the token table is a profile.
 
 ## API

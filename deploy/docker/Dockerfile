@@ -66,6 +66,16 @@ RUN apt-get update \
   && ln -sf /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/local/bin/ffmpeg \
   && ln -sf /usr/lib/jellyfin-ffmpeg/ffprobe /usr/local/bin/ffprobe \
   && rm -rf /var/lib/apt/lists/*
+# cloudflared runs only when a tunnel token is saved in Settings, Away from home.
+ARG CLOUDFLARED_VERSION=2026.10.0
+RUN case "$TARGETARCH" in \
+      amd64) sum=d33ff2d14475178d2012c2c56beba87389ac5ded27649519f198a7d3134a99db ;; \
+      arm64) sum=e6422b9d4f72d3194bc5a38676f13667c06666523217b842a877d72a80b5ac08 ;; \
+      *) echo "no cloudflared for $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+  && curl -fsSL -o /usr/local/bin/cloudflared "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${TARGETARCH}" \
+  && echo "$sum  /usr/local/bin/cloudflared" | sha256sum -c - \
+  && chmod 0755 /usr/local/bin/cloudflared
 COPY --from=build /out/broadwave /usr/local/bin/broadwave
 COPY --from=comskip /out/comskip /usr/local/bin/comskip
 COPY --from=comskip /out/comskip-LICENSE /out/comskip-source.tar.gz /usr/share/doc/broadwave/

@@ -144,7 +144,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     () =>
       onUnauthorized(() => {
         setNeedsPair(true);
-        navigate("/pair");
+        // An invite link is /pair?invite=CODE. Keep the code.
+        if (window.location.pathname !== "/pair") navigate("/pair");
       }),
     [],
   );

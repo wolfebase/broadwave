@@ -352,6 +352,36 @@ public struct GameAlert: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
+public struct Invite: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var name: String
+    public var scopes: [String]
+    public var createdAt: Date
+    public var expiresAt: Date
+
+    public init(id: String, name: String, scopes: [String], createdAt: Date, expiresAt: Date) {
+        self.id = id
+        self.name = name
+        self.scopes = scopes
+        self.createdAt = createdAt
+        self.expiresAt = expiresAt
+    }
+}
+
+public struct InviteGrant: Codable, Sendable, Hashable {
+    public var invite: Invite
+    public var code: String
+    public var link: String?
+    public var appLink: String?
+
+    public init(invite: Invite, code: String, link: String? = nil, appLink: String? = nil) {
+        self.invite = invite
+        self.code = code
+        self.link = link
+        self.appLink = appLink
+    }
+}
+
 public struct Marker: Codable, Sendable, Hashable, Identifiable {
     public var id: Int64
     public var recordingId: Int64?
@@ -770,6 +800,26 @@ public struct RecordingHealth: Codable, Sendable, Hashable {
     }
 }
 
+public struct RemoteStatus: Codable, Sendable, Hashable {
+    public var remoteUrl: String
+    public var configured: String
+    public var tokenSet: Bool
+    public var tunnel: TunnelStatus
+    public var deviceAuth: Bool
+    public var invites: [Invite]
+    public var here: Bool
+
+    public init(remoteUrl: String, configured: String, tokenSet: Bool, tunnel: TunnelStatus, deviceAuth: Bool, invites: [Invite], here: Bool) {
+        self.remoteUrl = remoteUrl
+        self.configured = configured
+        self.tokenSet = tokenSet
+        self.tunnel = tunnel
+        self.deviceAuth = deviceAuth
+        self.invites = invites
+        self.here = here
+    }
+}
+
 public struct RoomState: Codable, Sendable, Hashable {
     public var room: String
     public var channelId: Int64?
@@ -872,6 +922,9 @@ public struct Settings: Codable, Sendable, Hashable {
     public var autoplay: String?
     public var hdhrEmulate: String?
     public var deviceAuth: String?
+    public var remoteUrl: String?
+    public var tunnelToken: String?
+    public var tunnelTokenSet: String?
     public var deviceToken: String?
     public var exportMosaics: String?
     public var setupComplete: String?
@@ -894,7 +947,7 @@ public struct Settings: Codable, Sendable, Hashable {
     public var sportsdbKey: String?
     public var sportsdbKeySet: String?
 
-    public init(layout: String? = nil, profile: String? = nil, audio: String? = nil, encoder: String? = nil, watermarkGB: String? = nil, bufferMinutes: String? = nil, writeNfo: String? = nil, deleteWatchedDays: String? = nil, makeRoom: String? = nil, protectFavorites: String? = nil, folderLayout: String? = nil, gameAlerts: String? = nil, pictureMode: PictureMode? = nil, adaptive: String? = nil, autoplay: String? = nil, hdhrEmulate: String? = nil, deviceAuth: String? = nil, deviceToken: String? = nil, exportMosaics: String? = nil, setupComplete: String? = nil, needsSetup: String? = nil, lastGuidePull: Date? = nil, nextGuidePull: Date? = nil, lastManualGuidePull: Date? = nil, lastGuideError: String? = nil, lastGuideErrorAt: Date? = nil, hideScores: String? = nil, liveScores: String? = nil, checkUpdates: String? = nil, sdUser: String? = nil, sdPassword: String? = nil, sdLineup: String? = nil, sdPasswordSet: String? = nil, guideUrl: String? = nil, tmdbKey: String? = nil, tmdbKeySet: String? = nil, sportsdbKey: String? = nil, sportsdbKeySet: String? = nil) {
+    public init(layout: String? = nil, profile: String? = nil, audio: String? = nil, encoder: String? = nil, watermarkGB: String? = nil, bufferMinutes: String? = nil, writeNfo: String? = nil, deleteWatchedDays: String? = nil, makeRoom: String? = nil, protectFavorites: String? = nil, folderLayout: String? = nil, gameAlerts: String? = nil, pictureMode: PictureMode? = nil, adaptive: String? = nil, autoplay: String? = nil, hdhrEmulate: String? = nil, deviceAuth: String? = nil, remoteUrl: String? = nil, tunnelToken: String? = nil, tunnelTokenSet: String? = nil, deviceToken: String? = nil, exportMosaics: String? = nil, setupComplete: String? = nil, needsSetup: String? = nil, lastGuidePull: Date? = nil, nextGuidePull: Date? = nil, lastManualGuidePull: Date? = nil, lastGuideError: String? = nil, lastGuideErrorAt: Date? = nil, hideScores: String? = nil, liveScores: String? = nil, checkUpdates: String? = nil, sdUser: String? = nil, sdPassword: String? = nil, sdLineup: String? = nil, sdPasswordSet: String? = nil, guideUrl: String? = nil, tmdbKey: String? = nil, tmdbKeySet: String? = nil, sportsdbKey: String? = nil, sportsdbKeySet: String? = nil) {
         self.layout = layout
         self.profile = profile
         self.audio = audio
@@ -912,6 +965,9 @@ public struct Settings: Codable, Sendable, Hashable {
         self.autoplay = autoplay
         self.hdhrEmulate = hdhrEmulate
         self.deviceAuth = deviceAuth
+        self.remoteUrl = remoteUrl
+        self.tunnelToken = tunnelToken
+        self.tunnelTokenSet = tunnelTokenSet
         self.deviceToken = deviceToken
         self.exportMosaics = exportMosaics
         self.setupComplete = setupComplete
@@ -1247,6 +1303,22 @@ public struct TunerLock: Codable, Sendable, Hashable {
     public init(index: Int, locked: Bool) {
         self.index = index
         self.locked = locked
+    }
+}
+
+public struct TunnelStatus: Codable, Sendable, Hashable {
+    public var state: String
+    public var message: String?
+    public var hostnames: [String]?
+    public var connections: Int
+    public var since: Date?
+
+    public init(state: String, message: String? = nil, hostnames: [String]? = nil, connections: Int, since: Date? = nil) {
+        self.state = state
+        self.message = message
+        self.hostnames = hostnames
+        self.connections = connections
+        self.since = since
     }
 }
 

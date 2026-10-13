@@ -1529,6 +1529,17 @@
           }
         }
       }
+    },
+    "Sign in from a paired device." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in from a paired device."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

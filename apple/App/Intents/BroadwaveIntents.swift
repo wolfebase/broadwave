@@ -32,7 +32,7 @@ func intentAPI() throws -> APIClient {
     guard let base = SharedServer.load() else {
         throw IntentFailure.noServer
     }
-    return APIClient(base: base, session: intentSession)
+    return APIClient(base: base, session: intentSession, token: SharedServer.loadToken())
 }
 
 /// A server call whose failure Siri should say plainly, not as a URL error.

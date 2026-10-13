@@ -12,6 +12,8 @@ public final class EventSocket {
     public private(set) var offset: Double = 0
 
     private let url: URL
+    /// This device's token. The handshake carries it as a header.
+    private let token: String?
     private var task: URLSessionWebSocketTask?
     private var handlers: [String: [UUID: (Data) -> Void]] = [:]
     private var rooms: [String: Int64] = [:]
@@ -44,7 +46,8 @@ public final class EventSocket {
     /// Called when `connected` changes.
     public var onConnected: ((Bool) -> Void)?
 
-    public init(base: URL) {
+    public init(base: URL, token: String? = nil) {
+        self.token = token?.isEmpty == false ? token : nil
         var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)!
         comps.scheme = base.scheme == "https" ? "wss" : "ws"
         comps.path = "/api/v1/ws"
@@ -81,6 +84,15 @@ public final class EventSocket {
         return t1 - (t0 + t2) / 2
     }
 
+    /// The upgrade request, with the token as a header when there is one.
+    nonisolated static func handshake(_ url: URL, token: String?) -> URLRequest {
+        var req = URLRequest(url: url)
+        if let token, !token.isEmpty {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        return req
+    }
+
     public static func nowMS() -> Double {
         Date().timeIntervalSince1970 * 1000
     }
@@ -93,7 +105,7 @@ public final class EventSocket {
         guard !stopped, task == nil else { return }
         retryWork?.cancel()
         retryWork = nil
-        let task = URLSession.shared.webSocketTask(with: url)
+        let task = URLSession.shared.webSocketTask(with: Self.handshake(url, token: token))
         self.task = task
         task.resume()
         receive(task)

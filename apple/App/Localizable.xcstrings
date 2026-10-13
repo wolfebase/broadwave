@@ -522,6 +522,17 @@
         }
       }
     },
+    "ABCD-EFGH-JKMN": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ABCD-EFGH-JKMN"
+          }
+        }
+      }
+    },
     "AT": {
       "extractionState": "manual",
       "localizations": {
@@ -892,6 +903,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Any time of day."
+          }
+        }
+      }
+    },
+    "Ask the owner for an invite code. It works once and lasts a week.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask the owner for an invite code. It works once and lasts a week."
+          }
+        }
+      }
+    },
+    "Ask the owner to approve this code in Broadwave Settings, under Devices.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask the owner to approve this code in Broadwave Settings, under Devices."
           }
         }
       }
@@ -1965,6 +1998,17 @@
         }
       }
     },
+    "Enter the invite code.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter the invite code."
+          }
+        }
+      }
+    },
     "Episodes": {
       "extractionState": "manual",
       "localizations": {
@@ -2654,6 +2698,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jeopardy!"
+          }
+        }
+      }
+    },
+    "Join": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Join"
+          }
+        }
+      }
+    },
+    "Join a home server": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Join a home server"
           }
         }
       }
@@ -4066,6 +4132,17 @@
         }
       }
     },
+    "Open on your home network. Away from home, this device needs an invite from the owner.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open on your home network. Away from home, this device needs an invite from the owner."
+          }
+        }
+      }
+    },
     "Opens a channel live in Broadwave.": {
       "extractionState": "manual",
       "localizations": {
@@ -5409,6 +5486,17 @@
         }
       }
     },
+    "Show a code instead": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show a code instead"
+          }
+        }
+      }
+    },
     "Show all": {
       "extractionState": "manual",
       "localizations": {
@@ -5460,6 +5548,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Side by side"
+          }
+        }
+      }
+    },
+    "Signed in as %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed in as %@."
           }
         }
       }
@@ -5948,6 +6047,17 @@
         }
       }
     },
+    "That code ran out. Show a new one.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That code ran out. Show a new one."
+          }
+        }
+      }
+    },
     "That doesn't look like an address.": {
       "extractionState": "manual",
       "localizations": {
@@ -6091,6 +6201,17 @@
         }
       }
     },
+    "The owner turned this code down.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The owner turned this code down."
+          }
+        }
+      }
+    },
     "The recording and its commercial markers are removed from the server.": {
       "extractionState": "manual",
       "localizations": {
@@ -6135,6 +6256,17 @@
         }
       }
     },
+    "This device isn't signed in": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This device isn't signed in"
+          }
+        }
+      }
+    },
     "This library channel tried to use an antenna tuner.": {
       "extractionState": "manual",
       "localizations": {
@@ -6164,17 +6296,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "This pass would stop these from recording:"
-          }
-        }
-      }
-    },
-    "This server is for the home network. A password is required before remote access.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This server is for the home network. A password is required before remote access."
           }
         }
       }
@@ -7198,6 +7319,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "this tuner"
+          }
+        }
+      }
+    },
+    "tv.example.com": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tv.example.com"
           }
         }
       }

@@ -17,6 +17,7 @@ import { Schedule } from "./schedule/Schedule";
 import { HomeList } from "./setup/HomeList";
 import { Appearance } from "./settings/Appearance";
 import { PairedDevices } from "./settings/PairedDevices";
+import { RemoteAccess } from "./settings/RemoteAccess";
 import { SettingsScreen } from "./settings/Settings";
 import { ShareLinks } from "./settings/ShareLinks";
 import { tunerAddress } from "./settings/tunerShare";
@@ -235,6 +236,9 @@ export function SettingsPage() {
       </section>
       <section className="settings-section">
         <PairedDevices deviceAuth={settings.deviceAuth ?? "0"} onChange={saveSettings} />
+      </section>
+      <section className="settings-section">
+        <RemoteAccess onChange={saveSettings} />
       </section>
       <section className="settings-section">
         <h2>{t("pages.share")}</h2>

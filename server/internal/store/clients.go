@@ -293,7 +293,7 @@ func (s *Store) insertPendingPairing(ctx context.Context, mode, name, kind strin
 		}
 	}()
 	var pending int
-	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM pairings WHERE state = 'pending' AND expires_at > ?`,
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM pairings WHERE state = 'pending' AND mode != 'invite' AND expires_at > ?`,
 		now.UTC().Format(time.RFC3339)).Scan(&pending); err != nil {
 		return "", "", "", time.Time{}, err
 	}
@@ -382,6 +382,9 @@ func (s *Store) PollPairing(ctx context.Context, id, secret string, now time.Tim
 
 func (s *Store) finishCode(ctx context.Context, mode, code, name, kind string, scopes []string, now time.Time) (Pairing, ClientDevice, string, error) {
 	norm, ok := normalizeCode(code)
+	if mode == "invite" {
+		norm, ok = normalizeInvite(code)
+	}
 	if !ok {
 		return Pairing{}, ClientDevice{}, "", ErrPairCode
 	}
@@ -432,7 +435,11 @@ FROM pairings WHERE mode = ? AND state IN ('pending', 'denied', 'expired')`, mod
 	if state == "expired" || !expAt.After(now) {
 		return Pairing{}, ClientDevice{}, "", ErrPairExpired
 	}
-	if mode == "claim" {
+	if mode == "claim" || mode == "invite" {
+		if mode == "invite" && strings.TrimSpace(name) == "" {
+			// The invite names the person. Their device can say which device it is.
+			name = storedName
+		}
 		var nameErr error
 		storedName, nameErr = cleanClientName(name)
 		if nameErr != nil {

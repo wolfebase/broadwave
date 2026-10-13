@@ -566,6 +566,21 @@ html[data-layout="tv"] :focus-visible {
   margin: var(--space-2) 0;
 }
 
+.copy-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.copy-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.invite-card {
+  margin: var(--space-3) 0;
+}
+
 .pair-code {
   font-variant-numeric: tabular-nums;
   font-size: 2rem;

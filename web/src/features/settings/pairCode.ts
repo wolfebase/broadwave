@@ -10,6 +10,19 @@ export function normalizePairCode(raw: string): string | null {
   return digits;
 }
 
+// An invite is twelve letters and digits with no 0, 1, I, or O. Case, spaces,
+// and dashes do not matter.
+export function normalizeInviteCode(raw: string): string | null {
+  const plain = raw.replace(/[\s-]/g, "").toUpperCase();
+  if (!/^[2-9A-HJ-NP-Z]{12}$/.test(plain)) return null;
+  return `${plain.slice(0, 4)}-${plain.slice(4, 8)}-${plain.slice(8)}`;
+}
+
+// The pair screen takes either a six-digit code or an invite.
+export function normalizeClaimCode(raw: string): string | null {
+  return normalizePairCode(raw) ?? normalizeInviteCode(raw);
+}
+
 export function formatPairCode(code: string): string {
   if (!/^\d{6}$/.test(code)) return code;
   return `${code.slice(0, 3)} ${code.slice(3)}`;

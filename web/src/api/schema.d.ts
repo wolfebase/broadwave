@@ -1262,7 +1262,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * @description A device enters a code an admin is showing and receives its token once.
+         * @description A device enters a code an admin is showing, or an invite code
+         *     (twelve letters and digits, dashes and case ignored), and receives its token once.
          *     The response also sets the `bw_token` cookie.
          */
         post: operations["claimPair"];
@@ -1287,6 +1288,66 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/remote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Away from home. The public address, the built-in Cloudflare tunnel, and the
+         *     invites nobody has used. Requests that arrive through Cloudflare (a
+         *     `Cf-Connecting-Ip` or `Cf-Ray` header) or by the public name always need a
+         *     paired device, `/export` included. The home network is unchanged.
+         */
+        get: operations["getRemote"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Invites nobody has used yet. Codes are not included. */
+        get: operations["listInvites"];
+        put?: never;
+        /**
+         * @description A code for someone outside the house. It lasts 7 days and pairs one device
+         *     through `POST /pair/claim`. The code is returned once.
+         */
+        post: operations["createInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invites/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Stops an invite nobody has used. */
+        delete: operations["deleteInvite"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1682,6 +1743,46 @@ export interface components {
             /** Format: date-time */
             revokedAt?: string;
         };
+        Invite: {
+            id: string;
+            name: string;
+            scopes: ("watch" | "record" | "admin")[];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        InviteGrant: {
+            invite: components["schemas"]["Invite"];
+            /** @description Twelve characters in groups of four, such as K7QM-4XPA-9RTW. */
+            code: string;
+            /** @description The web page that pairs with this code. Present when the server has a public address. */
+            link?: string;
+            /** @description broadwave://join?server=…&code=… for the iPhone and iPad apps. Present when the server has a public address. */
+            appLink?: string;
+        };
+        TunnelStatus: {
+            /** @enum {string} */
+            state: "off" | "missing" | "starting" | "connected" | "error";
+            message?: string;
+            /** @description Public hostnames on the tunnel, as Cloudflare reported them. */
+            hostnames?: string[];
+            connections: number;
+            /** Format: date-time */
+            since?: string;
+        };
+        RemoteStatus: {
+            /** @description The address in use: the saved one, or the tunnel's hostname. Empty when there is none. */
+            remoteUrl: string;
+            /** @description The saved remoteUrl setting. */
+            configured: string;
+            tokenSet: boolean;
+            tunnel: components["schemas"]["TunnelStatus"];
+            deviceAuth: boolean;
+            invites: components["schemas"]["Invite"][];
+            /** @description This request came from outside the house. */
+            here: boolean;
+        };
         PairTicket: {
             id: string;
             /** @description Six digits. */
@@ -1786,6 +1887,8 @@ export interface components {
             discoveryKey?: string;
             /** @description Present when a newer release is available. Omitted when this build is current or the check is off. */
             update?: components["schemas"]["ServerUpdate"];
+            /** @description Google Cast application id from BROADWAVE_CAST_APP_ID. Omitted when unset or not 4 to 32 letters and digits. The web player shows Cast only when this is set. */
+            castAppId?: string;
         };
         /** @description A newer Broadwave release. The message is the banner. */
         ServerUpdate: {
@@ -2604,6 +2707,12 @@ export interface components {
              * @enum {string}
              */
             deviceAuth?: "0" | "1";
+            /** @description The https address that reaches this server from outside, such as https://tv.example.com. A bare name gets https. Empty clears it. */
+            remoteUrl?: string;
+            /** @description A Cloudflare tunnel token, or the install command that contains it. The server runs cloudflared with it. Never returned. Empty clears it and stops the tunnel. */
+            tunnelToken?: string;
+            /** @enum {string} */
+            readonly tunnelTokenSet?: "0" | "1";
             /** @description Returned once, on the response that turns deviceAuth on, when the request did not already use an admin token. Not stored. Not returned by GET. */
             deviceToken?: string;
             /** @description Mosaics listed as channels of their own in the M3U, XMLTV, and HDHomeRun exports: mosaic keys joined by commas, for example 4-12,1-2-3 (at most 8). They are numbered 990.1 and up in this order; a mosaic with a channel no longer in the lineup is left out. */
@@ -5229,6 +5338,110 @@ export interface operations {
                 };
             };
             404: components["responses"]["Error"];
+        };
+    };
+    getRemote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Remote access status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteStatus"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    listInvites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Waiting invites */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        invites: components["schemas"]["Invite"][];
+                    };
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    createInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Who the invite is for. */
+                    name: string;
+                    /** @description Omitted is watch. */
+                    scopes?: ("watch" | "record" | "admin")[];
+                };
+            };
+        };
+        responses: {
+            /** @description The invite and its code */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteGrant"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    deleteInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Waiting invites */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        invites: components["schemas"]["Invite"][];
+                    };
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
         };
     };
     listClients: {

@@ -1,8 +1,67 @@
 # Away from home
 
-Broadwave has no account password. The safe way to watch from somewhere else is a VPN that only your own devices can join. [Tailscale](https://tailscale.com/) is one. Do not forward port 8477 or 8478 on your router, and do not turn on Tailscale Funnel. Funnel publishes the server on the public internet.
+There are two ways to watch from somewhere else.
 
-The tuner stays home. Your phone talks to Broadwave, and Broadwave talks to the tuner. One tune of a channel still feeds every screen and every recording.
+- **A Cloudflare tunnel.** Broadwave gets a public `https` address, such as `tv.example.com`. You invite family, and only the phones, TVs, and browsers you invited can open it. Nothing on your router changes. This is the way to share with people outside the house.
+- **A VPN only your devices join**, such as [Tailscale](https://tailscale.com/). See [Tailscale](#tailscale) below.
+
+Either way, the tuner stays home. Your phone talks to Broadwave, and Broadwave talks to the tuner. One tune of a channel still feeds every screen and every recording. Do not forward port 8477 or 8478 on your router.
+
+## Cloudflare tunnel
+
+You need a free Cloudflare account and a domain whose DNS is on Cloudflare. A tunnel makes an outbound connection from your server to Cloudflare, so no port is opened at home.
+
+Everything that comes in through the tunnel needs a paired device. That includes the guide, the video, recordings, the playlist (`/export/lineup.m3u`), and the stream URLs. The home network does not change. Phones and TVs in the house keep working with no code.
+
+### 1. Make the tunnel
+
+1. Sign in to the Cloudflare dashboard and open **Zero Trust**. The first time, it asks you to pick a team name and the free plan.
+2. Go to **Networks**, then **Tunnels**, then **Create a tunnel**.
+3. Choose **Cloudflared**, name it `broadwave`, and save it.
+4. Cloudflare shows install commands. Copy any one of them. They all contain the same token, a long string that starts with `eyJ`. Keep it private. Anyone with it can run your tunnel.
+5. Go on to **Public hostnames** (on newer dashboards, **Published application routes**). Add one:
+   - **Subdomain:** `tv`, or any name you like.
+   - **Domain:** your domain.
+   - **Service type:** `HTTP`.
+   - **URL:** `localhost:8477`.
+6. Save. Cloudflare adds the DNS record for you.
+
+### 2. Give Broadwave the token
+
+The Docker image includes cloudflared, so Broadwave runs the tunnel itself.
+
+1. Open Broadwave on the home network. Go to **Settings**, then **Away from home**.
+2. Paste what you copied into **Tunnel token** and choose **Save**. The whole install command is fine. Broadwave keeps only the token.
+3. Within a few seconds it says **Connected to Cloudflare** and shows the address, such as `https://tv.example.com`. Broadwave reads the address from the tunnel. If it does not appear, type it into **Public address**.
+
+The token is never shown again, and it is left out of the support bundle. **Remove token** stops the tunnel.
+
+### If you already run cloudflared
+
+Leave **Tunnel token** empty. Point your tunnel's public hostname at `http://<the server's address>:8477`, then type the hostname into **Public address**, such as `tv.example.com`. Broadwave then answers to that name and asks for a paired device on every request through it. Requests carrying Cloudflare's `Cf-Connecting-Ip` header count as outside, whatever name they use.
+
+### 3. Invite family
+
+1. On the home network, open **Settings**, **Away from home**, **Invite someone**.
+2. Type who it is for, choose what they may do, and choose **Make an invite**.
+   - **Watch** plays live TV and recordings.
+   - **Record** also records and edits passes.
+   - **Admin** also changes settings. Give it only to someone who runs the server with you.
+3. Send them the code, such as `K7QM-4XPA-9RTW`, and the address. An invite pairs one device and lasts 7 days. Make one per device.
+
+On their side:
+
+- **Apple TV, iPhone, or iPad.** Install Broadwave. On the first screen, choose **Join a home server**. Enter the address and the code. On iPhone and iPad, the app link from Settings does the same in one tap.
+- **A browser.** Open the browser link from Settings, name the browser, and choose **Pair**.
+
+Devices you invited are listed under **Settings**, **Devices**. **Revoke** stops one at once. **Remove** on a waiting invite stops it before anyone uses it.
+
+### Good to know
+
+- A live channel away from home uses one of your tuners, like a TV in the house. Recordings come first.
+- Video goes through Cloudflare. Cloudflare's terms limit serving mostly video through its network on some plans. Read the current terms for your plan before you rely on it.
+- Device sign-in at home (**Settings**, **Devices**, **Require a device to sign in**) is separate. Leave it off if everyone in the house should keep watching without a code.
+- The HDHomeRun port, 8478, is never on the tunnel.
 
 ## What you open
 
@@ -25,7 +84,7 @@ Turn sign-in on when other people can reach the server and you watch in a browse
 
 A code is six digits and lasts 10 minutes. On a browser that is already signed in, Settings, Devices, choose Watch, Record, or Admin, then Pair a device. The hint is "Enter this code on the other device. It lasts 10 minutes." That page also has Approve a code. A browser that is not signed in says "Pair this device" and asks for the code from Settings. Show a code instead shows one there, and the hint is "Enter this code in Settings. It lasts 10 minutes." Pair this browser, on the signed-in page, opens that screen for the browser you are using. Watch plays and reads the guide. Record also records and edits passes. Admin also changes settings. Revoke stops one device. The last admin cannot be revoked while sign-in is on. The message is "Pair another admin device first. This is the last one that can change settings."
 
-The iPhone, iPad, and Apple TV apps have no place to enter a code. Leave sign-in off if you use them. With it on they still connect, but the server refuses the guide and playback with "Sign in from a paired device."
+The iPhone, iPad, and Apple TV apps pair with a code too: **Join a home server** takes a code from Settings, Devices, Pair a device, or an invite.
 
 These stay open with no code, even after sign-in is on:
 
@@ -50,7 +109,7 @@ Join both machines to the same tailnet. Then copy the server's Tailscale address
 
 Do not count on the apps listing the server. The UDP probe stays on the home network. Bonjour can advertise a Tailscale address.
 
-Leave Act as an HDHomeRun off unless a media server in the house needs it. Leave device sign-in off while you use the Apple apps. On the web, turn it on when the tailnet is not only you, and remember that a playlist or a stream URL still plays with no code.
+Leave Act as an HDHomeRun off unless a media server in the house needs it. On the web, turn it on when the tailnet is not only you, and remember that a playlist or a stream URL still plays with no code.
 
 ### A name instead of the address
 
@@ -84,10 +143,9 @@ A Tailscale subnet router can let the phone reach the server's home address. Mul
 
 ## Keep it small
 
-- Reach the server through Tailscale. Do not forward 8477 or 8478, and do not put Broadwave on a proxy the public internet can open.
+- Reach the server through a Cloudflare tunnel or Tailscale. Do not forward 8477 or 8478, and do not put Broadwave on any other proxy the public internet can open.
 - Use the Tailscale address. Add a public name to `BROADWAVE_HOSTS` only when you actually open that name.
 - Leave Act as an HDHomeRun off when nothing in the house needs port 8478. That port has no device code.
 - The playlist and `/export/stream/` are open on port 8477 whenever the server is. A stream opened in an app, or directly in a browser, starts a tune and uses a tuner. A page on another site is refused.
 - Device sign-in covers the guide, recordings, and settings in Broadwave. It does not cover the playlist, the stream URLs, or port 8478.
-- Leave device sign-in off while you use the iPhone, iPad, or Apple TV app.
 - Invite only the people who should be able to watch. Everyone on the tailnet can open the server.

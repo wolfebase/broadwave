@@ -9,6 +9,8 @@ struct SettingsView: View {
     @Environment(AppStore.self) private var store
     @Environment(LibraryFilter.self) private var library
     @State private var showAbout = false
+    /// How the server knows this device: open at home, or a paired device.
+    @State private var seat: ClientSeat?
     @State private var showDiagnostics = false
     @State private var showChannels = false
     @State private var showSources = false
@@ -139,9 +141,12 @@ struct SettingsView: View {
                 Button("About") { showAbout = true }
                     .accessibilityLabel("About Broadwave")
             }
-            Section {
-                Text("This server is for the home network. A password is required before remote access.")
-                    .foregroundStyle(.secondary)
+            if !demo {
+                Section {
+                    Text(accessLine)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("settings-access")
+                }
             }
         }
         .navigationTitle("Settings")
@@ -714,8 +719,19 @@ struct SettingsView: View {
         }
     }
 
+    /// What the server said about this device, in one plain sentence.
     @MainActor
+    private var accessLine: String {
+        if seat?.auth == "device", let name = seat?.device?.name, !name.isEmpty {
+            return String(localized: "Signed in as \(name).")
+        }
+        return String(localized: "Open on your home network. Away from home, this device needs an invite from the owner.")
+    }
+
     private func load() async {
+        if let me = try? await store.api?.clientMe() {
+            seat = me
+        }
         if let values = try? await store.api?.settings() {
             checkUpdates = values["checkUpdates"] != "0"
             updatesKnown = true
@@ -941,6 +957,9 @@ struct SettingsView: View {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.cachePolicy = .reloadIgnoringLocalCacheData
+        if let token = store.api?.token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         do {
             let (temp, response) = try await URLSession.shared.download(for: request)
             guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else { return nil }

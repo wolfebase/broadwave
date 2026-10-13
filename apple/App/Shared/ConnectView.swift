@@ -10,6 +10,7 @@ struct ConnectView: View {
     @State private var checking = false
     @State private var problem: String?
     @State private var showAddress = false
+    @State private var showJoin = false
     @State private var explained = ConnectView.initiallyExplained()
 
     private static func initiallyExplained() -> Bool {
@@ -104,6 +105,7 @@ struct ConnectView: View {
                     }
 
                     addressSection
+                    joinSection
                 }
                 .padding(24)
                 .frame(maxWidth: 640, alignment: .leading)
@@ -126,6 +128,22 @@ struct ConnectView: View {
             }
         #else
             addressFields
+        #endif
+    }
+
+    /// Away from home: an address the owner shares and an invite code.
+    @ViewBuilder
+    private var joinSection: some View {
+        #if os(tvOS)
+            if showJoin {
+                JoinView()
+            } else {
+                Button("Join a home server") { showJoin = true }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("join-open")
+            }
+        #else
+            JoinView()
         #endif
     }
 
@@ -173,16 +191,9 @@ struct ConnectView: View {
         .buttonStyle(.glass)
     }
 
+    /// Bare addresses are the home network: http on port 8477. An https address keeps its own port.
     private func manualURL() -> URL? {
-        var raw = address.trimmingCharacters(in: .whitespaces)
-        if !raw.contains("://") {
-            raw = "http://" + raw
-        }
-        guard var comps = URLComponents(string: raw), comps.user == nil, comps.password == nil else { return nil }
-        if comps.port == nil {
-            comps.port = 8477
-        }
-        return comps.url
+        ServerAddress.url(address)
     }
 
     private func tryDemo() async {

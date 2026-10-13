@@ -8,6 +8,11 @@ public struct APIError: LocalizedError, Sendable {
     public var errorDescription: String? {
         message
     }
+
+    /// The server wants a paired device: none was sent, or this one was removed.
+    public var signedOut: Bool {
+        status == 401
+    }
 }
 
 /// Whether /health answered, and whether the device itself still has a connection.
@@ -24,11 +29,30 @@ public struct ServerReach: Equatable, Sendable {
 /// Typed access to one server's /api/v1.
 public struct APIClient: Sendable {
     public let base: URL
+    /// This device's token from pairing. Nil on the home network, where none is needed.
+    public let token: String?
     private let session: URLSession
 
-    public init(base: URL, session: URLSession = .shared) {
+    public init(base: URL, session: URLSession = .shared, token: String? = nil) {
         self.base = base
         self.session = session
+        self.token = token?.isEmpty == false ? token : nil
+    }
+
+    /// A request that carries the token, when there is one.
+    func request(_ url: URL) -> URLRequest {
+        var req = URLRequest(url: url)
+        if let token {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        return req
+    }
+
+    /// A link something else fetches, such as an image view or a download, which
+    /// cannot add a header. The server takes the token from the query and drops it.
+    public func authorized(_ url: URL) -> URL {
+        guard let token else { return url }
+        return url.appending(queryItems: [URLQueryItem(name: "access_token", value: token)])
     }
 
     /// Dates go out as RFC3339. A default encoder writes seconds since 2001, and the
@@ -61,7 +85,7 @@ public struct APIClient: Sendable {
     }
 
     func send<T: Decodable>(_ method: String, _ path: String, body: (any Encodable)? = nil, timeout: TimeInterval = 30, as _: T.Type = T.self) async throws -> T {
-        var req = URLRequest(url: url("/api/v1" + path))
+        var req = request(url("/api/v1" + path))
         req.httpMethod = method
         req.timeoutInterval = timeout
         if let body {
@@ -93,7 +117,7 @@ public struct APIClient: Sendable {
     /// `up` is /health. `online` is false only when the device itself has no
     /// connection. A port that does not answer leaves `online` true.
     public func reach() async -> ServerReach {
-        var req = URLRequest(url: url("/api/v1/health"))
+        var req = request(url("/api/v1/health"))
         req.httpMethod = "GET"
         req.timeoutInterval = 2
         do {
@@ -110,7 +134,7 @@ public struct APIClient: Sendable {
     /// Whether the server still serves this playlist. A server that restarted
     /// answers 404 for every picture it had. Nil when the read itself failed.
     public func playlistFound(_ path: String) async -> Bool? {
-        var req = URLRequest(url: url(path))
+        var req = request(url(path))
         req.httpMethod = "GET"
         req.timeoutInterval = 2
         guard let (_, res) = try? await session.data(for: req), let status = (res as? HTTPURLResponse)?.statusCode else {
@@ -124,7 +148,7 @@ public struct APIClient: Sendable {
 
     /// The playlist's text, or nil when it did not answer 200.
     public func playlistText(_ path: String) async -> String? {
-        var req = URLRequest(url: url(path))
+        var req = request(url(path))
         req.timeoutInterval = 2
         guard let (data, res) = try? await session.data(for: req), (res as? HTTPURLResponse)?.statusCode == 200 else {
             return nil
@@ -296,7 +320,7 @@ public struct APIClient: Sendable {
     }
 
     private func postToScreen(id: String, _ verb: String, _ body: some Encodable, timeout: TimeInterval = 10) async throws {
-        var req = URLRequest(url: url("/api/v1/screens/\(Self.pathSegment(id))/\(verb)"))
+        var req = request(url("/api/v1/screens/\(Self.pathSegment(id))/\(verb)"))
         req.httpMethod = "POST"
         req.timeoutInterval = timeout
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -481,17 +505,17 @@ public struct APIClient: Sendable {
     }
 
     public func posterURL(recordingID: Int64) -> URL {
-        url("/media/poster/\(recordingID)")
+        authorized(url("/media/poster/\(recordingID)"))
     }
 
     public func artURL(kind: String, id: Int64, width: Int) -> URL {
-        url("/media/art/\(kind)/\(id)?w=\(width)")
+        authorized(url("/media/art/\(kind)/\(id)?w=\(width)"))
     }
 
     /// A still from a mux that is already tuned. The route keeps a 480 and a 1280 JPEG.
     public func frameURL(channelID: Int64, width: Int) -> URL {
         let w = width >= 1280 ? 1280 : 480
-        return url("/api/v1/channels/\(channelID)/frame?w=\(w)")
+        return authorized(url("/api/v1/channels/\(channelID)/frame?w=\(w)"))
     }
 
     /// Nil when this channel has no fresh preview, so the app does not ask for one.
@@ -505,7 +529,7 @@ public struct APIClient: Sendable {
     }
 
     public func supportURL() -> URL {
-        url("/api/v1/support")
+        authorized(url("/api/v1/support"))
     }
 
     // MARK: Setup
@@ -676,7 +700,7 @@ public struct APIClient: Sendable {
         body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(safeName)\"\r\nContent-Type: application/octet-stream\r\n\r\n".utf8))
         body.append(data)
         body.append(Data("\r\n--\(boundary)--\r\n".utf8))
-        var req = URLRequest(url: url("/api/v1/sources"))
+        var req = request(url("/api/v1/sources"))
         req.httpMethod = "POST"
         req.timeoutInterval = 60
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
@@ -779,16 +803,16 @@ public struct APIClient: Sendable {
     }
 
     public func backupURL(name: String) -> URL {
-        url("/api/v1/backups/\(Self.pathSegment(name))")
+        authorized(url("/api/v1/backups/\(Self.pathSegment(name))"))
     }
 
     public func catalogBackupURL() -> URL {
-        url("/api/v1/backup")
+        authorized(url("/api/v1/backup"))
     }
 
     /// Puts a catalog file back. The body is the database, not JSON.
     public func restoreCatalog(_ data: Data) async throws {
-        var req = URLRequest(url: catalogBackupURL())
+        var req = request(url("/api/v1/backup"))
         req.httpMethod = "POST"
         req.timeoutInterval = 60
         req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")

@@ -2037,7 +2037,8 @@ paths:
       tags: [pairing]
       operationId: claimPair
       description: |
-        A device enters a code an admin is showing and receives its token once.
+        A device enters a code an admin is showing, or an invite code
+        (twelve letters and digits, dashes and case ignored), and receives its token once.
         The response also sets the `bw_token` cookie.
       requestBody:
         required: true
@@ -2090,6 +2091,94 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PairPoll" }
         "404": { $ref: "#/components/responses/Error" }
+  /remote:
+    get:
+      tags: [pairing]
+      operationId: getRemote
+      description: |
+        Away from home. The public address, the built-in Cloudflare tunnel, and the
+        invites nobody has used. Requests that arrive through Cloudflare (a
+        `Cf-Connecting-Ip` or `Cf-Ray` header) or by the public name always need a
+        paired device, `/export` included. The home network is unchanged.
+      responses:
+        "200":
+          description: Remote access status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RemoteStatus" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /invites:
+    get:
+      tags: [pairing]
+      operationId: listInvites
+      description: Invites nobody has used yet. Codes are not included.
+      responses:
+        "200":
+          description: Waiting invites
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invites]
+                properties:
+                  invites:
+                    type: array
+                    items: { $ref: "#/components/schemas/Invite" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [pairing]
+      operationId: createInvite
+      description: |
+        A code for someone outside the house. It lasts 7 days and pairs one device
+        through `POST /pair/claim`. The code is returned once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 63, description: "Who the invite is for." }
+                scopes:
+                  type: array
+                  items: { type: string, enum: [watch, record, admin] }
+                  description: Omitted is watch.
+      responses:
+        "201":
+          description: The invite and its code
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InviteGrant" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /invites/{id}:
+    delete:
+      tags: [pairing]
+      operationId: deleteInvite
+      description: Stops an invite nobody has used.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Waiting invites
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invites]
+                properties:
+                  invites:
+                    type: array
+                    items: { $ref: "#/components/schemas/Invite" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
   /clients:
     get:
       tags: [pairing]
@@ -2565,6 +2654,50 @@ components:
         createdAt: { type: string, format: date-time }
         lastSeenAt: { type: string, format: date-time }
         revokedAt: { type: string, format: date-time }
+    Invite:
+      type: object
+      required: [id, name, scopes, createdAt, expiresAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        scopes:
+          type: array
+          items: { type: string, enum: [watch, record, admin] }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+    InviteGrant:
+      type: object
+      required: [invite, code]
+      properties:
+        invite: { $ref: "#/components/schemas/Invite" }
+        code: { type: string, description: "Twelve characters in groups of four, such as K7QM-4XPA-9RTW." }
+        link: { type: string, description: "The web page that pairs with this code. Present when the server has a public address." }
+        appLink: { type: string, description: "broadwave://join?server=…&code=… for the iPhone and iPad apps. Present when the server has a public address." }
+    TunnelStatus:
+      type: object
+      required: [state, connections]
+      properties:
+        state: { type: string, enum: [off, missing, starting, connected, error] }
+        message: { type: string }
+        hostnames:
+          type: array
+          items: { type: string }
+          description: Public hostnames on the tunnel, as Cloudflare reported them.
+        connections: { type: integer }
+        since: { type: string, format: date-time }
+    RemoteStatus:
+      type: object
+      required: [remoteUrl, configured, tokenSet, tunnel, deviceAuth, invites, here]
+      properties:
+        remoteUrl: { type: string, description: "The address in use: the saved one, or the tunnel's hostname. Empty when there is none." }
+        configured: { type: string, description: "The saved remoteUrl setting." }
+        tokenSet: { type: boolean }
+        tunnel: { $ref: "#/components/schemas/TunnelStatus" }
+        deviceAuth: { type: boolean }
+        invites:
+          type: array
+          items: { $ref: "#/components/schemas/Invite" }
+        here: { type: boolean, description: "This request came from outside the house." }
     PairTicket:
       type: object
       required: [id, code, expiresAt]
@@ -3411,6 +3544,9 @@ components:
         autoplay: { type: string, enum: ["0", "1"] }
         hdhrEmulate: { type: string, enum: ["0", "1"] }
         deviceAuth: { type: string, enum: ["0", "1"], description: "1 requires a device token on the API and on /media. 0, the default, leaves the home network open. A presented token is still recognized while this is off." }
+        remoteUrl: { type: string, description: "The https address that reaches this server from outside, such as https://tv.example.com. A bare name gets https. Empty clears it." }
+        tunnelToken: { type: string, writeOnly: true, description: "A Cloudflare tunnel token, or the install command that contains it. The server runs cloudflared with it. Never returned. Empty clears it and stops the tunnel." }
+        tunnelTokenSet: { type: string, enum: ["0", "1"], readOnly: true }
         deviceToken: { type: string, description: "Returned once, on the response that turns deviceAuth on, when the request did not already use an admin token. Not stored. Not returned by GET." }
         exportMosaics: { type: string, description: "Mosaics listed as channels of their own in the M3U, XMLTV, and HDHomeRun exports: mosaic keys joined by commas, for example 4-12,1-2-3 (at most 8). They are numbered 990.1 and up in this order; a mosaic with a channel no longer in the lineup is left out." }
         setupComplete: { type: string, enum: ["0", "1"] }
