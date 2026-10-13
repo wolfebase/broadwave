@@ -230,11 +230,14 @@ final class LibraryFilter {
     }
 
     extension EnvironmentValues {
-        /// Which tab is selected. The tvOS sidebar stays open over a tab until that tab's content is focused.
+        /// The page on screen: the guide, or the page opened over it.
         var tvSelectedTab: AppTab {
             get { self[TVSelectedTabKey.self] }
             set { self[TVSelectedTabKey.self] = newValue }
         }
+
+        /// Opens a page over the guide; `.guide` goes back to it.
+        @Entry var tvGo: @MainActor (AppTab) -> Void = { _ in }
     }
 #endif
 
@@ -274,6 +277,8 @@ struct RootView: View {
     // Apple TV opens on the guide: live TV is what it's for (owner 2026-10-11).
     #if os(tvOS)
         @State private var tab: AppTab = .guide
+        /// The page over the guide, at most one deep, so Back always lands on the guide.
+        @State private var tvPath: [AppTab] = []
     #else
         @State private var tab: AppTab = .home
     #endif
@@ -657,42 +662,90 @@ struct RootView: View {
         .phoneTabClearance()
     }
 
-    private var tabs: some View {
-        TabView(selection: $tab) {
-            Tab("Home", systemImage: "house.fill", value: AppTab.home) {
-                stack(.home) { HomeView() }
+    /// Apple TV has no tab sidebar: it opened as a menu in the corner. The guide is
+    /// the screen, and its icons open the other pages over it (owner 2026-10-13).
+    @ViewBuilder
+    private var pages: some View {
+        #if os(tvOS)
+            NavigationStack(path: $tvPath) {
+                GuideView()
+                    .navigationDestination(for: AppTab.self) { page in
+                        tvPage(page)
+                    }
             }
-            Tab("Guide", systemImage: "square.grid.3x3.topleft.filled", value: AppTab.guide) {
-                stack(.guide) { GuideView() }
-            }
-            Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) {
-                stack(.search) { SearchView() }
-            }
-            Tab("Sports", systemImage: "sportscourt.fill", value: AppTab.sports) {
-                stack(.sports) { SportsView() }
-            }
-            Tab("Recordings", systemImage: "play.rectangle.on.rectangle.fill", value: AppTab.recordings) {
-                stack(.recordings) { RecordingsView() }
-            }
-            if !phoneTabs {
-                Tab("Settings", systemImage: "gearshape.fill", value: AppTab.settings) {
-                    NavigationStack {
-                        SettingsView().safeAreaInset(edge: .top, spacing: 0) {
-                            if bannersInTabs {
-                                banners
+        #else
+            TabView(selection: $tab) {
+                Tab("Home", systemImage: "house.fill", value: AppTab.home) {
+                    stack(.home) { HomeView() }
+                }
+                Tab("Guide", systemImage: "square.grid.3x3.topleft.filled", value: AppTab.guide) {
+                    stack(.guide) { GuideView() }
+                }
+                Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) {
+                    stack(.search) { SearchView() }
+                }
+                Tab("Sports", systemImage: "sportscourt.fill", value: AppTab.sports) {
+                    stack(.sports) { SportsView() }
+                }
+                Tab("Recordings", systemImage: "play.rectangle.on.rectangle.fill", value: AppTab.recordings) {
+                    stack(.recordings) { RecordingsView() }
+                }
+                if !phoneTabs {
+                    Tab("Settings", systemImage: "gearshape.fill", value: AppTab.settings) {
+                        NavigationStack {
+                            SettingsView().safeAreaInset(edge: .top, spacing: 0) {
+                                if bannersInTabs {
+                                    banners
+                                }
                             }
                         }
+                        .phoneTabClearance()
                     }
-                    .phoneTabClearance()
+                }
+            }
+            .tabViewStyle(.sidebarAdaptable)
+        #endif
+    }
+
+    #if os(tvOS)
+        @ViewBuilder
+        private func tvPage(_ page: AppTab) -> some View {
+            switch page {
+            case .home: HomeView()
+            case .guide: GuideView()
+            case .search: SearchView()
+            case .sports: SportsView()
+            case .recordings: RecordingsView()
+            case .settings:
+                SettingsView().safeAreaInset(edge: .top, spacing: 0) {
+                    if bannersInTabs {
+                        banners
+                    }
                 }
             }
         }
-        .tabViewStyle(.sidebarAdaptable)
+    #endif
+
+    private var tabs: some View {
+        pages
         #if os(iOS)
             .background { PageKeyLayer(go: goTo) }
         #endif
         #if os(tvOS)
         .environment(\.tvSelectedTab, tab)
+        .environment(\.tvGo) { tab = $0 }
+        .onChange(of: tab) { _, page in
+            let path: [AppTab] = page == .guide ? [] : [page]
+            if tvPath != path {
+                tvPath = path
+            }
+        }
+        .onChange(of: tvPath) { _, path in
+            let page = path.last ?? .guide
+            if tab != page {
+                tab = page
+            }
+        }
         #endif
         #if os(iOS)
         .tabBarMinimizeBehavior(.onScrollDown)

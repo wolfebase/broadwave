@@ -13,6 +13,7 @@ struct GuideView: View {
     @State private var scores: [String: String] = [:]
     #if os(tvOS)
         @Environment(\.tvSelectedTab) private var tvSelectedTab
+        @Environment(\.tvGo) private var tvGo
         @Environment(NowPlaying.self) private var nowPlaying
         @FocusState private var headerFocus: GuideHeader?
         @FocusState private var channelFocus: Int64?
@@ -239,19 +240,60 @@ struct GuideView: View {
                 ForEach([BroadwaveKit.Category.sports, .news, .movies, .kids], id: \.self) { c in
                     chip(c.label, spot: c.rawValue, color: c.color, on: filter == c) { filter = filter == c ? nil : c }
                 }
+                #if os(tvOS)
+                    Spacer(minLength: 24)
+                    pageIcons
+                #endif
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
         }
     }
 
+    #if os(tvOS)
+        /// The other pages. Apple TV has no tab sidebar; Back on a page returns here.
+        private var pageIcons: some View {
+            HStack(spacing: 8) {
+                ForEach(Self.pages, id: \.id) { page in
+                    Button { tvGo(page.tab) } label: {
+                        Image(systemName: page.icon)
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 2)
+                    }
+                    .buttonStyle(.glass)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel(page.title)
+                    .accessibilityIdentifier("guide-go-\(page.id)")
+                }
+            }
+        }
+
+        private struct PageLink {
+            let id: String
+            let title: String
+            let icon: String
+            let tab: AppTab
+        }
+
+        private static let pages = [
+            PageLink(id: "search", title: String(localized: "Search"), icon: "magnifyingglass", tab: .search),
+            PageLink(id: "sports", title: String(localized: "Sports"), icon: "sportscourt.fill", tab: .sports),
+            PageLink(id: "recordings", title: String(localized: "Recordings"), icon: "play.rectangle.on.rectangle.fill", tab: .recordings),
+            PageLink(id: "home", title: String(localized: "Home"), icon: "house.fill", tab: .home),
+            PageLink(id: "settings", title: String(localized: "Settings"), icon: "gearshape.fill", tab: .settings),
+        ]
+    #endif
+
     /// A horizontal scroller on Apple TV keeps Up and Down inside the row. A short row
     /// centered on the screen sits beside the channel column, so Down from Now has nowhere to land.
     @ViewBuilder
     private func guideRow(@ViewBuilder content: () -> some View) -> some View {
         #if os(tvOS)
+            // A full-width section: Down from the page icons at the right end lands on
+            // the row below even where nothing sits under them.
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .focusSection()
         #else
             ScrollView(.horizontal) { content() }
                 .scrollIndicators(.hidden)

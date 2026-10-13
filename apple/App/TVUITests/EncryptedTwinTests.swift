@@ -83,7 +83,7 @@ final class EncryptedTwinTests: XCTestCase {
         XCTAssertFalse(begins(back, "4.1").exists, back.debugDescription)
     }
 
-    /// The Show row takes focus, which closes the sidebar. Select opens the list.
+    /// The Show row takes focus. Select opens the list.
     /// The open list starts on the current value, so one Down reaches the next.
     private func choose(_ app: XCUIApplication, _ value: String) {
         let remote = XCUIRemote.shared
@@ -93,7 +93,6 @@ final class EncryptedTwinTests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         }
         XCTAssertTrue(focusedLabel(app).contains("Show"), focusedLabel(app))
-        XCTAssertFalse(app.buttons["Settings"].firstMatch.isEnabled, "sidebar still covers the channel page")
         remote.press(.select)
         XCTAssertTrue(app.buttons[value].waitForExistence(timeout: 5), app.debugDescription)
         shot(app, "tv-choice")

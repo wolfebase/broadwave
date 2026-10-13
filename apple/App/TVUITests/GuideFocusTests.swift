@@ -115,7 +115,7 @@ final class GuideFocusTests: XCTestCase {
 
     /// The same move after the viewer opens Guide from the sidebar. Launching straight onto
     /// the tab is not enough: the collapsed sidebar still sits in the focus search.
-    func testChoosingGuideFocusesAChannel() throws {
+    func testRecordingsIconOpensAndBackReturns() throws {
         try XCTSkipIf(server.isEmpty, "set TEST_RUNNER_BROADWAVE_SERVER")
         try finishSetup()
         let label = try firstChannelLabel()
@@ -127,29 +127,26 @@ final class GuideFocusTests: XCTestCase {
         ]
         app.launch()
 
-        let guide = app.buttons["Guide"].firstMatch
-        XCTAssertTrue(guide.waitForExistence(timeout: 20), app.debugDescription)
-        if !guide.isEnabled {
-            XCUIRemote.shared.press(.menu)
-            XCTAssertTrue(until(5) { guide.isEnabled }, "the sidebar did not open: \(focused(app))")
-        }
+        let channel = channelButton(app, label)
+        XCTAssertTrue(channel.waitForExistence(timeout: 20), "no \(label)\n\(app.debugDescription)")
+        XCTAssertTrue(until(10) { channel.hasFocus }, "\(label) did not take focus: \(focused(app))")
+        let recordings = app.buttons["guide-go-recordings"]
         var trail: [String] = []
-        let moves: [XCUIRemote.Button] = Array(repeating: .down, count: 6) + Array(repeating: .up, count: 7)
-        for move in moves {
-            if guide.hasFocus {
-                break
-            }
+        for move in Array(repeating: XCUIRemote.Button.up, count: 3) + Array(repeating: .right, count: 14) where !recordings.hasFocus {
             XCUIRemote.shared.press(move)
             pause(0.4)
             trail.append(focused(app))
         }
-        XCTAssertTrue(guide.hasFocus, "no focus on Guide: \(trail)")
+        XCTAssertTrue(recordings.hasFocus, "could not reach the Recordings icon: \(trail)")
         XCUIRemote.shared.press(.select)
-        pause(1)
-
-        let channel = channelButton(app, label)
-        XCTAssertTrue(channel.waitForExistence(timeout: 15), "no \(label)")
-        XCTAssertTrue(until(8) { channel.hasFocus }, "\(label) did not take focus after opening Guide: \(focused(app))")
+        XCTAssertTrue(until(8) { !channel.isHittable }, "Recordings did not open over the guide: \(focused(app))")
+        shot(app, "guide-recordings")
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(until(8) { channel.isHittable && recordings.hasFocus }, "Back from Recordings did not return to the guide: \(focused(app))")
+        XCUIRemote.shared.press(.down)
+        XCUIRemote.shared.press(.down)
+        XCTAssertTrue(until(6) { focused(app).contains("rail") || channel.hasFocus || place(app).hasPrefix("rail") }, "Down did not reach the channels: \(focused(app))")
+        XCTAssertEqual(app.state, .runningForeground)
         shot(app, "guide-from-home")
     }
 
