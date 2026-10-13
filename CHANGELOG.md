@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.14.0 — 2026-10-13
+
+### Added
+
+- Away from home with a Cloudflare tunnel. In Settings › Away from home, paste a Cloudflare tunnel token and the server runs the tunnel itself (cloudflared is now in the Docker image) and shows its public address. Or run cloudflared yourself and type the address. Everything that comes in through the tunnel needs a paired device, including the playlist and stream URLs. The home network works as before. The handbook's Away from home page has the steps.
+- Invites for family. Settings › Away from home › Invite someone makes a code that pairs one device and lasts a week, with a link for a browser and one for iPhone and iPad. Revoke a device in Settings › Devices.
+- iPhone, iPad, and Apple TV: Join a home server, with the address and an invite code. Apple TV can also show a code for the owner to approve. A device that is signed out says so and offers the code screen.
+
+### Changed
+
+- The iPhone, iPad, and Apple TV apps pair with a code, so device sign-in no longer locks them out. An https address keeps port 443.
+
 ## 0.13.4 — 2026-10-13
 
 ### Changed
