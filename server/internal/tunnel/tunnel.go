@@ -6,12 +6,15 @@ package tunnel
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,9 +23,12 @@ import (
 // Status is what Settings shows about the tunnel.
 type Status struct {
 	// State is off, missing (no cloudflared), starting, connected, or error.
-	State       string    `json:"state"`
-	Message     string    `json:"message,omitempty"`
-	Hostnames   []string  `json:"hostnames,omitempty"`
+	State     string   `json:"state"`
+	Message   string   `json:"message,omitempty"`
+	Hostnames []string `json:"hostnames,omitempty"`
+	// Local is the hostname whose route points at this machine, when the
+	// tunnel has exactly one such route.
+	Local       string    `json:"local,omitempty"`
 	Connections int       `json:"connections"`
 	Since       time.Time `json:"since,omitzero"`
 }
@@ -34,11 +40,14 @@ type Runner struct {
 	// start runs cloudflared. Tests replace it.
 	start func(ctx context.Context, bin, token string) (io.ReadCloser, func() error, error)
 
-	mu     sync.Mutex
-	token  string
-	cancel context.CancelFunc
-	done   chan struct{}
-	status Status
+	// applyMu makes Apply and Stop one at a time, so a second call cannot
+	// start cloudflared while the first one waits for the old one to exit.
+	applyMu sync.Mutex
+	mu      sync.Mutex
+	token   string
+	cancel  context.CancelFunc
+	done    chan struct{}
+	status  Status
 }
 
 // New finds cloudflared next to the server, on PATH, or at
@@ -66,6 +75,8 @@ func (r *Runner) Status() Status {
 // Apply starts, restarts, or stops cloudflared for token. The same token
 // again changes nothing.
 func (r *Runner) Apply(token string) {
+	r.applyMu.Lock()
+	defer r.applyMu.Unlock()
 	r.mu.Lock()
 	if token == r.token && (token == "" || r.cancel != nil || r.status.State == "missing") {
 		r.mu.Unlock()
@@ -97,6 +108,8 @@ func (r *Runner) Apply(token string) {
 
 // Stop ends cloudflared and waits for it.
 func (r *Runner) Stop() {
+	r.applyMu.Lock()
+	defer r.applyMu.Unlock()
 	r.mu.Lock()
 	cancel, done := r.cancel, r.done
 	r.cancel, r.done = nil, nil
@@ -161,7 +174,8 @@ func (r *Runner) runOnce(ctx context.Context, token string) error {
 func execCloudflared(ctx context.Context, bin, token string) (io.ReadCloser, func() error, error) {
 	// The token goes in the environment, not the arguments, so it is not in
 	// the process list.
-	cmd := exec.CommandContext(ctx, bin, "tunnel", "--no-autoupdate", "--loglevel", "info", "run")
+	// Metrics stay on loopback: the container shares the host's network.
+	cmd := exec.CommandContext(ctx, bin, "tunnel", "--no-autoupdate", "--loglevel", "info", "--metrics", "127.0.0.1:0", "run")
 	cmd.Env = append(os.Environ(), "TUNNEL_TOKEN="+token)
 	pr, pw := io.Pipe()
 	cmd.Stdout, cmd.Stderr = pw, pw
@@ -180,9 +194,52 @@ func execCloudflared(ctx context.Context, bin, token string) (io.ReadCloser, fun
 }
 
 var (
-	hostnameRE = regexp.MustCompile(`\\?"hostname\\?"\s*:\s*\\?"([A-Za-z0-9.*-]+)\\?"`)
-	errorRE    = regexp.MustCompile(`error="((?:[^"\\]|\\.)*)"`)
+	configRE = regexp.MustCompile(`config="((?:[^"\\]|\\.)*)"`)
+	errorRE  = regexp.MustCompile(`error="((?:[^"\\]|\\.)*)"`)
 )
+
+// routes reads the hostnames in the tunnel's configuration, and the one whose
+// service is this machine. A tunnel that also serves other apps lists them
+// too, and an invite must not point at one of those.
+func routes(line string) (names []string, local string) {
+	m := configRE.FindStringSubmatch(line)
+	if m == nil {
+		return nil, ""
+	}
+	raw, err := strconv.Unquote(`"` + m[1] + `"`)
+	if err != nil {
+		return nil, ""
+	}
+	var cfg struct {
+		Ingress []struct {
+			Hostname string `json:"hostname"`
+			Service  string `json:"service"`
+		} `json:"ingress"`
+	}
+	if json.Unmarshal([]byte(raw), &cfg) != nil {
+		return nil, ""
+	}
+	var locals []string
+	for _, in := range cfg.Ingress {
+		name := strings.ToLower(strings.TrimSpace(in.Hostname))
+		if name == "" {
+			continue
+		}
+		names = append(names, name)
+		u, err := url.Parse(in.Service)
+		if err != nil || strings.Contains(name, "*") {
+			continue
+		}
+		switch u.Hostname() {
+		case "localhost", "127.0.0.1", "::1":
+			locals = append(locals, name)
+		}
+	}
+	if len(locals) == 1 {
+		local = locals[0]
+	}
+	return names, local
+}
 
 // note reads one cloudflared log line.
 func (r *Runner) note(line string) {
@@ -205,11 +262,7 @@ func (r *Runner) note(line string) {
 			r.status.Message = "Reconnecting to Cloudflare."
 		}
 	case strings.Contains(line, "Updated to new configuration"):
-		var names []string
-		for _, m := range hostnameRE.FindAllStringSubmatch(line, -1) {
-			names = append(names, strings.ToLower(m[1]))
-		}
-		r.status.Hostnames = names
+		r.status.Hostnames, r.status.Local = routes(line)
 	case strings.Contains(line, " ERR "):
 		msg := line
 		if m := errorRE.FindStringSubmatch(line); m != nil {

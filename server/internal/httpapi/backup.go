@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -35,6 +36,7 @@ func (s *Server) downloadSavedBackup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) restoreSavedBackup(w http.ResponseWriter, r *http.Request) {
+	defer s.applyTunnel(context.WithoutCancel(r.Context()))
 	if err := backup.Restore(r.Context(), s.Store, s.BackupDir, r.PathValue("name")); err != nil {
 		if errors.Is(err, backup.ErrNotFound) {
 			httpError(w, "That backup is not on this server.", http.StatusNotFound)

@@ -70,11 +70,15 @@ func (s *Server) hostAllowed(r *http.Request) bool {
 	if hostAllowed(s.Hosts, r) {
 		return true
 	}
-	// A request through Cloudflare reached a name the owner routed to this
-	// server. It always needs a paired device, so a rebinding page that
-	// fakes the header gets nothing a stranger could not.
-	if cloudflareRequest(r) {
+	// The built-in cloudflared connects from this machine and forwards the
+	// name the owner routed to it. Such a request always needs a paired
+	// device. A page on the home network that fakes the header is not on
+	// loopback, and the tuner emulator (no Store) never takes this path.
+	if s.Store != nil && cloudflareRequest(r) && loopbackPeer(r) {
 		return true
+	}
+	if s.Store == nil {
+		return false
 	}
 	// The public address is a name the owner gave this server.
 	host := store.RemoteHost(s.remoteURL(r.Context()))

@@ -116,7 +116,7 @@ func (s *Server) claimPair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.giveBackCodeTry(r, try)
-	setDeviceCookie(w, token)
+	setDeviceCookie(w, r, token)
 	writeJSON(w, http.StatusCreated, map[string]any{"token": token, "device": dev})
 }
 
@@ -168,7 +168,7 @@ func (s *Server) pollPair(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, body)
 		return
 	}
-	setDeviceCookie(w, held.token)
+	setDeviceCookie(w, r, held.token)
 	body["token"] = held.token
 	body["device"] = held.device
 	if err := writeJSONBody(w, http.StatusOK, body); err != nil {
