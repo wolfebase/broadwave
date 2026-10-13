@@ -58,8 +58,14 @@ final class JoinTests: XCTestCase {
         let keyboard = app.keyboards.firstMatch
         _ = keyboard.waitForExistence(timeout: 5)
         app.typeText(text)
-        // Return closes the tvOS keyboard and keeps the text.
+        // Return closes the tvOS keyboard on most layouts. Menu closes it on the
+        // rest and keeps the text, as it does for a viewer.
         app.typeText("\n")
-        _ = keyboard.waitForNonExistence(timeout: 5)
+        if !keyboard.waitForNonExistence(timeout: 3) {
+            XCUIRemote.shared.press(.menu)
+            XCTAssertTrue(keyboard.waitForNonExistence(timeout: 5), "keyboard stayed open")
+        }
+        let typed = (field.value as? String) ?? ""
+        XCTAssertEqual(typed.uppercased(), text.uppercased(), "the field lost what was typed")
     }
 }
