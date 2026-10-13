@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.13.4 — 2026-10-13
+
+### Changed
+
+- Apple TV: no more menu in the corner. The guide fills the screen; the icons at the end of its top row open Search, Sports, Recordings, Home, and Settings, and Back brings you back to the guide.
+- The web app's words now live in string catalogs, ready for translation. English reads the same.
+
+### Fixed
+
+- iPad recording rows are drawn in the label color again, not the accent.
+
 ## 0.13.3 — 2026-10-12
 
 ### Added
