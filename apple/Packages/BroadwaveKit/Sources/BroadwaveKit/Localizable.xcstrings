@@ -1540,6 +1540,17 @@
           }
         }
       }
+    },
+    "That server did not pair this device." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That server did not pair this device."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

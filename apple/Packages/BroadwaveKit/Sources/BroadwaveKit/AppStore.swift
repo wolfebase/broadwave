@@ -129,7 +129,7 @@ public final class AppStore {
         // Keychain items outlive the app, so a reinstall must not leave the old address for the Top Shelf.
         if server == nil || server?.id == "demo" {
             SharedServer.save(nil)
-            SharedServer.saveToken(nil)
+            SharedServer.saveToken(nil, for: nil)
             SharedLineup.save(nil)
         }
         clock = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
@@ -191,14 +191,19 @@ public final class AppStore {
         connect(FoundServer(id: "demo", name: String(localized: "Demo", bundle: .module), url: url))
     }
 
-    /// `token` is this device's token from pairing. Without one, the token saved
-    /// for this server is used, if any.
+    /// `token` is this device's token from pairing at exactly this address; an
+    /// empty one means none. Without it, only a token issued at this same address
+    /// by this same server is used. A server at a new address gets no token.
     public func connect(_ server: FoundServer, token: String? = nil) {
         generation += 1
-        if let token, !token.isEmpty {
-            DeviceTokens.save(token, forServer: server.id == "pending" ? "" : server.id)
+        let token: String? = if let token {
+            token.isEmpty ? nil : token
+        } else {
+            DeviceTokens.token(for: server.url, server: server.id)
         }
-        let token = token?.isEmpty == false ? token : DeviceTokens.token(forServer: server.id)
+        if let token {
+            DeviceTokens.save(token, for: server.url, server: server.id)
+        }
         if Self.dropCatalog(previousID: self.server?.id, nextID: server.id) {
             channels = []
             index = GuideIndex([])
@@ -262,7 +267,7 @@ public final class AppStore {
         save(server, "server")
         // The demo lives inside the app, where the Top Shelf cannot reach it.
         SharedServer.save(server.id == "demo" ? nil : server.url)
-        SharedServer.saveToken(server.id == "demo" ? nil : token)
+        SharedServer.saveToken(server.id == "demo" ? nil : token, for: server.url)
         // Channel ids belong to one server; the new lineup is written after its first refresh.
         SharedLineup.save(nil)
         sharedLineup = []
@@ -422,7 +427,7 @@ public final class AppStore {
             UserDefaults.standard.removeObject(forKey: "server")
         #endif
         SharedServer.save(nil)
-        SharedServer.saveToken(nil)
+        SharedServer.saveToken(nil, for: nil)
         SharedLineup.save(nil)
         sharedLineup = []
     }
@@ -507,8 +512,8 @@ public final class AppStore {
             }
             self.info = info
             if let current = server, let fixed = RememberedServers.refreshed(current, id: info.id, name: info.name, key: info.discoveryKey) {
-                if current.id == "pending", let token = api.token {
-                    DeviceTokens.save(token, forServer: info.id)
+                if current.id == "pending" {
+                    DeviceTokens.bind(current.url, server: info.id)
                 }
                 server = fixed
                 save(fixed, "server")

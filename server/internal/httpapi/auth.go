@@ -63,6 +63,9 @@ func (s *Server) withDeviceAuth(next http.Handler) http.Handler {
 			// and Channels. From outside they would hand anyone a tuner.
 			need = store.ScopeWatch
 		}
+		if remote {
+			w = privateCache{w}
+		}
 		if !(on || remote) || need == "public" {
 			next.ServeHTTP(w, r)
 			return
@@ -133,15 +136,30 @@ func bearerToken(r *http.Request) string {
 	return strings.TrimSpace(h[len(prefix):])
 }
 
-func setDeviceCookie(w http.ResponseWriter, token string) {
+// setDeviceCookie marks the cookie Secure when the browser reached the
+// server over https, such as through a tunnel. A plain home address keeps it
+// usable over http.
+func setDeviceCookie(w http.ResponseWriter, r *http.Request, token string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     deviceCookie,
 		Value:    token,
 		Path:     "/",
 		MaxAge:   365 * 24 * 3600,
 		HttpOnly: true,
+		Secure:   overHTTPS(r),
 		SameSite: http.SameSiteStrictMode,
 	})
+}
+
+func overHTTPS(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	if !trustedProxyPeer(r) {
+		return false
+	}
+	return strings.Contains(r.Header.Get("Cf-Visitor"), `"https"`) ||
+		strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 
 func clearDeviceCookie(w http.ResponseWriter) {
@@ -352,6 +370,7 @@ func splitAction(rest string) (id, action string, ok bool) {
 func (s *Server) pairAllowed(r *http.Request) bool {
 	now := s.now()
 	ip := clientIP(r)
+	all := s.failBucket(r)
 	s.pairMu.Lock()
 	defer s.pairMu.Unlock()
 	if s.pairHits == nil {
@@ -360,7 +379,7 @@ func (s *Server) pairAllowed(r *http.Request) bool {
 	if countRecent(s.pairHits["fail:"+ip], now, pairWindow) >= pairIPLimit {
 		return false
 	}
-	if countRecent(s.pairHits["fail:all"], now, pairWindow) >= pairFailCap {
+	if countRecent(s.pairHits[all], now, pairWindow) >= pairFailCap {
 		return false
 	}
 	return hitAllowed(s.pairHits, "ip:"+ip, now, pairIPLimit, pairWindow)
@@ -372,25 +391,27 @@ func (s *Server) pairAllowed(r *http.Request) bool {
 func (s *Server) takeCodeTry(r *http.Request) (time.Time, bool) {
 	now := s.now()
 	ip := clientIP(r)
+	all := s.failBucket(r)
 	s.pairMu.Lock()
 	defer s.pairMu.Unlock()
 	if s.pairHits == nil {
 		s.pairHits = map[string][]time.Time{}
 	}
 	if countRecent(s.pairHits["fail:"+ip], now, pairWindow) >= pairIPLimit ||
-		countRecent(s.pairHits["fail:all"], now, pairWindow) >= pairFailCap {
+		countRecent(s.pairHits[all], now, pairWindow) >= pairFailCap {
 		return now, false
 	}
 	hitAllowed(s.pairHits, "fail:"+ip, now, pairIPLimit, pairWindow)
-	hitAllowed(s.pairHits, "fail:all", now, pairFailCap, pairWindow)
+	hitAllowed(s.pairHits, all, now, pairFailCap, pairWindow)
 	return now, true
 }
 
 func (s *Server) giveBackCodeTry(r *http.Request, at time.Time) {
 	ip := clientIP(r)
+	all := s.failBucket(r)
 	s.pairMu.Lock()
 	defer s.pairMu.Unlock()
-	for _, key := range []string{"fail:" + ip, "fail:all"} {
+	for _, key := range []string{"fail:" + ip, all} {
 		hits := s.pairHits[key]
 		for i := len(hits) - 1; i >= 0; i-- {
 			if hits[i].Equal(at) {
@@ -399,6 +420,15 @@ func (s *Server) giveBackCodeTry(r *http.Request, at time.Time) {
 			}
 		}
 	}
+}
+
+// failBucket keeps guesses from outside in their own server-wide cap, so
+// strangers using it up cannot stop pairing at home.
+func (s *Server) failBucket(r *http.Request) string {
+	if s.isRemote(r) {
+		return "fail:all:remote"
+	}
+	return "fail:all"
 }
 
 func countRecent(at []time.Time, now time.Time, window time.Duration) int {

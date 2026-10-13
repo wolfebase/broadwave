@@ -125,14 +125,90 @@ func TestCloudflareHeaderMakesAnyNameRemote(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("cloudflare request %d", rec.Code)
 	}
-	// A name nobody saved yet, through Cloudflare, asks for pairing instead of refusing.
+	// A name nobody saved yet, from the built-in cloudflared, asks for pairing.
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/channels", nil)
 	req.Host = "new-name.example.org"
+	req.RemoteAddr = "127.0.0.1:41000"
 	req.Header.Set("Cf-Ray", "8c0ffee-DFW")
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("unsaved cloudflare name %d", rec.Code)
+	}
+	// A rebinding page on the home network that adds the header is still refused.
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/server", nil)
+	req.Host = "rebind.attacker.com"
+	req.RemoteAddr = "192.168.1.50:41000"
+	req.Header.Set("Cf-Ray", "x")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusMisdirectedRequest {
+		t.Fatalf("rebinding page with a fake header %d", rec.Code)
+	}
+}
+
+func TestTunnelEmulatorPortIgnoresCloudflareHeaders(t *testing.T) {
+	h := rejectForeignHost(nil, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	req := httptest.NewRequest(http.MethodGet, "/lineup.json", nil)
+	req.Host = "rebind.attacker.com:8478"
+	req.RemoteAddr = "127.0.0.1:41000"
+	req.Header.Set("Cf-Ray", "x")
+	req.Header.Set("Cf-Connecting-Ip", "203.0.113.4")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusMisdirectedRequest {
+		t.Fatalf("emulator answered a foreign name %d", rec.Code)
+	}
+}
+
+func TestOutsideGuessesDoNotBlockPairingAtHome(t *testing.T) {
+	_, h := remoteServer(t)
+	for i := range pairFailCap + 5 {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/pair/claim", strings.NewReader(`{"code":"000000","name":"x"}`))
+		req.RemoteAddr = "127.0.0.1:1000"
+		req.Header.Set("Cf-Connecting-Ip", "203.0.113."+strconv.Itoa(i%200+1))
+		h.ServeHTTP(httptest.NewRecorder(), req)
+	}
+	if got := remoteCall(t, h, http.MethodPost, "/api/v1/pair/claim", `{"code":"000000","name":"x"}`, ""); got.Code != http.StatusTooManyRequests {
+		t.Fatalf("outside cap %d", got.Code)
+	}
+	if got := call(t, h, http.MethodPost, "/api/v1/pair", `{"name":"Kitchen TV","kind":"tv"}`, ""); got.Code != http.StatusCreated {
+		t.Fatalf("home pairing blocked %d %s", got.Code, got.Body.String())
+	}
+}
+
+func TestOutsideResponsesAreNotShareable(t *testing.T) {
+	_, h := remoteServer(t)
+	call(t, h, http.MethodPut, "/api/v1/settings", `{"remoteUrl":"tv.example.net"}`, "")
+	made := call(t, h, http.MethodPost, "/api/v1/invites", `{"name":"Mom"}`, "")
+	code := jsonField(t, made.Body.Bytes(), "code")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/pair/claim", strings.NewReader(`{"code":"`+code+`","name":"Laptop","kind":"web"}`))
+	req.Host = "tv.example.net"
+	req.RemoteAddr = "127.0.0.1:5000"
+	req.Header.Set("Cf-Connecting-Ip", "203.0.113.9")
+	req.Header.Set("Cf-Visitor", `{"scheme":"https"}`)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("claim %d %s", rec.Code, rec.Body.String())
+	}
+	if c := rec.Header().Get("Set-Cookie"); !strings.Contains(c, "Secure") {
+		t.Fatalf("cookie over https without Secure: %q", c)
+	}
+	if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "private") && !strings.Contains(cc, "no-store") {
+		t.Fatalf("claim cache %q", cc)
+	}
+	token := jsonField(t, rec.Body.Bytes(), "token")
+	for _, path := range []string{"/api/v1/channels", "/api/v1/health", "/"} {
+		got := remoteCall(t, h, http.MethodGet, path, "", token)
+		if cc := got.Header().Get("Cache-Control"); strings.Contains(cc, "public") || (!strings.Contains(cc, "private") && !strings.Contains(cc, "no-store") && !strings.Contains(cc, "no-cache")) {
+			t.Fatalf("%s cache %q", path, cc)
+		}
+	}
+	// At home the cookie stays usable over plain http.
+	if c := call(t, h, http.MethodPut, "/api/v1/settings", `{"deviceAuth":"1"}`, "").Header().Get("Set-Cookie"); strings.Contains(c, "Secure") {
+		t.Fatalf("home cookie marked Secure: %q", c)
 	}
 }
 
@@ -256,7 +332,7 @@ func testTunnelToken() string {
 
 func TestTunnelTokenIsSecretAndStartsCloudflared(t *testing.T) {
 	api, h := remoteServer(t)
-	fake := &fakeTunnel{status: tunnel.Status{State: "connected", Hostnames: []string{"tv.example.net"}, Connections: 4}}
+	fake := &fakeTunnel{status: tunnel.Status{State: "connected", Hostnames: []string{"ha.example.net", "tv.example.net"}, Local: "tv.example.net", Connections: 4}}
 	api.Tunnel = fake
 	token := testTunnelToken()
 	if got := call(t, h, http.MethodPut, "/api/v1/settings", `{"tunnelToken":"not a token"}`, ""); got.Code != http.StatusBadRequest {

@@ -647,6 +647,7 @@ func (s *Server) restore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.Close()
+	defer s.applyTunnel(context.WithoutCancel(r.Context()))
 	if err := s.Store.RestoreFrom(r.Context(), path); err != nil {
 		writeError(w, err)
 		return

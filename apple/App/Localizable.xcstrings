@@ -467,6 +467,17 @@
         }
       }
     },
+    "A link asks Broadwave to use the server at %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A link asks Broadwave to use the server at %@."
+          }
+        }
+      }
+    },
     "A note when a team you follow starts playing, or a game on your channels comes down to the last minutes. A game you're recording and haven't watched gets no score and no close-game note.": {
       "extractionState": "manual",
       "localizations": {
@@ -5981,6 +5992,17 @@
         }
       }
     },
+    "Switch servers?": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch servers?"
+          }
+        }
+      }
+    },
     "Sync": {
       "extractionState": "manual",
       "localizations": {
@@ -6087,6 +6109,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "That file is over 32 MB. Add the playlist by address instead."
+          }
+        }
+      }
+    },
+    "That server did not pair this device.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That server did not pair this device."
           }
         }
       }

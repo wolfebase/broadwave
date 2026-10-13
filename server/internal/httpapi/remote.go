@@ -1,7 +1,10 @@
 package httpapi
 
 import (
+	"bufio"
 	"context"
+	"errors"
+	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -39,8 +42,8 @@ func (s *Server) remoteURL(ctx context.Context) string {
 		}
 	}
 	if v == "" && s.Tunnel != nil {
-		if names := s.Tunnel.Status().Hostnames; len(names) > 0 && !strings.Contains(names[0], "*") {
-			v = "https://" + names[0]
+		if local := s.Tunnel.Status().Local; local != "" {
+			v = "https://" + local
 		}
 	}
 	s.remoteMu.Lock()
@@ -72,6 +75,11 @@ func (s *Server) isRemote(r *http.Request) bool {
 
 func cloudflareRequest(r *http.Request) bool {
 	return r.Header.Get("Cf-Connecting-Ip") != "" || r.Header.Get("Cf-Ray") != ""
+}
+
+func loopbackPeer(r *http.Request) bool {
+	addr, err := netip.ParseAddrPort(r.RemoteAddr)
+	return err == nil && addr.Addr().Unmap().IsLoopback()
 }
 
 // trustedProxyPeer is a peer that may name the real client: cloudflared on
@@ -191,3 +199,45 @@ func (s *Server) applyTunnel(ctx context.Context) {
 
 // StartTunnel runs cloudflared when a token is saved. main calls it once.
 func (s *Server) StartTunnel(ctx context.Context) { s.applyTunnel(ctx) }
+
+// privateCache keeps a CDN from storing a response that answered a signed-in
+// request from outside. A zone rule such as Cache Everything would otherwise
+// serve it to anyone who asks for the same URL.
+type privateCache struct{ http.ResponseWriter }
+
+func (p privateCache) WriteHeader(code int) {
+	h := p.Header()
+	cc := h.Get("Cache-Control")
+	switch {
+	case cc == "":
+		h.Set("Cache-Control", "private")
+	case strings.Contains(cc, "public"):
+		h.Set("Cache-Control", strings.ReplaceAll(cc, "public", "private"))
+	case !strings.Contains(cc, "private") && !strings.Contains(cc, "no-store"):
+		h.Set("Cache-Control", "private, "+cc)
+	}
+	p.ResponseWriter.WriteHeader(code)
+}
+
+func (p privateCache) Write(b []byte) (int, error) {
+	if p.Header().Get("Cache-Control") == "" {
+		p.Header().Set("Cache-Control", "private")
+	}
+	return p.ResponseWriter.Write(b)
+}
+
+func (p privateCache) Flush() {
+	if f, ok := p.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (p privateCache) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := p.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("hijack not supported")
+	}
+	return h.Hijack()
+}
+
+func (p privateCache) Unwrap() http.ResponseWriter { return p.ResponseWriter }

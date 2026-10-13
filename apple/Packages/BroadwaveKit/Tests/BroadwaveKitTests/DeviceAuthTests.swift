@@ -181,27 +181,87 @@ struct DeviceAuthTests {
         #expect(try ConnectLink.serverURL(from: #require(URL(string: "broadwave://connect?url=https://broadwave.twolfe.io"))) != nil)
     }
 
-    @Test func tokensAreKeptPerServer() {
-        DeviceTokens.save("bw_one", forServer: "auth-test-one")
-        DeviceTokens.save("bw_two", forServer: "auth-test-two")
-        DeviceTokens.save("bw_demo", forServer: "demo")
-        #expect(DeviceTokens.token(forServer: "auth-test-one") == "bw_one")
-        #expect(DeviceTokens.token(forServer: "auth-test-two") == "bw_two")
-        #expect(DeviceTokens.token(forServer: "demo") == nil)
-        DeviceTokens.save(nil, forServer: "auth-test-one")
-        DeviceTokens.save(nil, forServer: "auth-test-two")
-        #expect(DeviceTokens.token(forServer: "auth-test-one") == nil)
+    @Test func tokensBelongToTheAddressTheyWereIssuedAt() throws {
+        let home = try #require(URL(string: "https://tv.example.com"))
+        let homeAgain = try #require(URL(string: "https://TV.example.com:443/guide"))
+        let lan = try #require(URL(string: "http://192.168.1.20:8477"))
+        let evil = try #require(URL(string: "https://evil.example"))
+        defer {
+            for url in [home, lan, evil] {
+                DeviceTokens.save(nil, for: url, server: "auth-home")
+            }
+        }
+        DeviceTokens.save("bw_home", for: home, server: "auth-home")
+        #expect(DeviceTokens.token(for: home, server: "auth-home") == "bw_home")
+        #expect(DeviceTokens.token(for: homeAgain, server: "auth-home") == "bw_home")
+        // Same id, another address: nothing. Not on the home network either.
+        #expect(DeviceTokens.token(for: evil, server: "auth-home") == nil)
+        #expect(DeviceTokens.token(for: lan, server: "auth-home") == nil)
+        // Same address, another id: nothing.
+        #expect(DeviceTokens.token(for: home, server: "auth-other") == nil)
+        // A token from another address under the same id leaves this one alone.
+        DeviceTokens.save("bw_evil", for: evil, server: "auth-home")
+        #expect(DeviceTokens.token(for: home, server: "auth-home") == "bw_home")
+        #expect(DeviceTokens.token(for: evil, server: "auth-home") == "bw_evil")
+        DeviceTokens.save("bw_demo", for: lan, server: "demo")
+        #expect(DeviceTokens.token(for: lan, server: "demo") == nil)
+    }
+
+    @Test func aTestLaunchTokenIsKeptBeforeTheServerAnswers() throws {
+        let url = try #require(URL(string: "https://pending.example.com"))
+        defer { DeviceTokens.save(nil, for: url, server: "auth-pending") }
+        DeviceTokens.save("bw_launch", for: url, server: "pending")
+        #expect(DeviceTokens.token(for: url, server: "pending") == "bw_launch")
+        DeviceTokens.bind(url, server: "auth-pending")
+        #expect(DeviceTokens.token(for: url, server: "auth-pending") == "bw_launch")
+        #expect(DeviceTokens.token(for: url, server: "auth-other") == nil)
+    }
+
+    @Test func anEmptyClaimTokenIsAnError() async throws {
+        let api = try authAPI(token: nil)
+        AuthStub.set("POST", "/api/v1/pair/claim", status: 201, body: Data("""
+        {"token":"","device":{"id":"d1","name":"Den TV","kind":"tv","scopes":["watch"],"createdAt":"2026-10-13T12:00:00Z"}}
+        """.utf8))
+        await #expect(throws: APIError.self) {
+            _ = try await api.claimPair(code: "X", name: "Den TV", kind: "tv")
+        }
+    }
+
+    @Test func aRedirectElsewhereDropsTheToken() throws {
+        let original = try #require(URL(string: "https://tv.example.com/api/v1/channels"))
+        var same = try URLRequest(url: #require(URL(string: "https://tv.example.com/api/v1/channels/")))
+        same.setValue("Bearer bw_lab", forHTTPHeaderField: "Authorization")
+        #expect(RedirectGuard.follow(from: original, to: same).value(forHTTPHeaderField: "Authorization") == "Bearer bw_lab")
+        for target in ["https://evil.example/x", "http://tv.example.com/api/v1/channels", "https://tv.example.com:8443/x"] {
+            var away = try URLRequest(url: #require(URL(string: target)))
+            away.setValue("Bearer bw_lab", forHTTPHeaderField: "Authorization")
+            #expect(RedirectGuard.follow(from: original, to: away).value(forHTTPHeaderField: "Authorization") == nil, "\(target)")
+        }
+    }
+
+    @Test func homeNamesStayOnTheHomeNetwork() {
+        for name in [
+            "192.168.1.20", "10.0.0.5:9000", "[fe80::1]:8477", "fe80::1", "tvbox", "tvbox.local", "nas.lan",
+            "tus.home.arpa", "x.home", "box.internal", "fritz.box", "nas.fritz.box", "router.attlocal.net", "media.corp",
+        ] {
+            #expect(ServerAddress.looksLocal(name), "\(name)")
+        }
+        for name in ["broadwave.twolfe.io", "tv.example.com", "home.example.net", "attlocal.net.evil.com", "my.box"] {
+            #expect(!ServerAddress.looksLocal(name), "\(name)")
+        }
+        #expect(ServerAddress.url("nas.lan", remote: true)?.absoluteString == "http://nas.lan:8477")
+        #expect(ServerAddress.url("tus.home.arpa", remote: true)?.absoluteString == "http://tus.home.arpa:8477")
     }
 
     @Test @MainActor func aStoreConnectsWithTheSavedToken() throws {
         let store = AppStore(session: authSession())
         store.persistServers = false
-        defer {
-            store.forget()
-            DeviceTokens.save(nil, forServer: "auth-store")
-        }
         // Nothing answers here, so the socket never opens.
         let url = try #require(URL(string: "http://127.0.0.1:19071"))
+        defer {
+            store.forget()
+            DeviceTokens.save(nil, for: url, server: "auth-store")
+        }
         store.connect(FoundServer(id: "auth-store", name: "Lab", url: url), token: "bw_store")
         #expect(store.api?.token == "bw_store")
         store.connect(FoundServer(id: "auth-other", name: "Other", url: url))
@@ -214,6 +274,12 @@ struct DeviceAuthTests {
         store.connect(FoundServer(id: "auth-store", name: "Lab", url: url), token: "bw_again")
         #expect(store.signedOut == nil)
         #expect(store.api?.token == "bw_again")
+        // The same id at another address gets no token, and an empty grant does not fall back.
+        let elsewhere = try #require(URL(string: "http://127.0.0.1:19072"))
+        store.connect(FoundServer(id: "auth-store", name: "Lab", url: elsewhere))
+        #expect(store.api?.token == nil)
+        store.connect(FoundServer(id: "auth-store", name: "Lab", url: url), token: "")
+        #expect(store.api?.token == nil)
     }
 }
 

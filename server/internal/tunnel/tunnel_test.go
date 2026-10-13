@@ -3,7 +3,9 @@ package tunnel
 import (
 	"context"
 	"io"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -33,8 +35,13 @@ func TestNoteReadsHostnamesConnectionsAndErrors(t *testing.T) {
 	if st.State != "connected" || st.Connections != 2 || st.Message != "" {
 		t.Fatalf("connected %+v", st)
 	}
-	if len(st.Hostnames) != 1 || st.Hostnames[0] != "broadwave.example.net" {
-		t.Fatalf("hostnames %q", st.Hostnames)
+	if len(st.Hostnames) != 1 || st.Hostnames[0] != "broadwave.example.net" || st.Local != "broadwave.example.net" {
+		t.Fatalf("hostnames %q local %q", st.Hostnames, st.Local)
+	}
+	// A tunnel shared with another app: only the route to this machine counts.
+	r.note(`2026-10-13T19:10:00Z INF Updated to new configuration config="{\"ingress\":[{\"hostname\":\"ha.example.net\", \"service\":\"http://192.168.1.152:8123\"}, {\"hostname\":\"tv.example.net\", \"service\":\"http://localhost:8477\"}, {\"service\":\"http_status:404\"}]}" version=2`)
+	if st := r.Status(); len(st.Hostnames) != 2 || st.Local != "tv.example.net" {
+		t.Fatalf("shared tunnel %+v", st)
 	}
 	r.note(`2026-10-13T19:05:00Z INF Unregistered tunnel connection connIndex=0`)
 	r.note(`2026-10-13T19:05:00Z INF Unregistered tunnel connection connIndex=1`)
@@ -74,6 +81,47 @@ func TestApplyRunsOnceAndStops(t *testing.T) {
 	case extra := <-started:
 		t.Fatalf("started again with %q", extra)
 	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestApplyAtOnceLeavesOneCloudflared(t *testing.T) {
+	var mu sync.Mutex
+	running := map[string]int{}
+	r := &Runner{Bin: "/bin/cloudflared"}
+	r.start = func(ctx context.Context, bin, token string) (io.ReadCloser, func() error, error) {
+		mu.Lock()
+		running[token]++
+		mu.Unlock()
+		pr, pw := io.Pipe()
+		go func() {
+			<-ctx.Done()
+			time.Sleep(time.Millisecond)
+			mu.Lock()
+			running[token]--
+			mu.Unlock()
+			_ = pw.Close()
+		}()
+		return pr, func() error { return ctx.Err() }, nil
+	}
+	for i := range 20 {
+		var wg sync.WaitGroup
+		for _, tok := range []string{"a", "b", "c"} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				r.Apply(tok + strconv.Itoa(i))
+			}()
+		}
+		wg.Wait()
+	}
+	r.Stop()
+	time.Sleep(20 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	for tok, n := range running {
+		if n != 0 {
+			t.Fatalf("%s still running (%d)", tok, n)
+		}
 	}
 }
 

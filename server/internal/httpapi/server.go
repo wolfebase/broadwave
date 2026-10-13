@@ -785,7 +785,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	values["deviceToken"] = minted
-	setDeviceCookie(w, minted)
+	setDeviceCookie(w, r, minted)
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, values)
 }

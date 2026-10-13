@@ -92,7 +92,7 @@ public struct APIClient: Sendable {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try Self.makeEncoder().encode(body)
         }
-        let (data, res) = try await session.data(for: req)
+        let (data, res) = try await session.data(for: req, delegate: RedirectGuard.shared)
         let status = (res as? HTTPURLResponse)?.statusCode ?? 0
         guard (200 ..< 300).contains(status) else {
             if let err = try? JSONDecoder().decode(APIErrorBody.self, from: data) {
@@ -121,7 +121,7 @@ public struct APIClient: Sendable {
         req.httpMethod = "GET"
         req.timeoutInterval = 2
         do {
-            let (_, res) = try await session.data(for: req)
+            let (_, res) = try await session.data(for: req, delegate: RedirectGuard.shared)
             let status = (res as? HTTPURLResponse)?.statusCode ?? 0
             return ServerReach(up: (200 ..< 300).contains(status), online: true)
         } catch let error as URLError {
@@ -137,7 +137,7 @@ public struct APIClient: Sendable {
         var req = request(url(path))
         req.httpMethod = "GET"
         req.timeoutInterval = 2
-        guard let (_, res) = try? await session.data(for: req), let status = (res as? HTTPURLResponse)?.statusCode else {
+        guard let (_, res) = try? await session.data(for: req, delegate: RedirectGuard.shared), let status = (res as? HTTPURLResponse)?.statusCode else {
             return nil
         }
         if status == 404 {
@@ -150,7 +150,7 @@ public struct APIClient: Sendable {
     public func playlistText(_ path: String) async -> String? {
         var req = request(url(path))
         req.timeoutInterval = 2
-        guard let (data, res) = try? await session.data(for: req), (res as? HTTPURLResponse)?.statusCode == 200 else {
+        guard let (data, res) = try? await session.data(for: req, delegate: RedirectGuard.shared), (res as? HTTPURLResponse)?.statusCode == 200 else {
             return nil
         }
         return String(data: data, encoding: .utf8)
@@ -326,7 +326,7 @@ public struct APIClient: Sendable {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try Self.makeEncoder().encode(body)
         // 202 has no body to decode.
-        let (data, res) = try await session.data(for: req)
+        let (data, res) = try await session.data(for: req, delegate: RedirectGuard.shared)
         let status = (res as? HTTPURLResponse)?.statusCode ?? 0
         guard (200 ..< 300).contains(status) else {
             if let err = try? JSONDecoder().decode(APIErrorBody.self, from: data) {
@@ -705,7 +705,7 @@ public struct APIClient: Sendable {
         req.timeoutInterval = 60
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         req.httpBody = body
-        let (reply, res) = try await session.data(for: req)
+        let (reply, res) = try await session.data(for: req, delegate: RedirectGuard.shared)
         let status = (res as? HTTPURLResponse)?.statusCode ?? 0
         guard (200 ..< 300).contains(status) else {
             if let err = try? JSONDecoder().decode(APIErrorBody.self, from: reply) {
@@ -817,7 +817,7 @@ public struct APIClient: Sendable {
         req.timeoutInterval = 60
         req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         req.httpBody = data
-        let (body, res) = try await session.data(for: req)
+        let (body, res) = try await session.data(for: req, delegate: RedirectGuard.shared)
         let status = (res as? HTTPURLResponse)?.statusCode ?? 0
         guard (200 ..< 300).contains(status) else {
             if let err = try? JSONDecoder().decode(APIErrorBody.self, from: body) {

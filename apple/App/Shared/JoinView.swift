@@ -121,7 +121,10 @@ struct JoinView: View {
                 let poll = try await api.pollPair(ticket)
                 switch poll.state {
                 case "approved":
-                    guard let token = poll.token else { return }
+                    guard let token = poll.token, !token.isEmpty else {
+                        problem = String(localized: "That server did not pair this device.")
+                        return
+                    }
                     store.connect(JoinFlow.found(info, url: url), token: token)
                     onJoined?()
                     return

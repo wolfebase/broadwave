@@ -286,6 +286,8 @@ struct RootView: View {
     @State private var dismissedUpdate = ""
     /// A broadwave://join link, shown filled in until the viewer joins or closes it.
     @State private var joinLink: JoinLink?
+    /// A broadwave://connect link's server, until the viewer says yes or no.
+    @State private var connectLink: URL?
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -371,6 +373,22 @@ struct RootView: View {
             .sheet(item: $joinLink) { link in
                 joinSheet(link)
             }
+            .alert(
+                "Switch servers?",
+                isPresented: Binding(get: { connectLink != nil }, set: {
+                    if !$0 {
+                        connectLink = nil
+                    }
+                }),
+                presenting: connectLink,
+                actions: { server in
+                    Button("Connect") { connectFromLink(server) }
+                    Button("Cancel", role: .cancel) { connectLink = nil }
+                },
+                message: { server in
+                    Text("A link asks Broadwave to use the server at \(server.host() ?? server.absoluteString).")
+                }
+            )
             .spotlightLinks(open)
             .watchHandoff(handoffChannel, server: store.server) { watch($0) }
             .onChange(of: store.screenRemote) {
@@ -527,19 +545,23 @@ struct RootView: View {
         }
     }
 
+    private func connectFromLink(_ server: URL) {
+        connectLink = nil
+        Task {
+            if let info = try? await APIClient(base: server).server() {
+                store.connect(FoundServer(id: info.id, name: info.name, url: server))
+            }
+        }
+    }
+
     private func open(_ url: URL) {
         guard url.scheme == "broadwave" else { return }
         switch url.host() {
         case "join":
             joinLink = JoinLink(url)
         case "connect":
-            if let server = ConnectLink.serverURL(from: url) {
-                Task {
-                    if let info = try? await APIClient(base: server).server() {
-                        store.connect(FoundServer(id: info.id, name: info.name, url: server))
-                    }
-                }
-            }
+            // A link can come from anywhere, so the viewer chooses the switch.
+            connectLink = ConnectLink.serverURL(from: url)
         case "watch":
             watch(Int64(url.lastPathComponent) ?? 0)
         case "multiview":

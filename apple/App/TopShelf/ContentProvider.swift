@@ -28,7 +28,7 @@ final class ContentProvider: TVTopShelfContentProvider {
         config.timeoutIntervalForResource = 10
         let session = URLSession(configuration: config)
         defer { session.finishTasksAndInvalidate() }
-        let api = APIClient(base: base, session: session, token: SharedServer.loadToken())
+        let api = APIClient(base: base, session: session, token: SharedServer.loadToken(for: base))
         let now = Date()
         async let channels = try? api.channels()
         async let airings = try? api.airings(from: now, to: now.addingTimeInterval(60))

@@ -106,6 +106,7 @@ public final class EventSocket {
         retryWork?.cancel()
         retryWork = nil
         let task = URLSession.shared.webSocketTask(with: Self.handshake(url, token: token))
+        task.delegate = RedirectGuard.shared
         self.task = task
         task.resume()
         receive(task)
