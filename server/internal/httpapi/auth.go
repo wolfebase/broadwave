@@ -56,8 +56,14 @@ func (s *Server) withDeviceAuth(next http.Handler) http.Handler {
 			writeError(w, err)
 			return
 		}
+		remote := s.isRemote(r)
 		need := requiredScope(r.Method, r.URL.Path)
-		if !on || need == "public" {
+		if remote && need == "public" && strings.HasPrefix(r.URL.Path, "/export/") {
+			// The playlist and streams stay open on the home network for Plex
+			// and Channels. From outside they would hand anyone a tuner.
+			need = store.ScopeWatch
+		}
+		if !(on || remote) || need == "public" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -423,6 +429,9 @@ func hitAllowed(hits map[string][]time.Time, key string, now time.Time, limit in
 }
 
 func clientIP(r *http.Request) string {
+	if ip := tunnelClientIP(r); ip != "" {
+		return ip
+	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

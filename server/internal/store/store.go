@@ -735,6 +735,9 @@ func cleanSettings(values map[string]string) (map[string]string, error) {
 		"lastGuideError":      true,
 		"lastGuideErrorAt":    true,
 		"adaptive":            true,
+		SettingRemoteURL:      true,
+		SettingTunnelToken:    true,
+		"tunnelTokenSet":      true,
 	}
 	cleaned := map[string]string{}
 	for k, v := range values {
@@ -822,13 +825,27 @@ func cleanSettings(values map[string]string) (map[string]string, error) {
 		if k == "sdPassword" && strings.TrimSpace(v) == "" {
 			continue
 		}
-		if k == "sdPasswordSet" || k == "tmdbKeySet" || k == "sportsdbKeySet" || k == "deviceToken" ||
+		if k == "sdPasswordSet" || k == "tmdbKeySet" || k == "tunnelTokenSet" || k == "sportsdbKeySet" || k == "deviceToken" ||
 			k == "needsSetup" || k == "lastGuidePull" || k == "nextGuidePull" || k == "lastManualGuidePull" ||
 			k == "lastGuideError" || k == "lastGuideErrorAt" {
 			continue
 		}
 		if k == "deviceAuth" && v != "0" && v != "1" {
 			return nil, fmt.Errorf("deviceAuth must be 0 or 1")
+		}
+		if k == SettingRemoteURL {
+			norm, err := NormalizeRemoteURL(v)
+			if err != nil {
+				return nil, err
+			}
+			v = norm
+		}
+		if k == SettingTunnelToken {
+			token, err := CleanTunnelToken(v)
+			if err != nil {
+				return nil, err
+			}
+			v = token
 		}
 		if k == "tmdbKey" && strings.TrimSpace(v) == "" {
 			continue

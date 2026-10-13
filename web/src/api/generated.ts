@@ -175,6 +175,21 @@ export type GameAlert = {
   detail?: string;
 };
 
+export type Invite = {
+  id: string;
+  name: string;
+  scopes: string[];
+  createdAt: string;
+  expiresAt: string;
+};
+
+export type InviteGrant = {
+  invite: Invite;
+  code: string;
+  link?: string;
+  appLink?: string;
+};
+
 export type Marker = {
   id: number;
   recordingId?: number;
@@ -385,6 +400,16 @@ export type RecordingHealth = {
   damaged?: boolean;
 };
 
+export type RemoteStatus = {
+  remoteUrl: string;
+  configured: string;
+  tokenSet: boolean;
+  tunnel: TunnelStatus;
+  deviceAuth: boolean;
+  invites: Invite[];
+  here: boolean;
+};
+
 export type RoomState = {
   room: string;
   channelId?: number;
@@ -475,6 +500,9 @@ export type Settings = {
   autoplay?: string;
   hdhrEmulate?: string;
   deviceAuth?: string;
+  remoteUrl?: string;
+  tunnelToken?: string;
+  tunnelTokenSet?: string;
   deviceToken?: string;
   exportMosaics?: string;
   setupComplete?: string;
@@ -653,6 +681,14 @@ export type Tuner = {
 export type TunerLock = {
   index: number;
   locked: boolean;
+};
+
+export type TunnelStatus = {
+  state: string;
+  message?: string;
+  hostnames?: string[];
+  connections: number;
+  since?: string;
 };
 
 export type VirtualChannel = {

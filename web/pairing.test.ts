@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { TOKEN_KEY, authHeaders, isForbidden, isUnauthorized, mediaURL, noteIfUnauthorized, onUnauthorized, readToken, settingsForWatcher, writeToken } from "./src/lib/deviceToken.ts";
-import { canEditSignIn, codeAfterPoll, formatPairCode, kindLabel, normalizePairCode, pairPollStep, scopeLabel, scopesForAccess } from "./src/features/settings/pairCode.ts";
+import { canEditSignIn, codeAfterPoll, formatPairCode, kindLabel, normalizeClaimCode, normalizeInviteCode, normalizePairCode, pairPollStep, scopeLabel, scopesForAccess } from "./src/features/settings/pairCode.ts";
 
 test("a pair code is six digits, with spaces and dashes ignored", () => {
   assert.equal(normalizePairCode("482913"), "482913");
@@ -190,4 +190,16 @@ test("a 401 is unauthorized and anything else is not", () => {
   assert.equal(isUnauthorized(null), false);
   assert.equal(isUnauthorized(undefined), false);
   assert.equal(isUnauthorized("401"), false);
+});
+
+test("an invite is twelve letters and digits, grouped in fours", () => {
+  assert.equal(normalizeInviteCode("K7QM-4XPA-9RTW"), "K7QM-4XPA-9RTW");
+  assert.equal(normalizeInviteCode("k7qm 4xpa 9rtw"), "K7QM-4XPA-9RTW");
+  assert.equal(normalizeInviteCode("K7QM4XPA9RTW"), "K7QM-4XPA-9RTW");
+  assert.equal(normalizeInviteCode("K7QM-4XPA-9RT0"), null);
+  assert.equal(normalizeInviteCode("K7QM-4XPA-9RTI"), null);
+  assert.equal(normalizeInviteCode("K7QM-4XPA"), null);
+  assert.equal(normalizeClaimCode("482 913"), "482913");
+  assert.equal(normalizeClaimCode("k7qm-4xpa-9rtw"), "K7QM-4XPA-9RTW");
+  assert.equal(normalizeClaimCode("hello"), null);
 });

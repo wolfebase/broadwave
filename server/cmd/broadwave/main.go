@@ -33,6 +33,7 @@ import (
 	"broadwave/internal/source"
 	"broadwave/internal/sports"
 	"broadwave/internal/store"
+	"broadwave/internal/tunnel"
 	"broadwave/internal/update"
 	"broadwave/internal/updatecheck"
 )
@@ -201,6 +202,9 @@ func main() {
 	api.Updates = releaseCheck(st, version)
 	api.Hosts = strings.Split(os.Getenv("BROADWAVE_HOSTS"), ",")
 	api.CastAppID = os.Getenv("BROADWAVE_CAST_APP_ID")
+	tunnels := tunnel.New()
+	api.Tunnel = tunnels
+	api.StartTunnel(context.Background())
 	hub.OnPSIP = func(_ int, g psip.Guide) {
 		n, err := api.ApplyBroadcast(context.Background(), g)
 		if err != nil {
@@ -344,6 +348,7 @@ func main() {
 	go func() {
 		<-ctx.Done()
 		hub.Shutdown()
+		tunnels.Stop()
 		shut, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shut)

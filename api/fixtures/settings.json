@@ -20,6 +20,7 @@
   "setupComplete": "1",
   "sportsdbKeySet": "0",
   "tmdbKeySet": "0",
+  "tunnelTokenSet": "0",
   "watermarkGB": "10",
   "writeNfo": "0"
 }

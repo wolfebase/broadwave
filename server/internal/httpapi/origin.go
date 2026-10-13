@@ -11,6 +11,8 @@ import (
 	"sync"
 
 	"golang.org/x/net/publicsuffix"
+
+	"broadwave/internal/store"
 )
 
 // homeDomains are names routers hand out under a public top-level domain.
@@ -65,7 +67,19 @@ func logRefused(name string) {
 }
 
 func (s *Server) hostAllowed(r *http.Request) bool {
-	return hostAllowed(s.Hosts, r)
+	if hostAllowed(s.Hosts, r) {
+		return true
+	}
+	// A request through Cloudflare reached a name the owner routed to this
+	// server. It always needs a paired device, so a rebinding page that
+	// fakes the header gets nothing a stranger could not.
+	if cloudflareRequest(r) {
+		return true
+	}
+	// The public address is a name the owner gave this server.
+	host := store.RemoteHost(s.remoteURL(r.Context()))
+	name, _, _ := splitHost(r.Host)
+	return host != "" && name == host
 }
 
 // rejectForeignHost is the host check for a listener that is not the main

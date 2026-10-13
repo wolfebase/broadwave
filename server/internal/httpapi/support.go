@@ -173,7 +173,7 @@ func redactSettings(values map[string]string) map[string]string {
 	out := map[string]string{}
 	for k, v := range values {
 		switch k {
-		case "sdPassword", "tmdbKey", "sdPasswordSet", "tmdbKeySet", "sportsdbKey", "sportsdbKeySet":
+		case "sdPassword", "tmdbKey", "tunnelToken", "tunnelTokenSet", "sdPasswordSet", "tmdbKeySet", "sportsdbKey", "sportsdbKeySet":
 			continue
 		default:
 			out[k] = redactURL(v)
