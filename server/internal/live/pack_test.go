@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -91,7 +92,13 @@ func TestPackClosesAFinishedGroupBeforeTheNext(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer in.Close()
-	cmd := exec.Command(ffmpeg, RenditionArgs(0, Source{VideoCodec: "H264", AudioCodec: "AAC", Progressive: true}, Rendition{Video: "copy", Audio: "copy"}, "libx264", "")...)
+	// Whole-group fragments, as a mosaic tile writes them. A split encode
+	// closes on the next keyframe instead (TestSplitEncodeClosesSegmentsOnlyOnKeyframes).
+	args := RenditionArgs(0, Source{VideoCodec: "H264", AudioCodec: "AAC", Progressive: true}, Rendition{Video: "copy", Audio: "copy"}, "libx264", "")
+	if i := slices.Index(args, "-frag_duration"); i >= 0 {
+		args = slices.Delete(args, i, i+2)
+	}
+	cmd := exec.Command(ffmpeg, args...)
 	cmd.Dir = out
 	cmd.Stdin = in
 	stdout, err := cmd.StdoutPipe()
@@ -1333,15 +1340,25 @@ func TestPackLinesUpTracksWithoutEditLists(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				// A track can first appear in a later fragment of the segment
+				// when the first one held only lead-in sound.
 				got := map[string]float64{}
-				for _, traf := range boxes(child(seg, "moof")) {
-					tfhd, tfdt := child(traf.body, "tfhd"), child(traf.body, "tfdt")
-					if traf.kind != "traf" || len(tfhd) < 8 || len(tfdt) < 12 || tfdt[0] != 1 {
+				for _, top := range boxes(seg) {
+					if top.kind != "moof" {
 						continue
 					}
-					id := binary.BigEndian.Uint32(tfhd[4:8])
-					base := int64(binary.BigEndian.Uint64(tfdt[4:12])) + firstCompositionOffset(child(traf.body, "trun"))
-					got[kinds[id]] = float64(base) / float64(scales[id])
+					for _, traf := range boxes(top.body) {
+						tfhd, tfdt := child(traf.body, "tfhd"), child(traf.body, "tfdt")
+						if traf.kind != "traf" || len(tfhd) < 8 || len(tfdt) < 12 || tfdt[0] != 1 {
+							continue
+						}
+						id := binary.BigEndian.Uint32(tfhd[4:8])
+						if _, seen := got[kinds[id]]; seen {
+							continue
+						}
+						base := int64(binary.BigEndian.Uint64(tfdt[4:12])) + firstCompositionOffset(child(traf.body, "trun"))
+						got[kinds[id]] = float64(base) / float64(scales[id])
+					}
 				}
 				return got
 			}

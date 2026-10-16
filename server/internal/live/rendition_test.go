@@ -157,11 +157,13 @@ func TestOpeningSegmentsAreShort(t *testing.T) {
 	if strings.Contains(gpu, "sliced-threads") || !strings.Contains(gpu, "h264_vaapi") {
 		t.Fatalf("a hardware encode does not take the software thread cap: %s", gpu)
 	}
-	if strings.Contains(live, "hls_init_time") || strings.Contains(live, "hls_time") || strings.Contains(live, "prev_forced_t") || strings.Contains(live, "frag_duration") {
+	// A fragment per picture, for low-latency parts; the
+	// packager still closes segments only on the source keyframes.
+	if strings.Contains(live, "hls_init_time") || strings.Contains(live, "hls_time") || strings.Contains(live, "prev_forced_t") || !strings.Contains(live, "-frag_duration "+fragMicros) {
 		t.Fatalf("a live transcode cuts on the source keyframes: %s", live)
 	}
 	remote := strings.Join(renditionArgs(0, Source{VideoCodec: "H264"}, Rendition{Video: "copy", Audio: "copy"}, "libx264", "", "http://example/live.m3u8"), " ")
-	if !strings.Contains(remote, "-analyzeduration 1500000") || !strings.Contains(remote, "frag_keyframe") || !strings.Contains(remote, "pipe:1") || strings.Contains(remote, "force_key_frames") || strings.Contains(remote, "hls_init_time") || strings.Contains(remote, "hls_time") || strings.Contains(remote, "frag_duration") {
+	if !strings.Contains(remote, "-analyzeduration 1500000") || !strings.Contains(remote, "frag_keyframe") || !strings.Contains(remote, "pipe:1") || strings.Contains(remote, "force_key_frames") || strings.Contains(remote, "hls_init_time") || strings.Contains(remote, "hls_time") || !strings.Contains(remote, "frag_duration") {
 		t.Fatalf("a remote copy keeps the longer probe and the source cut: %s", remote)
 	}
 }

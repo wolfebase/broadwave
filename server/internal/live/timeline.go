@@ -292,6 +292,11 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 	// missed is a part or segment the timeline still cannot date. Caching
 	// that playlist would keep the date off after the file shows up.
 	missed := false
+	// openAt is where in out the first part after the last segment starts,
+	// and openWall its date: the open segment's date line goes there.
+	// AVPlayer will not play low latency from a playlist with no date, and
+	// a fresh tune's first playlist lists only parts.
+	openAt, openWall := -1, time.Time{}
 	noteBreak := func(pts int64) {
 		if breakNext && haveEnd && tl != nil {
 			if contNext {
@@ -346,7 +351,13 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 						p.broke[name] = true
 					}
 					noteBreak(pts)
-					tl.Wall(pts)
+					wall := tl.Wall(pts)
+					if openAt < 0 {
+						if haveEnd && wall.Before(lastEnd) {
+							wall = lastEnd
+						}
+						openAt, openWall = out.Len(), wall
+					}
 				}
 			}
 			out.WriteString(line + "\n")
@@ -398,6 +409,7 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 			}
 			pending = pending[:0]
 			out.WriteString(line + "\n")
+			openAt = -1
 			continue
 		}
 		for _, l := range pending {
@@ -419,6 +431,10 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 		}
 	}
 	body := out.Bytes()
+	if openAt >= 0 {
+		date := "#EXT-X-PROGRAM-DATE-TIME:" + openWall.UTC().Format("2006-01-02T15:04:05.000Z") + "\n"
+		body = append(append(append([]byte{}, body[:openAt]...), date...), body[openAt:]...)
+	}
 	if missed {
 		return body
 	}
