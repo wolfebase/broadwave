@@ -126,6 +126,7 @@ export type Device = {
   lastSeen?: string;
   note?: string;
   offline?: boolean;
+  retired?: boolean;
 };
 
 export type DeviceHealth = {
@@ -264,6 +265,14 @@ export type NewPass = {
   days?: number[];
 };
 
+export type NowChannel = {
+  channelId: number;
+  now?: Airing;
+  next?: Airing;
+  progress: number;
+  art: string;
+};
+
 export type PairGrant = {
   token: string;
   device: ClientDevice;
@@ -374,6 +383,7 @@ export type Recording = {
   passId?: number;
   status: string;
   error?: string;
+  partial?: boolean;
   startedAt: string;
   endsAt?: string;
   endedAt?: string;

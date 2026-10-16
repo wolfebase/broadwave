@@ -100,9 +100,9 @@ func (s *Server) cachedHome(ctx context.Context, fresh, logScan bool) []discover
 			parts = append(parts, item.Kind+" "+item.Name+" "+item.Addr)
 		}
 		if len(parts) == 0 {
-			slog.Info("home scan: nothing")
+			slog.Debug("home scan: nothing")
 		} else {
-			slog.Info(fmt.Sprintf("home scan: %s", strings.Join(parts, "; ")))
+			slog.Debug(fmt.Sprintf("home scan: %s", strings.Join(parts, "; ")))
 		}
 	}
 	s.homeFound = found
