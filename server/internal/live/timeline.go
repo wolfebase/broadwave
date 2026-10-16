@@ -183,6 +183,18 @@ func (t *Timeline) Reanchor(pts int64, wall time.Time) {
 	t.set = true
 }
 
+// Continue re-anchors on an encode that took over on the same broadcast
+// clock: pts maps to wall exactly. A silence the tuner had is already in
+// wall, since the broadcast clock ran on through it.
+func (t *Timeline) Continue(pts int64, wall time.Time) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.pts = pts
+	t.wall = wall
+	t.carry = 0
+	t.set = true
+}
+
 // Shift moves the clock on by d after the tuner sent nothing for d. A source
 // that pauses and then carries on with the next timestamp would otherwise put
 // every later frame d in the past, and players would chase a live edge that
@@ -273,19 +285,34 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 	var lastEnd time.Time
 	var haveEnd bool
 	var breakNext bool
+	// cont is the step a continuing encode's first picture comes after the
+	// last end (#EXT-X-CONT), for the break it follows.
+	var cont time.Duration
+	var contNext bool
 	// missed is a part or segment the timeline still cannot date. Caching
 	// that playlist would keep the date off after the file shows up.
 	missed := false
 	noteBreak := func(pts int64) {
 		if breakNext && haveEnd && tl != nil {
-			tl.Reanchor(pts, lastEnd)
-			breakNext = false
+			if contNext {
+				tl.Continue(pts, lastEnd.Add(cont))
+			} else {
+				tl.Reanchor(pts, lastEnd)
+			}
+			breakNext, contNext = false, false
 		}
 	}
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		switch {
 		case strings.HasPrefix(trimmed, "#EXT-X-PROGRAM-DATE-TIME"):
+			continue
+		case strings.HasPrefix(trimmed, "#EXT-X-CONT:"):
+			// The packer's note that the encode after this break continues
+			// the broadcast clock. The line is not served.
+			if v, err := strconv.ParseInt(strings.TrimPrefix(trimmed, "#EXT-X-CONT:"), 10, 64); err == nil && breakNext {
+				cont, contNext = time.Duration(v)*time.Second/90000, true
+			}
 			continue
 		case strings.HasPrefix(trimmed, "#EXT-X-PTS:"):
 			// The packer already measured this fragment. The line is not served.
@@ -378,7 +405,7 @@ func (p *playlistStamper) stamp(dir string, src []byte, tl *Timeline) []byte {
 		}
 		pending = pending[:0]
 		if strings.HasPrefix(trimmed, "#EXT-X-DISCONTINUITY") {
-			breakNext = true
+			breakNext, contNext = true, false
 		}
 		if line != "" {
 			out.WriteString(line + "\n")

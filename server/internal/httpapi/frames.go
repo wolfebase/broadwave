@@ -18,11 +18,18 @@ import (
 func (s *Server) frames(w http.ResponseWriter, r *http.Request) {
 	// A grab lands a minute after the tune. A cached empty list would hide it.
 	w.Header().Set("Cache-Control", "no-cache")
-	writeJSON(w, http.StatusOK, frameList{Channels: s.freshFrames(time.Now())})
+	list := frameList{Channels: s.freshFrames(time.Now()), NoSignal: []int64{}}
+	if s.Hub != nil {
+		list.NoSignal = s.Hub.NoSignalChannels()
+	}
+	writeJSON(w, http.StatusOK, list)
 }
 
+// frameList is the channels with a fresh picture, and the ones whose last
+// tune found no signal, for the guide to mark.
 type frameList struct {
 	Channels []int64 `json:"channels"`
+	NoSignal []int64 `json:"noSignal"`
 }
 
 func (s *Server) freshFrames(now time.Time) []int64 {
