@@ -243,8 +243,12 @@ export function CloudflareCard({ remote, onRemote }: { remote: RemoteStatus | nu
   }
 
   if (stage === "signedIn") {
-    const taken = status?.error?.code === "name_taken";
-    const other = status?.error && !taken ? status.error : null;
+    // A taken name stops mattering once the owner types another one.
+    const takenError = status?.error?.code === "name_taken";
+    const taken = takenError && (!status?.hostname || status.hostname === host);
+    const other = status?.error && !takenError ? status.error : null;
+    // Without the domain an unfinished name (no dots yet) is not wrong, only short.
+    const bad = label.trim() !== "" && !host && (zone !== "" || !/^[a-z0-9.-]*$/i.test(label.trim()) || label.includes(".."));
     return (
       <form className="cf-card" ref={setCard} onSubmit={(event) => turnOn(event)} aria-labelledby="cf-signed-title">
         <div className="cf-head">
@@ -271,9 +275,9 @@ export function CloudflareCard({ remote, onRemote }: { remote: RemoteStatus | nu
               maxLength={zone ? 63 : 253}
               placeholder={zone ? "tv" : "tv.example.com"}
               aria-label={zone ? t("remote.cf.nameAria", { zone }) : t("remote.cf.nameLabel")}
-              aria-invalid={label.trim() !== "" && !host}
+              aria-invalid={bad}
               aria-describedby="cf-preview"
-              style={{ width: `${Math.max(2, label.length) + 0.3}ch` }}
+              style={zone ? { width: `${Math.max(2, label.length) + 0.3}ch` } : undefined}
               onChange={(event) => setLabel(event.target.value)}
             />
             {zone ? (
@@ -283,8 +287,8 @@ export function CloudflareCard({ remote, onRemote }: { remote: RemoteStatus | nu
             ) : null}
           </span>
         </label>
-        <p className={label.trim() && !host ? "hint cf-bad" : "hint"} id="cf-preview" aria-live="polite">
-          {host ? t("remote.cf.preview", { url: addressOf(host) }) : label.trim() ? t("remote.cf.badName") : " "}
+        <p className={bad ? "hint cf-bad" : "hint"} id="cf-preview" aria-live="polite">
+          {host ? t("remote.cf.preview", { url: addressOf(host) }) : bad ? t("remote.cf.badName") : zone ? " " : t("remote.cf.wholeNameHint")}
         </p>
         {taken ? (
           <div className="cf-alert cf-choice" role="alert">

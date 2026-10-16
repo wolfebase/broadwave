@@ -10,7 +10,7 @@ import { scopeLabel, scopesForAccess } from "./pairCode";
 
 const t = bind(settingsUiMessages);
 
-const guideURL = "https://github.com/wolfebase/broadwave/blob/main/docs/guide/remote.md#cloudflare-tunnel";
+const guideURL = "https://github.com/wolfebase/broadwave/blob/main/docs/guide/remote.md#advanced-a-token-or-your-own-cloudflared";
 
 type Access = "watch" | "record" | "admin";
 
