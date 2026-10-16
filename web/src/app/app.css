@@ -651,21 +651,21 @@ html[data-theater="1"] .topbar {
 }
 
 /* A TV remote lands on everything here. Each stop is at least 56 px. */
-html[data-layout="tv"] :is(.btn, .chip, .pill-btn, .text-btn, .record-btn, .sync-pill, .live-pill, .brand) {
+html[data-layout="tv"] :is(.topbar, .stage, .mv, .home, .guide-page, .search-page, .sheet-layer, .not-found) :is(.btn, .chip, .pill-btn, .text-btn, .record-btn, .sync-pill, .live-pill, .brand) {
   min-height: 56px;
 }
 
-html[data-layout="tv"] :is(.glass-icon, .transport-play) {
+html[data-layout="tv"] :is(.topbar, .stage, .mv, .home, .guide-page, .search-page, .sheet-layer, .not-found) :is(.glass-icon, .transport-play) {
   width: 56px;
   height: 56px;
   min-width: 56px;
 }
 
-html[data-layout="tv"] .chip {
+html[data-layout="tv"] :is(.topbar, .stage, .mv, .home, .guide-page, .search-page, .sheet-layer, .not-found) .chip {
   min-width: 56px;
 }
 
-html[data-layout="tv"] main input:is([type="search"], [type="text"], :not([type])) {
+html[data-layout="tv"] :is(.topbar, .stage, .mv, .home, .guide-page, .search-page, .sheet-layer, .not-found) input:is([type="search"], [type="text"], :not([type])) {
   min-height: 56px;
   font-size: var(--type-body-size);
 }
@@ -689,11 +689,11 @@ img.lf-wait {
 }
 
 /* A finger needs 44 px. Pills, chips, and text buttons grow to it on a phone. */
-.layout-phone :is(.text-btn, .record-btn, .sync-pill, .live-pill, .chip, .pill-btn, .go-live, .search-main) {
+.layout-phone :is(.topbar, .stage, .mv, .home, .guide-page, .search-page, .sheet-layer, .not-found) :is(.text-btn, .record-btn, .sync-pill, .live-pill, .chip, .pill-btn, .go-live, .search-main) {
   min-height: 44px;
 }
 
-.layout-phone main input:is([type="search"], [type="text"], :not([type])) {
+.layout-phone :is(.topbar, .stage, .mv, .home, .guide-page, .search-page, .sheet-layer, .not-found) input:is([type="search"], [type="text"], :not([type])) {
   min-height: 44px;
 }
 
