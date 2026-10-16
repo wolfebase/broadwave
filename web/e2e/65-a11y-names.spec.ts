@@ -74,8 +74,8 @@ test("repeated actions name the show", async ({ page }) => {
       contentType: "application/json",
       body: JSON.stringify({
         places: [
-          { id: "roof", group: "tuners", kind: "hdhr", name: "Roof Tuner", action: "add", addr: "127.0.0.1:9" },
-          { id: "spare", group: "screens", kind: "screen", name: "Spare Box", action: "use" },
+          { id: "roof", group: "tuner", kind: "hdhr", name: "Roof Tuner", action: "add", addr: "127.0.0.1:9" },
+          { id: "spare", group: "server", kind: "channels", name: "Spare Box", action: "use" },
         ],
         tunerAddress: "127.0.0.1:5004",
         sharing: false,
@@ -103,13 +103,16 @@ test("repeated actions name the show", async ({ page }) => {
 
   await page.goto("/settings#sources");
   await settle(page);
-  await expect(page.getByRole("checkbox", { name: "On guide, 4.1 KBWV", exact: true })).toBeVisible();
-  await expect(page.getByRole("checkbox", { name: "Hidden, 4.1 KBWV", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Scan channels Fake HDHomeRun", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings\/tuners$/);
+  await expect(page.getByRole("switch", { name: "4.1 KBWV on the guide", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Scan channels on Fake HDHomeRun", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add Roof Tuner", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Use Spare Box as tuner", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Add free channels" }).click();
   await expect(page.getByRole("button", { name: "Add Harbor Feed", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Look harder" }).click();
   await expect(page.getByRole("button", { name: "Add Attic Tuner", exact: true })).toBeVisible();
+  // A media server that can share a tuner is a device in the house, not a tuner yet.
+  await page.goto("/settings/devices");
+  await settle(page);
+  await expect(page.getByRole("button", { name: "Use Spare Box as tuner", exact: true })).toBeVisible();
 });

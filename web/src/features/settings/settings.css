@@ -185,9 +185,8 @@
 
 /* ---- One section on its own (phone, TV) ---- */
 
-.settings-hub.hub-detail {
-  display: grid;
-  gap: var(--space-6);
+.settings-hub.hub-detail .settings-split {
+  display: block;
 }
 
 .settings-hub.hub-detail .settings-detail-head h1 {
@@ -640,7 +639,7 @@ a.set-row-label:hover {
 
 .settings-hub .btn.danger,
 .set-dialog .btn.danger {
-  background: var(--color-tally);
+  background: var(--tally-fill);
   color: #fff;
   border-color: transparent;
 }

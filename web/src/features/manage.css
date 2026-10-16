@@ -19,7 +19,7 @@ html[data-layout="tv"] :is(.page-wrap, .setup, .sports-page, .manage) .btn.small
 
 html[data-layout="tv"] :is(.page-wrap, .setup, .sports-page, .manage) :is(.btn.primary, .chip.on, .seg.on),
 html[data-layout="tv"] .setup-steps li.on button {
-  background: var(--color-accent);
+  background: var(--accent-fill);
   background-image: none;
   color: var(--color-on-accent);
   border-color: transparent;

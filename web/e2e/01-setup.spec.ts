@@ -11,7 +11,7 @@ test("setup wizard finds the fake tuner", async ({ page }, info) => {
     await expect(page.locator('[data-setup="finish"]')).toBeVisible({ timeout: 15_000 });
     await page.getByRole("button", { name: "Sources" }).click();
     await expect(page.locator('[data-setup="sources"]')).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Your tuner" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Your tuner", exact: true })).toBeVisible();
     await expect(page.getByText("Fake HDHomeRun")).toBeVisible();
     // The address is how a tuner gets in when nothing announced itself, so it
     // sits above the playlist form.

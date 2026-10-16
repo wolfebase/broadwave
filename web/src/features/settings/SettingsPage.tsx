@@ -80,7 +80,7 @@ export function SettingsPage() {
   // A desktop or tablet window shows the list beside the section. Phone and TV go one level at a time.
   const split = layout === "desktop";
   const id: SectionId | null = picked ?? (split ? "appearance" : null);
-  const detailRef = useRef<HTMLDivElement>(null);
+  const detailRef = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const lastId = useRef<SectionId | null>(null);
 
@@ -88,7 +88,8 @@ export function SettingsPage() {
   useEffect(() => {
     if (!picked) return;
     const want = sectionPath(picked);
-    if (path !== want) window.history.replaceState(window.history.state, "", want);
+    // Through the router, so the next render reads the new path and not a hash that is gone.
+    if (path !== want) navigate(want, true);
   }, [picked, path]);
 
   // On a TV, focus starts on the section's first control, or on the row a viewer came back from.
@@ -183,49 +184,44 @@ export function SettingsPage() {
   const lede = id === "about" ? serverLine : h(`lede.${id}` as "lede.appearance");
   const body = <SectionBody id={id} server={server} />;
 
-  if (!split) {
-    return (
-      <div ref={detailRef} className="page-wrap settings-hub hub-detail">
-        <header className="settings-detail-head">
-          <button type="button" className="settings-back" aria-label={h("hub.backAria")} onClick={backToList}>
-            <ChevronLeft />
-            <span>{h("hub.back")}</span>
-          </button>
-          <h1>{titles[id]}</h1>
-          {lede ? <p className="settings-lede">{lede}</p> : null}
-        </header>
-        <div className="settings-body">{body}</div>
-      </div>
-    );
-  }
-
+  // One tree for both shapes, so the section's controls survive a window crossing between them.
   return (
-    <div className="page-wrap settings-hub hub-split">
-      <header className="page-header">
-        <h1>{copy.settings.title}</h1>
-        {serverLine ? <p className="page-sub">{serverLine}</p> : null}
-      </header>
+    <div className={split ? "page-wrap settings-hub hub-split" : "page-wrap settings-hub hub-detail"}>
+      {split ? (
+        <header className="page-header">
+          <h1>{copy.settings.title}</h1>
+          {serverLine ? <p className="page-sub">{serverLine}</p> : null}
+        </header>
+      ) : null}
       <div className="settings-split">
-        <nav className="settings-nav" aria-label={h("hub.nav")}>
-          <ul>
-            {sectionIds.map((item) => {
-              const Icon = icons[item];
-              return (
-                <li key={item}>
-                  <a href={sectionPath(item)} aria-current={item === id ? "page" : undefined} className={item === id ? "settings-nav-link on" : "settings-nav-link"} onClick={(event) => linkClick(event, () => open(item, false))}>
-                    <span className={`settings-menu-icon ${item}`} aria-hidden="true">
-                      <Icon />
-                    </span>
-                    <span>{titles[item]}</span>
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+        {split ? (
+          <nav className="settings-nav" aria-label={h("hub.nav")}>
+            <ul>
+              {sectionIds.map((item) => {
+                const Icon = icons[item];
+                return (
+                  <li key={item}>
+                    <a href={sectionPath(item)} aria-current={item === id ? "page" : undefined} className={item === id ? "settings-nav-link on" : "settings-nav-link"} onClick={(event) => linkClick(event, () => open(item, false))}>
+                      <span className={`settings-menu-icon ${item}`} aria-hidden="true">
+                        <Icon />
+                      </span>
+                      <span>{titles[item]}</span>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        ) : null}
         <section ref={detailRef} className="settings-detail" aria-labelledby="settings-section-title">
           <header className="settings-detail-head">
-            <h2 id="settings-section-title">{titles[id]}</h2>
+            {split ? null : (
+              <button type="button" className="settings-back" aria-label={h("hub.backAria")} onClick={backToList}>
+                <ChevronLeft />
+                <span>{h("hub.back")}</span>
+              </button>
+            )}
+            {split ? <h2 id="settings-section-title">{titles[id]}</h2> : <h1 id="settings-section-title">{titles[id]}</h1>}
             {lede ? <p className="settings-lede">{lede}</p> : null}
           </header>
           <div className="settings-body" key={id}>

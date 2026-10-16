@@ -15,6 +15,7 @@ import { playlistKeep } from "./playlistKeep";
 import { signalWord, tunerHost } from "./tunerHealth";
 import { Confirm } from "./Confirm";
 import { Lineup } from "./Lineup";
+import { HomeList } from "../setup/HomeList";
 import { Group, Row } from "./rows";
 import { AntennaIcon } from "./icons";
 
@@ -228,6 +229,9 @@ export function Sources({
           </p>
         ) : null}
       </Group>
+      <div className="set-block">
+        <HomeList heading="h3" groups={["tuner"]} hideAdded title={h("home.found")} lede={null} limit={4} />
+      </div>
       <Lineup channels={channels} devices={devices} onPatch={onPatch} />
       <SignalCheck />
       <FindTuners busy={busy} onLookup={onLookup} />
