@@ -125,7 +125,7 @@ struct JoinView: View {
                         problem = String(localized: "That server did not pair this device.")
                         return
                     }
-                    store.connect(JoinFlow.found(info, url: url), token: token)
+                    store.connect(JoinFlow.found(info, url: url), token: token, device: poll.device?.id)
                     onJoined?()
                     return
                 case "denied":
@@ -192,7 +192,7 @@ enum JoinFlow {
         }
         do {
             let grant = try await api.claimPair(code: typed, name: deviceName, kind: deviceKind)
-            store.connect(found(info, url: url), token: grant.token)
+            store.connect(found(info, url: url), token: grant.token, device: grant.device.id)
             return nil
         } catch {
             return error.localizedDescription

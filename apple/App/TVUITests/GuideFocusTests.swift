@@ -222,22 +222,21 @@ final class GuideFocusTests: XCTestCase {
         XCTAssertTrue(until(8) { channel.hasFocus }, "Back did not land on \(label): \(focused(app))")
         shot(app, "back-guide")
 
-        pause(2)
-        XCUIRemote.shared.press(.menu)
-        XCTAssertTrue(until(15) { probe.exists }, "Back from the guide did not resume \(label): \(focused(app))")
-        XCTAssertEqual(app.state, .runningForeground)
-        // The player may take the first Back for its own overlay; a second one leaves it.
-        XCUIRemote.shared.press(.menu)
-        var againBacks = 1
-        if !until(6, { channel.hasFocus }) {
+        // Back from the guide resumes the channel, and ONE Back leaves it again. Twice,
+        // since the first press after a resume was the one that went missing.
+        for round in 1 ... 2 {
+            pause(2)
             XCUIRemote.shared.press(.menu)
-            againBacks += 1
+            XCTAssertTrue(until(15) { probe.exists }, "Back from the guide did not resume \(label) (round \(round)): \(focused(app))")
+            XCTAssertEqual(app.state, .runningForeground)
+            pause(round == 1 ? 3 : 1)
+            shot(app, "back-resumed-\(round)")
+            XCUIRemote.shared.press(.menu)
+            let left = until(6) { !probe.exists && channel.hasFocus }
+            shot(app, "back-again-\(round)")
+            XCTAssertTrue(left, "one Back did not leave the resumed player (round \(round)): \(focused(app)) state \(app.state.rawValue) player \(probe.exists)")
+            XCTAssertEqual(app.state, .runningForeground)
         }
-        print("broadwave-test backs to leave the resumed player: \(againBacks)")
-        let backAgain = until(8) { channel.hasFocus }
-        shot(app, "back-again")
-        XCTAssertTrue(backAgain, "Back again did not land on \(label): \(focused(app)) state \(app.state.rawValue) player \(probe.exists)")
-        XCTAssertEqual(app.state, .runningForeground)
     }
 
     /// Titles of the first channel's program that ended in the last hour and the one on now.

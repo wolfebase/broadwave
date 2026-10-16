@@ -13,6 +13,14 @@ public struct APIError: LocalizedError, Sendable {
     public var signedOut: Bool {
         status == 401
     }
+
+    /// The server's own words when a token it no longer knows reaches it.
+    public static let signInWall = "Sign in from a paired device."
+
+    /// A sent token was turned away: the device was removed, or the token is not one the server knows.
+    public var tokenRefused: Bool {
+        status == 401 && message.trimmingCharacters(in: .whitespacesAndNewlines) == Self.signInWall
+    }
 }
 
 /// Whether /health answered, and whether the device itself still has a connection.
@@ -31,12 +39,16 @@ public struct APIClient: Sendable {
     public let base: URL
     /// This device's token from pairing. Nil on the home network, where none is needed.
     public let token: String?
-    private let session: URLSession
+    let session: URLSession
+    /// Called when the server turns this client's token away, with its words.
+    /// The store signs out at once instead of waiting for the next refresh.
+    private let onSignedOut: (@Sendable (String) -> Void)?
 
-    public init(base: URL, session: URLSession = .shared, token: String? = nil) {
+    public init(base: URL, session: URLSession = .shared, token: String? = nil, onSignedOut: (@Sendable (String) -> Void)? = nil) {
         self.base = base
         self.session = session
         self.token = token?.isEmpty == false ? token : nil
+        self.onSignedOut = onSignedOut
     }
 
     /// A request that carries the token, when there is one.
@@ -96,7 +108,11 @@ public struct APIClient: Sendable {
         let status = (res as? HTTPURLResponse)?.statusCode ?? 0
         guard (200 ..< 300).contains(status) else {
             if let err = try? JSONDecoder().decode(APIErrorBody.self, from: data) {
-                throw APIError(code: err.code, message: err.message, status: status)
+                let failure = APIError(code: err.code, message: err.message, status: status)
+                if token != nil, failure.tokenRefused {
+                    onSignedOut?(failure.message)
+                }
+                throw failure
             }
             throw Self.unreadable(status)
         }
@@ -330,7 +346,11 @@ public struct APIClient: Sendable {
         let status = (res as? HTTPURLResponse)?.statusCode ?? 0
         guard (200 ..< 300).contains(status) else {
             if let err = try? JSONDecoder().decode(APIErrorBody.self, from: data) {
-                throw APIError(code: err.code, message: err.message, status: status)
+                let failure = APIError(code: err.code, message: err.message, status: status)
+                if token != nil, failure.tokenRefused {
+                    onSignedOut?(failure.message)
+                }
+                throw failure
             }
             throw Self.unreadable(status)
         }

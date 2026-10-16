@@ -206,6 +206,10 @@ final class LivePlayer {
             } onCancel: {
                 task.cancel()
             }
+            // The multivariant playlist carries the captions track, so the
+            // system subtitle menu and the Closed Captions setting apply.
+            // Away from home it plays from a media link, so AirPlay can fetch it too.
+            let item = await api.linkedPlayerItem(session.mainPlaylist ?? session.playlist)
             guard !Task.isCancelled, token == watchToken, channelID == channel.id else {
                 await api.stopWatching(session)
                 return
@@ -218,9 +222,6 @@ final class LivePlayer {
                 error = nil
                 holdPicture = false
             }
-            // The multivariant playlist carries the captions track, so the
-            // system subtitle menu and the Closed Captions setting apply.
-            let item = api.playerItem(session.mainPlaylist ?? session.playlist)
             item.externalMetadata = metadata(channel: channel, airing: store.index.on(channel.id, at: Date()))
             PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
             player.replaceCurrentItem(with: item)
@@ -2546,7 +2547,8 @@ struct RecordingPlayerScreen: View {
             // A playlist the server is still writing can fail an item while it loads
             // (a changed discontinuity count). A fresh item reads it again once.
             for _ in 0 ..< 2 {
-                let item = api.playerItem(playlist)
+                let item = await api.linkedPlayerItem(playlist)
+                guard !Task.isCancelled else { return false }
                 PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
                 item.externalMetadata = metadata(rec)
                 player.replaceCurrentItem(with: item)

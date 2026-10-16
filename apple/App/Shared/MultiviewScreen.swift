@@ -413,6 +413,7 @@ final class TilePlayer {
                     room: store.socket == nil ? nil : room
                 )
             }
+            let item = await api.linkedPlayerItem(session.playlist)
             guard !Task.isCancelled, token == startToken, channelID == channel.id else {
                 await api.stopWatching(session)
                 return
@@ -426,7 +427,6 @@ final class TilePlayer {
                 holdPicture = false
             }
             detail = session.stream.reason
-            let item = api.playerItem(session.playlist)
             let tile = prefs.quality == .tile || prefs.quality == .tile360
             tileTuning = tile
             PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: tile)
@@ -2303,7 +2303,12 @@ final class PlayerHost: UIView {
                 return
             }
             key = session.key
-            let item = api.playerItem(session.playlist)
+            // The receiver fetches the stream itself. Away from home that takes a media link.
+            let item = await api.linkedPlayerItem(session.playlist)
+            guard gen == route.generation else {
+                await api.stopMosaic(key: session.key)
+                return
+            }
             PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
             player.replaceCurrentItem(with: item)
             player.isMuted = false

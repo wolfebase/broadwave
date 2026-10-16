@@ -69,6 +69,8 @@ public final class AppStore {
     private var frameTick = 0
     private var announced = false
     private var relocateAfter = Date.distantPast
+    /// GET /clients/me was asked once on this connection for this device's id.
+    private var seatAsked = false
     /// Bumped on connect and forget, so a move that started earlier cannot undo them.
     private var generation = 0
     /// Bumped when this screen changes a recording, so an older list does not undo it.
@@ -194,15 +196,18 @@ public final class AppStore {
     /// `token` is this device's token from pairing at exactly this address; an
     /// empty one means none. Without it, only a token issued at this same address
     /// by this same server is used. A server at a new address gets no token.
-    public func connect(_ server: FoundServer, token: String? = nil) {
+    /// `device` is this device's id in the pairing that issued `token`.
+    /// `movedFrom` is the old address of a home server that proved it moved.
+    public func connect(_ server: FoundServer, token: String? = nil, device: String? = nil, movedFrom: URL? = nil) {
         generation += 1
+        let started = generation
         let token: String? = if let token {
             token.isEmpty ? nil : token
         } else {
             DeviceTokens.token(for: server.url, server: server.id)
         }
         if let token {
-            DeviceTokens.save(token, for: server.url, server: server.id)
+            DeviceTokens.save(token, for: server.url, server: server.id, device: device)
         }
         if Self.dropCatalog(previousID: self.server?.id, nextID: server.id) {
             channels = []
@@ -224,7 +229,10 @@ public final class AppStore {
         noteConnection(false)
         announced = false
         self.server = server
-        let api = APIClient(base: server.url, session: session, token: token)
+        // A call the server turns away signs out now, not at the next refresh.
+        let api = APIClient(base: server.url, session: session, token: token) { [weak self] message in
+            Task { @MainActor in self?.noteTokenRefused(message, started: started) }
+        }
         self.api = api
         let socket = EventSocket(base: server.url, token: token)
         socket.onFailure = { [weak self] in
@@ -257,6 +265,11 @@ public final class AppStore {
             guard let sent = try? JSONDecoder().decode(ScreenWatch.self, from: data) else { return }
             self?.noteScreenWatch(sent)
         }
+        // The owner removed a paired device. When it is this one, sign out now.
+        socket.on("client.revoked") { [weak self] data in
+            guard let gone = try? JSONDecoder().decode(RevokedClient.self, from: data) else { return }
+            self?.noteRevoked(gone.id)
+        }
         // A button this app version doesn't know is ignored.
         socket.on("screen.remote") { [weak self] data in
             guard let pressed = try? JSONDecoder().decode(ScreenRemote.self, from: data) else { return }
@@ -271,16 +284,18 @@ public final class AppStore {
         // Channel ids belong to one server; the new lineup is written after its first refresh.
         SharedLineup.save(nil)
         sharedLineup = []
-        remembered = RememberedServers.upsert(remembered, server)
+        remembered = RememberedServers.upsert(remembered, server, movedFrom: movedFrom)
         save(remembered, "servers")
         frameIDs = []
+        seatAsked = false
         Task { await refresh() }
     }
 
-    /// Looks on the local network for a saved server whose address changed.
-    /// Nil until the stored key verifies the reply and GET /server agrees.
-    public func locate(_ id: String) async -> FoundServer? {
-        let saved = remembered.first { $0.id == id } ?? (server?.id == id ? server : nil)
+    /// Looks on the local network for the saved server at this address, when its
+    /// address changed. Nil until the stored key verifies the reply and GET /server agrees.
+    public func locate(_ at: FoundServer) async -> FoundServer? {
+        let current = server.flatMap { ServerOrigin.same($0.url, at.url) && $0.id == at.id ? $0 : nil }
+        let saved = RememberedServers.saved(at: at.url, in: remembered).flatMap { $0.id == at.id ? $0 : nil } ?? current
         guard let saved, let key = saved.key, !key.isEmpty else { return nil }
         let found = await Task.detached { LANProbe.collect(timeout: 1.2) }.value
         guard let next = ServerFollow.updated(saved, found: found) else { return nil }
@@ -301,7 +316,7 @@ public final class AppStore {
         guard let proven = await proven(next, key: key) else { return }
         guard Self.shouldApplyMove(savedID: savedID, currentID: server?.id, epoch: generation, captured: started) else { return }
         NSLog("broadwave followed %@", proven.url.absoluteString)
-        connect(proven)
+        connect(proven, movedFrom: saved.url)
     }
 
     /// GET /server at the candidate must return the same id and the stored key
@@ -520,6 +535,7 @@ public final class AppStore {
                 remembered = RememberedServers.upsert(remembered, fixed)
                 save(remembered, "servers")
             }
+            Task { await self.learnDevice(api, started: started) }
             if !announced, let current = server {
                 announced = true
                 NSLog("broadwave ready %@ %@", current.id, current.url.absoluteString)
@@ -566,6 +582,33 @@ public final class AppStore {
             }
             self.error = error.localizedDescription
         }
+    }
+
+    /// A call made with this session's token came back "Sign in from a paired device."
+    func noteTokenRefused(_ message: String, started: Int) {
+        guard generation == started, api?.token != nil, signedOut == nil else { return }
+        noteSignedOut(message)
+    }
+
+    /// `client.revoked` named a device. Only this device's own id signs it out,
+    /// and its token is dropped: the server will never take it again.
+    func noteRevoked(_ id: String) {
+        guard !id.isEmpty, let current = server, api?.token != nil,
+              DeviceTokens.device(for: current.url) == id else { return }
+        DeviceTokens.save(nil, for: current.url, server: current.id)
+        SharedServer.saveToken(nil, for: nil)
+        api = APIClient(base: current.url, session: session)
+        noteSignedOut(APIError.signInWall)
+    }
+
+    /// Learns this device's id for a token kept from before ids were stored.
+    private func learnDevice(_ api: APIClient, started: Int) async {
+        guard !seatAsked, let token = api.token, let current = server,
+              DeviceTokens.device(for: current.url) == nil else { return }
+        seatAsked = true
+        guard let seat = try? await api.clientMe(), sameSession(started, api.base),
+              let id = seat.device?.id else { return }
+        DeviceTokens.noteDevice(id, for: current.url, token: token)
     }
 
     /// The server turned this device away. The socket would only be turned away
@@ -897,4 +940,9 @@ public final class AppStore {
         var kind: String
         var message: String
     }
+}
+
+/// `client.revoked` {id}.
+struct RevokedClient: Decodable {
+    var id: String
 }

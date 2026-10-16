@@ -56,16 +56,125 @@ public extension APIClient {
         ])
     }
 
-    /// The asset for a playlist on this server. With a token, every request the
+    /// The asset for a playlist on this server. A media link fetched for it earlier
+    /// and still fresh plays as is. Otherwise, with a token, every request the
     /// player makes for it carries the cookie.
     func asset(_ path: String) -> AVURLAsset {
+        if let linked = MediaLinks.shared.url(for: self, path: path) {
+            return AVURLAsset(url: linked)
+        }
         guard let cookie = tokenCookie else { return AVURLAsset(url: url(path)) }
         return AVURLAsset(url: url(path), options: [AVURLAssetHTTPCookiesKey: [cookie]])
     }
 
     /// A player item for a playlist on this server. Use this, not AVPlayerItem(url:).
+    /// It does not wait for the network: prefer `linkedPlayerItem` where a call can wait.
     func playerItem(_ path: String) -> AVPlayerItem {
         AVPlayerItem(asset: asset(path))
+    }
+
+    /// A player item that also plays on an AirPlay receiver. The receiver fetches
+    /// the stream itself, without this app's cookie, so with a token the item
+    /// plays from a media link (`mk=`) instead. Without a token, or when the server
+    /// gives no link (an older one answers 404), it is the cookie item.
+    func linkedPlayerItem(_ path: String) async -> AVPlayerItem {
+        if let linked = await mediaLinkURL(path) {
+            return AVPlayerItem(asset: AVURLAsset(url: linked))
+        }
+        return playerItem(path)
+    }
+
+    /// A link to a /media/ path that plays without a header or cookie for 24 hours.
+    func mediaLink(_ path: String) async throws -> MediaLink {
+        struct B: Encodable { var path: String }
+        return try await send("POST", "/media/link", body: B(path: path), timeout: 5)
+    }
+
+    /// The media link for this path, from the cache or the server. Nil without a
+    /// token, or when the server gives none.
+    func mediaLinkURL(_ path: String, now: Date = Date()) async -> URL? {
+        guard token != nil else { return nil }
+        if let cached = MediaLinks.shared.url(for: self, path: path, now: now) {
+            return cached
+        }
+        guard MediaLinks.shared.worthAsking(self, now: now) else { return nil }
+        do {
+            let link = try await mediaLink(path)
+            // The link is a path on this server. Anything that resolves elsewhere is not used.
+            let resolved = url(link.url)
+            guard ServerOrigin.same(resolved, base), link.expiresAt > now else { return nil }
+            MediaLinks.shared.keep(resolved, until: link.expiresAt, for: self, path: path)
+            return resolved
+        } catch let error as APIError where error.status == 404 || error.status == 405 {
+            MediaLinks.shared.noLinks(self, now: now)
+            return nil
+        } catch {
+            return nil
+        }
+    }
+}
+
+/// Media links by server address, token, and path, kept until shortly before they
+/// run out. A server with no /media/link is not asked again for a while.
+final class MediaLinks: @unchecked Sendable {
+    static let shared = MediaLinks()
+
+    /// A link is reused only while this much of it is left, so a stream started
+    /// on it does not run out partway through an evening.
+    static let margin: TimeInterval = 2 * 3600
+    /// How long an older server's 404 holds before asking again.
+    static let quiet: TimeInterval = 10 * 60
+
+    private struct Kept {
+        var url: URL
+        var expiresAt: Date
+    }
+
+    private let lock = NSLock()
+    private var links: [String: Kept] = [:]
+    private var unsupported: [String: Date] = [:]
+
+    private static func server(_ api: APIClient) -> String? {
+        guard let token = api.token, let origin = ServerOrigin.of(api.base) else { return nil }
+        return origin + "\n" + token
+    }
+
+    func url(for api: APIClient, path: String, now: Date = Date()) -> URL? {
+        guard let server = Self.server(api) else { return nil }
+        return lock.withLock {
+            guard let kept = links[server + "\n" + path] else { return nil }
+            guard kept.expiresAt.timeIntervalSince(now) > Self.margin else {
+                links[server + "\n" + path] = nil
+                return nil
+            }
+            return kept.url
+        }
+    }
+
+    func keep(_ url: URL, until: Date, for api: APIClient, path: String) {
+        guard let server = Self.server(api) else { return }
+        lock.withLock {
+            links = links.filter { $0.value.expiresAt > Date() }
+            links[server + "\n" + path] = Kept(url: url, expiresAt: until)
+            unsupported[server] = nil
+        }
+    }
+
+    func worthAsking(_ api: APIClient, now: Date = Date()) -> Bool {
+        guard let server = Self.server(api) else { return false }
+        return lock.withLock { (unsupported[server] ?? .distantPast) <= now }
+    }
+
+    func noLinks(_ api: APIClient, now: Date = Date()) {
+        guard let server = Self.server(api) else { return }
+        lock.withLock { unsupported[server] = now.addingTimeInterval(Self.quiet) }
+    }
+
+    func reset() {
+        lock.withLock {
+            links = [:]
+            unsupported = [:]
+        }
     }
 }
 
@@ -184,6 +293,9 @@ public enum DeviceTokens {
         var token: String
         /// Empty until the server's id is known (a test launch with a token).
         var server: String
+        /// This device's id on that server, from the claim or GET /clients/me.
+        /// A `client.revoked` naming it signs this device out.
+        var device: String?
     }
 
     static let account = "device-tokens"
@@ -199,11 +311,16 @@ public enum DeviceTokens {
     }
 
     /// Keeps a token for this address. Nil or empty forgets it. Another address
-    /// keeps its own token, even when it reported the same server id.
-    public static func save(_ token: String?, for url: URL, server id: String) {
+    /// keeps its own token, even when it reported the same server id. `device` is
+    /// this device's id there; nil keeps the one known for this same token.
+    public static func save(_ token: String?, for url: URL, server id: String, device: String? = nil) {
         guard id != "demo", let origin = ServerOrigin.of(url) else { return }
         var list = all()
-        let next = token.flatMap { $0.isEmpty ? nil : Entry(token: $0, server: id == "pending" ? "" : id) }
+        var next = token.flatMap { $0.isEmpty ? nil : Entry(token: $0, server: id == "pending" ? "" : id) }
+        if next != nil {
+            let known = list[origin].flatMap { $0.token == next?.token ? $0.device : nil }
+            next?.device = device.flatMap { $0.isEmpty ? nil : $0 } ?? known
+        }
         guard list[origin] != next else { return }
         list[origin] = next
         store(list)
@@ -215,6 +332,22 @@ public enum DeviceTokens {
         var list = all()
         guard var entry = list[origin], entry.server.isEmpty else { return }
         entry.server = id
+        list[origin] = entry
+        store(list)
+    }
+
+    /// This device's id at this address, while a token is kept for it.
+    public static func device(for url: URL) -> String? {
+        guard let origin = ServerOrigin.of(url) else { return nil }
+        return all()[origin]?.device
+    }
+
+    /// Names this device for the token kept at this address. Only for that same token.
+    public static func noteDevice(_ device: String, for url: URL, token: String) {
+        guard !device.isEmpty, let origin = ServerOrigin.of(url) else { return }
+        var list = all()
+        guard var entry = list[origin], entry.token == token, entry.device != device else { return }
+        entry.device = device
         list[origin] = entry
         store(list)
     }

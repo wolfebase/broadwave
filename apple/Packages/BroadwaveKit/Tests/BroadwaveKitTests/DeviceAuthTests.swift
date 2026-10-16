@@ -281,6 +281,201 @@ struct DeviceAuthTests {
         store.connect(FoundServer(id: "auth-store", name: "Lab", url: url), token: "")
         #expect(store.api?.token == nil)
     }
+
+    // MARK: Media links
+
+    @Test func aTokenPlaysFromAMediaLink() async throws {
+        MediaLinks.shared.reset()
+        defer { MediaLinks.shared.reset() }
+        let api = try authAPI(token: "bw_lab")
+        AuthStub.set("POST", "/api/v1/media/link", body: mediaLinkBody("/media/live/12/index.m3u8?mk=k1", in: 24 * 3600))
+        let item = await api.linkedPlayerItem("/media/live/12/index.m3u8")
+        #expect(assetURL(item) == "http://auth.invalid/media/live/12/index.m3u8?mk=k1")
+        let call = try #require(AuthStub.all().last)
+        #expect(call.method == "POST")
+        #expect(call.path == "/api/v1/media/link")
+        #expect(call.authorization == "Bearer bw_lab")
+        #expect(call.contentType == "application/json")
+        let body = try #require(JSONSerialization.jsonObject(with: call.body) as? [String: Any])
+        #expect(Set(body.keys) == ["path"])
+        #expect(body["path"] as? String == "/media/live/12/index.m3u8")
+
+        // One call per path until it runs low. A reload, which cannot wait, uses it too.
+        let again = await api.linkedPlayerItem("/media/live/12/index.m3u8")
+        #expect(assetURL(again) == "http://auth.invalid/media/live/12/index.m3u8?mk=k1")
+        #expect(assetURL(api.playerItem("/media/live/12/index.m3u8")) == "http://auth.invalid/media/live/12/index.m3u8?mk=k1")
+        #expect(AuthStub.all().count == 1)
+        // Another token on the same server does not get this one's link.
+        let other = try APIClient(base: #require(URL(string: "http://auth.invalid")), session: authSession(), token: "bw_other")
+        #expect(MediaLinks.shared.url(for: other, path: "/media/live/12/index.m3u8") == nil)
+    }
+
+    @Test func anOlderServerFallsBackToTheCookie() async throws {
+        MediaLinks.shared.reset()
+        defer { MediaLinks.shared.reset() }
+        let api = try authAPI(token: "bw_lab")
+        AuthStub.set("POST", "/api/v1/media/link", status: 404, body: Data(#"{"code":"not_found","message":"Not found."}"#.utf8))
+        let item = await api.linkedPlayerItem("/media/live/12/index.m3u8")
+        #expect(assetURL(item) == "http://auth.invalid/media/live/12/index.m3u8")
+        // A server without links is not asked again on every channel change.
+        _ = await api.linkedPlayerItem("/media/live/13/index.m3u8")
+        #expect(AuthStub.all().count == 1)
+        #expect(MediaLinks.shared.worthAsking(api, now: Date().addingTimeInterval(MediaLinks.quiet + 1)))
+    }
+
+    @Test func aFailedLinkCallStillPlays() async throws {
+        MediaLinks.shared.reset()
+        defer { MediaLinks.shared.reset() }
+        let api = try authAPI(token: "bw_lab")
+        AuthStub.set("POST", "/api/v1/media/link", status: 500, body: Data(#"{"code":"internal","message":"boom"}"#.utf8))
+        #expect(await assetURL(api.linkedPlayerItem("/media/live/12/index.m3u8")) == "http://auth.invalid/media/live/12/index.m3u8")
+        // Not a missing route, so the next play asks again.
+        _ = await api.linkedPlayerItem("/media/live/12/index.m3u8")
+        #expect(AuthStub.all().count == 2)
+    }
+
+    @Test func aLinkElsewhereOrRunningOutIsNotUsed() async throws {
+        MediaLinks.shared.reset()
+        defer { MediaLinks.shared.reset() }
+        let api = try authAPI(token: "bw_lab")
+        AuthStub.set("POST", "/api/v1/media/link", body: mediaLinkBody("https://evil.example/media/live/12/index.m3u8?mk=k1", in: 24 * 3600))
+        #expect(await assetURL(api.linkedPlayerItem("/media/live/12/index.m3u8")) == "http://auth.invalid/media/live/12/index.m3u8")
+        // A link with less than the margin left plays once and is not kept.
+        AuthStub.set("POST", "/api/v1/media/link", body: mediaLinkBody("/media/live/12/index.m3u8?mk=short", in: 600))
+        #expect(await assetURL(api.linkedPlayerItem("/media/live/12/index.m3u8")) == "http://auth.invalid/media/live/12/index.m3u8?mk=short")
+        #expect(assetURL(api.playerItem("/media/live/12/index.m3u8")) == "http://auth.invalid/media/live/12/index.m3u8")
+        AuthStub.set("POST", "/api/v1/media/link", body: mediaLinkBody("/media/live/12/index.m3u8?mk=long", in: 24 * 3600))
+        _ = await api.linkedPlayerItem("/media/live/12/index.m3u8")
+        let later = Date().addingTimeInterval(23 * 3600)
+        #expect(MediaLinks.shared.url(for: api, path: "/media/live/12/index.m3u8", now: later) == nil)
+    }
+
+    @Test func homeNetworkPlaybackAsksForNoLink() async throws {
+        MediaLinks.shared.reset()
+        let api = try authAPI(token: nil)
+        let item = await api.linkedPlayerItem("/media/live/12/index.m3u8")
+        #expect(assetURL(item) == "http://auth.invalid/media/live/12/index.m3u8")
+        #expect(AuthStub.all().isEmpty)
+    }
+
+    // MARK: Signing out
+
+    @Test func aRefusedTokenReportsAtOnce() async throws {
+        AuthStub.reset()
+        let heard = Heard()
+        let base = try #require(URL(string: "http://auth.invalid"))
+        let api = APIClient(base: base, session: authSession(), token: "bw_gone") { heard.add($0) }
+        AuthStub.set("GET", "/api/v1/recordings", status: 401, body: Data(#"{"code":"unauthorized","message":"Sign in from a paired device."}"#.utf8))
+        AuthStub.set("GET", "/api/v1/passes", status: 403, body: Data(#"{"code":"forbidden","message":"This device can't do that."}"#.utf8))
+        AuthStub.set("POST", "/api/v1/pair/claim", status: 401, body: Data(#"{"code":"unauthorized","message":"That code does not match."}"#.utf8))
+        _ = try? await api.passes()
+        _ = try? await api.claimPair(code: "X", name: "Den TV", kind: "tv")
+        #expect(heard.all.isEmpty)
+        _ = try? await api.recordings()
+        #expect(heard.all == ["Sign in from a paired device."])
+        // Without a token there is nothing to sign out of.
+        let open = APIClient(base: base, session: authSession()) { heard.add($0) }
+        _ = try? await open.recordings()
+        #expect(heard.all.count == 1)
+    }
+
+    @Test @MainActor func aRefusedCallSignsTheStoreOut() async throws {
+        let store = AppStore(session: authSession())
+        store.persistServers = false
+        AuthStub.reset()
+        let url = try #require(URL(string: "http://127.0.0.1:19073"))
+        defer {
+            store.forget()
+            DeviceTokens.save(nil, for: url, server: "auth-refused")
+        }
+        store.connect(FoundServer(id: "auth-refused", name: "Lab", url: url), token: "bw_refused")
+        AuthStub.set("GET", "/api/v1/settings", status: 401, body: Data(#"{"code":"unauthorized","message":"Sign in from a paired device."}"#.utf8))
+        _ = try? await store.api?.settings()
+        for _ in 0 ..< 50 where store.signedOut == nil {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(store.signedOut == "Sign in from a paired device.")
+        #expect(store.socket == nil)
+    }
+
+    @Test @MainActor func aRevokedEventSignsOnlyThatDeviceOut() throws {
+        let store = AppStore(session: authSession())
+        store.persistServers = false
+        let url = try #require(URL(string: "http://127.0.0.1:19074"))
+        defer {
+            store.forget()
+            DeviceTokens.save(nil, for: url, server: "auth-revoke")
+        }
+        store.connect(FoundServer(id: "auth-revoke", name: "Lab", url: url), token: "bw_den", device: "dev-den")
+        #expect(DeviceTokens.device(for: url) == "dev-den")
+        store.noteRevoked("dev-kitchen")
+        #expect(store.signedOut == nil)
+        #expect(store.api?.token == "bw_den")
+        store.noteRevoked("dev-den")
+        #expect(store.signedOut == "Sign in from a paired device.")
+        #expect(store.api?.token == nil)
+        #expect(store.socket == nil)
+        #expect(DeviceTokens.token(for: url, server: "auth-revoke") == nil)
+        #expect(DeviceTokens.device(for: url) == nil)
+        let event = try JSONDecoder().decode(RevokedClient.self, from: Data(#"{"id":"dev-den"}"#.utf8))
+        #expect(event.id == "dev-den")
+    }
+
+    @Test @MainActor func aHomeNetworkStoreIgnoresRevokes() throws {
+        let store = AppStore(session: authSession())
+        store.persistServers = false
+        let url = try #require(URL(string: "http://127.0.0.1:19075"))
+        defer { store.forget() }
+        store.connect(FoundServer(id: "auth-open", name: "Lab", url: url), token: "")
+        store.noteRevoked("dev-den")
+        store.noteRevoked("")
+        #expect(store.signedOut == nil)
+    }
+
+    @Test func theDeviceIDStaysWithItsToken() throws {
+        let url = try #require(URL(string: "https://device.example.com"))
+        let other = try #require(URL(string: "https://other.example.com"))
+        defer {
+            DeviceTokens.save(nil, for: url, server: "auth-device")
+            DeviceTokens.save(nil, for: other, server: "auth-device")
+        }
+        DeviceTokens.save("bw_one", for: url, server: "auth-device", device: "d1")
+        #expect(DeviceTokens.device(for: url) == "d1")
+        #expect(DeviceTokens.device(for: other) == nil)
+        // Saving the same token again keeps the id; a new token starts without one.
+        DeviceTokens.save("bw_one", for: url, server: "auth-device")
+        #expect(DeviceTokens.device(for: url) == "d1")
+        DeviceTokens.save("bw_two", for: url, server: "auth-device")
+        #expect(DeviceTokens.device(for: url) == nil)
+        // GET /clients/me names it, but only for the token it asked with.
+        DeviceTokens.noteDevice("d2", for: url, token: "bw_one")
+        #expect(DeviceTokens.device(for: url) == nil)
+        DeviceTokens.noteDevice("d2", for: url, token: "bw_two")
+        #expect(DeviceTokens.device(for: url) == "d2")
+        DeviceTokens.save(nil, for: url, server: "auth-device")
+        #expect(DeviceTokens.device(for: url) == nil)
+    }
+}
+
+private final class Heard: @unchecked Sendable {
+    private let lock = NSLock()
+    private var words: [String] = []
+    var all: [String] {
+        lock.withLock { words }
+    }
+
+    func add(_ message: String) {
+        lock.withLock { words.append(message) }
+    }
+}
+
+private func mediaLinkBody(_ url: String, in seconds: TimeInterval) -> Data {
+    let expires = ISO8601DateFormatter().string(from: Date().addingTimeInterval(seconds))
+    return Data(#"{"url":"\#(url)","expiresAt":"\#(expires)"}"#.utf8)
+}
+
+private func assetURL(_ item: AVPlayerItem) -> String? {
+    (item.asset as? AVURLAsset)?.url.absoluteString
 }
 
 private func authSession() -> URLSession {
