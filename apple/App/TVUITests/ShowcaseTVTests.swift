@@ -31,9 +31,22 @@ final class ShowcaseTVTests: XCTestCase {
         remote.press(.up)
         pause(4)
         shot("tv-topshelf-focused")
+        // The title, channel, and time left fade in once the slide settles.
+        pause(8)
+        shot("tv-topshelf-details")
+        note("tv-topshelf-tree", home.debugDescription)
         remote.press(.right)
         pause(4)
         shot("tv-topshelf-next")
+        // Select opens the slide's details: Play, More Info, time left, ends, channel.
+        remote.press(.select)
+        pause(4)
+        shot("tv-topshelf-panel")
+        // Play opens Broadwave on that channel.
+        remote.press(.select)
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 15))
+        pause(12)
+        shot("tv-topshelf-play")
     }
 
     func testRecordingChaptersAndBreaks() throws {
@@ -144,6 +157,11 @@ final class ShowcaseTVTests: XCTestCase {
 
     private func pause(_ seconds: TimeInterval) {
         RunLoop.current.run(until: Date().addingTimeInterval(seconds))
+    }
+
+    private func note(_ name: String, _ text: String) {
+        guard let dir = ProcessInfo.processInfo.environment["BROADWAVE_SHOT_DIR"], !dir.isEmpty else { return }
+        try? text.write(toFile: dir + "/\(name).txt", atomically: true, encoding: .utf8)
     }
 
     private func shot(_ name: String) {
