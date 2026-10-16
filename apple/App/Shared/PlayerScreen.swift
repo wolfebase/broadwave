@@ -2388,7 +2388,8 @@ struct RecordingPlayerScreen: View {
     }
 
     var body: some View {
-        SystemPlayer(player: player, actions: actions, liveMenu: false, fileMenu: menu)
+        // One Back leaves, with the transport bar up or not; AVKit spent the first on hiding the bar.
+        SystemPlayer(player: player, actions: actions, liveMenu: false, fileMenu: menu, onEscape: { dismiss() })
             .ignoresSafeArea()
             .overlay {
                 if let error {
@@ -2396,6 +2397,7 @@ struct RecordingPlayerScreen: View {
                 }
             }
             .overlay(alignment: .top) { PlayerNote(text: note) }
+            .overlay { clockProbe }
         #if os(iOS)
             .overlay(alignment: .bottomTrailing) {
                 Group {
@@ -2472,6 +2474,22 @@ struct RecordingPlayerScreen: View {
         #endif
     }
 
+    /// UI tests read the player's clock here.
+    @ViewBuilder private var clockProbe: some View {
+        #if DEBUG
+            if UserDefaults.standard.bool(forKey: "BroadwaveChannelNow") {
+                TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+                    let now = player.currentTime().seconds
+                    Text(String(format: "%.1f", now.isFinite ? now : 0))
+                        .font(.system(size: 2))
+                        .foregroundStyle(.clear)
+                        .allowsHitTesting(false)
+                        .accessibilityIdentifier("recording-time")
+                }
+            }
+        #endif
+    }
+
     #if os(iOS)
         /// Next recording as its own button, and the break entries in a Breaks menu.
         @ToolbarContentBuilder private var fileToolbar: some ToolbarContent {
@@ -2526,11 +2544,12 @@ struct RecordingPlayerScreen: View {
             let playlist: String
             var position = 0.0
             var total = 1
+            var growing = false
             switch source {
             case let .recording(first):
                 let one = episode ?? first
                 let start = try await api.play(recordingID: one.id)
-                (rec, found, playlist, position) = (one, start.markers ?? [], start.playlist, start.position)
+                (rec, found, playlist, position, growing) = (one, start.markers ?? [], start.playlist, start.position, start.growing)
             case let .library(channel):
                 let start = try await api.playVirtual(channel.id, index: index)
                 guard start.usesTuner != true else {
@@ -2546,8 +2565,10 @@ struct RecordingPlayerScreen: View {
             var failure: (any Error)?
             // A playlist the server is still writing can fail an item while it loads
             // (a changed discontinuity count). A fresh item reads it again once.
+            let length = Self.length(rec, growing: growing)
+            let aired = growing || rec.isRecording ? rec.startedAt : nil
             for _ in 0 ..< 2 {
-                let item = await api.linkedPlayerItem(playlist)
+                let item = await playerItem(api, playlist, length: length, aired: aired)
                 guard !Task.isCancelled else { return false }
                 PlayerTuning.apply(item, network: Capabilities.current().network ?? "lan", tile: false)
                 item.externalMetadata = metadata(rec)
@@ -2574,6 +2595,28 @@ struct RecordingPlayerScreen: View {
         }
     }
 
+    /// Apple TV plays a recording as on-demand video: 0:00 to its length, time left,
+    /// no LIVE badge or air-time clock (`OnDemandPlaylist`). iPhone and iPad keep the
+    /// plain item, which AirPlay can hand to a receiver.
+    private func playerItem(_ api: APIClient, _ playlist: String, length: Double?, aired: Date?) async -> AVPlayerItem {
+        #if os(tvOS)
+            await api.onDemandItem(playlist, length: length, aired: aired)
+        #else
+            await api.linkedPlayerItem(playlist)
+        #endif
+    }
+
+    /// A finished recording's length, or for one still recording the length it is planned to have.
+    private static func length(_ rec: Recording, growing: Bool) -> Double? {
+        if growing || rec.isRecording {
+            guard let ends = rec.endsAt else { return nil }
+            let planned = ends.timeIntervalSince(rec.startedAt)
+            return planned > 60 ? planned : nil
+        }
+        guard let length = rec.durationSec, length > 1 else { return nil }
+        return length
+    }
+
     /// The first play of a recording grows its playlist while the server transcodes it,
     /// and a seek past the end plays from 0. Waits as long as the web player does.
     private static func reach(_ item: AVPlayerItem, _ position: Double) async -> Bool {
@@ -2591,20 +2634,27 @@ struct RecordingPlayerScreen: View {
         return false
     }
 
+    /// The show over the scrubber, the episode under it, and the description in the Info tab.
     private func metadata(_ rec: Recording) -> [AVMetadataItem] {
-        let title = AVMutableMetadataItem()
-        title.identifier = .commonIdentifierTitle
-        title.value = (rec.subtitle ?? rec.title) as NSString
-        title.extendedLanguageTag = "und"
-        let line = AVMutableMetadataItem()
-        line.identifier = .iTunesMetadataTrackSubTitle
-        if case let .library(channel) = source {
-            line.value = "\(channel.number) \(channel.name)" as NSString
-        } else {
-            line.value = rec.guideNumber as NSString
+        func item(_ id: AVMetadataIdentifier, _ value: String) -> AVMetadataItem {
+            let m = AVMutableMetadataItem()
+            m.identifier = id
+            m.value = value as NSString
+            m.extendedLanguageTag = "und"
+            return m
         }
-        line.extendedLanguageTag = "und"
-        return [title, line]
+        let episode = ProgramLine.episode(label: rec.episodeLabel, season: rec.season, episode: rec.episode, subtitle: nil)
+        var line = [episode, rec.subtitle].compactMap(\.self).filter { !$0.isEmpty }
+        if case let .library(channel) = source {
+            line.append("\(channel.number) \(channel.name)")
+        } else if line.isEmpty {
+            line.append(rec.guideNumber)
+        }
+        var out = [item(.commonIdentifierTitle, rec.title), item(.iTunesMetadataTrackSubTitle, line.joined(separator: " · "))]
+        if let about = rec.description, !about.isEmpty {
+            out.append(item(.commonIdentifierDescription, about))
+        }
+        return out
     }
 
     /// Next recording, marking a break by hand, and removing one: the transport bar on
