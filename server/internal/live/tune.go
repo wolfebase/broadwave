@@ -97,6 +97,17 @@ func (h *Hub) openTuned(ctx context.Context, ch store.SourceChannel) *tuned {
 	if !ok && alone {
 		tuner, ok = firstFree(device.Tuners, used, held)
 	}
+	// Every tuner busy: the one left longest ago for a flip back is tuned
+	// again here, outside h.mu. With another device to fail over to, the
+	// locked path reads that device first.
+	claimed := false
+	if !ok && alone {
+		var m *mux
+		m, tuner, _, ok = h.claimWarmLocked(device.Host, func(m *mux) bool {
+			return m.tuner >= 0 && !held[m.tuner]
+		})
+		claimed = ok && m != nil
+	}
 	if !ok {
 		h.mu.Unlock()
 		return nil
@@ -125,6 +136,11 @@ func (h *Hub) openTuned(ctx context.Context, ch store.SourceChannel) *tuned {
 			panic(r)
 		}
 	}()
+	if claimed {
+		// Set to none first, as the locked path does, so the device has
+		// ended the old stream before the new tune.
+		releaseTuner(t.host, t.tuner)
+	}
 	h.openTunedStream(ctx, t, device.Tuners)
 	return t
 }
