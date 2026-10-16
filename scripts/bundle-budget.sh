@@ -40,14 +40,19 @@
 # JS raised 2026-10-12: Home, the guide, and the shell look up their words in
 # an English catalog, with the plural helper. Measured entry gzip 97465, plus
 # 300 bytes of slack for lazy-chunk hashes.
+# JS and CSS raised 2026-10-16 for the watching work: link tabs with a More
+# menu and a 404 page, the guide's empty states and page keys, rails with
+# arrows and each show once, the light hero, a missing-tuner line, data change
+# events with versions and /now first paint, and TV and phone target sizes.
+# Measured entry gzip JS 101314 and CSS 13205, plus 300 and 200 bytes.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
-JS_GZIP_MAX=97765
-CSS_GZIP_MAX=12157
+JS_GZIP_MAX=101614
+CSS_GZIP_MAX=13405
 
 if [[ ! -f "$INDEX" ]]; then
   echo "bundle budget: missing $INDEX" >&2
