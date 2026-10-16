@@ -115,7 +115,7 @@ test.describe("rapid channel changes", () => {
 
       const steps = 10;
       for (let i = 0; i < steps; i++) {
-        await page.keyboard.press("ArrowDown");
+        await page.keyboard.press("ArrowUp");
         if (i < steps - 1) await page.waitForTimeout(2000);
       }
       const expected = lineup[(1 + steps) % lineup.length];

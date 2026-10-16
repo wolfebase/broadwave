@@ -138,37 +138,37 @@ test("a phone walks home, the guide, and the player by touch", async ({ page }) 
   expect(stage?.width).toBeGreaterThanOrEqual(389);
   expect(stage?.width).toBeLessThanOrEqual(390);
   await moving(page);
-  await expect.poll(() => chrome(page), { timeout: 8_000 }).toMatchObject({ idle: true, opacity: "0" });
+  // Upright, the picture sits on top with the controls under it, so the
+  // controls stay and a tap never pauses.
+  await expect(page.locator(".stage.portrait")).toBeVisible();
+  await expect(page.locator(".stage-below")).toContainText(/Next at|Channels/);
+  await page.waitForTimeout(3_600);
+  await expect.poll(() => chrome(page)).toMatchObject({ idle: false });
 
   const picture = await page.locator("video.stage-video").boundingBox();
   expect(picture).toBeTruthy();
-  await page.touchscreen.tap(picture!.x + picture!.width / 2, picture!.y + picture!.height * 0.28);
+  await page.touchscreen.tap(picture!.x + picture!.width / 2, picture!.y + picture!.height / 2);
+  await page.waitForTimeout(400);
   await expect.poll(() => page.locator("video.stage-video").evaluate((video: HTMLVideoElement) => video.paused)).toBe(false);
   await expect.poll(() => chrome(page)).toMatchObject({ idle: false });
-  const shown = await page.locator(".stage-hud").evaluate((node) => Number(getComputedStyle(node).opacity));
-  expect(shown).toBeGreaterThan(0);
   await page.screenshot({ path: path.join(evidence, "chrome.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
-  await expect.poll(() => chrome(page), { timeout: 4_000 }).toMatchObject({ idle: true, opacity: "0" });
 
-  await page.touchscreen.tap(picture!.x + picture!.width / 2, picture!.y + picture!.height * 0.28);
-  await expect.poll(() => chrome(page)).toMatchObject({ idle: false });
-  await tap(page.getByRole("button", { name: "Next channel" }));
+  await tap(page.getByRole("button", { name: "Channel up" }));
   await expect.poll(() => new URL(page.url()).searchParams.get("channel")).toBe(String(next.id));
   await moving(page);
   await fits(page);
-  await expect.poll(() => chrome(page), { timeout: 8_000 }).toMatchObject({ idle: true, opacity: "0" });
 
-  await page.touchscreen.tap(picture!.x + picture!.width / 2, picture!.y + picture!.height * 0.28);
-  await expect.poll(() => chrome(page), { timeout: 8_000 }).toMatchObject({ idle: false });
-  await tap(page.getByRole("button", { name: "Previous channel" }));
+  await tap(page.getByRole("button", { name: "Channel down" }));
   await expect.poll(() => new URL(page.url()).searchParams.get("channel")).toBe(String(start));
   await moving(page);
   await expect(page.locator(".tuning")).toHaveCount(0);
   await page.screenshot({ path: path.join(evidence, "player.jpg"), type: "jpeg", quality: 70, animations: "disabled" });
-  await expect.poll(() => chrome(page), { timeout: 8_000 }).toMatchObject({ idle: true, opacity: "0" });
 
-  await page.touchscreen.tap(picture!.x + picture!.width / 2, picture!.y + picture!.height * 0.28);
-  await expect.poll(() => chrome(page)).toMatchObject({ idle: false });
+  // A row under the picture tunes it.
+  await tap(page.locator(".pb-row", { hasText: next.number }).first());
+  await expect.poll(() => new URL(page.url()).searchParams.get("channel")).toBe(String(next.id));
+  await moving(page);
+
   await tap(page.getByRole("button", { name: "Back to browsing" }));
   await expect(page).toHaveURL(/\/guide$/);
   const mini = page.locator(".stage.mini");
