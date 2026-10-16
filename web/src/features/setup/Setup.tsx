@@ -7,10 +7,13 @@ import { setupMessages } from "../../i18n/messages/setup.ts";
 import { bind } from "../../i18n/runtime.ts";
 import { actionName } from "../../lib/actionName";
 import { copy } from "../../strings";
+import { focusRing } from "../../app/remote";
 import { ChevronIcon } from "../../ui/icons";
 import { noteAfterFetch } from "./fetchNote";
 import { guideAfterFree, hitsAfterLook } from "./lookHits";
 import { HomeList } from "./HomeList";
+import { setupSummary } from "./summary";
+import "../manage.css";
 import "./setup.css";
 
 const t = bind(setupMessages);
@@ -45,9 +48,21 @@ export function Setup() {
   const [xtreamUser, setXtreamUser] = useState("");
   const [xtreamPass, setXtreamPass] = useState("");
   const [progress, setProgress] = useState<SetupFinish | null>(null);
+  const [held, setHeld] = useState(false);
   const hold = useRef(false);
   const lookN = useRef(0);
   const freeN = useRef(0);
+  const continueRef = useRef<HTMLButtonElement>(null);
+  const lookRef = useRef<HTMLButtonElement>(null);
+  const watchRef = useRef<HTMLButtonElement>(null);
+  const autoFocus = useRef<HTMLElement | null>(null);
+  const found = devices.length > 0 || channels.length > 0;
+  const ready = Boolean(progress?.ready);
+
+  const stay = () => {
+    hold.current = true;
+    setHeld(true);
+  };
 
   useEffect(() => {
     if (window.location.pathname !== "/setup") navigate("/setup", true);
@@ -59,12 +74,12 @@ export function Setup() {
 
   useEffect(() => {
     if (step !== "sources" || hold.current) return;
-    if (devices.length === 0 && channels.length === 0) return;
+    if (!found) return;
     const timer = window.setTimeout(() => {
       if (!hold.current) setStep("finish");
     }, 4000);
     return () => window.clearTimeout(timer);
-  }, [step, devices.length, channels.length]);
+  }, [step, found]);
 
   useEffect(() => {
     if (step !== "finish") return;
@@ -89,6 +104,27 @@ export function Setup() {
     };
   }, [step]);
 
+  // The summary counts what the server just finished, not what loaded before it.
+  useEffect(() => {
+    if (ready) void refresh(["channels", "devices"]);
+  }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A remote starts on the next thing to press, unless it is already somewhere on the page.
+  useEffect(() => {
+    if (document.documentElement.dataset.layout !== "tv") return;
+    const frame = window.requestAnimationFrame(() => {
+      const active = document.activeElement;
+      const placed = active instanceof HTMLElement && active !== document.body && active.closest(".setup");
+      // Focus this effect put on Look harder moves on to Continue once a tuner turns up.
+      if (placed && active !== autoFocus.current) return;
+      const target = step === "finish" ? watchRef.current : found ? continueRef.current : lookRef.current;
+      if (!target) return;
+      autoFocus.current = target;
+      focusRing(target);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [step, ready, found]);
+
   const index = steps.findIndex((s) => s.id === step);
 
   async function watch() {
@@ -98,232 +134,276 @@ export function Setup() {
     navigate(id ? `/watch?channel=${id}` : "/");
   }
 
-  return (
-    <div className="setup" data-setup={step}>
-      <header className="setup-head">
-        <span className="brand-tally" aria-hidden="true" />
-        <h1>{t("setup.title")}</h1>
-        <ol className="setup-steps">
-          {steps.map((s, i) => (
-            <li key={s.id} className={i < index ? "done" : i === index ? "on" : ""}>
-              <button
-                type="button"
-                onClick={() => {
-                  if (s.id === "sources" && step === "finish") hold.current = true;
-                  setStep(s.id);
-                }}
-              >
-                {s.title}
-              </button>
-            </li>
-          ))}
-        </ol>
-      </header>
+  const lead = !found ? t("setup.leadSearching") : held ? t("setup.leadHeld") : t("setup.leadFound");
 
-      {step === "sources" ? (
-        <section
-          className="setup-card glass"
-          onPointerDownCapture={() => (hold.current = true)}
-          onKeyDownCapture={() => (hold.current = true)}
-        >
-          <h2>{devices.length > 0 ? t("setup.yourTuner") : t("setup.looking")}</h2>
-          <p className="dim">{t("setup.lead")}</p>
-          {devices.length > 0 ? (
-            <ul className="setup-list">
-              {devices.map((d) => (
-                <li key={d.deviceId}>
-                  <strong>{d.friendlyName || d.modelNumber}</strong>
-                  <span className="dim">
-                    {d.tunerCount > 0 ? t("setup.tuners", { count: d.tunerCount }) : t("setup.streamed")}
-                    {" · "}
-                    {t("setup.channels", { count: channels.filter((c) => c.deviceId === d.deviceId).length })}
-                  </span>
-                  <span className="ok">{t("setup.found")}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>{busy ? t("setup.searching") : t("setup.noTuner")}</p>
-          )}
-          <form
-            className="setup-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!address.trim() || busy) return;
-              setBusy(true);
-              void rediscover(address.trim())
-                .catch((e: unknown) => setNote(e instanceof Error ? e.message : t("setup.nothingAtAddress")))
-                .finally(() => setBusy(false));
-            }}
-          >
-            <label>
-              {copy.sources.address}
-              <input
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                autoComplete="off"
-                spellCheck={false}
-                placeholder={copy.sources.addressPlaceholder}
-              />
-            </label>
-            <p className="hint">{copy.sources.addressHint}</p>
-            <button type="submit" className="btn" disabled={!address.trim() || busy}>
-              {copy.sources.lookup}
-            </button>
-          </form>
-          <div className="setup-row">
-            <button
-              type="button"
-              className="btn"
-              disabled={busy}
-              onClick={() => {
-                const mine = ++lookN.current;
-                setBusy(true);
-                void lookHarder()
-                  .then((res) => {
-                    setHits((shown) => hitsAfterLook(mine, lookN.current, shown, true, res.found) ?? shown);
-                  })
-                  .catch(() => {
-                    setHits((shown) => hitsAfterLook(mine, lookN.current, shown, false, undefined) ?? shown);
-                  })
-                  .finally(() => {
-                    if (mine === lookN.current) setBusy(false);
-                  });
-              }}
-            >
-              {copy.sources.look}
-            </button>
-            <button
-              type="button"
-              className="btn"
-              disabled={busy}
-              onClick={() => {
-                const mine = ++freeN.current;
-                setBusy(true);
-                void findFree()
-                  .then((res) => {
-                    if (mine !== freeN.current) return;
-                    setFeeds((shown) => hitsAfterLook(mine, freeN.current, shown, true, res.found) ?? shown);
-                    const guide = guideAfterFree(true, res.found, res.guide);
-                    if (guide != null) setFreeGuide(guide);
-                    setNote((n) => noteAfterFetch(n, true, copy.sources.freeEmpty));
-                  })
-                  .catch(() => {
-                    setFeeds((shown) => hitsAfterLook(mine, freeN.current, shown, false, undefined) ?? shown);
-                    if (mine === freeN.current) setNote((n) => noteAfterFetch(n, false, copy.sources.freeEmpty));
-                  })
-                  .finally(() => {
-                    if (mine === freeN.current) setBusy(false);
-                  });
-              }}
-            >
-              {copy.sources.free}
-            </button>
-          </div>
-          {hits.length > 0 ? (
-            <ul className="setup-list">
-              {hits.map((hit) => (
-                <li key={`${hit.kind}-${hit.addr}`}>
-                  <strong>{hit.name}</strong>
-                  <span className="dim">{hit.addr}</span>
-                  <button type="button" className="btn" aria-label={actionName(copy.sources.add, hit.name)} onClick={() => void addHit(hit, rediscover, setNote, refresh)}>
-                    {copy.sources.add}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {feeds.map((feed) => (
-            <div key={feed.playlist} className="setup-row">
-              <span>{feed.name}</span>
-              <button
-                type="button"
-                className="btn"
-                aria-label={actionName(copy.sources.add, feed.name)}
-                onClick={() => {
+  return (
+    <div className="setup manage" data-setup={step}>
+      <div className="setup-inner">
+        <header className="setup-head">
+          <span className="brand-tally" aria-hidden="true" />
+          <h1>{t("setup.title")}</h1>
+          <ol className="setup-steps">
+            {steps.map((s, i) => (
+              <li key={s.id} className={i < index ? "done" : i === index ? "on" : ""}>
+                <button
+                  type="button"
+                  aria-current={i === index ? "step" : undefined}
+                  onClick={() => {
+                    if (s.id === "sources" && step === "finish") stay();
+                    setStep(s.id);
+                  }}
+                >
+                  {s.title}
+                </button>
+              </li>
+            ))}
+          </ol>
+        </header>
+
+        {step === "sources" ? (
+          <section className="setup-card" aria-labelledby="setup-sources-title" onPointerDownCapture={stay} onKeyDownCapture={stay}>
+            <div className="setup-card-head">
+              <h2 id="setup-sources-title">{devices.length > 0 ? t("setup.yourTuner") : t("setup.looking")}</h2>
+              <p className="dim">{lead}</p>
+            </div>
+            {devices.length > 0 ? (
+              <ul className="setup-found">
+                {devices.map((d) => (
+                  <li key={d.deviceId}>
+                    <span className="setup-found-mark" aria-hidden="true">
+                      <Check />
+                    </span>
+                    <span className="setup-found-text">
+                      <strong>{d.friendlyName || d.modelNumber}</strong>
+                      <span className="dim">
+                        {d.tunerCount > 0 ? t("setup.tuners", { count: d.tunerCount }) : t("setup.streamed")}
+                        {" · "}
+                        {t("setup.channels", { count: channels.filter((c) => c.deviceId === d.deviceId).length })}
+                      </span>
+                    </span>
+                    <span className="ok">{t("setup.found")}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="setup-searching" role="status">
+                <span className="setup-spinner" aria-hidden="true" />
+                {busy ? t("setup.searching") : t("setup.noTuner")}
+              </p>
+            )}
+
+            <div className="setup-block">
+              <h3>{t("setup.notSeeing")}</h3>
+              <form
+                className="setup-address"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!address.trim() || busy) return;
                   setBusy(true);
-                  void addFree(feed)
-                    .then((res) => {
-                      setNote(res.message || t("setup.addedLineup"));
-                      return refresh(["devices", "channels"]);
-                    })
-                    .catch((e: unknown) => setNote(e instanceof Error ? e.message : t("setup.feedFailed")))
+                  void rediscover(address.trim())
+                    .catch((e: unknown) => setNote(e instanceof Error ? e.message : t("setup.nothingAtAddress")))
                     .finally(() => setBusy(false));
                 }}
               >
-                {copy.sources.add}
-              </button>
+                <div className="field">
+                  <label htmlFor="setup-address">{copy.sources.address}</label>
+                  <div className="setup-inline">
+                    <input
+                      id="setup-address"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder={copy.sources.addressPlaceholder}
+                      aria-describedby="setup-address-hint"
+                    />
+                    <button type="submit" className="btn" disabled={!address.trim() || busy}>
+                      {copy.sources.lookup}
+                    </button>
+                  </div>
+                  <span className="hint" id="setup-address-hint">
+                    {copy.sources.addressHint}
+                  </span>
+                </div>
+              </form>
+              <div className="setup-row">
+                <button
+                  ref={lookRef}
+                  type="button"
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => {
+                    const mine = ++lookN.current;
+                    setBusy(true);
+                    void lookHarder()
+                      .then((res) => {
+                        setHits((shown) => hitsAfterLook(mine, lookN.current, shown, true, res.found) ?? shown);
+                      })
+                      .catch(() => {
+                        setHits((shown) => hitsAfterLook(mine, lookN.current, shown, false, undefined) ?? shown);
+                      })
+                      .finally(() => {
+                        if (mine === lookN.current) setBusy(false);
+                      });
+                  }}
+                >
+                  {copy.sources.look}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => {
+                    const mine = ++freeN.current;
+                    setBusy(true);
+                    void findFree()
+                      .then((res) => {
+                        if (mine !== freeN.current) return;
+                        setFeeds((shown) => hitsAfterLook(mine, freeN.current, shown, true, res.found) ?? shown);
+                        const guide = guideAfterFree(true, res.found, res.guide);
+                        if (guide != null) setFreeGuide(guide);
+                        setNote((n) => noteAfterFetch(n, true, copy.sources.freeEmpty));
+                      })
+                      .catch(() => {
+                        setFeeds((shown) => hitsAfterLook(mine, freeN.current, shown, false, undefined) ?? shown);
+                        if (mine === freeN.current) setNote((n) => noteAfterFetch(n, false, copy.sources.freeEmpty));
+                      })
+                      .finally(() => {
+                        if (mine === freeN.current) setBusy(false);
+                      });
+                  }}
+                >
+                  {copy.sources.free}
+                </button>
+              </div>
+              {hits.length > 0 || feeds.length > 0 ? (
+                <ul className="setup-list">
+                  {hits.map((hit) => (
+                    <li key={`${hit.kind}-${hit.addr}`}>
+                      <strong>{hit.name}</strong>
+                      <button type="button" className="btn small" aria-label={actionName(copy.sources.add, hit.name)} onClick={() => void addHit(hit, rediscover, setNote, refresh)}>
+                        {copy.sources.add}
+                      </button>
+                      <span className="dim">{hit.addr}</span>
+                    </li>
+                  ))}
+                  {feeds.map((feed) => (
+                    <li key={feed.playlist}>
+                      <strong>{feed.name}</strong>
+                      <button
+                        type="button"
+                        className="btn small"
+                        aria-label={actionName(copy.sources.add, feed.name)}
+                        onClick={() => {
+                          setBusy(true);
+                          void addFree(feed)
+                            .then((res) => {
+                              setNote(res.message || t("setup.addedLineup"));
+                              return refresh(["devices", "channels"]);
+                            })
+                            .catch((e: unknown) => setNote(e instanceof Error ? e.message : t("setup.feedFailed")))
+                            .finally(() => setBusy(false));
+                        }}
+                      >
+                        {copy.sources.add}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {freeGuide ? <pre className="hint setup-pre">{freeGuide}</pre> : null}
             </div>
-          ))}
-          {freeGuide ? <pre className="hint">{freeGuide}</pre> : null}
-          <form
-            className="setup-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setBusy(true);
-              const kind = xtreamUser ? "xtream" : "m3u";
-              void addSource(kind, "", playlistURL, "", "", "", xtreamUser, xtreamPass)
-                .then(() => refresh(["devices", "channels"]))
-                .then(() => setNote(t("setup.playlistAdded")))
-                .catch((e: unknown) => setNote(e instanceof Error ? e.message : t("setup.playlistFailed")))
-                .finally(() => setBusy(false));
-            }}
-          >
-            <label>
-              {t("setup.playlistOrXtream")}
-              <input value={playlistURL} onChange={(e) => setPlaylistURL(e.target.value)} placeholder={t("setup.playlistPlaceholder")} spellCheck={false} />
-            </label>
-            <label>
-              {t("setup.username")}
-              <input value={xtreamUser} onChange={(e) => setXtreamUser(e.target.value)} autoComplete="off" />
-            </label>
-            <label>
-              {t("setup.password")}
-              <input type="password" value={xtreamPass} onChange={(e) => setXtreamPass(e.target.value)} autoComplete="off" />
-            </label>
-            <label>
-              {copy.sources.file}
-              <input
-                type="file"
-                accept=".m3u,.m3u8"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
+
+            <details className="setup-other">
+              {/* The remote walks focusable things only, and a summary is not one by default. */}
+              <summary tabIndex={0}>
+                <span className="setup-other-title">{t("setup.otherSources")}</span>
+                <span className="hint">{t("setup.otherSourcesHint")}</span>
+              </summary>
+              <form
+                className="setup-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
                   setBusy(true);
-                  void addPlaylistFile("", "", file)
+                  const kind = xtreamUser ? "xtream" : "m3u";
+                  void addSource(kind, "", playlistURL, "", "", "", xtreamUser, xtreamPass)
                     .then(() => refresh(["devices", "channels"]))
                     .then(() => setNote(t("setup.playlistAdded")))
-                    .catch((err: unknown) => setNote(err instanceof Error ? err.message : t("setup.fileFailed")))
+                    .catch((e: unknown) => setNote(e instanceof Error ? e.message : t("setup.playlistFailed")))
                     .finally(() => setBusy(false));
                 }}
-              />
-            </label>
-            <button type="submit" className="btn" disabled={busy || playlistURL.trim() === ""}>
-              {t("setup.addPlaylist")}
-            </button>
-          </form>
-          {note ? <p className="dim" role={/did not|not finish|nothing|no free/i.test(note) ? "alert" : "status"}>{note}</p> : null}
-          <HomeList hideAdded />
-        </section>
-      ) : null}
-
-      {step === "finish" ? <FinishStep progress={progress} note={note} /> : null}
-      <div className="setup-foot">
-        {step === "sources" ? (
-          <button type="button" className="btn primary" disabled={devices.length === 0 && channels.length === 0} onClick={() => setStep("finish")}>
-            {t("setup.continue")} <ChevronIcon />
-          </button>
-        ) : progress?.ready ? (
-          <button type="button" className="btn primary big" onClick={() => void watch()}>
-            {t("setup.watch")} <ChevronIcon />
-          </button>
+              >
+                <label className="field">
+                  {t("setup.playlistOrXtream")}
+                  <input value={playlistURL} onChange={(e) => setPlaylistURL(e.target.value)} placeholder={t("setup.playlistPlaceholder")} spellCheck={false} />
+                </label>
+                <div className="setup-pair">
+                  <label className="field">
+                    {t("setup.username")}
+                    <input value={xtreamUser} onChange={(e) => setXtreamUser(e.target.value)} autoComplete="off" />
+                  </label>
+                  <label className="field">
+                    {t("setup.password")}
+                    <input type="password" value={xtreamPass} onChange={(e) => setXtreamPass(e.target.value)} autoComplete="off" />
+                  </label>
+                </div>
+                <button type="submit" className="btn" disabled={busy || playlistURL.trim() === ""}>
+                  {t("setup.addPlaylist")}
+                </button>
+                <label className="field setup-file">
+                  {copy.sources.file}
+                  <input
+                    type="file"
+                    accept=".m3u,.m3u8"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setBusy(true);
+                      void addPlaylistFile("", "", file)
+                        .then(() => refresh(["devices", "channels"]))
+                        .then(() => setNote(t("setup.playlistAdded")))
+                        .catch((err: unknown) => setNote(err instanceof Error ? err.message : t("setup.fileFailed")))
+                        .finally(() => setBusy(false));
+                    }}
+                  />
+                </label>
+              </form>
+            </details>
+            {note ? <p className="setup-note" role={/did not|not finish|nothing|no free/i.test(note) ? "alert" : "status"}>{note}</p> : null}
+            <div className="setup-block">
+              <HomeList hideAdded />
+            </div>
+          </section>
         ) : null}
+
+        {step === "finish" ? <FinishStep progress={progress} note={note} summary={setupSummary(devices, channels.length)} /> : null}
+      </div>
+      <div className="setup-foot">
+        <div className="setup-foot-inner">
+          {step === "sources" ? (
+            <button ref={continueRef} type="button" className="btn primary big" disabled={!found} onClick={() => setStep("finish")}>
+              {t("setup.continue")} <ChevronIcon />
+            </button>
+          ) : ready ? (
+            <button ref={watchRef} type="button" className="btn primary big" onClick={() => void watch()}>
+              {t("setup.watch")} <ChevronIcon />
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
 }
 
-function FinishStep({ progress, note }: { progress: SetupFinish | null; note: string }) {
+function Check() {
+  return (
+    <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
+  );
+}
+
+function FinishStep({ progress, note, summary }: { progress: SetupFinish | null; note: string; summary: string }) {
   const ready = progress?.ready ?? "";
   const url = window.location.origin;
   const loopback = /^(localhost|127\.|\[::1\]$)/.test(window.location.hostname);
@@ -334,41 +414,48 @@ function FinishStep({ progress, note }: { progress: SetupFinish | null; note: st
     return qr.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
   }, [url]);
   return (
-    <section
-      className="setup-card glass setup-finish"
-      tabIndex={0}
-      aria-labelledby="setup-ready-title"
-      aria-busy={progress?.running ? true : undefined}
-      data-ready={ready ? "1" : "0"}
-    >
-      {/* The card scrolls on a phone and has no controls of its own. */}
-      <h2 id="setup-ready-title">{ready || t("setup.settingUp")}</h2>
-      <ul className="setup-list">
-        {(progress?.steps ?? []).map((item) => (
-          <li key={item.id}>
-            <strong>{item.title}</strong>
-            <span className={`ok${item.state === "check" ? " warn" : item.state === "done" ? "" : " quiet"}`}>{stateWord(item.state)}</span>
-            {item.detail ? <span className="dim">{item.detail}</span> : null}
-          </li>
-        ))}
-      </ul>
-      {note ? <p className="dim" role={/did not|not finish|nothing|no free/i.test(note) ? "alert" : "status"}>{note}</p> : null}
+    <section className="setup-card setup-finish" aria-labelledby="setup-ready-title" aria-busy={progress?.running ? true : undefined} data-ready={ready ? "1" : "0"}>
+      <div className="setup-summary">
+        <span className={ready ? "setup-summary-mark done" : "setup-summary-mark"} aria-hidden="true">
+          {ready ? <Check /> : <span className="setup-spinner" />}
+        </span>
+        <div>
+          <h2 id="setup-ready-title">{ready ? summary : t("setup.settingUp")}</h2>
+          <p className="dim">{ready ? t("setup.readyToWatch") : t("setup.settingUpLead")}</p>
+        </div>
+      </div>
+      {(progress?.steps ?? []).length > 0 ? (
+        <ul className="setup-checks" aria-label={t("setup.stepsAria")}>
+          {(progress?.steps ?? []).map((item) => (
+            <li key={item.id} data-state={item.state}>
+              <span className="setup-check-mark" aria-hidden="true">
+                {item.state === "done" ? <Check /> : item.state === "check" ? "!" : item.state === "running" ? <span className="setup-spinner" /> : "–"}
+              </span>
+              <span className="setup-check-text">
+                <strong>{item.title}</strong>
+                {item.detail ? <span className="dim">{item.detail}</span> : null}
+              </span>
+              <span className="setup-check-word">{stateWord(item.state)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {note ? <p className="setup-note" role={/did not|not finish|nothing|no free/i.test(note) ? "alert" : "status"}>{note}</p> : null}
       {ready ? (
-        <>
+        <div className="setup-connect">
+          <h3>{t("setup.connect")}</h3>
           {loopback ? (
-            <p className="dim">
-              {t("setup.loopback")}
-            </p>
+            <p className="dim">{t("setup.loopback")}</p>
           ) : (
-            <>
-              <p className="dim">{t("setup.scan")}</p>
-              <div className="apps-row">
-                <div className="qr" dangerouslySetInnerHTML={{ __html: svg }} role="img" aria-label={t("setup.qr")} />
+            <div className="apps-row">
+              <div className="qr" dangerouslySetInnerHTML={{ __html: svg }} role="img" aria-label={t("setup.qr")} />
+              <div className="setup-connect-text">
+                <p className="dim">{t("setup.scan")}</p>
                 <p className="big-url">{url}</p>
               </div>
-            </>
+            </div>
           )}
-        </>
+        </div>
       ) : null}
     </section>
   );
