@@ -981,6 +981,8 @@ struct ProgramSheet: View {
     @Environment(NowPlaying.self) private var nowPlaying
     @Environment(\.dismiss) private var dismiss
     @State private var problem = ""
+    /// Record series asks first: it records every airing from now on.
+    @State private var confirmSeries = false
     let channel: Channel
     let airing: Airing?
 
@@ -1097,7 +1099,7 @@ struct ProgramSheet: View {
                     if let airing {
                         Button {
                             if series == nil {
-                                act { try await store.recordSeries(airing) }
+                                confirmSeries = true
                             }
                         } label: {
                             Label(series != nil ? "Series is recording" : kind == .sports ? "Record every airing" : "Record series", systemImage: "repeat")
@@ -1108,12 +1110,31 @@ struct ProgramSheet: View {
                         #if os(iOS)
                             .disabled(series != nil)
                         #endif
+                            .accessibilityIdentifier("program-record-series")
+                            .confirmationDialog(
+                                kind == .sports ? "Record every airing of \(airing.title)?" : "Record every episode of \(airing.title)?",
+                                isPresented: $confirmSeries,
+                                titleVisibility: .visible
+                            ) {
+                                Button(kind == .sports ? "Record every airing" : "Record series") {
+                                    act { try await store.recordSeries(airing) }
+                                }
+                                .accessibilityIdentifier("program-record-series-confirm")
+                                Button("Cancel", role: .cancel) {}
+                            } message: {
+                                Text("New airings record as they come up. You can stop it in Recordings › Upcoming.")
+                            }
                     }
                     if !problem.isEmpty {
                         Text(problem).font(.footnote).foregroundStyle(.red)
                     }
                 }
                 .padding(.top, 8)
+                #if os(tvOS)
+                    // Room for the focused button to grow without touching the sheet's edge.
+                    .padding(.bottom, 36)
+                    .padding(.horizontal, 12)
+                #endif
             }
             .padding(24)
         }

@@ -1088,6 +1088,23 @@ struct PlayerScreen: View {
                 }
             #endif
             #if os(tvOS)
+                // A recording of this channel is running: say so while the bar is away.
+                if let channel = nowPlaying.channel, store.activeRecording(on: channel) != nil {
+                    HStack(spacing: 6) {
+                        Circle().fill(Tokens.ColorToken.tally).frame(width: 12, height: 12)
+                        Text("REC").font(.caption.weight(.heavy)).tracking(1)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.55), in: .capsule)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.top, 50)
+                    .padding(.trailing, 80)
+                    .allowsHitTesting(false)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Recording")
+                    .accessibilityIdentifier("rec-indicator")
+                }
                 if stripOpen {
                     ChannelStrip { stripOpen = false }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -1346,19 +1363,22 @@ struct PlayerScreen: View {
 
     #if os(tvOS)
         /// Names in the transport menu. The bar's own entries stay out of the accessibility tree.
+        /// The bar's entries, then More's after a slash.
         private var transportMenuNames: [String] {
             let recording = nowPlaying.channel.flatMap { store.activeRecording(on: $0) } != nil
-            var names = ["Channels", "Audio", recording ? "Stop recording" : "Record", "Multiview"]
-            if let current = delayMenu.first(where: \.current) {
-                names.insert("Live delay \(current.title)", at: 2)
-            }
+            var names = [recording ? "Stop recording" : "Record", "Multiview", "More"]
             if startOverChoice != nil {
-                names.append("Start over")
+                names.insert("Start over", at: 0)
             }
+            var more = ["Channels", "Audio"]
+            if let current = delayMenu.first(where: \.current) {
+                more.append("Live delay \(current.title)")
+            }
+            more.append("Stream")
             if live.sync?.detached == true {
-                names.insert(live.sync?.offByChoice == true ? "Sync screens" : "Back in sync", at: 0)
+                more.insert(live.sync?.offByChoice == true ? "Sync screens" : "Back in sync", at: 0)
             }
-            return names
+            return names + ["/"] + more
         }
     #endif
 
@@ -2066,20 +2086,24 @@ struct SystemPlayer: UIViewControllerRepresentable {
             let together = UIAction(title: "Multiview", image: UIImage(systemName: "rectangle.split.2x1")) { _ in onTogether() }
             let stream = UIAction(title: streamOn ? "Hide stream" : "Stream", image: UIImage(systemName: "info.circle"), state: streamOn ? .on : .off) { _ in onStream() }
             let audioMenu = UIMenu(title: "Audio", image: UIImage(systemName: "speaker.wave.2"), children: audioActions)
-            var items: [UIMenuElement] = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions), audioMenu, stream, record]
+            // A few actions a viewer reaches for; the rest wait under More. Nine bare icons
+            // in a row read as noise from the couch.
+            var more: [UIMenuElement] = [UIMenu(title: "Channels", image: UIImage(systemName: "list.bullet"), children: actions), audioMenu]
             if !delay.isEmpty {
                 let choices = delay.map { entry in
                     UIAction(title: entry.title, state: entry.current ? .on : .off) { _ in entry.action() }
                 }
-                items.insert(UIMenu(title: "Live delay", image: UIImage(systemName: "clock"), children: choices), at: 2)
+                more.append(UIMenu(title: "Live delay", image: UIImage(systemName: "clock"), children: choices))
             }
+            more.append(stream)
+            if let rejoin {
+                more.insert(UIAction(title: rejoinTitle, image: UIImage(systemName: "arrow.triangle.2.circlepath")) { _ in rejoin() }, at: 0)
+            }
+            var items: [UIMenuElement] = []
             if canStartOver {
                 items.append(UIAction(title: "Start over", image: UIImage(systemName: "backward.end")) { _ in onStartOver() })
             }
-            items.append(together)
-            if let rejoin {
-                items.insert(UIAction(title: rejoinTitle, image: UIImage(systemName: "arrow.triangle.2.circlepath")) { _ in rejoin() }, at: 0)
-            }
+            items += [record, together, UIMenu(title: "More", image: UIImage(systemName: "ellipsis"), children: more)]
             vc.transportBarCustomMenuItems = items
             // The default action is Play From Beginning, which a live picture cannot do
             // unless the window still holds the start. An empty list leaves it off.

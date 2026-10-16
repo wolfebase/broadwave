@@ -449,3 +449,69 @@ final class GuideLookTests: WatchingCase {
         return out
     }
 }
+
+/// The transport bar keeps a few actions, a recording shows REC, and Record series asks first.
+final class PlayerActionsTests: WatchingCase {
+    func testTheBarKeepsAFewActions() throws {
+        try launch(["-BroadwaveChannelNow", "YES"])
+        XCTAssertTrue(until(30) { self.focused().exists && self.focused().frame.minX < 120 }, "no guide focus")
+        press(.select, wait: 0.5)
+        let tuning = element("tuning")
+        XCTAssertTrue(until(30) { self.element("player-channel").exists && !tuning.exists }, "the picture never started")
+        let probe = element("menuProbe")
+        XCTAssertTrue(until(10) { probe.exists && probe.label.contains("/") }, "no menu probe")
+        let parts = probe.label.components(separatedBy: "|/|")
+        let bar = parts[0].components(separatedBy: "|")
+        XCTAssertLessThanOrEqual(bar.count, 4, "bar: \(bar)")
+        XCTAssertTrue(bar.contains("More"), "bar: \(bar)")
+        XCTAssertTrue(parts.count == 2 && parts[1].contains("Stream"), "More: \(probe.label)")
+        until(12) { self.element("transportProbe").label == "hidden" }
+        press(.select, wait: 1.5)
+        shot("bar-0-up")
+    }
+
+    /// Staging: records the channel on screen for a minute, then removes the recording.
+    func testARecordingShowsREC() throws {
+        try launch(["-BroadwaveChannelNow", "YES"])
+        XCTAssertTrue(until(30) { self.focused().exists && self.focused().frame.minX < 120 }, "no guide focus")
+        press(.select, wait: 0.5)
+        let player = element("player-channel")
+        let tuning = element("tuning")
+        XCTAssertTrue(until(30) { player.exists && !tuning.exists }, "the picture never started")
+        let number = player.value as? String ?? ""
+        let channels = try (call("GET", "/api/v1/channels") as? [String: Any])?["channels"] as? [[String: Any]] ?? []
+        let channel = try XCTUnwrap(channels.first { $0["guideNumber"] as? String == number })
+        let made = try XCTUnwrap(try call("POST", "/api/v1/recordings", ["channelId": channel["id"] as Any, "minutes": 1, "title": "Watching REC test"]) as? [String: Any])
+        let id = try XCTUnwrap(made["id"] as? Int)
+        addTeardownBlock { [self] in
+            _ = try? call("POST", "/api/v1/recordings/\(id)/stop")
+            _ = try? call("DELETE", "/api/v1/recordings/\(id)")
+        }
+        XCTAssertTrue(until(20) { self.element("rec-indicator").exists }, "no REC while recording \(number)")
+        shot("rec-indicator")
+    }
+
+    /// Production listings: Record series on a later program asks first, and Cancel records nothing.
+    func testRecordSeriesAsksFirst() throws {
+        try launch()
+        XCTAssertTrue(until(30) { self.focused().exists && self.focused().frame.minX < 120 }, "no guide focus")
+        press(.down, wait: 0.5)
+        press(.right, 3, wait: 0.6)
+        press(.select, wait: 1.5)
+        let series = element("program-record-series")
+        XCTAssertTrue(until(5) { series.exists }, "no program sheet: \(focusedLabel())")
+        for _ in 0 ..< 4 where !series.hasFocus {
+            press(.down, wait: 0.5)
+        }
+        shot("sheet-0-series")
+        XCTAssertTrue(series.hasFocus, "focus on \(focusedLabel())")
+        XCTAssertLessThan(series.frame.maxY, 1060, "Record series is cut off: \(series.frame)")
+        press(.select, wait: 1.2)
+        shot("sheet-1-confirm")
+        let confirm = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Record series' OR label == 'Record every airing'")).count
+        XCTAssertGreaterThanOrEqual(confirm, 2, "no confirmation")
+        press(.menu, wait: 1)
+        shot("sheet-2-cancelled")
+        XCTAssertTrue(series.exists, "Back from the question closed the sheet")
+    }
+}
