@@ -9,8 +9,11 @@ import { canEditSignIn, formatPairCode, kindLabel, normalizePairCode, scopeLabel
 import { lastSeenPhrase } from "../../time";
 import type { ClientDevice } from "../../types";
 import { ChoiceRow, Group, SwitchRow } from "./rows";
+import { Confirm } from "./Confirm";
+import { settingsHubMessages } from "../../i18n/messages/settingsHub.ts";
 
 const t = bind(settingsUiMessages);
+const h = bind(settingsHubMessages);
 
 type Access = "watch" | "record" | "admin";
 
@@ -33,6 +36,7 @@ export function PairedDevices({
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState<ClientDevice | null>(null);
   const on = deviceAuth === "1";
 
   useEffect(() => {
@@ -92,7 +96,7 @@ export function PairedDevices({
   }
 
   async function revoke(device: ClientDevice) {
-    if (!window.confirm(t("devices.revokeConfirm", { name: device.name }))) return;
+    setAsking(null);
     setBusy(true);
     setError("");
     setNote("");
@@ -160,7 +164,7 @@ export function PairedDevices({
                     <span className="set-row-label">{device.name}</span>
                     <span className="set-row-hint">{[kindLabel(device.kind), scopeLabel(device.scopes ?? []), seen || t("devices.notSeen")].filter(Boolean).join(" · ")}</span>
                   </div>
-                  <button type="button" className="btn small ghost" aria-label={t("devices.revokeNamed", { name: device.name })} disabled={busy} onClick={() => void revoke(device)}>
+                  <button type="button" className="btn small ghost" aria-label={t("devices.revokeNamed", { name: device.name })} disabled={busy} onClick={() => setAsking(device)}>
                     {t("devices.revoke")}
                   </button>
                 </li>
@@ -183,17 +187,12 @@ export function PairedDevices({
           />
           <div className="set-row">
             <div className="set-row-text">
-              <span className="set-row-label">{t("devices.pair")}</span>
-              <span className="set-row-hint">{issued ? t("devices.codeHint") : t("devices.lead")}</span>
+              <span className="set-row-label">{t("devices.showCode")}</span>
+              <span className="set-row-hint">{issued ? t("devices.codeHint") : t("devices.showCodeHint")}</span>
             </div>
-            <div className="set-row-control set-buttons">
-              <button type="button" className="btn small" disabled={busy} onClick={() => void issue()}>
-                {t("devices.pair")}
-              </button>
-              <button type="button" className="btn small ghost" onClick={() => navigate("/pair")}>
-                {t("devices.pairBrowser")}
-              </button>
-            </div>
+            <button type="button" className="btn small" disabled={busy} onClick={() => void issue()}>
+              {issued ? t("devices.newCode") : t("devices.showCode")}
+            </button>
           </div>
           {issued ? <p className="pair-code set-code">{formatPairCode(issued)}</p> : null}
           <form className="set-row stack" onSubmit={(event) => void approve(event)}>
@@ -201,15 +200,36 @@ export function PairedDevices({
               <label className="set-row-label" htmlFor="approve-code">
                 {t("devices.approveCode")}
               </label>
+              <span className="set-row-hint">{t("devices.approveHint")}</span>
             </div>
             <div className="set-inline">
-              <input id="approve-code" className="set-input code" value={code} inputMode="numeric" autoComplete="one-time-code" spellCheck={false} onChange={(event) => setCode(event.target.value)} />
-              <button type="submit" className="btn" disabled={busy}>
+              <input id="approve-code" className="set-input code" value={code} inputMode="numeric" maxLength={7} placeholder="000000" autoComplete="one-time-code" spellCheck={false} onChange={(event) => setCode(event.target.value)} />
+              <button type="submit" className="btn" disabled={busy || normalizePairCode(code) == null}>
                 {t("devices.approve")}
               </button>
             </div>
           </form>
+          <div className="set-row">
+            <div className="set-row-text">
+              <span className="set-row-label">{t("devices.thisBrowser")}</span>
+              <span className="set-row-hint">{t("devices.thisBrowserHint")}</span>
+            </div>
+            <button type="button" className="btn small ghost" onClick={() => navigate("/pair")}>
+              {t("devices.pairBrowser")}
+            </button>
+          </div>
         </Group>
+      ) : null}
+      {asking ? (
+        <Confirm
+          title={t("devices.revokeNamed", { name: asking.name })}
+          body={<p>{t("devices.revokeConfirm", { name: asking.name })}</p>}
+          confirm={t("devices.revoke")}
+          cancel={h("backups.cancel")}
+          busy={busy}
+          onConfirm={() => void revoke(asking)}
+          onCancel={() => setAsking(null)}
+        />
       ) : null}
     </>
   );

@@ -46,18 +46,17 @@
   color: var(--color-text-tertiary);
 }
 
+/* One card, one line per thing: a list to scan, not a wall of tiles. */
 .home-rows {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 6px;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
-}
-
-.home-group.tuner .home-rows,
-.home-group.server .home-rows {
   grid-template-columns: minmax(0, 1fr);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface1);
+  border: 1px solid var(--color-line);
+  overflow: hidden;
 }
 
 .home-row {
@@ -66,14 +65,14 @@
   align-items: center;
   gap: 12px;
   min-height: 52px;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  background: var(--color-surface1);
-  border: 1px solid var(--color-line);
+  padding: 8px 14px;
+}
+
+.home-row + .home-row {
+  border-top: 1px solid var(--color-line);
 }
 
 .home-row.fresh {
-  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
   background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface1));
 }
 
@@ -137,10 +136,6 @@ html[data-layout="tv"] .home-icon {
   width: 44px;
   height: 44px;
   font-size: 24px;
-}
-
-html[data-layout="tv"] .home-rows {
-  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
 }
 
 html[data-layout="tv"] :is(.home-places-head, .home-row, .home-group) .btn {

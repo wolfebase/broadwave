@@ -150,7 +150,7 @@ export function SettingsPage() {
 
   if (!id) {
     return (
-      <div className="page-wrap settings-hub list">
+      <div className="page-wrap settings-hub hub-list">
         <header className="page-header">
           <h1>{copy.settings.title}</h1>
           {serverLine ? <p className="page-sub">{serverLine}</p> : null}
@@ -185,7 +185,7 @@ export function SettingsPage() {
 
   if (!split) {
     return (
-      <div ref={detailRef} className="page-wrap settings-hub detail">
+      <div ref={detailRef} className="page-wrap settings-hub hub-detail">
         <header className="settings-detail-head">
           <button type="button" className="settings-back" aria-label={h("hub.backAria")} onClick={backToList}>
             <ChevronLeft />
@@ -200,7 +200,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="page-wrap settings-hub split">
+    <div className="page-wrap settings-hub hub-split">
       <header className="page-header">
         <h1>{copy.settings.title}</h1>
         {serverLine ? <p className="page-sub">{serverLine}</p> : null}
@@ -251,7 +251,6 @@ function SectionBody({ id, server }: { id: SectionId; server: ServerInfo | null 
           channels={allChannels}
           busy={busy}
           error={error}
-          server={server}
           onDiscover={() => {
             setBusy(true);
             void rediscover().finally(() => setBusy(false));

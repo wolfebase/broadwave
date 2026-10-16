@@ -21,7 +21,8 @@ export function Lineup({ channels, devices, onPatch }: { channels: Channel[]; de
   const rows = useMemo(() => lineupRows(channels, devices), [channels, devices]);
   const hiddenCount = rows.filter((row) => row.extra).length;
   const shown = rows.filter((row) => (extra || !row.extra) && matchesLineup(row.channel, query));
-  const manyTuners = new Set(channels.map((channel) => channel.deviceId)).size > 1;
+  // The tuner column earns its place only when the rows shown come from more than one.
+  const manyTuners = new Set(shown.map((row) => row.tuner)).size > 1;
   const table = layout === "desktop";
   return (
     <Group title={h("lineup.group")} lede={h("lineup.count", rows.length - hiddenCount)}>
@@ -85,7 +86,7 @@ function StateControl({ row, onPatch }: { row: LineupRow; onPatch: (channel: Cha
 
 function stateNote(row: LineupRow): string {
   const { state, channel } = row;
-  if (state.kind === "duplicate") return h("lineup.duplicate", { number: state.of, tuner: state.tuner || "?" });
+  if (state.kind === "duplicate") return h("lineup.duplicate", { from: row.tuner || "?", number: state.of, tuner: state.tuner || "?" });
   if (state.kind === "encrypted") return channel.playsAs ? copy.sources.playsAs(state.playsAs) : copy.sources.encrypted(channel.standard === "atsc3");
   if (state.kind === "pair") return state.twin ? h("lineup.pairOf", { number: state.twin }) : "";
   return "";
@@ -168,7 +169,7 @@ function LineupList({ rows, showTuner, onPatch }: { rows: LineupRow[]; showTuner
         const { channel } = row;
         const open = editing === channel.id;
         const note = stateNote(row);
-        const details = [format(channel), channel.standard === "atsc3" ? "3.0" : "", showTuner || row.state.kind === "duplicate" ? h("lineup.from", { tuner: row.tuner }) : ""].filter(Boolean).join(" · ");
+        const details = [format(channel), channel.standard === "atsc3" ? "3.0" : "", showTuner && row.state.kind !== "duplicate" ? h("lineup.from", { tuner: row.tuner }) : ""].filter(Boolean).join(" · ");
         return (
           <li key={channel.id} className={`lineup-item ${row.state.kind}${row.extra ? " extra" : ""}${open ? " open" : ""}`}>
             <button type="button" className="lineup-main" aria-expanded={open} aria-label={h("lineup.editAria", { number: channel.displayNumber, name: channel.displayName })} onClick={() => setEditing(open ? null : channel.id)}>

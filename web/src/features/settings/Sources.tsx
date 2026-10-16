@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { Channel, Device, ServerInfo, TunerStatus } from "../../types";
+import type { Channel, Device, TunerStatus } from "../../types";
 import { addFree, addPlaylistFile, addSource, checkSignals, discover, findFree, getSignals, getTuners, lookHarder, request, sourceStatuses, startScan, type ChannelSignal, type FreeFeed, type SourceAdded, type SourceStatus } from "../../api";
 import { settingsUiMessages } from "../../i18n/messages/settingsUi.ts";
 import { settingsHubMessages } from "../../i18n/messages/settingsHub.ts";
@@ -23,11 +23,9 @@ const h = bind(settingsHubMessages);
 
 type Patch = { enabled?: boolean; hidden?: boolean; customName?: string; customNumber?: string; guideKey?: string; twinChoice?: string };
 
-/** The server can mark a tuner as removed on purpose, so a later search does not add it back. */
-const retireFeature = "deviceRetire";
-
-function retireDevice(deviceId: string) {
-  return request<{ devices: Device[] }>(`/api/v1/devices/${encodeURIComponent(deviceId)}/retire`, { method: "POST", body: "{}" });
+/** A tuner taken away on purpose is retired: it stops counting as offline, and comes back by itself if it answers. */
+function retireDevice(deviceId: string, retired: boolean) {
+  return request<{ devices: Device[] }>(`/api/v1/devices/${encodeURIComponent(deviceId)}`, { method: "PATCH", body: JSON.stringify({ retired }) });
 }
 
 export function Sources({
@@ -35,7 +33,6 @@ export function Sources({
   channels,
   busy,
   error,
-  server,
   onDiscover,
   onLookup,
   onPatch,
@@ -46,7 +43,6 @@ export function Sources({
   channels: Channel[];
   busy: boolean;
   error: string;
-  server?: ServerInfo | null;
   onDiscover: () => void;
   onLookup: (ip: string) => void;
   onPatch: (channel: Channel, patch: Patch) => void;
@@ -60,7 +56,6 @@ export function Sources({
   const [checking, setChecking] = useState("");
   const [deviceNote, setDeviceNote] = useState<{ id: string; text: string } | null>(null);
   const [removing, setRemoving] = useState<Device | null>(null);
-  const canRetire = Boolean(server?.features?.includes(retireFeature));
   useEffect(() => {
     let ticket = 0;
     let shown: TunerStatus[] = [];
@@ -97,6 +92,7 @@ export function Sources({
     setChecking(device.deviceId);
     setDeviceNote(null);
     try {
+      if (device.retired) await retireDevice(device.deviceId, false);
       const res = await discover(host);
       const again = (res.devices ?? []).find((item) => item.deviceId === device.deviceId);
       setDeviceNote({ id: device.deviceId, text: again && !again.offline ? h("tuners.foundAgain", { name }) : h("tuners.stillGone", { name, address: host }) });
@@ -108,10 +104,12 @@ export function Sources({
     }
   }
 
+  // An offline tuner is retired, so its channels and passes stay for when it returns.
+  // One that still answers would come straight back, so it is forgotten instead.
   async function remove(device: Device) {
-    if (canRetire) {
+    if (device.offline) {
       try {
-        await retireDevice(device.deviceId);
+        await retireDevice(device.deviceId, true);
         await onRefresh?.();
       } catch {
         onRemove(device.deviceId);
@@ -138,24 +136,27 @@ export function Sources({
         {devices.map((device) => {
           const status = statuses.find((item) => item.deviceId === device.deviceId);
           const name = device.friendlyName || device.modelNumber || device.deviceId;
-          const offline = Boolean(status?.health) || Boolean(device.offline);
+          const retired = Boolean(device.retired);
+          const offline = !retired && (Boolean(status?.health) || Boolean(device.offline));
           const scans = sourcesReady && deviceScans(status ? status.kind : undefined);
           const facts = [device.modelNumber, device.tunerCount > 0 ? h("tuners.count", device.tunerCount) : "", tunerHost(device.baseUrl)].filter(Boolean).join(" · ");
           const seen = lastSeenPhrase(device.lastSeen);
           return (
-            <div key={device.deviceId} className={offline ? "tuner-row offline" : "tuner-row"}>
+            <div key={device.deviceId} className={retired ? "tuner-row is-retired" : offline ? "tuner-row is-offline" : "tuner-row"}>
               <span className="tuner-icon" aria-hidden="true">
                 <AntennaIcon />
               </span>
               <div className="tuner-text">
                 <span className="tuner-name">
                   {name}
-                  <span className={offline ? "state-pill warn" : "state-pill ok"}>{offline ? h("tuners.offline") : h("tuners.working")}</span>
+                  <span className={retired ? "state-pill" : offline ? "state-pill warn" : "state-pill ok"}>{retired ? h("tuners.retired") : offline ? h("tuners.offline") : h("tuners.working")}</span>
                 </span>
                 <span className="tuner-facts">{facts}</span>
-                {offline ? (
+                {retired ? (
+                  <span className="tuner-help">{h("tuners.retiredHelp")}</span>
+                ) : offline ? (
                   <span className="tuner-help">
-                    {seen ? `${copy.sources.offline(seen)} ` : ""}
+                    {seen ? `${h("tuners.lastSeen", { when: seen })} ` : ""}
                     {h("tuners.offlineHelp")}
                   </span>
                 ) : (
@@ -176,7 +177,7 @@ export function Sources({
                 ) : null}
               </div>
               <div className="tuner-actions">
-                {offline ? (
+                {offline || retired ? (
                   <button type="button" className="btn small" disabled={busy || checking !== ""} aria-label={h("tuners.backAria", { name })} onClick={() => void itsBack(device)}>
                     {checking === device.deviceId ? h("tuners.lookingBack") : h("tuners.back")}
                   </button>
@@ -194,15 +195,17 @@ export function Sources({
                     {scanning === device.deviceId ? h("tuners.scanning") : h("tuners.scan")}
                   </button>
                 ) : null}
-                <button type="button" className={offline ? "btn small" : "btn small ghost"} disabled={busy} aria-label={copy.sources.removeLabel(name)} onClick={() => setRemoving(device)}>
-                  {h("tuners.remove")}
-                </button>
+                {retired ? null : (
+                  <button type="button" className={offline ? "btn small" : "btn small ghost"} disabled={busy} aria-label={copy.sources.removeLabel(name)} onClick={() => setRemoving(device)}>
+                    {h("tuners.remove")}
+                  </button>
+                )}
               </div>
             </div>
           );
         })}
         {others.map((item) => (
-          <div key={item.id} className={item.health ? "tuner-row offline" : "tuner-row"}>
+          <div key={item.id} className={item.health ? "tuner-row is-offline" : "tuner-row"}>
             <span className="tuner-icon" aria-hidden="true">
               <AntennaIcon />
             </span>
@@ -252,7 +255,7 @@ export function Sources({
       {removing ? (
         <Confirm
           title={h("tuners.removeAria", { name: removing.friendlyName || removing.modelNumber || removing.deviceId })}
-          body={<p>{(canRetire ? h("tuners.removeRetire", { name: removing.friendlyName || removing.deviceId }) : h("tuners.removeConfirm", { name: removing.friendlyName || removing.deviceId }))}</p>}
+          body={<p>{removing.offline ? h("tuners.removeRetire", { name: removing.friendlyName || removing.deviceId }) : h("tuners.removeConfirm", { name: removing.friendlyName || removing.deviceId })}</p>}
           confirm={h("tuners.remove")}
           cancel={h("backups.cancel")}
           busy={busy}
