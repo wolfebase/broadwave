@@ -1,10 +1,153 @@
+/* Schedule: what records next, the passes that decide it, and what happened. */
+
+.schedule {
+  gap: var(--space-8);
+}
+
+.sched-section {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.sched-section > .section-title,
+.sched-head .section-title {
+  margin: 0;
+  font-size: var(--type-title3-size);
+}
+
+.sched-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.sched-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface1);
+  border: 1px solid var(--color-line);
+  color: var(--color-text-secondary);
+}
+
+.sched-empty p {
+  margin: 0;
+  flex: 1 1 18rem;
+}
+
+/* Coming up: one card, a row per airing, the time in its own column. */
+.sched-list,
+.sched-activity {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface1);
+  border: 1px solid var(--color-line);
+  overflow: hidden;
+}
+
+.sched-row {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  min-height: 64px;
+}
+
+.sched-row + .sched-row,
+.sched-activity li + li {
+  border-top: 1px solid var(--color-line);
+}
+
+.sched-when {
+  display: grid;
+  gap: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sched-day {
+  font-size: var(--type-footnote-size);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.sched-clock {
+  font-weight: 700;
+}
+
+.sched-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sched-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.sched-sub {
+  font-size: var(--type-footnote-size);
+  color: var(--color-text-secondary);
+}
+
+.sched-row.skipped .sched-title {
+  color: var(--color-text-secondary);
+}
+
+.tag.sched-skip {
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: var(--color-warning);
+}
+
+.sched-row.live {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-tally) 12%, transparent), transparent 60%);
+}
+
+.sched-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.sched-ask {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
+.sched-ask-text {
+  flex: 1 1 100%;
+  font-weight: 600;
+}
+
+.schedule .btn.danger,
+.pass-row .btn.danger {
+  background: var(--color-tally-soft);
+  color: var(--color-tally-ink);
+  border-color: transparent;
+}
+
 .schedule-suggest {
-  flex: 1 0 100%;
+  grid-column: 2 / -1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
   min-width: 0;
+  font-size: var(--type-footnote-size);
+  color: var(--color-text-secondary);
 }
 
 .schedule-suggest > span {
@@ -16,25 +159,37 @@
   text-align: center;
 }
 
-.layout-phone .schedule-suggest {
-  flex-direction: column;
-  align-items: stretch;
+/* Activity: a quiet log, newest first. */
+.sched-activity li {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: var(--space-4);
+  padding: 10px var(--space-5);
+  font-size: var(--type-footnote-size);
 }
 
-.layout-phone .schedule-fix {
-  width: 100%;
-  justify-content: center;
+.sched-activity time {
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 
-.passes-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
+.sched-activity span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
+.sched-activity li[data-kind="home"] span {
+  color: var(--color-text-secondary);
+}
+
+.sched-more {
+  justify-self: start;
+}
+
+/* Passes */
 .pass-list {
   padding: 0;
+  margin: 0;
   list-style: none;
 }
 
@@ -51,9 +206,17 @@
 }
 
 .pass-rank {
-  min-width: 1.5em;
-  color: var(--color-text-tertiary);
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-surface3);
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote-size);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+  flex: none;
 }
 
 .pass-text {
@@ -67,53 +230,212 @@
   font-weight: 600;
 }
 
+.pass-actions {
+  margin-left: auto;
+}
+
+/* The pass editor: a label column and a control column. */
 .pass-editor {
   flex: 1 0 100%;
   display: grid;
-  gap: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--color-line);
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface1);
+  border: 1px solid var(--color-line-strong, var(--color-line));
+  min-width: 0;
 }
 
-.pass-editor fieldset {
-  border: 0;
-  margin: 0;
-  padding: 0;
+.pass-row .pass-editor {
+  margin-top: var(--space-2);
+  background: var(--color-surface2);
 }
 
-.pass-editor legend {
-  float: left;
-  margin-right: var(--space-2);
+.pe-row {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  min-width: 0;
 }
 
-.pass-name input {
-  min-width: 14rem;
+.pe-label {
+  font-size: var(--type-footnote-size);
+  font-weight: 600;
+  color: var(--color-text-secondary);
 }
 
-.layout-phone .pass-name {
+.pe-control {
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+
+.pe-control select {
+  min-width: min(18rem, 100%);
+}
+
+.pe-field {
+  flex: 1 1 14rem;
+  min-width: 0;
+  display: flex;
+}
+
+.pe-field input {
+  width: 100%;
+  min-width: 0;
+}
+
+.pe-unit {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote-size);
+}
+
+.pe-unit input[type="number"] {
+  width: 4.5em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.pe-unit input[type="time"],
+.pe-unit input[type="number"] {
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-line);
+  background: var(--color-surface2);
+  color: var(--color-text);
+  font-size: var(--type-body-size);
+}
+
+.pe-note {
+  font-size: var(--type-footnote-size);
+  color: var(--color-text-tertiary);
+}
+
+.pe-wide {
+  flex-basis: 100%;
+}
+
+.pe-days {
+  overflow: visible;
+}
+
+.pe-switches {
+  display: grid;
+  gap: 0;
+}
+
+.pe-switches .switch-row {
+  padding: 6px 0;
+}
+
+.pe-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-line);
 }
 
 .pass-preview {
   display: grid;
   gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  font-size: var(--type-footnote-size);
 }
 
 .pass-preview p {
   margin: 0;
+  font-weight: 600;
+}
+
+.pass-preview .marker-list {
+  margin: 0;
+}
+
+/* Phone: one column, the time above the title, actions under it. */
+.layout-phone .schedule {
+  gap: var(--space-6);
+}
+
+.layout-phone .sched-row {
+  grid-template-columns: minmax(0, 1fr);
+  padding: var(--space-3) var(--space-4);
+}
+
+.layout-phone .sched-when {
+  display: flex;
+  gap: 6px;
+  font-size: var(--type-footnote-size);
+}
+
+.layout-phone .sched-actions {
+  justify-content: flex-start;
+}
+
+.layout-phone .schedule-suggest {
+  grid-column: 1;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.layout-phone .schedule-fix {
+  width: 100%;
+  justify-content: center;
+}
+
+.layout-phone .sched-activity li {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 10px var(--space-4);
 }
 
 .layout-phone .pass-actions {
   flex: 1 0 100%;
+  margin-left: 0;
 }
 
-.layout-phone .pass-name input {
-  min-width: 0;
+.layout-phone .pass-editor {
+  padding: var(--space-4);
+}
+
+.layout-phone .pe-row {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.layout-phone .pe-control select {
   width: 100%;
 }
 
-.pass-editor label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
+/* 10-foot: the columns widen with the type. */
+html[data-layout="tv"] .sched-row,
+html[data-layout="tv"] .sched-activity li {
+  grid-template-columns: 14rem minmax(0, 1fr) auto;
+  padding: var(--space-4) var(--space-6);
+}
+
+html[data-layout="tv"] .sched-activity li {
+  grid-template-columns: 14rem minmax(0, 1fr);
+}
+
+html[data-layout="tv"] .pe-row {
+  grid-template-columns: 14rem minmax(0, 1fr);
+}
+
+html[data-layout="tv"] .pe-unit input {
+  min-height: 56px;
+}
+
+html[data-layout="tv"] .pass-rank {
+  width: 40px;
+  height: 40px;
 }
