@@ -862,9 +862,9 @@ func trimLeadInFrom(frag []byte, video uint32, scales map[uint32]uint32, floor i
 		return frag, picture, false
 	}
 	// gone is a sound track whose samples in this fragment all come before
-	// the picture. A fragment cut a third of a second in (fragMicros) can
-	// hold the whole lead-in and one picture; its track is left out, and the
-	// sound goes on in the next fragment.
+	// the picture. A fragment per picture (fragMicros) can hold the whole
+	// lead-in and one picture; its track is left out, and the sound goes on
+	// in the next fragment.
 	gone := make([]bool, len(runs))
 	for i := range runs {
 		r := &runs[i]

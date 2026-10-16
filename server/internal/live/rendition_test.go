@@ -157,7 +157,7 @@ func TestOpeningSegmentsAreShort(t *testing.T) {
 	if strings.Contains(gpu, "sliced-threads") || !strings.Contains(gpu, "h264_vaapi") {
 		t.Fatalf("a hardware encode does not take the software thread cap: %s", gpu)
 	}
-	// Fragments also end a third of a second in, for low-latency parts; the
+	// A fragment per picture, for low-latency parts; the
 	// packager still closes segments only on the source keyframes.
 	if strings.Contains(live, "hls_init_time") || strings.Contains(live, "hls_time") || strings.Contains(live, "prev_forced_t") || !strings.Contains(live, "-frag_duration "+fragMicros) {
 		t.Fatalf("a live transcode cuts on the source keyframes: %s", live)
