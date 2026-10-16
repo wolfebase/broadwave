@@ -1415,11 +1415,15 @@ struct PlayerScreen: View {
     }
 
     private func warmTarget(after channel: Channel) -> Channel? {
-        if let previous = nowPlaying.previousChannel, previous.id != channel.id, store.channels.contains(previous) {
-            return previous
-        }
         let lineup = store.channels
         guard lineup.count > 1, let i = lineup.firstIndex(of: channel) else { return nil }
+        // A viewer swiping through keeps going the same way.
+        if let dir = nowPlaying.surfing {
+            return lineup[(i + dir + lineup.count) % lineup.count]
+        }
+        if let previous = nowPlaying.previousChannel, previous.id != channel.id, lineup.contains(previous) {
+            return previous
+        }
         return lineup[(i + ChannelStep.offset(up: true) + lineup.count) % lineup.count]
     }
 

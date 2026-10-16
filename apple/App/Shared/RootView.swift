@@ -14,12 +14,17 @@ final class NowPlaying {
         didSet {
             if let oldValue, oldValue.id != channel?.id {
                 previousChannel = oldValue
+                // A pick from a list is not surfing; step() sets the way again after this.
+                surfing = nil
             }
         }
     }
 
     /// The channel before this one, which a viewer often goes back to. Its picture is kept warm.
     private(set) var previousChannel: Channel?
+    /// The way the viewer last stepped through the lineup. Surfing keeps going that way,
+    /// so the next channel that way is the one kept warm. Nil after a pick from a list.
+    private(set) var surfing: Int?
     var expanded = false
     /// The channel that played last, kept after the player closes: Back from the
     /// Apple TV guide goes back to it, and the guide opens on its row.
@@ -118,6 +123,7 @@ final class NowPlaying {
         guard let current = channel, let i = channels.firstIndex(of: current) else { return }
         let next = channels[(i + dir + channels.count) % channels.count]
         channel = next
+        surfing = dir
         lastChannel = next
         Self.lastChannelID = next.id
         SharedRecents.note(next.id)
