@@ -124,3 +124,16 @@ func TestGridAiringsLeaveOutDetails(t *testing.T) {
 		t.Fatalf("fields=all %d", rec.Code)
 	}
 }
+
+func TestListsAreCompressed(t *testing.T) {
+	h := (&Server{Store: testStore(t)}).Handler()
+	for _, path := range []string{"/api/v1/search?q=news", "/api/v1/recordings", "/api/v1/diagnostics"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Accept-Encoding", "gzip")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || rec.Header().Get("Content-Encoding") != "gzip" || rec.Header().Get("ETag") == "" {
+			t.Fatalf("%s: %d %q", path, rec.Code, rec.Header().Get("Content-Encoding"))
+		}
+	}
+}

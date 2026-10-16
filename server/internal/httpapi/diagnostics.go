@@ -132,7 +132,7 @@ func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
 	}
 	out["feeds"] = feeds
 	out["logs"] = scrubLogs(logbuf.Tail(diagLogLines), secrets)
-	writeJSON(w, http.StatusOK, out)
+	writeCachedJSON(w, r, out)
 }
 
 func (s *Server) doctorNotes(devices []store.Device) []doctor.Note {

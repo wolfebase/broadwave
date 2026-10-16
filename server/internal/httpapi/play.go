@@ -373,7 +373,7 @@ func (s *Server) recordings(w http.ResponseWriter, r *http.Request) {
 			list[i].Duration = 0
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"recordings": list})
+	writeCachedJSON(w, r, map[string]any{"recordings": list})
 }
 
 func (s *Server) deleteRecording(w http.ResponseWriter, r *http.Request) {
