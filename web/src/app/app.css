@@ -682,3 +682,8 @@ html[data-layout="tv"]:not([data-theme="light"]) :is(.tab, .chip, .btn, .pill-bt
   background: #fff;
   color: #0b0f17;
 }
+
+/* A preview still loading takes no room and shows nothing. */
+img.lf-wait {
+  opacity: 0;
+}
