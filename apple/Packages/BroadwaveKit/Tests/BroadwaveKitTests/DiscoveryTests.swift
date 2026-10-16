@@ -260,3 +260,15 @@ private func signedServer(id: String, url: String, privateKey: Curve25519.Signin
     #expect(Discovery.serverURL(host: "fe80::1c2b:3aff:fe4d:5e6f%en0", port: 8477) == nil)
     #expect(Discovery.serverURL(host: "FE80::1", port: 8477) == nil)
 }
+
+@Test func loopbackServersAreRecognized() throws {
+    let loopback = ["http://127.0.0.1:8477", "http://localhost:8477", "http://[::1]:8477", "http://127.0.1.1"]
+    for address in loopback {
+        let server = try FoundServer(id: "a", name: "A", url: #require(URL(string: address)))
+        #expect(server.isLoopback, "\(address)")
+    }
+    for address in ["http://192.168.1.2:8477", "https://tv.example.com", "http://10.127.0.1"] {
+        let server = try FoundServer(id: "a", name: "A", url: #require(URL(string: address)))
+        #expect(!server.isLoopback, "\(address)")
+    }
+}

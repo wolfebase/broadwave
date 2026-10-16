@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
-	"math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -156,12 +155,24 @@ func (s *Server) watch(w http.ResponseWriter, r *http.Request) {
 		s.Hub.Release(session.ChannelID, session.Rendition)
 		return
 	}
-	dark := waitServable(r.Context(), s.Hub, session.ChannelID, session.Rendition, 12*time.Second)
-	if r.Context().Err() != nil || dark {
+	state := waitServable(r.Context(), s.Hub, session.ChannelID, session.Rendition, servableWait)
+	if r.Context().Err() != nil || state != startServable {
 		s.Hub.Release(session.ChannelID, session.Rendition)
-		if dark {
+		switch {
+		case r.Context().Err() != nil:
+		case state == startDark:
 			s.Hub.DropDark(session.ChannelID)
 			writeError(w, live.ErrNoSignal)
+		default:
+			// A 200 with an empty playlist leaves a player on a black screen
+			// for its own timeout. Say it failed, and why in the log.
+			key := s.Hub.Current(session.ChannelID, session.Rendition)
+			why := s.Hub.StartFailure(session.ChannelID, key)
+			if why == "" {
+				why = "ffmpeg said nothing"
+			}
+			slog.Error(fmt.Sprintf("watch: %d %s did not start in %s (%s): %s", session.ChannelID, key, time.Since(asked).Round(100*time.Millisecond), state, why))
+			writeError(w, live.ErrNoPicture)
 		}
 		return
 	}
@@ -363,16 +374,8 @@ func (s *Server) recordings(w http.ResponseWriter, r *http.Request) {
 			list[i].Duration = 0
 			continue
 		}
-		if list[i].Duration == 0 && list[i].Status != "recording" && list[i].Path != "" && s.Hub != nil {
-			if tool := live.FFProbePath(s.Hub.FFmpeg); tool != "" {
-				seconds, err := live.ProbeDuration(tool, list[i].Path)
-				if err != nil || seconds <= 0 {
-					_ = s.Store.SetDuration(r.Context(), list[i].ID, -1)
-				} else {
-					_ = s.Store.SetDuration(r.Context(), list[i].ID, seconds)
-					list[i].Duration = seconds
-				}
-			}
+		if list[i].Duration == 0 && list[i].Status != "recording" && list[i].Path != "" {
+			s.probeLater(list[i].ID, list[i].Path)
 		}
 		if list[i].Status == "recording" {
 			// The stored length is the planned slot. The scrubber follows the
@@ -382,7 +385,7 @@ func (s *Server) recordings(w http.ResponseWriter, r *http.Request) {
 			list[i].Duration = 0
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"recordings": list})
+	writeCachedJSON(w, r, map[string]any{"recordings": list})
 }
 
 func (s *Server) deleteRecording(w http.ResponseWriter, r *http.Request) {
@@ -465,6 +468,11 @@ func (s *Server) airings(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "kind can only be sports", http.StatusBadRequest)
 		return
 	}
+	fields := r.URL.Query().Get("fields")
+	if fields != "" && fields != "grid" {
+		httpError(w, "fields can only be grid", http.StatusBadRequest)
+		return
+	}
 	var channels []int64
 	if raw := strings.TrimSpace(r.URL.Query().Get("channels")); raw != "" {
 		for _, part := range strings.Split(raw, ",") {
@@ -476,24 +484,44 @@ func (s *Server) airings(w http.ResponseWriter, r *http.Request) {
 			channels = append(channels, id)
 		}
 	}
-	list, err := s.Store.QueryAirings(r.Context(), store.AiringQuery{From: from, To: to, Channels: channels})
-	if err != nil {
-		writeError(w, err)
-		return
+	// The window is widened to whole minutes, so a guide asked for at "now"
+	// shares one cached answer per minute instead of one per request.
+	from = from.Truncate(time.Minute)
+	if up := to.Truncate(time.Minute); up.Before(to) {
+		to = up.Add(time.Minute)
 	}
-	if kind == "sports" {
-		games := make([]store.Airing, 0, len(list))
-		for _, row := range list {
-			if sportsListing(row) {
-				games = append(games, row)
+	key := s.versionKey(r.Context(), fmt.Sprintf("airings|%d|%d|%s|%s|%v", from.Unix(), to.Unix(), kind, fields, channels), "guide")
+	s.serveCached(w, r, key, func(ctx context.Context) (any, error) {
+		list, err := s.Store.QueryAirings(ctx, store.AiringQuery{From: from, To: to, Channels: channels})
+		if err != nil {
+			return nil, err
+		}
+		if kind == "sports" {
+			games := make([]store.Airing, 0, len(list))
+			for _, row := range list {
+				if sportsListing(row) {
+					games = append(games, row)
+				}
+			}
+			list = games
+		}
+		if list == nil {
+			list = []store.Airing{}
+		}
+		if fields == "grid" {
+			for i := range list {
+				list[i] = gridListing(list[i])
 			}
 		}
-		list = games
-	}
-	if list == nil {
-		list = []store.Airing{}
-	}
-	writeCachedJSON(w, r, http.StatusOK, map[string]any{"airings": list})
+		return map[string]any{"airings": list}, nil
+	})
+}
+
+// gridListing keeps what a guide grid draws. The rest (a long description,
+// the cast) was most of a two-day guide's bytes.
+func gridListing(a store.Airing) store.Airing {
+	a.Description, a.Cast, a.Rating, a.OriginalAir, a.SeriesID, a.ProgramID, a.GuideSource = "", "", "", "", "", "", ""
+	return a
 }
 
 // sportsWords and versus are the apps' sports rule (categoryOf on the web,
@@ -558,149 +586,18 @@ func (s *Server) DeferGuide(ctx context.Context, after time.Duration) {
 	_ = s.Store.SetNextGuidePull(ctx, time.Now().Add(after))
 }
 
-func (s *Server) RefreshGuide(ctx context.Context) (int, error) {
-	devices, err := s.Store.Devices(ctx)
-	if err != nil {
-		return 0, err
-	}
-	if len(devices) == 0 {
-		return 0, errors.New("no tuner")
-	}
-	channels, err := s.Store.Channels(ctx, false)
-	if err != nil {
-		return 0, err
-	}
-	var antenna []store.Channel
-	var ids []int64
-	for _, ch := range channels {
-		if strings.HasPrefix(ch.DeviceID, "src-") {
-			continue
-		}
-		antenna = append(antenna, ch)
-		ids = append(ids, ch.ID)
-	}
-	settings, _ := s.Store.Settings(ctx)
-	if settings == nil {
-		settings = map[string]string{}
-	}
-	tmdbKey := strings.TrimSpace(settings["tmdbKey"])
-	if tmdbKey == "" {
-		tmdbKey = strings.TrimSpace(os.Getenv("TMDB_API_KEY"))
-	}
-	// A failed SiliconDust pull still lets Schedules Direct and a guide
-	// address fill the guide; its own listings stay until the next pull.
-	var rows []store.Airing
-	var bases []string
-	for _, d := range devices {
-		if !strings.HasPrefix(d.DeviceID, "src-") && d.TunerCount > 0 {
-			bases = append(bases, d.BaseURL)
-		}
-	}
-	raw, pullErr := guide.Pull(ctx, s.HDHR, bases...)
-	if pullErr == nil {
-		var art map[int64]string
-		rows, art, pullErr = guide.Parse(raw, antenna)
-		if pullErr == nil {
-			rows = guide.ShareSame(guide.ShareTwins(rows, art, antenna), art, antenna)
-			_ = s.Store.SetChannelArt(ctx, art)
-			_ = s.Store.SetNetworks(ctx, guide.Networks(raw, antenna))
-			rows = guide.FillImages(ctx, tmdbKey, rows)
-			rows = tagGuideSource(rows, "silicondust")
-			if err := s.Store.ReplaceAiringsFor(ctx, ids, rows); err != nil {
-				return 0, err
-			}
-		}
-	}
-	user := strings.TrimSpace(settings["sdUser"])
-	pass := settings["sdPassword"]
-	lineup := strings.TrimSpace(settings["sdLineup"])
-	if user == "" {
-		user = strings.TrimSpace(os.Getenv("SD_USERNAME"))
-	}
-	if pass == "" {
-		pass = os.Getenv("SD_PASSWORD")
-	}
-	if lineup == "" {
-		lineup = strings.TrimSpace(os.Getenv("SD_LINEUP"))
-	}
-	if extra, _, err := guide.SchedulesDirect(ctx, antenna, user, pass, lineup); err == nil && len(extra) > 0 {
-		extra = guide.ShareSame(guide.ShareTwins(extra, nil, antenna), nil, antenna)
-		rows = s.fillUnlisted(ctx, rows, tagGuideSource(extra, "schedules-direct"))
-	}
-	if rawURL := strings.TrimSpace(settings["guideUrl"]); rawURL != "" {
-		if body, err := guide.PullURL(ctx, rawURL); err == nil {
-			if extra, extraArt, err := guide.Parse(body, antenna); err == nil && len(extra) > 0 {
-				extra = guide.ShareSame(guide.ShareTwins(extra, extraArt, antenna), extraArt, antenna)
-				_ = s.Store.SetChannelArt(ctx, extraArt)
-				_ = s.Store.SetNetworks(ctx, guide.Networks(body, antenna))
-				extra = guide.FillImages(ctx, tmdbKey, extra)
-				rows = s.fillUnlisted(ctx, rows, tagGuideSource(extra, "xmltv"))
-			}
-		}
-	}
-	if pullErr != nil {
-		_ = s.Store.SetGuideError(ctx, pullErr.Error(), time.Now())
-		if len(rows) == 0 {
-			return 0, pullErr
-		}
-		// The other sources filled the guide. SiliconDust is tried again soon.
-		slog.Warn(fmt.Sprintf("guide: SiliconDust: %v; %d airings from the other sources", pullErr, len(rows)))
-		s.DeferGuide(ctx, guide.RetryAfterError)
-		_ = s.Store.AddEvent(ctx, "guide", fmt.Sprintf("Guide updated, %d airings", len(rows)))
-		s.LinkGames(ctx)
-		return len(rows), nil
-	}
-	now := time.Now().UTC()
-	span := int64(guide.PullMax - guide.PullMin)
-	jitter := time.Duration(rand.Int64N(span + 1))
-	next := guide.NextPull(now, jitter)
-	if err := s.Store.SetGuideSchedule(ctx, now, next); err != nil {
-		return len(rows), err
-	}
-	listed := map[int64]struct{}{}
-	for _, row := range rows {
-		listed[row.ChannelID] = struct{}{}
-	}
-	slog.Info(fmt.Sprintf("guide: source=silicondust-xmltv airings=%d channels=%d next=%s", len(rows), len(listed), next.Format(time.RFC3339)))
-	_ = s.Store.AddEvent(ctx, "guide", fmt.Sprintf("Guide updated, %d airings", len(rows)))
-	s.LinkGames(ctx)
-	return len(rows), nil
-}
-
-// fillUnlisted keeps the listings a channel already has and adds rows only for channels that have none.
-func (s *Server) fillUnlisted(ctx context.Context, rows, extra []store.Airing) []store.Airing {
-	have := map[int64]bool{}
-	for _, row := range rows {
-		have[row.ChannelID] = true
-	}
-	var fill []store.Airing
-	for _, row := range extra {
-		if !have[row.ChannelID] {
-			fill = append(fill, row)
-		}
-	}
-	if len(fill) == 0 {
-		return rows
-	}
-	var fillIDs []int64
-	seen := map[int64]bool{}
-	for _, row := range fill {
-		if !seen[row.ChannelID] {
-			seen[row.ChannelID] = true
-			fillIDs = append(fillIDs, row.ChannelID)
-		}
-	}
-	_ = s.Store.ReplaceAiringsFor(ctx, fillIDs, fill)
-	return append(rows, fill...)
-}
-
+// schedule plans once per minute and per change to what the plan reads,
+// not once per request: a 14-day plan of a full guide takes a good part of
+// a second.
 func (s *Server) schedule(w http.ResponseWriter, r *http.Request) {
-	snap, err := s.loadSchedule(r.Context())
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"tunerCount": snap.count, "items": snap.items})
+	key := s.versionKey(r.Context(), "schedule|"+s.now().Truncate(time.Minute).Format(time.RFC3339), "guide", "channels", "recordings", "schedule")
+	s.serveCached(w, r, key, func(ctx context.Context) (any, error) {
+		snap, err := s.loadSchedule(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"tunerCount": snap.count, "items": snap.items}, nil
+	})
 }
 
 type scheduleSnap struct {
@@ -1041,19 +938,10 @@ func (s *Server) sameMux(ctx context.Context, watch store.SourceChannel, channel
 	return false
 }
 
+// tunerCount is the tuners the plan can count on: answering lately and not
+// retired by the owner.
 func (s *Server) tunerCount(ctx context.Context) int {
-	devices, err := s.Store.Devices(ctx)
-	if err != nil || len(devices) == 0 {
-		return 2
-	}
-	n := 0
-	for _, device := range devices {
-		n += device.TunerCount
-	}
-	if n < 1 {
-		return 2
-	}
-	return n
+	return dvr.TunerCount(ctx, s.Store, s.now())
 }
 
 func (s *Server) listingFor(ctx context.Context, channelID int64, title string) (store.Airing, bool) {
@@ -1141,7 +1029,7 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	if name == "index.m3u8" {
 		if msn, part, ok := blockReload(r); ok {
-			s.Hub.WaitBlocking(channelID, key, msn, part)
+			s.Hub.WaitBlocking(r.Context(), channelID, key, msn, part)
 		}
 		body, err := s.Hub.Playlist(channelID, key)
 		if err != nil {
@@ -1216,7 +1104,7 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 			// It lists the video's whole segments, so a blocking request
 			// waits for that segment; it has no parts.
 			if msn, _, ok := blockReload(r); ok {
-				s.Hub.WaitBlocking(channelID, key, msn, -1)
+				s.Hub.WaitBlocking(r.Context(), channelID, key, msn, -1)
 			}
 			body, err = s.Hub.CaptionPlaylist(channelID, key)
 		default:
@@ -1270,7 +1158,7 @@ func (s *Server) viewPlaylist(r *http.Request, channelID int64, key, name string
 		return nil, false, nil
 	}
 	if msn, part, ok := blockReload(r); ok {
-		s.Hub.WaitBlocking(channelID, key, msn, part)
+		s.Hub.WaitBlocking(r.Context(), channelID, key, msn, part)
 	}
 	skip := false
 	switch r.URL.Query().Get("_HLS_skip") {
@@ -1315,15 +1203,38 @@ func blockReload(r *http.Request) (msn, part int, ok bool) {
 // A tuner that locks sends packets within a second or two.
 var darkAfter = 5 * time.Second
 
+// servableWait is how long a watch waits for its first segment. A start
+// that fails is started again well inside it (live.startStall).
+var servableWait = 12 * time.Second
+
+// startState is how waiting for a watch's first segment ended.
+type startState int
+
+const (
+	startServable startState = iota
+	// startDark is a tuner that sent nothing and has no lock.
+	startDark
+	// startGone is a rendition given up on: its restarts were spent.
+	startGone
+	// startLate is a rendition still running with nothing to serve.
+	startLate
+)
+
+func (s startState) String() string {
+	return [...]string{"servable", "no signal", "encode given up", "nothing written"}[s]
+}
+
 // waitServable returns once the playlist has a segment a player can fetch.
 // A playlist that lists only parts is not enough: hls.js treats that as empty
 // and waits out its retry. The first part still anchors the clock while this waits.
 // A cancelled watch returns immediately so the handler can drop that viewer.
-// It reports true, and stops waiting, when the tuner has sent nothing for
-// darkAfter and says it has no lock: that channel is not coming in.
-func waitServable(ctx context.Context, h *live.Hub, channelID int64, key string, d time.Duration) bool {
+// It reports startDark, and stops waiting, when the tuner has sent nothing for
+// darkAfter and says it has no lock: that channel is not coming in. It
+// reports startGone as soon as the rendition was given up on, and startLate
+// when the wait runs out.
+func waitServable(ctx context.Context, h *live.Hub, channelID int64, key string, d time.Duration) startState {
 	if h == nil || key == "" {
-		return false
+		return startServable
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -1333,12 +1244,12 @@ func waitServable(ctx context.Context, h *live.Hub, channelID int64, key string,
 	var checked time.Time
 	for time.Now().Before(deadline) {
 		if ctx.Err() != nil {
-			return false
+			return startServable
 		}
 		if time.Since(start) >= darkAfter && time.Since(checked) >= 500*time.Millisecond {
 			checked = time.Now()
 			if h.NoSignal(channelID) {
-				return true
+				return startDark
 			}
 		}
 		// A restart replaces the gate. Spending the whole deadline on the
@@ -1352,18 +1263,21 @@ func waitServable(ctx context.Context, h *live.Hub, channelID int64, key string,
 		// Segment 0. A negative part means the whole segment, not an open part.
 		h.WaitMedia(channelID, key, 0, -1, slice)
 		body, err := h.Playlist(channelID, key)
-		if err == nil && strings.Count(string(body), "#EXTINF") >= 1 {
-			return false
+		if err == nil && bytes.Contains(body, []byte("#EXTINF")) {
+			return startServable
+		}
+		if err != nil && !h.Starting(channelID, key) {
+			return startGone
 		}
 		if !time.Now().Before(deadline) {
-			return false
+			return startLate
 		}
 		// No gate yet, or this wake was for a playlist a restart already removed.
 		if time.Since(started) < 50*time.Millisecond {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
-	return false
+	return startLate
 }
 
 // roomFrameWait caps how long a watch waits for an encode started in the

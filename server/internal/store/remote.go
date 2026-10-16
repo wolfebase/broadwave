@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -16,8 +17,9 @@ const (
 	// SettingRemoteURL is the https address that reaches this server from
 	// outside the house, such as a Cloudflare tunnel's public hostname.
 	SettingRemoteURL = "remoteUrl"
-	// SettingTunnelToken is the Cloudflare tunnel token the server runs
-	// cloudflared with. It is a secret: settings show only tunnelTokenSet.
+	// SettingTunnelToken is the Cloudflare tunnel token, as PUT /settings
+	// takes it. It is kept in the config folder's secrets file, never in the
+	// catalog; a catalog from before that may still hold one. See TakeTunnelToken.
 	SettingTunnelToken = "tunnelToken"
 
 	inviteTTL        = 7 * 24 * time.Hour
@@ -78,6 +80,29 @@ func RemoteHost(remoteURL string) string {
 		return ""
 	}
 	return strings.ToLower(u.Hostname())
+}
+
+// TakeTunnelToken hands a tunnel token the catalog still holds to keep, then
+// removes it from the catalog: one saved before tokens moved out of the
+// catalog, or one a restored backup brought back. When keep fails the token
+// stays where it is. keep is not called when there is none.
+func (s *Store) TakeTunnelToken(ctx context.Context, keep func(token string) error) error {
+	var token string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, SettingTunnelToken).Scan(&token)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if token = strings.TrimSpace(token); token != "" && keep != nil {
+		if err := keep(token); err != nil {
+			return err
+		}
+	}
+	defer s.forgetSettings()
+	_, err = s.db.ExecContext(ctx, `DELETE FROM settings WHERE key = ?`, SettingTunnelToken)
+	return err
 }
 
 // CleanTunnelToken accepts the token or the whole command Cloudflare shows

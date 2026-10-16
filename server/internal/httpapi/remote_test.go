@@ -17,15 +17,17 @@ import (
 )
 
 type fakeTunnel struct {
-	mu     sync.Mutex
-	tokens []string
-	status tunnel.Status
+	mu      sync.Mutex
+	tokens  []string
+	origins []string
+	status  tunnel.Status
 }
 
-func (f *fakeTunnel) Apply(token string) {
+func (f *fakeTunnel) Apply(token, origin string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.tokens = append(f.tokens, token)
+	f.origins = append(f.origins, origin)
 }
 
 func (f *fakeTunnel) Status() tunnel.Status {

@@ -14,6 +14,8 @@ Listings for every channel the antenna can receive, for as many days as the sour
 
 **Match, then pin.** A guide key wins. With none, a listing attaches by channel number, then by an exact name, then by call sign. A trailing DT, DT1, HD, TV, or LD still matches. A guide match on the channel pins a listing whose name does not.
 
+**One write per refresh.** Every source is read first, merged in that order of preference (a channel takes all its listings from the first source that has any), and written in one transaction that leaves unchanged rows alone. A source that fails, or whose upcoming listings fall by more than half from at least 100, keeps the channels it listed until a later refresh brings them back. Schedules Direct is asked for 20 stations and 500 programs a request, and a response over 8 MB is an error rather than a truncated parse.
+
 The Schedules Direct password is saved with the other settings and is not returned to the browser or written in the log.
 
 ## Consequences

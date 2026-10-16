@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"broadwave/internal/hdhr"
@@ -26,12 +28,18 @@ type Store struct {
 
 	// OnEvent is called after an activity event is saved, to push it to clients.
 	OnEvent func(Event)
+
+	settingsMu sync.Mutex
+	settings   map[string]string
 }
 
 type Device struct {
 	hdhr.Device
 	Priority int    `json:"priority"`
 	LastSeen string `json:"lastSeen"`
+	// Retired is a tuner the owner took away on purpose. It counts toward no
+	// plan and raises no note until it answers again.
+	Retired bool `json:"retired,omitempty"`
 }
 
 type Channel struct {
@@ -84,7 +92,7 @@ func Open(dir string) (*Store, error) {
 		return nil, err
 	}
 	path := filepath.Join(dir, "broadwave.db")
-	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)")
+	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?"+dsnOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -97,10 +105,43 @@ func Open(dir string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	// The planner's statistics, read once with a cap so a large catalog
+	// does not hold startup. Close and Optimize keep them current.
+	_, _ = db.Exec(`PRAGMA optimize=0x10002`)
 	return &Store{db: db, key: key}, nil
 }
 
-func (s *Store) Close() error { return s.db.Close() }
+// dsnOptions applies to every pooled connection.
+//
+// _txlock=immediate takes the write lock when a transaction begins. A
+// deferred transaction that read first and then wrote failed at once with
+// SQLITE_BUSY when another connection had written meanwhile, and
+// busy_timeout does not cover that upgrade. With the lock taken up front,
+// writers queue on busy_timeout instead.
+//
+// synchronous=NORMAL is safe in WAL: a power cut can lose the last commits
+// but never corrupts the file. temp_store and cache_size keep sorts and the
+// hot pages of the guide in memory.
+const dsnOptions = "_txlock=immediate" +
+	"&_pragma=busy_timeout(10000)" +
+	"&_pragma=journal_mode(WAL)" +
+	"&_pragma=foreign_keys(ON)" +
+	"&_pragma=synchronous(NORMAL)" +
+	"&_pragma=temp_store(MEMORY)" +
+	"&_pragma=cache_size(-16000)"
+
+// Close updates the planner's statistics and closes the catalog.
+func (s *Store) Close() error {
+	_, _ = s.db.Exec(`PRAGMA optimize`)
+	return s.db.Close()
+}
+
+// Optimize lets SQLite refresh the statistics of tables whose shape
+// changed. It is cheap when nothing did; the server runs it hourly.
+func (s *Store) Optimize(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `PRAGMA optimize`)
+	return err
+}
 
 func (s *Store) UpsertDevice(ctx context.Context, dev hdhr.Device, channels []hdhr.Channel) error {
 	return s.upsertDevice(ctx, dev, channels, true)
@@ -196,6 +237,16 @@ SELECT (SELECT COUNT(*) FROM devices WHERE device_id=?) + (SELECT COUNT(*) FROM 
 			return nil
 		}
 	}
+	// The refresh parks and rewrites every row, so the change triggers count
+	// it even when the lineup came back the same. Then the count goes back.
+	var version int64
+	if err := tx.QueryRowContext(ctx, `SELECT version FROM data_versions WHERE name='channels'`).Scan(&version); err != nil {
+		return err
+	}
+	before, err := deviceSnapshot(ctx, tx, dev.DeviceID)
+	if err != nil {
+		return err
+	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err = tx.ExecContext(ctx, `
@@ -212,7 +263,8 @@ ON CONFLICT(device_id) DO UPDATE SET
 	base_url=excluded.base_url,
 	lineup_url=excluded.lineup_url,
 	tuner_count=excluded.tuner_count,
-	last_seen=excluded.last_seen
+	last_seen=excluded.last_seen,
+	retired=0
 `, dev.DeviceID, dev.FriendlyName, dev.ModelNumber, dev.FirmwareName, dev.FirmwareVersion,
 		dev.UpgradeAvailable, dev.BaseURL, dev.LineupURL, dev.TunerCount, now)
 	if err != nil {
@@ -322,10 +374,64 @@ INSERT INTO channels (
 		}
 		used[keep] = true
 	}
+	after, err := deviceSnapshot(ctx, tx, dev.DeviceID)
+	if err != nil {
+		return err
+	}
+	if after == before {
+		if _, err := tx.ExecContext(ctx, `UPDATE data_versions SET version=? WHERE name='channels'`, version); err != nil {
+			return err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 	return s.ApplyTwinDefaults(ctx)
+}
+
+// deviceSnapshot is what clients see of one device and its channels: the
+// columns the data_versions triggers compare.
+func deviceSnapshot(ctx context.Context, tx *sql.Tx, deviceID string) (string, error) {
+	var b strings.Builder
+	row := tx.QueryRowContext(ctx, `
+SELECT friendly_name, model_number, firmware_version, base_url, tuner_count, priority, retired
+FROM devices WHERE device_id=?`, deviceID)
+	var name, model, firmware, base string
+	var tuners, priority, retired int
+	switch err := row.Scan(&name, &model, &firmware, &base, &tuners, &priority, &retired); {
+	case errors.Is(err, sql.ErrNoRows):
+	case err != nil:
+		return "", err
+	default:
+		fmt.Fprintf(&b, "%q|%q|%q|%q|%d|%d|%d\n", name, model, firmware, base, tuners, priority, retired)
+	}
+	rows, err := tx.QueryContext(ctx, `
+SELECT id, guide_number, guide_name, stream_url, video_codec, audio_codec, hd, favorite, enabled, hidden,
+	custom_name, custom_number, present, guide_key, art_url, art_width, art_height, network, protected, twin_choice
+FROM channels WHERE device_id=? ORDER BY id`, deviceID)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	cols, err := rows.Columns()
+	if err != nil {
+		return "", err
+	}
+	values := make([]any, len(cols))
+	ptrs := make([]any, len(cols))
+	for i := range values {
+		ptrs[i] = &values[i]
+	}
+	for rows.Next() {
+		if err := rows.Scan(ptrs...); err != nil {
+			return "", err
+		}
+		for _, v := range values {
+			fmt.Fprintf(&b, "%v|", v)
+		}
+		b.WriteByte('\n')
+	}
+	return b.String(), rows.Err()
 }
 
 // OtherDevices lists base URLs for other tuners that already have this channel number, lowest priority first.
@@ -393,7 +499,7 @@ ORDER BY d.priority, c.id`, guideNumber, exceptID)
 func (s *Store) Devices(ctx context.Context) ([]Device, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT device_id, friendly_name, model_number, firmware_name, firmware_version,
-	upgrade_available, base_url, lineup_url, tuner_count, priority, last_seen
+	upgrade_available, base_url, lineup_url, tuner_count, priority, last_seen, retired
 FROM devices ORDER BY priority, friendly_name`)
 	if err != nil {
 		return nil, err
@@ -403,12 +509,25 @@ FROM devices ORDER BY priority, friendly_name`)
 	for rows.Next() {
 		var d Device
 		if err := rows.Scan(&d.DeviceID, &d.FriendlyName, &d.ModelNumber, &d.FirmwareName, &d.FirmwareVersion,
-			&d.UpgradeAvailable, &d.BaseURL, &d.LineupURL, &d.TunerCount, &d.Priority, &d.LastSeen); err != nil {
+			&d.UpgradeAvailable, &d.BaseURL, &d.LineupURL, &d.TunerCount, &d.Priority, &d.LastSeen, &d.Retired); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
 	}
 	return out, rows.Err()
+}
+
+// SetDeviceRetired marks a tuner taken away on purpose, or brings it back.
+// Its channels and recordings stay; the next time it answers, the mark clears.
+func (s *Store) SetDeviceRetired(ctx context.Context, deviceID string, retired bool) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE devices SET retired = ? WHERE device_id = ?`, boolInt(retired), deviceID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNoDevice
+	}
+	return nil
 }
 
 // ErrNoDevice means no device has that id.
@@ -679,7 +798,23 @@ func (s *Store) Channel(ctx context.Context, id int64) (Channel, error) {
 	return Channel{}, sql.ErrNoRows
 }
 
+// Settings returns a copy of every setting. They are read from the catalog
+// once and kept in memory: device sign-in alone asked on every request.
+// Every write here drops the copy.
 func (s *Store) Settings(ctx context.Context) (map[string]string, error) {
+	s.settingsMu.Lock()
+	defer s.settingsMu.Unlock()
+	if s.settings == nil {
+		loaded, err := s.loadSettings(ctx)
+		if err != nil {
+			return nil, err
+		}
+		s.settings = loaded
+	}
+	return maps.Clone(s.settings), nil
+}
+
+func (s *Store) loadSettings(ctx context.Context) (map[string]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT key, value FROM settings`)
 	if err != nil {
 		return nil, err
@@ -694,6 +829,13 @@ func (s *Store) Settings(ctx context.Context) (map[string]string, error) {
 		out[k] = v
 	}
 	return out, rows.Err()
+}
+
+// forgetSettings drops the in-memory copy after a write.
+func (s *Store) forgetSettings() {
+	s.settingsMu.Lock()
+	s.settings = nil
+	s.settingsMu.Unlock()
 }
 
 func (s *Store) PutSettings(ctx context.Context, values map[string]string) error {
@@ -745,7 +887,6 @@ func cleanSettings(values map[string]string) (map[string]string, error) {
 		"lastGuideErrorAt":    true,
 		"adaptive":            true,
 		SettingRemoteURL:      true,
-		SettingTunnelToken:    true,
 		"tunnelTokenSet":      true,
 	}
 	cleaned := map[string]string{}
@@ -849,13 +990,6 @@ func cleanSettings(values map[string]string) (map[string]string, error) {
 			}
 			v = norm
 		}
-		if k == SettingTunnelToken {
-			token, err := CleanTunnelToken(v)
-			if err != nil {
-				return nil, err
-			}
-			v = token
-		}
 		if k == "tmdbKey" && strings.TrimSpace(v) == "" {
 			continue
 		}
@@ -871,6 +1005,7 @@ func (s *Store) writeSettings(ctx context.Context, values map[string]string) err
 	if len(values) == 0 {
 		return nil
 	}
+	defer s.forgetSettings()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

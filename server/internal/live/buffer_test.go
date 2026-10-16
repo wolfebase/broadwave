@@ -482,3 +482,61 @@ func TestANewEncodeForARoomBehindLiveHoldsItsFrame(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
+
+// A new encode on a frequency tuned a while ago starts startBack into the
+// buffer instead of waiting at the live edge for a keyframe, is not a room
+// start, and dates its pictures as the running encode does.
+func TestANewEncodeOnAnOlderTuneStartsInTheBuffer(t *testing.T) {
+	h, st := bufferHub(t)
+	id := idOf(t, st, "4.1")
+	ctx := context.Background()
+	first, err := h.Watch(ctx, id, Rendition{Video: "copy", Audio: "copy"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(leadFor + time.Second)
+	second, err := h.Watch(ctx, id, Rendition{Video: "360", Audio: "aac2", Mode: "broadcast"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.mu.Lock()
+	r := h.channels[id].renditions[second.Rendition]
+	quick := r != nil && !r.ringFrom.IsZero()
+	h.mu.Unlock()
+	if !quick || h.FromBuffer(id, second.Rendition) {
+		t.Fatalf("quick start %v, room start %v", quick, h.FromBuffer(id, second.Rendition))
+	}
+	dates := func(key string) []time.Time {
+		body, err := h.Playlist(id, key)
+		if err != nil {
+			return nil
+		}
+		var out []time.Time
+		for _, line := range strings.Split(string(body), "\n") {
+			if v, ok := strings.CutPrefix(line, "#EXT-X-PROGRAM-DATE-TIME:"); ok {
+				if at, err := time.Parse("2006-01-02T15:04:05.000Z", v); err == nil {
+					out = append(out, at)
+				}
+			}
+		}
+		return out
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		own, ref := dates(second.Rendition), dates(first.Rendition)
+		if len(own) > 0 && len(ref) > 0 {
+			for _, at := range ref {
+				if d := own[0].Sub(at); d > -50*time.Millisecond && d < 50*time.Millisecond {
+					return
+				}
+			}
+			if own[0].After(ref[len(ref)-1]) {
+				time.Sleep(200 * time.Millisecond)
+				continue
+			}
+			t.Fatalf("first picture dated %v, the running encode's segments %v", own[0], ref)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatal("no segment from both encodes")
+}

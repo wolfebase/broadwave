@@ -1,6 +1,5 @@
-// Package tunnel runs cloudflared with a tunnel token the owner pasted into
-// Settings, so the server can be opened from outside the house without a
-// second container.
+// Package tunnel runs cloudflared with the tunnel's run token, so the server
+// can be opened from outside the house without a second container.
 package tunnel
 
 import (
@@ -37,14 +36,17 @@ type Status struct {
 type Runner struct {
 	// Bin is the cloudflared path. Empty means it is not installed.
 	Bin string
+	// OnChange runs when the state changes, outside the lock.
+	OnChange func()
 	// start runs cloudflared. Tests replace it.
-	start func(ctx context.Context, bin, token string) (io.ReadCloser, func() error, error)
+	start func(ctx context.Context, bin, token, origin string) (io.ReadCloser, func() error, error)
 
 	// applyMu makes Apply and Stop one at a time, so a second call cannot
 	// start cloudflared while the first one waits for the old one to exit.
 	applyMu sync.Mutex
 	mu      sync.Mutex
 	token   string
+	origin  string
 	cancel  context.CancelFunc
 	done    chan struct{}
 	status  Status
@@ -72,19 +74,24 @@ func (r *Runner) Status() Status {
 	return st
 }
 
-// Apply starts, restarts, or stops cloudflared for token. The same token
-// again changes nothing.
-func (r *Runner) Apply(token string) {
+// Apply starts, restarts, or stops cloudflared for token. origin, when set,
+// is where a tunnel without routes in Cloudflare sends every request
+// (cloudflared --url). The same token and origin again change nothing.
+func (r *Runner) Apply(token, origin string) {
 	r.applyMu.Lock()
 	defer r.applyMu.Unlock()
+	defer r.changed()
+	if token == "" {
+		origin = ""
+	}
 	r.mu.Lock()
-	if token == r.token && (token == "" || r.cancel != nil || r.status.State == "missing") {
+	if token == r.token && origin == r.origin && (token == "" || r.cancel != nil || r.status.State == "missing") {
 		r.mu.Unlock()
 		return
 	}
 	cancel, done := r.cancel, r.done
 	r.cancel, r.done = nil, nil
-	r.token = token
+	r.token, r.origin = token, origin
 	r.mu.Unlock()
 	if cancel != nil {
 		cancel()
@@ -103,17 +110,24 @@ func (r *Runner) Apply(token string) {
 	ctx, stop := context.WithCancel(context.Background())
 	r.cancel, r.done = stop, make(chan struct{})
 	r.status = Status{State: "starting", Message: "Connecting to Cloudflare."}
-	go r.loop(ctx, token, r.done)
+	go r.loop(ctx, token, origin, r.done)
+}
+
+func (r *Runner) changed() {
+	if r.OnChange != nil {
+		r.OnChange()
+	}
 }
 
 // Stop ends cloudflared and waits for it.
 func (r *Runner) Stop() {
 	r.applyMu.Lock()
 	defer r.applyMu.Unlock()
+	defer r.changed()
 	r.mu.Lock()
 	cancel, done := r.cancel, r.done
 	r.cancel, r.done = nil, nil
-	r.token = ""
+	r.token, r.origin = "", ""
 	r.status = Status{State: "off"}
 	r.mu.Unlock()
 	if cancel != nil {
@@ -122,12 +136,12 @@ func (r *Runner) Stop() {
 	}
 }
 
-func (r *Runner) loop(ctx context.Context, token string, done chan struct{}) {
+func (r *Runner) loop(ctx context.Context, token, origin string, done chan struct{}) {
 	defer close(done)
 	wait := 2 * time.Second
 	for {
 		began := time.Now()
-		err := r.runOnce(ctx, token)
+		err := r.runOnce(ctx, token, origin)
 		if ctx.Err() != nil {
 			return
 		}
@@ -141,6 +155,7 @@ func (r *Runner) loop(ctx context.Context, token string, done chan struct{}) {
 			}
 		}
 		r.mu.Unlock()
+		r.changed()
 		if time.Since(began) > 5*time.Minute {
 			wait = 2 * time.Second
 		}
@@ -153,12 +168,12 @@ func (r *Runner) loop(ctx context.Context, token string, done chan struct{}) {
 	}
 }
 
-func (r *Runner) runOnce(ctx context.Context, token string) error {
+func (r *Runner) runOnce(ctx context.Context, token, origin string) error {
 	start := r.start
 	if start == nil {
 		start = execCloudflared
 	}
-	out, wait, err := start(ctx, r.Bin, token)
+	out, wait, err := start(ctx, r.Bin, token, origin)
 	if err != nil {
 		return err
 	}
@@ -171,11 +186,22 @@ func (r *Runner) runOnce(ctx context.Context, token string) error {
 	return wait()
 }
 
-func execCloudflared(ctx context.Context, bin, token string) (io.ReadCloser, func() error, error) {
+// Args are cloudflared's arguments. The token is not one of them.
+func Args(origin string) []string {
+	// Metrics stay on loopback: the container shares the host's network.
+	args := []string{"tunnel", "--no-autoupdate", "--loglevel", "info", "--metrics", "127.0.0.1:0"}
+	if origin != "" {
+		// A tunnel whose route is not kept in Cloudflare has no ingress
+		// rules; this sends every request to the server.
+		args = append(args, "--url", origin)
+	}
+	return append(args, "run")
+}
+
+func execCloudflared(ctx context.Context, bin, token, origin string) (io.ReadCloser, func() error, error) {
 	// The token goes in the environment, not the arguments, so it is not in
 	// the process list.
-	// Metrics stay on loopback: the container shares the host's network.
-	cmd := exec.CommandContext(ctx, bin, "tunnel", "--no-autoupdate", "--loglevel", "info", "--metrics", "127.0.0.1:0", "run")
+	cmd := exec.CommandContext(ctx, bin, Args(origin)...)
 	cmd.Env = append(os.Environ(), "TUNNEL_TOKEN="+token)
 	pr, pw := io.Pipe()
 	cmd.Stdout, cmd.Stderr = pw, pw
@@ -244,7 +270,14 @@ func routes(line string) (names []string, local string) {
 // note reads one cloudflared log line.
 func (r *Runner) note(line string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	before := r.status.State
+	defer func() {
+		after := r.status.State
+		r.mu.Unlock()
+		if after != before {
+			r.changed()
+		}
+	}()
 	switch {
 	case strings.Contains(line, "Registered tunnel connection"):
 		r.status.Connections++

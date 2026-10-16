@@ -2,6 +2,7 @@ package live
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -73,6 +74,20 @@ type playlistGate struct {
 	known   func() bool
 	verdict func(long bool)
 	said    atomic.Int32
+	// retired is set when this playlist is replaced or stopped. A request
+	// parked on it returns at once and reads whatever serves now.
+	retired bool
+}
+
+// retire wakes every request waiting on this playlist for good.
+func (g *playlistGate) retire() {
+	if g == nil {
+		return
+	}
+	g.mu.Lock()
+	g.retired = true
+	g.cond.Broadcast()
+	g.mu.Unlock()
 }
 
 func (g *playlistGate) longGroups() bool {
@@ -178,16 +193,26 @@ func (g *playlistGate) ready(msn, part int) bool {
 // asked for, for up to holdFor. The hold is read again whenever the playlist
 // changes: a request that comes before the first playlist would otherwise
 // get only the floor.
-func (g *playlistGate) block(msn, part int) {
+func (g *playlistGate) block(ctx context.Context, msn, part int) {
 	if g == nil || msn < 0 {
 		return
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	began := time.Now()
+	// A player that went away (a channel change) frees its request at once.
+	stop := context.AfterFunc(ctx, func() {
+		g.mu.Lock()
+		g.cond.Broadcast()
+		g.mu.Unlock()
+	})
+	defer stop()
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	for !g.ready(msn, part) {
+	for !g.retired && !g.ready(msn, part) {
 		left := g.holdFor() - time.Since(began)
-		if left <= 0 {
+		if left <= 0 || ctx.Err() != nil {
 			return
 		}
 		timer := time.AfterFunc(left, func() {
@@ -207,7 +232,7 @@ func (g *playlistGate) wait(msn, part int, d time.Duration) {
 	deadline := time.Now().Add(d)
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.ready(msn, part) {
+	if g.retired || g.ready(msn, part) {
 		return
 	}
 	timer := time.AfterFunc(d, func() {
@@ -216,7 +241,7 @@ func (g *playlistGate) wait(msn, part int, d time.Duration) {
 		g.mu.Unlock()
 	})
 	defer timer.Stop()
-	for !g.ready(msn, part) {
+	for !g.retired && !g.ready(msn, part) {
 		if !time.Now().Before(deadline) {
 			return
 		}
@@ -241,6 +266,11 @@ type packedSeg struct {
 	parts []partRef
 	gap   bool
 	timed bool
+	// cont is set on the first segment of an encode that continues the
+	// broadcast clock of the one before it (one started again after a crash):
+	// step is how far its first picture comes after where the last one ended.
+	cont bool
+	step int64
 	// refs name the parts whose files gave way to a pointer into the segment.
 	refs []string
 }
@@ -299,13 +329,15 @@ func newPackPipe(cmd *exec.Cmd) (*packPipe, error) {
 	return &packPipe{File: r, w: w}, nil
 }
 
-func startPack(dir string, stdout *packPipe, gate *playlistGate, done chan struct{}, line func() int) *packInput {
+// startPack packages stdout into dir. hold keeps the packager at the end of
+// each encode's output until the next one is queued (packInput.hold).
+func startPack(dir string, stdout *packPipe, gate *playlistGate, done chan struct{}, line func() int, hold bool) *packInput {
 	stdout.started()
-	in := &packInput{cur: stdout, line: line}
+	in := &packInput{cur: stdout, line: line, hold: hold}
 	go func() {
 		defer close(done)
 		defer in.close()
-		if err := Pack(dir, in, gate); err != nil && !os.IsNotExist(err) && !errors.Is(err, io.ErrClosedPipe) && !errors.Is(err, os.ErrClosed) {
+		if err := Pack(dir, in, gate); err != nil && !os.IsNotExist(err) && !errors.Is(err, io.ErrClosedPipe) && !errors.Is(err, os.ErrClosed) && !errors.Is(err, errAbandoned) {
 			slog.Error(fmt.Sprintf("pack %s: %v", dir, err))
 		}
 	}()
@@ -317,9 +349,18 @@ func startPack(dir string, stdout *packPipe, gate *playlistGate, done chan struc
 // playlist, so a player sees a discontinuity rather than a new stream.
 type packInput struct {
 	mu   sync.Mutex
+	cond *sync.Cond
 	cur  io.ReadCloser
 	next []*readAhead
 	done bool
+	// hold keeps the packager at the end of one encode's output until the
+	// next one is queued or end is called, so an encode started again on the
+	// same command line after a crash continues the playlist. parked is set
+	// while it waits there.
+	hold      bool
+	ended     bool
+	parked    bool
+	abandoned bool
 	// offset is the broadcast time, in 90 kHz ticks, of fragment time zero
 	// for the latest encode. known is true only while one encode has fed
 	// the playlist; encodeAt has each encode's own.
@@ -426,6 +467,10 @@ type encodeStarts interface {
 // errNextEncode is where one encode's output ends and the next one's begins.
 var errNextEncode = errors.New("next encode")
 
+// errAbandoned ends a packager whose directory is going away, before it
+// writes the last fragment into it.
+var errAbandoned = errors.New("pack: abandoned")
+
 func (in *packInput) Read(b []byte) (int, error) {
 	in.mu.Lock()
 	cur := in.cur
@@ -439,6 +484,15 @@ func (in *packInput) Read(b []byte) (int, error) {
 	}
 	in.mu.Lock()
 	defer in.mu.Unlock()
+	for len(in.next) == 0 && in.hold && !in.ended && !in.done {
+		in.parked = true
+		in.condLocked().Broadcast()
+		in.condLocked().Wait()
+	}
+	in.parked = false
+	if in.abandoned {
+		return 0, errAbandoned
+	}
 	if len(in.next) == 0 {
 		return 0, err
 	}
@@ -447,17 +501,83 @@ func (in *packInput) Read(b []byte) (int, error) {
 	return 0, errNextEncode
 }
 
+func (in *packInput) condLocked() *sync.Cond {
+	if in.cond == nil {
+		in.cond = sync.NewCond(&in.mu)
+	}
+	return in.cond
+}
+
 // follow queues the next encode's output. False means the packager has
-// already stopped reading.
+// already stopped reading, or was told to.
 func (in *packInput) follow(p *packPipe) bool {
+	if in == nil {
+		return false
+	}
 	in.mu.Lock()
 	defer in.mu.Unlock()
-	if in.done {
+	if in.done || in.ended {
 		return false
 	}
 	p.started()
 	in.next = append(in.next, newReadAhead(p))
+	in.condLocked().Broadcast()
 	return true
+}
+
+// holding reports a packager that waits for the next encode.
+func (in *packInput) holding() bool {
+	if in == nil {
+		return false
+	}
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	return in.hold && !in.ended && !in.done
+}
+
+// abandon ends the packager without the last fragment of the encode it
+// reads, once that encode's output ends: its directory is going away.
+func (in *packInput) abandon() {
+	if in == nil {
+		return
+	}
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	in.ended = true
+	in.abandoned = true
+	in.condLocked().Broadcast()
+}
+
+// end lets a holding packager finish once the encode it reads ends.
+func (in *packInput) end() {
+	if in == nil {
+		return
+	}
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	in.ended = true
+	in.condLocked().Broadcast()
+}
+
+// waitParked waits up to d for the packager to read the last of an encode
+// that has exited. It reports whether the packager is still there to follow.
+func (in *packInput) waitParked(d time.Duration) bool {
+	if in == nil {
+		return false
+	}
+	timer := time.AfterFunc(d, func() {
+		in.mu.Lock()
+		in.condLocked().Broadcast()
+		in.mu.Unlock()
+	})
+	defer timer.Stop()
+	deadline := time.Now().Add(d)
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	for !in.parked && !in.done && !in.ended && time.Now().Before(deadline) {
+		in.condLocked().Wait()
+	}
+	return in.parked && !in.done && !in.ended
 }
 
 // readAheadCap is how much of the next encode's output is held while the
@@ -521,6 +641,7 @@ func (in *packInput) close() {
 	in.mu.Lock()
 	defer in.mu.Unlock()
 	in.done = true
+	in.condLocked().Broadcast()
 	_ = in.cur.Close()
 	for _, p := range in.next {
 		_ = p.Close()
@@ -550,6 +671,14 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 	var partN int
 	var msn int
 	var segGap bool
+	// segCont and segStep are the open segment's continuation (packedSeg.cont).
+	var segCont bool
+	var segStep int64
+	// encStart is where the current encode's fragment time zero sits on the
+	// broadcast clock, in ticks; encKnown is false when its header did not
+	// say. prevStart and prevKnown are the encode before it.
+	var encStart, prevStart int64
+	var encKnown, prevKnown bool
 	var lastPTS, lastDur int64
 	var haveLast bool
 	// handover is set at an encode boundary. The next fragment starts a new
@@ -562,7 +691,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 
 	var hold playlistCeiling
 	flush := func() error {
-		return writePacked(dir, init, closed, open, msn-len(closed), allSync, segGap, &hold, gate)
+		return writePackedOpen(dir, init, closed, open, msn-len(closed), allSync, openBreak{gap: segGap, cont: segGap && segCont, step: segStep}, &hold, gate)
 	}
 	closeSeg := func(end int64) error {
 		if len(open) == 0 {
@@ -582,8 +711,8 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 		if dur <= 0 {
 			dur = partTicks
 		}
-		closed = append(closed, packedSeg{name: name, pts: open[0].pts, dur: dur, parts: names, gap: segGap, timed: open[0].timed})
-		segGap = false
+		closed = append(closed, packedSeg{name: name, pts: open[0].pts, dur: dur, parts: names, gap: segGap, timed: open[0].timed, cont: segGap && segCont, step: segStep})
+		segGap, segCont, segStep = false, false, 0
 		msn++
 		open = nil
 		var kept int64
@@ -630,13 +759,22 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 			d := ptsDiff(pts, expected)
 			if d < -int64(partTicks) || d > int64(jumpTicks) || handover {
 				jumped = true
-				slog.Warn(fmt.Sprintf("pack %s: timestamp jump %.3fs", dir, float64(d)/90000))
 				if len(open) > 0 {
 					if err := closeSeg(expected); err != nil {
 						return err
 					}
 				}
 				segGap = true
+				// An encode that took over on the same broadcast clock, after
+				// a crash, keeps its pictures' dates: players see a short gap,
+				// not frames dated where the old encode stopped.
+				step, cont := continuation(handover, prevKnown, encKnown, expected+prevStart, pts+encStart)
+				segCont, segStep = cont, step
+				if cont {
+					slog.Info(fmt.Sprintf("pack %s: the next encode continues %.3fs on", dir, float64(step)/90000))
+				} else {
+					slog.Warn(fmt.Sprintf("pack %s: timestamp jump %.3fs", dir, float64(d)/90000))
+				}
 			}
 		}
 		handover = false
@@ -801,6 +939,8 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 						if n, ok := r.(encodeStarts); ok {
 							n.noteEncodeStart(first, nextShifts != nil)
 						}
+						prevStart, prevKnown = encStart, encKnown
+						encStart, encKnown = int64(math.Round(first*90000))%ptsWrap, nextShifts != nil
 						fresh = true
 						reinit = nil
 						// Players keep init.mp4. A new encode that describes its
@@ -821,6 +961,7 @@ func Pack(dir string, r io.Reader, gate *playlistGate) error {
 						if n, ok := r.(encodeStarts); ok {
 							n.noteEncodeStart(first, shifts != nil)
 						}
+						encStart, encKnown = int64(math.Round(first*90000))%ptsWrap, shifts != nil
 						fresh = true
 						id, sc, ok := videoTrack(init)
 						if !ok {
@@ -902,6 +1043,17 @@ type playlistCeiling struct {
 }
 
 func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart, origin int, allSync, segGap bool, hold *playlistCeiling, gate *playlistGate) error {
+	return writePackedOpen(dir, init, closed, open, origin, allSync, openBreak{gap: segGap}, hold, gate)
+}
+
+// openBreak is how the open segment starts: after a discontinuity, and
+// whether that discontinuity continues the broadcast clock (packedSeg.cont).
+type openBreak struct {
+	gap, cont bool
+	step      int64
+}
+
+func writePackedOpen(dir string, init []byte, closed []packedSeg, open []packedPart, origin int, allSync bool, brk openBreak, hold *playlistCeiling, gate *playlistGate) error {
 	if len(init) == 0 {
 		return nil
 	}
@@ -999,6 +1151,7 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 	for i, s := range closed {
 		if s.gap {
 			b = append(b, "#EXT-X-DISCONTINUITY\n"...)
+			b = appendCont(b, s.cont, s.step)
 		}
 		if listed, _ := partsKept(fromEnd[i], target); listed {
 			for _, p := range s.parts {
@@ -1009,8 +1162,9 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 		b = appendPackedPTS(b, s.name, s.pts, s.timed)
 		b = append(b, "#EXTINF:"+fmtDur(s.dur)+",\n"+s.name+"\n"...)
 	}
-	if segGap && len(open) > 0 {
+	if brk.gap && len(open) > 0 {
 		b = append(b, "#EXT-X-DISCONTINUITY\n"...)
+		b = appendCont(b, brk.cont, brk.step)
 	}
 	for _, p := range open {
 		b = appendPackedPTS(b, p.name, p.pts, p.timed)
@@ -1032,6 +1186,30 @@ func writePacked(dir string, init []byte, closed []packedSeg, open []packedPart,
 		gate.publish(origin, origin+len(closed), len(open), recent...)
 	}
 	return nil
+}
+
+// continuation reports whether an encode that took over the playlist
+// (handover) carries on the broadcast clock where the last one stopped, and
+// how far on: from just before that end to a minute after it, which is a
+// restart, not a station's splice. last and next are broadcast times.
+func continuation(handover, lastKnown, nextKnown bool, last, next int64) (int64, bool) {
+	if !handover || !lastKnown || !nextKnown {
+		return 0, false
+	}
+	step := ptsDiff(next, last)
+	if step < -int64(partTicks) || step > 60*90000 {
+		return 0, false
+	}
+	return max(step, 0), true
+}
+
+// appendCont records a continuation for the stamper. Like the PTS lines, a
+// player never sees it.
+func appendCont(b []byte, cont bool, step int64) []byte {
+	if !cont {
+		return b
+	}
+	return append(b, "#EXT-X-CONT:"+strconv.FormatInt(step, 10)+"\n"...)
 }
 
 // appendPackedPTS records a fragment's start so stamp does not read the

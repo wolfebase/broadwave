@@ -135,10 +135,14 @@ public enum Library {
 
     /// "3 recordings · 1.2 GB"
     public static func summary(_ recordings: [Recording]) -> String {
-        let count = recordings.count == 1
+        "\(count(recordings)) · \(ByteCountFormatter.string(fromByteCount: totalBytes(recordings), countStyle: .file))"
+    }
+
+    /// "3 recordings", for a screen that shows no file sizes.
+    public static func count(_ recordings: [Recording]) -> String {
+        recordings.count == 1
             ? String(localized: "1 recording", bundle: .module)
             : String(localized: "\(String(recordings.count)) recordings", bundle: .module)
-        return "\(count) · \(ByteCountFormatter.string(fromByteCount: totalBytes(recordings), countStyle: .file))"
     }
 
     private static func kindOf(_ rec: Recording) -> Kind {
