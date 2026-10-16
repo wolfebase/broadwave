@@ -11,6 +11,7 @@ import { bind, setLocaleMode } from "./i18n/runtime";
 import { chooseGlass } from "./lib/glass";
 import { installLook } from "./theme/look";
 import { installBlocked } from "./lib/install";
+import { applyCaptionStyle, readCaptionStyle } from "./features/player/captionStyle";
 
 const shell = bind(shellMessages);
 const asked = new URLSearchParams(location.search).get("locale");
@@ -19,6 +20,7 @@ document.title = shell("shell.brand");
 
 installLook();
 chooseGlass();
+applyCaptionStyle(readCaptionStyle());
 
 // Registered before the first paint. The browser fires this once, and a listener
 // added after React commits can miss it.

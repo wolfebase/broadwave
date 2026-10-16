@@ -165,6 +165,32 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
   border-left: 1px solid var(--color-line);
 }
 
+/* A half hour that has scrolled partly under the channel column keeps its
+   label in view instead of showing "30 AM". */
+.guide-slot-label {
+  position: sticky;
+  left: calc(var(--channel) + 10px);
+  white-space: nowrap;
+}
+
+/* The "now" pill says the time, so the half-hour label it would cover steps aside. */
+.guide-slot.under-now .guide-slot-label {
+  visibility: hidden;
+}
+
+.guide-empty {
+  max-width: 1600px;
+  width: 100%;
+  margin: var(--space-6) auto 0;
+}
+
+.guide-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
 /* The signature: a tally-red "on air" line through the whole guide. */
 .now-flag {
   position: absolute;
@@ -183,7 +209,9 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
 
 .now-line {
   position: absolute;
-  z-index: 4;
+  /* Under the rows: it shows in the gaps and empty slots, never across a title.
+     Inside the show on now, the aired fill marks the same minute. */
+  z-index: 1;
   width: 2px;
   margin-left: -1px;
   background: var(--color-tally);
@@ -193,6 +221,7 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
 
 .guide-row {
   position: absolute;
+  z-index: 2;
   left: 0;
   height: var(--row);
   border-bottom: 1px solid var(--color-line);
@@ -205,7 +234,7 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
   width: var(--channel);
   height: 100%;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) 14px;
   align-items: center;
   gap: 10px;
   padding: 0 var(--space-4);
@@ -272,6 +301,12 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
   flex: none;
 }
 
+.gc-fav {
+  display: flex;
+  justify-content: center;
+  width: 14px;
+}
+
 .gc-star {
   flex: none;
   color: var(--color-warning);
@@ -323,7 +358,7 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
 }
 
 .guide-cell.has-thumb,
-.guide-cell:has(> .cell-thumb:not([hidden])) {
+.guide-cell:has(> .cell-thumb:not(.lf-wait)) {
   padding-right: 64px;
 }
 
@@ -610,6 +645,12 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
   display: flex;
   align-items: center;
   gap: 14px;
+}
+
+.ps-channel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .ps-body {

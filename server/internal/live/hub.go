@@ -158,6 +158,14 @@ type Hub struct {
 	// so flipping back to a channel is instant.
 	RenditionIdle time.Duration
 
+	// TunerLinger is how long a tune is kept after its last picture was
+	// watched, counted from the viewer leaving. The encode still stops after
+	// RenditionIdle; the tuner and its buffer stay, so a return within it
+	// starts on a locked frequency with the buffer behind it. A new tune
+	// takes a lingering tuner first. Zero gives the tuner back with the
+	// encode.
+	TunerLinger time.Duration
+
 	// FallbackWindow is how long a GPU encode has to fail before a death is a
 	// late failure (rebuild once) instead of an immediate software fallback.
 	// Zero means 8 seconds.
@@ -230,6 +238,15 @@ type Hub struct {
 	// grabbers counts preview-frame loops, so Shutdown returns only after
 	// the last one stops writing.
 	grabbers sync.WaitGroup
+	// failures are recent renditions given up on, by channel and key.
+	failures map[string]startFailure
+	// guessTune is the tune a guess opened without a picture.
+	guessTune *feed
+	// mutes are channels whose main sound sent no frame, until when their
+	// encodes start without it.
+	mutes map[int64]time.Time
+	// releasing counts tuners being set to none outside h.mu.
+	releasing sync.WaitGroup
 }
 
 type mux struct {
@@ -283,6 +300,9 @@ type mux struct {
 	// The tune's steps, for NoteStart. Set and read under h.mu.
 	tuneBegan, tuneStatus, tuneLocked time.Time
 	firstByte                         stamp
+	// retune is set on a tune whose tuner is claimed for another one:
+	// stopping it leaves setting the tuner to none to the claimant.
+	retune bool
 }
 
 // feed is one channel on a tuned frequency.
@@ -293,9 +313,13 @@ type feed struct {
 	renditions map[string]*rendition
 	// moved names the key a rebuilt rendition runs under now, for viewers
 	// who joined it under its old one.
-	moved     map[string]string
-	recording *recording
-	tracks    []AudioTrack
+	moved map[string]string
+	// lingerUntil keeps a feed whose viewers left, with no encode, until
+	// then (TunerLinger); linger is the timer that lets it go.
+	lingerUntil time.Time
+	linger      *time.Timer
+	recording   *recording
+	tracks      []AudioTrack
 	// stored is the audio measured on the last tune, then on this one. It
 	// vouches for a track this tune has not measured yet.
 	stored []AudioTrack
@@ -336,9 +360,28 @@ type rendition struct {
 	// clock maps this encode onto wall time. A transcode's fMP4 timestamps
 	// start at zero, so each encode has its own; seedClockLocked lines it up
 	// with the channel's other encodes on the broadcast clock.
-	clock     *Timeline
+	clock *Timeline
+	// fallback is a picture moved to the processor after the GPU failed at
+	// its start; aac is sound converted after a copy the muxer could not
+	// describe. restarted is the ladder's one restart.
 	fallback  bool
+	aac       bool
 	restarted bool
+	// mute is a main sound that sent no frame at all: the encode starts
+	// again without sound rather than wait for it.
+	mute bool
+	// restarts are when this encode was started again, for restartBudget.
+	restarts []time.Time
+	// startAt is this process's start and startFed its first input; stalled
+	// is set when the watchdog ended it for writing nothing, and stalls
+	// counts those ends in a row.
+	startAt  time.Time
+	startFed stamp
+	stalled  bool
+	stalls   int
+	// encoder is what the running process encodes with; log is its stderr.
+	encoder string
+	log     *procLog
 	// waited is set under the hub lock once cmd.Wait returns. A stop after
 	// that must not signal the pid: Wait has reaped it.
 	waited atomic.Bool
@@ -368,6 +411,9 @@ type rendition struct {
 	// once it fell back to dating by that arrival.
 	ringFrom time.Time
 	dated    bool
+	// roomStart is a start in the buffer for a room well behind live; the
+	// watch waits for the room's frame. A quick start (startBack) is not.
+	roomStart bool
 	// late is when the playlist last grew before a late gap, in Unix ns,
 	// until the gap ends and is logged.
 	late int64
@@ -451,6 +497,7 @@ func New(st *store.Store, dir, ffmpeg, encoder string) *Hub {
 		Store: st, Dir: dir, FFmpeg: ffmpeg, Encoder: encoder, HEVC: ProbeHEVC(ffmpeg, encoder),
 		DeintBroadcast: broadcast, DeintSmooth: smooth,
 		RenditionIdle: 20 * time.Second,
+		TunerLinger:   lingerFromEnv(90 * time.Second),
 		muxes:         map[int]*mux{}, channels: map[int64]*feed{}, mosaics: map[string]*mosaic{}, reserved: map[int]bool{},
 	}
 }
@@ -727,7 +774,13 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	// A channel that has already been tuned knows its frequency and program.
 	// Opening the mux is the lock. A vchannel probe would lock again, then
 	// wait for streaminfo, before this same request.
-	if ch.FrequencyHz > 0 && ch.ProgramNum > 0 {
+	// A channel that found no signal lately is probed for a short lock
+	// instead: a dark frequency holds an open for about 10 s.
+	wait := darkProbe
+	if h.darkWithinLocked(ch.ID, ch.FrequencyHz, noSignalFor) {
+		wait = quickProbe
+	}
+	if ch.FrequencyHz > 0 && ch.ProgramNum > 0 && wait == darkProbe {
 		if body, err := openMux(root, tuner, ch.FrequencyHz); err == nil {
 			locked := time.Now()
 			feed := h.beginMuxLocked(ch, host, base, tuner, ch.FrequencyHz, nil, body)
@@ -745,7 +798,7 @@ func (h *Hub) ensureFeedLocked(ctx context.Context, ch store.SourceChannel, stre
 	if need.ATSC3 {
 		return h.openAutoLocked(ch, root, host, last, false, began, status)
 	}
-	freq, programs, err := probe(host, tuner, ch.GuideNumber)
+	freq, programs, err := probe(host, tuner, ch.GuideNumber, wait)
 	if errors.Is(err, errDark) {
 		return nil, fmt.Errorf("%w (%v)", ErrNoSignal, err)
 	}
@@ -983,7 +1036,11 @@ func (h *Hub) rebuildRenditionsLocked(f *feed) {
 		// Tracks measured after the start are left out: a new sound track is
 		// not worth a restart. A changed main still is, and so is a stored
 		// track the PMT no longer lists the same way.
-		_, next := h.pictureArgs(f, r.spec, keptExtras(f, r))
+		spec := r.spec
+		if r.mute {
+			spec.Audio = "none"
+		}
+		_, next := h.pictureArgs(f, spec, keptExtras(f, r))
 		if slices.Equal(r.args, next) {
 			continue
 		}
@@ -1094,14 +1151,19 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 		return nil, &PictureError{Tiles: h.Host.Tiles}
 	}
 	dir := filepath.Join(h.Dir, "live", fmt.Sprintf("%d", f.channel.ID), key)
-	if err := os.RemoveAll(dir); err != nil {
+	if err := discardDir(dir); err != nil {
 		return nil, err
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
 	extras := h.extrasLocked(f, want)
-	input, args := h.pictureArgs(f, want, extras)
+	spec := want
+	mute := want.Audio != "none" && time.Now().Before(h.mutes[f.channel.ID])
+	if mute {
+		spec.Audio, extras = "none", nil
+	}
+	input, args := h.pictureArgs(f, spec, extras)
 	cmd := exec.Command(h.FFmpeg, args...)
 	cmd.Dir = dir
 	var stdin io.WriteCloser
@@ -1119,7 +1181,7 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 		}
 		return nil, err
 	}
-	logCommand(cmd)
+	plog := logCommand(cmd, renditionTag(f, key))
 	if err := cmd.Start(); err != nil {
 		_ = stdout.Close()
 		if stdin != nil {
@@ -1131,10 +1193,10 @@ func (h *Hub) ensureRenditionAtLocked(f *feed, want Rendition, frame time.Time) 
 		h.startCaptionsLocked(f)
 	}
 	h.seedLong(f, gate)
-	packIn := startPack(dir, stdout, gate, done, captionLine(f))
+	packIn := startPack(dir, stdout, gate, done, captionLine(f), true)
 	NotePID(h.Dir, cmd.Process.Pid)
 	now := time.Now()
-	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: now, began: now, args: args, extras: extras, gate: gate, packDone: done, input: packIn}
+	r := &rendition{spec: want, dir: dir, cmd: cmd, stdin: stdin, seen: now, began: now, startAt: now, args: args, extras: extras, gate: gate, packDone: done, input: packIn, log: plog, encoder: encoderOf(h.Encoder, want), mute: mute}
 	if stdin != nil {
 		r.sub = h.attachRenditionLocked(f, r, h.renditionPipe(f, r, stdin), frame, now)
 	}
@@ -1296,16 +1358,97 @@ func encoderOf(base string, want Rendition) string {
 	return OutputEncoder(base, want.Codec)
 }
 
-// watchRendition restarts an encode that dies, then releases the tuner if a
-// second start also dies. A restart wipes the directory so a software fallback
-// never serves the init.mp4 the GPU encode left behind.
+// restartBudget is how many times one encode is started again within
+// restartWindow. A broadcast that kills ffmpeg now and then keeps playing; one
+// that kills every start gives the tuner back.
+const (
+	restartBudget = 3
+	restartWindow = 5 * time.Minute
+)
+
+// restartAllowed reports whether one more restart fits the budget.
+func restartAllowed(restarts []time.Time, now time.Time) bool {
+	n := 0
+	for _, at := range restarts {
+		if now.Sub(at) < restartWindow {
+			n++
+		}
+	}
+	return n < restartBudget
+}
+
+// restartPlan is what watchRendition does with an encode that ended.
+type restartPlan int
+
+const (
+	planRelease restartPlan = iota
+	// planSame runs the same command line into the same packager, so the
+	// playlist carries on after a discontinuity and keeps its numbers.
+	planSame
+	// The others start over in an empty directory: the new encode describes
+	// its streams differently, so players need a new playlist.
+	planPlain    // without the other sound tracks
+	planAAC      // the sound converted to AAC instead of copied
+	planSoftware // the picture on the processor, as H.264
+	planSilent   // without sound: the main track sent no frame
+)
+
+func (p restartPlan) String() string {
+	return [...]string{"release", "same", "without the other sound tracks", "with AAC sound", "on the processor", "without sound (the station sends none)"}[p]
+}
+
+// planRestart picks what follows an encode's exit. early is a death within
+// the fallback window of its start; stalled is a start the watchdog ended
+// for writing nothing; silent is a main sound that sent no frame while the
+// picture played (29.4 lists an AC-3 track that carries nothing: a copy
+// cannot write its header, and AAC waits for it forever).
+//
+// Sound the muxer could not describe (a copied AC-3 track whose rate the
+// probe did not see) is not the GPU's fault: the encode starts again with
+// the sound converted, which needs no rate up front. A GPU that fails at
+// its start moves to the processor as H.264, never libx265, which runs a
+// 1080 picture far slower than real time and never writes a fragment.
+func planRestart(r *rendition, err error, cause exitCause, early, stalled, silent bool, encoder string, now time.Time) restartPlan {
+	if err == nil && !stalled {
+		return planRelease
+	}
+	if !restartAllowed(r.restarts, now) {
+		return planRelease
+	}
+	canFall := !r.fallback && gpuEncoder(encoder)
+	switch {
+	case silent && !r.mute && r.spec.Audio != "none" && (stalled || (early && cause == causeParams)):
+		return planSilent
+	case early && len(r.extras) > 0 && cause != causeGPU:
+		// A listed track that sends nothing, or something ffmpeg cannot
+		// open, stops the whole encode. The picture and main sound come first.
+		return planPlain
+	case early && cause == causeParams && r.spec.Audio == "copy" && !r.aac:
+		return planAAC
+	case stalled:
+		// One start that wrote nothing can be a broadcast that had not sent
+		// a whole group of pictures yet. Two in a row is the encoder.
+		if r.stalls >= 2 && canFall {
+			return planSoftware
+		}
+		return planSame
+	case early && cause != causeParams && canFall:
+		return planSoftware
+	}
+	return planSame
+}
+
+// watchRendition starts an encode that dies again, within restartBudget, and
+// releases the rendition when it cannot. A restart on the same command line
+// keeps the playlist; any other one wipes the directory so the new encode
+// never serves the init.mp4 the old one left behind.
 // respawn is an encode started after a timestamp break. Its early death says
 // nothing about the GPU, so it does not fall back to software.
 func (h *Hub) watchRendition(f *feed, r *rendition, cmd *exec.Cmd, encoder string, respawn bool) {
 	pid := cmd.Process.Pid
 	started := time.Now()
 	h.mu.Lock()
-	done := r.packDone
+	done, in := r.packDone, r.input
 	h.mu.Unlock()
 	err := cmd.Wait()
 	h.mu.Lock()
@@ -1321,9 +1464,11 @@ func (h *Hub) watchRendition(f *feed, r *rendition, cmd *exec.Cmd, encoder strin
 		slog.Info(fmt.Sprintf("rendition %s on %s: the encode before the break ended after %s", r.spec.Key(), f.channel.GuideNumber, time.Since(since).Round(10*time.Millisecond)))
 		return
 	}
-	// The packager can still be writing the last fragment after ffmpeg exits.
-	// A restart wipes the directory, so it waits for those writes first.
-	if done != nil {
+	// The packager can still be taking the last fragment after ffmpeg exits.
+	// A holding packager parks at the end of it; any other one finishes.
+	if in != nil && in.holding() {
+		in.waitParked(2 * time.Second)
+	} else if done != nil {
 		select {
 		case <-done:
 		case <-time.After(2 * time.Second):
@@ -1334,37 +1479,70 @@ func (h *Hub) watchRendition(f *feed, r *rendition, cmd *exec.Cmd, encoder strin
 	if f.renditions[r.spec.Key()] != r || r.cmd != cmd {
 		return
 	}
-	early := err != nil && !respawn && time.Since(started) <= h.fallbackWindow()
-	// A GPU encode that fails at its start moves to the CPU. libx265 runs a
-	// 1080 picture far slower than real time on most CPUs, so HEVC does only
-	// on VAAPI, as it always has.
-	canFall := !r.fallback && (vaapiFamily(encoder) || (gpuEncoder(encoder) && r.spec.Codec != "hevc"))
-	if early && len(r.extras) > 0 {
-		// A listed track that sends nothing, or something ffmpeg cannot open,
-		// stops the whole encode. The picture and main sound come first.
-		r.extras = nil
-		f.plain = true
-		_, r.args = h.pictureArgs(f, r.spec, nil)
-		if h.restartRenditionLocked(f, r, false) {
-			// The GPU still gets its own fallback if this start dies too.
-			if canFall {
-				r.restarted = false
-			}
-			slog.Info(fmt.Sprintf("rendition %s on %s restarted without its other sound tracks after %s", r.spec.Key(), f.channel.GuideNumber, time.Since(started).Round(time.Millisecond)))
+	now := time.Now()
+	stalled := r.stalled
+	r.stalled = false
+	cause := causeOf(r.log.Tail())
+	words := r.log.lastWords()
+	early := err != nil && !respawn && now.Sub(started) <= h.fallbackWindow()
+	silent := false
+	if r.filter != nil {
+		silent = r.filter.count.silent()
+	}
+	plan := planRestart(r, err, cause, early, stalled, silent, encoder, now)
+	ran := now.Sub(started).Round(time.Millisecond)
+	what := fmt.Sprintf("rendition %s on %s", r.spec.Key(), f.channel.GuideNumber)
+	if err != nil {
+		reason := err.Error()
+		if stalled {
+			reason = "wrote nothing"
+		}
+		heard := ""
+		if r.filter != nil && r.filter.count != nil {
+			c := r.filter.count
+			heard = fmt.Sprintf(" (%d pictures, %d sound frames on PID %d)", c.video.Load(), c.heard.Load(), c.sound.Load())
+		}
+		slog.Warn(fmt.Sprintf("%s ended after %s%s: %s; cause %s: %s", what, ran, heard, reason, cause, words))
+	}
+	switch plan {
+	case planSame:
+		if h.followRestartLocked(f, r) {
+			slog.Warn(fmt.Sprintf("%s started again on the same playlist", what))
 			return
 		}
+	case planPlain:
+		r.extras = nil
+		f.plain = true
+	case planAAC:
+		r.aac = true
+	case planSoftware:
+		r.fallback = true
+	case planSilent:
+		r.mute = true
+		r.extras = nil
+		if h.mutes == nil {
+			h.mutes = map[int64]time.Time{}
+		}
+		h.mutes[f.channel.ID] = now.Add(muteFor)
 	}
-	if err != nil && !r.restarted && h.restartRenditionLocked(f, r, early && canFall) {
-		slog.Info(fmt.Sprintf("rendition %s on %s restarted after %s", r.spec.Key(), f.channel.GuideNumber, time.Since(started).Round(time.Millisecond)))
+	if plan != planRelease && h.restartRenditionLocked(f, r) {
+		slog.Warn(fmt.Sprintf("%s started again %s", what, plan))
 		return
 	}
 	// The process has been waited. Don't signal a pid the OS may have reused.
 	r.cmd = nil
 	r.stdin = nil
-	slog.Error(fmt.Sprintf("rendition %s on %s released after %s: %v", r.spec.Key(), f.channel.GuideNumber, time.Since(started).Round(time.Millisecond), err))
+	if err != nil {
+		h.noteFailureLocked(f.channel.ID, r.spec.Key(), words)
+		slog.Error(fmt.Sprintf("%s released after %s: %v", what, ran, err))
+	}
 	h.stopRenditionLocked(f, r.spec.Key())
 	h.dropIfUnusedLocked(f)
 }
+
+// muteFor is how long a channel whose sound sent nothing starts its encodes
+// without it, rather than fail once more before each one.
+const muteFor = 30 * time.Minute
 
 func (h *Hub) fallbackWindow() time.Duration {
 	if h.FallbackWindow > 0 {
@@ -1373,9 +1551,109 @@ func (h *Hub) fallbackWindow() time.Duration {
 	return 8 * time.Second
 }
 
-// restartRenditionLocked starts the encode again in an empty directory.
-// software forces the CPU encoder; otherwise the same command line runs once more.
-func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool {
+// restartArgsLocked is the command line for r's next start: its own picture
+// and sound, the sound converted after a header failure, and the picture on
+// the processor as H.264 after a GPU one.
+func (h *Hub) restartArgsLocked(f *feed, r *rendition) (args []string, encoder string) {
+	spec := r.spec
+	if r.mute {
+		spec.Audio = "none"
+	}
+	if r.aac && spec.Audio == "copy" {
+		spec.Audio = "aac2"
+		if f.source.AudioChannels >= 6 {
+			spec.Audio = "aac6"
+		}
+	}
+	if !r.fallback {
+		_, args = h.pictureArgs(f, spec, r.extras)
+		return args, encoderOf(h.Encoder, spec)
+	}
+	spec.Codec = ""
+	input := "pipe:0"
+	if m := muxOf(h, f); m != nil && m.input != "" {
+		input = m.input
+	}
+	src := f.sourceFor(spec)
+	src.Extras = r.extras
+	return renditionArgs(f.program, src, spec, "libx264", "", input), "libx264"
+}
+
+// renditionTag names an encode in the log.
+func renditionTag(f *feed, key string) string {
+	return "ffmpeg " + f.channel.GuideNumber + " " + key
+}
+
+// followRestartLocked starts the same command line again into the packager
+// the last encode fed, so the playlist keeps its numbers and its dates, and
+// players see a discontinuity instead of a new stream. False when that
+// packager has stopped or the start failed.
+func (h *Hub) followRestartLocked(f *feed, r *rendition) bool {
+	if r.input == nil || !r.input.holding() || len(r.args) == 0 {
+		return false
+	}
+	m := muxOf(h, f)
+	if m != nil {
+		m.detach(r.sub)
+	} else if r.sub != nil {
+		r.sub.stop()
+	}
+	if r.sub == nil && r.stdin != nil {
+		_ = r.stdin.Close()
+	}
+	r.sub = nil
+	r.stdin = nil
+	cmd := exec.Command(h.FFmpeg, r.args...)
+	cmd.Dir = r.dir
+	var stdin io.WriteCloser
+	if usesPipe(r.args) {
+		var err error
+		if stdin, err = cmd.StdinPipe(); err != nil {
+			return false
+		}
+	}
+	stdout, err := newPackPipe(cmd)
+	if err != nil {
+		if stdin != nil {
+			_ = stdin.Close()
+		}
+		return false
+	}
+	plog := logCommand(cmd, renditionTag(f, r.spec.Key()))
+	if err := cmd.Start(); err != nil {
+		_ = stdout.Close()
+		if stdin != nil {
+			_ = stdin.Close()
+		}
+		return false
+	}
+	if !r.input.follow(stdout) {
+		_ = stdout.Close()
+		if stdin != nil {
+			_ = stdin.Close()
+		}
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return false
+	}
+	NotePID(h.Dir, cmd.Process.Pid)
+	now := time.Now()
+	r.cmd, r.stdin, r.log = cmd, stdin, plog
+	r.waited.Store(false)
+	r.filter = nil
+	r.restarts = append(r.restarts, now)
+	r.startAt = now
+	r.startFed.reset()
+	if stdin != nil {
+		r.sub = h.attachPipeLocked(m, h.renditionPipe(f, r, stdin))
+	}
+	go h.watchRendition(f, r, cmd, r.encoder, false)
+	return true
+}
+
+// restartRenditionLocked starts the encode again in an empty directory, on
+// restartArgsLocked's command line, with a new playlist.
+func (h *Hub) restartRenditionLocked(f *feed, r *rendition) bool {
 	// The encode being replaced has no fragment left to write: this restart
 	// deletes its directory. Kill it now. Its watch reaps it and sees the
 	// command change. A second close of stdin races the subscriber that
@@ -1393,32 +1671,21 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 	if live {
 		_ = old.Process.Kill()
 	}
+	r.input.abandon()
+	r.gate.retire()
 	r.sub = nil
 	r.stdin = nil
 	r.stamper.reset()
 	r.clock = nil
-	r.ringFrom = time.Time{}
+	r.ringFrom, r.roomStart = time.Time{}, false
 	r.dated = false
-	if err := os.RemoveAll(r.dir); err != nil {
+	if err := discardDir(r.dir); err != nil {
 		return false
 	}
 	if err := os.MkdirAll(r.dir, 0o755); err != nil {
 		return false
 	}
-	encoder := encoderOf(h.Encoder, r.spec)
-	args := r.args
-	if software || len(args) == 0 {
-		encoder = "libx264"
-		input := "pipe:0"
-		if m := muxOf(h, f); m != nil && m.input != "" {
-			input = m.input
-		}
-		src := f.sourceFor(r.spec)
-		src.Extras = r.extras
-		args = renditionArgs(f.program, src, r.spec, encoder, "", input)
-		r.fallback = true
-		encoder = OutputEncoder(encoder, r.spec.Codec)
-	}
+	args, encoder := h.restartArgsLocked(f, r)
 	cmd := exec.Command(h.FFmpeg, args...)
 	cmd.Dir = r.dir
 	var stdin io.WriteCloser
@@ -1436,7 +1703,7 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 		}
 		return false
 	}
-	logCommand(cmd)
+	plog := logCommand(cmd, renditionTag(f, r.spec.Key()))
 	if err := cmd.Start(); err != nil {
 		_ = stdout.Close()
 		if stdin != nil {
@@ -1445,14 +1712,19 @@ func (h *Hub) restartRenditionLocked(f *feed, r *rendition, software bool) bool 
 		return false
 	}
 	h.seedLong(f, gate)
-	r.input = startPack(r.dir, stdout, gate, done, captionLine(f))
+	r.input = startPack(r.dir, stdout, gate, done, captionLine(f), true)
 	NotePID(h.Dir, cmd.Process.Pid)
+	now := time.Now()
 	r.cmd = cmd
 	r.stdin = stdin
+	r.log = plog
 	r.args = args
+	r.encoder = encoder
 	r.gate = gate
 	r.packDone = done
-	r.restarted = true
+	r.restarts = append(r.restarts, now)
+	r.startAt = now
+	r.startFed.reset()
 	r.waited.Store(false)
 	r.filter = nil
 	if stdin != nil {
@@ -1469,9 +1741,10 @@ func (h *Hub) renditionPipe(f *feed, r *rendition, stdin io.WriteCloser) io.Writ
 	if program == 0 && NeedFor(f.channel.VideoCodec, f.channel.AudioCodec, f.channel.ATSC3).ATSC3 {
 		program = anyProgram
 	}
-	w := newProgramPipe(markWriter{stdin, &r.fed}, program)
+	w := newProgramPipe(markWriter{stdin, &r.fed, &r.startFed}, program)
 	if p, ok := w.(*programPipe); ok {
 		p.sw = &pipeSwitch{}
+		p.count = newPESCount(f.soundPID(r.spec))
 		p.onBreak = func() {
 			if r.spec.ABR {
 				go h.followLadderBreak(f, r, p)
@@ -1507,7 +1780,7 @@ func (h *Hub) followBreak(f *feed, r *rendition, p *programPipe) {
 	// playlist rather than a frozen one.
 	fail := func(err error) {
 		slog.Error(fmt.Sprintf("rendition %s on %s: start again: %v", r.spec.Key(), f.channel.GuideNumber, err))
-		if !h.restartRenditionLocked(f, r, false) {
+		if !h.restartRenditionLocked(f, r) {
 			h.stopRenditionLocked(f, r.spec.Key())
 			h.dropIfUnusedLocked(f)
 		}
@@ -1525,7 +1798,7 @@ func (h *Hub) followBreak(f *feed, r *rendition, p *programPipe) {
 		fail(err)
 		return
 	}
-	logCommand(cmd)
+	plog := logCommand(cmd, renditionTag(f, r.spec.Key()))
 	if err := cmd.Start(); err != nil {
 		_ = stdout.Close()
 		_ = stdin.Close()
@@ -1547,10 +1820,11 @@ func (h *Hub) followBreak(f *feed, r *rendition, p *programPipe) {
 	time.AfterFunc(10*time.Second, func() { _ = old.Process.Kill() })
 	r.cmd = cmd
 	r.stdin = stdin
+	r.log = plog
 	r.waited.Store(false)
 	r.respawned = time.Now()
 	slog.Info(fmt.Sprintf("rendition %s on %s started again after a timestamp break", r.spec.Key(), f.channel.GuideNumber))
-	go h.watchRendition(f, r, cmd, encoderOf(h.Encoder, r.spec), true)
+	go h.watchRendition(f, r, cmd, r.encoder, true)
 }
 
 func usesPipe(args []string) bool {
@@ -1725,14 +1999,38 @@ func (h *Hub) attachRenditionLocked(f *feed, r *rendition, w io.WriteCloser, fra
 	if m != nil && m.ring != nil && m.input == "" && !frame.IsZero() && back >= roomBackMin && back <= roomBackMax && datedSiblingLocked(f, r) {
 		from := frame.Add(-ringLead)
 		if pos, ok := m.ring.At(from); ok {
-			r.ringFrom = from
+			r.ringFrom, r.roomStart = from, true
 			sub := newPipeSub(w)
 			go m.joinLive(sub, packetStart(pos))
 			slog.Info(fmt.Sprintf("channel %s: %s starts %.1f s back in the buffer, at its room", f.channel.GuideNumber, r.spec.Key(), now.Sub(from).Seconds()))
 			return sub
 		}
 	}
+	// On a frequency tuned a while ago, the opening the tune kept is gone and
+	// the live edge is mid-group: the encode would wait for the next keyframe
+	// and probe its streams at broadcast speed. A start startBack into the
+	// buffer has both at once.
+	if m != nil && m.ring != nil && m.input == "" && m.leadSpent() {
+		from := now.Add(-startBack)
+		if pos, ok := m.ring.At(from); ok {
+			r.ringFrom = from
+			sub := newPipeSub(w)
+			go m.joinLive(sub, packetStart(pos))
+			return sub
+		}
+	}
 	return h.attachPipe(m, w, true)
+}
+
+// startBack is how far into the buffer a new encode on a tune that is no
+// longer fresh starts: a broadcast group of pictures and a probe's worth.
+const startBack = 2 * time.Second
+
+// leadSpent reports whether the tune's opening bytes are no longer kept.
+func (m *mux) leadSpent() bool {
+	m.pipeMu.Lock()
+	defer m.pipeMu.Unlock()
+	return m.leadDone || (!m.leadSince.IsZero() && time.Since(m.leadSince) > leadFor)
 }
 
 // FromBuffer reports whether a rendition started in the buffer, so its
@@ -1744,7 +2042,7 @@ func (h *Hub) FromBuffer(channelID int64, key string) bool {
 	if f == nil || f.renditions[key] == nil {
 		return false
 	}
-	return !f.renditions[key].ringFrom.IsZero()
+	return f.renditions[key].roomStart
 }
 
 // datedSiblingLocked reports whether another encode of the channel has
@@ -1791,7 +2089,9 @@ func seedClockLocked(f *feed, r *rendition) {
 	if !r.ringFrom.IsZero() && !r.dated && r.input.started() {
 		r.dated = true
 		r.clock.Start(r.ringFrom.Add(-ringDelay))
-		slog.Warn(fmt.Sprintf("channel %s: %s started in the buffer with no encode to date it by; its dates may be a second or two off", f.channel.GuideNumber, r.spec.Key()))
+		if r.roomStart {
+			slog.Warn(fmt.Sprintf("channel %s: %s started in the buffer with no encode to date it by; its dates may be a second or two off", f.channel.GuideNumber, r.spec.Key()))
+		}
 	}
 }
 
@@ -1878,8 +2178,8 @@ func (h *Hub) WaitMedia(channelID int64, key string, msn, part int, d time.Durat
 
 // WaitBlocking holds a blocking playlist request (_HLS_msn) until the
 // playlist lists the segment or part it asked for, for up to three times the
-// playlist's target duration.
-func (h *Hub) WaitBlocking(channelID int64, key string, msn, part int) {
+// playlist's target duration, or until the request is cancelled.
+func (h *Hub) WaitBlocking(ctx context.Context, channelID int64, key string, msn, part int) {
 	h.mu.Lock()
 	var gate *playlistGate
 	if f := h.channels[channelID]; f != nil {
@@ -1889,7 +2189,7 @@ func (h *Hub) WaitBlocking(channelID int64, key string, msn, part int) {
 		}
 	}
 	h.mu.Unlock()
-	gate.block(msn, part)
+	gate.block(ctx, msn, part)
 }
 
 // Touch records that a viewer of a rendition is still fetching video. It
@@ -1920,6 +2220,7 @@ func (h *Hub) ReleaseAbandoned(maxAge time.Duration) {
 			}
 			r.viewers = 0
 			h.stopRenditionLocked(f, key)
+			h.lingerLocked(f, h.TunerLinger-h.RenditionIdle)
 		}
 		h.dropIfUnusedLocked(f)
 	}
@@ -1965,7 +2266,52 @@ func (h *Hub) idleStop(channelID int64, key string) {
 	if r := f.renditions[key]; r != nil && r.viewers == 0 && !r.ladderChild {
 		h.stopRenditionLocked(f, key)
 	}
+	h.lingerLocked(f, h.TunerLinger-h.RenditionIdle)
 	h.dropIfUnusedLocked(f)
+}
+
+// lingerLocked keeps a feed that has just lost its last encode tuned for d,
+// unless a recording is about to need a tuner.
+func (h *Hub) lingerLocked(f *feed, d time.Duration) {
+	m := muxOf(h, f)
+	if d <= 0 || len(f.renditions) > 0 || h.hold > 0 || m == nil || m.input != "" || h.channels[f.channel.ID] != f {
+		return
+	}
+	until := time.Now().Add(d)
+	if until.Before(f.lingerUntil) {
+		return
+	}
+	f.lingerUntil = until
+	stopTimer(&f.linger)
+	id := f.channel.ID
+	f.linger = time.AfterFunc(d, func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if h.channels[id] == f {
+			h.dropIfUnusedLocked(f)
+		}
+	})
+}
+
+// endLingerLocked gives back every tuner kept only by linger.
+func (h *Hub) endLingerLocked() {
+	for _, f := range h.feedsLocked() {
+		if f.lingerUntil.IsZero() {
+			continue
+		}
+		f.lingerUntil = time.Time{}
+		stopTimer(&f.linger)
+		h.dropIfUnusedLocked(f)
+	}
+}
+
+func lingerFromEnv(d time.Duration) time.Duration {
+	if raw := os.Getenv("BROADWAVE_TUNER_LINGER"); raw != "" {
+		if s, err := strconv.Atoi(raw); err == nil && s >= 0 {
+			return time.Duration(s) * time.Second
+		}
+	}
+	return d
 }
 
 func (h *Hub) Record(ctx context.Context, channelID int64, minutes int, title string) (store.Recording, error) {
@@ -2026,7 +2372,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 				_ = h.Store.AddEvent(ctx, "recording", StopWarning(labels, time.Now(), title, time.Now()))
 			}
 			for _, feed := range feeds {
-				h.stopFeedLocked(feed)
+				h.stopFeedNowLocked(feed)
 			}
 			f, err = h.ensureFeedLocked(ctx, ch, res)
 		}
@@ -2100,7 +2446,7 @@ func (h *Hub) RecordMeta(ctx context.Context, minutes int, meta store.Recording)
 				return store.Recording{}, err
 			}
 		}
-		logCommand(cmd)
+		logCommand(cmd, "recording "+f.channel.GuideNumber)
 		if err := cmd.Start(); err != nil {
 			h.abortRecordingLocked(ctx, f, id)
 			return store.Recording{}, err
@@ -2147,7 +2493,14 @@ func (h *Hub) Shutdown() {
 	}
 	for _, f := range h.feedsLocked() {
 		if f.recording != nil {
-			h.finishRecordingLocked(f, "complete", "")
+			// A show still on is cut short, not finished: the next start
+			// records the rest (dvr.Recover), and neither piece counts as
+			// the episode.
+			status, note := "complete", ""
+			if time.Until(f.recording.ends) > 30*time.Second {
+				status, note = "interrupted", "Stopped when the server restarted."
+			}
+			h.finishRecordingLocked(f, status, note)
 		}
 		h.stopFeedLocked(f)
 	}
@@ -2159,6 +2512,7 @@ func (h *Hub) Shutdown() {
 	// running survives the process, and the next boot has no pid to reap.
 	h.stopFileEncodes()
 	h.grabbers.Wait()
+	h.releasing.Wait()
 }
 
 // recordingPath picks a free file for a new recording: by show (Plex and
@@ -2328,8 +2682,12 @@ func (h *Hub) SetHold(n int) {
 		n = 0
 	}
 	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.hold = n
-	h.mu.Unlock()
+	// A recording about to start may need a tuner held only for a return.
+	if n > 0 {
+		h.endLingerLocked()
+	}
 }
 
 func (h *Hub) Tuners(ctx context.Context) ([]Tuner, error) {
@@ -2777,11 +3135,36 @@ func (h *Hub) watchInput(ctx context.Context, m *mux) {
 
 // outputStall is how long an encode fed by a live tune may add nothing to
 // its playlist before it is ended and started again. A broadcast with long
-// picture groups gets three of its own longest gaps instead.
-const outputStall = 12 * time.Second
+// picture groups gets three of its own longest gaps instead, so a 2.5 s
+// group still waits 7.5 s.
+const outputStall = 8 * time.Second
 
 // unfreezeGap spaces the watchdog's restarts of one encode.
 const unfreezeGap = time.Minute
+
+// startStall is how long a new encode may read input without writing its
+// first fragment before it is ended and started again: a probe, a group of
+// pictures, and the encoder's start fit well inside it. A station with long
+// groups, and a second try, get twice as long.
+var startStall = 7 * time.Second
+
+// stuckStartLocked reports an encode that has read input for startStall
+// since it started, or since the tuner last resumed, and written nothing.
+func (h *Hub) stuckStartLocked(f *feed, r *rendition, now, fed time.Time) bool {
+	in := r.startFed.at()
+	if in.IsZero() || r.gate == nil || r.gate.moved.Load() >= r.startAt.UnixNano() {
+		return false
+	}
+	limit := startStall
+	if h.knownLong(f.channel.ID) || r.stalls > 0 {
+		limit *= 2
+	}
+	from := in
+	if fed.After(from) {
+		from = fed
+	}
+	return now.Sub(from) > limit && now.Sub(r.unfroze) > limit
+}
 
 // unfreezeLocked ends an encode whose playlist stopped growing while the
 // tuner kept sending. ffmpeg can stay alive and write nothing, and every
@@ -2803,11 +3186,24 @@ func (h *Hub) unfreezeLocked(m *mux, now, fed time.Time) {
 				continue
 			}
 			noteLate(r, f.channel.GuideNumber, now, fed)
-			if r.cmd == nil || r.cmd.Process == nil || r.waited.Load() || now.Sub(r.unfroze) < unfreezeGap || !r.gate.stuck(now, fed, limit) {
+			if r.cmd == nil || r.cmd.Process == nil || r.waited.Load() {
+				continue
+			}
+			if h.stuckStartLocked(f, r, now, fed) {
+				r.stalled = true
+				r.stalls++
+				r.unfroze = now
+				slog.Warn(fmt.Sprintf("rendition %s on %s wrote nothing in %.1f s of input; starting it again", r.spec.Key(), f.channel.GuideNumber, now.Sub(r.startFed.at()).Seconds()))
+				_ = r.cmd.Process.Kill()
+				continue
+			}
+			if r.gate.moved.Load() >= r.startAt.UnixNano() {
+				r.stalls = 0
+			}
+			if now.Sub(r.unfroze) < unfreezeGap || !r.gate.stuck(now, fed, limit) {
 				continue
 			}
 			r.unfroze = now
-			r.restarted = false
 			slog.Warn(fmt.Sprintf("rendition %s on %s wrote nothing for %s while the tuner sent; starting it again", r.spec.Key(), f.channel.GuideNumber, now.Sub(time.Unix(0, r.gate.moved.Load())).Round(time.Second)))
 			_ = r.cmd.Process.Kill()
 		}
@@ -3057,11 +3453,13 @@ func (h *Hub) stopRenditionLocked(f *feed, key string) {
 		}
 		_ = r.cmd.Process.Kill()
 	}
+	r.input.abandon()
+	r.gate.retire()
 	delete(f.renditions, key)
 	if len(f.renditions) == 0 {
 		h.stopCaptionsLocked(f)
 	}
-	_ = os.RemoveAll(r.dir)
+	_ = discardDir(r.dir)
 	h.changed()
 }
 
@@ -3075,13 +3473,14 @@ func (f *feed) tuneHeld() bool { return f.probing || f.probes > 0 }
 // dropIfUnusedLocked releases the feed, and the tuner with the last feed, once
 // nobody is watching or recording it.
 func (h *Hub) dropIfUnusedLocked(f *feed) {
-	if len(f.renditions) > 0 || f.recording != nil || f.tuneHeld() || f.heldOutside() {
+	if len(f.renditions) > 0 || f.recording != nil || f.tuneHeld() || f.heldOutside() || time.Now().Before(f.lingerUntil) {
 		return
 	}
 	h.stopFeedLocked(f)
 }
 
 func (h *Hub) stopFeedLocked(f *feed) {
+	stopTimer(&f.linger)
 	h.endMosaicsOnLocked(f)
 	for key := range f.renditions {
 		h.stopRenditionLocked(f, key)
@@ -3114,8 +3513,8 @@ func (h *Hub) stopFeedLocked(f *feed) {
 		for _, sub := range m.shut() {
 			sub.stop()
 		}
-		if m.tuner >= 0 {
-			_, _ = hdhr.Control{Addr: controlAddr(m.host)}.Set(fmt.Sprintf("/tuner%d/channel", m.tuner), "none")
+		if m.tuner >= 0 && !m.retune {
+			h.releaseLaterLocked(m.host, m.tuner)
 		}
 		delete(h.muxes, m.freq)
 	}
@@ -3178,7 +3577,9 @@ func (h *Hub) finishRecordingLocked(f *feed, status, errText string) {
 	if saved, err := h.Store.Recording(context.Background(), rec.id); err == nil {
 		writeSidecar(saved)
 		message := fmt.Sprintf("Saved %s on %s", saved.Title, saved.GuideNumber)
-		if status != "complete" {
+		if status == "interrupted" {
+			message = fmt.Sprintf("Paused %s on %s for a restart", saved.Title, saved.GuideNumber)
+		} else if status != "complete" {
 			message = fmt.Sprintf("Recording %s on %s ended %s", saved.Title, saved.GuideNumber, status)
 		}
 		_ = h.Store.AddEvent(context.Background(), "recording", message)
@@ -3326,7 +3727,35 @@ func (h *Hub) feedsLocked() []*feed {
 // freeWarmTunerLocked stops the tuner that was left longest ago among those
 // held only so a flip back is instant: no viewer, recording, export, or probe
 // on any of its channels. It returns that tuner, and false when none was.
+// The tune that follows picks the tuner at once, so it is set to none here
+// and not later: a late none would land on the new tune.
 func (h *Hub) freeWarmTunerLocked(host string) (int, string, bool) {
+	m, tuner, guide, ok := h.claimWarmLocked(host, func(*mux) bool { return true })
+	if ok && tuner >= 0 {
+		releaseTuner(m.host, tuner)
+	}
+	return tuner, guide, ok
+}
+
+// stopFeedNowLocked is stopFeedLocked for a caller that tunes again at once
+// (a recording taking a viewer's tuner): the tuner is set to none before it
+// returns instead of in the background, where it would still be pending.
+func (h *Hub) stopFeedNowLocked(f *feed) {
+	m := muxOf(h, f)
+	last := m != nil && m.tuner >= 0 && len(m.feeds) == 1 && m.feeds[f.channel.GuideNumber] == f
+	if last {
+		m.retune = true
+	}
+	h.stopFeedLocked(f)
+	if last && h.muxes[m.freq] != m {
+		releaseTuner(m.host, m.tuner)
+	}
+}
+
+// claimWarmLocked stops the warm mux ok accepts that was left longest ago.
+// Its tuner is not set to none: the caller does that, or tunes it again
+// outside h.mu.
+func (h *Hub) claimWarmLocked(host string, ok func(*mux) bool) (*mux, int, string, bool) {
 	want := hostOf(host)
 	var oldest *mux
 	var left time.Time
@@ -3338,14 +3767,18 @@ func (h *Hub) freeWarmTunerLocked(host string) (int, string, bool) {
 		if m.tuner < 0 && (len(m.feeds) != 1 || m.input != "") {
 			continue
 		}
+		if !ok(m) {
+			continue
+		}
 		last, warm := warmSince(m)
 		if warm && (oldest == nil || last.Before(left)) {
 			oldest, left = m, last
 		}
 	}
 	if oldest == nil {
-		return 0, "", false
+		return nil, 0, "", false
 	}
+	oldest.retune = true
 	guide := ""
 	for g := range oldest.feeds {
 		guide = g
@@ -3358,7 +3791,7 @@ func (h *Hub) freeWarmTunerLocked(host string) (int, string, bool) {
 	for _, f := range maps.Clone(oldest.feeds) {
 		h.stopFeedLocked(f)
 	}
-	return oldest.tuner, guide, true
+	return oldest, oldest.tuner, guide, true
 }
 
 // warmSince is when a mux was last watched, and whether it is held only for a
@@ -3780,7 +4213,7 @@ func fetchTunerStatus(ctx context.Context, host string) ([]tunerStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := fetchguard.TunerDo(req, 0)
+	res, err := answerWithin(req, streamAnswer, func(r *http.Request) (*http.Response, error) { return fetchguard.TunerDo(r, 0) })
 	if err != nil {
 		return nil, err
 	}
@@ -3864,6 +4297,29 @@ func (b *keptBody) Close() error {
 	return b.ReadCloser.Close()
 }
 
+// releaseLaterLocked sets a tuner to none outside h.mu. The device answers
+// in milliseconds, but an unplugged one holds the call for its dial timeout,
+// and every playlist and watch waits on h.mu. The tuner stays pending, so
+// no tune picks it before the device has let it go. Shutdown waits for it.
+func (h *Hub) releaseLaterLocked(host string, tuner int) {
+	if host == "" || tuner < 0 {
+		return
+	}
+	if h.pending == nil {
+		h.pending = map[string]bool{}
+	}
+	key := pendingKey(host, tuner)
+	h.pending[key] = true
+	h.releasing.Add(1)
+	go func() {
+		defer h.releasing.Done()
+		releaseTuner(host, tuner)
+		h.mu.Lock()
+		delete(h.pending, key)
+		h.mu.Unlock()
+	}()
+}
+
 func releaseTuner(host string, tuner int) {
 	if host == "" || tuner < 0 {
 		return
@@ -3892,7 +4348,7 @@ func openStream(u, userAgent, referrer string) (*http.Response, error) {
 	if referrer != "" {
 		req.Header.Set("Referer", fetchguard.OneLine(referrer))
 	}
-	res, err := fetchguard.Do(req, 0)
+	res, err := answerWithin(req, streamAnswer, func(r *http.Request) (*http.Response, error) { return fetchguard.Do(r, 0) })
 	if err != nil {
 		return nil, fmt.Errorf("%w (%w)", ErrStreamDown, err)
 	}
@@ -3904,7 +4360,8 @@ func openStream(u, userAgent, referrer string) (*http.Response, error) {
 	return res, nil
 }
 
-func probe(host string, tuner int, guide string) (int, []hdhr.Program, error) {
+// probe tunes the channel and waits up to wait for a lock.
+func probe(host string, tuner int, guide string, wait time.Duration) (int, []hdhr.Program, error) {
 	c := hdhr.Control{Addr: controlAddr(host)}
 	name := fmt.Sprintf("/tuner%d/vchannel", tuner)
 	if _, err := c.Set(name, guide); err != nil {
@@ -3922,7 +4379,7 @@ func probe(host string, tuner int, guide string) (int, []hdhr.Program, error) {
 		// frequency reads lock=none the whole time and answers its /auto
 		// stream with 807 only after about 10 s more.
 		unlocked := err == nil && hdhr.FrequencyHz(status) > 0 && strings.Contains(status, "lock=none")
-		if waited := time.Since(began); waited >= darkProbe || (!unlocked && waited >= 4*time.Second) {
+		if waited := time.Since(began); waited >= darkProbe || (unlocked && waited >= wait) || (!unlocked && waited >= 4*time.Second) {
 			break
 		}
 		time.Sleep(250 * time.Millisecond)
@@ -4020,13 +4477,49 @@ func muxURL(root string, tuner, freq int) string {
 	return fmt.Sprintf("%s/tuner%d/ch%d", strings.TrimRight(root, "/"), tuner, freq)
 }
 
+// streamAnswer bounds how long a device or stream server takes to answer a
+// stream request. A tuner on a dark frequency answers 807 after about 10 s;
+// one that left the network would hold the tune for the transport's two
+// minutes. The body that follows has no deadline.
+var streamAnswer = 15 * time.Second
+
+// answerWithin is do with a deadline on the response headers only.
+func answerWithin(req *http.Request, d time.Duration, do func(*http.Request) (*http.Response, error)) (*http.Response, error) {
+	ctx, cancel := context.WithCancel(req.Context())
+	timer := time.AfterFunc(d, cancel)
+	res, err := do(req.WithContext(ctx))
+	if !timer.Stop() {
+		if err == nil {
+			res.Body.Close()
+		}
+		err = fmt.Errorf("no answer in %s", d)
+	}
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	res.Body = &cancelBody{ReadCloser: res.Body, cancel: cancel}
+	return res, nil
+}
+
+type cancelBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b *cancelBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.cancel()
+	return err
+}
+
 func openMux(root string, tuner, freq int) (io.ReadCloser, error) {
 	u := muxURL(root, tuner, freq)
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
-	res, err := fetchguard.TunerDo(req, 0)
+	res, err := answerWithin(req, streamAnswer, func(r *http.Request) (*http.Response, error) { return fetchguard.TunerDo(r, 0) })
 	if err != nil {
 		return nil, err
 	}
@@ -4113,4 +4606,71 @@ func sanitize(name string) string {
 
 func muxOf(h *Hub, f *feed) *mux {
 	return h.muxes[f.channel.FrequencyHz]
+}
+
+// discardSeq names directories moved aside for deletion.
+var discardSeq atomic.Int64
+
+// discardDir moves dir aside and deletes it in the background, so the hub
+// lock never waits on removing a long playlist's thousands of files. A dir
+// that does not exist is fine. Startup removes anything left behind.
+func discardDir(dir string) error {
+	if dir == "" {
+		return nil
+	}
+	gone := fmt.Sprintf("%s.gone-%d", dir, discardSeq.Add(1))
+	if err := os.Rename(dir, gone); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return os.RemoveAll(dir)
+	}
+	go func() { _ = os.RemoveAll(gone) }()
+	return nil
+}
+
+// startFailure is the last words of an encode that was given up on, for the
+// watch that was waiting for it.
+type startFailure struct {
+	at    time.Time
+	words string
+}
+
+// noteFailureLocked keeps why a rendition was given up on for a minute.
+func (h *Hub) noteFailureLocked(channelID int64, key, words string) {
+	if h.failures == nil {
+		h.failures = map[string]startFailure{}
+	}
+	now := time.Now()
+	for k, v := range h.failures {
+		if now.Sub(v.at) > time.Minute {
+			delete(h.failures, k)
+		}
+	}
+	h.failures[fmt.Sprintf("%d/%s", channelID, key)] = startFailure{at: now, words: words}
+}
+
+// StartFailure is what ffmpeg last said about a rendition that did not start,
+// or the last lines of one still trying. Empty when it said nothing.
+func (h *Hub) StartFailure(channelID int64, key string) string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if f := h.channels[channelID]; f != nil {
+		if r := f.renditions[f.currentKey(key)]; r != nil {
+			return r.log.lastWords()
+		}
+	}
+	if v, ok := h.failures[fmt.Sprintf("%d/%s", channelID, key)]; ok {
+		return v.words
+	}
+	return ""
+}
+
+// Starting reports whether a rendition a watch is waiting on still exists.
+// A rendition given up on (restarts spent) is gone.
+func (h *Hub) Starting(channelID int64, key string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	f := h.channels[channelID]
+	return f != nil && f.renditions[f.currentKey(key)] != nil
 }

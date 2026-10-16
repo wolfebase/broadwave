@@ -7,12 +7,11 @@
   outline: none;
 }
 
-/* The picture fills the screen and covers an inset shadow. The outline paints on top of it. */
-html:root section.stage:focus-visible,
-html:root[data-layout="tv"] section.stage:focus-visible {
-  outline: 4px solid var(--brand-blue);
-  outline-offset: -4px;
-  box-shadow: inset 0 0 0 4px var(--brand-blue);
+/* The full player is the whole screen. A ring around it tells nobody anything,
+   so it never draws one; the keys still work on the picture. */
+html:root section.stage:not(.mini):focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 html:root section.stage.mini:focus-visible,
@@ -23,6 +22,83 @@ html:root[data-layout="tv"] section.stage.mini:focus-visible {
     inset 0 0 0 4px var(--brand-blue),
     0 24px 60px rgba(0, 0, 0, 0.6),
     0 0 0 1px var(--color-glass-stroke);
+}
+
+.stage-screen {
+  position: absolute;
+  inset: 0;
+  /* Taps, double taps, and swipes are the player's own. */
+  touch-action: none;
+}
+
+.stage.mini .stage-screen {
+  touch-action: auto;
+}
+
+.seek-ripple {
+  position: absolute;
+  top: 50%;
+  translate: 0 -50%;
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 800;
+  pointer-events: none;
+  animation: ripple-out 650ms ease-out forwards;
+}
+
+.seek-ripple.left {
+  left: 12%;
+}
+
+.seek-ripple.right {
+  right: 12%;
+}
+
+@keyframes ripple-out {
+  0% { opacity: 0; transform: scale(0.8); }
+  20% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.1); }
+}
+
+/* A swipe names the channel it moved to while the picture starts. */
+.channel-flash {
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+  padding: 10px 18px;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-weight: 700;
+  pointer-events: none;
+  animation: flash-in 180ms ease-out;
+  z-index: 3;
+}
+
+.channel-flash strong {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.channel-flash span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes flash-in {
+  from { opacity: 0; translate: -50% -8px; }
 }
 
 .stage-video {
@@ -715,7 +791,7 @@ html:root[data-layout="tv"] section.stage.mini:focus-visible {
 
 .tuning-num span {
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .tuning-show {
@@ -746,10 +822,12 @@ html:root[data-layout="tv"] section.stage.mini:focus-visible {
   animation: tuning-sweep 1.2s ease-in-out infinite;
 }
 
+/* Always over a black picture, in either theme. */
 .tuning-step {
   margin: 0;
-  font-size: var(--type-footnote-size);
-  color: var(--color-text-secondary);
+  font-size: var(--type-body-size, 17px);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.86);
 }
 
 .tuning.mini .tuning-num {
@@ -784,4 +862,213 @@ html:root[data-layout="tv"] section.stage.mini:focus-visible {
 :root[data-glass="flat"] .stage.mini .mini-bar {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+}
+
+/* A phone held upright: the picture at the top, the controls under it, then
+   what is on and the other channels. Nothing covers the picture, so the
+   chrome stays. */
+.stage.portrait {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.stage.portrait .stage-hud {
+  display: contents;
+}
+
+.stage.portrait .stage-hud > *,
+.stage.portrait > * {
+  order: 5;
+}
+
+.stage.portrait .stage-top {
+  order: 1;
+  flex-wrap: nowrap;
+  padding: max(10px, env(safe-area-inset-top)) var(--space-3) var(--space-2);
+}
+
+.stage.portrait .stage-title {
+  display: none;
+}
+
+.stage.portrait .stage-screen {
+  order: 2;
+  position: relative;
+  inset: auto;
+  flex: none;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+
+.stage.portrait .player-note,
+.stage.portrait .player-error {
+  order: 3;
+  margin: var(--space-2) var(--space-3) 0;
+}
+
+.stage.portrait .stage-dock {
+  order: 4;
+  margin: var(--space-2) var(--space-3) 0;
+}
+
+.stage.portrait .stage-below {
+  order: 6;
+}
+
+/* Panels float over the stacked page and above the controls. */
+.stage.portrait :is(.mini-guide, .info-panel, .help-panel) {
+  position: fixed;
+  z-index: 10;
+  max-height: calc(100dvh - 120px);
+  overflow: auto;
+}
+
+.stage-below {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-3) max(24px, env(safe-area-inset-bottom));
+  color: #fff;
+}
+
+.pb-now {
+  display: grid;
+  gap: 6px;
+}
+
+.pb-eyebrow {
+  margin: 0;
+  font-size: var(--type-footnote-size);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.pb-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.pb-sub,
+.pb-next {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: var(--type-subhead-size, 15px);
+}
+
+.pb-next strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+.pb-head {
+  margin: var(--space-2) 0 0;
+  font-size: var(--type-footnote-size);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.pb-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pb-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md, 12px);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  text-align: left;
+}
+
+.pb-row.current {
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 3px 0 0 var(--color-tally);
+}
+
+.pb-num {
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.pb-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pb-name {
+  font-size: var(--type-caption-size);
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+}
+
+.pb-show {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+/* Live: the time on the broadcast and how far behind it is. */
+.live-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--type-footnote-size);
+  font-variant-numeric: tabular-nums;
+  color: #f5f7fa;
+  white-space: nowrap;
+}
+
+.live-time .go-live {
+  min-height: 32px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--color-tally);
+  color: #fff;
+  font-weight: 700;
+}
+
+/* Captions as the viewer set them in Options. The page carries the choice. */
+html[data-cc-size="small"] video::cue {
+  font-size: 80%;
+}
+
+html[data-cc-size="large"] video::cue {
+  font-size: 140%;
+}
+
+html[data-cc-back="none"] video::cue {
+  background: transparent;
+  text-shadow: 0 0 3px #000, 0 0 6px #000, 0 1px 2px #000;
+}
+
+html[data-cc-back="box"] video::cue {
+  background: rgba(0, 0, 0, 0.62);
+}
+
+html[data-cc-back="solid"] video::cue {
+  background: #000;
+}
+
+html[data-cc-color="yellow"] video::cue {
+  color: #ffd60a;
 }

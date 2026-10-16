@@ -84,7 +84,7 @@ async function movingWithin(page: Page, id: number, budgetMs: number) {
 }
 
 test.describe("rapid channel changes", () => {
-  test.setTimeout(240_000);
+  test.setTimeout(300_000);
 
   for (const size of [
     { name: "1440x900", width: 1440, height: 900 },
@@ -96,14 +96,15 @@ test.describe("rapid channel changes", () => {
       const freqs = new Set(lineup.map((channel) => channel.number.split(".")[0]));
       expect(freqs.size).toBeGreaterThan(1);
 
-      // The tuner check at the end counts every tuner that is ours.
+      // The tuner check at the end counts every tuner that is ours. A tune a
+      // viewer left is kept 90 s for a return, after its 20 s encode.
       await expect
         .poll(
           async () => {
             const body = (await (await page.request.get("/api/v1/tuners")).json()) as { tuners?: { ours?: boolean }[] };
             return (body.tuners ?? []).some((tuner) => tuner.ours);
           },
-          { timeout: 90_000 },
+          { timeout: 150_000 },
         )
         .toBe(false);
 
@@ -115,7 +116,7 @@ test.describe("rapid channel changes", () => {
 
       const steps = 10;
       for (let i = 0; i < steps; i++) {
-        await page.keyboard.press("ArrowDown");
+        await page.keyboard.press("ArrowUp");
         if (i < steps - 1) await page.waitForTimeout(2000);
       }
       const expected = lineup[(1 + steps) % lineup.length];
@@ -123,14 +124,15 @@ test.describe("rapid channel changes", () => {
 
       await page.waitForTimeout(20_000);
       const tuners = (await (await page.request.get("/api/v1/tuners")).json()) as {
-        tuners?: { guide?: string; ours?: boolean; target?: string }[];
+        tuners?: { guide?: string; ours?: boolean; target?: string; viewers?: number }[];
       };
       const prefix = expected.number.split(".")[0];
       const all = tuners.tuners ?? [];
-      const held = all.filter((tuner) => tuner.ours);
-      // The harness status often omits the guide number. Two tuners still marked
-      // ours means the frequency we left is held. A guide number, when present,
-      // has to be the channel that is on screen.
+      // A frequency left during the zap may still be kept for a return, with
+      // no viewer and no encode. The one with a viewer has to be the channel on
+      // screen. The harness status often omits the guide number; a guide
+      // number, when present, has to be that channel.
+      const held = all.filter((tuner) => tuner.ours && (tuner.viewers ?? 0) > 0);
       const skipped = held.filter((tuner) => tuner.guide && !tuner.guide.startsWith(`${prefix}.`) && tuner.guide !== prefix);
 
       mkdirSync(evidence, { recursive: true });

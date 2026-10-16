@@ -31,6 +31,10 @@ struct HomeView: View {
     private var homeStack: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 36) {
+                #if os(tvOS)
+                    TVPageTitle(String(localized: "Home"))
+                        .padding(.horizontal)
+                #endif
                 if let (channel, airing) = store.featured() {
                     #if os(tvOS)
                         Hero(channel: channel, airing: airing, watchFocused: $watch)
@@ -62,7 +66,7 @@ struct HomeView: View {
                         }
                     }
                 }
-                let games = store.sports()
+                let games = homeGames
                 let yours = games.filter { WidgetFeed.followed($0.1, teams) }
                 if !yours.isEmpty {
                     Shelf("Your teams") {
@@ -86,10 +90,17 @@ struct HomeView: View {
                             Text("Sports").font(.title2.weight(.bold))
                             Spacer()
                             if liveGames.count >= 2 {
-                                Button("Watch together") {
-                                    nowPlaying.watchTogether(liveGames.prefix(4).map(\.0))
-                                }
-                                .buttonStyle(.bordered)
+                                #if os(tvOS)
+                                    Button("Watch together", systemImage: "rectangle.split.2x2") {
+                                        nowPlaying.watchTogether(liveGames.prefix(4).map(\.0))
+                                    }
+                                    .buttonStyle(TVChipStyle())
+                                #else
+                                    Button("Watch together") {
+                                        nowPlaying.watchTogether(liveGames.prefix(4).map(\.0))
+                                    }
+                                    .buttonStyle(.bordered)
+                                #endif
                             }
                         }
                         .padding(.horizontal)
@@ -175,42 +186,54 @@ struct HomeView: View {
         .onChange(of: playingRecording != nil) { _, up in library.playing = up }
         .onChange(of: library.closeToken) { _, _ in playingRecording = nil }
         .navigationTitle("Home")
-        #if os(iOS)
-            .toolbarTitleDisplayMode(.inlineLarge)
-            .toolbar {
-                if usesPhoneTabs(width) {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Settings", systemImage: "gearshape") {
-                            settingsRoute.show(on: .home)
-                        }
-                        .accessibilityIdentifier("home-settings")
-                    }
-                }
-            }
-        #endif
-            .overlay {
-                if store.channels.isEmpty, store.loading {
-                    ProgressView()
-                        .accessibilityLabel("Loading")
-                }
-            }
         #if os(tvOS)
-            .modifier(HomeDefaultFocus(hasHero: store.featured() != nil, watch: $watch, empty: $emptyHome))
-            .onAppear { claimHomeFocus() }
-            .onChange(of: tvSelectedTab) { _, _ in claimHomeFocus() }
-            .onChange(of: store.channels.isEmpty) { _, _ in claimHomeFocus() }
-            .task(id: store.loading) {
-                // Only the first load: every server event reloads, and focus must
-                // not jump back to Watch while someone is on another shelf. The
-                // sidebar takes focus on the same turn the page appears and
-                // clears a focus set then.
-                guard !store.loading, !loadedOnce else { return }
-                loadedOnce = true
-                try? await Task.sleep(for: .milliseconds(400))
-                claimHomeFocus()
-            }
+            .tvPageChrome()
         #endif
-            .onAppear { saved = SavedMultiview.load() }
+        #if os(iOS)
+        .toolbarTitleDisplayMode(.inlineLarge)
+        .toolbar {
+            if usesPhoneTabs(width) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Settings", systemImage: "gearshape") {
+                        settingsRoute.show(on: .home)
+                    }
+                    .accessibilityIdentifier("home-settings")
+                }
+            }
+        }
+        #endif
+        .overlay {
+            if store.channels.isEmpty, store.loading {
+                ProgressView()
+                    .accessibilityLabel("Loading")
+            }
+        }
+        #if os(tvOS)
+        .modifier(HomeDefaultFocus(hasHero: store.featured() != nil, watch: $watch, empty: $emptyHome))
+        .onAppear { claimHomeFocus() }
+        .onChange(of: tvSelectedTab) { _, _ in claimHomeFocus() }
+        .onChange(of: store.channels.isEmpty) { _, _ in claimHomeFocus() }
+        .task(id: store.loading) {
+            // Only the first load: every server event reloads, and focus must
+            // not jump back to Watch while someone is on another shelf. The
+            // sidebar takes focus on the same turn the page appears and
+            // clears a focus set then.
+            guard !store.loading, !loadedOnce else { return }
+            loadedOnce = true
+            try? await Task.sleep(for: .milliseconds(400))
+            claimHomeFocus()
+        }
+        #endif
+        .onAppear { saved = SavedMultiview.load() }
+    }
+
+    /// Apple TV lists games only, each once, as its Sports page does.
+    private var homeGames: [(Channel, Airing)] {
+        #if os(tvOS)
+            SportsBoard.games(store.sports()).map { ($0.channel, $0.airing) }
+        #else
+            store.sports()
+        #endif
     }
 
     #if os(tvOS)
@@ -265,11 +288,28 @@ struct Hero: View {
     var body: some View {
         let kind = airing?.kind ?? .other
         let art = airing.flatMap { store.artURL($0, width: 1600) }
+        let layout = airing.map { ArtLayout.choose(width: $0.imageWidth ?? 0, height: $0.imageHeight ?? 0, slot: 1400) } ?? "composed"
+        let frame = store.api?.frameURL(channelID: channel.id, width: 1280, listed: store.frameIDs)
         ZStack(alignment: .bottomLeading) {
-            if let airing, let art {
+            if tvLiveFirst, layout != "bleed" {
+                // A small picture (often the station's logo) would be blown up past its pixels.
+                // The channel's live frame (or its number on a tint) fills the hero instead,
+                // with the picture beside it at no more than its own size.
+                HeroBackdrop(frame: frame, number: channel.displayNumber, tint: kind.color)
+                    .overlay(alignment: .topTrailing) {
+                        if let airing, let art {
+                            ProgramPicture(url: art, width: airing.imageWidth ?? 0, height: airing.imageHeight ?? 0)
+                                .frame(maxWidth: 420, maxHeight: 236)
+                                .clipShape(.rect(cornerRadius: Tokens.Radius.lg))
+                                .shadow(color: .black.opacity(0.5), radius: 20, y: 10)
+                                .padding(28)
+                                .accessibilityHidden(true)
+                        }
+                    }
+            } else if let airing, let art {
                 // The art fills the hero's space; its own size must never widen the card.
                 Color.clear.overlay {
-                    HeroArt(url: art, layout: ArtLayout.choose(width: airing.imageWidth ?? 0, height: airing.imageHeight ?? 0, slot: 1400))
+                    HeroArt(url: art, layout: layout)
                 }
                 .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
                 RoundedRectangle(cornerRadius: Tokens.Radius.xl)
@@ -280,7 +320,7 @@ struct Hero: View {
                     )
                     .clipShape(.rect(cornerRadius: Tokens.Radius.xl))
             } else {
-                HeroBackdrop(frame: store.api?.frameURL(channelID: channel.id, width: 1280, listed: store.frameIDs), number: channel.displayNumber, tint: kind.color)
+                HeroBackdrop(frame: frame, number: channel.displayNumber, tint: kind.color)
             }
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 12) {
@@ -304,17 +344,25 @@ struct Hero: View {
                     }
                 }
                 HStack(spacing: 12) {
-                    Button("Watch", systemImage: "play.fill") { nowPlaying.play(channel) }
-                        .buttonStyle(.glassProminent)
-                        .controlSize(.large)
                     #if os(tvOS)
-                        .focused(watchFocused)
+                        // The one chip style of the Apple TV pages: white when focused, glass when not.
+                        Button("Watch", systemImage: "play.fill") { nowPlaying.play(channel) }
+                            .buttonStyle(TVChipStyle())
+                            .focused(watchFocused)
+                        Button(store.activeRecording(on: channel) == nil ? "Record" : "Recording", systemImage: "record.circle") {
+                            Task { await store.toggleRecord(channel) }
+                        }
+                        .buttonStyle(TVChipStyle(selected: store.activeRecording(on: channel) != nil))
+                    #else
+                        Button("Watch", systemImage: "play.fill") { nowPlaying.play(channel) }
+                            .buttonStyle(.glassProminent)
+                            .controlSize(.large)
+                        Button(store.activeRecording(on: channel) == nil ? "Record" : "Recording", systemImage: "record.circle") {
+                            Task { await store.toggleRecord(channel) }
+                        }
+                        .buttonStyle(.glass)
+                        .controlSize(.large)
                     #endif
-                    Button(store.activeRecording(on: channel) == nil ? "Record" : "Recording", systemImage: "record.circle") {
-                        Task { await store.toggleRecord(channel) }
-                    }
-                    .buttonStyle(.glass)
-                    .controlSize(.large)
                 }
             }
             .padding(28)
@@ -322,6 +370,14 @@ struct Hero: View {
         .frame(minHeight: 380)
         .playerZoomSource(channel.id)
         .padding(.horizontal)
+    }
+
+    private var tvLiveFirst: Bool {
+        #if os(tvOS)
+            true
+        #else
+            false
+        #endif
     }
 }
 

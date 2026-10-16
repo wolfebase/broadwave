@@ -8,6 +8,7 @@ import {
   discover,
   removeDevice,
   getAirings,
+  getNow,
   getChannels,
   getDevices,
   getPasses,
@@ -30,6 +31,7 @@ import { events } from "../lib/events";
 import { beginSave, commitSave, followUpRead, LatestReads, type SaveSeq } from "../lib/latest";
 import { guideSpan, indexAirings, keptGuideWindow, sortChannels, type AiringIndex } from "../lib/guide";
 import { hasSnapshotFlag, loadSnapshot, saveSnapshot } from "../lib/snapshot";
+import { changedEvents, movedSince, readVersions, type DataVersions } from "../lib/dataVersions";
 import type { Airing, Channel, ChannelPatch, Device, Pass, PlannedAiring, Recording, ServerInfo, Settings, StorageInfo, VirtualChannel } from "../types";
 
 const shell = bind(shellMessages);
@@ -76,7 +78,7 @@ type Data = {
   virtuals: VirtualChannel[];
   settings: Settings;
   storage: StorageInfo | null;
-  refresh: (what?: ("channels" | "recordings" | "passes" | "airings" | "virtuals" | "devices")[]) => Promise<void>;
+  refresh: (what?: ("channels" | "recordings" | "passes" | "airings" | "virtuals" | "devices" | "settings")[]) => Promise<void>;
   favorite: (channel: Channel) => Promise<void>;
   editChannel: (channel: Channel, patch: ChannelPatch) => Promise<void>;
   saveSettings: (values: Partial<Settings>) => Promise<void>;
@@ -170,7 +172,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (all || want.has("recordings")) keys.push("recordings");
     if (all || want.has("passes")) keys.push("passes", "planned");
     if (all || want.has("virtuals")) keys.push("virtuals");
-    if (all) keys.push("settings", "server", "storage");
+    if (all || want.has("settings")) keys.push("settings");
+    if (all) keys.push("server", "storage");
     const still = reads.current.start(keys);
     const jobs: Promise<unknown>[] = [];
     if (all || want.has("channels")) {
@@ -192,14 +195,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
           }),
       );
     }
-    if (all || want.has("airings")) jobs.push(getAirings(keptGuideWindow()).then((r) => still("airings") && setAirings(r.airings)));
+    if (all || want.has("airings")) jobs.push(getAirings({ ...keptGuideWindow(), fields: "grid" }).then((r) => still("airings") && setAirings(r.airings)));
     if (all || want.has("recordings")) jobs.push(getRecordings().then((r) => still("recordings") && setRecordings(r.recordings)));
     if (all || want.has("passes")) {
       jobs.push(getPasses().then((r) => still("passes") && setPasses(r.passes)));
       jobs.push(getSchedule().then((r) => still("planned") && setPlanned(r.items)).catch(() => undefined));
     }
     if (all || want.has("virtuals")) jobs.push(getVirtuals().then((r) => still("virtuals") && setVirtuals(r.virtuals)));
-    if (all) {
+    if (all || want.has("settings")) {
       jobs.push(
         getSettings()
           .then((next) => {
@@ -212,6 +215,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             else throw err;
           }),
       );
+    }
+    if (all) {
       jobs.push(
         getServer()
           .then((info) => {
@@ -274,10 +279,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
           return;
         }
         const span = guideSpan();
-        const [guideChannels, everyChannel, windowed, recs] = await Promise.all([
-          getChannels(true),
-          getChannels(false),
-          getAirings({ from: span.from, to: span.to }),
+        // A first visit has no saved copy. The channels and what is on now are
+        // small answers, so they paint like a saved copy while the guide window
+        // is still on its way.
+        const listsP = Promise.all([getChannels(true), getChannels(false)]);
+        const airingsAtBoot = reads.current.generation("airings");
+        if (!snap) {
+          void Promise.all([listsP, getNow().catch(() => null)])
+            .then(([[g, a], nowNext]) => {
+              const list = nowNext?.channels.flatMap((c) => [c.now, c.next].filter((x): x is Airing => Boolean(x))) ?? [];
+              if (!list.length || reads.current.generation("airings") !== airingsAtBoot || !stillBoot("channels")) return;
+              setChannels(sortChannels(g.channels, a.channels));
+              setAllChannels(sortChannels(a.channels));
+              setAirings((cur) => (cur.length ? cur : list));
+              setSettled(true);
+              setBooting(false);
+              setReady(true);
+            })
+            .catch(() => undefined);
+        }
+        const [[guideChannels, everyChannel], windowed, recs] = await Promise.all([
+          listsP,
+          getAirings({ from: span.from, to: span.to, fields: "grid" }),
           getRecordings(),
         ]);
         const channelsNow = sortChannels(guideChannels.channels, everyChannel.channels);
@@ -309,7 +332,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         idle(() => {
           void (async () => {
             const airingsGen = reads.current.generation("airings");
-            const rest = await getAirings({ from: span.to, to: span.restTo }).catch(() => null);
+            const rest = await getAirings({ from: span.to, to: span.restTo, fields: "grid" }).catch(() => null);
             if (rest && reads.current.generation("airings") === airingsGen) {
               setAirings((current) => {
                 const merged = mergeAirings(current, rest.airings);
@@ -365,12 +388,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return () => window.clearInterval(id);
   }, []);
 
+  // The server's data counters. A server that sends them also sends a change
+  // event per list, so only that list is read again.
+  const versions = useRef<DataVersions | null>(null);
   useEffect(() => {
     const bus = events();
     const offActivity = bus.on("activity", (data) => {
       const kind = (data as { kind?: string }).kind;
-      if (kind === "recording" || kind === "delete") void refresh(["recordings", "passes"]);
-      if (kind === "guide") void refresh(["airings"]);
+      if (!versions.current && (kind === "recording" || kind === "delete")) void refresh(["recordings", "passes"]);
+      if (!versions.current && kind === "guide") void refresh(["airings"]);
       if (kind === "source") {
         const message = (data as { message?: string }).message;
         if (message) setError(message);
@@ -381,20 +407,43 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
     });
     const offLive = bus.on("live.changed", () => void refresh(["recordings"]));
+    const offChanged = Object.entries(changedEvents).map(([type, key]) => bus.on(type, () => void refresh([key])));
+    let helloWait = 0;
+    const settledBack = () => {
+      setFreshAt(Date.now());
+      if (loadFailed.current) {
+        loadFailed.current = false;
+        setError("");
+      }
+    };
+    const offHello = bus.on("hello", (data) => {
+      const next = readVersions(data);
+      const prev = versions.current;
+      versions.current = next;
+      if (!next || !prev || !helloWait) return;
+      window.clearTimeout(helloWait);
+      helloWait = 0;
+      // Devices carry no counter, and a tuner may have come or gone.
+      void refresh([...movedSince(prev, next), "devices"])
+        .then(settledBack)
+        .catch(() => undefined);
+    });
     const offFound = bus.on("sources.found", () => void refresh(["devices", "channels"]));
-    // Events sent while this tab was away are gone, so read everything again.
+    // Events sent while this tab was away are gone. A server with data
+    // counters says in its hello what moved; any other is read again in full.
     const back = () => {
       void refresh()
-        .then(() => {
-          setFreshAt(Date.now());
-          if (loadFailed.current) {
-            loadFailed.current = false;
-            setError("");
-          }
-        })
+        .then(settledBack)
         .catch(() => undefined);
     };
-    const offBack = bus.on("reconnected", back);
+    const offBack = bus.on("reconnected", () => {
+      if (!versions.current || loadFailed.current) return back();
+      window.clearTimeout(helloWait);
+      helloWait = window.setTimeout(() => {
+        helloWait = 0;
+        back();
+      }, 3000);
+    });
     // A page opened while the server was down has not loaded anything yet.
     const offFirst = bus.on("connection", (up) => {
       if (up && loadFailed.current) back();
@@ -405,6 +454,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       offActivity();
       offLive();
       offFound();
+      offHello();
+      offChanged.forEach((off) => off());
+      window.clearTimeout(helloWait);
     };
   }, [refresh]);
 

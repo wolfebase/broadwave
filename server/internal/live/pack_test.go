@@ -2134,7 +2134,7 @@ func TestABlockingReloadBeforeTheFirstPlaylistWaitsTheFullHold(t *testing.T) {
 		gate.publish(0, 2, 0)
 	}()
 	began := time.Now()
-	gate.block(1, -1)
+	gate.block(context.Background(), 1, -1)
 	waited := time.Since(began)
 	gate.mu.Lock()
 	ready := gate.ready(1, -1)

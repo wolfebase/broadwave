@@ -6,6 +6,7 @@ export type {
   Invite,
   InviteGrant,
   RemoteStatus,
+  CloudflareStatus,
   Channel,
   ChannelPatch,
   Device,

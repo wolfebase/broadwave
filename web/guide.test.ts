@@ -113,7 +113,7 @@ test("the recordings tab names how many are in progress", () => {
 
 test("the guide, the tab, and the recording dot use those names", () => {
   const guide = fs.readFileSync(new URL("./src/features/guide/Guide.tsx", import.meta.url), "utf8");
-  const app = fs.readFileSync(new URL("./src/app/App.tsx", import.meta.url), "utf8");
+  const app = fs.readFileSync(new URL("./src/app/Nav.tsx", import.meta.url), "utf8");
   const dot = fs.readFileSync(new URL("./src/ui/primitives.tsx", import.meta.url), "utf8");
   assert.match(guide, /aria-label=\{guideCellName\(/);
   assert.match(guide, /aria-label=\{channelWatchName\(/);

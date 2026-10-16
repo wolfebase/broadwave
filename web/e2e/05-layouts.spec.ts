@@ -98,10 +98,10 @@ test("arrow keys, Enter, and Escape drive the TV layout", async ({ page }) => {
   await page.goto("/");
   await settle(page);
   await expect(page.locator("html")).toHaveAttribute("data-layout", "tv");
-  await expect(page.getByRole("tab", { name: "Guide" })).toBeVisible();
-  // The TV shell claims the selected tab on the next frame. Blur after that,
+  await expect(page.getByRole("link", { name: "Guide", exact: true })).toBeVisible();
+  // The TV shell puts the first focus on Watch on the next frame. Blur after that,
   // or the claim lands between the blur and the check.
-  await expect(page.locator(".tabs [role='tab'][aria-selected='true']")).toBeFocused();
+  await expect(page.locator(".hero-actions .btn").first()).toBeFocused();
   await page.evaluate(() => {
     const el = document.activeElement;
     if (el instanceof HTMLElement) el.blur();
@@ -110,7 +110,7 @@ test("arrow keys, Enter, and Escape drive the TV layout", async ({ page }) => {
   for (let i = 0; i < 14; i++) {
     const step = await page.evaluate(() => {
       const el = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      const tabs = [...document.querySelectorAll<HTMLElement>(".tabs [role='tab']")];
+      const tabs = [...document.querySelectorAll<HTMLElement>(".tabs a")];
       const guide = tabs.find((node) => (node.textContent || "").replace(/\s+/g, " ").trim() === "Guide");
       const name = (el?.textContent || "").replace(/\s+/g, " ").trim() ?? "";
       const inTabs = Boolean(el?.closest(".tabs"));
@@ -134,7 +134,8 @@ test("arrow keys, Enter, and Escape drive the TV layout", async ({ page }) => {
     await page.keyboard.press("ArrowDown");
   }
   await expect(page.locator(":focus")).toHaveAttribute("role", "grid");
-  await page.keyboard.press("Enter");
+  // OK on a show that is on now tunes it. Info opens its details.
+  await page.keyboard.press("i");
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);

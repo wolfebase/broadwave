@@ -55,7 +55,7 @@ test.describe("appearance", () => {
         await shot(page, `home-${theme}-${size.name}`, info);
       }
 
-      await page.getByRole("tab", { name: "Guide" }).click();
+      await page.getByRole("link", { name: "Guide", exact: true }).click();
       await expect(page.getByText("NFL: Bears at Bills").first()).toBeVisible();
       await page.setViewportSize({ width: 1440, height: 900 });
       await expectAccessible(page);
@@ -70,7 +70,7 @@ test.describe("appearance", () => {
       await expect(now).toHaveCSS("background-color", theme === "light" ? "rgb(29, 78, 216)" : "rgb(245, 247, 250)");
       await expect(now).toHaveCSS("color", theme === "light" ? "rgb(255, 255, 255)" : "rgb(7, 10, 16)");
 
-      await page.getByRole("button", { name: "Settings", exact: true }).click();
+      await page.getByRole("link", { name: "Settings", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Appearance" })).toBeVisible();
       await expect(page.getByRole("button", { name: theme === "light" ? "Light" : "Dark" })).toHaveAttribute("aria-pressed", "true");
       await page.setViewportSize({ width: 1440, height: 900 });
@@ -81,7 +81,7 @@ test.describe("appearance", () => {
       }
 
       await page.setViewportSize({ width: 1440, height: 900 });
-      await page.getByRole("tab", { name: "Search" }).click();
+      await page.getByRole("link", { name: "Search", exact: true }).click();
       await page.getByLabel("Search shows, people, and recordings").fill("Bears");
       await page.getByLabel("Search shows, people, and recordings").press("Enter");
       await expect(page.getByRole("heading", { name: "Guide" })).toBeVisible();
@@ -92,7 +92,7 @@ test.describe("appearance", () => {
       }
 
       await page.setViewportSize({ width: 1440, height: 900 });
-      await page.getByRole("tab", { name: "Sports" }).click();
+      await page.getByRole("link", { name: "Sports", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Sports" })).toBeVisible();
       await expect(page.getByRole("article").filter({ hasText: "Chicago" })).toBeVisible();
       for (const size of viewports) {
@@ -102,16 +102,16 @@ test.describe("appearance", () => {
 
       await page.setViewportSize({ width: 1440, height: 900 });
       // Earlier specs leave recordings and passes behind, so these two pages get a scan, not a picture.
-      await page.getByRole("tab", { name: "Recordings" }).click();
+      await page.getByRole("link", { name: "Recordings", exact: true }).click();
       await expect(page.getByRole("heading", { level: 1, name: "Recordings" })).toBeVisible();
       await expectAccessible(page);
 
-      await page.getByRole("tab", { name: "Schedule" }).click();
+      await page.getByRole("link", { name: "Schedule", exact: true }).click();
       await expect(page.getByRole("heading", { level: 1, name: "Schedule" })).toBeVisible();
       await expectAccessible(page);
 
       await page.setViewportSize({ width: 1440, height: 900 });
-      await page.getByRole("tab", { name: "Home" }).click();
+      await page.getByRole("link", { name: "Home", exact: true }).click();
       await expect(page.getByRole("heading", { name: "NFL: Bears at Bills" })).toBeVisible();
       await page.getByRole("button", { name: "Watch", exact: true }).first().click();
       await expect(page).toHaveURL(/\/watch\?channel=/);
@@ -140,7 +140,7 @@ test.describe("appearance", () => {
 
       if (theme !== "light") return;
       await page.setViewportSize({ width: 1440, height: 900 });
-      await page.getByRole("button", { name: "Settings", exact: true }).click();
+      await page.getByRole("link", { name: "Settings", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Appearance" })).toBeVisible();
       await page.getByRole("radio", { name: "Teal" }).check();
       await expect(page.locator("html")).toHaveAttribute("data-accent", "teal");
@@ -161,7 +161,7 @@ test.describe("appearance", () => {
     await settle(page);
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("link", { name: "Settings", exact: true }).click();
     await expect(page.getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: "System" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");

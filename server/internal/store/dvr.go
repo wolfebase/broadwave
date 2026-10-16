@@ -153,6 +153,16 @@ type Recording struct {
 	Keep bool `json:"keep,omitempty"`
 	// WatchedAt is when it was marked watched; nil when it was not.
 	WatchedAt *time.Time `json:"-"`
+	// Partial is set on a recording that holds only part of its airing: the
+	// piece before or after a restart, or a retry that started late. It does
+	// not count as having the episode.
+	Partial bool `json:"partial,omitempty"`
+}
+
+// Incomplete reports a recording that does not hold its whole airing: cut
+// short by a restart, failed, or a partial piece.
+func (r Recording) Incomplete() bool {
+	return r.Partial || r.Status == "failed" || r.Status == "interrupted"
 }
 
 type Pass struct {
@@ -412,6 +422,11 @@ func (s *Store) QueryAirings(ctx context.Context, q AiringQuery) ([]Airing, erro
 	if err != nil {
 		return nil, err
 	}
+	return scanAiringRows(rows)
+}
+
+// scanAiringRows reads rows selected with airingColumns and closes them.
+func scanAiringRows(rows *sql.Rows) ([]Airing, error) {
 	defer rows.Close()
 	var out []Airing
 	for rows.Next() {
@@ -561,6 +576,23 @@ WHERE id = ?`, h.ContinuityErrors, h.TransportErrors, h.SyncLosses, h.Packets, h
 	return err
 }
 
+// MarkPartial notes a recording that holds only part of its airing. A piece
+// resumed after a restart keeps the listing's episode from the piece before
+// it: the listing at the new start can already be the next show's.
+func (s *Store) MarkPartial(ctx context.Context, id int64, from *Recording) error {
+	if from == nil {
+		_, err := s.db.ExecContext(ctx, `UPDATE recordings SET partial = 1 WHERE id = ?`, id)
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `
+UPDATE recordings SET partial = 1, season = ?, episode = ?, episode_label = ?, original_air = ?,
+	subtitle = CASE WHEN ? != '' THEN ? ELSE subtitle END,
+	program_id = CASE WHEN ? != '' THEN ? ELSE program_id END
+WHERE id = ?`, from.Season, from.Episode, from.EpisodeLabel, from.OriginalAir,
+		from.Subtitle, from.Subtitle, from.ProgramID, from.ProgramID, id)
+	return err
+}
+
 func (s *Store) SetRecordingEnd(ctx context.Context, id int64, ends time.Time) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE recordings SET ends_at = ? WHERE id = ?`, ends.UTC().Format(time.RFC3339), id)
 	return err
@@ -573,7 +605,7 @@ const recordingColumns = `r.id, r.channel_id, r.guide_number, r.title, r.path, r
 	r.continuity_errors, r.transport_errors, r.sync_losses, r.packets, r.pass_id, r.gaps, COALESCE(r.lost_seconds, 0),
 	r.season, r.episode, r.episode_label, r.original_air, r.breaks_scanned,
 	r.intro_start, r.intro_end, r.credits_start, EXISTS (SELECT 1 FROM episode_prints e WHERE e.recording_id = r.id),
-	r.keep, r.watched_at, COALESCE(p.position_sec, 0), COALESCE(p.updated_at, '')`
+	r.keep, r.watched_at, COALESCE(p.position_sec, 0), COALESCE(p.updated_at, ''), r.partial`
 
 // recordingSelect is one recording, joined to its playhead. The library
 // orders by id. One recording adds WHERE r.id = ?, which is the primary key.
@@ -605,7 +637,7 @@ func scanRecordings(rows *sql.Rows) ([]Recording, error) {
 		var lost float64
 		if err := rows.Scan(&rec.ID, &rec.ChannelID, &rec.GuideNumber, &rec.Title, &rec.Path, &rec.Status, &rec.Error, &start, &ends, &ended, &rec.Duration, &rec.Subtitle, &rec.Description, &rec.Category, &rec.ProgramID, &rec.Watched, &rec.GameID, &continuity, &transport, &syncLoss, &packets, &rec.PassID, &gaps, &lost,
 			&rec.Season, &rec.Episode, &rec.EpisodeLabel, &rec.OriginalAir, &rec.BreaksScanned,
-			&rec.IntroStart, &rec.IntroEnd, &rec.CreditsStart, &rec.Listened, &rec.Keep, &watchedAt, &rec.Position, &played); err != nil {
+			&rec.IntroStart, &rec.IntroEnd, &rec.CreditsStart, &rec.Listened, &rec.Keep, &watchedAt, &rec.Position, &played, &rec.Partial); err != nil {
 			return nil, err
 		}
 		// Position 0 still counts: someone who starts a recording over saves
@@ -738,10 +770,11 @@ func (s *Store) DeleteRecording(ctx context.Context, id int64) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if recErr == nil && rec.Status != "failed" {
-		// A recording that never started is not an episode the viewer chose
-		// to drop. Marking it deleted would skip the next airing. The mark
-		// shares this transaction, so a delete that fails does not drop it.
+	if recErr == nil && !rec.Incomplete() {
+		// A recording that never started, or holds only part of the show, is
+		// not an episode the viewer chose to drop. Marking it deleted would
+		// skip the next airing. The mark shares this transaction, so a delete
+		// that fails does not drop it.
 		if err := rememberSeen(ctx, tx, EpisodeKey(rec.ProgramID, rec.Title, rec.Subtitle, rec.ChannelID), true); err != nil {
 			return err
 		}
@@ -1266,10 +1299,20 @@ func (s *Store) SetStreamFormat(ctx context.Context, id int64, format string) er
 	return err
 }
 
-// ReplaceAiringsFor swaps the listings of these channels for rows. Listings
-// read from the broadcast stay where rows leave a gap, since they fill slots a
-// guide feed does not cover.
+// ReplaceAiringsFor swaps the listings of these channels for rows, in one
+// transaction. Listings read from the broadcast stay where rows leave a gap,
+// since they fill slots a guide feed does not cover. A row the catalog
+// already holds unchanged is left alone, so a refresh that brings the same
+// guide rewrites nothing, keeps airing ids and linked games, and does not
+// count as a guide change.
 func (s *Store) ReplaceAiringsFor(ctx context.Context, channelIDs []int64, rows []Airing) error {
+	_, err := s.ApplyAirings(ctx, channelIDs, rows)
+	return err
+}
+
+// ApplyAirings is ReplaceAiringsFor that reports how many rows it wrote or
+// removed.
+func (s *Store) ApplyAirings(ctx context.Context, channelIDs []int64, rows []Airing) (int, error) {
 	rows = uniqueAirings(rows)
 	type span struct{ from, to time.Time }
 	spans := map[int64]span{}
@@ -1285,28 +1328,111 @@ func (s *Store) ReplaceAiringsFor(ctx context.Context, channelIDs []int64, rows 
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	replaced := map[int64]bool{}
 	for _, id := range channelIDs {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM airings WHERE channel_id = ? AND guide_source <> 'broadcast'`, id); err != nil {
-			return err
+		replaced[id] = true
+	}
+	have, err := feedAirings(ctx, tx, channelIDs)
+	if err != nil {
+		return 0, err
+	}
+	changes := 0
+	for _, row := range rows {
+		key := airingKey{row.ChannelID, row.Start.Unix()}
+		if old, ok := have[key]; ok && replaced[row.ChannelID] && sameListing(old, row) {
+			delete(have, key)
+			continue
 		}
+		if err := insertAiring(ctx, tx, row); err != nil {
+			return 0, err
+		}
+		changes++
+	}
+	// What is left of the old feed rows is gone from the new guide or changed.
+	for _, old := range have {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM airings WHERE id = ?`, old.ID); err != nil {
+			return 0, err
+		}
+		changes++
+	}
+	for _, id := range channelIDs {
 		sp, ok := spans[id]
 		if !ok {
 			continue
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM airings WHERE channel_id = ? AND guide_source = 'broadcast' AND starts_at < ? AND ends_at > ?`,
-			id, sp.to.UTC().Format(time.RFC3339), sp.from.UTC().Format(time.RFC3339)); err != nil {
-			return err
+		res, err := tx.ExecContext(ctx, `DELETE FROM airings WHERE channel_id = ? AND guide_source = 'broadcast' AND starts_at < ? AND ends_at > ?`,
+			id, sp.to.UTC().Format(time.RFC3339), sp.from.UTC().Format(time.RFC3339))
+		if err != nil {
+			return 0, err
+		}
+		n, _ := res.RowsAffected()
+		changes += int(n)
+	}
+	return changes, tx.Commit()
+}
+
+type airingKey struct {
+	channel int64
+	start   int64
+}
+
+// feedAirings reads the listings of these channels that came from a guide
+// feed, keyed by channel and start. A second row in one slot (a catalog
+// written before rows were made unique) is removed with the rest.
+func feedAirings(ctx context.Context, tx *sql.Tx, channelIDs []int64) (map[airingKey]Airing, error) {
+	out := map[airingKey]Airing{}
+	var dupes []int64
+	for len(channelIDs) > 0 {
+		n := min(len(channelIDs), 500)
+		part := channelIDs[:n]
+		channelIDs = channelIDs[n:]
+		marks := strings.TrimSuffix(strings.Repeat("?,", len(part)), ",")
+		args := make([]any, len(part))
+		for i, id := range part {
+			args[i] = id
+		}
+		rows, err := tx.QueryContext(ctx, `SELECT `+airingColumns+` FROM airings a WHERE a.channel_id IN (`+marks+`) AND a.guide_source <> 'broadcast'`, args...)
+		if err != nil {
+			return nil, err
+		}
+		list, err := scanAiringRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range list {
+			key := airingKey{row.ChannelID, row.Start.Unix()}
+			if _, ok := out[key]; ok {
+				dupes = append(dupes, row.ID)
+				continue
+			}
+			out[key] = row
 		}
 	}
-	for _, row := range rows {
-		if err := insertAiring(ctx, tx, row); err != nil {
-			return err
+	for _, id := range dupes {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM airings WHERE id = ?`, id); err != nil {
+			return nil, err
 		}
 	}
-	return tx.Commit()
+	return out, nil
+}
+
+// sameListing compares what a feed sends. The id and a linked game are the
+// catalog's own; a feed row never carries them.
+func sameListing(old, row Airing) bool {
+	old.ID, row.ID = 0, 0
+	if row.GameID == "" {
+		old.GameID = ""
+	}
+	old.Simulcast, row.Simulcast = 0, 0
+	return old.Start.Equal(row.Start) && old.End.Equal(row.End) && stripTimes(old) == stripTimes(row)
+}
+
+func stripTimes(a Airing) Airing {
+	a.Start, a.End = time.Time{}, time.Time{}
+	return a
 }
 
 // uniqueAirings keeps one row per channel and start, the one with the most detail.

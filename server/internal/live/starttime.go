@@ -13,6 +13,8 @@ type stamp struct{ ns atomic.Int64 }
 
 func (s *stamp) mark() { s.ns.CompareAndSwap(0, time.Now().UnixNano()) }
 
+func (s *stamp) reset() { s.ns.Store(0) }
+
 func (s *stamp) at() time.Time {
 	if n := s.ns.Load(); n != 0 {
 		return time.Unix(0, n)
@@ -20,15 +22,19 @@ func (s *stamp) at() time.Time {
 	return time.Time{}
 }
 
-// markWriter marks its stamp on the first bytes written through it.
+// markWriter marks its stamps on the first bytes written through it. also
+// may be nil.
 type markWriter struct {
 	io.WriteCloser
-	s *stamp
+	s, also *stamp
 }
 
 func (w markWriter) Write(b []byte) (int, error) {
 	if len(b) > 0 {
 		w.s.mark()
+		if w.also != nil {
+			w.also.mark()
+		}
 	}
 	return w.WriteCloser.Write(b)
 }

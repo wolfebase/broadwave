@@ -31,9 +31,12 @@ type tuned struct {
 	marked   int
 	programs []hdhr.Program
 	known    bool
-	began    time.Time
-	status   time.Time
-	locked   time.Time
+	// quick is a channel that found no signal lately: no open of the
+	// frequency, and a short probe.
+	quick  bool
+	began  time.Time
+	status time.Time
+	locked time.Time
 }
 
 // openTuned tunes a 1.0 channel on its own device without h.mu. A channel
@@ -97,6 +100,17 @@ func (h *Hub) openTuned(ctx context.Context, ch store.SourceChannel) *tuned {
 	if !ok && alone {
 		tuner, ok = firstFree(device.Tuners, used, held)
 	}
+	// Every tuner busy: the one left longest ago for a flip back is tuned
+	// again here, outside h.mu. With another device to fail over to, the
+	// locked path reads that device first.
+	claimed := false
+	if !ok && alone {
+		var m *mux
+		m, tuner, _, ok = h.claimWarmLocked(device.Host, func(m *mux) bool {
+			return m.tuner >= 0 && !held[m.tuner]
+		})
+		claimed = ok && m != nil
+	}
 	if !ok {
 		h.mu.Unlock()
 		return nil
@@ -105,6 +119,7 @@ func (h *Hub) openTuned(ctx context.Context, ch store.SourceChannel) *tuned {
 		h.pending = map[string]bool{}
 	}
 	h.pending[pendingKey(device.Host, tuner)] = true
+	quick := h.darkWithinLocked(ch.ID, ch.FrequencyHz, noSignalFor)
 	if ch.FrequencyHz > 0 {
 		if h.tuning == nil {
 			h.tuning = map[int]chan struct{}{}
@@ -113,7 +128,7 @@ func (h *Hub) openTuned(ctx context.Context, ch store.SourceChannel) *tuned {
 	}
 	h.mu.Unlock()
 
-	t := &tuned{ch: ch, host: device.Host, base: ch.BaseURL, tuner: tuner, freq: ch.FrequencyHz, marked: ch.FrequencyHz, began: began, status: status}
+	t := &tuned{ch: ch, host: device.Host, base: ch.BaseURL, tuner: tuner, freq: ch.FrequencyHz, marked: ch.FrequencyHz, began: began, status: status, quick: quick}
 	defer func() {
 		// The watch never reaches attachTunedLocked after a panic here, and
 		// the tuner and the frequency would stay marked.
@@ -125,6 +140,11 @@ func (h *Hub) openTuned(ctx context.Context, ch store.SourceChannel) *tuned {
 			panic(r)
 		}
 	}()
+	if claimed {
+		// Set to none first, as the locked path does, so the device has
+		// ended the old stream before the new tune.
+		releaseTuner(t.host, t.tuner)
+	}
 	h.openTunedStream(ctx, t, device.Tuners)
 	return t
 }
@@ -249,13 +269,17 @@ func (h *Hub) siblingLocked(ch store.SourceChannel) (*tuned, bool) {
 func (h *Hub) openTunedStream(ctx context.Context, t *tuned, tuners []Tuner) {
 	ch := t.ch
 	t.root = h.streamRootFor(ctx, ch.BaseURL, ch.GuideNumber)
-	if ch.FrequencyHz > 0 && ch.ProgramNum > 0 {
+	wait := darkProbe
+	if t.quick {
+		wait = quickProbe
+	}
+	if ch.FrequencyHz > 0 && ch.ProgramNum > 0 && !t.quick {
 		if body, err := openMux(t.root, t.tuner, ch.FrequencyHz); err == nil {
 			t.body, t.known, t.locked = body, true, time.Now()
 			return
 		}
 	}
-	freq, programs, err := probe(t.host, t.tuner, ch.GuideNumber)
+	freq, programs, err := probe(t.host, t.tuner, ch.GuideNumber, wait)
 	if errors.Is(err, errDark) {
 		t.err = fmt.Errorf("%w (%v)", ErrNoSignal, err)
 		return

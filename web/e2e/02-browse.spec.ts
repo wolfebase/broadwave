@@ -11,7 +11,7 @@ test("home, guide, search, and sports", async ({ page }, info) => {
     await snap(page, `home-${size.name}`, info);
   }
 
-  await page.getByRole("tab", { name: "Guide" }).click();
+  await page.getByRole("link", { name: "Guide", exact: true }).click();
   await expect(page.getByText("NFL: Bears at Bills").first()).toBeVisible();
   for (const size of sizes) {
     await atSize(page, size);
@@ -30,7 +30,7 @@ test("home, guide, search, and sports", async ({ page }, info) => {
   await expect(page).toHaveURL(/\/watch\?channel=/);
   await page.getByRole("button", { name: "Back to browsing" }).click();
 
-  await page.getByRole("tab", { name: "Search" }).click();
+  await page.getByRole("link", { name: "Search", exact: true }).click();
   await page.getByLabel("Search shows, people, and recordings").fill("Bears");
   await page.getByLabel("Search shows, people, and recordings").press("Enter");
   await expect(page.getByRole("heading", { name: "Guide" })).toBeVisible();
@@ -40,7 +40,7 @@ test("home, guide, search, and sports", async ({ page }, info) => {
     await snap(page, `search-${size.name}`, info);
   }
 
-  await page.getByRole("tab", { name: "Sports" }).click();
+  await page.getByRole("link", { name: "Sports", exact: true }).click();
   await expect(page.getByRole("article").filter({ hasText: "Chicago" })).toBeVisible();
   await page.getByRole("button", { name: "Coming up" }).click();
   await expect(page.getByRole("article").filter({ hasText: "Boston" })).toBeVisible();

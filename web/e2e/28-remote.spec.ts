@@ -274,7 +274,8 @@ test("a remote reaches home, the guide, the player, multiview, settings, and rec
     await expect.poll(async () => (await page.evaluate(readGrid)).now).toBe(true);
 
     await until(page, "ArrowDown", async () => (await page.evaluate(readGrid)).onGrid, 8);
-    await press(page, "Enter");
+    // OK on a show that is on now tunes it. Info opens its details.
+    await press(page, "i");
     const sheet = page.getByRole("dialog");
     await expect(sheet).toBeVisible();
     await expectRing(page);
