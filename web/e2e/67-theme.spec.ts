@@ -70,9 +70,9 @@ test.describe("appearance", () => {
       await expect(now).toHaveCSS("background-color", theme === "light" ? "rgb(29, 78, 216)" : "rgb(245, 247, 250)");
       await expect(now).toHaveCSS("color", theme === "light" ? "rgb(255, 255, 255)" : "rgb(7, 10, 16)");
 
-      await page.getByRole("link", { name: "Settings", exact: true }).click();
       // Desktop shows the section list beside Appearance; a phone shows the list alone.
       await page.setViewportSize({ width: 1440, height: 900 });
+      await page.getByRole("link", { name: "Settings", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Appearance" })).toBeVisible();
       await expect(page.getByRole("radio", { name: theme === "light" ? "Light" : "Dark", exact: true })).toHaveAttribute("aria-checked", "true");
       await expectAccessible(page);
