@@ -112,7 +112,7 @@ test("stats, help, last channel, a typed number, sleep, volume, and theater", as
   await page.keyboard.press("Escape");
   await expect(help).toHaveCount(0);
 
-  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowUp");
   await expect.poll(() => new URL(page.url()).searchParams.get("channel")).not.toBe(String(first!.id));
   const nextId = Number(new URL(page.url()).searchParams.get("channel"));
   await playing(page, nextId);

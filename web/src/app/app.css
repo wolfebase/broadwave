@@ -400,9 +400,11 @@ html[data-theater="1"] .topbar {
   background: #000;
 }
 
-/* Phone: tabs move to a floating glass bar at the bottom, like iOS. */
+/* Phone: tabs move to a floating glass bar at the bottom, like iOS. It sits
+   over the mini player, so the More menu opens above it, not under it. */
 .layout-phone .topbar {
   position: fixed;
+  z-index: 50;
   top: auto;
   bottom: max(10px, env(safe-area-inset-bottom));
   left: 8px;
@@ -641,3 +643,9 @@ html[data-theater="1"] .topbar {
   text-decoration: none;
 }
 .layout-phone .topbar-right:empty { display: none; }
+
+/* The mini player floats over the bottom corner. The page keeps room under it
+   so the last row is never behind the picture. */
+.shell.has-mini:not(.layout-phone):not(.immersive) .content {
+  padding-bottom: 250px;
+}

@@ -88,11 +88,12 @@ test("channel changes, go to live, sports, and search", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-layout", "desktop");
   await playing(page, start.id);
 
-  await player.press("ArrowDown");
+  // Up is channel up, the next number.
+  await player.press("ArrowUp");
   await expect.poll(() => new URL(page.url()).searchParams.get("channel")).toBe(String(next.id));
   await playing(page, next.id);
 
-  await player.press("ArrowUp");
+  await player.press("ArrowDown");
   await expect.poll(() => new URL(page.url()).searchParams.get("channel")).toBe(String(start.id));
   await playing(page, start.id);
 
