@@ -165,6 +165,24 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
   border-left: 1px solid var(--color-line);
 }
 
+/* The "now" pill says the time, so the half-hour label it would cover steps aside. */
+.guide-slot.under-now .guide-slot-label {
+  visibility: hidden;
+}
+
+.guide-empty {
+  max-width: 1600px;
+  width: 100%;
+  margin: var(--space-6) auto 0;
+}
+
+.guide-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
 /* The signature: a tally-red "on air" line through the whole guide. */
 .now-flag {
   position: absolute;
@@ -205,7 +223,7 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
   width: var(--channel);
   height: 100%;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) 14px;
   align-items: center;
   gap: 10px;
   padding: 0 var(--space-4);
@@ -270,6 +288,12 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
   height: 18px;
   object-fit: contain;
   flex: none;
+}
+
+.gc-fav {
+  display: flex;
+  justify-content: center;
+  width: 14px;
 }
 
 .gc-star {
