@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -507,27 +508,48 @@ func TestPlanRestart(t *testing.T) {
 		cause   exitCause
 		early   bool
 		stalled bool
+		silent  bool
 		encoder string
 		want    restartPlan
 	}{
-		{"clean exit", &rendition{spec: aacSpec}, nil, causeUnknown, false, false, "h264_vaapi", planRelease},
-		{"budget spent", &rendition{spec: aacSpec, restarts: spent}, died, causeUnknown, false, false, "h264_vaapi", planRelease},
-		{"old restarts do not count", &rendition{spec: aacSpec, restarts: old}, died, causeUnknown, false, false, "h264_vaapi", planSame},
-		{"late death", &rendition{spec: aacSpec}, died, causeGPU, false, false, "h264_vaapi", planSame},
-		{"sound header on a copy", &rendition{spec: copySpec}, died, causeParams, true, false, "hevc_vaapi", planAAC},
-		{"sound header after converting", &rendition{spec: copySpec, aac: true}, died, causeParams, true, false, "hevc_vaapi", planSame},
-		{"sound header is not the GPU", &rendition{spec: aacSpec}, died, causeParams, true, false, "h264_vaapi", planSame},
-		{"gpu at its start", &rendition{spec: copySpec}, died, causeGPU, true, false, "hevc_vaapi", planSoftware},
-		{"unknown at its start", &rendition{spec: aacSpec}, died, causeUnknown, true, false, "h264_vaapi", planSoftware},
-		{"already on the processor", &rendition{spec: aacSpec, fallback: true}, died, causeUnknown, true, false, "libx264", planSame},
-		{"extras first", &rendition{spec: aacSpec, extras: []AudioTrack{{PID: 258}}}, died, causeUnknown, true, false, "h264_vaapi", planPlain},
-		{"extras and the gpu", &rendition{spec: aacSpec, extras: []AudioTrack{{PID: 258}}}, died, causeGPU, true, false, "h264_vaapi", planSoftware},
-		{"one stalled start", &rendition{spec: aacSpec, stalls: 1}, died, causeUnknown, true, true, "h264_vaapi", planSame},
-		{"two stalled starts", &rendition{spec: aacSpec, stalls: 2}, died, causeUnknown, true, true, "h264_vaapi", planSoftware},
+		{"clean exit", &rendition{spec: aacSpec}, nil, causeUnknown, false, false, false, "h264_vaapi", planRelease},
+		{"budget spent", &rendition{spec: aacSpec, restarts: spent}, died, causeUnknown, false, false, false, "h264_vaapi", planRelease},
+		{"old restarts do not count", &rendition{spec: aacSpec, restarts: old}, died, causeUnknown, false, false, false, "h264_vaapi", planSame},
+		{"late death", &rendition{spec: aacSpec}, died, causeGPU, false, false, false, "h264_vaapi", planSame},
+		{"sound header on a copy", &rendition{spec: copySpec}, died, causeParams, true, false, false, "hevc_vaapi", planAAC},
+		{"sound header after converting", &rendition{spec: copySpec, aac: true}, died, causeParams, true, false, false, "hevc_vaapi", planSame},
+		{"sound header is not the GPU", &rendition{spec: aacSpec}, died, causeParams, true, false, false, "h264_vaapi", planSame},
+		{"gpu at its start", &rendition{spec: copySpec}, died, causeGPU, true, false, false, "hevc_vaapi", planSoftware},
+		{"unknown at its start", &rendition{spec: aacSpec}, died, causeUnknown, true, false, false, "h264_vaapi", planSoftware},
+		{"already on the processor", &rendition{spec: aacSpec, fallback: true}, died, causeUnknown, true, false, false, "libx264", planSame},
+		{"extras first", &rendition{spec: aacSpec, extras: []AudioTrack{{PID: 258}}}, died, causeUnknown, true, false, false, "h264_vaapi", planPlain},
+		{"extras and the gpu", &rendition{spec: aacSpec, extras: []AudioTrack{{PID: 258}}}, died, causeGPU, true, false, false, "h264_vaapi", planSoftware},
+		{"one stalled start", &rendition{spec: aacSpec, stalls: 1}, died, causeUnknown, true, true, false, "h264_vaapi", planSame},
+		{"two stalled starts", &rendition{spec: aacSpec, stalls: 2}, died, causeUnknown, true, true, false, "h264_vaapi", planSoftware},
+		{"a copied sound that sends nothing", &rendition{spec: copySpec}, died, causeParams, true, false, true, "hevc_vaapi", planSilent},
+		{"converted sound waiting on nothing", &rendition{spec: copySpec, aac: true, stalls: 1}, died, causeUnknown, true, true, true, "hevc_vaapi", planSilent},
+		{"already silent", &rendition{spec: copySpec, mute: true}, died, causeUnknown, true, true, true, "hevc_vaapi", planSame},
+		{"silent sound and a gpu death", &rendition{spec: aacSpec}, died, causeGPU, true, false, true, "h264_vaapi", planSoftware},
 	}
 	for _, c := range cases {
-		if got := planRestart(c.r, c.err, c.cause, c.early, c.stalled, c.encoder, now); got != c.want {
+		if got := planRestart(c.r, c.err, c.cause, c.early, c.stalled, c.silent, c.encoder, now); got != c.want {
 			t.Errorf("%s: %s, want %s", c.name, got, c.want)
 		}
+	}
+}
+
+// A channel whose sound sent nothing starts its next encode without sound,
+// instead of failing once more first.
+func TestAChannelWithoutSoundStartsSilent(t *testing.T) {
+	h, f, _ := restartHub(t, time.Hour, "hold")
+	h.mu.Lock()
+	h.mutes = map[int64]time.Time{1: time.Now().Add(time.Minute)}
+	h.mu.Unlock()
+	startRendition(t, h, f, "1080.copy.broadcast")
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	r := f.renditions["1080.copy.broadcast"]
+	if r == nil || !r.mute || !slices.Contains(r.args, "-an") {
+		t.Fatalf("the encode starts with sound: %v", r)
 	}
 }
