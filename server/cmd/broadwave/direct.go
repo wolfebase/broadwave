@@ -50,12 +50,15 @@ func acmeDirectory() string {
 }
 
 // startDirect serves the handler over HTTPS and HTTP/2 under the server's
-// secure name, and keeps the name and its certificate current. Off with
-// BROADWAVE_DIRECT=0, and in the test harness, which must not register names.
+// secure name, and keeps the name and its certificate current. Opt-in with
+// BROADWAVE_DIRECT=1 for now: until the packager makes sub-second parts,
+// Apple TV sits further behind live on HTTP/2 than on plain HTTP, so the apps
+// must not be offered the name by default. Never in the test harness, which
+// must not register names.
 // A port already in use leaves it off: apps must never be offered a name
 // that does not answer.
 func startDirect(ctx context.Context, st *store.Store, api *httpapi.Server, configDir, addr string, handler http.Handler) *http.Server {
-	if os.Getenv("BROADWAVE_DIRECT") == "0" || os.Getenv("BROADWAVE_E2E") == "1" {
+	if os.Getenv("BROADWAVE_DIRECT") != "1" || os.Getenv("BROADWAVE_E2E") == "1" {
 		return nil
 	}
 	id, err := st.Identity(ctx, httpapi.DefaultServerName())

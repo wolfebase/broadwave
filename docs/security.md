@@ -68,7 +68,7 @@ The zip holds `versions.json`, `doctor.json`, `config.json`, and `logs.txt`. Pas
 
 ## Secure name on the home network
 
-The server gets its own HTTPS name, such as `lan.abcdefghij.direct.wolfeup.com`, with a Let's Encrypt certificate, and serves the same API and media on it with HTTP/2. Nothing is installed on the phone or the router. The apps use it when it answers and stay on the plain address when it does not.
+Off by default for now (`BROADWAVE_DIRECT=1` turns it on): until the packager makes sub-second parts, Apple TV sits further behind live over HTTP/2 than over plain HTTP. When it is on, the server gets its own HTTPS name, such as `lan.abcdefghij.direct.wolfeup.com`, with a Let's Encrypt certificate, and serves the same API and media on it with HTTP/2. Nothing is installed on the phone or the router. The apps use it when it answers and stay on the plain address when it does not.
 
 - **The name.** On first start the server makes an Ed25519 key, `direct/server.key` in the config folder (mode 0600, outside the catalog and its backups), and registers it with the direct service at `api.direct.wolfeup.com`. The service returns a random ten-letter label. Every later call is signed with that key over the method, path, time, and body, and must be within five minutes of the service's clock, so only this server can change its name.
 - **Addresses.** The server reports the home network address it routes from (and that interface's `fd00::/8` addresses). The service publishes only private ranges: `10/8`, `172.16/12`, `192.168/16`, `100.64/10`, and `fd00::/8`. A name under the service can never point at a public site. The record is DNS only, with a five-minute TTL. A new address is reported within five minutes, and the same one once a day.
