@@ -2,6 +2,8 @@ package store
 
 import (
 	"encoding/base64"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -56,5 +58,30 @@ func TestInviteCodesAreTypeable(t *testing.T) {
 	}
 	if IsInviteCode("123456") || IsInviteCode("ABCD-EFGH-JKL0") {
 		t.Fatal("a six-digit code or a zero passed as an invite")
+	}
+}
+
+func TestCodeHashesAreKeyedAndTheKeyStays(t *testing.T) {
+	dir := t.TempDir()
+	a, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := a.hashCode("123456")
+	if h == hashSecret("123456") {
+		t.Fatal("code hash is plain SHA-256")
+	}
+	_ = a.Close()
+	info, err := os.Stat(filepath.Join(dir, keyFile))
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("key file %v %v", info, err)
+	}
+	b, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+	if b.hashCode("123456") != h {
+		t.Fatal("a restart changed the key")
 	}
 }

@@ -304,7 +304,7 @@ func (s *Store) insertPendingPairing(ctx context.Context, mode, name, kind strin
 	if err != nil {
 		return "", "", "", time.Time{}, err
 	}
-	code, err = uniqueCode(ctx, conn, now)
+	code, err = s.uniqueCode(ctx, conn, now)
 	if err != nil {
 		return "", "", "", time.Time{}, err
 	}
@@ -320,7 +320,7 @@ func (s *Store) insertPendingPairing(ctx context.Context, mode, name, kind strin
 	_, err = conn.ExecContext(ctx, `INSERT INTO pairings (
 id, mode, code_hash, poll_secret_hash, name, kind, scopes, created_at, expires_at, state
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-		id, mode, hashSecret(code), secretHash, name, kind, joinScopes(scopes),
+		id, mode, s.hashCode(code), secretHash, name, kind, joinScopes(scopes),
 		now.UTC().Format(time.RFC3339), expires.Format(time.RFC3339))
 	if err != nil {
 		return "", "", "", time.Time{}, err
@@ -397,7 +397,7 @@ FROM pairings WHERE mode = ? AND state IN ('pending', 'denied', 'expired')`, mod
 		return Pairing{}, ClientDevice{}, "", err
 	}
 	defer rows.Close()
-	want := hashSecret(norm)
+	want := s.hashCode(norm)
 	var (
 		found        bool
 		id           string
@@ -571,7 +571,7 @@ func insertClientExec(ctx context.Context, tx sqlExec, name, kind string, scopes
 // pairingCode is the digit source. Tests replace it to force a collision.
 var pairingCode = sixDigits
 
-func uniqueCode(ctx context.Context, q rowQuery, now time.Time) (string, error) {
+func (s *Store) uniqueCode(ctx context.Context, q rowQuery, now time.Time) (string, error) {
 	for range 5 {
 		code, err := pairingCode()
 		if err != nil {
@@ -579,7 +579,7 @@ func uniqueCode(ctx context.Context, q rowQuery, now time.Time) (string, error) 
 		}
 		var n int
 		if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM pairings WHERE code_hash = ? AND state = 'pending' AND expires_at > ?`,
-			hashSecret(code), now.UTC().Format(time.RFC3339)).Scan(&n); err != nil {
+			s.hashCode(code), now.UTC().Format(time.RFC3339)).Scan(&n); err != nil {
 			return "", err
 		}
 		if n == 0 {

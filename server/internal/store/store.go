@@ -19,6 +19,10 @@ import (
 
 type Store struct {
 	db *sql.DB
+	// key is this server's secret, kept in a file beside the catalog and never
+	// in the database, so a catalog backup does not carry it. It keys code
+	// hashes and media links.
+	key []byte
 
 	// OnEvent is called after an activity event is saved, to push it to clients.
 	OnEvent func(Event)
@@ -88,7 +92,12 @@ func Open(dir string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	return &Store{db: db}, nil
+	key, err := loadKey(dir)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return &Store{db: db, key: key}, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }

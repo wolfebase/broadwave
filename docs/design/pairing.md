@@ -112,6 +112,16 @@ An invite is a claim code that lasts 7 days: twelve characters from `23456789ABC
 
 `tunnelToken` is saved like a password and never returned. The server runs `cloudflared tunnel run` with it in `TUNNEL_TOKEN`, restarts it with a backoff, and reads its log for connections, errors, and the hostnames in the tunnel's configuration.
 
+### Media links
+
+`POST /media/link {path}` answers the path with `mk=` added, for a device that cannot carry the token: an AirPlay or Cast receiver. `mk` is the expiry and the device id, signed with the server key for the path's first three segments (`/media/live/28/`), so it opens one channel, recording, or mosaic for 24 hours and stops when the device is revoked. A request with a valid `mk` and no token is that device with watch only. Playlists it reads come back with `mk` on every URI and every `URI="…"` attribute, so the receiver's next requests carry it. At home without sign-in there is no device, and the path comes back unchanged.
+
+### The server key
+
+`config/broadwave.key` is 32 random bytes made on first start, mode 0600. It is not in the catalog, so a catalog backup does not carry it. Pairing and invite codes are stored as HMAC-SHA-256 under it; a stolen backup cannot be searched for a waiting invite. Tokens are 256-bit random and stay plain SHA-256. Losing the key only voids waiting codes and media links.
+
+Revoking a device publishes `client.revoked` {id} on the socket, so an app signs out at once. Watching from outside always uses the adaptive ladder, whatever the home setting.
+
 ## What a later accounts pass adds
 
 - A person, with more than one device, and a way to tell two people in one house apart. Tokens stay per device. An account would own a set of tokens, not replace them.
