@@ -1843,7 +1843,7 @@ export interface components {
         Error: {
             /**
              * @description Stable machine code. An unknown code is still a failure.
-             *     Known codes: bad_request, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, no_signal, no_source, not_found, pictures_full, rate_limited, recording_soon, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable.
+             *     Known codes: bad_request, conflict, device_busy, disk_low, error, expired, exports_full, forbidden, guide_rate_limited, internal, no_signal, no_source, not_found, pictures_full, rate_limited, recording_soon, start_failed, stream_down, streams_full, tuner_refused, tuner_silent, tuners_busy, unauthorized, unavailable.
              */
             code: string;
             /** @description Short text safe to show a user. */
@@ -3918,7 +3918,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description `no_signal`: the tuner could not lock the channel and sent nothing. The tuner is already free. `stream_down`: the channel's source (for example a playlist URL) answered with an error or not at all. `tuner_refused`: the tuner answered the stream request with an error, such as another app holding it. `tuner_silent`: no tuner answered at all. */
+            /** @description `no_signal`: the tuner could not lock the channel and sent nothing. The tuner is already free. `stream_down`: the channel's source (for example a playlist URL) answered with an error or not at all. `tuner_refused`: the tuner answered the stream request with an error, such as another app holding it. `tuner_silent`: no tuner answered at all. `start_failed`: the picture wrote nothing to play before the wait ran out, or failed every restart; trying again usually works, and the server log says why. */
             503: {
                 headers: {
                     [name: string]: unknown;
