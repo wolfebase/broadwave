@@ -206,7 +206,7 @@ func main() {
 			return
 		}
 		if n > 0 {
-			slog.Info(fmt.Sprintf("guide: broadcast filled %d listings", n))
+			slog.Debug(fmt.Sprintf("guide: broadcast filled %d listings", n))
 		}
 	}
 	handler := api.Handler()
