@@ -36,6 +36,7 @@ import { Stage } from "./Stage";
 import { groupRoom, peopleSentence, personLabel, useGroup } from "./together";
 import { useLiveStream } from "./useLiveStream";
 import { neighbourIds } from "./warmPlan";
+import { noteHandoff } from "../multiview/handoff";
 
 const t = bind(playerUiMessages);
 
@@ -123,6 +124,18 @@ export function LivePlayer({
   }, [channel.id]);
   const session = stream.session;
   const error = stream.error;
+  // Side by side takes over the screen. Its tile for this channel joins the
+  // rendition playing here, so the picture does not start over cold.
+  const handing = useRef({ id: channel.id, rendition: "" });
+  useEffect(() => {
+    handing.current = { id: channel.id, rendition: session?.rendition ?? "" };
+  });
+  useEffect(
+    () => () => {
+      if (window.location.pathname === "/multiview") noteHandoff(handing.current.id, handing.current.rendition);
+    },
+    [],
+  );
   const sync: SyncStatus = stream.syncStatus;
   const [panel, setPanel] = useState<"none" | "guide" | "info" | "sync" | "help" | "move">("none");
   const moveButton = useRef<HTMLButtonElement>(null);
