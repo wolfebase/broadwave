@@ -148,7 +148,7 @@ test("every page renders in the pseudo locale without overflow", { timeout: 180_
         for (const clip of box.clipped) problems.push(`${where}: clipped "${clip.text}" (${clip.cls})`);
         const immersive = ["/play", "/multiview", "/setup"].includes(item.path.split("?")[0]) || item.path.includes("virtual=");
         if (!immersive) {
-          const home = page.getByRole("tab", { name: "HomeHome", exact: true });
+          const home = page.getByRole("link", { name: "HomeHome", exact: true });
           if ((await home.count()) !== 1) problems.push(`${where}: the Home tab is not doubled${crashes.length ? ` (${crashes.at(-1)})` : ""}`);
         }
       }

@@ -104,6 +104,13 @@ a.glass-icon {
   transform: none;
 }
 
+/* A skip link inside a moving page is placed by that page, so off-screen is not
+   enough: it is clipped away until it has focus. */
+.skip-link:not(:focus) {
+  clip-path: inset(50%);
+  pointer-events: none;
+}
+
 main.content:focus {
   outline: none;
 }
@@ -445,11 +452,18 @@ html[data-theater="1"] .topbar {
   border-radius: 18px;
 }
 
+/* A long translation takes a second line rather than losing its end. */
 .layout-phone .tab-label {
+  display: -webkit-box;
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.15;
 }
 
 .layout-phone .tab-rec {

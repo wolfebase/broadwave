@@ -44,4 +44,5 @@ export const guideUiMessages = {
   "guideUi.recordSeries": "Record series",
   "guideUi.favorite": "Favorite",
   "guideUi.addFavorite": "Add favorite",
+  "guideUi.favoriteChannel": "Favorite {channel}",
 } as const satisfies Record<string, Message>;

@@ -201,7 +201,9 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
 
 .now-line {
   position: absolute;
-  z-index: 4;
+  /* Under the rows: it shows in the gaps and empty slots, never across a title.
+     Inside the show on now, the aired fill marks the same minute. */
+  z-index: 1;
   width: 2px;
   margin-left: -1px;
   background: var(--color-tally);
@@ -211,6 +213,7 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
 
 .guide-row {
   position: absolute;
+  z-index: 2;
   left: 0;
   height: var(--row);
   border-bottom: 1px solid var(--color-line);
@@ -634,6 +637,12 @@ html[data-layout="tv"] .guide-canvas:focus-visible {
   display: flex;
   align-items: center;
   gap: 14px;
+}
+
+.ps-channel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .ps-body {
