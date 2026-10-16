@@ -644,6 +644,13 @@ html[data-layout="tv"] .source-row input {
   gap: var(--space-3);
 }
 
+/* A list of rows lines up with the heading above it, on every screen. */
+.source-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .device-grid {
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }

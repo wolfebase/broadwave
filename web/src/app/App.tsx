@@ -20,7 +20,7 @@ const shell = bind(shellMessages);
 const Sports = lazy(() => import("../features/sports/Sports").then((m) => ({ default: m.Sports })));
 const RecordingsPage = lazy(() => import("../features/pages").then((m) => ({ default: m.RecordingsPage })));
 const SchedulePage = lazy(() => import("../features/pages").then((m) => ({ default: m.SchedulePage })));
-const SettingsPage = lazy(() => import("../features/pages").then((m) => ({ default: m.SettingsPage })));
+const SettingsPage = lazy(() => import("../features/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const AboutPage = lazy(() => import("../features/settings/About").then((m) => ({ default: m.AboutPage })));
 const GameAlerts = lazy(() => import("../features/sports/GameAlerts").then((m) => ({ default: m.GameAlerts })));
 const ScreenMoves = lazy(() => import("../features/player/ScreenMoves").then((m) => ({ default: m.ScreenMoves })));
@@ -100,7 +100,7 @@ function Shell() {
   const recordingCount = recordings.filter((r) => r.status === "recording").length;
   const fullPlayer = !needsPair && path === "/watch" && player.mode === "full" && !!player.channel;
   const firstRun = ready && settings.needsSetup === "1";
-  const immersive = path === "/play" || path === "/multiview" || (path === "/watch" && params.has("virtual")) || path === "/setup" || (firstRun && path !== "/diagnostics");
+  const immersive = needsPair || path === "/pair" || path === "/play" || path === "/multiview" || (path === "/watch" && params.has("virtual")) || path === "/setup" || (firstRun && path !== "/diagnostics");
 
   useEffect(() => {
     if (layout !== "tv" || booting) return;
@@ -171,7 +171,7 @@ function Shell() {
   else if (path === "/sports") page = <Sports />;
   else if (path === "/recordings" || path === "/library") page = <RecordingsPage />;
   else if (path === "/schedule") page = <SchedulePage />;
-  else if (path === "/settings" || path === "/sources") page = <SettingsPage />;
+  else if (path === "/settings" || path.startsWith("/settings/") || path === "/sources") page = <SettingsPage />;
   else if (path === "/about") page = <AboutPage />;
   else if (path === "/play") page = <PlayPage />;
   else if (path === "/watch" && params.has("virtual")) page = <VirtualPage />;
