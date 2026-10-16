@@ -677,8 +677,8 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		// ten seconds while it waits for that track's next packet.
 		args = append(args, "-max_interleave_delta", "1000000")
 	}
-	// Fragmented MP4 on stdout, one fragment per keyframe. The packager groups
-	// those into segments that start on a keyframe. Copy and transcode share
+	// Fragmented MP4 on stdout, a fragment per keyframe and per third of a
+	// second. The packager groups those into segments that start on a keyframe. Copy and transcode share
 	// the cut because the transcode's keyframes are the source's.
 	// -hls_init_time is not used: on ffmpeg 8 it keeps cutting at the init
 	// length until the playlist window fills.
@@ -690,6 +690,9 @@ func renditionArgs(program int, src Source, r Rendition, encoder, deint string, 
 		// delay_moov: AC-3 has no frame size until the first packet, and an
 		// empty moov written before that packet is rejected.
 		"-movflags", "frag_keyframe+empty_moov+default_base_moof+delay_moov",
+		// A fragment also ends a third of a second in, so the packager can
+		// publish low-latency parts inside a group. Keyframes still open one.
+		"-frag_duration", fragMicros,
 		"pipe:1",
 	)
 }
