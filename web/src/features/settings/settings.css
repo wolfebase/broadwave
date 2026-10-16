@@ -507,11 +507,11 @@ a.set-row-label:hover {
 }
 
 /* A choice wider than its row moves under the name instead of overflowing. */
-.set-row:has(> .set-row-control > .set-seg) {
+.set-row:not(.stack):has(> .set-row-control > .set-seg) {
   flex-wrap: wrap;
 }
 
-.set-row:has(> .set-row-control > .set-seg) > .set-row-text {
+.set-row:not(.stack):has(> .set-row-control > .set-seg) > .set-row-text {
   flex-basis: 16rem;
 }
 
