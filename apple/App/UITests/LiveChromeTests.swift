@@ -103,6 +103,37 @@
             shot("filled")
         }
 
+        func testTheMoveSheetSaysWhatMovesAndSwipesAway() throws {
+            let app = try launch(stays: true)
+            let more = app.buttons["player-more"]
+            XCTAssertTrue(more.waitForExistence(timeout: 30), app.debugDescription)
+            pause(3)
+            more.tap()
+            app.buttons["portrait-move"].tap()
+            let now = app.descendants(matching: .any)["move-now"]
+            XCTAssertTrue(now.waitForExistence(timeout: 5), "the sheet does not say what moves")
+            let screens = app.descendants(matching: .any)["move-screens-empty"]
+            let other = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'move-screen-'")).firstMatch
+            XCTAssertTrue(until(10) { screens.exists || other.exists }, "no screens and no word about them")
+            shot("move-sheet")
+            // Pulled up, the sheet shows AirPlay under the screens.
+            let airPlay = app.descendants(matching: .any)["move-airplay"]
+            if !airPlay.exists {
+                let grab = now.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                grab.press(forDuration: 0.05, thenDragTo: grab.withOffset(CGVector(dx: 0, dy: -400)))
+            }
+            XCTAssertTrue(airPlay.waitForExistence(timeout: 3), "no AirPlay row")
+            shot("move-sheet-large")
+            // Swipes down put it away: from large to half, then closed.
+            for _ in 0 ..< 2 where now.exists {
+                let start = now.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 700)))
+                pause(1)
+            }
+            XCTAssertTrue(until(4) { !now.exists }, "swipes left the sheet open")
+            XCTAssertTrue(more.waitForExistence(timeout: 3), "the player went away with the sheet")
+        }
+
         func testTheMiniPlayerPausesAndOffersPictureInPicture() throws {
             let app = try launch(stays: true)
             XCTAssertTrue(until(30) { onScreen(app, "Minimize") != nil }, app.debugDescription)

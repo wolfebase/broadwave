@@ -63,24 +63,89 @@ struct MoveToScreenList: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         #else
             List {
-                sharePlayRow
-                if let line {
-                    statusLine(line)
-                }
-                if !loaded {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                        .accessibilityLabel("Looking for screens")
-                } else if screens.isEmpty {
-                    emptyLine
-                } else {
-                    ForEach(screens) { screen in
-                        row(screen)
+                nowRow
+                Section {
+                    if let line {
+                        statusLine(line)
                     }
+                    if !loaded {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .accessibilityLabel("Looking for screens")
+                    } else if screens.isEmpty {
+                        noScreens
+                    } else {
+                        ForEach(screens) { screen in
+                            row(screen)
+                        }
+                    }
+                } header: {
+                    Text("Broadwave screens")
+                } footer: {
+                    if !screens.isEmpty {
+                        Text("It starts there and stops here.")
+                    }
+                }
+                Section {
+                    airPlayRow
+                    sharePlayRow
+                } header: {
+                    Text("Other ways to watch")
                 }
             }
         #endif
     }
+
+    #if os(iOS)
+        /// What is being moved.
+        @ViewBuilder private var nowRow: some View {
+            if let channel = nowPlaying.channel {
+                let airing = store.index.on(channel.id, at: store.now)
+                HStack(spacing: 14) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.title3)
+                        .foregroundStyle(Tokens.ColorToken.tally)
+                        .frame(width: 36)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(airing?.title ?? channel.displayName)
+                            .font(.headline)
+                            .lineLimit(1)
+                        Text("\(channel.displayNumber) \(channel.displayName)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("move-now")
+            }
+        }
+
+        private var noScreens: some View {
+            ContentUnavailableView {
+                Label(unreachable ? "Can't reach the server" : "No other screens", systemImage: unreachable ? "wifi.exclamationmark" : "tv.and.mediabox")
+            } description: {
+                Text(unreachable ? "Trying again." : "Open Broadwave on an Apple TV, iPad, iPhone, or a browser on this network and it shows up here.")
+            }
+            .accessibilityIdentifier("move-screens-empty")
+        }
+
+        /// An AirPlay TV or speaker, for a screen without Broadwave.
+        private var airPlayRow: some View {
+            HStack(spacing: 14) {
+                AirPlayRoute(compact: true)
+                    .frame(width: 44, height: 44)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("AirPlay")
+                    Text("Send the picture to a TV or speaker that doesn't have Broadwave.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("move-airplay")
+        }
+    #endif
 
     /// In a FaceTime call, everyone on it can watch this channel too.
     @ViewBuilder private var sharePlayRow: some View {
@@ -259,6 +324,9 @@ private struct MoveLine: Equatable {
                     }
             }
             .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            // A drag on the list resizes and closes the sheet before it scrolls.
+            .presentationContentInteraction(.resizes)
         }
     }
 #endif
