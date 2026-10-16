@@ -28,6 +28,9 @@
 # CSS raised 2026-10-11: guide bars, field edges, the sports card, the switch,
 # Live on the hero, and the player's dark island on a light page load with the
 # shell. Measured entry gzip 11660, plus 200 bytes.
+# CSS raised 2026-10-15: the phone tab bar's icon-only layout, the guide's
+# two-line channel cell, the hero name that truncates, and the Away from home
+# copy rows load with the shell. Measured entry gzip 11957, plus 200 bytes.
 # JS raised 2026-10-11: the shell listens for an install prompt and a TV remote
 # walks each row in order. The offer itself loads only when the browser asks.
 # Measured entry gzip 96517, plus 300 bytes of slack.
@@ -44,7 +47,7 @@ WEB="$ROOT/server/cmd/broadwave/assets/web"
 INDEX="$WEB/index.html"
 
 JS_GZIP_MAX=97765
-CSS_GZIP_MAX=11860
+CSS_GZIP_MAX=12157
 
 if [[ ! -f "$INDEX" ]]; then
   echo "bundle budget: missing $INDEX" >&2
