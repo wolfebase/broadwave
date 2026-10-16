@@ -10,6 +10,7 @@ import { Library } from "./library/Library";
 import { StoragePlanView } from "./library/StoragePlanView";
 import { nextEpisode } from "./library/model";
 import { Play } from "./recordings/Play";
+import { useTvStartFocus } from "./tvStart";
 import { VirtualPlay } from "./recordings/Virtual";
 import { Schedule } from "./schedule/Schedule";
 
@@ -35,8 +36,10 @@ export function RecordingsPage() {
       ? recordings
       : recordings.filter((rec) => rec.title.trim().toLocaleLowerCase() === show.toLocaleLowerCase());
   const [note, setNote] = useState("");
+  const pageRef = useRef<HTMLDivElement>(null);
+  useTvStartFocus(pageRef, ".media-card .btn.primary, .library-empty .btn, .library-chips .chip.on, .storage-plan button", `${storage}:${recordings.length > 0}`);
   return (
-    <div className="page-wrap">
+    <div className="page-wrap" ref={pageRef}>
       <header className="page-header">
         <h1>{t("pages.recordings")}</h1>
         <div className="guide-chips">
@@ -106,8 +109,10 @@ export function RecordingsPage() {
 
 export function SchedulePage() {
   const { recordings, passes, refresh } = useData();
+  const pageRef = useRef<HTMLDivElement>(null);
+  useTvStartFocus(pageRef, ".page-wrap section button:not([disabled]), .page-wrap button:not([disabled])", passes.length);
   return (
-    <div className="page-wrap">
+    <div className="page-wrap" ref={pageRef}>
       <header className="page-header">
         <h1>{copy.schedule.title}</h1>
       </header>
