@@ -314,17 +314,8 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 
 // Discovery refreshes lastSeen every 5 minutes (cmd/broadwave ticker).
 // Three missed rounds means the tuner has stopped answering.
-const deviceOfflineAfter = 15 * time.Minute
-
 func deviceOffline(d store.Device, now time.Time) bool {
-	if d.TunerCount <= 0 {
-		return false
-	}
-	seen, err := time.Parse(time.RFC3339, d.LastSeen)
-	if err != nil {
-		return false
-	}
-	return now.Sub(seen) > deviceOfflineAfter
+	return dvr.DeviceOffline(d, now)
 }
 
 func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) {

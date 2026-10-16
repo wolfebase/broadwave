@@ -226,6 +226,71 @@ func TestPartialPiecesAreNotTheEpisode(t *testing.T) {
 	}
 }
 
+func TestPlanCountsPaddingAndSportsTime(t *testing.T) {
+	at := time.Date(2026, 10, 1, 20, 0, 0, 0, time.UTC)
+	first := store.Airing{ID: 1, ChannelID: 1, Title: "Early", Start: at, End: at.Add(time.Hour)}
+	second := store.Airing{ID: 2, ChannelID: 2, Title: "Late", Start: at.Add(time.Hour), End: at.Add(2 * time.Hour)}
+	passes := []store.Pass{{ID: 1, Title: "Early", Priority: 2}, {ID: 2, Title: "Late", Priority: 1}}
+	items := Plan(passes, []store.Airing{first, second}, 1, at.Add(-time.Hour), at.Add(3*time.Hour))
+	for _, item := range items {
+		if item.Conflict {
+			t.Fatalf("back-to-back shows without padding conflict: %+v", item)
+		}
+	}
+	passes[0].PadAfter = 5
+	items = Plan(passes, []store.Airing{first, second}, 1, at.Add(-time.Hour), at.Add(3*time.Hour))
+	if !items[1].Conflict || items[0].Conflict {
+		t.Fatalf("five minutes of padding over the next show on the only tuner is a conflict: %+v", items)
+	}
+	passes[0].PadAfter = 0
+	game := first
+	game.Title, game.Category = "Early", "Sports event, Football"
+	items = Plan(passes, []store.Airing{game, second}, 1, at.Add(-time.Hour), at.Add(3*time.Hour))
+	if !items[1].Conflict {
+		t.Fatal("a sports listing's extra hour did not hold the tuner")
+	}
+	game.GameID = "401"
+	items = Plan(passes, []store.Airing{game, second}, 1, at.Add(-time.Hour), at.Add(3*time.Hour))
+	if items[1].Conflict {
+		t.Fatal("a matched game is followed live; its listing alone does not conflict")
+	}
+	// A matched game already running long holds its tuner as long as its recording.
+	long := at.Add(80 * time.Minute)
+	running := []store.Recording{{ChannelID: 1, Title: "Early", Status: "recording", StartedAt: at, EndsAt: &long}}
+	items = PlanLibrary(passes, []store.Airing{game, second}, 1, at.Add(-time.Hour), at.Add(3*time.Hour), running, nil, nil)
+	if !items[1].Conflict {
+		t.Fatal("a game running into the next show did not hold the tuner")
+	}
+}
+
+func TestLiveTunersSkipQuietAndRetiredDevices(t *testing.T) {
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	fresh := now.Add(-4 * time.Minute).Format(time.RFC3339)
+	stale := time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC).Format(time.RFC3339)
+	dev := func(id string, tuners int, seen string, retired bool) store.Device {
+		d := store.Device{LastSeen: seen, Retired: retired}
+		d.DeviceID, d.TunerCount = id, tuners
+		return d
+	}
+	cases := []struct {
+		name    string
+		devices []store.Device
+		want    int
+	}{
+		{"both answer", []store.Device{dev("FLEX", 4, fresh, false), dev("DUO", 2, fresh, false)}, 6},
+		{"one went quiet two weeks ago", []store.Device{dev("FLEX", 4, fresh, false), dev("DUO", 2, stale, false)}, 4},
+		{"one retired", []store.Device{dev("FLEX", 4, fresh, false), dev("DUO", 2, fresh, true)}, 4},
+		{"all quiet keeps the ones not retired", []store.Device{dev("FLEX", 4, stale, false), dev("DUO", 2, stale, true)}, 4},
+		{"playlists only", []store.Device{dev("src-1", 0, fresh, false)}, 2},
+		{"nothing yet", nil, 2},
+	}
+	for _, c := range cases {
+		if got := LiveTuners(c.devices, now); got != c.want {
+			t.Errorf("%s: %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
 // Next week's episode of the same title is not the resume of this one.
 func TestResumedLaterIgnoresALaterEpisode(t *testing.T) {
 	now := time.Date(2026, 9, 23, 18, 0, 0, 0, time.UTC)

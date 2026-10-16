@@ -36,7 +36,7 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 	active, _ := st.Recordings(ctx)
 	seen, _ := st.SeenDeleted(ctx)
 	skips, _ := st.Skips(ctx)
-	planned := PlanLibrary(passes, rows, countTuners(ctx, st), now.Add(-time.Minute), now.Add(lead), active, seen, skips)
+	planned := PlanLibrary(passes, rows, TunerCount(ctx, st, now), now.Add(-time.Minute), now.Add(lead), active, seen, skips)
 	hold := 0
 	for _, item := range planned {
 		if item.Skipped || already(active, item.Airing) {
@@ -78,21 +78,6 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 		}
 	}
 	hub.SetHold(hold)
-}
-
-func countTuners(ctx context.Context, st *store.Store) int {
-	devices, err := st.Devices(ctx)
-	if err != nil || len(devices) == 0 {
-		return 2
-	}
-	n := 0
-	for _, device := range devices {
-		n += device.TunerCount
-	}
-	if n < 1 {
-		return 2
-	}
-	return n
 }
 
 func findPass(passes []store.Pass, airing store.Airing) (store.Pass, bool) {

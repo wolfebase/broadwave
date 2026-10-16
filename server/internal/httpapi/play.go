@@ -1041,19 +1041,10 @@ func (s *Server) sameMux(ctx context.Context, watch store.SourceChannel, channel
 	return false
 }
 
+// tunerCount is the tuners the plan can count on: answering lately and not
+// retired by the owner.
 func (s *Server) tunerCount(ctx context.Context) int {
-	devices, err := s.Store.Devices(ctx)
-	if err != nil || len(devices) == 0 {
-		return 2
-	}
-	n := 0
-	for _, device := range devices {
-		n += device.TunerCount
-	}
-	if n < 1 {
-		return 2
-	}
-	return n
+	return dvr.TunerCount(ctx, s.Store, s.now())
 }
 
 func (s *Server) listingFor(ctx context.Context, channelID int64, title string) (store.Airing, bool) {
