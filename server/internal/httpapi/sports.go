@@ -191,7 +191,7 @@ func (s *Server) LinkGames(ctx context.Context) {
 		return
 	}
 	if len(links) > 0 {
-		slog.Info(fmt.Sprintf("sports: matched %d listings", len(links)))
+		slog.Debug(fmt.Sprintf("sports: matched %d listings", len(links)))
 	}
 	s.NoteTeams(ctx)
 }

@@ -37,7 +37,17 @@ func Install(w io.Writer) {
 	}
 	out := writer{dst: w}
 	log.SetOutput(out)
-	slog.SetDefault(slog.New(redactHandler{next: slog.NewTextHandler(out, nil)}))
+	slog.SetDefault(slog.New(redactHandler{next: slog.NewTextHandler(out, &slog.HandlerOptions{Level: level()})}))
+}
+
+// level is Info, or Debug when BROADWAVE_LOG=debug: the routine lines
+// (each channel a guide scan read, each broadcast guide fill) stay out of
+// the log unless someone is chasing a problem.
+func level() slog.Level {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("BROADWAVE_LOG")), "debug") {
+		return slog.LevelDebug
+	}
+	return slog.LevelInfo
 }
 
 type writer struct {

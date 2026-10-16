@@ -547,7 +547,7 @@ func (b *Bus) handle(c *client, m Message) {
 			b.reply(c, "error", map[string]string{"code": "sync", "message": err.Error()})
 		}
 	default:
-		slog.Info(fmt.Sprintf("realtime: unknown message %q", m.Type))
+		slog.Debug(fmt.Sprintf("realtime: unknown message %q", m.Type))
 	}
 }
 
