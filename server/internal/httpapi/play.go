@@ -362,16 +362,8 @@ func (s *Server) recordings(w http.ResponseWriter, r *http.Request) {
 			list[i].Duration = 0
 			continue
 		}
-		if list[i].Duration == 0 && list[i].Status != "recording" && list[i].Path != "" && s.Hub != nil {
-			if tool := live.FFProbePath(s.Hub.FFmpeg); tool != "" {
-				seconds, err := live.ProbeDuration(tool, list[i].Path)
-				if err != nil || seconds <= 0 {
-					_ = s.Store.SetDuration(r.Context(), list[i].ID, -1)
-				} else {
-					_ = s.Store.SetDuration(r.Context(), list[i].ID, seconds)
-					list[i].Duration = seconds
-				}
-			}
+		if list[i].Duration == 0 && list[i].Status != "recording" && list[i].Path != "" {
+			s.probeLater(list[i].ID, list[i].Path)
 		}
 		if list[i].Status == "recording" {
 			// The stored length is the planned slot. The scrubber follows the
