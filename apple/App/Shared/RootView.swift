@@ -324,7 +324,8 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Namespace private var playerZoom
 
-    var body: some View {
+    /// The screen for the connection state, with the environment and banners.
+    private var root: some View {
         Group {
             if !store.connected {
                 ConnectView()
@@ -388,31 +389,11 @@ struct RootView: View {
                 }
             }
         #endif
-            .task(id: store.connected) {
-                guard store.connected else { return }
-                store.screenName = ScreenIdentity.name
-                store.socket?.announce(id: ScreenIdentity.id, name: ScreenIdentity.name, kind: ScreenIdentity.kind)
-                #if DEBUG
-                    // Simulator testing: -BroadwaveHomeNotice "New Apple TV found: Den." shows an arrival line.
-                    if let notice = UserDefaults.standard.string(forKey: "BroadwaveHomeNotice") {
-                        store.showHomeNotice(notice)
-                    }
-                    // Setup replaces the tabs, and the player with them, so a launch
-                    // straight into a channel skips it.
-                    let watching = UserDefaults.standard.integer(forKey: "BroadwaveWatch") > 0
-                        || !(UserDefaults.standard.string(forKey: "BroadwaveMultiview") ?? "").isEmpty
-                    if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") || sidebarPageTest != nil || watching {
-                        return
-                    }
-                    if UserDefaults.standard.string(forKey: "BroadwaveSetup") != nil {
-                        showSetup = true
-                        return
-                    }
-                #endif
-                if let values = try? await store.api?.settings(), values["needsSetup"] == "1" {
-                    showSetup = true
-                }
-            }
+    }
+
+    var body: some View {
+        root
+            .task(id: store.connected) { await onConnected() }
             .onOpenURL(perform: open)
             .sheet(item: $joinLink) { link in
                 joinSheet(link)
@@ -435,19 +416,7 @@ struct RootView: View {
             )
             .spotlightLinks(open)
             .watchHandoff(handoffChannel, server: store.server) { watch($0) }
-            .onChange(of: store.screenRemote) {
-                // A remote pressed a button for this screen. It works the one-channel
-                // player as its own controls would; anything else ignores it.
-                guard let pressed = store.takeScreenRemote(), !showSetup, let channel = nowPlaying.channel,
-                      nowPlaying.together.isEmpty, nowPlaying.recordingScreens.isEmpty else { return }
-                let player = nowPlaying.live.player
-                switch pressed.action {
-                case .up, .down: nowPlaying.step(ChannelStep.offset(up: pressed.action == .up), in: store.channels)
-                case .pause: player.pause()
-                case .play: player.play()
-                case .record: Task { await store.toggleRecord(channel) }
-                }
-            }
+            .onChange(of: store.screenRemote) { handleScreenRemote() }
             .onChange(of: store.screenWatch) {
                 // Another screen sent this one a channel. It plays live and says who sent it.
                 // Setup holds no player, so the channel is dropped and the sender keeps playing.
@@ -482,65 +451,111 @@ struct RootView: View {
                 Text(nowPlaying.sharePlay.note ?? "")
             }
         #if DEBUG
-            .task {
-                if UserDefaults.standard.bool(forKey: "BroadwaveDemo"), store.server?.id != "demo" {
-                    await store.startDemo()
-                }
-                if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
-                    UserDefaults.standard.set("2up", forKey: "BroadwaveMultiviewLayout")
-                    store.previewLineup([
-                        previewChannel(id: 1, number: "4.1", name: "One"),
-                        previewChannel(id: 3, number: "9.1", name: "Two"),
-                    ])
-                    nowPlaying.watchTogether(store.channels)
-                    return
-                }
-                if let page = sidebarPageTest {
-                    store.previewLineup([
-                        previewChannel(id: 1, number: "4.1", name: "One"),
-                        previewChannel(id: 3, number: "5.1", name: "Two"),
-                    ])
-                    switch page {
-                    case "settings": openSettings()
-                    case "search": tab = .search
-                    case "recordings": tab = .recordings
-                    default: tab = .guide
-                    }
-                    return
-                }
-                if let name = UserDefaults.standard.string(forKey: "BroadwaveTab") {
-                    switch name {
-                    case "guide": tab = .guide
-                    case "search": tab = .search
-                    case "sports": tab = .sports
-                    case "recordings": tab = .recordings
-                    case "settings": openSettings()
-                    default: tab = .home
-                    }
-                }
-                // Simulator testing: -BroadwaveWatch <channel id>, or -BroadwaveMultiview 1,3.
-                #if os(iOS)
-                    if UserDefaults.standard.bool(forKey: "BroadwaveLandscape") {
-                        try? await Task.sleep(for: .milliseconds(600))
-                        if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
-                            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight)) { _ in }
-                        }
-                    }
-                #endif
-                if let raw = UserDefaults.standard.string(forKey: "BroadwaveMultiview"), !raw.isEmpty {
-                    let ids = raw.split(separator: ",").compactMap { Int64($0.trimmingCharacters(in: .whitespaces)) }
-                    // -BroadwaveMultiviewLayout picks pip or 1+3. fitting() never does.
-                    let layout = UserDefaults.standard.string(forKey: "BroadwaveMultiviewLayout")
-                    await openSavedMultiview(ids: ids, layout: layout, store: store, nowPlaying: nowPlaying)
-                    return
-                }
-                let id = UserDefaults.standard.integer(forKey: "BroadwaveWatch")
-                if id > 0 {
-                    open(URL(string: "broadwave://watch/\(id)")!)
-                }
-            }
+            .task { await debugLaunch() }
         #endif
     }
+
+    /// Announces this screen and opens setup when the server needs it.
+    private func onConnected() async {
+        guard store.connected else { return }
+        store.screenName = ScreenIdentity.name
+        store.socket?.announce(id: ScreenIdentity.id, name: ScreenIdentity.name, kind: ScreenIdentity.kind)
+        #if DEBUG
+            // Simulator testing: -BroadwaveHomeNotice "New Apple TV found: Den." shows an arrival line.
+            if let notice = UserDefaults.standard.string(forKey: "BroadwaveHomeNotice") {
+                store.showHomeNotice(notice)
+            }
+            // Setup replaces the tabs, and the player with them, so a launch
+            // straight into a channel skips it.
+            let watching = UserDefaults.standard.integer(forKey: "BroadwaveWatch") > 0
+                || !(UserDefaults.standard.string(forKey: "BroadwaveMultiview") ?? "").isEmpty
+            if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") || sidebarPageTest != nil || watching {
+                return
+            }
+            if UserDefaults.standard.string(forKey: "BroadwaveSetup") != nil {
+                showSetup = true
+                return
+            }
+        #endif
+        if let values = try? await store.api?.settings(), values["needsSetup"] == "1" {
+            showSetup = true
+        }
+    }
+
+    private func handleScreenRemote() {
+        // A remote pressed a button for this screen. It works the one-channel
+        // player as its own controls would; anything else ignores it.
+        guard let pressed = store.takeScreenRemote(), !showSetup, let channel = nowPlaying.channel,
+              nowPlaying.together.isEmpty, nowPlaying.recordingScreens.isEmpty else { return }
+        let player = nowPlaying.live.player
+        switch pressed.action {
+        case .up, .down: nowPlaying.step(ChannelStep.offset(up: pressed.action == .up), in: store.channels)
+        case .pause: player.pause()
+        case .play: player.play()
+        case .record: Task { await store.toggleRecord(channel) }
+        }
+    }
+
+    #if DEBUG
+        /// Launch arguments for simulator tests.
+        private func debugLaunch() async {
+            if UserDefaults.standard.bool(forKey: "BroadwaveDemo"), store.server?.id != "demo" {
+                await store.startDemo()
+            }
+            if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
+                UserDefaults.standard.set("2up", forKey: "BroadwaveMultiviewLayout")
+                store.previewLineup([
+                    previewChannel(id: 1, number: "4.1", name: "One"),
+                    previewChannel(id: 3, number: "9.1", name: "Two"),
+                ])
+                nowPlaying.watchTogether(store.channels)
+                return
+            }
+            if let page = sidebarPageTest {
+                store.previewLineup([
+                    previewChannel(id: 1, number: "4.1", name: "One"),
+                    previewChannel(id: 3, number: "5.1", name: "Two"),
+                ])
+                switch page {
+                case "settings": openSettings()
+                case "search": tab = .search
+                case "recordings": tab = .recordings
+                default: tab = .guide
+                }
+                return
+            }
+            if let name = UserDefaults.standard.string(forKey: "BroadwaveTab") {
+                switch name {
+                case "guide": tab = .guide
+                case "search": tab = .search
+                case "sports": tab = .sports
+                case "recordings": tab = .recordings
+                case "settings": openSettings()
+                default: tab = .home
+                }
+            }
+            // Simulator testing: -BroadwaveWatch <channel id>, or -BroadwaveMultiview 1,3.
+            #if os(iOS)
+                if UserDefaults.standard.bool(forKey: "BroadwaveLandscape") {
+                    try? await Task.sleep(for: .milliseconds(600))
+                    if let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
+                        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight)) { _ in }
+                    }
+                }
+            #endif
+            if let raw = UserDefaults.standard.string(forKey: "BroadwaveMultiview"), !raw.isEmpty {
+                let ids = raw.split(separator: ",").compactMap { Int64($0.trimmingCharacters(in: .whitespaces)) }
+                // -BroadwaveMultiviewLayout picks pip or 1+3. fitting() never does.
+                let layout = UserDefaults.standard.string(forKey: "BroadwaveMultiviewLayout")
+                await openSavedMultiview(ids: ids, layout: layout, store: store, nowPlaying: nowPlaying)
+                return
+            }
+            let id = UserDefaults.standard.integer(forKey: "BroadwaveWatch")
+            if id > 0, let url = URL(string: "broadwave://watch/" + String(id)) {
+                open(url)
+            }
+        }
+    #endif
 
     #if DEBUG
         /// Offline Guide, Settings, or Search for the sidebar focus tests. -BroadwaveFocus guide.

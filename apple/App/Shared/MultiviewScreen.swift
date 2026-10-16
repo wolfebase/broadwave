@@ -1865,6 +1865,86 @@ struct MultiviewTile: View {
         UserDefaults.standard.bool(forKey: "BroadwaveTileStats")
     }
 
+    private var caption: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 8) {
+                Text(channel.displayNumber).font(.caption.weight(.bold))
+                Text(title).font(.caption).lineLimit(1)
+                if remoteFocused {
+                    Text("Focused")
+                        .font(.caption.weight(.bold))
+                }
+                Spacer(minLength: 0)
+                if focused {
+                    Label("Sound", systemImage: "speaker.wave.2.fill")
+                        .font(.caption.weight(.bold))
+                        .labelStyle(.titleAndIcon)
+                }
+            }
+            if focused, !live.detail.isEmpty {
+                Text(live.detail)
+                    .font(.caption2)
+                    .lineLimit(1)
+            }
+            if tileStats {
+                Text("\(live.dropped) dropped")
+                    .font(.caption2)
+                    .accessibilityIdentifier("tile-drops-\(channel.id)")
+                if let drift = live.driftMS {
+                    Text("\(drift) ms")
+                        .font(.caption2)
+                        .accessibilityIdentifier("tile-drift-\(channel.id)")
+                }
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.black.opacity(0.82))
+    }
+
+    @ViewBuilder private var standInNote: some View {
+        if standIn {
+            Text(ClearBroadcast.encryptedNote)
+                .font(.footnote.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .glassEffect(in: .capsule)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .allowsHitTesting(false)
+                .accessibilityIdentifier("playback-note")
+        }
+    }
+
+    @ViewBuilder private var outage: some View {
+        if let error = live.error {
+            VStack(spacing: 8) {
+                Text(error)
+                    .font(.footnote)
+                    .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("playback-outage")
+                    .accessibilityHidden(true)
+                if live.needsConfirm {
+                    Button("Watch anyway") {
+                        live.confirmWatch()
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Button("Try again") {
+                        live.retry()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.black.opacity(0.55))
+        }
+    }
+
     var body: some View {
         Button(action: onFocus) {
             ZStack(alignment: .bottomLeading) {
@@ -1877,41 +1957,7 @@ struct MultiviewTile: View {
                         .overlay { ProgressView() }
                         .accessibilityHidden(true)
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 8) {
-                        Text(channel.displayNumber).font(.caption.weight(.bold))
-                        Text(title).font(.caption).lineLimit(1)
-                        if remoteFocused {
-                            Text("Focused")
-                                .font(.caption.weight(.bold))
-                        }
-                        Spacer(minLength: 0)
-                        if focused {
-                            Label("Sound", systemImage: "speaker.wave.2.fill")
-                                .font(.caption.weight(.bold))
-                                .labelStyle(.titleAndIcon)
-                        }
-                    }
-                    if focused, !live.detail.isEmpty {
-                        Text(live.detail)
-                            .font(.caption2)
-                            .lineLimit(1)
-                    }
-                    if tileStats {
-                        Text("\(live.dropped) dropped")
-                            .font(.caption2)
-                            .accessibilityIdentifier("tile-drops-\(channel.id)")
-                        if let drift = live.driftMS {
-                            Text("\(drift) ms")
-                                .font(.caption2)
-                                .accessibilityIdentifier("tile-drift-\(channel.id)")
-                        }
-                    }
-                }
-                .foregroundStyle(.white)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.black.opacity(0.82))
+                caption
             }
             .clipShape(.rect(cornerRadius: Tokens.Radius.md))
             .overlay {
@@ -1921,44 +1967,10 @@ struct MultiviewTile: View {
         }
         .buttonStyle(.plain)
         .overlay(alignment: .top) {
-            if standIn {
-                Text(ClearBroadcast.encryptedNote)
-                    .font(.footnote.weight(.semibold))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .glassEffect(in: .capsule)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .allowsHitTesting(false)
-                    .accessibilityIdentifier("playback-note")
-            }
+            standInNote
         }
         .overlay {
-            if let error = live.error {
-                VStack(spacing: 8) {
-                    Text(error)
-                        .font(.footnote)
-                        .multilineTextAlignment(.center)
-                        .accessibilityIdentifier("playback-outage")
-                        .accessibilityHidden(true)
-                    if live.needsConfirm {
-                        Button("Watch anyway") {
-                            live.confirmWatch()
-                        }
-                        .buttonStyle(.borderedProminent)
-                    } else {
-                        Button("Try again") {
-                            live.retry()
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-                .padding(8)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(.black.opacity(0.55))
-            }
+            outage
         }
         #if os(iOS)
         .focusEffectDisabled()
@@ -1968,58 +1980,8 @@ struct MultiviewTile: View {
         .accessibilityLabel("\(channel.displayNumber) \(channel.displayName), \(title)")
         .accessibilityValue(tileValue)
         .accessibilityAddTraits(focused ? .isSelected : [])
-        .task(id: "\(channel.id)-\(prefs.quality.rawValue)-\(prefs.audio.rawValue)-\(live.attempt)") {
-            #if DEBUG
-                if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
-                    return
-                }
-            #endif
-            unbind()
-            live.bindGrid(grid)
-            live.viewerPaused = gridPaused
-            await waitForSound()
-            guard !Task.isCancelled else { return }
-            if live.askLate {
-                live.askLate = false
-                try? await Task.sleep(for: .seconds(PictureOrder.askDelay(hadWatch: false, serverCameBack: true)))
-                guard !Task.isCancelled else { return }
-                await waitForSound()
-                guard !Task.isCancelled else { return }
-            }
-            await live.start(TilePlayer.Request(channel: channel, prefs: prefs, audible: focused && !grid.routingOut), room: room, store: store, bind: bind)
-            if !Task.isCancelled {
-                grid.soundDidAnswer(channel.id)
-            }
-        }
-        .task(id: grid.restartTick) {
-            #if DEBUG
-                if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
-                    return
-                }
-            #endif
-            let tick = grid.restartTick
-            // The first run records the tick already in progress. A tile that
-            // appears later must not treat that as a restart of its own watch.
-            if !restartArmed {
-                restartArmed = true
-                appliedRestart = tick
-                return
-            }
-            guard tick != appliedRestart else { return }
-            appliedRestart = tick
-            await waitForSound()
-            guard !Task.isCancelled else { return }
-            if live.hasWatch {
-                await live.restartKeepingPicture()
-                // The quiet tiles wait on this, or on the 8 s cap.
-                grid.soundDidAnswer(channel.id)
-            } else if focused {
-                live.kick()
-            } else {
-                live.askLate = true
-                live.kick()
-            }
-        }
+        .task(id: "\(channel.id)-\(prefs.quality.rawValue)-\(prefs.audio.rawValue)-\(live.attempt)") { await startTile() }
+        .task(id: grid.restartTick) { await restartTile() }
         .onChange(of: gridPaused) { _, paused in
             live.viewerPaused = paused
         }
@@ -2036,29 +1998,91 @@ struct MultiviewTile: View {
         .onChange(of: grid.routingOut) { _, out in
             live.setAudible(focused && !out)
         }
-        .task(id: focused) {
-            guard focused else { return }
-            while !Task.isCancelled {
-                if live.canHear, live.player.timeControlStatus == .playing, !live.player.isMuted {
-                    onSound()
-                    return
-                }
-                try? await Task.sleep(for: .milliseconds(400))
-            }
-        }
-        .task(id: tileStats) {
-            guard tileStats else { return }
-            while !Task.isCancelled {
-                if let event = live.player.currentItem?.accessLog()?.events.last {
-                    live.noteDrops(event.numberOfDroppedVideoFrames)
-                }
-                live.noteDrift()
-                try? await Task.sleep(for: .seconds(1))
-            }
-        }
+        .task(id: focused) { await waitUntilHeard() }
+        .task(id: tileStats) { await sampleStats() }
         .onDisappear {
             unbind()
             Task { await live.stop() }
+        }
+    }
+
+    /// Starts this tile's picture once the sound tile has answered.
+    private func startTile() async {
+        #if DEBUG
+            if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
+                return
+            }
+        #endif
+        unbind()
+        live.bindGrid(grid)
+        live.viewerPaused = gridPaused
+        await waitForSound()
+        guard !Task.isCancelled else { return }
+        if live.askLate {
+            live.askLate = false
+            try? await Task.sleep(for: .seconds(PictureOrder.askDelay(hadWatch: false, serverCameBack: true)))
+            guard !Task.isCancelled else { return }
+            await waitForSound()
+            guard !Task.isCancelled else { return }
+        }
+        await live.start(TilePlayer.Request(channel: channel, prefs: prefs, audible: focused && !grid.routingOut), room: room, store: store, bind: bind)
+        if !Task.isCancelled {
+            grid.soundDidAnswer(channel.id)
+        }
+    }
+
+    /// A restart of the whole grid, after the first one this tile saw.
+    private func restartTile() async {
+        #if DEBUG
+            if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") {
+                return
+            }
+        #endif
+        let tick = grid.restartTick
+        // The first run records the tick already in progress. A tile that
+        // appears later must not treat that as a restart of its own watch.
+        if !restartArmed {
+            restartArmed = true
+            appliedRestart = tick
+            return
+        }
+        guard tick != appliedRestart else { return }
+        appliedRestart = tick
+        await waitForSound()
+        guard !Task.isCancelled else { return }
+        if live.hasWatch {
+            await live.restartKeepingPicture()
+            // The quiet tiles wait on this, or on the 8 s cap.
+            grid.soundDidAnswer(channel.id)
+        } else if focused {
+            live.kick()
+        } else {
+            live.askLate = true
+            live.kick()
+        }
+    }
+
+    /// The focused tile tells the grid once its sound is playing.
+    private func waitUntilHeard() async {
+        guard focused else { return }
+        while !Task.isCancelled {
+            let heard: Bool = live.canHear && live.player.timeControlStatus == AVPlayer.TimeControlStatus.playing && !live.player.isMuted
+            if heard {
+                onSound()
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(400))
+        }
+    }
+
+    private func sampleStats() async {
+        guard tileStats else { return }
+        while !Task.isCancelled {
+            if let event = live.player.currentItem?.accessLog()?.events.last {
+                live.noteDrops(event.numberOfDroppedVideoFrames)
+            }
+            live.noteDrift()
+            try? await Task.sleep(for: .seconds(1))
         }
     }
 
