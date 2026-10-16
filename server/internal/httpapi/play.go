@@ -1187,11 +1187,20 @@ func decodeJSON(r *http.Request, dest any) error {
 // most a target duration, four seconds on a station with long groups.
 var partWait = 6 * time.Second
 
-// preloadFor keeps EXT-X-PRELOAD-HINT for HTTP/2 clients only. AVPlayer's
-// low-latency mode needs both; a browser on HTTP/1.1 would spend one of its
-// six connections holding each hinted part.
+// lowLatencyHints sends EXT-X-PRELOAD-HINT to HTTP/2 clients
+// (BROADWAVE_LL_HINTS=1). Off by default: the hint puts AVPlayer in
+// low-latency mode, and with this packager's parts (one keyframe group each,
+// about a second, so a segment is usually a single part and PART-TARGET is
+// near the target duration) AVPlayer often loads the first two seconds and
+// then waits at its live edge for good. Real low latency needs parts well
+// under a second, several to a segment.
+var lowLatencyHints = os.Getenv("BROADWAVE_LL_HINTS") == "1"
+
+// preloadFor keeps EXT-X-PRELOAD-HINT only for HTTP/2 clients, and only with
+// lowLatencyHints. AVPlayer's low-latency mode needs both; a browser on
+// HTTP/1.1 would spend one of its six connections holding each hinted part.
 func preloadFor(r *http.Request, body []byte) []byte {
-	if r.ProtoMajor >= 2 {
+	if r.ProtoMajor >= 2 && lowLatencyHints {
 		return body
 	}
 	return live.StripPreloadHint(body)
