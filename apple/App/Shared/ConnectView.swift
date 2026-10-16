@@ -82,7 +82,7 @@ struct ConnectView: View {
                     if !store.remembered.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Saved").font(.headline)
-                            ForEach(store.remembered) { server in
+                            ForEach(store.remembered, id: \.url) { server in
                                 serverButton(server)
                             }
                         }
@@ -161,7 +161,7 @@ struct ConnectView: View {
                     .padding(12)
                     .background(Tokens.ColorToken.surface2, in: .rect(cornerRadius: Tokens.Radius.sm))
                 Button("Connect") {
-                    Task { await check(manualURL(), name: nil, id: nil) }
+                    Task { await check(manualURL(), saved: nil) }
                 }
                 .buttonStyle(.glassProminent)
                 .disabled(address.isEmpty || checking)
@@ -174,7 +174,7 @@ struct ConnectView: View {
 
     private func serverButton(_ server: FoundServer) -> some View {
         Button {
-            Task { await check(server.url, name: server.name, id: server.id) }
+            Task { await check(server.url, saved: server) }
         } label: {
             HStack {
                 Image(systemName: "antenna.radiowaves.left.and.right")
@@ -205,7 +205,7 @@ struct ConnectView: View {
         }
     }
 
-    private func check(_ url: URL?, name: String?, id: String?) async {
+    private func check(_ url: URL?, saved: FoundServer?) async {
         guard let url else {
             problem = "That doesn't look like an address."
             return
@@ -214,11 +214,11 @@ struct ConnectView: View {
         defer { checking = false }
         do {
             let info = try await APIClient(base: url).server()
-            let display = info.name.isEmpty ? (name ?? "Broadwave") : info.name
+            let display = info.name.isEmpty ? (saved?.name ?? "Broadwave") : info.name
             store.connect(FoundServer(id: info.id, name: display, url: url, key: info.discoveryKey))
         } catch {
-            if let id, let moved = await store.locate(id) {
-                store.connect(moved)
+            if let saved, let moved = await store.locate(saved) {
+                store.connect(moved, movedFrom: saved.url)
                 return
             }
             problem = "No Broadwave server answered at \(url.host() ?? url.absoluteString)."

@@ -52,21 +52,41 @@ public enum ConnectLink {
     }
 }
 
-/// Servers this device has connected to, newest first.
+/// Servers this device has connected to, newest first. Each entry is kept under
+/// its address (scheme, host, and port, as tokens are), so a server that reports
+/// another server's id never replaces that server's entry. The same server
+/// reached at home and away from home is two entries.
 public enum RememberedServers {
-    public static func upsert(_ list: [FoundServer], _ server: FoundServer) -> [FoundServer] {
-        guard server.id != "demo", server.id != "pending", !server.id.isEmpty else { return list }
-        // A connect link has no key. Replacing the saved one would stop follow after the server moves.
+    /// `movedFrom` is the address a saved home-network server answered at before
+    /// the signed discovery reply and GET /server proved it moved. Only then does
+    /// the entry at that old address go.
+    public static func upsert(_ list: [FoundServer], _ server: FoundServer, movedFrom: URL? = nil) -> [FoundServer] {
+        guard server.id != "demo", server.id != "pending", !server.id.isEmpty,
+              let origin = ServerOrigin.of(server.url) else { return list }
+        let old = movedFrom.flatMap(ServerOrigin.of)
+        let replaced = { (entry: FoundServer) -> Bool in
+            let at = ServerOrigin.of(entry.url)
+            return at == origin || (old != nil && at == old && entry.id == server.id)
+        }
+        // A connect link has no key. Replacing the saved one would stop follow after
+        // the server moves. Only the same server's key is kept, never another one's.
         var incoming = server
-        if incoming.key?.isEmpty != false, let kept = list.first(where: { $0.id == server.id })?.key, !kept.isEmpty {
+        let kept = list.first { replaced($0) && $0.id == server.id }?.key
+        if incoming.key?.isEmpty != false, let kept, !kept.isEmpty {
             incoming.key = kept
         }
-        var next = list.filter { $0.id != server.id }
+        var next = list.filter { !replaced($0) }
         next.insert(incoming, at: 0)
         if next.count > 8 {
             next.removeLast(next.count - 8)
         }
         return next
+    }
+
+    /// The saved entry at this address.
+    public static func saved(at url: URL, in list: [FoundServer]) -> FoundServer? {
+        guard let origin = ServerOrigin.of(url) else { return nil }
+        return list.first { ServerOrigin.of($0.url) == origin }
     }
 
     /// What a refresh should store. Nil when nothing about this server changed.

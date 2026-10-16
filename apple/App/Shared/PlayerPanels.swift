@@ -179,6 +179,9 @@ final class LivePlayerController: AVPlayerViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         installChannelSwipes()
+        #if os(tvOS)
+            claimFocus()
+        #endif
         #if os(iOS)
             if keysOn {
                 becomeFirstResponder()
@@ -225,6 +228,17 @@ final class LivePlayerController: AVPlayerViewController {
     #endif
 
     #if os(tvOS)
+        /// A player that comes up while focus is still on the guide under it never sees
+        /// the remote, so the first Back went to the guide. Focus moves in here.
+        private func claimFocus() {
+            if let focused = UIFocusSystem.focusSystem(for: view)?.focusedItem as? UIView, focused.isDescendant(of: view) {
+                return
+            }
+            guard let root = view.window?.rootViewController else { return }
+            root.setNeedsFocusUpdate()
+            root.updateFocusIfNeeded()
+        }
+
         override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
             // A click while the bar is up moves through the bar. A click while it
             // is hidden changes channel, the same as a swipe on the clickpad.

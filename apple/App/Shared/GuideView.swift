@@ -131,17 +131,7 @@ struct GuideView: View {
         }
         // Back from the guide goes back to the channel you were watching, like a
         // cable box's Last; with nothing watched yet it goes to the sidebar as usual.
-        .onExitCommand(perform: resumable.map { last in {
-            // The player can take the first Back for its overlay, so viewers press twice;
-            // the second one must not bounce them back into the channel.
-            guard Date().timeIntervalSince(nowPlaying.stoppedAt ?? .distantPast) > 1.5 else { return }
-            // Opened inside the press, the player came up without focus and the next
-            // Back went to the guide under it. Open it after the press.
-            Task {
-                try? await Task.sleep(for: .milliseconds(200))
-                nowPlaying.play(last)
-            }
-        } })
+        .onExitCommand(perform: backAction)
         .task(id: tvSelectedTab) {
             // The sidebar takes focus on the same turn as onAppear and clears a focus set then.
             guard tvSelectedTab == .guide else { return }
@@ -168,6 +158,27 @@ struct GuideView: View {
         private var startChannel: Int64? {
             let last = nowPlaying.lastChannel?.id ?? NowPlaying.lastChannelID
             return rows.first(where: { $0.id == last })?.id ?? rows.first?.id
+        }
+
+        /// Back on the guide. With the player up, a Back that reaches the guide is one the
+        /// player never saw: it came up without focus (as it can right after Back resumed
+        /// a channel), so the press went to the row under it. That Back leaves the player,
+        /// so one press always does. Otherwise Back plays the last channel again.
+        private var backAction: (() -> Void)? {
+            if nowPlaying.channel != nil, nowPlaying.together.isEmpty, nowPlaying.recordingScreens.isEmpty, !nowPlaying.live.pictureInPicture {
+                return { nowPlaying.stop() }
+            }
+            guard let last = resumable else { return nil }
+            return {
+                // A double press to leave the player must not bounce back into the channel.
+                guard Date().timeIntervalSince(nowPlaying.stoppedAt ?? .distantPast) > 1.5 else { return }
+                // Opened inside the press, the player came up without focus and the next
+                // Back went to the guide under it. Open it after the press.
+                Task {
+                    try? await Task.sleep(for: .milliseconds(200))
+                    nowPlaying.play(last)
+                }
+            }
         }
 
         /// The channel Back goes to: one that played this session and isn't on screen now.

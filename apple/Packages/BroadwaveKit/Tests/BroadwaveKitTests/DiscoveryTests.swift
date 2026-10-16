@@ -202,11 +202,15 @@ private func signedServer(id: String, url: String, privateKey: Curve25519.Signin
 @Test func aMoveWithoutAKeyKeepsTheStoredKey() throws {
     let old = try FoundServer(id: "abc", name: "Living Room", url: #require(URL(string: "http://10.0.0.5:8477")), key: "stored-key")
     let moved = try FoundServer(id: "abc", name: "Living Room", url: #require(URL(string: "http://10.0.0.9:8477")))
-    let list = RememberedServers.upsert([old], moved)
+    let list = RememberedServers.upsert([old], moved, movedFrom: old.url)
+    #expect(list.count == 1)
     #expect(list[0].url.host() == "10.0.0.9")
     #expect(list[0].key == "stored-key")
     let rotated = try FoundServer(id: "abc", name: "Living Room", url: #require(URL(string: "http://10.0.0.9:8477")), key: "new-key")
     #expect(RememberedServers.upsert(list, rotated)[0].key == "new-key")
+    // A connect link to the same address has no key and keeps the stored one.
+    let linked = try FoundServer(id: "abc", name: "Living Room", url: #require(URL(string: "http://10.0.0.9:8477")))
+    #expect(RememberedServers.upsert(list, linked)[0].key == "stored-key")
 }
 
 @Test func rememberedServersKeepTheNewestAddress() throws {
@@ -216,12 +220,38 @@ private func signedServer(id: String, url: String, privateKey: Curve25519.Signin
     let demo = try FoundServer(id: "demo", name: "Demo", url: #require(URL(string: "http://127.0.0.1:9")))
     var list = RememberedServers.upsert([], first)
     list = RememberedServers.upsert(list, other)
-    list = RememberedServers.upsert(list, moved)
+    list = RememberedServers.upsert(list, moved, movedFrom: first.url)
     list = RememberedServers.upsert(list, demo)
     #expect(list.count == 2)
     #expect(list[0].id == "abc")
     #expect(list[0].url.host() == "10.0.0.9")
     #expect(list[1].id == "zzz")
+}
+
+@Test func savedServersAreKeptByAddress() throws {
+    let home = try FoundServer(id: "abc", name: "Living Room", url: #require(URL(string: "http://10.0.0.5:8477")), key: "home-key")
+    let away = try FoundServer(id: "abc", name: "Living Room", url: #require(URL(string: "https://tv.example.com")))
+    let impostor = try FoundServer(id: "abc", name: "Living Room", url: #require(URL(string: "https://evil.example")), key: "evil-key")
+    var list = RememberedServers.upsert([], home)
+    // The same server away from home is its own entry, and takes no key from home.
+    list = RememberedServers.upsert(list, away)
+    #expect(list.map(\.url.absoluteString) == ["https://tv.example.com", "http://10.0.0.5:8477"])
+    #expect(list[0].key == nil)
+    // A server elsewhere that reports the same id replaces nothing.
+    list = RememberedServers.upsert(list, impostor)
+    #expect(list.count == 3)
+    #expect(list.first { $0.url.host() == "10.0.0.5" }?.key == "home-key")
+    // Not even when it claims to have moved from home: a move names the same server.
+    let other = try FoundServer(id: "zzz", name: "Den", url: #require(URL(string: "http://10.0.0.7:8477")))
+    list = RememberedServers.upsert(list, other, movedFrom: home.url)
+    #expect(list.first { $0.url.host() == "10.0.0.5" }?.key == "home-key")
+    // The same address spelled another way is the same entry, whatever id answers there now.
+    let spelled = try FoundServer(id: "new", name: "Living Room", url: #require(URL(string: "https://TV.example.com:443")))
+    list = RememberedServers.upsert(list, spelled)
+    #expect(list.count(where: { $0.url.host()?.lowercased() == "tv.example.com" }) == 1)
+    #expect(list[0].id == "new")
+    let found = try RememberedServers.saved(at: #require(URL(string: "http://10.0.0.5:8477/guide")), in: list)
+    #expect(found?.key == "home-key")
 }
 
 @Test func bonjourAddressesBecomeURLsExceptLinkLocal() {
