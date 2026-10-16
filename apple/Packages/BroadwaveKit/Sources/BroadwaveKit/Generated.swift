@@ -530,6 +530,22 @@ public struct NewPass: Codable, Sendable, Hashable {
     }
 }
 
+public struct NowChannel: Codable, Sendable, Hashable {
+    public var channelId: Int64
+    public var now: Airing?
+    public var next: Airing?
+    public var progress: Double
+    public var art: String
+
+    public init(channelId: Int64, now: Airing? = nil, next: Airing? = nil, progress: Double, art: String) {
+        self.channelId = channelId
+        self.now = now
+        self.next = next
+        self.progress = progress
+        self.art = art
+    }
+}
+
 public struct PairGrant: Codable, Sendable, Hashable {
     public var token: String
     public var device: ClientDevice

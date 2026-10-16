@@ -132,8 +132,8 @@ export interface paths {
         /**
          * @description WebSocket for live updates and Whole-Home Sync. Every frame is `{"type", "data"}`.
          *
-         *     Server to client: `hello` {serverTime, boot} (boot names the server process; a new one means it restarted and every watch and room is gone), `clock` {t0, t1}, `activity` (Event),
-         *     `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `screen.watch` {channelId, from} (another screen sent this one a channel; see `/screens`), `screen.remote` {action, from} (a remote pressed a button for this screen; see `/screens/{id}/remote`), `client.revoked` {id} (a paired device was revoked; the device with that id is signed out and should show the sign-in screen), `error` {code, message}.
+         *     Server to client: `hello` {serverTime, boot, versions} (boot names the server process; a new one means it restarted and every watch and room is gone; versions are the data counters {guide, channels, recordings, schedule, settings}, so a reconnecting app refetches only what moved), `clock` {t0, t1}, `activity` (Event),
+         *     `live.changed` (refetch tuners and sessions), `guide.changed`, `channels.changed`, `recordings.changed`, `schedule.changed`, `settings.changed` {version} (that data changed; refetch it; a burst of writes is one event), `sources.found` {found} (discovery found a different set of tuners or lineups; not sent when nothing changed), `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `screen.watch` {channelId, from} (another screen sent this one a channel; see `/screens`), `screen.remote` {action, from} (a remote pressed a button for this screen; see `/screens/{id}/remote`), `client.revoked` {id} (a paired device was revoked; the device with that id is signed out and should show the sign-in screen), `error` {code, message}.
          *
          *     Client to server: `here` {id, name, kind, channelId} (names this screen; `id` is the app's own stable id, 1-64 letters, digits, or `-`; kind is iphone, ipad, appletv, or web; `channelId` is the channel it plays alone, sent again on each change, so a screen with sync off still shows what it watches in `/screens`), `clock` {t0}, `sync.join` {room, channelId, latency}, `sync.leave` {room},
          *     `sync.command` {room, action: play|pause|seek|live|latency|stalled, mediaTime, latency}. `stalled` steps a one-screen room or a multiview 2 s further from live, never past its latency target.
@@ -496,6 +496,27 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listAirings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description What is on every guide channel: the listing on the air and the one after, in guide order, without
+         *     reading a guide window. Listings carry the grid fields only (as `/airings?fields=grid`). The answer
+         *     changes each minute and when the guide or channels change (`guide.changed`, `channels.changed`).
+         */
+        get: operations["nowNext"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2335,6 +2356,16 @@ export interface components {
             /** @description Names the server process that counted this viewer, as in the event socket's `hello`. Send it back with the stop. */
             boot?: string;
         };
+        NowChannel: {
+            /** Format: int64 */
+            channelId: number;
+            now?: components["schemas"]["Airing"];
+            next?: components["schemas"]["Airing"];
+            /** @description How far into now the answer's minute is. 0 when nothing is on. */
+            progress: number;
+            /** @description Path on this server of the picture for the row: the listing's when it has one, else the channel's. */
+            art: string;
+        };
         Recording: {
             /** Format: int64 */
             id: number;
@@ -3765,6 +3796,41 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["Error"];
+        };
+    };
+    nowNext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Now and next per channel */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * Format: date-time
+                         * @description The minute the answer is for.
+                         */
+                        at: string;
+                        channels: components["schemas"]["NowChannel"][];
+                    };
+                };
+            };
+            /** @description Not modified. No body. If-None-Match matched the ETag. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     refreshGuide: {

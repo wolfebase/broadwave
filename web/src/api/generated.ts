@@ -264,6 +264,14 @@ export type NewPass = {
   days?: number[];
 };
 
+export type NowChannel = {
+  channelId: number;
+  now?: Airing;
+  next?: Airing;
+  progress: number;
+  art: string;
+};
+
 export type PairGrant = {
   token: string;
   device: ClientDevice;

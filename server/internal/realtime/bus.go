@@ -38,6 +38,9 @@ type Bus struct {
 	// Boot names this server process in every hello. A client that sees a
 	// new one knows the server restarted: every watch and room it had is gone.
 	Boot string
+	// Versions reports the data versions for hello, so a reconnecting app can
+	// skip a refetch of what it already has. Nil leaves them out.
+	Versions func() any
 
 	mu      sync.Mutex
 	clients map[*client]struct{}
@@ -368,7 +371,13 @@ func (b *Bus) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
-	c.send <- frame("hello", map[string]any{"serverTime": unixMS(b.now()), "boot": b.Boot})
+	hello := map[string]any{"serverTime": unixMS(b.now()), "boot": b.Boot}
+	if b.Versions != nil {
+		if v := b.Versions(); v != nil {
+			hello["versions"] = v
+		}
+	}
+	c.send <- frame("hello", hello)
 	for {
 		_, raw, err := conn.Read(ctx)
 		if err != nil {
