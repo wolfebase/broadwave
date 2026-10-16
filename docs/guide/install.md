@@ -41,6 +41,8 @@ docker run -d --name broadwave --restart unless-stopped \
 
 Then open `http://localhost:8477`.
 
+For the secure name, also publish `-p 8443:8443` and set `-e BROADWAVE_DIRECT_ADDRS=<this computer's address>`. Without them the apps use the plain address.
+
 ## Docker Compose
 
 ```bash
@@ -70,6 +72,9 @@ The optional updater is [`deploy/unraid/broadwave-updater.xml`](https://github.c
 | `BROADWAVE_RECORDINGS` | The recordings folder, when it is not `/config/work/recordings`. |
 | `BROADWAVE_ENCODER` | `gpu` or `software`, to skip the automatic choice. |
 | `BROADWAVE_HOSTS` | Public names the server answers to. See [Security](security.md). |
+| `BROADWAVE_DIRECT` | `0` turns off the secure name on the home network. See [Security](../security.md#secure-name-on-the-home-network). |
+| `BROADWAVE_SECURE_ADDR` | The HTTPS port for the secure name, such as `:9443`. By default 8443, or the HTTP port plus one when that is not 8477. |
+| `BROADWAVE_DIRECT_ADDRS` | The home network addresses the secure name points at, comma-separated, when the server cannot tell (for example Docker with published ports). |
 | `BROADWAVE_ALTERNATES` | `0` carries only the chosen sound track. By default a full-size encode also carries the channel's other languages. |
 
 NVIDIA graphics need the NVIDIA Container Toolkit and `--gpus all`. That path has not been tested on real hardware yet.

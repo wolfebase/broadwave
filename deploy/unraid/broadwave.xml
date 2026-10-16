@@ -19,7 +19,7 @@ Leave PUID at 99 and PGID at 100 so recordings are not owned by root. Set TZ to 
 
 One tune of a station is shared by every viewer and by a recording of that station. Subchannels of one station share it too. A second station takes another tuner.
 
-The template uses host networking and port 8477. Config holds the database and the guide. Recordings are a separate folder, mounted at /config/work/recordings, so they survive a new container. The image includes ffmpeg. comskip is included for commercial detection.
+The template uses host networking and port 8477. The server also serves HTTPS with HTTP/2 on port 8443 under its own Let's Encrypt name for the home network; the apps use it when the router allows it. Set Secure name to 0 to turn it off. Config holds the database and the guide. Recordings are a separate folder, mounted at /config/work/recordings, so they survive a new container. The image includes ffmpeg. comskip is included for commercial detection.
 
 Act as an HDHomeRun, under Settings, Share with other apps, lets Plex, Jellyfin, Emby, and Channels add this server at port 8478. That port does not answer tuner discovery, so type the address and the port. Leave it off when you do not use those apps.
 
@@ -46,6 +46,7 @@ There is no account password. Anything that can open port 8477 can use the serve
   <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group id for the config folder and recordings. 100 is Unraid's users group. Set this together with PUID." Type="Variable" Display="always" Required="false" Mask="false">100</Config>
   <Config Name="UMASK" Target="UMASK" Default="022" Mode="" Description="File mode mask for new recordings, in octal. 022 leaves files readable by others on the server." Type="Variable" Display="advanced" Required="false" Mask="false">022</Config>
   <Config Name="Public names" Target="BROADWAVE_HOSTS" Default="" Mode="" Description="Optional. Public names this server answers to, comma-separated, such as tv.example.com. A leading dot covers subdomains. Addresses and home names work without this. A MagicDNS name on port 8477 needs the name listed here." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Secure name" Target="BROADWAVE_DIRECT" Default="" Mode="" Description="Optional. Leave blank for an HTTPS name on your home network (port 8443, a Let's Encrypt certificate, nothing to install). Set to 0 to turn it off." Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="Encoder" Target="BROADWAVE_ENCODER" Default="" Mode="" Description="Optional. Leave blank to choose automatically. gpu keeps the detected graphics encoder. software uses the processor." Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="Extra audio" Target="BROADWAVE_ALTERNATES" Default="" Mode="" Description="Optional. Leave blank to keep other languages in a full-size encode. Set to 0 to send only the chosen track." Type="Variable" Display="advanced" Required="false" Mask="false"/>
 </Container>
