@@ -226,6 +226,7 @@ func (s *Store) BackupTo(ctx context.Context, path string) error {
 // RestoreFrom replaces the user's choices with a backup's, all or nothing.
 // A backup from an older version fills the columns it has; new ones take their defaults.
 func (s *Store) RestoreFrom(ctx context.Context, path string) error {
+	defer s.forgetSettings()
 	// ATTACH holds for one connection, and it cannot run inside a transaction.
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
