@@ -176,3 +176,194 @@ final class RecordingPlaybackTests: WatchingCase {
         return (Double(probe.label) ?? first) > first
     }
 }
+
+/// Down in the live player has one meaning: the channel strip.
+final class ChannelStripTests: WatchingCase {
+    func testDownOpensTheChannelStripAndNothingElse() throws {
+        try launch(["-BroadwaveChannelNow", "YES"])
+        try startWatching()
+        let before = channelNow
+        shot("strip-0-playing")
+
+        press(.down, wait: 1.2)
+        shot("strip-1-down")
+        let strip = element("channel-strip")
+        XCTAssertTrue(until(3) { strip.exists }, "Down opened no strip, focus on \(focusedLabel())")
+        XCTAssertEqual(channelNow, before, "Down changed channel")
+        XCTAssertTrue(element("panelProbe").exists, "no panel probe")
+        XCTAssertFalse(infoPanelUp, "Down opened AVKit's Info panel as well")
+        XCTAssertTrue(until(3) { self.focused().identifier.hasPrefix("strip-") }, "focus on \(focused().identifier) \(focusedLabel())")
+        let first = focused().identifier
+
+        press(.right, wait: 0.8)
+        shot("strip-2-right")
+        let picked = focused().identifier
+        XCTAssertNotEqual(picked, first, "Right did not move along the strip")
+        let pickedLabel = focusedLabel()
+        press(.select, wait: 1.5)
+        shot("strip-3-select")
+        XCTAssertTrue(until(3) { !strip.exists }, "Select left the strip up")
+        XCTAssertNotEqual(channelNow, before, "Select did not change channel")
+        XCTAssertTrue(pickedLabel.hasPrefix(channelNow + " "), "playing \(channelNow), picked \(pickedLabel)")
+
+        // Back closes the strip and nothing else.
+        waitForPictureOnly()
+        let playing = channelNow
+        press(.down, wait: 1.2)
+        XCTAssertTrue(until(3) { strip.exists }, "second Down opened no strip")
+        press(.menu, wait: 1.2)
+        shot("strip-4-back")
+        XCTAssertFalse(strip.exists, "Back left the strip up")
+        XCTAssertTrue(element("player-channel").exists, "Back left the player")
+        XCTAssertEqual(channelNow, playing)
+
+        // Up with nothing on screen still changes channel.
+        waitForPictureOnly()
+        press(.up, wait: 1.5)
+        shot("strip-5-up")
+        XCTAssertNotEqual(channelNow, playing, "Up did not change channel")
+        XCTAssertFalse(strip.exists, "Up opened the strip")
+
+        // With the bar up, Down is AVKit's again: its Info panel.
+        waitForPictureOnly()
+        press(.select, wait: 1.5)
+        press(.down, wait: 1.5)
+        shot("strip-6-bar-down")
+        XCTAssertTrue(until(3) { self.infoPanelUp }, "Down with the bar up opened no Info panel")
+        XCTAssertFalse(strip.exists, "Down with the bar up opened the strip")
+    }
+
+    private var channelNow: String {
+        let probe = app.staticTexts["channel-now"]
+        return probe.exists ? probe.label : "-"
+    }
+
+    private var infoPanelUp: Bool {
+        let probe = element("panelProbe")
+        return probe.exists && probe.label == "panel"
+    }
+
+    /// Select on the first channel in the guide, then wait for the picture and for the bar to hide.
+    private func startWatching() throws {
+        XCTAssertTrue(until(30) {
+            let focus = self.focused()
+            return focus.exists && focus.elementType == .button && focus.frame.minX < 120
+        }, "the guide never focused a channel: \(focusedLabel())")
+        press(.select, wait: 0.5)
+        let tuning = element("tuning")
+        XCTAssertTrue(until(30) { self.element("player-channel").exists && !tuning.exists }, "the picture never started")
+        waitForPictureOnly()
+    }
+
+    private func waitForPictureOnly() {
+        let probe = element("transportProbe")
+        until(12) { probe.exists && probe.label == "hidden" }
+        wait(0.5)
+    }
+}
+
+/// The day row scrolls the grid, the header says which day it shows, and Back comes back to now.
+final class GuideDayTests: WatchingCase {
+    func testDayButtonsScrollTheGridAndBackReturnsToNow() throws {
+        try launch()
+        XCTAssertTrue(until(30) { self.onChannel() }, "the guide never focused a channel: \(focusedLabel())")
+        wait(1.5)
+        let day = element("guide-day")
+        XCTAssertTrue(until(5) { day.exists }, "no day in the time header")
+        XCTAssertEqual(day.label, "Today")
+        shot("day-0-guide")
+
+        try pick("Tomorrow")
+        shot("day-1-tomorrow")
+        XCTAssertTrue(until(3) { day.label == "Tomorrow" }, "Tomorrow shows \(day.label)")
+        let eight = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH '8:00' AND label ENDSWITH 'PM'")).firstMatch
+        XCTAssertTrue(eight.exists, "8 pm is not in the header")
+
+        // Down lands on the first channel, and Right on its program tomorrow evening.
+        press(.down, wait: 1)
+        XCTAssertTrue(onChannel(), "Down from the days: \(focusedLabel())")
+        press(.right, wait: 1)
+        shot("day-2-tomorrow-cell")
+        XCTAssertFalse(onChannel(), "Right stayed on the channel column: \(focusedLabel())")
+        XCTAssertEqual(day.label, "Tomorrow")
+
+        // Back from tomorrow comes back to now, on the channel column.
+        press(.menu, wait: 1.2)
+        shot("day-3-back")
+        XCTAssertTrue(until(3) { day.label == "Today" }, "Back left the grid on \(day.label)")
+        XCTAssertTrue(onChannel(), "focus on \(focusedLabel())")
+        XCTAssertFalse(element("player-channel").exists, "Back started a channel")
+
+        // The day after tomorrow, by its name, when the listings reach it.
+        let third = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: 2, to: Date())?.formatted(.dateTime.weekday(.abbreviated)))
+        guard app.buttons[third].exists else { return }
+        try pick(third)
+        shot("day-4-third")
+        XCTAssertTrue(until(3) { day.label.hasPrefix(third) }, "\(third) shows \(day.label)")
+    }
+
+    private func onChannel() -> Bool {
+        let focus = focused()
+        // The rail is 300 wide at the left edge. A program that began earlier also starts left of it.
+        let frame = focus.frame
+        return focus.exists && focus.elementType == .button && frame.minX >= 0 && frame.minX < 120 && frame.maxX <= 420 && frame.minY > 150
+    }
+
+    /// Up to the day row, then along it to the button.
+    private func pick(_ label: String) throws {
+        let third = Calendar.current.date(byAdding: .day, value: 2, to: Date())!.formatted(.dateTime.weekday(.abbreviated))
+        let days = ["Now", "Tonight", "Tomorrow", third]
+        for _ in 0 ..< 4 where !days.contains(focusedLabel()) && focused().frame.minY > 140 {
+            press(.up, wait: 0.5)
+        }
+        // Past it, on the filters.
+        if !days.contains(focusedLabel()) {
+            press(.down, wait: 0.5)
+        }
+        XCTAssertTrue(days.contains(focusedLabel()), "not on the day row: \(focusedLabel())")
+        for _ in 0 ..< 6 where focusedLabel() != label {
+            press(.right, wait: 0.4)
+        }
+        XCTAssertEqual(focusedLabel(), label)
+        press(.select, wait: 1.5)
+    }
+}
+
+/// How long a channel takes from Select to a moving picture, cold and back to the one before.
+final class ChannelStartTests: WatchingCase {
+    func testChannelStartTimes() throws {
+        try launch(["-BroadwaveChannelNow", "YES"])
+        XCTAssertTrue(until(30) { self.focused().exists && self.focused().frame.minX < 120 }, "no guide focus")
+        let tuning = element("tuning")
+        let probe = app.staticTexts["channel-now"]
+        var times: [String] = []
+        func timed(_ name: String, _ action: () -> Void) {
+            let start = Date()
+            action()
+            let shown = until(3) { tuning.exists }
+            if shown {
+                wait(0.3)
+                shot("start-\(name)-card")
+            }
+            XCTAssertTrue(until(30) { !tuning.exists && probe.exists }, "\(name) never started")
+            let took = Date().timeIntervalSince(start)
+            times.append("\(name)=\(String(format: "%.2f", took))s")
+            print("TIMING \(name) select->picture \(String(format: "%.2f", took))s card=\(shown)")
+        }
+        press(.down, 2, wait: 0.5)
+        timed("cold-1") { XCUIRemote.shared.press(.select) }
+        wait(6)
+        // Up goes to the channel above, which is warm by now.
+        timed("up-warm") { XCUIRemote.shared.press(.up) }
+        wait(6)
+        // Back to the one before, the other warm guess.
+        timed("down-strip-previous") {
+            XCUIRemote.shared.press(.down)
+            wait(1)
+            XCUIRemote.shared.press(.right)
+            wait(0.5)
+            XCUIRemote.shared.press(.select)
+        }
+        print("TIMING all \(times.joined(separator: " "))")
+    }
+}

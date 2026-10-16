@@ -10,7 +10,16 @@ import SwiftUI
 @MainActor
 @Observable
 final class NowPlaying {
-    var channel: Channel?
+    var channel: Channel? {
+        didSet {
+            if let oldValue, oldValue.id != channel?.id {
+                previousChannel = oldValue
+            }
+        }
+    }
+
+    /// The channel before this one, which a viewer often goes back to. Its picture is kept warm.
+    private(set) var previousChannel: Channel?
     var expanded = false
     /// The channel that played last, kept after the player closes: Back from the
     /// Apple TV guide goes back to it, and the guide opens on its row.

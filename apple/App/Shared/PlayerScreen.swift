@@ -920,6 +920,8 @@ struct PlayerScreen: View {
     /// A recording that holds this showing's start, played from Start over.
     @State private var startOverRecording: Recording?
     @State private var lastChannelStep = Date.distantPast
+    /// Apple TV: the channel strip Down opens.
+    @State private var stripOpen = false
     #if os(iOS)
         @State private var showGuide = false
         @State private var showMove = false
@@ -992,6 +994,8 @@ struct PlayerScreen: View {
                 onStartOver: beginStartOver,
                 onStep: { step($0) },
                 onEscape: leaveKey,
+                onDown: { openStrip() },
+                overlayOpen: stripOpen,
                 keysOn: startOverRecording == nil && !keysCovered,
                 onTransport: { transportShown = $0 },
                 onDisplay: { live.displayLine = $0 },
@@ -1001,8 +1005,18 @@ struct PlayerScreen: View {
             )
             .ignoresSafeArea()
             if tuning, let channel = nowPlaying.channel {
-                TuningCard(channel: channel, show: store.index.on(channel.id, at: Date())?.title)
-                    .id(channel.id)
+                let airing = store.index.on(channel.id, at: Date())
+                // A fresh frame means the server already has the channel's frequency open.
+                let tuned = store.frameIDs.contains(channel.id)
+                TuningCard(
+                    channel: channel,
+                    show: airing?.title,
+                    still: tuned ? store.api?.frameURL(channelID: channel.id, width: 1280) : airing.flatMap { store.artURL($0, width: 1280) },
+                    tuned: tuned
+                )
+                .id(channel.id)
+                // The picture fades in under the card instead of cutting from black.
+                .transition(.opacity.animation(.easeOut(duration: 0.4)))
             }
             #if os(iOS)
                 overlay
@@ -1073,6 +1087,12 @@ struct PlayerScreen: View {
                     SyncProbe(sync: live.sync)
                 }
             #endif
+            #if os(tvOS)
+                if stripOpen {
+                    ChannelStrip { stripOpen = false }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            #endif
             if showStream, !portraitChrome {
                 StreamPanel(stream: live.session?.stream, stats: live.picture, sync: live.sync)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
@@ -1137,6 +1157,19 @@ struct PlayerScreen: View {
             }
         }
         #endif
+        // Once the picture moves, the likeliest next channel starts on the server: the one
+        // watched before this, or the one Up goes to. The server keeps one such guess.
+        .task(id: live.moving ? nowPlaying.channel?.id : nil) {
+            guard live.moving, let channel = nowPlaying.channel else { return }
+            try? await Task.sleep(for: .seconds(2))
+            while !Task.isCancelled, let api = store.api {
+                guard let next = warmTarget(after: channel) else { return }
+                let warmed = await api.warm(channelID: next.id, caps: Capabilities.current(), prefs: store.prefs)
+                live.playLogNote("warm \(next.displayNumber) \(warmed)")
+                // A guess stops after about 20 s unless a watch joins it.
+                try? await Task.sleep(for: .seconds(15))
+            }
+        }
         .onChange(of: store.prefs.track) { _, track in
             if live.sounds == nil {
                 nowPlaying.trackRestarts += 1
@@ -1283,6 +1316,22 @@ struct PlayerScreen: View {
             }
         #else
             nowPlaying.stop()
+        #endif
+    }
+
+    private func warmTarget(after channel: Channel) -> Channel? {
+        if let previous = nowPlaying.previousChannel, previous.id != channel.id, store.channels.contains(previous) {
+            return previous
+        }
+        let lineup = store.channels
+        guard lineup.count > 1, let i = lineup.firstIndex(of: channel) else { return nil }
+        return lineup[(i + ChannelStep.offset(up: true) + lineup.count) % lineup.count]
+    }
+
+    private func openStrip() {
+        #if os(tvOS)
+            withAnimation(.smooth(duration: 0.25)) { stripOpen = true }
+            live.playLogNote("strip open")
         #endif
     }
 
@@ -1869,6 +1918,10 @@ struct SystemPlayer: UIViewControllerRepresentable {
     var onStartOver: () -> Void = {}
     var onStep: (Int) -> Void = { _ in }
     var onEscape: () -> Void = {}
+    /// Down with only the picture on screen. Nil leaves Down to AVKit.
+    var onDown: (() -> Void)?
+    /// The app's own overlay has the remote.
+    var overlayOpen = false
     var keysOn = false
     var onTransport: (Bool) -> Void = { _ in }
     var onDisplay: (String) -> Void = { _ in }
@@ -1898,6 +1951,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
         #endif
         #if os(tvOS)
             vc.delegate = vc
+            vc.onDown = onDown
+            vc.overlayOpen = overlayOpen
             vc.onTransport = onTransport
             vc.appliesPreferredDisplayCriteriaAutomatically = false
             context.coordinator.start(vc)
@@ -1962,6 +2017,8 @@ struct SystemPlayer: UIViewControllerRepresentable {
             context.coordinator.picture.onClosed = onPictureClosed
         #endif
         #if os(tvOS)
+            vc.onDown = onDown
+            vc.overlayOpen = overlayOpen
             vc.onTransport = onTransport
             vc.onPictureInPicture = onPictureInPicture
             vc.onPictureRestore = onPictureRestore
@@ -2927,14 +2984,29 @@ struct RecordingPlayerScreen: View {
 
 /// Covers the player from a new watch until the picture moves, as the web
 /// player does, so the frame a new room holds at its start does not look frozen.
+/// What shows until the picture moves: the channel's last frame, or the program's art,
+/// with the channel, the show, and what the server is doing.
 private struct TuningCard: View {
     let channel: Channel
     let show: String?
+    var still: URL?
+    /// The frequency is already open, so there is no antenna to tune.
+    var tuned = false
     @State private var started = Date()
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
+            if let still {
+                AsyncImage(url: still) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                            .overlay(Color.black.opacity(0.45))
+                    }
+                }
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+            }
             TimelineView(.periodic(from: started, by: 0.5)) { context in
                 VStack(spacing: 10) {
                     Text("\(channel.displayNumber) \(channel.displayName)")
@@ -2945,7 +3017,7 @@ private struct TuningCard: View {
                             .foregroundStyle(.secondary)
                     }
                     ProgressView()
-                    Text("\(TuningSteps.text(after: context.date.timeIntervalSince(started)))…")
+                    Text("\(TuningSteps.text(after: context.date.timeIntervalSince(started) + (tuned ? 3 : 0)))…")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
