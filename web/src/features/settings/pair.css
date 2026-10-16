@@ -1,0 +1,223 @@
+/* The pair screen fills the window with no tab bar, so it scrolls itself. */
+.pair-page {
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: max(var(--space-8), env(safe-area-inset-top)) var(--space-4) max(var(--space-8), env(safe-area-inset-bottom));
+}
+
+/* Auto margins center the card, and a tall card still scrolls from its top. */
+.pair-card {
+  margin: auto;
+  width: min(480px, 100%);
+  display: grid;
+  gap: var(--space-6);
+  padding: var(--space-8);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface1);
+  border: 1px solid var(--color-line);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+}
+
+.pair-head {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.pair-head .brand-tally {
+  margin-bottom: var(--space-2);
+}
+
+.pair-head h1 {
+  font-size: var(--type-title1-size);
+}
+
+.pair-head .lede {
+  font-size: var(--type-body-size);
+}
+
+.pair-form {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.pair-group {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+fieldset.pair-group {
+  gap: var(--space-4);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-line);
+}
+
+.pair-group legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+  margin-bottom: var(--space-1);
+  font-size: var(--type-headline-size);
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.pair-group legend + * {
+  clear: both;
+}
+
+.pair-code-field {
+  color: var(--color-text);
+  font-size: var(--type-headline-size);
+  font-weight: 700;
+}
+
+.pair-code-input {
+  width: 100%;
+  min-height: 72px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-line-strong, var(--color-line));
+  background: var(--color-surface2);
+  color: var(--color-text);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 34px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+
+.pair-code-input.letters {
+  font-size: 24px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.pair-code-input::placeholder {
+  color: var(--color-text-tertiary);
+  opacity: 0.6;
+}
+
+.pair-code-input[aria-invalid="true"] {
+  border-color: var(--color-tally);
+}
+
+.pair-error {
+  font-size: var(--type-footnote-size);
+}
+
+.pair-switch {
+  justify-self: start;
+  margin-left: -10px;
+  font-size: var(--type-footnote-size);
+  color: var(--color-link);
+}
+
+.pair-kinds {
+  justify-self: start;
+}
+
+.pair-submit {
+  justify-content: center;
+  width: 100%;
+}
+
+.pair-alt {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-line);
+}
+
+.pair-alt h2 {
+  font-size: var(--type-headline-size);
+}
+
+.pair-alt > .btn {
+  margin-top: var(--space-2);
+}
+
+.pair-issued {
+  width: 100%;
+  display: grid;
+  gap: var(--space-1);
+  justify-items: center;
+  margin-top: var(--space-2);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface2);
+  text-align: center;
+}
+
+.pair-issued .pair-code {
+  margin: 0;
+  font-size: 44px;
+  letter-spacing: 0.16em;
+}
+
+.pair-waiting {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--type-footnote-size);
+  font-weight: 600;
+}
+
+.pair-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--color-line);
+  border-top-color: var(--color-accent);
+  animation: pair-spin 0.9s linear infinite;
+}
+
+@keyframes pair-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pair-spinner {
+    border-top-color: var(--color-line);
+    background: var(--color-accent);
+    transform: scale(0.5);
+  }
+}
+
+html[data-layout="phone"] .pair-page {
+  padding-inline: var(--space-4);
+}
+
+html[data-layout="phone"] .pair-card {
+  margin-top: 0;
+}
+
+html[data-layout="phone"] .pair-card {
+  padding: var(--space-6) var(--space-5);
+  gap: var(--space-5);
+}
+
+html[data-layout="tv"] .pair-card {
+  width: min(760px, 100%);
+  padding: var(--space-10, 40px);
+}
+
+html[data-layout="tv"] .pair-code-input {
+  min-height: 96px;
+  font-size: 48px;
+}
+
+html[data-layout="tv"] .pair-issued .pair-code {
+  font-size: 72px;
+}
