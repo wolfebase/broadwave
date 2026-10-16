@@ -175,7 +175,7 @@ paths:
         WebSocket for live updates and Whole-Home Sync. Every frame is `{"type", "data"}`.
 
         Server to client: `hello` {serverTime, boot} (boot names the server process; a new one means it restarted and every watch and room is gone), `clock` {t0, t1}, `activity` (Event),
-        `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `screen.watch` {channelId, from} (another screen sent this one a channel; see `/screens`), `screen.remote` {action, from} (a remote pressed a button for this screen; see `/screens/{id}/remote`), `error` {code, message}.
+        `live.changed` (refetch tuners and sessions), `sources.found` {found}, `sync.state` (RoomState), `groups.changed` (someone joined or left a group; refetch `/groups`), `game.alert` (GameAlert: a followed team's game starting or a close finish, on a channel this home gets; at most once per game and kind), `screen.watch` {channelId, from} (another screen sent this one a channel; see `/screens`), `screen.remote` {action, from} (a remote pressed a button for this screen; see `/screens/{id}/remote`), `client.revoked` {id} (a paired device was revoked; the device with that id is signed out and should show the sign-in screen), `error` {code, message}.
 
         Client to server: `here` {id, name, kind, channelId} (names this screen; `id` is the app's own stable id, 1-64 letters, digits, or `-`; kind is iphone, ipad, appletv, or web; `channelId` is the channel it plays alone, sent again on each change, so a screen with sync off still shows what it watches in `/screens`), `clock` {t0}, `sync.join` {room, channelId, latency}, `sync.leave` {room},
         `sync.command` {room, action: play|pause|seek|live|latency|stalled, mediaTime, latency}. `stalled` steps a one-screen room or a multiview 2 s further from live, never past its latency target.
@@ -2198,6 +2198,35 @@ paths:
                     items: { $ref: "#/components/schemas/ClientDevice" }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+  /media/link:
+    post:
+      tags: [pairing]
+      operationId: mediaLink
+      description: |
+        A link to a playlist or file under `/media/` that plays without a header or
+        cookie, for a device that cannot carry the token: an AirPlay or Google Cast
+        receiver, or a player handed a URL. The link adds `mk=` to the path and lasts
+        24 hours. Playlists fetched with it name every segment, part, and other
+        playlist with the same `mk`, so the whole stream plays. The link stops working
+        when this device is revoked. Watch scope. While sign-in is off and the request
+        is from the home network, the same call still answers, so apps need no special case.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path: { type: string, description: "A path under /media/, such as /media/live/28/1080.aac2.broadcast/index.m3u8. A query is kept." }
+      responses:
+        "200":
+          description: The link
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaLink" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
   /clients/me:
     get:
       tags: [pairing]
@@ -2654,6 +2683,12 @@ components:
         createdAt: { type: string, format: date-time }
         lastSeenAt: { type: string, format: date-time }
         revokedAt: { type: string, format: date-time }
+    MediaLink:
+      type: object
+      required: [url, expiresAt]
+      properties:
+        url: { type: string, description: "A path with mk= added. Resolve it against the server address." }
+        expiresAt: { type: string, format: date-time }
     Invite:
       type: object
       required: [id, name, scopes, createdAt, expiresAt]

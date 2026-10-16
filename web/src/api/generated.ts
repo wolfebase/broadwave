@@ -198,6 +198,11 @@ export type Marker = {
   confidence?: number;
 };
 
+export type MediaLink = {
+  url: string;
+  expiresAt: string;
+};
+
 export type MosaicSession = {
   key: string;
   playlist: string;
