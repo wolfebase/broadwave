@@ -48,6 +48,9 @@ func (s *Server) hiddenSecrets(ctx context.Context) []string {
 			raw = append(raw, v)
 		}
 	}
+	if saved, err := s.vault().Load(); err == nil && saved.Token != "" {
+		raw = append(raw, saved.Token)
+	}
 	return secretPieces(raw)
 }
 

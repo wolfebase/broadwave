@@ -31,6 +31,7 @@ export default defineConfig({
       "moveFile.test.tsx",
       "stage.test.tsx",
       "playerChrome.test.ts",
+      "cloudflareCard.test.tsx",
     ],
   },
 });
