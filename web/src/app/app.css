@@ -687,3 +687,24 @@ html[data-layout="tv"]:not([data-theme="light"]) :is(.tab, .chip, .btn, .pill-bt
 img.lf-wait {
   opacity: 0;
 }
+
+/* A finger needs 44 px. Pills, chips, and text buttons grow to it on a phone. */
+.layout-phone :is(.text-btn, .record-btn, .sync-pill, .live-pill, .chip, .pill-btn, .go-live, .search-main) {
+  min-height: 44px;
+}
+
+.layout-phone main input:is([type="search"], [type="text"], :not([type])) {
+  min-height: 44px;
+}
+
+/* The scrubber's track stays thin; the part a finger can grab is 44 px tall. */
+.layout-phone .scrub-wrap {
+  height: 44px;
+}
+
+.layout-phone .scrub {
+  height: 44px;
+  padding: 19px 0;
+  background-clip: content-box;
+  box-sizing: border-box;
+}
