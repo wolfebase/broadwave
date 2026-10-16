@@ -23,9 +23,10 @@ The Broadwave server runs on hardware you own. Your channels, guide, recordings,
 - guide providers you enable, such as the SiliconDust guide for HDHomeRun owners, Schedules Direct, or an XMLTV address you add;
 - public sports scoreboards, to show scores and extend recordings of games. The apps never ask for those scores. The server does, and it caches the answer. Settings, Live scores, stops every scoreboard request. A TheSportsDB key, if you add one, stays on your server. Nothing is sent to Wolfe Up;
 - GitHub, once a day, to see if a newer Broadwave release exists. That request carries no account, no id, and nothing about what you watch. Turn it off under Settings, Check for updates;
-- any playlist or channel sources you add.
+- any playlist or channel sources you add;
+- the Broadwave direct service at api.direct.wolfeup.com, which Wolfe Up runs, and Let's Encrypt, to give the server a trusted HTTPS name on your home network. The server sends a public key it made, the private home network addresses the name should point at (only private ranges are accepted), and the value Let's Encrypt asks for. The service keeps the key, a random label, those addresses as DNS records, and a hash of your network's public address for rate limits. Nothing about what you watch is sent. Setting `BROADWAVE_DIRECT=0` on the server turns it off.
 
-Those requests come from your server, not from Wolfe Up LLC, and we receive none of the data.
+Apart from the direct service, those requests come from your server, not from Wolfe Up LLC, and we receive none of the data.
 
 ## Children
 

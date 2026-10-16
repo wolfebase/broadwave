@@ -16,6 +16,9 @@ services:
       UMASK: "022"
       # HDHR_HOST: 192.168.1.50   # only if discovery cannot reach the tuner
       # BROADWAVE_CAST_APP_ID: "" # Google Cast application id. Empty hides Cast.
+      # The secure name (HTTPS and HTTP/2 on port 8443, a Let's Encrypt name
+      # for the home network) is on by default; host networking covers the port.
+      # BROADWAVE_DIRECT: "0"     # turn it off
     volumes:
       - ./config:/config
       - ./recordings:/config/work/recordings
