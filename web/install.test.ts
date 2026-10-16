@@ -70,3 +70,17 @@ test("a private window that hides storage is not asked again", () => {
     restore();
   }
 });
+
+test("iPhone and iPad Safari get a Home Screen hint, only on https and only until dismissed", async () => {
+  const { isAppleTouch, offerHomeScreenHint } = await import("./src/lib/install.ts");
+  assert.equal(isAppleTouch("Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)", 5), true);
+  assert.equal(isAppleTouch("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", 5), true);
+  assert.equal(isAppleTouch("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", 0), false);
+  assert.equal(isAppleTouch("Mozilla/5.0 (Linux; Android 15)", 5), false);
+  const ready = { appleTouch: true, secure: true, standalone: false, dismissed: false };
+  assert.equal(offerHomeScreenHint(ready), true);
+  assert.equal(offerHomeScreenHint({ ...ready, secure: false }), false);
+  assert.equal(offerHomeScreenHint({ ...ready, standalone: true }), false);
+  assert.equal(offerHomeScreenHint({ ...ready, dismissed: true }), false);
+  assert.equal(offerHomeScreenHint({ ...ready, appleTouch: false }), false);
+});
