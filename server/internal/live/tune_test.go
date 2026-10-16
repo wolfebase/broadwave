@@ -330,3 +330,70 @@ func TestARecordingTakesAWatchedTuner(t *testing.T) {
 	}
 	h.StopRecord(rec.ID)
 }
+
+// A channel the viewer left stops its encode after RenditionIdle but keeps
+// its tuner for TunerLinger, unless a recording is about to need one.
+func TestALeftChannelKeepsItsTunerAWhile(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	for _, hold := range []int{0, 1} {
+		srv := &fake.Server{Profile: fake.ProfileConnectDuo}
+		st, _ := tuneStore(t, srv)
+		h := New(st, t.TempDir(), "ffmpeg", "libx264")
+		t.Cleanup(h.Shutdown)
+		h.RenditionIdle = 100 * time.Millisecond
+		h.TunerLinger = 800 * time.Millisecond
+		h.SetHold(hold)
+		ctx := context.Background()
+		id := idOf(t, st, "4.1")
+		s, err := h.Watch(ctx, id, Rendition{Video: "copy", Audio: "aac2"}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.Release(id, s.Rendition)
+		time.Sleep(400 * time.Millisecond)
+		h.mu.Lock()
+		f := h.channels[id]
+		kept := f != nil && len(f.renditions) == 0
+		h.mu.Unlock()
+		if hold == 0 && !kept {
+			t.Fatal("the tune was not kept after its encode stopped")
+		}
+		if hold == 1 && f != nil {
+			t.Fatal("a tune lingered with a recording about to start")
+		}
+		time.Sleep(700 * time.Millisecond)
+		h.mu.Lock()
+		gone := h.channels[id] == nil
+		h.mu.Unlock()
+		if !gone {
+			t.Fatal("the tune outlived TunerLinger")
+		}
+	}
+}
+
+// A guess for an untuned 1.0 channel tunes it without a picture while two
+// tuners are free, and not when only one is.
+func TestAGuessTunesA1Point0Channel(t *testing.T) {
+	for _, tuners := range []int{2, 1} {
+		srv := &fake.Server{Profile: fake.ProfileConnectDuo, TunerCount: tuners}
+		st, _ := tuneStore(t, srv)
+		h := New(st, t.TempDir(), "ffmpeg", "libx264")
+		t.Cleanup(h.Shutdown)
+		id := idOf(t, st, "4.1")
+		running, err := h.Warm(context.Background(), id, Rendition{Video: "copy", Audio: "aac2"}, false)
+		if err != nil || running {
+			t.Fatalf("warm: %v %v", running, err)
+		}
+		h.mu.Lock()
+		f := h.channels[id]
+		h.mu.Unlock()
+		if tuners == 2 && (f == nil || len(f.renditions) > 0) {
+			t.Fatalf("two free tuners: tuned %v", f != nil)
+		}
+		if tuners == 1 && f != nil {
+			t.Fatal("a guess took the only free tuner")
+		}
+	}
+}
