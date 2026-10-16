@@ -235,6 +235,7 @@
                     Circle().fill(.white).frame(width: 10, height: 10)
                 }
                 Text(text.uppercased())
+                    .lineLimit(1)
                     .font(.caption2.weight(.heavy))
                     .tracking(1)
                     .monospacedDigit()

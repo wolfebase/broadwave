@@ -50,6 +50,16 @@ private func channel(_ id: Int64, _ number: String, favorite: Bool = false, twin
     #expect(games[1].also.isEmpty)
 }
 
+@Test func aReplayOfAGameIsNotListedAgain() {
+    let kmci = channel(5, "38.1")
+    let pairs: [(Channel, Airing)] = [
+        (kmci, airing(1, channel: 5, title: "High School Football", subtitle: "Lee's Summit at Blue Springs", category: "Sport, Football", live: true)),
+        (kmci, airing(2, channel: 5, title: "High School Football", subtitle: "Lee's Summit at Blue Springs", category: "Sport, Football", live: true, start: 13 * 60)),
+        (kmci, airing(3, channel: 5, title: "High School Football", subtitle: "Raytown at Belton", category: "Sport, Football", live: true, start: 14 * 60)),
+    ]
+    #expect(SportsBoard.games(pairs).map(\.airing.id) == [1, 3])
+}
+
 @Test func aTwinIsNotListedAsAnotherStation() {
     let three = channel(73, "104.1", twin: 28)
     let one = channel(28, "4.1", twin: 73)

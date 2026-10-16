@@ -764,7 +764,7 @@ struct RootView: View {
             case .home: HomeView()
             case .guide: GuideView()
             case .search: TVSearchView()
-            case .sports: SportsView()
+            case .sports: TVSportsView()
             case .recordings: RecordingsView()
             case .settings:
                 TVSettingsView().safeAreaInset(edge: .top, spacing: 0) {

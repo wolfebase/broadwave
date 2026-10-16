@@ -57,13 +57,17 @@ public enum SportsBoard {
         }
     }
 
-    /// What makes two listings the same game: the scoreboard id, else title, matchup, and start.
+    /// What makes two listings the same game: the scoreboard id, else the matchup (a
+    /// later airing of it is a replay), else title and start.
     static func sameGame(_ airing: Airing) -> String {
         if let id = airing.gameId, !id.isEmpty {
             return "game:\(id)"
         }
         let title = airing.title.trimmingCharacters(in: .whitespaces).lowercased()
         let sub = (airing.subtitle ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+        if let pair = airing.matchup {
+            return "match:\(pair.0.lowercased())|\(pair.1.lowercased())"
+        }
         return "\(title)|\(sub)|\(Int(airing.start.timeIntervalSince1970))"
     }
 

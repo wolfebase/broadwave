@@ -130,6 +130,27 @@ final class TVPagesTests: XCTestCase {
         shot("connect-2-join")
     }
 
+    /// Sports lists games, not shows about sports, each once, with something focused.
+    /// Read-only: nothing is played or recorded.
+    func testSportsListsGamesOnly() throws {
+        let server = try serverURL()
+        let app = XCUIApplication()
+        app.launchArguments = ["-BroadwaveServerURL", server, "-BroadwaveTab", "sports", "-lastChannel", "0", "-ApplePersistenceIgnoreState", "YES"]
+        app.launch()
+        XCTAssertTrue(app.descendants(matching: .any)["sports-page"].waitForExistence(timeout: 30), app.debugDescription)
+        let settled = until(15) { focusedID(app).hasPrefix("sports-") }
+        shot("sports-0")
+        XCTAssertTrue(settled, "nothing focused on Sports: \(focused(app))\n\(app.debugDescription)")
+        for show in ["SportsPulse", "Stay Fierce", "El pelotazo", "In Depth With Graham Bensinger"] {
+            XCTAssertFalse(app.buttons.containing(NSPredicate(format: "label BEGINSWITH %@", show)).firstMatch.exists, "\(show) is not a game")
+        }
+        let labels = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'sports-l'")).allElementsBoundByIndex.map(\.label)
+        XCTAssertEqual(labels.count, Set(labels).count, "a game is listed twice: \(labels)")
+        XCUIRemote.shared.press(.down)
+        pause(1)
+        shot("sports-1-down")
+    }
+
     private func focusedLabel(_ app: XCUIApplication) -> String {
         let element = focusedElement(app)
         return element.exists ? element.label : ""
