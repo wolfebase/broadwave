@@ -1371,7 +1371,7 @@ func writePackedOpen(dir string, init []byte, closed []packedSeg, open []packedP
 	// The part being written now. AVPlayer plays low latency only with this
 	// hint; it asks for the part early and the server holds the request until
 	// the part is on disk (WaitPart). Answers leave it out unless the client
-	// is on HTTP/2 and BROADWAVE_LL_HINTS=1 (httpapi preloadFor).
+	// is on HTTP/2, and with BROADWAVE_LL_HINTS=0 (httpapi preloadFor).
 	if brk.hint != "" && openFits {
 		b = append(b, "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\""+brk.hint+"\"\n"...)
 	}
