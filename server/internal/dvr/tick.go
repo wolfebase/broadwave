@@ -47,8 +47,12 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 			continue
 		}
 		start, minutes := StartDecision(pass, item.Airing, now)
+		retry := false
 		if !start && !attempted(active, pass, item.Airing) {
 			start, minutes = JoinDecision(pass, item.Airing, now, hub.BufferedSince(ctx, item.Airing.ChannelID))
+		}
+		if !start && RetryDue(active, pass, item.Airing, now) {
+			start, minutes, retry = true, recordMinutes(pass, item.Airing, now), true
 		}
 		if !start {
 			hold++
@@ -56,12 +60,21 @@ func Tick(ctx context.Context, st *store.Store, hub *live.Hub) {
 		}
 		// A recording that starts late begins at the airing, padding
 		// included, when the tuner's buffer still holds it.
-		if _, err := hub.RecordMeta(ctx, minutes, store.Recording{
+		rec, err := hub.RecordMeta(ctx, minutes, store.Recording{
 			ChannelID: item.Airing.ChannelID, Title: item.Airing.Title, Subtitle: item.Airing.Subtitle,
 			Description: item.Airing.Description, Category: item.Airing.Category, ProgramID: item.Airing.ProgramID, GameID: item.Airing.GameID,
 			StartedAt: item.Airing.Start.Add(-time.Duration(pass.PadBefore) * time.Minute), PassID: pass.ID,
-		}); err != nil {
+		})
+		if err != nil {
 			slog.Error(fmt.Sprintf("pass record: %v", err))
+			continue
+		}
+		if retry {
+			slog.Info(fmt.Sprintf("recording: trying %s on channel %d again for the %d min left", item.Airing.Title, item.Airing.ChannelID, minutes))
+			// The buffer can still hold the start; then the retry is whole.
+			if rec.StartedAt.After(item.Airing.Start.Add(time.Minute)) {
+				_ = st.MarkPartial(ctx, rec.ID, nil)
+			}
 		}
 	}
 	hub.SetHold(hold)
@@ -103,6 +116,46 @@ func attempted(recs []store.Recording, pass store.Pass, airing store.Airing) boo
 		}
 	}
 	return false
+}
+
+// maxRetries is how many times one airing is tried again after a failure.
+const maxRetries = 3
+
+// RetryDue reports an airing whose recording failed partway (a tuner that
+// dropped, a disk that filled, a restart nothing resumed) and that is still
+// on: it records again for the time left. A recording the viewer stopped is
+// complete and is not tried again. Each retry waits a minute longer than the
+// last, and after maxRetries failures the airing is left alone.
+func RetryDue(recs []store.Recording, pass store.Pass, airing store.Airing, now time.Time) bool {
+	lead := recordLead
+	if extra := time.Duration(pass.PadBefore) * time.Minute; extra > lead {
+		lead = extra
+	}
+	floor := airing.Start.Add(-lead)
+	tries := 0
+	var last time.Time
+	for _, rec := range recs {
+		if rec.ChannelID != airing.ChannelID || !strings.EqualFold(rec.Title, airing.Title) ||
+			!rec.StartedAt.Before(airing.End) || rec.StartedAt.Before(floor) {
+			continue
+		}
+		if rec.Status != "failed" && rec.Status != "interrupted" {
+			return false
+		}
+		tries++
+		ended := rec.StartedAt
+		if rec.EndedAt != nil {
+			ended = *rec.EndedAt
+		}
+		if ended.After(last) {
+			last = ended
+		}
+	}
+	if tries == 0 || tries > maxRetries || now.Sub(last) < time.Duration(tries)*time.Minute {
+		return false
+	}
+	end := airing.End.Add(time.Duration(pass.PadAfter)*time.Minute + SportsTail(airing))
+	return end.Sub(now) >= time.Minute
 }
 
 func already(recs []store.Recording, airing store.Airing) bool {

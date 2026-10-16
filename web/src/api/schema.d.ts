@@ -2353,9 +2353,14 @@ export interface components {
              * @description The pass that started it; its keep and limit rules apply. Absent for one started by hand or found in a folder.
              */
             passId?: number;
-            /** @enum {string} */
-            status: "recording" | "complete" | "failed" | "stopped" | "imported";
+            /**
+             * @description `interrupted`: cut short when the server stopped; the file holds the show up to then, and the rest records as a second piece.
+             * @enum {string}
+             */
+            status: "recording" | "complete" | "failed" | "stopped" | "imported" | "interrupted";
             error?: string;
+            /** @description Holds only part of its airing: a piece before or after a restart, or a retry after a failure. It does not count as having the episode, so the next airing still records. Absent when false. */
+            partial?: boolean;
             /** Format: date-time */
             startedAt: string;
             /** Format: date-time */

@@ -735,6 +735,7 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
     public var passId: Int64?
     public var status: String
     public var error: String?
+    public var partial: Bool?
     public var startedAt: Date
     public var endsAt: Date?
     public var endedAt: Date?
@@ -755,7 +756,7 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
     public var creditsStart: Double?
     public var health: RecordingHealth?
 
-    public init(id: Int64, channelId: Int64, guideNumber: String, title: String, subtitle: String? = nil, description: String? = nil, category: String? = nil, programId: String? = nil, gameId: String? = nil, passId: Int64? = nil, status: String, error: String? = nil, startedAt: Date, endsAt: Date? = nil, endedAt: Date? = nil, bytes: Int64? = nil, position: Double? = nil, durationSec: Double? = nil, watched: Int? = nil, keep: Bool? = nil, file: String? = nil, missing: Bool? = nil, season: Int? = nil, episode: Int? = nil, episodeLabel: String? = nil, originalAir: String? = nil, progressAt: Date? = nil, introStart: Double? = nil, introEnd: Double? = nil, creditsStart: Double? = nil, health: RecordingHealth? = nil) {
+    public init(id: Int64, channelId: Int64, guideNumber: String, title: String, subtitle: String? = nil, description: String? = nil, category: String? = nil, programId: String? = nil, gameId: String? = nil, passId: Int64? = nil, status: String, error: String? = nil, partial: Bool? = nil, startedAt: Date, endsAt: Date? = nil, endedAt: Date? = nil, bytes: Int64? = nil, position: Double? = nil, durationSec: Double? = nil, watched: Int? = nil, keep: Bool? = nil, file: String? = nil, missing: Bool? = nil, season: Int? = nil, episode: Int? = nil, episodeLabel: String? = nil, originalAir: String? = nil, progressAt: Date? = nil, introStart: Double? = nil, introEnd: Double? = nil, creditsStart: Double? = nil, health: RecordingHealth? = nil) {
         self.id = id
         self.channelId = channelId
         self.guideNumber = guideNumber
@@ -768,6 +769,7 @@ public struct Recording: Codable, Sendable, Hashable, Identifiable {
         self.passId = passId
         self.status = status
         self.error = error
+        self.partial = partial
         self.startedAt = startedAt
         self.endsAt = endsAt
         self.endedAt = endedAt
