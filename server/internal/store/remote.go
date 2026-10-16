@@ -82,22 +82,27 @@ func RemoteHost(remoteURL string) string {
 	return strings.ToLower(u.Hostname())
 }
 
-// TakeTunnelToken removes a tunnel token the catalog still holds and returns
-// it: one saved before tokens moved out of the catalog, or one a restored
-// backup brought back.
-func (s *Store) TakeTunnelToken(ctx context.Context) (string, error) {
+// TakeTunnelToken hands a tunnel token the catalog still holds to keep, then
+// removes it from the catalog: one saved before tokens moved out of the
+// catalog, or one a restored backup brought back. When keep fails the token
+// stays where it is. keep is not called when there is none.
+func (s *Store) TakeTunnelToken(ctx context.Context, keep func(token string) error) error {
 	var token string
 	err := s.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, SettingTunnelToken).Scan(&token)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
+		return nil
 	}
 	if err != nil {
-		return "", err
+		return err
 	}
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM settings WHERE key = ?`, SettingTunnelToken); err != nil {
-		return "", err
+	if token = strings.TrimSpace(token); token != "" && keep != nil {
+		if err := keep(token); err != nil {
+			return err
+		}
 	}
-	return strings.TrimSpace(token), nil
+	defer s.forgetSettings()
+	_, err = s.db.ExecContext(ctx, `DELETE FROM settings WHERE key = ?`, SettingTunnelToken)
+	return err
 }
 
 // CleanTunnelToken accepts the token or the whole command Cloudflare shows

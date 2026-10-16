@@ -340,21 +340,29 @@ func (s *Server) savePastedToken(raw string) error {
 }
 
 // migrateTunnelToken moves a token an older version kept in the catalog
-// into the secrets file. It runs once at start, before the tunnel does.
+// into the secrets file. It runs once at start, before the tunnel does. A
+// token already in the secrets file wins.
 func (s *Server) migrateTunnelToken(ctx context.Context) {
 	if s.Store == nil {
 		return
 	}
-	token, err := s.Store.TakeTunnelToken(ctx)
-	if err != nil || token == "" {
+	moved := false
+	err := s.Store.TakeTunnelToken(ctx, func(token string) error {
+		saved, err := s.vault().Load()
+		if err != nil {
+			return err
+		}
+		if saved.Token != "" {
+			return nil
+		}
+		moved = true
+		return s.vault().Save(cloudflare.Secret{Token: token, Source: cloudflare.SourcePasted, CreatedAt: s.now().UTC().Truncate(time.Second)})
+	})
+	if err != nil {
+		slog.Error(fmt.Sprintf("tunnel: could not move the token out of the catalog: %v", err))
 		return
 	}
-	saved, err := s.vault().Load()
-	if err == nil && saved.Token == "" {
-		if err := s.vault().Save(cloudflare.Secret{Token: token, Source: cloudflare.SourcePasted, CreatedAt: s.now().UTC().Truncate(time.Second)}); err != nil {
-			slog.Error(fmt.Sprintf("tunnel: could not move the token out of the catalog: %v", err))
-			return
-		}
+	if moved {
 		slog.Info("tunnel: moved the tunnel token out of the catalog into the secrets folder")
 	}
 }
@@ -365,7 +373,8 @@ func (s *Server) dropCatalogToken(ctx context.Context) {
 	if s.Store == nil {
 		return
 	}
-	if token, err := s.Store.TakeTunnelToken(ctx); err == nil && token != "" {
+	found := false
+	if err := s.Store.TakeTunnelToken(ctx, func(string) error { found = true; return nil }); err == nil && found {
 		slog.Info("tunnel: the restored catalog had a tunnel token; it was not used. Paste it again, or sign in with Cloudflare.")
 	}
 }

@@ -221,6 +221,32 @@ func TestRefusedRemoteRoutesFallBackToLocal(t *testing.T) {
 	}
 }
 
+func TestAZoneThatMayNotMakeTunnelsSaysSoAndKeepsTheSignIn(t *testing.T) {
+	m, fake, host := setup(t, func(f *cftest.Fake) { f.TunnelsRefused = true })
+	signIn(t, m, "")
+	waitState(t, m, cloudflare.StateAuthorized)
+	if _, err := m.Setup(cloudflare.Plan{Label: "tv", TunnelName: "broadwave-abc123", Service: "http://127.0.0.1:8477"}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		st := m.Status()
+		if st.State == cloudflare.StateAuthorized && st.Error != nil {
+			if st.Error.Code != "not_permitted" {
+				t.Fatalf("error %+v", st.Error)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("state %+v", st)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if len(fake.Tunnels()) != 0 || host.secret().Token != "" {
+		t.Fatalf("made %v saved %+v", fake.Tunnels(), host.secret())
+	}
+}
+
 func TestAHiddenZoneNeedsTheWholeName(t *testing.T) {
 	m, _, host := setup(t, func(f *cftest.Fake) { f.ZoneHidden = true })
 	signIn(t, m, "")
