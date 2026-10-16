@@ -46,6 +46,7 @@ test("a recording stops from the library and plays back at its full length", asy
   const row = page.locator(".media-card").filter({ has: page.locator(`img[src="/media/poster/${id}"]`) });
   await expect(row.getByText(/Recording/)).toBeVisible();
   await row.getByRole("button", { name: "Stop recording" }).click();
+  await row.getByRole("button", { name: "Stop now" }).click();
   await expect(page.getByText(/Stopped .*What it recorded is kept\./)).toBeVisible();
   await expect(row.getByRole("button", { name: "Stop recording" })).toHaveCount(0);
   await expect(row.locator(".ch-tags")).not.toContainText(/complete|stopped\b/);

@@ -1,0 +1,131 @@
+/* Recordings: filter chips, a live chip on what is recording, Stop set apart. */
+
+.library-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.library-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.library-chip {
+  display: contents;
+}
+
+.library-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--type-footnote-size);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.library-sum {
+  margin-top: calc(var(--space-4) * -1);
+}
+
+.live-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--color-tally);
+  color: #fff;
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  vertical-align: 2px;
+}
+
+.live-chip::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  animation: live-chip-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes live-chip-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.media-card.live {
+  border-color: color-mix(in srgb, var(--color-tally) 45%, var(--color-line));
+}
+
+.ch-tags.cut {
+  color: var(--color-warning);
+}
+
+html[data-theme="light"] .ch-tags.cut {
+  color: color-mix(in srgb, var(--color-warning) 60%, #000);
+}
+
+/* Stop sits at the far end of the actions, apart from Play. */
+.stop-zone {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.stop-ask {
+  font-size: var(--type-footnote-size);
+  color: var(--color-text-secondary);
+}
+
+.stop-zone .btn.ghost {
+  color: var(--color-tally-ink);
+}
+
+.library .btn.danger {
+  background: var(--color-tally);
+  color: #fff;
+  border-color: transparent;
+}
+
+.library-empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-6);
+}
+
+.library-empty h2 {
+  font-size: var(--type-title3-size);
+}
+
+.library-empty p {
+  color: var(--color-text-secondary);
+}
+
+.layout-phone .stop-zone {
+  margin-left: 0;
+  flex-basis: 100%;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-line);
+}
+
+html[data-layout="tv"] .library-sort select {
+  min-height: 56px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-chip::before {
+    animation: none;
+  }
+}
