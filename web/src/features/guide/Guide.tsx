@@ -715,7 +715,7 @@ export function Guide() {
           ))}
         </div>
       ) : null}
-      {nowInView ? null : (
+      {nowInView || rows.length === 0 ? null : (
         <button
           type="button"
           className="guide-now-float pill-btn"

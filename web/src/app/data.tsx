@@ -192,7 +192,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           }),
       );
     }
-    if (all || want.has("airings")) jobs.push(getAirings(keptGuideWindow()).then((r) => still("airings") && setAirings(r.airings)));
+    if (all || want.has("airings")) jobs.push(getAirings({ ...keptGuideWindow(), fields: "grid" }).then((r) => still("airings") && setAirings(r.airings)));
     if (all || want.has("recordings")) jobs.push(getRecordings().then((r) => still("recordings") && setRecordings(r.recordings)));
     if (all || want.has("passes")) {
       jobs.push(getPasses().then((r) => still("passes") && setPasses(r.passes)));
@@ -277,7 +277,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const [guideChannels, everyChannel, windowed, recs] = await Promise.all([
           getChannels(true),
           getChannels(false),
-          getAirings({ from: span.from, to: span.to }),
+          getAirings({ from: span.from, to: span.to, fields: "grid" }),
           getRecordings(),
         ]);
         const channelsNow = sortChannels(guideChannels.channels, everyChannel.channels);
@@ -309,7 +309,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         idle(() => {
           void (async () => {
             const airingsGen = reads.current.generation("airings");
-            const rest = await getAirings({ from: span.to, to: span.restTo }).catch(() => null);
+            const rest = await getAirings({ from: span.to, to: span.restTo, fields: "grid" }).catch(() => null);
             if (rest && reads.current.generation("airings") === airingsGen) {
               setAirings((current) => {
                 const merged = mergeAirings(current, rest.airings);

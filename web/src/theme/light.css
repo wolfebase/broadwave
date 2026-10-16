@@ -614,3 +614,13 @@ html[data-theme="light"] :is(.stage, .mv),
 html[data-theme="light"] :is(.stage, .mv) * {
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
+
+/* The aired part of a show on now is a tint, not a shadow. At the dark theme's
+   strength a slate category read as a grey block on a light sheet. */
+html[data-theme="light"] .guide-cell.now::after {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--cat-color) 4%, transparent), color-mix(in srgb, var(--cat-color) 11%, transparent));
+}
+
+html[data-theme="light"] .guide-cell.now {
+  background: color-mix(in srgb, var(--cat-color) 8%, var(--color-surface2));
+}
