@@ -103,6 +103,33 @@
             shot("filled")
         }
 
+        func testTheMiniPlayerPausesAndOffersPictureInPicture() throws {
+            let app = try launch(stays: true)
+            XCTAssertTrue(until(30) { onScreen(app, "Minimize") != nil }, app.debugDescription)
+            pause(6)
+            tap(app, "Minimize")
+            let mini = app.descendants(matching: .any)["miniPlayer"]
+            XCTAssertTrue(mini.waitForExistence(timeout: 10), "no mini player")
+            let play = app.buttons["mini-play"]
+            XCTAssertTrue(play.waitForExistence(timeout: 5), "no play button in the mini player")
+            XCTAssertEqual(play.label, "Pause")
+            pause(2)
+            shot("mini-playing")
+            play.tap()
+            XCTAssertTrue(until(3) { play.label == "Play" }, "the mini player did not pause")
+            XCTAssertEqual(mini.value as? String, "Paused")
+            play.tap()
+            XCTAssertTrue(until(3) { play.label == "Pause" })
+            // The iPad simulator has Picture in Picture; the iPhone simulator says it has not.
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                let pip = app.buttons["mini-pip"]
+                XCTAssertTrue(pip.waitForExistence(timeout: 10), "no Picture in Picture in the mini player")
+                pip.tap()
+                pause(3)
+                shot("mini-pip")
+            }
+        }
+
         private func launch(landscape: Bool = false, stays: Bool = false) throws -> XCUIApplication {
             try XCTSkipIf(server.isEmpty, "set TEST_RUNNER_BROADWAVE_SERVER")
             let app = XCUIApplication()

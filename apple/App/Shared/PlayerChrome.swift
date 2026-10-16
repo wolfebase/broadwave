@@ -910,4 +910,186 @@ struct TuneBackdrop: View {
             }
         }
     }
+
+    // MARK: Mini player
+
+    /// Live TV keeps a place at the bottom while you browse: the picture itself, what is
+    /// on, play and pause, and Picture in Picture. A tap opens the player.
+    struct MiniPlayerBar: View {
+        @Environment(AppStore.self) private var store
+        @Environment(NowPlaying.self) private var nowPlaying
+        @State private var window = MiniWindow()
+
+        var body: some View {
+            if let channel = nowPlaying.channel {
+                HStack(spacing: 12) {
+                    MiniPicture(channel: channel, window: window)
+                    title(channel)
+                    Spacer(minLength: 4)
+                    controls
+                        .foregroundStyle(.primary)
+                        .buttonStyle(MiniControl())
+                }
+                .labelStyle(.iconOnly)
+                .padding(.leading, 10)
+                .padding(.trailing, 14)
+                .contentShape(.rect)
+                .playerZoomSource(id: PlayerZoom.mini)
+                .onTapGesture {
+                    nowPlaying.zoomFrom = PlayerZoom.mini
+                    nowPlaying.expanded = true
+                }
+            }
+        }
+
+        private func title(_ channel: Channel) -> some View {
+            let live = nowPlaying.live
+            return VStack(alignment: .leading, spacing: 0) {
+                Text(store.index.on(channel.id, at: store.now)?.title ?? channel.displayName)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                Text(live.error ?? "\(channel.displayNumber) \(channel.displayName)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityValue(live.paused ? "Paused" : live.moving ? "Playing" : live.error == nil ? "Tuning" : "Stopped")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Opens the player")
+            .accessibilityIdentifier("miniPlayer")
+            .accessibilityAction { nowPlaying.expanded = true }
+        }
+
+        @ViewBuilder private var controls: some View {
+            let live = nowPlaying.live
+            if nowPlaying.externalDisplay {
+                // The picture is on the display; this bar is its remote.
+                Button("Previous channel", systemImage: "chevron.up") {
+                    nowPlaying.step(ChannelStep.offset(up: true), in: store.channels)
+                }
+                Button("Next channel", systemImage: "chevron.down") {
+                    nowPlaying.step(ChannelStep.offset(up: false), in: store.channels)
+                }
+            } else if window.possible {
+                Button("Picture in Picture", systemImage: "pip.enter") { window.start() }
+                    .accessibilityIdentifier("mini-pip")
+            }
+            Button(live.paused ? "Play" : "Pause", systemImage: live.paused ? "play.fill" : "pause.fill") {
+                live.togglePause()
+            }
+            .contentTransition(.symbolEffect(.replace))
+            .accessibilityIdentifier("mini-play")
+            Button("Close", systemImage: "xmark") { nowPlaying.stop() }
+                .accessibilityLabel("Close")
+        }
+    }
+
+    /// A 44 pt target around a small symbol.
+    private struct MiniControl: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .font(.body.weight(.semibold))
+                .frame(minWidth: 40, minHeight: 44)
+                .contentShape(Rectangle())
+                .opacity(configuration.isPressed ? 0.5 : 1)
+        }
+    }
+
+    /// The mini player's own Picture in Picture, for a picture docked under the tabs.
+    /// It also starts by itself when the app goes to the Home Screen.
+    @MainActor
+    @Observable
+    final class MiniWindow: NSObject, AVPictureInPictureControllerDelegate {
+        private(set) var possible = false
+        @ObservationIgnored private var controller: AVPictureInPictureController?
+        @ObservationIgnored private var watch: NSKeyValueObservation?
+        @ObservationIgnored var onRestore: () -> Void = {}
+        @ObservationIgnored var onChange: (Bool) -> Void = { _ in }
+
+        func attach(_ layer: AVPlayerLayer) {
+            guard controller?.playerLayer !== layer, AVPictureInPictureController.isPictureInPictureSupported() else { return }
+            let pip = AVPictureInPictureController(playerLayer: layer)
+            pip?.canStartPictureInPictureAutomaticallyFromInline = true
+            pip?.delegate = self
+            controller = pip
+            watch = pip?.observe(\.isPictureInPicturePossible, options: [.initial, .new]) { [weak self] pip, _ in
+                let can = pip.isPictureInPicturePossible
+                Task { @MainActor in self?.possible = can }
+            }
+        }
+
+        func start() {
+            controller?.startPictureInPicture()
+        }
+
+        nonisolated func pictureInPictureControllerDidStartPictureInPicture(_: AVPictureInPictureController) {
+            MainActor.assumeIsolated { onChange(true) }
+        }
+
+        nonisolated func pictureInPictureControllerDidStopPictureInPicture(_: AVPictureInPictureController) {
+            MainActor.assumeIsolated { onChange(false) }
+        }
+
+        nonisolated func pictureInPictureController(
+            _: AVPictureInPictureController,
+            restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completion: @escaping (Bool) -> Void
+        ) {
+            MainActor.assumeIsolated { onRestore() }
+            completion(true)
+        }
+    }
+
+    /// The live picture, small, over the show's art until it moves.
+    private struct MiniPicture: View {
+        @Environment(AppStore.self) private var store
+        @Environment(NowPlaying.self) private var nowPlaying
+        let channel: Channel
+        let window: MiniWindow
+
+        var body: some View {
+            let live = nowPlaying.live
+            ZStack {
+                TuneBackdrop(
+                    frame: store.api?.frameURL(channelID: channel.id, width: 480, listed: store.frameIDs),
+                    art: store.index.on(channel.id, at: store.now).flatMap { store.artURL($0, width: 480) }
+                )
+                MiniLayer(player: live.player, window: window)
+                    .opacity(live.moving ? 1 : 0)
+                if !live.moving, live.error == nil {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel("Tuning")
+                }
+            }
+            .frame(width: 64, height: 36)
+            .clipShape(.rect(cornerRadius: 6))
+            .accessibilityHidden(true)
+            .onAppear {
+                window.onRestore = { nowPlaying.expanded = true }
+                window.onChange = { live.notePictureInPicture($0) }
+            }
+        }
+    }
+
+    private struct MiniLayer: UIViewRepresentable {
+        let player: AVPlayer
+        let window: MiniWindow
+
+        func makeUIView(context _: Context) -> PlayerHost {
+            let view = PlayerHost()
+            view.playerLayer?.player = player
+            view.playerLayer?.videoGravity = .resizeAspectFill
+            if let layer = view.playerLayer {
+                window.attach(layer)
+            }
+            return view
+        }
+
+        func updateUIView(_ view: PlayerHost, context _: Context) {
+            if view.playerLayer?.player !== player {
+                view.playerLayer?.player = player
+            }
+        }
+    }
 #endif
