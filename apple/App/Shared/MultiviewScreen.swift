@@ -1517,7 +1517,7 @@ struct MultiviewScreen: View {
     @ViewBuilder
     private func grid(_ tiles: [Channel]) -> some View {
         if tiles.isEmpty {
-            if nowPlaying.together.count > 1, !session.notice.isEmpty {
+            if Self.saysWhyEmpty, nowPlaying.together.count > 1, !session.notice.isEmpty {
                 // Every tile was refused: the notice above says why. Offer to ask again.
                 VStack(spacing: 12) {
                     Text("No tuner is free for these channels.")
@@ -1588,6 +1588,15 @@ struct MultiviewScreen: View {
                 .clipped()
             }
         }
+    }
+
+    /// iPhone and iPad say why every tile was refused. Apple TV keeps its prompt.
+    private static var saysWhyEmpty: Bool {
+        #if os(iOS)
+            true
+        #else
+            false
+        #endif
     }
 
     private func dismissHint() {
@@ -1995,6 +2004,13 @@ struct MultiviewTile: View {
                         .labelStyle(.titleAndIcon)
                 }
             }
+            #if os(tvOS)
+                if focused, !live.detail.isEmpty {
+                    Text(live.detail)
+                        .font(.caption2)
+                        .lineLimit(1)
+                }
+            #endif
             if tileStats {
                 Text("\(live.dropped) dropped")
                     .font(.caption2)
@@ -2009,11 +2025,25 @@ struct MultiviewTile: View {
         .foregroundStyle(.white)
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LinearGradient(colors: [.clear, .black.opacity(0.75)], startPoint: .top, endPoint: .bottom))
+        #if os(tvOS)
+            .background(Color.black.opacity(0.82))
+        #else
+            .background(LinearGradient(colors: [.clear, .black.opacity(0.75)], startPoint: .top, endPoint: .bottom))
+        #endif
     }
 
-    /// The channel's last frame or its show's art until the picture moves.
-    private var tuningCover: some View {
+    /// The channel's last frame or its show's art until the picture moves. Apple TV keeps black.
+    @ViewBuilder private var tuningCover: some View {
+        #if os(tvOS)
+            Color.black
+                .overlay { ProgressView() }
+                .accessibilityHidden(true)
+        #else
+            phoneTuningCover
+        #endif
+    }
+
+    private var phoneTuningCover: some View {
         TuneBackdrop(
             frame: store.api?.frameURL(channelID: channel.id, width: 480, listed: store.frameIDs),
             art: store.index.on(channel.id, at: store.now).flatMap { store.artURL($0, width: 480) }
@@ -2045,12 +2075,15 @@ struct MultiviewTile: View {
     /// Eight seconds without a picture is long enough to say so and offer another try.
     private func watchForSlowStart() async {
         slow = false
-        guard tuning else { return }
-        try? await Task.sleep(for: .seconds(8))
-        if !Task.isCancelled, tuning, live.error == nil {
-            slow = true
-            Self.slowLog.notice("tile \(channel.id, privacy: .public) slow")
-        }
+        // A button inside the focused tile would take the remote; Apple TV keeps its spinner.
+        #if os(iOS)
+            guard tuning else { return }
+            try? await Task.sleep(for: .seconds(8))
+            if !Task.isCancelled, tuning, live.error == nil {
+                slow = true
+                Self.slowLog.notice("tile \(channel.id, privacy: .public) slow")
+            }
+        #endif
     }
 
     @ViewBuilder private var standInNote: some View {
