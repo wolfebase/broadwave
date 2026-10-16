@@ -501,12 +501,20 @@ export function Guide() {
                   title={t("guideUi.reorderHint")}
                 >
                   <span className="gc-num">{c.displayNumber}</span>
-                  <span className="gc-name">
-                    {c.standard === "atsc3" ? <Atsc3Tag /> : null}
-                    {c.artUrl ? <img className="gc-logo" alt="" src={`/media/art/channel/${c.id}?w=72`} /> : null}
-                    {c.displayName}
+                  <span className="gc-body">
+                    <span className="gc-name">
+                      {c.artUrl ? <img className="gc-logo" alt="" src={`/media/art/channel/${c.id}?w=72`} /> : null}
+                      <span className="gc-text" title={c.displayName}>
+                        {c.displayName}
+                      </span>
+                    </span>
+                    {c.standard === "atsc3" || c.favorite ? (
+                      <span className="gc-meta">
+                        {c.standard === "atsc3" ? <Atsc3Tag /> : null}
+                        {c.favorite ? <StarIcon filled className="gc-star" /> : null}
+                      </span>
+                    ) : null}
                   </span>
-                  {c.favorite ? <StarIcon filled className="gc-star" /> : null}
                 </button>
                 </div>
                 {list.length === 0 ? (
