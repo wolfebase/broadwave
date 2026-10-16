@@ -26,6 +26,7 @@ import { clearBroadcast, fromStillOn, resolveClear, standInIds } from "./clear";
 import { autoCandidates, channelsOnScreen, holdShown, layoutChoices, layoutFromParam, layoutLabel, rememberAuto, rememberLayout, roomId, saveSet, savedAuto, savedLayout, settlePlan, slotsFor, yieldsSound, type MvLayout } from "./storage";
 import { pickFocus } from "./switcher";
 import { tileArrow } from "./tileArrow";
+import { takeHandoff } from "./handoff";
 import "./multiview.css";
 
 const t = bind(multiviewUiMessages);
@@ -556,6 +557,21 @@ export function Multiview() {
             onRecord={() => void record(channel, airingAt(index, channel.id, now)?.title || channel.displayName)}
           />
         ))}
+        {/* An open slot says what it is for. One is enough. */}
+        {!waiting && ordered.length < slotsFor(layout) ? (
+          <div className="mv-cell">
+            <button
+              type="button"
+              className="mv-tile mv-add"
+              onClick={() => {
+                if (!guide) return go({ add: true });
+                focusRing(document.querySelector<HTMLElement>(".mv-guide button:not([disabled]):not([aria-selected='true'])"));
+              }}
+            >
+              <span aria-hidden="true">+</span> {t("mv.addChannel")}
+            </button>
+          </div>
+        ) : null}
       </div>
       </div>
       <div className="mv-bottom" role="toolbar" aria-label={t("mv.layout")}>
@@ -578,7 +594,8 @@ export function Multiview() {
                 <LiveFrame id={c.id} className="mv-frame" />
                 {c.displayNumber}
                 <small>{c.displayName}</small>
-                {cost?.label ? <small className="mv-cost">{cost.label}</small> : null}
+                {/* A cost from the plan for an older lineup may no longer be true. */}
+                {cost?.label && planFor === chKey ? <small className="mv-cost">{cost.label}</small> : null}
               </button>
             );
           })}
@@ -627,6 +644,7 @@ function Tile({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const showedRef = useRef(false);
+  const [handed] = useState(() => takeHandoff(channel.id));
   const [showedPicture, setShowedPicture] = useState(false);
   const layoutMode = useLayout();
   const equal = layout === "2up" || layout === "quad";
@@ -650,6 +668,7 @@ function Tile({
     audible: focused,
     gate,
     fits,
+    rendition: handed,
   });
   useEffect(() => {
     if (stream.asking) return;
@@ -699,7 +718,6 @@ function Tile({
             <VolumeIcon /> {copy.player.sound}
           </span>
         ) : null}
-        {focused && stream.session?.stream.reason ? <span className="mv-detail">{stream.session.stream.reason}</span> : null}
       </div>
       {stream.error ? (
         <div className="mv-error" role="alert">

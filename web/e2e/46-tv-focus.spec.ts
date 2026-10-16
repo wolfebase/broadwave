@@ -72,7 +72,7 @@ test("a TV remote keeps a visible ring on the guide and the mini player", async 
   await expect.poll(() => focused(page)).toMatchObject({ where: "grid", ring: true });
 
   // Down from Recordings enters the page under that tab, not at its far left.
-  const tab = page.locator(".topbar").getByRole("tab", { name: "Recordings" });
+  const tab = page.locator(".topbar").getByRole("link", { name: "Recordings", exact: true });
   await tab.focus();
   const tabBox = await tab.boundingBox();
   await page.keyboard.press("ArrowDown");

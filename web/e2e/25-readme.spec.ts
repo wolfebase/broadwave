@@ -181,7 +181,7 @@ test("readme screens from the test pattern", async ({ page, request }) => {
     await expect(page.locator("img.art-sharp[src*='/frame'], img.nc-frame:not([hidden])").first()).toBeVisible();
     saved.push(await save(page, `home-${size.name}.jpg`));
 
-    await page.getByRole("tab", { name: "Guide" }).click();
+    await page.getByRole("link", { name: "Guide", exact: true }).click();
     await expect(page).toHaveURL(/\/guide$/);
     await expect(page.getByText("The Afternoon Game").first()).toBeVisible();
     saved.push(await save(page, `guide-${size.name}.jpg`));

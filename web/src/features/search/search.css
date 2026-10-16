@@ -125,3 +125,72 @@ button.search-main {
   color: inherit;
   font-size: inherit;
 }
+
+/* One card per show: what it is and when, then the ways to watch or record it. */
+.search-groups {
+  gap: 12px;
+  max-width: 880px;
+}
+
+.search-groups > li.sg {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface1);
+  border: 1px solid var(--color-line);
+}
+
+.sg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.search-groups .search-more {
+  margin-top: 2px;
+}
+
+.sg-all {
+  grid-column: 1 / -1;
+  font-size: var(--type-footnote-size);
+  color: var(--color-text-secondary);
+}
+
+.sg-all summary {
+  cursor: pointer;
+  padding: 12px 0;
+}
+
+.sg-all ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 4px;
+  display: grid;
+  gap: 2px;
+}
+
+.sg-all .text-btn {
+  min-height: 40px;
+  text-align: left;
+}
+
+.search-hint {
+  margin-top: var(--space-4);
+}
+
+.layout-phone .search-groups > li.sg {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.layout-phone .sg-actions {
+  justify-content: flex-start;
+}
+
+.layout-phone .sg-actions .btn {
+  flex: 1 1 auto;
+  min-height: 44px;
+}

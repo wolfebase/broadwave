@@ -46,11 +46,11 @@ test("an encrypted 3.0 station plays and records its clear twin", async ({ page 
 
   await ready(page);
   // The encrypted row stays off the guide. Search still finds its shows.
-  await page.getByRole("tab", { name: "Guide" }).click();
+  await page.getByRole("link", { name: "Guide", exact: true }).click();
   await expect(page.getByRole("gridcell", { name: /Night Show/ }).first()).toBeVisible();
   await expect(page.getByRole("gridcell", { name: /Sealed Signal/ })).toHaveCount(0);
 
-  await page.getByRole("tab", { name: "Search" }).click();
+  await page.getByRole("link", { name: "Search", exact: true }).click();
   await page.getByLabel("Search shows, people, and recordings").fill("Sealed");
   await page.getByLabel("Search shows, people, and recordings").press("Enter");
   const found = page.locator("section").filter({ has: page.getByRole("heading", { name: "Guide" }) });

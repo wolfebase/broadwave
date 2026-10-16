@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { searchMessages } from "../../i18n/messages/search.ts";
 import { bind } from "../../i18n/runtime.ts";
-import { addPass, search } from "../../api";
+import { search } from "../../api";
 import { useData } from "../../app/data";
 import { useLayout } from "../../app/layout";
 import { usePlayer } from "../../app/player";
@@ -9,11 +9,12 @@ import { focusRing } from "../../app/remote";
 import { navigate, useRoute } from "../../app/router";
 import { actionName } from "../../lib/actionName";
 import { cappedCss } from "../../lib/art";
-import { dayLabel, searchRows, spanLabel } from "../../lib/guide";
-import { noteAfterRecord, noteTone, searchFieldValue } from "./field";
+import { categoryOf, dayLabel, minutesLeft, searchRows, spanLabel, timeLabel } from "../../lib/guide";
+import { noteTone, searchFieldValue } from "./field";
+import { groupByShow, type ShowGroup } from "./groups";
 import type { Recording, SearchAiring } from "../../types";
-import { SearchIcon } from "../../ui/icons";
-import { Atsc3Tag } from "../../ui/primitives";
+import { PlayIcon, RecordIcon, SearchIcon } from "../../ui/icons";
+import { Atsc3Tag, Empty } from "../../ui/primitives";
 import { ProgramSheet } from "../guide/ProgramSheet";
 import "./search.css";
 
@@ -61,7 +62,7 @@ function SearchArt({
 
 export function SearchPage() {
   const { params } = useRoute();
-  const { refresh, now, allChannels } = useData();
+  const { now, allChannels, passes, planned, recordSeries, recordOnce, record } = useData();
   const player = usePlayer();
   const [open, setOpen] = useState<SearchAiring | null>(null);
   const openChannel = open ? allChannels.find((channel) => channel.id === open.channelId) : undefined;
@@ -95,6 +96,85 @@ export function SearchPage() {
   const listed = searchRows<SearchAiring, Recording>(
     active && q === resultQuery ? { status: "done", airings, recordings } : { status: "pending" },
   );
+  const groups = groupByShow(listed.airings, now, (id) => allChannels.some((c) => c.id === id));
+  const channelOf = (id: number) => allChannels.find((c) => c.id === id);
+
+  function where(a: SearchAiring) {
+    return `${a.guideNumber ?? ""} ${a.channelName ?? ""}`.trim();
+  }
+
+  /** One show: when it is on, and the ways to watch or record it. */
+  // A plain function, not a component: a component made in render would remount
+  // each tick and close an open list of airings.
+  function showRow(g: ShowGroup<SearchAiring>) {
+    const lead = g.onNow ?? g.next ?? g.airings[0];
+    const leadChannel = channelOf(lead.channelId);
+    const series = passes.some((p) => p.kind !== "once" && p.title.toLowerCase() === g.title.toLowerCase());
+    const next = g.next;
+    const nextChannel = next ? channelOf(next.channelId) : undefined;
+    const onceSet = next
+      ? passes.some((p) => p.kind === "once" && p.channelId === next.channelId && p.airingStart && Date.parse(p.airingStart) === Date.parse(next.start)) ||
+        planned.some((p) => !p.skipped && p.airing.channelId === next.channelId && Date.parse(p.airing.start) === Date.parse(next.start))
+      : false;
+    const nowChannel = g.onNow ? channelOf(g.onNow.channelId) : undefined;
+    const atsc3 = leadChannel?.standard === "atsc3";
+    // A game is not a series. Its pass records every airing, as the guide says.
+    const everyLabel = categoryOf(lead) === "sports" ? t("search.recordEvery") : t("search.recordSeries");
+    return (
+      <li key={g.key} className="sg">
+        <button type="button" className="search-main" disabled={!leadChannel} onClick={() => setOpen(lead)}>
+          {g.art?.imageUrl ? <SearchArt src={`/media/art/airing/${g.art.id}?w=160`} width={g.art.imageWidth} height={g.art.imageHeight} boxW={84} boxH={56} /> : null}
+          <span className="search-copy">
+            <strong>{g.title}</strong>
+            <span className="search-meta">
+              {atsc3 ? <Atsc3Tag /> : null}
+              <span>
+                {g.onNow
+                  ? t("search.onNowAt", { channel: where(g.onNow), left: minutesLeft(g.onNow, now) })
+                  : t("search.nextAt", { when: `${dayLabel(lead.start, now)} · ${timeLabel(lead.start)}`, channel: where(lead) })}
+              </span>
+            </span>
+            {g.airings.length > 1 ? <span className="search-more">{g.channels > 1 ? t("search.airingsOn", { count: g.airings.length, channels: g.channels }) : t("search.airings", g.airings.length)}</span> : null}
+          </span>
+        </button>
+        <div className="sg-actions">
+          {g.onNow && nowChannel ? (
+            <button type="button" className="btn primary" aria-label={actionName(t("search.watchNow"), g.title)} onClick={() => player.open(nowChannel)}>
+              <PlayIcon /> {t("search.watchNow")}
+            </button>
+          ) : null}
+          {leadChannel ? (
+            <button type="button" className="btn" disabled={series} aria-label={actionName(series ? t("search.seriesSet") : everyLabel, g.title)} onClick={() => void recordSeries(g.title, leadChannel)}>
+              {series ? t("search.seriesSet") : everyLabel}
+            </button>
+          ) : null}
+          {!series && next && nextChannel ? (
+            <button type="button" className="btn" disabled={onceSet} aria-label={actionName(onceSet ? t("search.onceSet") : t("search.recordOnce"), `${g.title}, ${dayLabel(next.start, now)} ${timeLabel(next.start)}`)} onClick={() => void recordOnce(next, nextChannel)}>
+              <RecordIcon className="tally" /> {onceSet ? t("search.onceSet") : t("search.recordOnce")}
+            </button>
+          ) : !series && !next && g.onNow && nowChannel ? (
+            <button type="button" className="btn" aria-label={actionName(t("search.recordNow"), g.title)} onClick={() => void record(nowChannel, g.title)}>
+              <RecordIcon className="tally" /> {t("search.recordNow")}
+            </button>
+          ) : null}
+        </div>
+        {g.airings.length > 1 ? (
+          <details className="sg-all">
+            <summary>{t("search.allAirings")}</summary>
+            <ul>
+              {g.airings.map((a) => (
+                <li key={a.id}>
+                  <button type="button" className="text-btn" disabled={!channelOf(a.channelId)} onClick={() => setOpen(a)}>
+                    {dayLabel(a.start, now)} · {spanLabel(a)} · {where(a)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </li>
+    );
+  }
 
   // A browser autofocus does not match :focus-visible, so a TV would open Search with no ring.
   useEffect(() => {
@@ -162,60 +242,31 @@ export function SearchPage() {
           onChange={(event) => type(event.target.value)}
         />
       </form>
-      {active && q === resultQuery && note ? (
+      {active && q === resultQuery && note && note !== t("search.nothing") ? (
         <p className="hint" role={noteTone(note)}>
           {note}
         </p>
       ) : null}
-      {listed.airings.length > 0 ? (
+      {active && q === resultQuery && note === t("search.nothing") ? (
+        <div role="status">
+          <Empty
+            title={t("search.nothingFor", { query: q })}
+            action={
+              <button type="button" className="btn" onClick={() => navigate("/guide")}>
+                {t("search.openGuide")}
+              </button>
+            }
+          >
+            {t("search.nothingHint")}
+          </Empty>
+        </div>
+      ) : null}
+      {!active ? <p className="hint search-hint">{t("search.startHint")}</p> : null}
+      {groups.length > 0 ? (
         <section>
           <h2 className="section-title">{t("search.guide")}</h2>
-          <ul className="search-list">
-            {listed.airings.map((airing) => (
-              <li key={airing.id}>
-                <button
-                  type="button"
-                  className="search-main"
-                  disabled={!allChannels.some((channel) => channel.id === airing.channelId)}
-                  onClick={() => setOpen(airing)}
-                >
-                  {airing.imageUrl ? (
-                    <SearchArt
-                      src={`/media/art/airing/${airing.id}?w=160`}
-                      width={airing.imageWidth}
-                      height={airing.imageHeight}
-                      boxW={84}
-                      boxH={56}
-                    />
-                  ) : null}
-                  <span className="search-copy">
-                    <strong>{airing.title}</strong>
-                    <span className="search-meta">
-                      {allChannels.some((channel) => channel.id === airing.channelId && channel.standard === "atsc3") ? <Atsc3Tag /> : null}
-                      <span>
-                        {airing.guideNumber} {airing.channelName} · {dayLabel(airing.start, now)} · {spanLabel(airing)}
-                      </span>
-                    </span>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  aria-label={actionName(t("search.recordEvery"), airing.title)}
-                  onClick={() => {
-                    const asked = q;
-                    const title = airing.title;
-                    void addPass(title, airing.channelId).then(() => {
-                      const current = (new URLSearchParams(window.location.search).get("q") ?? "").trim();
-                      setNote((existing) => noteAfterRecord(asked, current, title, existing));
-                      return refresh(["passes"]);
-                    });
-                  }}
-                >
-                  {t("search.recordEvery")}
-                </button>
-              </li>
-            ))}
+          <ul className="search-list search-groups">
+            {groups.map((g) => showRow(g))}
           </ul>
         </section>
       ) : null}

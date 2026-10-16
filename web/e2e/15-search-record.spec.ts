@@ -52,7 +52,7 @@ test("a search result opens, and records just that airing", async ({ page }) => 
   expect(schedule.items.map((item) => item.airing.title)).toContain("Late Local News");
 
   await page.keyboard.press("Escape");
-  await page.getByRole("tab", { name: "Schedule" }).click();
+  await page.getByRole("link", { name: "Schedule", exact: true }).click();
   await expect(page.getByText(/^Late Local News · .+ only$/)).toBeVisible();
   // One airing takes pads, not series rules.
   await page.getByRole("listitem").filter({ hasText: /Late Local News · .+ only/ }).getByRole("button", { name: "Edit Late Local News" }).click();
