@@ -150,6 +150,9 @@ func TestWarmStartsAGuessOnlyWhereItCostsNothing(t *testing.T) {
 	}
 	h := New(st, t.TempDir(), "ffmpeg", "libx264")
 	defer h.Shutdown()
+	// The picture policy alone: no tune kept for a return, and no 1.0 tune
+	// for a guess (TestAGuessTunesA1Point0Channel).
+	h.TunerLinger = 0
 	h.Host.Tiles = 1
 	tile := Rendition{Video: "360", Audio: "aac2"}
 	running := func(number string) *rendition {

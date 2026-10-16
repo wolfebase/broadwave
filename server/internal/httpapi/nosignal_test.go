@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -51,8 +52,9 @@ func TestWatchingADarkChannelSaysItIsNotComingIn(t *testing.T) {
 	id := guideID(t, st, "5.1")
 	tuner.Dark("5.1")
 
-	// The first watch probes the channel; the second opens its known frequency.
-	for _, pass := range []string{"first tune", "known frequency"} {
+	// The first watch tunes the channel and waits for its picture; the
+	// second, with the channel remembered as dark, fails after a short probe.
+	for _, pass := range []string{"first tune", "remembered"} {
 		began := time.Now()
 		res := postJSON(t, h, "/api/v1/watch", fmt.Sprintf(`{"channelId":%d}`, id))
 		took := time.Since(began)
@@ -64,8 +66,11 @@ func TestWatchingADarkChannelSaysItIsNotComingIn(t *testing.T) {
 		if res.Code != http.StatusServiceUnavailable || problem.Code != "no_signal" || problem.Message != "This channel isn't coming in. Check the antenna." {
 			t.Fatalf("%s: %d %s", pass, res.Code, res.Body.String())
 		}
-		if took > 9*time.Second {
+		if took > 9*time.Second || (pass == "remembered" && took > 4*time.Second) {
 			t.Fatalf("%s took %v", pass, took)
+		}
+		if got := noSignalOf(t, h); !slices.Contains(got, id) {
+			t.Fatalf("%s: frames lists no signal for %v", pass, got)
 		}
 		if !hub.Idle() || !tunersFree(t, h) {
 			t.Fatalf("%s kept the tuner", pass)
@@ -84,6 +89,23 @@ func TestWatchingADarkChannelSaysItIsNotComingIn(t *testing.T) {
 	if _, verdict := signalOf(t, h, id); verdict == "Lost" {
 		t.Fatal("a channel that came back still reads lost")
 	}
+	if got := noSignalOf(t, h); slices.Contains(got, id) {
+		t.Fatal("a channel that came back is still listed with no signal")
+	}
+}
+
+func noSignalOf(t *testing.T, h http.Handler) []int64 {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/frames", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	var body struct {
+		NoSignal []int64 `json:"noSignal"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("frames: %v %s", err, rec.Body.String())
+	}
+	return body.NoSignal
 }
 
 func signalOf(t *testing.T, h http.Handler, channelID int64) (bool, string) {

@@ -100,6 +100,8 @@ func errorFor(err error) (int, string, string, map[string]any) {
 		return http.StatusInsufficientStorage, "disk_low", blocked.Error(), nil
 	case errors.Is(err, live.ErrNoSignal):
 		return http.StatusServiceUnavailable, "no_signal", live.ErrNoSignal.Error(), nil
+	case errors.Is(err, live.ErrNoPicture):
+		return http.StatusServiceUnavailable, "start_failed", live.ErrNoPicture.Error(), nil
 	case errors.Is(err, live.ErrStreamDown):
 		return http.StatusServiceUnavailable, "stream_down", live.ErrStreamDown.Error(), nil
 	case errors.As(err, &streams):

@@ -1017,3 +1017,41 @@ func TestOneBadTimestampDoesNotClampTheCopiedAudio(t *testing.T) {
 		t.Fatalf("the filtered stream still clamps:\n%s", got)
 	}
 }
+
+// A program map that lists a sound track the station never sends: the
+// filter tells that apart from sound that arrives.
+func TestProgramFilterCountsASoundThatNeverArrives(t *testing.T) {
+	run := func(sound bool, sound0 int) *pesCount {
+		head := twoProgramTS(1, 0x1000, 0x110, 0x111, 2, 0x1001, 0x210)
+		head = head[:len(head)-2*188]
+		var out bytes.Buffer
+		w := newProgramPipe(&closeBuf{&out}, 1)
+		count := newPESCount(sound0)
+		w.(*programPipe).count = count
+		pts := make([]int64, 30)
+		for i := range pts {
+			pts[i] = int64(i) * 3003
+		}
+		var cc byte
+		body := videoRun(0x110, pts, &cc)
+		if sound {
+			body = append(body, audioRun(0x111, pts[:5])...)
+		}
+		if _, err := w.Write(append(head, body...)); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	if c := run(false, 0); !c.silent() {
+		t.Fatalf("a track the map lists that sent nothing reads as heard: video %d, sound %d", c.video.Load(), c.heard.Load())
+	}
+	if c := run(false, 0x111); !c.silent() {
+		t.Fatalf("a track that sent nothing reads as heard: video %d, sound %d", c.video.Load(), c.heard.Load())
+	}
+	if c := run(true, 0x111); c.silent() {
+		t.Fatal("a track that sent frames reads as silent")
+	}
+	if (&pesCount{}).silent() || (*pesCount)(nil).silent() {
+		t.Fatal("an unknown sound track reads as silent")
+	}
+}

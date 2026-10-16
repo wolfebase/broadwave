@@ -84,6 +84,8 @@ func TestATuneReadsOnlyTheDevicesItNeeds(t *testing.T) {
 		h.stopFeedLocked(f)
 	}
 	h.mu.Unlock()
+	// A stopped tune sets its tuner to none in the background.
+	h.releasing.Wait()
 	tune("5.1", other.DeviceID)
 	if n := asked.Load(); n != 1 {
 		t.Fatalf("a device that just failed was asked again (%d)", n)
@@ -95,6 +97,8 @@ func TestATuneReadsOnlyTheDevicesItNeeds(t *testing.T) {
 		h.stopFeedLocked(f)
 	}
 	h.mu.Unlock()
+	// A stopped tune sets its tuner to none in the background.
+	h.releasing.Wait()
 	list, err := h.Tuners(ctx)
 	if err != nil || len(list) != 2 || asked.Load() != 1 {
 		t.Fatalf("tuners %v err %v, unplugged asked %d", list, err, asked.Load())
