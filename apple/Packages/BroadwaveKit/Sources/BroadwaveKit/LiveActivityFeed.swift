@@ -96,6 +96,42 @@ public enum LiveActivityFeed {
         return out
     }
 
+    /// Recordings the DVR will start in the next few hours, each to be handed to iOS ahead of
+    /// time with its start, so its Live Activity appears at that minute even with the app closed.
+    /// "plan-<channel>-<start>" ids. Once the recording runs, the app's own "rec-" activity
+    /// takes over and the scheduled one is no longer wanted.
+    public static func scheduled(
+        _ plan: [PlannedAiring], channels: [Channel], now: Date, horizon: TimeInterval = 6 * 3600, options: Options = Options()
+    ) -> [Item] {
+        guard options.recordings else { return [] }
+        let numbers = Dictionary(channels.map { ($0.id, $0.displayNumber) }, uniquingKeysWith: { first, _ in first })
+        var seen = Set<String>()
+        return plan
+            .filter { $0.scheduleState == .willRecord }
+            .compactMap { planned -> Item? in
+                let airing = planned.airing
+                let start = airing.start.addingTimeInterval(-Double(planned.padBefore))
+                // A minute's notice at least: iOS needs a start in the future.
+                guard start > now.addingTimeInterval(60), start < now.addingTimeInterval(horizon) else { return nil }
+                let id = "plan-\(airing.channelId)-\(Int(start.timeIntervalSince1970))"
+                guard seen.insert(id).inserted else { return nil }
+                let detail = ProgramLine.episode(label: airing.episodeLabel, season: airing.season, episode: airing.episode, subtitle: airing.subtitle)
+                return Item(
+                    id: id, kind: .recording, channelID: airing.channelId,
+                    content: Content(
+                        title: airing.title,
+                        number: numbers[airing.channelId] ?? airing.guideNumber ?? "",
+                        detail: detail ?? "",
+                        start: start,
+                        end: airing.end.addingTimeInterval(Double(planned.padAfter))
+                    )
+                )
+            }
+            .sorted { $0.content.start < $1.content.start }
+            .prefix(limit)
+            .map(\.self)
+    }
+
     private static func content(_ rec: Recording, live: Bool) -> Content {
         Content(title: rec.title, number: rec.guideNumber, detail: rec.subtitle ?? "", start: rec.startedAt, end: rec.endsAt, live: live)
     }

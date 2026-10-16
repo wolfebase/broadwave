@@ -55,6 +55,7 @@ struct HomeView: View {
                                     art: art,
                                     frame: art == nil ? store.api?.frameURL(channelID: channel.id, width: 480, listed: store.frameIDs) : nil
                                 )
+                                .playerZoomSource(channel.id)
                             }
                             .cardButton()
                             .contextMenu { ChannelActions(channel: channel, airing: airing) }
@@ -319,6 +320,7 @@ struct Hero: View {
             .padding(28)
         }
         .frame(minHeight: 380)
+        .playerZoomSource(channel.id)
         .padding(.horizontal)
     }
 }
@@ -454,7 +456,10 @@ struct GameCard: View {
                 }
                 Spacer(minLength: 0)
                 if let score, !score.isEmpty {
+                    // Each new point rolls in, as a scoreboard's digits do.
                     Text(score).font(.subheadline.weight(.semibold)).monospacedDigit()
+                        .contentTransition(.numericText())
+                        .animation(.snappy, value: score)
                 }
                 ChannelBadge(channel)
             }

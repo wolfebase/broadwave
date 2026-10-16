@@ -189,3 +189,33 @@ private func score(_ id: String, _ state: String, away: String = "3", home: Stri
     )
     #expect(recorded.isEmpty)
 }
+
+@Test func scheduledRecordingsStartAtTheirPaddedStartWithinTheHorizon() {
+    let now = Date(timeIntervalSince1970: 1_790_500_000)
+    func planned(_ id: Int64, channel: Int64, in minutes: Double, skipped: Bool = false, conflict: Bool = false) -> PlannedAiring {
+        let airing = Airing(
+            id: id, channelId: channel, title: "Show \(id)", episodeLabel: "S1 E\(id)", guideNumber: "\(channel).1",
+            start: now.addingTimeInterval(minutes * 60), end: now.addingTimeInterval(minutes * 60 + 1800)
+        )
+        return PlannedAiring(passId: 1, airing: airing, priority: 1, padBefore: 60, padAfter: 120, conflict: conflict, skipped: skipped)
+    }
+    let channel = Channel(
+        id: 4, deviceId: "d", guideNumber: "4.1", guideName: "K4", displayNumber: "4.1", displayName: "K4",
+        hd: true, favorite: false, enabled: true, hidden: false, present: true
+    )
+    let plan = [
+        planned(1, channel: 4, in: 90),
+        planned(2, channel: 5, in: 30),
+        planned(3, channel: 6, in: 1.5), // starts (with its pad) in 30 s: too soon to schedule
+        planned(4, channel: 7, in: 600), // past the horizon
+        planned(5, channel: 8, in: 45, skipped: true),
+        planned(6, channel: 9, in: 50, conflict: true),
+    ]
+    let items = LiveActivityFeed.scheduled(plan, channels: [channel], now: now)
+    #expect(items.map(\.id) == ["plan-5-\(Int(now.timeIntervalSince1970) + 1740)", "plan-4-\(Int(now.timeIntervalSince1970) + 5340)"])
+    #expect(items[1].content.number == "4.1")
+    #expect(items[1].content.detail == "S1 E1")
+    #expect(items[1].content.end == now.addingTimeInterval(90 * 60 + 1800 + 120))
+    #expect(items[0].content.number == "5.1")
+    #expect(LiveActivityFeed.scheduled(plan, channels: [], now: now, options: .init(recordings: false)).isEmpty)
+}

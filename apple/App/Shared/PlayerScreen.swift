@@ -923,6 +923,8 @@ struct PlayerScreen: View {
     #if os(iOS)
         @State private var showGuide = false
         @State private var showMove = false
+        /// The player's glass pills morph into each other as their state changes.
+        @Namespace private var glass
     #endif
 
     /// Portrait keeps the channel, the program, and labeled controls on screen.
@@ -1126,6 +1128,11 @@ struct PlayerScreen: View {
                     }
             }
         }
+        .playerHaptics(
+            channel: nowPlaying.channel?.id,
+            recording: nowPlaying.channel.flatMap { store.activeRecording(on: $0) } != nil,
+            synced: live.sync?.state == .locked && (live.sync?.members ?? 0) > 1
+        )
         #if os(iOS)
         .onChange(of: verticalSize) { _, size in
             guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") else { return }
@@ -1545,9 +1552,12 @@ struct PlayerScreen: View {
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                     if let airing {
-                        Text(airing.minutesLeft(at: store.now))
+                        let left = airing.minutesLeft(at: store.now)
+                        Text(left)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                            .contentTransition(.numericText(countsDown: true))
+                            .animation(.snappy, value: left)
                     }
                 }
             }
@@ -1634,6 +1644,8 @@ struct PlayerScreen: View {
                 }
             }
             .foregroundStyle(Tokens.ColorToken.tally)
+            .contentTransition(.symbolEffect(.replace))
+            .symbolEffect(.pulse, options: .repeat(.continuous), isActive: recording)
             .accessibilityLabel(recording ? "Stop recording" : "Record")
         }
 
@@ -1722,12 +1734,27 @@ struct PlayerScreen: View {
                 }
                 if let channel = nowPlaying.channel {
                     let recording = store.activeRecording(on: channel) != nil
-                    Button(recording ? "Stop recording" : "Record", systemImage: recording ? "record.circle.fill" : "record.circle") {
-                        Task { await store.toggleRecord(channel) }
+                    // Recording grows the round button into a "REC" pill; the glass morphs between them.
+                    GlassEffectContainer {
+                        Button {
+                            Task { await store.toggleRecord(channel) }
+                        } label: {
+                            if recording {
+                                Label("REC", systemImage: "record.circle.fill")
+                                    .labelStyle(.titleAndIcon)
+                                    .font(.footnote.weight(.heavy))
+                            } else {
+                                Label("Record", systemImage: "record.circle")
+                                    .labelStyle(.iconOnly)
+                            }
+                        }
+                        .buttonStyle(.glass)
+                        .foregroundStyle(Tokens.ColorToken.tally)
+                        .contentTransition(.symbolEffect(.replace))
+                        .symbolEffect(.pulse, options: .repeat(.continuous), isActive: recording)
+                        .glassEffectID("record", in: glass)
                     }
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.glass)
-                    .foregroundStyle(Tokens.ColorToken.tally)
+                    .animation(.bouncy, value: recording)
                     .accessibilityLabel(recording ? "Stop recording" : "Record")
                 }
             }
@@ -1736,7 +1763,21 @@ struct PlayerScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
 
-        @ViewBuilder private var syncPill: some View {
+        /// One glass shape that morphs between Sync screens, Back in sync, and the synced badge.
+        private var syncPill: some View {
+            GlassEffectContainer {
+                syncPillShape
+                    .glassEffectID("sync", in: glass)
+            }
+            .animation(.bouncy, value: syncPhase)
+        }
+
+        private var syncPhase: String {
+            guard let sync = live.sync else { return "none" }
+            return "\(sync.offByChoice) \(sync.detached) \(sync.state) \(sync.members)"
+        }
+
+        @ViewBuilder private var syncPillShape: some View {
             if let sync = live.sync, sync.offByChoice {
                 // Playing on its own; offer to line up only when someone else is on this channel.
                 if sync.members > 1 {

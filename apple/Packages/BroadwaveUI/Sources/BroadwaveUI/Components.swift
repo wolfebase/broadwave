@@ -240,7 +240,11 @@ public struct OnNowRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     if recording {
-                        Circle().fill(Tokens.ColorToken.tally).frame(width: 8, height: 8)
+                        Image(systemName: "record.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(Tokens.ColorToken.tally)
+                            .symbolEffect(.pulse, options: .repeat(.continuous))
+                            .accessibilityLabel("Recording")
                     }
                     Text(airing?.title ?? String(localized: "No listing")).font(.body.weight(.semibold)).lineLimit(1)
                 }

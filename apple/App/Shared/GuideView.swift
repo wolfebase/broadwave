@@ -409,10 +409,12 @@ struct GuideView: View {
                         now: store.now,
                         recording: store.activeRecording(on: channel) != nil
                     )
+                    .playerZoomSource(channel.id)
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(Tokens.ColorToken.surface1)
                 .contextMenu { ChannelActions(channel: channel, airing: airing) }
+                .modifier(ChannelSwipeActions(channel: channel))
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)

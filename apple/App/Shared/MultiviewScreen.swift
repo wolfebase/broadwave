@@ -205,6 +205,9 @@ final class MultiviewSession {
     var restartTick = 0
     /// The mosaic player owns AirPlay. Every tile stays muted until it ends.
     var routingOut = false
+    /// The sound tile's player, for the subtitles menu.
+    @ObservationIgnored weak var soundPlayer: AVPlayer?
+    var soundPlayerTick = 0
 
     init(focusID: Int64) {
         layout = .saved
@@ -1314,6 +1317,17 @@ struct MultiviewScreen: View {
                         .accessibilityIdentifier("multiview-airplay")
                 }
             #endif
+            #if os(iOS)
+                // A portrait iPhone's bar has no room; there the system player's own menu is a tap away.
+                if #available(iOS 26.4, *), width == .regular || height == .compact, let player = session.soundPlayer {
+                    // The system's own subtitles menu for the tile with the sound: tracks, and on
+                    // iOS 27 subtitles it makes as the channel plays, plus the caption style.
+                    SubtitlesMenu(player: player)
+                        .id(session.soundPlayerTick)
+                        .frame(width: 44, height: 44)
+                        .accessibilityIdentifier("multiview-subtitles")
+                }
+            #endif
             Button(session.paused ? "Play" : "Pause") { session.togglePause() }
                 .buttonStyle(.glass)
                 .accessibilityIdentifier("multiview-pause")
@@ -2012,6 +2026,12 @@ struct MultiviewTile: View {
         .onAppear { live.bindGrid(grid) }
         .onChange(of: focused) { _, on in
             live.setAudible(on && !grid.routingOut)
+        }
+        .onChange(of: focused, initial: true) { _, on in
+            if on, grid.soundPlayer !== live.player {
+                grid.soundPlayer = live.player
+                grid.soundPlayerTick += 1
+            }
         }
         .onChange(of: grid.routingOut) { _, out in
             live.setAudible(focused && !out)

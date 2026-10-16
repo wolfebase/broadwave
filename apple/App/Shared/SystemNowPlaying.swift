@@ -61,6 +61,7 @@ final class SystemNowPlaying {
                 if shown != show {
                     shown = show
                     media.content = Self.content(show)
+                    Self.note("content \(show.channel.displayNumber) \(show.airing?.title ?? show.channel.displayName) art=\(show.art != nil)")
                 }
                 current = commands
                 if media.commands.isEmpty {
@@ -76,14 +77,26 @@ final class SystemNowPlaying {
                     let live = MediaSession(media)
                     session = live
                     Task {
-                        try? await live.requestToBecomeApplicationPrimary()
-                        #if os(iOS)
-                            try? await live.requestToBecomeSystemPrimary()
-                        #endif
+                        do {
+                            try await live.requestToBecomeApplicationPrimary()
+                            #if os(iOS)
+                                try await live.requestToBecomeSystemPrimary()
+                            #endif
+                        } catch {
+                            Self.note("primary failed \(error)")
+                        }
+                        Self.note("session primary=\(live.isApplicationPrimary) \(show.channel.displayNumber) \(show.airing?.title ?? "-")")
                     }
                 }
             }
         #endif
+    }
+
+    /// `-BroadwaveSyncLog 1` only: what the system was handed.
+    private static func note(_ line: String) {
+        guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") else { return }
+        print("broadwave nowplaying \(line)")
+        fflush(stdout)
     }
 
     func end() {

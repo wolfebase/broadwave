@@ -25,6 +25,10 @@ final class NowPlaying {
     @ObservationIgnored var multiviewRemote: SystemNowPlaying.Commands?
     /// The live channel in the system's Now Playing (iOS and tvOS 27).
     @ObservationIgnored let system = SystemNowPlaying()
+    /// A display on a cable shows the picture (iOS 27). The device then stays the guide and remote.
+    var externalDisplay = false
+    /// The tile the full-screen player zooms out of on iPhone and iPad. Nil is the channel's own tile.
+    var zoomFrom: String?
     /// A channel the guide should open on with its program shown, from the Top Shelf's More Info.
     var guideChannel: Int64?
     /// Its id across launches, so the guide opens on it after a relaunch.
@@ -88,6 +92,7 @@ final class NowPlaying {
         openedFrom = nil
         self.channel = channel
         self.note = note
+        zoomFrom = nil
         self.expanded = expanded
         lastChannel = channel
         Self.lastChannelID = channel.id
@@ -300,6 +305,7 @@ struct RootView: View {
     /// A broadwave://connect link's server, until the viewer says yes or no.
     @State private var connectLink: URL?
     @Environment(\.scenePhase) private var scenePhase
+    @Namespace private var playerZoom
 
     var body: some View {
         Group {
@@ -320,6 +326,7 @@ struct RootView: View {
         }
         .environment(nowPlaying)
         .environment(libraryFilter)
+        .environment(\.playerZoom, playerZoom)
         #if os(iOS)
             .environment(settingsRoute)
         #endif
@@ -855,9 +862,13 @@ struct RootView: View {
         .tabViewBottomAccessory(isEnabled: nowPlaying.channel != nil && !nowPlaying.expanded) {
             MiniPlayerBar()
         }
-        .fullScreenCover(isPresented: Binding(get: { nowPlaying.expanded && nowPlaying.channel != nil }, set: { nowPlaying.expanded = $0 })) {
+        .fullScreenCover(isPresented: Binding(
+            get: { nowPlaying.expanded && nowPlaying.channel != nil && !nowPlaying.externalDisplay },
+            set: { nowPlaying.expanded = $0 }
+        )) {
             playingCover
         }
+        .modifier(ExternalDisplayAccessory(store: store, nowPlaying: nowPlaying))
         #else
         .fullScreenCover(isPresented: Binding(get: { nowPlaying.channel != nil }, set: {
             if !$0 {
@@ -890,6 +901,14 @@ struct RootView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             offlineBanner
         }
+        .playerZoomDestination(playerZoomID)
+        .environment(\.playerZoom, playerZoom)
+    }
+
+    /// The tile the player grew out of: the mini player, or the channel's card or row.
+    private var playerZoomID: String? {
+        guard nowPlaying.together.isEmpty, let channel = nowPlaying.channel else { return nil }
+        return nowPlaying.zoomFrom ?? PlayerZoom.id(channel.id)
     }
 
     /// True while a channel is on screen, so the offline note is not buried under the player.
@@ -1182,13 +1201,28 @@ struct GameAlertBanner: View {
                     .accessibilityIdentifier("miniPlayer")
                     .accessibilityAction { nowPlaying.expanded = true }
                     Spacer()
+                    if nowPlaying.externalDisplay {
+                        // The picture is on the display; this bar is its remote.
+                        Button("Previous channel", systemImage: "chevron.up") {
+                            nowPlaying.step(ChannelStep.offset(up: true), in: store.channels)
+                        }
+                        .labelStyle(.iconOnly)
+                        Button("Next channel", systemImage: "chevron.down") {
+                            nowPlaying.step(ChannelStep.offset(up: false), in: store.channels)
+                        }
+                        .labelStyle(.iconOnly)
+                    }
                     Button("Close", systemImage: "xmark") { nowPlaying.stop() }
                         .labelStyle(.iconOnly)
                         .accessibilityLabel("Close")
                 }
                 .padding(.horizontal, 16)
                 .contentShape(.rect)
-                .onTapGesture { nowPlaying.expanded = true }
+                .playerZoomSource(id: PlayerZoom.mini)
+                .onTapGesture {
+                    nowPlaying.zoomFrom = PlayerZoom.mini
+                    nowPlaying.expanded = true
+                }
             }
         }
     }

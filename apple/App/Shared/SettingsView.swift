@@ -105,6 +105,7 @@ struct SettingsView: View {
             }
             serverSection
             playbackSection(store)
+            CaptionStyleSection()
             delaySection
             pictureSection
             if demo {

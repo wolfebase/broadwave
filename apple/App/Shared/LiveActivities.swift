@@ -53,21 +53,48 @@
                 let snap = TopShelf.Snapshot(channels: store.channels, airings: games, recordings: recordings)
                 let wanted = LiveActivityFeed.wanted(snap, follows: follows, scores: scores, now: now, options: options)
                 let finals = LiveActivityFeed.finals(snap, follows: follows, scores: scores, options: options)
-                await apply(wanted, finals: finals, server: server.id, active: active)
+                // The next recordings go to iOS now, each to appear at its own start with the app closed.
+                // A schedule that can't be read leaves those already handed over.
+                let plan = options.recordings ? try? await api.schedule() : nil
+                let ahead = plan.map {
+                    LiveActivityFeed.scheduled($0.items, channels: store.channels, now: now, options: options).prefix(2).map(\.self)
+                }
+                await apply(wanted, ahead: ahead, finals: finals, server: server.id, active: active)
                 return wanted.contains { $0.kind == .game } ? .seconds(30) : .seconds(120)
             } catch {
                 return .seconds(60)
             }
         }
 
-        private func apply(_ wanted: [LiveActivityFeed.Item], finals: [String: LiveActivityFeed.Content], server: String, active: Bool) async {
-            let running = await Self.running(server: server)
-            let plan = LiveActivityFeed.plan(running: running.mapValues(\.content), wanted: wanted, finals: finals)
+        /// `ahead` nil keeps the scheduled ones as they are.
+        private func apply(
+            _ wanted: [LiveActivityFeed.Item], ahead: [LiveActivityFeed.Item]?, finals: [String: LiveActivityFeed.Content], server: String, active: Bool
+        ) async {
+            var running = await Self.running(server: server)
+            if ahead == nil || !active {
+                // Nothing to compare the scheduled ones with, or no way to start the recording's
+                // own activity that replaces one that just began: this pass leaves them alone.
+                running = running.filter { !$0.key.hasPrefix("plan-") }
+            }
+            let plan = LiveActivityFeed.plan(running: running.mapValues(\.content), wanted: wanted + (ahead ?? []), finals: finals)
             if active {
                 for item in plan.start {
                     let attributes = BroadwaveActivity(id: item.id, server: server, kind: item.kind, channelID: item.channelID)
                     do {
-                        _ = try Activity.request(attributes: attributes, content: Self.content(item), pushType: nil)
+                        if item.id.hasPrefix("plan-") {
+                            // iOS shows it at the recording's start, and says so once.
+                            let alert = AlertConfiguration(
+                                title: "Recording",
+                                body: "\(item.content.title) on \(item.content.number)",
+                                sound: .default
+                            )
+                            _ = try Activity.request(
+                                attributes: attributes, content: Self.content(item), pushType: nil,
+                                style: .standard, alertConfiguration: alert, start: item.content.start
+                            )
+                        } else {
+                            _ = try Activity.request(attributes: attributes, content: Self.content(item), pushType: nil)
+                        }
                     } catch {
                         Self.log.error("live activity \(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
                     }
@@ -107,7 +134,8 @@
         }
 
         private nonisolated static func showing(_ activity: Activity<BroadwaveActivity>) -> Bool {
-            activity.activityState == .active || activity.activityState == .stale
+            // Pending: a recording handed to iOS ahead of its start.
+            activity.activityState == .active || activity.activityState == .stale || activity.activityState == .pending
         }
 
         /// This server's activities on screen. Another server's go at once (a switched server's

@@ -29,7 +29,12 @@ struct LiveActivityWidget: Widget {
             } compactLeading: {
                 ActivityMark(kind: kind, live: content.live)
             } compactTrailing: {
-                ActivityTrailing(kind: kind, content: content)
+                NarrowIslandAware {
+                    ActivityTrailing(kind: kind, content: content)
+                } narrow: {
+                    // iPhone in landscape (iOS 27): the island is short of width, so the number alone.
+                    Text(content.number).font(.caption2.monospacedDigit().weight(.bold)).lineLimit(1)
+                }
             } minimal: {
                 ActivityMark(kind: kind, live: content.live)
             }
@@ -37,6 +42,41 @@ struct LiveActivityWidget: Widget {
         }
     }
 }
+
+/// The full view, or a narrower one when the Dynamic Island is limited in width (iOS 27 landscape).
+struct NarrowIslandAware<Full: View, Narrow: View>: View {
+    @ViewBuilder let full: () -> Full
+    @ViewBuilder let narrow: () -> Narrow
+
+    var body: some View {
+        #if compiler(>=6.4)
+            if #available(iOS 27, *) {
+                LimitedWidthReader(full: full, narrow: narrow)
+            } else {
+                full()
+            }
+        #else
+            full()
+        #endif
+    }
+}
+
+#if compiler(>=6.4)
+    @available(iOS 27, *)
+    private struct LimitedWidthReader<Full: View, Narrow: View>: View {
+        @Environment(\.isDynamicIslandLimitedInWidth) private var limited
+        let full: () -> Full
+        let narrow: () -> Narrow
+
+        var body: some View {
+            if limited {
+                narrow()
+            } else {
+                full()
+            }
+        }
+    }
+#endif
 
 /// A red dot while recording, a ball for a game.
 struct ActivityMark: View {
