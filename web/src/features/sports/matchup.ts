@@ -19,22 +19,27 @@ export function cardLabel(a: { title: string; subtitle?: string }): string {
   return a.subtitle || a.title;
 }
 
-/** Chip and eyebrow text. League acronyms and listing titles stay as stored. */
+const leagueKeys = {
+  "College Football": "sports.league.collegeFootball",
+  "College Basketball": "sports.league.collegeBasketball",
+  "High School Football": "sports.league.highSchoolFootball",
+  "High School Basketball": "sports.league.highSchoolBasketball",
+  "Premier League": "sports.league.premierLeague",
+  Olympics: "sports.league.olympics",
+  Football: "sports.league.football",
+  Basketball: "sports.league.basketball",
+  Baseball: "sports.league.baseball",
+  Hockey: "sports.league.hockey",
+  Soccer: "sports.league.soccer",
+  Golf: "sports.league.golf",
+  Tennis: "sports.league.tennis",
+  Racing: "sports.league.racing",
+  Boxing: "sports.league.boxing",
+  Wrestling: "sports.league.wrestling",
+} as const;
+
+/** Chip and eyebrow text. League acronyms stay as they are. */
 export function leagueLabel(id: string): string {
-  switch (id) {
-    case "College Football":
-      return t("sports.league.collegeFootball");
-    case "College Basketball":
-      return t("sports.league.collegeBasketball");
-    case "Soccer":
-      return t("sports.league.soccer");
-    case "Golf":
-      return t("sports.league.golf");
-    case "Tennis":
-      return t("sports.league.tennis");
-    case "Olympics":
-      return t("sports.league.olympics");
-    default:
-      return id;
-  }
+  const key = (leagueKeys as Record<string, (typeof leagueKeys)[keyof typeof leagueKeys]>)[id];
+  return key ? t(key) : id;
 }

@@ -2,6 +2,24 @@ import type { Message } from "../runtime.ts";
 
 export const setupMessages = {
   "setup.title": "Let's set up your TV",
+
+  "setup.leadFound": "Found it. Setup moves on in a few seconds. Tap anything here to stay.",
+  "setup.leadSearching": "Looking on this network. If your tuner doesn't show up, add it by address.",
+  "setup.leadHeld": "Take your time. Continue when you're ready.",
+  "setup.notSeeing": "Not seeing your tuner?",
+  "setup.otherSources": "Other sources",
+  "setup.otherSourcesHint": "A playlist, an Xtream server, or a file.",
+  "setup.summaryTuners": {
+    zero: "No channels yet from {tuners}.",
+    one: "1 channel from {tuners}.",
+    other: "{count} channels from {tuners}.",
+  },
+  "setup.tunerCount": { one: "1 tuner", other: "{count} tuners" },
+  "setup.sourceCount": { one: "1 source", other: "{count} sources" },
+  "setup.readyToWatch": "Ready to watch.",
+  "setup.settingUpLead": "Checking channels, the guide, and the picture.",
+  "setup.connect": "Watch on your other screens",
+  "setup.stepsAria": "What setup checked",
   "setup.ready": "Ready",
   "setup.yourTuner": "Your tuner",
   "setup.looking": "Looking for your tuner…",

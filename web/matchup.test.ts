@@ -15,7 +15,7 @@ test("a matchup name and a sport chip come from the catalog", () => {
   const naming = fs.readFileSync(new URL("./src/features/sports/matchup.ts", import.meta.url), "utf8");
   const page = fs.readFileSync(new URL("./src/features/sports/Sports.tsx", import.meta.url), "utf8");
   assert.equal(naming.includes("${sides[0]} at ${sides[1]}"), false);
-  assert.match(page, /gc-league">\{leagueLabel\(league\(airing\)\)\}/);
+  assert.match(page, /gc-league">\{league \? leagueLabel\(league\)/);
   assert.match(page, /\{leagueLabel\(l\)\}/);
   assert.equal(leagueLabel("Soccer"), "Soccer");
   assert.equal(leagueLabel("NFL"), "NFL");
@@ -23,8 +23,8 @@ test("a matchup name and a sport chip come from the catalog", () => {
   try {
     assert.equal(cardLabel({ title: "NFL: Bears at Bills", subtitle: "Sunday night" }), "Bears at BillsBears at Bills");
     assert.equal(cardLabel({ title: "Golf", subtitle: "Final round" }), "Final round");
-    assert.equal(leagueLabel("College Football"), "College FootballCollege Football");
-    assert.equal(leagueLabel("College Basketball"), "College BasketballCollege Basketball");
+    assert.equal(leagueLabel("College Football"), "College footballCollege football");
+    assert.equal(leagueLabel("College Basketball"), "College basketballCollege basketball");
     assert.equal(leagueLabel("Soccer"), "SoccerSoccer");
     assert.equal(leagueLabel("Golf"), "GolfGolf");
     assert.equal(leagueLabel("Tennis"), "TennisTennis");

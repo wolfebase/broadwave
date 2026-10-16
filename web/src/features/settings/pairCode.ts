@@ -82,3 +82,20 @@ export function codeAfterPoll(action: PairPollStep["action"], issued: string): s
   if (action === "miss" || action === "expired" || action === "denied") return "";
   return issued;
 }
+
+export type PairKind = "web" | "phone" | "tv";
+
+const tvAgents = /SMART-TV|SmartTV|Tizen|Web0S|webOS|NetCast|BRAVIA|AFT[A-Z]|CrKey|Android TV|GoogleTV|AppleTV|Roku|PlayStation|Xbox/i;
+
+/** A best guess from the browser. The person can change it before pairing. */
+export function detectKind(ua: string, touch: number, layout = ""): PairKind {
+  if (layout === "tv" || tvAgents.test(ua)) return "tv";
+  // iPadOS asks for desktop pages and names itself a Mac, one with a touch screen.
+  if (/iPhone|iPad|iPod|Android/.test(ua) || (/Macintosh/.test(ua) && touch > 1)) return "phone";
+  return "web";
+}
+
+/** The code field types letters only when the code is an invite. */
+export function codeLooksLikeInvite(raw: string): boolean {
+  return /[A-Za-z]/.test(raw);
+}
