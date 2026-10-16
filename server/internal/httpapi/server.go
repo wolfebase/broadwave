@@ -2,11 +2,8 @@ package httpapi
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -128,6 +125,14 @@ type Server struct {
 	remoteAt  time.Time
 
 	routes []string
+
+	// bodies caches the encoded guide, channel, and schedule answers.
+	bodies bodyCache
+
+	probeMu      sync.Mutex
+	probing      map[int64]bool
+	probeJobs    []probeJob
+	probeRunning bool
 }
 
 func (s *Server) Handler() http.Handler {
@@ -153,10 +158,12 @@ func (s *Server) Handler() http.Handler {
 	api("GET /profile", s.profile)
 	api("GET /devices", s.devices)
 	api("DELETE /devices/{id}", s.removeDevice)
+	api("PATCH /devices/{id}", s.patchDevice)
 	api("GET /devices/health", s.deviceHealth)
 	api("POST /devices/{id}/scan", s.startScan)
 	api("GET /devices/{id}/scan", s.scanStatus)
 	api("GET /home", s.home)
+	api("GET /now", s.nowNext)
 	api("POST /sources/discover", s.discover)
 	api("POST /sources/look", s.look)
 	api("GET /sources/free", s.freeSources)
@@ -261,6 +268,13 @@ func (s *Server) Handler() http.Handler {
 	// /cast is the receiver page. /cast/receiver.js is a built asset and falls through to ui.
 	mux.HandleFunc("GET /cast", s.castPage)
 	mux.HandleFunc("GET /", s.ui)
+	// An API path nothing serves is a JSON 404, not the web app's page: a
+	// client parsing the error envelope got HTML and a 200.
+	for _, method := range []string{"GET", "POST", "PUT", "PATCH", "DELETE"} {
+		mux.HandleFunc(method+" /api/", func(w http.ResponseWriter, r *http.Request) {
+			httpError(w, "No such API path.", http.StatusNotFound)
+		})
+	}
 	var handler http.Handler
 	if s.Dev {
 		handler = s.withDevCORS(s.withDeviceAuth(mux))
@@ -320,9 +334,10 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 	out := make([]noted, 0, len(devices))
 	for _, device := range redactDevices(devices) {
 		out = append(out, noted{
-			Device:  device,
-			Note:    hdhr.ModelNote(device.ModelNumber),
-			Offline: deviceOffline(device, now),
+			Device: device,
+			Note:   hdhr.ModelNote(device.ModelNumber),
+			// A retired tuner is away on purpose: no "stopped answering".
+			Offline: !device.Retired && deviceOffline(device, now),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"devices": out})
@@ -330,17 +345,8 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 
 // Discovery refreshes lastSeen every 5 minutes (cmd/broadwave ticker).
 // Three missed rounds means the tuner has stopped answering.
-const deviceOfflineAfter = 15 * time.Minute
-
 func deviceOffline(d store.Device, now time.Time) bool {
-	if d.TunerCount <= 0 {
-		return false
-	}
-	seen, err := time.Parse(time.RFC3339, d.LastSeen)
-	if err != nil {
-		return false
-	}
-	return now.Sub(seen) > deviceOfflineAfter
+	return dvr.DeviceOffline(d, now)
 }
 
 func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) {
@@ -358,6 +364,29 @@ func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("removed device", "device", id)
+	s.devices(w, r)
+}
+
+// patchDevice retires a tuner the owner took away on purpose, or brings it
+// back. A retired tuner keeps its channels and recordings, counts toward no
+// recording plan, and raises no "stopped answering" note. When it answers
+// discovery again the mark clears by itself.
+func (s *Server) patchDevice(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Retired *bool `json:"retired"`
+	}
+	if err := decodeJSON(r, &body); err != nil || body.Retired == nil {
+		httpError(w, "Send retired as true or false.", http.StatusBadRequest)
+		return
+	}
+	if err := s.Store.SetDeviceRetired(r.Context(), r.PathValue("id"), *body.Retired); err != nil {
+		if errors.Is(err, store.ErrNoDevice) {
+			apiError(w, http.StatusNotFound, "not_found", "That device is not in the list.", nil)
+			return
+		}
+		writeError(w, err)
+		return
+	}
 	s.devices(w, r)
 }
 
@@ -485,18 +514,22 @@ func (s *Server) look(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) channels(w http.ResponseWriter, r *http.Request) {
 	guideOnly := r.URL.Query().Get("guide") == "1"
-	channels, err := s.Store.Channels(r.Context(), guideOnly)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	if channels == nil {
-		channels = []store.Channel{}
-	}
-	writeCachedJSON(w, r, http.StatusOK, map[string]any{
-		"channels": withNetworks(channels),
-		"listings": "empty",
-		"message":  "Listings turn on when you add an XMLTV file. Live picture arrives with the player.",
+	// Which twin shows depends on the tuners still answering, so the answer
+	// also turns over each minute.
+	key := s.versionKey(r.Context(), fmt.Sprintf("channels|%v|%s", guideOnly, s.now().Truncate(time.Minute).Format(time.RFC3339)), "channels", "guide")
+	s.serveCached(w, r, key, func(ctx context.Context) (any, error) {
+		channels, err := s.Store.Channels(ctx, guideOnly)
+		if err != nil {
+			return nil, err
+		}
+		if channels == nil {
+			channels = []store.Channel{}
+		}
+		return map[string]any{
+			"channels": withNetworks(channels),
+			"listings": "empty",
+			"message":  "Listings turn on when you add an XMLTV file. Live picture arrives with the player.",
+		}, nil
 	})
 }
 
@@ -612,7 +645,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeCachedJSON(w, r, http.StatusOK, values)
+	writeCachedJSON(w, r, values)
 }
 
 func (s *Server) settingsValues(r *http.Request) (map[string]string, error) {
@@ -978,35 +1011,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 // writeCachedJSON sets an ETag and gzips when the client accepts it.
 // A matching If-None-Match returns 304. The tag is the body, so gzip and plain share it.
-func writeCachedJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
-	body, err := marshalJSON(v)
+func writeCachedJSON(w http.ResponseWriter, r *http.Request, v any) {
+	entry, err := encodeBody(v)
 	if err != nil {
 		http.Error(w, "json", http.StatusInternalServerError)
 		return
 	}
-	sum := sha256.Sum256(body)
-	etag := `"` + hex.EncodeToString(sum[:16]) + `"`
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "private, no-cache")
-	w.Header().Set("Vary", "Accept-Encoding")
-	if r.Header.Get("If-None-Match") == etag {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-		var buf bytes.Buffer
-		gz, _ := gzip.NewWriterLevel(&buf, gzip.DefaultCompression)
-		_, _ = gz.Write(body)
-		_ = gz.Close()
-		w.Header().Set("Content-Encoding", "gzip")
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(status)
-		_, _ = w.Write(buf.Bytes())
-		return
-	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_, _ = w.Write(body)
+	writeEntry(w, r, entry)
 }
 
 func marshalJSON(v any) ([]byte, error) {

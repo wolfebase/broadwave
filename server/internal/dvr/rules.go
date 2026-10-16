@@ -50,7 +50,9 @@ const maxDamaged = 2
 func haveEpisode(pass store.Pass, recs []store.Recording, seen map[string]bool, key string) bool {
 	damaged := 0
 	for _, rec := range recs {
-		if rec.Status == "failed" || store.EpisodeKey(rec.ProgramID, rec.Title, rec.Subtitle, rec.ChannelID) != key {
+		// A piece cut short by a restart, or a retry that started late, is
+		// not the episode: the next airing records it whole.
+		if rec.Incomplete() || store.EpisodeKey(rec.ProgramID, rec.Title, rec.Subtitle, rec.ChannelID) != key {
 			continue
 		}
 		if !rec.Damaged() {
@@ -76,7 +78,7 @@ func haveEpisode(pass store.Pass, recs []store.Recording, seen map[string]bool, 
 func unwatchedCount(recs []store.Recording, pass store.Pass) int {
 	n := 0
 	for _, rec := range recs {
-		if rec.Status == "failed" || !sameShow(pass, rec) {
+		if rec.Incomplete() || !sameShow(pass, rec) {
 			continue
 		}
 		if !rec.Played() {
@@ -116,7 +118,9 @@ func sameShow(pass store.Pass, rec store.Recording) bool {
 func KeepVictims(pass store.Pass, recs []store.Recording) []int64 {
 	var mine []store.Recording
 	for _, rec := range recs {
-		if rec.Keep || rec.Status == "recording" || rec.Status == "failed" || !sameShow(pass, rec) {
+		// A partial piece neither counts toward "keep the last N" nor is
+		// removed by it; it would push out a whole episode.
+		if rec.Keep || rec.Status == "recording" || rec.Incomplete() || !sameShow(pass, rec) {
 			continue
 		}
 		mine = append(mine, rec)

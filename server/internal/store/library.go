@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 )
@@ -217,15 +218,33 @@ func (s *Store) UpdateVirtual(ctx context.Context, id int64, orderMode, ruleTitl
 	return s.virtualByID(ctx, id)
 }
 
+// BackupTo writes a consistent copy of the catalog to path. The copy is
+// written under a temporary name and renamed into place, so a crash or a
+// full disk never leaves a half-written file under a backup's name, and an
+// older copy at path stays until the new one is whole.
 func (s *Store) BackupTo(ctx context.Context, path string) error {
-	escaped := strings.ReplaceAll(path, "'", "''")
-	_, err := s.db.ExecContext(ctx, fmt.Sprintf(`VACUUM INTO '%s'`, escaped))
-	return err
+	return VacuumInto(ctx, s.db, path)
+}
+
+// VacuumInto runs VACUUM INTO a temporary file beside path, then renames it.
+func VacuumInto(ctx context.Context, db *sql.DB, path string) error {
+	tmp := fmt.Sprintf("%s.partial-%d", path, time.Now().UnixNano())
+	escaped := strings.ReplaceAll(tmp, "'", "''")
+	if _, err := db.ExecContext(ctx, fmt.Sprintf(`VACUUM INTO '%s'`, escaped)); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // RestoreFrom replaces the user's choices with a backup's, all or nothing.
 // A backup from an older version fills the columns it has; new ones take their defaults.
 func (s *Store) RestoreFrom(ctx context.Context, path string) error {
+	defer s.forgetSettings()
 	// ATTACH holds for one connection, and it cannot run inside a transaction.
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
