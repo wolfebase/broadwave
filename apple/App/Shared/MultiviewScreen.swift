@@ -216,8 +216,15 @@ final class MultiviewSession {
         room = "multiview:\(id)"
     }
 
-    func beginRound(_ soundID: Int64, now: Date = .now) {
-        pictureRound = PictureOrder.begin(soundID, now: now)
+    func beginRound(_ soundID: Int64, everyTileFits: Bool, now: Date = .now) {
+        pictureRound = PictureOrder.begin(soundID, now: now, everyTileFits: everyTileFits)
+    }
+
+    /// The tuner plan changed whether the quiet tiles must wait for the sound tile.
+    func planned(everyTileFits: Bool) {
+        if pictureRound.everyTileFits != everyTileFits {
+            pictureRound = PictureOrder.planned(pictureRound, everyTileFits: everyTileFits)
+        }
     }
 
     func noteSound(_ id: Int64, now: Date = .now) {
@@ -1139,16 +1146,20 @@ struct MultiviewScreen: View {
             if nowPlaying.together.count > 1 {
                 planReady = false
             }
-            await refreshPlan()
+            // With a tuner for every tile, the tiles ask together: in turn, a second
+            // frequency waited out the first one's tune and sat dark for 15 s or more.
+            let fits = await refreshPlan()
             let sound = session.focusID == 0 ? (nowPlaying.together.first ?? 0) : session.focusID
-            session.beginRound(sound)
+            session.beginRound(sound, everyTileFits: fits == true)
             planReady = true
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(20))
                 if Task.isCancelled {
                     return
                 }
-                await refreshPlan()
+                if let fits = await refreshPlan() {
+                    session.planned(everyTileFits: fits)
+                }
             }
         }
         .task(id: GameSwitch.shouldPoll(auto: auto, gameIDs: switchGameIDs)) {
@@ -1287,63 +1298,136 @@ struct MultiviewScreen: View {
         #endif
     }
 
+    @ViewBuilder
     private func topBar(_ tiles: [Channel]) -> some View {
-        HStack(spacing: 12) {
-            Button("Back to one channel", systemImage: "xmark") { leave() }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.glass)
-            Text(session.layout.label)
-                .font(.headline)
-            Spacer()
-            Button("Auto") {
-                auto.toggle()
-                UserDefaults.standard.set(auto, forKey: "broadwave-mv-auto")
-            }
-            #if os(tvOS)
-            .buttonStyle(ChannelsPillStyle(focused: barFocus == .auto, selected: auto))
-            .focused($barFocus, equals: .auto)
-            .focusEffectDisabled()
-            #else
-            .buttonStyle(.glass)
-            .tint(auto ? Color.accentColor : nil)
-            #endif
-            .accessibilityLabel("Auto")
-            .accessibilityValue(auto ? "On" : "Off")
-            .accessibilityHint("Follow the game that matters")
-            .accessibilityIdentifier("multiview-auto")
-            #if os(iOS)
-                if mosaicChannelIDs().count >= 2 {
-                    AirPlayRoute(compact: true, onDismiss: { mosaic.pickerClosed() }, onPresent: { beginMosaicRoute() })
-                        .accessibilityIdentifier("multiview-airplay")
-                }
-            #endif
-            #if os(iOS)
-                // A portrait iPhone's bar has no room; there the system player's own menu is a tap away.
-                if #available(iOS 26.4, *), width == .regular || height == .compact, let player = session.soundPlayer {
-                    // The system's own subtitles menu for the tile with the sound: tracks, and on
-                    // iOS 27 subtitles it makes as the channel plays, plus the caption style.
-                    SubtitlesMenu(player: player)
-                        .id(session.soundPlayerTick)
-                        .frame(width: 44, height: 44)
-                        .accessibilityIdentifier("multiview-subtitles")
-                }
-            #endif
-            Button(session.paused ? "Play" : "Pause") { session.togglePause() }
-                .buttonStyle(.glass)
-                .accessibilityIdentifier("multiview-pause")
-            if session.paused {
-                Text("Paused")
-                    .font(.headline)
-                    .accessibilityIdentifier("multiview-paused")
-            }
-            Button("Save") {
-                let name = tiles.map(\.displayNumber).joined(separator: " and ")
-                SavedMultiview.save(name: name, channels: tiles.map(\.id), layout: session.layout.rawValue)
-            }
-            .buttonStyle(.glass)
-            .disabled(tiles.count < 2)
-        }
+        #if os(tvOS)
+            tvTopBar(tiles)
+        #else
+            phoneTopBar(tiles)
+        #endif
     }
+
+    #if os(iOS)
+        /// Room for Auto and subtitles beside the picture controls. A portrait iPhone keeps them in More.
+        private var roomyBar: Bool {
+            width == .regular || height == .compact
+        }
+
+        /// Close and the layout's name, then the controls as glass icons; the rest wait under More.
+        /// Words never wrap here, whatever the text size.
+        private func phoneTopBar(_ tiles: [Channel]) -> some View {
+            HStack(spacing: 10) {
+                Button("Back to one channel", systemImage: "xmark") { leave() }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(session.layout.label)
+                        .font(.headline)
+                    if session.paused {
+                        Text("Paused")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("multiview-paused")
+                    }
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .layoutPriority(-1)
+                Spacer(minLength: 4)
+                GlassEffectContainer(spacing: 8) {
+                    HStack(spacing: 8) {
+                        if roomyBar {
+                            Button("Auto", systemImage: "wand.and.stars") { toggleAuto() }
+                                .tint(auto ? Color.accentColor : nil)
+                                .accessibilityValue(auto ? "On" : "Off")
+                                .accessibilityHint("Follow the game that matters")
+                                .accessibilityIdentifier("multiview-auto")
+                        }
+                        if mosaicChannelIDs().count >= 2 {
+                            AirPlayRoute(compact: true, onDismiss: { mosaic.pickerClosed() }, onPresent: { beginMosaicRoute() })
+                                .frame(width: 44, height: 44)
+                                .accessibilityIdentifier("multiview-airplay")
+                        }
+                        if roomyBar, #available(iOS 26.4, *), let player = session.soundPlayer {
+                            // The system's own subtitles menu for the tile with the sound: tracks, and on
+                            // iOS 27 subtitles it makes as the channel plays, plus the caption style.
+                            SubtitlesMenu(player: player)
+                                .id(session.soundPlayerTick)
+                                .frame(width: 44, height: 44)
+                                .accessibilityIdentifier("multiview-subtitles")
+                        }
+                        Button(session.paused ? "Play" : "Pause", systemImage: session.paused ? "play.fill" : "pause.fill") {
+                            session.togglePause()
+                        }
+                        .contentTransition(.symbolEffect(.replace))
+                        .accessibilityIdentifier("multiview-pause")
+                        Menu("More", systemImage: "ellipsis") {
+                            if !roomyBar {
+                                Toggle(isOn: Binding(get: { auto }, set: { _ in toggleAuto() })) {
+                                    Label("Auto", systemImage: "wand.and.stars")
+                                }
+                                .accessibilityHint("Follow the game that matters")
+                            }
+                            Button("Save this set", systemImage: "square.and.arrow.down") {
+                                let name = tiles.map(\.displayNumber).joined(separator: " and ")
+                                SavedMultiview.save(name: name, channels: tiles.map(\.id), layout: session.layout.rawValue)
+                            }
+                            .disabled(tiles.count < 2)
+                        }
+                        .accessibilityIdentifier("multiview-more")
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                }
+            }
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+        }
+
+        private func toggleAuto() {
+            auto.toggle()
+            UserDefaults.standard.set(auto, forKey: "broadwave-mv-auto")
+        }
+    #endif
+
+    #if os(tvOS)
+        private func tvTopBar(_ tiles: [Channel]) -> some View {
+            HStack(spacing: 12) {
+                Button("Back to one channel", systemImage: "xmark") { leave() }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                Text(session.layout.label)
+                    .font(.headline)
+                Spacer()
+                Button("Auto") {
+                    auto.toggle()
+                    UserDefaults.standard.set(auto, forKey: "broadwave-mv-auto")
+                }
+                .buttonStyle(ChannelsPillStyle(focused: barFocus == .auto, selected: auto))
+                .focused($barFocus, equals: .auto)
+                .focusEffectDisabled()
+                .accessibilityLabel("Auto")
+                .accessibilityValue(auto ? "On" : "Off")
+                .accessibilityHint("Follow the game that matters")
+                .accessibilityIdentifier("multiview-auto")
+                Button(session.paused ? "Play" : "Pause") { session.togglePause() }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("multiview-pause")
+                if session.paused {
+                    Text("Paused")
+                        .font(.headline)
+                        .accessibilityIdentifier("multiview-paused")
+                }
+                Button("Save") {
+                    let name = tiles.map(\.displayNumber).joined(separator: " and ")
+                    SavedMultiview.save(name: name, channels: tiles.map(\.id), layout: session.layout.rawValue)
+                }
+                .buttonStyle(.glass)
+                .disabled(tiles.count < 2)
+            }
+        }
+    #endif
 
     private var channelsControl: some View {
         Button("Channels") { session.guide.toggle() }
@@ -1433,8 +1517,24 @@ struct MultiviewScreen: View {
     @ViewBuilder
     private func grid(_ tiles: [Channel]) -> some View {
         if tiles.isEmpty {
-            Text("Pick two channels.")
-                .foregroundStyle(.secondary)
+            if nowPlaying.together.count > 1, !session.notice.isEmpty {
+                // Every tile was refused: the notice above says why. Offer to ask again.
+                VStack(spacing: 12) {
+                    Text("No tuner is free for these channels.")
+                        .foregroundStyle(.secondary)
+                    Button("Try again") {
+                        Task {
+                            if let fits = await refreshPlan() {
+                                session.planned(everyTileFits: fits)
+                            }
+                        }
+                    }
+                    .buttonStyle(.glass)
+                }
+            } else {
+                Text("Pick two channels.")
+                    .foregroundStyle(.secondary)
+            }
         } else {
             GeometryReader { geo in
                 let frames = TileGeometry.frames(
@@ -1454,11 +1554,20 @@ struct MultiviewScreen: View {
                     }
                     if stacked, tiles.count >= 2 {
                         let handle = TileGeometry.stackedDivider(in: geo.size, split: session.split)
-                        Rectangle()
-                            .fill(.white.opacity(0.35))
-                            .frame(width: handle.width, height: handle.height)
-                            .offset(x: handle.minX, y: handle.minY)
+                        // A grabber, as a sheet has, in a band the full width so a thumb finds it.
+                        Capsule()
+                            .fill(.white.opacity(0.55))
+                            .frame(width: 40, height: 5)
+                            .frame(width: handle.width, height: max(handle.height, 24))
+                            .contentShape(.rect)
+                            .offset(x: handle.minX, y: handle.midY - max(handle.height, 24) / 2)
+                            .accessibilityElement()
                             .accessibilityLabel("Divider")
+                            .accessibilityValue("\(Int((session.split * 100).rounded())) percent")
+                            .accessibilityAdjustableAction { direction in
+                                let step: CGFloat = direction == .increment ? 0.05 : -0.05
+                                session.split = min(0.75, max(0.25, session.split + step))
+                            }
                         #if os(iOS)
                             .gesture(
                                 DragGesture()
@@ -1818,15 +1927,18 @@ struct MultiviewScreen: View {
         }
     }
 
-    private func refreshPlan() async {
+    /// Whether every tile has a tuner. Nil when the plan could not be read.
+    @discardableResult
+    private func refreshPlan() async -> Bool? {
         let ids = nowPlaying.together
-        guard let api = store.api else { return }
-        guard let plan = try? await api.planMultiview(ids) else { return }
+        guard let api = store.api else { return nil }
+        guard let plan = try? await api.planMultiview(ids) else { return nil }
         blocked = Set(plan.blocked.map(\.channelId))
         offers = Dictionary(uniqueKeysWithValues: (plan.offers ?? []).map { ($0.channelId, $0) })
         stops = plan.stops ?? []
         let warning = Array(Set((plan.stops ?? []).map(\.reason))).filter { !$0.isEmpty }.joined(separator: " ")
         session.notice = warning.isEmpty ? (plan.blocked.first?.reason ?? plan.note ?? "") : warning
+        return plan.blocked.isEmpty
     }
 }
 
@@ -1852,6 +1964,8 @@ struct MultiviewTile: View {
     @State private var live = TilePlayer()
     @State private var restartArmed = false
     @State private var appliedRestart = 0
+    /// The picture has not started 8 s after the tile asked. Says so, with Try again.
+    @State private var slow = false
     private var tuning: Bool {
         #if DEBUG
             if UserDefaults.standard.bool(forKey: "BroadwaveMultiviewTest") || UserDefaults.standard.bool(forKey: "BroadwaveChrome") {
@@ -1881,11 +1995,6 @@ struct MultiviewTile: View {
                         .labelStyle(.titleAndIcon)
                 }
             }
-            if focused, !live.detail.isEmpty {
-                Text(live.detail)
-                    .font(.caption2)
-                    .lineLimit(1)
-            }
             if tileStats {
                 Text("\(live.dropped) dropped")
                     .font(.caption2)
@@ -1900,7 +2009,48 @@ struct MultiviewTile: View {
         .foregroundStyle(.white)
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.black.opacity(0.82))
+        .background(LinearGradient(colors: [.clear, .black.opacity(0.75)], startPoint: .top, endPoint: .bottom))
+    }
+
+    /// The channel's last frame or its show's art until the picture moves.
+    private var tuningCover: some View {
+        TuneBackdrop(
+            frame: store.api?.frameURL(channelID: channel.id, width: 480, listed: store.frameIDs),
+            art: store.index.on(channel.id, at: store.now).flatMap { store.artURL($0, width: 480) }
+        )
+        .overlay {
+            if !slow {
+                ProgressView()
+            }
+        }
+    }
+
+    private var slowNote: some View {
+        VStack(spacing: 8) {
+            Text("\(channel.displayNumber) isn\u{2019}t playing yet.")
+                .font(.footnote.weight(.semibold))
+                .multilineTextAlignment(.center)
+            Button("Try again") {
+                slow = false
+                live.retry()
+            }
+            .buttonStyle(.glassProminent)
+            .accessibilityIdentifier("tile-retry-\(channel.id)")
+        }
+        .padding(8)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("tile-slow-\(channel.id)")
+    }
+
+    /// Eight seconds without a picture is long enough to say so and offer another try.
+    private func watchForSlowStart() async {
+        slow = false
+        guard tuning else { return }
+        try? await Task.sleep(for: .seconds(8))
+        if !Task.isCancelled, tuning, live.error == nil {
+            slow = true
+            Self.slowLog.notice("tile \(channel.id, privacy: .public) slow")
+        }
     }
 
     @ViewBuilder private var standInNote: some View {
@@ -1942,6 +2092,8 @@ struct MultiviewTile: View {
             .padding(8)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(.black.opacity(0.55))
+        } else if slow, tuning {
+            slowNote
         }
     }
 
@@ -1953,9 +2105,7 @@ struct MultiviewTile: View {
                     .background(.black)
                 if tuning {
                     // A new room holds its first frame for the start; that is not a picture yet.
-                    Color.black
-                        .overlay { ProgressView() }
-                        .accessibilityHidden(true)
+                    tuningCover
                 }
                 caption
             }
@@ -2000,11 +2150,14 @@ struct MultiviewTile: View {
         }
         .task(id: focused) { await waitUntilHeard() }
         .task(id: tileStats) { await sampleStats() }
+        .task(id: "\(channel.id)-\(live.attempt)-\(tuning)") { await watchForSlowStart() }
         .onDisappear {
             unbind()
             Task { await live.stop() }
         }
     }
+
+    private static let slowLog = Logger(subsystem: "com.wolfeup.broadwave", category: "play")
 
     /// Starts this tile's picture once the sound tile has answered.
     private func startTile() async {
