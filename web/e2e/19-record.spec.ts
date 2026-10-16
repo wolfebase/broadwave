@@ -200,6 +200,7 @@ test("a show recorded from the guide plays while it records, then leaves no file
   await player.getByRole("button", { name: "Library" }).click();
   await expect(page).toHaveURL(/\/recordings/);
   await row.getByRole("button", { name: "Stop recording" }).click();
+  await row.getByRole("button", { name: "Stop now" }).click();
   await expect(page.getByText("Stopped NFL: Bears at Bills. What it recorded is kept.")).toBeVisible();
   await expect(row.getByRole("button", { name: "Stop recording" })).toHaveCount(0);
   await expect.poll(async () => damage((await recordings()).find((rec) => rec.id === id)), { timeout: 30_000 }).toBeGreaterThan(0);
