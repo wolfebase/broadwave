@@ -333,6 +333,9 @@ public final class AppStore {
     func considerSecure(_ info: ServerInfo, started: Int) async {
         guard let current = server, current.id == info.id, generation == started, secureBase == nil,
               !["", "demo", "pending"].contains(current.id), let api, ServerOrigin.same(api.base, current.url) else { return }
+        // `-BroadwaveSecure NO` stays on the home address, to compare the two.
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: "BroadwaveSecure") == nil || defaults.bool(forKey: "BroadwaveSecure") else { return }
         guard let target = SecureLink.candidate(info.secureUrl, offeredBy: current.url) else {
             SecureMemory.save(nil, for: current.id)
             return
