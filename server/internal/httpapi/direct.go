@@ -7,7 +7,7 @@ import (
 )
 
 // Direct is the secure name on the home network. Nil in tests and when
-// BROADWAVE_DIRECT is not 1.
+// BROADWAVE_DIRECT=0.
 type Direct interface {
 	Host() string
 	URL() string
@@ -41,7 +41,7 @@ func (s *Server) putDirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.Direct == nil {
-		httpError(w, "This server was started without BROADWAVE_DIRECT=1.", http.StatusConflict)
+		httpError(w, "This server was started with BROADWAVE_DIRECT=0.", http.StatusConflict)
 		return
 	}
 	if err := s.Direct.SetEnabled(*body.Enabled); err != nil {
