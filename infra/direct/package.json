@@ -1,0 +1,9 @@
+{
+  "name": "broadwave-direct",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "deploy": "npx wrangler@4 deploy"
+  }
+}

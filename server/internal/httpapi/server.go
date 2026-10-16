@@ -111,7 +111,9 @@ type Server struct {
 	revokeMu sync.Mutex
 
 	// Tunnel runs cloudflared for a saved token. Nil in tests.
-	Tunnel    Tunnel
+	Tunnel Tunnel
+	// Direct is the secure name on the home network. Nil in tests.
+	Direct    Direct
 	remoteMu  sync.Mutex
 	remoteVal string
 	remoteAt  time.Time
@@ -171,6 +173,8 @@ func (s *Server) Handler() http.Handler {
 	api("GET /clients/me", s.clientMe)
 	api("DELETE /clients/{id}", s.revokeClient)
 	api("GET /remote", s.remoteStatus)
+	api("GET /direct", s.directStatus)
+	api("PUT /direct", s.putDirect)
 	api("POST /media/link", s.mediaLink)
 	api("GET /invites", s.listInvites)
 	api("POST /invites", s.createInvite)

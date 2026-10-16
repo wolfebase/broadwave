@@ -80,9 +80,14 @@ func (s *Server) hostAllowed(r *http.Request) bool {
 	if s.Store == nil {
 		return false
 	}
+	name, _, _ := splitHost(r.Host)
+	// The secure name points only at home network addresses, and only this
+	// server can get a certificate for it. Requests by it are still home.
+	if s.directHost(name) {
+		return true
+	}
 	// The public address is a name the owner gave this server.
 	host := store.RemoteHost(s.remoteURL(r.Context()))
-	name, _, _ := splitHost(r.Host)
 	return host != "" && name == host
 }
 
