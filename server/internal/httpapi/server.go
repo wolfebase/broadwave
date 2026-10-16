@@ -147,6 +147,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /profile", s.profile)
 	api("GET /devices", s.devices)
 	api("DELETE /devices/{id}", s.removeDevice)
+	api("PATCH /devices/{id}", s.patchDevice)
 	api("GET /devices/health", s.deviceHealth)
 	api("POST /devices/{id}/scan", s.startScan)
 	api("GET /devices/{id}/scan", s.scanStatus)
@@ -317,9 +318,10 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 	out := make([]noted, 0, len(devices))
 	for _, device := range redactDevices(devices) {
 		out = append(out, noted{
-			Device:  device,
-			Note:    hdhr.ModelNote(device.ModelNumber),
-			Offline: deviceOffline(device, now),
+			Device: device,
+			Note:   hdhr.ModelNote(device.ModelNumber),
+			// A retired tuner is away on purpose: no "stopped answering".
+			Offline: !device.Retired && deviceOffline(device, now),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"devices": out})
@@ -346,6 +348,29 @@ func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("removed device", "device", id)
+	s.devices(w, r)
+}
+
+// patchDevice retires a tuner the owner took away on purpose, or brings it
+// back. A retired tuner keeps its channels and recordings, counts toward no
+// recording plan, and raises no "stopped answering" note. When it answers
+// discovery again the mark clears by itself.
+func (s *Server) patchDevice(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Retired *bool `json:"retired"`
+	}
+	if err := decodeJSON(r, &body); err != nil || body.Retired == nil {
+		httpError(w, "Send retired as true or false.", http.StatusBadRequest)
+		return
+	}
+	if err := s.Store.SetDeviceRetired(r.Context(), r.PathValue("id"), *body.Retired); err != nil {
+		if errors.Is(err, store.ErrNoDevice) {
+			apiError(w, http.StatusNotFound, "not_found", "That device is not in the list.", nil)
+			return
+		}
+		writeError(w, err)
+		return
+	}
 	s.devices(w, r)
 }
 

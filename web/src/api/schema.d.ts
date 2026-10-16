@@ -258,7 +258,8 @@ export interface paths {
         delete: operations["removeDevice"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** @description Retire a tuner taken away on purpose, or bring it back. Its channels, passes, and recordings stay; it counts toward no recording plan and raises no "stopped answering" note. A retired tuner that answers discovery again is no longer retired. */
+        patch: operations["patchDevice"];
         trace?: never;
     };
     "/devices/health": {
@@ -1964,8 +1965,10 @@ export interface components {
             priority?: number;
             lastSeen?: string;
             note?: string;
-            /** @description True when a tuner has missed three discovery rounds (15 minutes). Playlists use source health instead. */
+            /** @description True when a tuner has missed three discovery rounds (15 minutes). Playlists use source health instead. Never true for a retired tuner. */
             offline?: boolean;
+            /** @description The owner took this tuner away on purpose (PATCH /devices/{id}). It counts toward no recording plan and raises no note. Cleared when it answers again. Absent when false. */
+            retired?: boolean;
         };
         /** @description Live model, firmware version, and signal lock. Empty error means the tuner answered. */
         DeviceHealth: {
@@ -3243,6 +3246,38 @@ export interface operations {
             };
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
+        };
+    };
+    patchDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    retired: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The devices */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        devices: components["schemas"]["Device"][];
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     getDeviceHealth: {
