@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"sort"
 	"strings"
 	"time"
@@ -72,7 +73,13 @@ func (s *Store) markSameAs(ctx context.Context, chs []Channel) error {
 	if err != nil {
 		return err
 	}
-	listed, err := s.listedChannels(ctx)
+	var ids []int64
+	for _, idx := range dupes {
+		for _, i := range idx {
+			ids = append(ids, chs[i].ID)
+		}
+	}
+	listed, err := s.listedChannels(ctx, ids)
 	if err != nil {
 		return err
 	}
@@ -166,14 +173,28 @@ func (s *Store) deviceRanks(ctx context.Context) (map[string]int, map[string]boo
 	return priority, answering, rows.Err()
 }
 
-// listedChannels is every channel with an airing that hasn't ended.
-func (s *Store) listedChannels(ctx context.Context) (map[int64]bool, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT channel_id FROM airings WHERE ends_at > ?`, time.Now().UTC().Format(time.RFC3339))
+// listedChannels reports which of these channels has a listing that hasn't
+// ended. Each channel is one seek on airings_channel_start: the rows before
+// now are only the few days PruneAirings keeps. Reading every future listing
+// for the distinct channels took 13 ms of each /channels on a two-week guide.
+func (s *Store) listedChannels(ctx context.Context, ids []int64) (map[int64]bool, error) {
+	out := map[int64]bool{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	list, err := json.Marshal(ids)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT CAST(j.value AS INTEGER) FROM json_each(?) j
+WHERE EXISTS (SELECT 1 FROM airings INDEXED BY airings_channel_start
+	WHERE airings.channel_id = CAST(j.value AS INTEGER) AND airings.ends_at > ?)`,
+		string(list), time.Now().UTC().Format(time.RFC3339))
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[int64]bool{}
 	for rows.Next() {
 		var id int64
 		if err := rows.Scan(&id); err != nil {
