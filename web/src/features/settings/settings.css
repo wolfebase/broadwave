@@ -103,6 +103,13 @@
   align-items: start;
 }
 
+@media (max-width: 1000px) {
+  .settings-split {
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+}
+
 .settings-nav {
   position: sticky;
   top: calc(var(--topbar-h, 64px) + var(--space-4));
