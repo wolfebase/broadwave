@@ -2320,14 +2320,7 @@ struct RecordingPlayerScreen: View {
         /// Next recording as its own button, and the break entries in a Breaks menu.
         @ToolbarContentBuilder private var fileToolbar: some ToolbarContent {
             let entries = menu
-            // An iPad recording is a cover, so it has no Back.
-            if recordingCovers {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Close", systemImage: "xmark") { dismiss() }
-                        .labelStyle(.iconOnly)
-                        .accessibilityLabel("Close")
-                }
-            }
+            // A recording is a cover. The system player draws its own Close; a second one beside it was noise.
             if let next = entries.first(where: { $0.id == "next" }) {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(next.title, systemImage: next.symbol) { next.action() }
