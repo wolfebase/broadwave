@@ -170,6 +170,7 @@ func LadderArgs(program int, src Source, videos []string, mode, encoder, input s
 			"-muxdelay", "0", "-muxpreload", "0",
 			"-f", "mp4",
 			"-movflags", "frag_keyframe+empty_moov+default_base_moof+delay_moov",
+			"-frag_duration", fragMicros,
 			fmt.Sprintf("pipe:%d", 3+i),
 		)
 	}
@@ -544,6 +545,7 @@ func (h *Hub) startLadderLocked(f *feed, specs []Rendition, frame time.Time) (*r
 	var primary *rendition
 	for i, spec := range specs {
 		gate := newPlaylistGate()
+		gate.split = splitFragments(args)
 		done := make(chan struct{})
 		h.seedLong(f, gate)
 		packIn := startPack(dirs[i], pipes[i], gate, done, captionLine(f), false)
@@ -743,6 +745,7 @@ func (h *Hub) restartLadderLocked(f *feed, primary *rendition, software bool) bo
 	NotePID(h.Dir, cmd.Process.Pid)
 	for i, r := range rungs {
 		gate := newPlaylistGate()
+		gate.split = splitFragments(args)
 		done := make(chan struct{})
 		h.seedLong(f, gate)
 		r.input = startPack(r.dir, pipes[i], gate, done, captionLine(f), false)

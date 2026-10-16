@@ -769,11 +769,22 @@ func (r *trackRun) build(dataOff int64) []byte {
 // as it is listed: 15 s instead of 6 s, which kept Apple screens from
 // reaching their room.
 func trimLeadIn(frag []byte, video uint32, scales map[uint32]uint32) []byte {
+	out, _, _ := trimLeadInFrom(frag, video, scales, -1)
+	return out
+}
+
+// trimLeadInFrom is trimLeadIn with the first picture's time given (floor,
+// in the video timescale) instead of read from this fragment, for the
+// fragment after one whose sound all came before the picture. It reports
+// the picture's time and whether every sound track was left out (more
+// lead-in sound may follow in the next fragment).
+func trimLeadInFrom(frag []byte, video uint32, scales map[uint32]uint32, floor int64) (out []byte, picture int64, soundGone bool) {
+	picture = floor
 	top := boxes(frag)
 	if len(top) != 2 || top[0].kind != "moof" || top[1].kind != "mdat" ||
 		binary.BigEndian.Uint32(frag[:4]) == 1 || len(frag) < 8+len(top[0].body)+8 ||
 		binary.BigEndian.Uint32(frag[8+len(top[0].body):]) == 1 {
-		return frag
+		return frag, picture, false
 	}
 	moofSize := int64(8 + len(top[0].body))
 	var mfhd []byte
@@ -785,16 +796,16 @@ func trimLeadIn(frag []byte, video uint32, scales map[uint32]uint32) []byte {
 		case "traf":
 			r, ok := parseRun(b.body)
 			if !ok || !r.hasDurs || !r.hasSizes {
-				return frag
+				return frag, picture, false
 			}
 			runs = append(runs, r)
 		default:
-			return frag
+			return frag, picture, false
 		}
 	}
 	vs := scales[video]
 	if vs == 0 {
-		return frag
+		return frag, picture, false
 	}
 	type cut struct{ at, n int64 }
 	var cuts []cut
@@ -825,12 +836,13 @@ func trimLeadIn(frag []byte, video uint32, scales map[uint32]uint32) []byte {
 			}
 		}
 	}
-	var picture int64 = -1
+	first := floor < 0
 	for i := range runs {
 		r := &runs[i]
-		if r.id != video || len(r.samples) == 0 {
+		if r.id != video || len(r.samples) == 0 || !first {
 			continue
 		}
+		picture = -1
 		// Only per-sample flags say where the later groups start.
 		if sound >= 0 && r.flags&0x400 != 0 {
 			at, from, fromAt := r.decodeTime(), 0, int64(0)
@@ -847,8 +859,13 @@ func trimLeadIn(frag []byte, video uint32, scales map[uint32]uint32) []byte {
 		picture = r.decodeTime() + r.cts(r.samples[0])
 	}
 	if picture < 0 {
-		return frag
+		return frag, picture, false
 	}
+	// gone is a sound track whose samples in this fragment all come before
+	// the picture. A fragment cut a third of a second in (fragMicros) can
+	// hold the whole lead-in and one picture; its track is left out, and the
+	// sound goes on in the next fragment.
+	gone := make([]bool, len(runs))
 	for i := range runs {
 		r := &runs[i]
 		scale := scales[r.id]
@@ -857,21 +874,42 @@ func trimLeadIn(frag []byte, video uint32, scales map[uint32]uint32) []byte {
 		}
 		before := picture * int64(scale) / int64(vs)
 		at, k := r.decodeTime(), 0
-		for k < len(r.samples)-1 && at+r.cts(r.samples[k]) < before {
+		for k < len(r.samples) && at+r.cts(r.samples[k]) < before {
 			at += r.sampleDur(r.samples[k])
 			k++
+		}
+		if k == len(r.samples) && len(runs) > 1 {
+			var n int64
+			for _, s := range r.samples {
+				n += r.sampleSize(s)
+			}
+			cuts = append(cuts, cut{r.dataOff, n})
+			gone[i] = true
+			continue
+		}
+		if k == len(r.samples) {
+			k--
+			at -= r.sampleDur(r.samples[k])
 		}
 		if k > 0 {
 			drop(r, k, at)
 		}
 	}
+	soundGone = true
+	for i := range runs {
+		if runs[i].id != video && !gone[i] {
+			soundGone = false
+		}
+	}
 	if len(cuts) == 0 {
-		return frag
+		return frag, picture, soundGone
 	}
 	moofBody := func(offsets []int64) []byte {
 		body := putBox("mfhd", mfhd)
 		for i := range runs {
-			body = append(body, runs[i].build(offsets[i])...)
+			if !gone[i] {
+				body = append(body, runs[i].build(offsets[i])...)
+			}
 		}
 		return body
 	}
@@ -892,9 +930,9 @@ func trimLeadIn(frag []byte, video uint32, scales map[uint32]uint32) []byte {
 	for j := len(cuts) - 1; j >= 0; j-- {
 		start := cuts[j].at - moofSize - 8
 		if start < 0 || start+cuts[j].n > int64(len(mdat)) {
-			return frag
+			return frag, picture, false
 		}
 		mdat = append(mdat[:start], mdat[start+cuts[j].n:]...)
 	}
-	return append(putBox("moof", moofBody(offsets)), putBox("mdat", mdat)...)
+	return append(putBox("moof", moofBody(offsets)), putBox("mdat", mdat)...), picture, soundGone
 }
