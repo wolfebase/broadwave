@@ -159,7 +159,8 @@ func TestAPlainStartThatDiesStillFallsBackToSoftware(t *testing.T) {
 	if !strings.Contains(args, "libx264") || strings.Contains(args, "0:i:258") {
 		t.Fatalf("third start should be software without the track:\n%s", args)
 	}
-	if n := settledCount(t, mark); n != 3 {
+	// Then the same software command line until the budget is spent.
+	if n := settledCount(t, mark); n != restartBudget+1 {
 		t.Fatalf("starts = %d", n)
 	}
 }
@@ -171,9 +172,11 @@ func TestASoftwareEncodeDropsTheTrackWithoutAnExtraStart(t *testing.T) {
 	f.stored = []AudioTrack{engMain, spaExtra}
 	h.mu.Unlock()
 	startRendition(t, h, f, "1080.aac2.broadcast")
-	waitMark(t, mark, ".args.2")
-	if n := settledCount(t, mark); n != 2 {
-		t.Fatalf("starts = %d, want with the track then without it", n)
+	if args := waitMark(t, mark, ".args.2"); strings.Contains(args, "0:i:258") || !strings.Contains(args, "libx264") {
+		t.Fatalf("second start should drop the track on the same encoder:\n%s", args)
+	}
+	if n := settledCount(t, mark); n != restartBudget+1 {
+		t.Fatalf("starts = %d, want with the track, then without it until the budget is spent", n)
 	}
 }
 

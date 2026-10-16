@@ -86,7 +86,7 @@ func (s *Server) mosaicMedia(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	if name == "index.m3u8" {
 		if msn, part, ok := blockReload(r); ok {
-			s.Hub.WaitMosaic(key, msn, part)
+			s.Hub.WaitMosaic(r.Context(), key, msn, part)
 		}
 		body, err := s.Hub.MosaicPlaylist(key)
 		if err != nil {

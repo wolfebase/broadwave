@@ -344,6 +344,13 @@ struct RootView: View {
                     banners
                 }
             }
+        #if os(tvOS)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !playerCoversTheScreen {
+                    tvOfflineBar
+                }
+            }
+        #endif
             .task(id: store.connected) {
                 guard store.connected else { return }
                 store.screenName = ScreenIdentity.name
@@ -459,6 +466,7 @@ struct RootView: View {
                     switch page {
                     case "settings": openSettings()
                     case "search": tab = .search
+                    case "recordings": tab = .recordings
                     default: tab = .guide
                     }
                     return
@@ -502,7 +510,7 @@ struct RootView: View {
         private var sidebarPageTest: String? {
             let page = UserDefaults.standard.string(forKey: "BroadwaveFocus")
             switch page {
-            case "guide", "settings", "search":
+            case "guide", "settings", "search", "recordings":
                 return page
             default:
                 return nil
@@ -762,11 +770,11 @@ struct RootView: View {
             switch page {
             case .home: HomeView()
             case .guide: GuideView()
-            case .search: SearchView()
-            case .sports: SportsView()
+            case .search: TVSearchView()
+            case .sports: TVSportsView()
             case .recordings: RecordingsView()
             case .settings:
-                SettingsView().safeAreaInset(edge: .top, spacing: 0) {
+                TVSettingsView().safeAreaInset(edge: .top, spacing: 0) {
                     if bannersInTabs {
                         banners
                     }
@@ -863,6 +871,48 @@ struct RootView: View {
         }
     }
 
+    private var isTV: Bool {
+        #if os(tvOS)
+            true
+        #else
+            false
+        #endif
+    }
+
+    #if os(tvOS)
+        /// The offline note on Apple TV: along the bottom, where it covers no chips, with
+        /// Try again and Choose another server. Its buttons take focus only when the viewer moves down.
+        @ViewBuilder
+        private var tvOfflineBar: some View {
+            if store.connected, store.offline {
+                HStack(spacing: 28) {
+                    Image(systemName: "wifi.exclamationmark")
+                        .font(.title3)
+                        .accessibilityHidden(true)
+                    Text(offlineLine)
+                        .font(.callout.weight(.semibold))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("offline-banner")
+                        .onAppear(perform: noteOfflineBanner)
+                    Button("Try again", systemImage: "arrow.clockwise") {
+                        if let server = store.server {
+                            store.connect(server)
+                        }
+                    }
+                    .accessibilityIdentifier("offline-retry")
+                    Button("Choose another server", systemImage: "server.rack") { store.forget() }
+                        .accessibilityIdentifier("offline-choose")
+                }
+                .buttonStyle(TVChipStyle())
+                .padding(.horizontal, 60)
+                .padding(.vertical, 20)
+                .background(.regularMaterial)
+                .focusSection()
+                .accessibilityElement(children: .contain)
+            }
+        }
+    #endif
+
     /// `-BroadwaveSyncLog 1` only, so a soak can see the moment the note is on screen.
     private func noteOfflineBanner() {
         guard UserDefaults.standard.bool(forKey: "BroadwaveSyncLog") else { return }
@@ -912,7 +962,8 @@ struct RootView: View {
     private var banners: some View {
         VStack(spacing: 0) {
             // The full-screen player covers this inset, so the note lives on the player then.
-            if !playerCoversTheScreen {
+            // Apple TV keeps it at the bottom with a way out (tvOfflineBar): at the top it sat on the guide's chips.
+            if !playerCoversTheScreen, !isTV {
                 offlineBanner
             }
             updateBanner

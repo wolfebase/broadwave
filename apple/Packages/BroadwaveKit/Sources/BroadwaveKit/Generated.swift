@@ -340,9 +340,11 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
 
 public struct FrameList: Codable, Sendable, Hashable {
     public var channels: [Int64]
+    public var noSignal: [Int64]?
 
-    public init(channels: [Int64]) {
+    public init(channels: [Int64], noSignal: [Int64]? = nil) {
         self.channels = channels
+        self.noSignal = noSignal
     }
 }
 
